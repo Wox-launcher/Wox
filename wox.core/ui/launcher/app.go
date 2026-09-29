@@ -1178,16 +1178,12 @@ func launcherResultAreaHeight(results []queryResult, layout queryLayout, width f
 	if len(results) == 0 || maxResults <= 0 {
 		return 0
 	}
-	visibleResults := min(len(results), maxResults)
 	contentHeight := 0
 	if layout.GridLayout != nil {
 		contentHeight = min(gridResultsHeight(results, width, layout.GridLayout), maxResults*resultRowHeight)
 	} else {
-		contentHeight = int(listVisibleResultsHeight(results, visibleResults, float32(resultRowHeight), groupHeaderHeight, float32(resultRowGap)))
-		if len(results) > maxResults {
-			// Bottom padding belongs to the end of the full list, not after the last visible row.
-			resultPaddingBottom = 0
-		}
+		visibleRows := listVisibleRowCount(results, maxResults)
+		contentHeight = int(listResultsContentHeight(results[:visibleRows], 0, 0, float32(resultRowHeight), groupHeaderHeight, float32(resultRowGap)))
 	}
 	return resultPaddingTop + resultPaddingBottom + contentHeight
 }
@@ -1257,11 +1253,6 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	resultPaddingTop := int(palette.resultContainerPadding.Top)
 	resultPaddingBottom := int(palette.resultContainerPadding.Bottom)
 	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText, a.queryLineHeight(densityMetrics)) + palette.appPadding.Top + palette.appPadding.Bottom)
-	listOverflowsResultLimit := layout.GridLayout == nil && resultCount > maxResults
-	if listOverflowsResultLimit && !params.QueryBoxAtBottom {
-		// Top query layouts transfer AppPaddingBottom to the result list, where it is also end-only padding.
-		queryAreaHeight -= int(palette.appPadding.Bottom)
-	}
 	// With the query box hidden, buildResults folds appPadding.Bottom into the
 	// result list content, so the window height must reserve that margin too.
 	// Otherwise the list overflows by it and a scrollbar appears even when every
@@ -1269,9 +1260,6 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	resultBottomInset := 0
 	if params.HideQueryBox {
 		resultBottomInset = int(palette.appPadding.Bottom)
-		if listOverflowsResultLimit && !params.QueryBoxAtBottom {
-			resultBottomInset = 0
-		}
 	}
 	toolbarHasContent := resultCount > 0 || toolbarMessageVisible || !params.HideToolbar
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
@@ -1296,9 +1284,6 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		height += int(densityMetrics.toolbarHeight)
 	}
 	maximumResultWindowHeight := resultPaddingTop + resultPaddingBottom + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
-	if listOverflowsResultLimit {
-		maximumResultWindowHeight -= resultPaddingBottom
-	}
 	if !params.HideQueryBox {
 		maximumResultWindowHeight += queryAreaHeight
 	} else {

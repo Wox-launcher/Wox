@@ -34,15 +34,40 @@ func TestFullGridWindowMatchesFullListWindow(t *testing.T) {
 	}
 }
 
-func TestListWindowExcludesEndPaddingBeforeScroll(t *testing.T) {
+func TestListWindowReservesBottomPaddingBeforeScroll(t *testing.T) {
 	results := make([]queryResult, 9)
 	for index := range results {
 		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: "item"}
 	}
 
 	height := launcherResultAreaHeight(results, queryLayout{}, 760, 8, 50, 8, 20, 28)
-	if height != 408 {
-		t.Fatalf("overflowing list height = %d, want 408 without end-only bottom padding", height)
+	if height != 428 {
+		t.Fatalf("overflowing list height = %d, want 428 including bottom padding", height)
+	}
+}
+
+// TestGroupedListWindowCountsResults checks header height and viewport padding together.
+func TestGroupedListWindowCountsResults(t *testing.T) {
+	for _, count := range []int{0, 4, 8, 9} {
+		for _, scale := range []int{1, 2} {
+			results := make([]queryResult, 0, count*2)
+			for range count {
+				results = append(results, queryResult{IsGroup: true}, queryResult{})
+			}
+			visible := min(count, 8)
+			want := 0
+			if count > 0 {
+				want = 8*scale + visible*(50+28)*scale + max(0, visible*2-1)*resultRowGap
+				want += 20 * scale
+			}
+			got := launcherResultAreaHeight(results, queryLayout{}, 760, 8, 50*scale, 8*scale, 20*scale, float32(28*scale))
+			if got != want {
+				t.Fatalf("%d grouped results at scale %d: height = %d, want %d", count, scale, got, want)
+			}
+			if rows := listVisibleRowCount(results, 8); rows != visible*2 {
+				t.Fatalf("visible rows = %d, want %d", rows, visible*2)
+			}
+		}
 	}
 }
 

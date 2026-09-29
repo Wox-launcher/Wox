@@ -1123,7 +1123,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	rowPadding.Right += densityMetrics.scaled(5)
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
 	contentHeight := listResultsContentHeight(snapshot.results, containerPadding.Top, containerPadding.Bottom, rowHeight, groupHeight, resultRowGap)
-	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top)
+	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top, containerPadding.Bottom)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	a.rememberQuickSelectViewport(quickSelectViewport{
 		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
@@ -1277,17 +1277,17 @@ func listResultsPrefixHeight(results []queryResult, count int, rowHeight, groupH
 	return height
 }
 
-// listVisibleResultsHeight sizes the launcher window to the first visibleCount rows.
-func listVisibleResultsHeight(results []queryResult, visibleCount int, rowHeight, groupHeight, gap float32) float32 {
-	limit := min(visibleCount, len(results))
-	height := float32(0)
-	for index := 0; index < limit; index++ {
-		height += listItemRowHeight(results[index], rowHeight, groupHeight)
-		if index < limit-1 {
-			height += gap
+// listVisibleRowCount includes group headers without spending the result budget.
+func listVisibleRowCount(results []queryResult, maxResults int) int {
+	for index, result := range results {
+		if maxResults <= 0 {
+			return index
+		}
+		if !result.IsGroup {
+			maxResults--
 		}
 	}
-	return height
+	return len(results)
 }
 
 // visibleResultRange returns the viewport rows plus a small buffer for smooth scrolling.
@@ -1338,7 +1338,7 @@ func visibleResultRangeAt(count int, offset, viewport, topPadding, gap float32, 
 }
 
 // resolveResultScroll follows keyboard selection until pointer scrolling takes ownership of the viewport.
-func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics, listTopPadding float32) scrollController {
+func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics, listTopPadding, listBottomPadding float32) scrollController {
 	scroll := current.withGeometry(viewport, content)
 	if detached || selected < 0 || selected >= len(results) || viewport <= 0 || content <= viewport {
 		return scroll
@@ -1358,6 +1358,13 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 				break
 			}
 		}
+		// Returning to the first row (or its leading group) must reveal the
+		// container padding too, otherwise an earlier scroll leaves the gap hidden.
+		if top == listTopPadding {
+			top = 0
+		}
+		// Preserve the theme gutter below the selected row even before the list end.
+		bottom = min(content, bottom+listBottomPadding)
 	}
 	scroll.ensureVisible(top, bottom)
 	return scroll

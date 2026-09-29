@@ -91,6 +91,31 @@ func TestVisibleResultRangeHandlesEmptyResults(t *testing.T) {
 	}
 }
 
+// TestResultScrollRestoresTopPadding covers returning to the top after scrolling or resizing.
+func TestResultScrollRestoresTopPadding(t *testing.T) {
+	for _, grouped := range []bool{false, true} {
+		results := make([]queryResult, 12)
+		selected := 0
+		if grouped {
+			results[0].IsGroup = true
+			selected = 1
+		}
+		for _, offset := range []float32{8, 200} {
+			for _, detached := range []bool{false, true} {
+				scroll := resolveResultScroll(results, nil, selected, 760, 300, 800,
+					scrollController{offset: offset}, detached, defaultPalette(), launcherDensityMetricsFor(""), 8, 0)
+				want := float32(0)
+				if detached {
+					want = offset
+				}
+				if scroll.offset != want {
+					t.Fatalf("grouped=%v detached=%v initial=%v: offset = %v, want %v", grouped, detached, offset, scroll.offset, want)
+				}
+			}
+		}
+	}
+}
+
 func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 	results := []queryResult{{Title: "App"}, {Title: "Files", IsGroup: true}, {Title: "readme.txt"}}
 	if height := listResultsContentHeight(results, 0, 0, 56, 28, 0); height != 140 {
@@ -102,6 +127,31 @@ func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 	}
 }
 
+// TestResultScrollRevealsEndPadding keeps the theme gutter below intermediate and final selections.
+func TestResultScrollRevealsEndPadding(t *testing.T) {
+	results := make([]queryResult, 12)
+	palette := defaultPalette()
+	density := launcherDensityMetricsFor("")
+	rowHeight := density.resultRowHeight(palette)
+	content := listResultsContentHeight(results, 8, 16, rowHeight, density.groupHeaderHeight(), resultRowGap)
+	for _, selected := range []int{7, 11} {
+		for _, detached := range []bool{false, true} {
+			scroll := resolveResultScroll(results, nil, selected, 760, 300, content,
+				scrollController{}, detached, palette, density, 8, 16)
+			want := listResultOffset(results, selected, 8, rowHeight, density.groupHeaderHeight(), resultRowGap) + rowHeight + 16 - 300
+			if selected == 11 {
+				want = content - 300
+			}
+			if detached {
+				want = 0
+			}
+			if scroll.offset != want {
+				t.Fatalf("selected=%d detached=%v: offset = %v, want %v", selected, detached, scroll.offset, want)
+			}
+		}
+	}
+}
+
 // TestResultsUnderlayKeepsSelectionAboveFooter checks that extra painting does not
 // enlarge the keyboard navigation viewport or hide the final row under glass.
 func TestResultsUnderlayKeepsSelectionAboveFooter(t *testing.T) {
@@ -110,7 +160,10 @@ func TestResultsUnderlayKeepsSelectionAboveFooter(t *testing.T) {
 		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: "Result"}
 	}
 	app := &App{selected: 39}
-	snapshot := viewSnapshot{results: results, selected: 39}
+	palette := defaultPalette()
+	palette.resultContainerPadding.Bottom = 12
+	palette.appPadding.Bottom = 6
+	snapshot := viewSnapshot{results: results, selected: 39, palette: palette}
 	plain := app.buildResults(snapshot, 760, 200, 1, 0).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	glass := app.buildResults(snapshot, 760, 200, 1, 40).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	if glass.Offset != plain.Offset || glass.Height != plain.Height || glass.ContentHeight != plain.ContentHeight || glass.UnderlayHeight != 40 {
