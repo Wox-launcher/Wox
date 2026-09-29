@@ -83,9 +83,11 @@ type Scanner struct {
 	dirtyBackpressureMu sync.Mutex
 	lastDirtyRunElapsed time.Duration
 	// Collapses repeated degraded-root reconcile requests into one per cooldown
-	// window (FSEvents flags history loss per event). Bounded by root count.
+	// window (FSEvents flags history loss per event). Suppressed requests are
+	// retained and re-fire once the cooldown expires instead of being dropped.
+	// Bounded by root count.
 	rootReconcileGateMu sync.Mutex
-	rootReconcileGateAt map[string]time.Time
+	rootReconcileGate   map[string]rootReconcileGateState
 	// Content index hook receives incremental file change notifications after
 	// the name index has been updated, so the content FTS index stays in sync
 	// without waiting for the next full crawl.
@@ -227,7 +229,7 @@ func (s *Scanner) Start(ctx context.Context) {
 				if err := s.processDirtyQueue(util.NewTraceContext(), time.Now()); err != nil {
 					util.GetLogger().Warn(ctx, "filesearch failed to process dirty queue: "+err.Error())
 				}
-				if pendingRootCount, pendingPathCount := s.pendingDirtyCounts(); pendingRootCount > 0 || pendingPathCount > 0 {
+				if pendingRootCount, pendingPathCount := s.pendingDirtyCounts(); pendingRootCount > 0 || pendingPathCount > 0 || !s.nextRootReconcileReleaseAt().IsZero() {
 					s.resetDirtyTimer(dirtyTimer)
 				}
 			case <-s.stopCh:
@@ -1752,6 +1754,11 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 		return err
 	}
 
+	// Release retained root reconciles whose cooldown expired. Their signals
+	// are enqueued just before the flush, so the debounce below defers them to
+	// the next timer tick instead of scanning inside this call.
+	s.releaseDueRootReconciles(ctx, now)
+
 	queuedRootCount, queuedPathCount := 0, 0
 	if fileSearchDiagnosticLoggingEnabled {
 		queuedRootCount, queuedPathCount = s.pendingDirtyCounts()
@@ -1904,11 +1911,11 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 		})
 	case ChangeSignalKindRequiresRootReconcile:
 		// FSEvents flags history loss per event, so one burst used to queue one
-		// root reconcile per event. Gate repeats to one per cooldown window; later
-		// requests still pass, so correctness only waits, never skips. The request
-		// log stays inside the gate: a 2000-event storm must not also emit 2000
-		// Info lines.
-		if s.gateRootReconcile(ctx, signal.RootID, signal.At) {
+		// root reconcile per event. Gate repeats to one per cooldown window, but
+		// suppressed requests are retained: the first suppression schedules a
+		// re-fire at cooldown expiry, so correctness only waits, never skips
+		// (processDirtyQueue releases it even without any further event).
+		if pass := s.gateRootReconcile(ctx, signal.RootID, signal.At); pass {
 			util.GetLogger().Info(ctx, fmt.Sprintf(
 				"filesearch change feed requested root reconcile: root=%s path=%s feed_type=%s reason=%q",
 				signal.RootID,
@@ -1962,28 +1969,105 @@ func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
 // reconcile from repeated RequiresRootReconcile signals.
 const rootReconcileCooldown = time.Minute
 
+// rootReconcileGateState tracks the last admitted reconcile per root plus a
+// retained request suppressed by the cooldown window.
+type rootReconcileGateState struct {
+	LastFireAt time.Time
+	// PendingReconcileAt is zero when nothing is retained. Suppressed requests
+	// are delayed, never skipped: the first suppression schedules exactly one
+	// follow-up reconcile at cooldown expiry.
+	PendingReconcileAt time.Time
+}
+
 // gateRootReconcile suppresses repeats inside the cooldown window; the first
-// request and any request after the window pass.
+// request and any request after the window pass. Suppression logs are capped
+// at one per window: a 2000-event storm must not emit 2000 Info lines.
 func (s *Scanner) gateRootReconcile(ctx context.Context, rootID string, at time.Time) bool {
 	if at.IsZero() {
 		at = time.Now()
 	}
 	s.rootReconcileGateMu.Lock()
 	defer s.rootReconcileGateMu.Unlock()
-	if s.rootReconcileGateAt == nil {
-		s.rootReconcileGateAt = make(map[string]time.Time)
+	if s.rootReconcileGate == nil {
+		s.rootReconcileGate = make(map[string]rootReconcileGateState)
 	}
-	if last, ok := s.rootReconcileGateAt[rootID]; ok && at.Sub(last) < rootReconcileCooldown {
-		util.GetLogger().Info(ctx, fmt.Sprintf(
-			"filesearch suppressed repeated root reconcile: root=%s since_last=%s cooldown=%s",
-			rootID,
-			at.Sub(last).Round(time.Second),
-			rootReconcileCooldown,
-		))
+	state := s.rootReconcileGate[rootID]
+	if !state.LastFireAt.IsZero() && at.Sub(state.LastFireAt) < rootReconcileCooldown {
+		if state.PendingReconcileAt.IsZero() {
+			// Retain the suppressed request so a history-loss event arriving
+			// after the last scan still triggers a follow-up scan at cooldown
+			// expiry, even if no further event ever arrives. Nudge the scan
+			// loop so it schedules a wake-up for the release time.
+			state.PendingReconcileAt = state.LastFireAt.Add(rootReconcileCooldown)
+			s.rootReconcileGate[rootID] = state
+			util.GetLogger().Info(ctx, fmt.Sprintf(
+				"filesearch suppressed repeated root reconcile, retained until cooldown expires: root=%s since_last=%s cooldown=%s release_at=%s",
+				rootID,
+				at.Sub(state.LastFireAt).Round(time.Second),
+				rootReconcileCooldown,
+				state.PendingReconcileAt.Format(time.RFC3339),
+			))
+			select {
+			case s.dirtyCh <- struct{}{}:
+			default:
+			}
+		}
 		return false
 	}
-	s.rootReconcileGateAt[rootID] = at
+	s.rootReconcileGate[rootID] = rootReconcileGateState{LastFireAt: at}
 	return true
+}
+
+// releaseDueRootReconciles re-enqueues retained root reconciles whose cooldown
+// expired. Called from the scan loop's dirty-flush path so a suppressed
+// request fires even without any further watcher event. Returns whether
+// anything was released.
+func (s *Scanner) releaseDueRootReconciles(ctx context.Context, now time.Time) bool {
+	s.rootReconcileGateMu.Lock()
+	dueRootIDs := make([]string, 0, len(s.rootReconcileGate))
+	dueAt := make(map[string]time.Time, len(s.rootReconcileGate))
+	for rootID, state := range s.rootReconcileGate {
+		if state.PendingReconcileAt.IsZero() || state.PendingReconcileAt.After(now) {
+			continue
+		}
+		state.PendingReconcileAt = time.Time{}
+		s.rootReconcileGate[rootID] = state
+		dueRootIDs = append(dueRootIDs, rootID)
+		dueAt[rootID] = state.LastFireAt.Add(rootReconcileCooldown)
+	}
+	s.rootReconcileGateMu.Unlock()
+	for _, rootID := range dueRootIDs {
+		util.GetLogger().Info(ctx, "filesearch released retained root reconcile after cooldown: root="+rootID)
+		// Reuse the scheduled release time as the signal timestamp so the
+		// debounce window sees an already-expired signal and flushes it in the
+		// same processDirtyQueue call.
+		s.enqueueDirtyWithContext(ctx, DirtySignal{
+			Kind:          DirtySignalKindRoot,
+			RootID:        rootID,
+			PathIsDir:     true,
+			PathTypeKnown: true,
+			At:            dueAt[rootID],
+		})
+	}
+	return len(dueRootIDs) > 0
+}
+
+// nextRootReconcileReleaseAt returns the earliest scheduled release time of a
+// retained suppressed reconcile, or zero when none is pending. The scan loop
+// uses it to schedule a wake-up.
+func (s *Scanner) nextRootReconcileReleaseAt() time.Time {
+	s.rootReconcileGateMu.Lock()
+	defer s.rootReconcileGateMu.Unlock()
+	var next time.Time
+	for _, state := range s.rootReconcileGate {
+		if state.PendingReconcileAt.IsZero() {
+			continue
+		}
+		if next.IsZero() || state.PendingReconcileAt.Before(next) {
+			next = state.PendingReconcileAt
+		}
+	}
+	return next
 }
 
 func (s *Scanner) handleDirtyQueueFailure(ctx context.Context, root RootRecord, batch ReconcileBatch, remaining []ReconcileBatch, cause error) {
@@ -2382,6 +2466,15 @@ func (s *Scanner) resetDirtyTimer(timer *time.Timer) {
 	window := s.dirtyDebounceWindow()
 	if window <= 0 {
 		window = defaultDirtyDebounceWindow
+	}
+	// Wake up at the earliest retained root-reconcile release time so a
+	// suppressed request fires on schedule without any further watcher event.
+	if releaseAt := s.nextRootReconcileReleaseAt(); !releaseAt.IsZero() {
+		releaseRemaining := time.Until(releaseAt)
+		if releaseRemaining < 0 {
+			releaseRemaining = 0
+		}
+		window = minDuration(window, releaseRemaining+time.Millisecond)
 	}
 	timer.Reset(window)
 }

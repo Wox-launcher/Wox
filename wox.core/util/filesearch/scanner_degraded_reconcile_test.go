@@ -2,6 +2,7 @@ package filesearch
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -37,8 +38,10 @@ func TestScannerDegradedRootKeepsUnknownFileDeltaScoped(t *testing.T) {
 	}
 }
 
-// Regression test: FSEvents reports history loss per event, so reconcile
-// signals must collapse inside the cooldown window and pass again after it.
+// Regression test (PR review): FSEvents reports history loss per event, so
+// reconcile signals must collapse inside the cooldown window and pass again
+// after it. A suppressed request is retained and fires at cooldown expiry even
+// without any further event.
 func TestScannerRepeatedRootReconcileSignalsCollapseToFirst(t *testing.T) {
 	ctx := context.Background()
 	scanner := NewScanner(nil)
@@ -74,7 +77,7 @@ func TestScannerRepeatedRootReconcileSignalsCollapseToFirst(t *testing.T) {
 		t.Fatalf("expected empty queue after flush, pending roots=%d", pendingRoots)
 	}
 
-	// A request after the cooldown window must pass again.
+	// A request inside the cooldown window is suppressed but retained.
 	scanner.handleChangeSignal(ctx, ChangeSignal{
 		Kind:          ChangeSignalKindRequiresRootReconcile,
 		SemanticKind:  ChangeSemanticKindRequiresRootReconcile,
@@ -84,10 +87,95 @@ func TestScannerRepeatedRootReconcileSignalsCollapseToFirst(t *testing.T) {
 		PathIsDir:     true,
 		PathTypeKnown: true,
 		Reason:        "fsevents flagged history loss or root change",
-		At:            at.Add(2 * rootReconcileCooldown),
+		At:            at.Add(10 * time.Second),
 	})
+	if pendingRoots, _ := scanner.pendingDirtyCounts(); pendingRoots != 0 {
+		t.Fatalf("expected suppressed reconcile to be retained, not enqueued, pending roots=%d", pendingRoots)
+	}
+
+	// The retained request fires at cooldown expiry with no further event and
+	// is enqueued with the release timestamp so the next flush consumes it.
+	releaseAt := at.Add(2 * rootReconcileCooldown)
+	scanner.releaseDueRootReconciles(ctx, releaseAt)
 	pendingRoots, _ := scanner.pendingDirtyCounts()
 	if pendingRoots != 1 {
-		t.Fatalf("expected post-cooldown reconcile to enqueue again, pending roots=%d", pendingRoots)
+		t.Fatalf("expected retained reconcile to enqueue at cooldown expiry, pending roots=%d", pendingRoots)
+	}
+	released := scanner.dirtyQueue.FlushReadyWithDebounce(releaseAt, nil, defaultDirtyDebounceWindow)
+	if len(released) != 1 || released[0].Mode != ReconcileModeRoot || released[0].RootID != rootID {
+		t.Fatalf("expected released retained reconcile to flush as a root batch, got %#v", released)
+	}
+}
+
+// Regression test (PR review): a suppressed request must trigger a scan at
+// cooldown expiry without any additional events. Verify end-to-end through
+// processDirtyQueue that the retained reconcile reaches the reconciler.
+func TestScannerSuppressedReconcileFiresWithoutFurtherEvents(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	now := time.Now().UnixMilli()
+
+	rootPath := t.TempDir()
+	root := RootRecord{
+		ID:        "root-suppressed-reconcile",
+		Path:      rootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	mustInsertRoot(t, ctx, db, root)
+
+	scanner := NewScanner(db)
+	scanner.scanAllRoots(ctx)
+	for i := 0; i < 100; i++ {
+		if ready, err := db.EntryMaintenanceIndexesReady(ctx); err == nil && ready {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// First reconcile signal passes and enqueues a root batch.
+	signalAt := time.Now()
+	scanner.handleChangeSignal(ctx, ChangeSignal{
+		Kind:          ChangeSignalKindRequiresRootReconcile,
+		SemanticKind:  ChangeSemanticKindRequiresRootReconcile,
+		RootID:        root.ID,
+		FeedType:      RootFeedTypeFSEvents,
+		Path:          rootPath,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+		At:            signalAt,
+	})
+	if err := scanner.processDirtyQueue(ctx, signalAt.Add(defaultDirtyDebounceWindow)); err != nil {
+		t.Fatalf("process first reconcile batch: %v", err)
+	}
+
+	// A new file appears, then a second reconcile signal arrives inside the
+	// cooldown window. It must be retained, not dropped: the new file only
+	// becomes searchable if the retained request fires later on its own.
+	newFilePath := filepath.Join(rootPath, "late.txt")
+	mustWriteTestFile(t, newFilePath, "late")
+	scanner.handleChangeSignal(ctx, ChangeSignal{
+		Kind:          ChangeSignalKindRequiresRootReconcile,
+		SemanticKind:  ChangeSemanticKindRequiresRootReconcile,
+		RootID:        root.ID,
+		FeedType:      RootFeedTypeFSEvents,
+		Path:          rootPath,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+		At:            signalAt.Add(time.Second),
+	})
+	if pendingRoots, _ := scanner.pendingDirtyCounts(); pendingRoots != 0 {
+		t.Fatalf("expected suppressed request to be retained, pending roots=%d", pendingRoots)
+	}
+
+	// No further events of any kind: the release fires purely from the timer
+	// path at cooldown expiry.
+	if err := scanner.processDirtyQueue(ctx, signalAt.Add(2*rootReconcileCooldown)); err != nil {
+		t.Fatalf("process released reconcile: %v", err)
+	}
+	results := searchSQLiteForTest(t, db, "late", 10)
+	if len(results) == 0 {
+		t.Fatalf("expected retained reconcile to scan and index the new file without further events")
 	}
 }
