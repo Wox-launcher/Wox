@@ -124,9 +124,9 @@ Use this reference as the source of truth when authoring `SettingDefinitions` in
 
 #### Cloud Sync And Platform-Specific Settings
 
-SDK and single-file SDK plugins should persist settings through the Public API setting methods (`GetSetting` / `SaveSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `on_setting_changed`). Those APIs are what Wox can sync across machines. Do not store ordinary plugin settings in local files or a custom store.
+SDK and single-file SDK plugins persist user settings through the Public API (`GetSetting` / `SaveSetting` / `SetSetting` / `OnSettingChanged`, or Python `get_setting` / `save_setting` / `set_setting` / `on_setting_changed`). A normal setting write is cloud-synced. Do not store ordinary plugin settings in local files or a custom store.
 
-Machine-local cache is different. If the plugin downloads files, stores thumbnails, or caches search results, put those files under `GetCacheFolder` / `get_cache_folder` (`~/.wox/cache/plugins/<plugin-id>/`) first. Do not create a custom `cache/` directory beside the plugin or under user data.
+Cache stays out of those APIs. Fetched JSON, subject or entity snapshots, search indexes, downloads, and thumbnails go under `GetCacheFolder` / `get_cache_folder` (`~/.wox/cache/plugins/<plugin-id>/`). Do not pass them to `SaveSetting`, `SetSetting`, `save_setting`, or `set_setting`, including a hidden key that is absent from `SettingDefinitions`. Each settings write becomes a sync record, so a cache blob is uploaded on every refresh and fills sync history. `IsPlatformSpecific` still syncs. `IsLocal` / `is_local` is only for a small machine-local preference, such as a window position, and is not a cache store. Do not create a custom `cache/` directory beside the plugin or under user data.
 
 Before adding a setting, decide whether cloud sync should share one value across all devices or keep a separate value per platform.
 

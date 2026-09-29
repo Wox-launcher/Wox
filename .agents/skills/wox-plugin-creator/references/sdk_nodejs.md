@@ -117,12 +117,14 @@ The `ctx` object is required for all API calls.
 
 ### Cache
 
-If the plugin needs on-disk cache, prefer `GetCacheFolder` over any custom directory.
+On-disk cache goes in `GetCacheFolder`. Do not store cache with `SaveSetting` or `SetSetting`.
 
 - `GetCacheFolder(ctx)`: Return `~/.wox/cache/plugins/<plugin-id>/`. Wox creates it if needed and deletes it on uninstall.
-- Call it once in `init()`, keep the path, and write downloads, thumbnails, and search-result files under it.
+- Call it once in `init()`, keep the path, and write downloads, thumbnails, fetched JSON, and other rebuildable snapshots under it.
+- Plugin setting writes are cloud-synced. A cache value saved as a setting is replicated on every change and fills sync history, even when the key is hidden from `SettingDefinitions`.
+- `IsLocal: true` keeps a small machine-local preference out of cloud sync. Do not use it as a cache store. `IsPlatformSpecific` still syncs.
 - Do not invent `cache/`, `tmp/`, or `downloads/` next to the plugin file, under user data, or under a hardcoded folder name.
-- User preferences and favorites are settings, not cache. Use `GetSetting` / `SetSetting` for those.
+- User preferences, API keys, and favorites are settings. Use `GetSetting` / `SetSetting` for those.
 
 ### Theme
 
@@ -132,7 +134,7 @@ Requires Wox >= 2.4.5.
 
 ### Settings
 
-Prefer these APIs for all plugin settings. Values stored here can sync across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store.
+Prefer these APIs for user settings. A normal write syncs across machines through Wox cloud sync. Do not persist ordinary settings in local files or a custom store, and do not store cache here.
 
 - `GetSetting(ctx, key)`: Retrieve a stored setting.
 - `SaveSetting(ctx, key, value, isPlatformSpecific)`: Save a setting. Normal plugin settings are eligible for cloud sync, so pass `true` for platform-only values such as local paths, executable paths, shell commands, hotkeys, browser profiles, application paths, and system integrations.
@@ -167,8 +169,8 @@ Runtime-registered callable operations. Requires Wox >= 2.4.5. See `references/p
 
 ## Settings Authoring Notes
 
-- Prefer `GetSetting`, `SaveSetting`, and `OnSettingChanged` for plugin settings. These APIs participate in Wox cloud sync across machines. Avoid local files or custom persistence for values the user would expect to follow them to another device.
-- If the plugin caches files, put them under `GetCacheFolder(ctx)` first. Do not invent a cache directory under the plugin folder or user-data tree.
+- Prefer `GetSetting`, `SetSetting`, and `OnSettingChanged` for user settings. These APIs participate in Wox cloud sync across machines. `SaveSetting` remains for plugins that must run before Wox 2.4.0. Avoid local files or custom persistence for values the user would expect to follow them to another device.
+- Put cache under `GetCacheFolder(ctx)`. Do not save fetched payloads or other rebuildable data with `SaveSetting` or `SetSetting`. Do not invent a cache directory under the plugin folder or user-data tree.
 - Read `references/plugin_json_schema.md` before writing `plugin.json` settings.
 - For ready-to-copy settings examples and advanced patterns, read `references/settings_patterns.md`.
 - `OnGetDynamicSetting` is used together with a `dynamic` entry in `SettingDefinitions`.
