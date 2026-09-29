@@ -86,6 +86,8 @@ type LauncherResultItem struct {
 }
 
 // LauncherResultsProps contains the prepared viewport slice and result-list geometry.
+// Height and ContentHeight exclude the fixed vertical ContainerPadding; the view
+// adds that padding outside the scroll surface. All dimensions are logical units.
 type LauncherResultsProps struct {
 	Width             float32
 	Height            float32
@@ -249,7 +251,7 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		}
 		rows = append(rows, launcherResultRow(rowProps))
 	}
-	visiblePadding := props.ContainerPadding
+	visiblePadding := woxwidget.Insets{Left: props.ContainerPadding.Left, Right: props.ContainerPadding.Right}
 	if props.StartOffset > 0 {
 		visiblePadding.Top += props.StartOffset
 	} else {
@@ -259,10 +261,17 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		Width: props.Width, Height: props.ContentHeight, Padding: visiblePadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
 	}
-	return WrapLauncherResultsStatus(props.Complete, woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
-		Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
-	}))
+	return WrapLauncherResultsStatus(props.Complete, woxwidget.Container{
+		Width: props.Width, Height: props.Height + props.ContainerPadding.Top + props.ContainerPadding.Bottom,
+		Padding: woxwidget.Insets{Top: props.ContainerPadding.Top, Bottom: props.ContainerPadding.Bottom},
+		Child: woxwidget.Semantics{
+			AutomationID: "launcher.results.viewport", Role: woxui.AccessibilityRoleList, Label: "Visible results",
+			Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
+				Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
+				Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
+			}),
+		},
+	})
 }
 
 // WrapLauncherResultsStatus exposes query completion on every result surface, including grid and preview-only chat.

@@ -1252,13 +1252,18 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
 	resultPaddingTop := int(palette.resultContainerPadding.Top)
 	resultPaddingBottom := int(palette.resultContainerPadding.Bottom)
-	queryAreaHeight := int(densityMetrics.queryBoxHeightForText(queryText, a.queryLineHeight(densityMetrics)) + palette.appPadding.Top + palette.appPadding.Bottom)
-	// With the query box hidden, buildResults folds appPadding.Bottom into the
-	// result list content, so the window height must reserve that margin too.
-	// Otherwise the list overflows by it and a scrollbar appears even when every
-	// result fits.
+	queryBoxHeight := densityMetrics.queryBoxHeightForText(queryText, a.queryLineHeight(densityMetrics))
+	queryAreaHeight := int(queryBoxHeight + palette.appPadding.Top + palette.appPadding.Bottom)
 	resultBottomInset := 0
-	if params.HideQueryBox {
+	if layout.GridLayout == nil && resultCount > 0 {
+		// Use the same fixed list gutters and query chrome as the rendered tree.
+		// The toolbar owns its edge, so app padding must not enlarge the row viewport.
+		padding := launcherListPadding(palette, params)
+		resultPaddingTop, resultPaddingBottom = int(padding.Top), int(padding.Bottom)
+		queryHeight, _ := launcherQueryChromeMetrics(queryBoxHeight, palette.appPadding, params.QueryBoxAtBottom)
+		queryAreaHeight = int(queryHeight)
+	} else if params.HideQueryBox {
+		// Preserve the existing outer-edge budget for grids and empty launchers.
 		resultBottomInset = int(palette.appPadding.Bottom)
 	}
 	toolbarHasContent := resultCount > 0 || toolbarMessageVisible || !params.HideToolbar

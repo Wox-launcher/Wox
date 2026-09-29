@@ -309,7 +309,7 @@ func TestActionPanelDisplayItemsInsertsSeparatorWhenBothGroupsVisible(t *testing
 		{ID: "keyword", IsSystemAction: false},
 		{ID: "pin", IsSystemAction: true},
 	}
-	items := actionPanelDisplayItems(entries, []int{0, 1, 2}, nil)
+	items := actionPanelDisplayItems(entries, []int{0, 1, 2}, false, nil)
 	if len(items) != 4 || items[2].Kind != launcherview.ActionItemKindSeparator {
 		t.Fatalf("grouped items = %+v, want two plugin rows, a separator, then system", items)
 	}
@@ -319,11 +319,11 @@ func TestActionPanelDisplayItemsInsertsSeparatorWhenBothGroupsVisible(t *testing
 }
 
 func TestActionPanelDisplayItemsOmitsSeparatorWhenOnlyOneGroup(t *testing.T) {
-	pluginOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "copy"}, {ID: "keyword"}}, []int{0, 1}, nil)
+	pluginOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "copy"}, {ID: "keyword"}}, []int{0, 1}, false, nil)
 	if len(pluginOnly) != 2 || pluginOnly[0].Kind != launcherview.ActionItemKindAction || pluginOnly[1].Kind != launcherview.ActionItemKindAction {
 		t.Fatalf("plugin-only items = %+v, want a flat list", pluginOnly)
 	}
-	systemOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "pin", IsSystemAction: true}}, []int{0}, nil)
+	systemOnly := actionPanelDisplayItems([]actionPanelEntry{{ID: "pin", IsSystemAction: true}}, []int{0}, false, nil)
 	if len(systemOnly) != 1 || systemOnly[0].Kind != launcherview.ActionItemKindAction {
 		t.Fatalf("system-only items = %+v, want a flat list", systemOnly)
 	}
@@ -364,7 +364,7 @@ func TestActionPanelFloatingPlacementKeepsSearchPinnedWhenListShrinks(t *testing
 
 func TestActionPanelDisplayItemsOmitsSeparatorWhenFilterLeavesOneGroup(t *testing.T) {
 	entries := []actionPanelEntry{{ID: "copy"}, {ID: "pin", IsSystemAction: true}}
-	items := actionPanelDisplayItems(entries, []int{1}, nil)
+	items := actionPanelDisplayItems(entries, []int{1}, false, nil)
 	if len(items) != 1 || items[0].ID != "pin" || items[0].Kind != launcherview.ActionItemKindAction {
 		t.Fatalf("filtered system items = %+v, want no separator", items)
 	}
@@ -418,5 +418,26 @@ func TestOnResultActionHotkeyLeavesDefaultEnterToLauncher(t *testing.T) {
 	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "default", Type: "local", Hotkey: "enter"}}}}}
 	if app.onResultActionHotkey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
 		t.Fatal("result hotkey intercepted the launcher's default Enter handling")
+	}
+}
+
+// TestActionPanelSearchHidesSeparator keeps matching actions contiguous and restores grouping on clear.
+func TestActionPanelSearchHidesSeparator(t *testing.T) {
+	entries := []actionPanelEntry{{ID: "open"}, {ID: "settings", IsSystemAction: true}}
+	for _, searching := range []bool{false, true, false} {
+		items := actionPanelDisplayItems(entries, []int{0, 1}, searching, nil)
+		wantCount := 3
+		if searching {
+			wantCount = 2
+		}
+		if len(items) != wantCount || items[0].ID != "open" || items[len(items)-1].ID != "settings" {
+			t.Fatalf("searching=%v items=%+v", searching, items)
+		}
+		if !searching && items[1].Kind != launcherview.ActionItemKindSeparator {
+			t.Fatal("clearing search did not restore separator")
+		}
+		if searching && (items[0].Index != 0 || items[1].Index != 1) {
+			t.Fatal("search changed action indices")
+		}
 	}
 }

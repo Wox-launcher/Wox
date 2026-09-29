@@ -21,7 +21,7 @@ func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 		},
 		Items: []LauncherResultItem{{Title: "Today", Group: true}},
 	}).(woxwidget.Semantics)
-	scrollGesture := result.Child.(woxwidget.Gesture)
+	scrollGesture := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	stack := scrollGesture.Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	content := scroll.Child.(woxwidget.Container)
@@ -45,7 +45,7 @@ func TestLauncherResultGroupUsesCompactHeaderHeight(t *testing.T) {
 		Width: 320, Height: 28, ContentHeight: 28, RowHeight: 56, GroupRowHeight: 28,
 		Items: []LauncherResultItem{{Title: "Files", Group: true}},
 	}).(woxwidget.Semantics)
-	scrollGesture := result.Child.(woxwidget.Gesture)
+	scrollGesture := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture)
 	stack := scrollGesture.Child.(woxwidget.Stack)
 	scroll := stack.Children[0].Child.(woxwidget.ScrollView)
 	content := scroll.Child.(woxwidget.Container)
@@ -62,7 +62,7 @@ func TestLauncherResultsScrollbarUsesValueText(t *testing.T) {
 		Theme: woxcomponent.Theme{ResultTitle: title, ResultSubtitle: woxui.Color{R: 255, A: 255}},
 		Items: []LauncherResultItem{{Title: "Result"}},
 	}).(woxwidget.Semantics)
-	scroll := result.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	scroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	if scroll.ThumbColor != title {
 		t.Fatalf("launcher scrollbar = %#v, want ResultTitle so ResultSubtitle cannot restyle it", scroll.ThumbColor)
 	}
@@ -106,7 +106,7 @@ func TestLauncherResultWiresSecondaryTap(t *testing.T) {
 		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
 		Items: []LauncherResultItem{{ID: "result", Title: "Result", OnSecondaryTapDown: func() { tapped = true }}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	gesture := row.Child.(woxwidget.Gesture)
 
@@ -164,7 +164,7 @@ func TestLauncherResultWithoutSubtitleCentersTitleVertically(t *testing.T) {
 		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
 		Items: []LauncherResultItem{{ID: "no-subtitle", Title: "Everything"}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	content := launcherResultRowContent(row)
 	if len(content.Children) != 2 {
@@ -183,7 +183,7 @@ func TestLauncherResultMultilineSubtitleUsesSingleLineCenteredGroup(t *testing.T
 		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
 		Items: []LauncherResultItem{{ID: "multiline-subtitle", Title: "Reinstall plugin", Subtitle: "Version: 1.0\nDescription: details"}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	labelContainer := launcherResultRowContent(row).Children[1].(woxwidget.Clip).Child.(woxwidget.Container)
 	label := labelContainer.Child.(woxwidget.Align)
@@ -200,7 +200,7 @@ func TestLauncherResultMultilineTitleUsesSingleLine(t *testing.T) {
 		Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
 		Items: []LauncherResultItem{{ID: "multiline-title", Title: "你说得对，是我把战略\r\n真正的问题不是“Wox"}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	labels := launcherResultRowContent(row).Children[1].(woxwidget.Clip).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	title := labels.Children[0].(woxwidget.Boundary[launcherResultTextProps])
@@ -222,7 +222,7 @@ func TestLauncherResultTailsScrollHorizontallyWhenClipped(t *testing.T) {
 			Tails: []LauncherResultTail{{Text: "first", Width: 50, Height: 22}, {Text: "second", Width: 50, Height: 22}},
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	tailAlignment := launcherResultRowContent(row).Children[2].(woxwidget.Align)
 	tailBoundary := tailAlignment.Child.(woxwidget.Boundary[launcherResultTailsProps])
@@ -251,7 +251,7 @@ func TestLauncherResultTailsAlignToTheRightWhenTheyFit(t *testing.T) {
 			Tails: []LauncherResultTail{{Text: "cpu", Width: 40, Height: 22}},
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	tailBoundary := launcherResultRowContent(row).Children[2].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultTailsProps])
 	aligned := tailBoundary.Build(tailBoundary.Props).(woxwidget.Align)
@@ -267,7 +267,7 @@ func TestLauncherResultLoadingIconAnimatesSpinner(t *testing.T) {
 		Theme: woxcomponent.Theme{Cursor: woxui.Color{R: 10, G: 20, B: 30, A: 255}},
 		Items: []LauncherResultItem{{ID: "ai-match", Title: "AI matching...", Loading: true}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	icon := launcherResultRowContent(row).Children[0].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultIconProps])
 	if _, ok := icon.Build(icon.Props).(woxwidget.LoopAnimation); !ok {
@@ -328,7 +328,7 @@ func TestLauncherResultUsesIndependentUpdateBoundaries(t *testing.T) {
 			Tails: []LauncherResultTail{{Text: "1%", Width: 60, Height: 22}},
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	rowStack := row.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	background := rowStack.Children[0].Child.(woxwidget.Boundary[launcherResultBackgroundProps])
@@ -365,7 +365,7 @@ func TestLauncherResultTitleTagsStayVisibleWhenTitleIsLong(t *testing.T) {
 			TailWidth: 40, Tails: []LauncherResultTail{{Text: "tail", Width: 40, Height: 22}},
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	if row.Description != "sz ctrl+alt+s" {
 		t.Fatalf("row description = %q, want title tags to stay readable", row.Description)
@@ -465,7 +465,7 @@ func TestLauncherResultTailWidthDoesNotChangeLabelBoundaryConstraints(t *testing
 			Width: 300, Height: 50, ContentHeight: 50, RowHeight: 50,
 			Items: []LauncherResultItem{{ID: "live", Title: "Title", TailWidth: tailWidth}},
 		}).(woxwidget.Semantics)
-		listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+		listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 		row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 		viewport := launcherResultRowContent(row).Children[1].(woxwidget.Clip)
 		content := viewport.Child.(woxwidget.Container)
@@ -487,7 +487,7 @@ func TestLauncherResultShowsQuickSelectBadge(t *testing.T) {
 		TailColor: fill, Theme: woxcomponent.Theme{Background: text, ResultTitle: woxui.Color{A: 255}},
 		Items: []LauncherResultItem{{ID: "one", Title: "One", QuickSelectNumber: "1"}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	content := launcherResultRowContent(row)
 	if len(content.Children) != 3 {
@@ -530,7 +530,7 @@ func TestLauncherResultSelectedQuickSelectKeepsReadableDigit(t *testing.T) {
 		Theme:             woxcomponent.Theme{Background: background, SelectedBackground: selectedFill, ResultTitle: woxui.Color{A: 255}},
 		Items:             []LauncherResultItem{{ID: "one", Title: "One", Selected: true, QuickSelectNumber: "1"}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	badgeSlot := launcherResultRowContent(row).Children[2].(woxwidget.Align).Child.(woxwidget.Container)
 	label := badgeSlot.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
@@ -548,7 +548,7 @@ func TestLauncherResultTrailingClusterKeepsBadgeOnTheRightEdge(t *testing.T) {
 			Tails: []LauncherResultTail{{Text: "CPU", Width: 40, Height: 22}, {Text: "MEM", Width: 40, Height: 22}},
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	content := launcherResultRowContent(row)
 	if len(content.Children) != 3 {
@@ -588,7 +588,7 @@ func TestLauncherResultTailHoverUsesTooltipAndKeepsRowActions(t *testing.T) {
 			OnTooltip: func(inside bool, text string, bounds woxui.Rect) { hovered, tooltip, anchor = inside, text, bounds },
 		}},
 	}).(woxwidget.Semantics)
-	listScroll := result.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
+	listScroll := result.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.ScrollView)
 	row := listScroll.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	tailBoundary := launcherResultRowContent(row).Children[2].(woxwidget.Align).Child.(woxwidget.Boundary[launcherResultTailsProps])
 	aligned := tailBoundary.Build(tailBoundary.Props).(woxwidget.Align)

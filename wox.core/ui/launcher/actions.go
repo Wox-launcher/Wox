@@ -224,8 +224,8 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 }
 
 // actionPanelDisplayItems keeps plugin and local/toolbar actions above system actions
-// and inserts a separator only when both groups are visible after filtering.
-func actionPanelDisplayItems(entries []actionPanelEntry, indices []int, makeItem func(int, actionPanelEntry) launcherview.ActionItem) []launcherview.ActionItem {
+// and separates their sources only when browsing without a search filter.
+func actionPanelDisplayItems(entries []actionPanelEntry, indices []int, searching bool, makeItem func(int, actionPanelEntry) launcherview.ActionItem) []launcherview.ActionItem {
 	hasPrimary, hasSystem := false, false
 	groups := actionPanelGroupIndices(entries)
 	for _, index := range indices {
@@ -256,7 +256,7 @@ func actionPanelDisplayItems(entries []actionPanelEntry, indices []int, makeItem
 			items = append(items, actionPanelGroupHeaderItem(entries[headerIndex], headerIndex, makeItem))
 			lastHeader = headerIndex
 		}
-		if hasPrimary && hasSystem && entry.IsSystemAction && !insertedDivider {
+		if !searching && hasPrimary && hasSystem && entry.IsSystemAction && !insertedDivider {
 			items = append(items, launcherview.ActionItem{Kind: launcherview.ActionItemKindSeparator})
 			insertedDivider = true
 		}
@@ -315,7 +315,7 @@ func svgUsesThemeIconColor(source woxImage) bool {
 
 // actionPanelVisibleListHeight sizes the scroll list from filtered entries, including a visible group divider.
 func actionPanelVisibleListHeight(entries []actionPanelEntry, indices []int) float32 {
-	return launcherview.ActionPanelListHeight(actionPanelDisplayItems(entries, indices, nil))
+	return launcherview.ActionPanelListHeight(actionPanelDisplayItems(entries, indices, false, nil))
 }
 
 // actionPanelUnfilteredIndices reserves window height for the full action list
@@ -335,11 +335,11 @@ func actionPanelUnfilteredIndices(entries []actionPanelEntry) []int {
 // filtered list, or a group divider appearing, cannot move the filter field.
 func actionPanelFloatingPlacement(left, windowHeight, queryHeight, toolbarHeight, panelWidth, panelHeight, bottomOffset float32) (launcherview.LauncherFloatingView, woxui.Rect) {
 	return launcherview.LauncherFloatingView{
-		Left: left, Bottom: toolbarHeight + bottomOffset, AnchorBottom: true,
-	}, woxui.Rect{
-		X: left, Y: max(queryHeight+launcherview.ActionPanelTopGap, windowHeight-toolbarHeight-panelHeight-bottomOffset),
-		Width: panelWidth, Height: panelHeight,
-	}
+			Left: left, Bottom: toolbarHeight + bottomOffset, AnchorBottom: true,
+		}, woxui.Rect{
+			X: left, Y: max(queryHeight+launcherview.ActionPanelTopGap, windowHeight-toolbarHeight-panelHeight-bottomOffset),
+			Width: panelWidth, Height: panelHeight,
+		}
 }
 
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.
@@ -347,7 +347,7 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 	if len(snapshot.actionEntries) == 0 {
 		return nil, 0, 0
 	}
-	items := actionPanelDisplayItems(snapshot.actionEntries, snapshot.actionIndices, func(index int, action actionPanelEntry) launcherview.ActionItem {
+	items := actionPanelDisplayItems(snapshot.actionEntries, snapshot.actionIndices, snapshot.actionFilter != "", func(index int, action actionPanelEntry) launcherview.ActionItem {
 		iconSize := float32(launcherview.ActionIconSize)
 		var paintedIconSize float32
 		if isAboutMenuCommunityEntry(action) {
@@ -375,7 +375,8 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		ActionPadding:     snapshot.palette.actionPadding,
 		BottomOffset:      launcherview.ActionPanelBottomOffset(snapshot.palette.appPadding.Bottom),
 		HeaderLabel:       actionPanelHeaderLabel(snapshot, a.translate("i18n:ui_actions"), a.translate("i18n:ui_about")), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
-		Items: items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
+		ListHeightLimit: actionPanelVisibleListHeight(snapshot.actionEntries, actionPanelUnfilteredIndices(snapshot.actionEntries)),
+		Items:           items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
 		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
 		OnFilterChanged: a.setActionFilterValue, OnFilterKey: a.onActionKey,
 	})

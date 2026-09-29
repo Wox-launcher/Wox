@@ -223,17 +223,17 @@ func TestAboutMenuCurrentEntriesIgnoreResultRefresh(t *testing.T) {
 
 func TestAboutMenuDisplayItemsInsertCommunityHeaderAfterFilter(t *testing.T) {
 	entries := aboutMenuEntries("2.4.4")
-	items := actionPanelDisplayItems(entries, actionPanelUnfilteredIndices(entries), nil)
+	items := actionPanelDisplayItems(entries, actionPanelUnfilteredIndices(entries), false, nil)
 	if len(items) != 9 || items[5].Kind != launcherview.ActionItemKindGroupHeader || items[5].ID != aboutMenuCommunityID {
 		t.Fatalf("unfiltered items = %#v, want community header before github", items)
 	}
 	filtered := filteredActionIndices(entries, "red", nil, false)
-	filteredItems := actionPanelDisplayItems(entries, filtered, nil)
+	filteredItems := actionPanelDisplayItems(entries, filtered, false, nil)
 	if len(filteredItems) != 2 || filteredItems[0].Kind != launcherview.ActionItemKindGroupHeader || filteredItems[1].ID != aboutMenuRedditID {
 		t.Fatalf("reddit filter items = %#v", filteredItems)
 	}
 	feedback := filteredActionIndices(entries, "feedback", map[string]string{"ui_about_menu_feedback": "Send Feedback"}, false)
-	feedbackItems := actionPanelDisplayItems(entries, feedback, nil)
+	feedbackItems := actionPanelDisplayItems(entries, feedback, false, nil)
 	if len(feedbackItems) != 1 || feedbackItems[0].ID != aboutMenuFeedbackID {
 		t.Fatalf("feedback filter should omit the community header: %#v", feedbackItems)
 	}
@@ -286,7 +286,7 @@ func TestActionPanelFilterKeepsNamedGroupsTogether(t *testing.T) {
 	if len(indices) != 3 || indices[0] != 0 {
 		t.Fatalf("group order = %v", indices)
 	}
-	items := actionPanelDisplayItems(entries, indices, nil)
+	items := actionPanelDisplayItems(entries, indices, false, nil)
 	if len(items) != 4 || items[0].ID != "guide" || items[1].Kind != launcherview.ActionItemKindGroupHeader {
 		t.Fatalf("items = %#v", items)
 	}

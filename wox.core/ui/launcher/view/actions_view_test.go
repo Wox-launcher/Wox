@@ -532,3 +532,32 @@ func TestActionGroupHeaderGeometryMatchesScrollExtentAcrossDensities(t *testing.
 		}
 	}
 }
+
+// TestActionPanelFilterCannotGrow checks a divider entering the first eight actions.
+func TestActionPanelFilterCannotGrow(t *testing.T) {
+	unfiltered := make([]ActionItem, 10)
+	unfiltered = append(unfiltered, ActionItem{Kind: ActionItemKindSeparator}, ActionItem{}, ActionItem{})
+	props := ActionsProps{WindowWidth: 800, WindowHeight: 900, QueryHeight: 60, ToolbarHeight: 40, Items: unfiltered, ListHeightLimit: ActionPanelListHeight(unfiltered)}
+	_, _, original, _ := actionPanelGeometry(props)
+	filtered := make([]ActionItem, 3)
+	filtered = append(filtered, ActionItem{Kind: ActionItemKindSeparator})
+	filtered = append(filtered, make([]ActionItem, 5)...)
+	props.Items = filtered
+	_, _, height, viewport := actionPanelGeometry(props)
+	if height != original || viewport != 8*ActionRowHeight {
+		t.Fatalf("filtered panel=%v viewport=%v, original=%v", height, viewport, original)
+	}
+	if ActionPanelListHeight(filtered) <= viewport {
+		t.Fatal("fixture must overflow because of the divider")
+	}
+	props.Items = []ActionItem{{}}
+	_, _, shorter, _ := actionPanelGeometry(props)
+	if shorter >= original {
+		t.Fatal("a short filtered list should still shrink")
+	}
+	props.Items = unfiltered
+	_, _, restored, _ := actionPanelGeometry(props)
+	if restored != original {
+		t.Fatalf("cleared panel=%v, want %v", restored, original)
+	}
+}

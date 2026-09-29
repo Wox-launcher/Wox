@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
+
 	woxwidget "wox/ui/widget"
 )
 
@@ -16,7 +17,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	app := &App{selected: -1}
 	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1, 0)
 	semantics := built.(woxwidget.Semantics)
-	retained := semantics.Child.(woxwidget.Stateful)
+	retained := semantics.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Stateful)
 	state := retained.CreateState()
 	state.InitState(woxwidget.StateContext{}, retained.Widget)
 	defer state.Dispose()
@@ -91,31 +92,6 @@ func TestVisibleResultRangeHandlesEmptyResults(t *testing.T) {
 	}
 }
 
-// TestResultScrollRestoresTopPadding covers returning to the top after scrolling or resizing.
-func TestResultScrollRestoresTopPadding(t *testing.T) {
-	for _, grouped := range []bool{false, true} {
-		results := make([]queryResult, 12)
-		selected := 0
-		if grouped {
-			results[0].IsGroup = true
-			selected = 1
-		}
-		for _, offset := range []float32{8, 200} {
-			for _, detached := range []bool{false, true} {
-				scroll := resolveResultScroll(results, nil, selected, 760, 300, 800,
-					scrollController{offset: offset}, detached, defaultPalette(), launcherDensityMetricsFor(""), 8, 0)
-				want := float32(0)
-				if detached {
-					want = offset
-				}
-				if scroll.offset != want {
-					t.Fatalf("grouped=%v detached=%v initial=%v: offset = %v, want %v", grouped, detached, offset, scroll.offset, want)
-				}
-			}
-		}
-	}
-}
-
 func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 	results := []queryResult{{Title: "App"}, {Title: "Files", IsGroup: true}, {Title: "readme.txt"}}
 	if height := listResultsContentHeight(results, 0, 0, 56, 28, 0); height != 140 {
@@ -127,49 +103,74 @@ func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 	}
 }
 
-// TestResultScrollRevealsEndPadding keeps the theme gutter below intermediate and final selections.
-func TestResultScrollRevealsEndPadding(t *testing.T) {
-	results := make([]queryResult, 12)
-	palette := defaultPalette()
-	density := launcherDensityMetricsFor("")
-	rowHeight := density.resultRowHeight(palette)
-	content := listResultsContentHeight(results, 8, 16, rowHeight, density.groupHeaderHeight(), resultRowGap)
-	for _, selected := range []int{7, 11} {
-		for _, detached := range []bool{false, true} {
-			scroll := resolveResultScroll(results, nil, selected, 760, 300, content,
-				scrollController{}, detached, palette, density, 8, 16)
-			want := listResultOffset(results, selected, 8, rowHeight, density.groupHeaderHeight(), resultRowGap) + rowHeight + 16 - 300
-			if selected == 11 {
-				want = content - 300
-			}
-			if detached {
-				want = 0
-			}
-			if scroll.offset != want {
-				t.Fatalf("selected=%d detached=%v: offset = %v, want %v", selected, detached, scroll.offset, want)
+// TestListViewportKeepsGuttersOutsideRows checks the eight-row budget, end scrolling,
+// and compact footer gap across theme geometry and launcher density.
+func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
+	for _, bottom := range []float32{0, 8} {
+		for _, densityName := range []string{"compact", "normal", "comfortable"} {
+			for _, count := range []int{4, 8, 12} {
+				for _, show := range []showAppParams{
+					{}, {HideToolbar: true}, {QueryBoxAtBottom: true},
+					{QueryBoxAtBottom: true, HideToolbar: true},
+					{HideQueryBox: true}, {HideQueryBox: true, HideToolbar: true},
+				} {
+					palette := defaultPalette()
+					palette.resultContainerPadding = woxwidget.Insets{Top: 8, Bottom: bottom}
+					palette.appPadding = woxwidget.Insets{Top: 12, Bottom: 12}
+					density := launcherDensityMetricsFor(densityName)
+					results := make([]queryResult, count)
+					for index := range results {
+						results[index].ID = fmt.Sprint(index)
+					}
+					padding := launcherListPadding(palette, show)
+					rowHeight := density.resultRowHeight(palette)
+					height := float32(launcherResultAreaHeight(results, queryLayout{}, 760, 8, int(rowHeight), int(padding.Top), int(padding.Bottom), density.groupHeaderHeight()))
+					for _, selected := range []int{0, count - 1} {
+						app := &App{selected: selected}
+						snapshot := viewSnapshot{results: results, selected: selected, palette: palette, densityMetrics: density, show: show}
+						built := app.buildResults(snapshot, 760, height, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
+						scroll := app.resultScroll
+						if scroll.viewport != float32(min(count, 8))*rowHeight || scroll.content != float32(count)*rowHeight {
+							t.Fatalf("count=%d density=%s: scroll=%+v row=%v", count, densityName, scroll, rowHeight)
+						}
+						if selected == 0 && scroll.offset != 0 || selected == count-1 && scroll.offset+scroll.viewport != scroll.content {
+							t.Fatalf("selected=%d scroll=%+v", selected, scroll)
+						}
+						if count > 8 {
+							props := built.Child.(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+							wantUnderlay := float32(40)
+							if padding.Bottom > 0 {
+								wantUnderlay = 0
+							}
+							if props.UnderlayHeight != wantUnderlay {
+								t.Fatalf("underlay=%v, want %v", props.UnderlayHeight, wantUnderlay)
+							}
+						}
+						if !show.HideToolbar && built.Padding.Bottom != bottom {
+							t.Fatalf("toolbar gutter=%v, want %v", built.Padding.Bottom, bottom)
+						}
+					}
+				}
 			}
 		}
 	}
 }
 
-// TestResultsUnderlayKeepsSelectionAboveFooter checks that extra painting does not
-// enlarge the keyboard navigation viewport or hide the final row under glass.
-func TestResultsUnderlayKeepsSelectionAboveFooter(t *testing.T) {
-	results := make([]queryResult, 40)
-	for index := range results {
-		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: "Result"}
-	}
-	app := &App{selected: 39}
+// TestListScrollKeepsContentCoordinates covers first-group recovery and detached pointer scrolling.
+func TestListScrollKeepsContentCoordinates(t *testing.T) {
+	results := make([]queryResult, 12)
+	results[0].IsGroup = true
 	palette := defaultPalette()
-	palette.resultContainerPadding.Bottom = 12
-	palette.appPadding.Bottom = 6
-	snapshot := viewSnapshot{results: results, selected: 39, palette: palette}
-	plain := app.buildResults(snapshot, 760, 200, 1, 0).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	glass := app.buildResults(snapshot, 760, 200, 1, 40).(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	if glass.Offset != plain.Offset || glass.Height != plain.Height || glass.ContentHeight != plain.ContentHeight || glass.UnderlayHeight != 40 {
-		t.Fatalf("footer changed selection visibility: plain offset %v, glass offset %v viewport %v underlay %v", plain.Offset, glass.Offset, glass.Height, glass.UnderlayHeight)
-	}
-	if glass.Offset+glass.Height < glass.ContentHeight {
-		t.Fatal("final result is hidden beneath the footer")
+	density := launcherDensityMetricsFor("")
+	content := listResultsContentHeight(results, 0, 0, density.resultRowHeight(palette), density.groupHeaderHeight(), resultRowGap)
+	for _, detached := range []bool{false, true} {
+		scroll := resolveResultScroll(results, nil, 1, 760, 200, content, scrollController{offset: 100}, detached, palette, density)
+		want := float32(0)
+		if detached {
+			want = 100
+		}
+		if scroll.offset != want {
+			t.Fatalf("detached=%v offset=%v, want %v", detached, scroll.offset, want)
+		}
 	}
 }

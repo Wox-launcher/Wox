@@ -1099,6 +1099,20 @@ func launcherPreviewRatio(layout queryLayout, chatFullscreen bool) float32 {
 	return ratio
 }
 
+// launcherListPadding assigns each gutter once. A toolbar owns the bottom edge;
+// AppPaddingBottom is only needed when results themselves end the window.
+func launcherListPadding(palette uiPalette, show showAppParams) woxwidget.Insets {
+	padding := palette.resultContainerPadding
+	padding.Left += palette.appPadding.Left
+	padding.Right += palette.appPadding.Right
+	if show.QueryBoxAtBottom && !show.HideQueryBox {
+		padding.Top += palette.appPadding.Top
+	} else if show.HideToolbar {
+		padding.Bottom += palette.appPadding.Bottom
+	}
+	return padding
+}
+
 func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
 	a.pruneRetainedResultIcons(snapshot.results, snapshot.resultsRevision)
 	if snapshot.layout.GridLayout != nil {
@@ -1107,29 +1121,26 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	densityMetrics := snapshot.densityMetrics.normalized()
 	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
 	groupHeight := densityMetrics.groupHeaderHeight()
-	containerPadding := snapshot.palette.resultContainerPadding
-	containerPadding.Left += snapshot.palette.appPadding.Left
-	containerPadding.Right += snapshot.palette.appPadding.Right
-	// Bottom-anchored query boxes already own AppPaddingBottom under the query
-	// chrome, so move AppPaddingTop onto the result list instead of leaving it
-	// between the results and the query pill.
-	if snapshot.show.QueryBoxAtBottom {
-		containerPadding.Top += snapshot.palette.appPadding.Top
-	} else {
-		containerPadding.Bottom += snapshot.palette.appPadding.Bottom
+	containerPadding := launcherListPadding(snapshot.palette, snapshot.show)
+	// Gutters belong to the viewport, not the end of the virtual content.
+	// Otherwise a ninth row can paint into the space budgeted below eight rows.
+	height = max(0, height-containerPadding.Top-containerPadding.Bottom)
+	if containerPadding.Bottom > 0 {
+		// A fixed gutter stays clear; only edge-to-edge lists extend behind the footer.
+		underlayHeight = 0
 	}
 	rowPadding := snapshot.palette.resultItemPadding
 	rowPadding.Left += densityMetrics.scaled(5)
 	rowPadding.Right += densityMetrics.scaled(5)
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
-	contentHeight := listResultsContentHeight(snapshot.results, containerPadding.Top, containerPadding.Bottom, rowHeight, groupHeight, resultRowGap)
-	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics, containerPadding.Top, containerPadding.Bottom)
+	contentHeight := listResultsContentHeight(snapshot.results, 0, 0, rowHeight, groupHeight, resultRowGap)
+	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
 	a.rememberResolvedResultScroll(snapshot, scroll)
 	a.rememberQuickSelectViewport(quickSelectViewport{
-		offset: scroll.offset, height: height, topPadding: containerPadding.Top, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
+		offset: scroll.offset, height: height, topPadding: 0, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
-	start, end := visibleListResultRange(snapshot.results, offset, height+underlayHeight, containerPadding.Top, rowHeight, groupHeight, resultRowGap)
+	start, end := visibleListResultRange(snapshot.results, offset, height+underlayHeight, 0, rowHeight, groupHeight, resultRowGap)
 	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
@@ -1338,14 +1349,14 @@ func visibleResultRangeAt(count int, offset, viewport, topPadding, gap float32, 
 }
 
 // resolveResultScroll follows keyboard selection until pointer scrolling takes ownership of the viewport.
-func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics, listTopPadding, listBottomPadding float32) scrollController {
+func resolveResultScroll(results []queryResult, layout *gridLayout, selected int, width, viewport, content float32, current scrollController, detached bool, palette uiPalette, densityMetrics launcherDensityMetrics) scrollController {
 	scroll := current.withGeometry(viewport, content)
 	if detached || selected < 0 || selected >= len(results) || viewport <= 0 || content <= viewport {
 		return scroll
 	}
 	rowHeight := densityMetrics.normalized().resultRowHeight(palette)
 	groupHeight := densityMetrics.normalized().groupHeaderHeight()
-	top := listResultOffset(results, selected, listTopPadding, rowHeight, groupHeight, resultRowGap)
+	top := listResultOffset(results, selected, 0, rowHeight, groupHeight, resultRowGap)
 	bottom := top + listItemRowHeight(results[selected], rowHeight, groupHeight)
 	if layout != nil {
 		top, bottom = gridResultVerticalBounds(results, selected, width, layout)
@@ -1353,18 +1364,11 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 		for index := selected - 1; index >= 0; index-- {
 			if results[index].IsGroup {
 				if selected-index <= 2 {
-					top = listResultOffset(results, index, listTopPadding, rowHeight, groupHeight, resultRowGap)
+					top = listResultOffset(results, index, 0, rowHeight, groupHeight, resultRowGap)
 				}
 				break
 			}
 		}
-		// Returning to the first row (or its leading group) must reveal the
-		// container padding too, otherwise an earlier scroll leaves the gap hidden.
-		if top == listTopPadding {
-			top = 0
-		}
-		// Preserve the theme gutter below the selected row even before the list end.
-		bottom = min(content, bottom+listBottomPadding)
 	}
 	scroll.ensureVisible(top, bottom)
 	return scroll

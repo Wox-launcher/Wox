@@ -136,18 +136,20 @@ type ActionsProps struct {
 	BottomOffset          float32
 	HeaderLabel           string
 	NoMatchesLabel        string
-	Items                 []ActionItem
-	Selected              int
-	Filter                string
-	OnSelect              func(int)                 `boundary:"stable"`
-	OnActivate            func()                    `boundary:"stable"`
-	OnFilterChanged       func(string)              `boundary:"stable"`
-	OnFilterKey           func(woxui.KeyEvent) bool `boundary:"stable"`
+	// ListHeightLimit is the unfiltered list budget; zero leaves sizing unconstrained.
+	ListHeightLimit float32
+	Items           []ActionItem
+	Selected        int
+	Filter          string
+	OnSelect        func(int)                 `boundary:"stable"`
+	OnActivate      func()                    `boundary:"stable"`
+	OnFilterChanged func(string)              `boundary:"stable"`
+	OnFilterKey     func(woxui.KeyEvent) bool `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the floating action panel.
 func (p ActionsProps) Equal(other ActionsProps) bool {
-	if p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.BottomOffset != other.BottomOffset || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
+	if p.ListHeightLimit != other.ListHeightLimit || p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.BottomOffset != other.BottomOffset || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
 		return false
 	}
 	for index := range p.Items {
@@ -233,6 +235,11 @@ func actionPanelGeometry(props ActionsProps) (panelWidth, innerWidth, panelHeigh
 	panelWidth = ActionPanelWidth(props.ActionPadding, props.WindowWidth)
 	innerWidth = max(float32(0), panelWidth-props.ActionPadding.Left-props.ActionPadding.Right)
 	listHeight = ActionPanelListHeight(props.Items)
+	// Filtering can bring a divider above the fold without adding actions.
+	// Keep that extra chrome inside the original scroll budget.
+	if props.ListHeightLimit > 0 {
+		listHeight = min(listHeight, props.ListHeightLimit)
+	}
 	panelHeight = ActionPanelBaseHeight(props.ActionPadding) + listHeight
 	bottomOffset := props.BottomOffset
 	if bottomOffset <= 0 {
