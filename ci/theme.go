@@ -20,6 +20,7 @@ type storeThemeManifest struct {
 	Website     string
 	DownloadUrl string
 	DateUpdated string
+	I18n        map[string]map[string]string
 }
 
 func runTheme() {
@@ -44,22 +45,22 @@ func checkThemeNewVersion() error {
 	for index, theme := range themes {
 		newVersion, versionErr := themeRemoteVersion(theme)
 		if versionErr != nil {
-			fmt.Printf("[%s] Get latest theme version err: %s\n", theme.Name, versionErr.Error())
+			fmt.Printf("[%s] Get latest theme version err: %s\n", themeLogName(theme), versionErr.Error())
 			continue
 		}
 
 		existVersion, existVersionErr := semver.NewVersion(theme.Version)
 		if existVersionErr != nil {
-			fmt.Printf("[%s] Parse exist version err: %s\n", theme.Name, existVersionErr.Error())
+			fmt.Printf("[%s] Parse exist version err: %s\n", themeLogName(theme), existVersionErr.Error())
 			continue
 		}
 		currentVersion, currentVersionErr := semver.NewVersion(newVersion)
 		if currentVersionErr != nil {
-			fmt.Printf("[%s] Parse new version err: %s\n", theme.Name, currentVersionErr.Error())
+			fmt.Printf("[%s] Parse new version err: %s\n", themeLogName(theme), currentVersionErr.Error())
 			continue
 		}
 		if !currentVersion.GreaterThan(existVersion) {
-			fmt.Printf("[%s] Exist version: %s, New version: %s\n", theme.Name, existVersion, currentVersion)
+			fmt.Printf("[%s] Exist version: %s, New version: %s\n", themeLogName(theme), existVersion, currentVersion)
 			continue
 		}
 
@@ -76,13 +77,31 @@ func checkThemeNewVersion() error {
 		themes[index].Version = currentVersion.String()
 		themes[index].DateUpdated = updatedAt
 		hasUpdate = true
-		fmt.Printf("[%s] Exist version: %s, New version: %s, update found\n", theme.Name, existVersion, currentVersion)
+		fmt.Printf("[%s] Exist version: %s, New version: %s, update found\n", themeLogName(theme), existVersion, currentVersion)
 	}
 
 	if hasUpdate {
 		return os.WriteFile("../store-theme.json", fileStr, 0644)
 	}
 	return nil
+}
+
+// themeLogName prints the English catalog name when Name is an i18n key.
+func themeLogName(theme storeThemeManifest) string {
+	name := strings.TrimSpace(theme.Name)
+	if strings.HasPrefix(name, "i18n:") {
+		key := strings.TrimPrefix(name, "i18n:")
+		if translated := strings.TrimSpace(theme.I18n["en_US"][key]); translated != "" && !strings.HasPrefix(translated, "i18n:") {
+			return translated
+		}
+		if id := strings.TrimSpace(theme.Id); id != "" {
+			return id
+		}
+	}
+	if name != "" {
+		return name
+	}
+	return strings.TrimSpace(theme.Id)
 }
 
 // themeRemoteVersion reads Version from a single-file JSON theme, or the GitHub release for a package.
