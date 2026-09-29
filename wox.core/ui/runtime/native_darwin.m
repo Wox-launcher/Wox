@@ -595,6 +595,30 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 
 @class WoxScreenshotSelectionSession;
 
+// Present captured pixels directly. Drawing the full screenshot through AppKit's
+// CGContext leaves a display-sized CA Whippet Drawable cached after window close.
+@interface WoxScreenshotBackgroundView : NSView
+@end
+
+@implementation WoxScreenshotBackgroundView
+- (BOOL)wantsUpdateLayer {
+  return YES;
+}
+
+- (void)updateLayer {
+  // The immutable screenshot is assigned once when the selection window is created.
+}
+@end
+
+@class WoxScreenshotSelectionView;
+
+// Only the small inspector needs a raster backing store; the desktop mask uses layers.
+@interface WoxScreenshotInspectorView : NSView {
+@public
+  WoxScreenshotSelectionView *owner;
+}
+@end
+
 @interface WoxScreenshotSelectionView : NSView {
   WoxScreenshotDisplayCapture *_capture;
   WoxScreenshotSelectionSession *_session;
@@ -602,7 +626,12 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   NSPoint _hover_local;
   BOOL _has_selection;
   BOOL _hover_visible;
+  CALayer *_mask_layers[4];
+  CALayer *_selection_border;
+  WoxScreenshotInspectorView *_inspector;
 }
+- (void)drawColorInspector;
+- (NSRect)inspectorRect;
 - (instancetype)initWithCapture:(WoxScreenshotDisplayCapture *)capture;
 - (void)setSession:(WoxScreenshotSelectionSession *)session;
 - (void)setGlobalSelection:(NSRect)selection visible:(BOOL)visible;
@@ -611,6 +640,24 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 
 @interface WoxScreenshotSelectionSession : NSObject
 - (BOOL)handleKeyEvent:(NSEvent *)event;
+@end
+
+@implementation WoxScreenshotInspectorView
+- (BOOL)isFlipped {
+  return YES;
+}
+
+// Inspector drawing keeps the selection view's logical coordinate system.
+- (void)drawRect:(NSRect)dirty_rect {
+  (void)dirty_rect;
+  if (owner == nil) return;
+  NSRectFillUsingOperation(self.bounds, NSCompositingOperationClear);
+  CGContextRef context = NSGraphicsContext.currentContext.CGContext;
+  CGContextSaveGState(context);
+  CGContextTranslateCTM(context, -NSMinX(self.frame), -NSMinY(self.frame));
+  [owner drawColorInspector];
+  CGContextRestoreGState(context);
+}
 @end
 
 @implementation WoxScreenshotSelectionView
@@ -625,6 +672,22 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   _hover_local = NSZeroPoint;
   _has_selection = NO;
   _hover_visible = NO;
+  self.wantsLayer = YES;
+  self.layer.geometryFlipped = YES;
+  for (NSUInteger index = 0; index < 4; index++) {
+    _mask_layers[index] = [CALayer layer];
+    _mask_layers[index].backgroundColor = [NSColor colorWithCalibratedWhite:0 alpha:0.46].CGColor;
+    [self.layer addSublayer:_mask_layers[index]];
+  }
+  _selection_border = [CALayer layer];
+  _selection_border.borderColor = [NSColor colorWithCalibratedRed:41.0 / 255.0 green:1.0 blue:114.0 / 255.0 alpha:1.0].CGColor;
+  _selection_border.borderWidth = 2.0;
+  [self.layer addSublayer:_selection_border];
+  _inspector = [[WoxScreenshotInspectorView alloc] initWithFrame:NSZeroRect];
+  _inspector->owner = self;
+  _inspector.wantsLayer = YES;
+  [self addSubview:_inspector];
+  [_inspector release];
   return self;
 }
 
@@ -675,6 +738,13 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   self.needsDisplay = YES;
 }
 
+// The panel frame stays in logical display coordinates; AppKit owns backing scale.
+- (NSRect)inspectorRect {
+  return wox_screenshot_inspector_rect(self.bounds.size, _hover_local,
+      NSMakeSize(12.0f * WOX_SCREENSHOT_INSPECTOR_COLUMNS + WOX_SCREENSHOT_INSPECTOR_INFO_EXTRA_WIDTH,
+                 12.0f * WOX_SCREENSHOT_INSPECTOR_ROWS + 104.0f), 1.0f);
+}
+
 // drawColorInspector mirrors the portable editor's pre-selection sampler. macOS selects on a
 // native overlay first, so this UI has to live here or the color inspector never appears.
 - (void)drawColorInspector {
@@ -705,11 +775,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   const float cell = 12.0f * ui_scale;
   const float preview_width = cell * WOX_SCREENSHOT_INSPECTOR_COLUMNS;
   const float preview_height = cell * WOX_SCREENSHOT_INSPECTOR_ROWS;
-  NSRect panel = wox_screenshot_inspector_rect(
-      self.bounds.size,
-      _hover_local,
-      NSMakeSize(preview_width + WOX_SCREENSHOT_INSPECTOR_INFO_EXTRA_WIDTH * ui_scale, preview_height + 104.0f * ui_scale),
-      ui_scale);
+  NSRect panel = [self inspectorRect];
   const float grid_x = (float)NSMinX(panel) + ((float)NSWidth(panel) - preview_width) / 2.0f;
   NSBezierPath *background = [NSBezierPath bezierPathWithRoundedRect:panel xRadius:10.0 * ui_scale yRadius:10.0 * ui_scale];
   [[NSColor colorWithCalibratedRed:20.0 / 255.0 green:18.0 / 255.0 blue:17.0 / 255.0 alpha:248.0 / 255.0] setFill];
@@ -783,45 +849,44 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   draw_color_row(@"HEX", [NSString stringWithFormat:@"#%02X%02X%02X", red, green, blue], @"H", info_top + 69.0f * ui_scale);
 }
 
-- (void)drawRect:(NSRect)dirty_rect {
-  (void)dirty_rect;
-  CGContextRef context = NSGraphicsContext.currentContext.CGContext;
-  if (context == NULL || _capture->image == NULL) {
-    return;
-  }
+- (BOOL)wantsUpdateLayer {
+  return YES;
+}
 
-  CGContextSaveGState(context);
-  CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
-  CGContextTranslateCTM(context, 0.0, NSHeight(self.bounds));
-  CGContextScaleCTM(context, 1.0, -1.0);
-  CGContextDrawImage(context, NSMakeRect(0.0, 0.0, NSWidth(self.bounds), NSHeight(self.bounds)), _capture->image);
-  CGContextRestoreGState(context);
-
-  NSBezierPath *mask = [NSBezierPath bezierPathWithRect:self.bounds];
+// Never rasterize a desktop-sized mask. AppKit retains a floating-point drawable
+// after drawRect redraws even when the screenshot view and window are destroyed.
+- (void)updateLayer {
   NSRect intersection = NSIntersectionRect(_capture->logical_bounds, _global_selection);
-  if (_has_selection && !NSIsEmptyRect(intersection)) {
-    NSRect local_selection = NSMakeRect(
-        NSMinX(intersection) - NSMinX(_capture->logical_bounds),
-        NSMinY(intersection) - NSMinY(_capture->logical_bounds),
-        NSWidth(intersection),
-        NSHeight(intersection));
-    [mask appendBezierPathWithRect:local_selection];
-    mask.windingRule = NSEvenOddWindingRule;
-    [[NSColor colorWithCalibratedWhite:0.0 alpha:0.46] setFill];
-    [mask fill];
-    [[NSColor colorWithCalibratedRed:41.0 / 255.0 green:1.0 blue:114.0 / 255.0 alpha:1.0] setStroke];
-    NSBezierPath *border = [NSBezierPath bezierPathWithRect:NSInsetRect(local_selection, 1.0, 1.0)];
-    border.lineWidth = 2.0;
-    [border stroke];
-    return;
+  BOOL selected = _has_selection && !NSIsEmptyRect(intersection);
+  NSRect bands[4] = {self.bounds, NSZeroRect, NSZeroRect, NSZeroRect};
+  NSRect local = NSZeroRect;
+  if (selected) {
+    local = NSOffsetRect(intersection, -NSMinX(_capture->logical_bounds), -NSMinY(_capture->logical_bounds));
+    bands[0] = NSMakeRect(0, 0, NSWidth(self.bounds), NSMinY(local));
+    bands[1] = NSMakeRect(0, NSMaxY(local), NSWidth(self.bounds), NSHeight(self.bounds) - NSMaxY(local));
+    bands[2] = NSMakeRect(0, NSMinY(local), NSMinX(local), NSHeight(local));
+    bands[3] = NSMakeRect(NSMaxX(local), NSMinY(local), NSWidth(self.bounds) - NSMaxX(local), NSHeight(local));
   }
-
-  [[NSColor colorWithCalibratedWhite:0.0 alpha:0.46] setFill];
-  [mask fill];
-  [self drawColorInspector];
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  for (NSUInteger index = 0; index < 4; index++) {
+    _mask_layers[index].frame = bands[index];
+    _mask_layers[index].hidden = NSIsEmptyRect(bands[index]);
+  }
+  _selection_border.frame = local;
+  _selection_border.hidden = !selected;
+  _inspector.hidden = !_hover_visible || _has_selection;
+  if (!_inspector.hidden) {
+    _inspector.frame = [self inspectorRect];
+    _inspector.needsDisplay = YES;
+  }
+  [CATransaction commit];
 }
 
 - (void)dealloc {
+  if (_inspector != nil) {
+    _inspector->owner = nil;
+  }
   [_capture release];
   [super dealloc];
 }
@@ -904,7 +969,14 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
     window.collectionBehavior = behavior;
     WoxScreenshotSelectionView *view = [[WoxScreenshotSelectionView alloc] initWithCapture:capture];
     [view setSession:self];
-    window.contentView = view;
+    WoxScreenshotBackgroundView *background = [[WoxScreenshotBackgroundView alloc] initWithFrame:view.frame];
+    background.wantsLayer = YES;
+    background.layer.contents = (id)capture->image;
+    background.layer.contentsGravity = kCAGravityResize;
+    window.contentView = background;
+    view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [background addSubview:view];
+    [background release];
     [view release];
     [windows addObject:window];
     [window release];
@@ -943,7 +1015,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 
 - (void)updateSelection:(NSRect)selection visible:(BOOL)visible {
   for (WoxScreenshotSelectionWindow *window in _windows) {
-    [(WoxScreenshotSelectionView *)window.contentView setGlobalSelection:selection visible:visible];
+    [(WoxScreenshotSelectionView *)window.contentView.subviews.firstObject setGlobalSelection:selection visible:visible];
   }
 }
 
@@ -952,7 +1024,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   _hover_point = point;
   _hover_visible = visible && [self captureAtPoint:point] != nil;
   for (WoxScreenshotSelectionWindow *window in _windows) {
-    [(WoxScreenshotSelectionView *)window.contentView setHoverPoint:point visible:_hover_visible];
+    [(WoxScreenshotSelectionView *)window.contentView.subviews.firstObject setHoverPoint:point visible:_hover_visible];
   }
 }
 
@@ -1022,7 +1094,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
     return;
   }
   [window makeKeyAndOrderFront:nil];
-  [window makeFirstResponder:window.contentView];
+  [window makeFirstResponder:window.contentView.subviews.firstObject];
 }
 
 // handleKeyEvent copies the inspected color with the same G/H keys as the portable Windows editor.
@@ -1177,7 +1249,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   if (NSApp.keyWindow == nil && _windows.count > 0) {
     WoxScreenshotSelectionWindow *first = _windows.firstObject;
     [first makeKeyAndOrderFront:nil];
-    [first makeFirstResponder:first.contentView];
+    [first makeFirstResponder:first.contentView.subviews.firstObject];
   }
 }
 
@@ -1190,9 +1262,19 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
     [NSEvent removeMonitor:_event_monitor];
     _event_monitor = nil;
   }
+  // Drop the full-screen capture while the layer is still in the window, then
+  // order out. orderOut while layer.contents still holds that image keeps a
+  // display-sized mapping after the selector's own CGImage is released.
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
   for (WoxScreenshotSelectionWindow *window in _windows) {
-    [window orderOut:nil];
+    window.contentView.layer.contents = nil;
+  }
+  [CATransaction commit];
+  [CATransaction flush];
+  for (WoxScreenshotSelectionWindow *window in _windows) {
     window.contentView = nil;
+    [window orderOut:nil];
     [window close];
   }
 }
@@ -1611,24 +1693,35 @@ static void draw_cached_cgimage(WoxDarwinRenderer *renderer, CGImageRef image, f
   CGContextRestoreGState(renderer->context);
 }
 
+// release_presented_surfaces drops WindowServer's mapping before the window leaves
+// the screen. orderOut or close while an IOSurface is still layer.contents pins
+// those display-sized buffers for the rest of the window's server lifetime, and
+// CFRelease of our own objects does not release that mapping.
+static void release_presented_surfaces(WoxDarwinWindow *window) {
+  if (window == NULL) {
+    return;
+  }
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  if (window->renderer != NULL) {
+    clear_renderer_surfaces(window->renderer);
+  }
+  if (window->overlay_renderer != NULL) {
+    clear_renderer_surfaces(window->overlay_renderer);
+  }
+  clear_cached_images(window);
+  [CATransaction commit];
+  [CATransaction flush];
+}
+
 // Hidden windows keep their AppKit state but release every IOSurface so the launcher has no
 // display-sized backing allocation while idle. A later frame recreates the pool on demand.
 static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   window->visible = false;
   atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
-  // Detach the presented IOSurfaces inside an explicitly flushed transaction
-  // before ordering the window out. The window server keeps referencing the
-  // surfaces that are still attached at orderOut time for the whole hidden
-  // period, which pins two window-sized buffers even though the pool itself
-  // is released. Flushing the cleared contents first drops that reference;
-  // both messages land within one compositor frame, so no blank flash shows.
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES];
-  clear_renderer_surfaces(window->renderer);
-  clear_renderer_surfaces(window->overlay_renderer);
-  clear_cached_images(window);
-  [CATransaction commit];
-  [CATransaction flush];
+  // Flush the cleared contents before orderOut so both messages land in one
+  // compositor frame and the window does not flash empty.
+  release_presented_surfaces(window);
   [window->window orderOut:nil];
 }
 
@@ -4776,8 +4869,11 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
     window->accessibility_roots = nil;
     [window->view setWoxAccessibilityChildren:@[]];
     window->window.delegate = nil;
+    // Screenshot and other fullscreen surfaces must be unmapped before close.
+    // Close orders the window out; doing that while the IOSurfaces are still
+    // attached leaves their pages in the process footprint after destroy.
+    release_presented_surfaces(window);
     [window->window close];
-    clear_cached_images(window);
     destroy_renderer(window->renderer);
     destroy_renderer(window->overlay_renderer);
     window->renderer = NULL;
