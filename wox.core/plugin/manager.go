@@ -5524,6 +5524,19 @@ func (m *Manager) HasVisibleToolbarMsg(ctx context.Context) bool {
 	return m.pluginToolbarMsgIds.Len() > 0
 }
 
+// VisibleToolbarMsgOwners returns pluginId=toolbarMsgId pairs still tracked for toolbar routing.
+func (m *Manager) VisibleToolbarMsgOwners() []string {
+	if m == nil || m.pluginToolbarMsgIds == nil {
+		return nil
+	}
+	owners := make([]string, 0, m.pluginToolbarMsgIds.Len())
+	m.pluginToolbarMsgIds.Range(func(pluginID, msgID string) bool {
+		owners = append(owners, pluginID+"="+msgID)
+		return true
+	})
+	return owners
+}
+
 func (m *Manager) clearCurrentPluginToolbarMsgAction(pluginId string) {
 	if pluginId == "" {
 		return

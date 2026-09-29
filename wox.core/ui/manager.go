@@ -740,9 +740,13 @@ func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
 }
 
 func (m *Manager) hasMainHotkeyToolbarWarning() bool {
+	return m.mainHotkeyToolbarWarning() != ""
+}
+
+func (m *Manager) mainHotkeyToolbarWarning() string {
 	m.mainHotkeyWarningMu.RLock()
 	defer m.mainHotkeyWarningMu.RUnlock()
-	return m.mainHotkeyWarning != ""
+	return m.mainHotkeyWarning
 }
 
 func (m *Manager) mainHotkeyRegistrationErrorKey() string {

@@ -155,7 +155,53 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
 	// In-app notifications only when the primary launcher is showing; secondary
 	// panels should not swallow system notifications.
-	if u.IsVisible(context.Background()) && !u.IsInManagementView() && !plugin.GetPluginManager().HasVisibleToolbarMsg(ctx) && !GetUIManager().hasMainHotkeyToolbarWarning() {
+	primaryVisible := u.IsVisible(context.Background())
+	inManagement := u.IsInManagementView()
+	toolbarOwners := plugin.GetPluginManager().VisibleToolbarMsgOwners()
+	hasToolbarMsg := len(toolbarOwners) > 0
+	hotkeyWarning := GetUIManager().mainHotkeyToolbarWarning()
+	useToolbar := primaryVisible && !inManagement && !hasToolbarMsg && hotkeyWarning == ""
+
+	notifySession := util.GetContextSessionId(ctx)
+	u.sessionMu.RLock()
+	primarySession := u.primarySessionID
+	notifySessionVisible := "n/a"
+	if notifySession != "" {
+		if visible, ok := u.sessionVisible[notifySession]; ok {
+			notifySessionVisible = fmt.Sprintf("%t", visible)
+		} else {
+			notifySessionVisible = "unknown"
+		}
+	}
+	u.sessionMu.RUnlock()
+
+	failed := "none"
+	route := "toolbar"
+	if !useToolbar {
+		route = "overlay"
+		reasons := make([]string, 0, 4)
+		if !primaryVisible {
+			reasons = append(reasons, "primaryVisible")
+		}
+		if inManagement {
+			reasons = append(reasons, "inManagement")
+		}
+		if hasToolbarMsg {
+			reasons = append(reasons, "toolbarMsg")
+		}
+		if hotkeyWarning != "" {
+			reasons = append(reasons, "hotkeyWarning")
+		}
+		failed = strings.Join(reasons, ",")
+	}
+	logger.Debug(ctx, fmt.Sprintf(
+		"notify route=%s failed=%s text=%q plugin=%s primaryVisible=%t inManagement=%t toolbarMsg=%t toolbarOwners=%s hotkeyWarning=%q notifySession=%s notifySessionVisible=%s primarySession=%s",
+		route, failed, msg.Text, msg.PluginId,
+		primaryVisible, inManagement, hasToolbarMsg, strings.Join(toolbarOwners, ","),
+		hotkeyWarning, notifySession, notifySessionVisible, primarySession,
+	))
+
+	if useToolbar {
 		u.applyView(ctx, "show notification message", func(view contract.View) error { return view.ShowNotificationMessage(ctx, msg) })
 	} else {
 		var icon image.Image
