@@ -82,6 +82,10 @@ type Scanner struct {
 	transientSyncState  *TransientSyncState
 	dirtyBackpressureMu sync.Mutex
 	lastDirtyRunElapsed time.Duration
+	// Collapses repeated degraded-root reconcile requests into one per cooldown
+	// window (FSEvents flags history loss per event). Bounded by root count.
+	rootReconcileGateMu sync.Mutex
+	rootReconcileGateAt map[string]time.Time
 	// Content index hook receives incremental file change notifications after
 	// the name index has been updated, so the content FTS index stays in sync
 	// without waiting for the next full crawl.
@@ -1773,12 +1777,18 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	}
 
 	runRoots := make([]RootRecord, 0, len(batches))
+	runBatches := make([]ReconcileBatch, 0, len(batches))
 	for _, batch := range batches {
 		root, ok := rootsByID[batch.RootID]
 		if !ok {
+			// Bug fix: a deleted root's stale batch failed the whole flush with
+			// "root not found" and was requeued forever. Its indexed rows are gone,
+			// so the batch is obsolete and dropped.
+			util.GetLogger().Warn(ctx, "filesearch dropped dirty batch for unknown root: root="+batch.RootID)
 			continue
 		}
 		runRoots = append(runRoots, root)
+		runBatches = append(runBatches, batch)
 	}
 	if len(runRoots) == 0 {
 		s.refreshTransientSyncPendingCounts()
@@ -1786,15 +1796,15 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	}
 
 	runStartedAt := time.Now()
-	if err := s.executePlannedRun(ctx, RunKindIncremental, "dirty_queue", runRoots, batches); err != nil {
+	if err := s.executePlannedRun(ctx, RunKindIncremental, "dirty_queue", runRoots, runBatches); err != nil {
 		s.recordDirtyRunElapsed(time.Since(runStartedAt))
-		s.handleIncrementalRunFailure(ctx, runRoots, batches, err)
+		s.handleIncrementalRunFailure(ctx, runRoots, runBatches, err)
 		return err
 	}
 	s.recordDirtyRunElapsed(time.Since(runStartedAt))
 
 	s.logRootReloadIndexSnapshot(ctx)
-	if err := s.handleSuccessfulDirtyFlush(ctx, batches, now); err != nil {
+	if err := s.handleSuccessfulDirtyFlush(ctx, runBatches, now); err != nil {
 		// Dynamic-root lifecycle work is opportunistic after the real reconcile
 		// has succeeded. A promotion/demotion failure should not turn an already
 		// applied dirty batch into a user-visible indexing failure or force a broad
@@ -1843,7 +1853,20 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			At:            signal.At,
 		})
 	case ChangeSignalKindDirtyPath:
-		if !rootFound || root.FeedState == RootFeedStateReady || root.FeedType == RootFeedTypeFallback || root.FeedType == "" || shouldKeepKnownFileDeltaScoped(signal) {
+		// Bug fix: unknown-semantics file events on a degraded FSEvents root used to
+		// escalate per event (a ~2000-file pnpm store write queued ~2000 full scans);
+		// a known file path is still an exact single-file mutation, so it stays
+		// scoped. The log guard must mirror the scoped condition below.
+		if fileSearchDiagnosticLoggingEnabled && rootFound && root.FeedType == RootFeedTypeFSEvents && root.FeedState != RootFeedStateReady && signal.PathTypeKnown && !signal.PathIsDir && !shouldKeepKnownFileDeltaScoped(signal) {
+			util.GetLogger().Info(ctx, fmt.Sprintf(
+				"filesearch degraded root kept unknown file delta scoped: root=%s path=%s semantic=%s feed_state=%s",
+				signal.RootID,
+				summarizeLogPath(signal.Path),
+				signal.SemanticKind,
+				root.FeedState,
+			))
+		}
+		if !rootFound || root.FeedState == RootFeedStateReady || root.FeedType == RootFeedTypeFallback || root.FeedType == "" || shouldKeepKnownFileDeltaScoped(signal) || (root.FeedType == RootFeedTypeFSEvents && signal.PathTypeKnown && !signal.PathIsDir) {
 			// Fallback feeds cannot replay a journal, so degraded state only tells us
 			// a previous reconcile failed. Keeping later concrete dirty paths scoped
 			// avoids converting one transient temp-directory miss into repeated full
@@ -1880,22 +1903,29 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			At:            signal.At,
 		})
 	case ChangeSignalKindRequiresRootReconcile:
-		util.GetLogger().Info(ctx, fmt.Sprintf(
-			"filesearch change feed requested root reconcile: root=%s path=%s feed_type=%s reason=%q",
-			signal.RootID,
-			summarizeLogPath(signal.Path),
-			signal.FeedType,
-			strings.TrimSpace(signal.Reason),
-		))
-		s.updateRootFeedState(ctx, signal.RootID, RootFeedStateDegraded)
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        signal.RootID,
-			Path:          signal.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			At:            signal.At,
-		})
+		// FSEvents flags history loss per event, so one burst used to queue one
+		// root reconcile per event. Gate repeats to one per cooldown window; later
+		// requests still pass, so correctness only waits, never skips. The request
+		// log stays inside the gate: a 2000-event storm must not also emit 2000
+		// Info lines.
+		if s.gateRootReconcile(ctx, signal.RootID, signal.At) {
+			util.GetLogger().Info(ctx, fmt.Sprintf(
+				"filesearch change feed requested root reconcile: root=%s path=%s feed_type=%s reason=%q",
+				signal.RootID,
+				summarizeLogPath(signal.Path),
+				signal.FeedType,
+				strings.TrimSpace(signal.Reason),
+			))
+			s.updateRootFeedState(ctx, signal.RootID, RootFeedStateDegraded)
+			s.enqueueDirtyWithContext(ctx, DirtySignal{
+				Kind:          DirtySignalKindRoot,
+				RootID:        signal.RootID,
+				Path:          signal.Path,
+				PathIsDir:     true,
+				PathTypeKnown: true,
+				At:            signal.At,
+			})
+		}
 	case ChangeSignalKindFeedUnavailable:
 		util.GetLogger().Info(ctx, fmt.Sprintf(
 			"filesearch change feed unavailable: root=%s path=%s feed_type=%s reason=%q",
@@ -1926,6 +1956,34 @@ func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
 	default:
 		return false
 	}
+}
+
+// rootReconcileCooldown bounds how often a degraded root re-queues a full
+// reconcile from repeated RequiresRootReconcile signals.
+const rootReconcileCooldown = time.Minute
+
+// gateRootReconcile suppresses repeats inside the cooldown window; the first
+// request and any request after the window pass.
+func (s *Scanner) gateRootReconcile(ctx context.Context, rootID string, at time.Time) bool {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	s.rootReconcileGateMu.Lock()
+	defer s.rootReconcileGateMu.Unlock()
+	if s.rootReconcileGateAt == nil {
+		s.rootReconcileGateAt = make(map[string]time.Time)
+	}
+	if last, ok := s.rootReconcileGateAt[rootID]; ok && at.Sub(last) < rootReconcileCooldown {
+		util.GetLogger().Info(ctx, fmt.Sprintf(
+			"filesearch suppressed repeated root reconcile: root=%s since_last=%s cooldown=%s",
+			rootID,
+			at.Sub(last).Round(time.Second),
+			rootReconcileCooldown,
+		))
+		return false
+	}
+	s.rootReconcileGateAt[rootID] = at
+	return true
 }
 
 func (s *Scanner) handleDirtyQueueFailure(ctx context.Context, root RootRecord, batch ReconcileBatch, remaining []ReconcileBatch, cause error) {
