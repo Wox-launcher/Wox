@@ -70,7 +70,7 @@
     "Id": "807b4689-606f-4e92-8eac-35e58c5d4f87",
     "Name": "i18n:theme_name",
     "Author": "qianlifeng",
-    "Version": "1.0.2",
+    "Version": "1.1.1",
     "MinWoxVersion": "2.4.5",
     "Description": "i18n:theme_description",
     "ImageTheme": true,
@@ -85,7 +85,7 @@
       "https://raw.githubusercontent.com/qianlifeng/Wox.Theme.Knit/master/preview.png"
     ],
     "DateCreated": "2026-09-22 01:17:50",
-    "DateUpdated": "2026-09-22 01:17:50",
+    "DateUpdated": "2026-09-29 12:53:16",
     "I18n": {
       "en_US": {
         "theme_name": "Knit",
