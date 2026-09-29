@@ -509,10 +509,17 @@ func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
 				Operation: CloudSyncProgressOperationPull,
 				Base:      progressBase,
 				Total:     0,
-			})
+			}, false)
 			applied += applyResult.Succeeded
 			failed += applyResult.Failed
 			historyDetails = append(historyDetails, applyResult.Details...)
+			if applyResult.haltErr != nil {
+				// Cursor stays put so the same page is retried. recordFailure also
+				// starts backoff, which keeps the following push from uploading oplogs
+				// that this page failed to retire.
+				fail(fmt.Errorf("failed to record applied cloud sync change: %w", applyResult.haltErr))
+				return
+			}
 			if applyErr := applyResult.Err(); applyErr != nil {
 				historyErr = fmt.Errorf("failed to apply remote records: %w", applyErr)
 			}
@@ -608,7 +615,7 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 				Operation: CloudSyncProgressOperationRestore,
 				Base:      progressBase,
 				Total:     0,
-			})
+			}, true)
 			for _, detail := range result.Details {
 				if detail.Status == CloudSyncHistoryStatusFailed {
 					util.GetLogger().Warn(ctx, fmt.Sprintf("cloud sync restore failed for %s/%s: %s", detail.EntityType, detail.Key, detail.Error))
@@ -648,7 +655,7 @@ func (m *CloudSyncManager) applyRecords(ctx context.Context, records []CloudSync
 
 // applyRecordsWithProgress applies remote records and optionally reports per-record UI progress.
 func (m *CloudSyncManager) applyRecordsWithProgress(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress) error {
-	return m.applyRecordsWithDetails(ctx, records, progress).Err()
+	return m.applyRecordsWithDetails(ctx, records, progress, false).Err()
 }
 
 // cloudSyncApplyProgress reports which remote record is currently being applied.
@@ -668,6 +675,9 @@ type cloudSyncApplyRecordsResult struct {
 	err error
 	// Optional installations may fail without preventing bootstrap and future pulls.
 	restoreErr error
+	// haltErr means version or oplog bookkeeping failed after a value was applied.
+	// The batch stops so the pull cursor and restore bootstrap stay retryable.
+	haltErr error
 }
 
 // Err returns the last per-record apply error for callers that still need aggregate failure semantics.
@@ -689,8 +699,114 @@ func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err erro
 	r.Details = append(r.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusFailed, userFacingCloudSyncError(err)))
 }
 
+// applyUnderSyncMutation compares, applies, and retires conflicting oplogs while holding
+// the sync lock. A local write either happens before the comparison or after cleanup.
+func (m *CloudSyncManager) applyUnderSyncMutation(apply func() error, record CloudSyncRecord, restore bool) (skipped bool, localTs int64, applyErr error, noteErr error) {
+	_ = WithLocalSyncMutation(func() error {
+		if !restore {
+			var older bool
+			older, localTs = remoteChangeIsOlder(record)
+			if older {
+				skipped = true
+				return nil
+			}
+		}
+		preexisting, err := loadPreApplyOplogs(record, restore)
+		if err != nil {
+			noteErr = err
+			return nil
+		}
+		applyErr = apply()
+		if applyErr != nil {
+			return nil
+		}
+		noteErr = noteRemoteChangeForApply(record, restore, preexisting)
+		return nil
+	})
+	return skipped, localTs, applyErr, noteErr
+}
+
+// applyInstallRecord keeps plugin and theme downloads outside the sync lock.
+// User installs hold installMu and then take the sync lock to write the oplog.
+// Holding the sync lock across InstallLocal waits on installMu in the opposite
+// order and also blocks unrelated setting writes for the whole download.
+// Oplogs created during the download stay queued: cleanup only retires the
+// snapshot taken before install.
+func (m *CloudSyncManager) applyInstallRecord(apply func() error, record CloudSyncRecord, restore bool) (skipped bool, localTs int64, applyErr error, noteErr error) {
+	var preexisting []preApplyOplog
+	_ = WithLocalSyncMutation(func() error {
+		if !restore {
+			var older bool
+			older, localTs = remoteChangeIsOlder(record)
+			if older {
+				skipped = true
+				return nil
+			}
+		}
+		var err error
+		preexisting, err = loadPreApplyOplogs(record, restore)
+		if err != nil {
+			noteErr = err
+		}
+		return nil
+	})
+	if skipped || noteErr != nil {
+		return skipped, localTs, nil, noteErr
+	}
+	applyErr = apply()
+	if applyErr != nil {
+		return skipped, localTs, applyErr, nil
+	}
+	_ = WithLocalSyncMutation(func() error {
+		noteErr = noteRemoteChangeForApply(record, restore, preexisting)
+		return nil
+	})
+	return skipped, localTs, nil, noteErr
+}
+
+// deliverDeferredPluginSettingNotification runs a plugin callback after the sync lock is free.
+func (m *CloudSyncManager) deliverDeferredPluginSettingNotification(ctx context.Context, pluginID string, key string, value string) {
+	notifier, ok := m.applier.(DeferredPluginSettingNotifier)
+	if !ok {
+		return
+	}
+	notifier.DeliverDeferredPluginSettingNotification(ctx, pluginID, key, value)
+}
+
+// finishRemoteApply runs one record through compare, apply, and oplog cleanup.
+// applied is false when the remote change lost last-write-wins or the value itself failed.
+// lockAroundApply is false for install records so the download does not hold the sync lock.
+func (m *CloudSyncManager) finishRemoteApply(ctx context.Context, result *cloudSyncApplyRecordsResult, record CloudSyncRecord, restore bool, blocksRestore bool, lockAroundApply bool, apply func() error) (halt bool, applied bool) {
+	var skipped bool
+	var localTs int64
+	var applyErr error
+	var noteErr error
+	if lockAroundApply {
+		skipped, localTs, applyErr, noteErr = m.applyUnderSyncMutation(apply, record, restore)
+	} else {
+		skipped, localTs, applyErr, noteErr = m.applyInstallRecord(apply, record, restore)
+	}
+	if skipped {
+		logSkippedOlderRemoteChange(ctx, record, localTs)
+		result.addSucceeded(record)
+		return false, false
+	}
+	if applyErr != nil {
+		result.addFailed(record, applyErr, blocksRestore)
+		return false, false
+	}
+	if noteErr != nil {
+		result.addFailed(record, noteErr, true)
+		result.haltErr = noteErr
+		return true, false
+	}
+	result.addSucceeded(record)
+	return false, true
+}
+
 // applyRecordsWithDetails keeps applying independent remote records after one item fails.
-func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress) cloudSyncApplyRecordsResult {
+// restore adopts the cloud snapshot instead of protecting newer unpushed local changes.
+func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress, restore bool) cloudSyncApplyRecordsResult {
 	disabled := m.disabledPluginSet(ctx)
 	appliedWoxSetting := false
 	appliedPluginSetting := false
@@ -698,6 +814,7 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 	appliedInstalledTheme := false
 	themeSettingChanged := false
 	result := cloudSyncApplyRecordsResult{}
+records:
 	for index, record := range records {
 		if progress != nil {
 			// Include the current item in the count so long installs still show movement.
@@ -731,37 +848,64 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 			rawValue = plaintext
 		}
 
+		// Incremental sync protects a newer unpushed local change. Restore replaces
+		// local state, including newer oplogs written before sync was enabled.
+		// Both decisions run inside finishRemoteApply with the apply and cleanup.
 		switch record.EntityType {
 		case EntityWoxSetting:
 			willChangeCurrentTheme := themeSettingWillChange(record, rawValue)
-			if err := m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err, true)
+			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, true, true, func() error {
+				return m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue)
+			})
+			if halt {
+				break records
+			}
+			if !applied {
 				continue
 			}
 			appliedWoxSetting = true
 			themeSettingChanged = themeSettingChanged || willChangeCurrentTheme
-			result.addSucceeded(record)
 		case EntityPluginSetting:
-			if err := m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err, true)
+			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, true, true, func() error {
+				return m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue)
+			})
+			if halt {
+				break records
+			}
+			if !applied {
 				continue
 			}
 			appliedPluginSetting = true
-			result.addSucceeded(record)
+			// The callback can await a setting write on another goroutine. That
+			// write needs the sync lock, so it must run only after this record's
+			// apply and bookkeeping have released it.
+			notifyValue := rawValue
+			if record.Op == OpDelete {
+				notifyValue = ""
+			}
+			m.deliverDeferredPluginSettingNotification(ctx, record.PluginID, record.Key, notifyValue)
 		case EntityInstalledPlugin:
-			if err := m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err, record.Op != OpUpsert)
+			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, record.Op != OpUpsert, false, func() error {
+				return m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue)
+			})
+			if halt {
+				break records
+			}
+			if !applied {
 				continue
 			}
 			appliedInstalledPlugin = true
-			result.addSucceeded(record)
 		case EntityInstalledTheme:
-			if err := m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue); err != nil {
-				result.addFailed(record, err, record.Op != OpUpsert)
+			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, record.Op != OpUpsert, false, func() error {
+				return m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue)
+			})
+			if halt {
+				break records
+			}
+			if !applied {
 				continue
 			}
 			appliedInstalledTheme = true
-			result.addSucceeded(record)
 		default:
 			util.GetLogger().Warn(ctx, fmt.Sprintf("unknown cloud sync entity type: %s", record.EntityType))
 			result.addSucceeded(record)

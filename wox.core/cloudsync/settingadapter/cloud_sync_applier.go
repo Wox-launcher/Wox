@@ -14,7 +14,18 @@ import (
 	"wox/util"
 )
 
-type LocalSettingApplier struct{}
+type LocalSettingApplier struct {
+	// deferredNotices are filled by ApplyPluginSetting and delivered only after
+	// the caller releases the sync mutation lock. One entry per plugin setting
+	// so a later record cannot erase a notice whose bookkeeping has not finished.
+	deferredNotices map[string]*pluginSettingNotice
+}
+
+type pluginSettingNotice struct {
+	pluginID string
+	key      string
+	value    string
+}
 
 func NewLocalSettingApplier() *LocalSettingApplier {
 	return &LocalSettingApplier{}
@@ -71,8 +82,9 @@ func (a *LocalSettingApplier) ApplyPluginSetting(ctx context.Context, pluginID s
 		if err := store.Delete(key); err != nil {
 			return err
 		}
+		// A retry after the row is already gone leaves the undelivered notice in place.
 		if hadPrevious {
-			notifyPluginSettingChanged(ctx, pluginID, normalizePluginSettingKey(key), "")
+			a.rememberPluginSettingNotice(pluginID, normalizePluginSettingKey(key), "")
 		}
 		return nil
 	case cloudsync.OpUpsert:
@@ -80,12 +92,35 @@ func (a *LocalSettingApplier) ApplyPluginSetting(ctx context.Context, pluginID s
 			return err
 		}
 		if shouldNotifySettingChange(op, hadPrevious, previousValue, rawValue) {
-			notifyPluginSettingChanged(ctx, pluginID, normalizePluginSettingKey(key), rawValue)
+			a.rememberPluginSettingNotice(pluginID, normalizePluginSettingKey(key), rawValue)
 		}
 		return nil
 	default:
 		return fmt.Errorf("unknown oplog op: %s", op)
 	}
+}
+
+func (a *LocalSettingApplier) rememberPluginSettingNotice(pluginID string, key string, value string) {
+	if a.deferredNotices == nil {
+		a.deferredNotices = map[string]*pluginSettingNotice{}
+	}
+	a.deferredNotices[pluginSettingNoticeID(pluginID, key)] = &pluginSettingNotice{pluginID: pluginID, key: key, value: value}
+}
+
+func pluginSettingNoticeID(pluginID string, key string) string {
+	return pluginID + "\x00" + key
+}
+
+// DeliverDeferredPluginSettingNotification runs the plugin callback after apply
+// and oplog bookkeeping have released the sync mutation lock.
+func (a *LocalSettingApplier) DeliverDeferredPluginSettingNotification(ctx context.Context, pluginID string, key string, value string) {
+	normalizedKey := normalizePluginSettingKey(key)
+	notice := a.deferredNotices[pluginSettingNoticeID(pluginID, normalizedKey)]
+	if notice == nil || notice.value != value {
+		return
+	}
+	delete(a.deferredNotices, pluginSettingNoticeID(pluginID, normalizedKey))
+	dispatchPluginSettingChange(ctx, notice.pluginID, notice.key, notice.value)
 }
 
 // ApplyInstalledPlugin replays remote plugin install-list changes without
@@ -279,6 +314,9 @@ func normalizePluginSettingKey(key string) string {
 	}
 	return key
 }
+
+// dispatchPluginSettingChange invokes plugin setting callbacks. Tests replace it.
+var dispatchPluginSettingChange = notifyPluginSettingChanged
 
 func notifyPluginSettingChanged(ctx context.Context, pluginID string, key string, value string) {
 	instances := plugin.GetPluginManager().GetPluginInstances()

@@ -448,6 +448,7 @@ func initCloudSyncTestDatabase(t *testing.T) {
 
 type testCloudSyncClient struct {
 	snapshotResponses    []*CloudSyncPullResponse
+	pullResponses        []*CloudSyncPullResponse
 	snapshotRequests     []CloudSyncPullRequest
 	pushRequests         []CloudSyncPushRequest
 	pullRequests         []CloudSyncPullRequest
@@ -470,7 +471,12 @@ func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest
 func (c *testCloudSyncClient) Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
 	_ = ctx
 	c.pullRequests = append(c.pullRequests, req)
-	return &CloudSyncPullResponse{NextCursor: "pulled"}, nil
+	if len(c.pullResponses) == 0 {
+		return &CloudSyncPullResponse{NextCursor: "pulled"}, nil
+	}
+	resp := c.pullResponses[0]
+	c.pullResponses = c.pullResponses[1:]
+	return resp, nil
 }
 
 func (c *testCloudSyncClient) Snapshot(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
@@ -529,15 +535,19 @@ func (p testCloudSyncDeviceProvider) DeviceID(ctx context.Context) (string, erro
 }
 
 type testCloudSyncApplier struct {
-	wox        map[string]string
-	plugins    map[string]string
-	err        error
-	installErr error
+	wox         map[string]string
+	plugins     map[string]string
+	err         error
+	installErr  error
+	duringApply func()
 }
 
 func (a *testCloudSyncApplier) ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error {
 	_ = ctx
 	_ = op
+	if a.duringApply != nil {
+		a.duringApply()
+	}
 	if a.err != nil {
 		return a.err
 	}
@@ -566,6 +576,9 @@ func (a *testCloudSyncApplier) ApplyInstalledPlugin(ctx context.Context, pluginI
 	_ = pluginID
 	_ = op
 	_ = rawValue
+	if a.duringApply != nil {
+		a.duringApply()
+	}
 	if a.installErr != nil {
 		return a.installErr
 	}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"wox/cloudsync"
 	"wox/util"
 )
 
@@ -164,28 +166,31 @@ func (v *SettingValue[T]) Get() T {
 }
 
 // Set updates the value of the setting and persists it to the store.
+// The sync lock is taken before v.mu. Remote apply already holds the sync lock
+// and then takes v.mu through SetLocal, so the local path must use that same order.
 func (v *SettingValue[T]) Set(newValue T) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	return cloudsync.WithLocalSyncMutation(func() error {
+		v.mu.Lock()
+		defer v.mu.Unlock()
 
-	var err error
-	if v.settingStore != nil {
-		if syncStore, ok := v.settingStore.(SyncableStore); ok {
-			err = syncStore.SetWithSync(v.key, newValue, v.syncable)
+		var err error
+		if v.settingStore != nil {
+			if syncStore, ok := v.settingStore.(SyncableStore); ok {
+				err = syncStore.SetWithSync(v.key, newValue, v.syncable)
+			} else {
+				err = v.settingStore.Set(v.key, newValue)
+			}
 		} else {
-			err = v.settingStore.Set(v.key, newValue)
+			return fmt.Errorf("no store available")
 		}
-	} else {
-		return fmt.Errorf("no store available")
-	}
+		if err != nil {
+			return err
+		}
 
-	if err != nil {
-		return err
-	}
-
-	v.value = newValue
-	v.isLoaded = true
-	return nil
+		v.value = newValue
+		v.isLoaded = true
+		return nil
+	})
 }
 
 func (v *SettingValue[T]) Key() string {

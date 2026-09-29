@@ -43,30 +43,32 @@ func LogInstalledThemeDelete(ctx context.Context, themeID string) error {
 // logInstallOplog stores install-list changes in the same encrypted oplog path
 // used by settings, with entityID as the stable per-plugin/theme key.
 func logInstallOplog(ctx context.Context, entityType string, entityID string, value interface{}, op string) error {
-	db := database.GetDB()
-	if db == nil {
-		return fmt.Errorf("database is not initialized")
-	}
-
-	rawValue := ""
-	if op == OpUpsert {
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			return fmt.Errorf("failed to serialize install sync value: %w", err)
+	return WithLocalSyncMutation(func() error {
+		db := database.GetDB()
+		if db == nil {
+			return fmt.Errorf("database is not initialized")
 		}
-		rawValue = string(encoded)
-	}
 
-	oplog := database.Oplog{
-		EntityType: entityType,
-		EntityID:   entityID,
-		Operation:  op,
-		Key:        entityID,
-		Value:      rawValue,
-		Timestamp:  util.GetSystemTimestamp(),
-	}
-	if err := db.Create(&oplog).Error; err != nil {
-		return err
-	}
-	return nil
+		rawValue := ""
+		if op == OpUpsert {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("failed to serialize install sync value: %w", err)
+			}
+			rawValue = string(encoded)
+		}
+
+		oplog := database.Oplog{
+			EntityType: entityType,
+			EntityID:   entityID,
+			Operation:  op,
+			Key:        entityID,
+			Value:      rawValue,
+			Timestamp:  util.GetSystemTimestamp(),
+		}
+		if err := db.Create(&oplog).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }

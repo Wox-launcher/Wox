@@ -236,6 +236,16 @@ type CloudSyncApplier interface {
 	ApplyInstalledTheme(ctx context.Context, themeID string, op string, rawValue string) error
 }
 
+// DeferredPluginSettingNotifier delivers plugin setting callbacks after the sync
+// mutation lock is released. A Python callback can await set_setting, which runs
+// on another goroutine and needs that lock; calling it while the lock is held
+// waits until the RPC timeout. pluginID, key, and value identify the record whose
+// bookkeeping just succeeded, so an earlier undelivered notice is not sent for a
+// different record.
+type DeferredPluginSettingNotifier interface {
+	DeliverDeferredPluginSettingNotification(ctx context.Context, pluginID string, key string, value string)
+}
+
 // CloudSyncSettingReloader lets the sync manager refresh UI-side cached settings
 // after remote records have been applied locally.
 type CloudSyncSettingReloader interface {

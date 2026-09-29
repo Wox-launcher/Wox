@@ -62,7 +62,20 @@ func SaveCloudSyncState(ctx context.Context, state *database.CloudSyncState) err
 
 // ResetCloudSyncState clears account-scoped sync progress so the next login starts from a clean bootstrap state.
 func ResetCloudSyncState(ctx context.Context) error {
+	if err := clearCloudSyncRecordVersions(); err != nil {
+		return err
+	}
 	return SaveCloudSyncState(ctx, &database.CloudSyncState{ID: cloudSyncStateID})
+}
+
+// clearCloudSyncRecordVersions drops last-write-wins baselines. They are not account-scoped,
+// so leaving them after logout would hide the next account's older records.
+func clearCloudSyncRecordVersions() error {
+	db := database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	return db.Where("1 = 1").Delete(&database.CloudSyncRecordVersion{}).Error
 }
 
 func UpdateCloudSyncState(ctx context.Context, update func(state *database.CloudSyncState)) (*database.CloudSyncState, error) {

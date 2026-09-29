@@ -127,7 +127,9 @@ func createSnapshotOplogs(oplogs []database.Oplog) error {
 		return fmt.Errorf("database not initialized")
 	}
 
-	return db.CreateInBatches(&oplogs, 100).Error
+	return cloudsync.WithLocalSyncMutation(func() error {
+		return db.CreateInBatches(&oplogs, 100).Error
+	})
 }
 
 // appendInstalledPluginOplogs snapshots store-installed plugins that can be reproduced on another device.

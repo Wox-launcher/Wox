@@ -77,6 +77,15 @@ type CloudSyncState struct {
 	Bootstrapped bool
 }
 
+// CloudSyncRecordVersion is the newest client timestamp known for one sync identity.
+// Remote applies remember it here because they do not create a local oplog.
+type CloudSyncRecordVersion struct {
+	EntityType string `gorm:"primaryKey"`
+	EntityID   string `gorm:"primaryKey"`
+	Key        string `gorm:"primaryKey"`
+	ClientTs   int64
+}
+
 // DeviceIdentity stores the local cloud sync device identifier outside synced settings.
 type DeviceIdentity struct {
 	ID       uint `gorm:"primaryKey"`
@@ -213,6 +222,7 @@ func Init(ctx context.Context) error {
 		&PluginSetting{},
 		&Oplog{},
 		&CloudSyncState{},
+		&CloudSyncRecordVersion{},
 		&DeviceIdentity{},
 		&TelemetryState{},
 		&CloudSyncHistory{},

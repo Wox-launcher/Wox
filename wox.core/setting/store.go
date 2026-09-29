@@ -64,24 +64,28 @@ func (s *WoxSettingStore) Delete(key string) error {
 }
 
 func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
-	if err := s.Set(key, value); err != nil {
-		return err
-	}
-	if !syncable {
-		return nil
-	}
-	return s.logOplog(key, value, cloudsync.OpUpsert)
+	return cloudsync.WithLocalSyncMutation(func() error {
+		if err := s.Set(key, value); err != nil {
+			return err
+		}
+		if !syncable {
+			return nil
+		}
+		return s.logOplog(key, value, cloudsync.OpUpsert)
+	})
 }
 
 func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
-	result := s.db.Delete(&database.WoxSetting{Key: key})
-	if result.Error != nil {
-		return result.Error
-	}
-	if !syncable || result.RowsAffected == 0 {
-		return nil
-	}
-	return s.logOplog(key, nil, cloudsync.OpDelete)
+	return cloudsync.WithLocalSyncMutation(func() error {
+		result := s.db.Delete(&database.WoxSetting{Key: key})
+		if result.Error != nil {
+			return result.Error
+		}
+		if !syncable || result.RowsAffected == 0 {
+			return nil
+		}
+		return s.logOplog(key, nil, cloudsync.OpDelete)
+	})
 }
 
 func (s *WoxSettingStore) logOplog(key string, value interface{}, op string) error {
@@ -160,56 +164,62 @@ func (s *PluginSettingStore) Delete(key string) error {
 }
 
 func (s *PluginSettingStore) DeleteAll() error {
-	var settings []database.PluginSetting
-	if err := s.db.Where("plugin_id = ?", s.pluginId).Find(&settings).Error; err != nil {
-		return err
-	}
-
-	if err := s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error; err != nil {
-		return err
-	}
-
-	for _, setting := range settings {
-		if setting.IsLocal {
-			continue
-		}
-		if err := s.logOplog(setting.Key, nil, cloudsync.OpDelete); err != nil {
+	return cloudsync.WithLocalSyncMutation(func() error {
+		var settings []database.PluginSetting
+		if err := s.db.Where("plugin_id = ?", s.pluginId).Find(&settings).Error; err != nil {
 			return err
 		}
-	}
 
-	return nil
+		if err := s.db.Where("plugin_id = ?", s.pluginId).Delete(&database.PluginSetting{}).Error; err != nil {
+			return err
+		}
+
+		for _, setting := range settings {
+			if setting.IsLocal {
+				continue
+			}
+			if err := s.logOplog(setting.Key, nil, cloudsync.OpDelete); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (s *PluginSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
-	if err := s.set(key, value, !syncable); err != nil {
-		return err
-	}
-	if !syncable {
-		return s.discardPendingOplogs(key)
-	}
-	return s.logOplog(key, value, cloudsync.OpUpsert)
+	return cloudsync.WithLocalSyncMutation(func() error {
+		if err := s.set(key, value, !syncable); err != nil {
+			return err
+		}
+		if !syncable {
+			return s.discardPendingOplogs(key)
+		}
+		return s.logOplog(key, value, cloudsync.OpUpsert)
+	})
 }
 
 func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
-	wasLocal := false
-	if syncable {
-		var existing database.PluginSetting
-		findErr := s.db.Select("is_local").Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&existing).Error
-		if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
-			return findErr
+	return cloudsync.WithLocalSyncMutation(func() error {
+		wasLocal := false
+		if syncable {
+			var existing database.PluginSetting
+			findErr := s.db.Select("is_local").Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&existing).Error
+			if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
+				return findErr
+			}
+			wasLocal = findErr == nil && existing.IsLocal
 		}
-		wasLocal = findErr == nil && existing.IsLocal
-	}
 
-	result := s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
-	if result.Error != nil {
-		return result.Error
-	}
-	if !syncable || wasLocal || result.RowsAffected == 0 {
-		return nil
-	}
-	return s.logOplog(key, nil, cloudsync.OpDelete)
+		result := s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
+		if result.Error != nil {
+			return result.Error
+		}
+		if !syncable || wasLocal || result.RowsAffected == 0 {
+			return nil
+		}
+		return s.logOplog(key, nil, cloudsync.OpDelete)
+	})
 }
 
 // discardPendingOplogs prevents a value switched to local-only from being uploaded by an older queued write.
