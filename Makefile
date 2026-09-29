@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins themes plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -124,6 +124,7 @@ help:
 	@echo "  deb        Build Linux .deb package"
 	@echo "  rpm        Build Linux .rpm package"
 	@echo "  plugins    Update plugin store"
+	@echo "  themes     Update theme store"
 	@echo "  plugin-health  Install store plugins headlessly and probe init/query"
 	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
@@ -567,6 +568,9 @@ winget-update:
 
 plugins:
 	cd ci && go run . plugin
+
+themes:
+	cd ci && go run . theme
 
 # PLUGIN and OUT are optional. Example: make plugin-health PLUGIN=Obsidian OUT=plugin-health.json
 plugin-health: ensure-resources
