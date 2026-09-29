@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,10 +13,18 @@ import (
 )
 
 // populateAppLaunchKey reuses the launcher's conservative link reader during indexing, never while typing.
-func populateAppLaunchKey(info *appInfo) {
+func populateAppLaunchKey(ctx context.Context, info *appInfo) {
 	info.launchKey = ""
+	info.shortcutTarget = ""
 	if info.Type == AppTypeDesktop {
 		info.launchKey = shell.DesktopLaunchKey(info.Path)
+		if strings.EqualFold(filepath.Ext(info.Path), ".lnk") {
+			// Hiding the bare exe does not require flattening the shortcut: its original
+			// arguments, directory, elevation and Shell metadata remain in the retained .lnk.
+			if target, err := resolveShortcutTarget(ctx, info.Path); err == nil && filepath.IsAbs(target) && strings.EqualFold(filepath.Ext(target), ".exe") {
+				info.shortcutTarget = appPathMatchKey(target)
+			}
+		}
 	}
 }
 
@@ -30,7 +39,8 @@ func deduplicateAppLaunches(apps []appInfo) []appInfo {
 	return deduplicateWindowsApps(apps, roots)
 }
 
-// deduplicateWindowsApps merges only equivalent launches (or the same entry path for opaque links).
+// deduplicateWindowsApps merges equivalent shortcuts and lets a shortcut replace its bare exe.
+// Opaque shortcuts only merge with the same entry path, never with another shortcut by target alone.
 // Sorting fixes the representative and alias order regardless of parallel indexing completion order.
 func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 	ordered := slices.Clone(apps)
@@ -48,10 +58,14 @@ func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 	})
 	type pathKey struct{ appType, path string }
 	byPath, byLaunch := make(map[pathKey]int), make(map[string]int)
+	byShortcutTarget := make(map[string]int)
 	result := make([]appInfo, 0, len(ordered))
 	for _, info := range ordered {
 		path := pathKey{info.Type, appPathMatchKey(info.Path)}
 		index, found := byPath[path]
+		if !found && info.Type == AppTypeDesktop && strings.EqualFold(filepath.Ext(info.Path), ".exe") {
+			index, found = byShortcutTarget[path.path]
+		}
 		if !found && info.launchKey != "" {
 			index, found = byLaunch[info.launchKey]
 		}
@@ -67,6 +81,13 @@ func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 		}
 		if info.launchKey != "" {
 			byLaunch[info.launchKey] = index
+		}
+		// Shortcuts sort before executables. Keep the highest-priority shortcut as the
+		// replacement for a bare exe, without merging distinct shortcuts with each other.
+		if info.shortcutTarget != "" {
+			if _, exists := byShortcutTarget[info.shortcutTarget]; !exists {
+				byShortcutTarget[info.shortcutTarget] = index
+			}
 		}
 	}
 	for i := range result {

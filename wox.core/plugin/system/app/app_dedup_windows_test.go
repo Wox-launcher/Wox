@@ -8,6 +8,33 @@ import (
 	"testing"
 )
 
+func TestShortcutReplacesBareExeWithoutMergingLaunchVariants(t *testing.T) {
+	target := `c:\apps\pixpin.exe`
+	apps := []appInfo{
+		{Name: "Bare exe", Path: target, Type: AppTypeDesktop, launchKey: "default"},
+		{Name: "PixPin", Path: `C:\Start\PixPin.lnk`, Type: AppTypeDesktop, launchKey: "explicit working directory", shortcutTarget: target},
+		{Name: "Profile", Path: `C:\Other\Profile.lnk`, Type: AppTypeDesktop, launchKey: "custom arguments", shortcutTarget: target},
+		{Name: "Special", Path: `C:\Other\Special.lnk`, Type: AppTypeDesktop, shortcutTarget: target},
+	}
+	result := deduplicateWindowsApps(apps, []string{`c:\start`})
+	if len(result) != 3 || result[0].Name != "PixPin" || !slices.Contains(result[0].SearchableNames, "Bare exe") {
+		t.Fatalf("expected all shortcuts but no bare exe: %+v", result)
+	}
+	// A shortcut rejected by the launch fast path can still replace a bare exe because
+	// execution keeps using the original .lnk, rather than discarding its special data.
+	result = deduplicateWindowsApps([]appInfo{apps[0], apps[3]}, nil)
+	if len(result) != 1 || result[0].Name != "Special" {
+		t.Fatalf("opaque shortcut should replace its bare exe: %+v", result)
+	}
+	a := &ApplicationPlugin{api: emptyAPIImpl{}, retriever: appRetriever, apps: []appInfo{apps[0], apps[1]}}
+	a.ignoredApps = []ignoredApp{{Path: apps[1].Path}}
+	a.rebuildQueryEntries(context.Background())
+	entries, _ := a.getQueryEntriesSnapshot()
+	if len(entries) != 1 || entries[0].info.Path != target {
+		t.Fatal("hidden shortcut must not suppress the remaining executable")
+	}
+}
+
 func TestDeduplicateWindowsAppsPreservesVariantsAndAliases(t *testing.T) {
 	roots := []string{`c:\user\start`, `c:\common\start`, `c:\user\desktop`, `c:\public\desktop`}
 	apps := []appInfo{

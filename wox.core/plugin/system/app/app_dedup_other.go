@@ -2,6 +2,8 @@
 
 package app
 
-func populateAppLaunchKey(info *appInfo) {}
+import "context"
+
+func populateAppLaunchKey(ctx context.Context, info *appInfo) {}
 
 func deduplicateAppLaunches(apps []appInfo) []appInfo { return apps }

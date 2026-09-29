@@ -73,6 +73,8 @@ type appInfo struct {
 	Pid int `json:"-"`
 	// Derived from the current launch semantics, never persisted or confused with process Identity.
 	launchKey string
+	// Used only to prefer an original shortcut over its bare executable in search results.
+	shortcutTarget string
 	// IsDefaultIcon is persisted so launchpad can hide entries whose icon fell
 	// back to a generic/default asset after a restart. Normal app search still
 	// keeps these entries visible.
@@ -83,6 +85,7 @@ type appInfo struct {
 func (info appInfo) equals(other appInfo) bool {
 	return info.Name == other.Name &&
 		info.launchKey == other.launchKey &&
+		info.shortcutTarget == other.shortcutTarget &&
 		slices.Equal(info.SearchableNames, other.SearchableNames) &&
 		info.Identity == other.Identity &&
 		info.Path == other.Path &&
@@ -434,7 +437,7 @@ func (a *ApplicationPlugin) populateAppMetadata(ctx context.Context, appPath str
 	if strings.TrimSpace(info.Path) == "" {
 		info.Path = appPath
 	}
-	populateAppLaunchKey(info)
+	populateAppLaunchKey(ctx, info)
 	if strings.TrimSpace(info.Identity) == "" {
 		info.Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, *info))
 	}
@@ -2436,7 +2439,7 @@ func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error)
 
 	for i := range apps {
 		apps[i].Pid = 0
-		populateAppLaunchKey(&apps[i])
+		populateAppLaunchKey(ctx, &apps[i])
 		if strings.TrimSpace(apps[i].Identity) == "" {
 			apps[i].Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, apps[i]))
 		}
