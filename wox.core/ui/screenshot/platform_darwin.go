@@ -48,6 +48,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	if cancelled {
 		return ScreenshotResult{Cancelled: true}, nil
 	}
+	editorStartedAt := time.Now()
 	var dismissOnce sync.Once
 	dismissSelection := func() {
 		dismissOnce.Do(func() {
@@ -119,7 +120,10 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		},
 		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
 		initialSelection: &selection,
-		afterShow:        dismissSelection,
+		afterShow: func() {
+			dismissSelection()
+			util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_toolbar stage=editor_shown editorUs=%d", time.Since(editorStartedAt).Microseconds()))
+		},
 	}
 	if hasCapturedCursor {
 		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)
@@ -169,25 +173,15 @@ func captureDarwinCursor() *screenshotEditorCapturedCursor {
 // selectDarwinScreenshotRegion keeps one cached native image and overlay window per display until
 // the user finishes selecting or copies a color from the pre-selection inspector.
 func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, string, bool, error) {
-	file, err := os.CreateTemp("", "wox-screenshot-*.png")
-	if err != nil {
-		return nil, 0, 0, Rect{}, Rect{}, "", false, fmt.Errorf("create screenshot capture file: %w", err)
-	}
-	path := file.Name()
-	if err := file.Close(); err != nil {
-		return nil, 0, 0, Rect{}, Rect{}, "", false, fmt.Errorf("close screenshot capture file: %w", err)
-	}
-	defer os.Remove(path)
-
-	nativePath := C.CString(path)
-	defer C.free(unsafe.Pointer(nativePath))
+	var pixelWidth, pixelHeight C.int32_t
 	var sessionHandle C.uintptr_t
 	var displayID C.uint32_t
 	var displayX, displayY, displayWidth, displayHeight C.float
 	var selectionX, selectionY, selectionWidth, selectionHeight C.float
 	var copiedColor *C.char
 	switch result := C.wox_darwin_select_screenshot_region(
-		nativePath,
+		&pixelWidth,
+		&pixelHeight,
 		&sessionHandle,
 		&displayID,
 		&displayX,
@@ -215,11 +209,14 @@ func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, s
 		return nil, 0, 0, Rect{}, Rect{}, "", false, errors.New("failed to start the macOS screenshot selector")
 	}
 
-	source, err := decodeDarwinScreenshot(path)
-	if err != nil {
+	copyStartedAt := time.Now()
+	// Own the pixels in Go so dismissing the native selector cannot invalidate the editor image.
+	source := image.NewRGBA(image.Rect(0, 0, int(pixelWidth), int(pixelHeight)))
+	if C.wox_darwin_copy_screenshot_selection_rgba(sessionHandle, pixelWidth, pixelHeight, unsafe.Pointer(&source.Pix[0])) != 0 {
 		C.wox_darwin_dismiss_screenshot_selection(sessionHandle)
-		return nil, 0, 0, Rect{}, Rect{}, "", false, err
+		return nil, 0, 0, Rect{}, Rect{}, "", false, errors.New("copy cached macOS screenshot pixels")
 	}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_toolbar stage=pixels_copied copyUs=%d width=%d height=%d", time.Since(copyStartedAt).Microseconds(), pixelWidth, pixelHeight))
 	return source,
 		uintptr(sessionHandle),
 		uint32(displayID),
@@ -309,4 +306,13 @@ func darwinScreenshotColorShortcut(keyCode uint16) (asHex bool, ok bool) {
 		return false, false
 	}
 	return hex != 0, true
+}
+
+// darwinScreenshotTestPixels exercises the same native conversion as the selector handoff.
+func darwinScreenshotTestPixels() (*image.RGBA, error) {
+	pixels := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	if C.wox_darwin_test_screenshot_rgba(unsafe.Pointer(&pixels.Pix[0])) != 0 {
+		return nil, errors.New("convert native screenshot fixture")
+	}
+	return pixels, nil
 }

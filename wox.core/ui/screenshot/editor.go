@@ -239,6 +239,9 @@ type screenshotEditorOverlayState struct {
 	desktopPixelOrigin      Point
 	recordingUI             *recordingToolbarState
 	result                  chan screenshotEditorOverlayOutcome
+
+	// selectionReleasedAt measures the first toolbar build after the selection gesture.
+	selectionReleasedAt time.Time
 }
 
 type screenshotEditorPlatform struct {
@@ -604,6 +607,14 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.measureNumberAnnotation(&state.annotations[index], uiScale)
 	}
 	dragging := state.dragging
+	selectionReleasedAt := state.selectionReleasedAt
+	if !dragging && !selectionReleasedAt.IsZero() {
+		state.selectionReleasedAt = time.Time{}
+		buildStartedAt := time.Now()
+		defer func() {
+			util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_toolbar stage=frame_built selectionToBuildUs=%d buildUs=%d", time.Since(selectionReleasedAt).Microseconds(), time.Since(buildStartedAt).Microseconds()))
+		}()
+	}
 	activeTool := state.activeTool
 	hideTools := state.hideTools
 	annotationColor := state.annotationColor
@@ -1743,6 +1754,10 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			state.selection = normalizeScreenshotEditorRect(Rect{X: state.start.X, Y: state.start.Y, Width: event.Position.X - state.start.X, Height: event.Position.Y - state.start.Y}, state.frameSize)
 			state.dragging = false
 			state.hasSelection = state.selection.Width >= 2 && state.selection.Height >= 2
+			if state.hasSelection && !state.autoConfirm {
+				state.selectionReleasedAt = time.Now()
+				util.GetLogger().Debug(context.Background(), "screenshot_toolbar stage=selection_released")
+			}
 			autoConfirm := state.autoConfirm && state.hasSelection
 			state.mu.Unlock()
 			state.invalidate()

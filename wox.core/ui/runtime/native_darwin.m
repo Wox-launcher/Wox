@@ -3312,7 +3312,8 @@ static int32_t write_cgimage_png(CGImageRef image, const char *path) {
 }
 
 int32_t wox_darwin_select_screenshot_region(
-    const char *path,
+    int32_t *pixel_width,
+    int32_t *pixel_height,
     uintptr_t *session_handle,
     uint32_t *display_id,
     float *display_x,
@@ -3324,7 +3325,7 @@ int32_t wox_darwin_select_screenshot_region(
     float *selection_width,
     float *selection_height,
     char **copied_color) {
-  if (path == NULL || path[0] == '\0' || session_handle == NULL || display_id == NULL || display_x == NULL || display_y == NULL || display_width == NULL || display_height == NULL ||
+  if (pixel_width == NULL || pixel_height == NULL || session_handle == NULL || display_id == NULL || display_x == NULL || display_y == NULL || display_width == NULL || display_height == NULL ||
       selection_x == NULL || selection_y == NULL || selection_width == NULL || selection_height == NULL || copied_color == NULL || [NSThread isMainThread]) {
     return -1;
   }
@@ -3385,8 +3386,12 @@ int32_t wox_darwin_select_screenshot_region(
 
   WoxScreenshotDisplayCapture *capture = [session selectedCapture];
   NSRect selection = [session selection];
-  int32_t result = write_cgimage_png(capture->image, path);
+  size_t width = CGImageGetWidth(capture->image);
+  size_t height = CGImageGetHeight(capture->image);
+  int32_t result = width > 0 && height > 0 && width <= INT32_MAX && height <= INT32_MAX ? 0 : -1;
   if (result == 0) {
+    *pixel_width = (int32_t)width;
+    *pixel_height = (int32_t)height;
     *session_handle = (uintptr_t)session;
     *display_id = capture->display_id;
     *display_x = (float)NSMinX(capture->logical_bounds);
@@ -3404,6 +3409,50 @@ int32_t wox_darwin_select_screenshot_region(
     });
     [session release];
   }
+  return result;
+}
+
+// Normalize cached display pixels to the editor's premultiplied sRGB RGBA layout.
+static int32_t copy_screenshot_image_rgba(CGImageRef image, int32_t width, int32_t height, void *pixels) {
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(pixels, width, height, 8, (size_t)width * 4, color_space,
+                                              kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(color_space);
+  if (context == NULL) {
+    return -1;
+  }
+  CGContextSetBlendMode(context, kCGBlendModeCopy);
+  CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+  CGContextRelease(context);
+  return 0;
+}
+
+// Transfer the cached display into Go-owned RGBA memory before dismissing the selector.
+// Pixel dimensions come from CGImage, independently of the display's logical bounds.
+int32_t wox_darwin_copy_screenshot_selection_rgba(uintptr_t session_handle, int32_t width, int32_t height, void *pixels) {
+  if (session_handle == 0 || pixels == NULL || width <= 0 || height <= 0) {
+    return -1;
+  }
+  WoxScreenshotDisplayCapture *capture = [(WoxScreenshotSelectionSession *)session_handle selectedCapture];
+  if (capture == nil || CGImageGetWidth(capture->image) != (size_t)width || CGImageGetHeight(capture->image) != (size_t)height) {
+    return -1;
+  }
+  return copy_screenshot_image_rgba(capture->image, width, height, pixels);
+}
+
+// Exercise the production conversion with asymmetric colors and alpha without screen permissions.
+int32_t wox_darwin_test_screenshot_rgba(void *pixels) {
+  uint8_t source[] = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 64, 32, 16, 128};
+  CGColorSpaceRef color_space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGContextRef context = CGBitmapContextCreate(source, 2, 2, 8, 8, color_space,
+                                              kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(color_space);
+  if (context == NULL) return -1;
+  CGImageRef image = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  if (image == NULL) return -1;
+  int32_t result = copy_screenshot_image_rgba(image, 2, 2, pixels);
+  CGImageRelease(image);
   return result;
 }
 

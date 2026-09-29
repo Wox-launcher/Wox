@@ -64,3 +64,17 @@ func TestDarwinScreenshotInspectorRectMatchesPortableEditor(t *testing.T) {
 		}
 	}
 }
+
+// TestDarwinScreenshotTransfer checks row order, channel order and premultiplied alpha.
+func TestDarwinScreenshotTransfer(t *testing.T) {
+	got, err := darwinScreenshotTestPixels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []color.RGBA{{255, 0, 0, 255}, {0, 255, 0, 255}, {0, 0, 255, 255}, {64, 32, 16, 128}}
+	for index, pixel := range want {
+		if actual := got.RGBAAt(index%2, index/2); actual != pixel {
+			t.Fatalf("pixel %d = %v, want %v", index, actual, pixel)
+		}
+	}
+}
