@@ -44,8 +44,17 @@ func TestOnboardingRetainsHotkeySaveFailureAfterRecorderCloses(t *testing.T) {
 
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {
 	steps := (&App{}).onboardingSteps()
-	if len(steps) < 2 || steps[0].ID != "welcome" || steps[1].ID != "mainHotkey" {
-		t.Fatalf("first onboarding steps = %#v, want welcome then main hotkey setup", steps)
+	want := []string{"welcome", "mainHotkey"}
+	if runtime.GOOS == "darwin" {
+		want = []string{"welcome", "permissions", "mainHotkey"}
+	}
+	if len(steps) < len(want) {
+		t.Fatalf("onboarding steps = %#v, want prefix %v", steps, want)
+	}
+	for index, id := range want {
+		if steps[index].ID != id {
+			t.Fatalf("onboarding step %d = %q, want %q in %#v", index, steps[index].ID, id, steps)
+		}
 	}
 	for _, step := range steps {
 		if step.ID == "selectionHotkey" || step.ID == "trayQueries" {

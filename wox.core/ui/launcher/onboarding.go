@@ -367,14 +367,16 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) onboardingSteps() []launcherview.OnboardingStep {
+	// Recording the main hotkey needs Accessibility. On macOS that permission
+	// step comes first, otherwise a denied recording disables Continue.
 	specs := []onboardingStepSpec{
 		{"welcome", "onboarding_welcome_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}},
-		{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}},
 	}
 	if runtime.GOOS == "darwin" {
 		specs = append(specs, onboardingStepSpec{"permissions", "onboarding_permissions_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
 	}
 	specs = append(specs,
+		onboardingStepSpec{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}},
 		onboardingStepSpec{"glance", "onboarding_glance_title", woxui.Color{R: 250, G: 204, B: 21, A: 255}},
 		onboardingStepSpec{"queryHotkeys", "onboarding_query_hotkeys_title", woxui.Color{R: 244, G: 63, B: 94, A: 255}},
 	)
