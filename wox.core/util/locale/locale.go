@@ -1,11 +1,8 @@
 package locale
 
 import (
-	"os"
-	"runtime"
 	"strings"
 	"sync"
-	"wox/util/shell"
 )
 
 var (
@@ -25,49 +22,4 @@ func GetLocale() (string, string) {
 		cachedLang, cachedRegion = detectLocale()
 	})
 	return cachedLang, cachedRegion
-}
-
-func detectLocale() (string, string) {
-	osHost := runtime.GOOS
-	defaultLang := "en"
-	defaultLoc := "US"
-	switch osHost {
-	case "windows":
-		// Exec powershell Get-Culture on Windows.
-		output, err := shell.RunOutput("powershell", "Get-Culture | select -exp Name")
-		if err == nil {
-			langLocRaw := strings.TrimSpace(string(output))
-			langLoc := strings.Split(langLocRaw, "-")
-			if len(langLoc) >= 2 {
-				lang := langLoc[0]
-				loc := langLoc[1]
-				return lang, loc
-			}
-		}
-	case "darwin":
-		// Exec shell Get-Culture on MacOS.
-		output, err := shell.RunOutput("osascript", "-e", "user locale of (get system info)")
-		if err == nil {
-			langLocRaw := strings.TrimSpace(string(output))
-			langLoc := strings.Split(langLocRaw, "_")
-			if len(langLoc) >= 2 {
-				lang := langLoc[0]
-				loc := langLoc[1]
-				return lang, loc
-			}
-		}
-	case "linux":
-		envlang, ok := os.LookupEnv("LANG")
-		if ok {
-			langLocRaw := strings.TrimSpace(envlang)
-			langLocRaw = strings.Split(envlang, ".")[0]
-			langLoc := strings.Split(langLocRaw, "_")
-			if len(langLoc) >= 2 {
-				lang := langLoc[0]
-				loc := langLoc[1]
-				return lang, loc
-			}
-		}
-	}
-	return defaultLang, defaultLoc
 }
