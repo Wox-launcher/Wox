@@ -9,9 +9,11 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
-	active := woxui.Color{R: 20, G: 110, B: 220, A: 255}
-	result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", Selected: true}, LauncherGridProps{
+func TestLauncherGridSelectedResultUsesOpaqueFocusFrame(t *testing.T) {
+	active := woxui.Color{R: 20, G: 110, B: 220, A: 25}
+	wantBorder := active
+	wantBorder.A = 255
+	result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", Selected: true, Hovered: true}, LauncherGridProps{
 		CellWidth: 120, CellHeight: 110, VisualWidth: 100, VisualHeight: 70, ItemPadding: 4, ShowTitle: true, TitleHeight: 22,
 		Theme: woxcomponent.Theme{SelectedBackground: active},
 	}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
@@ -23,8 +25,8 @@ func TestLauncherGridSelectedResultUsesFlutterFocusFrame(t *testing.T) {
 	titleBoundary := titleAlign.Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherResultTextProps])
 	frame := frameBoundary.Build(frameBoundary.Props).(woxwidget.Container)
 
-	if frame.Color.A != 0 || frame.BorderColor != active || frame.BorderWidth != 4 || frame.Radius != 8 {
-		t.Fatalf("selected grid frame = fill %#v border %#v/%.0f radius %.0f, want transparent Flutter 4px/8px frame", frame.Color, frame.BorderColor, frame.BorderWidth, frame.Radius)
+	if frame.Color.A != 0 || frame.BorderColor != wantBorder || frame.BorderWidth != 4 || frame.Radius != 4 {
+		t.Fatalf("selected grid frame = fill %#v border %#v/%.0f radius %.0f, want transparent fill and opaque 4px frame with rounding within padding", frame.Color, frame.BorderColor, frame.BorderWidth, frame.Radius)
 	}
 	if _, isIcon := visual.Children[0].Child.(woxwidget.Container); !isIcon {
 		t.Fatal("grid paints the image under the hover frame")
@@ -79,6 +81,44 @@ func TestLauncherGridImageUsesFlutterFit(t *testing.T) {
 			iconBoundary := visual.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
 			if got := iconBoundary.Build(iconBoundary.Props).(woxwidget.Image).Fit; got != test.want {
 				t.Fatalf("grid image fit = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestLauncherGridFocusFrameLeavesImageUnchanged(t *testing.T) {
+	icon, err := woxui.NewImage(image.NewRGBA(image.Rect(0, 0, 160, 90)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name     string
+		selected bool
+		hovered  bool
+		padding  float32
+		radius   float32
+	}{
+		{name: "idle", radius: 0},
+		{name: "selected full bleed", selected: true, radius: 0},
+		{name: "hovered full bleed", hovered: true, radius: 0},
+		{name: "selected inset", selected: true, padding: 4, radius: 4},
+		{name: "selected large inset", selected: true, padding: 12, radius: 8},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := launcherGridResultView(LauncherGridResult{ID: "wallpaper", Icon: icon, Selected: test.selected, Hovered: test.hovered}, LauncherGridProps{
+				CellWidth: 200, CellHeight: 130, VisualWidth: 160, VisualHeight: 90, ItemPadding: test.padding,
+			}).(woxwidget.Semantics).Child.(woxwidget.Gesture)
+			visual := result.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Stack)
+			boundary := visual.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Boundary[launcherGridIconProps])
+			got := boundary.Build(boundary.Props).(woxwidget.Image)
+			want := woxwidget.Image{Source: icon, Width: 160, Height: 90, Fit: woxwidget.ImageFitCover}
+			if got != want {
+				t.Fatalf("grid image = %+v, want unchanged %+v", got, want)
+			}
+			frameBoundary := visual.Children[1].Child.(woxwidget.Boundary[launcherGridFrameProps])
+			frame := frameBoundary.Build(frameBoundary.Props).(woxwidget.Container)
+			if frame.Radius != test.radius {
+				t.Fatalf("grid frame radius = %v, want %v", frame.Radius, test.radius)
 			}
 		})
 	}

@@ -57,6 +57,7 @@ type LauncherGridProps struct {
 type launcherGridFrameProps struct {
 	Width       float32
 	Height      float32
+	Radius      float32
 	BorderColor woxui.Color
 }
 
@@ -162,6 +163,8 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	if result.Selected {
 		surface = props.Theme.Surfaces.Get("ResultItemActive")
 		frameColor = props.Theme.SelectedBackground
+		// A translucent list background loses contrast when used as an outline over photos.
+		frameColor.A = 255
 	} else if result.Hovered {
 		frameColor = props.Theme.ResultHoverColor()
 	}
@@ -185,7 +188,8 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 	}
 	visualWidth := props.VisualWidth + props.ItemPadding*2
 	visualHeight := props.VisualHeight + props.ItemPadding*2
-	frameProps := launcherGridFrameProps{Width: visualWidth, Height: visualHeight, BorderColor: frameColor}
+	// Keep the image unchanged; rounding must fit in the padding around its square corners.
+	frameProps := launcherGridFrameProps{Width: visualWidth, Height: visualHeight, Radius: min(float32(8), max(float32(0), props.ItemPadding)), BorderColor: frameColor}
 	// Draw the hover/selected outline after the image so a full-bleed photo
 	// cannot cover the 4px frame.
 	visualChildren := []woxwidget.StackChild{
@@ -193,7 +197,7 @@ func launcherGridResultView(result LauncherGridResult, props LauncherGridProps) 
 		{Child: woxwidget.Boundary[launcherGridFrameProps]{
 			Key: LauncherResultBackgroundBoundaryKey(result.ID), Label: "grid-frame:" + result.ID, Props: frameProps,
 			Build: func(props launcherGridFrameProps) woxwidget.Widget {
-				return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 8, BorderColor: props.BorderColor, BorderWidth: 4}
+				return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: props.Radius, BorderColor: props.BorderColor, BorderWidth: 4}
 			},
 		}},
 	}
