@@ -603,20 +603,31 @@ func pluginTableOperationIconButton(t *testing.T, action woxwidget.Widget) woxco
 	return woxcomponent.IconButtonProps{}
 }
 
-func TestPreparePluginSettingSaveValuesPersistsClearedText(t *testing.T) {
-	state := &pluginSettingsFormState{
-		formFieldsState: formFieldsState{
-			definitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "api_key"}}},
-			values:      map[string]string{"api_key": ""},
-		},
-		initial: map[string]string{"api_key": "secret"},
-	}
-	submitted, persisted, err := preparePluginSettingSaveValues(state)
-	if err != nil {
-		t.Fatalf("prepare cleared setting: %v", err)
-	}
-	if submitted["api_key"] != "" || persisted["api_key"] != "" {
-		t.Fatalf("cleared api_key = submitted %q persisted %q, want empty strings", submitted["api_key"], persisted["api_key"])
+func TestPreparePluginSettingSaveValuesPersistsText(t *testing.T) {
+	for _, fieldType := range []string{"textbox", "password"} {
+		for _, change := range [][2]string{{"", "secret"}, {"secret", "updated"}, {"secret", ""}} {
+			t.Run(fieldType+"/"+change[0]+"/"+change[1], func(t *testing.T) {
+				state := &pluginSettingsFormState{
+					formFieldsState: formFieldsState{
+						definitions: []formDefinition{{Type: fieldType, Value: formDefinitionValue{Key: "api_key"}}},
+						values:      map[string]string{"api_key": change[1]},
+					},
+					initial: map[string]string{"api_key": change[0]},
+				}
+				if !pluginFormDirty(state.definitions, state.values, state.initial) {
+					t.Fatal("changed field should mark the form dirty")
+				}
+				submitted, persisted, err := preparePluginSettingSaveValues(state)
+				if err != nil {
+					t.Fatalf("prepare setting: %v", err)
+				}
+				for _, values := range []map[string]string{submitted, persisted} {
+					if value, exists := values["api_key"]; !exists || value != change[1] {
+						t.Fatalf("api_key = %q (present %v), want %q", value, exists, change[1])
+					}
+				}
+			})
+		}
 	}
 }
 

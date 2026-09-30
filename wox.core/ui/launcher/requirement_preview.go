@@ -567,7 +567,7 @@ func editableFormKeys(definitions []formDefinition) []string {
 	keys := make([]string, 0, len(definitions))
 	seen := make(map[string]struct{})
 	for _, definition := range definitions {
-		if definition.Type != "textbox" && definition.Type != "dirPath" && definition.Type != "checkbox" && definition.Type != "select" && definition.Type != "selectAIModel" && definition.Type != "table" && definition.Type != "dictationModel" && definition.Type != "ocrModel" && definition.Type != "dictationHotkey" {
+		if definition.Type != "textbox" && definition.Type != "password" && definition.Type != "dirPath" && definition.Type != "checkbox" && definition.Type != "select" && definition.Type != "selectAIModel" && definition.Type != "table" && definition.Type != "dictationModel" && definition.Type != "ocrModel" && definition.Type != "dictationHotkey" {
 			continue
 		}
 		key := definition.Value.Key
