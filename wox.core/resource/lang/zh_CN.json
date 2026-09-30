@@ -2673,7 +2673,7 @@
   "plugin_manager_trigger_keyword_conflict_save": "保存关键字",
   "plugin_manager_trigger_keyword_conflict_empty": "至少需要保留一个触发关键字。",
   "plugin_manager_trigger_keyword_conflict_saved": "已保存，正在刷新查询...",
-  "mru_remove_action": "从最近使用中移除",
+  "mru_remove_action": "从首页移除",
   "ui_ai_builtin_tools": "内置工具",
   "ui_ai_builtin_tools_tooltip": "启用或禁用 AI 聊天可用的内置工具。",
   "ui_ai_builtin_tool_name": "名称",

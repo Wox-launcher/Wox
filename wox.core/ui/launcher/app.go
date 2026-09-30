@@ -1008,10 +1008,6 @@ func (a *App) sendCurrentQuery() error {
 	}); err != nil {
 		return err
 	}
-	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
-		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
-		return err
-	}
 	// A selection query keeps its payload in QuerySelection, so an empty QueryText
 	// is not an empty query box; replacing it with MRU reassigns QueryID and the
 	// in-flight selection results are discarded by applyResults.
@@ -1019,6 +1015,10 @@ func (a *App) sendCurrentQuery() error {
 	// an input query must return to MRU even after a query hotkey or deeplink.
 	if query.QueryType != "selection" && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
 		return a.requestMRU()
+	}
+	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
+		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
+		return err
 	}
 	return nil
 }
@@ -1059,7 +1059,12 @@ func (a *App) usePinYin() bool {
 func (a *App) requestMRU() error {
 	queryID := ""
 	if err := a.runOnUI("prepare MRU query", func() {
+		previousQueryID := a.query.QueryID
 		a.query = newInputQuery("")
+		// MRU replaces the refresh generation; carry its selection into the actual response.
+		if a.pendingSelection != nil && a.pendingSelection.queryID == previousQueryID {
+			a.pendingSelection.queryID = a.query.QueryID
+		}
 		a.queryContext = queryContext{IsGlobalQuery: true}
 		a.queryContextKnown = true
 		a.editor.SetText("", false)
@@ -2096,6 +2101,12 @@ func lastSelectableBefore(results []queryResult, exclusiveEnd int) int {
 // selectableIndexFrom restores an explicitly preserved refresh index while skipping group rows.
 func selectableIndexFrom(results []queryResult, start int) int {
 	for index := max(0, start); index < len(results); index++ {
+		if !results[index].IsGroup {
+			return index
+		}
+	}
+	// A removed final row keeps selection near the end instead of jumping to the top.
+	for index := len(results) - 1; index >= 0; index-- {
 		if !results[index].IsGroup {
 			return index
 		}

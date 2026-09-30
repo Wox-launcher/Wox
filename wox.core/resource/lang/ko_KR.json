@@ -2671,7 +2671,7 @@
   "plugin_manager_trigger_keyword_conflict_save": "키워드 저장",
   "plugin_manager_trigger_keyword_conflict_empty": "하나 이상의 트리거 키워드가 필요합니다.",
   "plugin_manager_trigger_keyword_conflict_saved": "저장했습니다. 쿼리를 새로 고치는 중...",
-  "mru_remove_action": "MRU에서 제거",
+  "mru_remove_action": "홈페이지에서 제거",
   "ui_ai_builtin_tools": "기본 제공 도구",
   "ui_ai_builtin_tools_tooltip": "AI 채팅에 사용할 수 있는 기본 제공 도구를 활성화하거나 비활성화합니다.",
   "ui_ai_builtin_tool_name": "이름",

@@ -227,6 +227,7 @@
   "ui_launch_mode_fresh_tips": "Limpar a caixa de consulta cada vez que o Wox for exibido, ideal para novas tarefas rápidas",
   "ui_launch_mode_continue": "Continuar Última Consulta",
   "ui_launch_mode_continue_tips": "Preservar o texto da última consulta com seleção completa, conveniente para modificações rápidas",
+  "mru_remove_action": "Remover da página inicial",
   "ui_start_page": "Página Inicial",
   "ui_start_page_tips": "Controla o que exibir quando a caixa de consulta estiver vazia",
   "ui_start_page_blank": "Página em Branco",

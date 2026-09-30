@@ -795,6 +795,27 @@ func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
 	if index := selectableIndexFrom(results, 1); index != 2 {
 		t.Fatalf("preserved selected index = %d, want 2", index)
 	}
+	if index := selectableIndexFrom(results, 3); index != 2 {
+		t.Fatalf("removed final row selection = %d, want 2", index)
+	}
+}
+
+// TestRefreshMRUPreservesSelection covers the extra query generation used by the homepage.
+func TestRefreshMRUPreservesSelection(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	app := newSendQueryTestApp(services, newInputQuery(""), showAppParams{StartPage: "mru"})
+	app.selected = 2
+	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
+		t.Fatalf("refresh homepage: %v", err)
+	}
+	if services.startedQuery.QueryId != "" {
+		t.Fatal("homepage refresh started an unnecessary empty query")
+	}
+	results := []queryResult{{ID: "first"}, {ID: "second"}, {ID: "third"}}
+	selected, preserved, _ := restoreRefreshSelection(results, app.pendingSelection, app.query.QueryID, true)
+	if selected != 2 || !preserved {
+		t.Fatalf("homepage selection = %d preserved=%v, want 2/true", selected, preserved)
+	}
 }
 
 func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {

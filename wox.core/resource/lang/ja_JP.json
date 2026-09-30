@@ -2672,7 +2672,7 @@
   "plugin_manager_trigger_keyword_conflict_save": "キーワードを保存",
   "plugin_manager_trigger_keyword_conflict_empty": "少なくとも 1つのトリガーキーワードが必要です。",
   "plugin_manager_trigger_keyword_conflict_saved": "保存しました。クエリを更新中...",
-  "mru_remove_action": "MRU から削除",
+  "mru_remove_action": "ホームページから削除",
   "ui_ai_builtin_tools": "ビルトインツール",
   "ui_ai_builtin_tools_tooltip": "AI チャットで利用できるビルトインツールを有効または無効にします。",
   "ui_ai_builtin_tool_name": "名前",

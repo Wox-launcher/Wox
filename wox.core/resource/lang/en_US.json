@@ -2672,7 +2672,7 @@
   "plugin_manager_trigger_keyword_conflict_save": "Save keywords",
   "plugin_manager_trigger_keyword_conflict_empty": "At least one trigger keyword is required.",
   "plugin_manager_trigger_keyword_conflict_saved": "Saved. Refreshing query...",
-  "mru_remove_action": "Remove from MRU",
+  "mru_remove_action": "Remove from homepage",
   "ui_ai_builtin_tools": "Built-in Tools",
   "ui_ai_builtin_tools_tooltip": "Enable or disable the built-in tools available to AI chat.",
   "ui_ai_builtin_tool_name": "Name",

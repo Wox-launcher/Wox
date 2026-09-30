@@ -5130,18 +5130,20 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 			restored.Actions = append(restored.Actions, m.newOpenPluginSettingAction(ctx, pluginInstance))
 			restored.Actions = append(restored.Actions, m.newResultBindingActions(ctx, pluginInstance, query, *restored, item.Hash)...)
 
-			// Add "Remove from MRU" action to each MRU result
+			// Keep the homepage visible so users can continue managing its items.
 			removeMRUAction := QueryResultAction{
-				Id:             systemActionRemoveFromMRUID,
-				Name:           i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
-				Icon:           icons.Get(icons.ActionDelete),
-				IsSystemAction: true,
+				Id:                     systemActionRemoveFromMRUID,
+				Name:                   i18n.GetI18nManager().TranslateWox(ctx, "mru_remove_action"),
+				Icon:                   icons.Get(icons.ActionDelete),
+				IsSystemAction:         true,
+				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext ActionContext) {
 					err := setting.GetSettingManager().RemoveMRUItem(ctx, item.Hash)
 					if err != nil {
 						util.GetLogger().Error(ctx, fmt.Sprintf("failed to remove MRU item: %s", err.Error()))
 					} else {
 						util.GetLogger().Info(ctx, fmt.Sprintf("removed MRU item: %s - %s", item.Title, item.SubTitle))
+						m.GetUI().RefreshQuery(ctx, common.RefreshQueryOptions{PreserveSelectedIndex: true})
 					}
 				},
 			}
