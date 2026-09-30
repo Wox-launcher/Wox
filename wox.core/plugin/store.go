@@ -466,7 +466,7 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 		// Package plugins replace the directory. Script and single-file plugins
 		// keep the old file as a rollback backup until the new file loads.
 		if kind == PluginArtifactPackage {
-			uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, nil)
+			uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, true, nil)
 			if uninstallErr != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 				return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -896,7 +896,7 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 			}
 		}
 
-		uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, nil)
+		uninstallErr := s.uninstallLocked(ctx, installedPlugin, true, true, nil)
 		if uninstallErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error()))
 			return fmt.Errorf("failed to uninstall plugin %s(%s): %s", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version, uninstallErr.Error())
@@ -969,7 +969,7 @@ func (s *Store) uninstallWithProgress(ctx context.Context, plugin *Instance, ski
 	// triggered directly from the UI cannot race with an in-progress install.
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
-	if err := s.uninstallLocked(ctx, plugin, skipCleanSetting, progressCallback); err != nil {
+	if err := s.uninstallLocked(ctx, plugin, skipCleanSetting, false, progressCallback); err != nil {
 		return err
 	}
 	if syncInstall && !plugin.IsSystemPlugin && !plugin.IsDevPlugin {
@@ -982,7 +982,7 @@ func (s *Store) uninstallWithProgress(ctx context.Context, plugin *Instance, ski
 // while the caller already holds installMu, so it never tries to acquire the
 // lock itself. This lets InstallWithProgress call it internally without
 // deadlocking (InstallWithProgress already holds installMu).
-func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipCleanSetting bool, progressCallback UninstallProgressCallback) error {
+func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipCleanSetting bool, preserveCache bool, progressCallback UninstallProgressCallback) error {
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
 	pluginAlreadyUnloaded := false
 	reportProgress := func(key string, args ...any) {
@@ -1073,9 +1073,12 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 		}
 	}
 
-	reportProgress("plugin_uninstall_progress_cleaning_cache")
-	if cacheErr := util.GetLocation().RemovePluginCacheDirectory(plugin.Metadata.Id); cacheErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to delete plugin cache %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, cacheErr.Error()))
+	// Replacing plugin files during an upgrade or reinstall must retain the ID-based cache.
+	if !preserveCache {
+		reportProgress("plugin_uninstall_progress_cleaning_cache")
+		if cacheErr := util.GetLocation().RemovePluginCacheDirectory(plugin.Metadata.Id); cacheErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to delete plugin cache %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, cacheErr.Error()))
+		}
 	}
 
 	if !pluginAlreadyUnloaded {
