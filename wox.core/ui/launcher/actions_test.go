@@ -95,8 +95,8 @@ func TestActionPanelTintsThemeAdaptiveSVGOnly(t *testing.T) {
 	if svgUsesThemeIconColor(fromCoreImage(icons.Get(icons.PluginApp))) {
 		t.Fatal("plugin.app is a brand SVG and must not be flattened by a source-in tint")
 	}
-	if svgUsesThemeIconColor(settingControlIconSource("refresh")) {
-		t.Fatal("control masks do not use the theme variable; local actions tint them separately")
+	if !svgUsesThemeIconColor(settingControlIconSource("refresh")) {
+		t.Fatal("control.refresh must follow the row text tint")
 	}
 }
 

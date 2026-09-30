@@ -52,6 +52,9 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 				t.Fatalf("%s: indicator appearance changed", name)
 			}
 			expected := fromCoreTheme(before)
+			// Built-in themes now use symmetric result gutters instead of the legacy spacing.
+			expected.ResultContainerPaddingTop = 8
+			expected.ResultContainerPaddingBottom = 8
 			if target[0] == "linux" && target[1] == "" {
 				// Ordinary Linux desktops now use rounded fallback chrome; Hyprland
 				// clears the override so its compositor keeps ownership of the material.
