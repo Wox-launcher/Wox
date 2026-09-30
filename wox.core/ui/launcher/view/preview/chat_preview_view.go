@@ -161,7 +161,6 @@ type ChatPreviewProps struct {
 	Panel           string
 	Header          *ChatHeaderProps
 	Messages        ChatMessagesProps
-	Debug           *ChatDebugProps
 	Question        *ChatQuestionProps
 	Input           ChatInputProps
 	History         *ChatCatalogProps
@@ -189,9 +188,6 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 		headerHeight = 0
 	}
 	children = append(children, ChatMessages(props.Messages))
-	if props.Debug != nil {
-		children = append(children, ChatDebug(*props.Debug))
-	}
 	if props.Question != nil {
 		children = append(children, ChatQuestion(*props.Question))
 	}
@@ -239,7 +235,8 @@ type ChatHeaderProps struct {
 	Key               string
 	Title             string
 	ShowDebug         bool
-	DebugOpen         bool
+	DebugCopied       bool
+	DebugCopiedLabel  string
 	ShowExit          bool
 	ShowOpenWindow    bool
 	ExitLabel         string
@@ -248,7 +245,7 @@ type ChatHeaderProps struct {
 	HistoryTooltip    string
 	Theme             woxcomponent.Theme
 	OnHistory         func()
-	OnDebug           func()
+	OnDebug           func() bool
 	OnExit            func()
 	OnOpenWindow      func()
 	OnDrag            func()
@@ -260,6 +257,38 @@ type ChatHeaderProps struct {
 
 // ChatHeader builds the compact chat title bar.
 func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: woxwidget.Key("chat-header-" + props.Key), Type: (*chatHeaderState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &chatHeaderState{} },
+	}
+}
+
+// chatHeaderState retains copy feedback independently in each chat window.
+type chatHeaderState struct {
+	chatCopyFeedbackState
+}
+
+func (s *chatHeaderState) InitState(_ woxwidget.StateContext, _ any) {}
+
+func (s *chatHeaderState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+
+func (s *chatHeaderState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(ChatHeaderProps)
+	props.DebugCopied = s.copied
+	if original := props.OnDebug; original != nil {
+		props.OnDebug = func() bool {
+			if !original() {
+				return false
+			}
+			s.confirmCopied(context, nil, "")
+			return true
+		}
+	}
+	return chatHeaderContent(props)
+}
+
+// chatHeaderContent composes header actions from prepared props and local feedback.
+func chatHeaderContent(props ChatHeaderProps) woxwidget.Widget {
 	menuHoverBackground := props.Theme.ResultSubtitle
 	menuHoverBackground.A = uint8(float32(menuHoverBackground.A) * 0.1)
 	debugWidth := float32(0)
@@ -292,13 +321,19 @@ func ChatHeader(props ChatHeaderProps) woxwidget.Widget {
 		{Left: 44, Right: 4 + debugWidth + openWindowWidth + exitWidth, StretchWidth: true, Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: title}},
 	}
 	if props.ShowDebug {
-		debugBackground := woxui.Color{}
-		if props.DebugOpen {
-			debugBackground = props.Theme.ActionBackground
+		icon := woxcomponent.DebugGlyph(16, props.Theme.ResultSubtitle)
+		label := "Debug trace"
+		if props.DebugCopied {
+			icon = woxcomponent.CheckGlyph(16, props.Theme.ResultSubtitle)
+			label = props.DebugCopiedLabel
 		}
 		children = append(children, woxwidget.StackChild{Right: 12 + openWindowWidth + exitWidth, AnchorRight: true, Child: woxwidget.Align{Width: 28, Height: props.Height, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "chat-debug-" + props.Key, Label: "Debug trace", Icon: woxcomponent.DebugGlyph(16, props.Theme.ResultSubtitle),
-			Width: 28, Height: 28, Radius: 7, Background: debugBackground, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnDebug,
+			ID: "chat-debug-" + props.Key, Label: label, Icon: icon,
+			Width: 28, Height: 28, Radius: 7, HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: func() {
+				if props.OnDebug != nil {
+					props.OnDebug()
+				}
+			},
 		})}})
 	}
 	if props.ShowOpenWindow {
@@ -703,41 +738,6 @@ func chatHistoryItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 	}}}
 }
 
-// ChatDebugProps contains the laid-out trace and copy action.
-type ChatDebugProps struct {
-	Width             float32
-	Height            float32
-	DensityScale      float32
-	Key               string
-	Summary           string
-	Value             string
-	Layout            woxwidget.TextBlockLayout
-	Scroll            float32
-	Theme             woxcomponent.Theme
-	OnScroll          func(float32)
-	OnGeometryChanged func(viewport, content float32)
-	OnCopy            func()
-}
-
-// ChatDebug builds the portable JSON trace panel.
-func ChatDebug(props ChatDebugProps) woxwidget.Widget {
-	header := woxwidget.Stack{Height: 24, Children: []woxwidget.StackChild{
-		{Right: 54, StretchWidth: true, Child: woxwidget.Container{Height: 24, Child: woxwidget.Text{Value: props.Summary, Style: woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 10), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ActionHeader}}},
-		{AnchorRight: true, Right: 0, Child: chatHeaderButton("chat-debug-copy-"+props.Key, "Copy", false, props.Theme, props.OnCopy)},
-	}}
-	body := woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key("chat-debug-scroll-" + props.Key), FillWidth: true, FillHeight: true,
-		Offset: props.Scroll, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll, OnGeometryChanged: props.OnGeometryChanged,
-		Content: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
-			Radius: 7, Color: props.Theme.QueryBackground, Padding: woxwidget.Insets{Left: 8, Top: 8, Right: 8, Bottom: 8},
-			Child: woxwidget.TextBlock{Value: props.Value, Height: props.Layout.Size.Height, Style: woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 10)}, LineHeight: ChatScaledSize(props.DensityScale, 16), Color: props.Theme.PreviewText, Layout: &props.Layout},
-		}},
-	})
-	return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 9, Color: props.Theme.ActionBackground, Padding: woxwidget.Insets{Left: 10, Top: 7, Right: 10, Bottom: 7}, Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisStretch, Children: []woxwidget.Widget{header, woxwidget.Expanded{Child: body}},
-	}}
-}
-
 // ChatToolDetailProps contains one labeled tool-call detail value.
 type ChatToolDetailProps struct {
 	Label  string
@@ -912,12 +912,17 @@ func ChatMessages(props ChatMessagesProps) woxwidget.Widget {
 
 // chatMessageState keeps message-local interaction state out of the launcher controller.
 type chatMessageState struct {
+	chatCopyFeedbackState
 	hovered       bool
 	selection     woxcomponent.MarkdownSelection
 	actionHovered bool
-	copied        bool
-	copyAnchor    woxui.Rect
-	copyReset     *time.Timer
+}
+
+// chatCopyFeedbackState shares the success indicator and reset timer across chat copy actions.
+type chatCopyFeedbackState struct {
+	copied     bool
+	copyAnchor woxui.Rect
+	copyReset  *time.Timer
 }
 
 // ChatMessage maps a prepared conversation to the Flutter-aligned reading surface.
@@ -966,7 +971,7 @@ func (s *chatMessageState) Build(context woxwidget.StateContext, widget any) wox
 	})
 }
 
-func (s *chatMessageState) confirmCopied(context woxwidget.StateContext, tooltip func(bool, string, woxui.Rect), label string) {
+func (s *chatCopyFeedbackState) confirmCopied(context woxwidget.StateContext, tooltip func(bool, string, woxui.Rect), label string) {
 	if s.copyReset != nil {
 		s.copyReset.Stop()
 	}
@@ -987,7 +992,7 @@ func (s *chatMessageState) confirmCopied(context woxwidget.StateContext, tooltip
 	})
 }
 
-func (s *chatMessageState) Dispose() {
+func (s *chatCopyFeedbackState) Dispose() {
 	if s.copyReset != nil {
 		s.copyReset.Stop()
 		s.copyReset = nil

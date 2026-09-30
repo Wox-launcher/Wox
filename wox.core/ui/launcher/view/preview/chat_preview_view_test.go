@@ -8,6 +8,42 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestChatDebugCopyFeedbackRequiresSuccess(t *testing.T) {
+	success := false
+	props := ChatHeaderProps{
+		Width: 500, Height: 52, Key: "test", ShowDebug: true, DebugCopiedLabel: "Copied",
+		OnDebug: func() bool { return success },
+	}
+	state := &chatHeaderState{}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		header := ChatHeader(props).(woxwidget.Stateful)
+		header.CreateState = func() woxwidget.State { return state }
+		return header
+	})
+	host.AttachServices(terminalPreviewHostServices{})
+	t.Cleanup(host.Dispose)
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 500, Height: 52}, PixelSize: woxui.PixelSize{Width: 500, Height: 52}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	for _, success = range []bool{false, true} {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Position: woxui.Point{X: 474, Y: 26}, Button: woxui.PointerButtonPrimary})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Position: woxui.Point{X: 474, Y: 26}, Button: woxui.PointerButtonPrimary})
+		if state.copied != success || (state.copyReset != nil) != success {
+			t.Fatalf("copy success=%v: feedback=%v timer=%v", success, state.copied, state.copyReset != nil)
+		}
+		header := state.Build(woxwidget.StateContext{}, props).(woxwidget.Container)
+		button := header.Child.(woxwidget.Stack).Children[3].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+		wantLabel := "Debug trace"
+		wantIcon := woxcomponent.DebugGlyph(16, props.Theme.ResultSubtitle).(woxwidget.Image)
+		if success {
+			wantLabel = "Copied"
+			wantIcon = woxcomponent.CheckGlyph(16, props.Theme.ResultSubtitle).(woxwidget.Image)
+		}
+		if button.Label != wantLabel || button.Icon.(woxwidget.Image).Source != wantIcon.Source {
+			t.Fatalf("copy success=%v: label=%q icon=%#v", success, button.Label, button.Icon)
+		}
+	}
+}
+
 // TestFramelessChatTextUsesPreparedWidth prevents a full reflow inside TextBlock on every frame.
 func TestFramelessChatTextUsesPreparedWidth(t *testing.T) {
 	for _, width := range []float32{320, 560, 1000} {
@@ -288,20 +324,6 @@ func TestChatMessagesCentersEmptyStateWithAlign(t *testing.T) {
 	alignment := view.Child.(woxwidget.Align)
 	if alignment.Width != 500 || alignment.Height != 286 || alignment.Horizontal != 0.5 || alignment.Vertical != 0.5 {
 		t.Fatalf("chat empty alignment = %#v, want centered 500x286 viewport", alignment)
-	}
-}
-
-func TestChatDebugUsesMeasuredControlledScrollGeometry(t *testing.T) {
-	view := ChatDebug(ChatDebugProps{
-		Width: 500, Height: 300, Key: "debug", Value: "trace", Layout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 400, Height: 180}},
-		OnScroll: func(float32) {}, OnGeometryChanged: func(float32, float32) {},
-	}).(woxwidget.Container)
-	bodyWidget := view.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child
-	body := resolvedScrollViewProps(bodyWidget, woxui.Size{Width: 480, Height: 258})
-	content := body.Content.(woxwidget.Constrained).Child.(woxwidget.Container)
-
-	if body.ContentHeight != 0 || body.OnGeometryChanged == nil || content.Height != 0 {
-		t.Fatalf("debug scroll = content hint %.0f callback %v container height %.0f, want measured controlled geometry", body.ContentHeight, body.OnGeometryChanged != nil, content.Height)
 	}
 }
 

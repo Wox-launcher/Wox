@@ -692,13 +692,33 @@ func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 	}
 }
 
-func TestChatDebugGeometryClampsControlledScroll(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{panel: "debug", panelScroll: 500}}
+func TestChatDebugHeaderCopiesWithoutOpeningPanel(t *testing.T) {
+	app := &App{chatPreview: &chatPreviewState{panel: "history"}}
+	snapshot := &chatPreviewSnapshot{chat: chatData{DebugTrace: []byte(`{"Events":[]}`)}}
+	props := app.chatHeaderProps(snapshot, uiPalette{}, 500, 52, false, false)
+	if !props.ShowDebug {
+		t.Fatal("debug action is hidden for an available trace")
+	}
+	props.OnDebug()
+	if app.chatPreview.panel != "history" {
+		t.Fatalf("debug action changed panel to %q", app.chatPreview.panel)
+	}
+	// An uninitialized native window proves the action reached the clipboard path.
+	if !strings.HasPrefix(app.chatPreview.error, "Copy failed:") {
+		t.Fatalf("debug action did not attempt to copy: %q", app.chatPreview.error)
+	}
+}
 
-	app.setChatDebugGeometry(100, 260)
-
-	if app.chatPreview.panelMaxScroll != 160 || app.chatPreview.panelScroll != 160 {
-		t.Fatalf("debug geometry = max %.0f offset %.0f, want 160/160", app.chatPreview.panelMaxScroll, app.chatPreview.panelScroll)
+func TestFormatChatDebugTrace(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{`{"Events":[],"custom":1}`, "{\n  \"Events\": [],\n  \"custom\": 1\n}"},
+		{"  invalid JSON  ", "invalid JSON"},
+		{" null ", "No debug trace is available."},
+		{"", "No debug trace is available."},
+	} {
+		if got := formatChatDebugTrace([]byte(tc.raw)); got != tc.want {
+			t.Fatalf("formatChatDebugTrace(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
 	}
 }
 

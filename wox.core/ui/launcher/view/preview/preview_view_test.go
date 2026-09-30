@@ -220,7 +220,7 @@ func TestTerminalHighlightSegmentsFollowWrappedLines(t *testing.T) {
 func TestChatHeaderOpenWindowUsesOverlappingRectangles(t *testing.T) {
 	opened := false
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
-	header := ChatHeader(ChatHeaderProps{
+	header := chatHeaderContent(ChatHeaderProps{
 		Width: 500, Height: 48, Key: "test", ShowExit: true, ShowOpenWindow: true,
 		ExitLabel: "Close", OpenWindowLabel: "Open in dedicated window", Theme: theme,
 		OnExit: func() {}, OnOpenWindow: func() { opened = true }, OnDrag: func() {},
@@ -254,7 +254,7 @@ func TestChatHeaderOpenWindowUsesOverlappingRectangles(t *testing.T) {
 func TestChatHeaderExitKeepsGlyphVisible(t *testing.T) {
 	dragged := false
 	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 120, G: 130, B: 140, A: 255}}
-	header := ChatHeader(ChatHeaderProps{Width: 500, Height: 48, Key: "test", ShowExit: true, ExitLabel: "Close", Theme: theme, OnExit: func() {}, OnDrag: func() { dragged = true }}).(woxwidget.Container)
+	header := chatHeaderContent(ChatHeaderProps{Width: 500, Height: 48, Key: "test", ShowExit: true, ExitLabel: "Close", Theme: theme, OnExit: func() {}, OnDrag: func() { dragged = true }}).(woxwidget.Container)
 	stack := header.Child.(woxwidget.Stack)
 	backgroundDrag := stack.Children[0].Child.(woxwidget.Gesture)
 	if backgroundDrag.ID != "chat-titlebar-drag-test" || backgroundDrag.OnDragStart == nil {

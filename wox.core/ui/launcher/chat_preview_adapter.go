@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -50,16 +49,6 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 	innerWidth := max(float32(0), contentWidth-20)
 	innerHeight := max(float32(0), height-14)
 	questionHeight := chatQuestionPanelHeight(snapshot, innerHeight, a.chatDensityScale())
-	debugHeight := float32(0)
-	if snapshot.panel == "debug" {
-		debugHeight = chatCatalogPanelHeight(snapshot, innerHeight-questionHeight)
-	}
-
-	var debug *previewview.ChatDebugProps
-	if debugHeight > 0 {
-		props := a.chatDebugProps(snapshot, palette, innerWidth, debugHeight)
-		debug = &props
-	}
 	var question *previewview.ChatQuestionProps
 	if questionHeight > 0 {
 		props := a.chatQuestionProps(snapshot, palette, innerWidth, questionHeight, window, onKey)
@@ -89,10 +78,10 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 		},
 		ChatPreviewProps: previewview.ChatPreviewProps{
 			Width: width, Height: height, Key: snapshot.key, Panel: panel,
-			Header: header,
-			Debug:  debug, Question: question,
-			Input:   a.chatInputProps(snapshot, palette, 0, 0, window, onKey),
-			History: history, OnDismiss: func() { a.toggleChatPanel(panel) },
+			Header:   header,
+			Question: question,
+			Input:    a.chatInputProps(snapshot, palette, 0, 0, window, onKey),
+			History:  history, OnDismiss: func() { a.toggleChatPanel(panel) },
 		}})
 }
 
@@ -120,11 +109,15 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 	historyTooltip := historyLabel + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
 	return previewview.ChatHeaderProps{
 		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Title: title,
-		ShowDebug: hasDebug, DebugOpen: snapshot.panel == "debug",
-		ShowExit: showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
+		ShowDebug:        hasDebug,
+		DebugCopiedLabel: a.translate("i18n:toolbar_copied"),
+		ShowExit:         showExit && launcherChromeHidden(a.show, a.chatFullscreen), ExitLabel: exitLabel,
 		ShowOpenWindow: showOpenWindow, OpenWindowLabel: openWindowLabel,
 		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
-		OnHistory: func() { a.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() { a.toggleChatPanel("debug") },
+		OnHistory: func() { a.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() bool {
+			value := formatChatDebugTrace(snapshot.chat.DebugTrace)
+			return a.copyChatText(value)
+		},
 		OnExit: a.closePreviewWindow, OnOpenWindow: a.requestOpenDedicatedChatWindow, OnDrag: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start chat preview window drag: %v", err)
@@ -447,39 +440,17 @@ func chatHistoryContentHeight(chats []chatData, now time.Time) float32 {
 	return height
 }
 
-// chatDebugProps prepares the copyable trace while the controller owns cached text measurement and scrolling.
-func (a *App) chatDebugProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatDebugProps {
-	innerWidth := max(float32(0), width-20)
-	summary, value := formatChatDebugTrace(snapshot.chat.DebugTrace)
-	textWidth := max(float32(20), innerWidth-16)
-	hash := sha256.Sum256([]byte(value))
-	scale := a.chatDensityScale()
-	layout := a.previewTextLayout(fmt.Sprintf("chat-debug\x00%s\x00%x", snapshot.key, hash[:8]), value, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 10)}, textWidth, previewview.ChatScaledSize(scale, 16))
-	return previewview.ChatDebugProps{
-		Width: width, Height: height, DensityScale: scale, Key: snapshot.key, Summary: summary, Value: value, Layout: layout,
-		Scroll: snapshot.panelScroll, Theme: palette.componentTheme(), OnScroll: a.scrollChatDebugPanel, OnGeometryChanged: a.setChatDebugGeometry,
-		OnCopy: func() { _ = a.copyChatText(value) },
-	}
-}
-
-// formatChatDebugTrace keeps the raw protocol payload intact while surfacing a compact token and event summary.
-func formatChatDebugTrace(raw json.RawMessage) (string, string) {
+// formatChatDebugTrace formats the protocol payload for copying without changing its fields.
+func formatChatDebugTrace(raw json.RawMessage) string {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return "Debug trace", "No debug trace is available."
+		return "No debug trace is available."
 	}
-	var metadata struct {
-		Events                   []json.RawMessage `json:"Events"`
-		EstimatedPersistedTokens int               `json:"EstimatedPersistedTokens"`
-		EstimatedRuntimeTokens   int               `json:"EstimatedRuntimeTokens"`
-	}
-	_ = json.Unmarshal(trimmed, &metadata)
-	summary := fmt.Sprintf("Trace · %d events · %d persisted / %d runtime tokens", len(metadata.Events), metadata.EstimatedPersistedTokens, metadata.EstimatedRuntimeTokens)
 	var formatted bytes.Buffer
 	if err := json.Indent(&formatted, trimmed, "", "  "); err != nil {
-		return summary, string(trimmed)
+		return string(trimmed)
 	}
-	return summary, formatted.String()
+	return formatted.String()
 }
 
 // chatRenderItem separates controller conversations from the visible round disclosure state.

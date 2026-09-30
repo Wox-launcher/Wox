@@ -54,9 +54,6 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 	if p.Question != nil {
 		height -= p.Question.Height
 	}
-	if p.Debug != nil {
-		height -= p.Debug.Height
-	}
 	height = max(float32(0), height)
 	if props.PrepareMessages != nil {
 		p.Messages = props.PrepareMessages(width, height)

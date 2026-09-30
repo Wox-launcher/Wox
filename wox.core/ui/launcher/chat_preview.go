@@ -30,7 +30,7 @@ const (
 
 // chatOverlayPanel reports floating catalogs that must not replace the history drawer.
 func chatOverlayPanel(panel string) bool {
-	return panel == "models" || panel == "skills" || panel == chatCommandPanel || panel == chatMentionPanel || panel == "debug"
+	return panel == "models" || panel == "skills" || panel == chatCommandPanel || panel == chatMentionPanel
 }
 
 // chatHistoryVisible reports whether the conversation sidebar should stay in layout.
@@ -183,22 +183,21 @@ type chatPreviewState struct {
 	resultID string
 	chat     chatData
 	// nextModel survives snapshots from the current stream until the next request starts.
-	nextModel      *aiModel
-	chats          []chatData
-	editor         *woxui.TextEditor
-	active         bool
-	scroll         chatview.ChatScrollState
-	loading        bool
-	sending        bool
-	error          string
-	revision       uint64
-	remoteVersion  uint64
-	panel          string
-	panelQuery     string
-	panelSelected  int
-	panelScroll    float32
-	panelViewport  float32
-	panelMaxScroll float32
+	nextModel     *aiModel
+	chats         []chatData
+	editor        *woxui.TextEditor
+	active        bool
+	scroll        chatview.ChatScrollState
+	loading       bool
+	sending       bool
+	error         string
+	revision      uint64
+	remoteVersion uint64
+	panel         string
+	panelQuery    string
+	panelSelected int
+	panelScroll   float32
+	panelViewport float32
 	// sidebarOpen keeps the conversation drawer visible while a slash/model overlay is open.
 	sidebarOpen      bool
 	sidebarSelected  int
@@ -798,7 +797,6 @@ func (a *App) toggleChatPanel(panel string) {
 		state.panelQuery = ""
 		state.panelScroll = 0
 		state.panelViewport = 0
-		state.panelMaxScroll = 0
 		state.panelSelected = 0
 		if panel == "history" {
 			state.sidebarOpen = true
@@ -1487,22 +1485,6 @@ func (a *App) scrollChatPanel(delta float32) {
 	a.invalidateChatSurfaces()
 }
 
-// setChatDebugGeometry records the measured JSON inspector extent for controlled scrolling.
-func (a *App) setChatDebugGeometry(viewport, content float32) {
-	if state := a.chatPreview; state != nil && state.panel == "debug" {
-		state.panelMaxScroll = max(float32(0), content-viewport)
-		state.panelScroll = min(max(float32(0), state.panelScroll), state.panelMaxScroll)
-	}
-}
-
-// scrollChatDebugPanel applies pointer and keyboard movement to the portable trace inspector.
-func (a *App) scrollChatDebugPanel(delta float32) {
-	if state := a.chatPreview; state != nil && state.panel == "debug" {
-		state.panelScroll = min(max(float32(0), state.panelScroll+delta), state.panelMaxScroll)
-	}
-	a.invalidateChatSurfaces()
-}
-
 // applyTypedAIQuestion routes ask_user into the visible shared chat surface and cancels if no chat can answer it.
 func (a *App) applyTypedAIQuestion(question aiQuestion) error {
 	if question.QuestionID == "" {
@@ -1913,21 +1895,6 @@ func (a *App) handleChatKey(event woxui.KeyEvent, dedicated bool) bool {
 	if active && event.Key == woxui.Key("b") && event.Modifiers.HasPrimary() {
 		// Ctrl/Cmd+B toggles the conversation sidebar, matching Flutter's preview fullscreen shortcut.
 		a.toggleChatPanel("history")
-		return true
-	}
-	if panel == "debug" {
-		switch event.Key {
-		case woxui.KeyEscape:
-			a.closeChatPanel()
-		case woxui.KeyArrowUp:
-			a.scrollChatDebugPanel(-44)
-		case woxui.KeyArrowDown, woxui.KeyTab:
-			delta := float32(44)
-			if event.Modifiers&woxui.KeyModifierShift != 0 {
-				delta = -delta
-			}
-			a.scrollChatDebugPanel(delta)
-		}
 		return true
 	}
 	// A persistent history drawer does not own composer keys. Its rows and
