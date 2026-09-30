@@ -60,6 +60,9 @@ type CloudSyncHistoryRecordDetail struct {
 	Op         string `json:"op"`
 	Status     string `json:"status,omitempty"`
 	Error      string `json:"error,omitempty"`
+	// SizeBytes counts the serialized wire record, including encrypted data and metadata.
+	// Zero means the history predates size tracking.
+	SizeBytes int `json:"size_bytes,omitempty"`
 }
 
 type CloudSyncEncryptedValue struct {

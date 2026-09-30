@@ -807,6 +807,10 @@ func (m *CloudSyncManager) finishRemoteApply(ctx context.Context, result *cloudS
 // applyRecordsWithDetails keeps applying independent remote records after one item fails.
 // restore adopts the cloud snapshot instead of protecting newer unpushed local changes.
 func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records []CloudSyncRecord, progress *cloudSyncApplyProgress, restore bool) cloudSyncApplyRecordsResult {
+	started := time.Now()
+	defer func() {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=apply_records count=%d restore=%t costMs=%d", len(records), restore, time.Since(started).Milliseconds()))
+	}()
 	disabled := m.disabledPluginSet(ctx)
 	appliedWoxSetting := false
 	appliedPluginSetting := false
@@ -918,6 +922,7 @@ records:
 
 // cloudSyncHistoryDetailFromRecord converts an apply attempt into persisted history detail.
 func cloudSyncHistoryDetailFromRecord(record CloudSyncRecord, status string, errorMessage string) CloudSyncHistoryRecordDetail {
+	encoded, _ := json.Marshal(record) // Wire record fields cannot fail JSON encoding.
 	return CloudSyncHistoryRecordDetail{
 		EntityType: record.EntityType,
 		PluginID:   record.PluginID,
@@ -925,6 +930,7 @@ func cloudSyncHistoryDetailFromRecord(record CloudSyncRecord, status string, err
 		Op:         record.Op,
 		Status:     status,
 		Error:      errorMessage,
+		SizeBytes:  len(encoded),
 	}
 }
 
@@ -996,6 +1002,10 @@ func (m *CloudSyncManager) reloadAppliedSettings(ctx context.Context, reloadWoxS
 }
 
 func (m *CloudSyncManager) buildPushBatch(ctx context.Context, oplogs []database.Oplog) ([]CloudSyncChange, []uint, error) {
+	started := time.Now()
+	defer func() {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=build_push_batch candidates=%d costMs=%d", len(oplogs), time.Since(started).Milliseconds()))
+	}()
 	var changes []CloudSyncChange
 	var oplogIds []uint
 	var totalBytes int
@@ -1133,6 +1143,7 @@ func cloudSyncPushHistoryDetails(changes []CloudSyncChange, oplogIds []uint, syn
 		if status == "" {
 			continue
 		}
+		encoded, _ := json.Marshal(changes[i]) // Wire change fields cannot fail JSON encoding.
 		details = append(details, CloudSyncHistoryRecordDetail{
 			EntityType: changes[i].EntityType,
 			PluginID:   changes[i].PluginID,
@@ -1140,6 +1151,7 @@ func cloudSyncPushHistoryDetails(changes []CloudSyncChange, oplogIds []uint, syn
 			Op:         changes[i].Op,
 			Status:     status,
 			Error:      errorMessage,
+			SizeBytes:  len(encoded),
 		})
 	}
 	return details
@@ -1390,6 +1402,7 @@ func (m *CloudSyncManager) recordOperationHistory(ctx context.Context, operation
 	}
 
 	finishedAt := util.GetSystemTimestamp()
+	util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=operation operation=%s reason=%s count=%d status=%s costMs=%d", operation, reason, itemCount, status, finishedAt-startedAt))
 	record := CloudSyncHistoryRecord{
 		Operation:    operation,
 		Reason:       reason,

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 	"wox/i18n"
 	"wox/util"
 )
@@ -243,6 +244,12 @@ func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, t
 var errCloudSyncUnauthorized = fmt.Errorf("cloud sync unauthorized")
 
 func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, payload []byte, target any, tokenOverride string) error {
+	started := time.Now()
+	var prepareCost, httpCost time.Duration
+	statusCode := 0
+	defer func() {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=request path=%s requestBytes=%d status=%d prepareMs=%d httpMs=%d totalMs=%d", path, len(payload), statusCode, prepareCost.Milliseconds(), httpCost.Milliseconds(), time.Since(started).Milliseconds()))
+	}()
 	url := c.BaseURL() + path
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
@@ -293,13 +300,18 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 		client = util.GetHTTPClient(ctx)
 	}
 
+	prepareCost = time.Since(started)
+	httpStarted := time.Now()
 	resp, err := client.Do(req)
+	httpCost = time.Since(httpStarted)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	statusCode = resp.StatusCode
 
 	responsePayload, err := io.ReadAll(resp.Body)
+	httpCost = time.Since(httpStarted)
 	if err != nil {
 		return err
 	}

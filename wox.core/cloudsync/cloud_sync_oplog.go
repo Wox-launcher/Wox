@@ -3,6 +3,7 @@ package cloudsync
 import (
 	"context"
 	"fmt"
+	"time"
 	"wox/database"
 	"wox/util"
 
@@ -16,6 +17,10 @@ func NewDefaultOplogStore() *DefaultOplogStore {
 }
 
 func (s *DefaultOplogStore) LoadPending(ctx context.Context, limit int) ([]database.Oplog, error) {
+	started := time.Now()
+	defer func() {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=load_pending limit=%d costMs=%d", limit, time.Since(started).Milliseconds()))
+	}()
 	db := database.GetDB()
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -35,6 +40,10 @@ func (s *DefaultOplogStore) LoadPending(ctx context.Context, limit int) ([]datab
 
 // CountPending returns the current number of due local oplogs waiting for cloud upload.
 func (s *DefaultOplogStore) CountPending(ctx context.Context) (int, error) {
+	started := time.Now()
+	defer func() {
+		util.GetLogger().Debug(ctx, fmt.Sprintf("cloud_sync_timing stage=count_pending costMs=%d", time.Since(started).Milliseconds()))
+	}()
 	db := database.GetDB()
 	if db == nil {
 		return 0, fmt.Errorf("database not initialized")

@@ -1194,8 +1194,9 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 	textHeight := densityMetrics.scaled(22)
 	defaultImageSize := densityMetrics.scaled(20)
 	style := woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.TailFontSize)}
-	// Flutter's one-third cap includes the 10 px leading and 5 px trailing tail padding; the row owns those gaps in Go UI, so only the inner tail width is reserved here.
-	maximum := max(float32(0), rowWidth/3-tailOuterPadding)
+	// Keep at least one third of the row available for labels when metadata is wide.
+	// The row owns the outer gaps; reserve only the inner tail width here.
+	maximum := max(float32(0), rowWidth*2/3-tailOuterPadding)
 	maximumTextWidth := max(float32(0), maximum-tailItemPadding)
 	items := make([]launcherview.LauncherResultTail, 0, len(tails))
 	used := float32(0)

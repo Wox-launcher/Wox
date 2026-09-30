@@ -83,8 +83,12 @@ func (p *CloudSyncPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		return plugin.NewQueryResponse(p.historyDetailResults(ctx, historyID))
 	}
 
+	planLabelKey := "ui_cloud_sync_plan_free"
+	if accountStatus.Plan == "pro" {
+		planLabelKey = "ui_cloud_sync_plan_pro"
+	}
 	result := plugin.QueryResult{
-		Title:      p.statusTitle(accountStatus, status),
+		Title:      fmt.Sprintf("%s · %s", p.tr(ctx, p.statusTitle(accountStatus, status)), p.tr(ctx, planLabelKey)),
 		SubTitle:   p.statusSubtitle(ctx, accountStatus, status),
 		Icon:       cloudSyncIcon,
 		Score:      cloudSyncStatusResultScore,
@@ -166,9 +170,7 @@ func (p *CloudSyncPlugin) statusTitle(accountStatus account.Status, status cloud
 
 // statusSubtitle keeps the top status row focused on actionable sync state.
 func (p *CloudSyncPlugin) statusSubtitle(ctx context.Context, accountStatus account.Status, status cloudsync.ServiceStatus) string {
-	parts := []string{
-		p.labelValue(ctx, "plugin_cloudsync_label_pending", strconv.Itoa(status.PendingCount)),
-	}
+	parts := []string{}
 
 	if !accountStatus.SyncEnabled {
 		parts = append(parts, i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_detail_disabled"))
@@ -185,16 +187,17 @@ func (p *CloudSyncPlugin) statusSubtitle(ctx context.Context, accountStatus acco
 
 // statusTails surfaces the most actionable state for quick scanning and filtering.
 func (p *CloudSyncPlugin) statusTails(ctx context.Context, accountStatus account.Status, status cloudsync.ServiceStatus) []plugin.QueryResultTail {
+	tails := []plugin.QueryResultTail{plugin.NewQueryResultTailText(fmt.Sprintf("%s %d", p.tr(ctx, "plugin_cloudsync_label_pending"), status.PendingCount))}
 	if status.State != nil && status.State.LastError != "" {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_error"), plugin.QueryResultTailTextCategoryDanger)}
+		return append(tails, plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_error"), plugin.QueryResultTailTextCategoryDanger))
 	}
 	if status.State != nil && status.State.BackoffUntil > util.GetSystemTimestamp() {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_retrying"), plugin.QueryResultTailTextCategoryWarning)}
+		return append(tails, plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_retrying"), plugin.QueryResultTailTextCategoryWarning))
 	}
 	if !accountStatus.SyncEnabled {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_disabled"))}
+		return append(tails, plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_disabled")))
 	}
-	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_active"), plugin.QueryResultTailTextCategorySuccess)}
+	return append(tails, plugin.NewQueryResultTailTextWithCategory(i18n.GetI18nManager().TranslateWox(ctx, "plugin_cloudsync_tail_active"), plugin.QueryResultTailTextCategorySuccess))
 }
 
 // historyResults appends recent local push/pull attempts without changing sync state or protocol behavior.
@@ -361,11 +364,9 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 	if record.Reason != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_source", p.historyReasonLabel(ctx, record.Reason)))
 	}
-	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_count", strconv.Itoa(record.ItemCount)))
 	if types := p.formatHistoryEntityCounts(ctx, record.EntityCounts); types != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_types", types))
 	}
-	parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_duration", formatHistoryDuration(record.DurationMs)))
 	if record.Status != cloudsync.CloudSyncHistoryStatusSucceeded && record.Error != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncError(record.Error)))
 	}
@@ -373,9 +374,23 @@ func (p *CloudSyncPlugin) historySubtitle(ctx context.Context, record cloudsync.
 	return strings.Join(parts, " | ")
 }
 
-// historyTails mirrors history status as a semantic chip in the launcher row.
+// historyTails keeps metrics separate from the title and preserves the semantic status chip.
 func (p *CloudSyncPlugin) historyTails(ctx context.Context, record cloudsync.CloudSyncHistoryRecord) []plugin.QueryResultTail {
-	tails := []plugin.QueryResultTail{plugin.NewQueryResultTailText(p.formatTimestamp(ctx, historyTimestamp(record)))}
+	tails := []plugin.QueryResultTail{}
+	totalSize := 0
+	for _, detail := range record.Details {
+		if detail.SizeBytes == 0 {
+			totalSize = 0
+			break
+		}
+		totalSize += detail.SizeBytes
+	}
+	// Legacy or incomplete details cannot provide an accurate total.
+	if totalSize > 0 && len(record.Details) == record.ItemCount {
+		tails = append(tails, plugin.NewQueryResultTailText(formatHistoryRecordSize(totalSize)))
+	}
+	tails = append(tails, plugin.NewQueryResultTailText(formatHistoryDuration(record.DurationMs)))
+	tails = append(tails, plugin.NewQueryResultTailText(p.formatTimestamp(ctx, historyTimestamp(record))))
 	if record.Status == cloudsync.CloudSyncHistoryStatusFailed {
 		return append(tails, plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger))
 	}
@@ -469,6 +484,9 @@ func (p *CloudSyncPlugin) historyDetailSubtitle(ctx context.Context, detail clou
 	}
 	if detail.Status != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_status", p.historyDetailStatusLabel(ctx, detail.Status)))
+	}
+	if detail.SizeBytes > 0 {
+		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_history_label_size", formatHistoryRecordSize(detail.SizeBytes)))
 	}
 	if detail.Error != "" {
 		parts = append(parts, p.labelValue(ctx, "plugin_cloudsync_label_error", formatCloudSyncError(detail.Error)))
@@ -609,6 +627,17 @@ func (p *CloudSyncPlugin) historyDetailTitle(ctx context.Context, detail cloudsy
 		return detail.PluginID
 	}
 	return detail.EntityType
+}
+
+// formatHistoryRecordSize uses the same units as file sizes elsewhere in the launcher.
+func formatHistoryRecordSize(size int) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	if size < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(size)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
 }
 
 // formatHistoryDuration keeps short sync attempts readable without locale-specific formatting.
