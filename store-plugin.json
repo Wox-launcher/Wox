@@ -700,7 +700,7 @@
     "Id": "0057ebd4-1a85-4653-8bfa-d51557c0c7a1",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
+    "Version": "0.0.2",
     "MinWoxVersion": "2.0.0",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
@@ -716,7 +716,7 @@
       "Linux"
     ],
     "DateCreated": "2026-04-26 15:15:06",
-    "DateUpdated": "2026-04-26 15:17:37",
+    "DateUpdated": "2026-09-30 09:06:26",
     "I18n": {
       "en_US": {
         "plugin_name": "Unsplash",
