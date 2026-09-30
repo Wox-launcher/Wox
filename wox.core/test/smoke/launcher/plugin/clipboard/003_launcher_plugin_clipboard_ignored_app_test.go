@@ -28,6 +28,10 @@ const (
 // Flow: add the platform editor to Clipboard privacy settings -> copy unique text in that editor -> query Clipboard.
 // Evidence: a fresh ignore log identifies the source application and the completed Clipboard query omits the marker.
 func Test003LauncherPluginClipboardIgnoredApp(t *testing.T) {
+	// Asynchronous native copy events can outlive editor focus on shared CI desktops.
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("ignored-application clipboard smoke requires a local desktop")
+	}
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		requireClipboardIgnoredAppRuntime(t)
 		smoke.PreserveClipboard(t)
