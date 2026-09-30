@@ -1618,5 +1618,27 @@
         "plugin_description": "搜索 Steam、Epic、GOG、Ubisoft Connect、EA、Battle.net、Xbox 和 itch.io 里已安装的游戏。"
       }
     }
+  },
+  {
+    "Id": "9d778a44-0185-4cd5-81eb-b7b019fd7c3f",
+    "Name": "IMDB",
+    "Author": "qianlifeng",
+    "Version": "1.2.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Search TMDB movies and TV, with posters and ratings",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/f8f74160-0bcf-4e73-9615-221bbb0dd861",
+    "Website": "https://gist.github.com/qianlifeng/dc6511115bdde92b3976369c4b675ebe",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/dc6511115bdde92b3976369c4b675ebe/raw/Wox.Plugin.IMDB.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/7ff063ae-da80-4c8d-8c45-5e48305fe2d1"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-09-30 20:31:39",
+    "DateUpdated": "2026-09-30 20:31:39"
   }
 ]
