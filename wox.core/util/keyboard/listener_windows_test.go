@@ -104,23 +104,28 @@ func TestWindowsFunctionKeyVirtualKeyMappingThroughF24(t *testing.T) {
 	}
 }
 
-func TestWindowsShellReservedComboOnlyCoversWinSpaceFamily(t *testing.T) {
+func TestWindowsWinHookFallbackComboCoversTakenWinChordsExceptLock(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		modifiers Modifier
 		key       Key
-		reserved  bool
+		fallback  bool
 	}{
-		{name: "win+space", modifiers: ModifierSuper, key: KeySpace, reserved: true},
-		{name: "shift+win+space", modifiers: ModifierSuper | ModifierShift, key: KeySpace, reserved: true},
-		{name: "ctrl+win+space", modifiers: ModifierSuper | ModifierCtrl, key: KeySpace, reserved: true},
-		{name: "win+alt+space", modifiers: ModifierSuper | ModifierAlt, key: KeySpace, reserved: true},
-		{name: "alt+space", modifiers: ModifierAlt, key: KeySpace, reserved: false},
-		{name: "win+e", modifiers: ModifierSuper, key: KeyE, reserved: false},
-		{name: "win+l", modifiers: ModifierSuper, key: KeyL, reserved: false},
+		{name: "win+space", modifiers: ModifierSuper, key: KeySpace, fallback: true},
+		{name: "shift+win+space", modifiers: ModifierSuper | ModifierShift, key: KeySpace, fallback: true},
+		{name: "ctrl+win+space", modifiers: ModifierSuper | ModifierCtrl, key: KeySpace, fallback: true},
+		{name: "win+alt+space", modifiers: ModifierSuper | ModifierAlt, key: KeySpace, fallback: true},
+		{name: "win+e", modifiers: ModifierSuper, key: KeyE, fallback: true},
+		{name: "win+v", modifiers: ModifierSuper, key: KeyV, fallback: true},
+		{name: "win+c", modifiers: ModifierSuper, key: KeyC, fallback: true},
+		{name: "win+shift+v", modifiers: ModifierSuper | ModifierShift, key: KeyV, fallback: true},
+		{name: "win+shift+l", modifiers: ModifierSuper | ModifierShift, key: KeyL, fallback: true},
+		{name: "alt+space", modifiers: ModifierAlt, key: KeySpace, fallback: false},
+		{name: "ctrl+k", modifiers: ModifierCtrl, key: KeyK, fallback: false},
+		{name: "win+l", modifiers: ModifierSuper, key: KeyL, fallback: false},
 	} {
-		if actual := isWindowsShellReservedCombo(tc.modifiers, tc.key); actual != tc.reserved {
-			t.Fatalf("%s reserved = %t, want %t", tc.name, actual, tc.reserved)
+		if actual := windowsWinHookFallbackCombo(tc.modifiers, tc.key); actual != tc.fallback {
+			t.Fatalf("%s fallback = %t, want %t", tc.name, actual, tc.fallback)
 		}
 	}
 }
@@ -177,6 +182,35 @@ func TestWindowsRegistersWinSpaceGlobalHotkey(t *testing.T) {
 	}
 	if err := registration.Unregister(); err != nil {
 		t.Fatalf("unregister Win+Space: %v", err)
+	}
+}
+
+func TestWindowsRegistersTakenWinChordAndRejectsLock(t *testing.T) {
+	for _, key := range []Key{KeyV, KeyE, KeyC} {
+		accepted, errCode, err := probeRegisterHotkey(ModifierSuper, key)
+		if err != nil {
+			t.Fatalf("probe Win+%s: %v", key.Character(), err)
+		}
+		t.Logf("RegisterHotKey Win+%s accepted=%t err=%d", key.Character(), accepted, errCode)
+
+		registration, err := RegisterGlobalHotkey(ModifierSuper, key, func() {})
+		if err != nil {
+			t.Fatalf("register Win+%s: %v", key.Character(), err)
+		}
+		_, isHook := registration.(*hookHotkey)
+		if accepted && isHook {
+			t.Fatalf("Win+%s was free for RegisterHotKey but registered through the hook", key.Character())
+		}
+		if !accepted && !isHook {
+			t.Fatalf("Win+%s was refused by RegisterHotKey (err=%d) but did not fall back to the hook", key.Character(), errCode)
+		}
+		if err := registration.Unregister(); err != nil {
+			t.Fatalf("unregister Win+%s: %v", key.Character(), err)
+		}
+	}
+
+	if _, err := RegisterGlobalHotkey(ModifierSuper, KeyL, func() {}); err == nil {
+		t.Fatal("Win+L must stay rejected; winlogon still locks the workstation")
 	}
 }
 

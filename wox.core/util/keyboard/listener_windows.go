@@ -61,6 +61,12 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 	if err != nil {
 		return nil, err
 	}
+	// winlogon locks the session on Win+L even when this process swallows L.
+	// Refuse the chord before RegisterHotKey so a successful OS registration
+	// cannot look like Wox owns the lock shortcut.
+	if key == KeyL && modifiers == ModifierSuper {
+		return nil, fmt.Errorf("failed to register hotkey (err=%d)", windowsErrorHotkeyAlreadyRegistered)
+	}
 
 	managerMu.Lock()
 	id := nextHotkeyID
@@ -71,7 +77,7 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 		return nil, err
 	}
 
-	shellReserved := isWindowsShellReservedCombo(modifiers, key)
+	hookFallback := windowsWinHookFallbackCombo(modifiers, key)
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
@@ -87,9 +93,9 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 		if uint32(errCode) != windowsErrorHotkeyAlreadyRegistered || attempt == maxAttempts {
 			break
 		}
-		// Shell-reserved combos are held by Explorer permanently, so retrying only
-		// delays the hook fallback below.
-		if shellReserved {
+		// A Win chord the shell will not release is not a stale probe. Retrying
+		// only delays the hook fallback below.
+		if hookFallback {
 			break
 		}
 		// A preceding availability probe can have just released this key. Windows
@@ -97,7 +103,7 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 		time.Sleep(hotkeyRegistrationRetryDelay)
 	}
 	if !registered {
-		if uint32(errCode) == windowsErrorHotkeyAlreadyRegistered && shellReserved {
+		if uint32(errCode) == windowsErrorHotkeyAlreadyRegistered && hookFallback {
 			util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hotkey is reserved by the Windows shell, falling back to keyboard hook: modifiers=%d key=%d", modifiers, key))
 			return registerHookHotkey(modifiers, key, callback)
 		}
@@ -111,21 +117,52 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 	return &hotkeyRegistration{id: id}, nil
 }
 
-// isWindowsShellReservedCombo reports whether the combination is one that
-// Explorer owns permanently: Win+Space and its Ctrl/Shift/Alt variants drive the
-// input language switcher, so RegisterHotKey always fails with
-// ERROR_HOTKEY_ALREADY_REGISTERED for them. Only these fall back to the
-// low-level keyboard hook. Other Win shortcuts keep failing so the recorder can
-// report the system conflict honestly instead of silently overriding shortcuts
-// that the hook could only partially intercept (e.g. Win+L is handled by winlogon).
-func isWindowsShellReservedCombo(modifiers Modifier, key Key) bool {
-	return key == KeySpace && modifiers&ModifierSuper != 0
+// windowsWinHookFallbackCombo reports a Win chord that may be taken over by the
+// low-level hook when RegisterHotKey returns ERROR_HOTKEY_ALREADY_REGISTERED.
+// Exact Win+L is excluded: winlogon locks the workstation even if this process
+// swallows L, so accepting it would look successful while the machine still locks.
+func windowsWinHookFallbackCombo(modifiers Modifier, key Key) bool {
+	if modifiers&ModifierSuper == 0 {
+		return false
+	}
+	return !(key == KeyL && modifiers == ModifierSuper)
 }
 
-// hookHotkey emulates RegisterHotKey through the WH_KEYBOARD_LL hook for combos
-// the shell refuses to hand out. It consumes the main key while the exact
+// probeRegisterHotkey asks RegisterHotKey once and releases the chord when the
+// OS accepts it. Tests use this to see a taken Win chord before the hook
+// fallback hides that 1409.
+func probeRegisterHotkey(modifiers Modifier, key Key) (bool, uint32, error) {
+	vkCode, err := keyToWindowsVK(key)
+	if err != nil {
+		return false, 0, err
+	}
+	if err := ensureNativeKeyboardThread(); err != nil {
+		return false, 0, err
+	}
+
+	managerMu.Lock()
+	id := nextHotkeyID
+	nextHotkeyID++
+	managerMu.Unlock()
+
+	var errCode C.ulong
+	ok := C.woxKeyboardRegisterHotkey(C.int(id), C.uint(modifiers), C.uint(vkCode), &errCode)
+	if ok == 0 {
+		return false, uint32(errCode), nil
+	}
+	var unregisterErr C.ulong
+	if C.woxKeyboardUnregisterHotkey(C.int(id), &unregisterErr) == 0 {
+		return true, uint32(unregisterErr), fmt.Errorf("failed to unregister probed hotkey (err=%d)", uint32(unregisterErr))
+	}
+	return true, 0, nil
+}
+
+// hookHotkey emulates RegisterHotKey through the WH_KEYBOARD_LL hook for Win
+// chords the shell refuses to hand out. It consumes the main key while the exact
 // modifier set is held, fires once per physical press (MOD_NOREPEAT semantics),
-// and masks the Win release so Explorer does not open the Start menu.
+// and masks the Win release so Explorer does not open the Start menu. Unbound
+// Win chords are left untouched, so Win+E and Win+R keep working until the user
+// assigns them.
 //
 // Unlike RegisterHotKey, the hook is subject to UIPI: it receives no events while
 // an elevated window is in the foreground unless Wox itself runs elevated.
