@@ -2,13 +2,90 @@ package system
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"wox/diagnostic"
 	"wox/plugin"
+	"wox/updater"
 	"wox/util"
+
+	"gopkg.in/yaml.v3"
 )
+
+// TestGitHubIssueURLPrefills checks the shared URL path used by bug, feature, and crash actions.
+func TestGitHubIssueURLPrefills(t *testing.T) {
+	t.Setenv("XDG_CURRENT_DESKTOP", "GNOME")
+	t.Setenv("XDG_SESSION_TYPE", "x11")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DISPLAY", ":0")
+	for _, template := range []string{feedbackBugTemplate, feedbackFeatureTemplate} {
+		issueURL, err := url.Parse(githubIssueURL(template, "Test & details"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := issueURL.Query()
+		formData, err := os.ReadFile("../../../.github/ISSUE_TEMPLATE/" + template)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var form struct {
+			Body []struct {
+				Type, ID    string
+				Validations struct{ Required bool }
+			}
+		}
+		if err := yaml.Unmarshal(formData, &form); err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range form.Body {
+			if template == feedbackFeatureTemplate && field.ID == "platform" {
+				t.Error("feature form must not ask for a platform")
+			}
+			if field.Type == "dropdown" {
+				t.Errorf("%s: %s must be a text field", template, field.ID)
+			}
+			if field.ID == "linux_environment" && field.Validations.Required {
+				t.Error("Linux environment must be optional")
+			}
+			if field.Type == "input" && field.ID != "linux_environment" && !query.Has(field.ID) {
+				t.Errorf("%s: missing prefill for %s", template, field.ID)
+			}
+		}
+		platform := "Linux"
+		if util.IsWindows() {
+			platform = "Windows"
+		} else if util.IsMacOS() {
+			platform = "macOS"
+		}
+		if template == feedbackFeatureTemplate {
+			platform = ""
+			if query.Has("platform") {
+				t.Error("feature URL must not include a platform")
+			}
+		}
+		for key, want := range map[string]string{
+			"template": template, "title": "Test & details", "wox_version": updater.CURRENT_VERSION, "platform": platform,
+		} {
+			if query.Get(key) != want {
+				t.Errorf("%s: %s = %q, want %q", template, key, query.Get(key), want)
+			}
+		}
+		wantEnvironment := ""
+		if template == feedbackBugTemplate && util.IsLinux() {
+			wantEnvironment = "GNOME / X11 (Xorg)"
+		}
+		if query.Get("linux_environment") != wantEnvironment {
+			t.Errorf("%s: Linux environment = %q, want %q", template, query.Get("linux_environment"), wantEnvironment)
+		}
+		for _, key := range []string{"desktop_environment", "display_server"} {
+			if query.Has(key) {
+				t.Errorf("%s: obsolete parameter %s", template, key)
+			}
+		}
+	}
+}
 
 type feedbackTestAPI struct {
 	plugin.API

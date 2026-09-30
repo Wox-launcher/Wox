@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 	"wox/common/icons"
 	"wox/diagnostic"
@@ -318,6 +319,32 @@ func githubIssueURL(template, title string) string {
 		query.Set("title", title)
 	}
 	query.Set("wox_version", updater.CURRENT_VERSION)
+	if template == feedbackBugTemplate {
+		platform := "Linux"
+		if util.IsWindows() {
+			platform = "Windows"
+		} else if util.IsMacOS() {
+			platform = "macOS"
+		}
+		query.Set("platform", platform)
+	}
+	if template == feedbackBugTemplate && util.IsLinux() {
+		var environment []string
+		for _, envName := range []string{"XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION", "GDMSESSION"} {
+			if value := os.Getenv(envName); value != "" {
+				environment = append(environment, value)
+				break
+			}
+		}
+		if util.IsLinuxWaylandSession() {
+			environment = append(environment, "Wayland")
+		} else if os.Getenv("DISPLAY") != "" {
+			environment = append(environment, "X11 (Xorg)")
+		}
+		if len(environment) > 0 {
+			query.Set("linux_environment", strings.Join(environment, " / "))
+		}
+	}
 	return feedbackGitHubNewIssueURL + "?" + query.Encode()
 }
 

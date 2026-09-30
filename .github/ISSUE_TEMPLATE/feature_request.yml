@@ -34,19 +34,6 @@ body:
     validations:
       required: false
 
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      description: Which platform is this feature for?
-      options:
-        - All platforms
-        - macOS
-        - Windows
-        - Linux
-    validations:
-      required: true
-
   - type: input
     id: wox_version
     attributes:

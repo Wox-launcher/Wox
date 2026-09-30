@@ -6,51 +6,23 @@ assignees:
   - qianlifeng
 
 body:
-  - type: dropdown
+  - type: input
     id: platform
     attributes:
       label: Platform
-      description: Select your operating system
-      options:
-        - macOS
-        - Windows
-        - Linux
+      description: Enter your operating system.
+      placeholder: macOS, Windows, or Linux
     validations:
       required: true
 
-  - type: markdown
+  - type: input
+    id: linux_environment
     attributes:
-      value: |
-        ### Linux Environment
-        The following two fields are only required for Linux users.
-        If you are on macOS or Windows, select "N/A".
-
-  - type: dropdown
-    id: desktop_environment
-    attributes:
-      label: Desktop Environment
-      description: Linux only. Select "N/A" if you are not a Linux user.
-      options:
-        - N/A (not a Linux user)
-        - GNOME
-        - KDE Plasma
-        - XFCE
-        - Other (specify in Description)
+      label: Linux Environment
+      description: Optional. Linux users can enter their desktop environment and display server; otherwise leave blank.
+      placeholder: GNOME / Wayland, KDE Plasma / X11 (Xorg), etc.
     validations:
-      required: true
-
-  - type: dropdown
-    id: display_server
-    attributes:
-      label: Display Server
-      description: Linux only. Select "N/A" if you are not a Linux user.
-      options:
-        - N/A (not a Linux user)
-        - Wayland
-        - X11 (Xorg)
-        - Not sure
-    validations:
-      required: true
+      required: false
 
   - type: input
     id: wox_version
