@@ -5,7 +5,16 @@ package perf
 import (
 	"os"
 	"runtime"
+	"testing"
 )
+
+// requireNativePerf keeps presented-frame performance sampling local to avoid shared-runner instability.
+func requireNativePerf(t *testing.T) {
+	t.Helper()
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("presented-frame performance smoke runs locally only")
+	}
+}
 
 // perfTimingBudgetMultiplier gives shared runners scheduling headroom while retaining a hard ceiling.
 func perfTimingBudgetMultiplier() int64 {

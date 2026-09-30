@@ -33,6 +33,7 @@ const (
 // Flow: hide the primary launcher -> show through the product window path -> wait for the query input and a presented frame.
 // Evidence: twenty steady hide/show cycles report p50/p95/max against the local or CI smoke ceiling.
 func Test007ShowToVisibleLatency(t *testing.T) {
+	requireNativePerf(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		samples := make([]time.Duration, 0, showToVisibleWarmupSamples+showToVisibleSampleCount)
 		for range showToVisibleWarmupSamples + showToVisibleSampleCount {

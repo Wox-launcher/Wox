@@ -15,6 +15,7 @@ import (
 // Flow: install catalog-500 -> open plugins -> measure -> open themes -> measure.
 // Evidence: both catalogs expose the first fixture row and settled frames report work counters without unexpected drops.
 func Test003Catalog500Work(t *testing.T) {
+	requireNativePerf(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		if err := client.OpenSettings(ctx, "/plugins"); err != nil {
 			t.Fatalf("open plugin catalog: %v", err)

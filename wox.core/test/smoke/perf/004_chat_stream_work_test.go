@@ -17,6 +17,7 @@ import (
 // Flow: query wox-smoke chat-200 -> append answer text -> settle -> scroll historical messages.
 // Evidence: streaming and scrolling keep bounded work, and the completed stream satisfies steady budgets.
 func Test004ChatStreamWork(t *testing.T) {
+	requireNativePerf(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		snapshot := runQueryFixture(t, ctx, client, fixtureCommandQuery("chat-200"))
 		_, chatVisible := automationdriver.Find(snapshot, "chat.messages")

@@ -16,6 +16,7 @@ import (
 // Flow: query a small fixture -> hover a result -> extend query selection -> resize the launcher.
 // Evidence: each interaction yields presented frames with work counters and at most one resize drop.
 func Test006LocalInteractionDamage(t *testing.T) {
+	requireNativePerf(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		snapshot := runQueryFixture(t, ctx, client, fixtureCommandQuery("warm-cache"))
 		result, found := automationdriver.Find(snapshot, "launcher.result.perf-warm-0")

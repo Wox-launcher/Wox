@@ -14,6 +14,7 @@ import (
 // Flow: show launcher -> query wox-smoke grid-500 -> collect settled presented frames.
 // Evidence: the first grid item is visible and settled frames report work counters without unexpected drops.
 func Test002Grid500Work(t *testing.T) {
+	requireNativePerf(t)
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		snapshot := runQueryFixture(t, ctx, client, fixtureCommandQuery("grid-500"))
 		if _, found := automationdriver.Find(snapshot, "launcher.result.perf-grid-0000"); !found {
