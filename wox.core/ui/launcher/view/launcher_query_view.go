@@ -19,7 +19,7 @@ const (
 const launcherQueryMinimumEditableWidth = float32(300)
 
 // LauncherQueryProps contains the prepared text and callbacks for the launcher query editor.
-// LauncherQueryMark is a measured semantic range behind ordinary query text.
+// LauncherQueryMark is a measured semantic range under ordinary query text.
 type LauncherQueryMark struct {
 	Line     int
 	X, Width float32
@@ -520,23 +520,14 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 	offset := launcherQueryHorizontalOffset(props)
 	return woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 		textTop := bounds.Y + max(float32(0), bounds.Height-float32(len(lines))*lineHeight)/2
-		for index, mark := range props.Marks {
+		for _, mark := range props.Marks {
 			color := props.Theme.QueryText
-			color.A = 10
+			color.A = 24
 			if mark.Active {
-				color.A = 18
+				color.A = 56
 			}
-			// Expand only the paint in logical units; keep editor geometry intact and
-			// share tight gaps between neighboring marks instead of overlapping them.
-			left, right := max(float32(0), mark.X-offset-3), min(bounds.Width, mark.X-offset+mark.Width+3)
-			if index > 0 && props.Marks[index-1].Line == mark.Line {
-				previous := props.Marks[index-1]
-				left = max(left, (previous.X+previous.Width+mark.X)/2-offset)
-			}
-			if index+1 < len(props.Marks) && props.Marks[index+1].Line == mark.Line {
-				right = min(right, (mark.X+mark.Width+props.Marks[index+1].X)/2-offset)
-			}
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + left, Y: textTop + float32(mark.Line)*lineHeight, Width: max(float32(0), right-left), Height: props.CaretHeight}, 4, color)
+			left, right := max(float32(0), mark.X-offset), min(bounds.Width, mark.X-offset+mark.Width)
+			displayList.FillRect(woxui.Rect{X: bounds.X + left, Y: textTop + float32(mark.Line)*lineHeight + props.CaretHeight - 1, Width: max(float32(0), right-left), Height: 1}, color)
 		}
 		lastLine := lines[len(lines)-1]
 		if focused && props.State.Composition == "" && props.CompletionSuffix != "" {
@@ -550,10 +541,13 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			}
 			if len(props.CompletionChips) > 0 {
 				chipColor := props.Theme.QueryText
-				chipColor.A = 18
+				chipColor.A = 24
 				for _, chip := range props.CompletionChips {
-					left, right := max(float32(0), hintX+chip.X-3), min(bounds.Width, hintX+chip.X+chip.Width+3)
-					displayList.FillRoundedRect(woxui.Rect{X: bounds.X + left, Y: hintY, Width: max(float32(0), right-left), Height: props.CaretHeight}, 4, chipColor)
+					// Multiple placeholders need visible boundaries when their labels contain spaces.
+					if len(props.CompletionChips) > 1 {
+						left, right := max(float32(0), hintX+chip.X), min(bounds.Width, hintX+chip.X+chip.Width)
+						displayList.FillRect(woxui.Rect{X: bounds.X + left, Y: hintY + props.CaretHeight - 1, Width: max(float32(0), right-left), Height: 1}, chipColor)
+					}
 					displayList.DrawText(chip.Text, woxui.Rect{X: bounds.X + hintX + chip.X, Y: hintY, Width: max(float32(0), bounds.Width-hintX-chip.X), Height: lineHeight}, props.Style, hintColor)
 				}
 			} else {

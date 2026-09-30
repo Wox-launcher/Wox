@@ -9,7 +9,7 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// Keep neighboring ghost chips far enough apart that their 3-unit paint pads do not merge.
+// Separate argument hints without treating spaces inside a label as boundaries.
 const queryHintChipGap = float32(12)
 
 // queryHintSuggestionsLabel limits only the preview; all candidates remain available for completion.
@@ -85,9 +85,8 @@ func (a *App) queryHintView(snapshot viewSnapshot, width, height, lineHeight flo
 						// Deferred separators still separate the next ghost hint visually.
 						props.CompletionSuffix = " " + props.CompletionSuffix
 					}
-					// Every empty argument is a hole: the same quiet chip, even
-					// when only one variable remains. Plain ghost text is reserved
-					// for completion suffixes, not query slots.
+					// Measure each placeholder separately so the painter can mark its
+					// range without adding decoration to the editable document.
 					x := float32(0)
 					if strings.HasPrefix(props.CompletionSuffix, " ") {
 						x = measure(" ")

@@ -278,7 +278,7 @@ func TestQueryHintCompletionOffset(t *testing.T) {
 	}
 }
 
-func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
+func TestQueryHintSingleEmptyArgumentPaintsPlainHint(t *testing.T) {
 	props := LauncherQueryProps{Width: 400, Height: 34, LineHeight: 34, CaretHeight: 30,
 		Style: woxui.TextStyle{Size: 28},
 		State: woxui.TextEditingState{Text: "set volume "}, Lines: []LauncherQueryLine{{Text: "set volume ", TextWidth: 90}},
@@ -287,11 +287,8 @@ func TestQueryHintSingleEmptyArgumentPaintsChip(t *testing.T) {
 		Theme:            woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}}
 	bounds := woxui.Rect{Width: props.Width, Height: props.Height}
 	var actual, expected woxui.DisplayList
-	chip := props.Theme.QueryText
-	chip.A = 18
 	hint := props.Theme.QueryText
 	hint.A = 96
-	expected.FillRoundedRect(woxui.Rect{X: 87, Width: 126, Height: props.CaretHeight}, 4, chip)
 	expected.DrawText("Volume (0–100)", woxui.Rect{X: 90, Width: 310, Height: props.LineHeight}, props.Style, hint)
 	expected.DrawText("set volume ", bounds, props.Style, props.Theme.QueryText)
 	expected.DrawCaret(woxui.Rect{Width: 2, Height: props.CaretHeight}, props.Theme.Cursor, false)
@@ -314,12 +311,12 @@ func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 	bounds := woxui.Rect{Width: props.Width, Height: props.Height}
 	var actual, expected woxui.DisplayList
 	chip := props.Theme.QueryText
-	chip.A = 18
+	chip.A = 24
 	hint := props.Theme.QueryText
 	hint.A = 96
-	expected.FillRoundedRect(woxui.Rect{X: 17, Width: 86, Height: props.CaretHeight}, 4, chip)
+	expected.FillRect(woxui.Rect{X: 20, Y: 29, Width: 80, Height: 1}, chip)
 	expected.DrawText("search query", woxui.Rect{X: 20, Width: 380, Height: props.LineHeight}, props.Style, hint)
-	expected.FillRoundedRect(woxui.Rect{X: 109, Width: 76, Height: props.CaretHeight}, 4, chip)
+	expected.FillRect(woxui.Rect{X: 112, Y: 29, Width: 70, Height: 1}, chip)
 	expected.DrawText("time range", woxui.Rect{X: 112, Width: 288, Height: props.LineHeight}, props.Style, hint)
 	expected.DrawText("g ", bounds, props.Style, props.Theme.QueryText)
 	expected.DrawCaret(woxui.Rect{Width: 2, Height: props.CaretHeight}, props.Theme.Cursor, false)
@@ -621,8 +618,8 @@ func TestInlineQueryMarkPreservesTextGeometry(t *testing.T) {
 		bounds := woxui.Rect{X: -120 * scale, Y: 18 * scale, Width: props.Width, Height: props.Height}
 		var expected, actual woxui.DisplayList
 		color := props.Theme.QueryText
-		color.A = 18
-		expected.FillRoundedRect(woxui.Rect{X: bounds.X + 160*scale - 3, Y: bounds.Y + 2*scale, Width: 32*scale + 6, Height: props.CaretHeight}, 4, color)
+		color.A = 56
+		expected.FillRect(woxui.Rect{X: bounds.X + 160*scale, Y: bounds.Y + 2*scale + props.CaretHeight - 1, Width: 32 * scale, Height: 1}, color)
 		launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&expected, bounds, true, false)
 		props.Marks = []LauncherQueryMark{{X: 160 * scale, Width: 32 * scale, Active: true}}
 		launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
@@ -633,17 +630,17 @@ func TestInlineQueryMarkPreservesTextGeometry(t *testing.T) {
 }
 
 // Tight parameter gaps and editor edges must not produce overlapping decoration.
-func TestInlineQueryMarkPaddingStopsAtNeighborsAndEdges(t *testing.T) {
+func TestInlineQueryUnderlineStopsAtNeighborsAndEdges(t *testing.T) {
 	props := LauncherQueryProps{Width: 40, Height: 30, LineHeight: 30, CaretHeight: 26,
 		Theme: woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}}
 	bounds := woxui.Rect{X: -100, Y: 20, Width: 40, Height: 30}
 	var expected, actual woxui.DisplayList
 	color := props.Theme.QueryText
-	color.A = 10
-	expected.FillRoundedRect(woxui.Rect{X: -100, Y: 20, Width: 21, Height: 26}, 4, color)
-	expected.FillRoundedRect(woxui.Rect{X: -79, Y: 20, Width: 19, Height: 26}, 4, color)
+	color.A = 24
+	expected.FillRect(woxui.Rect{X: -100, Y: 45, Width: 20, Height: 1}, color)
+	expected.FillRect(woxui.Rect{X: -78, Y: 45, Width: 18, Height: 1}, color)
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&expected, bounds, true, false)
-	props.Marks = []LauncherQueryMark{{X: 0, Width: 20}, {X: 22, Width: 18}}
+	props.Marks = []LauncherQueryMark{{X: -2, Width: 22}, {X: 22, Width: 20}}
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatal("parameter decoration exceeded editor edges or overlapped its neighbor")
