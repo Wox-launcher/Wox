@@ -244,6 +244,7 @@ const (
 	ControlModelTraining       = "control.model-training"
 	ControlMoreHorizontal      = "control.more-horizontal"
 	ControlToolbarToggle       = "control.toolbar-toggle"
+	ControlToolbarHidden       = "control.toolbar-hidden"
 	ControlTextFormat          = "control.text-format"
 	ControlPin                 = "control.pin"
 	ControlFormatHeading       = "control.format-heading"

@@ -3,6 +3,7 @@ package view
 import (
 	"testing"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -44,9 +45,33 @@ func TestSettingsWindowMacKeepsTitleBarOutOfPageColumn(t *testing.T) {
 	}
 }
 
-func TestSettingsWindowWindowsRetainsFullWidthTitleBarRow(t *testing.T) {
+func TestSettingsWindowWindowsSharesPageGutterWithTitleBar(t *testing.T) {
 	window := SettingsWindow(SettingsWindowProps{
 		Width: 1200, Height: 800, PageID: "ui", Platform: "windows", RailWidth: 240,
+		TitleBar: woxwidget.Container{Width: 1200, Height: SettingsTitleBarHeight},
+		Rail:     woxwidget.Container{Width: 240, Height: 760},
+		Page:     woxwidget.Container{Width: 960, Height: 780},
+	})
+
+	root := window.(woxwidget.Semantics).Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	layout := root.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	page := layout.Children[0]
+	if page.Left != 240 || page.Top != 20 || page.Top+page.Child.(woxwidget.Semantics).Child.(woxwidget.Container).Height != 800 {
+		t.Fatalf("Windows page frame = %#v, want top 20 and bottom at window edge", page)
+	}
+	if layout.Children[1].Top != SettingsTitleBarHeight || layout.Children[2].Top != 0 {
+		t.Fatal("Windows rail and caption controls must retain their vertical positions")
+	}
+	// Catalogs have the smallest top inset; their first control must clear the draggable caption row.
+	catalog := PluginSettingsPage(PluginSettingsPageProps{Width: 960, Height: 780}).(woxwidget.Container)
+	if page.Top+catalog.Padding.Top < SettingsTitleBarHeight {
+		t.Fatal("Windows catalog controls overlap the draggable title bar")
+	}
+}
+
+func TestSettingsWindowLinuxRetainsFullWidthTitleBarRow(t *testing.T) {
+	window := SettingsWindow(SettingsWindowProps{
+		Width: 1200, Height: 800, PageID: "ui", Platform: "linux", RailWidth: 240,
 		TitleBar: woxwidget.Container{Width: 1200, Height: SettingsTitleBarHeight},
 		Rail:     woxwidget.Container{Width: 240, Height: 760},
 		Page:     woxwidget.Container{Width: 960, Height: 760},
@@ -56,10 +81,10 @@ func TestSettingsWindowWindowsRetainsFullWidthTitleBarRow(t *testing.T) {
 	body := root.Children[0].Child.(woxwidget.Container)
 	layout, ok := body.Child.(woxwidget.Flex)
 	if !ok {
-		t.Fatalf("Windows settings layout type = %T, want woxwidget.Flex", body.Child)
+		t.Fatalf("Linux settings layout type = %T, want woxwidget.Flex", body.Child)
 	}
 	if len(layout.Children) != 2 {
-		t.Fatalf("Windows settings row count = %d, want title bar and content", len(layout.Children))
+		t.Fatalf("Linux settings row count = %d, want title bar and content", len(layout.Children))
 	}
 }
 
@@ -94,12 +119,12 @@ func TestSettingsTitleBarLinuxCloseHoverUsesDangerHighlight(t *testing.T) {
 
 func TestSettingsTitleBarCloseOnlyOmitsWindowsMinimize(t *testing.T) {
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "windows", CloseOnly: true}, "", nil).(woxwidget.Stack)
-	if len(titleBar.Children) != 4 {
-		t.Fatalf("close-only Windows title-bar child count = %d, want drag, title, border, and close", len(titleBar.Children))
+	if len(titleBar.Children) != 3 {
+		t.Fatalf("close-only Windows title-bar child count = %d, want drag, title, and close", len(titleBar.Children))
 	}
-	closeButton, ok := titleBar.Children[3].Child.(woxwidget.Gesture)
+	closeButton, ok := titleBar.Children[2].Child.(woxwidget.Gesture)
 	if !ok || closeButton.ID != "settings-window-close" {
-		t.Fatalf("close-only Windows last control = %#v, want close button", titleBar.Children[3].Child)
+		t.Fatalf("close-only Windows last control = %#v, want close button", titleBar.Children[2].Child)
 	}
 }
 
@@ -123,9 +148,8 @@ func TestSettingsTitleBarCustomContentKeepsPlatformControlsClear(t *testing.T) {
 func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, Platform: "windows"}, "", nil).(woxwidget.Stack)
 	title := titleBar.Children[1]
-	border := titleBar.Children[2]
-	minimize := titleBar.Children[3]
-	closeButton := titleBar.Children[4]
+	minimize := titleBar.Children[2]
+	closeButton := titleBar.Children[3]
 
 	if title.Left != 40 || title.Right != 92 || !title.StretchWidth {
 		t.Fatalf("Windows title slot = left %.0f right %.0f stretch %v, want 40/92/true", title.Left, title.Right, title.StretchWidth)
@@ -134,8 +158,35 @@ func TestSettingsTitleBarWindowsUsesInsetStretchAndRightAnchors(t *testing.T) {
 	if !ok || title.Top != 0 || titleAlignment.Height != SettingsTitleBarHeight || titleAlignment.Vertical != 0.5 {
 		t.Fatalf("Windows title alignment = top %.0f child %#v, want full-height vertical center", title.Top, title.Child)
 	}
-	if !border.StretchWidth || !border.AnchorBottom || !minimize.AnchorRight || minimize.Right != 46 || !closeButton.AnchorRight {
-		t.Fatalf("Windows chrome anchors = border %v/%v minimize %v/%.0f close %v, want true/true true/46 true", border.StretchWidth, border.AnchorBottom, minimize.AnchorRight, minimize.Right, closeButton.AnchorRight)
+	if !minimize.AnchorRight || minimize.Right != 46 || !closeButton.AnchorRight {
+		t.Fatalf("Windows chrome anchors = minimize %v/%.0f close %v, want true/46 true", minimize.AnchorRight, minimize.Right, closeButton.AnchorRight)
+	}
+}
+
+func TestSettingsTitleBarWindowsContinuesRailWithoutHorizontalDivider(t *testing.T) {
+	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 168, G: 168, B: 179, A: 255}}
+	for _, closeOnly := range []bool{false, true} {
+		titleBar := buildSettingsTitleBar(SettingsTitleBarProps{
+			Width: 1200, RailWidth: 240, Platform: "windows", CloseOnly: closeOnly, Theme: theme,
+		}, "", nil).(woxwidget.Stack)
+		tint := titleBar.Children[0].Child.(woxwidget.Container)
+		if tint.Width != 240 || tint.Height != SettingsTitleBarHeight || tint.Color != settingsRailBackground(theme, false) {
+			t.Fatalf("Windows title-bar rail tint = %#v, want full-height matching rail surface", tint)
+		}
+		drag := titleBar.Children[1].Child.(woxwidget.Gesture)
+		if drag.Child.(woxwidget.Container).Width != 1200 {
+			t.Fatal("Windows title bar must retain full-width dragging")
+		}
+		divider := titleBar.Children[2]
+		line := divider.Child.(woxwidget.Container)
+		if divider.Left != 239 || line.Width != 1 || line.Height != SettingsTitleBarHeight || line.Color != settingsColorAlpha(theme.TextSecondary, 26) {
+			t.Fatalf("Windows title-bar rail divider = %#v, want continuation at rail edge", divider)
+		}
+		for _, child := range titleBar.Children {
+			if line, ok := child.Child.(woxwidget.Container); ok && line.Height == 1 && child.StretchWidth {
+				t.Fatal("Windows title bar must blend into the content without a horizontal divider")
+			}
+		}
 	}
 }
 

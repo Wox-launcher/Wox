@@ -475,7 +475,11 @@ func TextFormatGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon(icons.ControlTextFormat, size, color)
 }
 
-// ToolbarToggleGlyph depicts the bottom bar that the action shows or hides.
-func ToolbarToggleGlyph(size float32, color woxui.Color) woxwidget.Widget {
-	return svgIcon(icons.ControlToolbarToggle, size, color)
+// ToolbarToggleGlyph depicts the current visibility of the bottom toolbar.
+func ToolbarToggleGlyph(size float32, color woxui.Color, visible bool) woxwidget.Widget {
+	name := icons.ControlToolbarHidden
+	if visible {
+		name = icons.ControlToolbarToggle
+	}
+	return svgIcon(name, size, color)
 }

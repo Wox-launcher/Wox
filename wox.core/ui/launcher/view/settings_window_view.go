@@ -25,6 +25,19 @@ type SettingsWindowProps struct {
 
 const SettingsTitleBarHeight = woxcomponent.TitleBarHeight
 
+// SettingsPageTop keeps page placement and its available height in sync with platform chrome.
+func SettingsPageTop(platform string) float32 {
+	switch platform {
+	case "darwin":
+		return 0
+	case "windows":
+		// Catalogs inset controls by 20 units, so only their empty gutter overlaps the caption row.
+		return SettingsTitleBarHeight - 20
+	default:
+		return SettingsTitleBarHeight
+	}
+}
+
 // SettingsWindow builds the shared settings window frame.
 func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 	contentHeight := max(float32(0), props.Height-SettingsTitleBarHeight)
@@ -33,10 +46,10 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 		Child: props.Page,
 	}
 	var bodyChild woxwidget.Widget
-	if props.Platform == "darwin" {
-		// macOS window controls belong to the rail, so the page should not reserve the rail's title-bar height.
+	if props.Platform == "darwin" || props.Platform == "windows" {
+		// Let the page's top gutter share the chrome area instead of stacking both blank spaces.
 		bodyChild = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-			{Left: props.RailWidth, Child: page},
+			{Left: props.RailWidth, Top: SettingsPageTop(props.Platform), Child: page},
 			{Top: SettingsTitleBarHeight, Child: props.Rail},
 			{Child: props.TitleBar},
 		}}
@@ -57,7 +70,7 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 // SettingsTitleBarProps contains the title and native window actions.
 type SettingsTitleBarProps struct {
 	Width float32
-	// RailWidth reserves the macOS settings rail; zero makes the title bar span the full window.
+	// RailWidth continues the settings rail's surface into the title bar; macOS also limits dragging to the rail.
 	RailWidth float32
 	// CloseOnly hides platform minimize and zoom controls for preview title bars.
 	CloseOnly  bool
@@ -136,7 +149,8 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 	}
 	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
-	if props.Platform == "darwin" && props.RailWidth > 0 {
+	if (props.Platform == "darwin" || props.Platform == "windows") && props.RailWidth > 0 {
+		// Continue the rail tint above its search field so the title bar has no horizontal color seam.
 		children = append(children, woxwidget.StackChild{Child: woxwidget.Container{Width: props.RailWidth, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 9)}})
 	}
 	children = append(children, woxwidget.StackChild{Child: dragArea})
@@ -151,6 +165,9 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 			children = append(children, woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 26)}})
 		}
 	case "windows":
+		if props.RailWidth > 0 {
+			children = append(children, woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 26)}})
+		}
 		if props.CloseOnly {
 			if props.Content == nil && props.AppIcon != nil {
 				children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
@@ -159,7 +176,6 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 				children = append(children, woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}})
 			}
 			children = append(children,
-				woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.Border, 76)}},
 				woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "close", hovered == "close", props.Theme, props.OnClose, onHover)},
 			)
 			break
@@ -169,7 +185,6 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 		}
 		children = append(children,
 			woxwidget.StackChild{Left: 40, Right: 92, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}},
-			woxwidget.StackChild{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.Border, 76)}},
 			woxwidget.StackChild{Right: 46, AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-minimize", "minimize", hovered == "minimize", props.Theme, props.OnMinimize, onHover)},
 			woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("settings-window-close", "close", hovered == "close", props.Theme, props.OnClose, onHover)},
 		)

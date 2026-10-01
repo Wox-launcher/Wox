@@ -324,7 +324,7 @@ func TestAboutMenuMonochromeIconsRender(t *testing.T) {
 
 // TestNotesToolbarGlyphCenters catches uneven SVG whitespace even when image boxes match.
 func TestNotesToolbarGlyphCenters(t *testing.T) {
-	for _, name := range []string{ControlSearch, ControlPin, ControlToolbarToggle, ControlAdd, ControlMenu} {
+	for _, name := range []string{ControlSearch, ControlPin, ControlToolbarToggle, ControlToolbarHidden, ControlAdd, ControlMenu} {
 		source := strings.ReplaceAll(Get(name).ImageData, "var(--wox-theme-icon-color)", "#ffffff")
 		img, err := woxsvg.Render(source, 96, 96)
 		if err != nil {

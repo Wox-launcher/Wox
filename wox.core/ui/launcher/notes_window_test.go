@@ -1759,6 +1759,44 @@ func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 	}
 }
 
+// TestNotesToolbarToggleIconFollowsVisibility checks both directions through the real button callback.
+func TestNotesToolbarToggleIconFollowsVisibility(t *testing.T) {
+	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note"})
+	controller.formatVisible = true
+	theme := woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}
+	var shown *woxui.Image
+	for _, visible := range []bool{true, false, true} {
+		toolbar := controller.buildToolbar(420, true, theme).(woxwidget.Container).Child.(woxwidget.Stack)
+		var button woxcomponent.IconButtonProps
+		for _, child := range toolbar.Children {
+			alignment, ok := child.Child.(woxwidget.Align)
+			if !ok {
+				continue
+			}
+			row, ok := alignment.Child.(woxwidget.Flex)
+			if !ok {
+				continue
+			}
+			for _, control := range row.Children {
+				if stateful, ok := control.(woxwidget.Stateful); ok && stateful.Key == "notes.toolbar.format" {
+					button = stateful.Widget.(woxcomponent.IconButtonProps)
+				}
+			}
+		}
+		if button.OnTap == nil || controller.formatVisible != visible {
+			t.Fatalf("format toggle missing or visibility = %v, want %v", controller.formatVisible, visible)
+		}
+		image := button.Icon.(woxwidget.Image)
+		if shown == nil {
+			shown = image.Source
+		}
+		if image.Source == nil || (image.Source == shown) != visible {
+			t.Fatalf("visible=%v: toolbar icon did not reflect visibility", visible)
+		}
+		button.OnTap()
+	}
+}
+
 func TestNotesToolbarSupportsCaptionButtonsAndTitleBarDoubleClick(t *testing.T) {
 	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
 	controller := newNotesWindowController(app, common.NoteRecord{

@@ -1191,7 +1191,7 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	right := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		button("search", searchLabel, woxcomponent.SearchGlyph(iconSize, color), false, c.toggleSearch),
 		button("pin", pinLabel, woxcomponent.PinGlyph(iconSize, pinColor), false, c.toggleWindowPin),
-		button("format", c.app.translate("i18n:notes_format"), woxcomponent.ToolbarToggleGlyph(iconSize, color), false, func() { c.formatVisible = !c.formatVisible; c.invalidate() }),
+		button("format", c.app.translate("i18n:notes_format"), woxcomponent.ToolbarToggleGlyph(iconSize, color, c.formatVisible), false, func() { c.formatVisible = !c.formatVisible; c.invalidate() }),
 		button("new", newLabel, woxcomponent.AddGlyph(iconSize, color), false, func() { c.runAction(c.app.openNewNoteWindow) }),
 		button("more", c.app.translate("i18n:notes_more"), woxcomponent.MenuGlyph(iconSize, color), false, func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() }),
 	}}

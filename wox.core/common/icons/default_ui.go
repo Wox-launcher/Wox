@@ -131,6 +131,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlModelTraining:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.5 13.5c0 2-2.5 3.5-2.5 5h-2c0-1.5-2.5-3-2.5-5 0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5M13 19.5h-2v.5c0 .55.45 1 1 1s1-.45 1-1zM19 13c0 1.39-.41 2.69-1.12 3.78-.25.39-.19.91.14 1.24.44.44 1.2.38 1.54-.15A8.95 8.95 0 0 0 21 13c0-2.36-.91-4.51-2.4-6.12-.39-.42-1.05-.43-1.45-.03-.38.38-.38.99-.02 1.39A6.97 6.97 0 0 1 19 13M15.65 4.65l-2.79-2.79c-.32-.32-.86-.1-.86.35V4a9 9 0 0 0-7.56 13.88c.34.53 1.1.59 1.54.15.33-.33.39-.84.14-1.23A6.97 6.97 0 0 1 12 6v1.79c0 .45.54.67.85.35l2.79-2.79c.2-.19.2-.51.01-.7"/></svg>`),
 	ControlMoreHorizontal:    common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`),
 	ControlToolbarToggle:     newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18M7 17h2M12 17h2M17 17h.01"/>`),
+	ControlToolbarHidden:     newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="2" stroke="var(--wox-theme-icon-color)"/>`),
 	ControlTextFormat:        newMonochromeUIIcon(`<path d="M2 20 6.5 4 11 20M4 14h5M22 12v8M22 16a3 4 0 1 0-6 0 3 4 0 1 0 6 0"/>`),
 	ControlPin:               newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
 

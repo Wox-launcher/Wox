@@ -25,10 +25,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	width := frame.Size.Width
 	height := frame.Size.Height
 	contentHeight := max(float32(0), height-settingsTitleBarHeight)
-	pageHeight := contentHeight
-	if runtime.GOOS == "darwin" {
-		pageHeight = height
-	}
+	pageHeight := max(float32(0), height-launcherview.SettingsPageTop(runtime.GOOS))
 	railWidth := woxcomponent.SettingsRailWidth(width)
 	var page woxwidget.Widget
 	if snapshot.tab == "plugins" {
