@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
-	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -129,8 +128,8 @@ func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 						app := &App{selected: selected}
 						snapshot := viewSnapshot{results: results, selected: selected, palette: palette, densityMetrics: density, show: show}
 						built := app.buildResults(snapshot, 760, height, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
-						if padding.Bottom > 0 && !woxui.SupportsEdgeFade() && built.Height != height {
-							t.Fatalf("padded result paint height=%v, want %v", built.Height, height)
+						if built.Height != height+40 {
+							t.Fatalf("padded result paint height=%v, want %v", built.Height, height+40)
 						}
 						scroll := app.resultScroll
 						if scroll.viewport != float32(min(count, 8))*rowHeight || scroll.content != float32(count)*rowHeight {
@@ -141,19 +140,13 @@ func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 						}
 						if count > 8 {
 							props := built.Child.(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-							wantUnderlay := float32(40)
-							if padding.Bottom > 0 {
-								wantUnderlay = 0
-								if woxui.SupportsEdgeFade() {
-									wantUnderlay = 40 + padding.Bottom
-								}
-							}
+							wantUnderlay := 40 + padding.Bottom
 							if props.UnderlayHeight != wantUnderlay {
 								t.Fatalf("underlay=%v, want %v", props.UnderlayHeight, wantUnderlay)
 							}
 						}
-						if !woxui.SupportsEdgeFade() && !show.HideToolbar && built.Padding.Bottom != bottom {
-							t.Fatalf("toolbar gutter=%v, want %v", built.Padding.Bottom, bottom)
+						if built.Padding.Bottom != 0 {
+							t.Fatalf("toolbar gutter=%v, want %v", built.Padding.Bottom, 0)
 						}
 					}
 				}
@@ -183,9 +176,6 @@ func TestListScrollKeepsContentCoordinates(t *testing.T) {
 
 // TestFooterSamplingPreservesPaddingHeight keeps layout space while painting through it.
 func TestFooterSamplingPreservesPaddingHeight(t *testing.T) {
-	if !woxui.SupportsEdgeFade() {
-		t.Skip("native renderer has no edge mask")
-	}
 	for _, border := range []float32{0, 1} {
 		palette := defaultPalette()
 		palette.toolbarBorderWidth = border

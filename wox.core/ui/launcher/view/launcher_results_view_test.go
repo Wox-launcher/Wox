@@ -656,9 +656,6 @@ func TestResultUnderlayPaintsBeyondPaddedViewport(t *testing.T) {
 
 // TestResultBottomGutterTransparency paints list content through padding while retaining the footer sample.
 func TestResultBottomGutterTransparency(t *testing.T) {
-	if !woxui.SupportsEdgeFade() {
-		t.Skip("native renderer has no edge mask")
-	}
 	for _, underlay := range []float32{0, 40} {
 		for _, scale := range []float32{1, 1.5, 2} {
 			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {

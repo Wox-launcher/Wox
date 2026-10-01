@@ -653,7 +653,7 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		w.OnGeometryChanged(height, contentHeight)
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
-	if woxui.SupportsEdgeFade() && w.EdgeFade > 0 {
+	if w.EdgeFade > 0 && width > 0 && height > 0 {
 		result.fadeTop = min(w.EdgeFade, offset)
 		result.fadeBottom = min(w.EdgeFade, max(float32(0), contentHeight-height-offset))
 	}

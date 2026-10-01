@@ -1123,10 +1123,6 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	groupHeight := densityMetrics.groupHeaderHeight()
 	containerPadding := launcherListPadding(snapshot.palette, snapshot.show)
 	height = max(0, height-containerPadding.Top-containerPadding.Bottom)
-	// Platforms without an edge mask keep the fixed gutter clear of footer samples.
-	if containerPadding.Bottom > 0 && !woxui.SupportsEdgeFade() {
-		underlayHeight = 0
-	}
 	rowPadding := snapshot.palette.resultItemPadding
 	rowPadding.Left += densityMetrics.scaled(5)
 	rowPadding.Right += densityMetrics.scaled(5)
@@ -1138,10 +1134,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		offset: scroll.offset, height: height, topPadding: 0, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
-	paintHeight := height + underlayHeight
-	if woxui.SupportsEdgeFade() && containerPadding.Bottom > 0 {
-		paintHeight += containerPadding.Bottom
-	}
+	paintHeight := height + underlayHeight + containerPadding.Bottom
 	start, end := visibleListResultRange(snapshot.results, offset, paintHeight, 0, rowHeight, groupHeight, resultRowGap)
 	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)

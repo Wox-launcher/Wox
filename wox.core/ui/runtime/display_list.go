@@ -558,9 +558,6 @@ func rotatedRectBounds(rect Rect, radians float32) Rect {
 	return Rect{X: centerX - width/2, Y: centerY - height/2, Width: width, Height: height}
 }
 
-// SupportsEdgeFade reports whether the native renderer supports content alpha masks.
-func SupportsEdgeFade() bool { return runtime.GOOS == "darwin" }
-
 // BeginEdgeFade isolates content so its alpha can fade without covering glass behind it.
 // Top and bottom are logical distances, clamped to keep the ramps from overlapping.
 func (d *DisplayList) BeginEdgeFade(rect Rect, top, bottom float32) {

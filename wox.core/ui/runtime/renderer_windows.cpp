@@ -75,6 +75,7 @@ struct WoxRenderer {
   float scale = 1.0f;
   bool frame_open = false;
   bool overlay_active = false;
+  unsigned edge_fade_depth = 0;
   bool clip_active = false;
   D2D1_RECT_F clip_rect = {};
   bool damage_clip_active = false;
@@ -1472,6 +1473,45 @@ extern "C" int32_t wox_renderer_clear_clip(WoxRenderer *renderer) {
   return S_OK;
 }
 
+// A layer opacity brush fades only its content, preserving the translucent backdrop.
+extern "C" int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom) {
+  if (renderer == nullptr || !renderer->frame_open || height <= 0) return E_INVALIDARG;
+  D2D1_GRADIENT_STOP stops[] = {
+      {0, D2D1::ColorF(1, 1, 1, top > 0 ? 0.0f : 1.0f)},
+      {top / height, D2D1::ColorF(1, 1, 1, 1)},
+      {1 - bottom / height, D2D1::ColorF(1, 1, 1, 1)},
+      {1, D2D1::ColorF(1, 1, 1, bottom > 0 ? 0.0f : 1.0f)}};
+  ID2D1GradientStopCollection *collection = nullptr;
+  ID2D1LinearGradientBrush *mask = nullptr;
+  HRESULT result = renderer->d2d_context->CreateGradientStopCollection(stops, 4, D2D1_GAMMA_1_0, D2D1_EXTEND_MODE_CLAMP, &collection);
+  if (SUCCEEDED(result)) {
+    const auto gradient = D2D1::LinearGradientBrushProperties(D2D1::Point2F(x, y), D2D1::Point2F(x, y + height));
+    result = renderer->d2d_context->CreateLinearGradientBrush(gradient, collection, &mask);
+  }
+  if (SUCCEEDED(result)) {
+    wox_renderer_clear_clip(renderer);
+    D2D1_LAYER_PARAMETERS1 layer = {};
+    layer.contentBounds = D2D1::RectF(x, y, x + width, y + height);
+    layer.maskTransform = D2D1::Matrix3x2F::Identity();
+    layer.opacity = 1;
+    layer.opacityBrush = mask;
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+    renderer->edge_fade_depth++;
+  }
+  if (mask != nullptr) mask->Release();
+  if (collection != nullptr) collection->Release();
+  return result;
+}
+
+// Clear the content clip before popping its enclosing layer; Go restores the parent clip.
+extern "C" int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer) {
+  if (renderer == nullptr || !renderer->frame_open || renderer->edge_fade_depth == 0) return E_UNEXPECTED;
+  wox_renderer_clear_clip(renderer);
+  renderer->d2d_context->PopLayer();
+  renderer->edge_fade_depth--;
+  return S_OK;
+}
+
 extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
   if (renderer == nullptr || text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
     return E_INVALIDARG;
@@ -1517,6 +1557,11 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (renderer->clip_active) {
     renderer->d2d_context->PopAxisAlignedClip();
     renderer->clip_active = false;
+  }
+  // Encoding can fail inside a layer; unwind it before ending the frame.
+  while (renderer->edge_fade_depth > 0) {
+    renderer->d2d_context->PopLayer();
+    renderer->edge_fade_depth--;
   }
   if (renderer->damage_clip_active) {
     renderer->d2d_context->PopAxisAlignedClip();
@@ -1606,4 +1651,60 @@ extern "C" int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float p
  }
  if (SUCCEEDED(result)) result = renderer->composition_device->Commit();
  return result;
+}
+
+// Exercise the production Direct2D mask on a WARP bitmap without opening a window.
+extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+  WoxRenderer renderer;
+  IDXGIDevice *dxgi = nullptr;
+  ID2D1Bitmap1 *target = nullptr, *readback = nullptr;
+  HRESULT result = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &renderer.device, nullptr, nullptr);
+  if (SUCCEEDED(result)) result = renderer.device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgi));
+  if (SUCCEEDED(result)) result = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), reinterpret_cast<void **>(&renderer.d2d_factory));
+  if (SUCCEEDED(result)) result = renderer.d2d_factory->CreateDevice(dxgi, &renderer.d2d_device);
+  if (SUCCEEDED(result)) result = renderer.d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &renderer.d2d_context);
+  D2D1_BITMAP_PROPERTIES1 properties = {};
+  properties.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+  properties.dpiX = properties.dpiY = 96 * scale;
+  properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
+  if (SUCCEEDED(result)) result = renderer.d2d_context->CreateBitmap(D2D1::SizeU(size, size), nullptr, 0, &properties, &target);
+  if (SUCCEEDED(result)) {
+    renderer.d2d_context->SetTarget(target);
+    renderer.d2d_context->SetDpi(96 * scale, 96 * scale);
+    result = renderer.d2d_context->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &renderer.brush);
+  }
+  if (SUCCEEDED(result)) {
+    renderer.frame_open = true;
+    renderer.d2d_context->BeginDraw();
+    const auto glass = D2D1::ColorF(0, 0, 1, 0.5f);
+    renderer.d2d_context->Clear(&glass);
+    result = wox_renderer_begin_edge_fade(&renderer, 0, 8, 96, 80, top, bottom);
+    if (SUCCEEDED(result)) {
+      wox_renderer_set_clip_rect(&renderer, 0, 8, 96, 80);
+      wox_renderer_fill_rounded_rect(&renderer, 0, 8, 96, 80, 0, 255, 255, 255, 255);
+      result = wox_renderer_end_edge_fade(&renderer);
+    }
+    wox_renderer_fill_rounded_rect(&renderer, 0, 90, 96, 6, 0, 255, 0, 0, 255);
+    HRESULT draw_result = renderer.d2d_context->EndDraw();
+    if (SUCCEEDED(result)) result = draw_result;
+    renderer.frame_open = false;
+  }
+  properties.bitmapOptions = D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+  if (SUCCEEDED(result)) result = renderer.d2d_context->CreateBitmap(D2D1::SizeU(size, size), nullptr, 0, &properties, &readback);
+  if (SUCCEEDED(result)) result = readback->CopyFromBitmap(nullptr, target, nullptr);
+  D2D1_MAPPED_RECT mapped = {};
+  if (SUCCEEDED(result)) result = readback->Map(D2D1_MAP_OPTIONS_READ, &mapped);
+  if (SUCCEEDED(result)) {
+    for (int row = 0; row < size; row++) memcpy(pixels + row * size * 4, mapped.bits + row * mapped.pitch, size * 4);
+    readback->Unmap();
+  }
+  if (readback != nullptr) readback->Release();
+  if (target != nullptr) target->Release();
+  if (renderer.brush != nullptr) renderer.brush->Release();
+  if (renderer.d2d_context != nullptr) renderer.d2d_context->Release();
+  if (renderer.d2d_device != nullptr) renderer.d2d_device->Release();
+  if (renderer.d2d_factory != nullptr) renderer.d2d_factory->Release();
+  if (dxgi != nullptr) dxgi->Release();
+  if (renderer.device != nullptr) renderer.device->Release();
+  return result;
 }

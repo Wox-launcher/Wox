@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct WoxRenderer WoxRenderer;
+int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);
 int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float physical_radius);
 
 // WoxRendererGpuMemory carries what the graphics driver attributes to this process, already split
@@ -45,6 +46,8 @@ int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, void **visual,
 int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height, float corner_radius);
 int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, void *visual);
 int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height);
+int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom);
+int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer);
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);
 int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline);
 int32_t wox_renderer_end_frame(WoxRenderer *renderer);

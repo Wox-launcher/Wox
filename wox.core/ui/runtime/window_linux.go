@@ -812,6 +812,10 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.edge.B),
 				C.uint8_t(command.edge.A),
 			)
+		case displayCommandBeginEdgeFade:
+			result = C.wox_linux_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandEndEdgeFade:
+			result = C.wox_linux_window_end_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
 		case displayCommandSetClipRect:
 			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:
@@ -1111,4 +1115,12 @@ func woxGoLinuxFileDrop(context C.uintptr_t, paths *C.char) {
 	if len(values) > 0 {
 		window.options.OnFileDrop(values)
 	}
+}
+
+// testLinuxEdgeFade reads native mask pixels from an offscreen GL target.
+func testLinuxEdgeFade(scale, top, bottom float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_linux_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
+	return pixels, int(status)
 }
