@@ -157,6 +157,30 @@ func TestHotkeyAndAliasActionsShareKeyboardIcon(t *testing.T) {
 	}
 }
 
+func TestStatusWarningKeepsFixedAmber(t *testing.T) {
+	icon := Get(StatusWarning)
+	if strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") || !strings.Contains(icon.ImageData, `stroke="#F59E0B"`) {
+		t.Fatal("status warning must keep a fixed amber stroke")
+	}
+	if !strings.Contains(icon.ImageData, `<circle cx="12" cy="12" r="9"/>`) || !strings.Contains(icon.ImageData, `M12 8v5M12 16h.01`) {
+		t.Fatal("status warning should keep the circle-exclamation geometry")
+	}
+	img, err := woxsvg.Render(icon.ImageData, 24, 24)
+	if err != nil {
+		t.Fatalf("render status warning: %v", err)
+	}
+	colored := false
+	for y := 0; y < 24; y++ {
+		for x := 0; x < 24; x++ {
+			pixel := img.RGBAAt(x, y)
+			colored = colored || pixel.A > 0 && pixel.R > pixel.B && pixel.G > pixel.B
+		}
+	}
+	if !colored {
+		t.Fatal("status warning rendered without an amber mark")
+	}
+}
+
 func TestDefaultThemeCoversNames(t *testing.T) {
 	theme := DefaultTheme()
 	for _, name := range Names() {

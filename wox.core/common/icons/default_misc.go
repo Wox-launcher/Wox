@@ -18,5 +18,9 @@ var defaultMiscIcons = map[string]common.WoxImage{
 	StatusRunning:          common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#22c55e"/></svg>`),
 	StatusLoading:          common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#5da3ef" d="M12 2a10 10 0 1 0 10 10h-3a7 7 0 1 1-7-7z"/><circle cx="12" cy="12" r="3" fill="#dbeafe"/></svg>`),
 	StatusInstalled:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#21BF4B"/><path fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.6" d="m7 12.3 3.1 3.1L17.2 8.3"/></svg>`),
+	// Same circle-exclamation as ActionError. A fixed amber stroke keeps a failed
+	// doctor row readable as a warning on both light and dark launcher surfaces.
+	// The shared action glyph follows the row label and would match ordinary text.
+	StatusWarning:          common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>`),
 	StatusImagePlaceholder: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="#E6E9F2"/><path fill="#A6B0C3" d="M7.5 9.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/><path fill="#7B879C" d="M5 18h14l-4.7-6.2a1.4 1.4 0 0 0-2.2 0l-2.5 3.3-1.1-1.4a1.3 1.3 0 0 0-2.1.1z"/></svg>`),
 }

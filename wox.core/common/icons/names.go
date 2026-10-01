@@ -103,6 +103,7 @@ const (
 	StatusRunning          = "status.running"
 	StatusLoading          = "status.loading"
 	StatusInstalled        = "status.installed"
+	StatusWarning          = "status.warning"
 	StatusImagePlaceholder = "status.image-placeholder"
 
 	// System commands.

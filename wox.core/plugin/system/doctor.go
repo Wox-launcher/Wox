@@ -47,7 +47,9 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	checkResults := plugin.RunDoctorChecks(ctx)
 
 	for _, check := range checkResults {
-		icon := icons.Get(icons.ActionError)
+		// Failed checks keep the circle-exclamation, in the fixed warning amber.
+		// ActionError follows the row label, so it reads as ordinary text.
+		icon := icons.Get(icons.StatusWarning)
 		if check.Passed {
 			icon = icons.Get(icons.ActionCorrect)
 		}

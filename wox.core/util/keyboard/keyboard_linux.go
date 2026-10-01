@@ -178,13 +178,8 @@ func isCapsLockEnabled() bool {
 // currently physically pressed. This is used by the CapsLock combo handler
 // to wait for key release before triggering the callback.
 func isKeyPressed(key Key) bool {
-	if key == KeyCapsLock {
-		// CapsLock is a lock key, not a press-and-hold key. The evdev key
-		// state bitmap tracks the physical press state, not the toggle state.
-		// For CapsLock, we check the LED state instead.
-		return isCapsLockEnabled()
-	}
-
+	// CapsLock must use EVIOCGKEY too: its LED can remain on after release,
+	// which would make combo callbacks wait until the release timeout.
 	code, err := keyToEvdevKeyCode(key)
 	if err != nil {
 		return false

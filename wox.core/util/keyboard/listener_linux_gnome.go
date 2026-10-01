@@ -66,6 +66,35 @@ type gnomeHotkeyRegistration struct {
 	once    sync.Once
 }
 
+// registerGlobalHotkeysLinuxGnome selects the portal or custom-keybinding backend
+// after releasing fallback bindings left behind by a previous process.
+func registerGlobalHotkeysLinuxGnome(specs []GlobalHotkeySpec) (HotkeyRegistration, error) {
+	if len(specs) == 0 {
+		return &globalHotkeyGroupRegistration{}, nil
+	}
+	// Persisted fallback bindings can consume keys even when the portal reports
+	// success. Clear them before binding, not only when entering the fallback.
+	gnomeCleanupOnce.Do(gnomeClearStaleWoxKeybindings)
+	registration, err := registerGlobalHotkeysLinuxWayland(specs)
+	if err == nil {
+		return registration, nil
+	}
+	util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
+		"[hotkey] wayland portal batch bind unavailable (%v), falling back to GNOME custom keybindings for all shortcuts", err))
+	// Keep the fallback grouped so callers do not retry each shortcut through
+	// separate portal sessions and display multiple permission dialogs.
+	group := &globalHotkeyGroupRegistration{}
+	for _, spec := range specs {
+		reg, regErr := registerGlobalHotkeyLinuxGnome(spec.Modifiers, spec.Key, spec.Callback)
+		if regErr != nil {
+			_ = group.Unregister()
+			return nil, regErr
+		}
+		group.registrations = append(group.registrations, reg)
+	}
+	return group, nil
+}
+
 // registerGlobalHotkeyLinuxGnome registers a global hotkey via GNOME's
 // custom-keybindings gsettings schema. The hotkey persists for the lifetime of
 // the returned HotkeyRegistration; call Unregister() to remove it.

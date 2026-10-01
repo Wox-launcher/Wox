@@ -115,24 +115,51 @@ CapsLock 组合键需要 `input` 组（evdev 读取权限）来检测组合键�
 要启用完整的 CapsLock 状态恢复，请将自己加入 `uinput` 组：
 
 ```bash
-sudo groupadd -r uinput 2>/dev/null
-sudo usermod -aG input,uinput $USER
+getent group uinput >/dev/null || sudo groupadd -r uinput
+sudo usermod -aG input,uinput "$USER"
 ```
 
 然后确保 `/dev/uinput` 对组可写。许多原版发行版将 `/dev/uinput` 设为 `crw------- root:root`，仅加入组还不够——还需要一条 udev 规则：
 
 ```bash
 echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
+sudo udevadm control --reload-rules
 ```
 
-重新登录，然后重启 Wox。
+接着加载 `uinput` 内核模块，并应用设备权限。即使 `/dev/uinput` 文件已经存在，也不代表模块已加载：
 
-> **排障：** 如果 Wox doctor 提示你已经在 `uinput` 组里，但 `/dev/uinput` 仍然不可写，说明设备节点缺少组权限。执行上面的 udev 规则并运行 `sudo udevadm trigger /dev/uinput` 即可——设备节点变更不需要重新登录，但需要重启 Wox。
+```bash
+sudo modprobe uinput
+sudo udevadm trigger --action=change /sys/class/misc/uinput
+sudo udevadm settle
+```
+
+设置开机自动加载，避免重启后设备再次不可用：
+
+```bash
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+```
+
+**注销整个桌面会话并重新登录**，让新增的组成员资格生效，然后检查：
+
+```bash
+id -nG
+ls -l /dev/uinput
+test -w /dev/uinput && echo "uinput writable"
+```
+
+`id -nG` 应包含 `input` 和 `uinput`，设备应显示 `crw-rw---- root uinput`，最后一条命令应输出 `uinput writable`。确认后重启 Wox，让它重新检测权限。
+
+遇到错误时：
+
+- **`udevadm trigger` 报 `No such device`**：先执行 `sudo modprobe uinput`。检查 `/sys/class/misc/uinput` 是否存在，再触发上面的 udev 命令；仅创建组或写入规则不会加载模块。
+- **`modprobe` 报 `Module uinput not found`**：检查当前内核是否提供该模块。如果刚升级过内核，先重启到新内核再重试。
+- **设备仍是 `root:root` 或没有组写权限**：检查 udev 规则是否保存正确，重新加载规则、触发设备事件并等待 `udevadm settle` 完成。
+- **设备权限正确但仍不可写**：用不带用户名的 `id -nG` 检查当前会话的组。新增组后只重开终端可能不够，需要注销桌面再登录；如果只是修改设备权限，则无需重新登录，但仍需重启 Wox。
 
 设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
 
-> **注意：** 此方案不需要 root 权限或系统守护进程。Wox 只是被动读取 evdev 事件，仅在组合键触发后使用 uinput 注入一个 CapsLock 按键事件来恢复大小写状态。如果没有 uinput，CapsLock 组合键仍然可用——仅跳过状态恢复（会记录一条警告日志）。
+> **注意：** 上述系统配置需要 `sudo`，但 Wox 本身以普通用户运行，无需额外的系统守护进程。在 CapsLock 组合键流程中，Wox 被动读取 evdev 事件，并通过 uinput 恢复大小写状态、删除多打的组合字符。没有 uinput 时热键仍能触发，但这些恢复操作无法完成。
 
 ### 如何在 Wayland 下禁用 Wox 窗口动画？ {#wayland-disable-animation}
 

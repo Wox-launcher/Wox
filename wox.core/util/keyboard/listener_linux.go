@@ -31,15 +31,12 @@ func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyR
 			})
 			return reg, err
 		}
+		if util.IsGnomeDesktopSession() {
+			return registerGlobalHotkeysLinuxGnome([]GlobalHotkeySpec{{Modifiers: modifiers, Key: key, Callback: callback}})
+		}
 		reg, err := registerGlobalHotkeyLinuxWayland(modifiers, key, callback)
 		if err == nil {
 			return reg, nil
-		}
-
-		if util.IsGnomeDesktopSession() {
-			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
-				"[hotkey] wayland portal unavailable (%v), falling back to GNOME custom keybindings", err))
-			return registerGlobalHotkeyLinuxGnome(modifiers, key, callback)
 		}
 
 		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
@@ -62,32 +59,14 @@ func registerGlobalHotkeysLinux(specs []GlobalHotkeySpec) (HotkeyRegistration, b
 	if isHyprlandSession() {
 		return registerGlobalHotkeysLinuxHyprland(specs)
 	}
+	if util.IsGnomeDesktopSession() {
+		registration, err := registerGlobalHotkeysLinuxGnome(specs)
+		return registration, true, err
+	}
 
 	registration, err := registerGlobalHotkeysLinuxWayland(specs)
 	if err == nil {
 		return registration, true, nil
-	}
-
-	if util.IsGnomeDesktopSession() {
-		util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(
-			"[hotkey] wayland portal batch bind unavailable (%v), falling back to GNOME custom keybindings for all shortcuts", err))
-		// Register every shortcut via GNOME custom keybindings instead of
-		// returning handled=false. Returning false would make the caller fall
-		// back to individual RegisterGlobalHotkey calls, each of which may
-		// create a separate portal session and trigger its own permission
-		// dialog. GNOME custom keybindings do not use portal sessions and do
-		// not show permission dialogs, so batching them here avoids the
-		// multi-dialog problem entirely.
-		group := &globalHotkeyGroupRegistration{}
-		for _, spec := range specs {
-			reg, regErr := registerGlobalHotkeyLinuxGnome(spec.Modifiers, spec.Key, spec.Callback)
-			if regErr != nil {
-				_ = group.Unregister()
-				return nil, true, regErr
-			}
-			group.registrations = append(group.registrations, reg)
-		}
-		return group, true, nil
 	}
 
 	util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf(

@@ -115,24 +115,51 @@ When CapsLock is used as a combo prefix, the system toggles the caps lock state 
 To enable full CapsLock restoration, add yourself to the `uinput` group:
 
 ```bash
-sudo groupadd -r uinput 2>/dev/null
-sudo usermod -aG input,uinput $USER
+getent group uinput >/dev/null || sudo groupadd -r uinput
+sudo usermod -aG input,uinput "$USER"
 ```
 
 Then ensure `/dev/uinput` is group-writable. Many stock distros ship `/dev/uinput` as `crw------- root:root`, so group membership alone is not enough — you also need a udev rule:
 
 ```bash
 echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger /dev/uinput
+sudo udevadm control --reload-rules
 ```
 
-Log out and back in, then restart Wox.
+Next, load the `uinput` kernel module and apply the device permissions. The presence of `/dev/uinput` alone does not mean the module is loaded:
 
-> **Troubleshooting:** If the Wox doctor check reports you are already in the `uinput` group but `/dev/uinput` is still not writable, the device node is missing group permissions. Apply the udev rule above and run `sudo udevadm trigger /dev/uinput` — re-logging in is not needed for the device-node change, but Wox must be restarted.
+```bash
+sudo modprobe uinput
+sudo udevadm trigger --action=change /sys/class/misc/uinput
+sudo udevadm settle
+```
+
+Enable automatic loading at boot so the device remains available after a restart:
+
+```bash
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+```
+
+**Log out of your desktop session and back in** to apply the new group membership, then verify:
+
+```bash
+id -nG
+ls -l /dev/uinput
+test -w /dev/uinput && echo "uinput writable"
+```
+
+`id -nG` should include `input` and `uinput`, the device should show `crw-rw---- root uinput`, and the last command should print `uinput writable`. Then restart Wox so it checks permissions again.
+
+If a command fails:
+
+- **`udevadm trigger` reports `No such device`**: run `sudo modprobe uinput` first. Check that `/sys/class/misc/uinput` exists before retrying the udev trigger command above. Creating a group or writing a rule does not load the module.
+- **`modprobe` reports `Module uinput not found`**: check whether your current kernel provides the module. If you recently upgraded your kernel, reboot into the new kernel and retry.
+- **The device still belongs to `root:root` or lacks group write permission**: check the saved udev rule, reload the rules, trigger the device event, and wait for `udevadm settle` to finish.
+- **Device permissions are correct but it is still not writable**: run `id -nG` without a username to check the current session's groups. Opening a new terminal may not apply newly added groups; log out of the desktop and back in. Changing only device permissions does not require logging out, but Wox still needs to be restarted.
 
 After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
 
-> **Note:** Wox does NOT require root or a system daemon. It only reads evdev events passively and uses uinput solely to inject a single CapsLock key event when restoring the caps lock state after a combo. If uinput is unavailable, CapsLock combos still work — only the state restoration is skipped (a warning is logged).
+> **Note:** The system setup above requires `sudo`, but Wox itself runs as a regular user without an extra system daemon. For CapsLock combos, Wox reads evdev events passively and uses uinput to restore CapsLock state and delete the stray combo character. Without uinput, the hotkey still fires, but these recovery operations cannot complete.
 
 ### How do I disable the Wox window animation on Wayland? {#wayland-disable-animation}
 
