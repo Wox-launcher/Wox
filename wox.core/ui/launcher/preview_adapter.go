@@ -428,7 +428,7 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 
 func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	fontSize := a.densityMetrics.scaled(woxcomponent.PreviewBodyFontSize)
-	lineHeight := a.densityMetrics.scaled(23)
+	lineHeight := a.densityMetrics.scaled(22)
 	initialOffset := float32(0)
 	if scrollPosition == "bottom" {
 		initialOffset = float32(math.MaxFloat32)

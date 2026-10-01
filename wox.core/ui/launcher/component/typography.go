@@ -15,7 +15,7 @@ const (
 	ActionTitleFontSize    = float32(13)
 	ActionFilterFontSize   = float32(13)
 	ToolbarFontSize        = float32(12)
-	PreviewBodyFontSize    = float32(15)
+	PreviewBodyFontSize    = float32(14)
 	PreviewQuoteFontSize   = float32(17)
 	GridHeaderFontSize     = float32(13)
 	GridItemTitleFontSize  = float32(12)
