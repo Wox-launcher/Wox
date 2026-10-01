@@ -49,6 +49,8 @@ type WindowOptions struct {
 	WorkArea  *woxui.Rect
 	Movable   bool
 	Resizable bool
+	// TitleBarControls enables platform-owned captions for image preview overlays.
+	TitleBarControls woxui.TitleBarControls
 	// LightAppearance requests the light window appearance instead of the
 	// default dark one, letting themed overlays match the active theme.
 	LightAppearance bool
@@ -216,6 +218,9 @@ func showWindowOnUI(options WindowOptions, view View) bool {
 	appearanceChanged := !created && instance.options.LightAppearance != options.LightAppearance
 	instance.options = options
 	instance.view = view
+	if !created {
+		_ = instance.window.SetTitleBarControls(options.TitleBarControls)
+	}
 	if appearanceChanged {
 		_ = instance.window.SetAppearance(!options.LightAppearance)
 	}
@@ -389,13 +394,14 @@ func (instance *runtimeOverlay) dispose() {
 // Other Linux sessions paint an opaque SurfaceFill.
 func overlayNativeWindowOptions(options WindowOptions, size woxui.Size) woxui.WindowOptions {
 	return woxui.WindowOptions{
-		Title:         "Wox Overlay",
-		Size:          size,
-		Role:          woxui.WindowRoleUtility,
-		Resizable:     options.Resizable,
-		AspectRatio:   float32(options.AspectRatio),
-		Nonactivating: !(options.TakeFocus || options.CloseOnEscape),
-		Topmost:       options.Topmost,
+		Title:            "Wox Overlay",
+		Size:             size,
+		Role:             woxui.WindowRoleUtility,
+		Resizable:        options.Resizable,
+		TitleBarControls: options.TitleBarControls,
+		AspectRatio:      float32(options.AspectRatio),
+		Nonactivating:    !(options.TakeFocus || options.CloseOnEscape),
+		Topmost:          options.Topmost,
 	}
 }
 

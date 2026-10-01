@@ -359,7 +359,7 @@ func TestLauncherGlassFooterBlocksCoveredResults(t *testing.T) {
 
 func TestLauncherToolbarUsesThemeTintedMaterial(t *testing.T) {
 	for _, tint := range []woxui.Color{{R: 35, G: 41, B: 51, A: 76}, {R: 255, G: 255, B: 255, A: 128}} {
-		built := LauncherToolbarView(LauncherToolbarProps{Width: 400, Height: 40, Theme: woxcomponent.Theme{ToolbarBackground: tint}}).(woxwidget.Stack)
+		built := LauncherToolbarView(LauncherToolbarProps{Width: 400, Height: 40, Theme: woxcomponent.Theme{ToolbarBackground: tint, ToolbarBorderWidth: 1}}).(woxwidget.Stack)
 		body := built.Children[1].Child.(woxwidget.Container)
 		if !body.Floating || body.Color != tint {
 			t.Fatalf("toolbar material = floating %v tint %+v, want %+v", body.Floating, body.Color, tint)

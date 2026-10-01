@@ -40,7 +40,7 @@
   "QueryBoxCursorColor": "#F7F7F8FF",
   "QueryBoxTextSelectionBackgroundColor": "#FFFFFF3D",
   "QueryBoxTextSelectionColor": "#FFFFFFFF",
-  "ActionContainerBackgroundColor": "#15151558",
+  "ActionContainerBackgroundColor": "#1A1A1A3E",
   "ActionContainerBorderColor": "#FFFFFF28",
   "ActionContainerBorderWidth": 1,
   "ActionContainerBorderRadius": 8,
@@ -64,7 +64,7 @@
   "ToolbarFontColor": "#A3A3A3FF",
   "ToolbarBackgroundColor": "#16161A04",
   "ToolbarBorderColor": "#D8D8E01A",
-  "ToolbarBorderWidth": 1,
+  "ToolbarBorderWidth": 0,
   "ToolbarPaddingLeft": 10,
   "ToolbarPaddingRight": 10,
   "windows": {

@@ -243,6 +243,8 @@ const (
 	ControlArrowDown           = "control.arrow-down"
 	ControlModelTraining       = "control.model-training"
 	ControlMoreHorizontal      = "control.more-horizontal"
+	ControlToolbarToggle       = "control.toolbar-toggle"
+	ControlTextFormat          = "control.text-format"
 	ControlPin                 = "control.pin"
 	ControlFormatHeading       = "control.format-heading"
 	ControlFormatBold          = "control.format-bold"

@@ -153,8 +153,22 @@ type WindowOptions struct {
 	// that follow a foreign native window. Other platforms ignore it.
 	OnStickyWindowChanged func(target uintptr)
 	OnCloseRequested      func()
-	OnClosed              func()
-	frameMetrics          *frameMetricsRecorder
+	// OnMaximizeRequested preserves the host's maximize/restore policy for native caption buttons.
+	OnMaximizeRequested func()
+	// TitleBarControls opts into platform-owned caption controls where supported.
+	TitleBarControls TitleBarControls
+	OnClosed         func()
+	frameMetrics     *frameMetricsRecorder
+}
+
+// TitleBarControls describes native caption visibility in logical units.
+// Minimize also shows a disabled zoom button when Maximize is false, as in Settings.
+// The zero value keeps launcher and overlay windows free of caption controls.
+type TitleBarControls struct {
+	Height   float32
+	Close    bool
+	Minimize bool
+	Maximize bool
 }
 
 // Window wraps the native implementation selected for the current platform.
@@ -714,6 +728,18 @@ func (w *Window) isOpen() bool {
 
 // DefaultWindowCornerRadius is the platform clip used when custom chrome does not author a radius.
 const DefaultWindowCornerRadius float32 = 14
+
+// SetTitleBarControls updates native captions without changing portable title-bar layout.
+// Platforms with Go-rendered captions keep using their existing widgets.
+func (w *Window) SetTitleBarControls(controls TitleBarControls) error {
+	if w == nil || w.native == nil {
+		return errWindowClosed
+	}
+	if native, ok := any(w.native).(interface{ setTitleBarControls(TitleBarControls) error }); ok {
+		return native.setTitleBarControls(controls)
+	}
+	return nil
+}
 
 // SetWindowChrome disables native window material when custom is true so the Go
 // UI paints the outline. radius is the clip; nil keeps the default rounded shape.

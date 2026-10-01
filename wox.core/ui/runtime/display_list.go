@@ -257,6 +257,8 @@ const (
 	displayCommandSetClipRect
 	displayCommandClearClip
 	displayCommandFloatingMaterial
+	displayCommandBeginEdgeFade
+	displayCommandEndEdgeFade
 )
 
 type displayCommand struct {
@@ -554,4 +556,24 @@ func rotatedRectBounds(rect Rect, radians float32) Rect {
 	centerX := rect.X + rect.Width/2
 	centerY := rect.Y + rect.Height/2
 	return Rect{X: centerX - width/2, Y: centerY - height/2, Width: width, Height: height}
+}
+
+// SupportsEdgeFade reports whether the native renderer supports content alpha masks.
+func SupportsEdgeFade() bool { return runtime.GOOS == "darwin" }
+
+// BeginEdgeFade isolates content so its alpha can fade without covering glass behind it.
+// Top and bottom are logical distances, clamped to keep the ramps from overlapping.
+func (d *DisplayList) BeginEdgeFade(rect Rect, top, bottom float32) {
+	d.appendCommand(displayCommand{kind: displayCommandBeginEdgeFade, rect: rect,
+		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
+}
+
+// EndEdgeFade composites the isolated content back onto the window.
+func (d *DisplayList) EndEdgeFade(rect Rect, top, bottom float32) {
+	d.appendCommand(displayCommand{kind: displayCommandEndEdgeFade, rect: rect,
+		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
+	// Native layer boundaries clear the current clip; restore the portable clip state.
+	if len(d.clipStack) > 0 {
+		d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
+	}
 }

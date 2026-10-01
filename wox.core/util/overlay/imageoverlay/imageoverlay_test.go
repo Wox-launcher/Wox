@@ -103,7 +103,7 @@ func TestImageOverlayMacOSTitleOmitsIcon(t *testing.T) {
 		Width: 400, Height: 280, Title: "shot.png", Platform: "darwin",
 		Logo:   &woxui.Image{},
 		Colors: ThemeColors{Foreground: woxui.Color{A: 255}},
-	}, "", "", nil, nil).(woxwidget.Stack)
+	}, "", nil).(woxwidget.Stack)
 	title, ok := chrome.Children[3].Child.(woxwidget.Align)
 	if !ok {
 		t.Fatalf("macOS title = %T, want Align", chrome.Children[3].Child)
@@ -119,7 +119,7 @@ func TestImageOverlayChromePaintsThemeBackground(t *testing.T) {
 	chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
 		Width: 400, Height: 280, Title: "shot.png", Platform: "darwin",
 		Colors: ThemeColors{Background: background, Foreground: woxui.Color{A: 255}, Toolbar: woxui.Color{A: 255}},
-	}, "", "", nil, nil).(woxwidget.Stack)
+	}, "", nil).(woxwidget.Stack)
 	panel, ok := chrome.Children[0].Child.(woxwidget.Container)
 	if !ok {
 		t.Fatalf("chrome panel = %T, want Container", chrome.Children[0].Child)
@@ -134,7 +134,7 @@ func TestImageOverlayChromePaintsWindowsTitleBar(t *testing.T) {
 	chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
 		Width: 400, Height: 280, Title: "shot.png", Platform: "windows",
 		Colors: ThemeColors{Background: background, Foreground: woxui.Color{A: 255}, Toolbar: woxui.Color{A: 255}},
-	}, "", "", nil, nil).(woxwidget.Stack)
+	}, "", nil).(woxwidget.Stack)
 	panel, ok := chrome.Children[0].Child.(woxwidget.Container)
 	if !ok {
 		t.Fatalf("Windows chrome panel = %T, want Container", chrome.Children[0].Child)
@@ -149,7 +149,7 @@ func TestImageOverlayChromeOmitsWidgetWindowOutline(t *testing.T) {
 		chrome := buildImageOverlayChrome(imageOverlayTitleBarProps{
 			Width: 400, Height: 280, Title: "clipboard", Platform: platform,
 			Colors: ThemeColors{Background: woxui.Color{A: 255}, Border: woxui.Color{A: 30}},
-		}, "", "", nil, nil).(woxwidget.Stack)
+		}, "", nil).(woxwidget.Stack)
 		panel, ok := chrome.Children[0].Child.(woxwidget.Container)
 		if !ok {
 			t.Fatalf("%s panel = %T, want Container", platform, chrome.Children[0].Child)

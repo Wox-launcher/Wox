@@ -14,7 +14,14 @@ enum {
 
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
+enum {
+  WOX_TITLE_BAR_CLOSE = 1,
+  WOX_TITLE_BAR_MINIMIZE = 2,
+  WOX_TITLE_BAR_MAXIMIZE = 4,
+};
+
 WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
+int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float height, uint8_t controls);
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
 int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
 int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window);
@@ -92,3 +99,8 @@ int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as
 int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius);
 
 #endif
+
+int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_end_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, float top, float bottom);
+
+int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);

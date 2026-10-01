@@ -626,3 +626,69 @@ func TestLauncherResultImageTailOverlaysCenteredSVGText(t *testing.T) {
 		t.Fatalf("image tail label = %#v", label)
 	}
 }
+
+// TestResultUnderlayPaintsBeyondPaddedViewport checks pixels available to the footer blur.
+func TestResultUnderlayPaintsBeyondPaddedViewport(t *testing.T) {
+	for _, bottom := range []float32{0, 8} {
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return LauncherResultsView(LauncherResultsProps{
+				Width: 320, Height: 200, UnderlayHeight: 40, ContentHeight: 300, RowHeight: 50,
+				ContainerPadding: woxwidget.Insets{Top: 8, Bottom: bottom},
+				Theme:            woxcomponent.Theme{ToolbarBorderWidth: 1, SelectedBackground: woxui.Color{R: 255, A: 255}},
+				Items:            []LauncherResultItem{{ID: "1"}, {ID: "2"}, {ID: "3"}, {ID: "4"}, {ID: "5", Selected: true}, {ID: "6"}},
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		list := &woxui.DisplayList{}
+		host.Frame(list, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 256}, PixelSize: woxui.PixelSize{Width: 320, Height: 256}, Scale: 1})
+		renderer, err := woxui.NewSoftwareRenderer(320, 256)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = renderer.Render(list); err != nil {
+			t.Fatal(err)
+		}
+		if pixel := renderer.RGBA().RGBAAt(160, 230); pixel.R != 255 || pixel.A != 255 {
+			t.Fatalf("bottom=%v footer backdrop was clipped: %v", bottom, pixel)
+		}
+	}
+}
+
+// TestResultBottomGutterTransparency paints list content through padding while retaining the footer sample.
+func TestResultBottomGutterTransparency(t *testing.T) {
+	if !woxui.SupportsEdgeFade() {
+		t.Skip("native renderer has no edge mask")
+	}
+	for _, underlay := range []float32{0, 40} {
+		for _, scale := range []float32{1, 1.5, 2} {
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				return LauncherResultsView(LauncherResultsProps{
+					Width: 320, Height: 200, UnderlayHeight: underlay, ContentHeight: 300, RowHeight: 50,
+					ContainerPadding: woxwidget.Insets{Top: 8, Bottom: 8},
+					Theme:            woxcomponent.Theme{SelectedBackground: woxui.Color{R: 255, A: 255}},
+					Items:            []LauncherResultItem{{ID: "1"}, {ID: "2"}, {ID: "3"}, {ID: "4", Selected: true}, {ID: "5", Selected: true}, {ID: "6"}},
+				})
+			})
+			host.AttachServices(actionSearchHostServices{})
+			list := &woxui.DisplayList{}
+			host.Frame(list, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 256}, PixelSize: woxui.PixelSize{Width: int(320 * scale), Height: int(256 * scale)}, Scale: scale})
+			renderer, err := woxui.NewSoftwareRenderer(320, 256)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = renderer.Render(list); err != nil {
+				t.Fatal(err)
+			}
+			img := renderer.RGBA()
+			before, start, end, after := img.RGBAAt(160, 207).A, img.RGBAAt(160, 209).A, img.RGBAAt(160, 214).A, img.RGBAAt(160, 216+int(underlay)).A
+			if underlay > 0 && img.RGBAAt(160, 230).A != 255 {
+				t.Fatalf("footer sample was faded or clipped: %v", img.RGBAAt(160, 230))
+			}
+			if before != 255 || start != 255 || end != 255 || after != 0 {
+				t.Fatalf("scale=%v alpha before/start/end/after=%v/%v/%v/%v", scale, before, start, end, after)
+			}
+		}
+
+	}
+
+}

@@ -289,6 +289,7 @@ func Show(ctx context.Context, opts Options) error {
 		OffsetY:          opts.OffsetY,
 		Width:            width,
 		Height:           height + imageOverlayTitleBarHeight,
+		TitleBarControls: woxui.TitleBarControls{Height: imageOverlayTitleBarHeight, Close: opts.Closable || opts.CloseOnEscape},
 	}
 	overlay.ShowWindow(window, overlay.View{Kind: "image", Build: func(_ *woxui.Window, frame woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Stateful{
@@ -372,7 +373,6 @@ type imageOverlayTitleBarProps struct {
 
 type imageOverlayTitleBarState struct {
 	hovered string
-	pressed string
 }
 
 func (s *imageOverlayTitleBarState) InitState(_ woxwidget.StateContext, _ any)          {}
@@ -391,21 +391,12 @@ func (s *imageOverlayTitleBarState) Build(context woxwidget.StateContext, widget
 			}
 		})
 	}
-	onPress := func(control string, pressed bool) {
-		context.SetState(func() {
-			if pressed {
-				s.pressed = control
-			} else if s.pressed == control {
-				s.pressed = ""
-			}
-		})
-	}
-	return buildImageOverlayChrome(props, s.hovered, s.pressed, onHover, onPress)
+	return buildImageOverlayChrome(props, s.hovered, onHover)
 }
 
 // buildImageOverlayChrome composes the image body and the shared platform title
 // bar chrome so preview and pinned screenshot windows match the WebView chrome.
-func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed string, onHover, onPress func(string, bool)) woxwidget.Widget {
+func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered string, onHover func(string, bool)) woxwidget.Widget {
 	bodyHeight := max(float32(1), props.Height-imageOverlayTitleBarHeight)
 	theme := woxcomponent.ControlTheme{Background: props.Colors.Background, ChromeText: props.Colors.Toolbar}
 	children := []woxwidget.StackChild{
@@ -441,7 +432,7 @@ func buildImageOverlayChrome(props imageOverlayTitleBarProps, hovered, pressed s
 	if props.Closable {
 		switch props.Platform {
 		case "darwin":
-			children = append(children, woxwidget.StackChild{Left: 13, Child: woxcomponent.MacTrafficLight("image-overlay-close", woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255}, hovered == "mac-controls", pressed == "image-overlay-close", props.Active, theme, props.OnClose, onHover, onPress)})
+			// The runtime overlay owns the native close button.
 		case "windows":
 			children = append(children, woxwidget.StackChild{AnchorRight: true, Child: woxcomponent.WindowsTitleBarButton("image-overlay-close", "close", hovered == "close", theme, props.OnClose, onHover)})
 		default:

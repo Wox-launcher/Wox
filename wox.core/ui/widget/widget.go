@@ -131,24 +131,25 @@ func (c constraints) constrainNode(result *node) *node {
 }
 
 type node struct {
-	id         woxui.AccessibilityNodeID
-	key        Key
-	kind       string
-	parent     *node
-	bounds     woxui.Rect
-	paint      func(*woxui.DisplayList, woxui.Rect)
-	gesture    *gesture
-	focus      *focusBehavior
-	scope      *focusScopeBehavior
-	semantic   *semanticBehavior
-	scroll     *scrollBehavior
-	caret      bool
-	floating   bool
-	caretPaint func(*woxui.DisplayList, woxui.Rect, bool, bool)
-	clip       bool
-	children   []*node
-	boundary   *boundaryCache
-	viewport   *viewportQuery
+	id                  woxui.AccessibilityNodeID
+	key                 Key
+	kind                string
+	parent              *node
+	bounds              woxui.Rect
+	paint               func(*woxui.DisplayList, woxui.Rect)
+	gesture             *gesture
+	focus               *focusBehavior
+	scope               *focusScopeBehavior
+	semantic            *semanticBehavior
+	scroll              *scrollBehavior
+	caret               bool
+	floating            bool
+	caretPaint          func(*woxui.DisplayList, woxui.Rect, bool, bool)
+	fadeTop, fadeBottom float32
+	clip                bool
+	children            []*node
+	boundary            *boundaryCache
+	viewport            *viewportQuery
 }
 
 func (n *node) place(x, y float32) {
@@ -529,6 +530,8 @@ type ScrollRange struct {
 
 // ScrollView clips a larger child and optionally retains its own offset when Key is set.
 type ScrollView struct {
+	// EdgeFade is the optional logical fade length for edges with hidden content.
+	EdgeFade      float32
 	Key           Key
 	ID            string
 	Width         float32
@@ -650,6 +653,10 @@ func (w ScrollView) layout(ctx context, available constraints) *node {
 		w.OnGeometryChanged(height, contentHeight)
 	}
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
+	if woxui.SupportsEdgeFade() && w.EdgeFade > 0 {
+		result.fadeTop = min(w.EdgeFade, offset)
+		result.fadeBottom = min(w.EdgeFade, max(float32(0), contentHeight-height-offset))
+	}
 	if w.onEnsureVisible != nil {
 		result.scroll = &scrollBehavior{offset: offset, ensureVisible: w.onEnsureVisible}
 	}

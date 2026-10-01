@@ -163,10 +163,12 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 			id = a.windowID + ".chat"
 		}
 		managed, _, openErr = a.windows.Open(id, woxui.WindowOptions{
-			Title:   a.chatWindowTitle(),
-			Size:    woxui.Size{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight},
-			MinSize: chatWindowNativeMinSize(),
-			Role:    chatWindowRole, Icon: chatWindowIcon(), Resizable: true, HideOnBlur: false,
+			Title:               a.chatWindowTitle(),
+			Size:                woxui.Size{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight},
+			MinSize:             chatWindowNativeMinSize(),
+			TitleBarControls:    woxui.TitleBarControls{Height: launcherview.ChatWindowTitleBarHeight, Close: true, Minimize: true, Maximize: true},
+			OnMaximizeRequested: a.toggleChatWindowMaximize,
+			Role:                chatWindowRole, Icon: chatWindowIcon(), Resizable: true, HideOnBlur: false,
 			OnFrame: host.Frame, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)

@@ -12,7 +12,9 @@ import (
 
 // ScrollViewProps contains the geometry and optional controlled state for a Wox scroll surface.
 type ScrollViewProps struct {
-	Theme ControlTheme
+	// EdgeFade fades only content at scrollable vertical edges, leaving the thumb clear.
+	EdgeFade float32
+	Theme    ControlTheme
 
 	Key     woxwidget.Key
 	Content woxwidget.Widget
@@ -213,6 +215,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		viewportKey = "wox-scroll-viewport"
 	}
 	scroll := woxwidget.ScrollView{
+		EdgeFade: props.EdgeFade,
 		// A Wox strip is never nested inside another scroller, so a horizontal
 		// surface always consumes the ordinary mouse wheel.
 		Width: props.Width, Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal,

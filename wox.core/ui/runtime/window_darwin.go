@@ -176,6 +176,9 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.MinSize.Width > 0 || options.MinSize.Height > 0 {
 		_ = C.wox_darwin_window_set_min_size(window.native, C.float(options.MinSize.Width), C.float(options.MinSize.Height))
 	}
+	if options.TitleBarControls != (TitleBarControls{}) {
+		_ = window.setTitleBarControls(options.TitleBarControls)
+	}
 	if options.Topmost {
 		_ = C.wox_darwin_window_set_topmost(window.native, 1)
 	}
@@ -197,6 +200,28 @@ func (w *platformWindow) show() (FocusEpoch, error) {
 		return 0, errors.New("woxui: failed to show macOS window")
 	}
 	return FocusEpoch(epoch), nil
+}
+
+// setTitleBarControls leaves appearance and backing-pixel sizing to AppKit.
+func (w *platformWindow) setTitleBarControls(controls TitleBarControls) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	var mask C.uint8_t
+	if controls.Close {
+		mask |= C.WOX_TITLE_BAR_CLOSE
+	}
+	if controls.Minimize {
+		mask |= C.WOX_TITLE_BAR_MINIMIZE
+	}
+	if controls.Maximize {
+		mask |= C.WOX_TITLE_BAR_MAXIMIZE
+	}
+	if C.wox_darwin_window_set_title_bar_controls(native, C.float(controls.Height), mask) != 0 {
+		return errors.New("woxui: failed to update macOS caption controls")
+	}
+	return nil
 }
 
 // runLockedOnMain runs op with renderMu held on the AppKit main thread.
@@ -1156,6 +1181,10 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			imageCount++
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			result = C.wox_darwin_window_begin_embedded_surface_overlay(native)
+		case displayCommandBeginEdgeFade:
+			result = C.wox_darwin_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandEndEdgeFade:
+			result = C.wox_darwin_window_end_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
 		case displayCommandSetClipRect:
 			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandClearClip:
@@ -1321,6 +1350,14 @@ func woxGoDarwinCloseRequested(context C.uintptr_t) {
 			window.recordRenderError("close requested window", -1)
 		}
 	}()
+}
+
+//export woxGoDarwinMaximizeRequested
+func woxGoDarwinMaximizeRequested(context C.uintptr_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnMaximizeRequested != nil {
+		window.options.OnMaximizeRequested()
+	}
 }
 
 //export woxGoDarwinFrame
@@ -1489,4 +1526,12 @@ func testRenderDarwinMaterial(scale float32, alpha uint8, mode int) ([]byte, int
 		return nil, int(status)
 	}
 	return pixels, size
+}
+
+// testDarwinEdgeFade reads native compositing pixels at the supplied backing scale.
+func testDarwinEdgeFade(scale, top, bottom float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_darwin_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
+	return pixels, int(status)
 }

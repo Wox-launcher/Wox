@@ -489,6 +489,7 @@ func (a *App) start() error {
 			host.Dispose()
 			a.onLauncherWindowClosed()
 		},
+		OnCloseRequested: a.closePreviewWindow,
 	})
 	if err != nil {
 		return err
@@ -1214,6 +1215,19 @@ func (a *App) applyWindowBoundsWithPlacement(useShowPosition bool) error {
 
 // applyWindowBoundsOnUI prevents an older hotkey layout from overwriting newer query results.
 func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
+	if runtime.GOOS == "darwin" && a.window != nil {
+		controls := woxui.TitleBarControls{}
+		snapshot := viewSnapshot{
+			show: a.show, results: a.results, selected: a.selected, layout: a.layout,
+			chatFullscreen: a.chatFullscreen, webViewFullscreen: a.webViewFullscreen, terminalFullscreen: a.terminalFullscreen,
+		}
+		if launcherPreviewTitleBarVisible(snapshot) {
+			controls = woxui.TitleBarControls{Height: launcherview.SettingsTitleBarHeight, Close: true}
+		}
+		if err := a.window.SetTitleBarControls(controls); err != nil {
+			return err
+		}
+	}
 	params := a.show
 	results := a.results
 	resultCount := len(results)

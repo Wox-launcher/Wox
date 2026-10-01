@@ -423,9 +423,21 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	controls := map[woxwidget.Key]bool{}
 	labels := map[woxwidget.Key]string{}
 	for _, child := range toolbar.Children {
-		if row, ok := child.Child.(woxwidget.Flex); ok {
+		if alignment, ok := child.Child.(woxwidget.Align); ok {
+			row, ok := alignment.Child.(woxwidget.Flex)
+			if !ok {
+				continue
+			}
+			if alignment.Height != woxcomponent.TitleBarHeight || alignment.Vertical != 0.5 || row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+				t.Fatal("toolbar controls must share the title bar centerline")
+			}
 			for _, control := range row.Children {
 				if stateful, ok := control.(woxwidget.Stateful); ok {
+					props := stateful.Widget.(woxcomponent.IconButtonProps)
+					icon, imageOK := props.Icon.(woxwidget.Image)
+					if !imageOK || icon.Width != 16 || icon.Height != 16 || props.Width != 32 || props.Height != 32 {
+						t.Fatalf("inconsistent toolbar icon/button size: %s", stateful.Key)
+					}
 					controls[stateful.Key] = true
 					labels[stateful.Key] = stateful.Widget.(woxcomponent.IconButtonProps).Label
 				}
@@ -440,7 +452,11 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	}
 	var pinIcon woxwidget.Widget
 	for _, child := range toolbar.Children {
-		row, ok := child.Child.(woxwidget.Flex)
+		alignment, ok := child.Child.(woxwidget.Align)
+		if !ok {
+			continue
+		}
+		row, ok := alignment.Child.(woxwidget.Flex)
 		if !ok {
 			continue
 		}
@@ -452,8 +468,8 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 			pinIcon = stateful.Widget.(woxcomponent.IconButtonProps).Icon
 		}
 	}
-	if image, ok := pinIcon.(woxwidget.Image); !ok || image.Source == nil || image.Width != 15 || image.Height != 15 {
-		t.Fatalf("pin icon = %#v, want 15x15 thumbtack SVG beside search", pinIcon)
+	if image, ok := pinIcon.(woxwidget.Image); !ok || image.Source == nil || image.Width != 16 || image.Height != 16 {
+		t.Fatalf("pin icon = %#v, want 16x16 thumbtack SVG beside search", pinIcon)
 	}
 	for key, hotkey := range map[woxwidget.Key]string{"notes.toolbar.search": primaryHotkey("p"), "notes.toolbar.pin": primaryHotkey("shift+p"), "notes.toolbar.new": primaryHotkey("n")} {
 		shortcut := "(" + strings.Join(formatHotkeyLabels(hotkey), "+") + ")"
@@ -461,7 +477,7 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 			t.Fatalf("Notes title-bar label %q = %q, want shortcut suffix %q", key, labels[key], shortcut)
 		}
 	}
-	title := toolbar.Children[2]
+	title := toolbar.Children[1]
 	alignment := title.Child.(woxwidget.Align)
 	wantLeft, wantRight, wantAlign := notesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
 	if title.Left != wantLeft || title.Right != wantRight || alignment.Horizontal != wantAlign {
@@ -472,7 +488,7 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 		t.Fatalf("Notes title = %#v, want a single-line ellipsized TextBlock", alignment.Child)
 	}
 	if runtime.GOOS != "darwin" {
-		icon := toolbar.Children[4]
+		icon := toolbar.Children[3]
 		iconAlignment, ok := icon.Child.(woxwidget.Align)
 		iconImage, imageOK := iconAlignment.Child.(woxwidget.Image)
 		if !ok || !imageOK || icon.Left != 12 || iconAlignment.Width != 20 || iconImage.Source == nil || iconImage.Width != 20 || iconImage.Height != 20 {
@@ -2196,5 +2212,36 @@ func TestNotesPasteInsertsImageFile(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("pasted file blocks = %#v", controller.document.Blocks)
+	}
+}
+
+// TestNotesToolbarActionBounds checks real layout, including right anchoring after resize.
+func TestNotesToolbarActionBounds(t *testing.T) {
+	app := &App{palette: defaultPalette()}
+	controller := newNotesWindowController(app, common.NoteRecord{ID: "toolbar"})
+	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
+		return controller.buildToolbar(frame.Size.Width, true, app.palette.componentTheme())
+	})
+	host.AttachServices(&notesEditorHostServices{})
+	for _, width := range []float32{420, 800, 600} {
+		for _, scale := range []float32{1, 1.5, 2} {
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 40}, PixelSize: woxui.PixelSize{Width: int(width * scale), Height: int(40 * scale)}, Scale: scale})
+			for index, id := range []string{"search", "pin", "format", "new", "more"} {
+				found := false
+				for _, node := range host.Snapshot().Tree.Nodes {
+					if node.AutomationID != "notes.toolbar."+id {
+						continue
+					}
+					found = true
+					want := woxui.Rect{X: width - woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true) - notesToolbarActionsWidth + float32(index)*34, Y: 4, Width: 32, Height: 32}
+					if node.Bounds != want {
+						t.Fatalf("width=%v scale=%v %s bounds=%+v want %+v", width, scale, id, node.Bounds, want)
+					}
+				}
+				if !found {
+					t.Fatalf("missing toolbar button %s", id)
+				}
+			}
+		}
 	}
 }

@@ -3,6 +3,7 @@ package launcher
 import (
 	"log"
 
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -27,11 +28,12 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 		}
 		host := woxwidget.NewHost(a.buildSettings)
 		managed, _, openErr = a.windows.Open(settingsWindowID, woxui.WindowOptions{
-			Title:     a.settingsWindowTitle(),
-			Size:      woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight},
-			Role:      woxui.WindowRoleApplication,
-			OnFrame:   host.Frame,
-			OnPointer: host.Pointer,
+			Title:            a.settingsWindowTitle(),
+			Size:             woxui.Size{Width: settingsWindowWidth, Height: settingsWindowHeight},
+			Role:             woxui.WindowRoleApplication,
+			TitleBarControls: woxui.TitleBarControls{Height: launcherview.SettingsTitleBarHeight, Close: true, Minimize: true},
+			OnFrame:          host.Frame,
+			OnPointer:        host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
 			},

@@ -329,8 +329,10 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		host := woxwidget.NewHost(c.buildNotes)
 		managed, _, openErr = c.app.windows.Open(c.windowID, woxui.WindowOptions{
 			Title: c.app.translate("i18n:notes_title"), Size: woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight},
-			MinSize: notesNativeMinSize(),
-			Role:    notesWindowRole, Icon: notesWindowIcon(), Resizable: true, Topmost: c.windowPinned, HideOnBlur: false,
+			MinSize:             notesNativeMinSize(),
+			TitleBarControls:    woxui.TitleBarControls{Height: woxcomponent.TitleBarHeight, Close: true, Minimize: true, Maximize: true},
+			OnMaximizeRequested: c.toggleMaximize,
+			Role:                notesWindowRole, Icon: notesWindowIcon(), Resizable: true, Topmost: c.windowPinned, HideOnBlur: false,
 			OnFrame: host.Frame, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
@@ -623,7 +625,8 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 	lineHeight := 24 * c.zoom
 	fieldHeight := max(height, woxcomponent.TextFieldVisualHeight(c.editor.Text(), c.managed.Window(), style, width, lineHeight, padding, nil))
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: c.app.translate("i18n:notes_editor"),
+		EdgeFade: 24,
+		Key:      "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: c.app.translate("i18n:notes_editor"),
 		Width: width, Height: height, KeepVisible: c.noteMarkdownCaretVisible(width, lineHeight, padding),
 		Content: woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: "notes.editor.markdown", Label: c.app.translate("i18n:notes_editor"), Width: width, Height: fieldHeight,
@@ -1095,7 +1098,8 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		editor = c.buildMarkdownEditor(frame.Size.Width, editorHeight, theme)
 	} else {
 		editor = woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
-			ID: "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
+			EdgeFade: 24,
+			ID:       "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
 			Width: frame.Size.Width, Height: editorHeight, Padding: notesEditorPadding(),
 			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
@@ -1153,6 +1157,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 
 func (c *notesWindowController) buildToolbar(width float32, active bool, theme woxcomponent.Theme) woxwidget.Widget {
 	const buttonSize = float32(32)
+	const iconSize = float32(16)
 	hoverBackground := woxcomponent.TitleBarAlpha(theme.ToolbarText, 20)
 	button := func(id, label string, icon woxwidget.Widget, disabled bool, action func()) woxwidget.Widget {
 		onTap := func() {
@@ -1183,12 +1188,12 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 		pinColor = woxcomponent.DocumentListMarkerColor
 	}
 	newLabel := c.app.translate("i18n:notes_new") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("n")), "+") + ")"
-	right := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, Children: []woxwidget.Widget{
-		button("search", searchLabel, woxcomponent.SearchGlyph(15, color), false, c.toggleSearch),
-		button("pin", pinLabel, woxcomponent.PinGlyph(15, pinColor), false, c.toggleWindowPin),
-		button("format", c.app.translate("i18n:notes_format"), woxwidget.Text{Value: "Aa", Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: color}, false, func() { c.formatVisible = !c.formatVisible; c.invalidate() }),
-		button("new", newLabel, woxcomponent.AddGlyph(15, color), false, func() { c.runAction(c.app.openNewNoteWindow) }),
-		button("more", c.app.translate("i18n:notes_more"), woxcomponent.MenuGlyph(15, color), false, func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() }),
+	right := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		button("search", searchLabel, woxcomponent.SearchGlyph(iconSize, color), false, c.toggleSearch),
+		button("pin", pinLabel, woxcomponent.PinGlyph(iconSize, pinColor), false, c.toggleWindowPin),
+		button("format", c.app.translate("i18n:notes_format"), woxcomponent.ToolbarToggleGlyph(iconSize, color), false, func() { c.formatVisible = !c.formatVisible; c.invalidate() }),
+		button("new", newLabel, woxcomponent.AddGlyph(iconSize, color), false, func() { c.runAction(c.app.openNewNoteWindow) }),
+		button("more", c.app.translate("i18n:notes_more"), woxcomponent.MenuGlyph(iconSize, color), false, func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() }),
 	}}
 	contentRight := woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true)
 	titleLeft, titleRight, titleAlignment := notesTitleSlot(runtime.GOOS, contentRight)
@@ -1207,12 +1212,11 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	}}
 	children := []woxwidget.StackChild{
 		{Child: drag},
-		{AnchorBottom: true, Child: woxwidget.Container{Width: width, Height: 1, Color: woxcomponent.TitleBarAlpha(theme.PreviewSplit, 76)}},
 		{Left: titleLeft, Right: titleRight, StretchWidth: true, Child: woxwidget.Align{Height: launcherview.NotesToolbarHeight, Horizontal: titleAlignment, Vertical: .5, Child: woxwidget.TextBlock{
 			Value: title, MaxLines: 1, ShrinkWrap: true, AlignmentY: 0.5,
 			Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ToolbarText,
 		}}},
-		{Right: contentRight + 6, AnchorRight: true, Top: 4, Child: right},
+		{Right: contentRight + 6, AnchorRight: true, Child: woxwidget.Align{Width: notesToolbarActionsWidth - 6, Height: launcherview.NotesToolbarHeight, Vertical: 0.5, Child: right}},
 	}
 	if runtime.GOOS != "darwin" {
 		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: launcherview.NotesToolbarHeight, Vertical: .5, Child: woxwidget.Image{Source: notesWindowIcon(), Width: 20, Height: 20}}})
@@ -1345,7 +1349,7 @@ func (c *notesWindowController) buildFormatBar(width float32, theme woxcomponent
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatButtonGap, Children: items},
 		}})
 	}
-	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight, BorderColor: theme.PreviewSplit, BorderWidth: 1,
+	return woxwidget.Container{Width: width, Height: launcherview.NotesFormatBarHeight,
 		Padding: woxwidget.Insets{Left: notesFormatBarPadLeft, Right: notesFormatBarPadRight},
 		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatBarStatsGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}}
 }

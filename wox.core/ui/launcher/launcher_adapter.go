@@ -1122,11 +1122,9 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	rowHeight := densityMetrics.resultRowHeight(snapshot.palette)
 	groupHeight := densityMetrics.groupHeaderHeight()
 	containerPadding := launcherListPadding(snapshot.palette, snapshot.show)
-	// Gutters belong to the viewport, not the end of the virtual content.
-	// Otherwise a ninth row can paint into the space budgeted below eight rows.
 	height = max(0, height-containerPadding.Top-containerPadding.Bottom)
-	if containerPadding.Bottom > 0 {
-		// A fixed gutter stays clear; only edge-to-edge lists extend behind the footer.
+	// Platforms without an edge mask keep the fixed gutter clear of footer samples.
+	if containerPadding.Bottom > 0 && !woxui.SupportsEdgeFade() {
 		underlayHeight = 0
 	}
 	rowPadding := snapshot.palette.resultItemPadding
@@ -1140,7 +1138,11 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		offset: scroll.offset, height: height, topPadding: 0, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
-	start, end := visibleListResultRange(snapshot.results, offset, height+underlayHeight, 0, rowHeight, groupHeight, resultRowGap)
+	paintHeight := height + underlayHeight
+	if woxui.SupportsEdgeFade() && containerPadding.Bottom > 0 {
+		paintHeight += containerPadding.Bottom
+	}
+	start, end := visibleListResultRange(snapshot.results, offset, paintHeight, 0, rowHeight, groupHeight, resultRowGap)
 	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {

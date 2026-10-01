@@ -469,3 +469,13 @@ func FormatGlyph(kind string, size float32, color woxui.Color) woxwidget.Widget 
 	}
 	return svgIcon(name, size, color)
 }
+
+// TextFormatGlyph keeps the typography action independent of the configured font baseline.
+func TextFormatGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlTextFormat, size, color)
+}
+
+// ToolbarToggleGlyph depicts the bottom bar that the action shows or hides.
+func ToolbarToggleGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlToolbarToggle, size, color)
+}

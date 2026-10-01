@@ -14,6 +14,7 @@ const noteEditorSegmentGap = float32(8)
 
 // NoteEditorProps describes the Notes document surface hosted by the utility window.
 type NoteEditorProps struct {
+	EdgeFade             float32
 	ID                   string
 	Document             common.NoteDocument
 	Width                float32
@@ -191,7 +192,8 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 		content = woxwidget.Container{Width: props.Width, Padding: woxwidget.Insets{Bottom: props.Padding.Bottom}, Child: content}
 	}
 	return WoxScrollView(ScrollViewProps{
-		Key: "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
+		EdgeFade: props.EdgeFade,
+		Key:      "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
 		Width: props.Width, Height: props.Height, Content: content, KeepVisible: caretVisible,
 		Theme: props.Theme, ThumbColor: props.Theme.TextSecondary,
 	})

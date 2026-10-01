@@ -24,6 +24,7 @@
 
 extern int32_t woxGoDarwinStart(uintptr_t context);
 extern void woxGoDarwinCloseRequested(uintptr_t context);
+extern void woxGoDarwinMaximizeRequested(uintptr_t context);
 extern void woxGoDarwinProtocolURL(uintptr_t context, const char *url);
 extern void woxGoDarwinOpenFile(uintptr_t context, const char *path);
 extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
@@ -395,6 +396,9 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 
 @interface WoxNativeWindow : NSWindow
 @property(nonatomic, assign) BOOL woxNonactivating;
+@property(nonatomic, assign) WoxDarwinWindow *woxOwner;
+@property(nonatomic, assign) CGFloat woxTitleBarHeight;
+@property(nonatomic, assign) uint8_t woxTitleBarControls;
 @end
 
 @implementation WoxNativeWindow
@@ -405,7 +409,56 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 - (BOOL)canBecomeMainWindow {
   return !self.woxNonactivating;
 }
+
+// Keep the native green button on the host's existing maximize/restore path.
+- (void)woxMaximize:(id)sender {
+  (void)sender;
+  WoxDarwinWindow *owner = self.woxOwner;
+  if (owner != NULL && !owner->closed) {
+    woxGoDarwinMaximizeRequested(owner->context);
+  }
+}
 @end
+
+// Position AppKit-owned buttons in content points, retaining their system size,
+// title-bar hierarchy, hover tracking, accessibility, and OS-specific material.
+static void update_title_bar_controls(WoxDarwinWindow *window) {
+  if (window == NULL || window->closed || window->window == nil) return;
+  WoxNativeWindow *native = (WoxNativeWindow *)window->window;
+  uint8_t controls = native.woxTitleBarControls;
+  NSWindowButton types[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
+  for (int index = 0; index < 3; index++) {
+    NSButton *button = [native standardWindowButton:types[index]];
+    BOOL visible;
+    if (index == 0) {
+      visible = (controls & WOX_TITLE_BAR_CLOSE) != 0;
+    } else if (index == 1) {
+      visible = (controls & WOX_TITLE_BAR_MINIMIZE) != 0;
+    } else {
+      visible = (controls & (WOX_TITLE_BAR_MINIMIZE | WOX_TITLE_BAR_MAXIMIZE)) != 0;
+    }
+    button.hidden = !visible;
+    if (!visible || button.superview == nil) continue;
+    if (index == 2) {
+      button.enabled = (controls & WOX_TITLE_BAR_MAXIMIZE) != 0;
+      button.target = native;
+      button.action = @selector(woxMaximize:);
+    }
+  }
+  // Enabling or revealing a standard button can relayout its AppKit container.
+  // Finish those changes for all three buttons before assigning any positions.
+  [native.contentView.superview layoutSubtreeIfNeeded];
+  for (int index = 0; index < 3; index++) {
+    NSButton *button = [native standardWindowButton:types[index]];
+    if (button.hidden || button.superview == nil) continue;
+    NSView *content = native.contentView;
+    // AppKit points are logical units; backingScaleFactor belongs only to rendering.
+    CGFloat center_y = content.isFlipped ? native.woxTitleBarHeight / 2.0 : NSHeight(content.bounds) - native.woxTitleBarHeight / 2.0;
+    int slot = index == 2 && (controls & WOX_TITLE_BAR_MINIMIZE) == 0 ? 1 : index;
+    NSPoint center = [button.superview convertPoint:NSMakePoint(23.0 + 23.0 * slot, center_y) fromView:content];
+    [button setFrameOrigin:NSMakePoint(center.x - NSWidth(button.frame) / 2.0, center.y - NSHeight(button.frame) / 2.0)];
+  }
+}
 
 @interface WoxApplicationDelegate : NSObject <NSApplicationDelegate> {
   uintptr_t _context;
@@ -3021,6 +3074,15 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 @end
 
 @implementation WoxWindowDelegate
+// Finish AppKit's title-bar layout before positioning captions in the same resize
+// transaction. Render callbacks can run before that layout and cause visible jumps.
+- (void)windowDidResize:(NSNotification *)notification {
+  (void)notification;
+  if (_owner == NULL || _owner->closed) return;
+  [_owner->window.contentView.superview layoutSubtreeIfNeeded];
+  update_title_bar_controls(_owner);
+}
+
 - (BOOL)windowShouldClose:(NSWindow *)sender {
   (void)sender;
   WoxDarwinWindow *owner = _owner;
@@ -3209,6 +3271,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_signatures = [[NSMutableDictionary alloc] init];
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
+    native_window.woxOwner = window;
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
     window->application_window = is_application_window;
@@ -3235,6 +3298,28 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     }
     return window;
   }
+}
+
+// Caption visibility can change when the launcher enters or leaves a full preview.
+int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float height, uint8_t controls) {
+  if (window == NULL || (controls != 0 && (!isfinite(height) || height <= 0.0f))) return -1;
+  __block int32_t result = 0;
+  run_on_main_sync(^{
+    if (window->closed || window->screenshot_window) {
+      result = -1;
+      return;
+    }
+    WoxNativeWindow *native = (WoxNativeWindow *)window->window;
+    if (native.woxTitleBarControls == controls && native.woxTitleBarHeight == height) return;
+    NSWindowStyleMask mask = native.styleMask;
+    if ((controls & WOX_TITLE_BAR_CLOSE) != 0) mask |= NSWindowStyleMaskClosable;
+    if ((controls & WOX_TITLE_BAR_MINIMIZE) != 0) mask |= NSWindowStyleMaskMiniaturizable;
+    if (native.styleMask != mask) native.styleMask = mask;
+    native.woxTitleBarHeight = height;
+    native.woxTitleBarControls = controls;
+    update_title_bar_controls(window);
+  });
+  return result;
 }
 
 // Called on the AppKit thread; a retained key window in an inactive app is not focused.
@@ -3274,6 +3359,9 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       [window->window makeKeyAndOrderFront:nil];
       [window->window makeFirstResponder:window->view];
     }
+    // Ordering a fixed-size window front can restore AppKit's disabled zoom-button frame.
+    // Reapply the shared centerline after that first native layout, even without a resize.
+    update_title_bar_controls(window);
     if (!window->closed && window->window.isKeyWindow) {
       emit_focus(window, true);
     }
@@ -4847,6 +4935,7 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     window->view->_owner = NULL;
     window->delegate->_owner = NULL;
+    ((WoxNativeWindow *)window->window).woxOwner = NULL;
     clear_active_web_view(window, true);
     [window->web_view_toolbar release];
     window->web_view_toolbar = nil;
@@ -5555,6 +5644,54 @@ int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float sca
     }
     wox_darwin_window_clear_clip(&window);
   }
+  CGContextFlush(context);
+  CGContextRelease(context);
+  return 0;
+}
+
+// Isolate only the scroll content; destination-in must never erase window material.
+int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height) {
+  if (wox_darwin_window_clear_clip(window) != 0) return -1;
+  CGContextRef context = window->active_renderer->context;
+  CGContextSaveGState(context);
+  CGContextClipToRect(context, CGRectMake(x, y, width, height));
+  CGContextBeginTransparencyLayerWithRect(context, CGRectMake(x, y, width, height), NULL);
+  return 0;
+}
+
+// Apply a logical-coordinate alpha ramp so backing scale and glass tint stay independent.
+int32_t wox_darwin_window_end_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, float top, float bottom) {
+  if (wox_darwin_window_clear_clip(window) != 0) return -1;
+  CGContextRef context = window->active_renderer->context;
+  CGFloat locations[] = {0, top / height, 1 - bottom / height, 1};
+  CGFloat colors[] = {1, top > 0 ? 0 : 1, 1, 1, 1, 1, 1, bottom > 0 ? 0 : 1};
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+  CGGradientRef gradient = CGGradientCreateWithColorComponents(space, colors, locations, 4);
+  CGContextSetBlendMode(context, kCGBlendModeDestinationIn);
+  CGContextDrawLinearGradient(context, gradient, CGPointMake(x, y), CGPointMake(x, y + height), 0);
+  CGGradientRelease(gradient);
+  CGColorSpaceRelease(space);
+  CGContextEndTransparencyLayer(context);
+  CGContextRestoreGState(context);
+  return 0;
+}
+
+// Exercise the production mask over translucent pixels without opening a window.
+int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate(pixels, size, size, 8, size * 4, space, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+  CGColorSpaceRelease(space);
+  if (context == NULL) return -1;
+  CGContextTranslateCTM(context, 0, size);
+  CGContextScaleCTM(context, scale, -scale);
+  WoxDarwinRenderer renderer = {.context = context, .scale = scale, .viewport_size = CGSizeMake(96, 96), .frame_open = true};
+  WoxDarwinWindow window = {.active_renderer = &renderer};
+  wox_darwin_window_fill_rounded_rect(&window, 0, 0, 96, 96, 0, 0, 0, 255, 128);
+  wox_darwin_window_begin_edge_fade(&window, 0, 8, 96, 80);
+  wox_darwin_window_set_clip_rect(&window, 0, 8, 96, 80);
+  wox_darwin_window_fill_rounded_rect(&window, 0, 8, 96, 80, 0, 255, 255, 255, 255);
+  wox_darwin_window_end_edge_fade(&window, 0, 8, 96, 80, top, bottom);
+  wox_darwin_window_fill_rounded_rect(&window, 0, 90, 96, 6, 0, 255, 0, 0, 255);
   CGContextFlush(context);
   CGContextRelease(context);
   return 0;

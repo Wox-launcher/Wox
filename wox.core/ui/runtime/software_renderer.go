@@ -50,8 +50,27 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 	r.clear(damage, displayList.clearColor)
 	var clip *Rect
 	var renderErr error
+	var fadeLayers []*stdimage.RGBA
 	displayList.forEachCommand(func(command displayCommand) bool {
 		switch command.kind {
+		case displayCommandBeginEdgeFade:
+			fadeLayers = append(fadeLayers, r.pixels)
+			r.pixels = stdimage.NewRGBA(r.pixels.Bounds())
+		case displayCommandEndEdgeFade:
+			layer := r.pixels
+			r.pixels = fadeLayers[len(fadeLayers)-1]
+			fadeLayers = fadeLayers[:len(fadeLayers)-1]
+			r.forEachPixel(command.rect, damage, clip, func(_, y float32, offset int) {
+				alpha := float32(1)
+				if command.radius > 0 {
+					alpha = min(alpha, (y-command.rect.Y)/command.radius)
+				}
+				if command.stroke > 0 {
+					alpha = min(alpha, (command.rect.Y+command.rect.Height-y)/command.stroke)
+				}
+				alpha = max(float32(0), alpha)
+				r.blendPremultiplied(offset, byte(float32(layer.Pix[offset])*alpha), byte(float32(layer.Pix[offset+1])*alpha), byte(float32(layer.Pix[offset+2])*alpha), byte(float32(layer.Pix[offset+3])*alpha))
+			})
 		case displayCommandSetClipRect:
 			value := command.rect
 			clip = &value

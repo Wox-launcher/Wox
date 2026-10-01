@@ -1,7 +1,6 @@
 package component
 
 import (
-	"math"
 	"strings"
 
 	woxui "wox/ui/runtime"
@@ -33,7 +32,6 @@ type WindowCloseChromeProps struct {
 
 type windowCloseChromeState struct {
 	hovered string
-	pressed string
 }
 
 // WindowCloseChrome builds the same close control for every custom title bar.
@@ -62,44 +60,13 @@ func (s *windowCloseChromeState) Build(context woxwidget.StateContext, widget an
 			}
 		})
 	}
-	onPress := func(control string, pressed bool) {
-		context.SetState(func() {
-			if pressed {
-				s.pressed = control
-				return
-			}
-			if s.pressed == control {
-				s.pressed = ""
-			}
-		})
-	}
 	closeID := windowChromeControlID(props.ID, "close")
 	minimizeID := windowChromeControlID(props.ID, "minimize")
 	maximizeID := windowChromeControlID(props.ID, "maximize")
-	macHovered := s.hovered == "mac-controls"
 	children := make([]woxwidget.StackChild, 0, 3)
 	switch props.Platform {
 	case "darwin":
-		children = append(children, woxwidget.StackChild{Left: 13, Child: MacTrafficLight(
-			closeID, woxui.Color{R: 255, G: 92, B: 95, A: 255}, "×", woxui.Color{R: 128, G: 47, B: 49, A: 255},
-			macHovered, s.pressed == closeID, props.Active, props.Theme, props.OnClose, onHover, onPress,
-		)})
-		if props.OnMinimize != nil {
-			children = append(children, woxwidget.StackChild{Left: 36, Child: MacTrafficLight(
-				minimizeID, woxui.Color{R: 250, G: 200, B: 0, A: 255}, "−", woxui.Color{R: 126, G: 100, B: 11, A: 255},
-				macHovered, s.pressed == minimizeID, props.Active, props.Theme, props.OnMinimize, onHover, onPress,
-			)})
-		}
-		if props.OnMaximize != nil {
-			zoomLeft := float32(36)
-			if props.OnMinimize != nil {
-				zoomLeft = 59
-			}
-			children = append(children, woxwidget.StackChild{Left: zoomLeft, Child: MacTrafficLight(
-				maximizeID, woxui.Color{R: 40, G: 200, B: 64, A: 255}, "+", woxui.Color{R: 17, G: 96, B: 27, A: 255},
-				macHovered, s.pressed == maximizeID, props.Active, props.Theme, props.OnMaximize, onHover, onPress,
-			)})
-		}
+		// AppKit owns the captions; this layer only retains the title-bar footprint.
 	case "linux":
 		right := float32(0)
 		children = append(children, woxwidget.StackChild{AnchorRight: true, Child: LinuxTitleBarCloseButton(closeID, s.hovered == "close", props.Theme, props.OnClose, onHover)})
@@ -245,87 +212,4 @@ func windowsTitleBarControlName(id string, closeButton bool) string {
 		return "maximize"
 	}
 	return "minimize"
-}
-
-// MacTrafficLight matches the compact macOS controls and reveals their glyphs while the group is hovered.
-// Inactive (non-key) windows use a uniform gray fill until the group is hovered, matching AppKit.
-func MacTrafficLight(id string, color woxui.Color, glyph string, glyphColor woxui.Color, hovered, pressed, active bool, theme ControlTheme, onTap func(), onHover, onPress func(string, bool)) woxwidget.Widget {
-	if !active && !hovered {
-		color = MacTrafficLightInactiveColor(theme)
-	}
-	if pressed {
-		color = MacTrafficLightPressedColor(color)
-	}
-	var symbol woxwidget.Widget = woxwidget.Container{Width: 14, Height: 14}
-	if hovered {
-		switch glyph {
-		case "×":
-			symbol = MacCloseGlyph(glyphColor)
-		case "−":
-			symbol = woxwidget.Container{Width: 7, Height: 2, Radius: 1, Color: glyphColor}
-		default:
-			symbol = MacZoomGlyph(glyphColor)
-		}
-	}
-	control := woxwidget.Align{Width: 20, Height: TitleBarHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: 14, Height: 14, Radius: 7, Color: color, Child: woxwidget.Align{Width: 14, Height: 14, Horizontal: 0.5, Vertical: 0.5, Child: symbol}}}
-	if onTap == nil && onHover == nil && onPress == nil {
-		return control
-	}
-	return woxwidget.Gesture{ID: id, OnTap: onTap, OnPressChange: func(pressed bool) {
-		if onPress != nil {
-			onPress(id, pressed)
-		}
-	}, OnHover: func(inside bool) {
-		if onHover != nil {
-			onHover("mac-controls", inside)
-		}
-	}, Child: control}
-}
-
-// MacTrafficLightInactiveColor is the unfocused fill used by native macOS traffic lights.
-func MacTrafficLightInactiveColor(theme ControlTheme) woxui.Color {
-	if macTrafficLightThemeIsDark(theme) {
-		return woxui.Color{R: 94, G: 94, B: 96, A: 255}
-	}
-	return woxui.Color{R: 222, G: 222, B: 222, A: 255}
-}
-
-// macTrafficLightThemeIsDark uses relative luminance so inactive gray tracks light and dark title bars.
-func macTrafficLightThemeIsDark(theme ControlTheme) bool {
-	linear := func(value uint8) float64 {
-		channel := float64(value) / 255
-		if channel <= 0.03928 {
-			return channel / 12.92
-		}
-		return math.Pow((channel+0.055)/1.055, 2.4)
-	}
-	return 0.2126*linear(theme.Background.R)+0.7152*linear(theme.Background.G)+0.0722*linear(theme.Background.B) < 0.5
-}
-
-// MacTrafficLightPressedColor approximates AppKit's highlighted luminance while preserving hue.
-func MacTrafficLightPressedColor(color woxui.Color) woxui.Color {
-	color.R = uint8(uint16(color.R) * 220 / 255)
-	color.G = uint8(uint16(color.G) * 220 / 255)
-	color.B = uint8(uint16(color.B) * 220 / 255)
-	return color
-}
-
-// MacCloseGlyph draws the thicker cross used by the native macOS traffic light.
-func MacCloseGlyph(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		for step := 0; step < 5; step++ {
-			offset := float32(step)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4 + offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-			displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 8 - offset, Y: bounds.Y + 4 + offset, Width: 2, Height: 2}, 1, color)
-		}
-	}}
-}
-
-// MacZoomGlyph draws a geometrically centered plus. A font "+" sits on the text
-// baseline and looks shifted up and right inside the 14-unit traffic light.
-func MacZoomGlyph(color woxui.Color) woxwidget.Widget {
-	return woxwidget.Painter{Width: 14, Height: 14, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 4, Y: bounds.Y + 6, Width: 6, Height: 2}, 1, color)
-		displayList.FillRoundedRect(woxui.Rect{X: bounds.X + 6, Y: bounds.Y + 4, Width: 2, Height: 6}, 1, color)
-	}}
 }

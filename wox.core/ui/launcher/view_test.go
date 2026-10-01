@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
-
+	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
@@ -129,6 +129,9 @@ func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 						app := &App{selected: selected}
 						snapshot := viewSnapshot{results: results, selected: selected, palette: palette, densityMetrics: density, show: show}
 						built := app.buildResults(snapshot, 760, height, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
+						if padding.Bottom > 0 && !woxui.SupportsEdgeFade() && built.Height != height {
+							t.Fatalf("padded result paint height=%v, want %v", built.Height, height)
+						}
 						scroll := app.resultScroll
 						if scroll.viewport != float32(min(count, 8))*rowHeight || scroll.content != float32(count)*rowHeight {
 							t.Fatalf("count=%d density=%s: scroll=%+v row=%v", count, densityName, scroll, rowHeight)
@@ -141,12 +144,15 @@ func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 							wantUnderlay := float32(40)
 							if padding.Bottom > 0 {
 								wantUnderlay = 0
+								if woxui.SupportsEdgeFade() {
+									wantUnderlay = 40 + padding.Bottom
+								}
 							}
 							if props.UnderlayHeight != wantUnderlay {
 								t.Fatalf("underlay=%v, want %v", props.UnderlayHeight, wantUnderlay)
 							}
 						}
-						if !show.HideToolbar && built.Padding.Bottom != bottom {
+						if !woxui.SupportsEdgeFade() && !show.HideToolbar && built.Padding.Bottom != bottom {
 							t.Fatalf("toolbar gutter=%v, want %v", built.Padding.Bottom, bottom)
 						}
 					}
@@ -171,6 +177,29 @@ func TestListScrollKeepsContentCoordinates(t *testing.T) {
 		}
 		if scroll.offset != want {
 			t.Fatalf("detached=%v offset=%v, want %v", detached, scroll.offset, want)
+		}
+	}
+}
+
+// TestFooterSamplingPreservesPaddingHeight keeps layout space while painting through it.
+func TestFooterSamplingPreservesPaddingHeight(t *testing.T) {
+	if !woxui.SupportsEdgeFade() {
+		t.Skip("native renderer has no edge mask")
+	}
+	for _, border := range []float32{0, 1} {
+		palette := defaultPalette()
+		palette.toolbarBorderWidth = border
+		palette.resultContainerPadding = woxwidget.Insets{Top: 8, Bottom: 8}
+		results := make([]queryResult, 20)
+		for i := range results {
+			results[i].ID = fmt.Sprint(i)
+		}
+		app := &App{selected: -1}
+		built := app.buildResults(viewSnapshot{results: results, selected: -1, palette: palette}, 760, 416, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
+		props := built.Child.(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		wantGap, wantHeight := float32(8), float32(456)
+		if props.UnderlayHeight != wantGap+40 || built.Height != wantHeight || app.resultScroll.viewport != 400 {
+			t.Fatalf("border=%v extension=%v height=%v viewport=%v", border, props.UnderlayHeight, built.Height, app.resultScroll.viewport)
 		}
 	}
 }

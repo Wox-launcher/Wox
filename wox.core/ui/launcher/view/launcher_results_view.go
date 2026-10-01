@@ -261,13 +261,20 @@ func LauncherResultsView(props LauncherResultsProps) woxwidget.Widget {
 		Width: props.Width, Height: props.ContentHeight, Padding: visiblePadding,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.RowGap, Children: rows},
 	}
+	bottomPadding, bottomExtension := props.ContainerPadding.Bottom, float32(0)
+	if woxui.SupportsEdgeFade() {
+		// Padding reserves layout height while allowing list pixels to show through.
+		bottomExtension, bottomPadding = bottomPadding, 0
+	}
+	// The parent must allow the extended paint height; otherwise layout clamps the
+	// scroller before the toolbar can sample the rows underneath it.
 	return WrapLauncherResultsStatus(props.Complete, woxwidget.Container{
-		Width: props.Width, Height: props.Height + props.ContainerPadding.Top + props.ContainerPadding.Bottom,
-		Padding: woxwidget.Insets{Top: props.ContainerPadding.Top, Bottom: props.ContainerPadding.Bottom},
+		Width: props.Width, Height: props.Height + props.ContainerPadding.Top + props.ContainerPadding.Bottom + props.UnderlayHeight,
+		Padding: woxwidget.Insets{Top: props.ContainerPadding.Top, Bottom: bottomPadding},
 		Child: woxwidget.Semantics{
 			AutomationID: "launcher.results.viewport", Role: woxui.AccessibilityRoleList, Label: "Visible results",
 			Child: woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-				Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight, ContentHeight: props.ContentHeight, Offset: props.Offset,
+				Key: "launcher-result-scroll", Content: content, Width: props.Width, Height: props.Height, UnderlayHeight: props.UnderlayHeight + bottomExtension, ContentHeight: props.ContentHeight, Offset: props.Offset,
 				Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, OnScroll: props.OnScroll,
 			}),
 		},

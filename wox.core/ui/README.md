@@ -8,6 +8,8 @@ Shared controls consume `component.ControlTheme` directly; launcher-only appeara
 
 Settings uses the fixed Glass-derived dark palette in `launcher/settings_theme.go`, with a translucent window tint, system blur where supported, and translucent popup tints over floating blur materials. Onboarding management uses the same fixed colors and system material, with a separate launcher theme for its demos. Launcher themes and system appearance do not restyle Settings or onboarding management; theme previews continue to show their own theme colors.
 
+macOS caption controls use AppKit's standard window buttons through `WindowOptions.TitleBarControls` and `Window.SetTitleBarControls`. They retain the running OS's appearance, including macOS 27 glass, while Go title bars reserve their layout space. Close and maximize requests flow through the host callbacks; Settings keeps zoom disabled. Ordinary launcher, onboarding, and screenshot windows leave captions hidden. Caption coordinates are AppKit points and do not use the display's backing pixel scale.
+
 ## Architecture contract
 
 The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, renderer submission, font measurement, clipboard, file dialogs, external browser dispatch, and IME integration:

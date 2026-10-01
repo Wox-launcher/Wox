@@ -31,6 +31,10 @@ func (n *node) drawAt(displayList *woxui.DisplayList, origin woxui.Point, focuse
 		}
 		n.caretPaint(displayList, bounds, caretFocused, caretVisible)
 	}
+	fading := n.fadeTop > 0 || n.fadeBottom > 0
+	if fading {
+		displayList.BeginEdgeFade(bounds, n.fadeTop, n.fadeBottom)
+	}
 	if n.clip {
 		displayList.PushClipRect(bounds)
 	}
@@ -44,6 +48,9 @@ func (n *node) drawAt(displayList *woxui.DisplayList, origin woxui.Point, focuse
 			Width: bounds.Width + outsets.Left + outsets.Right, Height: bounds.Height + outsets.Top + outsets.Bottom,
 		}
 		displayList.StrokeRoundedRect(ring, n.focus.focusRingRadius, 2, n.focus.focusRingColor)
+	}
+	if fading {
+		displayList.EndEdgeFade(bounds, n.fadeTop, n.fadeBottom)
 	}
 	if n.clip {
 		displayList.PopClipRect()

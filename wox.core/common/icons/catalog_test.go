@@ -321,3 +321,43 @@ func TestAboutMenuMonochromeIconsRender(t *testing.T) {
 		}
 	}
 }
+
+// TestNotesToolbarGlyphCenters catches uneven SVG whitespace even when image boxes match.
+func TestNotesToolbarGlyphCenters(t *testing.T) {
+	for _, name := range []string{ControlSearch, ControlPin, ControlToolbarToggle, ControlAdd, ControlMenu} {
+		source := strings.ReplaceAll(Get(name).ImageData, "var(--wox-theme-icon-color)", "#ffffff")
+		img, err := woxsvg.Render(source, 96, 96)
+		if err != nil {
+			t.Fatal(err)
+		}
+		top, bottom := 96, -1
+		for y := 0; y < 96; y++ {
+			for x := 0; x < 96; x++ {
+				if img.RGBAAt(x, y).A > 127 {
+					top = min(top, y)
+					bottom = max(bottom, y)
+				}
+			}
+		}
+		if bottom < 0 || top+bottom < 93 || top+bottom > 97 {
+			t.Fatalf("%s visual vertical bounds=%d..%d, want centered at 47.5", name, top, bottom)
+		}
+	}
+}
+
+// TestTextFormatGlyphLetterGap preserves separation at the toolbar's actual raster sizes.
+func TestTextFormatGlyphLetterGap(t *testing.T) {
+	for _, size := range []int{16, 24, 32} {
+		source := strings.ReplaceAll(Get(ControlTextFormat).ImageData, "var(--wox-theme-icon-color)", "#ffffff")
+		img, err := woxsvg.Render(source, size, size)
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := size * 13 / 24
+		for y := 0; y < size; y++ {
+			if img.RGBAAt(x, y).A > 16 {
+				t.Fatalf("letters touch at size=%d x=%d y=%d", size, x, y)
+			}
+		}
+	}
+}

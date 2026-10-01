@@ -130,7 +130,9 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlArrowDown:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>`),
 	ControlModelTraining:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M15.5 13.5c0 2-2.5 3.5-2.5 5h-2c0-1.5-2.5-3-2.5-5 0-1.93 1.57-3.5 3.5-3.5s3.5 1.57 3.5 3.5M13 19.5h-2v.5c0 .55.45 1 1 1s1-.45 1-1zM19 13c0 1.39-.41 2.69-1.12 3.78-.25.39-.19.91.14 1.24.44.44 1.2.38 1.54-.15A8.95 8.95 0 0 0 21 13c0-2.36-.91-4.51-2.4-6.12-.39-.42-1.05-.43-1.45-.03-.38.38-.38.99-.02 1.39A6.97 6.97 0 0 1 19 13M15.65 4.65l-2.79-2.79c-.32-.32-.86-.1-.86.35V4a9 9 0 0 0-7.56 13.88c.34.53 1.1.59 1.54.15.33-.33.39-.84.14-1.23A6.97 6.97 0 0 1 12 6v1.79c0 .45.54.67.85.35l2.79-2.79c.2-.19.2-.51.01-.7"/></svg>`),
 	ControlMoreHorizontal:    common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`),
-	ControlPin:               newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
+	ControlToolbarToggle:     newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18M7 17h2M12 17h2M17 17h.01"/>`),
+	ControlTextFormat:        newMonochromeUIIcon(`<path d="M2 20 6.5 4 11 20M4 14h5M22 12v8M22 16a3 4 0 1 0-6 0 3 4 0 1 0 6 0"/>`),
+	ControlPin:               newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
 
 	// Notes and other compact editor format bars.
 	ControlFormatHeading:       newMonochromeUIIcon(`<path d="M6 5v14M18 5v14M6 12h12"/>`),
@@ -157,7 +159,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ScreenshotMosaic:           newMonochromeUIIcon(`<rect x="3.5" y="3.5" width="17" height="17" rx=".75"/><path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="#fff" stroke="none"/>`),
 	ScreenshotScrollingCapture: newMonochromeUIIcon(`<path d="m8 7 4-4 4 4M12 3v18M8 17l4 4 4-4"/>`),
 	ScreenshotCursor:           common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4.5 2.5v16.2l4.1-4 3.4 7.1 3.8-1.8-3.3-6.8h6.1L4.5 2.5Z" fill="#fff" stroke="#171717" stroke-width="1.6" stroke-linejoin="round"/></svg>`),
-	ScreenshotPin:              newMonochromeUIIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
+	ScreenshotPin:              newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
 
 	// Usage dashboard.
 	UsageShare:      common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M6 22q-.825 0-1.412-.587T4 20V10q0-.825.588-1.412T6 8h2q.425 0 .713.288T9 9t-.288.713T8 10H6v10h12V10h-2q-.425 0-.712-.288T15 9t.288-.712T16 8h2q.825 0 1.413.588T20 10v10q0 .825-.587 1.413T18 22zm5.288-6.288Q11 15.425 11 15V4.825l-.9.9q-.3.3-.7.288T8.7 5.7q-.275-.3-.287-.7t.287-.7l2.6-2.6q.15-.15.325-.212T12 1.425t.375.063t.325.212l2.6 2.6q.275.275.275.688T15.3 5.7q-.3.3-.712.3t-.713-.3L13 4.825V15q0 .425-.288.713T12 16t-.712-.288"/></svg>`),
