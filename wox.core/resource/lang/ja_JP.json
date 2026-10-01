@@ -1,4 +1,6 @@
 {
+  "ui_hotkey_overview_preview_toggle": "プレビューを切り替える",
+  "ui_preview_open_tooltip": "プレビューを開く（{hotkey}）",
   "plugin_theme_package_invalid": "無効なテーマパッケージ",
   "ui_hotkey_ignore_fullscreen": "全画面表示中はホットキーを無視",
   "ui_hotkey_ignore_fullscreen_tips": "前面のウィンドウが全画面表示中は Wox のホットキーを無視します。",

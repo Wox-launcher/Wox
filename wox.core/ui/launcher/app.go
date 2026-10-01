@@ -262,6 +262,7 @@ type App struct {
 	retainedResultIconRevision                uint64
 	retainedResultIconsPruned                 bool
 	remotePreviews                            map[string]queryPreview
+	previewVisibility                         queryPreviewVisibility
 	previewRequests                           map[string]bool
 	filePreviews                              map[string]filePreviewContent
 	fileRequests                              map[string]bool
@@ -1218,7 +1219,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if runtime.GOOS == "darwin" && a.window != nil {
 		controls := woxui.TitleBarControls{}
 		snapshot := viewSnapshot{
-			show: a.show, results: a.results, selected: a.selected, layout: a.layout,
+			show: a.show, results: a.results, selected: a.selected, layout: a.selectedPreviewLayout(),
 			chatFullscreen: a.chatFullscreen, webViewFullscreen: a.webViewFullscreen, terminalFullscreen: a.terminalFullscreen,
 		}
 		if launcherPreviewTitleBarVisible(snapshot) {
@@ -1231,7 +1232,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	params := a.show
 	results := a.results
 	resultCount := len(results)
-	layout := a.layout
+	layout := a.selectedPreviewLayout()
 	refinementVisible := len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
 	actionPanel := a.actionPanel
 	palette := a.palette
@@ -1599,6 +1600,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.onActionKey(event) {
 		return true
 	}
+	if hotkeyMatches(primaryHotkey("p"), event) && !event.Repeat && a.toggleSelectedPreview() {
+		return true
+	}
 	if a.onTriggerConflictPreviewKey(event) {
 		return true
 	}
@@ -1923,6 +1927,7 @@ func (a *App) moveSelection(delta int) {
 		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
+		_ = a.applyWindowBounds()
 	}
 	_ = a.window.Invalidate()
 }
@@ -1944,6 +1949,7 @@ func (a *App) moveSelectionByGroup(direction int) {
 		a.clearWebViewPreviewModeLocked()
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
+		_ = a.applyWindowBounds()
 	}
 	_ = a.window.Invalidate()
 }
@@ -1969,7 +1975,7 @@ func (a *App) selectResult(index int) {
 		a.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
-	if closedPanel || closedForm {
+	if valid || closedPanel || closedForm {
 		_ = a.applyWindowBounds()
 	}
 	_ = a.window.Invalidate()
@@ -2365,6 +2371,7 @@ func appendUIReceivedTails(results []queryResult, elapsed int64) {
 }
 
 type queryPreview struct {
+	DefaultHidden      bool              `json:"DefaultHidden"`
 	PreviewType        string            `json:"PreviewType"`
 	PreviewData        string            `json:"PreviewData"`
 	PreviewOverlayData string            `json:"PreviewOverlayData"`

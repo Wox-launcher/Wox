@@ -333,7 +333,7 @@ func toolbarActionKeycapFill(t *testing.T, action woxwidget.Container) woxui.Col
 }
 
 func TestLauncherGlassFooterBlocksCoveredResults(t *testing.T) {
-	for _, scale := range []float32{1, 1.5, 2} {
+	for _, scale := range []float32{1, 1.5, 2, 2.5} {
 		activated, covered := 0, 0
 		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 			return LauncherView(LauncherViewProps{
@@ -347,6 +347,18 @@ func TestLauncherGlassFooterBlocksCoveredResults(t *testing.T) {
 		})
 		host.AttachServices(actionSearchHostServices{})
 		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 200}, PixelSize: woxui.PixelSize{Width: int(400 * scale), Height: int(200 * scale)}, Scale: scale})
+		foundToolbar := false
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "launcher.toolbar" {
+				foundToolbar = true
+				if node.Bounds != (woxui.Rect{Y: 160, Width: 400, Height: 40}) {
+					t.Fatalf("scale %v: toolbar bounds %+v", scale, node.Bounds)
+				}
+			}
+		}
+		if !foundToolbar {
+			t.Fatal("missing toolbar semantics")
+		}
 		for _, point := range []woxui.Point{{X: 5, Y: 198}, {X: 370, Y: 180}} {
 			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
 			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})

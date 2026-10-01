@@ -1,4 +1,6 @@
 {
+  "ui_hotkey_overview_preview_toggle": "Переключить предпросмотр",
+  "ui_preview_open_tooltip": "Открыть предпросмотр ({hotkey})",
   "plugin_theme_package_invalid": "Недопустимый пакет темы",
   "ui_hotkey_ignore_fullscreen": "Игнорировать горячие клавиши в полноэкранном режиме",
   "ui_hotkey_ignore_fullscreen_tips": "Игнорировать горячие клавиши Wox, когда активное окно полноэкранное.",

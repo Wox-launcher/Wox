@@ -13,6 +13,7 @@ func (a *App) reconcileSelectedPreview() {
 
 // reconcileSelectedPreviewOnUI serializes resource transitions after native thread ownership is established.
 func (a *App) reconcileSelectedPreviewOnUI() {
+	a.reconcilePreviewVisibility()
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if !visible {
 		a.releasePinnedPreviewImage()
@@ -114,17 +115,7 @@ func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
 	}
 	result := a.results[a.selected]
 	preview := result.Preview
-	if !launcherPreviewVisible(a.layout, preview) {
-		return queryResult{}, queryPreview{}, false
-	}
-	ratio := float32(0.4)
-	if a.layout.ResultPreviewWidthRatio != nil && *a.layout.ResultPreviewWidthRatio >= 0 && *a.layout.ResultPreviewWidthRatio <= 1 {
-		ratio = float32(*a.layout.ResultPreviewWidthRatio)
-	}
-	if a.chatFullscreen || a.webViewFullscreen || a.terminalFullscreen {
-		ratio = 0
-	}
-	if ratio >= 1 {
+	if !launcherPreviewVisible(a.selectedPreviewLayout(), preview) {
 		return queryResult{}, queryPreview{}, false
 	}
 	if a.resultsQueryID != a.query.QueryID {

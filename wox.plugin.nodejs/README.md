@@ -4,6 +4,12 @@ TypeScript type definitions and SDK for developing Wox plugins in TypeScript/Jav
 
 ## Quick Start
 
+Set `Preview.DefaultHidden: true` on a result to keep its preview collapsed initially.
+Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
+applies to all results in the current query, including live updates. A new query restores
+each result's default; before manual input, each result uses its own default.
+Omitting the field preserves automatic previews. Global search does not expose plugin previews, including manually opened previews.
+
 ### Installation
 
 ```bash

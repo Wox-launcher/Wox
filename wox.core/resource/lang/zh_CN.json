@@ -1,4 +1,6 @@
 {
+  "ui_hotkey_overview_preview_toggle": "切换预览",
+  "ui_preview_open_tooltip": "打开预览（{hotkey}）",
   "plugin_theme_package_invalid": "主题包无效",
   "ui_hotkey_ignore_fullscreen": "全屏时忽略快捷键",
   "ui_hotkey_ignore_fullscreen_tips": "前台窗口全屏时，不响应启动器快捷键。",

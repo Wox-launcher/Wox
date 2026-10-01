@@ -159,6 +159,18 @@ func TestLargeMediaPreviewBypassesRemoteWrapping(t *testing.T) {
 	assert.Equal(t, previewData, result.Preview.PreviewData)
 }
 
+// TestRemotePreviewKeepsDefaultHidden prevents deferred payloads from opening before user input.
+func TestRemotePreviewKeepsDefaultHidden(t *testing.T) {
+	result := (&Manager{}).buildResultUI(&QueryResultCache{
+		Result: QueryResult{Id: "hidden", Preview: WoxPreview{
+			PreviewType: WoxPreviewTypeText, PreviewData: strings.Repeat("x", previewDataMaxSize+1), DefaultHidden: true,
+		}},
+		Query: Query{SessionId: "session"},
+	}, "query")
+	assert.Equal(t, WoxPreviewTypeRemote, result.Preview.PreviewType)
+	assert.True(t, result.Preview.DefaultHidden)
+}
+
 func TestLargeChatAndTerminalPreviewsBypassRemoteWrapping(t *testing.T) {
 	previewData := strings.Repeat("x", previewDataMaxSize+1)
 	for _, previewType := range []string{WoxPreviewTypeChat, WoxPreviewTypeTerminal} {

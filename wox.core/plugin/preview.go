@@ -60,6 +60,8 @@ type WoxPreviewTag struct {
 type WoxPreview struct {
 	PreviewType WoxPreviewType
 	PreviewData string
+	// DefaultHidden keeps content available for manual opening. Manual visibility overrides last until the next query.
+	DefaultHidden bool
 	// PreviewOverlayData is the optional full-size image payload used when the UI opens an image
 	// preview in the native overlay. PreviewData often points at a lightweight thumbnail, which is
 	// correct for the inline preview but not enough for the click-to-enlarge flow.

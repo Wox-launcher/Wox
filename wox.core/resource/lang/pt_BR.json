@@ -1,4 +1,6 @@
 {
+  "ui_hotkey_overview_preview_toggle": "Alternar prévia",
+  "ui_preview_open_tooltip": "Abrir prévia ({hotkey})",
   "plugin_theme_package_invalid": "Pacote de tema inválido",
   "ui_hotkey_ignore_fullscreen": "Ignorar atalhos em tela cheia",
   "ui_hotkey_ignore_fullscreen_tips": "Ignorar atalhos do Wox quando a janela ativa estiver em tela cheia.",

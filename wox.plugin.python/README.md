@@ -19,6 +19,12 @@ uv add wox-plugin
 
 ## Usage
 
+Use `WoxPreview(..., default_hidden=True)` to keep a result's preview collapsed initially.
+Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
+applies to all results in the current query, including live updates. A new query restores
+each result's default; before manual input, each result uses its own default.
+The default is `False`. Global search does not expose plugin previews, including manually opened previews.
+
 This example returns `QueryResponse`, so the plugin's `plugin.json` should set
 `MinWoxVersion` to `2.0.4` or newer. Return `list[Result]` directly if you need
 the same plugin build to run on older Wox releases.

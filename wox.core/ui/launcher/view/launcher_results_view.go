@@ -77,6 +77,9 @@ type LauncherResultItem struct {
 	TailWidth          float32
 	TailHeight         float32
 	QuickSelectNumber  string
+	PreviewIcon        *woxui.Image
+	PreviewTooltip     string
+	OnOpenPreview      func()                         `boundary:"stable"`
 	OnHover            func(bool)                     `boundary:"stable"`
 	OnSelect           func()                         `boundary:"stable"`
 	OnSecondaryTapDown func()                         `boundary:"stable"`
@@ -364,7 +367,30 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 		}
 	}
 	quickSelectWidth := launcherQuickSelectSlotWidth(item.QuickSelectNumber, props.DensityScale)
-	trailingWidth := item.TailWidth + quickSelectWidth
+	tailWidth := item.TailWidth
+	if item.PreviewIcon != nil && item.OnOpenPreview != nil {
+		size := scaledLauncherSize(28, props.DensityScale)
+		glyphSize := scaledLauncherSize(20, props.DensityScale)
+		button := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "result-preview-" + item.ID, Label: item.PreviewTooltip,
+			Width: size, Height: size, Radius: scaledLauncherSize(4, props.DensityScale),
+			HoverBackground: props.Theme.ResultHoverColor(), FocusRingColor: props.Theme.Cursor,
+			Icon:  woxwidget.Image{Source: item.PreviewIcon, Width: glyphSize, Height: glyphSize, Fit: woxwidget.ImageFitContain},
+			OnTap: item.OnOpenPreview, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+				if item.OnTooltip != nil {
+					item.OnTooltip(inside, item.PreviewTooltip, bounds)
+				}
+			},
+		})
+		children := []woxwidget.Widget{button}
+		if tail != nil {
+			children = append(children, tail)
+			tailWidth += scaledLauncherSize(6, props.DensityScale)
+		}
+		tailWidth += size
+		tail = woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Gap: scaledLauncherSize(6, props.DensityScale), Children: children}
+	}
+	trailingWidth := tailWidth + quickSelectWidth
 	gapCount := 1
 	if trailingWidth > 0 {
 		gapCount++
@@ -417,7 +443,7 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 	// Keep tails and the hold-to-number chip in one trailing cluster so every
 	// row shares the same right edge. An extra flex gap here is what pushed
 	// numbered rows with tags past the result padding.
-	if trailing := launcherResultTrailing(tail, item.TailWidth, item.QuickSelectNumber, props.BaseHeight, quickSelectWidth, props.DensityScale, tailColor, props.Theme.Background); trailing != nil {
+	if trailing := launcherResultTrailing(tail, tailWidth, item.QuickSelectNumber, props.BaseHeight, quickSelectWidth, props.DensityScale, tailColor, props.Theme.Background); trailing != nil {
 		rowChildren = append(rowChildren, trailing)
 	}
 	contentLayer := woxwidget.Container{

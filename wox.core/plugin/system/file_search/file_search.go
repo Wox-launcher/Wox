@@ -1064,11 +1064,10 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 				Files: []string{item.Path},
 			},
 		}
-		if showPreview {
-			queryResult.Preview = plugin.WoxPreview{
-				PreviewType: plugin.WoxPreviewTypeFile,
-				PreviewData: item.Path,
-			}
+		queryResult.Preview = plugin.WoxPreview{
+			PreviewType:   plugin.WoxPreviewTypeFile,
+			PreviewData:   item.Path,
+			DefaultHidden: !showPreview,
 		}
 		if selectedSort != fileSearchSortRefinementRelevance {
 			queryResult.Score = fileSearchRefinementSortScore(index, len(results))

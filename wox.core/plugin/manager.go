@@ -2941,8 +2941,9 @@ func (m *Manager) buildResultUI(resultCache *QueryResultCache, queryId string) Q
 	// choose the dedicated fullscreen/editing surface before loading the preview.
 	if shouldWrapRemotePreview(uiResult.Preview) {
 		uiResult.Preview = WoxPreview{
-			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
+			PreviewType:   WoxPreviewTypeRemote,
+			PreviewData:   fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", resultCache.Query.SessionId, queryId, uiResult.Id),
+			DefaultHidden: uiResult.Preview.DefaultHidden,
 		}
 	}
 	resultUI := uiResult.ToUI()
@@ -3402,8 +3403,9 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	// can detect the type before deciding whether grid previews are allowed.
 	if shouldWrapRemotePreview(result.Preview) {
 		result.Preview = WoxPreview{
-			PreviewType: WoxPreviewTypeRemote,
-			PreviewData: fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
+			PreviewType:   WoxPreviewTypeRemote,
+			PreviewData:   fmt.Sprintf("/preview?sessionId=%s&queryId=%s&id=%s", query.SessionId, query.Id, result.Id),
+			DefaultHidden: originalPreview.DefaultHidden,
 		}
 	}
 	PreviewWrapCost := util.GetSystemTimestamp() - previewWrapStart

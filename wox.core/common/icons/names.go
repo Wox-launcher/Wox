@@ -234,6 +234,7 @@ const (
 	ControlWindowRestore       = "control.window-restore"
 	ControlMenu                = "control.menu"
 	ControlMenuLines           = "control.menu-lines"
+	ControlPreviewOpen         = "control.preview-open"
 	ControlChevronUp           = "control.chevron-up"
 	ControlChevronDown         = "control.chevron-down"
 	ControlClock               = "control.clock"

@@ -883,7 +883,7 @@ func fromCorePreview(preview plugin.WoxPreview) queryPreview {
 		tags[index] = previewTag{Label: tag.Label, Tooltip: tag.Tooltip}
 	}
 	return queryPreview{
-		PreviewType: preview.PreviewType, PreviewData: preview.PreviewData, PreviewOverlayData: preview.PreviewOverlayData,
+		PreviewType: preview.PreviewType, PreviewData: preview.PreviewData, PreviewOverlayData: preview.PreviewOverlayData, DefaultHidden: preview.DefaultHidden,
 		PreviewTags: tags, PreviewProperties: cloneStringMap(preview.PreviewProperties), ScrollPosition: preview.ScrollPosition,
 	}
 }

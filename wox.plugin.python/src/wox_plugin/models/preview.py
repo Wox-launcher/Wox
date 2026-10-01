@@ -373,6 +373,9 @@ class WoxPreview:
     new plugins can pass preview_tags by keyword.
     """
 
+    default_hidden: bool = field(default=False)
+    """Initially hide this preview; Ctrl/Cmd+P opens it until the next query."""
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -387,6 +390,7 @@ class WoxPreview:
             {
                 "PreviewType": self.preview_type,
                 "PreviewData": self.preview_data,
+                "DefaultHidden": self.default_hidden,
                 "PreviewTags": [tag.to_dict() for tag in self.preview_tags],
                 "PreviewProperties": self.preview_properties,
                 "ScrollPosition": self.scroll_position,
@@ -415,6 +419,7 @@ class WoxPreview:
         return cls(
             preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
+            default_hidden=data.get("DefaultHidden", False),
             preview_tags=[WoxPreviewTag.from_json(item) for item in data.get("PreviewTags", []) if isinstance(item, dict)]
             if isinstance(data.get("PreviewTags", []), list)
             else [],

@@ -8,6 +8,48 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestPreviewButtonUsesLogicalBounds verifies the icon stays clickable beside tails at different display scales.
+func TestPreviewButtonUsesLogicalBounds(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2} {
+		opened, activated := 0, 0
+		tooltip := ""
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return LauncherResultsView(LauncherResultsProps{
+				Width: 320, Height: 50, ContentHeight: 50, RowHeight: 50,
+				Items: []LauncherResultItem{{
+					ID: "preview", Title: "A long file name that must not cover the preview button", Selected: true,
+					PreviewIcon: &woxui.Image{}, PreviewTooltip: "Open preview (Ctrl+P)",
+					OnOpenPreview: func() { opened++ }, OnActivate: func() { activated++ },
+					OnTooltip: func(inside bool, text string, _ woxui.Rect) {
+						if inside {
+							tooltip = text
+						}
+					},
+					Tails: []LauncherResultTail{{Text: "1ms", Width: 32, Height: 22}}, TailWidth: 32, TailHeight: 22,
+				}},
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 320, Height: 50}, PixelSize: woxui.PixelSize{Width: int(320 * scale), Height: int(50 * scale)}, Scale: scale})
+		var button woxui.AccessibilityNode
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "result-preview-preview" {
+				button = node
+			}
+		}
+		if button.Label != "Open preview (Ctrl+P)" || button.Bounds.Width != 28 || button.Bounds.X+button.Bounds.Width > 320 {
+			t.Fatalf("scale %v: invalid preview button: %#v", scale, button)
+		}
+		point := woxui.Point{X: button.Bounds.X + 14, Y: button.Bounds.Y + 14}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: point})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Position: point, Button: woxui.PointerButtonPrimary})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Position: point, Button: woxui.PointerButtonPrimary})
+		if opened != 1 || activated != 0 || tooltip != button.Label {
+			t.Fatalf("scale %v: opened=%d activated=%d tooltip=%q", scale, opened, activated, tooltip)
+		}
+	}
+}
+
 func TestLauncherResultGroupUsesFlutterTitleTypography(t *testing.T) {
 	titleColor := woxui.Color{R: 240, G: 242, B: 244, A: 255}
 	result := LauncherResultsView(LauncherResultsProps{

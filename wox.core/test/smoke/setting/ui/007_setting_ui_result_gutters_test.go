@@ -84,9 +84,16 @@ func assertResultGutters(t *testing.T, snapshot woxwidget.AutomationSnapshot, wa
 	if !found {
 		t.Fatal("missing result viewport")
 	}
-	// The scroll painter may continue behind a translucent toolbar. The enclosing
-	// result area bounds still end at the toolbar and define the usable viewport.
-	end := min(viewport.Bounds.Y+viewport.Bounds.Height, area.Bounds.Y+area.Bounds.Height-bottom)
+	toolbar, found := automationdriver.Find(snapshot, "launcher.toolbar")
+	if !found {
+		t.Fatal("missing toolbar bounds")
+	}
+	// Both result bounds include footer underlay; the toolbar marks the visible edge.
+	areaEnd := min(area.Bounds.Y+area.Bounds.Height, toolbar.Bounds.Y)
+	end := min(viewport.Bounds.Y+viewport.Bounds.Height, areaEnd-bottom)
+	// Native pixel rounding can shift logical bounds by half a unit at 100% scale,
+	// and less at higher scales (for example 0.2 units at 250%).
+	const tolerance = 0.501
 	full, partial := 0, 0
 	var selectedVisible bool
 	var lastBottom float32
@@ -95,24 +102,24 @@ func assertResultGutters(t *testing.T, snapshot woxwidget.AutomationSnapshot, wa
 			continue
 		}
 		top, rowEnd := node.Bounds.Y, node.Bounds.Y+node.Bounds.Height
-		if rowEnd <= viewport.Bounds.Y+0.1 || top >= end-0.1 {
+		if rowEnd <= viewport.Bounds.Y+tolerance || top >= end-tolerance {
 			continue
 		}
-		if top < viewport.Bounds.Y-0.1 || rowEnd > end+0.1 {
+		if top < viewport.Bounds.Y-tolerance || rowEnd > end+tolerance {
 			partial++
 		} else {
 			full++
 		}
 		if node.Selected {
-			selectedVisible = top >= viewport.Bounds.Y-0.1 && rowEnd <= end+0.1
+			selectedVisible = top >= viewport.Bounds.Y-tolerance && rowEnd <= end+tolerance
 		}
 		lastBottom = max(lastBottom, rowEnd)
 	}
 	if full != want || partial != 0 || !selectedVisible {
 		t.Fatalf("visible rows full=%d partial=%d selectedVisible=%t, want %d whole rows; area=%+v viewport=%+v", full, partial, selectedVisible, want, area.Bounds, viewport.Bounds)
 	}
-	gap := area.Bounds.Y + area.Bounds.Height - lastBottom
-	if math.Abs(float64(gap-bottom)) > 0.1 {
+	gap := areaEnd - lastBottom
+	if math.Abs(float64(gap-bottom)) > tolerance {
 		t.Fatalf("bottom gutter=%.2f, want %.2f", gap, bottom)
 	}
 	smoke.AssertNoDiagnostics(t, snapshot)

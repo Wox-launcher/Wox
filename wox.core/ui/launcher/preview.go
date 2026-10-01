@@ -78,7 +78,7 @@ func (a *App) loadRemotePreview(path string, fallback queryPreview) {
 					tags[index] = previewTag{Label: tag.Label, Tooltip: tag.Tooltip}
 				}
 				resolved = queryPreview{
-					PreviewType: loaded.PreviewType, PreviewData: loaded.PreviewData, PreviewOverlayData: loaded.PreviewOverlayData,
+					PreviewType: loaded.PreviewType, PreviewData: loaded.PreviewData, PreviewOverlayData: loaded.PreviewOverlayData, DefaultHidden: loaded.DefaultHidden,
 					PreviewTags: tags, PreviewProperties: loaded.PreviewProperties, ScrollPosition: loaded.ScrollPosition,
 				}
 			}

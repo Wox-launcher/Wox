@@ -177,7 +177,7 @@ func (a *App) snapshot() viewSnapshot {
 		hoveredResult:         a.hoveredResult,
 		resultScroll:          a.resultScroll,
 		resultScrollDetached:  a.resultScrollDetached,
-		layout:                a.layout,
+		layout:                a.selectedPreviewLayout(),
 		refinements:           a.refinements,
 		refinementsRevision:   a.refinementsSectionRevision,
 		refinementValues:      a.query.QueryRefinements,
@@ -1069,7 +1069,7 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 
 // launcherPreviewVisible mirrors Flutter's grid preview exceptions for system-owned guidance.
 func launcherPreviewVisible(layout queryLayout, preview queryPreview) bool {
-	if preview.PreviewData == "" {
+	if preview.PreviewData == "" || launcherPreviewRatio(layout, false) >= 1 {
 		return false
 	}
 	if layout.GridLayout == nil {
@@ -1156,11 +1156,19 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		if !loading {
 			icon = a.imageForResultRow(result.ID, result.Icon, physicalImageSize(int(densityMetrics.scaled(32)), imageScale), snapshot.palette, index == snapshot.selected)
 		}
+		var previewIcon *woxui.Image
+		previewTooltip := ""
+		if index == snapshot.selected && result.Preview.PreviewData != "" && !launcherPreviewVisible(snapshot.layout, result.Preview) {
+			color := snapshot.palette.selectedTail
+			previewIcon = a.imageForTint(fromCoreImage(icons.Get(icons.ControlPreviewOpen)), &color, physicalImageSize(int(densityMetrics.scaled(20)), imageScale))
+			previewTooltip = strings.ReplaceAll(a.translate("i18n:ui_preview_open_tooltip"), "{hotkey}", strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+"))
+		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: icon, Loading: loading, TitleTags: fromCoreResultTitleTags(result.TitleTags), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
-			OnHover:           func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
+			PreviewIcon:       previewIcon, PreviewTooltip: previewTooltip, OnOpenPreview: func() { a.toggleSelectedPreview() },
+			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
 			OnDragStart: func() { a.startResultDrag(index) }, OnTooltip: a.setResultTailTooltip,
 		})
 	}

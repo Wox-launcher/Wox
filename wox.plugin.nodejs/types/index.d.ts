@@ -2059,6 +2059,8 @@ export interface WoxPreviewTag {
  * ```
  */
 export interface WoxPreview {
+  /** Initially hide this preview; Ctrl/Cmd+P opens it until the next query. Defaults to false. */
+  DefaultHidden?: boolean
   /**
    * The type of preview content.
    *

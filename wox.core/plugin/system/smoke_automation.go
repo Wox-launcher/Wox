@@ -5,6 +5,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,16 +56,17 @@ type smokeAutomationPlugin struct {
 	attentionDescription string
 }
 
-// GetMetadata exposes one explicit smoke trigger with command-scoped fixture behaviors.
+// GetMetadata exposes command-scoped fixtures and an exact-match global preview probe.
 func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id: "0cb0d21c-45ce-4fe0-987e-24d645eca58c", Name: "Smoke Test Fixture", Runtime: "Go", Version: "1.0.0",
-		TriggerKeywords: []string{smokeAutomationTrigger},
+		TriggerKeywords: []string{smokeAutomationTrigger, "*"},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureQuerySelection},
 			{Name: plugin.MetadataFeatureMRU},
 		},
 		Commands: []plugin.MetadataCommand{
+			{Command: "preview-scope", Description: "Global and plugin preview boundary fixture"},
 			{Command: "query-hint", QueryHint: &common.QueryHint{Elements: []common.QueryElement{
 				{Id: "filter", Kind: common.QueryElementArgument, Suggestions: []string{"created", "assigned", "search"}},
 			}}},
@@ -94,7 +96,15 @@ func (p *smokeAutomationPlugin) Init(ctx context.Context, initParams plugin.Init
 
 // Query dispatches the deterministic native smoke behaviors by metadata command.
 func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if query.IsGlobalQuery() {
+		if strings.TrimSpace(query.Search) == "wox-preview-scope-smoke" {
+			return p.queryPreviewScope()
+		}
+		return plugin.QueryResponse{}
+	}
 	switch query.Command {
+	case "preview-scope":
+		return p.queryPreviewScope()
 	case smokeAutomationSlowCommand:
 		return p.querySlow(ctx)
 	case smokeAutomationStreamingCommand:
@@ -133,6 +143,22 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 	default:
 		return plugin.QueryResponse{}
 	}
+}
+
+// queryPreviewScope sends identical preview payloads through global and plugin queries, including live updates.
+func (p *smokeAutomationPlugin) queryPreviewScope() plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Id: uuid.NewString(), Title: "Preview scope initial", Icon: icons.Get(icons.PluginApp),
+		Preview: plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Preview scope initial body"},
+		Actions: []plugin.QueryResultAction{{
+			Id: "update-preview-scope", Name: "Update preview", Icon: icons.Get(icons.ActionUpdate), IsDefault: true, PreventHideAfterAction: true,
+			Action: func(ctx context.Context, action plugin.ActionContext) {
+				title := "Preview scope updated"
+				preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeText, PreviewData: "Preview scope updated body"}
+				p.api.UpdateResult(ctx, plugin.UpdatableResult{Id: action.ResultId, Title: &title, Preview: &preview})
+			},
+		}},
+	}})
 }
 
 // queryResultBinding returns one restorable executable result for alias and hotkey bindings.
