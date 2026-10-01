@@ -84,6 +84,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	if snapshot.tooltip != nil {
 		tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
 			Width: width, Height: height, Anchor: snapshot.tooltip.Anchor, Message: snapshot.tooltip.Text, Side: snapshot.tooltip.Side, Theme: snapshot.palette,
+			Window: a.settingsNativeWindow(),
 		})
 		if tooltip != nil {
 			if overlay == nil {
@@ -102,7 +103,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	return launcherview.SettingsWindow(launcherview.SettingsWindowProps{
 		Width: width, Height: height, PageID: snapshot.tab, Platform: runtime.GOOS, RailWidth: railWidth, Theme: snapshot.palette,
-		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth, frame.WindowFocused), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
+		TitleBar: a.buildSettingsTitleBar(snapshot, width, railWidth, frame.WindowFocused, frame.Scale), Rail: a.buildSettingsRail(snapshot, railWidth, contentHeight, frame.Scale), Page: page,
 		Overlay: overlay, OverlayLeft: overlayLeft, OverlayTop: overlayTop,
 	})
 }
@@ -115,7 +116,7 @@ func (a *App) settingsWindowTitle() string {
 	return title
 }
 
-func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32, windowFocused bool) woxwidget.Widget {
+func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth float32, windowFocused bool, imageScale float32) woxwidget.Widget {
 	title := a.settingsWindowTitle()
 	titleStyle := woxui.TextStyle{Size: snapshot.palette.Scaled(13), Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
@@ -124,8 +125,9 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 			titleWidth = metrics.Size.Width + 24
 		}
 	}
+	// The caption draws this at 20 logical px. A 256 px raster filtered down in GL softens the mark.
 	return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
-		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageForSurface(appIconImageSource, 256, settingsPalette().Background),
+		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageForSurface(appIconImageSource, physicalImageSize(20, imageScale), settingsPalette().Background),
 		Theme: snapshot.palette, Active: windowFocused,
 		OnDrag: func() {
 			if window := a.settingsNativeWindow(); window != nil {

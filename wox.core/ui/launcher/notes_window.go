@@ -1267,8 +1267,13 @@ func (c *notesWindowController) composeLinuxInlineTooltip(size woxui.Size, theme
 	if c.inlineTooltip == nil {
 		return overlay
 	}
+	var notesWindow *woxui.Window
+	if c.managed != nil {
+		notesWindow = c.managed.Window()
+	}
 	tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
 		Width: size.Width, Height: size.Height, Anchor: c.inlineTooltip.Anchor, Message: c.inlineTooltip.Text, Side: c.inlineTooltip.Side, Theme: theme.Controls,
+		Window: notesWindow,
 	})
 	if tooltip == nil {
 		return overlay

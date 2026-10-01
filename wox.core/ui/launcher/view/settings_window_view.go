@@ -30,7 +30,7 @@ func SettingsPageTop(platform string) float32 {
 	switch platform {
 	case "darwin":
 		return 0
-	case "windows":
+	case "windows", "linux":
 		// Catalogs inset controls by 20 units, so only their empty gutter overlaps the caption row.
 		return SettingsTitleBarHeight - 20
 	default:
@@ -46,7 +46,7 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 		Child: props.Page,
 	}
 	var bodyChild woxwidget.Widget
-	if props.Platform == "darwin" || props.Platform == "windows" {
+	if props.Platform == "darwin" || props.Platform == "windows" || props.Platform == "linux" {
 		// Let the page's top gutter share the chrome area instead of stacking both blank spaces.
 		bodyChild = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 			{Left: props.RailWidth, Top: SettingsPageTop(props.Platform), Child: page},
@@ -192,6 +192,19 @@ func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover 
 		closeButton := woxcomponent.WindowsTitleBarButton("settings-window-close", "close", hovered == "close", props.Theme, props.OnClose, onHover)
 		if props.Platform == "linux" {
 			closeButton = woxcomponent.LinuxTitleBarCloseButton("settings-window-close", hovered == "close", props.Theme, props.OnClose, onHover)
+			if props.RailWidth > 0 {
+				// This row sits above the rail, so the rail edge has to be repeated to reach the top of the window.
+				children = append(children, woxwidget.StackChild{Left: max(float32(0), props.RailWidth-1), Child: woxwidget.Container{Width: 1, Height: height, Color: woxcomponent.TitleBarAlpha(props.Theme.TextSecondary, 26)}})
+			}
+			if props.Content == nil && props.RailWidth > 0 {
+				if props.AppIcon != nil {
+					children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: height, Vertical: 0.5, Child: woxwidget.Image{Source: props.AppIcon, Width: 20, Height: 20}}})
+				}
+				// Match the Windows close-only caption: the title sits beside the icon, clear of the close control.
+				children = append(children, woxwidget.StackChild{Left: 40, Right: 46, StretchWidth: true, Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}})
+				children = append(children, woxwidget.StackChild{AnchorRight: true, Child: closeButton})
+				break
+			}
 		}
 		if props.Content == nil {
 			children = append(children, woxwidget.StackChild{Left: max(float32(0), (props.Width-props.TitleWidth)/2), Child: woxwidget.Align{Width: props.TitleWidth, Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: props.Title, Style: titleStyle, Color: props.Theme.TextSecondary}}})

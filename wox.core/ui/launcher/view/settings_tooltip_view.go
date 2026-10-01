@@ -1,7 +1,9 @@
 package view
 
 import (
+	"math"
 	"strings"
+	"unicode"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
@@ -9,15 +11,18 @@ import (
 )
 
 const (
-	settingsInlineTooltipGap            = float32(6)
-	settingsInlineTooltipMargin         = float32(8)
-	settingsInlineTooltipPaddingX       = float32(11)
-	settingsInlineTooltipPaddingY       = float32(8)
-	settingsInlineTooltipLineHeight     = float32(16)
-	settingsInlineTooltipMinWidth       = float32(120)
-	settingsInlineTooltipPreferredWidth = float32(280)
-	settingsInlineTooltipMaxWidth       = float32(360)
-	settingsInlineTooltipMaxLines       = 12
+	settingsInlineTooltipGap        = float32(6)
+	settingsInlineTooltipMargin     = float32(8)
+	settingsInlineTooltipPaddingX   = float32(11)
+	settingsInlineTooltipPaddingY   = float32(8)
+	settingsInlineTooltipLineHeight = float32(16)
+	// settingsInlineTooltipMaxWidth matches the native tooltip cap.
+	settingsInlineTooltipMaxWidth = float32(400)
+	settingsInlineTooltipMaxLines = 12
+	// Width factors match util/tooltip so a missing measure still tracks Latin and CJK.
+	settingsInlineTooltipAsciiWidth = float32(0.68)
+	settingsInlineTooltipWideWidth  = float32(1.1)
+	settingsInlineTooltipSpaceWidth = float32(0.34)
 )
 
 // SettingsInlineTooltipProps contains one settings-window tooltip anchored in window coordinates.
@@ -28,6 +33,8 @@ type SettingsInlineTooltipProps struct {
 	Message string
 	Side    string
 	Theme   woxcomponent.ControlTheme
+	// Window measures the label. Without it the width falls back to the shared character estimate.
+	Window *woxui.Window
 }
 
 // SettingsInlineTooltipOverlay renders Linux fallback tooltips inside the settings window.
@@ -37,10 +44,11 @@ func SettingsInlineTooltipOverlay(props SettingsInlineTooltipProps) (woxwidget.W
 		return nil, 0, 0
 	}
 
-	tooltipWidth := min(settingsInlineTooltipMaxWidth, max(settingsInlineTooltipMinWidth, settingsInlineTooltipPreferredWidth))
-	tooltipWidth = min(tooltipWidth, max(float32(1), props.Width-settingsInlineTooltipMargin*2))
-	contentWidth := max(float32(1), tooltipWidth-settingsInlineTooltipPaddingX*2)
-	lineCount := settingsInlineTooltipLineCount(message, contentWidth)
+	style := woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold}
+	maxWidth := min(settingsInlineTooltipMaxWidth, max(float32(1), props.Width-settingsInlineTooltipMargin*2))
+	contentLimit := max(float32(1), maxWidth-settingsInlineTooltipPaddingX*2)
+	contentWidth, lineCount := settingsInlineTooltipTextSize(props.Window, message, style, contentLimit)
+	tooltipWidth := contentWidth + settingsInlineTooltipPaddingX*2
 	tooltipHeight := settingsInlineTooltipPaddingY*2 + float32(lineCount)*settingsInlineTooltipLineHeight
 
 	left, top := settingsInlineTooltipPosition(props, tooltipWidth, tooltipHeight)
@@ -71,7 +79,7 @@ func SettingsInlineTooltipOverlay(props SettingsInlineTooltipProps) (woxwidget.W
 			Height:     float32(lineCount) * settingsInlineTooltipLineHeight,
 			MaxLines:   lineCount,
 			LineHeight: settingsInlineTooltipLineHeight,
-			Style:      woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold},
+			Style:      style,
 			Color:      textColor,
 		},
 	}
@@ -140,18 +148,79 @@ func settingsInlineTooltipPosition(props SettingsInlineTooltipProps, tooltipWidt
 	return left, top
 }
 
-func settingsInlineTooltipLineCount(message string, contentWidth float32) int {
-	maxCharsPerLine := int(max(float32(8), contentWidth/7))
-	if maxCharsPerLine <= 0 {
-		maxCharsPerLine = 8
+// settingsInlineTooltipTextSize returns the content width and wrapped line count.
+// A live window uses the same font metrics as the native tooltip. Otherwise the
+// width follows the shared Latin and CJK character factors.
+func settingsInlineTooltipTextSize(window *woxui.Window, message string, style woxui.TextStyle, contentLimit float32) (float32, int) {
+	natural := settingsInlineTooltipNaturalWidth(window, message, style)
+	contentWidth := min(max(natural, float32(1)), contentLimit)
+	if window != nil {
+		layout := woxwidget.LayoutTextBlock(window, message, style, contentWidth, settingsInlineTooltipMaxLines, settingsInlineTooltipLineHeight)
+		lineCount := len(layout.Lines)
+		if lineCount < 1 {
+			lineCount = 1
+		}
+		if lineCount > settingsInlineTooltipMaxLines {
+			lineCount = settingsInlineTooltipMaxLines
+		}
+		return contentWidth, lineCount
 	}
-	runes := []rune(message)
-	lineCount := (len(runes) + maxCharsPerLine - 1) / maxCharsPerLine
+	return contentWidth, settingsInlineTooltipEstimatedLines(message, style.Size, contentWidth)
+}
+
+func settingsInlineTooltipNaturalWidth(window *woxui.Window, message string, style woxui.TextStyle) float32 {
+	widest := float32(0)
+	for _, line := range strings.Split(message, "\n") {
+		var width float32
+		if window != nil {
+			if metrics, err := window.MeasureText(line, style); err == nil {
+				width = metrics.Size.Width
+			}
+		}
+		if width <= 0 {
+			width = settingsInlineTooltipEstimatedWidth(line, style.Size)
+		}
+		widest = max(widest, width)
+	}
+	return widest
+}
+
+func settingsInlineTooltipEstimatedWidth(text string, fontSize float32) float32 {
+	if fontSize <= 0 {
+		fontSize = 11
+	}
+	width := float32(0)
+	for _, r := range text {
+		switch {
+		case unicode.IsSpace(r):
+			width += fontSize * settingsInlineTooltipSpaceWidth
+		case r <= unicode.MaxASCII:
+			width += fontSize * settingsInlineTooltipAsciiWidth
+		default:
+			width += fontSize * settingsInlineTooltipWideWidth
+		}
+	}
+	return width
+}
+
+func settingsInlineTooltipEstimatedLines(message string, fontSize, contentWidth float32) int {
+	if contentWidth <= 0 {
+		contentWidth = 1
+	}
+	lineCount := 0
+	for _, line := range strings.Split(message, "\n") {
+		width := settingsInlineTooltipEstimatedWidth(line, fontSize)
+		wrapped := int(math.Ceil(float64(width / contentWidth)))
+		if wrapped < 1 {
+			wrapped = 1
+		}
+		lineCount += wrapped
+	}
 	if lineCount < 1 {
 		lineCount = 1
 	}
 	if lineCount > settingsInlineTooltipMaxLines {
-		lineCount = settingsInlineTooltipMaxLines
+		return settingsInlineTooltipMaxLines
 	}
 	return lineCount
 }

@@ -26,6 +26,8 @@ import (
 	woxui "wox/ui/runtime"
 	"wox/util"
 	woxsvg "wox/util/svg"
+
+	"github.com/disintegration/imaging"
 )
 
 type woxImage struct {
@@ -622,10 +624,28 @@ func decodeWoxImageWithTintDimensions(source woxImage, tint *woxui.Color, svgWid
 	case "theme":
 		return decodeThemeImage(source.ImageData)
 	case "appicon":
-		return woxui.DecodeImageMax(bytes.NewReader(resource.GetAppIconPNG()), max(svgWidth, svgHeight))
+		return decodeEmbeddedAppIcon(max(svgWidth, svgHeight))
 	default:
 		return nil, fmt.Errorf("unsupported Wox image type %q", source.ImageType)
 	}
+}
+
+// decodeEmbeddedAppIcon keeps the caption-sized mark antialiased.
+// The shared fast scaler stair-steps the rounded corners when 512 px becomes 20 px.
+func decodeEmbeddedAppIcon(maxDimension int) (*woxui.Image, error) {
+	decoded, _, err := image.Decode(bytes.NewReader(resource.GetAppIconPNG()))
+	if err != nil {
+		return nil, err
+	}
+	bounds := decoded.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if maxDimension > 0 && (width > maxDimension || height > maxDimension) {
+		scale := float64(maxDimension) / float64(max(width, height))
+		nextWidth := max(1, int(math.Round(float64(width)*scale)))
+		nextHeight := max(1, int(math.Round(float64(height)*scale)))
+		decoded = imaging.Resize(decoded, nextWidth, nextHeight, imaging.Lanczos)
+	}
+	return woxui.NewImage(decoded)
 }
 
 func decodeSVGImage(data string, width, height int, tint *woxui.Color, dark bool, themeIconColor *woxui.Color) (*woxui.Image, error) {

@@ -44,6 +44,27 @@ func TestImageCacheConcurrentStoresAreSerialized(t *testing.T) {
 	}
 }
 
+func TestEmbeddedAppIconCaptionSizeKeepsEdgeCoverage(t *testing.T) {
+	image, err := decodeWoxImageWithTint(appIconImageSource, nil, 20)
+	if err != nil {
+		t.Fatalf("decode caption app icon: %v", err)
+	}
+	if image.Width != 20 || image.Height != 20 {
+		t.Fatalf("caption app icon size = %dx%d, want 20x20", image.Width, image.Height)
+	}
+	partial := 0
+	for y := 0; y < image.Height; y++ {
+		for x := 0; x < image.Width; x++ {
+			if alpha := image.RGBAAt(x, y).A; alpha > 0 && alpha < 255 {
+				partial++
+			}
+		}
+	}
+	if partial < 100 {
+		t.Fatalf("caption app icon partial-alpha pixels = %d, want antialiased edges", partial)
+	}
+}
+
 func TestEmbeddedAppIconUsesHighResolutionPNG(t *testing.T) {
 	image, err := decodeWoxImageWithTint(appIconImageSource, nil, 256)
 	if err != nil {

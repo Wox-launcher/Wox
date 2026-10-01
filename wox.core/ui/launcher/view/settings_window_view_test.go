@@ -69,22 +69,22 @@ func TestSettingsWindowWindowsSharesPageGutterWithTitleBar(t *testing.T) {
 	}
 }
 
-func TestSettingsWindowLinuxRetainsFullWidthTitleBarRow(t *testing.T) {
+func TestSettingsWindowLinuxSharesPageGutterWithTitleBar(t *testing.T) {
 	window := SettingsWindow(SettingsWindowProps{
 		Width: 1200, Height: 800, PageID: "ui", Platform: "linux", RailWidth: 240,
 		TitleBar: woxwidget.Container{Width: 1200, Height: SettingsTitleBarHeight},
 		Rail:     woxwidget.Container{Width: 240, Height: 760},
-		Page:     woxwidget.Container{Width: 960, Height: 760},
+		Page:     woxwidget.Container{Width: 960, Height: 780},
 	})
 
 	root := window.(woxwidget.Semantics).Child.(woxwidget.Container).Child.(woxwidget.Stack)
-	body := root.Children[0].Child.(woxwidget.Container)
-	layout, ok := body.Child.(woxwidget.Flex)
-	if !ok {
-		t.Fatalf("Linux settings layout type = %T, want woxwidget.Flex", body.Child)
+	layout := root.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Stack)
+	page := layout.Children[0]
+	if page.Left != 240 || page.Top != 20 || page.Top+page.Child.(woxwidget.Semantics).Child.(woxwidget.Container).Height != 800 {
+		t.Fatalf("Linux page frame = %#v, want top 20 and bottom at window edge", page)
 	}
-	if len(layout.Children) != 2 {
-		t.Fatalf("Linux settings row count = %d, want title bar and content", len(layout.Children))
+	if layout.Children[1].Top != SettingsTitleBarHeight || layout.Children[2].Top != 0 {
+		t.Fatal("Linux rail stays below the caption while the page gutter shares that row")
 	}
 }
 
@@ -93,6 +93,40 @@ func TestSettingsTitleBarMacLimitsDragAreaToRail(t *testing.T) {
 	drag := titleBar.Children[1].Child.(woxwidget.Gesture)
 	if width := drag.Child.(woxwidget.Container).Width; width != 240 {
 		t.Fatalf("macOS title-bar drag width = %v, want rail width 240", width)
+	}
+}
+
+func TestSettingsTitleBarLinuxContinuesRailAndPlacesTitleBesideIcon(t *testing.T) {
+	theme := woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 168, G: 168, B: 179, A: 255}}
+	icon := &woxui.Image{Width: 32, Height: 32}
+	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{
+		Width: 1200, RailWidth: 240, Title: "Wox Settings", TitleWidth: 160, Platform: "linux", AppIcon: icon, Theme: theme,
+	}, "", nil).(woxwidget.Stack)
+
+	divider := titleBar.Children[1]
+	line := divider.Child.(woxwidget.Container)
+	if divider.Left != 239 || line.Width != 1 || line.Height != SettingsTitleBarHeight || line.Color != settingsColorAlpha(theme.TextSecondary, 26) {
+		t.Fatalf("Linux title-bar rail divider = %#v, want continuation at the rail edge", divider)
+	}
+	iconSlot := titleBar.Children[2]
+	iconAlign := iconSlot.Child.(woxwidget.Align)
+	iconImage := iconAlign.Child.(woxwidget.Image)
+	if iconSlot.Left != 12 || iconAlign.Width != 20 || iconAlign.Height != SettingsTitleBarHeight || iconAlign.Vertical != 0.5 || iconImage.Source != icon || iconImage.Width != 20 || iconImage.Height != 20 {
+		t.Fatalf("Linux title-bar icon = %#v, want a 20px mark at the left of the rail column", iconSlot)
+	}
+	title := titleBar.Children[3]
+	titleAlignment, ok := title.Child.(woxwidget.Align)
+	if !ok || title.Left != 40 || title.Right != 46 || !title.StretchWidth || titleAlignment.Height != SettingsTitleBarHeight || titleAlignment.Vertical != 0.5 {
+		t.Fatalf("Linux title = %#v, want the caption beside the icon and clear of the close control", title)
+	}
+	closeButton := titleBar.Children[4]
+	if !closeButton.AnchorRight {
+		t.Fatal("Linux close control must stay anchored to the right")
+	}
+	for _, child := range titleBar.Children {
+		if fill, ok := child.Child.(woxwidget.Container); ok && fill.Width == 240 && fill.Height == SettingsTitleBarHeight && fill.Color.A != 0 {
+			t.Fatal("Linux title bar must not tint the rail column")
+		}
 	}
 }
 

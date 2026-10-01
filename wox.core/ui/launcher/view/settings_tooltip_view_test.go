@@ -1,6 +1,7 @@
 package view
 
 import (
+	"strings"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -72,6 +73,36 @@ func TestSettingsInlineTooltipOverlayFlipsBelowWhenTopOverflows(t *testing.T) {
 	if top < 18 {
 		t.Fatalf("tooltip top = %.0f, want below the anchor when the top side overflows", top)
 	}
+}
+
+func TestSettingsInlineTooltipWidthFollowsText(t *testing.T) {
+	short := settingsInlineTooltipContainer(t, "Hi")
+	medium := settingsInlineTooltipContainer(t, "用于显示或隐藏Wox的快捷键")
+	long := settingsInlineTooltipContainer(t, strings.Repeat("设置说明", 80))
+	if short.Width >= medium.Width {
+		t.Fatalf("tooltip widths = short %.0f medium %.0f, want the longer label to be wider", short.Width, medium.Width)
+	}
+	if short.Width >= 120 {
+		t.Fatalf("short tooltip width = %.0f, want it to hug the text", short.Width)
+	}
+	if long.Width > settingsInlineTooltipMaxWidth+0.5 {
+		t.Fatalf("long tooltip width = %.0f, want the native cap %.0f", long.Width, settingsInlineTooltipMaxWidth)
+	}
+	if long.Height <= medium.Height {
+		t.Fatalf("long tooltip height = %.0f, medium = %.0f, want the capped width to wrap", long.Height, medium.Height)
+	}
+}
+
+func settingsInlineTooltipContainer(t *testing.T, message string) woxwidget.Container {
+	t.Helper()
+	overlay, _, _ := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
+		Width: 900, Height: 640, Anchor: woxui.Rect{X: 520, Y: 180, Width: 14, Height: 14}, Message: message, Side: "top", Theme: woxcomponent.ControlTheme{},
+	})
+	container, ok := overlay.(woxwidget.Container)
+	if !ok {
+		t.Fatalf("overlay type = %T, want woxwidget.Container", overlay)
+	}
+	return container
 }
 
 func TestSettingsInlineTooltipOverlayReturnsNilForEmptyMessage(t *testing.T) {
