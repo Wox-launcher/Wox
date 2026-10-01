@@ -1,5 +1,7 @@
 package woxui
 
+import "math"
+
 // A floating material is one translucent backdrop placed behind a panel that
 // floats above other Go UI content in the same window: the launcher action
 // panel, dialogs, dropdown menus, context menus and tooltips. It blurs the Go
@@ -59,4 +61,36 @@ func opaqueFloatingMaterialTint(tint Color) Color {
 		tint.A = 255
 	}
 	return tint
+}
+
+// FloatingMaterialStyle adjusts only the sampled backdrop; tint and alpha stay independent.
+// Sigma is in logical units. Brightness and saturation are multipliers of the native result.
+type FloatingMaterialStyle struct {
+	Sigma      float32
+	Brightness float32
+	Saturation float32
+}
+
+func DefaultFloatingMaterialStyle() FloatingMaterialStyle {
+	return FloatingMaterialStyle{Sigma: floatingMaterialBlurSigma, Brightness: 1, Saturation: 1}
+}
+
+// Resolved bounds renderer work even when callers bypass theme schema validation.
+func (s *FloatingMaterialStyle) Resolved() FloatingMaterialStyle {
+	result := DefaultFloatingMaterialStyle()
+	if s == nil {
+		return result
+	}
+	for _, item := range []struct {
+		source float32
+		target *float32
+		limit  float32
+	}{
+		{s.Sigma, &result.Sigma, 64}, {s.Brightness, &result.Brightness, 2}, {s.Saturation, &result.Saturation, 2},
+	} {
+		if !math.IsNaN(float64(item.source)) && !math.IsInf(float64(item.source), 0) {
+			*item.target = max(0, min(item.source, item.limit))
+		}
+	}
+	return result
 }

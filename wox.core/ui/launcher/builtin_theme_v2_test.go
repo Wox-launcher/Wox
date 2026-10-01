@@ -20,7 +20,11 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 		if err := json.Unmarshal(data, &theme); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if theme.SchemaVersion != 2 || !theme.HasAuthoredStyles() || theme.MinWoxVersion != "2.4.3" {
+		minimum := "2.4.3"
+		if name == "glass" {
+			minimum = "2.4.6"
+		}
+		if theme.SchemaVersion != 2 || !theme.HasAuthoredStyles() || theme.MinWoxVersion != minimum {
 			t.Fatalf("%s is not a complete v2 theme", name)
 		}
 		oldData, err := os.ReadFile("../../common/testdata/theme_v1/" + name + ".json")
@@ -59,9 +63,8 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 				width := 0
 				expected.ToolbarBorderWidth = &width
 			}
-			if target[0] == "linux" && target[1] == "" {
-				// Ordinary Linux desktops now use rounded fallback chrome; Hyprland
-				// clears the override so its compositor keeps ownership of the material.
+			if target[0] == "linux" && (target[1] == "" || name == "glass") {
+				// Glass keeps its rounded outline on Hyprland now that Linux blur follows it.
 				radius := 8
 				expected.AppWindowChrome = true
 				expected.AppBorderRadius = &radius
@@ -90,7 +93,7 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 						}
 					}
 					if name == "glass" && field == "ActionContainerBackgroundColor" {
-						expected = "#15151558"
+						expected = "#1A1A1A3E"
 						if target[0] == "linux" {
 							expected = "#131518B2"
 						}

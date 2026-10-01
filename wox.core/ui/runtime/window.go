@@ -741,9 +741,10 @@ func (w *Window) SetTitleBarControls(controls TitleBarControls) error {
 	return nil
 }
 
-// SetWindowChrome disables native window material when custom is true so the Go
-// UI paints the outline. radius is the clip; nil keeps the default rounded shape.
-func (w *Window) SetWindowChrome(custom bool, radius *int) error {
+// SetWindowChrome clips the authored outline; nil radius keeps the default shape.
+// Linux can retain blur inside that outline. Passing false for backgroundBlur
+// keeps transparent image-theme margins clear. Other platforms retain their native policy.
+func (w *Window) SetWindowChrome(custom bool, radius *int, backgroundBlur ...bool) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
@@ -754,5 +755,5 @@ func (w *Window) SetWindowChrome(custom bool, radius *int) error {
 		}
 		value = float32(*radius)
 	}
-	return w.native.setWindowChrome(custom, value)
+	return w.native.setWindowChrome(custom, value, backgroundBlur...)
 }

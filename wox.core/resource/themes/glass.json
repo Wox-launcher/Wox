@@ -84,10 +84,20 @@
     "ToolbarBackgroundColor": "#0D0D0DA5",
     "variants": {
       "hyprland": {
-        "AppBorderRadius": null,
         "AppBackgroundColor": "#16161AF9",
-        "BaseBackgroundColor": "#16161AF9",
-        "ToolbarBackgroundColor": "#15151AB3"
+        "ToolbarBackgroundColor": "#15151AB3",
+        "backgroundBlur": {
+          "AppBackgroundColor": "#121215FA",
+          "BaseBackgroundColor": "#15151AB3"
+        }
+      },
+      "kde": {
+        "backgroundBlur": {
+          "AppBackgroundColor": "#050505BC",
+          "ActionContainerBackgroundColor": "#0A0A0A98",
+          "ToolbarBackgroundColor": "#16161600",
+          "ToolbarBlurBrightness": 0.3
+        }
       }
     }
   },

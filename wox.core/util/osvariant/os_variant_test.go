@@ -25,10 +25,19 @@ func TestWindowsPlatformVariantForBuildNumber(t *testing.T) {
 }
 
 func TestLinuxPlatformVariantForSession(t *testing.T) {
-	if got := linuxPlatformVariantForSession(true); got != "hyprland" {
-		t.Fatalf("linuxPlatformVariantForSession(true) = %q, want hyprland", got)
+	if got := linuxPlatformVariantForSession(true, false, false); got != "hyprland" {
+		t.Fatalf("linuxPlatformVariantForSession(true, false, false) = %q, want hyprland", got)
 	}
-	if got := linuxPlatformVariantForSession(false); got != "" {
-		t.Fatalf("linuxPlatformVariantForSession(false) = %q, want empty", got)
+	if got := linuxPlatformVariantForSession(false, false, false); got != "" {
+		t.Fatalf("linuxPlatformVariantForSession(false, false, false) = %q, want empty", got)
+	}
+}
+
+func TestLinuxDesktopThemeVariants(t *testing.T) {
+	if got := linuxPlatformVariantForSession(false, true, false); got != "kde" {
+		t.Fatalf("KDE variant = %q", got)
+	}
+	if got := linuxPlatformVariantForSession(false, false, true); got != "gnome" {
+		t.Fatalf("GNOME variant = %q", got)
 	}
 }

@@ -123,11 +123,12 @@ type Host struct {
 	keyedDamage map[Key]bool
 	// renderedMaterials are the renderer-blurred floating surfaces of the last presented
 	// frame (see DisplayList.RenderedFloatingMaterialRects). Damage under one of them
-	// covers that surface plus FloatingMaterialBlurMargin so the blur can resample;
+	// covers that surface plus its sample margin so the blur can resample;
 	// adjacent cards are not joined into one rectangle.
 	renderedMaterials []woxui.Rect
 	// Native double buffering can return damage from the frame before the last one.
-	previousRenderedMaterials []woxui.Rect
+	previousRenderedMaterials              []woxui.Rect
+	materialMargin, previousMaterialMargin float32
 }
 
 // NewHost creates a retained host whose builder runs once per invalidated frame.
@@ -318,10 +319,11 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		damage = unionDamageRects(damage, boundaryDamage)
 		damage = unionDamageRects(damage, removedDamage)
 		materials := append(h.previousRenderedMaterials, h.renderedMaterials...)
+		margin := max(h.materialMargin, h.previousMaterialMargin)
 		if len(materials) > 0 {
-			materials = currentMaterialBounds(root, materials)
+			materials = currentMaterialBounds(root, materials, &margin)
 		}
-		damage = coverRenderedMaterials(damage, materials, woxui.FloatingMaterialBlurMargin, frame.Scale)
+		damage = coverRenderedMaterials(damage, materials, margin, frame.Scale)
 	}
 	if damage.Width > 0 && damage.Height > 0 {
 		damage = expandDamageRect(damage, 4)
@@ -413,6 +415,8 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	debugFrame.draw(displayList)
 	h.previousRenderedMaterials = h.renderedMaterials
 	h.renderedMaterials = displayList.RenderedFloatingMaterialRects()
+	h.previousMaterialMargin = h.materialMargin
+	h.materialMargin = displayList.FloatingMaterialSampleMargin()
 	h.recordFramePhase(frameID, woxui.FrameMetricDrawRecord, time.Since(drawStart))
 
 	accessibilityStart := time.Now()

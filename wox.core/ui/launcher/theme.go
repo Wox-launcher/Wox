@@ -148,6 +148,9 @@ type themeData struct {
 	PreviewPropertyContentColor          string
 	ToolbarFontColor                     string
 	ToolbarBackgroundColor               string
+	ToolbarBlurSigma                     *float64 `json:",omitempty"`
+	ToolbarBlurBrightness                *float64 `json:",omitempty"`
+	ToolbarBlurSaturation                *float64 `json:",omitempty"`
 	ToolbarBorderColor                   string
 	ToolbarBorderWidth                   *int
 	ToolbarPaddingLeft                   int
@@ -275,6 +278,7 @@ type uiPalette struct {
 	previewPropertyTitle   woxui.Color
 	previewPropertyContent woxui.Color
 	toolbarBackground      woxui.Color
+	toolbarMaterial        *woxui.FloatingMaterialStyle
 	toolbarText            woxui.Color
 	toolbarPadding         woxwidget.Insets
 }
@@ -404,6 +408,7 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		PreviewPropertyTitle:   palette.previewPropertyTitle,
 		PreviewPropertyContent: palette.previewPropertyContent,
 		ToolbarBackground:      palette.toolbarBackground,
+		ToolbarMaterial:        palette.toolbarMaterial,
 		ToolbarText:            palette.toolbarText,
 	}
 }
@@ -416,11 +421,11 @@ func (theme themeData) usesCustomWindowChrome() bool {
 // opaqueWindowBackground disables unsupported desktop translucency without changing component blending.
 // A fully transparent fill is an image-theme frame, not a wash. Forcing its alpha turns #00000000
 // into a black rectangle behind the frame image's clear margin. Partial washes still become opaque.
-func opaqueWindowBackground(color woxui.Color, customChrome bool) woxui.Color {
+func opaqueWindowBackground(color woxui.Color) woxui.Color {
 	if color.A == 0 {
 		return color
 	}
-	if runtime.GOOS == "linux" && (customChrome || !woxui.HasNativeWindowMaterial()) {
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() {
 		color.A = 255
 	}
 	return color
@@ -436,7 +441,7 @@ func defaultPalette() uiPalette {
 		toolbarBorder:           woxui.Color{R: 166, G: 176, B: 190, A: 26},
 		actionBorder:            woxui.Color{R: 85, G: 96, B: 112, A: 150},
 
-		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}, false),
+		background:             opaqueWindowBackground(woxui.Color{R: 24, G: 29, B: 38, A: 242}),
 		appPadding:             woxwidget.UniformInsets(10),
 		queryBackground:        woxui.Color{R: 56, G: 67, B: 82, A: 230},
 		queryRadius:            8,
@@ -495,7 +500,7 @@ func (a *App) applyTheme(theme themeData) {
 	onboardingView := a.onboardingView
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
-		if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius); err != nil {
+		if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius, a.palette.background.A != 0); err != nil {
 			util.GetLogger().Error(context.Background(), fmt.Sprintf("apply theme window chrome: %v", err))
 		}
 		_ = a.applyWindowBounds()
@@ -665,7 +670,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		selectedBorderLeftColor: parseThemeColor(theme.ResultItemActiveBorderLeftColor, parseThemeColor(theme.QueryBoxCursorColor, fallback.cursor)),
 		toolbarBorder:           parseThemeColor(theme.ToolbarBorderColor, toolbarBorder),
 
-		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background), theme.usesCustomWindowChrome()),
+		background:             opaqueWindowBackground(parseThemeColor(theme.AppBackgroundColor, fallback.background)),
 		appPadding:             themeInsets(theme.AppPaddingLeft, theme.AppPaddingTop, theme.AppPaddingRight, theme.AppPaddingBottom),
 		queryBackground:        parseThemeColor(theme.QueryBoxBackgroundColor, fallback.queryBackground),
 		queryRadius:            max(float32(0), float32(theme.QueryBoxBorderRadius)),
@@ -698,6 +703,7 @@ func paletteForTheme(theme themeData) uiPalette {
 		previewPropertyTitle:   parseThemeColor(theme.PreviewPropertyTitleColor, fallback.previewPropertyTitle),
 		previewPropertyContent: parseThemeColor(theme.PreviewPropertyContentColor, fallback.previewPropertyContent),
 		toolbarBackground:      parseThemeColor(theme.ToolbarBackgroundColor, fallback.toolbarBackground),
+		toolbarMaterial:        toolbarMaterialForTheme(theme),
 		toolbarText:            parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText),
 		toolbarPadding:         themeInsets(theme.ToolbarPaddingLeft, 0, theme.ToolbarPaddingRight, 0),
 	}
@@ -841,4 +847,22 @@ func optionalThemeColor(value string) *woxui.Color {
 	}
 	parsed := parseThemeColor(value, woxui.Color{})
 	return &parsed
+}
+
+// toolbarMaterialForTheme keeps omitted controls on the platform's existing material.
+func toolbarMaterialForTheme(theme themeData) *woxui.FloatingMaterialStyle {
+	if theme.ToolbarBlurSigma == nil && theme.ToolbarBlurBrightness == nil && theme.ToolbarBlurSaturation == nil {
+		return nil
+	}
+	style := woxui.DefaultFloatingMaterialStyle()
+	if theme.ToolbarBlurSigma != nil {
+		style.Sigma = float32(*theme.ToolbarBlurSigma)
+	}
+	if theme.ToolbarBlurBrightness != nil {
+		style.Brightness = float32(*theme.ToolbarBlurBrightness)
+	}
+	if theme.ToolbarBlurSaturation != nil {
+		style.Saturation = float32(*theme.ToolbarBlurSaturation)
+	}
+	return &style
 }

@@ -501,7 +501,7 @@ func (a *App) start() error {
 	if err := a.window.SetAppearance(a.palette.isDark()); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
-	if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius); err != nil {
+	if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius, a.palette.background.A != 0); err != nil {
 		return fmt.Errorf("apply Wox UI chrome: %w", err)
 	}
 	if err := a.window.SetFontFamily(a.generalSettings.Data().AppFontFamily); err != nil {

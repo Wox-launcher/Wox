@@ -1073,11 +1073,11 @@ func (m *Manager) parseTheme(themeJson string) (common.Theme, error) {
 }
 
 func (m *Manager) resolvePlatformTheme(ctx context.Context, theme common.Theme) common.Theme {
-	return resolvePlatformThemeForTarget(ctx, theme, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+	return resolvePlatformThemeForTarget(ctx, theme, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 }
 
-func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, platformName string, variantName string) common.Theme {
-	resolved, err := theme.ResolveForTarget(platformName, variantName)
+func resolvePlatformThemeForTarget(ctx context.Context, theme common.Theme, platformName string, variantName string, capabilities ...string) common.Theme {
+	resolved, err := theme.ResolveForTarget(platformName, variantName, capabilities...)
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("resolve theme %s: %s", theme.ThemeId, err))
 		theme.Windows, theme.MacOS, theme.Linux = nil, nil, nil

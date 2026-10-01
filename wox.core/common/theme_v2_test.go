@@ -377,8 +377,13 @@ func TestBuiltinThemesWindowChrome(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius != nil {
-			t.Fatalf("%s hyprland disabled compositor material", name)
+		if name == "glass" {
+			// Rounded chrome no longer disables compositor blur on Linux.
+			if !hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius == nil || *hyprland.AppBorderRadius != 8 {
+				t.Fatal("glass hyprland lost its rounded outline")
+			}
+		} else if hyprland.UsesCustomWindowChrome() || hyprland.AppBorderRadius != nil {
+			t.Fatalf("%s hyprland changed its authored chrome", name)
 		}
 	}
 	for _, name := range []string{"jade"} {

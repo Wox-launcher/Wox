@@ -63,10 +63,11 @@ type DisplayList struct {
 	// Renderer-backed platforms keep launcher chrome on the main surface until floating panels paint.
 	pendingEmbeddedOverlay Rect
 	// floatingMaterials lets the widget host widen damage under a blurred surface using
-	// FloatingMaterialBlurMargin (see RenderedFloatingMaterialRects). Declared
+	// the recorded sample margin (see RenderedFloatingMaterialRects). Declared
 	// surfaces are kept even when damage culling skips their command, because
 	// the next frame's damage depends on them.
 	floatingMaterials []Rect
+	materialMargin    float32
 	caretPatch        Rect
 	caretCapture      int  // One-based command index; zero disables native backdrop capture.
 	caretStable       bool // Both swap-chain buffers must have seen the unchanged background.
@@ -209,7 +210,7 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 func displayCommandsEqual(left, right displayCommand) bool {
 	if left.caret != right.caret || left.caretVisible != right.caretVisible || left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
-		left.color != right.color || left.edge != right.edge || left.text != right.text || left.style.Weight != right.style.Weight ||
+		left.material != right.material || left.color != right.color || left.edge != right.edge || left.text != right.text || left.style.Weight != right.style.Weight ||
 		left.style.Family != right.style.Family || left.style.Italic != right.style.Italic ||
 		!displayListFloatsEqual(left.style.Size, right.style.Size) || !displayListFloatsEqual(left.rotation, right.rotation) {
 		return false
@@ -270,6 +271,7 @@ type displayCommand struct {
 	stroke       float32
 	color        Color
 	edge         Color
+	material     FloatingMaterialStyle
 	text         string
 	style        TextStyle
 	image        *Image
@@ -281,10 +283,15 @@ type displayCommand struct {
 // order. The renderer samples previously drawn content inside the current clip stack;
 // unsupported platforms paint just the tint and edge. Native WebView pixels cannot be
 // sampled, so surfaces above them use an opaque tint.
-func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Color) {
+func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Color, styles ...*FloatingMaterialStyle) {
 	if rect.Width <= 0 || rect.Height <= 0 {
 		return
 	}
+	var style *FloatingMaterialStyle
+	if len(styles) > 0 {
+		style = styles[0]
+	}
+	material := style.Resolved()
 	switch nativeFloatingMaterialMode() {
 	case floatingMaterialPainted:
 		if tint.A != 0 {
@@ -310,16 +317,17 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 			tint = opaqueFloatingMaterialTint(tint)
 		}
 		if d.shouldRecord(rect) {
-			d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge})
+			d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge, material: material})
 		}
 		d.floatingMaterials = append(d.floatingMaterials, rect)
+		d.materialMargin = max(d.materialMargin, 3*material.Sigma)
 		return
 	}
 }
 
 // RenderedFloatingMaterialRects returns the surfaces this frame backed with a renderer
 // blur, in logical coordinates and without the sample halo. The host applies
-// FloatingMaterialBlurMargin when widening later damage so a change under a surface
+// FloatingMaterialSampleMargin when widening later damage so a change under a surface
 // covers that surface, without joining adjacent cards into one axis-aligned rect.
 // Platforms without a renderer blur return nil.
 func (d *DisplayList) RenderedFloatingMaterialRects() []Rect {
@@ -574,3 +582,5 @@ func (d *DisplayList) EndEdgeFade(rect Rect, top, bottom float32) {
 		d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
 	}
 }
+
+func (d *DisplayList) FloatingMaterialSampleMargin() float32 { return d.materialMargin }

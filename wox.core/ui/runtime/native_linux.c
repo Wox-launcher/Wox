@@ -182,6 +182,8 @@ typedef struct {
   GLint compose_radius;
   GLint compose_source;
   GLint compose_scale;
+  GLint compose_brightness;
+  GLint compose_saturation;
   bool software_gl;
   bool blur_unavailable;
   bool ready;
@@ -263,6 +265,7 @@ struct WoxLinuxWindow {
   bool application_window;
   bool screenshot_window;
   bool custom_window_chrome;
+  bool background_blur_disabled;
   float corner_radius;
   bool topmost;
   bool layer_shell_enabled;
@@ -673,8 +676,8 @@ static void on_webview_action_panel_message(gpointer manager, gpointer javascrip
 static const char *const wox_webview_radius_key = "wox-webview-corner-radius";
 static const char *const wox_webview_css_key = "wox-webview-corner-css";
 
-// rounded_rect_region builds a device-pixel mask so WebKit's native GdkWindow can
-// stay concentric with the Go preview shell. GTK CSS alone does not clip WebKitGTK.
+// rounded_rect_region builds a mask in the supplied coordinate space. GTK CSS
+// alone does not clip native child windows or the top-level window silhouette.
 static cairo_region_t *rounded_rect_region(int width, int height, float radius) {
   if (width <= 0 || height <= 0) {
     return cairo_region_create();
@@ -1036,6 +1039,8 @@ static const char *const compose_fragment_source =
     "#version 330 core\n"
     "uniform sampler2D u_original;\n"
     "uniform sampler2D u_blurred;\n"
+    "uniform float u_brightness;\n"
+    "uniform float u_saturation;\n"
     "uniform vec4 u_rect;\n"
     "uniform float u_radius;\n"
     "uniform vec4 u_source;\n"
@@ -1051,7 +1056,10 @@ static const char *const compose_fragment_source =
     "  float coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
     "  vec2 pixel = (u_rect.xy + v_local) * u_scale;\n"
     "  vec2 uv = vec2((pixel.x - u_source.x) / u_source.z, 1.0 - (pixel.y - u_source.y) / u_source.w);\n"
-    "  fragment_color = mix(texture(u_original, uv), texture(u_blurred, uv), coverage);\n"
+    "  vec4 blurred = texture(u_blurred, uv);\n"
+    "  float luma = dot(blurred.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
+    "  blurred.rgb = clamp(mix(vec3(luma), blurred.rgb, u_saturation) * u_brightness, vec3(0.0), vec3(blurred.a));\n"
+    "  fragment_color = mix(texture(u_original, uv), blurred, coverage);\n"
     "}\n";
 
 typedef void (*WoxMainFunction)(void *data);
@@ -2788,11 +2796,8 @@ static void apply_linux_window_corner_shape(WoxLinuxWindow *window) {
     gdk_window_set_opaque_region(gdk_window, NULL);
     return;
   }
-  int scale = gtk_widget_get_scale_factor(window->window);
-  if (scale < 1) {
-    scale = 1;
-  }
-  cairo_region_t *region = rounded_rect_region(gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window), radius * (float)scale);
+  // GDK shape dimensions and the authored radius are both surface-local logical units.
+  cairo_region_t *region = rounded_rect_region(gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window), radius);
   if (!window->pointer_passthrough) {
     gtk_widget_shape_combine_region(window->window, region);
   }
@@ -2805,15 +2810,12 @@ static void apply_linux_window_corner_shape(WoxLinuxWindow *window) {
 // bind on the parent surface is a protocol error. GTK also recreates the
 // Wayland surface across hide/show, so a stale effect object must be dropped.
 static void apply_linux_background_effect(WoxLinuxWindow *window) {
-  if (window == NULL || window->closed || window->window == NULL || window->screenshot_window || window->custom_window_chrome) {
-    if (window != NULL && window->custom_window_chrome) {
-      destroy_linux_background_effect(window);
-      apply_linux_window_corner_shape(window);
-    }
+  if (window == NULL || window->closed || window->window == NULL) {
     return;
   }
   apply_linux_window_corner_shape(window);
-  if (!wox_linux_background_blur_available()) {
+  if (window->screenshot_window || window->background_blur_disabled || !wox_linux_background_blur_available()) {
+    destroy_linux_background_effect(window);
     return;
   }
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
@@ -2839,7 +2841,7 @@ static void apply_linux_background_effect(WoxLinuxWindow *window) {
   if (window->background_effect == NULL) {
     return;
   }
-  wox_linux_background_effect_update(window->background_effect, gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window));
+  wox_linux_background_effect_update(window->background_effect, gdk_window_get_width(gdk_window), gdk_window_get_height(gdk_window), window->corner_radius);
 }
 
 // destroy_linux_background_effect drops protocol objects before GTK destroys the wl_surface.
@@ -3125,6 +3127,7 @@ static void on_scale_changed(GObject *object, GParamSpec *specification, gpointe
   WoxLinuxWindow *window = data;
   if (!window->closed) {
     trace_linux_window_geometry(window, "scale_changed");
+    apply_linux_background_effect(window);
     gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
   }
 }
@@ -3965,6 +3968,7 @@ int32_t wox_linux_window_set_hide_on_blur(WoxLinuxWindow *window, int32_t enable
 typedef struct {
   WoxLinuxWindow *window;
   bool enabled;
+  bool background_blur;
   float radius;
   int32_t result;
 } WoxChromeCall;
@@ -3976,6 +3980,7 @@ static void set_window_chrome_main(void *data) {
     return;
   }
   call->window->custom_window_chrome = call->enabled;
+  call->window->background_blur_disabled = !call->background_blur;
   call->window->corner_radius = linux_custom_chrome_corner_radius(call->enabled, call->radius);
   apply_linux_background_effect(call->window);
   if (call->window->gl_area != NULL) {
@@ -3983,11 +3988,11 @@ static void set_window_chrome_main(void *data) {
   }
 }
 
-int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom, float radius) {
+int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custom, float radius, int32_t background_blur) {
   if (window == NULL) {
     return -1;
   }
-  WoxChromeCall call = {.window = window, .enabled = custom != 0, .radius = radius};
+  WoxChromeCall call = {.window = window, .enabled = custom != 0, .radius = radius, .background_blur = background_blur != 0};
   return run_on_main_sync(set_window_chrome_main, &call) ? call.result : -1;
 }
 
@@ -5524,6 +5529,8 @@ static bool ensure_blur_programs(WoxLinuxRenderer *renderer) {
   renderer->compose_radius = glGetUniformLocation(renderer->blur_compose_program, "u_radius");
   renderer->compose_source = glGetUniformLocation(renderer->blur_compose_program, "u_source");
   renderer->compose_scale = glGetUniformLocation(renderer->blur_compose_program, "u_scale");
+  renderer->compose_brightness = glGetUniformLocation(renderer->blur_compose_program, "u_brightness");
+  renderer->compose_saturation = glGetUniformLocation(renderer->blur_compose_program, "u_saturation");
   glUseProgram(renderer->blur_program);
   glUniform1i(glGetUniformLocation(renderer->blur_program, "u_texture"), 0);
   glUseProgram(renderer->blur_blit_program);
@@ -5569,8 +5576,8 @@ static bool bind_texture_as_blur_target(WoxLinuxRenderer *renderer, GLuint textu
 // blurred copy of what the frame has drawn there so far. The copy is downsampled, run
 // through a separable Gaussian, then written back through a rounded mask so the corners
 // of the bounding box keep their sharp pixels. Failure leaves the target as it was.
-static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin) {
-  if (renderer == NULL || renderer->software_gl || renderer->frame_texture == 0 || blur_sigma <= 0.0f) {
+static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation) {
+  if (renderer == NULL || renderer->software_gl || renderer->frame_texture == 0 || (blur_sigma <= 0.0f && brightness == 1.0f && saturation == 1.0f)) {
     return false;
   }
   if (!ensure_blur_programs(renderer)) {
@@ -5608,6 +5615,8 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
   } else if (physical_sigma < 8.0f) {
     factor = 2;
   }
+  // Keep the three-sigma kernel inside the shader tap budget at high DPI.
+  factor = MAX(factor, (int)ceilf(physical_sigma / 10.0f));
   int down_width = copy_width / factor;
   int down_height = copy_height / factor;
   if (down_width < 1) {
@@ -5680,6 +5689,8 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
   glUniform1f(renderer->compose_radius, radius);
   glUniform4f(renderer->compose_source, (float)left, (float)top, (float)copy_width, (float)copy_height);
   glUniform1f(renderer->compose_scale, scale);
+  glUniform1f(renderer->compose_brightness, brightness);
+  glUniform1f(renderer->compose_saturation, saturation);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -5695,7 +5706,7 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
 // (WebView pixels are a sibling compositor layer), so overlay tints drop transparency.
 // Software GL would convolve on the CPU every repaint and keeps the authored alpha over
 // the unblurred Go pixels already in the buffer.
-int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
@@ -5703,8 +5714,8 @@ int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, floa
     return 0;
   }
   WoxLinuxRenderer *renderer = window->active_renderer;
-  if (renderer == &window->renderer && !renderer->software_gl && blur_sigma > 0.0f) {
-    blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin);
+  if (renderer == &window->renderer && !renderer->software_gl && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
+    blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, brightness, saturation);
   }
   if (window->embedded_surface_overlay_active && tint_alpha != 0) {
     tint_alpha = 255;

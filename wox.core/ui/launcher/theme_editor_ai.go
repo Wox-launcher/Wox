@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"wox/common"
@@ -431,9 +430,8 @@ func validateThemeEditorAIPatch(raw map[string]any, values map[string]string, re
 		}
 		value = strings.TrimSpace(value)
 		if value != "" && isV2Theme(raw) && themeEditorNumericToken(key) {
-			n, err := strconv.Atoi(value)
-			if err != nil || n < 0 {
-				return nil, fmt.Errorf("invalid integer for %s", key)
+			if !validThemeEditorNumber(key, value) {
+				return nil, fmt.Errorf("invalid number for %s", key)
 			}
 		} else if value != "" {
 			if _, ok := decodeThemeColor(value); !ok {

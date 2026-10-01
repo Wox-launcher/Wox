@@ -5233,7 +5233,7 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
 }
 
 // Paint in display-list order so floating surfaces share normal clipping and stacking.
-int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
   }
@@ -5241,9 +5241,9 @@ int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, fl
   if (width <= 0.0f || height <= 0.0f) {
     return 0;
   }
-  if (!window->embedded_surface_overlay_active && blur_sigma > 0.0f) {
+  if (!window->embedded_surface_overlay_active && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
     // A failed blur leaves the backdrop intact; the authored tint still paints.
-    wox_darwin_blur_material(renderer->context, renderer->scale, CGRectMake(x, y, width, height), radius, blur_sigma, blur_margin, tint_red, tint_green, tint_blue);
+    wox_darwin_blur_material(renderer->context, renderer->scale, CGRectMake(x, y, width, height), radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
   }
   if (window->embedded_surface_overlay_active && tint_alpha != 0) {
     tint_alpha = 255;
@@ -5638,9 +5638,9 @@ int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float sca
   CGContextSetBlendMode(context, kCGBlendModeNormal);
   if (mode != 0) {
     wox_darwin_window_set_clip_rect(&window, 0, 26, 80, 54);
-    wox_darwin_window_floating_material(&window, -8, 16, 88, 64, 10, 12, 36, 60, 80, 100, 64, 0, 0, 0, 0);
+    wox_darwin_window_floating_material(&window, -8, 16, 88, 64, 10, 12, 36, 1, 1, 60, 80, 100, 64, 0, 0, 0, 0);
     if (mode == 2) {
-      wox_darwin_window_floating_material(&window, 24, 36, 40, 32, 6, 12, 36, 100, 80, 60, 64, 0, 0, 0, 0);
+      wox_darwin_window_floating_material(&window, 24, 36, 40, 32, 6, 12, 36, 1, 1, 100, 80, 60, 64, 0, 0, 0, 0);
     }
     wox_darwin_window_clear_clip(&window);
   }

@@ -8,8 +8,8 @@
 // Blur only the physical sample region, leaving all output clipping to CoreGraphics.
 // A half-logical-resolution sample and three box passes approximate the shared
 // Gaussian without a GPU device or persistent window-sized scratch buffers.
-bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, float radius, float sigma, float margin, uint8_t red, uint8_t green, uint8_t blue) {
-  if (context == NULL || scale <= 0 || sigma <= 0 || CGRectIsEmpty(bounds)) {
+bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, float radius, float sigma, float margin, float brightness, float saturation, uint8_t red, uint8_t green, uint8_t blue) {
+  if (context == NULL || scale <= 0 || (sigma <= 0 && brightness == 1 && saturation == 1) || CGRectIsEmpty(bounds)) {
     return false;
   }
   size_t width = CGBitmapContextGetWidth(context);
@@ -30,8 +30,9 @@ bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, 
   size_t region_height = bottom - top;
   // Blur removes detail at this scale anyway; avoid CPU convolution and tone mapping
   // at Retina resolution for every frame of a scrolling result list.
-  size_t sample_width = fmax(1, ceil(region_width / scale / 2));
-  size_t sample_height = fmax(1, ceil(region_height / scale / 2));
+  float sample_factor = sigma < 2 ? 1 : scale * 2;
+  size_t sample_width = fmax(1, ceil(region_width / sample_factor));
+  size_t sample_height = fmax(1, ceil(region_height / sample_factor));
   size_t sample_stride = sample_width * 4;
   size_t size = sample_stride * sample_height;
   uint8_t *source = malloc(size);
@@ -71,6 +72,14 @@ bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, 
     for (int channel = 0; channel < 3; channel++) {
       float value = 0.125f * (blurred[offset + channel] + luma) + (tint[channel] - 0.125f * (tint[channel] + tint_luma)) * alpha;
       blurred[offset + channel] = (uint8_t)fminf(blurred[offset + 3], fmaxf(0, roundf(value)));
+    }
+    // Keep the original alpha: these controls alter the sampled light, not an overlay tint.
+    if (brightness != 1.0f || saturation != 1.0f) {
+      luma = 0.2126f * blurred[offset + 2] + 0.7152f * blurred[offset + 1] + 0.0722f * blurred[offset];
+      for (int channel = 0; channel < 3; channel++) {
+        float value = brightness * (luma + saturation * (blurred[offset + channel] - luma));
+        blurred[offset + channel] = (uint8_t)fminf(blurred[offset + 3], fmaxf(0, roundf(value)));
+      }
     }
   }
   CGColorSpaceRef color_space = CGBitmapContextGetColorSpace(context);

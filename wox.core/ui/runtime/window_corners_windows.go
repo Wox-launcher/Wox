@@ -16,7 +16,7 @@ import (
 var cornerSetWindowRgn = syscall.NewLazyDLL("user32.dll").NewProc("SetWindowRgn")
 var cornerCreateRoundRectRgn = syscall.NewLazyDLL("gdi32.dll").NewProc("CreateRoundRectRgn")
 
-func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
+func (w *platformWindow) setWindowChrome(custom bool, radius float32, backgroundBlur ...bool) error {
 	return w.call(windowCommand{kind: windowCommandSetWindowChrome, customChrome: custom, cornerRadius: radius}).err
 }
 

@@ -33,7 +33,7 @@ type themeSchema struct {
 	colors  func(Theme) map[string]string
 	parse   func([]byte) (Theme, error)
 	marshal func(Theme) ([]byte, error)
-	resolve func(Theme, string, string) (Theme, error)
+	resolve func(Theme, string, string, ...string) (Theme, error)
 }
 
 var themeSchemas = map[int]themeSchema{}
@@ -105,7 +105,7 @@ func (t Theme) UsesCustomWindowChrome() bool {
 }
 
 // ResolveForTarget lets each schema apply platform overrides before its own defaults.
-func (t Theme) ResolveForTarget(platform, variant string) (Theme, error) {
+func (t Theme) ResolveForTarget(platform, variant string, capabilities ...string) (Theme, error) {
 	version := t.SchemaVersion
 	if version == 0 {
 		version = 1
@@ -117,7 +117,7 @@ func (t Theme) ResolveForTarget(platform, variant string) (Theme, error) {
 	if schema.resolve == nil {
 		return t, nil
 	}
-	return schema.resolve(t, platform, variant)
+	return schema.resolve(t, platform, variant, capabilities...)
 }
 
 // EnsureWoxVersionSupported uses the same semantic-version floor as plugins.

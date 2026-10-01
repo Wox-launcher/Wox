@@ -2982,7 +2982,7 @@
   "ui_ai_mcp_empty": "Nenhum servidor MCP configurado. Adicione um servidor para começar.",
   "ui_theme_editor_search_properties": "Pesquisar propriedades…",
   "ui_theme_editor_invalid_geometry": "Insira um número inteiro não negativo.",
-  "ui_theme_editor_chrome_help": "Personalizar as bordas ou os cantos da janela desativa o efeito de transparência acrílica do sistema. A transparência das cores e os efeitos acrílicos no aplicativo continuam disponíveis. Redefina as três propriedades da borda da janela para restaurar a aparência do sistema.",
+  "ui_theme_editor_chrome_help": "Bordas ou cantos personalizados desativam o material de fundo do sistema. A transparência das cores e o desfoque dentro do aplicativo continuam disponíveis. Redefina as três propriedades da borda da janela para restaurar a aparência do sistema.",
   "ui_theme_editor_background_opacity": "Opacidade",
   "ui_theme_editor_token_action_border": "cor da borda",
   "ui_theme_editor_window_border": "Cor da borda",
@@ -3055,5 +3055,10 @@
   "ui_theme_editor_ai_no_models": "Configure um provedor nas configurações de IA primeiro.",
   "ui_theme_editor_ai_undo": "Desfazer alteração da IA",
   "ui_theme_editor_ai_done": "Aplicado ao rascunho. Continue ajustando ou salve.",
-  "ui_theme_editor_ai_failed": "Não foi possível aplicar a sugestão."
+  "ui_theme_editor_ai_failed": "Não foi possível aplicar a sugestão.",
+  "ui_theme_material_sigma": "Barra de ferramentas · intensidade do desfoque (0–64)",
+  "ui_theme_material_brightness": "Barra de ferramentas · brilho do desfoque (0–2)",
+  "ui_theme_material_saturation": "Barra de ferramentas · saturação do desfoque (0–2)",
+  "ui_theme_editor_invalid_material": "Insira um número dentro do intervalo exibido.",
+  "ui_theme_editor_chrome_help_linux": "Bordas e cantos personalizados podem manter o desfoque de fundo do sistema. Se o ambiente de trabalho não oferecer suporte ao desfoque, os fundos translúcidos das janelas se tornam opacos. O desfoque dentro do aplicativo não é afetado."
 }

@@ -181,12 +181,15 @@ type ThemeSchemaV2 struct {
 	ActionItemActiveHotkeyBackgroundColor *string `json:",omitempty"`
 	ActionItemActiveHotkeyBorderColor     *string `json:",omitempty"`
 
-	ToolbarFontColor       *string `json:",omitempty"`
-	ToolbarBackgroundColor *string `json:",omitempty"`
-	ToolbarBorderColor     *string `json:",omitempty"`
-	ToolbarBorderWidth     *int    `json:",omitempty"`
-	ToolbarPaddingLeft     *int    `json:",omitempty"`
-	ToolbarPaddingRight    *int    `json:",omitempty"`
+	ToolbarFontColor       *string  `json:",omitempty"`
+	ToolbarBackgroundColor *string  `json:",omitempty"`
+	ToolbarBlurSigma       *float64 `json:",omitempty"`
+	ToolbarBlurBrightness  *float64 `json:",omitempty"`
+	ToolbarBlurSaturation  *float64 `json:",omitempty"`
+	ToolbarBorderColor     *string  `json:",omitempty"`
+	ToolbarBorderWidth     *int     `json:",omitempty"`
+	ToolbarPaddingLeft     *int     `json:",omitempty"`
+	ToolbarPaddingRight    *int     `json:",omitempty"`
 
 	Windows *ThemePlatformOverride `json:"windows,omitempty"`
 	MacOS   *ThemePlatformOverride `json:"macos,omitempty"`
@@ -277,7 +280,7 @@ func decodeThemeV2(data []byte, t *Theme) error {
 }
 
 // resolveThemeV2 merges authored platform overrides before deriving any default colors or geometry.
-func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
+func resolveThemeV2(t Theme, platform, variant string, capabilities ...string) (Theme, error) {
 	if platform == "darwin" {
 		platform = "macos"
 	}
@@ -295,13 +298,12 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 			return Theme{}, err
 		}
 	}
-	mergeThemeV2OverrideFields(raw, node)
-	if data := node["variants"]; len(data) > 0 {
-		var variants map[string]map[string]json.RawMessage
-		if err := json.Unmarshal(data, &variants); err != nil {
-			return Theme{}, err
-		}
-		mergeThemeV2OverrideFields(raw, variants[variant])
+	layers, err := themeVariantLayers(node, variant, capabilities)
+	if err != nil {
+		return Theme{}, err
+	}
+	for _, fields := range layers {
+		mergeThemeV2OverrideFields(raw, fields)
 	}
 	delete(raw, "windows")
 	delete(raw, "macos")
@@ -315,7 +317,7 @@ func resolveThemeV2(t Theme, platform, variant string) (Theme, error) {
 		return Theme{}, err
 	}
 	// Keep the original authored source alongside effective fields for lossless editing and sync.
-	// Window chrome follows the merged document so a platform-only outline still disables material.
+	// Window chrome follows the merged document, including outlines authored only in capability variants.
 	resolved.source.(*themeV2Source).definition = t.source.(*themeV2Source).definition
 	resolved.source.(*themeV2Source).appWindowChrome = rawHasAppWindowChrome(raw)
 	resolved.AssetFiles = t.AssetFiles
@@ -332,7 +334,7 @@ func authoredAppWindowChrome(color *string, width *int, radius *int) bool {
 // schema defaults, including system window material after a parent AppBorder* outline.
 func mergeThemeV2OverrideFields(raw, fields map[string]json.RawMessage) {
 	for key, value := range fields {
-		if key == "variants" {
+		if key == "variants" || key == themeBackgroundBlurField {
 			continue
 		}
 		if string(value) == "null" {
@@ -411,31 +413,48 @@ func validateV2ThemePlatforms(raw map[string]json.RawMessage) error {
 		if err := json.Unmarshal(raw[platform], &node); err != nil {
 			return err
 		}
-		variants := map[string]map[string]json.RawMessage{"": nil}
-		if data := node["variants"]; len(data) > 0 {
-			if err := json.Unmarshal(data, &variants); err != nil {
-				return err
-			}
-			variants[""] = nil
+		if err := validateV2ThemeOverrideTree(raw, node, platform); err != nil {
+			return err
 		}
-		for variant, fields := range variants {
-			merged := make(map[string]json.RawMessage, len(raw))
-			for key, value := range raw {
-				if key != "windows" && key != "macos" && key != "linux" {
-					merged[key] = value
-				}
-			}
-			for _, overrides := range []map[string]json.RawMessage{node, fields} {
-				mergeThemeV2OverrideFields(merged, overrides)
-			}
-			data, err := json.Marshal(merged)
-			if err != nil {
-				return err
-			}
-			var theme Theme
-			if err := json.Unmarshal(data, &theme); err != nil {
-				return fmt.Errorf("%s/%s: %w", platform, variant, err)
-			}
+	}
+	return nil
+}
+
+// validateV2ThemeOverrideTree validates inactive nested capability layers with their inherited values.
+func validateV2ThemeOverrideTree(parent, node map[string]json.RawMessage, path string) error {
+	merged := make(map[string]json.RawMessage, len(parent))
+	for key, value := range parent {
+		if key != "windows" && key != "macos" && key != "linux" {
+			merged[key] = value
+		}
+	}
+	mergeThemeV2OverrideFields(merged, node)
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	var theme Theme
+	if err := json.Unmarshal(data, &theme); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	var variants map[string]map[string]json.RawMessage
+	if data := node["variants"]; len(data) > 0 {
+		if err := json.Unmarshal(data, &variants); err != nil {
+			return err
+		}
+	}
+	if data := node[themeBackgroundBlurField]; len(data) > 0 {
+		var child map[string]json.RawMessage
+		if err := json.Unmarshal(data, &child); err != nil {
+			return err
+		}
+		if err := validateV2ThemeOverrideTree(merged, child, path+"/"+themeBackgroundBlurField); err != nil {
+			return err
+		}
+	}
+	for name, child := range variants {
+		if err := validateV2ThemeOverrideTree(merged, child, path+"/"+name); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -518,6 +537,17 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 		}
 		if key == "Surfaces" {
 			values[key] = d.Surfaces
+			continue
+		}
+		if limit, ok := ThemeMaterialFieldLimit(key); ok {
+			var number float64
+			if err := json.Unmarshal(value, &number); err != nil {
+				return nil, fmt.Errorf("%s: %w", key, err)
+			}
+			if math.IsNaN(number) || math.IsInf(number, 0) || number < 0 || number > limit {
+				return nil, fmt.Errorf("%s must be between 0 and %g", key, limit)
+			}
+			values[key] = number
 			continue
 		}
 		if strings.HasSuffix(key, "Color") {
@@ -658,3 +688,15 @@ var themeV2StyleFields = func() map[string]bool {
 	}
 	return fields
 }()
+
+// ThemeMaterialFieldLimit distinguishes continuous material controls from integer geometry.
+func ThemeMaterialFieldLimit(key string) (float64, bool) {
+	switch key {
+	case "ToolbarBlurSigma":
+		return 64, true
+	case "ToolbarBlurBrightness", "ToolbarBlurSaturation":
+		return 2, true
+	default:
+		return 0, false
+	}
+}

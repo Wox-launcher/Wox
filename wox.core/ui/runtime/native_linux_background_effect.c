@@ -7,6 +7,7 @@
 #include "native_linux.h"
 
 #include <stdbool.h>
+#include <math.h>
 #include <string.h>
 
 #ifdef GDK_WINDOWING_WAYLAND
@@ -117,10 +118,36 @@ void *wox_linux_background_effect_attach(GdkWindow *gdk_window) {
 #endif
 }
 
-// wox_linux_background_effect_update sets an explicit surface-local blur region.
-// The protocol only accepts axis-aligned rectangles, so the region is the full
-// window. Painted window chrome on this path stays square to match.
-void wox_linux_background_effect_update(void *effect, int width, int height) {
+// wox_linux_background_blur_region builds a rounded silhouette in surface-local
+// logical units, independent of buffer scale or the monitor's desktop origin.
+// Each scanline stays inside the circle so fully transparent corners never blur.
+cairo_region_t *wox_linux_background_blur_region(int width, int height, float radius) {
+  cairo_region_t *region = cairo_region_create();
+  if (width <= 0 || height <= 0) {
+    return region;
+  }
+  radius = fmaxf(0.0f, fminf(radius, fminf(width, height) * 0.5f));
+  int rows = (int)ceilf(radius);
+  cairo_rectangle_int_t center = {0, rows, width, height - 2 * rows};
+  if (center.height > 0) {
+    cairo_region_union_rectangle(region, &center);
+  }
+  for (int y = 0; y < rows; y++) {
+    float dy = radius - (float)y;
+    int inset = (int)ceilf(radius - sqrtf(fmaxf(0.0f, radius * radius - dy * dy)));
+    cairo_rectangle_int_t row = {inset, y, width - 2 * inset, 1};
+    if (row.width > 0) {
+      cairo_region_union_rectangle(region, &row);
+      row.y = height - y - 1;
+      cairo_region_union_rectangle(region, &row);
+    }
+  }
+  return region;
+}
+
+// wox_linux_background_effect_update submits the rounded logical silhouette as
+// a union of Wayland rectangles. Scaling belongs to the compositor, not this region.
+void wox_linux_background_effect_update(void *effect, int width, int height, float radius) {
 #ifdef GDK_WINDOWING_WAYLAND
   if (effect == NULL || wox_background_effect_compositor == NULL) {
     return;
@@ -134,13 +161,20 @@ void wox_linux_background_effect_update(void *effect, int width, int height) {
   if (region == NULL) {
     return;
   }
-  wl_region_add(region, 0, 0, width, height);
+  cairo_region_t *rounded = wox_linux_background_blur_region(width, height, radius);
+  for (int i = 0; i < cairo_region_num_rectangles(rounded); i++) {
+    cairo_rectangle_int_t rect;
+    cairo_region_get_rectangle(rounded, i, &rect);
+    wl_region_add(region, rect.x, rect.y, rect.width, rect.height);
+  }
+  cairo_region_destroy(rounded);
   ext_background_effect_surface_v1_set_blur_region(surface, region);
   wl_region_destroy(region);
 #else
   (void)effect;
   (void)width;
   (void)height;
+  (void)radius;
 #endif
 }
 

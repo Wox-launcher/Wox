@@ -167,7 +167,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 		}}
 	}
 	body := woxwidget.Container{
-		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground, Floating: true, Surface: props.Theme.Surfaces.Get("Toolbar"),
+		Width: props.Width, Height: props.Height, Color: props.Theme.ToolbarBackground, Floating: true, Material: props.Theme.ToolbarMaterial, Surface: props.Theme.Surfaces.Get("Toolbar"),
 		Padding: woxwidget.Insets{Left: props.Padding.Left, Right: props.Padding.Right},
 		Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: leftWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets}},
@@ -182,7 +182,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 		// Keep both material and texture on the rounded layer; a texture on body would cover the bottom corners.
 		body.Color, body.Floating, body.Surface = woxui.Color{}, false, nil
 		surface = woxwidget.Clip{Width: props.Width, Height: props.Height, Child: woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-			{Top: -radius, Child: woxwidget.Container{Width: props.Width, Height: props.Height + radius, Radius: radius, Color: props.Theme.ToolbarBackground, Floating: true, Surface: props.Theme.Surfaces.Get("Toolbar")}},
+			{Top: -radius, Child: woxwidget.Container{Width: props.Width, Height: props.Height + radius, Radius: radius, Color: props.Theme.ToolbarBackground, Floating: true, Material: props.Theme.ToolbarMaterial, Surface: props.Theme.Surfaces.Get("Toolbar")}},
 			{Child: body},
 		}}}
 	}

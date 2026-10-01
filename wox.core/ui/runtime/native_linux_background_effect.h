@@ -9,7 +9,8 @@
 void wox_linux_background_effect_probe(GdkDisplay *display);
 void *wox_linux_background_effect_attach(GdkWindow *gdk_window);
 void *wox_linux_background_effect_surface(GdkWindow *gdk_window);
-void wox_linux_background_effect_update(void *effect, int width, int height);
+void wox_linux_background_effect_update(void *effect, int width, int height, float radius);
 void wox_linux_background_effect_destroy(void *effect);
+cairo_region_t *wox_linux_background_blur_region(int width, int height, float radius);
 
 #endif

@@ -2,4 +2,4 @@
 
 package woxui
 
-func (w *platformWindow) setWindowChrome(bool, float32) error { return nil }
+func (w *platformWindow) setWindowChrome(bool, float32, ...bool) error { return nil }

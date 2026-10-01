@@ -130,8 +130,12 @@ func themeEditorForm(raw map[string]any) ([]formDefinition, map[string]string) {
 	for _, group := range themeEditorGroups(raw) {
 		definitions = append(definitions, formDefinition{Type: "head", Value: formDefinitionValue{Content: group.label}})
 		for _, token := range group.tokens {
-			definitions = append(definitions, formDefinition{Type: "textbox", Value: formDefinitionValue{Key: token.key, Label: token.label, Tooltip: "CSS color: #RRGGBB, #RRGGBBAA, rgb(), or rgba()"}})
-			source := themeEditorTokenSource(raw, token.key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+			tooltip := "CSS color: #RRGGBB, #RRGGBBAA, rgb(), or rgba()"
+			if themeEditorNumericToken(token.key) {
+				tooltip = ""
+			}
+			definitions = append(definitions, formDefinition{Type: "textbox", Value: formDefinitionValue{Key: token.key, Label: token.label, Tooltip: tooltip}})
+			source := themeEditorTokenSource(raw, token.key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 			values[token.key] = themeMapString(source, token.key)
 		}
 	}
@@ -482,7 +486,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 			var savedTheme common.Theme
 			savedTheme, err = a.services.SaveTheme(ctx, a.sessionID, name, theme, overwrite)
 			if err == nil {
-				resolved, resolveErr := savedTheme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+				resolved, resolveErr := savedTheme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 				if resolveErr != nil {
 					err = resolveErr
 				} else {

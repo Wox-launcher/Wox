@@ -3278,7 +3278,7 @@
   "ui_ai_mcp_empty": "尚未配置 MCP 服务器，添加服务器即可开始使用。",
   "ui_theme_editor_search_properties": "搜索属性…",
   "ui_theme_editor_invalid_geometry": "请输入非负整数。",
-  "ui_theme_editor_chrome_help": "自定义窗口边框或圆角会禁用系统亚克力透明效果。颜色透明度和应用内的亚克力透明效果仍然可用。重置全部三项窗口边框属性可恢复系统外观。",
+  "ui_theme_editor_chrome_help": "自定义窗口边框或圆角会关闭系统背景材质。颜色透明度和应用内模糊仍然可用。重置全部三项窗口边框属性可恢复系统外观。",
   "ui_theme_editor_background_opacity": "不透明度",
   "ui_theme_editor_token_action_border": "边框颜色",
   "ui_theme_editor_window_border": "边框颜色",
@@ -3351,5 +3351,10 @@
   "ui_theme_editor_ai_no_models": "请先在 AI 设置中配置模型提供方。",
   "ui_theme_editor_ai_undo": "撤销 AI 修改",
   "ui_theme_editor_ai_done": "已应用到草稿。可以继续描述调整，满意后再保存。",
-  "ui_theme_editor_ai_failed": "无法应用建议。"
+  "ui_theme_editor_ai_failed": "无法应用建议。",
+  "ui_theme_material_sigma": "工具栏 · 模糊强度（0–64）",
+  "ui_theme_material_brightness": "工具栏 · 模糊亮度（0–2）",
+  "ui_theme_material_saturation": "工具栏 · 模糊饱和度（0–2）",
+  "ui_theme_editor_invalid_material": "请输入显示范围内的数字。",
+  "ui_theme_editor_chrome_help_linux": "自定义窗口边框和圆角可与系统磨玻璃共存。桌面不支持磨玻璃时，半透明窗口背景会改为不透明。应用内模糊不受影响。"
 }

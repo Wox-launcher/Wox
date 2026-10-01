@@ -218,3 +218,18 @@ func TestHostConsumesPendingDamageOnlyWithNativeDamage(t *testing.T) {
 		t.Fatalf("combined platform damage = %+v, want %+v", got, want)
 	}
 }
+
+// TestMaterialDamageUsesNewSigma covers a theme edit before the new frame has been painted.
+func TestMaterialDamageUsesNewSigma(t *testing.T) {
+	style := woxui.FloatingMaterialStyle{Sigma: 24, Brightness: 1, Saturation: 1}
+	root := (Container{Width: 100, Height: 40, Floating: true, Material: &style}).layout(context{}, constraints{width: 100, height: 40})
+	margin := float32(3)
+	materials := currentMaterialBounds(root, nil, &margin)
+	if margin != 72 {
+		t.Fatalf("new blur radius ignored before paint: %v", margin)
+	}
+	damage := coverRenderedMaterials(woxui.Rect{X: 150, Y: 10, Width: 1, Height: 1}, materials, margin, 1.5)
+	if damage.X > 0 || damage.Width < 172 {
+		t.Fatalf("sample halo did not invalidate material: %+v", damage)
+	}
+}

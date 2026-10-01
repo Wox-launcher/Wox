@@ -3277,7 +3277,7 @@
   "ui_ai_mcp_empty": "설정된 MCP 서버가 없습니다. 서버를 추가하여 시작하세요.",
   "ui_theme_editor_search_properties": "속성 검색…",
   "ui_theme_editor_invalid_geometry": "0 이상의 정수를 입력하세요.",
-  "ui_theme_editor_chrome_help": "창 테두리나 모서리를 사용자 지정하면 시스템의 아크릴 투명 효과가 비활성화됩니다. 색상 투명도와 앱 내부의 아크릴 효과는 계속 사용할 수 있습니다. 창 테두리 속성 세 가지를 모두 초기화하면 시스템 모양이 복원됩니다.",
+  "ui_theme_editor_chrome_help": "창 테두리나 모서리를 사용자 지정하면 시스템 배경 재질이 비활성화됩니다. 색상 투명도와 앱 내부 흐림 효과는 계속 사용할 수 있습니다. 세 가지 창 테두리 속성을 모두 초기화하면 시스템 모양이 복원됩니다.",
   "ui_theme_editor_background_opacity": "불투명도",
   "ui_theme_editor_token_action_border": "테두리 색상",
   "ui_theme_editor_window_border": "테두리 색상",
@@ -3350,5 +3350,10 @@
   "ui_theme_editor_ai_no_models": "먼저 AI 설정에서 제공자를 구성하세요.",
   "ui_theme_editor_ai_undo": "AI 변경 취소",
   "ui_theme_editor_ai_done": "초안에 적용했습니다. 계속 수정하거나 저장하세요.",
-  "ui_theme_editor_ai_failed": "제안을 적용하지 못했습니다."
+  "ui_theme_editor_ai_failed": "제안을 적용하지 못했습니다.",
+  "ui_theme_material_sigma": "도구 모음 · 흐림 강도 (0–64)",
+  "ui_theme_material_brightness": "도구 모음 · 흐림 밝기 (0–2)",
+  "ui_theme_material_saturation": "도구 모음 · 흐림 채도 (0–2)",
+  "ui_theme_editor_invalid_material": "표시된 범위 내의 숫자를 입력하세요.",
+  "ui_theme_editor_chrome_help_linux": "창 테두리와 모서리를 사용자 지정해도 시스템 배경 흐림을 유지할 수 있습니다. 데스크톱이 흐림을 지원하지 않으면 반투명 창 배경이 불투명해집니다. 앱 내부 흐림 효과에는 영향을 주지 않습니다."
 }

@@ -214,15 +214,18 @@ func themeEditorWheelRGB(hue, saturation float64) (uint8, uint8, uint8) {
 
 // ThemeEditorColorToken contains one editable color and its resolved preview swatch.
 type ThemeEditorColorToken struct {
-	Key       string
-	Label     string
-	Color     woxui.Color
-	Numeric   bool
-	Optional  bool
-	Value     string
-	Effective string
-	Subgroup  string
-	Error     string
+	Key     string
+	Label   string
+	Color   woxui.Color
+	Numeric bool
+	// NumericStep and NumericMax describe continuous controls; zero step retains integer geometry.
+	NumericStep float64
+	NumericMax  float64
+	Optional    bool
+	Value       string
+	Effective   string
+	Subgroup    string
+	Error       string
 }
 
 // ThemeEditorColorGroup contains one collapsible inspector section.
@@ -512,7 +515,7 @@ func themeEditorPropertyRow(props ThemeEditorSettingsProps, token ThemeEditorCol
 		}
 		border := props.Theme.Border
 		if value := strings.TrimSpace(token.Value); value != "" {
-			if number, err := strconv.Atoi(value); err != nil || number < 0 {
+			if _, valid := themeEditorNumberStep(token, value, 0); !valid {
 				border = props.Theme.Error
 			}
 		}
@@ -540,19 +543,15 @@ func themeEditorPropertyRow(props ThemeEditorSettingsProps, token ThemeEditorCol
 			if value == "" {
 				value = token.Effective
 			}
-			number, err := strconv.Atoi(value)
-			if value == "" {
-				number = 0
-				err = nil
-			}
+			next, enabled := themeEditorNumberStep(token, value, delta)
 			caption := "−"
 			if delta > 0 {
 				caption = "+"
 			}
-			controls = append(controls, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-step-" + token.Key + caption, Label: caption, Width: 32, Disabled: props.Saving || props.AIBusy || err != nil || (delta < 0 && number == 0) || (delta > 0 && number == int(^uint(0)>>1)), Theme: props.Theme,
+			controls = append(controls, woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-step-" + token.Key + caption, Label: caption, Width: 32, Disabled: props.Saving || props.AIBusy || !enabled, Theme: props.Theme,
 				OnTap: func() {
 					if props.OnChangeToken != nil {
-						props.OnChangeToken(token.Key, strconv.Itoa(max(0, number+delta)))
+						props.OnChangeToken(token.Key, next)
 					}
 				}}))
 		}
@@ -990,4 +989,34 @@ func ThemeEditorInspectorSize(width, height float32, hasError bool) (float32, fl
 	}
 	previewHeight := min(float32(300), float32(math.Floor(float64(height*.35))))
 	return max(float32(0), width-16), max(float32(0), height-previewHeight-104)
+}
+
+// themeEditorNumberStep validates and steps continuous material values without
+// relaxing the integer contract for geometry. Bounds disable buttons at the ends.
+func themeEditorNumberStep(token ThemeEditorColorToken, value string, delta int) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		value = "0"
+	}
+	if token.NumericStep == 0 {
+		number, err := strconv.Atoi(value)
+		if err != nil || number < 0 || (delta < 0 && number == 0) || (delta > 0 && number == int(^uint(0)>>1)) {
+			return "", false
+		}
+		return strconv.Itoa(number + delta), true
+	}
+	number, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 || number > token.NumericMax {
+		return "", false
+	}
+	if delta == 0 {
+		return value, true
+	}
+	if (delta < 0 && number == 0) || (delta > 0 && number == token.NumericMax) {
+		return "", false
+	}
+	// Decimal steps should not expose floating-point tails such as 0.30000000000000004.
+	next := math.Round((number+float64(delta)*token.NumericStep)*1e9) / 1e9
+	next = max(0, min(token.NumericMax, next))
+	return strconv.FormatFloat(next, 'f', -1, 64), true
 }

@@ -476,7 +476,7 @@ func demoToolbar(props LauncherDemoProps, height, windowRadius float32, alpha ui
 	// window's bottom corners stay rounded — the same trick as LauncherToolbarView.
 	fill := woxwidget.Container{
 		Width: props.Width, Height: height + windowRadius, Radius: windowRadius,
-		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("Toolbar"), Floating: true,
+		Color: demoColorOpacity(props.Theme.ToolbarBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("Toolbar"), Floating: true, Material: props.Theme.ToolbarMaterial,
 	}
 	toolbar := woxwidget.Container{Width: props.Width, Height: height, Child: woxwidget.Clip{
 		Width: props.Width, Height: height,

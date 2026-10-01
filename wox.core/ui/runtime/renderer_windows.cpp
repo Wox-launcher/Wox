@@ -1138,7 +1138,7 @@ static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, 
 // copy the region (plus margin) out of the back buffer, run it through the blur graph, and
 // draw it back inside the rounded shape while the corners keep their sharp pixels. Every
 // step that can fail runs before the target is touched, so a failure leaves it as it was.
-static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue) {
+static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue) {
   const float scale = renderer->scale;
   const D2D1_SIZE_U target_size = renderer->target_bitmap->GetPixelSize();
   const auto clamp_pixel = [](float value, uint32_t limit) {
@@ -1160,7 +1160,7 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
     return result;
   }
   // Suppress bright, saturated icon blobs without changing the surface's authored alpha.
-  const auto tone = floating_material_tone_matrix(tint_red / 255.0f, tint_green / 255.0f, tint_blue / 255.0f);
+  const auto tone = floating_material_tone_matrix(tint_red / 255.0f, tint_green / 255.0f, tint_blue / 255.0f, brightness, saturation);
   result = renderer->material_tone_effect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, tone);
   if (SUCCEEDED(result)) {
     result = renderer->material_tone_effect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
@@ -1265,15 +1265,15 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
 // nothing beneath the panel to sample (WebView pixels live in a sibling visual). Overlay
 // tints drop transparency so the card does not wash out over the page; WARP still uses
 // the authored alpha over the unblurred Go pixels that are already in the buffer.
-extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
+extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->target_bitmap == nullptr) {
     return E_UNEXPECTED;
   }
   if (width <= 0.0f || height <= 0.0f) {
     return E_INVALIDARG;
   }
-  if (!renderer->uses_warp && !renderer->overlay_active && blur_sigma > 0.0f) {
-    const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, tint_red, tint_green, tint_blue);
+  if (!renderer->uses_warp && !renderer->overlay_active && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
+    const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
     // A lost device must surface through the normal recovery path; any other failure only
     // costs the blur, and the tint below still reads as a panel.
     if (FAILED(result) && FAILED(renderer->device->GetDeviceRemovedReason())) {

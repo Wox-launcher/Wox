@@ -3,9 +3,11 @@ package launcher
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"strconv"
 	"strings"
 	"wox/common"
+	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/osvariant"
 )
@@ -24,7 +26,7 @@ func (t *themeData) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &theme); err != nil {
 		return err
 	}
-	resolved, err := theme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+	resolved, err := theme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 	if err != nil {
 		return err
 	}
@@ -97,7 +99,7 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 }
 
 // themeEditorTokenSource finds the authored layer currently supplying a color, without flattening other platforms.
-func themeEditorTokenSource(raw map[string]any, key, platform, variant string) map[string]any {
+func themeEditorTokenSource(raw map[string]any, key, platform, variant string, capabilities ...string) map[string]any {
 	if !isV2Theme(raw) || key == "ThemeName" {
 		return raw
 	}
@@ -108,6 +110,12 @@ func themeEditorTokenSource(raw map[string]any, key, platform, variant string) m
 	platformNode, _ := raw[platform].(map[string]any)
 	variants, _ := platformNode["variants"].(map[string]any)
 	variantNode, _ := variants[variant].(map[string]any)
+	for i := len(capabilities) - 1; i >= 0; i-- {
+		capabilityNode, _ := variantNode[capabilities[i]].(map[string]any)
+		if _, exists := capabilityNode[key]; exists {
+			return capabilityNode
+		}
+	}
 	if _, exists := variantNode[key]; exists {
 		return variantNode
 	}
@@ -121,7 +129,7 @@ func themeEditorTokenSource(raw map[string]any, key, platform, variant string) m
 func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[string]any {
 	draft := copyThemeMap(raw)
 	for key, value := range values {
-		source := themeEditorTokenSource(draft, key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+		source := themeEditorTokenSource(draft, key, util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 		if isV2Theme(raw) {
 			value = strings.TrimSpace(value)
 			// Leave untouched authored values (including null and numeric types) intact.
@@ -131,6 +139,12 @@ func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[str
 		}
 		if isV2Theme(raw) && value == "" && key != "ThemeName" && !strings.HasPrefix(key, "Base") {
 			delete(source, key)
+		} else if _, material := common.ThemeMaterialFieldLimit(key); isV2Theme(raw) && material {
+			if number, err := strconv.ParseFloat(value, 64); err == nil {
+				source[key] = number
+			} else {
+				source[key] = value
+			}
 		} else if isV2Theme(raw) && themeEditorNumericToken(key) {
 			// Invalid input stays invalid so the schema rejects preview/save without losing the edit.
 			if number, err := strconv.Atoi(value); err == nil && number >= 0 {
@@ -140,6 +154,15 @@ func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[str
 			}
 		} else {
 			source[key] = value
+		}
+	}
+	// This is an authored editor draft, not a migration of loaded or synced themes.
+	if isV2Theme(draft) && themeEditorUsesMaterialFeatures(draft) {
+		minimum := "2.4.6"
+		current := themeMapString(draft, "MinWoxVersion")
+		version, err := semver.NewVersion(current)
+		if current == "" || (err == nil && version.LessThan(semver.MustParse(minimum))) {
+			draft["MinWoxVersion"] = minimum
 		}
 	}
 	return draft
@@ -152,7 +175,7 @@ func themeEditorResolvedColors(raw map[string]any, values map[string]string) map
 	if err := json.Unmarshal(encoded, &theme); err != nil {
 		return raw
 	}
-	resolved, err := theme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant())
+	resolved, err := theme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 	if err != nil {
 		return raw
 	}
@@ -160,6 +183,11 @@ func themeEditorResolvedColors(raw map[string]any, values map[string]string) map
 	encoded, _ = json.Marshal(effective(resolved))
 	var result map[string]any
 	_ = json.Unmarshal(encoded, &result)
+	for key, fallback := range map[string]float64{"ToolbarBlurSigma": 12, "ToolbarBlurBrightness": 1, "ToolbarBlurSaturation": 1} {
+		if _, exists := result[key]; !exists {
+			result[key] = fallback
+		}
+	}
 	for key, value := range resolved.ResolvedColors() {
 		result[key] = value
 	}
@@ -198,4 +226,29 @@ func (a *App) resetThemeEditorToken() {
 	}
 	a.setThemeEditorText(index, "")
 	a.confirmThemeEditorDialog()
+}
+
+// themeEditorUsesMaterialFeatures examines only style layers, including inactive desktops.
+func themeEditorUsesMaterialFeatures(raw map[string]any) bool {
+	for key := range raw {
+		if _, material := common.ThemeMaterialFieldLimit(key); material {
+			return true
+		}
+	}
+	if _, capability := raw["backgroundBlur"]; capability {
+		return true
+	}
+	for _, platform := range []string{"windows", "macos", "linux"} {
+		if node, ok := raw[platform].(map[string]any); ok && themeEditorUsesMaterialFeatures(node) {
+			return true
+		}
+	}
+	if variants, ok := raw["variants"].(map[string]any); ok {
+		for _, value := range variants {
+			if node, ok := value.(map[string]any); ok && themeEditorUsesMaterialFeatures(node) {
+				return true
+			}
+		}
+	}
+	return false
 }

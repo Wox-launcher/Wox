@@ -144,6 +144,7 @@ type node struct {
 	scroll              *scrollBehavior
 	caret               bool
 	floating            bool
+	materialMargin      float32
 	caretPaint          func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	fadeTop, fadeBottom float32
 	clip                bool
@@ -233,6 +234,7 @@ type Container struct {
 	// the platform supports it; elsewhere they are painted exactly as usual.
 	// BorderWidth controls the edge independently of the material; zero disables it.
 	Floating          bool
+	Material          *woxui.FloatingMaterialStyle
 	BorderColor       woxui.Color
 	BorderWidth       float32
 	LeftBorderColor   woxui.Color
@@ -364,6 +366,7 @@ func (w Container) layout(ctx context, available constraints) *node {
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}}
 	if w.Floating {
 		result.floating = true
+		result.materialMargin = 3 * w.Material.Resolved().Sigma
 		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 			// Native material edges are always one unit; paint custom widths separately.
 			edge := w.BorderColor
@@ -373,7 +376,7 @@ func (w Container) layout(ctx context, available constraints) *node {
 			// A transparent image-framed panel supplies its own silhouette; a rectangular
 			// material behind it would fill the transparent parts outside the frame.
 			if w.Color.A != 0 || w.Surface == nil || w.Surface.Frame == nil {
-				displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge)
+				displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge, w.Material)
 			}
 			w.Surface.Paint(displayList, bounds, w.Radius)
 			if w.BorderWidth > 0 && w.BorderWidth != 1 && w.BorderColor.A != 0 {

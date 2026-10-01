@@ -12,9 +12,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
+	"wox/common"
 	"wox/common/icons"
 
 	"github.com/disintegration/imaging"
@@ -64,18 +66,28 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			tokenLabel := a.translate(token.label)
 			fieldError := ""
 			if numeric && strings.TrimSpace(state.values[token.key]) != "" {
-				if number, err := strconv.Atoi(strings.TrimSpace(state.values[token.key])); err != nil || number < 0 {
+				if !validThemeEditorNumber(token.key, strings.TrimSpace(state.values[token.key])) {
 					fieldError = a.translate("i18n:ui_theme_editor_invalid_geometry")
+					if _, material := common.ThemeMaterialFieldLimit(token.key); material {
+						fieldError = a.translate("i18n:ui_theme_editor_invalid_material")
+					}
 					// Numeric validation belongs to the field; keep save/service failures at page level.
 					if formError == fieldError {
 						formError = ""
 					}
 				}
 			}
+			step, upper := float64(0), float64(0)
+			if limit, material := common.ThemeMaterialFieldLimit(token.key); material {
+				step, upper = 0.1, limit
+				if token.key == "ToolbarBlurSigma" {
+					step = 0.5
+				}
+			}
 			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: tokenLabel, Color: color,
 				Error:    fieldError,
 				Subgroup: a.translate(themeEditorTokenSection(token.key)),
-				Numeric:  numeric, Value: state.values[token.key], Effective: value,
+				Numeric:  numeric, NumericStep: step, NumericMax: upper, Value: state.values[token.key], Effective: value,
 				Optional: isV2Theme(state.raw) && !strings.HasPrefix(token.key, "Base"),
 			})
 		}
@@ -114,7 +126,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		DefaultLabel: a.translate("i18n:ui_theme_inherited"), ResetLabel: a.translate("i18n:ui_theme_restore_default"),
 		LinkPaddingLabel: a.translate("i18n:ui_theme_editor_link_padding"), PaddingLabel: a.translate("i18n:ui_theme_editor_padding"),
 		NoPropertiesLabel: a.translate("i18n:ui_theme_editor_no_properties"),
-		ChromeHelp:        a.translate("i18n:ui_theme_editor_chrome_help"), ShowChromeHelp: isV2Theme(state.raw),
+		ChromeHelp:        a.themeEditorChromeHelp(), ShowChromeHelp: isV2Theme(state.raw),
 		OpacityLabel:   a.translate("i18n:ui_theme_editor_background_opacity"),
 		OnChangeToken:  a.changeThemeEditorToken,
 		OnChangeTokens: a.changeThemeEditorTokens,
@@ -743,4 +755,12 @@ func (a *App) overwriteThemeEditorDraft() {
 	}
 	name := state.sourceName
 	a.saveThemeEditorDraft(name, true)
+}
+
+// themeEditorChromeHelp follows the native platform's custom-outline material policy.
+func (a *App) themeEditorChromeHelp() string {
+	if runtime.GOOS == "linux" {
+		return a.translate("i18n:ui_theme_editor_chrome_help_linux")
+	}
+	return a.translate("i18n:ui_theme_editor_chrome_help")
 }

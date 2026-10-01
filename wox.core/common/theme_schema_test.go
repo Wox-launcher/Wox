@@ -13,7 +13,7 @@ func TestThemeSchemaDispatch(t *testing.T) {
 	registerThemeSchema(version, themeSchema{
 		parse:   func(data []byte) (Theme, error) { return Theme{SchemaVersion: version, ThemeName: "future"}, nil },
 		marshal: func(theme Theme) ([]byte, error) { return []byte(`{"SchemaVersion":987}`), nil },
-		resolve: func(theme Theme, platform, variant string) (Theme, error) {
+		resolve: func(theme Theme, platform, variant string, capabilities ...string) (Theme, error) {
 			theme.ThemeName = platform + "/" + variant
 			return theme, nil
 		},

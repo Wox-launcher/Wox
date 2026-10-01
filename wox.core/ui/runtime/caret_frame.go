@@ -52,7 +52,7 @@ func (d *DisplayList) PrepareCaretPatch(previous *DisplayList, allowPatch bool) 
 		}
 		margin := max(float32(4), command.stroke/2)
 		if command.kind == displayCommandFloatingMaterial {
-			margin += FloatingMaterialBlurMargin
+			margin += 3 * command.material.Sigma
 		}
 		bounds := Rect{X: command.rect.X - margin, Y: command.rect.Y - margin, Width: command.rect.Width + 2*margin, Height: command.rect.Height + 2*margin}
 		intersection := intersectRects(caret.rect, bounds)

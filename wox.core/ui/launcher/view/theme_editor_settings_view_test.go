@@ -371,3 +371,51 @@ func TestThemeEditorPropertyLabelOmitsVisibleScope(t *testing.T) {
 		}
 	}
 }
+
+// TestThemeEditorMaterialSteps covers fractional input, boundary clamping, and integer isolation.
+func TestThemeEditorMaterialSteps(t *testing.T) {
+	material := ThemeEditorColorToken{Numeric: true, NumericStep: .1, NumericMax: 2}
+	for _, tc := range []struct {
+		value string
+		delta int
+		want  string
+		valid bool
+	}{
+		{"0.3", 0, "0.3", true}, {"0.2", 1, "0.3", true}, {"0.3", -1, "0.2", true},
+		{"1.95", 1, "2", true}, {"0.05", -1, "0", true}, {"2", 1, "", false}, {"0", -1, "", false},
+		{"NaN", 0, "", false}, {"Inf", 0, "", false}, {"2.1", 0, "", false}, {"-0.1", 0, "", false},
+	} {
+		got, valid := themeEditorNumberStep(material, tc.value, tc.delta)
+		if got != tc.want || valid != tc.valid {
+			t.Fatalf("step(%q,%d) = %q,%v; want %q,%v", tc.value, tc.delta, got, valid, tc.want, tc.valid)
+		}
+	}
+	if _, valid := themeEditorNumberStep(ThemeEditorColorToken{Numeric: true}, "0.3", 0); valid {
+		t.Fatal("geometry accepted fractional input")
+	}
+}
+
+// TestThemeEditorMaterialButtons exercises the mounted controls rather than only parsing helpers.
+func TestThemeEditorMaterialButtons(t *testing.T) {
+	token := ThemeEditorColorToken{Key: "ToolbarBlurBrightness", Label: "Brightness", Numeric: true, NumericStep: .1, NumericMax: 2, Value: "0.3"}
+	props := ThemeEditorSettingsProps{Width: 800, Height: 640, Groups: []ThemeEditorColorGroup{{Label: "Toolbar", Tokens: []ThemeEditorColorToken{token}}}}
+	props.OnChangeToken = func(key, value string) { props.Groups[0].Tokens[0].Value = value }
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ThemeEditorSettingsView(props) })
+	host.AttachServices(settingsWindowHostServices{})
+	defer host.Dispose()
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5}
+	for _, tc := range []struct{ value, suffix, want string }{{"0.3", "+", "0.4"}, {"0.3", "−", "0.2"}, {"2", "+", "2"}, {"0", "−", "0"}} {
+		props.Groups[0].Tokens[0].Value = tc.value
+		host.Frame(&woxui.DisplayList{}, frame)
+		bounds, ok := host.BoundsForKey(woxwidget.Key("theme-editor-step-ToolbarBlurBrightness" + tc.suffix))
+		if !ok {
+			t.Fatal("missing material step button")
+		}
+		point := woxui.Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		if got := props.Groups[0].Tokens[0].Value; got != tc.want {
+			t.Fatalf("%s%s = %s; want %s", tc.value, tc.suffix, got, tc.want)
+		}
+	}
+}

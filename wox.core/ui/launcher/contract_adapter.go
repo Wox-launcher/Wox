@@ -636,7 +636,7 @@ func fromCoreTheme(theme common.Theme) themeData {
 		ActionItemActiveBackgroundColor: theme.ActionItemActiveBackgroundColor, ActionItemActiveFontColor: theme.ActionItemActiveFontColor, ActionItemFontColor: theme.ActionItemFontColor,
 		ActionQueryBoxFontColor: theme.ActionQueryBoxFontColor, ActionQueryBoxBackgroundColor: theme.ActionQueryBoxBackgroundColor, ActionQueryBoxBorderRadius: theme.ActionQueryBoxBorderRadius,
 		PreviewFontColor: theme.PreviewFontColor, PreviewSplitLineColor: theme.PreviewSplitLineColor, PreviewPropertyTitleColor: theme.PreviewPropertyTitleColor, PreviewPropertyContentColor: theme.PreviewPropertyContentColor,
-		ToolbarFontColor: theme.ToolbarFontColor, ToolbarBackgroundColor: theme.ToolbarBackgroundColor, ToolbarPaddingLeft: theme.ToolbarPaddingLeft, ToolbarPaddingRight: theme.ToolbarPaddingRight,
+		ToolbarFontColor: theme.ToolbarFontColor, ToolbarBackgroundColor: theme.ToolbarBackgroundColor, ToolbarBlurSigma: theme.ToolbarBlurSigma, ToolbarBlurBrightness: theme.ToolbarBlurBrightness, ToolbarBlurSaturation: theme.ToolbarBlurSaturation, ToolbarPaddingLeft: theme.ToolbarPaddingLeft, ToolbarPaddingRight: theme.ToolbarPaddingRight,
 	}
 }
 

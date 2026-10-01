@@ -1095,7 +1095,7 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		case displayCommandFloatingMaterial:
 			result = C.wox_darwin_window_floating_material(native,
 				C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius),
-				C.float(floatingMaterialBlurSigma), C.float(FloatingMaterialBlurMargin),
+				C.float(command.material.Sigma), C.float(3*command.material.Sigma), C.float(command.material.Brightness), C.float(command.material.Saturation),
 				C.uint8_t(command.color.R), C.uint8_t(command.color.G), C.uint8_t(command.color.B), C.uint8_t(command.color.A),
 				C.uint8_t(command.edge.R), C.uint8_t(command.edge.G), C.uint8_t(command.edge.B), C.uint8_t(command.edge.A))
 		case displayCommandFillRoundedRect:
@@ -1502,7 +1502,7 @@ func woxGoDarwinFileDragEnded(context C.uintptr_t, status C.int32_t) {
 }
 
 // setWindowChrome removes Liquid Glass when a theme authors its own outline.
-func (w *platformWindow) setWindowChrome(custom bool, radius float32) error {
+func (w *platformWindow) setWindowChrome(custom bool, radius float32, backgroundBlur ...bool) error {
 	native, err := w.openNative()
 	if err != nil {
 		return err

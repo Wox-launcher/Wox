@@ -14,15 +14,16 @@ type boundaryDamage struct {
 
 // currentMaterialBounds includes newly grown surfaces before damage classification.
 // Previous display lists only describe the smaller panel after a filter has settled.
-func currentMaterialBounds(current *node, materials []woxui.Rect) []woxui.Rect {
+func currentMaterialBounds(current *node, materials []woxui.Rect, margin *float32) []woxui.Rect {
 	if current == nil {
 		return materials
 	}
 	if current.floating {
 		materials = append(materials, globalRect(current))
+		*margin = max(*margin, current.materialMargin)
 	}
 	for _, child := range current.children {
-		materials = currentMaterialBounds(child, materials)
+		materials = currentMaterialBounds(child, materials, margin)
 	}
 	return materials
 }

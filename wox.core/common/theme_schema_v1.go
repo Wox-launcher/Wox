@@ -364,7 +364,7 @@ func parseJSONInt(raw map[string]json.RawMessage, keys ...string) int {
 }
 
 // resolveThemeV1 keeps legacy alias precedence and null/zero behavior when flattening platform styles.
-func resolveThemeV1(t Theme, platform, variant string) (Theme, error) {
+func resolveThemeV1(t Theme, platform, variant string, capabilities ...string) (Theme, error) {
 	var node *ThemePlatformOverride
 	switch platform {
 	case "windows":
@@ -395,18 +395,17 @@ func resolveThemeV1(t Theme, platform, variant string) (Theme, error) {
 			delete(raw, "ResultItemActiveBorderLeftWidth")
 		}
 		for key, value := range fields {
-			if key != "variants" {
+			if key != "variants" && key != themeBackgroundBlurField {
 				raw[key] = value
 			}
 		}
 	}
-	merge(*node)
-	if data := (*node)["variants"]; variant != "" && len(data) > 0 {
-		var variants map[string]ThemePlatformOverride
-		if err := json.Unmarshal(data, &variants); err != nil {
-			return Theme{}, err
-		}
-		merge(variants[variant])
+	layers, err := themeVariantLayers(*node, variant, capabilities)
+	if err != nil {
+		return Theme{}, err
+	}
+	for _, fields := range layers {
+		merge(fields)
 	}
 	encoded, err = json.Marshal(raw)
 	if err != nil {

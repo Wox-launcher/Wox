@@ -166,3 +166,78 @@ func TestV2ThemeEditorInheritance(t *testing.T) {
 		t.Fatal("save lost platform source or explicit zero")
 	}
 }
+
+// TestThemeEditorNestedCapabilitySource keeps edits in the active desktop's capability layer.
+func TestThemeEditorNestedCapabilitySource(t *testing.T) {
+	raw := map[string]any{"SchemaVersion": 2, "AppBackgroundColor": "#000000FF", "linux": map[string]any{
+		"variants": map[string]any{"kde": map[string]any{"AppBackgroundColor": "#111111FF",
+			"backgroundBlur": map[string]any{"AppBackgroundColor": "#22222280"},
+		}},
+	}}
+	source := themeEditorTokenSource(raw, "AppBackgroundColor", "linux", "kde", "backgroundBlur")
+	source["AppBackgroundColor"] = "#33333380"
+	if got := themeEditorTokenSource(raw, "AppBackgroundColor", "linux", "kde")["AppBackgroundColor"]; got != "#111111FF" {
+		t.Fatalf("edited fallback: %v", got)
+	}
+	if got := themeEditorTokenSource(raw, "AppBackgroundColor", "linux", "hyprland", "backgroundBlur")["AppBackgroundColor"]; got != "#000000FF" {
+		t.Fatalf("sibling leaked: %v", got)
+	}
+	if got := themeEditorTokenSource(raw, "AppBackgroundColor", "linux", "kde", "backgroundBlur")["AppBackgroundColor"]; got != "#33333380" {
+		t.Fatalf("capability edit lost: %v", got)
+	}
+}
+
+// TestThemeEditorMaterialDecimals checks real editor save/preview and native style propagation.
+func TestThemeEditorMaterialDecimals(t *testing.T) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"material","ThemeName":"Material","BaseBackgroundColor":"#16161A84","BaseTextColor":"#FFFFFF","BaseAccentColor":"#FFFFFF"}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	draft := mergeThemeEditorDraft(raw, map[string]string{"ToolbarBlurSigma": "4.5", "ToolbarBlurBrightness": "0.8", "ToolbarBlurSaturation": "0"})
+	data, err := json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var theme themeData
+	if err := json.Unmarshal(data, &theme); err != nil {
+		t.Fatal(err)
+	}
+	material := paletteForTheme(theme).componentTheme().ToolbarMaterial
+	if material == nil || material.Sigma != 4.5 || material.Brightness != .8 || material.Saturation != 0 {
+		t.Fatalf("material lost: %+v", material)
+	}
+	for _, invalid := range []string{"NaN", "Inf", "-1", "2.1"} {
+		if validThemeEditorNumber("ToolbarBlurBrightness", invalid) {
+			t.Fatalf("accepted %s", invalid)
+		}
+	}
+	if validThemeEditorNumber("ToolbarBorderWidth", "1.5") {
+		t.Fatal("material decimals leaked into integer geometry")
+	}
+}
+
+// TestThemeEditorMaterialVersionFloor raises only editor drafts that use new features.
+func TestThemeEditorMaterialVersionFloor(t *testing.T) {
+	for _, tc := range []struct {
+		minimum string
+		fields  map[string]any
+		want    string
+	}{
+		{"2.4.3", map[string]any{"ToolbarBlurBrightness": 0.3}, "2.4.6"},
+		{"2.5.0", map[string]any{"ToolbarBlurSigma": 4}, "2.5.0"},
+		{"2.4.3", map[string]any{"ToolbarBackgroundColor": "#00000000"}, "2.4.3"},
+		{"2.4.3", map[string]any{"linux": map[string]any{"variants": map[string]any{"kde": map[string]any{"backgroundBlur": map[string]any{}}}}}, "2.4.6"},
+	} {
+		raw := map[string]any{"SchemaVersion": 2, "MinWoxVersion": tc.minimum}
+		for key, value := range tc.fields {
+			raw[key] = value
+		}
+		draft := mergeThemeEditorDraft(raw, nil)
+		if draft["MinWoxVersion"] != tc.want {
+			t.Fatalf("minimum=%v, want %s", draft["MinWoxVersion"], tc.want)
+		}
+		if raw["MinWoxVersion"] != tc.minimum {
+			t.Fatal("editor changed source document")
+		}
+	}
+}

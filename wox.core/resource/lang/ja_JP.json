@@ -3279,7 +3279,7 @@
   "ui_ai_mcp_empty": "MCP サーバーが設定されていません。サーバーを追加してください。",
   "ui_theme_editor_search_properties": "プロパティを検索…",
   "ui_theme_editor_invalid_geometry": "0 以上の整数を入力してください。",
-  "ui_theme_editor_chrome_help": "ウィンドウの枠線や角丸をカスタマイズすると、システムのアクリル透明効果が無効になります。色の透明度とアプリ内のアクリル効果は引き続き利用できます。ウィンドウの枠線に関する3つのプロパティをすべてリセットすると、システムの外観に戻ります。",
+  "ui_theme_editor_chrome_help": "ウィンドウの枠線や角をカスタマイズすると、システムの背景マテリアルが無効になります。色の透明度とアプリ内のぼかしは引き続き使用できます。枠線の3項目をすべてリセットすると、システムの外観に戻ります。",
   "ui_theme_editor_background_opacity": "不透明度",
   "ui_theme_editor_token_action_border": "枠線の色",
   "ui_theme_editor_window_border": "枠線の色",
@@ -3352,5 +3352,10 @@
   "ui_theme_editor_ai_no_models": "先に AI 設定でプロバイダーを設定してください。",
   "ui_theme_editor_ai_undo": "AI の変更を元に戻す",
   "ui_theme_editor_ai_done": "下書きに適用しました。続けて調整するか保存してください。",
-  "ui_theme_editor_ai_failed": "提案を適用できませんでした。"
+  "ui_theme_editor_ai_failed": "提案を適用できませんでした。",
+  "ui_theme_material_sigma": "ツールバー · ぼかしの強さ（0–64）",
+  "ui_theme_material_brightness": "ツールバー · ぼかしの明るさ（0–2）",
+  "ui_theme_material_saturation": "ツールバー · ぼかしの彩度（0–2）",
+  "ui_theme_editor_invalid_material": "表示された範囲内の数値を入力してください。",
+  "ui_theme_editor_chrome_help_linux": "ウィンドウの枠線や角をカスタマイズしても、システムの背景ぼかしを使用できます。デスクトップがぼかしに対応していない場合、半透明のウィンドウ背景は不透明になります。アプリ内のぼかしには影響しません。"
 }

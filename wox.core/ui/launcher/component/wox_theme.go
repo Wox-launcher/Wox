@@ -126,6 +126,7 @@ type Theme struct {
 	PreviewPropertyTitle   woxui.Color
 	PreviewPropertyContent woxui.Color
 	ToolbarBackground      woxui.Color
+	ToolbarMaterial        *woxui.FloatingMaterialStyle
 	ToolbarText            woxui.Color
 }
 

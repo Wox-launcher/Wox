@@ -61,7 +61,7 @@ func TestImageThemeWindowFillStaysClear(t *testing.T) {
 		t.Fatalf("transparent frame fill = %#v, want a clear window", transparent.background)
 	}
 	wash := paletteForTheme(themeData{AppBackgroundColor: "#18201D80", AppBorderWidth: &borderWidth})
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && !woxui.HasNativeWindowMaterial() {
 		if wash.background != (woxui.Color{R: 0x18, G: 0x20, B: 0x1D, A: 255}) {
 			t.Fatalf("linux wash = %#v, want opaque authored rgb", wash.background)
 		}

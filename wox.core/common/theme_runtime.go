@@ -106,8 +106,11 @@ type Theme struct {
 
 	ToolbarFontColor       string
 	ToolbarBackgroundColor string
-	ToolbarBorderColor     string `json:",omitempty"`
-	ToolbarBorderWidth     *int   `json:",omitempty"`
+	ToolbarBlurSigma       *float64 `json:",omitempty"`
+	ToolbarBlurBrightness  *float64 `json:",omitempty"`
+	ToolbarBlurSaturation  *float64 `json:",omitempty"`
+	ToolbarBorderColor     string   `json:",omitempty"`
+	ToolbarBorderWidth     *int     `json:",omitempty"`
 	ToolbarPaddingLeft     int
 	ToolbarPaddingRight    int
 

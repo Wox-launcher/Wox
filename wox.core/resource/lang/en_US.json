@@ -3279,7 +3279,7 @@
   "ui_ai_mcp_empty": "No MCP servers configured. Add a server to get started.",
   "ui_theme_editor_search_properties": "Search properties…",
   "ui_theme_editor_invalid_geometry": "Enter a non-negative whole number.",
-  "ui_theme_editor_chrome_help": "Custom window borders or corners disable the system acrylic transparency effect. Color transparency and in-app acrylic effects remain available. Reset all three window border properties to restore the system appearance.",
+  "ui_theme_editor_chrome_help": "Custom window borders or corners disable the system backdrop material. Color transparency and in-app blur remain available. Reset all three window border properties to restore the system appearance.",
   "ui_theme_editor_background_opacity": "Opacity",
   "ui_theme_editor_token_action_border": "Border color",
   "ui_theme_editor_window_border": "Border color",
@@ -3352,5 +3352,10 @@
   "ui_theme_editor_ai_no_models": "Configure an AI provider in AI settings first.",
   "ui_theme_editor_ai_undo": "Undo AI change",
   "ui_theme_editor_ai_done": "Applied to draft. Describe another change or save when ready.",
-  "ui_theme_editor_ai_failed": "Could not apply suggestion."
+  "ui_theme_editor_ai_failed": "Could not apply suggestion.",
+  "ui_theme_material_sigma": "Toolbar · blur strength (0–64)",
+  "ui_theme_material_brightness": "Toolbar · blur brightness (0–2)",
+  "ui_theme_material_saturation": "Toolbar · blur saturation (0–2)",
+  "ui_theme_editor_invalid_material": "Enter a number within the displayed range.",
+  "ui_theme_editor_chrome_help_linux": "Custom window borders and corners can retain system background blur. If the desktop does not support blur, translucent window backgrounds become opaque. In-app blur is unaffected."
 }

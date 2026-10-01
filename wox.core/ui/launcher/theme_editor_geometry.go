@@ -1,6 +1,11 @@
 package launcher
 
-import "strings"
+import (
+	"math"
+	"strconv"
+	"strings"
+	"wox/common"
+)
 
 // themeEditorTokenSection groups properties by the visible element they style.
 func themeEditorTokenSection(key string) string {
@@ -89,13 +94,16 @@ var themeEditorGeometryGroups = [][]themeColorToken{
 		{key: "ActionQueryBoxBorderRadius", label: "i18n:ui_theme_geometry_ActionQueryBoxBorderRadius"},
 	},
 	{
+		{key: "ToolbarBlurSigma", label: "i18n:ui_theme_material_sigma"},
+		{key: "ToolbarBlurBrightness", label: "i18n:ui_theme_material_brightness"},
+		{key: "ToolbarBlurSaturation", label: "i18n:ui_theme_material_saturation"},
 		{key: "ToolbarBorderWidth", label: "i18n:ui_theme_geometry_ToolbarBorderWidth"},
 		{key: "ToolbarPaddingLeft", label: "i18n:ui_theme_geometry_ToolbarPaddingLeft"},
 		{key: "ToolbarPaddingRight", label: "i18n:ui_theme_geometry_ToolbarPaddingRight"},
 	},
 }
 
-// themeEditorNumericToken identifies the optional integer fields accepted by the v2 editor.
+// themeEditorNumericToken identifies optional geometry and material fields accepted by the v2 editor.
 func themeEditorNumericToken(key string) bool {
 	for _, group := range themeEditorGeometryGroups {
 		for _, token := range group {
@@ -105,4 +113,14 @@ func themeEditorNumericToken(key string) bool {
 		}
 	}
 	return false
+}
+
+// validThemeEditorNumber keeps fractional material controls separate from integer geometry.
+func validThemeEditorNumber(key, value string) bool {
+	if limit, ok := common.ThemeMaterialFieldLimit(key); ok {
+		number, err := strconv.ParseFloat(value, 64)
+		return err == nil && !math.IsNaN(number) && !math.IsInf(number, 0) && number >= 0 && number <= limit
+	}
+	number, err := strconv.Atoi(value)
+	return err == nil && number >= 0
 }
