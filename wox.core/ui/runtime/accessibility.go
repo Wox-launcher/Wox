@@ -25,6 +25,7 @@ const (
 	AccessibilityRoleListItem    AccessibilityRole = "list_item"
 	AccessibilityRoleImage       AccessibilityRole = "image"
 	AccessibilityRoleProgressBar AccessibilityRole = "progress_bar"
+	AccessibilityRoleSlider      AccessibilityRole = "slider"
 	AccessibilityRoleLink        AccessibilityRole = "link"
 	AccessibilityRoleMenu        AccessibilityRole = "menu"
 	AccessibilityRoleMenuItem    AccessibilityRole = "menu_item"

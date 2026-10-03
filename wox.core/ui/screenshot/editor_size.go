@@ -28,7 +28,7 @@ type screenshotSizeDialog struct {
 	aspectRatio   float64
 }
 
-// publishSizeLabel gives assistive technology the same entry point as clicking the capture dimensions.
+// publishSizeLabel publishes capture dimensions and the current annotation-size control together.
 func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value string) {
 	if state.window == nil {
 		return
@@ -41,9 +41,23 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 			Label: state.sizeDialogOptions.SizeLabels.Title, Value: value, Bounds: bounds,
 			Enabled: state.activeSizeDialog() == nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		}}
+		state.mu.Lock()
+		if state.editFontSizeRect.Width > 0 {
+			tree.RootIDs = append(tree.RootIDs, 2)
+			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
+				ID: 2, AutomationID: "screenshot.font_size", Role: woxui.AccessibilityRoleSlider,
+				Label: state.fontSizeLabel, Value: fmt.Sprintf("%.0f", state.fontSizeLocked()), Bounds: state.editFontSizeRect,
+				Enabled: state.sizeDialog == nil, Focusable: true, Focused: state.fontSizeFocused,
+				Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionFocus, woxui.AccessibilityActionSetValue, woxui.AccessibilityActionIncrement, woxui.AccessibilityActionDecrement},
+			})
+		}
+		state.mu.Unlock()
 	}
-	_ = state.window.UpdateAccessibility(tree, func(_ woxui.AccessibilityNodeID, action woxui.AccessibilityAction, _ string) error {
-		if action == woxui.AccessibilityActionActivate {
+	_ = state.window.UpdateAccessibility(tree, func(id woxui.AccessibilityNodeID, action woxui.AccessibilityAction, value string) error {
+		if id == 2 {
+			return state.fontSizeAccessibilityAction(action, value)
+		}
+		if id == 1 && action == woxui.AccessibilityActionActivate {
 			state.openSizeDialog()
 		}
 		return nil

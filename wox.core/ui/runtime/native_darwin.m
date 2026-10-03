@@ -949,7 +949,9 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 // A regular app's NSWindow can stay outside another app's fullscreen Space even at
 // shielding level. Nonactivating panels keep screenshot surfaces in that Space without
 // activating Settings; they can still accept keys unless the Wox option disables input.
-@interface WoxScreenshotPanel : NSPanel
+@interface WoxScreenshotPanel : NSPanel {
+  BOOL _owns_cursor_control;
+}
 @property(nonatomic, assign) BOOL woxNonactivating;
 @end
 
@@ -960,8 +962,23 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   if (self != nil) {
     self.hidesOnDeactivate = NO;
     self.becomesKeyOnlyIfNeeded = NO;
+    int32_t status = wox_darwin_acquire_screenshot_cursor();
+    _owns_cursor_control = YES;
+    if (status != 0) {
+      woxGoDarwinScreenshotDiagnostic([NSString stringWithFormat:@"stage=cursor_acquire_failed status=%d", status].UTF8String);
+    }
   }
   return self;
+}
+
+- (void)dealloc {
+  if (_owns_cursor_control) {
+    int32_t status = wox_darwin_release_screenshot_cursor();
+    if (status != 0) {
+      woxGoDarwinScreenshotDiagnostic([NSString stringWithFormat:@"stage=cursor_restore_failed status=%d", status].UTF8String);
+    }
+  }
+  [super dealloc];
 }
 
 - (BOOL)canBecomeKeyWindow {
@@ -1618,6 +1635,13 @@ static WoxDarwinRenderer *create_renderer(CALayer *layer) {
   renderer->content_layer = [[CALayer alloc] init];
   renderer->content_layer.opaque = NO;
   renderer->content_layer.needsDisplayOnBoundsChange = NO;
+  // Wox supplies complete frames, including any animation. Synchronous screenshot
+  // first frames have no outer resize transaction, so prevent Core Animation from
+  // moving the content from the layer origin or crossfading it on its own.
+  renderer->content_layer.actions = @{
+    @"position": [NSNull null], @"bounds": [NSNull null],
+    @"contents": [NSNull null], @"contentsScale": [NSNull null],
+  };
   renderer->scale = 1.0f;
   [layer addSublayer:renderer->content_layer];
   return renderer;
@@ -2429,7 +2453,60 @@ static NSCursor *darwin_web_view_cursor(NSString *value) {
   return [NSCursor arrowCursor];
 }
 
-// apply_darwin_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
+// darwin_diagonal_resize_fallback supplies directional arrows on macOS versions before 15.
+static NSCursor *darwin_diagonal_resize_fallback(BOOL northwest_southeast) {
+  static NSCursor *cursors[2] = {nil, nil};
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    for (NSUInteger index = 0; index < 2; index++) {
+      // Image size and hotspot are AppKit points; the drawing handler rasterizes at the active display scale.
+      NSImage *image = [NSImage imageWithSize:NSMakeSize(24, 24)
+                                      flipped:NO
+                               drawingHandler:^BOOL(NSRect rect) {
+                                 [NSGraphicsContext saveGraphicsState];
+                                 NSAffineTransform *transform = [NSAffineTransform transform];
+                                 [transform translateXBy:12 yBy:12];
+                                 [transform rotateByDegrees:index == 0 ? -45 : 45];
+                                 [transform concat];
+                                 NSBezierPath *arrow = [NSBezierPath bezierPath];
+                                 [arrow moveToPoint:NSMakePoint(-9, 0)];
+                                 [arrow lineToPoint:NSMakePoint(-3, 6)];
+                                 [arrow lineToPoint:NSMakePoint(-3, 2)];
+                                 [arrow lineToPoint:NSMakePoint(3, 2)];
+                                 [arrow lineToPoint:NSMakePoint(3, 6)];
+                                 [arrow lineToPoint:NSMakePoint(9, 0)];
+                                 [arrow lineToPoint:NSMakePoint(3, -6)];
+                                 [arrow lineToPoint:NSMakePoint(3, -2)];
+                                 [arrow lineToPoint:NSMakePoint(-3, -2)];
+                                 [arrow lineToPoint:NSMakePoint(-3, -6)];
+                                 [arrow closePath];
+                                 [arrow setLineWidth:2];
+                                 [arrow setLineJoinStyle:NSLineJoinStyleRound];
+                                 [[NSColor whiteColor] setStroke];
+                                 [arrow stroke];
+                                 [[NSColor blackColor] setFill];
+                                 [arrow fill];
+                                 [NSGraphicsContext restoreGraphicsState];
+                                 return YES;
+                               }];
+      cursors[index] = [[NSCursor alloc] initWithImage:image hotSpot:NSMakePoint(12, 12)];
+    }
+  });
+  return cursors[northwest_southeast ? 0 : 1];
+}
+
+// darwin_diagonal_resize_cursor preserves both resize axes instead of falling back to a crosshair.
+static NSCursor *darwin_diagonal_resize_cursor(BOOL northwest_southeast) {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
+  if (@available(macOS 15.0, *)) {
+    NSCursorFrameResizePosition position = northwest_southeast ? NSCursorFrameResizePositionTopLeft : NSCursorFrameResizePositionTopRight;
+    return [NSCursor frameResizeCursorFromPosition:position inDirections:NSCursorFrameResizeDirectionsAll];
+  }
+#endif
+  return darwin_diagonal_resize_fallback(northwest_southeast);
+}
+
+// darwin_host_pointer_cursor maps portable pointer targets to native AppKit cursors.
 static NSCursor *darwin_host_pointer_cursor(uint8_t cursor) {
   switch (cursor) {
     case 1: return [NSCursor IBeamCursor];
@@ -2437,23 +2514,28 @@ static NSCursor *darwin_host_pointer_cursor(uint8_t cursor) {
     case 3: return [NSCursor crosshairCursor];
     case 4: return [NSCursor resizeLeftRightCursor];
     case 5: return [NSCursor resizeUpDownCursor];
-    // AppKit has no public diagonal resize cursor, so use the precise crosshair fallback.
-    case 6:
-    case 7: return [NSCursor crosshairCursor];
+    case 6: return darwin_diagonal_resize_cursor(YES);
+    case 7: return darwin_diagonal_resize_cursor(NO);
     case 8: return [NSCursor pointingHandCursor];
+    case 9: return darwin_web_view_cursor(@"none");
     default: return [NSCursor arrowCursor];
   }
 }
 
+// resolved_darwin_pointer_cursor lets the active page cursor override the Go-rendered host cursor.
+static NSCursor *resolved_darwin_pointer_cursor(WoxDarwinWindow *window) {
+  return window != NULL && window->pointer_over_web_view && window->web_view_cursor != nil
+             ? window->web_view_cursor
+             : darwin_host_pointer_cursor(window != NULL ? window->pointer_cursor : 0);
+}
+
+// apply_darwin_pointer_cursor refreshes cursor rectangles before setting the immediate pointer image.
 static void apply_darwin_pointer_cursor(WoxDarwinWindow *window) {
   if (window == NULL || window->closed) {
     return;
   }
-  NSCursor *cursor = window->pointer_over_web_view && window->web_view_cursor != nil
-                         ? window->web_view_cursor
-                         : darwin_host_pointer_cursor(window->pointer_cursor);
-  [cursor set];
   [window->window invalidateCursorRectsForView:window->view];
+  [resolved_darwin_pointer_cursor(window) set];
 }
 
 // web_view_cursor_script reports computed CSS cursors because WoxRenderView owns native hit testing above WKWebView.
@@ -2805,10 +2887,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 
 - (void)resetCursorRects {
   [super resetCursorRects];
-  NSCursor *cursor = _owner != NULL && _owner->pointer_over_web_view && _owner->web_view_cursor != nil
-                         ? _owner->web_view_cursor
-                         : (_owner != NULL ? darwin_host_pointer_cursor(_owner->pointer_cursor) : [NSCursor arrowCursor]);
-  [self addCursorRect:self.bounds cursor:cursor];
+  [self addCursorRect:self.bounds cursor:resolved_darwin_pointer_cursor(_owner)];
 }
 
 - (CALayer *)makeBackingLayer {
@@ -3061,6 +3140,11 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
   NSRect window_rect = [self convertRect:owner->input_cursor_rect toView:nil];
   return [self.window convertRectToScreen:window_rect];
+}
+
+// Report overlay levels so IME candidate windows can appear above the screenshot panel.
+- (NSInteger)windowLevel {
+  return self.window != nil ? self.window.level : NSNormalWindowLevel;
 }
 
 - (NSUInteger)characterIndexForPoint:(NSPoint)point {
@@ -4791,8 +4875,13 @@ int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cu
       result = -1;
       return;
     }
-    window->pointer_cursor = cursor;
-    apply_darwin_pointer_cursor(window);
+    if (window->pointer_cursor != cursor) {
+      window->pointer_cursor = cursor;
+      apply_darwin_pointer_cursor(window);
+    } else {
+      // Restore a cursor overridden by native mouse handling without rebuilding unchanged cursor rectangles.
+      [resolved_darwin_pointer_cursor(window) set];
+    }
   });
   return result;
 }
@@ -4809,6 +4898,7 @@ static NSString *accessibility_role(const char *role) {
   if ([value isEqualToString:@"list_item"]) return NSAccessibilityRowRole;
   if ([value isEqualToString:@"image"]) return NSAccessibilityImageRole;
   if ([value isEqualToString:@"progress_bar"]) return NSAccessibilityProgressIndicatorRole;
+  if ([value isEqualToString:@"slider"]) return NSAccessibilitySliderRole;
   if ([value isEqualToString:@"link"]) return NSAccessibilityLinkRole;
   if ([value isEqualToString:@"menu"]) return NSAccessibilityMenuRole;
   if ([value isEqualToString:@"menu_item"]) return NSAccessibilityMenuItemRole;
@@ -5156,6 +5246,11 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
       }
       effective_damage = CGRectUnion(effective_damage, record.damage);
     }
+  }
+  if (!effective_full) {
+    // Cleanup must cover whole physical pixels; fractional clips blend the clear color into moving damage edges.
+    CGRect device_damage = CGRectIntegral(CGContextConvertRectToDeviceSpace(context, effective_damage));
+    effective_damage = CGContextConvertRectToUserSpace(context, device_damage);
   }
 
   // On M3, the first Metal render pass reserves about 200 MB of driver memory; drawing the same IOSurface on the CPU avoids that fixed visible-state cost.
@@ -5696,6 +5791,51 @@ int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t 
     CGContextRelease(context);
     CGImageRelease(crop);
     return 0;
+  }
+}
+
+// wox_darwin_test_fractional_damage repaints an unchanged scene on an actual retained IOSurface.
+int32_t wox_darwin_test_fractional_damage(float scale, float x, float y) {
+  @autoreleasepool {
+    WoxDarwinRenderer *renderer = create_renderer(nil);
+    if (renderer == NULL) return -1;
+    NSUInteger size = (NSUInteger)ceilf(64 * scale);
+    WoxDarwinSurface *surface = acquire_render_surface(renderer, size, size);
+    if (surface == nil || IOSurfaceLock(surface->io_surface, 0, NULL) != kIOReturnSuccess) {
+      [surface release];
+      destroy_renderer(renderer);
+      return -2;
+    }
+    uint8_t *pixels = IOSurfaceGetBaseAddress(surface->io_surface);
+    size_t stride = IOSurfaceGetBytesPerRow(surface->io_surface);
+    const uint8_t background[] = {0, 128, 255, 255};
+    for (NSUInteger y = 0; y < size; y++) {
+      for (NSUInteger x = 0; x < size; x++) {
+        memcpy(pixels + y * stride + x * 4, background, 4);
+      }
+    }
+    IOSurfaceUnlock(surface->io_surface, 0, NULL);
+    surface->content_sequence = 1;
+    renderer->submission_sequence = 1;
+    [surface release];
+
+    WoxDarwinWindow window = {.renderer = renderer, .active_renderer = renderer, .visible = true};
+    atomic_init(&window.presentation_generation, 0);
+    int32_t result = begin_darwin_renderer_frame(&window, renderer, 2, 64, 64, scale, x, y, 21.4f, 18.6f, 0, 0, 0, 255);
+    if (result != 0 || !renderer->damage_clip_active) {
+      destroy_renderer(renderer);
+      return -3;
+    }
+    wox_darwin_window_fill_rounded_rect(&window, 0, 0, 64, 64, 0, 255, 128, 0, 255);
+    CGContextFlush(renderer->context);
+    int32_t changed_pixels = 0;
+    for (NSUInteger y = 0; y < size; y++) {
+      for (NSUInteger x = 0; x < size; x++) {
+        if (memcmp(pixels + y * stride + x * 4, background, 4) != 0) changed_pixels++;
+      }
+    }
+    destroy_renderer(renderer);
+    return changed_pixels;
   }
 }
 

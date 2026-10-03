@@ -1524,6 +1524,10 @@ func (w *platformWindow) setWindowChrome(custom bool, radius float32, background
 	return nil
 }
 
+func testDarwinFractionalDamage(scale float32, origin Point) int32 {
+	return int32(C.wox_darwin_test_fractional_damage(C.float(scale), C.float(origin.X), C.float(origin.Y)))
+}
+
 // testRenderDarwinMaterial exercises the native renderer without opening a window.
 func testRenderDarwinMaterial(scale float32, alpha uint8, mode int) ([]byte, int) {
 	size := int(96 * scale)

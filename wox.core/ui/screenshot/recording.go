@@ -355,7 +355,7 @@ func (session *recordingSession) countdown(parent context.Context) {
 		return
 	}
 	session.mu.Lock()
-	if session.state != recordingStateCountdown {
+	if session.state != recordingStateCountdown || parent.Err() != nil {
 		session.mu.Unlock()
 		return
 	}
@@ -551,14 +551,14 @@ func (session *recordingSession) DiscardPendingFrames() {
 // stopPipelines waits for capture to exit before closing the encoder queue.
 func (session *recordingSession) stopPipelines() error {
 	session.mu.Lock()
-	cancel := session.stopCapture
+	// Cancel under the countdown lock so no workers can start after this snapshot.
+	if session.stopCapture != nil {
+		session.stopCapture()
+	}
 	frames := session.frames
 	done := session.workerDone
 	captureDone := session.captureDone
 	session.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
 	if captureDone != nil {
 		<-captureDone
 	}

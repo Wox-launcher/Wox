@@ -577,6 +577,7 @@ static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
       "nwse-resize",
       "nesw-resize",
       "pointer",
+      "none",
   };
   uint8_t host_cursor = window->pointer_cursor;
   const char *host_cursor_name = host_cursor < sizeof(host_cursor_names) / sizeof(host_cursor_names[0]) ? host_cursor_names[host_cursor] : "default";
@@ -4876,6 +4877,7 @@ static AtkRole accessibility_atk_role(const char *role) {
   if (g_strcmp0(role, "list_item") == 0) return ATK_ROLE_LIST_ITEM;
   if (g_strcmp0(role, "image") == 0) return ATK_ROLE_IMAGE;
   if (g_strcmp0(role, "progress_bar") == 0) return ATK_ROLE_PROGRESS_BAR;
+  if (g_strcmp0(role, "slider") == 0) return ATK_ROLE_SLIDER;
   if (g_strcmp0(role, "link") == 0) return ATK_ROLE_LINK;
   if (g_strcmp0(role, "menu") == 0) return ATK_ROLE_MENU;
   if (g_strcmp0(role, "menu_item") == 0) return ATK_ROLE_MENU_ITEM;

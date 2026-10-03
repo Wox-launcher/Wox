@@ -50,6 +50,7 @@ const (
 	PointerCursorCrosshair        = woxui.PointerCursorCrosshair
 	PointerCursorDefault          = woxui.PointerCursorDefault
 	PointerCursorHand             = woxui.PointerCursorHand
+	PointerCursorHidden           = woxui.PointerCursorHidden
 	PointerCursorMove             = woxui.PointerCursorMove
 	PointerCursorResizeHorizontal = woxui.PointerCursorResizeHorizontal
 	PointerCursorResizeNESW       = woxui.PointerCursorResizeNESW

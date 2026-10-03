@@ -1,10 +1,12 @@
 package screenshot
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +23,13 @@ type screenshotTestSurface struct{ *Window }
 
 func (*screenshotTestSurface) MeasureText(text string, style TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{Size: Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size + 6}}, nil
+}
+
+// screenshotTooltipTestSurface models glyphs wider and taller than the editor's character estimates.
+type screenshotTooltipTestSurface struct{ *Window }
+
+func (*screenshotTooltipTestSurface) MeasureText(text string, style TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: Size{Width: float32(len([]rune(text))) * style.Size * 1.1, Height: style.Size * 1.7}}, nil
 }
 
 // TestScreenshotSizeLabelCentersOpaqueChrome covers the stateless widget path at fractional DPI scales.
@@ -657,8 +666,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 686 || state.toolbarRect.Height != 60 {
-		t.Fatalf("toolbar bounds = %+v, want 686x60", state.toolbarRect)
+	if state.toolbarRect.Width != 782 || state.toolbarRect.Height != 48 {
+		t.Fatalf("toolbar bounds = %+v, want 782x48", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -712,7 +721,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 794 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+	if state.toolbarRect.Width != 890 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
 		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
 	}
 	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
@@ -723,7 +732,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 740 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 836 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
@@ -746,7 +755,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 740 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 836 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -754,7 +763,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 686 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 782 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
@@ -903,12 +912,37 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 		"control.remove",
 		"control.add",
 		"control.delete",
+		"screenshot.video-camera",
+		"control.record",
+		"control.pause",
+		"control.play-circle",
+		"control.play-arrow",
+		"control.refresh",
+		"control.keyboard",
+		"control.stop",
 	)
 	for _, name := range names {
 		displayList := &DisplayList{}
 		drawScreenshotEditorToolbarIcon(displayList, name, Rect{Width: 40, Height: 40}, Color{R: 255, G: 255, B: 255, A: 255}, 1)
 		if displayList.CommandCount() != 1 {
 			t.Fatalf("toolbar icon %q did not render as an SVG image", name)
+		}
+		renderer, err := woxui.NewSoftwareRenderer(40, 40)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := renderer.Render(displayList); err != nil {
+			t.Fatalf("render toolbar icon %q: %v", name, err)
+		}
+		visible := false
+		for index := 3; index < len(renderer.RGBA().Pix); index += 4 {
+			if renderer.RGBA().Pix[index] > 0 {
+				visible = true
+				break
+			}
+		}
+		if !visible {
+			t.Fatalf("toolbar icon %q rendered blank", name)
 		}
 	}
 }
@@ -935,7 +969,7 @@ func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 		t.Fatalf("estimated CJK tooltip width = %v, want 24", got)
 	}
 	displayList := &DisplayList{}
-	drawScreenshotEditorToolTooltip(displayList, Size{Width: 400, Height: 240}, Rect{X: 100, Y: 100, Width: 40, Height: 40}, Rect{}, "Rectangle", 1)
+	drawScreenshotEditorToolTooltip(displayList, &screenshotTestSurface{}, Size{Width: 400, Height: 240}, Rect{X: 100, Y: 100, Width: 40, Height: 40}, Rect{}, "Rectangle", 1)
 	if displayList.CommandCount() != 2 {
 		t.Fatalf("tooltip commands = %d, want background and text", displayList.CommandCount())
 	}
@@ -945,19 +979,59 @@ func TestScreenshotEditorToolTooltipStaysOnSelectionSide(t *testing.T) {
 	frame := Size{Width: 1200, Height: 700}
 	anchor := Rect{X: 400, Y: 100, Width: 40, Height: 40}
 	belowSelection := Rect{X: 100, Y: 20, Width: 900, Height: 60}
-	above := screenshotEditorToolTooltipRect(frame, anchor, belowSelection, "Arrow (A)", 1)
+	above := screenshotEditorToolTooltipRect(&screenshotTestSurface{}, frame, anchor, belowSelection, "Arrow (A)", 1)
 	if above.Y != 64 {
 		t.Fatalf("below-toolbar tooltip = %+v, want 8px above the icon", above)
 	}
 
 	aboveSelection := Rect{X: 100, Y: 160, Width: 900, Height: 200}
-	below := screenshotEditorToolTooltipRect(frame, anchor, aboveSelection, "Arrow (A)", 1)
+	below := screenshotEditorToolTooltipRect(&screenshotTestSurface{}, frame, anchor, aboveSelection, "Arrow (A)", 1)
 	if below.Y != 148 {
 		t.Fatalf("above-toolbar tooltip = %+v, want 8px below the icon", below)
 	}
 	editBar := Rect{X: 400, Y: 36, Width: 192, Height: 56}
 	if below.Y < editBar.Y+editBar.Height && below.Y+below.Height > editBar.Y {
 		t.Fatalf("tooltip %+v overlaps property bar %+v", below, editBar)
+	}
+}
+
+// TestScreenshotEditorTooltipUsesFontMetrics checks complete labels and centering at screen edges across DPI scales.
+func TestScreenshotEditorTooltipUsesFontMetrics(t *testing.T) {
+	surface := &screenshotTooltipTestSurface{}
+	frame := Size{Width: 1600, Height: 900}
+	for _, scale := range []float32{1, 1.25, 1.5, 2.5} {
+		for _, label := range []string{"Record video (V)", "录制视频 (V)", "Записать видео (V)"} {
+			for _, left := range []float32{0, 700, frame.Width - 40*scale} {
+				anchor := Rect{X: left, Y: 500, Width: 40 * scale, Height: 40 * scale}
+				style := TextStyle{Size: 12 * scale, Weight: FontWeightSemibold}
+				metrics, _ := surface.MeasureText(label, style)
+				rect := screenshotEditorToolTooltipRect(surface, frame, anchor, Rect{}, label, scale)
+				if rect.Width < metrics.Size.Width+20*scale || rect.Height < metrics.Size.Height+8*scale {
+					t.Fatalf("scale %v: tooltip %q bounds %+v clip measured text %+v", scale, label, rect, metrics.Size)
+				}
+				if rect.X < 8*scale || rect.X+rect.Width > frame.Width-8*scale {
+					t.Fatalf("scale %v: tooltip %q escapes frame: %+v", scale, label, rect)
+				}
+				actual := &DisplayList{}
+				drawScreenshotEditorToolTooltip(actual, surface, frame, anchor, Rect{}, label, scale)
+				expected := &DisplayList{}
+				expected.FillRoundedRect(rect, 8*scale, Color{R: 20, G: 18, B: 17, A: 240})
+				expected.DrawText(label, Rect{
+					X: rect.X + (rect.Width-metrics.Size.Width)/2, Y: rect.Y + (rect.Height-metrics.Size.Height)/2,
+					Width: metrics.Size.Width, Height: metrics.Size.Height,
+				}, style, Color{R: 255, G: 255, B: 255, A: 255})
+				if err := actual.Compare(expected); err != nil {
+					t.Fatalf("scale %v: tooltip %q should draw the complete centered label: %v", scale, label, err)
+				}
+				toolbar := Rect{X: 150, Y: 250}
+				origin := Point{X: -900, Y: -300}
+				localAnchor := Rect{X: anchor.X - toolbar.X, Y: anchor.Y - toolbar.Y, Width: anchor.Width, Height: anchor.Height}
+				local := recordingToolbarTooltipLocalRect(surface, frame, toolbar, localAnchor, Rect{}, origin, label, scale)
+				if math.Abs(float64(local.X+origin.X-rect.X)) > 0.001 || local.Y+origin.Y != rect.Y || local.Width != rect.Width || local.Height != rect.Height {
+					t.Fatalf("scale %v: recording tooltip %q lost measured bounds after origin conversion: %+v, want %+v", scale, label, local, rect)
+				}
+			}
+		}
 	}
 }
 
@@ -972,8 +1046,8 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 1029 || state.toolbarRect.Height != 90 {
-		t.Fatalf("scaled toolbar = %+v, want 1029x90", state.toolbarRect)
+	if state.toolbarRect.Width != 1173 || state.toolbarRect.Height != 72 {
+		t.Fatalf("scaled toolbar = %+v, want 1173x72", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)
@@ -1178,6 +1252,48 @@ func TestScreenshotEditorNumberToolCreatesConsecutiveMovableMarkers(t *testing.T
 	}
 }
 
+// TestScreenshotEditorNumberColorPersistsAfterRecoloring catches a palette showing the selected color while creation still uses the old one.
+func TestScreenshotEditorNumberColorPersistsAfterRecoloring(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2} {
+		state := &screenshotEditorOverlayState{
+			image: testScreenshotImage(t, 1, 1), frameSize: Size{Width: 1600, Height: 1000},
+			selection: Rect{X: 100, Y: 100, Width: 800, Height: 500}, hasSelection: true,
+			activeTool: screenshotEditorToolNumber, annotationColor: screenshotEditorPalette[1],
+			chromeScale: func(Rect) float32 { return scale },
+		}
+		click := func(point Point) {
+			state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+			state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: point})
+			state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
+		}
+		click(Point{X: 200, Y: 200})
+		red := state.editColorRects[0]
+		click(Point{X: red.X + red.Width/2, Y: red.Y + red.Height/2})
+		if state.annotations[0].color != screenshotEditorPalette[0] {
+			t.Fatal("palette did not recolor the selected number")
+		}
+		for index, point := range []Point{{X: 350, Y: 200}, {X: 500, Y: 200}} {
+			click(point)
+			if len(state.annotations) != index+2 || state.annotations[index+1].color != screenshotEditorPalette[0] || state.annotationColor != screenshotEditorPalette[0] {
+				t.Fatalf("scale %v: number %d reverted to the old color: %+v", scale, index+2, state.annotations)
+			}
+			if state.annotations[index+1].number != index+2 || state.activeTool != screenshotEditorToolNumber {
+				t.Fatal("continuing in the new color changed number sequencing or the active tool")
+			}
+		}
+		// Explicit selection edits change only that marker, preserving the creation preference.
+		click(Point{X: 200, Y: 200})
+		if state.activeTool != screenshotEditorToolSelect {
+			t.Fatal("clicking an existing number did not enter selection mode")
+		}
+		blue := state.editColorRects[3]
+		click(Point{X: blue.X + blue.Width/2, Y: blue.Y + blue.Height/2})
+		if state.annotations[0].color != screenshotEditorPalette[3] || state.annotations[1].color != screenshotEditorPalette[0] || state.annotationColor != screenshotEditorPalette[0] {
+			t.Fatal("recoloring a selected marker changed other marks or the creation preference")
+		}
+	}
+}
+
 func TestScreenshotEditorNumberAnnotationDrawsAndExports(t *testing.T) {
 	annotation := screenshotEditorAnnotation{
 		tool: screenshotEditorToolNumber, start: Point{X: 40, Y: 30}, number: 12, color: screenshotEditorAnnotationColor,
@@ -1188,7 +1304,7 @@ func TestScreenshotEditorNumberAnnotationDrawsAndExports(t *testing.T) {
 		t.Fatalf("number text rect = %+v, want center %+v", textRect, annotation.start)
 	}
 	displayList := &DisplayList{}
-	drawScreenshotEditorAnnotations(displayList, []screenshotEditorAnnotation{annotation}, nil, Size{Width: 80, Height: 60}, 1)
+	drawScreenshotEditorAnnotations(displayList, nil, []screenshotEditorAnnotation{annotation}, nil, Size{Width: 80, Height: 60}, 1)
 	if displayList.CommandCount() != 2 {
 		t.Fatalf("number preview commands = %d, want circle and text", displayList.CommandCount())
 	}
@@ -1462,6 +1578,62 @@ func TestScreenshotEditorAnnotationDirtyRectCoversMove(t *testing.T) {
 	}
 }
 
+// TestScreenshotEditorDragCanRepaintReusedBuffers covers native damage expansion after commands are recorded.
+func TestScreenshotEditorDragCanRepaintReusedBuffers(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 800, 600))
+	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 100, G: 140, B: 200, A: 255}), image.Point{}, draw.Src)
+	background, err := NewImage(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		state := &screenshotEditorOverlayState{
+			image: background, frameSize: Size{Width: 800, Height: 600},
+			selection: Rect{X: 40, Y: 40, Width: 700, Height: 400}, hasSelection: true,
+			activeTool: screenshotEditorToolSelect, hasSelectedMark: true, colorInspectorDismissed: true,
+			chromeScale: func(Rect) float32 { return scale },
+			annotations: []screenshotEditorAnnotation{{
+				tool: screenshotEditorToolEllipse, rect: Rect{X: 100, Y: 100, Width: 80, Height: 60}, color: screenshotEditorAnnotationColor,
+			}, {
+				tool: screenshotEditorToolRect, rect: Rect{X: 600, Y: 300, Width: 100, Height: 70}, color: screenshotEditorAnnotationColor,
+			}},
+		}
+		frame := FrameInfo{Size: state.frameSize, Scale: scale}
+		state.draw(&DisplayList{}, frame)
+		state.editMode = screenshotEditorEditMoveAnnotation
+		state.editOriginalMark = state.annotations[0]
+		state.start = Point{X: 140, Y: 130}
+		for _, point := range []Point{{X: 200.3, Y: 160.7}, {X: 340.8, Y: 220.2}, {X: 170.6, Y: 140.9}} {
+			damage := state.updateSelectEditLocked(point, 0)
+			if damage.Width <= 0 || damage.Height <= 0 {
+				t.Fatal("annotation drag did not produce partial damage")
+			}
+			partial := &DisplayList{}
+			frame.Damage = damage
+			state.draw(partial, frame)
+			if partial.NativeDamage() != damage {
+				t.Fatalf("scale %v: lost annotation damage: %+v, want %+v", scale, partial.NativeDamage(), damage)
+			}
+			full := &DisplayList{}
+			frame.Damage = Rect{}
+			state.draw(full, frame)
+			// A fresh or sufficiently old native back buffer can require the complete frame.
+			partial.SetDamage(Rect{})
+			actual, _ := woxui.NewSoftwareRenderer(800, 600)
+			expected, _ := woxui.NewSoftwareRenderer(800, 600)
+			if err := actual.Render(partial); err != nil {
+				t.Fatal(err)
+			}
+			if err := expected.Render(full); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(actual.RGBA().Pix, expected.RGBA().Pix) {
+				t.Fatalf("scale %v: expanded annotation repaint lost scene pixels at pointer %+v", scale, point)
+			}
+		}
+	}
+}
+
 func TestScreenshotEditorExportCropsBeforeAnnotating(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 800, 400))
 	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 20, G: 30, B: 40, A: 255}), image.Point{}, draw.Src)
@@ -1587,6 +1759,28 @@ func TestScreenshotEditorToolbarKeyboardShortcuts(t *testing.T) {
 	if state.key(KeyEvent{Key: Key("r"), Down: true}) || state.activeTool != screenshotEditorToolText {
 		t.Fatal("tool shortcut should not run while entering annotation text")
 	}
+	state.allowVideoRecording = true
+	state.result = make(chan screenshotEditorOverlayOutcome, 1)
+	if state.key(KeyEvent{Key: Key("v"), Down: true}) {
+		t.Fatal("recording shortcut should leave annotation text input alone")
+	}
+	state.textEditing = false
+	state.allowVideoRecording = false
+	if state.key(KeyEvent{Key: Key("v"), Down: true}) {
+		t.Fatal("recording shortcut should not run for image-only requests")
+	}
+	state.allowVideoRecording = true
+	if !state.key(KeyEvent{Key: Key("v"), Down: true}) {
+		t.Fatal("recording shortcut was not handled")
+	}
+	select {
+	case outcome := <-state.result:
+		if !outcome.record || outcome.cancelled || outcome.pinned {
+			t.Fatalf("recording shortcut outcome = %+v", outcome)
+		}
+	default:
+		t.Fatal("recording shortcut did not enter the recording flow")
+	}
 }
 
 func TestScreenshotEditorSelectMovesResizesAndDeletesAnnotation(t *testing.T) {
@@ -1711,28 +1905,29 @@ func TestScreenshotEditorTextToolHoverShowsNestedTextWithoutSelectingShape(t *te
 	}
 }
 
-func TestScreenshotEditorAnnotationHandlesMatchFlutterContract(t *testing.T) {
+func TestScreenshotEditorAnnotationResizeHandles(t *testing.T) {
 	displayList := &DisplayList{}
 	drawScreenshotEditorAnnotationHandles(displayList, screenshotEditorAnnotation{
 		tool: screenshotEditorToolRect,
 		rect: Rect{X: 20, Y: 20, Width: 80, Height: 50},
 	}, 1)
-	if displayList.CommandCount() != 8 {
-		t.Fatalf("rectangle handle commands = %d, want 8", displayList.CommandCount())
+	if displayList.CommandCount() != 16 {
+		t.Fatalf("rectangle handle commands = %d, want 16", displayList.CommandCount())
 	}
 	expected := &DisplayList{}
 	for _, point := range screenshotEditorRectHandlePoints(Rect{X: 20, Y: 20, Width: 80, Height: 50}) {
 		expected.StrokeRoundedRect(Rect{X: point.X - 5, Y: point.Y - 5, Width: 10, Height: 10}, 5, 1.5, Color{R: 255, G: 255, B: 255, A: 255})
 	}
+	drawScreenshotEditorRectRadiusHandles(expected, screenshotEditorAnnotation{tool: screenshotEditorToolRect, rect: Rect{X: 20, Y: 20, Width: 80, Height: 50}}, 1)
 	if err := displayList.Compare(expected); err != nil {
-		t.Fatalf("rectangle handles are not uniform small white circles: %v", err)
+		t.Fatalf("rectangle resize handles changed when adding radius controls: %v", err)
 	}
 	arrowDisplayList := &DisplayList{}
 	drawScreenshotEditorAnnotationHandles(arrowDisplayList, screenshotEditorAnnotation{
 		tool: screenshotEditorToolArrow, start: Point{X: 20, Y: 20}, end: Point{X: 80, Y: 50}, color: screenshotEditorAnnotationColor,
 	}, 1)
 	arrowExpected := &DisplayList{}
-	for _, point := range []Point{{X: 20, Y: 20}, {X: 80, Y: 50}} {
+	for _, point := range []Point{{X: 20, Y: 20}, {X: 50, Y: 35}, {X: 80, Y: 50}} {
 		arrowExpected.StrokeRoundedRect(Rect{X: point.X - 5, Y: point.Y - 5, Width: 10, Height: 10}, 5, 1.5, Color{R: 255, G: 255, B: 255, A: 255})
 	}
 	if err := arrowDisplayList.Compare(arrowExpected); err != nil {
@@ -1781,10 +1976,11 @@ func TestScreenshotEditorEditBarUpdatesCreationAndSelectedAnnotation(t *testing.
 	state.activeTool = screenshotEditorToolText
 	state.hasSelectedMark = false
 	state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
-	increaseCreationTextRect := state.editIncreaseRect
-	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: increaseCreationTextRect.X + 21, Y: increaseCreationTextRect.Y + 21}})
-	if state.textFontSize != 22 {
-		t.Fatalf("creation text font size = %v, want 22", state.textFontSize)
+	slider := state.editFontSizeRect
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: slider.X + slider.Width/2, Y: slider.Y + 21}})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary})
+	if state.textFontSize != 30 {
+		t.Fatalf("creation text font size = %v, want 30", state.textFontSize)
 	}
 
 	state.activeTool = screenshotEditorToolSelect
@@ -1792,10 +1988,11 @@ func TestScreenshotEditorEditBarUpdatesCreationAndSelectedAnnotation(t *testing.
 	state.selectedAnnotation = 0
 	state.hasSelectedMark = true
 	state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
-	increaseRect := state.editIncreaseRect
-	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: increaseRect.X + 21, Y: increaseRect.Y + 21}})
-	if state.annotations[0].fontSize != 22 {
-		t.Fatalf("text font size = %v, want 22", state.annotations[0].fontSize)
+	slider = state.editFontSizeRect
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: slider.X + slider.Width/2, Y: slider.Y + 21}})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary})
+	if state.annotations[0].fontSize != 30 {
+		t.Fatalf("text font size = %v, want 30", state.annotations[0].fontSize)
 	}
 	deleteRect := state.editDeleteRect
 	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: deleteRect.X + 21, Y: deleteRect.Y + 21}})

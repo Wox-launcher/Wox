@@ -440,7 +440,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		ExtraActions:      request.ExtraActions,
-		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 30, ShowPointer: true}, WindowManager: a.windows,
+		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 60, ShowPointer: true}, WindowManager: a.windows,
 		Theme: a.screenshotControlTheme(), FontFamily: a.generalSettings.Data().AppFontFamily,
 		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
 			Title: a.translate("i18n:plugin_screenshot_size_title"),
@@ -450,12 +450,15 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			LockAspectRatio: a.translate("i18n:plugin_screenshot_size_lock_ratio"), Swap: a.translate("i18n:plugin_screenshot_size_swap"),
 		},
 		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
+			FontSize:  a.translate("i18n:ui_screenshot_font_size"),
 			Rectangle: a.translate("i18n:ui_screenshot_tool_rectangle"),
 			Ellipse:   a.translate("i18n:ui_screenshot_tool_ellipse"),
 			Text:      a.translate("i18n:ui_screenshot_tool_text"),
 			Arrow:     a.translate("i18n:ui_screenshot_tool_arrow"),
 			Number:    a.translate("i18n:ui_screenshot_tool_number"),
 			Mosaic:    a.translate("i18n:ui_screenshot_tool_mosaic"),
+			Brush:     a.translate("i18n:ui_screenshot_tool_brush"),
+			Eraser:    a.translate("i18n:ui_screenshot_tool_eraser"),
 		},
 		ActionTooltips: woxscreenshot.ScreenshotActionTooltips{
 			Undo:             a.translate("i18n:ui_screenshot_tool_undo"),

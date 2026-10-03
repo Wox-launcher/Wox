@@ -1,8 +1,10 @@
 package screenshot
 
 import (
+	"strings"
 	"time"
 
+	woxwidget "wox/ui/widget"
 	"wox/util/clipboard"
 )
 
@@ -51,10 +53,12 @@ func (state *screenshotEditorOverlayState) editingTextAnnotationLocked() screens
 	if state.textEditor != nil {
 		preview, _ = screenshotEditorTextEditingPreview(state.textEditor.State())
 	}
-	return screenshotEditorAnnotation{
+	annotation := screenshotEditorAnnotation{
 		tool: screenshotEditorToolText, start: state.textPosition, text: preview,
 		color: state.annotationColor, fontSize: state.textFontSize,
 	}
+	state.measureTextAnnotation(&annotation, state.uiScale)
+	return annotation
 }
 
 // editingTextContainsLocked reports whether the pointer is still inside the label being typed.
@@ -91,8 +95,9 @@ func (state *screenshotEditorOverlayState) beginTextSelectionAtLocked(point Poin
 	editor := state.ensureTextEditorLocked()
 	annotation := state.editingTextAnnotationLocked()
 	offset := screenshotEditorTextCaretIndex(
+		state.window,
 		annotation.text,
-		point.X-annotation.start.X,
+		Point{X: point.X - annotation.start.X, Y: point.Y - annotation.start.Y},
 		screenshotEditorAnnotationRenderedFontSize(annotation, state.uiScale),
 	)
 	switch state.noteTextTapLocked(point) {
@@ -115,8 +120,9 @@ func (state *screenshotEditorOverlayState) extendTextSelectionLocked(point Point
 	editor := state.ensureTextEditorLocked()
 	annotation := state.editingTextAnnotationLocked()
 	focus := screenshotEditorTextCaretIndex(
+		state.window,
 		annotation.text,
-		point.X-annotation.start.X,
+		Point{X: point.X - annotation.start.X, Y: point.Y - annotation.start.Y},
 		screenshotEditorAnnotationRenderedFontSize(annotation, state.uiScale),
 	)
 	editor.SetSelection(editor.State().Selection.Anchor, focus)
@@ -130,6 +136,56 @@ func (state *screenshotEditorOverlayState) handleTextEditingKeyLocked(event KeyE
 		return false, "", false
 	}
 	editor := state.ensureTextEditorLocked()
+	if event.Key == KeyEnter && event.Modifiers == KeyModifierShift {
+		editor.InsertTextSeparate("\n")
+		state.syncTextEditorLocked()
+		state.showCaretLocked()
+		return true, "", false
+	}
+	vertical := event.Key == KeyArrowUp || event.Key == KeyArrowDown
+	if event.Modifiers & ^KeyModifierShift == 0 && (vertical || event.Key == KeyHome || event.Key == KeyEnd) {
+		snapshot := editor.State()
+		runes := []rune(snapshot.Text)
+		focus := snapshot.Selection.Focus
+		preferredX := float32(0)
+		switch event.Key {
+		case KeyArrowUp, KeyArrowDown:
+			caret := screenshotEditorTextCaretRect(state.window, Point{}, string(runes[:focus]), state.textFontSize, state.uiScale)
+			x, hasPreferredX := editor.PreferredX()
+			if !hasPreferredX {
+				x = caret.X
+			}
+			fontSize := state.textFontSize * max(float32(1), state.uiScale)
+			direction := float32(1)
+			if event.Key == KeyArrowUp {
+				direction = -1
+			}
+			lineHeight := screenshotEditorTextLineHeight(fontSize)
+			focus = screenshotEditorTextCaretIndex(state.window, snapshot.Text, Point{X: x, Y: caret.Y + (direction+0.5)*lineHeight}, fontSize)
+			preferredX = x
+		case KeyHome, KeyEnd:
+			if event.Key == KeyHome {
+				for focus > 0 && runes[focus-1] != '\n' {
+					focus--
+				}
+			} else {
+				for focus < len(runes) && runes[focus] != '\n' {
+					focus++
+				}
+			}
+		}
+		if event.Modifiers&KeyModifierShift != 0 {
+			editor.SetSelection(snapshot.Selection.Anchor, focus)
+		} else {
+			editor.SetCaret(focus)
+		}
+		if vertical {
+			editor.SetPreferredX(preferredX)
+		}
+		state.syncTextEditorLocked()
+		state.showCaretLocked()
+		return true, "", false
+	}
 	if event.Modifiers.HasPrimary() {
 		switch event.Key {
 		case Key("c"):
@@ -163,7 +219,7 @@ func (state *screenshotEditorOverlayState) pasteTextEditing(text string) bool {
 	if !state.textEditing {
 		return false
 	}
-	text = FilterSingleLineNewlines(text)
+	text = screenshotEditorNormalizeTextNewlines(text)
 	if text == "" {
 		return true
 	}
@@ -213,19 +269,66 @@ func screenshotEditorTextEditingPreview(state TextEditingState) (string, string)
 	return prefix + string(runes[end:]), prefix
 }
 
-func drawScreenshotEditorTextSelection(displayList *DisplayList, origin Point, text string, selection TextSelection, fontSize float32, color Color, uiScale float32) {
+// screenshotEditorTextWidth matches annotation drawing; estimates are only a fallback when native metrics are unavailable.
+func screenshotEditorTextWidth(window woxwidget.HostServices, text string, fontSize float32) float32 {
+	if text == "" {
+		return 0
+	}
+	if window != nil {
+		if metrics, err := window.MeasureText(text, TextStyle{Size: fontSize, Weight: FontWeightSemibold}); err == nil {
+			return metrics.Size.Width
+		}
+	}
+	return screenshotEditorEstimatedTextWidth(text, fontSize)
+}
+
+func screenshotEditorNormalizeTextNewlines(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+}
+
+// screenshotEditorTextLineHeight shares line spacing between logical preview layout and scaled pixel export.
+func screenshotEditorTextLineHeight(fontSize float32) float32 {
+	return fontSize * 1.4
+}
+
+// screenshotEditorTextCaretRect keeps the visible caret and native IME anchor at the same measured logical position.
+func screenshotEditorTextCaretRect(window woxwidget.HostServices, origin Point, prefix string, fontSize, uiScale float32) Rect {
+	scale := max(float32(1), uiScale)
+	line := strings.Count(prefix, "\n")
+	linePrefix := prefix[strings.LastIndex(prefix, "\n")+1:]
+	return Rect{
+		X:     origin.X + screenshotEditorTextWidth(window, linePrefix, fontSize*scale),
+		Y:     origin.Y + float32(line)*screenshotEditorTextLineHeight(fontSize*scale),
+		Width: max(float32(1), 1.5*scale), Height: (fontSize + 4) * scale,
+	}
+}
+
+// drawScreenshotEditorTextSelection uses the same measured advances as caret placement and click selection.
+func drawScreenshotEditorTextSelection(displayList *DisplayList, window woxwidget.HostServices, origin Point, text string, selection TextSelection, fontSize float32, color Color, uiScale float32) {
 	runes := []rune(text)
 	start := min(max(0, selection.Start()), len(runes))
 	end := min(max(start, selection.End()), len(runes))
 	if start >= end {
 		return
 	}
-	left := origin.X + screenshotEditorEstimatedTextWidth(string(runes[:start]), fontSize)
-	right := origin.X + screenshotEditorEstimatedTextWidth(string(runes[:end]), fontSize)
 	highlight := color
 	highlight.A = 70
-	displayList.FillRect(Rect{
-		X: left, Y: origin.Y,
-		Width: max(float32(1), right-left), Height: fontSize + 4*max(float32(1), uiScale),
-	}, highlight)
+	lineStart := 0
+	for row, line := range strings.Split(text, "\n") {
+		lineRunes := []rune(line)
+		lineEnd := lineStart + len(lineRunes)
+		if start <= lineEnd && end > lineStart {
+			left := screenshotEditorTextWidth(window, string(lineRunes[:max(0, start-lineStart)]), fontSize)
+			right := screenshotEditorTextWidth(window, string(lineRunes[:min(len(lineRunes), end-lineStart)]), fontSize)
+			if end > lineEnd {
+				// A selected newline remains visible even on an otherwise empty line.
+				right += screenshotEditorTextWidth(window, " ", fontSize)
+			}
+			displayList.FillRect(Rect{
+				X: origin.X + left, Y: origin.Y + float32(row)*screenshotEditorTextLineHeight(fontSize),
+				Width: max(float32(1), right-left), Height: fontSize + 4*max(float32(1), uiScale),
+			}, highlight)
+		}
+		lineStart = lineEnd + 1
+	}
 }

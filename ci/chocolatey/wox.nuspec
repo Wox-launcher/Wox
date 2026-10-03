@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>wox</id>
+    <version>@@VERSION@@</version>
+    <title>Wox</title>
+    <authors>Wox Launcher</authors>
+    <licenseUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/@@TAG@@/LICENSE</licenseUrl>
+    <projectUrl>https://www.woxlauncher.com/</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/Wox-launcher/Wox/@@TAG@@/assets/app.png</iconUrl>
+    <packageSourceUrl>https://github.com/Wox-launcher/Wox/tree/master/ci/chocolatey</packageSourceUrl>
+    <projectSourceUrl>https://github.com/Wox-launcher/Wox</projectSourceUrl>
+    <docsUrl>https://www.woxlauncher.com/</docsUrl>
+    <bugTrackerUrl>https://github.com/Wox-launcher/Wox/issues</bugTrackerUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Wox is an open-source cross-platform launcher for macOS, Linux, and Windows. It provides fast local search, extensibility through plugins, and a lightweight distribution that runs from a single executable.</description>
+    <summary>A cross-platform launcher that simply works</summary>
+    <releaseNotes>@@RELEASE_URL@@</releaseNotes>
+    <copyright>Copyright (c) 2013-present Wox Launcher</copyright>
+    <tags>wox launcher alfred launchy spotlight</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

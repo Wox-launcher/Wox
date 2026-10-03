@@ -130,6 +130,7 @@ CONTROLTYPEID control_type(const std::string &role) {
   if (role == "list_item") return UIA_ListItemControlTypeId;
   if (role == "image") return UIA_ImageControlTypeId;
   if (role == "progress_bar") return UIA_ProgressBarControlTypeId;
+  if (role == "slider") return UIA_SliderControlTypeId;
   if (role == "link") return UIA_HyperlinkControlTypeId;
   if (role == "menu") return UIA_MenuControlTypeId;
   if (role == "menu_item") return UIA_MenuItemControlTypeId;

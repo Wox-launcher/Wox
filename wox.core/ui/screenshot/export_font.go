@@ -278,6 +278,11 @@ func drawScreenshotEditorPixelTextWithFonts(target *image.RGBA, clip image.Recta
 	var glyphBuf sfnt.Buffer
 	var utfBuf [utf8.UTFMax]byte
 	for _, r := range text {
+		if r == '\n' {
+			drawer.Dot.X = fixed.I(position.X)
+			drawer.Dot.Y += fixed.Int26_6(screenshotEditorTextLineHeight(size) * 64)
+			continue
+		}
 		drawer.Face = screenshotEditorFaceForRune(r, faces, &glyphBuf)
 		n := utf8.EncodeRune(utfBuf[:], r)
 		drawer.DrawBytes(utfBuf[:n])

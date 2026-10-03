@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins themes plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins themes plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update chocolatey-update appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -132,6 +132,7 @@ help:
 	@echo "  release    Create a new release (reads version from CHANGELOG.md)"
 	@echo "  release-continue Re-push the existing top CHANGELOG release tag after a failed release run"
 	@echo "  winget-update Check the latest stable Wox release and confirm before submitting its winget update"
+	@echo "  chocolatey-update Package the latest stable Wox release and confirm before submitting to Chocolatey (CHOCOLATEY_ARGS=--dry-run or --yes)"
 
 _check_deps:
 	@echo "Checking required dependencies..."
@@ -565,6 +566,9 @@ release-continue:
 
 winget-update:
 	@node ci/winget-update.mjs
+
+chocolatey-update:
+	@node ci/chocolatey-update.mjs $(CHOCOLATEY_ARGS)
 
 plugins:
 	cd ci && go run . plugin

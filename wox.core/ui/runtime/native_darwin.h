@@ -14,6 +14,8 @@ enum {
 
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
+int32_t wox_darwin_acquire_screenshot_cursor(void);
+int32_t wox_darwin_release_screenshot_cursor(void);
 enum {
   WOX_TITLE_BAR_CLOSE = 1,
   WOX_TITLE_BAR_MINIMIZE = 2,
@@ -90,6 +92,7 @@ int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
 int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
 int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
 int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float scale, uint8_t background_alpha, int32_t mode);
+int32_t wox_darwin_test_fractional_damage(float scale, float x, float y);
 int32_t wox_darwin_test_cached_image_owns_pixels(void);
 int32_t wox_darwin_test_large_image_admission(void);
 int32_t wox_darwin_test_screenshot_pixel_at_point(int32_t image_width, int32_t image_height, float frame_width, float frame_height, float x, float y, int32_t *pixel_x, int32_t *pixel_y);

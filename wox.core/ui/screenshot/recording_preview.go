@@ -9,11 +9,13 @@ import (
 	"math"
 	"os/exec"
 	"strconv"
+	"time"
 )
 
 const (
-	recordingCountdownLogicalSize = float32(160)
-	recordingPreviewMaxEdge       = 1280
+	recordingCountdownLogicalSize  = float32(160)
+	recordingCountdownFadeDuration = 180 * time.Millisecond
+	recordingPreviewMaxEdge        = 1280
 )
 
 var recordingCountdownFill = Color{R: 255, G: 59, B: 48, A: 255}
@@ -30,11 +32,17 @@ func recordingCountdownFontSize(selection Rect, uiScale float32) float32 {
 	return size
 }
 
-// drawRecordingCountdown paints a large red digit with a white outline in the selection center.
-func drawRecordingCountdown(displayList *DisplayList, selection Rect, seconds int, uiScale float32) {
-	if displayList == nil || seconds < 1 {
+// drawRecordingCountdown fades each digit in without moving it away from the selection center.
+func drawRecordingCountdown(displayList *DisplayList, selection Rect, remaining time.Duration, uiScale float32) {
+	if displayList == nil || remaining <= 0 {
 		return
 	}
+	seconds := int((remaining + time.Second - 1) / time.Second)
+	elapsed := time.Duration(seconds)*time.Second - remaining
+	opacity := min(float32(1), float32(elapsed)/float32(recordingCountdownFadeDuration))
+	fill, stroke := recordingCountdownFill, recordingCountdownStroke
+	fill.A = uint8(float32(fill.A) * opacity)
+	stroke.A = uint8(float32(stroke.A) * opacity)
 	label := strconv.Itoa(seconds)
 	size := recordingCountdownFontSize(selection, uiScale)
 	strokeWidth := max(float32(4), size*0.05)
@@ -45,7 +53,7 @@ func drawRecordingCountdown(displayList *DisplayList, selection Rect, seconds in
 		X: selection.X + (selection.Width-width)/2, Y: selection.Y + (selection.Height-height)/2,
 		Width: width, Height: height,
 	}
-	drawRecordingOutlinedText(displayList, label, rect, style, recordingCountdownFill, recordingCountdownStroke, strokeWidth)
+	drawRecordingOutlinedText(displayList, label, rect, style, fill, stroke, strokeWidth)
 }
 
 // drawRecordingOutlinedText draws a solid halo first so the fill stays readable on any desktop.

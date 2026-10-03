@@ -185,6 +185,23 @@ func TestRecordingSessionCancelStopsCountdownWithoutResurrection(t *testing.T) {
 	}
 }
 
+// TestRecordingCountdownCannotStartAfterPipelineStop covers a timer waking as cancellation snapshots the workers.
+func TestRecordingCountdownCannotStartAfterPipelineStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session := &recordingSession{
+		state: recordingStateCountdown, stopCapture: cancel,
+		config: recordingSessionConfig{Now: time.Now, Sleep: func(context.Context, time.Duration) error { return nil }},
+	}
+	if err := session.stopPipelines(); err != nil {
+		t.Fatal(err)
+	}
+	session.countdown(ctx)
+	if session.state != recordingStateCountdown || session.frames != nil || session.captureDone != nil || session.workerDone != nil {
+		t.Fatal("cancelled countdown created workers after pipeline shutdown")
+	}
+}
+
 func TestRecordingSessionSerializesConcurrentFinishAndCancel(t *testing.T) {
 	encoder := &recordingTestEncoder{}
 	session, err := newRecordingSession(recordingSessionConfig{
@@ -216,6 +233,83 @@ func TestRecordingSessionSerializesConcurrentFinishAndCancel(t *testing.T) {
 	workers.Wait()
 	if state := session.currentState(); state != recordingStateClosed {
 		t.Fatalf("concurrent stop state = %s, want closed", state)
+	}
+}
+
+// TestRecordingToolbarCancelKeepsUIThreadAvailable reproduces capture waiting for a native main-queue callback.
+func TestRecordingToolbarCancelKeepsUIThreadAvailable(t *testing.T) {
+	uiAvailable := make(chan struct{})
+	captureWaiting := make(chan struct{})
+	var releaseUI sync.Once
+	defer releaseUI.Do(func() { close(uiAvailable) })
+	encoder := &recordingTestEncoder{}
+	releases := 0
+	session, err := newRecordingSession(recordingSessionConfig{
+		FPS: 60, PixelBounds: image.Rect(0, 0, 4, 2), Encoder: encoder, TempRoot: t.TempDir(),
+		Capture: func() (image.Image, error) { return image.NewRGBA(image.Rect(0, 0, 4, 2)), nil },
+		Compose: func(source image.Image) (*image.RGBA, error) {
+			select {
+			case <-captureWaiting:
+			default:
+				close(captureWaiting)
+			}
+			<-uiAvailable
+			return source.(*image.RGBA), nil
+		},
+		Sleep:   func(context.Context, time.Duration) error { return nil },
+		Release: func() { releases++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	path := session.TempPath()
+	select {
+	case <-captureWaiting:
+	case <-time.After(time.Second):
+		t.Fatal("capture did not request its UI callback")
+	}
+	state := &recordingToolbarState{session: session, result: make(chan recordingUIResult, 1)}
+	returned := make(chan struct{})
+	go func() {
+		state.cancel()
+		state.cancel()
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		releaseUI.Do(func() { close(uiAvailable) })
+		<-returned
+		t.Fatal("Cancel blocked the UI callback while capture was waiting for the UI thread")
+	}
+	select {
+	case <-state.result:
+		t.Fatal("recording closed before capture stopped")
+	default:
+	}
+	releaseUI.Do(func() { close(uiAvailable) })
+	select {
+	case result := <-state.result:
+		if !result.result.Cancelled || result.err != nil {
+			t.Fatalf("cancel result = %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Cancel did not finish after the UI callback completed")
+	}
+	if releases != 1 || !encoder.aborted || session.currentState() != recordingStateClosed {
+		t.Fatalf("cancel cleanup: releases=%d aborted=%t state=%s", releases, encoder.aborted, session.currentState())
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("cancelled recording still exists: %v", err)
+	}
+	state.closed()
+	select {
+	case <-state.result:
+		t.Fatal("window close published a duplicate cancellation result")
+	default:
 	}
 }
 
@@ -301,15 +395,15 @@ func TestRecordingToolbarLayoutScalesOutsideTheSelection(t *testing.T) {
 }
 
 func TestRecordingToolbarControlLayoutMatchesScreenshotSlots(t *testing.T) {
-	panel, timeRect, fpsRect, primary, restart, pointer, keypress, finish, cancel := recordingToolbarControlLayout(1)
+	panel, timeRect, primary, restart, pointer, keypress, finish, cancel := recordingToolbarControlLayout(1)
 	if panel.Y != 0 || panel.Height != recordingToolbarHeight {
 		t.Fatalf("toolbar panel = %+v, want y=0 height=%v", panel, recordingToolbarHeight)
 	}
 	if timeRect.X != recordingToolbarPad {
 		t.Fatalf("time control left = %v, want %v", timeRect.X, recordingToolbarPad)
 	}
-	if gap := fpsRect.X - (timeRect.X + timeRect.Width); gap != recordingToolbarGap {
-		t.Fatalf("time to FPS gap = %v, want %v", gap, recordingToolbarGap)
+	if gap := primary.X - (timeRect.X + timeRect.Width); gap != recordingToolbarGap+4 {
+		t.Fatalf("time to primary button gap = %v, want %v", gap, recordingToolbarGap+4)
 	}
 	buttons := []Rect{primary, restart, pointer, keypress, finish, cancel}
 	for index := 1; index < len(buttons); index++ {
@@ -506,8 +600,9 @@ func TestRecordingBorderPointerMovesAndResizesReadySelection(t *testing.T) {
 		}
 	}
 	moving := newState()
-	moving.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 50, Y: recordingBorderMargin + 50}})
-	moving.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 70, Y: recordingBorderMargin + 65}})
+	// Start on the border band; native hit testing passes the selection interior through.
+	moving.borderPointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 50, Y: recordingBorderMargin + 5}})
+	moving.borderPointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: Point{X: recordingBorderMargin + 70, Y: recordingBorderMargin + 20}})
 	if moving.selection.X != 120 || moving.selection.Y != 115 {
 		t.Fatalf("moved selection = %+v", moving.selection)
 	}
@@ -623,7 +718,7 @@ func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
 	toolbar := Rect{X: selection.X + selection.Width - recordingToolbarWidth, Y: selection.Y + selection.Height + recordingToolbarSelectionGap, Width: recordingToolbarWidth, Height: recordingToolbarHeight}
 	anchor := Rect{X: 300, Y: 10, Width: 40, Height: 40}
 	origin := Point{X: selection.X - recordingBorderMargin, Y: selection.Y - recordingBorderMargin}
-	local := recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
+	local := recordingToolbarTooltipLocalRect(&screenshotTestSurface{}, Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
 	globalY := local.Y + origin.Y
 	if globalY != toolbar.Y+anchor.Y-36 {
 		t.Fatalf("tooltip top = %v, want screenshot offset above the icon %v", globalY, toolbar.Y+anchor.Y-36)
@@ -634,7 +729,7 @@ func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
 	}
 
 	toolbar.Y = selection.Y - recordingToolbarHeight - recordingToolbarSelectionGap
-	local = recordingToolbarTooltipLocalRect(Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
+	local = recordingToolbarTooltipLocalRect(&screenshotTestSurface{}, Size{Width: 1920, Height: 1080}, toolbar, anchor, selection, origin, "Show keystrokes", 1)
 	globalY = local.Y + origin.Y
 	if globalY != toolbar.Y+anchor.Y+anchor.Height+8 {
 		t.Fatalf("above-toolbar tooltip top = %v, want 8px below the icon %v", globalY, toolbar.Y+anchor.Y+anchor.Height+8)
@@ -646,12 +741,12 @@ func TestRecordingToolbarTooltipSitsInSelectionGapLikeScreenshot(t *testing.T) {
 
 func TestRecordingSelectionEdgeContainsLeavesInteriorClickable(t *testing.T) {
 	selection := Rect{X: 100, Y: 100, Width: 400, Height: 300}
-	for _, point := range []Point{{X: 100, Y: 250}, {X: 500, Y: 250}, {X: 300, Y: 100}, {X: 300, Y: 400}, {X: 94, Y: 94}} {
+	for _, point := range []Point{{X: 100, Y: 250}, {X: 500, Y: 250}, {X: 300, Y: 100}, {X: 300, Y: 400}, {X: 94, Y: 94}, {X: 94, Y: 180}} {
 		if !recordingSelectionEdgeContains(selection, point, 14) {
 			t.Fatalf("border point %+v should be interactive", point)
 		}
 	}
-	for _, point := range []Point{{X: 300, Y: 250}, {X: 50, Y: 50}, {X: 520, Y: 420}, {X: 94, Y: 180}} {
+	for _, point := range []Point{{X: 300, Y: 250}, {X: 50, Y: 50}, {X: 520, Y: 420}, {X: 85, Y: 180}} {
 		if recordingSelectionEdgeContains(selection, point, 14) {
 			t.Fatalf("non-border point %+v should pass through", point)
 		}
@@ -1187,7 +1282,7 @@ func TestOverlayRecordingCursorUsesDPIScale(t *testing.T) {
 
 func TestDrawRecordingCountdownUsesRedFillAndWhiteOutline(t *testing.T) {
 	displayList := &DisplayList{}
-	drawRecordingCountdown(displayList, Rect{Width: 800, Height: 600}, 3, 1)
+	drawRecordingCountdown(displayList, Rect{Width: 800, Height: 600}, 3*time.Second-recordingCountdownFadeDuration, 1)
 	if displayList.CommandCount() < 9 {
 		t.Fatalf("countdown commands = %d, want a white outline plus red fill", displayList.CommandCount())
 	}

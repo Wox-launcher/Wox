@@ -6,7 +6,10 @@ import (
 	"image/draw"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
+
+	woxwidget "wox/ui/widget"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
@@ -45,10 +48,14 @@ var (
 )
 
 type screenshotEditorAnnotation struct {
-	tool         screenshotEditorTool
-	rect         Rect
-	start        Point
-	end          Point
+	tool  screenshotEditorTool
+	rect  Rect
+	start Point
+	end   Point
+	// arrowBend is the curve midpoint's offset from the endpoint chord, in logical units.
+	arrowBend Point
+	// cornerRadius is shared by all rectangle corners, in the annotation's logical coordinates.
+	cornerRadius float32
 	text         string
 	points       []Point
 	color        Color
@@ -57,25 +64,49 @@ type screenshotEditorAnnotation struct {
 	measuredSize float32
 	mosaicRadius float32
 	number       int
+	strokeRadius float32
+	// paintOrder separates visual stacking from creation order, which remains the undo history.
+	paintOrder    uint64
+	eraserPreview *screenshotEditorEraserPreview
 }
 
-func drawScreenshotEditorAnnotations(displayList *DisplayList, annotations []screenshotEditorAnnotation, source *Image, frame Size, uiScale float32) {
+func drawScreenshotEditorAnnotations(displayList *DisplayList, window woxwidget.HostServices, annotations []screenshotEditorAnnotation, source *Image, frame Size, uiScale float32) {
 	strokeWidth := screenshotEditorAnnotationPreviewStroke(uiScale)
-	for _, annotation := range annotations {
+	for _, annotation := range screenshotEditorPaintOrder(annotations) {
 		annotationColor := screenshotEditorAnnotationDrawColor(annotation)
 		switch annotation.tool {
 		case screenshotEditorToolRect:
-			displayList.StrokeRoundedRect(annotation.rect, 0, strokeWidth, annotationColor)
+			displayList.StrokeRoundedRect(annotation.rect, screenshotEditorRectCornerRadius(annotation), strokeWidth, annotationColor)
 		case screenshotEditorToolEllipse:
 			drawScreenshotEditorEllipse(displayList, annotation.rect, strokeWidth, annotationColor)
 		case screenshotEditorToolArrow:
-			drawScreenshotEditorArrow(displayList, annotation.start, annotation.end, strokeWidth, annotationColor)
+			drawScreenshotEditorArrow(displayList, annotation, strokeWidth, annotationColor)
 		case screenshotEditorToolText:
 			fontSize := screenshotEditorAnnotationRenderedFontSize(annotation, uiScale)
 			textSize := screenshotEditorAnnotationTextSize(annotation, fontSize)
-			displayList.DrawText(annotation.text, Rect{X: annotation.start.X, Y: annotation.start.Y, Width: max(float32(480), textSize.Width+8*uiScale), Height: max(fontSize+12, textSize.Height)}, TextStyle{Size: fontSize, Weight: FontWeightSemibold}, annotationColor)
+			lines := strings.Split(annotation.text, "\n")
+			lineHeight := screenshotEditorTextLineHeight(fontSize)
+			for row, line := range lines {
+				rect := Rect{
+					X: annotation.start.X, Y: annotation.start.Y + float32(row)*lineHeight,
+					Width: max(float32(480), textSize.Width+8*uiScale), Height: max(fontSize+12, textSize.Height-float32(len(lines)-1)*lineHeight),
+				}
+				style := TextStyle{Size: fontSize, Weight: FontWeightSemibold}
+				if window != nil {
+					if metrics, err := window.MeasureText(line, style); err == nil && metrics.Baseline > 0 {
+						// Fallback fonts change the native ascent as scripts change. Anchor every line
+						// at fontSize, matching pixel export, instead of moving the existing glyphs.
+						rect.Y = rect.Y + fontSize - metrics.Baseline
+					}
+				}
+				displayList.DrawText(line, rect, style, annotationColor)
+			}
 		case screenshotEditorToolNumber:
 			drawScreenshotEditorNumber(displayList, annotation, uiScale)
+		case screenshotEditorToolBrush:
+			drawScreenshotEditorBrush(displayList, annotation, uiScale)
+		case screenshotEditorToolEraser:
+			drawScreenshotEditorEraser(displayList, annotation, source, frame, uiScale)
 		case screenshotEditorToolMosaic:
 			drawScreenshotEditorMosaicPreview(displayList, annotation.points, screenshotEditorAnnotationMosaicRadius(annotation), source, frame)
 		}
@@ -92,9 +123,12 @@ func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation 
 	case screenshotEditorToolRect, screenshotEditorToolEllipse:
 		points = screenshotEditorRectHandlePoints(annotation.rect)
 	case screenshotEditorToolArrow:
-		points = []Point{annotation.start, annotation.end}
+		points = []Point{annotation.start, screenshotEditorArrowMiddle(annotation), annotation.end}
 	case screenshotEditorToolText:
 		drawScreenshotEditorTextFrame(displayList, screenshotEditorTextFrame(annotation, uiScale), uiScale)
+		return
+	case screenshotEditorToolBrush:
+		drawScreenshotEditorTextFrame(displayList, screenshotEditorAnnotationBounds(annotation, uiScale), uiScale)
 		return
 	case screenshotEditorToolNumber:
 		bounds := screenshotEditorNumberBounds(annotation, uiScale)
@@ -108,6 +142,9 @@ func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation 
 	for _, point := range points {
 		handleRect := Rect{X: point.X - 5*uiScale, Y: point.Y - 5*uiScale, Width: 10 * uiScale, Height: 10 * uiScale}
 		displayList.StrokeRoundedRect(handleRect, 5*uiScale, 1.5*uiScale, Color{R: 255, G: 255, B: 255, A: 255})
+	}
+	if annotation.tool == screenshotEditorToolRect {
+		drawScreenshotEditorRectRadiusHandles(displayList, annotation, uiScale)
 	}
 }
 
@@ -135,15 +172,15 @@ func screenshotEditorNumberTextLayout(annotation screenshotEditorAnnotation, uiS
 // screenshotEditorNumberLabel scales down three-digit markers so the sequence remains inside its circle.
 func screenshotEditorNumberLabel(annotation screenshotEditorAnnotation, uiScale float32) (string, float32) {
 	label := strconv.Itoa(annotation.number)
-	fontSize := screenshotEditorNumberFontSize * max(float32(1), uiScale)
+	fontSize := screenshotEditorAnnotationRenderedFontSize(annotation, uiScale)
 	if len(label) >= 3 {
-		fontSize = 11 * max(float32(1), uiScale)
+		fontSize *= 11 / screenshotEditorNumberFontSize
 	}
 	return label, fontSize
 }
 
 func screenshotEditorNumberBounds(annotation screenshotEditorAnnotation, uiScale float32) Rect {
-	diameter := screenshotEditorNumberDiameter * max(float32(1), uiScale)
+	diameter := screenshotEditorNumberDiameter * screenshotEditorAnnotationRenderedFontSize(annotation, uiScale) / screenshotEditorNumberFontSize
 	return Rect{X: annotation.start.X - diameter/2, Y: annotation.start.Y - diameter/2, Width: diameter, Height: diameter}
 }
 
@@ -182,7 +219,7 @@ func drawScreenshotEditorTextFrame(displayList *DisplayList, frame Rect, uiScale
 func screenshotEditorAnnotationContains(annotation screenshotEditorAnnotation, point Point, uiScale float32) bool {
 	switch annotation.tool {
 	case screenshotEditorToolRect:
-		return screenshotEditorRectContains(annotation.rect, point)
+		return screenshotEditorRoundedRectContains(annotation.rect, screenshotEditorRectCornerRadius(annotation), point)
 	case screenshotEditorToolEllipse:
 		radiusX, radiusY := annotation.rect.Width/2, annotation.rect.Height/2
 		if radiusX <= 0 || radiusY <= 0 {
@@ -192,7 +229,7 @@ func screenshotEditorAnnotationContains(annotation screenshotEditorAnnotation, p
 		dx, dy := (point.X-centerX)/radiusX, (point.Y-centerY)/radiusY
 		return dx*dx+dy*dy <= 1
 	case screenshotEditorToolArrow:
-		return screenshotEditorDistanceToSegment(point, annotation.start, annotation.end) <= screenshotEditorAnnotationStroke
+		return screenshotEditorArrowDistance(annotation, point) <= 6*max(float32(1), uiScale)
 	case screenshotEditorToolText:
 		fontSize := screenshotEditorAnnotationRenderedFontSize(annotation, uiScale)
 		textSize := screenshotEditorAnnotationTextSize(annotation, fontSize)
@@ -201,6 +238,8 @@ func screenshotEditorAnnotationContains(annotation screenshotEditorAnnotation, p
 		bounds := screenshotEditorNumberBounds(annotation, uiScale)
 		radius := bounds.Width / 2
 		return math.Hypot(float64(point.X-annotation.start.X), float64(point.Y-annotation.start.Y)) <= float64(radius)
+	case screenshotEditorToolBrush:
+		return screenshotEditorStrokeContains(annotation.points, point, screenshotEditorStrokeRadius(annotation, uiScale)+3*max(float32(1), uiScale))
 	case screenshotEditorToolMosaic:
 		radius := screenshotEditorAnnotationMosaicRadius(annotation)
 		for _, brushPoint := range annotation.points {
@@ -242,9 +281,10 @@ func screenshotEditorAnnotationAtMatching(annotations []screenshotEditorAnnotati
 		center := Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
 		distance := float32(math.Hypot(float64(point.X-center.X), float64(point.Y-center.Y)))
 		if annotation.tool == screenshotEditorToolArrow {
-			distance = screenshotEditorDistanceToSegment(point, annotation.start, annotation.end)
+			distance = screenshotEditorArrowDistance(annotation, point)
 		}
-		if area < bestArea || (area == bestArea && (distance < bestDistance || (distance == bestDistance && index > bestIndex))) {
+		onTop := bestIndex < 0 || annotation.paintOrder >= annotations[bestIndex].paintOrder
+		if area < bestArea || (area == bestArea && (distance < bestDistance || (distance == bestDistance && onTop))) {
 			bestIndex = index
 			bestArea = area
 			bestDistance = distance
@@ -258,14 +298,14 @@ func screenshotEditorAnnotationBounds(annotation screenshotEditorAnnotation, uiS
 	case screenshotEditorToolRect, screenshotEditorToolEllipse:
 		return annotation.rect
 	case screenshotEditorToolArrow:
-		return normalizeScreenshotEditorRect(Rect{X: annotation.start.X, Y: annotation.start.Y, Width: annotation.end.X - annotation.start.X, Height: annotation.end.Y - annotation.start.Y}, Size{Width: math.MaxFloat32, Height: math.MaxFloat32})
+		return screenshotEditorArrowBounds(annotation)
 	case screenshotEditorToolText:
 		fontSize := screenshotEditorAnnotationRenderedFontSize(annotation, uiScale)
 		textSize := screenshotEditorAnnotationTextSize(annotation, fontSize)
 		return Rect{X: annotation.start.X, Y: annotation.start.Y, Width: textSize.Width, Height: textSize.Height}
 	case screenshotEditorToolNumber:
 		return screenshotEditorNumberBounds(annotation, uiScale)
-	case screenshotEditorToolMosaic:
+	case screenshotEditorToolMosaic, screenshotEditorToolBrush, screenshotEditorToolEraser:
 		if len(annotation.points) == 0 {
 			return Rect{}
 		}
@@ -275,6 +315,9 @@ func screenshotEditorAnnotationBounds(annotation screenshotEditorAnnotation, uiS
 			right, bottom = max(right, point.X), max(bottom, point.Y)
 		}
 		radius := screenshotEditorAnnotationMosaicRadius(annotation)
+		if annotation.tool != screenshotEditorToolMosaic {
+			radius = screenshotEditorStrokeRadius(annotation, uiScale)
+		}
 		return Rect{X: left - radius, Y: top - radius, Width: right - left + 2*radius, Height: bottom - top + 2*radius}
 	default:
 		return Rect{}
@@ -312,10 +355,12 @@ func screenshotEditorAnnotationTextSize(annotation screenshotEditorAnnotation, r
 	if annotation.textSize.Width > 0 && annotation.textSize.Height > 0 && math.Abs(float64(annotation.measuredSize-renderedFontSize)) < 0.01 {
 		return annotation.textSize
 	}
-	return Size{
-		Width:  max(float32(24), screenshotEditorEstimatedTextWidth(annotation.text, renderedFontSize)),
-		Height: renderedFontSize + 8,
+	lines := strings.Split(annotation.text, "\n")
+	width := float32(24)
+	for _, line := range lines {
+		width = max(width, screenshotEditorEstimatedTextWidth(line, renderedFontSize))
 	}
+	return Size{Width: width, Height: float32(len(lines)) * screenshotEditorTextLineHeight(renderedFontSize)}
 }
 
 func screenshotEditorDistanceToSegment(point, start, end Point) float32 {
@@ -345,14 +390,17 @@ func drawScreenshotEditorEllipse(displayList *DisplayList, rect Rect, width floa
 	}
 }
 
-func drawScreenshotEditorArrow(displayList *DisplayList, start, end Point, width float32, color Color) {
-	angle := math.Atan2(float64(end.Y-start.Y), float64(end.X-start.X))
-	headLength := float32(14) * width / screenshotEditorAnnotationStroke
-	left := Point{X: end.X - headLength*float32(math.Cos(angle-math.Pi/6)), Y: end.Y - headLength*float32(math.Sin(angle-math.Pi/6))}
-	right := Point{X: end.X - headLength*float32(math.Cos(angle+math.Pi/6)), Y: end.Y - headLength*float32(math.Sin(angle+math.Pi/6))}
-	base := Point{X: (left.X + right.X) / 2, Y: (left.Y + right.Y) / 2}
-	drawScreenshotEditorLine(displayList, start, base, width, color)
-	displayList.FillConvexPolygon([]Point{end, left, right}, color)
+// drawScreenshotEditorArrow joins sampled curve segments smoothly and keeps the head on the end tangent.
+func drawScreenshotEditorArrow(displayList *DisplayList, annotation screenshotEditorAnnotation, width float32, color Color) {
+	shaft, head := screenshotEditorArrowGeometry(annotation, width, 0.25/max(float32(1), displayList.RasterScale))
+	for index := 1; index < len(shaft); index++ {
+		drawScreenshotEditorLine(displayList, shaft[index-1], shaft[index], width, color)
+		if index < len(shaft)-1 {
+			point := shaft[index]
+			displayList.FillRoundedRect(Rect{X: point.X - width/2, Y: point.Y - width/2, Width: width, Height: width}, width/2, color)
+		}
+	}
+	displayList.FillConvexPolygon(head[:], color)
 }
 
 func drawScreenshotEditorLine(displayList *DisplayList, start, end Point, width float32, color Color) {
@@ -420,24 +468,24 @@ func renderScreenshotEditorAnnotations(source image.Image, annotations []screens
 	scaleY := float32(bounds.Dy()) / frame.Height
 	previewScale := max(float32(1), uiScale)
 	strokeWidth := screenshotEditorAnnotationStroke * previewScale * scaleX
-	for _, annotation := range annotations {
+	for _, annotation := range screenshotEditorPaintOrder(annotations) {
 		drawColor := screenshotEditorAnnotationDrawColor(annotation)
 		pixelColor := color.RGBA{R: drawColor.R, G: drawColor.G, B: drawColor.B, A: drawColor.A}
 		switch annotation.tool {
 		case screenshotEditorToolRect:
-			rect := screenshotEditorScaleRect(annotation.rect, scaleX, scaleY)
-			drawScreenshotEditorPixelLine(output, clip, rect.Min, image.Pt(rect.Max.X, rect.Min.Y), strokeWidth, pixelColor)
-			drawScreenshotEditorPixelLine(output, clip, image.Pt(rect.Max.X, rect.Min.Y), rect.Max, strokeWidth, pixelColor)
-			drawScreenshotEditorPixelLine(output, clip, rect.Max, image.Pt(rect.Min.X, rect.Max.Y), strokeWidth, pixelColor)
-			drawScreenshotEditorPixelLine(output, clip, image.Pt(rect.Min.X, rect.Max.Y), rect.Min, strokeWidth, pixelColor)
+			drawScreenshotEditorPixelRect(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
 		case screenshotEditorToolEllipse:
 			drawScreenshotEditorPixelEllipse(output, clip, screenshotEditorScaleRect(annotation.rect, scaleX, scaleY), strokeWidth, pixelColor)
 		case screenshotEditorToolArrow:
-			drawScreenshotEditorPixelArrow(output, clip, screenshotEditorScalePoint(annotation.start, scaleX, scaleY), screenshotEditorScalePoint(annotation.end, scaleX, scaleY), strokeWidth, pixelColor)
+			drawScreenshotEditorPixelArrow(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
 		case screenshotEditorToolText:
 			drawScreenshotEditorPixelText(output, clip, annotation.text, screenshotEditorScalePoint(annotation.start, scaleX, scaleY), screenshotEditorAnnotationRenderedFontSize(annotation, previewScale)*scaleY, pixelColor)
 		case screenshotEditorToolNumber:
 			drawScreenshotEditorPixelNumber(output, clip, annotation, previewScale, scaleX, scaleY, pixelColor)
+		case screenshotEditorToolBrush:
+			paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(int, int) color.RGBA { return pixelColor })
+		case screenshotEditorToolEraser:
+			paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(x, y int) color.RGBA { return color.RGBAModel.Convert(source.At(x, y)).(color.RGBA) })
 		case screenshotEditorToolMosaic:
 			drawScreenshotEditorPixelMosaic(output, clip, annotation.points, screenshotEditorAnnotationMosaicRadius(annotation), scaleX, scaleY)
 		}
@@ -448,14 +496,10 @@ func renderScreenshotEditorAnnotations(source image.Image, annotations []screens
 // drawScreenshotEditorPixelNumber preserves the marker's logical size and centered label in the exported image.
 func drawScreenshotEditorPixelNumber(target *image.RGBA, clip image.Rectangle, annotation screenshotEditorAnnotation, previewScale, scaleX, scaleY float32, fill color.RGBA) {
 	center := screenshotEditorScalePoint(annotation.start, scaleX, scaleY)
-	diameter := screenshotEditorNumberDiameter * previewScale * min(scaleX, scaleY)
+	diameter := screenshotEditorNumberBounds(annotation, previewScale).Width * min(scaleX, scaleY)
 	drawScreenshotEditorPixelLine(target, clip, center, center, diameter, fill)
-	label := strconv.Itoa(annotation.number)
-	fontSize := screenshotEditorNumberFontSize * previewScale * scaleY
-	if len(label) >= 3 {
-		fontSize = 11 * previewScale * scaleY
-	}
-	drawScreenshotEditorPixelCenteredText(target, clip, label, center, fontSize, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+	label, fontSize := screenshotEditorNumberLabel(annotation, previewScale)
+	drawScreenshotEditorPixelCenteredText(target, clip, label, center, fontSize*scaleY, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 }
 
 // drawScreenshotEditorPixelCenteredText centers the actual glyph ink rather than its nominal font box.
@@ -591,14 +635,13 @@ func drawScreenshotEditorPixelEllipse(target *image.RGBA, clip, rect image.Recta
 	}
 }
 
-func drawScreenshotEditorPixelArrow(target *image.RGBA, clip image.Rectangle, start, end image.Point, width float32, color color.RGBA) {
-	angle := math.Atan2(float64(end.Y-start.Y), float64(end.X-start.X))
-	headLength := float64(width) * 14 / float64(screenshotEditorAnnotationStroke)
-	left := image.Pt(int(math.Round(float64(end.X)-headLength*math.Cos(angle-math.Pi/6))), int(math.Round(float64(end.Y)-headLength*math.Sin(angle-math.Pi/6))))
-	right := image.Pt(int(math.Round(float64(end.X)-headLength*math.Cos(angle+math.Pi/6))), int(math.Round(float64(end.Y)-headLength*math.Sin(angle+math.Pi/6))))
-	base := image.Pt((left.X+right.X)/2, (left.Y+right.Y)/2)
-	drawScreenshotEditorPixelLine(target, clip, start, base, width, color)
-	drawScreenshotEditorPixelTriangle(target, clip, end, left, right, color)
+// drawScreenshotEditorPixelArrow maps the same logical curve and head to the capture's actual pixels.
+func drawScreenshotEditorPixelArrow(target *image.RGBA, clip image.Rectangle, annotation screenshotEditorAnnotation, width, scaleX, scaleY float32, color color.RGBA) {
+	shaft, head := screenshotEditorArrowGeometry(annotation, width, 0.25/max(scaleX, scaleY))
+	for index := 1; index < len(shaft); index++ {
+		drawScreenshotEditorPixelLine(target, clip, screenshotEditorScalePoint(shaft[index-1], scaleX, scaleY), screenshotEditorScalePoint(shaft[index], scaleX, scaleY), width*scaleX, color)
+	}
+	drawScreenshotEditorPixelTriangle(target, clip, screenshotEditorScalePoint(head[0], scaleX, scaleY), screenshotEditorScalePoint(head[1], scaleX, scaleY), screenshotEditorScalePoint(head[2], scaleX, scaleY), color)
 }
 
 func drawScreenshotEditorPixelTriangle(target *image.RGBA, clip image.Rectangle, first, second, third image.Point, color color.RGBA) {
@@ -678,8 +721,12 @@ func screenshotEditorAnnotationDrawColor(annotation screenshotEditorAnnotation) 
 	return annotation.color
 }
 
+// screenshotEditorAnnotationFontSize preserves each tool's original size when the annotation has no explicit override.
 func screenshotEditorAnnotationFontSize(annotation screenshotEditorAnnotation) float32 {
 	if annotation.fontSize <= 0 {
+		if annotation.tool == screenshotEditorToolNumber {
+			return screenshotEditorNumberFontSize
+		}
 		return screenshotEditorTextFontSize
 	}
 	return annotation.fontSize

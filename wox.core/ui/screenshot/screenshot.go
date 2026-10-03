@@ -69,12 +69,15 @@ type ScreenshotActionTooltips struct {
 
 // ScreenshotAnnotationTooltips carries localized labels for the annotation creation tools.
 type ScreenshotAnnotationTooltips struct {
+	FontSize  string
 	Rectangle string
 	Ellipse   string
 	Text      string
 	Arrow     string
 	Number    string
 	Mosaic    string
+	Brush     string
+	Eraser    string
 }
 
 const ScreenshotWindowID WindowID = "wox.screenshot"
