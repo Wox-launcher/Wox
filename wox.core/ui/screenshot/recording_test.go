@@ -114,6 +114,59 @@ func TestRecordingSessionStateTransitionsExcludePausedTime(t *testing.T) {
 	if path == "" || session.currentState() != recordingStateSave || !encoder.finalized {
 		t.Fatalf("finalized path=%q state=%s encoder=%t", path, session.currentState(), encoder.finalized)
 	}
+	now = now.Add(time.Minute)
+	if got := session.EffectiveDuration(); got != 3*time.Second {
+		t.Fatalf("preview duration = %s, want 3s", got)
+	}
+}
+
+// TestRecordingDurationFreezesWhenCaptureEnds covers redraws during finalization and preview.
+func TestRecordingDurationFreezesWhenCaptureEnds(t *testing.T) {
+	for _, scenario := range []string{"finish", "paused finish", "runtime error", "paused runtime error", "cancel"} {
+		t.Run(scenario, func(t *testing.T) {
+			now := time.Unix(100, 0)
+			session := &recordingSession{
+				state: recordingStateRecording, startedAt: now,
+				config: recordingSessionConfig{
+					Now: func() time.Time { return now }, Encoder: &recordingTestEncoder{},
+				},
+			}
+			now = now.Add(2 * time.Second)
+			if strings.HasPrefix(scenario, "paused") {
+				if err := session.Pause(); err != nil {
+					t.Fatal(err)
+				}
+				now = now.Add(5 * time.Second)
+			}
+			if strings.Contains(scenario, "runtime error") {
+				session.setRuntimeError(fmt.Errorf("capture failed"))
+				now = now.Add(time.Minute)
+				if got := session.EffectiveDuration(); got != 2*time.Second {
+					t.Fatalf("error duration = %s, want 2s", got)
+				}
+			}
+			session.config.OnChanged = func() {
+				// Simulate slow encoder finalization after the stop request.
+				now = now.Add(10 * time.Second)
+				if got := session.EffectiveDuration(); got != 2*time.Second {
+					t.Errorf("%s duration = %s, want 2s", session.currentState(), got)
+				}
+			}
+			if scenario == "cancel" {
+				if err := session.Cancel(); err != nil {
+					t.Fatal(err)
+				}
+			} else if _, err := session.Finish(); err != nil {
+				t.Fatal(err)
+			}
+			for range 3 {
+				now = now.Add(time.Minute)
+				if got := session.EffectiveDuration(); got != 2*time.Second {
+					t.Fatalf("duration after stop = %s, want 2s", got)
+				}
+			}
+		})
+	}
 }
 
 func TestRecordingSessionRejectsDuplicateControlsAndCleansTempFile(t *testing.T) {

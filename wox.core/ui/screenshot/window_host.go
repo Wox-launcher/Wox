@@ -60,6 +60,13 @@ func (host *screenshotEditorWindowHost) pointer(event PointerEvent) {
 func (host *screenshotEditorWindowHost) key(event KeyEvent) bool {
 	if state := host.current(); state != nil {
 		if recording := state.activeRecordingUI(); recording != nil {
+			recording.mu.Lock()
+			dialog := recording.runtimeDialog
+			recording.mu.Unlock()
+			if dialog != nil && dialog.host != nil {
+				return dialog.host.Key(event)
+			}
+
 			if event.Down && event.Key == KeyEscape {
 				recording.cancel()
 				return true

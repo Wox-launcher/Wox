@@ -64,16 +64,18 @@ func drawRecordingOutlinedText(displayList *DisplayList, text string, rect Rect,
 	displayList.DrawText(text, rect, style, fill)
 }
 
+// recordingOutlineOffsets samples a round halo densely enough to keep glyph terminals smooth.
 func recordingOutlineOffsets(strokeWidth float32) []Point {
-	steps := max(1, int(math.Round(float64(strokeWidth))))
-	offsets := make([]Point, 0, 8*steps)
-	for step := 1; step <= steps; step++ {
-		delta := float32(step)
-		offsets = append(offsets,
-			Point{X: -delta, Y: -delta}, Point{X: 0, Y: -delta}, Point{X: delta, Y: -delta},
-			Point{X: -delta, Y: 0}, Point{X: delta, Y: 0},
-			Point{X: -delta, Y: delta}, Point{X: 0, Y: delta}, Point{X: delta, Y: delta},
-		)
+	if strokeWidth <= 0 {
+		return nil
+	}
+	// Eight radial spokes leave notches at open terminals and overthicken diagonals.
+	// Half-unit spacing around the perimeter keeps the outline smooth at Retina scale.
+	steps := max(8, int(math.Ceil(4*math.Pi*float64(strokeWidth))))
+	offsets := make([]Point, steps)
+	for step := range offsets {
+		angle := 2 * math.Pi * float64(step) / float64(steps)
+		offsets[step] = Point{X: strokeWidth * float32(math.Cos(angle)), Y: strokeWidth * float32(math.Sin(angle))}
 	}
 	return offsets
 }

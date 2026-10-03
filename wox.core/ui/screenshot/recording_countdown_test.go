@@ -2,9 +2,34 @@ package screenshot
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
+
+// TestRecordingOutlineHasUniformCoverage guards against gaps and thick diagonal spokes at glyph terminals.
+func TestRecordingOutlineHasUniformCoverage(t *testing.T) {
+	for _, scale := range []float32{1, 1.25, 1.5, 2, 2.5} {
+		width := 8 * scale
+		offsets := recordingOutlineOffsets(width)
+		for _, offset := range offsets {
+			if radius := math.Hypot(float64(offset.X), float64(offset.Y)); math.Abs(radius-float64(width)) > 0.001 {
+				t.Fatalf("scale %v: uneven outline radius %v, want %v", scale, radius, width)
+			}
+		}
+		for degrees := range 360 {
+			angle := float64(degrees) * math.Pi / 180
+			x, y := float64(width)*math.Cos(angle), float64(width)*math.Sin(angle)
+			nearest := math.Inf(1)
+			for _, offset := range offsets {
+				nearest = min(nearest, math.Hypot(x-float64(offset.X), y-float64(offset.Y)))
+			}
+			if nearest > 0.5 {
+				t.Fatalf("scale %v: outline gap at %d degrees, nearest sample %v units away", scale, degrees, nearest)
+			}
+		}
+	}
+}
 
 // TestRecordingCountdownFadesInPlace checks that only opacity changes within each second.
 func TestRecordingCountdownFadesInPlace(t *testing.T) {

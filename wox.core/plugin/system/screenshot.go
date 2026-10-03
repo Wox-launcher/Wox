@@ -955,9 +955,10 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
-		if result.ArtifactKind == common.CaptureArtifactKindVideo {
+		// Animation exports are saved artifacts, not still screenshots for OCR and history thumbnails.
+		if result.ArtifactKind == common.CaptureArtifactKindVideo || (result.ArtifactPath != "" && result.ScreenshotPath == "") {
 			if result.ArtifactPath == "" {
-				p.api.Log(ctx, plugin.LogLevelError, "video recording completed without an artifact path")
+				p.api.Log(ctx, plugin.LogLevelError, "recording completed without an artifact path")
 				p.notifyCaptureFailure(ctx, "", "")
 				return
 			}

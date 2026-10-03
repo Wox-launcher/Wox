@@ -471,6 +471,17 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			SaveTitle:        a.translate("i18n:ui_screenshot_save_title"),
 			Confirm:          a.translate("i18n:ui_screenshot_tool_confirm"),
 		},
+		RecordingRuntime: woxscreenshot.RecordingRuntimeLabels{
+			Title:       a.translate("i18n:ui_screenshot_record_runtime_title"),
+			Description: a.translate("i18n:ui_screenshot_record_runtime_description"),
+			Install:     a.translate("i18n:ui_screenshot_record_runtime_install"),
+			Cancel:      a.translate("i18n:ui_screenshot_record_runtime_cancel"),
+			Retry:       a.translate("i18n:ui_screenshot_record_runtime_retry"),
+			Downloading: a.translate("i18n:ui_screenshot_record_runtime_downloading"),
+			Installing:  a.translate("i18n:ui_screenshot_record_runtime_installing"),
+			Failed:      a.translate("i18n:ui_screenshot_record_runtime_failed"),
+			Unsupported: a.translate("i18n:ui_screenshot_record_runtime_unsupported"),
+		},
 		RecordingTooltips: woxscreenshot.RecordingTooltips{
 			Enter: a.translate("i18n:ui_screenshot_record_enter"), Start: a.translate("i18n:ui_screenshot_record_start"),
 			Pause: a.translate("i18n:ui_screenshot_record_pause"), Resume: a.translate("i18n:ui_screenshot_record_resume"),
@@ -478,6 +489,9 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			ShowKeypress: a.translate("i18n:ui_screenshot_record_keypress"), Finish: a.translate("i18n:ui_screenshot_record_finish"),
 			Save: a.translate("i18n:ui_screenshot_record_save"), Play: a.translate("i18n:ui_screenshot_record_play"),
 			Cancel: a.translate("i18n:ui_screenshot_record_cancel"), PrivacyWarning: a.translate("i18n:ui_screenshot_record_privacy"),
+			Format: a.translate("i18n:ui_screenshot_record_format"), FormatMP4: a.translate("i18n:ui_screenshot_record_format_mp4"),
+			FormatGIF: a.translate("i18n:ui_screenshot_record_format_gif"), FormatWebP: a.translate("i18n:ui_screenshot_record_format_webp"),
+			ExportFailed: a.translate("i18n:ui_screenshot_record_export_failed"),
 		},
 	})
 	if err != nil {

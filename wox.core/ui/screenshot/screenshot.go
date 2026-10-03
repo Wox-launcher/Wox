@@ -19,6 +19,7 @@ type ScreenshotOptions struct {
 	AnnotationTooltips    ScreenshotAnnotationTooltips
 	ActionTooltips        ScreenshotActionTooltips
 	RecordingTooltips     RecordingTooltips
+	RecordingRuntime      RecordingRuntimeLabels
 	SizeLabels            ScreenshotSizeLabels
 	Theme                 woxcomponent.ControlTheme
 	FontFamily            string
@@ -28,6 +29,12 @@ type ScreenshotOptions struct {
 type ScreenshotSizeLabels struct {
 	Title, Width, Height, Apply, Cancel, InvalidSize string
 	LockAspectRatio, Swap                            string
+}
+
+// RecordingRuntimeLabels carries the consent, transfer, and recovery copy for optional FFmpeg installation.
+type RecordingRuntimeLabels struct {
+	Title, Description, Install, Cancel, Retry   string
+	Downloading, Installing, Failed, Unsupported string
 }
 
 // RecordingDefaults configures the options shown before the countdown begins.
@@ -51,6 +58,11 @@ type RecordingTooltips struct {
 	Play           string
 	Cancel         string
 	PrivacyWarning string
+	Format         string
+	FormatMP4      string
+	FormatGIF      string
+	FormatWebP     string
+	ExportFailed   string
 }
 
 // ScreenshotActionTooltips carries localized labels for screenshot-wide actions.

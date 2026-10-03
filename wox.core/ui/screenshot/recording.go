@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"wox/util"
+	"wox/util/ffmpeg"
 )
 
 const (
@@ -102,6 +103,7 @@ type recordingSession struct {
 	state           recordingState
 	tempPath        string
 	startedAt       time.Time
+	stoppedAt       time.Time
 	pausedAt        time.Time
 	pausedDuration  time.Duration
 	countdownEndsAt time.Time
@@ -289,6 +291,9 @@ func (session *recordingSession) transition(from []recordingState, to recordingS
 	defer session.mu.Unlock()
 	for _, allowed := range from {
 		if session.state == allowed {
+			if to == recordingStateFinalizing {
+				session.stopClockLocked()
+			}
 			session.state = to
 			return true
 		}
@@ -455,6 +460,7 @@ func (session *recordingSession) encodeLoop() {
 // setRuntimeError stops capture while preserving an already encoded temporary artifact.
 func (session *recordingSession) setRuntimeError(err error) {
 	session.mu.Lock()
+	session.stopClockLocked()
 	if session.error == nil {
 		session.error = err
 	}
@@ -512,7 +518,7 @@ func (session *recordingSession) Resume() error {
 	return nil
 }
 
-// EffectiveDuration returns the monotonic take duration with pauses removed.
+// EffectiveDuration returns the monotonic take duration with pauses removed, frozen when capture ends.
 func (session *recordingSession) EffectiveDuration() time.Duration {
 	session.mu.Lock()
 	defer session.mu.Unlock()
@@ -523,11 +529,22 @@ func (session *recordingSession) effectiveDurationLocked(now time.Time) time.Dur
 	if session.startedAt.IsZero() {
 		return 0
 	}
+	if !session.stoppedAt.IsZero() {
+		now = session.stoppedAt
+	}
 	paused := session.pausedDuration
-	if session.state == recordingStatePaused {
+	// An open pause still belongs to the take after it enters finalization or an error state.
+	if !session.pausedAt.IsZero() {
 		paused += now.Sub(session.pausedAt)
 	}
 	return max(time.Duration(0), now.Sub(session.startedAt)-paused)
+}
+
+// stopClockLocked excludes finalization and preview time even when later redraws query the duration.
+func (session *recordingSession) stopClockLocked() {
+	if session.stoppedAt.IsZero() && !session.startedAt.IsZero() {
+		session.stoppedAt = session.config.Now()
+	}
 }
 
 // DiscardPendingFrames removes stale captures before an in-selection toolbar is exposed.
@@ -551,6 +568,7 @@ func (session *recordingSession) DiscardPendingFrames() {
 // stopPipelines waits for capture to exit before closing the encoder queue.
 func (session *recordingSession) stopPipelines() error {
 	session.mu.Lock()
+	session.stopClockLocked()
 	// Cancel under the countdown lock so no workers can start after this snapshot.
 	if session.stopCapture != nil {
 		session.stopCapture()
@@ -645,8 +663,8 @@ func (session *recordingSession) Cancel() error {
 	return nil
 }
 
-// Save atomically publishes the finalized MP4 and removes the session temporary file.
-func (session *recordingSession) Save(target string) error {
+// Save atomically publishes the selected format and removes the temporary MP4 only on success.
+func (session *recordingSession) Save(ctx context.Context, target string, format recordingExportFormat) error {
 	session.operationMu.Lock()
 	defer session.operationMu.Unlock()
 	session.mu.Lock()
@@ -657,7 +675,7 @@ func (session *recordingSession) Save(target string) error {
 	}
 	source := session.tempPath
 	session.mu.Unlock()
-	if err := copyRecordingAtomically(source, target); err != nil {
+	if err := exportRecordingAtomically(ctx, source, target, format); err != nil {
 		return err
 	}
 	if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
@@ -697,6 +715,17 @@ func cleanupRecordingOrphans(root string, now time.Time, maxAge time.Duration) e
 
 // copyRecordingAtomically uses a sibling file so failed copies never leave a partial destination.
 func copyRecordingAtomically(source, target string) error {
+	return exportRecordingAtomically(context.Background(), source, target, recordingExportMP4)
+}
+
+// exportRecordingAtomically publishes only a complete export and preserves the source on failure.
+func exportRecordingAtomically(ctx context.Context, source, target string, format recordingExportFormat) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !format.valid() {
+		return errors.New("unsupported recording export format")
+	}
 	if source == "" || target == "" {
 		return errors.New("recording source and target paths are required")
 	}
@@ -720,20 +749,42 @@ func copyRecordingAtomically(source, target string) error {
 	}
 	siblingPath := sibling.Name()
 	defer os.Remove(siblingPath)
-	input, err := os.Open(source)
-	if err != nil {
-		_ = sibling.Close()
-		return fmt.Errorf("open finalized recording: %w", err)
+	if format != recordingExportMP4 {
+		if err := sibling.Close(); err != nil {
+			return err
+		}
+		if err := convertRecording(ctx, source, siblingPath, format); err != nil {
+			return err
+		}
+		// Conversion writes directly into the sibling, avoiding a second full-file copy.
+		sibling, err = os.OpenFile(siblingPath, os.O_RDWR, 0)
+		if err != nil {
+			return err
+		}
+	} else {
+		input, err := os.Open(source)
+		if err != nil {
+			_ = sibling.Close()
+			return fmt.Errorf("open finalized recording: %w", err)
+		}
+		_, copyErr := io.Copy(sibling, input)
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			_ = sibling.Close()
+			return fmt.Errorf("copy finalized recording: %w", copyErr)
+		}
+		if closeInputErr != nil {
+			_ = sibling.Close()
+			return closeInputErr
+		}
 	}
-	_, copyErr := io.Copy(sibling, input)
-	closeInputErr := input.Close()
 	syncErr := sibling.Sync()
 	closeOutputErr := sibling.Close()
-	if copyErr != nil {
-		return fmt.Errorf("copy finalized recording: %w", copyErr)
-	}
-	if closeInputErr != nil || syncErr != nil || closeOutputErr != nil {
+	if syncErr != nil || closeOutputErr != nil {
 		return errors.New("flush finalized recording failed")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := replaceRecordingFile(siblingPath, target); err != nil {
 		return fmt.Errorf("publish finalized recording: %w", err)
@@ -783,25 +834,8 @@ func (encoder *ffmpegRecordingEncoder) Start(path string, width, height, fps int
 	return nil
 }
 
-// recordingFFmpegPath prefers the packaged, version-pinned runtime and retains a development fallback.
 func recordingFFmpegPath() (string, error) {
-	executable := "ffmpeg"
-	if runtime.GOOS == "windows" {
-		executable += ".exe"
-	}
-	dataRoot := util.GetLocation().GetWoxDataDirectory()
-	if dataRoot != "" {
-		packaged := filepath.Join(util.GetLocation().GetOthersDirectory(), "recording", runtime.GOOS+"-"+runtime.GOARCH, executable)
-		if util.IsFileExists(packaged) {
-			if runtime.GOOS != "windows" {
-				if err := os.Chmod(packaged, 0o755); err != nil {
-					return "", fmt.Errorf("make packaged recording runtime executable: %w", err)
-				}
-			}
-			return packaged, nil
-		}
-	}
-	return exec.LookPath("ffmpeg")
+	return ffmpeg.Resolve()
 }
 
 func (encoder *ffmpegRecordingEncoder) WriteFrame(frame recordingFrame) error {

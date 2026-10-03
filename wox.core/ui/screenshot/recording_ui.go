@@ -7,12 +7,12 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	woxwidget "wox/ui/widget"
+	"wox/util"
 	"wox/util/keyboard"
 )
 
@@ -94,6 +94,12 @@ type recordingToolbarState struct {
 	previewStop          context.CancelFunc
 	previewWidth         int
 	previewHeight        int
+	exportFormat         recordingExportFormat
+	formatRect           Rect
+	formatMenu           *recordingFormatMenu
+	runtimeDialog        *recordingRuntimeDialog
+	exportCancel         context.CancelFunc
+	exportFailed         bool
 }
 
 type recordingUIResult struct {
@@ -223,6 +229,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	}
 	defer overlayManaged.Close()
 	defer borderManaged.Close()
+	defer func() { _ = Call(func() { state.closeFormatMenu(); state.closeRuntimeDialog() }) }()
 	state.startBorderMonitor()
 	defer state.stopBorderMonitor()
 	state.startDurationTicker()
@@ -445,7 +452,11 @@ func (state *recordingToolbarState) positionToolbar() error {
 	}
 	scale := state.toolbarChromeScale()
 	frame := Rect{Width: state.frameSize.Width, Height: state.frameSize.Height}
-	expanded, collapsed, collapseWhileActive := recordingToolbarLayout(frame, state.selection, recordingToolbarWidth*scale, recordingToolbarHeight*scale)
+	width := recordingToolbarWidth
+	if state.recordingStatus() == recordingStateSave {
+		width -= 48
+	}
+	expanded, collapsed, collapseWhileActive := recordingToolbarLayout(frame, state.selection, width*scale, recordingToolbarHeight*scale)
 	state.expandedBounds = expanded
 	state.collapsedBounds = collapsed
 	state.collapseWhileActive = collapseWhileActive
@@ -551,6 +562,9 @@ func (state *recordingToolbarState) recordingStatus() recordingState {
 func (state *recordingToolbarState) syncRecordingSurfaces() {
 	status := state.recordingStatus()
 	ready := status == recordingStateReady
+	if ready || status == recordingStateSave {
+		_ = Call(func() { _ = state.positionToolbar() })
+	}
 	coverSelection := status == recordingStateCountdown || status == recordingStateSave
 	if ready {
 		state.closeScrollBorder()
@@ -640,6 +654,7 @@ func (state *recordingToolbarState) overlayPointer(event PointerEvent) {
 	if event.Kind != PointerDown || event.Button != PointerButtonPrimary {
 		return
 	}
+	state.closeFormatMenu()
 	if state.recordingStatus() == recordingStateSave {
 		state.togglePreview()
 	}
@@ -973,12 +988,25 @@ func (state *recordingToolbarState) drawOverlay(displayList *DisplayList, frame 
 	state.pruneRecordingKeycaps(now)
 	visibleKeycaps := append([]recordingKeycap(nil), state.keycaps...)
 	session := state.session
+	lastError := state.lastError
+	exportFailed := state.exportFailed
 	state.mu.Unlock()
 
 	displayList.Clear(Color{})
 	local := Rect{Width: frame.Size.Width, Height: frame.Size.Height}
 	if session != nil && session.currentState() == recordingStateSave {
 		state.drawPreview(displayList, local, uiScale)
+		if exportFailed && lastError != "" {
+			woxwidget.PaintStateless(state.overlay, woxwidget.Align{
+				Width: local.Width, Height: local.Height, Horizontal: 0.5, Vertical: 1,
+				Child: woxwidget.Container{
+					Width: min(local.Width, 420*uiScale), Padding: woxwidget.Insets{Left: 12 * uiScale, Right: 12 * uiScale, Top: 8 * uiScale, Bottom: 8 * uiScale},
+					Color: Color{R: 100, G: 30, B: 30, A: 240}, Radius: 8 * uiScale,
+					Child: woxwidget.TextBlock{Value: state.options.RecordingTooltips.ExportFailed, MaxLines: 2, Centered: true,
+						Style: TextStyle{Size: 13 * uiScale}, Color: Color{R: 255, G: 255, B: 255, A: 255}},
+				},
+			}, displayList, local)
+		}
 	}
 	if state.platform.retainRecordingBorder {
 		displayList.StrokeRoundedRect(local, 0, 2*uiScale, Color{R: 47, G: 128, B: 237, A: 255})
@@ -1207,6 +1235,8 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	keyboardAvailable := state.keyboardUnavailable == ""
 	finishing := state.finishing
 	previewPlaying := state.previewPlaying
+	exportFormat := state.exportFormat
+	formatOpen := state.formatMenu != nil
 	hoverTooltip := state.hoverTooltip
 	hoverTooltipRect := state.hoverTooltipRect
 	state.mu.Unlock()
@@ -1223,6 +1253,9 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 
 	displayList.Clear(Color{})
 	panel, timeRect, primaryRect, restartRect, pointerRect, keypressRect, finishRect, cancelRect := recordingToolbarControlLayout(scale)
+	if recordingStatus == recordingStateSave {
+		finishRect, cancelRect = keypressRect, finishRect
+	}
 	panel.Width = frame.Size.Width
 	state.timeRect = timeRect
 	state.primaryRect = primaryRect
@@ -1251,8 +1284,14 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	}
 	drawRecordingToolbarIcon(displayList, primaryIcon, primaryRect, primaryColor, scale)
 	drawRecordingToolbarIcon(displayList, "control.refresh", restartRect, white, scale)
-	state.drawToggle(displayList, pointerRect, "screenshot.cursor", showPointer, true, scale)
-	state.drawToggle(displayList, keypressRect, "control.keyboard", showKeypress, keyboardAvailable, scale)
+	state.formatRect = Rect{}
+	if recordingStatus == recordingStateSave {
+		state.formatRect = pointerRect
+		drawRecordingFormatTrigger(displayList, state.window, state.formatRect, exportFormat, finishing, formatOpen || hoverTooltipRect == state.formatRect, scale)
+	} else {
+		state.drawToggle(displayList, pointerRect, "screenshot.cursor", showPointer, true, scale)
+		state.drawToggle(displayList, keypressRect, "control.keyboard", showKeypress, keyboardAvailable, scale)
+	}
 	finishIcon := "control.stop"
 	if recordingStatus == recordingStateSave {
 		finishIcon = "control.download"
@@ -1335,7 +1374,15 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 		return
 	}
 	state.mu.Lock()
-	if state.finishing || state.cancelled {
+	menuOpen := state.formatMenu != nil
+	formatHit := screenshotEditorRectContains(state.formatRect, event.Position)
+	state.mu.Unlock()
+	state.closeFormatMenu()
+	if menuOpen && formatHit {
+		return
+	}
+	state.mu.Lock()
+	if state.finishing || state.cancelled || state.runtimeDialog != nil {
 		state.mu.Unlock()
 		return
 	}
@@ -1355,6 +1402,10 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 	}
 	locked := current != recordingStateReady
 	switch {
+	case formatHit && current == recordingStateSave:
+		state.mu.Unlock()
+		state.openFormatMenu()
+		return
 	case screenshotEditorRectContains(state.pointerRect, event.Position) && !locked:
 		state.showPointer = !state.showPointer
 	case screenshotEditorRectContains(state.keypressRect, event.Position) && !locked:
@@ -1391,6 +1442,8 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 // tooltipAt resolves the localized hint for the visible control under the pointer.
 func (state *recordingToolbarState) tooltipAt(point Point, current recordingState) (Rect, string) {
 	switch {
+	case current == recordingStateSave && screenshotEditorRectContains(state.formatRect, point):
+		return state.formatRect, state.options.RecordingTooltips.Format
 	case screenshotEditorRectContains(state.primaryRect, point):
 		switch current {
 		case recordingStateRecording:
@@ -1544,6 +1597,10 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 
 // start locks the selected region and begins the countdown.
 func (state *recordingToolbarState) start() {
+	if _, err := recordingFFmpegPath(); err != nil {
+		state.openRuntimeDialog()
+		return
+	}
 	session, err := state.newSession()
 	if err == nil {
 		state.mu.Lock()
@@ -1623,6 +1680,7 @@ func (state *recordingToolbarState) resetRecording(restart bool) {
 			state.previewFrame = nil
 			state.finishing = false
 			state.mu.Unlock()
+			_ = state.positionToolbar()
 			if restart {
 				state.start()
 			} else {
@@ -1746,15 +1804,20 @@ func (state *recordingToolbarState) saveRecording() {
 	}
 	state.finishing = true
 	session := state.session
+	exportFormat := state.exportFormat
+	state.lastError = ""
+	ctx, cancel := context.WithCancel(context.Background())
+	state.exportCancel = cancel
 	state.mu.Unlock()
 	go func() {
+		defer cancel()
 		state.stopPreview()
 		var target string
 		var saveErr error
 		callErr := Call(func() {
 			state.hidePreviewSurfacesForDialog()
-			defaultName := time.Now().Format("20060102_150405") + "_wox_recording.mp4"
-			target, saveErr = state.window.SaveFile(SaveFileOptions{Title: "Save recording", DefaultFileName: defaultName, Extension: "mp4"})
+			defaultName := time.Now().Format("20060102_150405") + "_wox_recording." + exportFormat.extension()
+			target, saveErr = state.window.SaveFile(SaveFileOptions{Title: state.options.RecordingTooltips.Save, DefaultFileName: defaultName, Extension: exportFormat.extension()})
 			if target == "" || saveErr != nil {
 				state.restorePreviewSurfacesAfterDialog()
 			}
@@ -1769,6 +1832,7 @@ func (state *recordingToolbarState) saveRecording() {
 		}
 		if target == "" {
 			state.mu.Lock()
+			state.exportCancel = nil
 			state.finishing = false
 			window := state.window
 			state.mu.Unlock()
@@ -1777,15 +1841,17 @@ func (state *recordingToolbarState) saveRecording() {
 			}
 			return
 		}
-		if filepath.Ext(target) == "" {
-			target += ".mp4"
-		}
-		if err := session.Save(target); err != nil {
+		target = recordingExportPath(target, exportFormat)
+		if err := session.Save(ctx, target, exportFormat); err != nil {
 			state.setFinishError(err)
 			return
 		}
+		kind := "video"
+		if exportFormat != recordingExportMP4 {
+			kind = "image"
+		}
 		state.complete(recordingUIResult{result: ScreenshotResult{
-			ArtifactKind: "video", ArtifactPath: target, LogicalSelection: state.platform.logicalSelection(state.selection, state.frameSize),
+			ArtifactKind: kind, ArtifactPath: target, LogicalSelection: state.platform.logicalSelection(state.selection, state.frameSize),
 		}})
 	}()
 }
@@ -1793,10 +1859,17 @@ func (state *recordingToolbarState) saveRecording() {
 // setFinishError re-enables Finish so the same finalized temporary file can be retried.
 func (state *recordingToolbarState) setFinishError(err error) {
 	state.mu.Lock()
+	if state.cancelled {
+		state.mu.Unlock()
+		return
+	}
+	state.exportFailed = state.exportCancel != nil
+	state.exportCancel = nil
 	state.finishing = false
 	state.lastError = err.Error()
 	state.mu.Unlock()
-	_ = state.window.Invalidate()
+	util.GetLogger().Warn(context.Background(), fmt.Sprintf("recording operation failed: %v", err))
+	_ = Call(state.restorePreviewSurfacesAfterDialog)
 }
 
 // togglePreview starts or stops in-overlay playback of the finalized recording.
@@ -1901,6 +1974,9 @@ func (state *recordingToolbarState) cancel() {
 	}
 	state.cancelled = true
 	state.finishing = true
+	if state.exportCancel != nil {
+		state.exportCancel()
+	}
 	session := state.session
 	state.mu.Unlock()
 	state.stopPreview()
@@ -1927,6 +2003,15 @@ func (state *recordingToolbarState) closed() {
 
 // borderPointer moves and resizes the ready selection without the screenshot "draw a new region" path.
 func (state *recordingToolbarState) borderPointer(event PointerEvent) {
+	state.mu.Lock()
+	modal := state.runtimeDialog != nil
+	state.mu.Unlock()
+	if modal {
+		return
+	}
+	if event.Kind == PointerDown {
+		state.closeFormatMenu()
+	}
 	state.mu.Lock()
 	session := state.session
 	if session != nil && session.currentState() == recordingStateSave {
