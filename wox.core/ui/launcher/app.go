@@ -2393,6 +2393,7 @@ type resultAction struct {
 	Icon                   woxImage          `json:"Icon"`
 	IsDefault              bool              `json:"IsDefault"`
 	PreventHideAfterAction bool              `json:"PreventHideAfterAction"`
+	HideInToolbar          bool              `json:"HideInToolbar"`
 	Hotkey                 string            `json:"Hotkey"`
 	Form                   []formDefinition  `json:"Form"`
 	IsSystemAction         bool              `json:"IsSystemAction"`

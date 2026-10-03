@@ -57,6 +57,7 @@ type actionPanelEntry struct {
 	Tail                 string
 	TailIcon             woxImage
 	IsDefault            bool
+	HideInToolbar        bool
 	Source               actionPanelSource
 	ResultIndex          int
 	ActionIndex          int
@@ -125,7 +126,7 @@ func toolbarActionEntriesBySources(entries []actionPanelEntry, sources []actionP
 	ordered := make([]actionPanelEntry, 0, len(entries))
 	for _, source := range sources {
 		for _, entry := range entries {
-			if entry.Source == source && strings.TrimSpace(entry.Hotkey) != "" {
+			if entry.Source == source && !entry.HideInToolbar && strings.TrimSpace(entry.Hotkey) != "" {
 				ordered = append(ordered, entry)
 			}
 		}
@@ -211,7 +212,7 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 		entries = append(entries, actionPanelEntry{
 			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
 			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Tail: action.Tail, TailIcon: action.TailIcon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
-			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction,
+			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction, HideInToolbar: action.HideInToolbar,
 		})
 	}
 	for _, index := range pluginActions {

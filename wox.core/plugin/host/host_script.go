@@ -272,6 +272,11 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 								"prevent_hide_after_action",
 								"PreventHideAfterAction",
 							}),
+							HideInToolbar: getFirstBoolFromMap(actionMapCopy, []string{
+								"hideInToolbar",
+								"hide_in_toolbar",
+								"HideInToolbar",
+							}),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								s.executeAction(ctx, actionMapCopy)
 							},

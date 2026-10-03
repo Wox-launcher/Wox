@@ -523,6 +523,7 @@ class ResultAction:
         icon: Icon to display for the action
         is_default: Whether this is the default action
         prevent_hide_after_action: Keep Wox visible after action
+        hide_in_toolbar: Hide the toolbar button while retaining the action panel and hotkey
         hotkey: Keyboard shortcut to trigger the action
         context_data: Additional data for later retrieval
 
@@ -674,6 +675,13 @@ class ResultAction:
     Wox automatically includes the English translation of name when available.
     """
 
+    hide_in_toolbar: bool = field(default=False)
+    """
+    Hide this action from the toolbar, including when it is the default action.
+
+    The action panel and keyboard shortcut remain available. Defaults to False.
+    """
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -691,6 +699,7 @@ class ResultAction:
             "Type": self.type,
             "IsDefault": self.is_default,
             "PreventHideAfterAction": self.prevent_hide_after_action,
+            "HideInToolbar": self.hide_in_toolbar,
             "Hotkey": self.hotkey,
             "Icon": json.loads(self.icon.to_json()),
             "ContextData": self.context_data,
@@ -738,6 +747,7 @@ class ResultAction:
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
             is_default=data.get("IsDefault", False),
             prevent_hide_after_action=data.get("PreventHideAfterAction", False),
+            hide_in_toolbar=data.get("HideInToolbar", False),
             hotkey=data.get("Hotkey", ""),
             context_data=context_data if isinstance(context_data, dict) else {},
         )

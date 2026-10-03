@@ -158,7 +158,7 @@ func mergeThemeEditorDraft(raw map[string]any, values map[string]string) map[str
 	}
 	// This is an authored editor draft, not a migration of loaded or synced themes.
 	if isV2Theme(draft) && themeEditorUsesMaterialFeatures(draft) {
-		minimum := "2.4.6"
+		minimum := "2.4.5"
 		current := themeMapString(draft, "MinWoxVersion")
 		version, err := semver.NewVersion(current)
 		if current == "" || (err == nil && version.LessThan(semver.MustParse(minimum))) {

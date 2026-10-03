@@ -364,6 +364,8 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
+	// Hide only the toolbar shortcut chip; the action panel, hotkey, and default action remain available.
+	HideInToolbar bool
 	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
@@ -435,6 +437,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
+				HideInToolbar:          action.HideInToolbar,
 				Hotkey:                 action.Hotkey,
 				Form:                   action.Form,
 				ContextData:            action.ContextData,
@@ -499,6 +502,7 @@ type QueryResultActionUI struct {
 	Icon                   common.WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
+	HideInToolbar          bool
 	Hotkey                 string
 	Form                   definition.PluginSettingDefinitions
 	ContextData            map[string]string

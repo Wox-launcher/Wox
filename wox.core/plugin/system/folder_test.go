@@ -28,6 +28,7 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 	fileActions := folderPlugin.buildPathActions("file.txt", false, nil)
 	assertFolderActionIDs(t, fileActions, []string{
 		folderOpenActionID,
+		folderBrowseContainingFolderActionID,
 		folderOpenContainingFolderActionID,
 		folderCopyPathActionID,
 		folderCopyNameActionID,
@@ -57,6 +58,45 @@ func TestFolderCopyNamePrefersTitleAndVolumeRoot(t *testing.T) {
 	}
 	if got := folderCopyName("Projects", `D:\dev\Wox`); got != "Projects" {
 		t.Fatalf("favorite name = %q, want Projects", got)
+	}
+}
+
+// TestFolderShiftEnterNavigation keeps file, folder, favorite, and volume-root actions consistent.
+func TestFolderShiftEnterNavigation(t *testing.T) {
+	root := t.TempDir()
+	volumeRoot := filepath.VolumeName(root) + string(os.PathSeparator)
+	api := &chatTestAPI{}
+	p := &FolderPlugin{api: api}
+	for _, test := range []struct {
+		name    string
+		actions []plugin.QueryResultAction
+		want    string
+	}{
+		{"folder", p.buildPathActions(root, true, nil), root + string(os.PathSeparator)},
+		{"file", p.buildPathActions(filepath.Join(root, "report.txt"), false, nil), root + string(os.PathSeparator)},
+		{"favorite", p.buildFavoriteActions("Projects", root, 0), root + string(os.PathSeparator)},
+		{"volume root", p.buildPathActions(volumeRoot, true, nil), volumeRoot},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			api.changed = common.PlainQuery{}
+			if test.actions[0].Id != folderOpenActionID || !test.actions[0].IsDefault {
+				t.Fatal("Enter must keep opening the result")
+			}
+			count := 0
+			for _, action := range test.actions {
+				if action.Hotkey != "shift+enter" {
+					continue
+				}
+				count++
+				if !action.PreventHideAfterAction || action.IsDefault {
+					t.Fatal("browsing must keep Wox visible without becoming the default action")
+				}
+				action.Action(t.Context(), plugin.ActionContext{})
+			}
+			if count != 1 || api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != test.want {
+				t.Fatalf("browse count=%d query=%+v, want %q", count, api.changed, test.want)
+			}
+		})
 	}
 }
 

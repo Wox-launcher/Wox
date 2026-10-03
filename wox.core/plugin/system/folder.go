@@ -27,13 +27,14 @@ const (
 	ToolBrowsePath          = "browse_path"
 	folderResultScore int64 = 1000
 
-	folderOpenActionID                 = "open_folder"
-	folderEnterActionID                = "enter_folder"
-	folderOpenContainingFolderActionID = "open_containing_folder"
-	folderCopyPathActionID             = "copy_path"
-	folderCopyNameActionID             = "copy_name"
-	folderExecuteCommandHereActionID   = "execute_command_here"
-	folderToggleHiddenFilesActionID    = "toggle_hidden_files"
+	folderOpenActionID                   = "open_folder"
+	folderEnterActionID                  = "enter_folder"
+	folderBrowseContainingFolderActionID = "browse_containing_folder"
+	folderOpenContainingFolderActionID   = "open_containing_folder"
+	folderCopyPathActionID               = "copy_path"
+	folderCopyNameActionID               = "copy_name"
+	folderExecuteCommandHereActionID     = "execute_command_here"
+	folderToggleHiddenFilesActionID      = "toggle_hidden_files"
 
 	folderFavoritesSettingKey     = "favorites"
 	folderFavoriteFormNameKey     = "name"
@@ -375,7 +376,7 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteInd
 	}
 }
 
-// buildPathActions keeps Enter opening the path while primary+Enter enters folders.
+// buildPathActions keeps Enter opening the path while Shift+Enter browses its directory in Wox.
 func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *folderFavoriteMatch) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{
 		{
@@ -387,24 +388,10 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 				_ = shell.Open(path)
 			},
 		},
+		p.buildBrowseAction(path, isDir),
 	}
 
 	if isDir {
-		actions = append(actions, plugin.QueryResultAction{
-			Id:                     folderEnterActionID,
-			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   icons.Get(icons.ActionOpen),
-			Hotkey:                 util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if p.api != nil {
-					p.api.ChangeQuery(ctx, common.PlainQuery{
-						QueryType: plugin.QueryTypeInput,
-						QueryText: ensureFolderQueryTrailingSeparator(path),
-					})
-				}
-			},
-		})
 		actions = append(actions, p.buildCopyPathAction(path), p.buildCopyNameAction("", path))
 		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, true))
 		if favoriteMatch != nil {
@@ -443,21 +430,7 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 				_ = shell.Open(path)
 			},
 		},
-		{
-			Id:                     folderEnterActionID,
-			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   icons.Get(icons.ActionOpen),
-			Hotkey:                 util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if p.api != nil {
-					p.api.ChangeQuery(ctx, common.PlainQuery{
-						QueryType: plugin.QueryTypeInput,
-						QueryText: ensureFolderQueryTrailingSeparator(path),
-					})
-				}
-			},
-		},
+		p.buildBrowseAction(path, true),
 		p.buildCopyPathAction(path),
 		p.buildCopyNameAction(name, path),
 		p.buildExecuteCommandAtLocationAction(path, true),
@@ -467,6 +440,32 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
 	return actions
+}
+
+// buildBrowseAction shares directory navigation across path results and saved favorites.
+func (p *FolderPlugin) buildBrowseAction(path string, isDir bool) plugin.QueryResultAction {
+	id := folderEnterActionID
+	name := "i18n:plugin_folder_enter"
+	if !isDir {
+		path = filepath.Dir(path)
+		id = folderBrowseContainingFolderActionID
+		name = "i18n:plugin_folder_browse_containing_folder"
+	}
+	return plugin.QueryResultAction{
+		Id:                     id,
+		Name:                   name,
+		Icon:                   icons.Get(icons.ActionOpen),
+		Hotkey:                 "shift+enter",
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			if p.api != nil {
+				p.api.ChangeQuery(ctx, common.PlainQuery{
+					QueryType: plugin.QueryTypeInput,
+					QueryText: ensureFolderQueryTrailingSeparator(path),
+				})
+			}
+		},
+	}
 }
 
 // buildCopyPathAction copies the result path for files, folders, and favorites.

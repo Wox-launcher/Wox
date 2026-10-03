@@ -246,6 +246,7 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		Icon:                   fromCoreImage(action.Icon),
 		IsDefault:              action.IsDefault,
 		PreventHideAfterAction: action.PreventHideAfterAction,
+		HideInToolbar:          action.HideInToolbar,
 		Hotkey:                 action.Hotkey,
 		Form:                   definitions,
 		IsSystemAction:         action.IsSystemAction,

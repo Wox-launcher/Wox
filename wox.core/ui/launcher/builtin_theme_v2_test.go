@@ -22,7 +22,7 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 		}
 		minimum := "2.4.3"
 		if name == "glass" {
-			minimum = "2.4.6"
+			minimum = "2.4.5"
 		}
 		if theme.SchemaVersion != 2 || !theme.HasAuthoredStyles() || theme.MinWoxVersion != minimum {
 			t.Fatalf("%s is not a complete v2 theme", name)

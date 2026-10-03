@@ -2593,6 +2593,7 @@
   "plugin_folder_open": "열기",
   "plugin_folder_open_containing_folder": "상위 폴더 열기",
   "plugin_folder_enter": "폴더로 들어가기",
+  "plugin_folder_browse_containing_folder": "폴더 탐색",
   "plugin_folder_copy_path": "경로 복사",
   "plugin_folder_copy_name": "이름 복사",
   "plugin_folder_browse_here": "폴더 찾아보기",

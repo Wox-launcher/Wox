@@ -223,10 +223,10 @@ func TestThemeEditorMaterialVersionFloor(t *testing.T) {
 		fields  map[string]any
 		want    string
 	}{
-		{"2.4.3", map[string]any{"ToolbarBlurBrightness": 0.3}, "2.4.6"},
+		{"2.4.3", map[string]any{"ToolbarBlurBrightness": 0.3}, "2.4.5"},
 		{"2.5.0", map[string]any{"ToolbarBlurSigma": 4}, "2.5.0"},
 		{"2.4.3", map[string]any{"ToolbarBackgroundColor": "#00000000"}, "2.4.3"},
-		{"2.4.3", map[string]any{"linux": map[string]any{"variants": map[string]any{"kde": map[string]any{"backgroundBlur": map[string]any{}}}}}, "2.4.6"},
+		{"2.4.3", map[string]any{"linux": map[string]any{"variants": map[string]any{"kde": map[string]any{"backgroundBlur": map[string]any{}}}}}, "2.4.5"},
 	} {
 		raw := map[string]any{"SchemaVersion": 2, "MinWoxVersion": tc.minimum}
 		for key, value := range tc.fields {

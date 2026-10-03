@@ -1,10 +1,12 @@
 package launcher
 
 import (
+	"encoding/json"
 	"runtime"
 	"testing"
 
 	"wox/common/icons"
+	"wox/plugin"
 	"wox/setting"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -194,6 +196,54 @@ func TestToolbarActionEntriesIncludesShortcutLocalActions(t *testing.T) {
 	withMessage := toolbarActionEntries(entries, true)
 	if len(withMessage) != 4 || withMessage[0].ID != "open" || withMessage[1].ID != "folder" || withMessage[2].ID != localActionWebViewReloadID || withMessage[3].ID != "message" {
 		t.Fatalf("toolbar actions with message = %+v, want result, local, then message shortcuts", withMessage)
+	}
+}
+
+// TestHideInToolbarPreservesPanelAndHotkeys covers both UI transports and hiding default or secondary actions.
+func TestHideInToolbarPreservesPanelAndHotkeys(t *testing.T) {
+	for _, actionType := range []string{plugin.QueryResultActionTypeExecute, plugin.QueryResultActionTypeForm} {
+		for _, hidden := range []bool{false, true} {
+			core := plugin.QueryResult{Actions: []plugin.QueryResultAction{
+				{Id: "open", Name: "Open", Hotkey: "enter", IsDefault: true, HideInToolbar: hidden},
+				{Id: "browse", Name: "Browse folder", Type: actionType, Hotkey: "shift+enter", HideInToolbar: hidden},
+				{Id: "copy", Name: "Copy", Hotkey: "ctrl+c"},
+			}}
+			ui := core.ToUI()
+			for _, transport := range []string{"typed", "json"} {
+				result := queryResult{ID: "selected"}
+				for _, action := range ui.Actions {
+					converted := fromCoreResultAction(action)
+					if transport == "json" {
+						data, err := json.Marshal(action)
+						if err != nil {
+							t.Fatal(err)
+						}
+						converted = resultAction{}
+						if err := json.Unmarshal(data, &converted); err != nil {
+							t.Fatal(err)
+						}
+					}
+					result.Actions = append(result.Actions, converted)
+				}
+				entries := unifiedActionPanelEntries([]queryResult{result}, 0, nil)
+				if len(entries) != 3 || entries[1].HideInToolbar != hidden || !entries[0].IsDefault {
+					t.Fatalf("%s: toolbar visibility changed the action panel or default action: %+v", transport, entries)
+				}
+				if matches := filteredActionIndices(entries, "Browse folder", nil, false); len(matches) != 1 || matches[0] != 1 {
+					t.Fatalf("%s: hidden action must remain searchable: %v", transport, matches)
+				}
+				for _, messageVisible := range []bool{false, true} {
+					chips := toolbarActionEntries(entries, messageVisible)
+					if hidden && (len(chips) != 1 || chips[0].ActionIndex != 2) || !hidden && len(chips) != 3 {
+						t.Fatalf("%s: hidden=%t message=%t toolbar=%+v", transport, hidden, messageVisible, chips)
+					}
+				}
+				entry, matched := actionPanelEntryForHotkey(entries, woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true})
+				if !matched || entry.ActionIndex != 1 || result.Actions[entry.ActionIndex].Type != actionType {
+					t.Fatalf("%s: hiding a toolbar chip changed hotkey dispatch: %+v", transport, entry)
+				}
+			}
+		}
 	}
 }
 
@@ -411,6 +461,24 @@ func TestOnResultActionHotkeyHandlesClosedPanel(t *testing.T) {
 	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}}}
 	if !app.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {
 		t.Fatal("closed action panel did not handle Cmd+D")
+	}
+}
+
+// TestShiftEnterResultActionPrecedesQueryNewline guards the directory-browsing shortcut against editor handling.
+func TestShiftEnterResultActionPrecedesQueryNewline(t *testing.T) {
+	app := &App{
+		editor:         woxui.NewTextEditor("f report"),
+		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
+		selected:       0,
+		results: []queryResult{{ID: "file", Actions: []resultAction{
+			{ID: "browse", Type: "local", Hotkey: "shift+enter", PreventHideAfterAction: true, HideInToolbar: true},
+		}}},
+	}
+	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true}) {
+		t.Fatal("Shift+Enter browse action was not handled")
+	}
+	if app.editor.State().Text != "f report" {
+		t.Fatal("Shift+Enter inserted a newline instead of dispatching the result action")
 	}
 }
 

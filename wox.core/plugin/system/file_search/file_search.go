@@ -1222,20 +1222,26 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 		},
 	}
 
-	if item.IsDir {
-		actions = append(actions, plugin.QueryResultAction{
-			Name:                   "i18n:plugin_folder_enter",
-			Icon:                   icons.Get(icons.ActionOpen),
-			Hotkey:                 util.PrimaryHotkey("enter"),
-			PreventHideAfterAction: true,
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				c.api.ChangeQuery(ctx, common.PlainQuery{
-					QueryType: plugin.QueryTypeInput,
-					QueryText: ensureFileSearchFolderBrowseQuery(item.Path),
-				})
-			},
-		})
-	} else {
+	browsePath := item.Path
+	browseName := "i18n:plugin_folder_enter"
+	if !item.IsDir {
+		browsePath = filepath.Dir(item.Path)
+		browseName = "i18n:plugin_folder_browse_containing_folder"
+	}
+	actions = append(actions, plugin.QueryResultAction{
+		Name:                   browseName,
+		Icon:                   icons.Get(icons.ActionOpen),
+		Hotkey:                 "shift+enter",
+		HideInToolbar:          true,
+		PreventHideAfterAction: true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			c.api.ChangeQuery(ctx, common.PlainQuery{
+				QueryType: plugin.QueryTypeInput,
+				QueryText: ensureFileSearchFolderBrowseQuery(browsePath),
+			})
+		},
+	})
+	if !item.IsDir {
 		actions = append(actions, plugin.QueryResultAction{
 			Name: "i18n:plugin_file_open_containing_folder",
 			Icon: icons.Get(icons.ActionOpenContainingFolder),
@@ -1281,6 +1287,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 				}
 			},
 			Hotkey:                 util.PrimaryHotkey("m"),
+			HideInToolbar:          true,
 			PreventHideAfterAction: true,
 		})
 	}

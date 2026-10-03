@@ -984,6 +984,12 @@ export interface ExecuteResultAction {
   PreventHideAfterAction?: boolean
 
   /**
+   * Hide this action from the toolbar, including when it is the default action.
+   * The action panel and keyboard shortcut remain available. Defaults to false.
+   */
+  HideInToolbar?: boolean
+
+  /**
    * The callback function to execute when the action is triggered.
    *
    * @param ctx - Request context
@@ -1093,6 +1099,12 @@ export interface FormResultAction {
    * Whether to keep Wox visible after executing this action.
    */
   PreventHideAfterAction?: boolean
+
+  /**
+   * Hide this action from the toolbar, including when it is the default action.
+   * The action panel and keyboard shortcut remain available. Defaults to false.
+   */
+  HideInToolbar?: boolean
 
   /**
    * Form definition to display.

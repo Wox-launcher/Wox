@@ -184,6 +184,12 @@ const opened = await this.api.InvokePluginTool(ctx, {
 
 Actions are operations users can perform on results:
 
+Set `HideInToolbar: true` on an execute or form action to omit its toolbar button.
+It remains available in the Action Panel and through its `Hotkey`, including
+when it is the default Enter action. Omitting this field keeps existing toolbar
+behavior. This option requires a Wox build that supports `HideInToolbar`;
+older releases ignore it.
+
 ```typescript
 ResultAction({
   name: "Copy",

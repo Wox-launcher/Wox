@@ -41,7 +41,7 @@ image-theme windows opt out of blur so their clear margins remain clear. Windows
 and macOS retain their existing custom-outline material behavior.
 
 
-## Toolbar backdrop controls (schema v2, Wox 2.4.6+)
+## Toolbar backdrop controls (schema v2, Wox 2.4.5+)
 
 `ToolbarBlurSigma` controls the local toolbar blur in logical units (0–64, default
 12). Zero removes spatial blur; brightness and saturation can still adjust the
@@ -75,6 +75,6 @@ whole-window blur. The editor and launcher preview use the same controls. The
 internal `Container.Floating` flag remains necessary: ordinary containers and the
 content inside an already-blurred rounded toolbar must not add another blur pass.
 
-Capability overrides and toolbar backdrop controls require Wox 2.4.6. The theme
+Capability overrides and toolbar backdrop controls require Wox 2.4.5. The theme
 editor raises `MinWoxVersion` on drafts using these features, including inactive
 platform overrides, while preserving higher requirements and the loaded source.

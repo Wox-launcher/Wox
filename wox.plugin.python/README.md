@@ -141,6 +141,14 @@ Plugins can declare settings that must be configured before Wox calls `query()`:
 
 MIT
 
+## Action toolbar visibility
+
+Set `hide_in_toolbar=True` on a `ResultAction` to omit its toolbar button.
+The action remains in the Action Panel and its `hotkey` continues to work,
+including when it is the default Enter action. The default is `False`.
+This applies to execute and form actions. It requires a Wox build that supports
+the `HideInToolbar` field; older releases ignore it.
+
 ## Static HTML preview
 
 Use `WoxPreviewType.WEBVIEW` with a JSON-encoded `html` field. No HTTP server or temporary HTML file is needed; there is no separate `html` preview type.

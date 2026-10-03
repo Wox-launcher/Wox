@@ -12,7 +12,7 @@ C:\Users
 %LOCALAPPDATA%
 ```
 
-Press `Enter` to open the folder. The Action Panel can enter the folder in Wox, open the containing directory, run a Shell command here, or toggle hidden files.
+Press `Enter` to open the folder. Press `Shift+Enter` to browse it inside Wox, then use the same shortcut to enter subfolders. On a file result, `Shift+Enter` browses its containing folder. The shortcut also works for favorites. The Action Panel provides these actions, opening the containing directory in the file manager, running a Shell command here, and toggling hidden files.
 
 ## Favorites
 
