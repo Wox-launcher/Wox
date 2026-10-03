@@ -1426,6 +1426,13 @@ func woxGoDarwinPresentationDiagnostic(context C.uintptr_t, frameID C.uint64_t, 
 	))
 }
 
+// woxGoDarwinScreenshotDiagnostic routes native Space and window-order snapshots through Wox's logger.
+//
+//export woxGoDarwinScreenshotDiagnostic
+func woxGoDarwinScreenshotDiagnostic(detail *C.char) {
+	util.GetLogger().Debug(context.Background(), "darwin_screenshot "+C.GoString(detail))
+}
+
 //export woxGoDarwinFocus
 func woxGoDarwinFocus(context C.uintptr_t, epoch C.uint64_t, active C.int32_t) {
 	window := cgo.Handle(context).Value().(*platformWindow)

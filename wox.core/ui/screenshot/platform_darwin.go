@@ -179,7 +179,8 @@ func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, s
 	var displayX, displayY, displayWidth, displayHeight C.float
 	var selectionX, selectionY, selectionWidth, selectionHeight C.float
 	var copiedColor *C.char
-	switch result := C.wox_darwin_select_screenshot_region(
+	selectionStartedAt := time.Now()
+	result := C.wox_darwin_select_screenshot_region(
 		&pixelWidth,
 		&pixelHeight,
 		&sessionHandle,
@@ -193,7 +194,9 @@ func selectDarwinScreenshotRegion() (image.Image, uintptr, uint32, Rect, Rect, s
 		&selectionWidth,
 		&selectionHeight,
 		&copiedColor,
-	); result {
+	)
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("darwin_screenshot stage=selector_returned status=%d elapsedMs=%d", int32(result), time.Since(selectionStartedAt).Milliseconds()))
+	switch result {
 	case 0:
 	case 1:
 		return nil, 0, 0, Rect{}, Rect{}, "", true, nil

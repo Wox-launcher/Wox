@@ -34,6 +34,7 @@ extern void woxGoDarwinCall(uintptr_t context);
 extern void woxGoDarwinFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoDarwinFrameSync(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale, int32_t transactional);
 extern void woxGoDarwinPresentationDiagnostic(uintptr_t context, uint64_t frame_id, uint8_t event, uint8_t renderer_kind, uint64_t sequence, uint64_t generation, uint64_t current_generation);
+extern void woxGoDarwinScreenshotDiagnostic(const char *detail);
 extern void woxGoDarwinFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoDarwinKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoDarwinWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
@@ -423,7 +424,7 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 // Position AppKit-owned buttons in content points, retaining their system size,
 // title-bar hierarchy, hover tracking, accessibility, and OS-specific material.
 static void update_title_bar_controls(WoxDarwinWindow *window) {
-  if (window == NULL || window->closed || window->window == nil) return;
+  if (window == NULL || window->closed || window->window == nil || window->screenshot_window) return;
   WoxNativeWindow *native = (WoxNativeWindow *)window->window;
   uint8_t controls = native.woxTitleBarControls;
   NSWindowButton types[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
@@ -945,18 +946,65 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 }
 @end
 
-@interface WoxScreenshotSelectionWindow : WoxNativeWindow
+// A regular app's NSWindow can stay outside another app's fullscreen Space even at
+// shielding level. Nonactivating panels keep screenshot surfaces in that Space without
+// activating Settings; they can still accept keys unless the Wox option disables input.
+@interface WoxScreenshotPanel : NSPanel
+@property(nonatomic, assign) BOOL woxNonactivating;
 @end
 
-@implementation WoxScreenshotSelectionWindow
+@implementation WoxScreenshotPanel
+// Set the style during creation so AppKit initializes the panel's independent keyboard focus.
+- (instancetype)initWithContentRect:(NSRect)content_rect styleMask:(NSWindowStyleMask)style backing:(NSBackingStoreType)backing defer:(BOOL)defer {
+  self = [super initWithContentRect:content_rect styleMask:style | NSWindowStyleMaskNonactivatingPanel backing:backing defer:defer];
+  if (self != nil) {
+    self.hidesOnDeactivate = NO;
+    self.becomesKeyOnlyIfNeeded = NO;
+  }
+  return self;
+}
+
 - (BOOL)canBecomeKeyWindow {
-  return YES;
+  return !self.woxNonactivating;
 }
 
 - (BOOL)canBecomeMainWindow {
-  return YES;
+  return NO;
 }
 @end
+
+// Sample AppKit and WindowServer together: a high-level visible window can still be absent
+// from the active fullscreen Space after a management window changes the app activation policy.
+static void log_screenshot_window_state(const char *stage, const void *session, NSString *detail) {
+  NSArray *onscreen = (NSArray *)CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+  NSRunningApplication *front_app = NSWorkspace.sharedWorkspace.frontmostApplication;
+  NSMutableString *message = [NSMutableString stringWithFormat:
+      @"stage=%s session=%p policy=%ld appActive=%d frontPID=%d keyWindow=%ld mainWindow=%ld %@",
+      stage, session, (long)NSApp.activationPolicy, NSApp.isActive, front_app.processIdentifier,
+      (long)NSApp.keyWindow.windowNumber, (long)NSApp.mainWindow.windowNumber, detail ?: @""];
+  for (NSWindow *window in NSApp.windows) {
+    if (!window.isVisible && ![window isKindOfClass:[WoxScreenshotPanel class]]) {
+      continue;
+    }
+    NSInteger onscreen_index = -1;
+    for (NSUInteger index = 0; index < onscreen.count; index++) {
+      NSDictionary *entry = onscreen[index];
+      if ([entry[(id)kCGWindowNumber] integerValue] == window.windowNumber) {
+        onscreen_index = (NSInteger)index;
+        break;
+      }
+    }
+    [message appendFormat:
+        @" window={id=%ld class=%@ title=%@ level=%ld behavior=0x%lx visible=%d activeSpace=%d occlusionVisible=%d key=%d main=%d onscreenIndex=%ld framePoints=%@ scale=%.2f}",
+        (long)window.windowNumber, NSStringFromClass(window.class), window.title,
+        (long)window.level, (unsigned long)window.collectionBehavior, window.isVisible,
+        window.isOnActiveSpace, (window.occlusionState & NSWindowOcclusionStateVisible) != 0,
+        window.isKeyWindow, window.isMainWindow, (long)onscreen_index,
+        NSStringFromRect(window.frame), window.backingScaleFactor];
+  }
+  [onscreen release];
+  woxGoDarwinScreenshotDiagnostic(message.UTF8String);
+}
 
 @interface WoxScreenshotSelectionSession () {
   NSArray *_captures;
@@ -995,7 +1043,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   _completion = dispatch_semaphore_create(0);
   NSMutableArray *windows = [NSMutableArray arrayWithCapacity:_captures.count];
   for (WoxScreenshotDisplayCapture *capture in _captures) {
-    WoxScreenshotSelectionWindow *window = [[WoxScreenshotSelectionWindow alloc]
+    WoxScreenshotPanel *window = [[WoxScreenshotPanel alloc]
         initWithContentRect:NSMakeRect(
                                 NSMinX(capture->logical_bounds),
                                 desktop_top() - NSMaxY(capture->logical_bounds),
@@ -1067,7 +1115,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 }
 
 - (void)updateSelection:(NSRect)selection visible:(BOOL)visible {
-  for (WoxScreenshotSelectionWindow *window in _windows) {
+  for (WoxScreenshotPanel *window in _windows) {
     [(WoxScreenshotSelectionView *)window.contentView.subviews.firstObject setGlobalSelection:selection visible:visible];
   }
 }
@@ -1076,7 +1124,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 - (void)updateHoverAt:(NSPoint)point visible:(BOOL)visible {
   _hover_point = point;
   _hover_visible = visible && [self captureAtPoint:point] != nil;
-  for (WoxScreenshotSelectionWindow *window in _windows) {
+  for (WoxScreenshotPanel *window in _windows) {
     [(WoxScreenshotSelectionView *)window.contentView.subviews.firstObject setHoverPoint:point visible:_hover_visible];
   }
 }
@@ -1142,7 +1190,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   if (index == NSNotFound || index >= _windows.count) {
     return;
   }
-  WoxScreenshotSelectionWindow *window = _windows[index];
+  WoxScreenshotPanel *window = _windows[index];
   if (window.isKeyWindow) {
     return;
   }
@@ -1220,6 +1268,8 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   if (copied_color.length == 0 && !cancelled && (NSWidth(selection) < 2.0 || NSHeight(selection) < 2.0)) {
     cancelled = YES;
   }
+  log_screenshot_window_state("selector_finished", self, [NSString stringWithFormat:
+      @"cancelled=%d copiedColor=%d selectionPoints=%@", cancelled, copied_color.length > 0, NSStringFromRect(selection)]);
   _completed = YES;
   _cancelled = cancelled && copied_color.length == 0;
   _dragging = NO;
@@ -1254,7 +1304,15 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
     if (session->_completed) {
       return nil;
     }
+    // A local monitor also sees Settings events when an overlay is missing from its Space.
+    // Only the selector's own windows may start a selection or consume keyboard input.
+    if (![session->_windows containsObject:event.window]) {
+      return event;
+    }
     if (event.type == NSEventTypeKeyDown) {
+      if (event.keyCode == 53) {
+        log_screenshot_window_state("selector_escape", session, [NSString stringWithFormat:@"eventWindow=%ld", (long)event.windowNumber]);
+      }
       [session handleKeyEvent:event];
       return nil;
     }
@@ -1265,6 +1323,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
       return nil;
     }
     if (event.type == NSEventTypeLeftMouseDown) {
+      log_screenshot_window_state("selector_mouse_down", session, [NSString stringWithFormat:@"eventWindow=%ld point=%@", (long)event.windowNumber, NSStringFromPoint(mouse_location)]);
       session->_drag_capture = [session captureAtPoint:mouse_location];
       if (session->_drag_capture == nil) {
         return nil;
@@ -1292,18 +1351,25 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
     }
     return event;
   }];
-  for (WoxScreenshotSelectionWindow *window in _windows) {
+  for (WoxScreenshotPanel *window in _windows) {
     [window orderFrontRegardless];
   }
-  [NSApp activateIgnoringOtherApps:YES];
   NSPoint mouse_location = [self topLeftMouseLocation];
   [self updateHoverAt:mouse_location visible:YES];
   [self makeKeyForPoint:mouse_location];
   if (NSApp.keyWindow == nil && _windows.count > 0) {
-    WoxScreenshotSelectionWindow *first = _windows.firstObject;
+    WoxScreenshotPanel *first = _windows.firstObject;
     [first makeKeyAndOrderFront:nil];
     [first makeFirstResponder:first.contentView.subviews.firstObject];
   }
+  log_screenshot_window_state("selector_shown", self, nil);
+  // Space membership and occlusion can settle after ordering returns. The block retains
+  // the session until this one-shot sample and skips selectors already handed off or dismissed.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+    if (!session->_completed && !session->_dismissed) {
+      log_screenshot_window_state("selector_settled", session, nil);
+    }
+  });
 }
 
 - (void)dismiss {
@@ -1320,12 +1386,12 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   // display-sized mapping after the selector's own CGImage is released.
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  for (WoxScreenshotSelectionWindow *window in _windows) {
+  for (WoxScreenshotPanel *window in _windows) {
     window.contentView.layer.contents = nil;
   }
   [CATransaction commit];
   [CATransaction flush];
-  for (WoxScreenshotSelectionWindow *window in _windows) {
+  for (WoxScreenshotPanel *window in _windows) {
     window.contentView = nil;
     [window orderOut:nil];
     [window close];
@@ -3178,13 +3244,18 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     if (resizable != 0) {
       style_mask |= NSWindowStyleMaskResizable;
     }
-    WoxNativeWindow *native_window = [[WoxNativeWindow alloc]
+    Class window_class = is_screenshot_window ? [WoxScreenshotPanel class] : [WoxNativeWindow class];
+    NSWindow *native_window = [[window_class alloc]
         initWithContentRect:frame
                   styleMask:style_mask
                     backing:NSBackingStoreBuffered
                       defer:NO];
     native_window.releasedWhenClosed = NO;
-    native_window.woxNonactivating = is_nonactivating;
+    if (is_screenshot_window) {
+      ((WoxScreenshotPanel *)native_window).woxNonactivating = is_nonactivating;
+    } else {
+      ((WoxNativeWindow *)native_window).woxNonactivating = is_nonactivating;
+    }
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
     // Every window floats with a native shadow except the screenshot surface,
@@ -3271,7 +3342,9 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_signatures = [[NSMutableDictionary alloc] init];
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
-    native_window.woxOwner = window;
+    if (!is_screenshot_window) {
+      ((WoxNativeWindow *)native_window).woxOwner = window;
+    }
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
     window->application_window = is_application_window;
@@ -3322,10 +3395,11 @@ int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float 
   return result;
 }
 
-// Called on the AppKit thread; a retained key window in an inactive app is not focused.
+// Nonactivating screenshot panels can own keyboard focus while another app remains active.
+// Ordinary windows still need app activation to reject stale retained key-window state.
 int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window) {
   return window != NULL && !window->closed && window->window.isVisible &&
-         !window->window.isMiniaturized && NSApp.isActive && window->window.isKeyWindow;
+         !window->window.isMiniaturized && (NSApp.isActive || window->screenshot_window) && window->window.isKeyWindow;
 }
 
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
@@ -3341,7 +3415,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // Starting a new focus epoch is not a real focus loss.
       window->active = false;
     }
-    if (!window->nonactivating) {
+    if (!window->nonactivating && !window->screenshot_window) {
       save_previous_active_app_if_needed(window);
     }
     window->epoch++;
@@ -3355,7 +3429,9 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     if (window->nonactivating) {
       [window->window orderFrontRegardless];
     } else {
-      [NSApp activateIgnoringOtherApps:YES];
+      if (!window->screenshot_window) {
+        [NSApp activateIgnoringOtherApps:YES];
+      }
       [window->window makeKeyAndOrderFront:nil];
       [window->window makeFirstResponder:window->view];
     }
@@ -3369,6 +3445,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // Screenshot handoff keeps native selection overlays visible until this first complete frame
       // is ready, avoiding a transparent gap between the native selector and portable editor.
       [window->view renderFrameSynchronously:YES];
+      log_screenshot_window_state("editor_shown", window, nil);
     } else if (!window->closed) {
       // Rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
       [window->view renderFrame];
@@ -3520,6 +3597,7 @@ int32_t wox_darwin_select_screenshot_region(
   __block WoxScreenshotSelectionSession *session = nil;
   __block int32_t setup_result = 0;
   run_on_main_sync(^{
+    log_screenshot_window_state("before_capture", NULL, nil);
     NSArray<NSScreen *> *screens = [NSScreen screens];
     NSMutableArray *captures = [NSMutableArray arrayWithCapacity:screens.count];
     CGFloat top = desktop_top();
@@ -3665,7 +3743,7 @@ uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float
     for (NSUInteger index = 0; index < 4; index++) {
       NSRect edge = edges[index];
       NSRect frame = NSMakeRect(NSMinX(edge), desktop_top() - NSMaxY(edge), NSWidth(edge), NSHeight(edge));
-      WoxNativeWindow *window = [[WoxNativeWindow alloc]
+      WoxScreenshotPanel *window = [[WoxScreenshotPanel alloc]
           initWithContentRect:frame
                     styleMask:NSWindowStyleMaskBorderless
                       backing:NSBackingStoreBuffered
@@ -3701,7 +3779,7 @@ void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle) {
   }
   NSMutableArray *windows = (NSMutableArray *)border_handle;
   run_on_main_sync(^{
-    for (WoxNativeWindow *window in windows) {
+    for (WoxScreenshotPanel *window in windows) {
       [window orderOut:nil];
       [window close];
     }
@@ -4935,7 +5013,9 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     window->view->_owner = NULL;
     window->delegate->_owner = NULL;
-    ((WoxNativeWindow *)window->window).woxOwner = NULL;
+    if (!window->screenshot_window) {
+      ((WoxNativeWindow *)window->window).woxOwner = NULL;
+    }
     clear_active_web_view(window, true);
     [window->web_view_toolbar release];
     window->web_view_toolbar = nil;
