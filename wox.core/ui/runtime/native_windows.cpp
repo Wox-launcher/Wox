@@ -24,6 +24,7 @@
 #include "renderer_windows.h"
 
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
+extern "C" void woxGoWindowsWebViewInitializationDiagnostic(uintptr_t owner, const char *stage, uint64_t elapsed_ms, int32_t result);
 extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
 extern "C" int32_t woxGoWindowsWebViewActionHotkeyMatches(uintptr_t owner, uint32_t virtual_key, uint8_t modifiers);
 extern "C" int32_t woxGoWindowsWebViewActionHotkey(uintptr_t owner);
@@ -881,26 +882,40 @@ struct WoxWindowsWebView {
   }
 
   HRESULT initialize() {
+    // The loader and environment call can block before WebView2's asynchronous callback.
+    // Record boundaries in the Wox log so an automation timeout identifies the native stage.
+    const ULONGLONG started = GetTickCount64();
+    auto diagnostic = [this, started](const char *stage, HRESULT result) {
+      woxGoWindowsWebViewInitializationDiagnostic(reinterpret_cast<uintptr_t>(owner), stage, GetTickCount64() - started, result);
+    };
+    diagnostic("load-loader-start", S_OK);
     loader = load_webview2_loader();
     if (loader == nullptr) {
       webview_debug("loader missing");
+      diagnostic("load-loader-failed", HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND));
       return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     }
+    diagnostic("load-loader-complete", S_OK);
     FARPROC procedure = GetProcAddress(loader, "CreateCoreWebView2EnvironmentWithOptions");
     if (procedure == nullptr) {
+      diagnostic("resolve-create-environment-failed", HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND));
       return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
     CreateEnvironment create_environment = nullptr;
     static_assert(sizeof(create_environment) == sizeof(procedure));
     std::memcpy(&create_environment, &procedure, sizeof(create_environment));
+    diagnostic("user-data-folder-start", S_OK);
     std::wstring user_data = webview_user_data_folder();
+    diagnostic("user-data-folder-complete", S_OK);
     // Set the initial background before controller creation: CSS and the controller property
     // take effect too late to prevent WebView2's initial white frame. Keep explicit overrides.
     if (GetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", nullptr, 0) == 0 && !SetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", L"00000000")) {
       return HRESULT_FROM_WIN32(GetLastError());
     }
     auto *handler = new WoxEnvironmentCompletedHandler(this);
+    diagnostic("create-environment-start", S_OK);
     HRESULT result = create_environment(nullptr, user_data.empty() ? nullptr : user_data.c_str(), nullptr, handler);
+    diagnostic("create-environment-returned", result);
     webview_debug("create environment returned 0x%08X", static_cast<unsigned int>(result));
     handler->Release();
     return result;

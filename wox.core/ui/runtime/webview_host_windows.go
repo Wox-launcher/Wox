@@ -10,6 +10,7 @@ package woxui
 import "C"
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"unsafe"
@@ -17,6 +18,7 @@ import (
 	"github.com/lxn/win"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
+	"wox/util"
 )
 
 func (w *platformWindow) showWebView(content WebViewContent, bounds Rect) error {
@@ -434,6 +436,13 @@ func (w *platformWindow) clearWebViewPointerState() {
 
 func webViewHRESULT(operation string, result C.int32_t) error {
 	return fmt.Errorf("woxui: %s failed with HRESULT 0x%08X", operation, uint32(result))
+}
+
+// woxGoWindowsWebViewInitializationDiagnostic identifies native startup stalls that Go stacks cannot resolve.
+//
+//export woxGoWindowsWebViewInitializationDiagnostic
+func woxGoWindowsWebViewInitializationDiagnostic(owner C.uintptr_t, stage *C.char, elapsedMS C.uint64_t, result C.int32_t) {
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("webview initialization: owner=%#x stage=%s elapsedMs=%d result=0x%08X", uintptr(owner), C.GoString(stage), uint64(elapsedMS), uint32(result)))
 }
 
 // woxGoWindowsWebViewEscapeDiagnostic records the page decision and native focus handoff.
