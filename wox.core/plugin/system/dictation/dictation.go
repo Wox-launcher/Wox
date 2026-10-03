@@ -1746,11 +1746,7 @@ func (p *DictationPlugin) openActionChat(ctx context.Context, action dictationAc
 	}
 
 	chater.Chat(ctx, chatData, 0)
-	p.api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType:   plugin.QueryTypeInput,
-		QueryText:   "chat " + message,
-		ContextData: common.ContextData{"ai_chat_active_id": chatID},
-	})
+	p.api.ChangeQuery(ctx, plugin.GetPluginManager().BuildAIChatQuery(ctx, message, common.ContextData{"ai_chat_active_id": chatID}))
 	p.api.ShowApp(ctx)
 	return nil
 }

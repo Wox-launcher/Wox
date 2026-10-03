@@ -265,12 +265,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 							UpdatedAt: util.GetSystemTimestamp(),
 						}, 0)
 
-						r.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType:      plugin.QueryTypeInput,
-							QueryText:      "chat " + query.RawQuery,
-							QuerySelection: selection.Selection{},
-							ContextData:    common.ContextData{"ai_chat_active_id": chatId},
-						})
+						r.api.ChangeQuery(ctx, plugin.GetPluginManager().BuildAIChatQuery(ctx, query.RawQuery, common.ContextData{"ai_chat_active_id": chatId}))
 					},
 				},
 			},
@@ -1433,11 +1428,7 @@ func (r *AIChatPlugin) openChatWithAttachmentsTool(ctx context.Context, option p
 	if err != nil {
 		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorExecutionFailed, Message: err.Error()}}
 	}
-	r.api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType:   plugin.QueryTypeInput,
-		QueryText:   "chat ",
-		ContextData: common.ContextData{aiChatAttachmentsContextKey: string(data)},
-	})
+	r.api.ChangeQuery(ctx, plugin.GetPluginManager().BuildAIChatQuery(ctx, "", common.ContextData{aiChatAttachmentsContextKey: string(data)}))
 	r.api.ShowApp(ctx)
 	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
@@ -1522,7 +1513,7 @@ func (r *AIChatPlugin) querySelection(ctx context.Context, query plugin.Query) p
 				if err != nil {
 					return
 				}
-				r.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "chat ", ContextData: common.ContextData{aiChatAttachmentsContextKey: string(data)}})
+				r.api.ChangeQuery(ctx, plugin.GetPluginManager().BuildAIChatQuery(ctx, "", common.ContextData{aiChatAttachmentsContextKey: string(data)}))
 			},
 		}},
 	}})
@@ -1738,11 +1729,7 @@ func (r *AIChatPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUD
 				PreventHideAfterAction: true,
 				ContextData:            common.ContextData{"ai_chat_active_id": foundID, "query": foundTitle},
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					r.api.ChangeQuery(ctx, common.PlainQuery{
-						QueryType:   plugin.QueryTypeInput,
-						QueryText:   "chat ",
-						ContextData: common.ContextData{"ai_chat_active_id": foundID},
-					})
+					r.api.ChangeQuery(ctx, plugin.GetPluginManager().BuildAIChatQuery(ctx, "", common.ContextData{"ai_chat_active_id": foundID}))
 				},
 			},
 		},

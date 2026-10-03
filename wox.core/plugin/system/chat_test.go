@@ -177,11 +177,23 @@ func TestAIChatQuerySelectionQuotesText(t *testing.T) {
 	}
 
 	result.Actions[0].Action(context.Background(), plugin.ActionContext{})
-	if api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "chat " {
+	// This isolated plugin has no registered instance, so the builder uses the stable plugin scope.
+	if api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "" || api.changed.QueryScope.Identity() != common.AIChatPluginID {
 		t.Fatalf("change query = %+v", api.changed)
 	}
 	if !strings.Contains(api.changed.ContextData[aiChatAttachmentsContextKey], "  selected line  ") {
 		t.Fatalf("quote context = %#v", api.changed.ContextData)
+	}
+	chatResponse := chatPlugin.Query(context.Background(), plugin.Query{Type: api.changed.QueryType, ContextData: api.changed.ContextData, Scope: api.changed.QueryScope})
+	if !chatResponse.Layout.ChatMode || len(chatResponse.Results) != 1 {
+		t.Fatalf("chat response = %+v", chatResponse)
+	}
+	var preview common.AIChatPreviewData
+	if err := json.Unmarshal([]byte(chatResponse.Results[0].Preview.PreviewData), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.InitialAttachments) != 1 || preview.InitialAttachments[0].Kind != common.AIChatAttachmentQuote || preview.InitialAttachments[0].Text != "  selected line  " {
+		t.Fatalf("initial attachments = %+v", preview.InitialAttachments)
 	}
 }
 
@@ -315,10 +327,11 @@ func TestAIChatAttachFilesCommandSeedsComposer(t *testing.T) {
 	if result.Error != nil {
 		t.Fatalf("open chat with attachments = %#v", result)
 	}
-	if !api.shown || api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "chat " {
+	if !api.shown || api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "" || api.changed.QueryScope.Identity() != common.AIChatPluginID {
 		t.Fatalf("opened chat = shown:%t query:%+v", api.shown, api.changed)
 	}
 	var attachments []common.AIChatAttachment
+	t.Cleanup(func() { common.RemoveImportedChatAttachments(attachments) })
 	if err := json.Unmarshal([]byte(api.changed.ContextData[aiChatAttachmentsContextKey]), &attachments); err != nil {
 		t.Fatal(err)
 	}
@@ -331,6 +344,25 @@ func TestAIChatAttachFilesCommandRequiresPath(t *testing.T) {
 	result := (&AIChatPlugin{api: &chatTestAPI{}}).openChatWithAttachmentsTool(context.Background(), plugin.InvokePluginToolHandlerOption{})
 	if result.Error == nil || result.Error.Message != "path is required" {
 		t.Fatalf("empty attach files tool = %#v", result)
+	}
+}
+
+// TestAIChatMRURestoreTargetsSavedChat keeps the selected conversation attached
+// to the query built by the shared chat entry point.
+func TestAIChatMRURestoreTargetsSavedChat(t *testing.T) {
+	api := &chatTestAPI{}
+	chatPlugin := &AIChatPlugin{api: api}
+	chatPlugin.replaceChatSummaries([]common.AIChatData{{Id: "saved-chat", Title: "Saved chat"}})
+	result, err := chatPlugin.handleMRURestore(context.Background(), plugin.MRUData{ContextData: common.ContextData{"ai_chat_active_id": "saved-chat"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil || len(result.Actions) != 1 {
+		t.Fatalf("restored result = %+v", result)
+	}
+	result.Actions[0].Action(context.Background(), plugin.ActionContext{})
+	if api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "" || api.changed.QueryScope.Identity() != common.AIChatPluginID || api.changed.ContextData["ai_chat_active_id"] != "saved-chat" {
+		t.Fatalf("restored chat query = %+v", api.changed)
 	}
 }
 
