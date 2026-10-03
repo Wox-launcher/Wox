@@ -25,7 +25,26 @@ func populateAppLaunchKey(ctx context.Context, info *appInfo) {
 				info.shortcutTarget = appPathMatchKey(target)
 			}
 		}
+	} else if target := windowsAppExecutablePath(*info); target != "" {
+		// Known Folder entries name a real executable. Share its default launch key,
+		// but retain the original Shell path when this entry represents the group.
+		info.launchKey = shell.DesktopLaunchKey(target)
 	}
+}
+
+// windowsAppExecutablePath resolves only bare executables and Known Folder Shell entries.
+// Packaged apps, web apps and opaque AUMIDs must retain their own activation semantics.
+func windowsAppExecutablePath(info appInfo) string {
+	target := info.Path
+	if info.Type == AppTypeAppsFolder && isAppsFolderIndexedApp(info) {
+		target = resolveInboxAppsFolderPath(strings.TrimPrefix(info.Path, "shell:AppsFolder\\"))
+	} else if info.Type != AppTypeDesktop {
+		return ""
+	}
+	if !filepath.IsAbs(target) || !strings.EqualFold(filepath.Ext(target), ".exe") {
+		return ""
+	}
+	return target
 }
 
 // deduplicateAppLaunches uses the actual known folders, including redirected user desktops/start menus.
@@ -39,7 +58,7 @@ func deduplicateAppLaunches(apps []appInfo) []appInfo {
 	return deduplicateWindowsApps(apps, roots)
 }
 
-// deduplicateWindowsApps merges equivalent shortcuts and lets a shortcut replace its bare exe.
+// deduplicateWindowsApps merges equivalent shortcuts and lets a shortcut replace its bare exe or Known Folder entry.
 // Opaque shortcuts only merge with the same entry path, never with another shortcut by target alone.
 // Sorting fixes the representative and alias order regardless of parallel indexing completion order.
 func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
@@ -63,8 +82,10 @@ func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 	for _, info := range ordered {
 		path := pathKey{info.Type, appPathMatchKey(info.Path)}
 		index, found := byPath[path]
-		if !found && info.Type == AppTypeDesktop && strings.EqualFold(filepath.Ext(info.Path), ".exe") {
-			index, found = byShortcutTarget[path.path]
+		if !found {
+			if target := windowsAppExecutablePath(info); target != "" {
+				index, found = byShortcutTarget[appPathMatchKey(target)]
+			}
 		}
 		if !found && info.launchKey != "" {
 			index, found = byLaunch[info.launchKey]
@@ -82,8 +103,8 @@ func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 		if info.launchKey != "" {
 			byLaunch[info.launchKey] = index
 		}
-		// Shortcuts sort before executables. Keep the highest-priority shortcut as the
-		// replacement for a bare exe, without merging distinct shortcuts with each other.
+		// Shortcuts sort before Known Folder entries and executables. Keep the highest-priority
+		// shortcut for their target without merging distinct shortcuts with each other.
 		if info.shortcutTarget != "" {
 			if _, exists := byShortcutTarget[info.shortcutTarget]; !exists {
 				byShortcutTarget[info.shortcutTarget] = index
@@ -97,10 +118,13 @@ func deduplicateWindowsApps(apps []appInfo, roots []string) []appInfo {
 	return result
 }
 
-// windowsAppEntryPriority prefers user Start Menu, common Start Menu, desktop, other links, then bare exe.
+// windowsAppEntryPriority prefers Start Menu and desktop links, other links, AppsFolder, then bare exe.
 func windowsAppEntryPriority(path string, roots []string) int {
-	if strings.EqualFold(filepath.Ext(path), ".exe") {
+	if strings.HasPrefix(path, "shell:AppsFolder\\") {
 		return 4
+	}
+	if strings.EqualFold(filepath.Ext(path), ".exe") {
+		return 5
 	}
 	key := appPathMatchKey(path)
 	for i, root := range roots {

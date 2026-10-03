@@ -3,10 +3,131 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 )
+
+// TestAppsFolderExecutableDeduplication covers each resolvable namespace and source priority.
+func TestAppsFolderExecutableDeduplication(t *testing.T) {
+	t.Setenv("SystemRoot", `D:\Windows`)
+	for _, test := range []struct {
+		appID  string
+		target string
+	}{
+		{`{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cleanmgr.exe`, `D:\Windows\System32\cleanmgr.exe`},
+		{`{d65231b0-b2f1-4857-a4ce-a8e7c6ea7d27}\odbcad32.EXE`, `D:\Windows\SysWOW64\odbcad32.EXE`},
+		{`{F38BF404-1D43-42F2-9305-67DE0B28FC23}\regedit.exe`, `D:\Windows\regedit.exe`},
+	} {
+		t.Run(test.appID, func(t *testing.T) {
+			executable := appInfo{Name: "Executable", Path: test.target, Type: AppTypeDesktop}
+			folder := appInfo{Name: "Shell entry", Path: extraAppPath(test.appID), Type: AppTypeAppsFolder}
+			populateAppLaunchKey(context.Background(), &executable)
+			populateAppLaunchKey(context.Background(), &folder)
+			if folder.launchKey == "" || folder.launchKey != executable.launchKey || folder.Path != extraAppPath(test.appID) {
+				t.Fatalf("expected shared executable identity without changing Shell activation: %+v", folder)
+			}
+			// An opaque/custom shortcut may have a different launch key or none at all.
+			// Its original launch semantics must survive replacing the default entries.
+			shortcut := appInfo{Name: "Shortcut", Path: `Z:\Custom\Tool.lnk`, Type: AppTypeDesktop, shortcutTarget: appPathMatchKey(test.target)}
+			variant := appInfo{Name: "Custom arguments", Path: `Z:\Custom\Variant.lnk`, Type: AppTypeDesktop, shortcutTarget: shortcut.shortcutTarget, launchKey: "custom arguments"}
+			for _, test := range []struct {
+				name    string
+				apps    []appInfo
+				want    []string
+				aliases []string
+			}{
+				{"all sources", []appInfo{folder, executable, variant, shortcut}, []string{shortcut.Path, variant.Path}, []string{folder.Name, executable.Name}},
+				{"without shortcut", []appInfo{executable, folder}, []string{folder.Path}, []string{executable.Name}},
+				{"without executable", []appInfo{folder, shortcut}, []string{shortcut.Path}, []string{folder.Name}},
+				{"Shell only", []appInfo{folder}, []string{folder.Path}, nil},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					got := deduplicateWindowsApps(test.apps, nil)
+					paths := make([]string, len(got))
+					for i := range got {
+						paths[i] = got[i].Path
+					}
+					if !slices.Equal(paths, test.want) {
+						t.Fatalf("got %v, want %v", paths, test.want)
+					}
+					for _, alias := range test.aliases {
+						if !slices.Contains(got[0].SearchableNames, alias) {
+							t.Fatalf("lost merged alias %q: %+v", alias, got[0])
+						}
+					}
+					slices.Reverse(test.apps)
+					if reversed := deduplicateWindowsApps(test.apps, nil); !reflect.DeepEqual(got, reversed) {
+						t.Fatal("discovery order changed AppsFolder deduplication")
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestAppsFolderDeduplicationPreservesOpaqueEntries rejects names/icons as executable identities.
+func TestAppsFolderDeduplicationPreservesOpaqueEntries(t *testing.T) {
+	target := filepath.Join(getWindowsSystemRoot(), "System32", "cleanmgr.exe")
+	apps := []appInfo{{Name: "Disk Cleanup", Path: target, Type: AppTypeDesktop}}
+	for _, appID := range []string{
+		`Microsoft.Windows.DiskCleanup`,
+		`Example.Package_123!App`,
+		`https://example.com/cleanmgr.exe`,
+		`{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\tools.msc`,
+		`{UNKNOWN}\cleanmgr.exe`,
+	} {
+		info := appInfo{Name: "Disk Cleanup", Path: extraAppPath(appID), Type: AppTypeAppsFolder, IconSourcePath: target, launchKey: "stale", shortcutTarget: "stale"}
+		populateAppLaunchKey(context.Background(), &info)
+		if info.launchKey != "" || info.shortcutTarget != "" {
+			t.Fatalf("opaque entry acquired an executable identity: %+v", info)
+		}
+		apps = append(apps, info)
+	}
+	if got := deduplicateWindowsApps(apps, nil); len(got) != len(apps) {
+		t.Fatalf("opaque entries were merged: %+v", got)
+	}
+}
+
+// TestAppsFolderDeduplicationRebuild restores launch keys from cache and promotes visible fallbacks.
+func TestAppsFolderDeduplicationRebuild(t *testing.T) {
+	ctx := context.Background()
+	target := filepath.Join(getWindowsSystemRoot(), "System32", "cleanmgr.exe")
+	folder := appInfo{Name: "Shell entry", Path: extraAppPath(`{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cleanmgr.exe`), Type: AppTypeAppsFolder}
+	executable := appInfo{Name: "Executable", Path: target, Type: AppTypeDesktop}
+	encoded, err := json.Marshal(appCacheFile{Version: appCacheVersion, Apps: []appInfo{folder, executable}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, err := parseAppCacheContent(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range cached {
+		populateAppLaunchKey(ctx, &cached[i])
+	}
+	shortcut := appInfo{Name: "Shortcut", Path: `Z:\Custom\Cleanup.lnk`, Type: AppTypeDesktop, shortcutTarget: appPathMatchKey(target)}
+	a := &ApplicationPlugin{api: emptyAPIImpl{}, retriever: appRetriever, apps: append(cached, shortcut)}
+	for _, test := range []struct {
+		ignored []ignoredApp
+		want    string
+	}{
+		{nil, shortcut.Path},
+		{[]ignoredApp{{Path: shortcut.Path}}, folder.Path},
+		{[]ignoredApp{{Path: shortcut.Path}, {Path: folder.Path}}, executable.Path},
+	} {
+		a.ignoredApps = test.ignored
+		a.rebuildQueryEntries(ctx)
+		entries, _ := a.getQueryEntriesSnapshot()
+		if len(entries) != 1 || entries[0].info.Path != test.want || len(a.apps) != 3 {
+			t.Fatalf("expected fallback %q and all original sources, got %+v", test.want, entries)
+		}
+	}
+	if cached[0].launchKey == "" || cached[0].launchKey != cached[1].launchKey {
+		t.Fatal("cached AppsFolder launch identity was not rebuilt")
+	}
+}
 
 func TestShortcutReplacesBareExeWithoutMergingLaunchVariants(t *testing.T) {
 	target := `c:\apps\pixpin.exe`
