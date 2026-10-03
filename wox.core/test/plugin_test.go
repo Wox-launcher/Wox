@@ -108,13 +108,22 @@ func TestColorPlugin(t *testing.T) {
 		t.Fatalf("color query should record history: %v", err)
 	}
 
-	historyResults, err := runQuery(ctx, "color ")
-	if err != nil {
-		t.Fatalf("color history query failed: %v", err)
-	}
-	historyResult := findResultByTitle(historyResults, "#FF0042")
-	if historyResult == nil {
-		t.Fatalf("color history should include #FF0042, got %#v", historyResults)
+	// Queries return before history is persisted, so wait for it to become visible.
+	var historyResult *plugin.QueryResultUI
+	historyDeadline := time.Now().Add(5 * time.Second)
+	for {
+		historyResults, err := runQuery(ctx, "color ")
+		if err != nil {
+			t.Fatalf("color history query failed: %v", err)
+		}
+		historyResult = findResultByTitle(historyResults, "#FF0042")
+		if historyResult != nil {
+			break
+		}
+		if !time.Now().Before(historyDeadline) {
+			t.Fatalf("color history should include #FF0042 within 5 seconds, got %#v", historyResults)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if historyResult.Group == "" {
 		t.Fatalf("color history result should be grouped by time")
