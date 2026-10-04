@@ -102,8 +102,10 @@ func NewCatalog() *Catalog {
 		c.registerUnit("delta"+strings.TrimPrefix(t.symbol, "°"), "temperature", t.scale, "temperature difference", "temperature difference")
 	}
 	c.Aliases["centigrade"] = "°C"
-	// Mbps is megabits/second (1e6/8 bytes per second).
-	c.registerUnit("Mbps", "storage", "125000", "Mbps", "Mbps", "mbps")
+	// Rate aliases expand to storage/second in the parser. Keep the storage
+	// factor free of "ps" so formatting and time cancellation remain correct.
+	c.registerUnit("Mbit", "storage", "125000", "megabit", "megabits", "mbps")
+	c.Aliases["MBps"] = "MB"
 	return c
 }
 

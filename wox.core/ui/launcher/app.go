@@ -1694,15 +1694,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		case woxui.Key("v"):
 			text, err := clipboard.ReadText()
+			text = normalizeQueryPaste(text)
 			if err != nil || text == "" {
 				return true
 			}
 			if a.queryHintEditorState.allSelected {
-				a.replaceWholeQueryHint(normalizeQueryNewlines(text))
+				a.replaceWholeQueryHint(text)
 				return true
 			}
 			previousText := a.editor.State().Text
-			if a.editor.InsertTextSeparate(normalizeQueryNewlines(text)) {
+			if a.editor.InsertTextSeparate(text) {
 				a.applyQueryTextChangeLocked(a.editor.State().Text)
 			}
 			_ = a.window.Invalidate()
@@ -1895,6 +1896,11 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 
 func normalizeQueryNewlines(text string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+}
+
+// normalizeQueryPaste drops copied line endings at the edges while preserving internal lines and spaces.
+func normalizeQueryPaste(text string) string {
+	return strings.Trim(normalizeQueryNewlines(text), "\n")
 }
 
 func (a *App) moveSelection(delta int) {

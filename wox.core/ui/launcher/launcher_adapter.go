@@ -844,15 +844,16 @@ func (a *App) queryViewClipboardPaste() error {
 		return nil
 	}
 	text, err := clipboard.ReadText()
+	text = normalizeQueryPaste(text)
 	if err != nil || text == "" {
 		return nil
 	}
 	if a.queryHintEditorState.allSelected {
-		a.replaceWholeQueryHint(normalizeQueryNewlines(text))
+		a.replaceWholeQueryHint(text)
 		return nil
 	}
 	previousText := a.editor.State().Text
-	if a.editor.InsertTextSeparate(normalizeQueryNewlines(text)) {
+	if a.editor.InsertTextSeparate(text) {
 		a.applyQueryTextChangeLocked(a.editor.State().Text)
 	}
 	_ = a.window.Invalidate()

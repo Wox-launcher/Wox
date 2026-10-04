@@ -471,8 +471,8 @@ func (c *Catalog) Parse(input string, options ParseOptions) (result *Query, err 
 	if err != nil {
 		return nil, err
 	}
-	// The lexer normally folds words to lowercase. Keep explicit uppercase
-	// aliases for currencies whose codes collide with physical units (CUP/cup).
+	// Preserve explicit case-sensitive aliases before resolving units:
+	// CUP/cup and MBps/Mbps have different meanings.
 	for i := range tokens {
 		if tokens[i].raw != tokens[i].text {
 			if _, ok := c.Aliases[tokens[i].raw]; ok {
@@ -1448,6 +1448,7 @@ func (p *parser) unit() (Unit, error) {
 		if !ok {
 			return nil, invalid("expected unit")
 		}
+		perSecond := p.peek() == "mbps" || p.peek() == "MBps"
 		p.i++
 		if symbol == "month" && sign < 0 {
 			symbol = "mo"
@@ -1475,7 +1476,7 @@ func (p *parser) unit() (Unit, error) {
 			return nil, invalid("unit exponent exceeds limit")
 		}
 		u[symbol] += sign * exponent
-		if symbol == "Mbps" {
+		if perSecond {
 			u["s"] -= sign * exponent
 		}
 		p.query.Crypto = p.query.Crypto || p.catalog.Crypto[symbol]

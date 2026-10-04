@@ -1458,10 +1458,30 @@ func TestNormalizeQueryNewlinesPreservesPastedLines(t *testing.T) {
 	}
 }
 
+func TestNormalizeQueryPaste(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"500 Mbps in MBps\n", "500 Mbps in MBps"},
+		{"\r\n500 Mbps in MBps\r\n\r\n", "500 Mbps in MBps"},
+		{"\rone\r\ntwo\rthree\r", "one\ntwo\nthree"},
+		{"\none\n\ntwo\n", "one\n\ntwo"},
+		{"\n one \n two \n", " one \n two "},
+		{" \t ", " \t "},
+		{"\r\n\n\r", ""},
+		{"", ""},
+	} {
+		if got := normalizeQueryPaste(tt.input); got != tt.want {
+			t.Errorf("normalizeQueryPaste(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestQueryPasteReplacesSelectionWithMultilineText(t *testing.T) {
 	editor := woxui.NewTextEditor("replace me")
 	editor.SelectAll()
-	if !editor.InsertText(normalizeQueryNewlines("one\r\ntwo\rthree")) {
+	if !editor.InsertTextSeparate(normalizeQueryPaste("\r\none\r\ntwo\rthree\r\n")) {
 		t.Fatal("multiline paste did not change query text")
 	}
 	state := editor.State()
