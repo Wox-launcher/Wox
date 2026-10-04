@@ -41,6 +41,19 @@ func (host *screenshotEditorWindowHost) draw(displayList *DisplayList, frame Fra
 			recording.drawToolbar(displayList, frame)
 			return
 		}
+		if state.document != nil {
+			state.mu.Lock()
+			scale, offset := screenshotDocumentViewport(state.document.Frame, frame.Size)
+			state.viewportScale, state.viewportOffset = scale, offset
+			state.mu.Unlock()
+			frame.Size = state.document.Frame
+			frame.Damage = Rect{}
+			displayList.SetDamage(Rect{})
+			displayList.SetNativeDamage(Rect{})
+			state.draw(displayList, frame)
+			displayList.TransformScene(scale, offset)
+			return
+		}
 		state.draw(displayList, frame)
 	} else {
 		displayList.Clear(Color{})
@@ -52,6 +65,18 @@ func (host *screenshotEditorWindowHost) pointer(event PointerEvent) {
 		if recording := state.activeRecordingUI(); recording != nil {
 			recording.toolbarPointer(event)
 			return
+		}
+		if state.document != nil {
+			state.mu.Lock()
+			scale, offset := state.viewportScale, state.viewportOffset
+			state.mu.Unlock()
+			if scale <= 0 {
+				return
+			}
+			event.Position = Point{X: (event.Position.X - offset.X) / scale, Y: (event.Position.Y - offset.Y) / scale}
+			if event.Kind == PointerDown && !screenshotEditorRectContains(Rect{Width: state.document.Frame.Width, Height: state.document.Frame.Height}, event.Position) {
+				return
+			}
 		}
 		state.pointer(event)
 	}

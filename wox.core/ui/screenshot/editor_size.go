@@ -38,7 +38,7 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 		tree.RootIDs = []woxui.AccessibilityNodeID{1}
 		tree.Nodes = []woxui.AccessibilityNode{{
 			ID: 1, AutomationID: "screenshot.size.open", Role: woxui.AccessibilityRoleButton,
-			Label: state.sizeDialogOptions.SizeLabels.Title, Value: value, Bounds: bounds,
+			Label: state.sizeDialogOptions.SizeLabels.Title, Value: value, Bounds: state.surfaceRect(bounds),
 			Enabled: state.activeSizeDialog() == nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		}}
 		state.mu.Lock()
@@ -46,7 +46,7 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 			tree.RootIDs = append(tree.RootIDs, 2)
 			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
 				ID: 2, AutomationID: "screenshot.font_size", Role: woxui.AccessibilityRoleSlider,
-				Label: state.fontSizeLabel, Value: fmt.Sprintf("%.0f", state.fontSizeLocked()), Bounds: state.editFontSizeRect,
+				Label: state.fontSizeLabel, Value: fmt.Sprintf("%.0f", state.fontSizeLocked()), Bounds: state.surfaceRect(state.editFontSizeRect),
 				Enabled: state.sizeDialog == nil, Focusable: true, Focused: state.fontSizeFocused,
 				Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionFocus, woxui.AccessibilityActionSetValue, woxui.AccessibilityActionIncrement, woxui.AccessibilityActionDecrement},
 			})

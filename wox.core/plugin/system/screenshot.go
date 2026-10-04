@@ -22,9 +22,9 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
-	"wox/util/clipboard"
 	"wox/util/ocr"
 	"wox/util/overlay/imageoverlay"
+	"wox/util/screenshotedit"
 	"wox/util/shell"
 
 	"github.com/disintegration/imaging"
@@ -44,6 +44,7 @@ var screenshotDefaultRetentionDays = 15
 var screenshotOCRSidecarVersion = 1
 
 const screenshotPermissionDeniedErrorCode = "permission_denied"
+const screenshotPluginID = "78fc701b-a87e-4d5f-a7f2-13cbad9f7d1d"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ScreenshotPlugin{})
@@ -61,7 +62,7 @@ type ScreenshotPlugin struct {
 
 func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "78fc701b-a87e-4d5f-a7f2-13cbad9f7d1d",
+		Id:            screenshotPluginID,
 		Name:          "i18n:plugin_screenshot_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -166,6 +167,7 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	// that the retention policy is about to delete.
 	p.runScreenshotBackgroundTask("initialize screenshot history", func(runtimeCtx context.Context) {
 		p.cleanupExpiredScreenshots(runtimeCtx)
+		p.indexScreenshotScenes(runtimeCtx)
 		p.warmScreenshotHistoryThumbnails(runtimeCtx)
 	})
 	// Screenshot retention uses one scheduled owner instead of tying deletion to capture or query
@@ -501,6 +503,9 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 		removedCount++
 		p.removeScreenshotHistoryThumbnails(ctx, item)
 		p.removeScreenshotOCRSidecar(ctx, item.path)
+		if err := screenshotedit.Remove(item.path); err != nil {
+			util.GetLogger().Warn(ctx, err.Error())
+		}
 	}
 
 	if removedCount > 0 {
@@ -836,6 +841,9 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 		actions := []plugin.QueryResultAction{result.Actions[0], NewCopyOCRTextAction(p.api, ocrText)}
 		result.Actions = append(actions, result.Actions[1:]...)
 	}
+	if screenshotedit.Available(item.path) {
+		result.Actions = append(result.Actions, p.screenshotEditAction(item.path))
+	}
 	return result
 }
 
@@ -857,15 +865,10 @@ func (p *ScreenshotPlugin) screenshotHistoryGroup(timestamp int64) (string, int6
 	return "i18n:plugin_screenshot_group_history", 10
 }
 
+// copyScreenshotHistoryItem uses the native writer so clipboard history observes the JPEG pixels too.
+// The generic clipboard writer consumes Wox's own change edge and would suppress this new entry.
 func (p *ScreenshotPlugin) copyScreenshotHistoryItem(ctx context.Context, screenshotPath string) {
-	img, err := imaging.Open(screenshotPath)
-	if err != nil {
-		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to decode screenshot history item: path=%s err=%s", screenshotPath, err.Error()))
-		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_warning")
-		return
-	}
-
-	if err := clipboard.Write(&clipboard.ImageData{Image: img}); err != nil {
+	if err := plugin.GetPluginManager().GetUI().WriteClipboardImageFile(ctx, screenshotPath); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy screenshot history item: path=%s err=%s", screenshotPath, err.Error()))
 		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_warning")
 	}
@@ -937,8 +940,15 @@ func (p *ScreenshotPlugin) notifyCaptureFailure(ctx context.Context, errorCode s
 }
 
 func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext plugin.ActionContext) {
+	p.runScreenshot(ctx, "")
+}
+
+// runScreenshot keeps capture and history editing on the same export, OCR, pin, and AI completion path.
+func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 	request := common.DefaultCaptureScreenshotRequest()
-	request.AllowVideoRecording = true
+	request.AllowVideoRecording = editPath == ""
+	request.SaveEditableScene = true
+	request.EditScreenshotPath = editPath
 	request.ExtraActions = screenshotAIToolbarActions(
 		p.isScreenshotAIToolbarEnabled(ctx),
 		hasConfiguredAIProvider(setting.GetSettingManager().GetWoxSetting(ctx).AIProviders.Get()),
@@ -949,12 +959,21 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 		// The screenshot session spans Go, UI, and the native bridge, so transport failures need a local
 		// notification here instead of silently falling through to keep the action predictable for the user.
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("capture screenshot request failed: %s", err.Error()))
+		if editPath != "" {
+			p.api.Notify(ctx, "i18n:plugin_screenshot_edit_failed")
+			return
+		}
 		p.notifyCaptureFailure(ctx, "", err.Error())
 		return
 	}
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
+		defer p.saveScreenshotSceneInBackground(result.ScreenshotPath, result.SaveEditableScene)
+		if result.EditableSceneWarning != "" {
+			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+result.EditableSceneWarning)
+			defer p.api.Notify(ctx, "i18n:plugin_screenshot_edit_save_failed")
+		}
 		// Animation exports are saved artifacts, not still screenshots for OCR and history thumbnails.
 		if result.ArtifactKind == common.CaptureArtifactKindVideo || (result.ArtifactPath != "" && result.ScreenshotPath == "") {
 			if result.ArtifactPath == "" {
@@ -1005,6 +1024,15 @@ func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext 
 			p.api.Notify(ctx, "plugin_screenshot_capture_clipboard_warning")
 		}
 	case common.CaptureScreenshotStatusFailed:
+		if editPath != "" {
+			util.GetLogger().Warn(ctx, "failed to restore screenshot scene: "+result.ErrorMessage)
+			if result.ErrorCode == "display_layout_changed" {
+				p.api.Notify(ctx, "i18n:plugin_screenshot_edit_display_layout_changed")
+				return
+			}
+			p.api.Notify(ctx, "i18n:plugin_screenshot_edit_failed")
+			return
+		}
 		errText := result.ErrorMessage
 		if errText == "" {
 			errText = "screenshot session failed"

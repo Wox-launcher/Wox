@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
-	"image/draw"
 	"os"
 	"path"
 	"path/filepath"
@@ -1038,26 +1036,7 @@ func (c *ClipboardPlugin) isDuplicateContent(ctx context.Context, data clipboard
 }
 
 func (c *ClipboardPlugin) calculateImageHash(img image.Image) string {
-	if img == nil {
-		return ""
-	}
-
-	sourceBounds := img.Bounds()
-	if sourceBounds.Dx() == 0 || sourceBounds.Dy() == 0 {
-		return ""
-	}
-
-	normalized := image.NewNRGBA(image.Rect(0, 0, sourceBounds.Dx(), sourceBounds.Dy()))
-	draw.Draw(normalized, normalized.Bounds(), img, sourceBounds.Min, draw.Src)
-
-	hasher := sha256.New()
-	var dimensions [8]byte
-	binary.LittleEndian.PutUint32(dimensions[0:4], uint32(normalized.Bounds().Dx()))
-	binary.LittleEndian.PutUint32(dimensions[4:8], uint32(normalized.Bounds().Dy()))
-	_, _ = hasher.Write(dimensions[:])
-	_, _ = hasher.Write(normalized.Pix)
-
-	return hex.EncodeToString(hasher.Sum(nil))
+	return clipboard.ImageHash(img)
 }
 
 func (c *ClipboardPlugin) shortHashString(hash string) string {
@@ -1954,6 +1933,11 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		})
 	}
 
+	if record.ImageHash != nil {
+		if action, ok := system.ScreenshotEditActionForImage(*record.ImageHash); ok {
+			result.Actions = append(result.Actions, action)
+		}
+	}
 	result.Actions = append(result.Actions, c.editTitleAction(record))
 	result.Actions = append(result.Actions, plugin.QueryResultAction{
 		Name:                   "i18n:plugin_clipboard_delete",

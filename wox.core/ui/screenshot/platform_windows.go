@@ -16,7 +16,29 @@ import (
 	"github.com/lxn/win"
 	woxui "wox/ui/runtime"
 	"wox/util"
+	"wox/util/screen"
 )
+
+// restoreScreenshotDocumentDesktop uses the same physical desktop surface as a fresh capture.
+// A single spanning window puts each monitor's saved pixels and mask back on that monitor.
+func restoreScreenshotDocumentDesktop(platform *screenshotEditorPlatform, document *screenshotDocument, displays []screen.Display) error {
+	bounds, available := screenshotDocumentDesktopBounds(document, displays, true)
+	if !available {
+		return ErrScreenshotDisplayLayoutChanged
+	}
+	platform.setWindowBounds = func(window *Window) error { return window.SetPhysicalBounds(bounds) }
+	platform.logicalSelection = func(selection Rect, _ Size) Rect {
+		selection.X += bounds.X
+		selection.Y += bounds.Y
+		return woxui.WindowsLogicalRectFromPhysical(selection)
+	}
+	platform.chromeScale = func(selection Rect) float32 {
+		selection.X += bounds.X
+		selection.Y += bounds.Y
+		return woxui.WindowsPhysicalRectScale(selection)
+	}
+	return nil
+}
 
 const windowsCursorShowing = uint32(1)
 

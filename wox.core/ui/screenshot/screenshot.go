@@ -1,13 +1,20 @@
 package screenshot
 
 import (
+	"errors"
 	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	"wox/util/screen"
 )
+
+var ErrScreenshotDisplayLayoutChanged = errors.New("screenshot display layout is missing or differs from the current desktop")
 
 // ScreenshotOptions configures one interactive desktop-region capture.
 type ScreenshotOptions struct {
+	capturedDisplays      []screenshotDisplay
+	SaveEditableScene     bool
+	EditScreenshotPath    string
 	ExportFilePath        string
 	CopyToClipboard       bool
 	HideAnnotationToolbar bool
@@ -96,11 +103,13 @@ const ScreenshotWindowID WindowID = "wox.screenshot"
 
 // ScreenshotResult reports the exported image and its logical desktop selection.
 type ScreenshotResult struct {
-	Cancelled    bool
-	ArtifactKind string
-	ArtifactPath string
-	CopiedColor  string
-	PinToScreen  bool
+	SaveEditableScene    func() error
+	EditableSceneWarning string
+	Cancelled            bool
+	ArtifactKind         string
+	ArtifactPath         string
+	CopiedColor          string
+	PinToScreen          bool
 	// PinOverlayShown is true when the editor already opened the pinned window
 	// from in-memory pixels. The plugin then skips a second file-backed overlay.
 	PinOverlayShown         bool
@@ -114,5 +123,15 @@ type ScreenshotResult struct {
 
 // CaptureScreenshot runs the native desktop capture and Go-rendered selection surface.
 func CaptureScreenshot(options ScreenshotOptions) (ScreenshotResult, error) {
+	if options.EditScreenshotPath != "" {
+		return editSavedScreenshot(options)
+	}
+	if options.SaveEditableScene {
+		// Snapshot before capture; a later layout must never be attributed to these pixels.
+		displays, err := screen.ListDisplays()
+		if err == nil {
+			options.capturedDisplays = screenshotDisplayLayout(displays)
+		}
+	}
 	return captureScreenshotPlatform(options)
 }

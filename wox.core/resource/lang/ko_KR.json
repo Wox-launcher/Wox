@@ -3375,5 +3375,9 @@
   "ui_theme_material_brightness": "도구 모음 · 흐림 밝기 (0–2)",
   "ui_theme_material_saturation": "도구 모음 · 흐림 채도 (0–2)",
   "ui_theme_editor_invalid_material": "표시된 범위 내의 숫자를 입력하세요.",
-  "ui_theme_editor_chrome_help_linux": "창 테두리와 모서리를 사용자 지정해도 시스템 배경 흐림을 유지할 수 있습니다. 데스크톱이 흐림을 지원하지 않으면 반투명 창 배경이 불투명해집니다. 앱 내부 흐림 효과에는 영향을 주지 않습니다."
+  "ui_theme_editor_chrome_help_linux": "창 테두리와 모서리를 사용자 지정해도 시스템 배경 흐림을 유지할 수 있습니다. 데스크톱이 흐림을 지원하지 않으면 반투명 창 배경이 불투명해집니다. 앱 내부 흐림 효과에는 영향을 주지 않습니다.",
+  "plugin_screenshot_history_edit": "스크린샷 다시 편집",
+  "plugin_screenshot_edit_failed": "편집 데이터가 없거나 손상되었거나 이미지와 일치하지 않아 스크린샷을 다시 열 수 없습니다.",
+  "plugin_screenshot_edit_save_failed": "스크린샷은 저장되었지만 편집 데이터를 저장하지 못했습니다. 이 스크린샷은 다시 편집할 수 없습니다.",
+  "plugin_screenshot_edit_display_layout_changed": "스크린샷을 다시 편집할 수 없습니다. 디스플레이 배치 정보가 없거나 모니터, 배치, 해상도 또는 배율이 변경되었습니다. 촬영 당시의 설정으로 복원한 후 다시 시도하세요."
 }

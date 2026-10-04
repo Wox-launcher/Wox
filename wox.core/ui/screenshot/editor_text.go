@@ -57,7 +57,7 @@ func (state *screenshotEditorOverlayState) editingTextAnnotationLocked() screens
 		tool: screenshotEditorToolText, start: state.textPosition, text: preview,
 		color: state.annotationColor, fontSize: state.textFontSize,
 	}
-	state.measureTextAnnotation(&annotation, state.uiScale)
+	state.measureTextAnnotation(&annotation, state.annotationScale())
 	return annotation
 }
 
@@ -67,7 +67,7 @@ func (state *screenshotEditorOverlayState) editingTextContainsLocked(point Point
 		return false
 	}
 	annotation := state.editingTextAnnotationLocked()
-	return screenshotEditorAnnotationContains(annotation, point, state.uiScale)
+	return screenshotEditorAnnotationContains(annotation, point, state.annotationScale())
 }
 
 func (state *screenshotEditorOverlayState) noteTextTapLocked(point Point) int {
@@ -98,7 +98,7 @@ func (state *screenshotEditorOverlayState) beginTextSelectionAtLocked(point Poin
 		state.window,
 		annotation.text,
 		Point{X: point.X - annotation.start.X, Y: point.Y - annotation.start.Y},
-		screenshotEditorAnnotationRenderedFontSize(annotation, state.uiScale),
+		screenshotEditorAnnotationRenderedFontSize(annotation, state.annotationScale()),
 	)
 	switch state.noteTextTapLocked(point) {
 	case 2:
@@ -123,7 +123,7 @@ func (state *screenshotEditorOverlayState) extendTextSelectionLocked(point Point
 		state.window,
 		annotation.text,
 		Point{X: point.X - annotation.start.X, Y: point.Y - annotation.start.Y},
-		screenshotEditorAnnotationRenderedFontSize(annotation, state.uiScale),
+		screenshotEditorAnnotationRenderedFontSize(annotation, state.annotationScale()),
 	)
 	editor.SetSelection(editor.State().Selection.Anchor, focus)
 	state.syncTextEditorLocked()
@@ -150,12 +150,12 @@ func (state *screenshotEditorOverlayState) handleTextEditingKeyLocked(event KeyE
 		preferredX := float32(0)
 		switch event.Key {
 		case KeyArrowUp, KeyArrowDown:
-			caret := screenshotEditorTextCaretRect(state.window, Point{}, string(runes[:focus]), state.textFontSize, state.uiScale)
+			caret := screenshotEditorTextCaretRect(state.window, Point{}, string(runes[:focus]), state.textFontSize, state.annotationScale())
 			x, hasPreferredX := editor.PreferredX()
 			if !hasPreferredX {
 				x = caret.X
 			}
-			fontSize := state.textFontSize * max(float32(1), state.uiScale)
+			fontSize := state.textFontSize * max(float32(1), state.annotationScale())
 			direction := float32(1)
 			if event.Key == KeyArrowUp {
 				direction = -1

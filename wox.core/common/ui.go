@@ -256,12 +256,15 @@ type ScreenshotRect struct {
 // We keep the request explicit instead of inferring defaults in UI so both layers stay aligned
 // when tests trigger the flow directly through the UI bridge.
 type CaptureScreenshotRequest struct {
-	SessionId      string   `json:"sessionId"`
-	Trigger        string   `json:"trigger"`
-	Scope          string   `json:"scope"`
-	Output         string   `json:"output"`
-	Tools          []string `json:"tools"`
-	ExportFilePath string   `json:"exportFilePath"`
+	// Editable scenes are opt-in for Wox-owned screenshot history, never third-party captures.
+	SaveEditableScene  bool     `json:"saveEditableScene,omitempty"`
+	EditScreenshotPath string   `json:"editScreenshotPath,omitempty"`
+	SessionId          string   `json:"sessionId"`
+	Trigger            string   `json:"trigger"`
+	Scope              string   `json:"scope"`
+	Output             string   `json:"output"`
+	Tools              []string `json:"tools"`
+	ExportFilePath     string   `json:"exportFilePath"`
 	// HideAnnotationToolbar is an API-facing simplification for plugins that only need a selected
 	// image region. The previous toolbar always exposed markup controls, which slowed down raw OCR
 	// style workflows and implied annotation support the caller would ignore.
@@ -314,6 +317,9 @@ type DisplaySnapshot struct {
 // core the saved artifact path and clipboard warning state without copying the image
 // bytes back through the bridge.
 type CaptureScreenshotResult struct {
+	// SaveEditableScene owns detached Go data; the system plugin runs it after capture completion.
+	SaveEditableScene    func() error            `json:"-"`
+	EditableSceneWarning string                  `json:"editableSceneWarning,omitempty"`
 	Status               CaptureScreenshotStatus `json:"status"`
 	ArtifactKind         CaptureArtifactKind     `json:"artifactKind,omitempty"`
 	ArtifactPath         string                  `json:"artifactPath,omitempty"`

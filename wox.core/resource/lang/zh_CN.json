@@ -3376,5 +3376,9 @@
   "ui_theme_material_brightness": "工具栏 · 模糊亮度（0–2）",
   "ui_theme_material_saturation": "工具栏 · 模糊饱和度（0–2）",
   "ui_theme_editor_invalid_material": "请输入显示范围内的数字。",
-  "ui_theme_editor_chrome_help_linux": "自定义窗口边框和圆角可与系统磨玻璃共存。桌面不支持磨玻璃时，半透明窗口背景会改为不透明。应用内模糊不受影响。"
+  "ui_theme_editor_chrome_help_linux": "自定义窗口边框和圆角可与系统磨玻璃共存。桌面不支持磨玻璃时，半透明窗口背景会改为不透明。应用内模糊不受影响。",
+  "plugin_screenshot_history_edit": "重新编辑截图",
+  "plugin_screenshot_edit_failed": "无法重新编辑此截图：编辑数据已丢失、损坏或与图片不匹配。",
+  "plugin_screenshot_edit_save_failed": "截图已保存，但编辑数据保存失败，无法恢复编辑。",
+  "plugin_screenshot_edit_display_layout_changed": "无法重新编辑：截图缺少显示器布局信息，或显示器数量、排列、分辨率、缩放等配置已变化。请恢复截图时的显示器配置后重试。"
 }

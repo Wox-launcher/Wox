@@ -3080,5 +3080,9 @@
   "ui_theme_material_brightness": "Barra de ferramentas · brilho do desfoque (0–2)",
   "ui_theme_material_saturation": "Barra de ferramentas · saturação do desfoque (0–2)",
   "ui_theme_editor_invalid_material": "Insira um número dentro do intervalo exibido.",
-  "ui_theme_editor_chrome_help_linux": "Bordas e cantos personalizados podem manter o desfoque de fundo do sistema. Se o ambiente de trabalho não oferecer suporte ao desfoque, os fundos translúcidos das janelas se tornam opacos. O desfoque dentro do aplicativo não é afetado."
+  "ui_theme_editor_chrome_help_linux": "Bordas e cantos personalizados podem manter o desfoque de fundo do sistema. Se o ambiente de trabalho não oferecer suporte ao desfoque, os fundos translúcidos das janelas se tornam opacos. O desfoque dentro do aplicativo não é afetado.",
+  "plugin_screenshot_history_edit": "Editar captura novamente",
+  "plugin_screenshot_edit_failed": "Não foi possível reabrir a captura. Os dados de edição estão ausentes, corrompidos ou não correspondem à imagem.",
+  "plugin_screenshot_edit_save_failed": "Captura salva, mas não foi possível salvar os dados de edição. Esta captura não poderá ser reaberta para edição.",
+  "plugin_screenshot_edit_display_layout_changed": "Não é possível editar: faltam os dados de disposição das telas ou as telas, a disposição, a resolução ou a escala mudaram. Restaure a configuração original e tente novamente."
 }

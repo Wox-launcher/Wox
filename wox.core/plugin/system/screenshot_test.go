@@ -1,15 +1,135 @@
 package system
 
 import (
+	"context"
+	"errors"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	"wox/common/icons"
+	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
+	"wox/util/screenshotedit"
 )
+
+type screenshotSceneTestAPI struct {
+	plugin.API
+	refreshed chan bool
+	notified  chan string
+}
+
+func (api *screenshotSceneTestAPI) RefreshQuery(_ context.Context, options plugin.RefreshQueryParam) {
+	api.refreshed <- options.PreserveSelectedIndex
+}
+
+func (api *screenshotSceneTestAPI) Notify(_ context.Context, message string) {
+	api.notified <- message
+}
+
+func TestScreenshotSceneSaveRunsInBackgroundAndFinishesBeforeUnload(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &ScreenshotPlugin{backgroundCtx: ctx, backgroundCancel: cancel}
+	started, release, stopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	defer cancel()
+	returned := make(chan struct{})
+	go func() {
+		p.saveScreenshotSceneInBackground("capture.jpg", func() error { close(started); <-release; return nil })
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("capture completion waited for scene encoding")
+	}
+	<-started
+	go func() { p.stopScreenshotBackgroundTasks(); close(stopped) }()
+	<-ctx.Done()
+	select {
+	case <-stopped:
+		t.Fatal("unload returned while scene data was still being written")
+	default:
+	}
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("unload did not finish after scene commit")
+	}
+}
+
+func TestScreenshotSceneBackgroundCompletionRefreshesOrReportsFailure(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		ctx, cancel := context.WithCancel(context.Background())
+		api := &screenshotSceneTestAPI{refreshed: make(chan bool, 1), notified: make(chan string, 1)}
+		p := &ScreenshotPlugin{api: api, backgroundCtx: ctx, backgroundCancel: cancel}
+		p.saveScreenshotSceneInBackground("capture.jpg", func() error {
+			if fail {
+				return errors.New("disk full")
+			}
+			return nil
+		})
+		p.backgroundWG.Wait()
+		if fail {
+			select {
+			case message := <-api.notified:
+				if message != "i18n:plugin_screenshot_edit_save_failed" {
+					t.Fatal(message)
+				}
+			default:
+				t.Fatal("background scene failure was silent")
+			}
+		} else {
+			select {
+			case preserve := <-api.refreshed:
+				if !preserve {
+					t.Fatal("scene completion reset selection")
+				}
+			default:
+				t.Fatal("ready scene did not refresh edit actions")
+			}
+		}
+		p.stopScreenshotBackgroundTasks()
+	}
+}
+
+func TestScreenshotHistoryEditActionRequiresScene(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.jpg")
+	if err := os.WriteFile(path, []byte("image"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p := &ScreenshotPlugin{}
+	item := screenshotHistoryItem{path: path, fileName: "capture.jpg", size: 5}
+	assertEditable := func(want bool) {
+		t.Helper()
+		result := p.screenshotHistoryResult(item)
+		found := false
+		for _, action := range result.Actions {
+			if action.Name == "i18n:plugin_screenshot_history_edit" {
+				found = true
+				if action.IsDefault {
+					t.Fatal("edit replaced the copy default")
+				}
+			}
+		}
+		if found != want {
+			t.Fatalf("edit action = %v, want %v", found, want)
+		}
+	}
+	assertEditable(false)
+	if err := os.WriteFile(path+screenshotedit.Suffix, []byte("scene"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	assertEditable(true)
+	if err := screenshotedit.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	assertEditable(false)
+}
 
 func TestScreenshotHistoryThumbnailHasWidth(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "preview.png")

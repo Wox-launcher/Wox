@@ -3377,5 +3377,9 @@
   "ui_theme_material_brightness": "ツールバー · ぼかしの明るさ（0–2）",
   "ui_theme_material_saturation": "ツールバー · ぼかしの彩度（0–2）",
   "ui_theme_editor_invalid_material": "表示された範囲内の数値を入力してください。",
-  "ui_theme_editor_chrome_help_linux": "ウィンドウの枠線や角をカスタマイズしても、システムの背景ぼかしを使用できます。デスクトップがぼかしに対応していない場合、半透明のウィンドウ背景は不透明になります。アプリ内のぼかしには影響しません。"
+  "ui_theme_editor_chrome_help_linux": "ウィンドウの枠線や角をカスタマイズしても、システムの背景ぼかしを使用できます。デスクトップがぼかしに対応していない場合、半透明のウィンドウ背景は不透明になります。アプリ内のぼかしには影響しません。",
+  "plugin_screenshot_history_edit": "スクリーンショットを再編集",
+  "plugin_screenshot_edit_failed": "編集データが見つからないか、破損しているか、画像と一致しないため、このスクリーンショットを再編集できません。",
+  "plugin_screenshot_edit_save_failed": "スクリーンショットは保存されましたが、編集データを保存できませんでした。このスクリーンショットは再編集できません。",
+  "plugin_screenshot_edit_display_layout_changed": "再編集できません。撮影時の画面配置情報がないか、ディスプレイの構成、配置、解像度、倍率が変更されています。撮影時の設定に戻してから再試行してください。"
 }

@@ -437,6 +437,7 @@ func (a *App) screenshotControlTheme() woxcomponent.ControlTheme {
 // CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
+		SaveEditableScene: request.SaveEditableScene, EditScreenshotPath: request.EditScreenshotPath,
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		ExtraActions:      request.ExtraActions,
@@ -496,6 +497,9 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	})
 	if err != nil {
 		errorCode := "capture_failed"
+		if errors.Is(err, woxscreenshot.ErrScreenshotDisplayLayoutChanged) {
+			errorCode = "display_layout_changed"
+		}
 		if strings.Contains(strings.ToLower(err.Error()), "screen recording permission") {
 			errorCode = "permission_denied"
 		}
@@ -517,7 +521,9 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		artifactPath = result.ScreenshotPath
 	}
 	return common.CaptureScreenshotResult{
-		Status: common.CaptureScreenshotStatusCompleted, ArtifactKind: artifactKind, ArtifactPath: artifactPath,
+		SaveEditableScene:    result.SaveEditableScene,
+		EditableSceneWarning: result.EditableSceneWarning,
+		Status:               common.CaptureScreenshotStatusCompleted, ArtifactKind: artifactKind, ArtifactPath: artifactPath,
 		ScreenshotPath: result.ScreenshotPath, LogicalSelectionRect: &selection,
 		PinToScreen: result.PinToScreen, PinOverlayShown: result.PinOverlayShown, ClipboardWriteSucceeded: result.ClipboardWriteSucceeded, ClipboardWarningMessage: result.ClipboardWarningMessage,
 		ExtraActionID: result.ExtraActionID,

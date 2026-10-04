@@ -3377,5 +3377,9 @@
   "ui_theme_material_brightness": "Toolbar · blur brightness (0–2)",
   "ui_theme_material_saturation": "Toolbar · blur saturation (0–2)",
   "ui_theme_editor_invalid_material": "Enter a number within the displayed range.",
-  "ui_theme_editor_chrome_help_linux": "Custom window borders and corners can retain system background blur. If the desktop does not support blur, translucent window backgrounds become opaque. In-app blur is unaffected."
+  "ui_theme_editor_chrome_help_linux": "Custom window borders and corners can retain system background blur. If the desktop does not support blur, translucent window backgrounds become opaque. In-app blur is unaffected.",
+  "plugin_screenshot_history_edit": "Edit screenshot again",
+  "plugin_screenshot_edit_failed": "Unable to reopen this screenshot. Its editing data is missing, damaged, or no longer matches the image.",
+  "plugin_screenshot_edit_save_failed": "Screenshot saved, but editing data could not be saved. This screenshot cannot be reopened for editing.",
+  "plugin_screenshot_edit_display_layout_changed": "Cannot edit this screenshot: its display layout is missing or the connected displays, arrangement, resolution, or scaling have changed. Restore the original display configuration and try again."
 }
