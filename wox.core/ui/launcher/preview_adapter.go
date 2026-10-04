@@ -60,7 +60,7 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 	if preview.PreviewType == "terminal" {
 		return a.buildTerminalPreview(a.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
 	}
-	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0)
+	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme())
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
 	return previewview.PreviewView(previewview.PreviewProps{
 		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTooltip,
@@ -101,6 +101,19 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return previewview.PreviewLoading(width, height, palette.componentTheme().PreviewText)
 		case "markdown":
 			return a.buildMarkdownPreview(scrollKey, a.filePreviewDisplayText(file), filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
+		case "code":
+			note := ""
+			if file.Limited {
+				note = a.translate("i18n:ui_file_preview_code_preview_limited")
+			}
+			offset := float32(0)
+			if preview.ScrollPosition == "bottom" {
+				offset = math.MaxFloat32
+			}
+			return previewview.CodePreview(previewview.CodePreviewProps{
+				ID: scrollKey, Value: file.Text, Tokens: file.CodeTokens, Note: note,
+				Width: width, Height: height, InitialOffset: offset, Window: a.window, Theme: palette.componentTheme(),
+			})
 		case "webview":
 			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
 		case "native_file":
@@ -206,7 +219,8 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 			if !ok {
 				return nil, "Unsupported Markdown image: " + source
 			}
-			return a.imageForViewport(imageSource, markdownImageRequestSize(width, imageScale)), a.imageErrorFor(imageSource)
+			size := markdownImageRequestSize(width, imageScale)
+			return a.imageForViewport(imageSource, size), a.imageErrorFor(imageSource, size)
 		},
 		ReleaseImage: func(source string) {
 			imageSource, ok := resolveSource(source)
@@ -254,7 +268,7 @@ func (a *App) filePreviewDisplayText(file filePreviewContent) string {
 	if !file.Limited {
 		return text
 	}
-	note := strings.ReplaceAll(a.translate("i18n:ui_file_preview_code_preview_limited"), "{lines}", strconv.Itoa(max(file.DisplayLines, 1)))
+	note := a.translate("i18n:ui_file_preview_code_preview_limited")
 	if strings.TrimSpace(text) == "" {
 		return note
 	}
@@ -296,13 +310,6 @@ func (a *App) buildLargeFilePreview(file filePreviewContent, palette uiPalette, 
 // buildFolderPreview maps inspected directory metadata into the dedicated folder preview.
 func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	folder := file.Folder
-	metadata := make([]string, 0, 2)
-	if modified := formatFolderPreviewTime(folder.Modified); modified != "" {
-		metadata = append(metadata, modified)
-	}
-	if items := a.folderPreviewItemsValue(folder); items != "" {
-		metadata = append(metadata, items)
-	}
 	entries := make([]previewview.FolderPreviewEntry, 0, len(folder.Entries))
 	for _, entry := range folder.Entries {
 		item := previewview.FolderPreviewEntry{Name: entry.Name, IsDir: entry.IsDir}
@@ -323,8 +330,7 @@ func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, wid
 	fileIcon := fromCoreImage(icons.Get(icons.PluginFile))
 	return previewview.FolderPreviewView(previewview.FolderPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(),
-		Path: folder.Path, Name: folder.Name, Metadata: strings.Join(metadata, "  ·  "),
-		Icon:       a.imageForSize(folderIcon, physicalImageSize(32, imageScale)),
+		Path:       folder.Path,
 		FolderIcon: a.imageForSize(folderIcon, physicalImageSize(20, imageScale)),
 		FileIcon:   a.imageForSize(fileIcon, physicalImageSize(20, imageScale)),
 		Entries:    entries, More: more,
@@ -332,40 +338,20 @@ func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, wid
 	})
 }
 
-// folderPreviewItemsValue joins the shallow folder/file counts, omitting empty and unreadable folders.
-func (a *App) folderPreviewItemsValue(folder folderPreviewContent) string {
-	if folder.Error != "" || (folder.FolderCount == 0 && folder.FileCount == 0) {
-		return ""
-	}
-	parts := make([]string, 0, 2)
-	if folder.FolderCount > 0 {
-		parts = append(parts, strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_folders_count"), "{count}", strconv.Itoa(folder.FolderCount)))
-	}
-	if folder.FileCount > 0 {
-		parts = append(parts, strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_files_count"), "{count}", strconv.Itoa(folder.FileCount)))
-	}
-	return strings.Join(parts, " · ")
-}
-
-// folderPreviewTags replaces the generic FILE/size chips with folder identity and item count.
+// folderPreviewTags shows separate shallow counts; incomplete scans remain lower bounds.
 func (a *App) folderPreviewTags(folder folderPreviewContent) []previewTag {
-	tags := []previewTag{{
-		Label:   a.translate("i18n:ui_file_preview_type_folder"),
-		Tooltip: a.translate("i18n:ui_file_preview_property_type"),
-	}}
-	total := folder.FolderCount + folder.FileCount
-	if folder.Error != "" || total == 0 {
-		return tags
+	if folder.Error != "" {
+		return nil
 	}
-	key := "i18n:ui_file_preview_folder_items_count"
+	folders, files := strconv.Itoa(folder.FolderCount), strconv.Itoa(folder.FileCount)
 	if !folder.CountedAll {
-		key = "i18n:ui_file_preview_folder_items_count_limited"
+		folders += "+"
+		files += "+"
 	}
-	tags = append(tags, previewTag{
-		Label:   strings.ReplaceAll(a.translate(key), "{count}", strconv.Itoa(total)),
-		Tooltip: a.translate("i18n:ui_file_preview_property_items"),
-	})
-	return tags
+	return []previewTag{
+		{Label: strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_folders_count"), "{count}", folders)},
+		{Label: strings.ReplaceAll(a.translate("i18n:ui_file_preview_folder_files_count"), "{count}", files)},
+	}
 }
 
 // previewBodyTags resolves metadata before the body is built at its final tagged height.
@@ -503,7 +489,7 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 	theme := palette.componentTheme()
 	message := ""
 	if image == nil {
-		if imageErr := a.imageErrorFor(source); imageErr != "" {
+		if imageErr := a.imageErrorFor(source, size); imageErr != "" {
 			message = "Unable to decode image preview:\n" + imageErr
 		}
 	}

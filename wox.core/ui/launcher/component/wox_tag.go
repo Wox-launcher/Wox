@@ -5,16 +5,14 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// WoxTag builds the compact outlined label shared by settings lists.
-// A 1-unit stroke and 2-unit vertical padding keep the outline inside a full
-// pixel and clear of CJK glyph metrics, which otherwise clip the top edge.
-func WoxTag(label string, color woxui.Color) woxwidget.Widget {
-	return woxTag(label, color, TagFontSize)
+// WoxTag shares the quiet metadata styling used by preview and result-tail tags.
+func WoxTag(label string, color woxui.Color, theme ControlTheme) woxwidget.Widget {
+	return woxTag(label, color, theme, TagFontSize, 22)
 }
 
 // WoxCompactTag is the 9px table-row status chip beside 13px cell text.
-func WoxCompactTag(label string, color woxui.Color) woxwidget.Widget {
-	return woxTag(label, color, CompactTagFontSize)
+func WoxCompactTag(label string, color woxui.Color, theme ControlTheme) woxwidget.Widget {
+	return woxTag(label, color, theme, CompactTagFontSize, 18)
 }
 
 // WoxWarningTag uses an opaque status fill so its contrast survives custom launcher backgrounds.
@@ -31,10 +29,17 @@ func WoxWarningTag(label string, width float32, theme ControlTheme) woxwidget.Wi
 	}
 }
 
-func woxTag(label string, color woxui.Color, size float32) woxwidget.Widget {
+// woxTag sizes to its label so translations and density changes need no fixed badge slot.
+func woxTag(label string, color woxui.Color, theme ControlTheme, size, height float32) woxwidget.Widget {
+	background := theme.Text
+	background.A = 13
+	height = theme.Scaled(height)
 	return woxwidget.Container{
-		Radius: 3, BorderColor: color, BorderWidth: 1,
-		Padding: woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2},
-		Child:   woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: size}, Color: color},
+		Height: height, Radius: theme.Scaled(4), Color: background,
+		Padding: woxwidget.Insets{Left: theme.Scaled(7), Right: theme.Scaled(7)},
+		Child: woxwidget.TextBlock{
+			Value: label, Style: woxui.TextStyle{Size: theme.Scaled(size)}, Color: color,
+			Height: height, LineHeight: height, MaxLines: 1, ShrinkWrap: true, AlignmentY: 0.5,
+		},
 	}
 }

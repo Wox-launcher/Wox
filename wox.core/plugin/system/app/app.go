@@ -969,7 +969,6 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				}
 			},
 			Hotkey:                 util.PrimaryHotkey("m"),
-			HideInToolbar:          true,
 			PreventHideAfterAction: true,
 		})
 	}

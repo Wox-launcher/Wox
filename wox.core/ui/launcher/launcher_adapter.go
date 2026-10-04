@@ -1166,7 +1166,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
-			Icon: icon, Loading: loading, TitleTags: fromCoreResultTitleTags(result.TitleTags), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
+			Icon: icon, IconShowContainer: result.IconShowContainer, Loading: loading, TitleTags: fromCoreResultTitleTags(result.TitleTags), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 			PreviewIcon:       previewIcon, PreviewTooltip: previewTooltip, OnOpenPreview: func() { a.toggleSelectedPreview() },
 			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
@@ -1194,7 +1194,7 @@ func fromCoreResultTitleTags(tags []resultTitleTag) []launcherview.LauncherResul
 func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityMetrics launcherDensityMetrics, imageScale float32) ([]launcherview.LauncherResultTail, float32, float32) {
 	tailOuterPadding := densityMetrics.scaled(15)
 	tailItemPadding := densityMetrics.scaled(10)
-	textPadding := densityMetrics.scaled(16)
+	textPadding := 2 * densityMetrics.scaled(7)
 	textHeight := densityMetrics.scaled(22)
 	defaultImageSize := densityMetrics.scaled(20)
 	style := woxui.TextStyle{Size: densityMetrics.scaled(woxcomponent.TailFontSize)}

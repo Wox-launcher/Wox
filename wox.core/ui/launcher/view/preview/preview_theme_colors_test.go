@@ -34,7 +34,7 @@ func TestPreviewCornerGeometry(t *testing.T) {
 		wantSurface, wantTag := float32(8), float32(8)
 		if value >= 0 {
 			theme.PreviewBorderRadius, theme.PreviewTagBorderRadius = &value, &value
-			wantSurface, wantTag = min(float32(value), 90), min(float32(value), 13)
+			wantSurface, wantTag = min(float32(value), 90), min(float32(value), 11)
 		}
 		surface := previewSurface(woxwidget.Container{}, theme, 300, 180).(woxwidget.Container)
 		tags := PreviewTags([]PreviewTag{{Label: "Tag"}}, theme, &woxui.Window{}, 200, nil).(woxwidget.ScrollView)

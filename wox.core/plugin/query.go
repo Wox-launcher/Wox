@@ -275,7 +275,9 @@ type QueryResult struct {
 	// SubTitle support i18n
 	SubTitle string
 	Icon     common.WoxImage
-	Preview  WoxPreview
+	// IconShowContainer opts into a theme-aware rounded icon background and border.
+	IconShowContainer bool
+	Preview           WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
 	// ScoreKey is an optional stable identity when title or subtitle is dynamic.
@@ -364,8 +366,9 @@ type QueryResultAction struct {
 	IsDefault bool
 	// If true, Wox will not hide after user select this result
 	PreventHideAfterAction bool
-	// Hide only the toolbar shortcut chip; the action panel, hotkey, and default action remain available.
-	HideInToolbar bool
+	// Show this action in the toolbar. The default Enter action is always shown;
+	// other actions default to panel-only, with their hotkeys still available.
+	ShowInToolbar bool
 	// Hotkey to trigger this action. E.g. "ctrl+Shift+Space", "Ctrl+1", "Command+K"
 	// Case insensitive, space insensitive
 	// If IsDefault is true, Hotkey will be set to enter key by default
@@ -413,17 +416,18 @@ type FormActionContext struct {
 
 func (q *QueryResult) ToUI() QueryResultUI {
 	return QueryResultUI{
-		Id:         q.Id,
-		Title:      q.Title,
-		SubTitle:   q.SubTitle,
-		Icon:       q.Icon,
-		Preview:    q.Preview,
-		Score:      q.Score,
-		Group:      q.Group,
-		GroupScore: q.GroupScore,
-		TitleTags:  append([]QueryResultTitleTag(nil), q.TitleTags...),
-		Tails:      q.Tails,
-		DragData:   q.DragData,
+		Id:                q.Id,
+		Title:             q.Title,
+		SubTitle:          q.SubTitle,
+		Icon:              q.Icon,
+		IconShowContainer: q.IconShowContainer,
+		Preview:           q.Preview,
+		Score:             q.Score,
+		Group:             q.Group,
+		GroupScore:        q.GroupScore,
+		TitleTags:         append([]QueryResultTitleTag(nil), q.TitleTags...),
+		Tails:             q.Tails,
+		DragData:          q.DragData,
 		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
 			actionType := action.Type
 			if actionType == "" {
@@ -437,7 +441,7 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
-				HideInToolbar:          action.HideInToolbar,
+				ShowInToolbar:          action.ShowInToolbar,
 				Hotkey:                 action.Hotkey,
 				Form:                   action.Form,
 				ContextData:            action.ContextData,
@@ -461,20 +465,21 @@ func (q *QueryResponse) ToUI() QueryResponseUI {
 }
 
 type QueryResultUI struct {
-	QueryId    string
-	Id         string
-	Title      string
-	SubTitle   string
-	Icon       common.WoxImage
-	Preview    WoxPreview
-	Score      int64
-	Group      string
-	GroupScore int64
-	TitleTags  []QueryResultTitleTag
-	Tails      []QueryResultTail
-	Actions    []QueryResultActionUI
-	DragData   *QueryResultDragData
-	IsGroup    bool
+	QueryId           string
+	Id                string
+	Title             string
+	SubTitle          string
+	Icon              common.WoxImage
+	IconShowContainer bool
+	Preview           WoxPreview
+	Score             int64
+	Group             string
+	GroupScore        int64
+	TitleTags         []QueryResultTitleTag
+	Tails             []QueryResultTail
+	Actions           []QueryResultActionUI
+	DragData          *QueryResultDragData
+	IsGroup           bool
 }
 
 type QueryResponseUI struct {
@@ -502,7 +507,7 @@ type QueryResultActionUI struct {
 	Icon                   common.WoxImage
 	IsDefault              bool
 	PreventHideAfterAction bool
-	HideInToolbar          bool
+	ShowInToolbar          bool
 	Hotkey                 string
 	Form                   definition.PluginSettingDefinitions
 	ContextData            map[string]string

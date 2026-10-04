@@ -602,22 +602,22 @@ func onboardingSelectionWindow(props OnboardingProps, step OnboardingStep, width
 // onboardingSelectionPreview shows the selected file on the right, matching a live selection query.
 func onboardingSelectionPreview(props OnboardingProps, width, height, opacity float32, fileName, filePath string) woxwidget.Widget {
 	alpha := demoAlpha(opacity)
-	layout := previewview.ResolvePreviewLayout(width, height, true)
+	layout := previewview.ResolvePreviewLayout(width, height, true, props.PreviewTheme)
 	surfaceHeight := layout.BodyHeight + 2
 	tag := func(label string) woxwidget.Widget {
-		tagWidth := max(float32(36), float32(len([]rune(label)))*7+18)
+		tagWidth := max(float32(36), float32(len([]rune(label)))*7+14)
 		return woxwidget.Container{
-			Width: tagWidth, Height: 26, Radius: 8, BorderColor: settingsColorAlpha(props.PreviewTheme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
-			Padding: woxwidget.Insets{Left: 9, Right: 9},
-			Child: woxwidget.Align{Width: max(float32(0), tagWidth-18), Height: 26, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{
-				Value: label, Style: woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}, Color: settingsColorAlpha(props.PreviewTheme.ResultSubtitle, alpha),
+			Width: tagWidth, Height: props.PreviewTheme.Controls.Scaled(previewview.PreviewTagHeight), Radius: 8, BorderColor: settingsColorAlpha(props.PreviewTheme.ResultTitle, demoScaledAlpha(opacity, 76)), BorderWidth: 1,
+			Padding: woxwidget.Insets{Left: 7, Right: 7},
+			Child: woxwidget.Align{Width: max(float32(0), tagWidth-14), Height: props.PreviewTheme.Controls.Scaled(previewview.PreviewTagHeight), Horizontal: .5, Vertical: .5, Child: woxwidget.Text{
+				Value: label, Style: woxui.TextStyle{Size: props.PreviewTheme.Controls.Scaled(11)}, Color: settingsColorAlpha(props.PreviewTheme.ResultSubtitle, alpha),
 			}},
 		}
 	}
 	// Tags sit below the bordered surface. The 10px shell padding under them matches live PreviewView.
 	return woxwidget.Container{
 		Width: width, Height: height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 10, Children: []woxwidget.Widget{
+		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: props.PreviewTheme.Controls.Scaled(previewview.PreviewTagGap), Children: []woxwidget.Widget{
 			woxwidget.Container{
 				Width: layout.InnerWidth, Height: surfaceHeight, Radius: 8,
 				Color:       settingsColorAlpha(props.PreviewTheme.ResultTitle, demoScaledAlpha(opacity, 18)),
@@ -630,7 +630,7 @@ func onboardingSelectionPreview(props OnboardingProps, width, height, opacity fl
 					},
 				}},
 			},
-			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{tag("PDF"), tag("2.4 MB")}},
+			woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: []woxwidget.Widget{tag("PDF"), tag("2.4 MB")}},
 		}},
 	}
 }

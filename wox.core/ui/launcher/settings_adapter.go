@@ -435,6 +435,8 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 		switch key {
 		case "EnableAutostart", "HideOnStart":
 			return a.translate("i18n:ui_general_section_startup")
+		case "UsePinYin", "SwitchInputMethodABC":
+			return a.translate("i18n:ui_general_section_input_search")
 		case "HttpProxyEnabled", "HttpProxyUrl":
 			return a.translate("i18n:ui_network")
 		default:

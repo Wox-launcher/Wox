@@ -402,6 +402,7 @@ func (p *smokeAutomationPlugin) queryToolbarWithStatus(ctx context.Context, titl
 			{
 				Id:                     smokeAutomationSecondaryAction,
 				Name:                   "Open folder",
+				ShowInToolbar:          true,
 				Icon:                   icons.Get(icons.ActionOpenContainingFolder),
 				Hotkey:                 util.PrimaryHotkey("enter"),
 				PreventHideAfterAction: true,

@@ -9,6 +9,7 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/cloudsync"
+	"wox/common/icons"
 	"wox/plugin"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
@@ -26,15 +27,28 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 	theme := snapshot.palette
 	message := snapshot.cloud.Error
 	messageColor := theme.Error
+	account := a.cloudAccountViewProps(snapshot, contentWidth, imageScale)
+	sync := a.cloudSyncViewProps(snapshot, imageScale)
+	devices := a.cloudDevicesViewProps(snapshot, imageScale)
+	// Share the widest translated action, including busy labels, across the three sections.
+	actionWidth := theme.Scaled(100)
+	if window := a.settingsNativeWindow(); window != nil {
+		for _, label := range []string{account.SupportLabel, sync.ButtonLabel, devices.RefreshLabel} {
+			if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: theme.Scaled(woxcomponent.CompactButtonFontSize)}); err == nil {
+				actionWidth = max(actionWidth, metrics.Size.Width+48)
+			}
+		}
+	}
+	account.ActionWidth, sync.ActionWidth, devices.ActionWidth = actionWidth, actionWidth, actionWidth
 	return launcherview.CloudSettingsPage(launcherview.CloudSettingsPageProps{
 		Width:        width,
 		Height:       height,
 		Title:        a.translate("i18n:ui_cloud_sync"),
 		Description:  a.translate("i18n:ui_cloud_sync_description"),
 		Intro:        a.cloudIntroViewProps(snapshot, imageScale),
-		Account:      a.cloudAccountViewProps(snapshot, contentWidth, imageScale),
-		Sync:         a.cloudSyncViewProps(snapshot, contentWidth),
-		Devices:      a.cloudDevicesViewProps(snapshot, contentWidth, imageScale),
+		Account:      account,
+		Sync:         sync,
+		Devices:      devices,
 		Plugins:      a.cloudPluginExclusionsViewProps(snapshot, imageScale),
 		ConfigNotes:  a.cloudConfigNotesViewProps(snapshot, imageScale),
 		Message:      message,
@@ -205,10 +219,10 @@ func cloudSettingsLabelWidth(contentWidth, reservedWidth float32) float32 {
 }
 
 // cloudSyncViewProps prepares status text and the sync or join action.
-func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, contentWidth float32) launcherview.CloudSyncProps {
-	label, detail, color := a.cloudSyncPresentation(snapshot)
+func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudSyncProps {
+	label, detail, color, statusIcon := a.cloudSyncPresentation(snapshot)
 	ready := cloudSyncReady(snapshot)
-	buttonLabel := a.translate("i18n:ui_cloud_sync_sync")
+	buttonLabel := a.translate("i18n:ui_cloud_sync_sync_now")
 	buttonAction := func() {
 		if !ready || !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
 			a.beginCloudBootstrap()
@@ -224,51 +238,55 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, contentWidth float32
 			})
 		}
 	}
+	detailColor := snapshot.palette.TextSecondary
+	if statusIcon == icons.ControlError {
+		detailColor = color
+	}
 	return launcherview.CloudSyncProps{
 		SectionLabel:  a.translate("i18n:ui_cloud_sync_sync"),
-		StatusLabel:   a.translate("i18n:ui_cloud_sync_sync_status"),
-		LabelWidth:    cloudSettingsLabelWidth(contentWidth, 154),
+		StatusIcon:    a.imageForTint(fromCoreImage(icons.Get(statusIcon)), &color, physicalImageSize(24, imageScale)),
+		ButtonIcon:    a.imageForTint(fromCoreImage(icons.Get(icons.ControlRefresh)), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		Label:         label,
 		Detail:        detail,
-		Color:         color,
+		Color:         detailColor,
 		ButtonLabel:   cloudBusyLabel(snapshot, "sync", buttonLabel),
 		ButtonEnabled: snapshot.cloud.Busy == "" && !snapshot.cloud.Loading && !snapshot.cloud.Account.SessionExpired && snapshot.cloud.Account.SyncEligible,
 		OnSync:        buttonAction,
 	}
 }
 
-func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, woxui.Color) {
+func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, woxui.Color, string) {
 	muted := snapshot.palette.TextSecondary
 	errorColor := snapshot.palette.Error
 	if snapshot.cloud.Loading {
-		return a.translate("i18n:ui_cloud_sync_loading"), "", muted
+		return a.translate("i18n:ui_cloud_sync_loading"), "", muted, icons.ControlHourglassEmpty
 	}
 	if snapshot.cloud.Account.SessionExpired {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), a.translate("i18n:ui_cloud_sync_account_session_expired"), errorColor
+		return a.translate("i18n:ui_cloud_sync_sync_error"), a.translate("i18n:ui_cloud_sync_account_session_expired"), errorColor, icons.ControlError
 	}
 	if snapshot.cloud.Error != "" {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor
+		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor, icons.ControlError
 	}
 	if progress := snapshot.cloud.Sync.Progress; progress != nil && progress.Active {
-		return a.translate("i18n:ui_cloud_sync_syncing"), a.formatCloudSyncProgress(progress, snapshot.cloud.Busy == "sync"), muted
+		return a.translate("i18n:ui_cloud_sync_syncing"), a.formatCloudSyncProgress(progress, snapshot.cloud.Busy == "sync"), muted, icons.ControlHourglassEmpty
 	}
 	if snapshot.cloud.Busy == "sync" {
-		return a.translate("i18n:ui_cloud_sync_syncing"), a.translate("i18n:ui_cloud_sync_progress_starting"), muted
+		return a.translate("i18n:ui_cloud_sync_syncing"), a.translate("i18n:ui_cloud_sync_progress_starting"), muted, icons.ControlHourglassEmpty
 	}
 	if state := snapshot.cloud.Sync.State; state != nil && state.LastError != "" {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor
+		return a.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor, icons.ControlError
 	}
 	if !snapshot.cloud.Account.SyncEligible {
-		return a.translate("i18n:ui_cloud_sync_unsynced"), a.translate("i18n:ui_cloud_sync_subscription_required"), muted
+		return a.translate("i18n:ui_cloud_sync_unsynced"), a.translate("i18n:ui_cloud_sync_subscription_required"), muted, icons.SettingsDataCloudsync
 	}
 	if !cloudSyncReady(snapshot) {
-		return a.translate("i18n:ui_cloud_sync_unsynced"), "", muted
+		return a.translate("i18n:ui_cloud_sync_unsynced"), "", muted, icons.SettingsDataCloudsync
 	}
 	if !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
-		return a.translate("i18n:ui_cloud_sync_disabled"), "", muted
+		return a.translate("i18n:ui_cloud_sync_disabled"), "", muted, icons.SettingsDataCloudsync
 	}
 	lastSync := max(cloudStateTimestamp(snapshot.cloud.Sync.State, true), cloudStateTimestamp(snapshot.cloud.Sync.State, false))
-	return a.translate("i18n:ui_cloud_sync_synced"), a.translate("i18n:ui_cloud_sync_last_sync_time") + ": " + a.formatCloudTime(lastSync), muted
+	return a.translate("i18n:ui_cloud_sync_synced"), a.translate("i18n:ui_cloud_sync_last_sync_time") + " · " + a.formatCloudActivityTime(lastSync, util.GetSystemTime()), snapshot.palette.Success, icons.ControlCheckCircle
 }
 
 func cloudSyncReady(snapshot settingsSnapshot) bool {
@@ -393,7 +411,7 @@ func cloudDeviceInactive(device cloudDevice, now time.Time) bool {
 }
 
 // cloudDevicesViewProps prepares device labels and revoke callbacks.
-func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, imageScale float32) launcherview.CloudDevicesProps {
+func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudDevicesProps {
 	items := make([]launcherview.CloudDeviceProps, 0, len(snapshot.cloud.Devices.Devices))
 	now := util.GetSystemTime()
 	for index, device := range snapshot.cloud.Devices.Devices {
@@ -407,14 +425,17 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, ima
 		if strings.TrimSpace(name) == "" {
 			name = device.DeviceID
 		}
+		currentLabel := ""
 		if device.Current {
-			name += " " + a.translate("i18n:ui_cloud_sync_devices_current")
+			currentLabel = a.translate("i18n:ui_cloud_sync_devices_current")
 		}
 		items = append(items, launcherview.CloudDeviceProps{
 			ID:            fmt.Sprintf("cloud-revoke-%d", index),
 			Name:          name,
 			Detail:        cloudDevicePlatform(a, device.Platform),
-			LastSeen:      a.formatCloudTime(device.LastSeenAt),
+			LastSeen:      a.formatCloudActivityTime(device.LastSeenAt, now),
+			CurrentLabel:  currentLabel,
+			Icon:          a.imageForTint(fromCoreImage(icons.Get(cloudDevicePlatformIcon(device.Platform))), &snapshot.palette.TextSecondary, physicalImageSize(24, imageScale)),
 			RevokeLabel:   a.translate("i18n:ui_cloud_sync_devices_revoke"),
 			ShowRevoke:    !strings.EqualFold(snapshot.cloud.Account.Plan, "pro") && !device.Current && device.RevokedAt == 0,
 			RevokeEnabled: snapshot.cloud.Busy == "",
@@ -436,15 +457,29 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, contentWidth, ima
 		tips = strings.ReplaceAll(tips, "{limit}", fmt.Sprint(limit))
 	}
 	return launcherview.CloudDevicesProps{
-		SectionLabel:   a.translate("i18n:ui_cloud_sync_devices"),
-		Tips:           tips,
-		LabelWidth:     cloudSettingsLabelWidth(contentWidth, 154),
-		RefreshLabel:   cloudRefreshLabel(a, snapshot),
-		RefreshIcon:    a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
-		RefreshEnabled: !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
-		EmptyLabel:     a.translate("i18n:ui_cloud_sync_devices_empty"),
-		Items:          items,
-		OnRefresh:      func() { util.Go(a.lifecycleCtx, "reload cloud sync devices", a.reloadCloudSync) },
+		SectionLabel:    a.translate("i18n:ui_cloud_sync_devices"),
+		Tips:            tips,
+		LastActiveLabel: a.translate("i18n:ui_cloud_sync_devices_last_active"),
+		RefreshLabel:    cloudRefreshLabel(a, snapshot),
+		RefreshIcon:     a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
+		RefreshEnabled:  !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
+		EmptyLabel:      a.translate("i18n:ui_cloud_sync_devices_empty"),
+		Items:           items,
+		OnRefresh:       func() { util.Go(a.lifecycleCtx, "reload cloud sync devices", a.reloadCloudSync) },
+	}
+}
+
+// cloudDevicePlatformIcon keeps platform aliases consistent with device labels.
+func cloudDevicePlatformIcon(platform string) string {
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case "darwin", "macos", "mac":
+		return icons.SystemMacOS
+	case "windows", "win32", "win":
+		return icons.SystemWindows
+	case "linux":
+		return icons.SystemLinux
+	default:
+		return icons.SystemDevice
 	}
 }
 
@@ -634,6 +669,21 @@ func (a *App) formatCloudTime(timestamp int64) string {
 		return a.translate("i18n:ui_cloud_sync_never")
 	}
 	return time.UnixMilli(timestamp).Local().Format("2006-01-02 15:04:05")
+}
+
+// formatCloudActivityTime keeps recent activity compact while retaining the year for older dates.
+func (a *App) formatCloudActivityTime(timestamp int64, now time.Time) string {
+	if timestamp <= 0 {
+		return a.translate("i18n:ui_cloud_sync_never")
+	}
+	date := time.UnixMilli(timestamp).In(now.Location())
+	if date.Format("2006-01-02") == now.Format("2006-01-02") {
+		return a.translate("i18n:ui_cloud_sync_today") + " " + date.Format("15:04")
+	}
+	if date.Year() == now.Year() {
+		return date.Format("01-02 15:04")
+	}
+	return date.Format("2006-01-02 15:04")
 }
 
 // buildCloudFormOverlay maps account form state into typed view props.

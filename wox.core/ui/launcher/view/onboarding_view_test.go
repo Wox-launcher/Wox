@@ -598,14 +598,14 @@ func TestOnboardingSelectionPreviewKeepsGapBelowTags(t *testing.T) {
 		t.Fatalf("padding below tags = %v, want 10", preview.Padding.Bottom)
 	}
 	flex := preview.Child.(woxwidget.Flex)
-	if flex.Gap != 10 || len(flex.Children) != 2 {
-		t.Fatalf("preview body/tags = gap %v children %d, want a 10px gap and two children", flex.Gap, len(flex.Children))
+	if flex.Gap != 8 || len(flex.Children) != 2 {
+		t.Fatalf("preview body/tags = gap %v children %d, want an 8px gap and two children", flex.Gap, len(flex.Children))
 	}
 	surface := flex.Children[0].(woxwidget.Container)
 	if surface.BorderWidth != 1 {
 		t.Fatalf("file surface border = %v, want a bordered preview body", surface.BorderWidth)
 	}
-	if got, want := surface.Height+flex.Gap+26+preview.Padding.Top+preview.Padding.Bottom, height; got != want {
+	if got, want := surface.Height+flex.Gap+22+preview.Padding.Top+preview.Padding.Bottom, height; got != want {
 		t.Fatalf("preview vertical layout = %v, want %v so tags keep 10px below them", got, want)
 	}
 }

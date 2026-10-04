@@ -291,7 +291,7 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 		titleColor = props.Theme.SelectionText
 		subtitleColor = props.Theme.SelectionText
 	}
-	trailing, _ := themeListTrailing(props, item)
+	trailing := themeListTrailing(props, item)
 	status := strings.TrimSpace(item.Version + "  " + item.Author)
 	swatch := themeListSwatch(props, item)
 	rowChildren := []woxwidget.Widget{
@@ -304,8 +304,7 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 		}}},
 	}
 	if props.Mode == "store" && item.ImageTheme && props.ImageLabel != "" {
-		rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5,
-			Child: woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary)})
+		rowChildren = append(rowChildren, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary, props.Theme))
 	}
 	if trailing != nil {
 		rowChildren = append(rowChildren, trailing)
@@ -368,25 +367,25 @@ func themeDetailMeta(props ThemeSettingsProps, theme ThemeCatalogItem, website w
 		woxwidget.Flexible{Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: props.Theme.TextSecondary}},
 	}
 	if props.Mode == "store" && theme.ImageTheme && props.ImageLabel != "" {
-		meta = append(meta, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary))
+		meta = append(meta, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary, props.Theme))
 	}
 	return []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: meta}}, website}
 }
 
-func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem) (woxwidget.Widget, float32) {
+// themeListTrailing builds natural-width metadata beside the theme title.
+func themeListTrailing(props ThemeSettingsProps, item ThemeCatalogItem) woxwidget.Widget {
 	if props.Mode == "store" && item.IsInstalled {
 		icon := props.InstalledIcon
 		if item.Selected {
 			icon = props.InstalledSelectedIcon
 		}
-		return woxwidget.Align{Width: 26, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: icon, Width: 20, Height: 20}}, 26
+		return woxwidget.Align{Width: 26, Height: 44, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: icon, Width: 20, Height: 20}}
 	}
 	if props.Mode != "store" && item.IsSystem {
-		const width = float32(44)
 		// Keep the System badge on secondary text so a selected row cannot invert it.
-		return woxwidget.Align{Width: width, Height: 44, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxTag(props.SystemLabel, props.Theme.TextSecondary)}, width
+		return woxcomponent.WoxTag(props.SystemLabel, props.Theme.TextSecondary, props.Theme)
 	}
-	return nil, 0
+	return nil
 }
 
 func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widget {

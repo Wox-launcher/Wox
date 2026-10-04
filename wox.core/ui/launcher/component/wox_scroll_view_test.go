@@ -1,11 +1,53 @@
 package component
 
 import (
+	"math"
 	"testing"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestScrollContentGutter keeps content outside every thumb state without moving
+// the scrollbar or changing the default overlay and horizontal contracts.
+func TestScrollContentGutter(t *testing.T) {
+	wide, wider := 20, 26
+	for _, scale := range []float32{0.9, 1, 1.1, 1.5, 2} {
+		for _, width := range []float32{8, 100, 300} {
+			for _, custom := range []bool{false, true} {
+				props := ScrollViewProps{Key: "gutter", Width: width, Height: 100, ContentHeight: 200,
+					ReserveScrollbarSpace: true, AlwaysShowScrollbar: true, Theme: ControlTheme{DensityScale: scale}}
+				hitWidth := float32(12)
+				if custom {
+					props.Theme.ScrollbarWidth, props.Theme.ScrollbarHoverWidth = &wide, &wider
+					hitWidth = 26
+				}
+				want := max(float32(0), width-hitWidth-2-float32(math.Round(float64(4*scale))))
+				for phase := 0; phase < 3; phase++ {
+					state := &scrollViewState{hovered: phase == 1, dragging: phase == 2}
+					stack := buildWoxScrollView(woxwidget.StateContext{}, props, state).(woxwidget.Gesture).Child.(woxwidget.Stack)
+					viewport := stack.Children[0].Child.(woxwidget.ScrollView)
+					if viewport.Width != want || props.ContentViewportWidth() != want || stack.Width != width || stack.Children[1].Right != 2 {
+						t.Fatalf("scale=%v width=%v custom=%v phase=%v: viewport=%v want=%v stack=%#v", scale, width, custom, phase, viewport.Width, want, stack)
+					}
+				}
+				props.ContentHeight = 50
+				if props.ContentViewportWidth() != want {
+					t.Fatal("content width changed when overflow disappeared")
+				}
+				for _, mode := range []string{"overlay", "hidden", "horizontal"} {
+					unreserved := props
+					unreserved.ReserveScrollbarSpace = mode != "overlay"
+					unreserved.HideScrollbar = mode == "hidden"
+					unreserved.Horizontal = mode == "horizontal"
+					if unreserved.ContentViewportWidth() != width {
+						t.Fatalf("%s scroll lost content width", mode)
+					}
+				}
+			}
+		}
+	}
+}
 
 type scrollDamageServices struct {
 	hotkeyRecorderHostServices

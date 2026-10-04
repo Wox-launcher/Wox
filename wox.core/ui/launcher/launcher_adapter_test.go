@@ -26,7 +26,7 @@ func TestResultTailWidthBudget(t *testing.T) {
 		}
 	}
 	_, width, _ := app.resultTailViewProps(tails[:1], 900, launcherDensityMetrics{scale: 1}, 1)
-	if width != 26 {
+	if width != 24 {
 		t.Fatalf("one small tail should shrink to its content, got width %.0f", width)
 	}
 }

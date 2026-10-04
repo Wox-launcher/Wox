@@ -14,16 +14,17 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
+
 	"wox/common"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
 
-// Automatic file previews stay cheap: text layout and Office/PDF handlers are deferred
-// above these sizes, matching the Flutter-era details-first gate. After an explicit load,
-// text is still bounded so minified one-line files cannot stall DirectWrite wrapping.
+// Text previews read only a bounded prefix; only Office/PDF handlers need a size gate.
+// Layout is also bounded so minified one-line files cannot stall DirectWrite wrapping.
 const (
-	autoPreviewTextBytes         = 64 * 1024
 	maxFilePreviewDisplayBytes   = 16 * 1024
 	maxFilePreviewDisplayLines   = 200
 	maxFilePreviewLineRunes      = 240
@@ -35,6 +36,7 @@ const (
 type filePreviewContent struct {
 	Kind               string
 	Text               string
+	CodeTokens         []chroma.Token
 	Image              woxImage
 	WebViewData        string
 	NativeFilePath     string
@@ -321,12 +323,44 @@ func inspectPreviewFile(path, extension string, forceLoad bool) filePreviewConte
 		base.Limited = truncated || len(lines) > maxFilePreviewDisplayLines
 		return base
 	}
+	if lexer := lexers.Match(filepath.Base(path)); lexer != nil && lexer.Config().Name != "plaintext" {
+		// Keep source line numbers intact and tokenize once, off the UI thread.
+		base.Kind = "code"
+		base.Text, base.DisplayLines, base.Limited = boundFilePreviewCode(string(data))
+		base.Limited = base.Limited || truncated
+		base.CodeTokens, err = chroma.Tokenise(chroma.Coalesce(lexer), nil, base.Text)
+		if err != nil {
+			base.CodeTokens = nil // Unrecognized syntax still has a readable, numbered preview.
+		}
+		return base
+	}
 	text, lines, limited := boundFilePreviewText(string(data))
 	base.Kind = "text"
 	base.Text = text
 	base.DisplayLines = lines
 	base.Limited = truncated || limited
 	return base
+}
+
+// boundFilePreviewCode keeps a source prefix instead of inserting synthetic numbered lines.
+func boundFilePreviewCode(text string) (string, int, bool) {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	if text == "" {
+		return "", 0, false
+	}
+	lines := strings.SplitN(text, "\n", maxFilePreviewDisplayLines+1)
+	limited := len(lines) > maxFilePreviewDisplayLines
+	lines = lines[:min(len(lines), maxFilePreviewDisplayLines)]
+	for index, line := range lines {
+		if runes := []rune(line); len(runes) > maxFilePreviewLineRunes {
+			// Bound shaping work for minified files without changing subsequent line numbers.
+			lines[index] = string(runes[:maxFilePreviewLineRunes])
+			lines = lines[:index+1]
+			limited = true
+			break
+		}
+	}
+	return strings.Join(lines, "\n"), len(lines), limited
 }
 
 // boundFilePreviewText hard-wraps minified lines before the preview measurer sees them.
@@ -391,13 +425,7 @@ func deferredFilePreview(base filePreviewContent, extension string, size int64) 
 }
 
 func shouldDeferFilePreview(extension string, size int64) bool {
-	if isVideoPreviewExtension(extension) || isAudioPreviewExtension(extension) {
-		return false
-	}
-	if isOfficePreviewExtension(extension) || isPDFPreviewExtension(extension) {
-		return size > officePreviewManualLoadBytes
-	}
-	return size > autoPreviewTextBytes
+	return (isOfficePreviewExtension(extension) || isPDFPreviewExtension(extension)) && size > officePreviewManualLoadBytes
 }
 
 func isTooLargeFilePreview(extension string, size int64) bool {
@@ -437,7 +465,7 @@ func filePreviewMetadata(path, typeLabel string, info os.FileInfo, tags []previe
 // isImagePreviewExtension identifies still images decoded by the launcher image pipeline.
 func isImagePreviewExtension(extension string) bool {
 	switch strings.ToLower(extension) {
-	case ".png", ".jpg", ".jpeg", ".gif":
+	case ".png", ".jpg", ".jpeg", ".gif", ".svg":
 		return true
 	default:
 		return false

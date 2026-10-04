@@ -162,12 +162,12 @@ func TestRuntimeRunningHostOffersRestart(t *testing.T) {
 	}
 }
 
-// TestRuntimePathEditorOffersSave verifies editing replaces Clear with a keyboard-accessible save action.
-func TestRuntimePathEditorOffersSave(t *testing.T) {
+// TestRuntimePathEditorSavesOnBlur verifies editing preserves Clear and saves on focus loss.
+func TestRuntimePathEditorSavesOnBlur(t *testing.T) {
 	saves, clears := 0, 0
 	var idleInputWidth float32
 	for _, editing := range []bool{false, true} {
-		row := runtimeExecutableSettingRow(RuntimeSettingsProps{Labels: RuntimeSettingsLabels{Save: "Save", Clear: "Clear"}}, RuntimeSettingRow{
+		row := runtimeExecutableSettingRow(RuntimeSettingsProps{Labels: RuntimeSettingsLabels{Clear: "Clear"}}, RuntimeSettingRow{
 			ID: "node", Focused: editing, OnSave: func() { saves++ }, OnClear: func() { clears++ },
 		}, 800, 72).(woxwidget.Gesture)
 		field := row.Child.(woxwidget.Container).Child.(woxwidget.Container)
@@ -180,15 +180,17 @@ func TestRuntimePathEditorOffersSave(t *testing.T) {
 		}
 		button := controls.Children[2].(woxwidget.Semantics)
 		expected := "node-clear"
-		if editing {
-			expected = "node-save"
-		}
 		if button.AutomationID != expected {
 			t.Fatalf("action = %s, want %s", button.AutomationID, expected)
 		}
 		button.Child.(woxwidget.Focusable).OnKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true})
+		input.OnFocusChange(true)
+		if saves != 0 {
+			t.Fatal("focusing the input should not save")
+		}
+		input.OnFocusChange(false)
 	}
-	if saves != 1 || clears != 1 {
+	if saves != 1 || clears != 2 {
 		t.Fatalf("actions: save=%d clear=%d", saves, clears)
 	}
 }

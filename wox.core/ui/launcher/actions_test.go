@@ -181,13 +181,15 @@ func TestUnifiedActionsReserveWebViewReloadHotkey(t *testing.T) {
 	}
 }
 
-func TestToolbarActionEntriesIncludesShortcutLocalActions(t *testing.T) {
+func TestToolbarActionEntriesUsesExplicitVisibility(t *testing.T) {
 	entries := []actionPanelEntry{
-		{ID: localActionWebViewReloadID, Hotkey: "control+r", Source: actionPanelSourceLocal},
+		{ID: localActionWebViewReloadID, Hotkey: "control+r", ShowInToolbar: true, Source: actionPanelSourceLocal},
 		{ID: localActionWebViewOpenDevToolsID, Source: actionPanelSourceLocal},
 		{ID: "open", Hotkey: "enter", IsDefault: true, Source: actionPanelSourceResult},
-		{ID: "folder", Hotkey: "control+enter", Source: actionPanelSourceResult},
-		{ID: "message", Hotkey: "control+m", Source: actionPanelSourceToolbar},
+		{ID: "folder", ShowInToolbar: true, Source: actionPanelSourceResult},
+		{ID: "message", Hotkey: "control+m", ShowInToolbar: true, Source: actionPanelSourceToolbar},
+		{ID: "hidden", Hotkey: "control+d", Source: actionPanelSourceResult},
+		{ID: "hidden-local", Hotkey: "control+r", Source: actionPanelSourceLocal},
 	}
 	withoutMessage := toolbarActionEntries(entries, false)
 	if len(withoutMessage) != 3 || withoutMessage[0].ID != localActionWebViewReloadID || withoutMessage[1].ID != "open" || withoutMessage[2].ID != "folder" {
@@ -199,13 +201,13 @@ func TestToolbarActionEntriesIncludesShortcutLocalActions(t *testing.T) {
 	}
 }
 
-// TestHideInToolbarPreservesPanelAndHotkeys covers both UI transports and hiding default or secondary actions.
-func TestHideInToolbarPreservesPanelAndHotkeys(t *testing.T) {
+// TestShowInToolbarPreservesPanelAndHotkeys covers both transports and opt-in secondary actions.
+func TestShowInToolbarPreservesPanelAndHotkeys(t *testing.T) {
 	for _, actionType := range []string{plugin.QueryResultActionTypeExecute, plugin.QueryResultActionTypeForm} {
-		for _, hidden := range []bool{false, true} {
+		for _, shown := range []bool{false, true} {
 			core := plugin.QueryResult{Actions: []plugin.QueryResultAction{
-				{Id: "open", Name: "Open", Hotkey: "enter", IsDefault: true, HideInToolbar: hidden},
-				{Id: "browse", Name: "Browse folder", Type: actionType, Hotkey: "shift+enter", HideInToolbar: hidden},
+				{Id: "open", Name: "Open", Hotkey: "enter", IsDefault: true, ShowInToolbar: shown},
+				{Id: "browse", Name: "Browse folder", Type: actionType, Hotkey: "shift+enter", ShowInToolbar: shown},
 				{Id: "copy", Name: "Copy", Hotkey: "ctrl+c"},
 			}}
 			ui := core.ToUI()
@@ -226,21 +228,25 @@ func TestHideInToolbarPreservesPanelAndHotkeys(t *testing.T) {
 					result.Actions = append(result.Actions, converted)
 				}
 				entries := unifiedActionPanelEntries([]queryResult{result}, 0, nil)
-				if len(entries) != 3 || entries[1].HideInToolbar != hidden || !entries[0].IsDefault {
+				if len(entries) != 3 || entries[1].ShowInToolbar != shown || !entries[0].IsDefault {
 					t.Fatalf("%s: toolbar visibility changed the action panel or default action: %+v", transport, entries)
 				}
 				if matches := filteredActionIndices(entries, "Browse folder", nil, false); len(matches) != 1 || matches[0] != 1 {
-					t.Fatalf("%s: hidden action must remain searchable: %v", transport, matches)
+					t.Fatalf("%s: action must remain searchable regardless of toolbar visibility: %v", transport, matches)
 				}
 				for _, messageVisible := range []bool{false, true} {
 					chips := toolbarActionEntries(entries, messageVisible)
-					if hidden && (len(chips) != 1 || chips[0].ActionIndex != 2) || !hidden && len(chips) != 3 {
-						t.Fatalf("%s: hidden=%t message=%t toolbar=%+v", transport, hidden, messageVisible, chips)
+					wantCount := 1
+					if shown {
+						wantCount = 2
+					}
+					if len(chips) != wantCount || chips[0].ActionIndex != 0 || (shown && chips[1].ActionIndex != 1) {
+						t.Fatalf("%s: shown=%t message=%t toolbar=%+v", transport, shown, messageVisible, chips)
 					}
 				}
 				entry, matched := actionPanelEntryForHotkey(entries, woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true})
 				if !matched || entry.ActionIndex != 1 || result.Actions[entry.ActionIndex].Type != actionType {
-					t.Fatalf("%s: hiding a toolbar chip changed hotkey dispatch: %+v", transport, entry)
+					t.Fatalf("%s: toolbar visibility changed hotkey dispatch: %+v", transport, entry)
 				}
 			}
 		}
@@ -471,7 +477,7 @@ func TestShiftEnterResultActionPrecedesQueryNewline(t *testing.T) {
 		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
 		selected:       0,
 		results: []queryResult{{ID: "file", Actions: []resultAction{
-			{ID: "browse", Type: "local", Hotkey: "shift+enter", PreventHideAfterAction: true, HideInToolbar: true},
+			{ID: "browse", Type: "local", Hotkey: "shift+enter", PreventHideAfterAction: true},
 		}}},
 	}
 	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true}) {

@@ -238,8 +238,8 @@ func TestWoxLauncherDemoResultTailPadsHorizontalText(t *testing.T) {
 	row := demoResultRow(LauncherDemoProps{Theme: Theme{}}, LauncherDemoResult{Title: "Result", Tail: "已就绪"}, 400, 56, 255).(woxwidget.Container)
 	tail := row.Child.(woxwidget.Flex).Children[2].(woxwidget.Align).Child.(woxwidget.Container)
 	inner := tail.Child.(woxwidget.Align)
-	if tail.Padding.Left != 8 || tail.Padding.Right != 8 || tail.Width != 49 || inner.Width != 33 {
-		t.Fatalf("result tail = width %v padding %#v inner %v, want 8px inset around CJK text", tail.Width, tail.Padding, inner.Width)
+	if tail.Padding.Left != 7 || tail.Padding.Right != 7 || tail.Width != 47 || inner.Width != 33 {
+		t.Fatalf("result tail = width %v padding %#v inner %v, want 7px inset around CJK text", tail.Width, tail.Padding, inner.Width)
 	}
 }
 

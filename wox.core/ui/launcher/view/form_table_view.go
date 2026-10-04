@@ -797,7 +797,7 @@ func formTableRowTextColor(props FormTableFieldProps, row FormTableRow) woxui.Co
 }
 
 func formTableStatusLabel(status string, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	return woxcomponent.WoxCompactTag(status, theme.TextSecondary)
+	return woxcomponent.WoxCompactTag(status, theme.TextSecondary, theme)
 }
 
 // formTableDataCellAt gives row-specific tooltip triggers stable table coordinates.

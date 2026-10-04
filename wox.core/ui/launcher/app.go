@@ -2316,18 +2316,19 @@ type queryRefinementOption struct {
 }
 
 type queryResult struct {
-	QueryID   string               `json:"QueryId"`
-	ID        string               `json:"Id"`
-	Title     string               `json:"Title"`
-	SubTitle  string               `json:"SubTitle"`
-	Icon      woxImage             `json:"Icon"`
-	Preview   queryPreview         `json:"Preview"`
-	TitleTags []resultTitleTag     `json:"TitleTags"`
-	Tails     []resultTail         `json:"Tails"`
-	Actions   []resultAction       `json:"Actions"`
-	DragData  *queryResultDragData `json:"DragData"`
-	IsGroup   bool                 `json:"IsGroup"`
-	Revision  uint64               `json:"-"`
+	QueryID           string               `json:"QueryId"`
+	ID                string               `json:"Id"`
+	Title             string               `json:"Title"`
+	SubTitle          string               `json:"SubTitle"`
+	Icon              woxImage             `json:"Icon"`
+	IconShowContainer bool                 `json:"IconShowContainer"`
+	Preview           queryPreview         `json:"Preview"`
+	TitleTags         []resultTitleTag     `json:"TitleTags"`
+	Tails             []resultTail         `json:"Tails"`
+	Actions           []resultAction       `json:"Actions"`
+	DragData          *queryResultDragData `json:"DragData"`
+	IsGroup           bool                 `json:"IsGroup"`
+	Revision          uint64               `json:"-"`
 }
 
 type queryResultDragData struct {
@@ -2399,7 +2400,7 @@ type resultAction struct {
 	Icon                   woxImage          `json:"Icon"`
 	IsDefault              bool              `json:"IsDefault"`
 	PreventHideAfterAction bool              `json:"PreventHideAfterAction"`
-	HideInToolbar          bool              `json:"HideInToolbar"`
+	ShowInToolbar          bool              `json:"ShowInToolbar"`
 	Hotkey                 string            `json:"Hotkey"`
 	Form                   []formDefinition  `json:"Form"`
 	IsSystemAction         bool              `json:"IsSystemAction"`

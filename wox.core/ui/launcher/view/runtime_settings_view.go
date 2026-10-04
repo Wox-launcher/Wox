@@ -13,7 +13,6 @@ type RuntimeSettingsLabels struct {
 	StatusSection     string
 	ExecutableSection string
 	ExecutableHelp    string
-	Save              string
 	Browse            string
 	Clear             string
 	Empty             string
@@ -290,8 +289,7 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 	labelWidth := min(float32(400), max(float32(220), width*0.48))
 	controlWidth := max(float32(220), width-labelWidth-32)
 	browseWidth := runtimeLabelWidth(props.Labels.Browse, 62, 96)
-	// Reserve the wider action label in both states so editing never shifts the row.
-	actionWidth := max(runtimeLabelWidth(props.Labels.Clear, 62, 96), runtimeLabelWidth(props.Labels.Save, 62, 96))
+	actionWidth := runtimeLabelWidth(props.Labels.Clear, 62, 96)
 	inputWidth := max(float32(80), controlWidth-browseWidth-actionWidth-20)
 	input := woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
 		ID: row.ID + "-input", Label: row.Title, Hint: row.Placeholder, Width: inputWidth,
@@ -301,13 +299,12 @@ func runtimeExecutableSettingRow(props RuntimeSettingsProps, row RuntimeSettingR
 			if focused && row.OnFocus != nil {
 				row.OnFocus()
 			}
+			if !focused && row.Focused && row.OnSave != nil {
+				row.OnSave()
+			}
 		},
 	})
 	action := woxcomponent.ButtonProps{ID: row.ID + "-clear", Label: props.Labels.Clear, Width: actionWidth, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnClear, Theme: props.Theme}
-	if row.Focused {
-		// Keep saving visible without squeezing the path field with another button.
-		action.ID, action.Label, action.OnTap = row.ID+"-save", props.Labels.Save, row.OnSave
-	}
 	controls := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: []woxwidget.Widget{
 		input,
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: row.ID + "-browse", Label: props.Labels.Browse, Width: browseWidth, Radius: 4, FontSize: 13, Disabled: row.Disabled, Variant: woxcomponent.ButtonSecondary, OnTap: row.OnBrowse, Theme: props.Theme}),

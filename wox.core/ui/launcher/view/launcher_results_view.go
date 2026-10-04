@@ -71,6 +71,7 @@ type LauncherResultItem struct {
 	Selected           bool
 	Hovered            bool
 	Icon               *woxui.Image
+	IconShowContainer  bool
 	Loading            bool
 	TitleTags          []LauncherResultTitleTag
 	Tails              []LauncherResultTail
@@ -150,10 +151,12 @@ func (p launcherResultBackgroundProps) Equal(other launcherResultBackgroundProps
 }
 
 type launcherResultIconProps struct {
-	Image   *woxui.Image
-	Size    float32
-	Loading bool
-	Color   woxui.Color
+	ShowContainer bool
+	Foreground    woxui.Color
+	Image         *woxui.Image
+	Size          float32
+	Loading       bool
+	Color         woxui.Color
 }
 
 func (p launcherResultIconProps) Equal(other launcherResultIconProps) bool {
@@ -340,12 +343,22 @@ func launcherResultRow(props launcherResultRowProps) woxwidget.Widget {
 			Child: woxwidget.Align{Height: groupHeight, Vertical: 0.5, Child: launcherResultTextBoundary(LauncherResultTitleBoundaryKey(item.ID), "result-title:"+item.ID, titleProps)},
 		}
 	}
-	iconProps := launcherResultIconProps{Image: item.Icon, Size: props.IconSize, Loading: item.Loading, Color: props.Theme.Cursor}
+	var thumbnailForeground woxui.Color
+	if item.IconShowContainer {
+		thumbnailForeground = props.Theme.ResultTitle
+		if item.Selected {
+			thumbnailForeground = props.Theme.SelectedTitle
+		}
+	}
+	iconProps := launcherResultIconProps{ShowContainer: item.IconShowContainer, Foreground: thumbnailForeground, Image: item.Icon, Size: props.IconSize, Loading: item.Loading, Color: props.Theme.Cursor}
 	icon := woxwidget.Boundary[launcherResultIconProps]{
 		Key: LauncherResultIconBoundaryKey(item.ID), Label: "result-icon:" + item.ID, Props: iconProps,
 		Build: func(props launcherResultIconProps) woxwidget.Widget {
 			if props.Loading {
 				return woxcomponent.WoxLoadingIndicator(props.Size, props.Color)
+			}
+			if props.ShowContainer {
+				return woxcomponent.WoxImageThumbnail(props.Image, props.Size, props.Foreground)
 			}
 			if props.Image == nil {
 				return woxwidget.Painter{Width: props.Size, Height: props.Size}
@@ -566,7 +579,7 @@ func launcherResultTitleTagHover(item LauncherResultItem, tag LauncherResultTitl
 	}
 }
 
-// launcherResultTails restores Flutter's text-tag and image-tail presentation.
+// launcherResultTails renders compact metadata tags and image tails.
 func launcherResultTails(tails []LauncherResultTail, width, height float32, foreground woxui.Color, selected bool) woxwidget.Widget {
 	return launcherResultTailsWithDensity(launcherResultTailsProps{
 		Items: tails, Width: width, Height: height, Foreground: foreground, Selected: selected, DensityScale: 1,
@@ -591,11 +604,11 @@ func launcherResultTailsWithDensity(props launcherResultTailsProps, scrollKey wo
 				}}
 			}
 		} else {
-			textColor, background, border := launcherResultTextTailStyle(item.TextCategory, props.Foreground, props.Selected)
-			horizontalPadding := scaledLauncherSize(8, props.DensityScale)
+			textColor, background := launcherResultTextTailStyle(item.TextCategory, props.Foreground, props.Selected)
+			horizontalPadding := scaledLauncherSize(7, props.DensityScale)
 			textWidth := max(float32(0), item.Width-horizontalPadding*2)
 			content = woxwidget.Container{
-				Width: item.Width, Height: item.Height, Radius: item.Height / 2, Color: background, BorderColor: border, BorderWidth: 1,
+				Width: item.Width, Height: item.Height, Radius: scaledLauncherSize(4, props.DensityScale), Color: background,
 				Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 				Child: woxwidget.Align{Width: textWidth, Height: item.Height, Vertical: 0.5, Child: woxwidget.Text{
 					Value: item.Text, Style: woxui.TextStyle{Size: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale)}, Color: textColor,
@@ -657,8 +670,8 @@ func launcherResultTailHover(props launcherResultTailsProps, index int, tooltip 
 	}
 }
 
-// launcherResultTextTailStyle maps semantic tail categories to Flutter's stable status colors.
-func launcherResultTextTailStyle(category string, foreground woxui.Color, selected bool) (woxui.Color, woxui.Color, woxui.Color) {
+// launcherResultTextTailStyle preserves status colors while keeping ordinary metadata quiet.
+func launcherResultTextTailStyle(category string, foreground woxui.Color, selected bool) (woxui.Color, woxui.Color) {
 	semantic := woxui.Color{}
 	switch category {
 	case "danger":
@@ -669,16 +682,14 @@ func launcherResultTextTailStyle(category string, foreground woxui.Color, select
 		semantic = woxui.Color{R: 2, G: 122, B: 72, A: 255}
 	}
 	if semantic.A != 0 {
-		border := semantic
-		border.A = 184
-		return woxui.Color{R: 255, G: 255, B: 255, A: 255}, semantic, border
+		return woxui.Color{R: 255, G: 255, B: 255, A: 255}, semantic
 	}
-	border := foreground
-	border.A = 51
+	background := foreground
+	background.A = 13
 	if selected {
-		border.A = 87
+		background.A = 24
 	}
-	return foreground, woxui.Color{}, border
+	return foreground, background
 }
 
 const (

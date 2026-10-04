@@ -158,7 +158,7 @@ func TestPluginListSearchUsesValueText(t *testing.T) {
 	}
 }
 
-func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
+func TestPluginListBadgeUsesSharedMetadataStyle(t *testing.T) {
 	activeColor := woxui.Color{R: 90, G: 100, B: 110, A: 255}
 	inactiveColor := woxui.Color{R: 120, G: 130, B: 140, A: 255}
 	title := woxui.Color{R: 240, G: 244, B: 248, A: 255}
@@ -176,41 +176,24 @@ func TestPluginListBadgeUsesFlutterTagGeometry(t *testing.T) {
 	rows := props.Content.(woxwidget.LazyList)
 	row := focusedControlGesture(rows.ItemBuilder(0)).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	status := rowContent.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	status := rowContent.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if status.Color != activeColor {
 		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
 	}
 	inactiveRow := focusedControlGesture(rows.ItemBuilder(1)).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	inactiveStatus := inactiveRow.Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	inactiveStatus := inactiveRow.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if inactiveStatus.Color != inactiveColor {
 		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
 	}
-	badgeSlot := rowContent.Children[2].(woxwidget.Align)
-	if badgeSlot.Horizontal != 1 || badgeSlot.Vertical != 0.5 {
-		t.Fatalf("badge slot alignment = (%v, %v), want trailing and vertically centered", badgeSlot.Horizontal, badgeSlot.Vertical)
-	}
-	textWidth := rowContent.Children[1].(woxwidget.Container).Width
-	if contentWidth := float32(32+10) + textWidth + float32(10) + badgeSlot.Width; contentWidth != row.Width-row.Padding.Left-row.Padding.Right {
-		t.Fatalf("plugin row content width = %v, want inner width %v so the tag keeps the 6px trailing padding", contentWidth, row.Width-row.Padding.Left-row.Padding.Right)
-	}
-	badge := badgeSlot.Child.(woxwidget.Container)
-	wantPadding := woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}
-	if badge.Padding != wantPadding {
-		t.Fatalf("badge padding = %+v, want %+v", badge.Padding, wantPadding)
-	}
-	if badge.BorderWidth != 1 {
-		t.Fatalf("badge border width = %v, want 1", badge.BorderWidth)
-	}
-	label := badge.Child.(woxwidget.Text)
-	if label.Color != inactiveColor || badge.BorderColor != inactiveColor {
-		t.Fatal("selected badge must retain the secondary text color")
-	}
-	if label.Style.Size != 11 {
-		t.Fatalf("badge font size = %v, want 11", label.Style.Size)
-	}
-	inactiveBadge := inactiveRow.Children[2].(woxwidget.Align).Child.(woxwidget.Container)
-	if inactiveBadge.BorderColor != inactiveColor || inactiveBadge.Child.(woxwidget.Text).Color != inactiveColor {
-		t.Fatalf("unselected System badge = border %#v text %#v, want Text", inactiveBadge.BorderColor, inactiveBadge.Child.(woxwidget.Text).Color)
+	for _, content := range []woxwidget.Flex{rowContent, inactiveRow} {
+		badge := content.Children[2].(woxwidget.Container)
+		label := badge.Child.(woxwidget.TextBlock)
+		if badge.Width != 0 || badge.Height != 22 || badge.Radius != 4 || badge.BorderWidth != 0 || badge.Color.A != 13 || label.Color != inactiveColor || label.Style.Size != 11 {
+			t.Fatalf("System badge must retain secondary metadata styling and natural width: %+v / %+v", badge, label)
+		}
+		if content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+			t.Fatal("metadata must remain vertically centered beside the title")
+		}
 	}
 }
 
@@ -1146,6 +1129,32 @@ func TestPluginListDisabledRowsUseSecondaryText(t *testing.T) {
 
 func pluginListRowTexts(row woxwidget.Widget) (woxwidget.Text, woxwidget.Text) {
 	content := focusedControlGesture(row).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	texts := content.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+	texts := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex)
 	return texts.Children[0].(woxwidget.Text), texts.Children[1].(woxwidget.Text)
+}
+
+// TestCatalogTagsFitTranslatedLabels guards against fixed-width badge slots clipping metadata.
+func TestCatalogTagsFitTranslatedLabels(t *testing.T) {
+	services := translatedLabelHostServices{}
+	for _, scale := range []float32{0.9, 1, 1.5} {
+		for _, label := range []string{"System", "系统", "Системный"} {
+			theme := woxcomponent.ControlTheme{DensityScale: scale}
+			plugin := pluginListRow(PluginListItem{Name: "Plugin", Badge: label}, PluginListProps{Width: 260, Theme: theme}, 60)
+			pluginRow := focusedControlGesture(plugin).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+			themeRow := themeListRow(ThemeSettingsProps{Theme: theme, SystemLabel: label}, ThemeCatalogItem{Name: "Theme", IsSystem: true}, 260).(woxwidget.Container)
+			themeContent := focusedControlGesture(themeRow.Child).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+			for _, row := range []woxwidget.Flex{pluginRow, themeContent} {
+				row.Children[2] = woxwidget.Semantics{Key: "tag", Child: row.Children[2]}
+				host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return row })
+				host.AttachServices(services)
+				host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 248, Height: 44}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: 372, Height: 66}})
+				bounds, ok := host.BoundsForKey("tag")
+				host.Dispose()
+				metrics, _ := services.MeasureText(label, woxui.TextStyle{Size: theme.Scaled(woxcomponent.TagFontSize)})
+				if !ok || bounds.Width != metrics.Size.Width+2*theme.Scaled(7) || bounds.X+bounds.Width > 248 || bounds.Height != theme.Scaled(22) {
+					t.Fatalf("scale %v label %q: metadata clipped or overflowed: %+v", scale, label, bounds)
+				}
+			}
+		}
+	}
 }

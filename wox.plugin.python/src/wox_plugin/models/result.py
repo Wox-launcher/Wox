@@ -523,7 +523,7 @@ class ResultAction:
         icon: Icon to display for the action
         is_default: Whether this is the default action
         prevent_hide_after_action: Keep Wox visible after action
-        hide_in_toolbar: Hide the toolbar button while retaining the action panel and hotkey
+        show_in_toolbar: Show the toolbar button; the default Enter action is always shown
         hotkey: Keyboard shortcut to trigger the action
         context_data: Additional data for later retrieval
 
@@ -675,11 +675,11 @@ class ResultAction:
     Wox automatically includes the English translation of name when available.
     """
 
-    hide_in_toolbar: bool = field(default=False)
+    show_in_toolbar: bool = field(default=False)
     """
-    Hide this action from the toolbar, including when it is the default action.
+    Show this action in the toolbar. The default Enter action is always shown.
 
-    The action panel and keyboard shortcut remain available. Defaults to False.
+    Defaults to False. The action panel and keyboard shortcut remain available regardless.
     """
 
     def to_json(self) -> str:
@@ -699,7 +699,7 @@ class ResultAction:
             "Type": self.type,
             "IsDefault": self.is_default,
             "PreventHideAfterAction": self.prevent_hide_after_action,
-            "HideInToolbar": self.hide_in_toolbar,
+            "ShowInToolbar": self.show_in_toolbar,
             "Hotkey": self.hotkey,
             "Icon": json.loads(self.icon.to_json()),
             "ContextData": self.context_data,
@@ -747,7 +747,7 @@ class ResultAction:
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
             is_default=data.get("IsDefault", False),
             prevent_hide_after_action=data.get("PreventHideAfterAction", False),
-            hide_in_toolbar=data.get("HideInToolbar", False),
+            show_in_toolbar=data.get("ShowInToolbar", False),
             hotkey=data.get("Hotkey", ""),
             context_data=context_data if isinstance(context_data, dict) else {},
         )
@@ -918,6 +918,9 @@ class Result:
     unless prevent_hide_after_drag is true.
     """
 
+    icon_show_container: bool = field(default=False)
+    """Show a theme-aware rounded background and border around the icon."""
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -930,6 +933,7 @@ class Result:
         data = {
             "Title": self.title,
             "Icon": json.loads(self.icon.to_json()),
+            "IconShowContainer": self.icon_show_container,
             "Id": self.id,
             "SubTitle": self.sub_title,
             "Score": self.score,
@@ -976,6 +980,7 @@ class Result:
             drag_data = ResultDragData.from_json(json.dumps(data["DragData"]))
 
         return cls(
+            icon_show_container=data.get("IconShowContainer", False),
             title=data.get("Title", ""),
             icon=WoxImage.from_json(json.dumps(data.get("Icon", {}))),
             id=data.get("Id", ""),

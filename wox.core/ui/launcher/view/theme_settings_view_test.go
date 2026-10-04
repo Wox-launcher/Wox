@@ -365,7 +365,7 @@ func TestThemeCatalogPreviewUsesV2WindowChrome(t *testing.T) {
 	}
 	demo := themeCatalogPreviewWindow(themeCatalogPreview(ThemeSettingsProps{
 		PreviewTitle: "Wox Theme Preview", PreviewTexts: []string{"One", "Two", "Three"},
-		PreviewOpenLabel: "Open", PreviewMoreLabel: "More Actions",
+		PreviewOpenLabel: "Open", PreviewMoreLabel: "Actions",
 	}, theme, 600, 360))
 	children := demo.Child.(woxwidget.Stack).Children
 	border := children[len(children)-1].Child.(woxwidget.Container)
@@ -496,18 +496,9 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 		Theme: woxcomponent.ControlTheme{TextSecondary: tagColor, SelectionText: woxui.Color{R: 240, G: 244, B: 248, A: 255}},
 		Items: []ThemeCatalogItem{{ID: "light", Name: "Wox Light", IsSystem: true, Selected: true}},
 	}
-	trailing, _ := themeListTrailing(props, props.Items[0])
-	slot := trailing.(woxwidget.Align)
-	if slot.Horizontal != 1 || slot.Vertical != 0.5 {
-		t.Fatalf("system tag slot alignment = (%v, %v), want trailing and vertically centered", slot.Horizontal, slot.Vertical)
-	}
-	tag := slot.Child.(woxwidget.Container)
-	wantPadding := woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}
-	if tag.Padding != wantPadding || tag.BorderWidth != 1 {
-		t.Fatalf("system tag geometry = padding %+v border %v, want shared 1px outlined tag", tag.Padding, tag.BorderWidth)
-	}
-	if label := tag.Child.(woxwidget.Text); tag.BorderColor != tagColor || label.Color != tagColor {
-		t.Fatalf("system tag colors = border %#v text %#v, want %#v", tag.BorderColor, label.Color, tagColor)
+	tag := themeListTrailing(props, props.Items[0]).(woxwidget.Container)
+	if tag.BorderWidth != 0 || tag.Radius != 4 || tag.Height != 22 || tag.Color.A != 13 || tag.Child.(woxwidget.TextBlock).Color != tagColor {
+		t.Fatalf("System tag should use shared metadata style: %+v", tag)
 	}
 	list := themeList(props, 260, 400).(woxwidget.Flex)
 	scrollProps := list.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
@@ -516,16 +507,12 @@ func TestThemeSystemTagCentersLabel(t *testing.T) {
 	alignment := row.Child.(woxwidget.Align)
 	content := alignment.Child.(woxwidget.Flex)
 	_, textExpanded := content.Children[1].(woxwidget.Expanded)
-	tagSlot := content.Children[2].(woxwidget.Align)
+	rowTag := content.Children[2].(woxwidget.Container)
 	if row.Padding.Top != 0 || alignment.Vertical != 0.5 || content.CrossAxisAlignment != woxwidget.CrossAxisCenter {
 		t.Fatalf("theme row alignment = padding %#v slot %#v flex %v, want a full-height centered icon row", row.Padding, alignment, content.CrossAxisAlignment)
 	}
-	if !textExpanded || tagSlot.Width != 44 {
-		t.Fatalf("theme row slots = text expanded %v tag %.0f, want true/44", textExpanded, tagSlot.Width)
-	}
-	rowTag := tagSlot.Child.(woxwidget.Container)
-	if rowTag.BorderColor != tagColor || rowTag.Child.(woxwidget.Text).Color != tagColor {
-		t.Fatalf("selected System tag = border %#v text %#v, want secondary %#v", rowTag.BorderColor, rowTag.Child.(woxwidget.Text).Color, tagColor)
+	if !textExpanded || rowTag.Width != 0 || rowTag.Child.(woxwidget.TextBlock).Color != tagColor {
+		t.Fatalf("theme title must expand beside a natural-width secondary tag: %+v", rowTag)
 	}
 }
 
@@ -559,10 +546,9 @@ func TestThemeStoreImageTagMatchesPluginTrailingBadge(t *testing.T) {
 		slot := themeListRow(props, item, 250).(woxwidget.Container)
 		row := focusedControlGesture(slot.Child).Child.(woxwidget.Container)
 		children := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
-		tagSlot := children[2].(woxwidget.Align)
-		tag := tagSlot.Child.(woxwidget.Container)
-		label := tag.Child.(woxwidget.Text)
-		if len(children) != 4 || tagSlot.Width != 44 || tagSlot.Horizontal != 1 || tagSlot.Vertical != 0.5 || label.Value != "Image" || label.Style.Size != woxcomponent.TagFontSize {
+		tag := children[2].(woxwidget.Container)
+		label := tag.Child.(woxwidget.TextBlock)
+		if len(children) != 4 || tag.Width != 0 || tag.Height != 22 || tag.BorderWidth != 0 || label.Value != "Image" || label.Style.Size != woxcomponent.TagFontSize {
 			t.Fatal("Image must use the plugin badge slot before the installed icon")
 		}
 	}

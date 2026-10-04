@@ -377,3 +377,17 @@ func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
 		t.Fatalf("hovered model row = color %#v icon %.0f; want hover and 18px sparkles", container.Color, icon.Width)
 	}
 }
+
+// TestPreviewTagsFitScaledFooter checks that rounded density sizes share the same reserved space.
+func TestPreviewTagsFitScaledFooter(t *testing.T) {
+	for _, scale := range []float32{1, 1.1, 1.25, 1.5, 2} {
+		theme := woxcomponent.Theme{Controls: woxcomponent.ControlTheme{DensityScale: scale}}
+		panel := PreviewView(PreviewProps{Width: 320, Height: 240, Theme: theme, Tags: []PreviewTag{{Label: "OCR"}}}).(woxwidget.Container)
+		stack := panel.Child.(woxwidget.Stack)
+		tags := stack.Children[1]
+		strip := tags.Child.(woxwidget.ScrollView)
+		if tags.Top+strip.Height != stack.Height {
+			t.Fatalf("density %v: footer bottom %v, available %v", scale, tags.Top+strip.Height, stack.Height)
+		}
+	}
+}

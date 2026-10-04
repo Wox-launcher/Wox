@@ -263,22 +263,18 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 	if item.Icon != nil {
 		icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
 	}
-	textWidth := max(float32(0), props.Width-12-32-10)
-	rowChildren := []woxwidget.Widget{icon}
-	if item.Badge != "" {
-		textWidth = max(float32(0), textWidth-10-44)
+	rowChildren := []woxwidget.Widget{icon,
+		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
+				woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
+			}}}
+		}}},
 	}
-	if item.ShowInstalledIcon {
-		textWidth = max(float32(0), textWidth-10-26)
-	}
-	rowChildren = append(rowChildren, woxwidget.Container{Width: textWidth, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-		woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
-		woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
-	}}})
 	if item.Badge != "" {
 		// Keep the System badge on secondary text so a selected row cannot invert it.
-		badge := woxcomponent.WoxTag(item.Badge, props.Theme.TextSecondary)
-		rowChildren = append(rowChildren, woxwidget.Align{Width: 44, Height: 44, Horizontal: 1, Vertical: 0.5, Child: badge})
+		badge := woxcomponent.WoxTag(item.Badge, props.Theme.TextSecondary, props.Theme)
+		rowChildren = append(rowChildren, badge)
 	}
 	if item.ShowInstalledIcon {
 		installedIcon := props.InstalledIcon

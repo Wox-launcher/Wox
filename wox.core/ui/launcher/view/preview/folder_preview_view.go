@@ -10,8 +10,6 @@ const (
 	folderPreviewPaddingX      = float32(18)
 	folderPreviewPaddingTop    = float32(16)
 	folderPreviewPaddingBottom = float32(16)
-	folderPreviewSectionGap    = float32(16)
-	folderPreviewIconSize      = float32(32)
 	folderPreviewRowIconSize   = float32(20)
 	folderPreviewRowHeight     = float32(32)
 	folderPreviewSizeWidth     = float32(64)
@@ -24,15 +22,12 @@ type FolderPreviewEntry struct {
 	Size  string
 }
 
-// FolderPreviewProps contains the resolved folder identity, counts, and child peek.
+// FolderPreviewProps contains the resolved child peek and its display state.
 type FolderPreviewProps struct {
 	Width      float32
 	Height     float32
 	Theme      woxcomponent.Theme
 	Path       string
-	Name       string
-	Metadata   string
-	Icon       *woxui.Image
 	FolderIcon *woxui.Image
 	FileIcon   *woxui.Image
 	Entries    []FolderPreviewEntry
@@ -41,45 +36,14 @@ type FolderPreviewProps struct {
 	Error      string
 }
 
-// FolderPreviewView shows a top-aligned folder identity, cheap metadata, and a contents peek.
+// FolderPreviewView shows the folder contents without repeating the selected result identity.
 func FolderPreviewView(props FolderPreviewProps) woxwidget.Widget {
 	innerWidth := max(float32(0), props.Width-folderPreviewPaddingX*2)
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		Padding: woxwidget.Insets{Left: folderPreviewPaddingX, Top: folderPreviewPaddingTop, Right: folderPreviewPaddingX, Bottom: folderPreviewPaddingBottom},
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: folderPreviewSectionGap, Children: []woxwidget.Widget{
-			folderPreviewHeader(props, innerWidth),
-			woxwidget.Expanded{Child: folderPreviewBody(props, innerWidth)},
-		}},
+		Child:   folderPreviewBody(props, innerWidth),
 	}
-}
-
-// folderPreviewHeader uses the catalog folder mark so the preview matches the result row.
-func folderPreviewHeader(props FolderPreviewProps, width float32) woxwidget.Widget {
-	textWidth := max(float32(0), width-folderPreviewIconSize-12)
-	lines := make([]woxwidget.Widget, 0, 3)
-	if props.Name != "" {
-		lines = append(lines, woxwidget.TextBlock{
-			Value: props.Name, Width: textWidth, MaxLines: 1, Style: woxui.TextStyle{Size: 15, Weight: woxui.FontWeightSemibold},
-			LineHeight: 20, Color: props.Theme.PreviewText,
-		})
-	}
-	if props.Path != "" && props.Path != props.Name {
-		lines = append(lines, woxwidget.TextBlock{
-			Value: props.Path, Width: textWidth, MaxLines: 2, Style: woxui.TextStyle{Size: 12},
-			LineHeight: 16, Color: props.Theme.ResultSubtitle,
-		})
-	}
-	if props.Metadata != "" {
-		lines = append(lines, woxwidget.TextBlock{
-			Value: props.Metadata, Width: textWidth, MaxLines: 2, Style: woxui.TextStyle{Size: 12},
-			LineHeight: 16, Color: props.Theme.PreviewPropertyContent,
-		})
-	}
-	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{
-		folderPreviewCatalogIcon(props.Icon, folderPreviewIconSize, props.Theme.QueryBackground),
-		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: lines}},
-	}}
 }
 
 // folderPreviewBody fills the remaining preview height with empty, error, or a scrollable peek.
@@ -90,12 +54,13 @@ func folderPreviewBody(props FolderPreviewProps, width float32) woxwidget.Widget
 	if len(props.Entries) == 0 {
 		return woxwidget.TextBlock{Value: props.Empty, Width: width, Style: woxui.TextStyle{Size: 13}, LineHeight: 18, Color: props.Theme.ResultSubtitle}
 	}
-	rows := folderPreviewEntryRows(props, width)
-	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-		Key: woxwidget.Key("folder-preview-" + props.Path), FillWidth: true, FillHeight: true,
-		ThumbColor: props.Theme.PreviewPropertyContent, Theme: props.Theme.Controls,
-		Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
-	})
+	scroll := woxcomponent.ScrollViewProps{
+		Key: woxwidget.Key("folder-preview-" + props.Path), Width: width, FillWidth: true, FillHeight: true,
+		ReserveScrollbarSpace: true,
+		ThumbColor:            props.Theme.PreviewPropertyContent, Theme: props.Theme.Controls,
+	}
+	scroll.Content = woxwidget.Flex{Axis: woxwidget.Vertical, Children: folderPreviewEntryRows(props, scroll.ContentViewportWidth())}
+	return woxcomponent.WoxScrollView(scroll)
 }
 
 func folderPreviewEntryRows(props FolderPreviewProps, width float32) []woxwidget.Widget {

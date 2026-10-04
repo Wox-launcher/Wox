@@ -84,8 +84,18 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
 			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
-			OnSave:   a.submitBuiltInSettingEdit,
-			OnClear:  func() { a.selectSettingRow(index); a.saveRuntimeExecutablePath(item, "") },
+			OnSave: func() {
+				if a.generalSettings.EditKey() != item.key || a.settingSaving {
+					return
+				}
+				// Leaving an unchanged path must not restart its runtime host.
+				if a.generalSettings.Editor().State().Text == item.value {
+					a.cancelBuiltInSettingEdit()
+					return
+				}
+				a.submitBuiltInSettingEdit()
+			},
+			OnClear: func() { a.selectSettingRow(index); a.saveRuntimeExecutablePath(item, "") },
 		})
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
@@ -104,7 +114,6 @@ func (a *App) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
 		StatusSection:     a.translate("i18n:ui_runtime_status"),
 		ExecutableSection: a.translate("i18n:ui_runtime_executable_paths"),
 		ExecutableHelp:    a.translate("i18n:ui_runtime_executable_help"),
-		Save:              a.translate("i18n:ui_save"),
 		Browse:            a.translate("i18n:ui_runtime_browse"),
 		Clear:             a.translate("i18n:ui_runtime_clear"),
 		Empty:             a.translate("i18n:ui_runtime_status_empty"),

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 const (
@@ -115,12 +114,4 @@ func folderPreviewMoreCount(folder folderPreviewContent) int {
 		return 0
 	}
 	return remaining
-}
-
-// formatFolderPreviewTime uses the same DateTime layout as large-file preview details.
-func formatFolderPreviewTime(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.Format(time.DateTime)
 }

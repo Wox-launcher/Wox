@@ -652,6 +652,9 @@ export interface Result {
    */
   Icon: WoxImage
 
+  /** Show a theme-aware rounded background and border around the icon. Defaults to false. */
+  IconShowContainer?: boolean
+
   /**
    * Preview panel content.
    *
@@ -984,10 +987,10 @@ export interface ExecuteResultAction {
   PreventHideAfterAction?: boolean
 
   /**
-   * Hide this action from the toolbar, including when it is the default action.
-   * The action panel and keyboard shortcut remain available. Defaults to false.
+   * Show this action in the toolbar. Defaults to false; the default Enter action is always shown.
+   * The action panel and keyboard shortcut remain available regardless of this setting.
    */
-  HideInToolbar?: boolean
+  ShowInToolbar?: boolean
 
   /**
    * The callback function to execute when the action is triggered.
@@ -1101,10 +1104,10 @@ export interface FormResultAction {
   PreventHideAfterAction?: boolean
 
   /**
-   * Hide this action from the toolbar, including when it is the default action.
-   * The action panel and keyboard shortcut remain available. Defaults to false.
+   * Show this action in the toolbar. Defaults to false; the default Enter action is always shown.
+   * The action panel and keyboard shortcut remain available regardless of this setting.
    */
-  HideInToolbar?: boolean
+  ShowInToolbar?: boolean
 
   /**
    * Form definition to display.

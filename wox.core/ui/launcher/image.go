@@ -458,6 +458,8 @@ func (a *App) storeImageError(key string, err error) {
 	if dispatchErr := a.runOnUI("store launcher image error", func() {
 		a.imageMu.Lock()
 		a.imageErrors[key] = err.Error()
+		// Cached preview trees must rebuild when loading finishes with an error too.
+		a.imagesRevision.Add(1)
 		a.imageMu.Unlock()
 		a.invalidateAllWindows()
 	}); dispatchErr != nil {
@@ -574,8 +576,10 @@ func (a *App) removeImageLocked(key string) {
 	delete(a.imageErrors, key)
 }
 
-func (a *App) imageErrorFor(source woxImage) string {
-	key := imageKey(source)
+// imageErrorFor uses the same size and appearance as the viewport decode request.
+func (a *App) imageErrorFor(source woxImage, size int) string {
+	size = max(1, size)
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
 	a.imageMu.RLock()
 	defer a.imageMu.RUnlock()
 	return a.imageErrors[key]

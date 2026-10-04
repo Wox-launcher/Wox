@@ -618,8 +618,8 @@ func TestFormTableRowStatusUsesQuietLabel(t *testing.T) {
 		t.Fatalf("disabled name = %#v, want shrink-wrapped reduced emphasis", name)
 	}
 	tag := content.Children[1].(woxwidget.Container)
-	label := tag.Child.(woxwidget.Text)
-	if tag.Radius != 3 || tag.BorderWidth != 1 || tag.BorderColor != subtitle || label.Value != "Disabled" || label.Style.Size != woxcomponent.CompactTagFontSize {
+	label := tag.Child.(woxwidget.TextBlock)
+	if tag.Radius != 4 || tag.BorderWidth != 0 || tag.Color.A != 13 || label.Color != subtitle || label.Value != "Disabled" || label.Style.Size != woxcomponent.CompactTagFontSize {
 		t.Fatalf("status tag = %#v / %#v, want the compact WoxTag beside the name", tag, label)
 	}
 	hotkey := formTableDataCellAt(FormTableFieldProps{Theme: woxcomponent.ControlTheme{Text: title}}, row, 0, 1, row.Cells[1], 120, false)

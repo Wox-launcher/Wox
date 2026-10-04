@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"wox/common"
 	"wox/database"
 	"wox/plugin"
@@ -59,6 +60,31 @@ func TestImagePasteFailureUsesTranslatedNotification(t *testing.T) {
 		return
 	}
 	t.Fatal("default paste action missing")
+}
+
+func TestConvertImageRecordSeparatesTitleAndMetadata(t *testing.T) {
+	width, height, size := 2443, 1777, int64(1024*1024)
+	alias := "My screenshot"
+	for _, test := range []struct {
+		alias           *string
+		width           *int
+		size            *int64
+		title, subtitle string
+	}{
+		{nil, &width, &size, "i18n:plugin_clipboard_refinement_type_image", "2443 × 1777 · 1.0 MB"},
+		{&alias, &width, &size, alias, "2443 × 1777 · 1.0 MB"},
+		{nil, nil, &size, "i18n:plugin_clipboard_refinement_type_image", "1.0 MB"},
+		{nil, &width, nil, "i18n:plugin_clipboard_refinement_type_image", "2443 × 1777"},
+		{nil, nil, nil, "i18n:plugin_clipboard_refinement_type_image", ""},
+	} {
+		c := &ClipboardPlugin{api: &imagePasteFailureAPI{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+		c.imageCache.Store("image", &ImageCacheEntry{})
+		record := ClipboardRecord{ID: "image", Content: "Image (2443×1777) (1.0 MB)", Alias: test.alias, Width: test.width, Height: &height, FileSize: test.size}
+		result := c.convertImageRecord(context.Background(), record, plugin.Query{})
+		if result.Title != test.title || result.SubTitle != test.subtitle {
+			t.Fatalf("title/subtitle = %q / %q, want %q / %q", result.Title, result.SubTitle, test.title, test.subtitle)
+		}
+	}
 }
 
 func TestConvertImageRecordExposesFavoriteAndEditTitleActions(t *testing.T) {
@@ -814,5 +840,22 @@ func TestClipboardSearchCandidatesKeepTypedRefinementsScoped(t *testing.T) {
 	}
 	if !clipboardRecordMatchesType(string(clipboard.ClipboardTypeImage), "", clipboardTypeRefinementAll) {
 		t.Fatal("image records must remain visible to All search")
+	}
+}
+
+// TestClipboardCompactMetadata covers local midnight and year boundaries.
+func TestClipboardCompactMetadata(t *testing.T) {
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.FixedZone("test", 8*60*60))
+	for _, tc := range []struct {
+		age  time.Duration
+		want string
+	}{
+		{0, "12:00"}, {13 * time.Hour, "10-03 23:00"}, {365 * 24 * time.Hour, "2025-10-04 12:00"},
+	} {
+		copied := now.Add(-tc.age)
+		tag := clipboardTimestampTag(copied.UnixMilli(), now)
+		if tag.Label != tc.want || tag.Tooltip != copied.Format("2006-01-02 15:04:05") {
+			t.Fatalf("unexpected time tag: %+v", tag)
+		}
 	}
 }

@@ -210,7 +210,7 @@ func TestLauncherToolbarOmitsEmptyActionLabels(t *testing.T) {
 		ToolbarText:       woxui.Color{R: 220, G: 230, B: 240, A: 255},
 	}
 	empty, emptyWidth := launcherToolbarActionSurface(LauncherToolbarAction{ID: "blank", HotkeyLabels: []string{"Enter"}}, theme, &woxui.Window{}, 1, false)
-	labeled, labeledWidth := launcherToolbarActionSurface(LauncherToolbarAction{ID: "more", Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}}, theme, &woxui.Window{}, 1, false)
+	labeled, labeledWidth := launcherToolbarActionSurface(LauncherToolbarAction{ID: "more", Label: "Actions", HotkeyLabels: []string{"Ctrl", "J"}}, theme, &woxui.Window{}, 1, false)
 
 	emptyFlex := empty.(woxwidget.Container).Child.(woxwidget.Flex)
 	if len(emptyFlex.Children) != 1 {
@@ -234,7 +234,7 @@ func TestLauncherToolbarOmitsEmptyActionLabels(t *testing.T) {
 		Width: 800, Height: 40, Window: &woxui.Window{}, DensityScale: 1,
 		Actions: []LauncherToolbarAction{
 			{ID: "blank", HotkeyLabels: []string{"Enter"}},
-			{ID: "more", Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}},
+			{ID: "more", Label: "Actions", HotkeyLabels: []string{"Ctrl", "J"}},
 		},
 	}).(woxwidget.Stack)
 	right := built.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[2].(woxwidget.Container)
@@ -309,7 +309,7 @@ func TestToolbarOpenPanelKeepsHoverHighlight(t *testing.T) {
 	var expectedWidth float32
 	for _, active := range []bool{false, true, false} {
 		for _, hovered := range []bool{false, true} {
-			built, width := launcherToolbarActionSurface(LauncherToolbarAction{ID: launcherToolbarMoreActionID, Label: "More Actions", HotkeyLabels: []string{"Ctrl", "J"}, Active: active}, theme, &woxui.Window{}, 1, hovered)
+			built, width := launcherToolbarActionSurface(LauncherToolbarAction{ID: launcherToolbarMoreActionID, Label: "Actions", HotkeyLabels: []string{"Ctrl", "J"}, Active: active}, theme, &woxui.Window{}, 1, hovered)
 			if expectedWidth == 0 {
 				expectedWidth = width
 			}

@@ -59,6 +59,8 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 			// Built-in themes now use symmetric result gutters instead of the legacy spacing.
 			expected.ResultContainerPaddingTop = 8
 			expected.ResultContainerPaddingBottom = 8
+			radius := 4
+			expected.PreviewTagBorderRadius = &radius
 			if name == "glass" {
 				width := 0
 				expected.ToolbarBorderWidth = &width
@@ -80,6 +82,26 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 				}
 				if strings.HasSuffix(field, "Color") {
 					expected := left.Field(i).String()
+					// Compact metadata tags replace the old outlined pills.
+					if name == "light" {
+						switch field {
+						case "PreviewTagFontColor":
+							expected = "#454545CC"
+						case "PreviewTagBackgroundColor":
+							expected = "#0000000D"
+						case "PreviewTagBorderColor":
+							expected = "#00000000"
+						}
+					} else if name == "dark" {
+						switch field {
+						case "PreviewTagFontColor":
+							expected = "#E2E8F0CC"
+						case "PreviewTagBackgroundColor":
+							expected = "#FFFFFF0D"
+						case "PreviewTagBorderColor":
+							expected = "#FFFFFF00"
+						}
+					}
 					// Glass material and selection updates supersede the legacy fixture.
 					if name == "glass" && field == "ToolbarBackgroundColor" {
 						expected = "#16161A04"

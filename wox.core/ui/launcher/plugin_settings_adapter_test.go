@@ -62,6 +62,28 @@ func TestPluginListEntriesGroupInstalledAndStayFlatInStore(t *testing.T) {
 	}
 }
 
+func TestPluginListEntriesOmitScriptBadge(t *testing.T) {
+	app := &App{translations: map[string]string{
+		"ui_setting_plugin_script_tag": "Script",
+		"ui_setting_plugin_system_tag": "System",
+		"ui_plugin_dev_tag":            "Dev",
+	}}
+	for _, store := range []bool{false, true} {
+		entries := app.pluginListEntries(settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: store}}, []filteredPlugin{
+			{plugin: pluginSettingsPlugin{ID: "script", Runtime: "Script"}},
+			{plugin: pluginSettingsPlugin{ID: "system", IsSystem: true}},
+			{plugin: pluginSettingsPlugin{ID: "dev", Runtime: "Script", IsDev: true}},
+		})
+		badges := map[string]string{}
+		for _, entry := range entries {
+			if entry.Header == "" {
+				badges[entry.ID] = entry.Item.Badge
+			}
+		}
+		assert.Equal(t, map[string]string{"script": "", "system": "System", "dev": "Dev"}, badges)
+	}
+}
+
 func TestPluginRuntimeLabelOmitsNativeGoHost(t *testing.T) {
 	if got := pluginRuntimeLabel("Go"); got != "" {
 		t.Fatalf("Go runtime label = %q, want empty so native plugins hide the chip", got)

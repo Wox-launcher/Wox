@@ -589,9 +589,9 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 
 		// Generate preview and icon caches at insert time to avoid query-time decoding/resizing
 		imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
-		imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+		imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
 		previewImg := imaging.Resize(imageData.Image, 400, 0, imaging.Lanczos)
-		iconImg := imaging.Resize(imageData.Image, 40, 0, imaging.Lanczos)
+		iconImg := common.NewImageThumbnail(imageData.Image)
 		if err := imaging.Save(previewImg, imagePreviewFile); err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image preview cache: %s", err.Error()))
 		}
@@ -1788,7 +1788,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			PreviewType: previewType,
 			PreviewData: previewData,
 			PreviewTags: []plugin.WoxPreviewTag{
-				{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
+				clipboardTimestampTag(record.Timestamp, time.Now()),
 				// Preview pills show values only, so the character unit belongs in
 				// the value. Keep that unit localized instead of hard-coding a
 				// Chinese suffix into English and other languages.
@@ -1824,14 +1824,14 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 	group, groupScore := c.getResultGroup(ctx, record)
 
 	previewTags := []plugin.WoxPreviewTag{
-		{Label: util.FormatTimestamp(record.Timestamp), Tooltip: "i18n:plugin_clipboard_copy_date"},
+		clipboardTimestampTag(record.Timestamp, time.Now()),
 	}
 
 	if record.Width != nil && record.Height != nil {
 		// Width and height now share one value because the preview shell only
 		// shows metadata values by default. Keeping dimensions together saves
 		// pill space while preserving the exact image size in the tooltip.
-		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf("%dx%d", *record.Width, *record.Height), Tooltip: "i18n:plugin_clipboard_image_dimensions"})
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf("%d × %d", *record.Width, *record.Height), Tooltip: "i18n:plugin_clipboard_image_dimensions"})
 	}
 	if record.FileSize != nil {
 		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: c.formatFileSize(*record.FileSize), Tooltip: "i18n:plugin_clipboard_image_size"})
@@ -1843,16 +1843,25 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: "OCR", Tooltip: strings.TrimSpace(*record.OCRText)})
 	}
 
-	title := record.Content
+	title := "i18n:plugin_clipboard_refinement_type_image"
 	if record.Alias != nil && *record.Alias != "" {
 		title = *record.Alias
 	}
+	var details []string
+	if record.Width != nil && record.Height != nil {
+		details = append(details, fmt.Sprintf("%d × %d", *record.Width, *record.Height))
+	}
+	if record.FileSize != nil {
+		details = append(details, c.formatFileSize(*record.FileSize))
+	}
 
 	result := plugin.QueryResult{
-		Title:      title,
-		Icon:       iconWoxImage,
-		Group:      group,
-		GroupScore: groupScore,
+		Title:             title,
+		SubTitle:          strings.Join(details, " · "),
+		Icon:              iconWoxImage,
+		IconShowContainer: true,
+		Group:             group,
+		GroupScore:        groupScore,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeImage,
 			PreviewData: previewWoxImage.String(),
@@ -2062,9 +2071,12 @@ func (c *ClipboardPlugin) deleteRecordAssets(ctx context.Context, record Clipboa
 	// Remove cached preview and icon files
 	cacheDir := util.GetLocation().GetImageCacheDirectory()
 	previewPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_preview.png", record.ID))
-	iconPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+	iconPath := path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
 	_ = os.Remove(previewPath)
 	_ = os.Remove(iconPath)
+	_ = os.Remove(path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon_v3.png", record.ID)))
+	_ = os.Remove(path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon_v2.png", record.ID)))
+	_ = os.Remove(path.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon.png", record.ID)))
 	_ = os.Remove(c.getDibCachePath(record.ID))
 
 	// Remove memory cache
@@ -2118,6 +2130,18 @@ func (c *ClipboardPlugin) getDefaultTextIcon() common.WoxImage {
 	return icons.Get(icons.ActionText)
 }
 
+// clipboardTimestampTag keeps recent metadata compact while retaining the exact time on hover.
+func clipboardTimestampTag(timestamp int64, now time.Time) plugin.WoxPreviewTag {
+	copied := time.UnixMilli(timestamp).In(now.Location())
+	format := "01-02 15:04"
+	if copied.Year() != now.Year() {
+		format = "2006-01-02 15:04"
+	} else if copied.YearDay() == now.YearDay() {
+		format = "15:04"
+	}
+	return plugin.WoxPreviewTag{Label: copied.Format(format), Tooltip: copied.Format("2006-01-02 15:04:05")}
+}
+
 // generateImagePreviewAndIcon generates preview and icon for image records
 func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, record ClipboardRecord) (previewImg, iconImg common.WoxImage) {
 	// Check memory cache first
@@ -2127,7 +2151,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	}
 
 	imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
-	imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon.png", record.ID))
+	imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
 
 	if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
 		previewImg = common.NewWoxImageAbsolutePath(imagePreviewFile)
@@ -2151,7 +2175,7 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	}
 
 	compressedPreviewImg := imaging.Resize(sourceImage, 400, 0, imaging.Lanczos)
-	compressedIconImg := imaging.Resize(sourceImage, 40, 0, imaging.Lanczos)
+	compressedIconImg := common.NewImageThumbnail(sourceImage)
 
 	// Save to disk cache first
 	if saveErr := imaging.Save(compressedPreviewImg, imagePreviewFile); saveErr != nil {

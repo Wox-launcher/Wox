@@ -10,6 +10,11 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+const (
+	scrollbarMinHitThickness = float32(12)
+	scrollbarEdgeInset       = float32(2)
+)
+
 // ScrollViewProps contains the geometry and optional controlled state for a Wox scroll surface.
 type ScrollViewProps struct {
 	// EdgeFade fades only content at scrollable vertical edges, leaving the thumb clear.
@@ -38,13 +43,32 @@ type ScrollViewProps struct {
 	ThumbColor          woxui.Color
 	HideScrollbar       bool
 	AlwaysShowScrollbar bool
-	AutomationID        string
-	Label               string
-	OnScroll            func(float32)
+	// ReserveScrollbarSpace keeps vertical content clear of the thumb and its
+	// hit target, even while faded or not overflowing, so wrapping stays stable.
+	ReserveScrollbarSpace bool
+	AutomationID          string
+	Label                 string
+	OnScroll              func(float32)
 	// OnOffsetChanged reports absolute offset changes made through a retained scroll controller.
 	OnOffsetChanged func(float32)
 	// OnGeometryChanged reports measured geometry when the scroll-axis content extent is omitted.
 	OnGeometryChanged func(viewport, content float32)
+}
+
+// ContentViewportWidth returns logical units available to content. Callers that
+// measure or explicitly size children must use this same width as the scroller.
+func (props ScrollViewProps) ContentViewportWidth() float32 {
+	if !props.ReserveScrollbarSpace || props.HideScrollbar || props.Horizontal {
+		return props.Width
+	}
+	width, hoverWidth := float32(3), float32(7)
+	if props.Theme.ScrollbarWidth != nil {
+		width = float32(*props.Theme.ScrollbarWidth)
+	}
+	if props.Theme.ScrollbarHoverWidth != nil {
+		hoverWidth = float32(*props.Theme.ScrollbarHoverWidth)
+	}
+	return max(float32(0), props.Width-max(scrollbarMinHitThickness, width, hoverWidth)-scrollbarEdgeInset-props.Theme.Scaled(4))
 }
 
 type scrollViewState struct {
@@ -218,7 +242,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 		EdgeFade: props.EdgeFade,
 		// A Wox strip is never nested inside another scroller, so a horizontal
 		// surface always consumes the ordinary mouse wheel.
-		Width: props.Width, Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal,
+		Width: props.ContentViewportWidth(), Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal,
 		Offset: offset, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey, Child: props.Content,
 	}
 	if props.Horizontal {
@@ -290,7 +314,7 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 			}
 		}
 		// The drag target stays usable even when the authored thumb is thin.
-		hitThickness := max(float32(12), targetThickness)
+		hitThickness := max(scrollbarMinHitThickness, targetThickness)
 		opacityKey := props.Key + "-scrollbar-opacity"
 		widthKey := props.Key + "-scrollbar-width"
 		var thumb woxwidget.Widget = woxwidget.AnimatedFloat{Key: opacityKey, Target: targetOpacity, Duration: 200 * time.Millisecond, Builder: func(opacity float32) woxwidget.Widget {
@@ -326,9 +350,9 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 			}, Child: thumb}
 		}
 		if props.Horizontal {
-			children = append(children, woxwidget.StackChild{Left: thumbOffset, Bottom: 2, AnchorBottom: true, Child: thumb})
+			children = append(children, woxwidget.StackChild{Left: thumbOffset, Bottom: scrollbarEdgeInset, AnchorBottom: true, Child: thumb})
 		} else {
-			children = append(children, woxwidget.StackChild{Top: thumbOffset, Right: 2, AnchorRight: true, Child: thumb})
+			children = append(children, woxwidget.StackChild{Top: thumbOffset, Right: scrollbarEdgeInset, AnchorRight: true, Child: thumb})
 		}
 	}
 	var result woxwidget.Widget = woxwidget.Gesture{ID: string(props.Key), CoverHover: true, OnPointer: func(event woxui.PointerEvent) bool {

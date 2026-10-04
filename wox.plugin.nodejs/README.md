@@ -184,11 +184,10 @@ const opened = await this.api.InvokePluginTool(ctx, {
 
 Actions are operations users can perform on results:
 
-Set `HideInToolbar: true` on an execute or form action to omit its toolbar button.
-It remains available in the Action Panel and through its `Hotkey`, including
-when it is the default Enter action. Omitting this field keeps existing toolbar
-behavior. This option requires a Wox build that supports `HideInToolbar`;
-older releases ignore it.
+Only the default Enter action appears in the toolbar automatically. Set
+`ShowInToolbar: true` on an execute or form action to also show it in the toolbar,
+with or without a `Hotkey`. The default is `false`. All actions remain available
+in the Action Panel and their keyboard shortcuts continue to work.
 
 ```typescript
 ResultAction({
@@ -387,3 +386,9 @@ another API; omitted suggestions preserve ordinary placeholders.
 
 To disable automatic command hints, add `{ "Name": "disableAutoCommandHint" }`
 to the plugin metadata's `Features` array. Explicit Query Hints remain available.
+
+### Result icon container
+
+Set `IconShowContainer: true` on a result to show its icon inside a rounded background
+and border that adapt to the theme and selection state. The default is `false`;
+the image keeps its aspect ratio.

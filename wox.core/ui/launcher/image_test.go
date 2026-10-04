@@ -12,10 +12,53 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"wox/common/icons"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
+
+// TestMalformedSVGPreviewFinishesWithError covers async decode and cached preview invalidation.
+func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broken.svg")
+	if err := os.WriteFile(path, []byte(`<svg xmlns=\"http://www.w3.org/2000/svg\"/>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, shade := range []uint8{0, 255} {
+		t.Run(fmt.Sprint(shade), func(t *testing.T) {
+			applied := make(chan func(), 1)
+			app := &App{
+				palette: uiPalette{background: woxui.Color{R: shade, G: shade, B: shade, A: 255}},
+				images:  map[string]*woxui.Image{}, imageRequested: map[string]string{},
+				imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
+				uiCall: func(fn func()) error { applied <- fn; return nil },
+			}
+			source := app.filePreviewFor(path).Image
+			app.buildPreviewImage(source, source, app.palette, 400, 300)
+			revision := app.imagesRevision.Load()
+			select {
+			case apply := <-applied:
+				app.uiCall = nil
+				apply()
+			case <-time.After(5 * time.Second):
+				t.Fatal("SVG decode did not finish")
+			}
+			if app.imagesRevision.Load() == revision {
+				t.Fatal("decode failure did not invalidate the cached preview")
+			}
+			view := app.buildPreviewImage(source, source, app.palette, 400, 300)
+			container, ok := view.(woxwidget.Container)
+			if !ok {
+				t.Fatalf("preview = %T, want an error message", view)
+			}
+			message, ok := container.Child.(woxwidget.TextBlock)
+			if !ok || !strings.Contains(message.Value, "Unable to decode image preview:") {
+				t.Fatalf("preview body = %#v, want a decode error instead of a spinner", container.Child)
+			}
+		})
+	}
+}
 
 func TestImageCacheConcurrentStoresAreSerialized(t *testing.T) {
 	app := &App{

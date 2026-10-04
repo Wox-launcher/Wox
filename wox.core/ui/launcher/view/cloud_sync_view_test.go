@@ -72,11 +72,6 @@ func TestCloudAccountHelpTextWrapsInsteadOfClipping(t *testing.T) {
 	assertWrappingHelp("plan", column.Children[1], planTips, 520)
 	assertWrappingHelp("billing", column.Children[2], billingTips, 520)
 
-	const deviceTips = "Pro plan has no synced device limit."
-	deviceHeader := cloudDeviceHeader(CloudDevicesProps{
-		LabelWidth: 520, SectionLabel: "Devices", Tips: deviceTips, RefreshLabel: "Refresh",
-	}, 830, woxcomponent.ControlTheme{})
-	assertWrappingHelp("devices", deviceHeader, deviceTips, 520)
 }
 
 func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
@@ -99,34 +94,6 @@ func TestCloudWideFormActionsEndAtContentEdge(t *testing.T) {
 		t.Fatalf("support button width = %v, want content-sized", supportButton.Width)
 	}
 
-	buttonTheme := woxcomponent.ControlTheme{Accent: woxui.Color{R: 1, A: 255}, TextSecondary: woxui.Color{R: 2, A: 255}}
-	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: labelWidth, ButtonLabel: "Sync"}, width, buttonTheme).(woxwidget.Container)
-	syncRow := syncCard.Child.(woxwidget.Flex)
-	syncValue := syncRow.Children[1].(woxwidget.Align)
-	if got := labelWidth + gap + syncValue.Width; got != width {
-		t.Fatalf("sync row width = %v, want %v", got, width)
-	}
-	if syncValue.Horizontal != 1 {
-		t.Fatal("sync button should stay right-aligned")
-	}
-
-	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: labelWidth, RefreshLabel: "Refresh"}, width, buttonTheme).(woxwidget.Container)
-	deviceRow := deviceHeader.Child.(woxwidget.Flex)
-	refreshValue := deviceRow.Children[1].(woxwidget.Align)
-	if got := labelWidth + gap + refreshValue.Width; got != width {
-		t.Fatalf("device row width = %v, want %v", got, width)
-	}
-	if refreshValue.Horizontal != 1 {
-		t.Fatal("refresh button should stay right-aligned")
-	}
-	syncButton := focusedControlGesture(syncValue.Child).Child.(woxwidget.Container)
-	refreshButton := focusedControlGesture(refreshValue.Child).Child.(woxwidget.Container)
-	if syncButton.Color != refreshButton.Color || syncButton.BorderColor != refreshButton.BorderColor || syncButton.BorderWidth != refreshButton.BorderWidth {
-		t.Fatalf("sync button surface = %+v, want refresh surface %+v", syncButton, refreshButton)
-	}
-	if syncButton.Width != 0 || refreshButton.Width != 0 {
-		t.Fatalf("sync/refresh widths = %v/%v, want content-sized", syncButton.Width, refreshButton.Width)
-	}
 }
 
 func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
@@ -136,7 +103,7 @@ func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
 	}
 
 	account := cloudAccountCard(CloudAccountProps{
-		LoggedIn: true, LabelWidth: 520, SupportLabel: "Contact Support", SupportIcon: &woxui.Image{},
+		LoggedIn: true, LabelWidth: 520, SupportLabel: "Contact", SupportIcon: &woxui.Image{}, ActionWidth: 120,
 	}, 830, 0, theme).(woxwidget.Container)
 	accountRows := account.Child.(woxwidget.Flex)
 	billingRow := accountRows.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -144,16 +111,25 @@ func TestCloudSettingsActionsUseSharedButtonHeight(t *testing.T) {
 		t.Fatalf("support button height = %v, want shared 32", got)
 	}
 
-	syncCard := cloudSyncCard(CloudSyncProps{LabelWidth: 520, ButtonLabel: "Sync"}, 830, theme).(woxwidget.Container)
+	syncCard := cloudSyncCard(CloudSyncProps{ButtonLabel: "Sync", ActionWidth: 120}, 830, theme).(woxwidget.Container)
 	syncRow := syncCard.Child.(woxwidget.Flex)
-	if got := buttonHeight(syncRow.Children[1].(woxwidget.Align).Child); got != 32 {
+	if got := buttonHeight(syncRow.Children[2]); got != 32 {
 		t.Fatalf("sync button height = %v, want shared 32", got)
 	}
 
-	deviceHeader := cloudDeviceHeader(CloudDevicesProps{LabelWidth: 520, RefreshLabel: "Refresh", RefreshIcon: &woxui.Image{}}, 830, theme).(woxwidget.Container)
-	deviceRow := deviceHeader.Child.(woxwidget.Flex)
-	if got := buttonHeight(deviceRow.Children[1].(woxwidget.Align).Child); got != 32 {
+	deviceHeader := cloudDeviceHeader(CloudDevicesProps{RefreshLabel: "Refresh", RefreshIcon: &woxui.Image{}, ActionWidth: 120}, 830, theme).(woxwidget.Container)
+	section := deviceHeader.Child.(woxwidget.Flex).Children[1].(woxwidget.Container)
+	deviceRow := section.Child.(woxwidget.Flex)
+	if section.Padding.Top != theme.Scaled(16) || deviceRow.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatal("refresh must be centered beside the complete title and help block with space below the divider")
+	}
+	if got := buttonHeight(deviceRow.Children[1]); got != 32 {
 		t.Fatalf("refresh button height = %v, want shared 32", got)
+	}
+	for _, button := range []woxwidget.Widget{billingRow.Children[1].(woxwidget.Align).Child, syncRow.Children[2], deviceRow.Children[1]} {
+		if got := focusedControlGesture(button).Child.(woxwidget.Container).Width; got != 120 {
+			t.Fatalf("cloud action width = %v, want shared width 120", got)
+		}
 	}
 }
 
@@ -209,16 +185,21 @@ func TestCloudAccountActionsUseCenteredSharedDropdownIndicator(t *testing.T) {
 
 func TestCloudPlanHeaderOmitsRecommendedBadge(t *testing.T) {
 	header := cloudPlanHeader(CloudIntroProps{FreeLabel: "Free", ProLabel: "Pro"}, 560, false, woxcomponent.ControlTheme{}).(woxwidget.Container)
-	columns := header.Child.(woxwidget.Flex).Children
+	columns := header.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	if len(columns) != 3 {
 		t.Fatalf("plan header columns = %d, want spacer plus Free and Pro labels", len(columns))
 	}
-	free := columns[1].(woxwidget.Container).Child.(woxwidget.Text)
-	pro := columns[2].(woxwidget.Container).Child.(woxwidget.Text)
+	free := columns[1].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
+	pro := columns[2].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
 	if free.Value != "Free" || pro.Value != "Pro" {
 		t.Fatalf("plan header labels = %q / %q, want Free / Pro", free.Value, pro.Value)
 	}
-	if _, isBadgeRow := columns[2].(woxwidget.Container).Child.(woxwidget.Flex); isBadgeRow {
+	for _, label := range []woxwidget.TextBlock{free, pro} {
+		if label.LineHeight != label.Height || label.Height != tableSurfaceHeaderHeight || label.AlignmentY != 0.5 || label.MaxLines != 1 {
+			t.Fatal("plan header labels must center within the full header row")
+		}
+	}
+	if _, isBadgeRow := columns[2].(woxwidget.Expanded).Child.(woxwidget.Flex); isBadgeRow {
 		t.Fatal("Pro column should not wrap a recommended badge")
 	}
 }
@@ -319,5 +300,127 @@ func TestCloudPluginExclusionDialogUsesFlutterRowEditorChrome(t *testing.T) {
 	choice := choiceDialog.Children[1].Child.(woxwidget.Stateful).Widget.(SettingsChoiceProps)
 	if choice.ID != "cloud-plugin-exclusion-choice" || choice.CurrentValue != "plugin-a" {
 		t.Fatalf("choice props = %+v, want cloud plugin selector with current value", choice)
+	}
+}
+
+// TestCloudDeviceRowsKeepIdentityAndActivity verifies narrow layouts and full-date tooltips.
+func TestCloudDeviceRowsKeepIdentityAndActivity(t *testing.T) {
+	icon := &woxui.Image{}
+	var revoked bool
+	props := CloudDevicesProps{LastActiveLabel: "Last active", Items: []CloudDeviceProps{
+		{ID: "current", Name: "A long current device name", CurrentLabel: "这台设备", Icon: icon, Detail: "Windows", LastSeen: "Today 00:17"},
+		{ID: "revoke", Name: "arch", Detail: "Linux", Icon: icon, LastSeen: "Today 00:16", RevokeLabel: "Revoke", ShowRevoke: true, RevokeEnabled: true, OnRevoke: func() { revoked = true }},
+	}}
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		for _, width := range []float32{360, 830} {
+			theme := woxcomponent.ControlTheme{DensityScale: scale}
+			card := cloudDeviceCard(props, width, theme).(woxwidget.Container)
+			rows := card.Child.(woxwidget.Flex)
+			rowIndex := 0
+			if len(rows.Children) != len(props.Items) {
+				t.Fatal("device list must not reserve a separate activity header row")
+			}
+			row := rows.Children[rowIndex].(woxwidget.Container)
+			content := row.Child.(woxwidget.Flex)
+			if content.Children[0].(woxwidget.Image).Source != icon {
+				t.Fatal("device row lost platform icon")
+			}
+			labels := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+			name := labels.Children[0].(woxwidget.Flex)
+			tag := name.Children[1].(woxwidget.Container)
+			if tag.BorderWidth != 0 || tag.Child.(woxwidget.TextBlock).Value != "这台设备" {
+				t.Fatal("current device must use shared metadata tag")
+			}
+			// Keep the semantics inside Expanded so the probe does not change flex allocation.
+			content.Children[1] = woxwidget.Expanded{Child: woxwidget.Semantics{Key: "identity", Child: labels}}
+			row.Child = content
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return row })
+			host.AttachServices(translatedLabelHostServices{})
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 160}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: int(width * 1.5), Height: 240}})
+			bounds, ok := host.BoundsForKey("identity")
+			host.Dispose()
+			if !ok || bounds.Width <= 0 || bounds.X+bounds.Width > width {
+				t.Fatalf("identity overflow at width %v scale %v: %+v", width, scale, bounds)
+			}
+			other := rows.Children[rowIndex+1].(woxwidget.Container).Child.(woxwidget.Flex)
+			focusedControlGesture(other.Children[len(other.Children)-1]).OnTap()
+		}
+	}
+	if !revoked {
+		t.Fatal("device revoke callback was lost")
+	}
+}
+
+// TestCloudSyncStatusAndDetailRemainSeparate allows wrapped errors and progress below the state.
+func TestCloudSyncStatusAndDetailRemainSeparate(t *testing.T) {
+	card := cloudSyncCard(CloudSyncProps{Label: "Sync error", Detail: "A long network error that must stay readable", ButtonLabel: "Sync now"}, 360, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	labels := card.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	status := labels.Children[0].(woxwidget.TextBlock)
+	detail := labels.Children[1].(woxwidget.TextBlock)
+	if status.Value != "Sync error" || detail.Value == "" || detail.MaxLines != 0 || card.Height != 0 {
+		t.Fatal("status and detail must remain separate and allow wrapping")
+	}
+}
+
+// TestCloudSignedOutIntroKeepsAuthenticationBeforePlans covers translated copy and responsive layout.
+func TestCloudSignedOutIntroKeepsAuthenticationBeforePlans(t *testing.T) {
+	intro := CloudIntroProps{Headline: "Keep every device in sync", Description: "Sync settings and plugin configuration across your devices.", FreeLabel: "Free", ProLabel: "Pro",
+		Features: []CloudIntroFeatureProps{{Title: "Settings Sync", Description: "A longer description that must wrap without losing any feature information."}, {Title: "Plugin Config", Description: "同步插件开关和配置，减少重复设置。"}, {Title: "Encrypted Sync", Description: "Your data is encrypted locally."}},
+		PlanRows: []CloudPlanRowProps{{Label: "Price", FreeValue: "$0/month", ProValue: "$1.99/month · 1 month free trial"}, {Label: "Devices", FreeValue: "Up to 2 active devices", ProValue: "Unlimited devices"}},
+	}
+	var login, register bool
+	account := CloudAccountProps{LoginLabel: "登录", RegisterLabel: "创建账号", ActionsEnabled: true, OnLogin: func() { login = true }, OnRegister: func() { register = true }}
+	for _, density := range []float32{0.9, 1, 1.1} {
+		for _, width := range []float32{360, 900} {
+			theme := woxcomponent.ControlTheme{DensityScale: density, Text: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Border: woxui.Color{R: 180, G: 180, B: 180, A: 255}}
+			root := cloudIntro(intro, account, width, theme).(woxwidget.Container)
+			content := root.Child.(woxwidget.Flex)
+			hero := content.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+			header := hero
+			actions := hero.Children[len(hero.Children)-1].(woxwidget.Flex)
+			if hero.Axis == woxwidget.Vertical {
+				header = hero.Children[0].(woxwidget.Flex)
+			}
+			focusedControlGesture(actions.Children[0]).OnTap()
+			focusedControlGesture(actions.Children[1]).OnTap()
+			grid := content.Children[1].(woxwidget.Grid)
+			featureRow := grid.Children[0].(woxwidget.Flex)
+			if header.Gap != featureRow.Gap || header.Children[0].(woxwidget.Align).Width != featureRow.Children[0].(woxwidget.Align).Width {
+				t.Fatal("hero and features must share icon and text alignment")
+			}
+			for _, feature := range grid.Children {
+				copy := feature.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+				if description := copy.Children[1].(woxwidget.TextBlock); description.MaxLines != 0 || description.Height != 0 {
+					t.Fatal("feature copy must wrap without truncation")
+				}
+			}
+			plan := content.Children[2].(woxwidget.Container)
+			style := newTableSurfaceStyle(theme)
+			if plan.BorderWidth != tableSurfaceBorderWidth || plan.BorderColor != style.border || plan.Radius != woxcomponent.SettingsTableRadius || plan.Height != 0 || plan.Color != style.bodyBackground {
+				t.Fatal("plan comparison must retain intrinsic height and use shared Settings table chrome")
+			}
+			rows := plan.Child.(woxwidget.Flex).Children
+			if rows[1].(woxwidget.Container).Color != style.border || rows[3].(woxwidget.Container).Color != style.rowDivider {
+				t.Fatal("plan separators must use the shared header and body border colors")
+			}
+			content.Children[2] = woxwidget.Semantics{Key: "plans", Child: plan}
+			root.Child = content
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return root })
+			host.AttachServices(translatedLabelHostServices{})
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 1600}, Scale: 1.5, PixelSize: woxui.PixelSize{Width: int(width * 1.5), Height: 2400}})
+			loginBounds, loginOK := host.BoundsForKey("cloud-login")
+			registerBounds, registerOK := host.BoundsForKey("cloud-register")
+			planBounds, planOK := host.BoundsForKey("plans")
+			host.Dispose()
+			if right := registerBounds.X + registerBounds.Width; right < width-0.1 || right > width+0.1 {
+				t.Fatalf("authentication must align with the content right edge: got %v, want %v", right, width)
+			}
+			if !loginOK || !registerOK || !planOK || loginBounds.Y+loginBounds.Height > planBounds.Y || registerBounds.Y+registerBounds.Height > planBounds.Y || registerBounds.X+registerBounds.Width > width || planBounds.X+planBounds.Width > width {
+				t.Fatalf("width %v density %v: authentication must fit before plan comparison: login=%+v register=%+v plans=%+v", width, density, loginBounds, registerBounds, planBounds)
+			}
+		}
+	}
+	if !login || !register {
+		t.Fatal("authentication callbacks were lost")
 	}
 }

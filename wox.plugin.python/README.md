@@ -143,11 +143,10 @@ MIT
 
 ## Action toolbar visibility
 
-Set `hide_in_toolbar=True` on a `ResultAction` to omit its toolbar button.
-The action remains in the Action Panel and its `hotkey` continues to work,
-including when it is the default Enter action. The default is `False`.
-This applies to execute and form actions. It requires a Wox build that supports
-the `HideInToolbar` field; older releases ignore it.
+Only the default Enter action appears in the toolbar automatically. Set
+`show_in_toolbar=True` on an execute or form `ResultAction` to also show it in
+the toolbar, with or without a `hotkey`. The default is `False`. All actions
+remain available in the Action Panel and their keyboard shortcuts continue to work.
 
 ## Static HTML preview
 
@@ -207,3 +206,9 @@ preserve ordinary placeholders. The JSON field is `Suggestions`.
 
 To disable automatic command hints, add `{ "Name": "disableAutoCommandHint" }`
 to the plugin metadata's `Features` array. Explicit Query Hints remain available.
+
+### Result icon container
+
+Set `icon_show_container=True` on a result to show its icon inside a rounded background
+and border that adapt to the theme and selection state. The default is `false`;
+the image keeps its aspect ratio.

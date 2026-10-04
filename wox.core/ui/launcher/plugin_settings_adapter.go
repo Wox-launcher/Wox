@@ -87,8 +87,6 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 			badge = a.translate("i18n:ui_setting_plugin_system_tag")
 		} else if plugin.IsDev {
 			badge = a.translate("i18n:ui_plugin_dev_tag")
-		} else if strings.EqualFold(plugin.Runtime, "script") {
-			badge = a.translate("i18n:ui_setting_plugin_script_tag")
 		}
 		itemIndex := visibleIndex
 		visibleIndex++

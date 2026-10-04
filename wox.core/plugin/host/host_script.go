@@ -204,10 +204,11 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 		}
 
 		queryResult := plugin.QueryResult{
-			Title:    getStringFromMap(itemMap, "title"),
-			SubTitle: getStringFromMap(itemMap, "subtitle"),
-			Score:    int64(getFloatFromMap(itemMap, "score")),
-			ScoreKey: getFirstStringFromMap(itemMap, []string{"scoreKey", "score_key", "ScoreKey"}),
+			IconShowContainer: getFirstBoolFromMap(itemMap, []string{"iconShowContainer", "icon_show_container", "IconShowContainer"}),
+			Title:             getStringFromMap(itemMap, "title"),
+			SubTitle:          getStringFromMap(itemMap, "subtitle"),
+			Score:             int64(getFloatFromMap(itemMap, "score")),
+			ScoreKey:          getFirstStringFromMap(itemMap, []string{"scoreKey", "score_key", "ScoreKey"}),
 		}
 
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"
@@ -272,10 +273,10 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 								"prevent_hide_after_action",
 								"PreventHideAfterAction",
 							}),
-							HideInToolbar: getFirstBoolFromMap(actionMapCopy, []string{
-								"hideInToolbar",
-								"hide_in_toolbar",
-								"HideInToolbar",
+							ShowInToolbar: getFirstBoolFromMap(actionMapCopy, []string{
+								"showInToolbar",
+								"show_in_toolbar",
+								"ShowInToolbar",
 							}),
 							Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 								s.executeAction(ctx, actionMapCopy)

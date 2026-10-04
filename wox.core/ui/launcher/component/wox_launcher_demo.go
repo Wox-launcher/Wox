@@ -319,7 +319,7 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 }
 
 func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, height float32, alpha uint8) woxwidget.Widget {
-	const tailHeight, tailPadding = float32(22), float32(8)
+	const tailHeight, tailPadding = float32(22), float32(7)
 	padding := woxwidget.Insets{Left: 13, Right: 13, Top: 3, Bottom: 3}
 	if props.Geometry != nil {
 		padding = props.Geometry.ItemPadding
@@ -366,17 +366,17 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 		// theme editor look like subtitle edits also restyled the tail chips.
 		textSlot := max(float32(0), tailWidth-tailPadding*2)
 		tailColor := demoResultColor(result.Selected, props.Theme.SelectedTail, props.Theme.ResultTail)
-		borderAlpha := uint8(51)
+		backgroundAlpha := uint8(13)
 		if result.Selected {
-			borderAlpha = 87
+			backgroundAlpha = 24
 		}
 		tail := woxwidget.Container{
-			Width: tailWidth, Height: tailHeight, Radius: tailHeight / 2, BorderColor: withAlpha(tailColor, demoScaledAlpha(float32(alpha)/255, borderAlpha)), BorderWidth: 1,
+			Width: tailWidth, Height: tailHeight, Radius: 4, Color: withAlpha(tailColor, demoScaledAlpha(float32(alpha)/255, backgroundAlpha)),
 			Padding: woxwidget.Insets{Left: tailPadding, Right: tailPadding},
 			Child:   woxwidget.Align{Width: textSlot, Height: tailHeight, Horizontal: .5, Vertical: .5, Child: woxwidget.Text{Value: result.Tail, Style: woxui.TextStyle{Size: TailFontSize}, Color: withAlpha(tailColor, alpha)}},
 		}
 		highlightTail := props.HighlightTarget == LauncherDemoHighlightResultTail && !result.Selected || props.HighlightTarget == LauncherDemoHighlightSelectedTail && result.Selected
-		children = append(children, woxwidget.Align{Width: tailWidth, Height: baseHeight, Vertical: .5, Child: demoHighlight(tail, tailWidth, tailHeight, tailHeight/2, highlightTail, props.HighlightColor, props.HighlightCorners)})
+		children = append(children, woxwidget.Align{Width: tailWidth, Height: baseHeight, Vertical: .5, Child: demoHighlight(tail, tailWidth, tailHeight, 4, highlightTail, props.HighlightColor, props.HighlightCorners)})
 	}
 	row := woxwidget.Container{Width: width, Height: height, Radius: demoResultRadius(props.Theme), Color: background, Padding: padding, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: iconGap, Children: children,
@@ -399,7 +399,7 @@ func demoResultRow(props LauncherDemoProps, result LauncherDemoResult, width, he
 	return demoHighlight(row, width, height, demoResultRadius(props.Theme), props.HighlightTarget == LauncherDemoHighlightSelectedBackground && result.Selected || props.HighlightTarget == LauncherDemoHighlightResultHover && result.Hovered && !result.Selected, props.HighlightColor, props.HighlightCorners)
 }
 
-// demoResultTailTextWidth estimates tail text so CJK glyphs keep the same 8px inset as production tags.
+// demoResultTailTextWidth estimates tail text so CJK glyphs keep the same 7px inset as production tags.
 func demoResultTailTextWidth(text string) float32 {
 	width := float32(0)
 	for _, r := range text {
@@ -423,7 +423,7 @@ func demoToolbar(props LauncherDemoProps, height, windowRadius float32, alpha ui
 	}
 	more := props.ActionMore
 	if more == "" {
-		more = "More Actions"
+		more = "Actions"
 	}
 	modifier := "Ctrl"
 	if runtime.GOOS == "darwin" {

@@ -38,6 +38,36 @@ func TestFilePreviewForImageIncludesSizeTag(t *testing.T) {
 	}
 }
 
+// TestFilePreviewForSVGUsesImagePipeline guards against treating SVG markup as source code.
+func TestFilePreviewForSVGUsesImagePipeline(t *testing.T) {
+	for _, extension := range []string{".svg", ".SVG"} {
+		t.Run(extension, func(t *testing.T) {
+			filePath := filepath.Join(t.TempDir(), "preview"+extension)
+			payload := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#ff0000"/></svg>`)
+			if err := os.WriteFile(filePath, payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			app := &App{}
+			app.prepareFilePreview(filePath)
+			defer app.cancelScheduledFilePreview()
+			content := app.filePreviewFor(filePath)
+			if content.Kind != "image" || content.Image.ImageType != "absolute" || content.Image.ImageData != filePath {
+				t.Fatalf("SVG preview = %#v, want image file", content)
+			}
+			if app.filePreviewTimer != nil || app.fileRequests[filePath] {
+				t.Fatal("SVG preview scheduled a text file read")
+			}
+			decoded, err := decodeWoxImage(content.Image)
+			if err != nil {
+				t.Fatalf("decode SVG preview: %v", err)
+			}
+			if decoded.Width <= 0 || decoded.Height <= 0 {
+				t.Fatal("SVG preview decoded an empty image")
+			}
+		})
+	}
+}
+
 func TestInspectImagePreviewAddsTypeAndSizeTags(t *testing.T) {
 	filePath := filepath.Join(t.TempDir(), "theme.jpg")
 	payload := bytes.Repeat([]byte{0xFF}, 2048)
@@ -193,26 +223,60 @@ func TestInspectPreviewFileDefersLargeOfficeHandlerUntilRequested(t *testing.T) 
 	}
 }
 
-func TestInspectPreviewFileDefersLargeTextUntilRequested(t *testing.T) {
-	filePath := writeSizedPreviewFile(t, "bundle.js", autoPreviewTextBytes+1, 'a')
+func TestInspectPreviewFileAutomaticallyBoundsLargeText(t *testing.T) {
+	for _, extension := range []string{".js", ".txt", ".md"} {
+		t.Run(extension, func(t *testing.T) {
+			filePath := writeSizedPreviewFile(t, "large"+extension, 6*1024*1024, 'a')
+			content := inspectPreviewFile(filePath, extension, false)
+			want := map[string]string{".js": "code", ".txt": "text", ".md": "markdown"}[extension]
+			if content.Kind != want || !strings.Contains(content.Text, "aaa") {
+				t.Fatalf("automatic preview = kind %q, want %q with contents", content.Kind, want)
+			}
+			if !content.Limited || len(content.Text) > maxFilePreviewDisplayBytes+maxFilePreviewDisplayLines {
+				t.Fatalf("preview exceeds budget: limited=%v bytes=%d", content.Limited, len(content.Text))
+			}
+		})
+	}
+}
 
-	content := inspectPreviewFile(filePath, ".js", false)
-	if content.Kind != "large" {
-		t.Fatalf("large text preview kind = %q, want large", content.Kind)
+func TestInspectPreviewCodeKeepsSourceAndFallsBackForPlainText(t *testing.T) {
+	for _, name := range []string{"main.go", "main.py", "main.js", "data.json", "notes.txt", "file.unknown"} {
+		t.Run(name, func(t *testing.T) {
+			const source = "// 中文\r\n\r\npackage main\r\n"
+			path := filepath.Join(t.TempDir(), name)
+			if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			content := inspectPreviewFile(path, filepath.Ext(path), false)
+			want := "code"
+			if name == "notes.txt" || name == "file.unknown" {
+				want = "text"
+			}
+			if content.Kind != want || content.Text != strings.ReplaceAll(source, "\r\n", "\n") || content.Limited {
+				t.Fatalf("unexpected file preview: %#v", content)
+			}
+			if want == "code" && len(content.CodeTokens) == 0 {
+				t.Fatal("recognized code should have cached syntax tokens")
+			}
+		})
 	}
-	if content.Text != "" || content.Size != autoPreviewTextBytes+1 {
-		t.Fatalf("deferred text preview should keep metadata only: text %q size %d", content.Text, content.Size)
-	}
+}
 
-	loaded := inspectPreviewFile(filePath, ".js", true)
-	if loaded.Kind != "text" {
-		t.Fatalf("requested text preview kind = %q, want text", loaded.Kind)
-	}
-	if !strings.Contains(loaded.Text, "aaa") {
-		t.Fatal("requested text preview should read file contents")
-	}
-	if !loaded.Limited || len(loaded.Text) > maxFilePreviewDisplayBytes+maxFilePreviewDisplayLines {
-		t.Fatalf("loaded preview should stay bounded: limited=%v bytes=%d", loaded.Limited, len(loaded.Text))
+func TestBoundFilePreviewCodeKeepsOriginalLineNumbers(t *testing.T) {
+	for _, test := range []struct {
+		source, want string
+		lines        int
+		limited      bool
+	}{
+		{"", "", 0, false},
+		{"one\r\n\r\ntwo\n", "one\n\ntwo\n", 4, false},
+		{strings.Repeat("x\n", 201), strings.TrimSuffix(strings.Repeat("x\n", 200), "\n"), 200, true},
+		{"first\n" + strings.Repeat("界", 241) + "\nlast", "first\n" + strings.Repeat("界", 240), 2, true},
+	} {
+		value, lines, limited := boundFilePreviewCode(test.source)
+		if value != test.want || lines != test.lines || limited != test.limited {
+			t.Fatalf("bounded code = %q, %d, %v; want %q, %d, %v", value, lines, limited, test.want, test.lines, test.limited)
+		}
 	}
 }
 
@@ -337,7 +401,7 @@ func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("file inspection did not finish")
 			}
-			if app.filePreviewFor(filePath).Kind != "text" {
+			if app.filePreviewFor(filePath).Kind != "code" {
 				t.Fatal("selected file was not loaded")
 			}
 		})
@@ -346,7 +410,7 @@ func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
 
 func TestPrepareFilePreviewDelaysLargeTextInspection(t *testing.T) {
 	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}, filePreviewManualPaths: map[string]bool{}}
-	filePath := writeSizedPreviewFile(t, "vendor.js", autoPreviewTextBytes+8, 'c')
+	filePath := writeSizedPreviewFile(t, "vendor.js", 6*1024*1024, 'c')
 	app.prepareFilePreview(filePath)
 	defer app.cancelScheduledFilePreview()
 	content := app.filePreviewFor(filePath)
@@ -354,19 +418,19 @@ func TestPrepareFilePreviewDelaysLargeTextInspection(t *testing.T) {
 		t.Fatal("large files must wait for background inspection")
 	}
 	if content.Text != "" {
-		t.Fatal("large-file gate should not read contents during prepare")
+		t.Fatal("selection scheduling should not read contents during prepare")
 	}
 }
 
 func TestDeferredFilePreviewUsesBoundedCacheAndRemoteLoadHotkey(t *testing.T) {
-	filePath := writeSizedPreviewFile(t, "large.txt", autoPreviewTextBytes+1, 'x')
+	filePath := writeSizedPreviewFile(t, "large.docx", officePreviewManualLoadBytes+1, 'x')
 	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}}
 	for i := 0; i < 128; i++ {
 		path := fmt.Sprint(i)
 		app.filePreviews[path] = filePreviewContent{Kind: "large"}
 		app.fileRequests[path] = true
 	}
-	app.loadFilePreview(filePath, ".txt", false)
+	app.loadFilePreview(filePath, ".docx", false)
 	if len(app.filePreviews) != 1 || len(app.fileRequests) != 1 || app.filePreviewFor(filePath).Kind != "large" {
 		t.Fatal("deferred previews must use the bounded cache")
 	}
@@ -389,8 +453,8 @@ func TestDeferredFilePreviewUsesBoundedCacheAndRemoteLoadHotkey(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("manual preview did not finish")
 	}
-	if app.filePreviewFor(filePath).Kind != "text" {
-		t.Fatal("manual preview did not load text")
+	if content := app.filePreviewFor(filePath); content.Kind != "native_file" || !content.NativeFileAutoLoad {
+		t.Fatal("manual preview did not enable the Office preview")
 	}
 }
 

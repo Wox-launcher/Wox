@@ -8,6 +8,9 @@ import (
 // TableGridBorderWidth is the shared 1-unit stroke for table frames and separators.
 const TableGridBorderWidth = float32(1)
 
+// SettingsTableRadius keeps intrinsic and scrollable Settings tables on the same silhouette.
+const SettingsTableRadius = float32(8)
+
 // TableGridCellProps describes one collapsed table cell.
 type TableGridCellProps struct {
 	Width    float32
@@ -47,7 +50,7 @@ func WoxTableGridCell(props TableGridCellProps) woxwidget.Container {
 // WoxSettingsTableFrame paints continuous rounded surfaces behind transparent
 // cells, so header and scrolling body fills cannot square off the corners.
 func WoxSettingsTableFrame(width, height, headerHeight float32, border, header, body woxui.Color, child woxwidget.Widget) woxwidget.Widget {
-	const radius = float32(8)
+	const radius = SettingsTableRadius
 	return woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 		{Child: woxwidget.Painter{Width: width, Height: height, Paint: func(list *woxui.DisplayList, bounds woxui.Rect) {
 			list.FillRoundedRect(bounds, radius, body)

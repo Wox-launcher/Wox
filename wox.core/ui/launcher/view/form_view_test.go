@@ -558,7 +558,7 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 	if control.Children[0].(woxwidget.Text).Value != "Running" {
 		t.Fatalf("service status = %#v", control.Children[0])
 	}
-	tag := control.Children[1].(woxwidget.Container).Child.(woxwidget.Text)
+	tag := control.Children[1].(woxwidget.Container).Child.(woxwidget.TextBlock)
 	if tag.Value != "v2.8.0" {
 		t.Fatalf("service version tag = %q, want v2.8.0", tag.Value)
 	}

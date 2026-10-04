@@ -73,14 +73,14 @@ func TerminalPreviewView(props TerminalPreviewProps) woxwidget.Widget {
 	innerHeight := max(float32(0), props.Height-20)
 	previewHeight := innerHeight
 	if len(props.Tags) > 0 {
-		previewHeight = max(float32(0), previewHeight-36)
+		previewHeight = max(float32(0), previewHeight-props.Theme.Controls.Scaled(PreviewTagHeight)-props.Theme.Controls.Scaled(PreviewTagGap))
 	}
 	contentProps := props
 	contentProps.Width = innerWidth
 	contentProps.Height = previewHeight
 	children := []woxwidget.StackChild{{Child: terminalPreviewContent(contentProps)}}
 	if len(props.Tags) > 0 {
-		children = append(children, woxwidget.StackChild{Top: previewHeight + 10, Child: PreviewTags(props.Tags, props.Theme, props.Window, max(float32(0), innerWidth-12), props.OnTagHover)})
+		children = append(children, woxwidget.StackChild{Top: previewHeight + props.Theme.Controls.Scaled(PreviewTagGap), Child: PreviewTags(props.Tags, props.Theme, props.Window, max(float32(0), innerWidth-12), props.OnTagHover)})
 	}
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 10, Top: 10, Right: 12, Bottom: 10},

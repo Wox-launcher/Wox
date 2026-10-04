@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	PreviewTagHeight          float32 = 22
+	PreviewTagGap             float32 = 8
 	previewSurfaceRadius      float32 = 8
 	previewSurfaceBorderWidth float32 = 1
 )
@@ -40,23 +42,23 @@ type PreviewLayout struct {
 }
 
 // ResolvePreviewLayout calculates the body size after optional metadata tags are reserved.
-func ResolvePreviewLayout(width, height float32, hasTags bool) PreviewLayout {
+func ResolvePreviewLayout(width, height float32, hasTags bool, theme woxcomponent.Theme) PreviewLayout {
 	innerWidth := max(float32(0), width-26)
 	innerHeight := max(float32(0), height-22)
 	bodyHeight := innerHeight
 	if hasTags {
-		bodyHeight = max(float32(0), innerHeight-36)
+		bodyHeight = max(float32(0), innerHeight-theme.Controls.Scaled(PreviewTagHeight)-theme.Controls.Scaled(PreviewTagGap))
 	}
 	return PreviewLayout{BodyWidth: max(float32(0), innerWidth-2), BodyHeight: max(float32(0), bodyHeight-2), InnerWidth: innerWidth, InnerHeight: innerHeight}
 }
 
 // PreviewView builds the generic preview surface and its optional metadata tags.
 func PreviewView(props PreviewProps) woxwidget.Widget {
-	layout := ResolvePreviewLayout(props.Width, props.Height, len(props.Tags) > 0)
+	layout := ResolvePreviewLayout(props.Width, props.Height, len(props.Tags) > 0, props.Theme)
 	surfaceHeight := layout.BodyHeight + 2
 	children := []woxwidget.StackChild{{Child: previewSurface(props.Body, props.Theme, layout.InnerWidth, surfaceHeight)}}
 	if len(props.Tags) > 0 {
-		children = append(children, woxwidget.StackChild{Top: surfaceHeight + 10, Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth, props.OnTagHover)})
+		children = append(children, woxwidget.StackChild{Top: surfaceHeight + props.Theme.Controls.Scaled(PreviewTagGap), Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth, props.OnTagHover)})
 	}
 	return woxwidget.Container{
 		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
@@ -90,16 +92,19 @@ func previewSurface(body woxwidget.Widget, theme woxcomponent.Theme, width, heig
 func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Window, width float32, onHover func(bool, string, woxui.Rect)) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, len(tags))
 	contentWidth := float32(0)
+	height := theme.Controls.Scaled(PreviewTagHeight)
+	padding := theme.Controls.Scaled(7)
+	gap := theme.Controls.Scaled(6)
 	for index, tag := range tags {
 		label := strings.TrimSpace(tag.Label)
 		if strings.TrimSpace(label) == "" {
 			continue
 		}
-		style := woxui.TextStyle{Size: 11, Weight: woxui.FontWeightSemibold}
+		style := woxui.TextStyle{Size: theme.Controls.Scaled(11)}
 		metrics, _ := window.MeasureText(label, style)
-		chipWidth := min(max(float32(36), metrics.Size.Width+18), min(float32(220), max(float32(36), width)))
+		chipWidth := min(max(theme.Controls.Scaled(28), metrics.Size.Width+2*padding), min(theme.Controls.Scaled(220), max(theme.Controls.Scaled(28), width)))
 		if len(children) > 0 {
-			contentWidth += 8
+			contentWidth += gap
 		}
 		background := previewColorWithOpacity(theme.PreviewText, 0.035)
 		border := previewColorWithOpacity(theme.PreviewPropertyTitle, 0.48)
@@ -114,15 +119,15 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 		if theme.PreviewTagFontColor != nil {
 			foreground = *theme.PreviewTagFontColor
 		}
-		radius := float32(8)
+		radius := theme.Controls.Scaled(8)
 		if theme.PreviewTagBorderRadius != nil {
-			radius = min(float32(*theme.PreviewTagBorderRadius), 13)
+			radius = min(theme.Controls.Scaled(float32(*theme.PreviewTagBorderRadius)), height/2)
 		}
 		pill := woxwidget.Container{
-			Width: chipWidth, Height: 26, Radius: radius, Color: background,
+			Width: chipWidth, Height: height, Radius: radius, Color: background,
 			BorderColor: border, BorderWidth: 1,
-			Padding: woxwidget.Insets{Left: 9, Right: 9},
-			Child:   woxwidget.Align{Height: 26, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: style, Color: foreground}},
+			Padding: woxwidget.Insets{Left: padding, Right: padding},
+			Child:   woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{Value: label, Style: style, Color: foreground}},
 		}
 		tooltip := strings.TrimSpace(tag.Tooltip)
 		if tooltip == "" {
@@ -130,7 +135,7 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 		}
 		if onHover != nil {
 			id := fmt.Sprintf("preview-tag-%d", index)
-			pill = woxwidget.Container{Width: chipWidth, Height: 26, Child: woxwidget.Semantics{
+			pill = woxwidget.Container{Width: chipWidth, Height: height, Child: woxwidget.Semantics{
 				Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleText, Label: label, Description: tooltip,
 				Child: woxwidget.Gesture{
 					ID: id, OnHoverAt: func(inside bool, bounds woxui.Rect) { onHover(inside, tooltip, bounds) }, Child: pill,
@@ -144,9 +149,9 @@ func PreviewTags(tags []PreviewTag, theme woxcomponent.Theme, window *woxui.Wind
 	// primitive. Map the vertical mouse wheel because this footer is not nested
 	// inside another scroller and Windows wheels rarely emit a horizontal delta.
 	return woxwidget.ScrollView{
-		Key: "preview-tags", Width: width, Height: 26, ContentWidth: max(width, contentWidth),
+		Key: "preview-tags", Width: width, Height: height, ContentWidth: max(width, contentWidth),
 		Horizontal: true, MapVerticalWheel: true,
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: children},
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: children},
 	}
 }
 

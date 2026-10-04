@@ -8,64 +8,42 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestFolderPreviewViewIsTopAlignedWithIdentityAndEntries(t *testing.T) {
+// TestFolderPreviewViewStartsWithContents guards against reintroducing the duplicate header.
+func TestFolderPreviewViewStartsWithContents(t *testing.T) {
 	view := FolderPreviewView(FolderPreviewProps{
-		Width: 320, Height: 280, Name: "Droppy", Path: `C:\Users\qianl\Droppy`,
-		Metadata: "2026-09-17 16:30:58  ·  2 files",
-		Entries: []FolderPreviewEntry{
-			{Name: "projects", IsDir: true},
-			{Name: "src", IsDir: true},
-			{Name: "readme.md", Size: "2.1 KB"},
-		},
-		More:  "1 more items not shown",
-		Theme: folderPreviewTestTheme(),
+		Width: 320, Height: 280, Path: "/tmp/folder",
+		Entries: []FolderPreviewEntry{{Name: "src", IsDir: true}},
+		Theme:   folderPreviewTestTheme(),
 	}).(woxwidget.Container)
 	if view.Padding.Left != 18 || view.Padding.Top != 16 {
-		t.Fatalf("folder preview padding = %#v, want the large-file preview inset", view.Padding)
+		t.Fatalf("folder preview padding = %#v", view.Padding)
 	}
-	column := view.Child.(woxwidget.Flex)
-	if column.Axis != woxwidget.Vertical || column.Gap != 16 || len(column.Children) != 2 {
-		t.Fatalf("column = %#v, want header and body", column)
+	if _, ok := view.Child.(woxwidget.LayoutBuilder); !ok {
+		t.Fatalf("body = %T, want the scroll view directly inside the preview", view.Child)
 	}
-	header := column.Children[0].(woxwidget.Flex)
-	if header.CrossAxisAlignment != woxwidget.CrossAxisStart || header.Gap != 12 {
-		t.Fatalf("header = %#v, want a catalog icon beside the identity stack", header)
-	}
-	icon := header.Children[0].(woxwidget.Container)
-	if icon.Width != 32 || icon.Height != 32 {
-		t.Fatalf("header icon = %#v, want the 32-unit catalog folder mark", icon)
-	}
-	lines := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children
-	if lines[0].(woxwidget.TextBlock).Value != "Droppy" || lines[1].(woxwidget.TextBlock).Value != `C:\Users\qianl\Droppy` {
-		t.Fatalf("identity = %#v", lines)
-	}
-	if lines[2].(woxwidget.TextBlock).Value != "2026-09-17 16:30:58  ·  2 files" {
-		t.Fatalf("metadata = %#v", lines[2])
-	}
-	if _, ok := column.Children[1].(woxwidget.Expanded); !ok {
-		t.Fatalf("body = %#v, want the contents peek to take remaining height", column.Children[1])
+	scroll := resolvedScrollViewProps(view.Child, woxui.Size{Width: 284, Height: 248})
+	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Container)
+	if !scroll.ReserveScrollbarSpace || row.Width != scroll.ContentViewportWidth() || row.Width >= scroll.Width {
+		t.Fatalf("folder row width %v overlaps the scrollbar in viewport %v", row.Width, scroll.Width)
 	}
 }
 
-func TestFolderPreviewViewShowsEmptyMessageWithoutQuoteLayout(t *testing.T) {
-	view := FolderPreviewView(FolderPreviewProps{
-		Width: 280, Height: 180, Name: "Empty", Path: "/tmp/empty",
-		Empty: "This folder is empty", Theme: folderPreviewTestTheme(),
-	}).(woxwidget.Container)
-	body := view.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
-	if body.Value != "This folder is empty" {
-		t.Fatalf("empty body = %#v", body)
-	}
-}
-
-func TestFolderPreviewHeaderUsesCatalogImageWhenProvided(t *testing.T) {
-	image := &woxui.Image{Width: 32, Height: 32}
-	header := folderPreviewHeader(FolderPreviewProps{
-		Name: "Droppy", Icon: image, Theme: folderPreviewTestTheme(),
-	}, 240).(woxwidget.Flex)
-	drawn := header.Children[0].(woxwidget.Image)
-	if drawn.Source != image || drawn.Width != 32 {
-		t.Fatalf("header icon = %#v, want the decoded plugin.folder image", drawn)
+// TestFolderPreviewViewEmptyAndError keeps feedback visible without the removed header.
+func TestFolderPreviewViewEmptyAndError(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		props := FolderPreviewProps{
+			Width: 280, Height: 180, Path: "/tmp/empty",
+			Empty: "This folder is empty", Theme: folderPreviewTestTheme(),
+		}
+		want := props.Empty
+		if failed {
+			props.Error = "Unable to read folder"
+			want = props.Error
+		}
+		view := FolderPreviewView(props).(woxwidget.Container)
+		if body := view.Child.(woxwidget.TextBlock); body.Value != want {
+			t.Fatalf("body = %#v, want %q", body, want)
+		}
 	}
 }
 

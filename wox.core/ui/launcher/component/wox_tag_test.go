@@ -7,25 +7,28 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-func TestWoxTagKeepsFullPixelOutline(t *testing.T) {
-	color := woxui.Color{R: 80, G: 90, B: 100, A: 255}
-	tag := WoxTag("系统", color).(woxwidget.Container)
-	wantPadding := woxwidget.Insets{Left: 4, Top: 2, Right: 4, Bottom: 2}
-	if tag.Radius != 3 || tag.BorderWidth != 1 || tag.Padding != wantPadding || tag.BorderColor != color {
-		t.Fatalf("tag chrome = radius %v border %v padding %+v color %#v, want 3/1/%+v/%#v", tag.Radius, tag.BorderWidth, tag.Padding, tag.BorderColor, wantPadding, color)
-	}
-	label := tag.Child.(woxwidget.Text)
-	if label.Value != "系统" || label.Style.Size != TagFontSize || label.Color != color {
-		t.Fatalf("tag label = %q size %v color %#v, want 系统/%v/%#v", label.Value, label.Style.Size, label.Color, TagFontSize, color)
-	}
-}
-
-func TestWoxCompactTagUsesDenseMetadataSize(t *testing.T) {
-	color := woxui.Color{R: 80, G: 90, B: 100, A: 255}
-	tag := WoxCompactTag("Disabled", color).(woxwidget.Container)
-	label := tag.Child.(woxwidget.Text)
-	if label.Value != "Disabled" || label.Style.Size != CompactTagFontSize {
-		t.Fatalf("compact tag = %q size %v, want Disabled/%v", label.Value, label.Style.Size, CompactTagFontSize)
+func TestWoxTagsUseScaledMetadataStyle(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1, 1.5} {
+		for _, foreground := range []woxui.Color{{R: 240, G: 240, B: 240, A: 255}, {R: 30, G: 30, B: 30, A: 255}} {
+			theme := ControlTheme{DensityScale: scale, Text: foreground, TextSecondary: foreground}
+			for _, compact := range []bool{false, true} {
+				tag := WoxTag("系统", foreground, theme).(woxwidget.Container)
+				size, height := TagFontSize, float32(22)
+				if compact {
+					tag = WoxCompactTag("系统", foreground, theme).(woxwidget.Container)
+					size, height = CompactTagFontSize, 18
+				}
+				background := foreground
+				background.A = 13
+				if tag.Radius != theme.Scaled(4) || tag.BorderWidth != 0 || tag.Color != background || tag.Height != theme.Scaled(height) || tag.Padding != (woxwidget.Insets{Left: theme.Scaled(7), Right: theme.Scaled(7)}) {
+					t.Fatalf("scale %v compact %v: unexpected tag chrome %+v", scale, compact, tag)
+				}
+				label := tag.Child.(woxwidget.TextBlock)
+				if label.Value != "系统" || label.Style.Size != theme.Scaled(size) || label.Color != foreground || !label.ShrinkWrap || label.AlignmentY != 0.5 || label.Height != tag.Height {
+					t.Fatalf("scale %v compact %v: unexpected tag label %+v", scale, compact, label)
+				}
+			}
+		}
 	}
 }
 

@@ -33,7 +33,7 @@ import (
 var screenshotIcon = icons.Get(icons.PluginScreenshot)
 var screenshotCommandNew = "new"
 var screenshotHistoryPreviewWidth = 1024
-var screenshotHistoryIconWidth = 40
+
 var screenshotPinnedOverlayPrefix = "wox_screenshot_pin_"
 var screenshotRetentionDaysSettingKey = "retention_days"
 var screenshotOCREnabledSettingKey = "ocr_enabled"
@@ -572,7 +572,7 @@ func isScreenshotHistoryImage(path string) bool {
 
 func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context, item screenshotHistoryItem) error {
 	previewPath, iconPath := p.screenshotHistoryThumbnailPaths(item)
-	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && screenshotHistoryThumbnailHasWidth(iconPath, screenshotHistoryIconWidth) {
+	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && util.IsFileExists(iconPath) {
 		p.warmScreenshotHistoryManagerIconCache(ctx, iconPath)
 		return nil
 	}
@@ -580,7 +580,7 @@ func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context
 	p.thumbnailM.Lock()
 	defer p.thumbnailM.Unlock()
 
-	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && screenshotHistoryThumbnailHasWidth(iconPath, screenshotHistoryIconWidth) {
+	if screenshotHistoryThumbnailHasWidth(previewPath, screenshotHistoryPreviewWidth) && util.IsFileExists(iconPath) {
 		p.warmScreenshotHistoryManagerIconCache(ctx, iconPath)
 		return nil
 	}
@@ -601,7 +601,7 @@ func (p *ScreenshotPlugin) ensureScreenshotHistoryThumbnails(ctx context.Context
 		return fmt.Errorf("failed to save screenshot preview thumbnail: %w", err)
 	}
 
-	iconImage := imaging.Resize(sourceImage, screenshotHistoryIconWidth, 0, imaging.Lanczos)
+	iconImage := common.NewImageThumbnail(sourceImage)
 	if err := imaging.Save(iconImage, iconPath); err != nil {
 		return fmt.Errorf("failed to save screenshot icon thumbnail: %w", err)
 	}
@@ -641,12 +641,12 @@ func (p *ScreenshotPlugin) screenshotHistoryThumbnailPaths(item screenshotHistor
 	cacheKey := util.Md5([]byte(fmt.Sprintf("%s:%d:%d", item.path, item.size, item.timestamp)))
 	cacheDirectory := util.GetLocation().GetImageCacheDirectory()
 	return filepath.Join(cacheDirectory, fmt.Sprintf("screenshot_%s_preview.png", cacheKey)),
-		filepath.Join(cacheDirectory, fmt.Sprintf("screenshot_%s_icon.png", cacheKey))
+		filepath.Join(cacheDirectory, fmt.Sprintf("screenshot_%s_icon_plain.png", cacheKey))
 }
 
 func (p *ScreenshotPlugin) removeScreenshotHistoryThumbnails(ctx context.Context, item screenshotHistoryItem) {
 	previewPath, iconPath := p.screenshotHistoryThumbnailPaths(item)
-	for _, thumbnailPath := range []string{previewPath, iconPath} {
+	for _, thumbnailPath := range []string{previewPath, iconPath, strings.Replace(iconPath, "_icon_plain.png", "_icon_rounded.png", 1), strings.Replace(iconPath, "_icon_plain.png", "_icon.png", 1)} {
 		if !util.IsFileExists(thumbnailPath) {
 			continue
 		}
@@ -787,11 +787,12 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 	}
 
 	result := plugin.QueryResult{
-		Title:      item.fileName,
-		SubTitle:   util.FormatTimestamp(item.timestamp),
-		Icon:       iconImage,
-		Group:      group,
-		GroupScore: groupScore,
+		Title:             item.fileName,
+		SubTitle:          util.FormatTimestamp(item.timestamp),
+		Icon:              iconImage,
+		IconShowContainer: thumbnailsReady,
+		Group:             group,
+		GroupScore:        groupScore,
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{item.path},

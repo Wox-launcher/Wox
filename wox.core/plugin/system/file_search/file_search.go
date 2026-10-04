@@ -1232,7 +1232,6 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 		Name:                   browseName,
 		Icon:                   icons.Get(icons.ActionOpen),
 		Hotkey:                 "shift+enter",
-		HideInToolbar:          true,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.api.ChangeQuery(ctx, common.PlainQuery{
@@ -1287,7 +1286,6 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 				}
 			},
 			Hotkey:                 util.PrimaryHotkey("m"),
-			HideInToolbar:          true,
 			PreventHideAfterAction: true,
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"wox/cloudsync"
+	"wox/common/icons"
 	"wox/ui/contract"
 )
 
@@ -41,7 +42,7 @@ func TestCloudSyncPresentationShowsUnknownTotalProgress(t *testing.T) {
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
 	}
-	_, detail, _ := app.cloudSyncPresentation(settingsSnapshot{
+	_, detail, _, _ := app.cloudSyncPresentation(settingsSnapshot{
 		cloud: cloudSettingsSnapshot{
 			Sync: cloudSyncStatus{
 				Progress: &cloudSyncProgress{
@@ -58,7 +59,7 @@ func TestCloudSyncPresentationShowsUnknownTotalProgress(t *testing.T) {
 		t.Fatalf("restore detail = %q, want %q", detail, "Restoring plugin plugin-deepl (17 items processed)")
 	}
 
-	label, detail, _ := app.cloudSyncPresentation(settingsSnapshot{cloud: cloudSettingsSnapshot{Busy: "sync"}})
+	label, detail, _, _ := app.cloudSyncPresentation(settingsSnapshot{cloud: cloudSettingsSnapshot{Busy: "sync"}})
 	if label != "Syncing..." || detail != "Preparing sync..." {
 		t.Fatalf("busy sync presentation = %q / %q, want Syncing... / Preparing sync...", label, detail)
 	}
@@ -186,5 +187,56 @@ func TestCloudDeviceInactiveHidesStaleDevices(t *testing.T) {
 	}
 	if cloudDeviceInactive(cloudDevice{DeviceID: "unknown"}, now) {
 		t.Fatal("device without a last-seen timestamp should stay visible")
+	}
+}
+
+// TestCloudDevicePlatformIcons keeps aliases and unknown devices distinct from known platforms.
+func TestCloudDevicePlatformIcons(t *testing.T) {
+	for platform, want := range map[string]string{"windows": icons.SystemWindows, " win32 ": icons.SystemWindows, "WIN": icons.SystemWindows, "darwin": icons.SystemMacOS, "macOS": icons.SystemMacOS, "mac": icons.SystemMacOS, "Linux": icons.SystemLinux, "": icons.SystemDevice, "other": icons.SystemDevice} {
+		if got := cloudDevicePlatformIcon(platform); got != want || icons.Get(got).IsEmpty() {
+			t.Errorf("platform %q icon = %q, want registered %q", platform, got, want)
+		}
+	}
+}
+
+// TestCloudActivityTime uses the viewer's local date, including year and day transitions.
+func TestCloudActivityTime(t *testing.T) {
+	app := &App{translations: map[string]string{"ui_cloud_sync_today": "Today", "ui_cloud_sync_never": "Never"}}
+	now := time.Date(2026, 1, 2, 0, 30, 0, 0, time.FixedZone("local", 8*3600))
+	for _, test := range []struct {
+		date time.Time
+		want string
+	}{
+		{now, "Today 00:30"},
+		{now.Add(-time.Hour), "01-01 23:30"},
+		{now.Add(-48 * time.Hour), "2025-12-31 00:30"},
+	} {
+		if got := app.formatCloudActivityTime(test.date.UnixMilli(), now); got != test.want {
+			t.Errorf("time = %q, want %q", got, test.want)
+		}
+	}
+	if got := app.formatCloudActivityTime(0, now); got != "Never" {
+		t.Fatalf("unset activity = %q", got)
+	}
+}
+
+// TestCloudSyncStatusIcons never presents loading, errors or disabled sync as successful.
+func TestCloudSyncStatusIcons(t *testing.T) {
+	app := &App{}
+	ready := cloudSettingsSnapshot{Account: cloudAccountStatus{SyncEligible: true, SyncEnabled: true}, Sync: cloudSyncStatus{Enabled: true, KeyStatus: cloudSyncKeyStatus{Available: true}, State: &cloudSyncState{Bootstrapped: true}}}
+	for _, test := range []struct {
+		state cloudSettingsSnapshot
+		icon  string
+	}{
+		{ready, icons.ControlCheckCircle},
+		{cloudSettingsSnapshot{Loading: true}, icons.ControlHourglassEmpty},
+		{cloudSettingsSnapshot{Busy: "sync"}, icons.ControlHourglassEmpty},
+		{cloudSettingsSnapshot{Error: "Network unavailable"}, icons.ControlError},
+		{cloudSettingsSnapshot{}, icons.SettingsDataCloudsync},
+	} {
+		_, _, _, got := app.cloudSyncPresentation(settingsSnapshot{cloud: test.state})
+		if got != test.icon {
+			t.Errorf("state %+v icon = %q, want %q", test.state, got, test.icon)
+		}
 	}
 }

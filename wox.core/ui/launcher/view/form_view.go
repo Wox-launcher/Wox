@@ -152,7 +152,7 @@ func FormServiceField(props FormServiceFieldProps) woxwidget.Widget {
 		woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsControlFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 	}
 	if tag := formServiceVersionLabel(props.Detail); tag != "" {
-		row = append(row, woxcomponent.WoxTag(tag, props.Theme.TextSecondary))
+		row = append(row, woxcomponent.WoxTag(tag, props.Theme.TextSecondary, props.Theme))
 	} else if detail := strings.TrimSpace(props.Detail); detail != "" {
 		row = append(row, woxwidget.Text{Value: detail, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.TextSecondary})
 	}

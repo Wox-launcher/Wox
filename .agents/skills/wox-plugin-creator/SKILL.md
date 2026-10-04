@@ -54,7 +54,7 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
 - For plugins declaring `querySelection`, return results only for selection types and content the plugin can process. Return an empty results list for unsupported, missing, or empty selection data instead of showing usage or help rows for unrelated selections.
 - Keep a result on the row. `Title` is the name to scan. `SubTitle` is one short identity line, such as a code, place, or source. `Tails` are the few facts that must stay visible, such as a price and its change. Use at most three tail tags on one result. A fourth tag can be clipped, so part of a tag is not shown. Put any further fact in the subtitle, the copied text, or a preview. Do not add `Preview` for a quote, status, short record, or anything that fits on that row.
-- A text tail is already a capsule. Use an SVG image tail only when that capsule must also contain an icon. Match the launcher metrics below, and see [Simulated tail tags](#simulated-tail-tags).
+- A text tail already has a theme-aware rounded container. Use an SVG image tail only when that tag must also contain an icon. Match the launcher metrics below, and see [Simulated tail tags](#simulated-tail-tags).
 - Refresh a visible row in place with `UpdateResult` / `update_result`. Remember the results returned by the latest `query()`. Replace that list on the next query. When a background refresh or an action changes a row that is still on screen, call `UpdateResult` with the same result `Id` and only the fields that changed (`Title`, `SubTitle`, `Icon`, `Tails`, `Actions`). The query text stays put and the list does not reload. Use `RefreshQuery` / `refresh_query` only when rows must be added or removed and `UpdateResult` cannot express that. Do not use `ChangeQuery` to redraw results.
 - Add `Preview` only for a large body that cannot fit the row: a long document, many fields, a chart, a gallery, or syntax highlighting. When a preview is required, use `markdown` for prose, lists, links, and images. Use `text` or `image` when that is the whole preview. Use `webview` HTML only after markdown cannot express it, such as syntax highlighting, folding, or an interactive layout. HTML is the last option because the webview can steal query focus, miss launcher theme colors, and hit layout bugs. There is no separate `html` preview type; HTML uses `webview` with a JSON-encoded `html` field and no local HTTP server. See the HTML preview examples in the SDK references.
 - Do not rasterize documents as SVG/`image` previews; those scale as pictures, cannot select text, and do not follow theme colors.
@@ -104,25 +104,29 @@ Plugin settings are cloud-synced. Each settings write becomes a sync record and 
 
 ## Simulated tail tags
 
-Text tails are capsules drawn by the launcher. Use at most three on one result. More than three can leave a tag partly hidden. Copy these unscaled metrics when an SVG has to imitate one. Density scale multiplies them; at 100% they are:
+Prefer a native `text` tail whenever the label is only text. Wox draws compact rounded rectangles and owns theme, selected-row colors, font rendering, and density scaling. Use at most three tails on one result; additional facts belong in the subtitle, copied text, or a preview.
 
-| | |
+Use an SVG `image` tail only when an icon and label must share one tag. Match the current native text-tail geometry; do not reuse the old pill shape or outlined capsule examples. At normal density, the logical dimensions are:
+
+| Property | Value |
 | --- | --- |
 | Height | 22 |
-| Corner radius | half the height, 11. A 1px stroke inset by 0.5 uses a 21px rect with `rx="10.5"`. |
-| Side inset | 8 on the left and 8 on the right. Tag width is measured text width plus 16. |
-| Font size | 11 |
-| Border | 1 |
-| Success | fill `#027A48`, label `#FFFFFF` |
-| Danger | fill `#B42318`, label `#FFFFFF` |
-| Warning | fill `#B54708`, label `#FFFFFF` |
-| Default | no fill, border `#FFFFFF` at alpha 51 (`#FFFFFF33`), label is the row foreground |
+| Corner radius | 4 (`rx="4"`), not half the height |
+| Side inset | 7 on each side; text-only width is measured text width plus 14 |
+| Font | 11, regular weight |
+| Border | None; omit `stroke` |
+| Default | Row foreground text; background uses the same RGB at alpha 13/255, or 24/255 when selected |
+| Success | Fill `#027A48`, label `#FFFFFF` |
+| Danger | Fill `#B42318`, label `#FFFFFF` |
+| Warning | Fill `#B54708`, label `#FFFFFF` |
 
-Prefer a real `text` tail whenever the label is only text. Wox then applies this capsule, including the selected-row color.
+Use native `TextCategory` / `text_category` for semantic text tails. Status fills remain solid; ordinary metadata has a subtle background. Do not make every secondary fact a status badge just to add color.
 
-Use `Type: "image"` only to put an icon and a label in the same capsule. Set `ImageWidth` to the capsule width and `ImageHeight` to 22, or the launcher squares it into a 20px icon. Width is `8 + icon + gap + label + 8`.
+For an icon-and-label SVG, width is `7 + icon width + gap + measured label width + 7`. Set `ImageWidth` to that width and `ImageHeight` to 22, or the launcher defaults to a 20px image slot. For example, a 90-unit tag starts with `<svg viewBox="0 0 90 22" ...><rect width="90" height="22" rx="4" fill="#027A48"/>...`, with no stroke. Keep the image-tail corners consistent with adjacent native tags.
 
-Draw the label as filled glyph paths inside the SVG. The SVG rasterizer does not draw `<text>`. One `<text text-anchor="middle">` whose `x` is the viewBox center is pulled out and painted centered on the whole image. With an icon on the left, that extra centering adds the icon width again as right inset. Do not use that centered text when the icon and the label sit side by side.
+Image tails keep their authored colors; Wox does not automatically apply text-tail selection or theme styling to them. For neutral metadata, prefer native text instead of hardcoding white text on a transparent SVG. If a custom image is necessary, use `GetThemeColors` / `get_theme_colors` to choose readable light/dark colors and include those colors in its cache key. Avoid claiming an SVG matches selected-row styling when the plugin has no selection state.
+
+Draw side-by-side icon labels as filled glyph paths inside the SVG. The SVG rasterizer does not draw general `<text>`. One `<text text-anchor="middle">` whose `x` is the viewBox center is extracted and painted centered on the whole image; it is unsuitable for a label beside an icon because that shifts the intended spacing.
 
 ## QueryHint
 

@@ -57,7 +57,7 @@ type actionPanelEntry struct {
 	Tail                 string
 	TailIcon             woxImage
 	IsDefault            bool
-	HideInToolbar        bool
+	ShowInToolbar        bool
 	Source               actionPanelSource
 	ResultIndex          int
 	ActionIndex          int
@@ -126,7 +126,7 @@ func toolbarActionEntriesBySources(entries []actionPanelEntry, sources []actionP
 	ordered := make([]actionPanelEntry, 0, len(entries))
 	for _, source := range sources {
 		for _, entry := range entries {
-			if entry.Source == source && !entry.HideInToolbar && strings.TrimSpace(entry.Hotkey) != "" {
+			if entry.Source == source && (entry.ShowInToolbar || toolbarPinnedAction(entry)) {
 				ordered = append(ordered, entry)
 			}
 		}
@@ -184,7 +184,8 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 			entries = append(entries, actionPanelEntry{
 				Key: fmt.Sprintf("toolbar:%s:%s:%d", message.ID, action.ID, index), ID: fmt.Sprintf("toolbar-%s-%d", action.ID, index),
 				Name: action.Name, Icon: action.Icon, Hotkey: action.Hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceToolbar,
-				ToolbarMessageID: message.ID, ToolbarMessageAction: action,
+				// Toolbar message actions are explicitly supplied for the footer.
+				ShowInToolbar: true, ToolbarMessageID: message.ID, ToolbarMessageAction: action,
 			})
 			if hotkey := normalizeToolbarHotkey(action.Hotkey); hotkey != "" {
 				reservedHotkeys[hotkey] = struct{}{}
@@ -212,7 +213,7 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 		entries = append(entries, actionPanelEntry{
 			Key: fmt.Sprintf("result:%s:%s:%d", result.ID, action.ID, index), ID: fmt.Sprintf("result-%s-%d", action.ID, index),
 			Name: action.Name, SearchAliases: action.SearchAliases, Icon: action.Icon, Tail: action.Tail, TailIcon: action.TailIcon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceResult,
-			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction, HideInToolbar: action.HideInToolbar,
+			ResultIndex: selected, ActionIndex: index, IsSystemAction: action.IsSystemAction, ShowInToolbar: action.ShowInToolbar,
 		})
 	}
 	for _, index := range pluginActions {
@@ -336,11 +337,11 @@ func actionPanelUnfilteredIndices(entries []actionPanelEntry) []int {
 // filtered list, or a group divider appearing, cannot move the filter field.
 func actionPanelFloatingPlacement(left, windowHeight, queryHeight, toolbarHeight, panelWidth, panelHeight, bottomOffset float32) (launcherview.LauncherFloatingView, woxui.Rect) {
 	return launcherview.LauncherFloatingView{
-			Left: left, Bottom: toolbarHeight + bottomOffset, AnchorBottom: true,
-		}, woxui.Rect{
-			X: left, Y: max(queryHeight+launcherview.ActionPanelTopGap, windowHeight-toolbarHeight-panelHeight-bottomOffset),
-			Width: panelWidth, Height: panelHeight,
-		}
+		Left: left, Bottom: toolbarHeight + bottomOffset, AnchorBottom: true,
+	}, woxui.Rect{
+		X: left, Y: max(queryHeight+launcherview.ActionPanelTopGap, windowHeight-toolbarHeight-panelHeight-bottomOffset),
+		Width: panelWidth, Height: panelHeight,
+	}
 }
 
 // buildActionPanel resolves action labels and icons before delegating to the pure panel view.

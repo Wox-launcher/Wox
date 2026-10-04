@@ -194,7 +194,7 @@ func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
 				if panel.Width != clip.Width || panel.Height != clip.Height {
 					t.Fatal("preview content exceeds its launcher viewport")
 				}
-				layout := previewview.ResolvePreviewLayout(panel.Width, panel.Height, true)
+				layout := previewview.ResolvePreviewLayout(panel.Width, panel.Height, true, props.DraftTheme)
 				shell := panel.Children[0].Child.(woxwidget.Container)
 				slots := shell.Child.(woxwidget.Stack).Children
 				if token == "PreviewPropertyTitleColor" || token == "PreviewPropertyContentColor" {
@@ -298,7 +298,7 @@ func TestThemeEditorUsesCompleteLauncherDemo(t *testing.T) {
 	preview := themeEditorPreviewWindow(ThemeEditorSettingsProps{
 		DraftTheme:         woxcomponent.Theme{QueryText: woxui.Color{A: 255}},
 		PreviewResultTitle: "Theme editor", QueryBoxLabel: "Query box", ResultsLabel: "Results",
-		ToolbarCopyLabel: "Copy", ToolbarMoreLabel: "More Actions",
+		ToolbarCopyLabel: "Copy", ToolbarMoreLabel: "Actions",
 	}, 600, 320).(woxwidget.Clip)
 	children := preview.Child.(woxwidget.Stack).Children
 	query := children[2].Child.(woxwidget.Container)

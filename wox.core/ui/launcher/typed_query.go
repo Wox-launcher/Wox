@@ -204,11 +204,12 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 		titleTags[index] = fromCoreTitleTag(result.TitleTags[index])
 	}
 	return queryResult{
-		QueryID:  result.QueryId,
-		ID:       result.Id,
-		Title:    result.Title,
-		SubTitle: result.SubTitle,
-		Icon:     fromCoreImage(result.Icon),
+		QueryID:           result.QueryId,
+		ID:                result.Id,
+		Title:             result.Title,
+		SubTitle:          result.SubTitle,
+		Icon:              fromCoreImage(result.Icon),
+		IconShowContainer: result.IconShowContainer,
 		Preview: queryPreview{
 			PreviewType:        result.Preview.PreviewType,
 			PreviewData:        result.Preview.PreviewData,
@@ -246,7 +247,7 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 		Icon:                   fromCoreImage(action.Icon),
 		IsDefault:              action.IsDefault,
 		PreventHideAfterAction: action.PreventHideAfterAction,
-		HideInToolbar:          action.HideInToolbar,
+		ShowInToolbar:          action.ShowInToolbar,
 		Hotkey:                 action.Hotkey,
 		Form:                   definitions,
 		IsSystemAction:         action.IsSystemAction,

@@ -43,7 +43,10 @@ var defaultUIIcons = map[string]common.WoxImage{
 	PositionBottomRight:   newPositionUIIcon("17", "17"),
 
 	// Windows taskbar and system-tray chrome.
-	SystemWindows:   newMonochromeUIIcon(`<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/>`),
+	SystemWindows:   common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg>`),
+	SystemMacOS:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" d="M16.3 2c.2 1.5-.6 3-1.5 3.8-.9.9-2.1 1.4-3.3 1.3-.2-1.4.6-2.8 1.5-3.6.9-.9 2.2-1.5 3.3-1.5ZM18.5 12.6c0-2 1.6-3 1.7-3.1-1-1.5-2.6-1.7-3.2-1.7-1.4-.2-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.6 0-3.1.9-3.9 2.3-1.7 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3.1-.7s1.9.7 3.1.7c1.3 0 2.1-1.1 2.9-2.2.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.6-1-2.6-4.2Z"/></svg>`),
+	SystemLinux:     common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" fill-rule="evenodd" d="M8 7c0-3.5 1.5-5 4-5s4 1.5 4 5v2c.6 2 3 4 3 7 0 1.5-.8 2.7-2 3.5H7C5.8 18.7 5 17.5 5 16c0-3 2.4-5 3-7V7Zm4 3c-2.4 0-4 3-4 5.8 0 2 1.5 3.2 4 3.2s4-1.2 4-3.2C16 13 14.4 10 12 10Zm-2-5a.7 1 0 1 0 0 2 .7 1 0 1 0 0-2Zm4 0a.7 1 0 1 0 0 2 .7 1 0 1 0 0-2Zm-4 3 2 1.5L14 8l-2-.5-2 .5Z"/><path fill="var(--wox-theme-icon-color)" d="m7 18 3 2-1 2H3l1-3 3-1Zm10 0-3 2 1 2h6l-1-3-3-1Z"/></svg>`),
+	SystemDevice:    newMonochromeUIIcon(`<g stroke="var(--wox-theme-icon-color)"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M8 21h8M12 16v5"/></g>`),
 	SystemBrowser:   newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6M12 21v-6M3 12h6"/>`),
 	SystemCode:      newMonochromeUIIcon(`<path d="m8 6-6 6 6 6M16 6l6 6-6 6M14 3l-4 18"/>`),
 	SystemWifi:      newMonochromeUIIcon(`<path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1"/>`),

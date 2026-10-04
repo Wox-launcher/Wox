@@ -98,31 +98,28 @@ func TestFolderPreviewDisplayNameUsesVolumeRoot(t *testing.T) {
 	}
 }
 
-func TestFolderPreviewTagsAndItemsUseCounts(t *testing.T) {
+// TestFolderPreviewTagsUseSeparateCounts covers complete, bounded, empty, and failed scans.
+func TestFolderPreviewTagsUseSeparateCounts(t *testing.T) {
 	app := &App{translations: map[string]string{
-		"ui_file_preview_type_folder":                "Folder",
-		"ui_file_preview_property_type":              "Type",
-		"ui_file_preview_property_items":             "Items",
-		"ui_file_preview_folder_folders_count":       "{count} folders",
-		"ui_file_preview_folder_files_count":         "{count} files",
-		"ui_file_preview_folder_items_count":         "{count} items",
-		"ui_file_preview_folder_items_count_limited": "{count}+ items",
+		"ui_file_preview_folder_folders_count": "{count} folders",
+		"ui_file_preview_folder_files_count":   "{count} files",
 	}}
-	folder := folderPreviewContent{FolderCount: 2, FileCount: 3, CountedAll: true}
-	if got := app.folderPreviewItemsValue(folder); got != "2 folders · 3 files" {
-		t.Fatalf("items = %q", got)
+	for _, test := range []struct {
+		folder         folderPreviewContent
+		folders, files string
+	}{
+		{folderPreviewContent{FolderCount: 5, FileCount: 8, CountedAll: true}, "5 folders", "8 files"},
+		{folderPreviewContent{FolderCount: 2, FileCount: 510}, "2+ folders", "510+ files"},
+		{folderPreviewContent{CountedAll: true}, "0 folders", "0 files"},
+		{folderPreviewContent{FileCount: 3, CountedAll: true}, "0 folders", "3 files"},
+	} {
+		tags := app.folderPreviewTags(test.folder)
+		if len(tags) != 2 || tags[0].Label != test.folders || tags[1].Label != test.files {
+			t.Fatalf("tags = %#v, want %q and %q", tags, test.folders, test.files)
+		}
 	}
-	tags := app.folderPreviewTags(folder)
-	if len(tags) != 2 || tags[0].Label != "Folder" || tags[1].Label != "5 items" {
-		t.Fatalf("tags = %#v", tags)
-	}
-	limited := app.folderPreviewTags(folderPreviewContent{FolderCount: 2, FileCount: 510, CountedAll: false})
-	if len(limited) != 2 || limited[1].Label != "512+ items" {
-		t.Fatalf("limited tags = %#v", limited)
-	}
-	empty := app.folderPreviewTags(folderPreviewContent{})
-	if len(empty) != 1 || empty[0].Label != "Folder" {
-		t.Fatalf("empty tags = %#v", empty)
+	if tags := app.folderPreviewTags(folderPreviewContent{Error: "permission denied"}); len(tags) != 0 {
+		t.Fatalf("unreadable folder must not show counts: %#v", tags)
 	}
 }
 

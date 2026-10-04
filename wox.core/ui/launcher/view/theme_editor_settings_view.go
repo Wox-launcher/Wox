@@ -787,7 +787,7 @@ func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighl
 }
 
 func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
-	layout := previewview.ResolvePreviewLayout(width, height, true)
+	layout := previewview.ResolvePreviewLayout(width, height, true, props.DraftTheme)
 	contentWidth := max(float32(0), layout.BodyWidth-24)
 	selectionColor := props.DraftTheme.SelectionBackground
 	for _, group := range props.Groups {
@@ -817,7 +817,7 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		title, body, selection,
 	}}}
 	panelBody := previewview.PreviewView(previewview.PreviewProps{
-		Width: width, Height: height, Tags: []previewview.PreviewTag{{Label: "2026-05-26 10:47:08"}, {Label: "2074x679"}, {Label: "702.7 KB"}, {Label: "OCR"}},
+		Width: width, Height: height, Tags: []previewview.PreviewTag{{Label: "10:47"}, {Label: "2074 × 679"}, {Label: "702.7 KB"}, {Label: "OCR"}},
 		Body: previewBody, Theme: props.DraftTheme, Window: props.Window,
 	})
 	children := []woxwidget.StackChild{
@@ -828,7 +828,7 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		children = append(children, woxwidget.StackChild{Left: 14, Top: 12, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: layout.BodyHeight + 2}, layout.InnerWidth, layout.BodyHeight+2, 8, true)})
 	}
 	if props.FlashToken == "PreviewTagFontColor" || props.FlashToken == "PreviewTagBackgroundColor" || props.FlashToken == "PreviewTagBorderColor" || (props.DraftTheme.PreviewTagFontColor == nil && (props.FlashToken == "PreviewPropertyTitleColor" || props.FlashToken == "PreviewPropertyContentColor")) {
-		children = append(children, woxwidget.StackChild{Left: 14, Top: 12 + layout.BodyHeight + 2 + 10, Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: 26}, layout.InnerWidth, 26, 8, true)})
+		children = append(children, woxwidget.StackChild{Left: 14, Top: 12 + layout.BodyHeight + 2 + props.DraftTheme.Controls.Scaled(previewview.PreviewTagGap), Child: themeEditorFlashOverlay(woxwidget.Container{Width: layout.InnerWidth, Height: props.DraftTheme.Controls.Scaled(previewview.PreviewTagHeight)}, layout.InnerWidth, props.DraftTheme.Controls.Scaled(previewview.PreviewTagHeight), 8, true)})
 	}
 	if props.FlashToken == "PreviewBorderRadius" {
 		radius := float32(8)
@@ -838,13 +838,13 @@ func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height f
 		children = append(children, woxwidget.StackChild{Left: 14, Top: 12, Child: woxcomponent.CornerRadiusHighlight(layout.InnerWidth, layout.BodyHeight+2, radius, themeEditorFlashColor())})
 	}
 	if props.FlashToken == "PreviewTagBorderRadius" {
-		metrics, _ := props.Window.MeasureText("2026-05-26 10:47:08", woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold})
+		metrics, _ := props.Window.MeasureText("10:47", woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold})
 		chipWidth := min(max(float32(36), metrics.Size.Width+18), min(float32(220), max(float32(36), layout.InnerWidth)))
 		radius := float32(8)
 		if props.DraftTheme.PreviewTagBorderRadius != nil {
 			radius = float32(*props.DraftTheme.PreviewTagBorderRadius)
 		}
-		children = append(children, woxwidget.StackChild{Left: 14, Top: 12 + layout.BodyHeight + 2 + 10, Child: woxcomponent.CornerRadiusHighlight(chipWidth, 26, radius, themeEditorFlashColor())})
+		children = append(children, woxwidget.StackChild{Left: 14, Top: 12 + layout.BodyHeight + 2 + props.DraftTheme.Controls.Scaled(previewview.PreviewTagGap), Child: woxcomponent.CornerRadiusHighlight(chipWidth, 26, radius, themeEditorFlashColor())})
 	}
 	if props.FlashToken == "PreviewSplitLineColor" {
 		children = append(children, woxwidget.StackChild{Child: themeEditorFlashOverlay(woxwidget.Container{Width: 3, Height: height, Color: props.DraftTheme.PreviewSplit}, 3, height, 0, true)})
