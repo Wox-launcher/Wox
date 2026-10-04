@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 Contributions are welcome through issues, discussions, and pull requests.
 
 - [Reddit](https://www.reddit.com/r/WoxLauncher/)
-- [Discord](https://discord.gg/NnahFAwm3)
+- [Discord](https://discord.gg/WcPAXtY6h)
 - [Discussions](https://github.com/Wox-launcher/Wox/discussions)
 - [Issues](https://github.com/Wox-launcher/Wox/issues)
 - [Pull requests](https://github.com/Wox-launcher/Wox/pulls)

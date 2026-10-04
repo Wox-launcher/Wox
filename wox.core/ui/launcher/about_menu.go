@@ -29,7 +29,7 @@ const (
 	aboutMenuChangelogURL     = "https://github.com/Wox-launcher/Wox/releases"
 	aboutMenuGithubURL        = "https://github.com/Wox-launcher/Wox"
 	aboutMenuRedditURL        = "https://www.reddit.com/r/WoxLauncher/"
-	aboutMenuDiscordURL       = "https://discord.gg/NnahFAwm3"
+	aboutMenuDiscordURL       = "https://discord.gg/WcPAXtY6h"
 
 	aboutMenuDefaultSettingsPath = "/"
 	aboutMenuGuideTail           = "woxlauncher.com"
