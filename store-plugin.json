@@ -1593,7 +1593,7 @@
     "Id": "c3a91e47-8d2b-4f65-a1c0-6e9b4d7f2a18",
     "Name": "i18n:plugin_name",
     "Author": "Wox-Launcher",
-    "Version": "1.1.1",
+    "Version": "1.1.2",
     "MinWoxVersion": "2.4.5",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -1607,7 +1607,7 @@
       "Windows"
     ],
     "DateCreated": "2026-09-27 18:21:26",
-    "DateUpdated": "2026-09-30 09:10:36",
+    "DateUpdated": "2026-10-04 08:01:06",
     "I18n": {
       "en_US": {
         "plugin_name": "Games",
