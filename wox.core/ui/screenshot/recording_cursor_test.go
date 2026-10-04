@@ -2,6 +2,33 @@ package screenshot
 
 import "testing"
 
+// TestRecordingShortcutRestoresCursor covers the hidden brush cursor carried by the reused screenshot window.
+func TestRecordingShortcutRestoresCursor(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		frameSize: Size{Width: 800, Height: 600}, selection: Rect{X: 20, Y: 20, Width: 700, Height: 500},
+		hasSelection: true, allowVideoRecording: true,
+		result: make(chan screenshotEditorOverlayOutcome, 1),
+	}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 200, Y: 200}})
+	state.key(KeyEvent{Key: Key("m"), Down: true})
+	if state.pointerCursor != PointerCursorHidden {
+		t.Fatal("mosaic should hide the native cursor before the recording shortcut")
+	}
+	if !state.key(KeyEvent{Key: Key("v"), Down: true}) {
+		t.Fatal("recording shortcut was not handled")
+	}
+	if outcome := <-state.result; !outcome.record {
+		t.Fatal("recording shortcut did not start the handoff")
+	}
+	if state.pointerCursor != PointerCursorDefault {
+		t.Fatal("recording toolbar inherited the hidden screenshot cursor")
+	}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: 210, Y: 200}})
+	if state.pointerCursor == PointerCursorHidden {
+		t.Fatal("pointer movement during the recording handoff hid the cursor again")
+	}
+}
+
 // TestRecordingBorderCursorPersistsWithinBand models native cursor resets between nearby mouse positions.
 func TestRecordingBorderCursorPersistsWithinBand(t *testing.T) {
 	selection := Rect{X: 200, Y: 200, Width: 600, Height: 400}

@@ -2618,8 +2618,15 @@ func pinScreenshotOverlay(img image.Image, exportPath string, logical Rect) erro
 	})
 }
 
+// completeRecord restores the system cursor before handing the screenshot window to the recording toolbar.
 func (state *screenshotEditorOverlayState) completeRecord() {
 	state.once.Do(func() {
+		state.mu.Lock()
+		// Stop brush hover from hiding the cursor again while the recording UI is being prepared.
+		state.activeTool = screenshotEditorToolSelect
+		state.pointerCursor = PointerCursorDefault
+		state.mu.Unlock()
+		state.setPointerCursor(PointerCursorDefault)
 		state.result <- screenshotEditorOverlayOutcome{record: true}
 	})
 }
