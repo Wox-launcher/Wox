@@ -471,6 +471,15 @@ func (c *Catalog) Parse(input string, options ParseOptions) (result *Query, err 
 	if err != nil {
 		return nil, err
 	}
+	// The lexer normally folds words to lowercase. Keep explicit uppercase
+	// aliases for currencies whose codes collide with physical units (CUP/cup).
+	for i := range tokens {
+		if tokens[i].raw != tokens[i].text {
+			if _, ok := c.Aliases[tokens[i].raw]; ok {
+				tokens[i].text = tokens[i].raw
+			}
+		}
+	}
 	p := parser{tokens: tokens, catalog: c, query: q}
 	for isFillerWord(p.peek()) || p.peek() == "the" || p.peek() == "is" && p.i+1 < len(p.tokens) && (p.tokens[p.i+1].text == "$" || p.tokens[p.i+1].value != nil) && lastContent(p.tokens) != "prime" {
 		p.i++

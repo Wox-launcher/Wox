@@ -30,6 +30,39 @@
 | 时间 | 时间戳、日期、时长、时区 |
 | 计算 | 对兼容值使用 `+`、`-`、`*`、`/` |
 
+## 货币转换
+
+支持 156 种法币代码，包括新台币 TWD、越南盾 VND、俄罗斯卢布 RUB、卡塔尔里亚尔 QAR、阿根廷比索 ARS 等。列表覆盖每日汇率源提供的 ISO 4217 流通货币，并保留原有的 BGN 代码。
+
+货币代码通常不区分大小写。唯一例外是古巴比索：使用大写 `CUP`；小写 `cup` 或 `cups` 仍表示容量单位“杯”。
+
+```text
+100 usd to twd
+100 vnd to cny
+20 qar to aed
+100 CUP to usd
+```
+
+支持的代码：
+
+```text
+AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT
+BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD
+CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK
+DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP
+GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD
+IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD
+KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD
+MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN
+NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG
+QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP
+SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND
+TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VED VES
+VND VUV WST XAF XCD XCG XOF XPF YER ZAR ZMW ZWG
+```
+
+转换器启动时和之后每小时检查汇率，优先通过 jsDelivr 获取每日更新的 [Currency API](https://github.com/fawazahmed0/exchange-api) 数据，失败时依次尝试 Cloudflare 镜像、HKAB 和 ECB。HKAB 和 ECB 覆盖的币种较少；某种货币未能刷新时，会保留其上次汇率或启动时的近似兜底值。
+
 ## 表达式与自然语言
 
 支持嵌套括号、运算优先级、正负号、幂、百分比和兼容的复合单位。数字输入与 Calculator 共用小数点和分组分隔符设置。

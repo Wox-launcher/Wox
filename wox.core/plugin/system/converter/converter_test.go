@@ -2,12 +2,117 @@ package converter
 
 import (
 	"context"
+	"fmt"
+	"math/big"
+	"strings"
 	"testing"
+	"time"
 	"wox/plugin"
+	"wox/plugin/system/converter/engine"
+	"wox/plugin/system/converter/modules"
 )
+
+// TestMiddleEasternCurrencies covers the production catalog and offline price path
+// in both directions, including cross-currency conversions and compact input.
+func TestMiddleEasternCurrencies(t *testing.T) {
+	m := modules.NewCurrencyModule()
+	c := &Converter{api: converterTestAPI{}, catalog: newCatalog(), currencyModule: m}
+	prices, updated := m.Snapshot()
+	if updated != 0 {
+		t.Fatal("offline prices were marked as live")
+	}
+	codes := []string{"USD", "AED", "SAR", "EGP", "JOD", "KWD"}
+	for _, from := range codes {
+		for _, to := range codes {
+			input := fmt.Sprintf("100%s to %s", strings.ToLower(from), to)
+			t.Run(input, func(t *testing.T) {
+				query, err := c.catalog.Parse(input, engine.ParseOptions{DecimalSeparator: "."})
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := c.catalog.Evaluate(context.Background(), query, engine.Env{Local: time.UTC, Prices: prices})
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := new(big.Rat).Quo(prices[from], prices[to])
+				want.Mul(want, big.NewRat(100, 1))
+				if result.Value.Number.Cmp(want) != 0 || result.Value.Unit[to] != 1 {
+					t.Fatalf("got %+v, want %v %s", result.Value, want, to)
+				}
+				response := c.Query(context.Background(), plugin.Query{Search: input})
+				if len(response.Results) != 1 || !response.AutoRecordQueryHistory || len(response.Results[0].Actions) != 3 {
+					t.Fatalf("missing currency result or copy actions: %+v", response)
+				}
+			})
+		}
+	}
+}
 
 type converterTestAPI struct {
 	plugin.API
+}
+
+// TestFiatCurrencyCatalog exercises every registered code through the production
+// parser, including prefix notation and both sides of a USD conversion.
+func TestFiatCurrencyCatalog(t *testing.T) {
+	c := newCatalog()
+	prices, _ := modules.NewCurrencyModule().Snapshot()
+	for _, code := range modules.CurrencyCodes() {
+		canonical := strings.ToUpper(code)
+		if prices[canonical] == nil || prices[canonical].Sign() <= 0 {
+			t.Fatalf("no offline price for %s", canonical)
+		}
+		spellings := []string{canonical, code}
+		if canonical == "CUP" {
+			spellings = []string{canonical}
+		}
+		for _, spelling := range spellings {
+			for _, tc := range []struct{ input, from, to string }{
+				{"100" + spelling + " to usd", canonical, "USD"},
+				{spelling + "100 to USD", canonical, "USD"},
+				{"100 usd to " + spelling, "USD", canonical},
+			} {
+				t.Run(tc.input, func(t *testing.T) {
+					q, err := c.Parse(tc.input, engine.ParseOptions{DecimalSeparator: "."})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !q.Money || q.Crypto {
+						t.Fatal("fiat query was not recognized as fiat")
+					}
+					result, err := c.Evaluate(context.Background(), q, engine.Env{Local: time.UTC, Prices: prices})
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := new(big.Rat).Mul(big.NewRat(100, 1), prices[tc.from])
+					want.Quo(want, prices[tc.to])
+					if result.Value.Number.Cmp(want) != 0 || result.Value.Unit[tc.to] != 1 {
+						t.Fatalf("got %+v, want %s %s", result.Value, want, tc.to)
+					}
+				})
+			}
+		}
+	}
+}
+
+// TestFiatCurrencyUnitCollisions protects cooking units when CUP is registered.
+func TestFiatCurrencyUnitCollisions(t *testing.T) {
+	c := &Converter{api: converterTestAPI{}, catalog: newCatalog(), currencyModule: modules.NewCurrencyModule()}
+	for _, input := range []string{"1 cup to ml", "1 Cup to ml", "1 cups to ml", "1 cup + 1 cup to ml", "236.5882365 ml to cup"} {
+		q, err := c.catalog.Parse(input, engine.ParseOptions{DecimalSeparator: "."})
+		if err != nil || q.Money {
+			t.Fatalf("%s was treated as currency: %v", input, err)
+		}
+		response := c.Query(context.Background(), plugin.Query{Search: input})
+		if len(response.Results) != 1 {
+			t.Fatalf("cooking conversion stopped working: %s", input)
+		}
+	}
+	for _, input := range []string{"100 cup to usd", "100 usd to cup"} {
+		if r := c.Query(context.Background(), plugin.Query{Search: input}); len(r.Results) != 0 {
+			t.Fatalf("lowercase cup silently became currency: %s", input)
+		}
+	}
 }
 
 func (converterTestAPI) GetSetting(ctx context.Context, key string) string { return "" }

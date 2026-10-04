@@ -89,6 +89,11 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 // GetUserDefaultCurrency returns the user's default currency based on their locale
 func GetUserDefaultCurrency() string {
 	var regionToCurrency = map[string]string{
+		"AE": "AED", // United Arab Emirates -> UAE Dirham
+		"SA": "SAR", // Saudi Arabia -> Saudi Riyal
+		"EG": "EGP", // Egypt -> Egyptian Pound
+		"JO": "JOD", // Jordan -> Jordanian Dinar
+		"KW": "KWD", // Kuwait -> Kuwaiti Dinar
 		"CN": "CNY", // China -> Chinese Yuan
 		"US": "USD", // United States -> US Dollar
 		"GB": "GBP", // United Kingdom -> British Pound

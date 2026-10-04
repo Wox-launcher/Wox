@@ -30,6 +30,46 @@ Converter listens globally. Use `calculator` as an explicit keyword if another g
 | Time | timestamps, dates, durations, and time zones |
 | Math | `+`, `-`, `*`, `/` with compatible values |
 
+## Currency Conversion
+
+Converter supports 156 fiat currency codes, including TWD, VND, RUB, QAR, ARS,
+and the other codes below. The list covers the circulating ISO 4217 currencies
+available in the daily feed and retains the previously supported BGN code.
+
+Codes are case-insensitive except for the Cuban peso: use uppercase `CUP`.
+Lowercase `cup` and `cups` remain cooking volume units.
+
+```text
+100 usd to twd
+100 vnd to cny
+20 qar to aed
+100 CUP to usd
+```
+
+Supported codes:
+
+```text
+AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT
+BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD
+CAD CDF CHF CLP CNY COP CRC CUP CVE CZK DJF DKK
+DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP
+GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD
+IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD
+KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD
+MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN
+NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG
+QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP
+SLE SOS SRD SSP STN SVC SYP SZL THB TJS TMT TND
+TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VED VES
+VND VUV WST XAF XCD XCG XOF XPF YER ZAR ZMW ZWG
+```
+
+Converter checks for rates at startup and every hour. It first tries the daily
+[Currency API](https://github.com/fawazahmed0/exchange-api) feed through jsDelivr,
+then its Cloudflare mirror, with HKAB and ECB as additional fallback sources.
+HKAB and ECB cover fewer currencies. When a currency cannot be refreshed, its
+previous rate or approximate startup value remains available.
+
 ## Expressions and Natural Language
 
 Converter supports nested parentheses, operator precedence, unary signs, powers,

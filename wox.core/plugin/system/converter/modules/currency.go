@@ -3,9 +3,12 @@ package modules
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,62 +25,177 @@ type CurrencyModule struct {
 	rateUpdatedAt atomic.Int64
 }
 
-var supportedCurrencyCodes = []string{
-	"usd", "eur", "gbp", "jpy", "cny", "aud", "cad",
-	"hkd", "sgd", "chf", "nzd", "sek", "nok", "dkk",
-	"pln", "czk", "huf", "ron", "bgn", "isk", "try",
-	"inr", "krw", "mxn", "brl", "zar", "thb", "myr",
-	"idr", "ils", "php",
+// defaultCurrencyRates is the fiat allowlist and offline fallback, quoted as units
+// per USD. New entries use the 2026-10-03 Currency API snapshot. It covers the
+// circulating ISO 4217 currencies available in that feed; funds, metals, and
+// crypto are excluded. BGN remains registered for existing queries.
+var defaultCurrencyRates = map[string]float64{
+	"AED": 3.6725,
+	"AFN": 64.45639444,
+	"ALL": 81.68598718,
+	"AMD": 362.49696104,
+	"AOA": 918.21835868,
+	"ARS": 1522.21036116,
+	"AUD": 1.52,
+	"AWG": 1.79,
+	"AZN": 1.70000081,
+	"BAM": 1.73800154,
+	"BBD": 2,
+	"BDT": 122.92463913,
+	"BGN": 1.8,
+	"BHD": 0.376,
+	"BIF": 2997.75742065,
+	"BMD": 1,
+	"BND": 1.27936025,
+	"BOB": 11.95448871,
+	"BRL": 5.0,
+	"BSD": 1,
+	"BTN": 96.18688524,
+	"BWP": 14.17293222,
+	"BYN": 3.01311953,
+	"BZD": 2.01437225,
+	"CAD": 1.36,
+	"CDF": 2296.56,
+	"CHF": 0.88,
+	"CLP": 990.17293844,
+	"CNY": 7.2,
+	"COP": 3271.03599926,
+	"CRC": 458.14403338,
+	"CUP": 24.00822304,
+	"CVE": 97.98879727,
+	"CZK": 23.0,
+	"DJF": 178.28952,
+	"DKK": 6.85,
+	"DOP": 59.98680996,
+	"DZD": 133.99726837,
+	"EGP": 52.22,
+	"ERN": 15,
+	"ETB": 161.00075764,
+	"EUR": 0.92,
+	"FJD": 2.26390904,
+	"FKP": 0.75533999,
+	"GBP": 0.79,
+	"GEL": 2.60140097,
+	"GHS": 11.73506829,
+	"GIP": 0.75533999,
+	"GMD": 73.46796927,
+	"GNF": 8745.8442211,
+	"GTQ": 7.64151504,
+	"GYD": 208.87720187,
+	"HKD": 7.82,
+	"HNL": 26.92430836,
+	"HTG": 130.93958012,
+	"HUF": 360.0,
+	"IDR": 15600.0,
+	"ILS": 3.7,
+	"INR": 83.0,
+	"IQD": 1310.47936967,
+	"IRR": 1747474.87834207,
+	"ISK": 140.0,
+	"JMD": 158.29928012,
+	"JOD": 0.709,
+	"JPY": 150.0,
+	"KES": 128.50616091,
+	"KGS": 87.45541528,
+	"KHR": 4055.05461866,
+	"KMF": 437.17537062,
+	"KPW": 900.48232116,
+	"KRW": 1350.0,
+	"KWD": 0.309,
+	"KYD": 0.83219962,
+	"KZT": 448.36878322,
+	"LAK": 22546.45253105,
+	"LBP": 90043.54103005,
+	"LKR": 330.61722673,
+	"LRD": 171.33637683,
+	"LSL": 16.64673909,
+	"LYD": 6.39995241,
+	"MAD": 9.93526897,
+	"MDL": 17.80731155,
+	"MGA": 4426.08840084,
+	"MKD": 54.60664593,
+	"MMK": 2100.78315534,
+	"MNT": 3597.06716958,
+	"MOP": 8.08219416,
+	"MRU": 40.07836951,
+	"MUR": 48.12862858,
+	"MVR": 15.45736307,
+	"MWK": 1736.42004856,
+	"MXN": 17.0,
+	"MYR": 4.7,
+	"MZN": 63.83045317,
+	"NAD": 16.64673909,
+	"NGN": 1330.5021385,
+	"NIO": 36.65519515,
+	"NOK": 10.8,
+	"NPR": 153.97115654,
+	"NZD": 1.65,
+	"OMR": 0.38399587,
+	"PAB": 1,
+	"PEN": 3.43405515,
+	"PGK": 4.41865972,
+	"PHP": 56.0,
+	"PKR": 276.65545745,
+	"PLN": 4.0,
+	"PYG": 5856.05149084,
+	"QAR": 3.64,
+	"RON": 4.6,
+	"RSD": 104.33620221,
+	"RUB": 83.67816657,
+	"RWF": 1474.4635649,
+	"SAR": 3.75,
+	"SBD": 8.07561826,
+	"SCR": 13.69664553,
+	"SDG": 600.2056294,
+	"SEK": 10.5,
+	"SGD": 1.34,
+	"SHP": 0.75533999,
+	"SLE": 23.0565525,
+	"SOS": 570.49738707,
+	"SRD": 37.76216782,
+	"SSP": 5712.59152749,
+	"STN": 22.21947614,
+	"SVC": 8.75,
+	"SYP": 13008.96358905,
+	"SZL": 16.64673909,
+	"THB": 36.0,
+	"TJS": 9.21439386,
+	"TMT": 3.49571986,
+	"TND": 2.9939329,
+	"TOP": 2.40245467,
+	"TRY": 32.0,
+	"TTD": 6.7785177,
+	"TWD": 31.82188553,
+	"TZS": 2635.45091593,
+	"UAH": 44.96739468,
+	"UGX": 3992.99711488,
+	"USD": 1.0,
+	"UYU": 40.28565824,
+	"UZS": 11818.02055136,
+	"VED": 865.51774908,
+	"VES": 865.51774908,
+	"VND": 26002.63646348,
+	"VUV": 119.62299348,
+	"WST": 2.78859075,
+	"XAF": 582.90049416,
+	"XCD": 2.70247843,
+	"XCG": 1.79938342,
+	"XOF": 582.90049416,
+	"XPF": 106.04129771,
+	"YER": 236.39642372,
+	"ZAR": 18.5,
+	"ZMW": 19.63923759,
+	"ZWG": 26.77164445,
 }
 
-// NewCurrencyModule initializes the existing offline rates without starting network access.
+// NewCurrencyModule initializes offline rates without starting network access.
 func NewCurrencyModule() *CurrencyModule {
 	m := &CurrencyModule{
 		rates: util.NewHashMap[string, float64](),
 	}
-
-	// Keep offline fallback rates aligned with the tokenizer-supported currency list.
-	// The old hard-coded seven-currency list rejected common queries such as
-	// "10000hkd in cny" before the converter could calculate anything. These
-	// approximate USD-based rates let common currencies work until HKAB/ECB sync
-	// replaces them with live data.
-	defaultRates := map[string]float64{
-		"USD": 1.0,     // Base currency
-		"EUR": 0.92,    // Approximate
-		"GBP": 0.79,    // Approximate
-		"JPY": 150.0,   // Approximate
-		"CNY": 7.2,     // Approximate
-		"AUD": 1.52,    // Approximate
-		"CAD": 1.36,    // Approximate
-		"HKD": 7.82,    // Approximate
-		"SGD": 1.34,    // Approximate
-		"CHF": 0.88,    // Approximate
-		"NZD": 1.65,    // Approximate
-		"SEK": 10.5,    // Approximate
-		"NOK": 10.8,    // Approximate
-		"DKK": 6.85,    // Approximate
-		"PLN": 4.0,     // Approximate
-		"CZK": 23.0,    // Approximate
-		"HUF": 360.0,   // Approximate
-		"RON": 4.6,     // Approximate
-		"BGN": 1.8,     // Approximate
-		"ISK": 140.0,   // Approximate
-		"TRY": 32.0,    // Approximate
-		"INR": 83.0,    // Approximate
-		"KRW": 1350.0,  // Approximate
-		"MXN": 17.0,    // Approximate
-		"BRL": 5.0,     // Approximate
-		"ZAR": 18.5,    // Approximate
-		"THB": 36.0,    // Approximate
-		"MYR": 4.7,     // Approximate
-		"IDR": 15600.0, // Approximate
-		"ILS": 3.7,     // Approximate
-		"PHP": 56.0,    // Approximate
-	}
-	for currency, rate := range defaultRates {
+	for currency, rate := range defaultCurrencyRates {
 		m.rates.Store(currency, rate)
 	}
-
 	return m
 }
 
@@ -94,7 +212,15 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 		// Try named data sources so successful refreshes can be surfaced in the
 		// result tail. Previously users could see a converted value without any
 		// signal that live rates had actually refreshed.
+		// HKAB and ECB do not cover all supported fiat currencies.
+		// Try the broader daily feed and its independent mirror before them.
 		sources := []exchangeRateSource{
+			{name: "Currency API (jsDelivr)", parse: func(ctx context.Context) (map[string]float64, error) {
+				return m.parseExchangeRateFromCurrencyAPI(ctx, "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json")
+			}},
+			{name: "Currency API (Cloudflare)", parse: func(ctx context.Context) (map[string]float64, error) {
+				return m.parseExchangeRateFromCurrencyAPI(ctx, "https://latest.currency-api.pages.dev/v1/currencies/usd.json")
+			}},
 			{name: "HKAB", parse: m.parseExchangeRateFromHKAB},
 			{name: "ECB", parse: m.parseExchangeRateFromECB},
 		}
@@ -355,6 +481,39 @@ func (m *CurrencyModule) parseExchangeRateFromECB(ctx context.Context) (rates ma
 	return rates, nil
 }
 
+// parseExchangeRateFromCurrencyAPI reads a USD-based daily feed from either mirror.
+func (m *CurrencyModule) parseExchangeRateFromCurrencyAPI(ctx context.Context, url string) (map[string]float64, error) {
+	body, err := util.HttpGet(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	return decodeCurrencyAPIRates(body)
+}
+
+// decodeCurrencyAPIRates accepts only the registered fiat currencies. The feed also
+// contains crypto and metals, which must not bypass the separate crypto service.
+func decodeCurrencyAPIRates(body []byte) (map[string]float64, error) {
+	var result struct {
+		USD map[string]float64 `json:"usd"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	if result.USD["usd"] != 1 {
+		return nil, fmt.Errorf("invalid USD base rate")
+	}
+	rates := make(map[string]float64, len(defaultCurrencyRates))
+	for code := range defaultCurrencyRates {
+		rate := result.USD[strings.ToLower(code)]
+		// A partial response must not stop failover to a complete daily feed.
+		if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+			return nil, fmt.Errorf("missing or invalid rate for %s", code)
+		}
+		rates[code] = rate
+	}
+	return rates, nil
+}
+
 // Snapshot copies USD-per-unit prices and their timestamp under the refresh lock.
 func (m *CurrencyModule) Snapshot() (map[string]*big.Rat, int64) {
 	m.snapshotMu.RLock()
@@ -373,4 +532,11 @@ func (m *CurrencyModule) Snapshot() (map[string]*big.Rat, int64) {
 }
 
 // CurrencyCodes exposes syntax without requiring prices or network access.
-func CurrencyCodes() []string { return append([]string(nil), supportedCurrencyCodes...) }
+func CurrencyCodes() []string {
+	codes := make([]string, 0, len(defaultCurrencyRates))
+	for code := range defaultCurrencyRates {
+		codes = append(codes, strings.ToLower(code))
+	}
+	sort.Strings(codes)
+	return codes
+}

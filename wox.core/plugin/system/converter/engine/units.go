@@ -118,7 +118,15 @@ func (c *Catalog) registerUnit(symbol, dimension, scale, singular, plural string
 // AddCurrency registers syntax separately from the availability of a live price.
 func (c *Catalog) AddCurrency(code string, crypto bool) {
 	code = strings.ToUpper(code)
+	lower := strings.ToLower(code)
+	existing := c.Aliases[lower]
 	c.registerUnit(code, "money", "1", code, code)
+	// CUP overlaps the cooking unit cup. Preserve the existing unit alias and
+	// reserve the uppercase currency code instead of silently changing recipes.
+	if existing != "" && c.Units[existing].Dimension != "money" {
+		c.Aliases[lower] = existing
+		c.Aliases[code] = code
+	}
 	c.Crypto[code] = crypto
 	for alias, currency := range map[string]string{
 		"$": "USD", "us$": "USD", "dollar": "USD", "dollars": "USD",
@@ -138,6 +146,9 @@ func (c *Catalog) AddCurrency(code string, crypto bool) {
 func (c *Catalog) resolve(s string) (string, bool) {
 	if s == "m" {
 		return "?m", true
+	}
+	if u, ok := c.Aliases[s]; ok {
+		return u, true
 	}
 	u, ok := c.Aliases[strings.ToLower(s)]
 	return u, ok

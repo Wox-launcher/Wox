@@ -140,3 +140,22 @@ go test -tags sqlite_fts5 ./test -run 'TestConverter|TestCalculatorTime|TestTime
 Network fetch tests retain the existing live-service checks; setting
 `WOX_TEST_ENABLE_NETWORK=false` skips those requests, not the deterministic price
 snapshot or conversion tests.
+
+## Fiat rate coverage
+
+`defaultCurrencyRates` is the single fiat allowlist and offline fallback table:
+156 codes covering circulating ISO 4217 currencies available in Currency API,
+plus the existing BGN code. Funds, metals, and crypto are excluded. Add supported
+fiat codes with a fallback rate here so vocabulary and prices cannot drift apart.
+The list was checked against SIX's ISO 4217 List One and the 2026-10-03 USD feed.
+
+Currency API's daily USD feed (jsDelivr, then Cloudflare) supplies complete
+coverage before the narrower HKAB and ECB fallbacks. Decode only registered fiat
+codes; the same feed's crypto and metal entries must not enter fiat snapshots.
+`modules/testdata/currency_api_usd.json` is a reduced 2026-10-03 feed fixture,
+including BTC and XAU to exercise that filter.
+
+`CUP` overlaps the cooking unit `cup`: uppercase CUP explicitly selects the Cuban
+peso; lowercase cup and plural cups keep volume semantics. Other currency codes
+remain case-insensitive. The catalog tests exercise all codes in prefix/suffix
+positions and on both sides of a conversion, alongside cooking regressions.
