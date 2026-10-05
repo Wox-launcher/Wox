@@ -26,7 +26,7 @@ import (
 
 // Test002LauncherPluginClipboardImage verifies image capture and restoration through the Clipboard result action.
 // Flow: inject an external PNG -> query Clipboard -> select the image result -> activate Copy.
-// Evidence: the Clipboard plugin exposes the image dimensions and the system clipboard receives the same image.
+// Evidence: the result subtitle exposes the image dimensions and the system clipboard receives the same image.
 func Test002LauncherPluginClipboardImage(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.PreserveClipboard(t)
@@ -35,9 +35,9 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		imagePath, width, height, expectedColor := createClipboardSmokeImage(t)
 		injectClipboardSmokeImage(t, ctx, imagePath, expectedColor, width, height)
 
-		labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
-		waitForClipboardImageResult(t, ctx, client, width, height)
-		smoke.SelectLauncherResultLabelPrefix(t, ctx, client, labelPrefix)
+		dimensions := clipboardImageDimensions(width, height)
+		waitForClipboardImageResult(t, ctx, client, dimensions)
+		smoke.SelectLauncherResultDescriptionContains(t, ctx, client, dimensions)
 
 		snapshot := smoke.OpenResultActionPanel(t, ctx, client)
 		copyAction, found := automationdriver.FindByAutomationIDPrefix(snapshot, "action-result-")
@@ -179,11 +179,15 @@ func createClipboardSmokeImage(t *testing.T) (string, int, int, color.RGBA) {
 // actually showed instead of silently burning the whole case timeout.
 const clipboardImageResultAttempts = 20
 
+// clipboardImageDimensions is the subtitle text convertImageRecord uses for width and height.
+func clipboardImageDimensions(width, height int) string {
+	return fmt.Sprintf("%d × %d", width, height)
+}
+
 // waitForClipboardImageResult retries fresh query generations until the asynchronous image watcher has persisted the PNG.
-func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *automationdriver.Client, width, height int) {
+func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *automationdriver.Client, dimensions string) {
 	t.Helper()
 	queries := []string{"cb", "cb "}
-	labelPrefix := fmt.Sprintf("Image (%d×%d)", width, height)
 	var lastSnapshot woxwidget.AutomationSnapshot
 	for attempt := 0; attempt < clipboardImageResultAttempts; attempt++ {
 		query := queries[attempt%len(queries)]
@@ -201,7 +205,7 @@ func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *auto
 				return false
 			}
 			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.HasPrefix(node.Label, labelPrefix) {
+				if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.Contains(node.Description, dimensions) {
 					return true
 				}
 			}
@@ -217,21 +221,21 @@ func waitForClipboardImageResult(t *testing.T, ctx context.Context, client *auto
 		}
 		return
 	}
-	t.Fatalf("Clipboard image result %q did not appear after %d queries; %s", labelPrefix, clipboardImageResultAttempts, describeClipboardResults(lastSnapshot))
+	t.Fatalf("Clipboard image result %q did not appear after %d queries; %s", dimensions, clipboardImageResultAttempts, describeClipboardResults(lastSnapshot))
 }
 
 // describeClipboardResults lists the launcher rows a failing image wait observed.
 func describeClipboardResults(snapshot woxwidget.AutomationSnapshot) string {
-	var labels []string
+	var rows []string
 	for _, node := range snapshot.Tree.Nodes {
 		if strings.HasPrefix(node.AutomationID, "launcher.result.") {
-			labels = append(labels, node.Label)
+			rows = append(rows, fmt.Sprintf("%s [%s]", node.Label, node.Description))
 		}
 	}
-	if len(labels) == 0 {
+	if len(rows) == 0 {
 		return "no launcher result rows were present"
 	}
-	return fmt.Sprintf("observed result rows %q", labels)
+	return fmt.Sprintf("observed result rows %q", rows)
 }
 
 // writeExternalImageClipboard changes the OS clipboard outside Wox so its watcher treats the image as user-originated.

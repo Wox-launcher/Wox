@@ -225,6 +225,15 @@ func SelectLauncherResultLabelPrefix(t *testing.T, ctx context.Context, client *
 	})
 }
 
+// SelectLauncherResultDescriptionContains moves selection to the visible result whose description contains text.
+// Result subtitles land in the description, so this can target a row when the title is a shared translated label.
+func SelectLauncherResultDescriptionContains(t *testing.T, ctx context.Context, client *automationdriver.Client, text string) woxwidget.AutomationSnapshot {
+	t.Helper()
+	return selectLauncherResult(t, ctx, client, text, func(node woxui.AccessibilityNode) bool {
+		return strings.Contains(node.Description, text)
+	})
+}
+
 // selectLauncherResult moves keyboard selection to the current result matching match.
 func selectLauncherResult(t *testing.T, ctx context.Context, client *automationdriver.Client, description string, match func(woxui.AccessibilityNode) bool) woxwidget.AutomationSnapshot {
 	t.Helper()
