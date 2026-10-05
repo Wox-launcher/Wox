@@ -22,7 +22,7 @@ func (state *screenshotEditorOverlayState) captureSelectedWindow(selection Rect,
 	if current && err != nil {
 		state.windowSelection = nil
 	}
-	prepareBackground := current && err == nil && !autoConfirm && state.backgroundWallpaper != nil
+	prepareBackground := current && !autoConfirm && state.backgroundWallpaper != nil
 	state.mu.Unlock()
 	if err != nil {
 		util.GetLogger().Debug(context.Background(), "screenshot native window capture: "+err.Error())

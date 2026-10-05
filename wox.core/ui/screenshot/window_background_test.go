@@ -244,8 +244,11 @@ func TestScreenshotWindowBackgroundToggle(t *testing.T) {
 			state.toggleWindowBackground()
 			state.setSelectionLocked(Rect{X: 110, Y: 100, Width: 200, Height: 100})
 			state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
-			if state.showBackground || state.backgroundSource != nil || state.backgroundPreview != nil || state.backgroundRect != (Rect{}) {
+			if state.showBackground || state.backgroundSource != nil || state.backgroundPreview != nil {
 				t.Fatal("selection change retained window background")
+			}
+			if state.backgroundRect.Width != 40*scale {
+				t.Fatal("changed selection cannot request a fresh background")
 			}
 		})
 	}

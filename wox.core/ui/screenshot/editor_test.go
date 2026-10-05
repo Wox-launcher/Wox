@@ -666,8 +666,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 782 || state.toolbarRect.Height != 48 {
-		t.Fatalf("toolbar bounds = %+v, want 782x48", state.toolbarRect)
+	if state.toolbarRect.Width != 836 || state.toolbarRect.Height != 48 {
+		t.Fatalf("toolbar bounds = %+v, want 836x48", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -721,7 +721,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 890 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+	if state.toolbarRect.Width != 944 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
 		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
 	}
 	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
@@ -732,7 +732,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 836 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 890 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
@@ -755,7 +755,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 836 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 890 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -763,7 +763,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 782 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 836 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
@@ -1046,8 +1046,8 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 1173 || state.toolbarRect.Height != 72 {
-		t.Fatalf("scaled toolbar = %+v, want 1173x72", state.toolbarRect)
+	if state.toolbarRect.Width != 1254 || state.toolbarRect.Height != 72 {
+		t.Fatalf("scaled toolbar = %+v, want 1254x72", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)

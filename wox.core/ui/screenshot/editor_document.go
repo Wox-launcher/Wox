@@ -104,11 +104,11 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		pixels := image.NewNRGBA64(image.Rectangle{Max: clip.Size()})
 		draw.Draw(pixels, pixels.Bounds(), state.windowSource, clip.Min, draw.Src)
 		window = pixels
-		if state.backgroundSource != nil {
-			background = state.backgroundSource
-		}
-		document.ShowBackground = state.showBackground && background != nil
 	}
+	if state.backgroundSource != nil {
+		background = state.backgroundSource
+	}
+	document.ShowBackground = state.showBackground && background != nil
 	if state.cursorPixel != nil {
 		point := *state.cursorPixel
 		document.CursorPixel = &point
@@ -195,10 +195,11 @@ func loadScreenshotDocument(path string) (*screenshotDocument, image.Image, *scr
 		draw.Draw(document.windowPixels, document.windowPixels.Bounds(), window, window.Bounds().Min, draw.Src)
 	}
 	if background != nil {
-		if document.windowPixels == nil {
-			return nil, nil, nil, nil, errors.New("screenshot background has no window image")
+		clip, err := screenshotEditorPixelSelection(source.Bounds(), document.Selection, document.Frame)
+		if err != nil {
+			return nil, nil, nil, nil, err
 		}
-		padding := background.Bounds().Size().Sub(document.windowPixels.Bounds().Size())
+		padding := background.Bounds().Size().Sub(clip.Size())
 		if padding.X <= 0 || padding.Y <= 0 || padding.X%2 != 0 || padding.Y%2 != 0 {
 			return nil, nil, nil, nil, errors.New("invalid screenshot background dimensions")
 		}

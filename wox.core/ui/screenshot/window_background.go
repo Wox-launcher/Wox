@@ -68,6 +68,7 @@ func (wallpaper *screenshotWallpaperLoad) close() {
 
 // stopWindowBackgroundPreparation joins every generation without waiting for a native wallpaper resolver.
 // The resolver owns no editor pixels; its cancelled loader discards results before decoding or publishing them.
+// Preparation must finish before a freeform capture's borrowed desktop storage can be released.
 func (state *screenshotEditorOverlayState) stopWindowBackgroundPreparation() {
 	state.mu.Lock()
 	state.backgroundClosed = true
@@ -104,7 +105,7 @@ func (state *screenshotEditorOverlayState) releaseWindowBackground() {
 // toggleWindowBackground reuses the prepared canvas or requests it while preloading finishes.
 func (state *screenshotEditorOverlayState) toggleWindowBackground() {
 	state.mu.Lock()
-	if state.windowSource == nil || state.windowSelection == nil || state.backgroundClosed || state.scrolling || state.scrollingStarting {
+	if !state.hasSelection || state.dragging || state.backgroundCaptureSourceLocked() == nil || (state.windowSelection != nil && state.windowSource == nil) || state.backgroundClosed || state.scrolling || state.scrollingStarting {
 		state.mu.Unlock()
 		return
 	}
@@ -118,16 +119,17 @@ func (state *screenshotEditorOverlayState) toggleWindowBackground() {
 	state.invalidate()
 }
 
-// prepareWindowBackground fits and composes the wallpaper as soon as native window pixels are ready.
+// prepareWindowBackground fits and composes the wallpaper once the selection's capture pixels are ready.
 // Preparing never enables the effect: editing still shows the frozen desktop until the user requests it.
 func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 	state.mu.Lock()
-	if state.windowSource == nil || state.windowSelection == nil || state.backgroundSource != nil || state.backgroundLoading || state.backgroundClosed {
+	source := state.backgroundCaptureSourceLocked()
+	if !state.hasSelection || state.dragging || source == nil || (state.windowSelection != nil && state.windowSource == nil) || state.backgroundSource != nil || state.backgroundLoading || state.backgroundClosed || state.scrolling || state.scrollingStarting {
 		state.mu.Unlock()
 		return
 	}
 	selection, generation := state.selection, state.windowCaptureGeneration
-	source, frame, scale := state.windowSource, state.frameSize, state.annotationScale()
+	frame, scale := state.frameSize, state.annotationScale()
 	if state.document == nil && state.chromeScale != nil {
 		// Initial macOS captures can be ready before Draw publishes the active display's scale.
 		scale = max(float32(1), state.chromeScale(selection))
@@ -155,7 +157,7 @@ func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 		}
 		pixels, err := wallpaper.result()
 		state.mu.Lock()
-		current := !state.backgroundClosed && generation == state.windowCaptureGeneration && state.windowSelection != nil && state.selection == selection
+		current := !state.backgroundClosed && generation == state.windowCaptureGeneration && state.hasSelection && state.selection == selection
 		state.mu.Unlock()
 		if !current || ctx.Err() != nil {
 			return
@@ -175,7 +177,7 @@ func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 			}
 		}
 		state.mu.Lock()
-		current = ctx.Err() == nil && !state.backgroundClosed && generation == state.windowCaptureGeneration && state.windowSelection != nil && state.selection == selection
+		current = ctx.Err() == nil && !state.backgroundClosed && generation == state.windowCaptureGeneration && state.hasSelection && state.selection == selection
 		if current {
 			state.backgroundLoading = false
 			state.backgroundFailed = err != nil && state.showBackground
@@ -261,7 +263,7 @@ func loadScreenshotWallpaper(ctx context.Context) (image.Image, error) {
 	return pixels, err
 }
 
-// screenshotWindowBackgroundPadding uses one fraction of each window dimension, preserving its aspect ratio.
+// screenshotWindowBackgroundPadding uses one fraction of each selection dimension, preserving its aspect ratio.
 // Bound the shorter inset in logical units, then convert both axes to actual capture pixels independently.
 func screenshotWindowBackgroundPadding(bounds image.Rectangle, selection Rect, frame Size, scale float32) image.Point {
 	scale = max(float32(1), scale)
@@ -279,7 +281,7 @@ func fitScreenshotWallpaper(pixels image.Image, size image.Point) *image.RGBA {
 	return result
 }
 
-// composeScreenshotWindowBackground centers native window pixels and rounds only the outer composited canvas.
+// composeScreenshotWindowBackground centers capture pixels and rounds only the outer composited canvas.
 func composeScreenshotWindowBackground(window image.Image, background *image.RGBA) *image.RGBA {
 	result := image.NewRGBA(background.Bounds())
 	draw.Draw(result, result.Bounds(), background, background.Bounds().Min, draw.Src)
@@ -307,23 +309,32 @@ func composeScreenshotWindowBackground(window image.Image, background *image.RGB
 	return result
 }
 
-// composeScreenshotWindowBackgroundPreview freezes the dimmed desktop and window canvas into one renderer image.
+// composeScreenshotWindowBackgroundPreview freezes the dimmed desktop and capture canvas into one renderer image.
 // Drawing them separately alternates two oversized images through the renderer's single large-image cache slot.
-func composeScreenshotWindowBackgroundPreview(source *image.RGBA, clip image.Rectangle, background *image.RGBA) *image.RGBA {
+func composeScreenshotWindowBackgroundPreview(source image.Image, clip image.Rectangle, background *image.RGBA) *image.RGBA {
 	preview := image.NewRGBA(source.Bounds())
-	draw.Draw(preview, preview.Bounds(), source, source.Bounds().Min, draw.Src)
+	copyScreenshotCapture(preview, source, source.Bounds().Min)
+	// Compose from detached pixels before dimming so freeform captures retain their original colors.
+	canvas := composeScreenshotWindowBackground(preview.SubImage(clip), background)
 	draw.Draw(preview, preview.Bounds(), image.NewUniform(color.RGBA{A: screenshotEditorDimAlpha}), image.Point{}, draw.Over)
-	canvas := composeScreenshotWindowBackground(source.SubImage(clip), background)
 	padding := background.Bounds().Size().Sub(clip.Size()).Div(2)
 	origin := clip.Min.Sub(padding)
 	draw.Draw(preview, image.Rectangle{Min: origin, Max: origin.Add(canvas.Bounds().Size())}, canvas, canvas.Bounds().Min, draw.Over)
 	return preview
 }
 
-// selectionBoundsLocked exposes the outer background frame while keeping native window and annotation coordinates stable.
+// backgroundCaptureSourceLocked preserves native alpha only while the original window selection is intact.
+func (state *screenshotEditorOverlayState) backgroundCaptureSourceLocked() image.Image {
+	if state.windowSource != nil && state.windowSelection != nil && *state.windowSelection == state.selection {
+		return state.windowSource
+	}
+	return state.originalSource
+}
+
+// selectionBoundsLocked exposes the outer background frame while keeping capture and annotation coordinates stable.
 func (state *screenshotEditorOverlayState) selectionBoundsLocked() Rect {
-	if state.showBackground && state.backgroundSource != nil && state.windowSource != nil {
-		return screenshotWindowBackgroundBounds(state.selection, state.backgroundSource, state.windowSource.Bounds(), state.frameSize)
+	if source := state.backgroundCaptureSourceLocked(); state.showBackground && state.backgroundSource != nil && source != nil {
+		return screenshotWindowBackgroundBounds(state.selection, state.backgroundSource, source.Bounds(), state.frameSize)
 	}
 	return state.selection
 }

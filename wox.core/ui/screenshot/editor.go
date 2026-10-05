@@ -171,7 +171,7 @@ type screenshotEditorOverlayState struct {
 	originalSource      image.Image
 	windowSource        *image.RGBA
 	backgroundSource    *image.RGBA
-	backgroundPreview   *Image // Full editor raster, including the dimmed desktop behind the padded window.
+	backgroundPreview   *Image // Full editor raster, including the dimmed desktop behind the padded capture.
 	showBackground      bool
 	backgroundLoading   bool
 	backgroundFailed    bool
@@ -405,7 +405,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		return ScreenshotResult{}, errors.New("screenshot editor platform is incomplete")
 	}
 	var wallpaper *screenshotWallpaperLoad
-	if !options.AutoConfirm && !options.HideAnnotationToolbar && platform.initialBackgroundSource == nil && (platform.captureWindow != nil || platform.initialWindowSource != nil) {
+	if !options.AutoConfirm && !options.HideAnnotationToolbar && platform.initialBackgroundSource == nil {
 		wallpaper = preloadScreenshotWallpaper(loadScreenshotWallpaper)
 		defer wallpaper.close()
 	}
@@ -423,13 +423,13 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			return ScreenshotResult{}, err
 		}
 	}
-	if platform.initialBackgroundSource != nil && state.windowSource != nil {
+	if platform.initialBackgroundSource != nil && state.hasSelection {
 		clip, err := screenshotEditorPixelSelection(source.Bounds(), state.selection, state.frameSize)
 		if err != nil {
 			return ScreenshotResult{}, err
 		}
 		state.backgroundSource = platform.initialBackgroundSource
-		state.backgroundPreview, err = newScreenshotEditorImage(composeScreenshotWindowBackgroundPreview(state.windowSource, clip, state.backgroundSource))
+		state.backgroundPreview, err = newScreenshotEditorImage(composeScreenshotWindowBackgroundPreview(state.backgroundCaptureSourceLocked(), clip, state.backgroundSource))
 		if err != nil {
 			return ScreenshotResult{}, err
 		}
@@ -517,7 +517,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	if windowCaptureDone != nil {
 		<-windowCaptureDone
 	}
-	// Unused preloading owns detached pixels and must not delay cancel, recording or ordinary exports.
+	// Only an enabled effect waits for wallpaper decoding; cancellation below joins any active pixel composition.
 	// Read this after native capture finishes, since it can start background preparation itself.
 	state.mu.Lock()
 	backgroundDone := state.backgroundDone
@@ -547,7 +547,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		exportSource = state.windowSource
 	}
 	backgroundSource := state.backgroundSource
-	showBackground := windowCapture && state.showBackground && backgroundSource != nil
+	showBackground := state.showBackground && backgroundSource != nil && !state.scrolling
 	frameSize := state.frameSize
 	if state.workspaceSize.Width > 0 && state.workspaceSize.Height > 0 {
 		frameSize = state.workspaceSize
@@ -591,9 +591,9 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		exportedImage = composited
 		if windowCapture {
 			clipScreenshotWindowAlpha(composited, exportSource, selection, frameSize)
-			if showBackground {
-				exportedImage = composeScreenshotWindowBackground(composited, backgroundSource)
-			}
+		}
+		if showBackground {
+			exportedImage = composeScreenshotWindowBackground(composited, backgroundSource)
 		}
 	}
 	// PNG preserves native window corners; opaque captures keep the existing JPEG history format.
@@ -761,16 +761,21 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	selection := normalizeScreenshotEditorRect(state.selection, frame.Size)
 	hasSelection := state.hasSelection || state.dragging
 	previewImage := state.image
-	backgroundAvailable := state.windowSelection != nil
+	backgroundAvailable := state.hasSelection && !state.dragging
 	backgroundEnabled := state.showBackground && state.backgroundSource != nil
-	backgroundLoading := (state.showBackground && state.backgroundLoading) || (backgroundAvailable && state.windowSource == nil)
+	backgroundLoading := (state.showBackground && state.backgroundLoading) || (state.windowSelection != nil && state.windowSource == nil)
 	backgroundFailed := state.backgroundFailed
 	backgroundImage := state.backgroundPreview
 	backgroundSize := image.Point{}
 	if state.backgroundSource != nil {
 		backgroundSize = state.backgroundSource.Bounds().Size()
 	}
-	backgroundBounds := state.selectionBoundsLocked()
+	// Creation drags can have negative dimensions; their border and handles must follow the normalized crop.
+	backgroundBounds := selection
+	if backgroundEnabled {
+		// Keep intentional off-screen wallpaper padding instead of clamping the outer canvas to the desktop.
+		backgroundBounds = state.selectionBoundsLocked()
+	}
 	previewWindow := !hasSelection && state.pointerInside
 	if previewWindow {
 		selection = state.windowAtPoint(state.pointerPosition)
@@ -2109,12 +2114,15 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				state.windowCaptureDone = captureDone
 				state.windowSelection = &selection
 			}
+			prepareBackground := state.hasSelection && !autoConfirm && state.backgroundWallpaper != nil
 			state.mu.Unlock()
 			state.invalidate()
 			if captureDone != nil {
 				go state.captureSelectedWindow(selection, generation, captureDone, autoConfirm)
 			} else if autoConfirm {
 				state.complete(false)
+			} else if prepareBackground {
+				state.prepareWindowBackground()
 			}
 			return
 		}
@@ -2754,9 +2762,9 @@ func (state *screenshotEditorOverlayState) requestSave() {
 		return
 	}
 	state.mu.Lock()
-	windowCapture := state.windowSelection != nil
+	transparentCapture := state.windowSelection != nil || state.showBackground
 	state.mu.Unlock()
-	if windowCapture && filepath.Ext(path) == "" {
+	if transparentCapture && filepath.Ext(path) == "" {
 		path += ".png"
 	}
 	state.completeSave(screenshotSaveAsExportPath(path))
@@ -2778,7 +2786,7 @@ func (state *screenshotEditorOverlayState) chooseScreenshotSavePath() (string, e
 	}
 	state.mu.Lock()
 	extension := "jpg"
-	if state.windowSelection != nil {
+	if state.windowSelection != nil || state.showBackground {
 		extension = "png"
 	}
 	state.mu.Unlock()

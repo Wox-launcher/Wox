@@ -47,7 +47,7 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
 				ID: 3, AutomationID: "screenshot.background", Role: woxui.AccessibilityRoleButton,
 				Label: state.actionTooltips.Background, Value: strconv.FormatBool(state.showBackground), Bounds: state.surfaceRect(state.backgroundRect),
-				Enabled: state.windowSource != nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+				Enabled: state.hasSelection && !state.dragging && (state.windowSelection == nil || state.windowSource != nil), Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 			})
 		}
 		if state.editFontSizeRect.Width > 0 {
