@@ -159,6 +159,16 @@ func TestNestedMarkdownTaskStateStaysOnTheOwningListItem(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownKeepsLocalImagePathWithSpaces(t *testing.T) {
+	document := ParseMarkdown("![](<C:/Users/qian l/cache/shot.png>)\n\n**Page title**")
+	if len(document.blocks) != 2 || document.blocks[0].kind != markdownImage || document.blocks[1].kind != markdownParagraph {
+		t.Fatalf("blocks = %#v, want image then title", document.blocks)
+	}
+	if document.blocks[0].image != "C:/Users/qian l/cache/shot.png" {
+		t.Fatalf("image = %q", document.blocks[0].image)
+	}
+}
+
 func TestParseMarkdownPromotesImageOnSoftLineBreak(t *testing.T) {
 	document := ParseMarkdown("Intro paragraph\n![](https://example.com/shot.png)")
 	if len(document.blocks) != 2 || document.blocks[0].kind != markdownParagraph || document.blocks[1].kind != markdownImage {

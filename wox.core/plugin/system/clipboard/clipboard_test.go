@@ -671,6 +671,9 @@ type clipboardFavoritesTestAPI struct {
 	settings       map[string]string
 	refreshCount   int
 	lastRefresh    plugin.RefreshQueryParam
+	updatable      *plugin.UpdatableResult
+	updates        []plugin.UpdatableResult
+	updateCtx      context.Context
 	changedQuery   common.PlainQuery
 	failSetSetting bool
 }
@@ -690,6 +693,20 @@ func (a *clipboardFavoritesTestAPI) SetSetting(_ context.Context, option plugin.
 func (a *clipboardFavoritesTestAPI) RefreshQuery(_ context.Context, param plugin.RefreshQueryParam) {
 	a.refreshCount++
 	a.lastRefresh = param
+}
+
+func (a *clipboardFavoritesTestAPI) GetUpdatableResult(_ context.Context, resultID string) *plugin.UpdatableResult {
+	if a.updatable == nil || a.updatable.Id != resultID {
+		return nil
+	}
+	copied := *a.updatable
+	return &copied
+}
+
+func (a *clipboardFavoritesTestAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
+	a.updates = append(a.updates, result)
+	a.updateCtx = ctx
+	return true
 }
 
 func (a *clipboardFavoritesTestAPI) ChangeQuery(_ context.Context, query common.PlainQuery) {

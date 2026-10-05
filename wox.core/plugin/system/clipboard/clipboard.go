@@ -163,6 +163,14 @@ type ClipboardPlugin struct {
 	// faviconFetchAttempted remembers hosts already requested this session so a
 	// missing or failed favicon is not retried until Wox restarts.
 	faviconFetchAttempted *util.HashMap[string, bool]
+	// linkPreviewAttempted remembers URLs already requested this session.
+	linkPreviewAttempted sync.Map
+	// linkResults maps the result ids from the latest clipboard query to their URLs.
+	linkResultsMu sync.Mutex
+	linkResults   map[string]clipboardVisibleLink
+	// Query identity is protected by linkResultsMu so a late response cannot repopulate old rows.
+	linkQueryID   string
+	linkSessionID string
 
 	pasteMu sync.Mutex
 	// pasteCursorID is the history record shown by `cb paste`. Empty means newest.
@@ -535,6 +543,14 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	if c.isDuplicateContent(ctx, data, imageHash, fileSignature) {
 		c.api.Log(ctx, plugin.LogLevelInfo, "duplicate clipboard content, skipping")
 		c.resetPasteCursor()
+		// Repeated copies may predate this session's preview fetch, even though
+		// they do not insert another history row.
+		if data.GetType() == clipboard.ClipboardTypeText {
+			textData := data.(*clipboard.TextData)
+			if util.IsUrl(textData.Text) {
+				c.scheduleLinkPreviewFetch(ctx, util.NormalizeUrl(textData.Text))
+			}
+		}
 		return
 	}
 
@@ -633,6 +649,11 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	}
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("saved clipboard %s to database", data.GetType()))
+	// Page metadata is fetched after the record is stored so a slow or failed
+	// request cannot delay clipboard history. Queries only read the cache.
+	if link := clipboardRecordLink(record); link != "" {
+		c.scheduleLinkPreviewFetch(ctx, link)
+	}
 	c.scheduleLinkFaviconPrefetch(ctx, []ClipboardRecord{record})
 }
 
@@ -797,6 +818,7 @@ func clipboardSearchCandidateMatches(ctx context.Context, candidate string, sear
 }
 
 func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	c.beginClipboardLinkQuery(query)
 	var results []plugin.QueryResult
 	var iconRecords []ClipboardRecord
 	var favoriteScores map[string]int64
@@ -841,7 +863,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 				c.appendFavoriteMoveActions(result, record.ID, i, len(favorites))
 			}
 		}
-		return c.clipboardQueryResponse(ctx, results, iconRecords)
+		return c.clipboardQueryResponse(ctx, query, results, iconRecords)
 	}
 
 	if query.Search == "" {
@@ -890,7 +912,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			}
 		}
 
-		return c.clipboardQueryResponse(ctx, results, iconRecords)
+		return c.clipboardQueryResponse(ctx, query, results, iconRecords)
 	}
 
 	// Search historical content. All matches text records and image OCR text.
@@ -927,7 +949,7 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		addResult(record)
 	}
 
-	return c.clipboardQueryResponse(ctx, results, iconRecords)
+	return c.clipboardQueryResponse(ctx, query, results, iconRecords)
 }
 
 func (c *ClipboardPlugin) searchClipboardRecords(ctx context.Context, search string, selectedType string, limit int) ([]ClipboardRecord, error) {
@@ -1622,8 +1644,12 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("skip paste to active window action: %s", pasteToActiveWindowErr.Error()))
 	}
 
+	var linkPreview clipboardLinkPreview
+	var linkPreviewOK bool
 	if normalizedLink != "" {
+		linkPreview, linkPreviewOK = loadClipboardLinkPreview(ctx, normalizedLink)
 		actions = append(actions, plugin.QueryResultAction{
+			Id:   clipboardOpenLinkActionID,
 			Name: "i18n:plugin_clipboard_open_link",
 			Icon: icons.Get(icons.ActionOpen),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1634,6 +1660,12 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 				c.recordUsed(ctx, record)
 			},
 		})
+		if linkPreview.Title != "" {
+			actions = append(actions, c.copyLinkTextAction(clipboardCopyLinkTitleActionID, "i18n:plugin_clipboard_copy_link_title", linkPreview.Title))
+		}
+		if linkPreview.Description != "" {
+			actions = append(actions, c.copyLinkTextAction(clipboardCopyLinkDescriptionActionID, "i18n:plugin_clipboard_copy_link_description", linkPreview.Description))
+		}
 	}
 
 	if openDirectoryPath != "" {
@@ -1771,22 +1803,28 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	previewType := plugin.WoxPreviewTypeText
 	previewData := record.Content
+	previewOverlay := ""
+	subtitle := ""
 	if normalizedLink != "" {
-		// Feature addition: link clipboard entries use Markdown preview so the
-		// existing UI markdown renderer can expose a clickable URL without
-		// adding a clipboard-specific preview surface.
-		previewType = plugin.WoxPreviewTypeMarkdown
-		previewData = formatClipboardLinkMarkdown(record.Content, normalizedLink)
+		// Link rows stay on the shared Markdown preview. A cached page image is a
+		// standalone Markdown image, and a direct image URL uses the image preview.
+		linkResult := buildClipboardLinkResultPreview(record.Content, normalizedLink, linkPreview, linkPreviewOK)
+		previewType = linkResult.Type
+		previewData = linkResult.Data
+		previewOverlay = linkResult.OverlayData
+		subtitle = linkResult.SubTitle
 	}
 
 	return plugin.QueryResult{
 		Title:      title,
+		SubTitle:   subtitle,
 		Icon:       icon,
 		Group:      group,
 		GroupScore: groupScore,
 		Preview: plugin.WoxPreview{
-			PreviewType: previewType,
-			PreviewData: previewData,
+			PreviewType:        previewType,
+			PreviewData:        previewData,
+			PreviewOverlayData: previewOverlay,
 			PreviewTags: []plugin.WoxPreviewTag{
 				clipboardTimestampTag(record.Timestamp, time.Now()),
 				// Preview pills show values only, so the character unit belongs in

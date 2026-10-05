@@ -1874,6 +1874,8 @@
   "plugin_clipboard_open_path": "打开此路径",
   "plugin_clipboard_open_containing_folder": "打开所在文件夹",
   "plugin_clipboard_open_link": "打开链接",
+  "plugin_clipboard_copy_link_title": "复制标题",
+  "plugin_clipboard_copy_link_description": "复制描述",
   "plugin_clipboard_mark_favorite": "添加到收藏",
   "plugin_clipboard_cancel_favorite": "从收藏移除",
   "plugin_clipboard_move_favorite_up": "收藏项上移",

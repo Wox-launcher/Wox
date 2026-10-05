@@ -11,7 +11,9 @@ import (
 	"wox/util/clipboard"
 )
 
-func (c *ClipboardPlugin) clipboardQueryResponse(ctx context.Context, results []plugin.QueryResult, records []ClipboardRecord) plugin.QueryResponse {
+// clipboardQueryResponse records query-scoped link rows and starts missing favicon prefetches.
+func (c *ClipboardPlugin) clipboardQueryResponse(ctx context.Context, query plugin.Query, results []plugin.QueryResult, records []ClipboardRecord) plugin.QueryResponse {
+	c.rememberClipboardLinks(query, records)
 	c.scheduleLinkFaviconPrefetch(ctx, records)
 	return c.newClipboardQueryResponse(results)
 }

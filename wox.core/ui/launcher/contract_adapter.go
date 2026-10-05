@@ -376,10 +376,18 @@ func (a *App) RefreshAccountStatus(_ context.Context) error {
 }
 
 // UpdateResult patches the visible result with one already-polished core snapshot.
-func (a *App) UpdateResult(_ context.Context, result plugin.UpdatableResult) (bool, error) {
+func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (bool, error) {
 	updated := false
 	previewBecameVisible := false
 	err := a.runOnUI("apply result update", func() {
+		// Check on the UI thread, after any intervening query transition. Result
+		// ids alone cannot distinguish retained rows from the next query's rows.
+		if sessionID := util.GetContextSessionId(ctx); sessionID != "" && sessionID != a.sessionID {
+			return
+		}
+		if queryID := util.GetContextQueryId(ctx); queryID != "" && (queryID != a.query.QueryID || queryID != a.resultsQueryID) {
+			return
+		}
 		for index := range a.results {
 			if a.results[index].ID == result.Id {
 				previewBecameVisible = index == a.selected && resultPreviewBecameVisible(a.results[index].Preview, result.Preview)

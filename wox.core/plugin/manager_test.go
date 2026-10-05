@@ -589,6 +589,27 @@ func newTestManagerWithCachedResult(query Query, result QueryResult) (*Manager, 
 	return manager, pluginInstance
 }
 
+func TestGetUpdatableResultKeepsExplicitQueryScope(t *testing.T) {
+	oldQuery := Query{Id: "old", SessionId: "session"}
+	manager, instance := newTestManagerWithCachedResult(oldQuery, QueryResult{Id: "row", Title: "old title"})
+	currentQuery := Query{Id: "current", SessionId: "session"}
+	current := newQueryResultSet(currentQuery)
+	current.Results.Store("row", &QueryResultCache{Query: currentQuery, PluginInstance: instance, Result: QueryResult{Id: "row", Title: "current title"}})
+	session, _ := manager.sessionQueryResultCache.Load("session")
+	session.Store("current", current)
+	for _, query := range []Query{oldQuery, currentQuery} {
+		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), query.SessionId), query.Id)
+		update := manager.GetUpdatableResult(ctx, "row")
+		require.NotNil(t, update)
+		assert.Equal(t, query.Id+" title", *update.Title)
+	}
+	for _, query := range []Query{{Id: "missing", SessionId: "session"}, {Id: "current", SessionId: "missing"}} {
+		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), query.SessionId), query.Id)
+		assert.Nil(t, manager.GetUpdatableResult(ctx, "row"), "missing scope must not resolve another query's row")
+	}
+	assert.NotNil(t, manager.GetUpdatableResult(context.Background(), "row"), "unscoped legacy lookup remains supported")
+}
+
 func TestShouldClearGroupForGlobalQueryKeepsFilePlugin(t *testing.T) {
 	globalQuery := Query{Type: QueryTypeInput, Search: "scottqian"}
 	filePlugin := &Instance{Metadata: Metadata{Id: fileSearchPluginID}}

@@ -1873,6 +1873,8 @@
   "plugin_clipboard_open_path": "パスを開く",
   "plugin_clipboard_open_containing_folder": "含むフォルダーを開く",
   "plugin_clipboard_open_link": "リンクを開く",
+  "plugin_clipboard_copy_link_title": "タイトルをコピー",
+  "plugin_clipboard_copy_link_description": "説明をコピー",
   "plugin_clipboard_mark_favorite": "お気に入りに追加",
   "plugin_clipboard_cancel_favorite": "お気に入りから削除",
   "plugin_clipboard_move_favorite_up": "お気に入りを上へ移動",

@@ -1873,6 +1873,8 @@
   "plugin_clipboard_open_path": "경로 열기",
   "plugin_clipboard_open_containing_folder": "상위 폴더 열기",
   "plugin_clipboard_open_link": "링크 열기",
+  "plugin_clipboard_copy_link_title": "제목 복사",
+  "plugin_clipboard_copy_link_description": "설명 복사",
   "plugin_clipboard_mark_favorite": "즐겨찾기에 추가",
   "plugin_clipboard_cancel_favorite": "즐겨찾기에서 제거",
   "plugin_clipboard_move_favorite_up": "즐겨찾기 위로 이동",

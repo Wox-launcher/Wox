@@ -1077,8 +1077,17 @@ func (a *APIImpl) OnMRURestore(ctx context.Context, callback func(ctx context.Co
 }
 
 func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool {
-	if sessionId, queryId := GetPluginManager().GetQueryInfoByResultId(result.Id); sessionId != "" {
-		ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
+	// Preserve an explicit query scope: stable result ids can occur in several
+	// cached queries, and id-only lookup can select an obsolete action snapshot.
+	if util.GetContextSessionId(ctx) == "" || util.GetContextQueryId(ctx) == "" {
+		if sessionId, queryId := GetPluginManager().GetQueryInfoByResultId(result.Id); sessionId != "" {
+			ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
+		}
+	}
+	if util.GetContextSessionId(ctx) != "" && util.GetContextQueryId(ctx) != "" {
+		if _, found := GetPluginManager().findResultCacheByIdWithContext(ctx, result.Id); !found {
+			return false
+		}
 	}
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)

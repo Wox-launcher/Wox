@@ -2883,8 +2883,11 @@ func (m *Manager) findResultCacheByIdWithContext(ctx context.Context, resultId s
 	sessionId := util.GetContextSessionId(ctx)
 	queryId := util.GetContextQueryId(ctx)
 	if sessionId != "" {
-		if resultCache, ok := m.findResultCacheInSession(sessionId, queryId, resultId); ok {
-			return resultCache, true
+		resultCache, ok := m.findResultCacheInSession(sessionId, queryId, resultId)
+		// An explicit query scope must never fall back to another query that
+		// happens to reuse the same stable result id.
+		if ok || queryId != "" {
+			return resultCache, ok
 		}
 	}
 	return m.findResultCacheById(resultId)
