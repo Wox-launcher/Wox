@@ -1640,5 +1640,37 @@
     ],
     "DateCreated": "2026-09-30 20:31:39",
     "DateUpdated": "2026-09-30 20:31:39"
+  },
+  {
+    "Id": "c4a8e2b7-1d63-4f90-8a55-6e0b9d3c7f21",
+    "Name": "i18n:plugin_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/8836a961-14d0-4fb8-997c-35a99bd7c64a",
+    "Website": "https://gist.github.com/qianlifeng/db55c71d2bef5359af515f309be4d23d",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/db55c71d2bef5359af515f309be4d23d/raw/Wox.Plugin.ClashVerge.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/cb83c7a4-73de-4149-9ab9-23f854b7b4eb"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-10-05 17:43:15",
+    "DateUpdated": "2026-10-05 17:43:15",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Clash Verge",
+        "plugin_description": "Show the local Clash Verge core and switch proxy nodes."
+      },
+      "zh_CN": {
+        "plugin_name": "Clash Verge",
+        "plugin_description": "查看本机 Clash Verge 运行状态，并切换代理节点。"
+      }
+    }
   }
 ]
