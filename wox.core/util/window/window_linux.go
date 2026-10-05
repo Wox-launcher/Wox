@@ -3,32 +3,34 @@
 package window
 
 import (
-	"errors"
 	"image"
 )
 
+// GetActiveWindowIcon returns the focused application's icon.
+// Wayland clipboard protocols do not name the copying client, so Linux records
+// the focused application, which is also what Windows and macOS store on text rows.
 func GetActiveWindowIcon() (image.Image, error) {
-	return nil, errors.New("not implemented")
+	return linuxActiveWindowIcon()
 }
 
-// GetWindowIconByPid is a PID-based companion for asynchronous snapshot detail
-// refreshes; Linux keeps the existing unsupported behavior.
+// GetWindowIconByPid resolves the icon captured for this process. A later call
+// must not read whichever application is focused now, because the launcher may
+// already be in front by the time a snapshot refresh runs.
 func GetWindowIconByPid(pid int) (image.Image, error) {
-	return nil, errors.New("not implemented")
+	return linuxWindowIconByPid(pid)
 }
 
 func GetActiveWindowName() string {
-	return ""
+	return linuxActiveWindowName()
 }
 
-// GetWindowNameByPid is a PID-based companion for asynchronous snapshot detail
-// refreshes; Linux keeps the existing unsupported behavior.
+// GetWindowNameByPid returns the application name captured for this process.
 func GetWindowNameByPid(pid int) string {
-	return ""
+	return linuxWindowNameByPid(pid)
 }
 
 func GetActiveWindowPid() int {
-	return -1
+	return linuxActiveWindowPid()
 }
 
 func GetActiveWindowId() string {
@@ -65,8 +67,10 @@ func MinimizeWindow(managedWindow ManagedWindow) error {
 	return ErrWindowManagementUnsupported
 }
 
+// GetProcessIdentity returns the desktop-file id of the application, the same
+// identity the ignore-application picker stores on Linux.
 func GetProcessIdentity(pid int) string {
-	return ""
+	return linuxProcessIdentity(pid)
 }
 
 // IsProcessIdentityRunning is not implemented on Linux yet.
