@@ -102,7 +102,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		// Keep original desktop pixels for re-editing and native window pixels as a separate export resource.
 		// Sixteen-bit straight alpha avoids rounding the compositor's premultiplied edge colors on reload.
 		pixels := image.NewNRGBA64(image.Rectangle{Max: clip.Size()})
-		draw.Draw(pixels, pixels.Bounds(), state.windowSource, clip.Min, draw.Src)
+		copyScreenshotSceneStraightAlpha(pixels, state.windowSource, clip.Min)
 		window = pixels
 	}
 	if state.backgroundSource != nil {
@@ -140,7 +140,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		// Eight-bit straight-alpha PNG rounds premultiplied edge pixels on reload.
 		// Sixteen-bit storage preserves the original cursor's compositing values.
 		lossless := image.NewNRGBA64(cursor.Bounds())
-		draw.Draw(lossless, lossless.Bounds(), cursor, cursor.Bounds().Min, draw.Src)
+		copyScreenshotSceneStraightAlpha(lossless, cursor, cursor.Bounds().Min)
 		cursor = lossless
 	}
 	// Windows captures are backed by a DIB that is freed when CaptureScreenshot returns.
@@ -167,6 +167,35 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		detachedSource, cursor, composited, window, background = nil, nil, nil, nil, nil
 		return nil
 	}, nil
+}
+
+// copyScreenshotSceneStraightAlpha preserves edge precision without allocating a color object per pixel.
+// Large native windows must detach before the editor closes; generic 16-bit draw conversion delays history publication.
+func copyScreenshotSceneStraightAlpha(destination *image.NRGBA64, source image.Image, sourcePoint image.Point) {
+	raster, ok := source.(*image.RGBA)
+	if !ok {
+		draw.Draw(destination, destination.Bounds(), source, sourcePoint, draw.Src)
+		return
+	}
+	for y := 0; y < destination.Rect.Dy(); y++ {
+		offset := raster.PixOffset(sourcePoint.X, sourcePoint.Y+y)
+		src := raster.Pix[offset : offset+destination.Rect.Dx()*4]
+		dst := destination.Pix[y*destination.Stride : y*destination.Stride+destination.Rect.Dx()*8]
+		for x := 0; x < len(src); x += 4 {
+			alpha := uint32(src[x+3])
+			for channel := 0; channel < 4; channel++ {
+				value := uint32(src[x+channel]) * 257
+				if channel < 3 && alpha != 255 {
+					if alpha == 0 {
+						value = 0
+					} else {
+						value = uint32(src[x+channel]) * 65535 / alpha
+					}
+				}
+				dst[x*2+channel*2], dst[x*2+channel*2+1] = byte(value>>8), byte(value)
+			}
+		}
+	}
 }
 
 // loadScreenshotDocument validates persisted values before they reach geometry and drawing loops.

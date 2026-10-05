@@ -567,6 +567,7 @@ func (p *ScreenshotPlugin) screenshotHistoryItemFromPath(screenshotPath string) 
 
 func isScreenshotHistoryImage(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
+	// Existing JPEG history remains readable even though new captures always use PNG.
 	return extension == ".png" || extension == ".jpg" || extension == ".jpeg"
 }
 
@@ -866,7 +867,7 @@ func (p *ScreenshotPlugin) screenshotHistoryGroup(timestamp int64) (string, int6
 	return "i18n:plugin_screenshot_group_history", 10
 }
 
-// copyScreenshotHistoryItem uses the native writer so clipboard history observes the JPEG pixels too.
+// copyScreenshotHistoryItem uses the native writer so clipboard history observes the copied pixels too.
 // The generic clipboard writer consumes Wox's own change edge and would suppress this new entry.
 func (p *ScreenshotPlugin) copyScreenshotHistoryItem(ctx context.Context, screenshotPath string) {
 	if err := plugin.GetPluginManager().GetUI().WriteClipboardImageFile(ctx, screenshotPath); err != nil {
@@ -1008,7 +1009,7 @@ func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 			return
 		}
 		if result.PinToScreen {
-			// Capture pin now opens the overlay from the composited pixels before the JPEG
+			// Capture pin now opens the overlay from the composited pixels before the PNG
 			// write returns. Retry from the saved file only when that in-memory show failed.
 			if !result.PinOverlayShown {
 				if err := p.pinScreenshotToScreen(ctx, result.ScreenshotPath, result.LogicalSelectionRect); err != nil {

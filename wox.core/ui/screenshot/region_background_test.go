@@ -111,11 +111,11 @@ func TestScreenshotRegionBackground(t *testing.T) {
 			if got := composeScreenshotWindowBackground(restoredCrop, document.backgroundPixels); got.Bounds() != output.Bounds() || got.RGBAAt(padding.X, padding.Y) != originalColor || got.RGBAAt(0, 0).A != 0 {
 				t.Fatal("editable history changed the freeform background composition")
 			}
-			state.key(KeyEvent{Key: Key("d"), Down: true})
+			state.key(KeyEvent{Key: KeySpace, Down: true})
 			if state.showBackground || state.selectionBoundsLocked() != selection {
 				t.Fatal("keyboard toggle did not restore the crop bounds")
 			}
-			state.key(KeyEvent{Key: Key("d"), Down: true})
+			state.key(KeyEvent{Key: KeySpace, Down: true})
 			state.chooseSavePath = func() (string, error) { return filepath.Join(t.TempDir(), "download"), nil }
 			state.requestSave()
 			if outcome := <-state.result; filepath.Ext(outcome.saveAsPath) != ".png" {

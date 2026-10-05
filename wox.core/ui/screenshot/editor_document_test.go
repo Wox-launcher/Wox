@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/jpeg"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +20,33 @@ import (
 	"wox/util/screenshotedit"
 )
 
+// TestScreenshotSceneStraightAlpha compares exact 16-bit values across cropped physical pixels and row strides.
+func TestScreenshotSceneStraightAlpha(t *testing.T) {
+	source := image.NewRGBA(image.Rect(-12, -6, 120, 61))
+	random := rand.New(rand.NewPCG(31, 49))
+	for y := source.Rect.Min.Y; y < source.Rect.Max.Y; y++ {
+		for x := source.Rect.Min.X; x < source.Rect.Max.X; x++ {
+			a := byte(random.Uint32())
+			source.SetRGBA(x, y, color.RGBA{R: byte(random.UintN(uint(a) + 1)), G: a / 2, B: a, A: a})
+		}
+	}
+	for _, bounds := range []image.Rectangle{image.Rect(0, 0, 112, 52), image.Rect(-8, -4, 104, 48)} {
+		parent := image.NewNRGBA64(bounds.Inset(-3))
+		got := parent.SubImage(bounds).(*image.NRGBA64)
+		want := image.NewNRGBA64(bounds)
+		point := image.Pt(-9, -3)
+		copyScreenshotSceneStraightAlpha(got, source, point)
+		draw.Draw(want, want.Bounds(), source, point, draw.Src)
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				if got.NRGBA64At(x, y) != want.NRGBA64At(x, y) {
+					t.Fatalf("pixel (%d,%d): got %v want %v", x, y, got.NRGBA64At(x, y), want.NRGBA64At(x, y))
+				}
+			}
+		}
+	}
+}
+
 func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 32, 32))
 	source.SetRGBA(4, 5, color.RGBA{R: 255, A: 255})
@@ -25,7 +54,7 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	state.selection = Rect{Width: 32, Height: 32}
 	state.cursorPixel = &Point{X: 8, Y: 9}
 	state.annotations = []screenshotEditorAnnotation{{tool: screenshotEditorToolBrush, points: []Point{{X: 3, Y: 3}, {X: 6, Y: 6}}, strokeRadius: 2, color: Color{A: 255}}}
-	path := filepath.Join(t.TempDir(), "capture.jpg")
+	path := filepath.Join(t.TempDir(), "capture.png")
 	composited, err := exportScreenshotSelection(source, state.annotations, state.selection, state.frameSize, 1, state.cursorPixel, false, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +83,34 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	}
 	if color.RGBAModel.Convert(restored.At(4, 5)) != (color.RGBA{R: 255, A: 255}) || marks[0].points[0] != (Point{X: 3, Y: 3}) || doc.CursorPixel.X != 8 {
 		t.Fatal("background save retained mutable editor or native capture data")
+	}
+}
+
+// TestScreenshotDocumentLoadsLegacyJPEG keeps pre-PNG history scenes readable by the re-edit workflow.
+func TestScreenshotDocumentLoadsLegacyJPEG(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 29, G: 61, B: 93, A: 255}), image.Point{}, draw.Src)
+	state := newScreenshotEditorOverlayState(ScreenshotOptions{}, nil, screenshotEditorPlatform{frameSize: Size{Width: 32, Height: 32}})
+	state.selection = Rect{Width: 32, Height: 32}
+	path := filepath.Join(t.TempDir(), "legacy.jpg")
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, source, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = screenshotedit.Remove(path) })
+	save, err := prepareScreenshotDocumentSave(path, source, source, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := save(); err != nil {
+		t.Fatal(err)
+	}
+	document, restored, _, _, err := loadScreenshotDocument(path)
+	if err != nil || document.Selection != state.selection || clipboard.ImageHash(restored) != clipboard.ImageHash(source) {
+		t.Fatalf("legacy JPEG scene cannot be restored: %v", err)
 	}
 }
 
@@ -205,7 +262,7 @@ func TestScreenshotDocumentRoundTripAllAnnotations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "capture.jpg")
+	path := filepath.Join(t.TempDir(), "capture.png")
 	if err := writeScreenshotImage(path, before); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +299,7 @@ func TestScreenshotDocumentRoundTripAllAnnotations(t *testing.T) {
 	}
 
 	// A second save is independent of the first history entry and its archive.
-	second := filepath.Join(t.TempDir(), "edited.jpg")
+	second := filepath.Join(t.TempDir(), "edited.png")
 	state.document, state.annotations = doc, marks
 	state.capturedCursor = cursor
 	state.annotations[0].color = Color{G: 255, A: 255}

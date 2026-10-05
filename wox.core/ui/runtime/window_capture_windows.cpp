@@ -80,6 +80,11 @@ int32_t wox_capture_windows_window(uintptr_t hwnd, int32_t width, int32_t height
       if (FAILED(result)) return result;
       result = RoGetActivationFactory(item_name, __uuidof(IGraphicsCaptureItemInterop), (void **)interop.address());
       if (FAILED(result)) return result;
+      // Capture workers can still unwind after Close and RoUninitialize unload the WinRT server.
+      // Keep its code mapped until process exit; sessions, frames and GPU resources stay capture-scoped.
+      HMODULE capture_module = nullptr;
+      if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, L"GraphicsCapture.dll", &capture_module))
+        return HRESULT_FROM_WIN32(GetLastError());
       result = interop->CreateForWindow((HWND)hwnd, __uuidof(capture::IGraphicsCaptureItem), (void **)item.address());
       if (FAILED(result)) return result;
       ABI::Windows::Graphics::SizeInt32 size;

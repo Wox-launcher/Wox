@@ -3,6 +3,7 @@ package screenshotedit
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,8 +16,11 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/imageencode"
 )
 
 const Suffix = ".edit.zip"
@@ -36,6 +40,7 @@ var index = struct {
 
 // Save commits a self-contained scene before publishing its clipboard fingerprints.
 func Save(path string, state json.RawMessage, source, cursor, composited, window, background image.Image) error {
+	startedAt := time.Now()
 	exportHash, err := fileHash(path)
 	if err != nil {
 		return err
@@ -51,6 +56,7 @@ func Save(path string, state json.RawMessage, source, cursor, composited, window
 	}
 	metadata := Metadata{Version: 1, ExportHash: exportHash, State: state,
 		ImageHashes: []string{clipboard.ImageHash(composited), clipboard.ImageHash(exported)}}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_scene stage=fingerprints durationMs=%d", time.Since(startedAt).Milliseconds()))
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".screenshot-edit-*.tmp")
 	if err != nil {
 		return err
@@ -77,9 +83,14 @@ func Save(path string, state json.RawMessage, source, cursor, composited, window
 		if err != nil {
 			return err
 		}
-		if err = png.Encode(entry, resource.img); err != nil {
+		resourceStartedAt := time.Now()
+		if err = imageencode.PNG(entry, resource.img); err != nil {
 			return err
 		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+			"screenshot_scene stage=resource_written name=%s durationMs=%d size=%dx%d",
+			resource.name, time.Since(resourceStartedAt).Milliseconds(), resource.img.Bounds().Dx(), resource.img.Bounds().Dy(),
+		))
 	}
 	if err = archive.Close(); err != nil {
 		return err
@@ -102,6 +113,7 @@ func Save(path string, state json.RawMessage, source, cursor, composited, window
 		return err
 	}
 	registerIndexPath(path, metadata)
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_scene stage=committed totalMs=%d", time.Since(startedAt).Milliseconds()))
 	return nil
 }
 

@@ -5,7 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/jpeg"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -341,8 +341,8 @@ func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
 	}
 }
 
-func TestWriteScreenshotImageUsesJPEGForJPG(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "capture.jpg")
+func TestWriteScreenshotImagePreservesOpaquePixelsInPNG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.png")
 	source := image.NewRGBA(image.Rect(0, 0, 32, 24))
 	draw.Draw(source, source.Bounds(), &image.Uniform{C: color.RGBA{R: 40, G: 80, B: 120, A: 255}}, image.Point{}, draw.Src)
 	if err := writeScreenshotImage(path, source); err != nil {
@@ -354,12 +354,15 @@ func TestWriteScreenshotImageUsesJPEGForJPG(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	decoded, err := jpeg.Decode(file)
+	decoded, err := png.Decode(file)
 	if err != nil {
-		t.Fatalf("decode screenshot JPEG: %v", err)
+		t.Fatalf("decode screenshot PNG: %v", err)
 	}
 	if decoded.Bounds().Size() != source.Bounds().Size() {
-		t.Fatalf("JPEG size = %v, want %v", decoded.Bounds().Size(), source.Bounds().Size())
+		t.Fatalf("PNG size = %v, want %v", decoded.Bounds().Size(), source.Bounds().Size())
+	}
+	if color.RGBAModel.Convert(decoded.At(0, 0)) != source.RGBAAt(0, 0) {
+		t.Fatal("opaque screenshot lost color precision")
 	}
 }
 
@@ -804,7 +807,7 @@ func TestScreenshotEditorSaveActionDownloadsToChosenPath(t *testing.T) {
 	}
 	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: state.saveRect.X + 20, Y: state.saveRect.Y + 20}})
 	outcome := <-state.result
-	if outcome.cancelled || !strings.HasSuffix(outcome.saveAsPath, "shot.jpg") {
+	if outcome.cancelled || !strings.HasSuffix(outcome.saveAsPath, "shot.png") {
 		t.Fatalf("save outcome = %+v", outcome)
 	}
 }
@@ -828,15 +831,16 @@ func TestScreenshotEditorSaveShortcutUsesPrimaryModifier(t *testing.T) {
 	}
 }
 
-func TestScreenshotSaveAsExportPathAddsJPEGWhenMissing(t *testing.T) {
-	if got := screenshotSaveAsExportPath("shot"); got != "shot.jpg" {
-		t.Fatalf("path = %q", got)
-	}
-	if got := screenshotSaveAsExportPath("shot.png"); got != "shot.png" {
-		t.Fatalf("png path = %q", got)
-	}
-	if screenshotSaveAsExportPath("  ") != "" {
-		t.Fatal("blank path should stay empty")
+// The UI and caller-supplied export path share this normalization before writing.
+func TestScreenshotSaveAsExportPathUsesPNG(t *testing.T) {
+	for input, want := range map[string]string{
+		"shot": "shot.png", "shot.png": "shot.png", "shot.PNG": "shot.PNG",
+		"shot.jpg": "shot.png", "shot.JPEG": "shot.png", "shot.webp": "shot.png",
+		"capture.v2.jpg": "capture.v2.png", "  shot  ": "shot.png", "  ": "",
+	} {
+		if got := screenshotSaveAsExportPath(input); got != want {
+			t.Fatalf("path %q = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -960,6 +964,10 @@ func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{})
 	if anchor.X != 10 || actionTooltip != "Localized cursor (C)" {
 		t.Fatalf("cursor tooltip = anchor:%+v text:%q", anchor, actionTooltip)
+	}
+	backgroundAnchor, backgroundTooltip := screenshotEditorActionTooltip(screenshotEditorActionBackground, ScreenshotActionTooltips{Background: "Localized background"}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{X: 80, Y: 20, Width: 40, Height: 40})
+	if backgroundAnchor.X != 80 || backgroundTooltip != "Localized background (Space)" {
+		t.Fatalf("background tooltip = anchor:%+v text:%q", backgroundAnchor, backgroundTooltip)
 	}
 	saveAnchor, saveTooltip := screenshotEditorActionTooltip(screenshotEditorActionSave, ScreenshotActionTooltips{Save: "Localized save"}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{X: 40, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{})
 	if saveAnchor.X != 40 || !strings.HasPrefix(saveTooltip, "Localized save (") {

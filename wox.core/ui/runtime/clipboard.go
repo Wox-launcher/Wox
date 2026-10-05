@@ -42,12 +42,17 @@ func (w *Window) WriteClipboardImageFile(filePath string) error {
 	return w.native.writeClipboardImage(image)
 }
 
-// WriteClipboardImage publishes in-memory pixels without encoding another image copy.
+// WriteClipboardImage publishes in-memory pixels, adding PNG when native formats would lose alpha.
 func (w *Window) WriteClipboardImage(source image.Image) error {
+	return w.WriteClipboardImageWithPNG(source, nil)
+}
+
+// WriteClipboardImageWithPNG reuses a PNG encoded from the same pixels instead of compressing transparent images twice.
+func (w *Window) WriteClipboardImageWithPNG(source image.Image, encodedPNG []byte) error {
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}
-	clipboard, err := newClipboardImage(source, nil)
+	clipboard, err := newClipboardImage(source, encodedPNG)
 	if err != nil {
 		return err
 	}

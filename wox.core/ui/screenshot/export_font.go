@@ -28,7 +28,7 @@ type screenshotEditorExportFace struct {
 }
 
 // screenshotEditorExportFonts returns faces used when baking labels into the saved image.
-// Live preview uses the native system renderer, but JPEG export rasterizes with
+// Live preview uses the native system renderer, but image export rasterizes with
 // golang.org/x/image. Go Regular has no CJK glyphs, so a missing system face turns
 // Chinese into .notdef boxes after save.
 func screenshotEditorExportFonts() []*opentype.Font {

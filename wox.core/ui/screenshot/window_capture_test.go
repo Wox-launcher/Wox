@@ -13,6 +13,21 @@ import (
 	"wox/util/screenshotedit"
 )
 
+// screenshotImageHasTransparency checks capture resources without assuming a decoded raster type.
+func screenshotImageHasTransparency(pixels image.Image) bool {
+	if opaque, ok := pixels.(interface{ Opaque() bool }); ok {
+		return !opaque.Opaque()
+	}
+	for y := pixels.Bounds().Min.Y; y < pixels.Bounds().Max.Y; y++ {
+		for x := pixels.Bounds().Min.X; x < pixels.Bounds().Max.X; x++ {
+			if _, _, _, alpha := pixels.At(x, y).RGBA(); alpha != 65535 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // TestScreenshotWindowAlphaSurvivesExportAndScene verifies native alpha through annotation, PNG, and editable history.
 func TestScreenshotWindowAlphaSurvivesExportAndScene(t *testing.T) {
 	for _, scale := range []float32{1, 1.5, 2} {

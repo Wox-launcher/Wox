@@ -227,7 +227,29 @@ func TestScreenshotWindowBackgroundToggle(t *testing.T) {
 				t.Fatal("toolbar toggle altered selection or frozen desktop")
 			}
 			state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
-			state.key(KeyEvent{Key: Key("d"), Down: true})
+			for _, event := range []KeyEvent{
+				{Key: Key("d"), Down: true},
+				{Key: KeySpace, Down: true, Modifiers: KeyModifierControl},
+				{Key: KeySpace, Down: true, Modifiers: KeyModifierAlt},
+				{Key: KeySpace, Down: true, Modifiers: KeyModifierMeta},
+			} {
+				if state.key(event) || !state.showBackground {
+					t.Fatalf("unrelated key toggled background: %+v", event)
+				}
+			}
+			state.textEditing = true
+			state.resetTextEditorLocked("label")
+			if state.key(KeyEvent{Key: KeySpace, Down: true}) || !state.showBackground {
+				t.Fatal("space toggled background while editing text")
+			}
+			state.textInput(TextInputEvent{Kind: TextInputCommit, Text: " "})
+			if state.textDraft != "label " {
+				t.Fatalf("space was not inserted into the annotation: %q", state.textDraft)
+			}
+			state.textEditing = false
+			if !state.key(KeyEvent{Key: KeySpace, Down: true}) {
+				t.Fatal("space shortcut was not handled")
+			}
 			if state.showBackground || state.backgroundSource == nil {
 				t.Fatal("keyboard toggle did not retain reusable wallpaper")
 			}

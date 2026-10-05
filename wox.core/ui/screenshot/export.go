@@ -9,17 +9,8 @@ import (
 	"wox/util"
 )
 
-// reserveScreenshotExportFilePath allocates a collision-safe JPEG only after image confirmation.
+// reserveScreenshotExportFilePath allocates a collision-safe PNG only after image confirmation.
 func reserveScreenshotExportFilePath() (string, error) {
-	return reserveScreenshotImageFilePath("jpg")
-}
-
-func reserveScreenshotPNGExportFilePath() (string, error) {
-	return reserveScreenshotImageFilePath("png")
-}
-
-// reserveScreenshotImageFilePath allocates a collision-safe history image without overwriting previous captures.
-func reserveScreenshotImageFilePath(extension string) (string, error) {
 	directory := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "screenshots")
 	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
 		return "", fmt.Errorf("ensure screenshot directory: %w", err)
@@ -30,7 +21,7 @@ func reserveScreenshotImageFilePath(extension string) (string, error) {
 		if suffix > 0 {
 			suffixText = fmt.Sprintf("_%02d", suffix)
 		}
-		candidate := filepath.Join(directory, baseName+suffixText+"."+extension)
+		candidate := filepath.Join(directory, baseName+suffixText+".png")
 		file, err := os.OpenFile(candidate, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
 			if closeErr := file.Close(); closeErr != nil {

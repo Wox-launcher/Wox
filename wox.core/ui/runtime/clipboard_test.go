@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,5 +60,25 @@ func TestClipboardImagePublishesTransparentPNG(t *testing.T) {
 	clipboard, err = newClipboardImage(opaque, nil)
 	if err != nil || len(clipboard.png) != 0 {
 		t.Fatal("opaque capture unnecessarily encoded PNG")
+	}
+}
+
+// TestClipboardImageReusesEncodedPNG checks that export bytes retain alpha without another compression pass.
+func TestClipboardImageReusesEncodedPNG(t *testing.T) {
+	source := image.NewRGBA(image.Rect(10, 20, 12, 21))
+	source.SetRGBA(11, 20, color.RGBA{R: 40, G: 20, B: 10, A: 128})
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, source); err != nil {
+		t.Fatal(err)
+	}
+	clipboard, err := newClipboardImage(source, encoded.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(clipboard.png) != encoded.Len() || &clipboard.png[0] != &encoded.Bytes()[0] {
+		t.Fatal("clipboard did not reuse the exported PNG")
+	}
+	if clipboard.width != 2 || clipboard.height != 1 || !bytes.Equal(clipboard.pixels, []byte{0, 0, 0, 0, 79, 39, 19, 128}) {
+		t.Fatalf("clipboard changed straight-alpha pixels: %v", clipboard.pixels)
 	}
 }

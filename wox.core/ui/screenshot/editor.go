@@ -1,13 +1,13 @@
 package screenshot
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"image"
 	"image/color"
-	"image/jpeg"
-	"image/png"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -22,15 +22,16 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/imageencode"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/screen"
 	woxsvg "wox/util/svg"
 )
 
-const screenshotJPEGQuality = 90
 const screenshotEditorDimAlpha = 119
 
 type screenshotEditorOverlayOutcome struct {
+	confirmedAt time.Time
 	cancelled   bool
 	pinned      bool
 	record      bool
@@ -507,6 +508,10 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	case <-time.After(175 * time.Second):
 		outcome.cancelled = true
 	}
+	completionStartedAt := outcome.confirmedAt
+	if completionStartedAt.IsZero() {
+		completionStartedAt = time.Now()
+	}
 	if outcome.cancelled {
 		state.hideEditorWindow()
 	}
@@ -596,15 +601,15 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			exportedImage = composeScreenshotWindowBackground(composited, backgroundSource)
 		}
 	}
-	// PNG preserves native window corners; opaque captures keep the existing JPEG history format.
-	exportPath := options.ExportFilePath
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+		"screenshot_export stage=composed prepareMs=%d composeMs=%d totalMs=%d size=%dx%d background=%t",
+		exportStartedAt.Sub(completionStartedAt).Milliseconds(), time.Since(exportStartedAt).Milliseconds(),
+		time.Since(completionStartedAt).Milliseconds(), exportedImage.Bounds().Dx(), exportedImage.Bounds().Dy(), showBackground,
+	))
+	exportPath := screenshotSaveAsExportPath(options.ExportFilePath)
 	reservedExport := exportPath == ""
 	if reservedExport {
-		if showBackground || screenshotImageHasTransparency(exportedImage) {
-			exportPath, err = reserveScreenshotPNGExportFilePath()
-		} else {
-			exportPath, err = reserveScreenshotExportFilePath()
-		}
+		exportPath, err = reserveScreenshotExportFilePath()
 		if err != nil {
 			return ScreenshotResult{}, err
 		}
@@ -632,9 +637,20 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			exportedImage.Bounds().Dx(), exportedImage.Bounds().Dy(),
 		))
 	}
-	if err := writeScreenshotImage(exportPath, exportedImage); err != nil {
+	copyToClipboard := options.CopyToClipboard && !outcome.pinned && outcome.saveAsPath == ""
+	var clipboardPNG bytes.Buffer
+	var pngCopy *bytes.Buffer
+	if copyToClipboard {
+		pngCopy = &clipboardPNG
+	}
+	fileStartedAt := time.Now()
+	if err := writeScreenshotImageWithPNG(exportPath, exportedImage, pngCopy); err != nil {
 		return ScreenshotResult{}, err
 	}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+		"screenshot_export stage=file_written durationMs=%d totalMs=%d format=%s retainedPNGBytes=%d",
+		time.Since(fileStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), filepath.Ext(exportPath), clipboardPNG.Len(),
+	))
 	if savePath := screenshotSaveAsExportPath(outcome.saveAsPath); savePath != "" && !screenshotExportPathsEqual(savePath, exportPath) {
 		if err := writeScreenshotImage(savePath, exportedImage); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to write screenshot download: path=%s err=%s", savePath, err.Error()))
@@ -651,14 +667,20 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		LogicalSelection:        logicalSelection,
 		ExtraActionID:           outcome.extraActionID,
 	}
-	if options.CopyToClipboard && !outcome.pinned && outcome.saveAsPath == "" {
-		if err := overlay.WriteClipboardImage(exportedImage); err != nil {
+	if copyToClipboard {
+		clipboardStartedAt := time.Now()
+		if err := overlay.WriteClipboardImageWithPNG(exportedImage, clipboardPNG.Bytes()); err != nil {
 			result.ClipboardWarningMessage = err.Error()
 		} else {
 			result.ClipboardWriteSucceeded = true
 		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+			"screenshot_export stage=clipboard_ready durationMs=%d totalMs=%d success=%t reusedPNG=%t",
+			time.Since(clipboardStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), result.ClipboardWriteSucceeded, clipboardPNG.Len() > 0,
+		))
 	}
 	if options.SaveEditableScene && !scrolling {
+		sceneStartedAt := time.Now()
 		// Refuse an editable scene if the desktop changed while the capture editor was open.
 		displays, err := screen.ListDisplays()
 		if err == nil && !screenshotDisplayLayoutMatches(options.capturedDisplays, displays) {
@@ -672,6 +694,10 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		if err != nil {
 			result.EditableSceneWarning = err.Error()
 		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+			"screenshot_export stage=scene_prepared durationMs=%d totalMs=%d success=%t",
+			time.Since(sceneStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), err == nil,
+		))
 	}
 	exportSucceeded = true
 	return result, nil
@@ -709,27 +735,35 @@ func screenshotEditorPixelSelection(sourceBounds image.Rectangle, selection Rect
 	return pixelSelection, nil
 }
 
-// writeScreenshotImage uses JPEG for default exports while honoring explicit PNG paths from callers.
+// writeScreenshotImage uses the same PNG encoder for history and user-chosen destinations.
 func writeScreenshotImage(path string, source image.Image) error {
+	return writeScreenshotImageWithPNG(path, source, nil)
+}
+
+// writeScreenshotImageWithPNG retains only confirmed PNG exports needed by the clipboard, sharing the same compression pass.
+func writeScreenshotImageWithPNG(path string, source image.Image, pngCopy *bytes.Buffer) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create screenshot export directory: %w", err)
 	}
-	file, err := os.Create(path)
+	// History queries must see either the previous export or a complete image, never an encoding in progress.
+	file, err := os.CreateTemp(filepath.Dir(path), ".screenshot-export-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create screenshot export file: %w", err)
 	}
-	var encodeErr error
-	if extension := strings.ToLower(filepath.Ext(path)); extension == ".jpg" || extension == ".jpeg" {
-		encodeErr = jpeg.Encode(file, source, &jpeg.Options{Quality: screenshotJPEGQuality})
-	} else {
-		encodeErr = png.Encode(file, source)
+	defer os.Remove(file.Name())
+	var writer io.Writer = file
+	if pngCopy != nil {
+		writer = io.MultiWriter(file, pngCopy)
 	}
-	if encodeErr != nil {
+	if err := imageencode.PNG(writer, source); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("encode screenshot image: %w", encodeErr)
+		return fmt.Errorf("encode screenshot image: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close screenshot export file: %w", err)
+	}
+	if err := os.Rename(file.Name(), path); err != nil {
+		return fmt.Errorf("publish screenshot export file: %w", err)
 	}
 	return nil
 }
@@ -1358,7 +1392,7 @@ func screenshotEditorActionTooltip(action screenshotEditorAction, configured Scr
 	case screenshotEditorActionCursor:
 		return cursor, screenshotEditorTooltipWithShortcut(configured.Cursor, "Show cursor", "C")
 	case screenshotEditorActionBackground:
-		return background, screenshotEditorTooltipWithShortcut(configured.Background, "Show background", "D")
+		return background, screenshotEditorTooltipWithShortcut(configured.Background, "Show background", "Space")
 	case screenshotEditorActionPin:
 		return pin, screenshotEditorTooltipWithShortcut(configured.Pin, "Pin to screen", "P")
 	case screenshotEditorActionRecord:
@@ -2398,7 +2432,7 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 		state.mu.Unlock()
 		state.invalidate()
 		return true
-	case Key("d"):
+	case KeySpace:
 		state.mu.Unlock()
 		state.toggleWindowBackground()
 		return true
@@ -2730,7 +2764,7 @@ func (state *screenshotEditorOverlayState) stopCaretBlink() {
 
 func (state *screenshotEditorOverlayState) complete(cancelled bool) {
 	state.once.Do(func() {
-		state.result <- screenshotEditorOverlayOutcome{cancelled: cancelled}
+		state.result <- screenshotEditorOverlayOutcome{cancelled: cancelled, confirmedAt: time.Now()}
 	})
 }
 
@@ -2761,12 +2795,6 @@ func (state *screenshotEditorOverlayState) requestSave() {
 	if path == "" {
 		return
 	}
-	state.mu.Lock()
-	transparentCapture := state.windowSelection != nil || state.showBackground
-	state.mu.Unlock()
-	if transparentCapture && filepath.Ext(path) == "" {
-		path += ".png"
-	}
 	state.completeSave(screenshotSaveAsExportPath(path))
 }
 
@@ -2784,14 +2812,17 @@ func (state *screenshotEditorOverlayState) chooseScreenshotSavePath() (string, e
 	if title == "" {
 		title = "Save screenshot"
 	}
-	state.mu.Lock()
-	extension := "jpg"
-	if state.windowSelection != nil || state.showBackground {
-		extension = "png"
+	defaultName := time.Now().Format("20060102_150405") + "_wox_snapshots.png"
+	path, err := window.SaveFile(SaveFileOptions{Title: title, DefaultFileName: defaultName, Extension: "png"})
+	if err == nil && path != "" {
+		pngPath := screenshotSaveAsExportPath(path)
+		// Native overwrite confirmation covers the chosen name, not a different name after normalization.
+		if !screenshotExportPathsEqual(path, pngPath) && util.IsFileExists(pngPath) {
+			err = fmt.Errorf("PNG screenshot destination already exists: %s", pngPath)
+		} else {
+			path = pngPath
+		}
 	}
-	state.mu.Unlock()
-	defaultName := time.Now().Format("20060102_150405") + "_wox_snapshots." + extension
-	path, err := window.SaveFile(SaveFileOptions{Title: title, DefaultFileName: defaultName, Extension: extension})
 	if path == "" || err != nil {
 		if _, showErr := window.Show(); showErr != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to restore screenshot overlay after save dialog: %s", showErr.Error()))
@@ -2801,14 +2832,15 @@ func (state *screenshotEditorOverlayState) chooseScreenshotSavePath() (string, e
 	return path, err
 }
 
-// screenshotSaveAsExportPath keeps a user-chosen destination and adds JPEG only when no extension was given.
+// screenshotSaveAsExportPath keeps every destination aligned with the PNG-only encoder.
 func screenshotSaveAsExportPath(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
 	}
-	if filepath.Ext(path) == "" {
-		return path + ".jpg"
+	extension := filepath.Ext(path)
+	if !strings.EqualFold(extension, ".png") {
+		return strings.TrimSuffix(path, extension) + ".png"
 	}
 	return path
 }
@@ -2878,7 +2910,7 @@ func exportScreenshotSelection(source image.Image, annotations []screenshotEdito
 	return composited, nil
 }
 
-// pinScreenshotOverlay shows the composited selection before the JPEG history file is written.
+// pinScreenshotOverlay shows the composited selection before the PNG history file is written.
 func pinScreenshotOverlay(img image.Image, exportPath string, logical Rect) error {
 	width := float64(logical.Width)
 	height := float64(logical.Height)

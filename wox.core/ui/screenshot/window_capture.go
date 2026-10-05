@@ -102,18 +102,3 @@ func clipScreenshotWindowAlpha(output *image.RGBA, source image.Image, selection
 		}
 	}
 }
-
-// screenshotImageHasTransparency selects a lossless alpha-capable export only when the result needs it.
-func screenshotImageHasTransparency(pixels image.Image) bool {
-	if opaque, ok := pixels.(interface{ Opaque() bool }); ok {
-		return !opaque.Opaque()
-	}
-	for y := pixels.Bounds().Min.Y; y < pixels.Bounds().Max.Y; y++ {
-		for x := pixels.Bounds().Min.X; x < pixels.Bounds().Max.X; x++ {
-			if _, _, _, alpha := pixels.At(x, y).RGBA(); alpha != 65535 {
-				return true
-			}
-		}
-	}
-	return false
-}

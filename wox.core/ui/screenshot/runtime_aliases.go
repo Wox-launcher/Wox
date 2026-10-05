@@ -35,6 +35,7 @@ const (
 	KeyBackspace                  = woxui.KeyBackspace
 	KeyDelete                     = woxui.KeyDelete
 	KeyEnter                      = woxui.KeyEnter
+	KeySpace                      = woxui.KeySpace
 	KeyEscape                     = woxui.KeyEscape
 	KeyArrowLeft                  = woxui.KeyArrowLeft
 	KeyArrowUp                    = woxui.KeyArrowUp

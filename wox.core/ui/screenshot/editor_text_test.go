@@ -259,7 +259,7 @@ func TestScreenshotEditorCaretFallsBackWithoutNativeMetrics(t *testing.T) {
 
 // TestScreenshotEditorLeavesCompositionKeysToIME prevents candidate navigation from editing or committing the annotation.
 func TestScreenshotEditorLeavesCompositionKeysToIME(t *testing.T) {
-	for _, key := range []Key{KeyEnter, KeyEscape, KeyBackspace, KeyDelete, KeyArrowLeft, KeyArrowRight, KeyArrowUp, KeyArrowDown, KeyHome, KeyEnd, Key(" "), Key("1")} {
+	for _, key := range []Key{KeyEnter, KeyEscape, KeyBackspace, KeyDelete, KeyArrowLeft, KeyArrowRight, KeyArrowUp, KeyArrowDown, KeyHome, KeyEnd, KeySpace, Key("1")} {
 		t.Run(string(key), func(t *testing.T) {
 			state := &screenshotEditorOverlayState{textEditing: true, textFontSize: 20, uiScale: 1}
 			state.resetTextEditorLocked("文字")
