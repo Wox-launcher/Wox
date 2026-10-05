@@ -6,9 +6,12 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"image/draw"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"weak"
 
 	"wox/util/clipboard"
 	"wox/util/screen"
@@ -51,6 +54,48 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	}
 	if color.RGBAModel.Convert(restored.At(4, 5)) != (color.RGBA{R: 255, A: 255}) || marks[0].points[0] != (Point{X: 3, Y: 3}) || doc.CursorPixel.X != 8 {
 		t.Fatal("background save retained mutable editor or native capture data")
+	}
+}
+
+// TestPreparedScreenshotSceneReleasesBackground keeps the job alive to catch rasters retained after successful saving.
+func TestPreparedScreenshotSceneReleasesBackground(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	selection := Rect{X: 8, Y: 8, Width: 16, Height: 16}
+	state := newScreenshotEditorOverlayState(ScreenshotOptions{}, nil, screenshotEditorPlatform{frameSize: Size{Width: 32, Height: 32}, initialSelection: &selection})
+	state.originalSource = source
+	if err := state.installWindowCapture(selection, image.NewRGBA(image.Rect(0, 0, 16, 16))); err != nil {
+		t.Fatal(err)
+	}
+	background := image.NewRGBA(image.Rect(0, 0, 24, 24))
+	draw.Draw(background, background.Bounds(), image.NewUniform(color.RGBA{A: 255}), image.Point{}, draw.Src)
+	retained := weak.Make(background)
+	state.backgroundSource, state.showBackground = background, true
+	background = nil
+	path := filepath.Join(t.TempDir(), "capture.png")
+	if err := writeScreenshotImage(path, source); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = screenshotedit.Remove(path) })
+	save, err := prepareScreenshotDocumentSave(path, source, source, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.releaseWindowBackground()
+	if retained.Value() == nil {
+		t.Fatal("scene lost its wallpaper before saving")
+	}
+	for call := 0; call < 2; call++ {
+		if err := save(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime.GC()
+	if retained.Value() != nil {
+		t.Fatal("completed scene job retained its background raster")
+	}
+	runtime.KeepAlive(save)
+	if !screenshotedit.Available(path) {
+		t.Fatal("releasing scene pixels removed the saved editable history")
 	}
 }
 

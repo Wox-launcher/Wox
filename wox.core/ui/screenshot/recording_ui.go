@@ -130,7 +130,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	editor.mu.Lock()
 	editor.activeTool = screenshotEditorToolSelect
 	editor.hasSelectedMark = false
-	editor.selection = selection
+	editor.setSelectionLocked(selection)
 	editor.hasSelection = true
 	editor.annotations = nil
 	editor.toolbarRect = Rect{}
@@ -2100,7 +2100,7 @@ func (state *recordingToolbarState) finishRecordingSelectionEdit() {
 		if normalized, err := normalizeRecordingLogicalSelection(image.Rect(0, 0, source.Width, source.Height), selection, state.frameSize); err == nil {
 			selection = normalized
 			state.editor.mu.Lock()
-			state.editor.selection = normalized
+			state.editor.setSelectionLocked(normalized)
 			state.editor.mu.Unlock()
 		}
 	}

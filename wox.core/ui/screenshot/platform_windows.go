@@ -62,6 +62,7 @@ type windowsCursorInfo struct {
 
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
 	startedAt := time.Now()
+	windowCandidates := captureWindowsWindowCandidates()
 	capturedCursorPosition, capturedCursor := captureWindowsCursor()
 	type desktopCapture struct {
 		capture      *woxui.WindowsDesktopCapture
@@ -96,6 +97,10 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	}
 	source, virtualBounds := captured.capture.Image, captured.capture.Bounds
 	platform := screenshotEditorPlatform{
+		windowCandidates: windowsScreenshotWindowCandidates(windowCandidates, virtualBounds),
+		captureWindow: func(selection Rect) (*image.RGBA, error) {
+			return captureWindowsSelectedWindow(windowCandidates, virtualBounds, selection)
+		},
 		setWindowBounds: func(window *Window) error {
 			return window.SetPhysicalBounds(Rect{
 				X:      float32(virtualBounds.Min.X),

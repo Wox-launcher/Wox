@@ -33,3 +33,9 @@ OCR is optional. Enable it in **Settings -> Plugins -> Screenshot** to search ca
 1. Run `screenshot new`, or bind a hotkey to that query.
 2. Select the region and annotate if needed.
 3. Later, type `screenshot` and filter by date or OCR text.
+
+On Windows and macOS, hover over a window to highlight it and click to select it. Drag to select a custom region. Overlapping windows follow their visible stacking order. On macOS, a window spanning displays is selected within the display under the pointer.
+
+When native window capture is available, an unchanged window selection uses the window's own pixels at export, preserving transparent rounded corners without the desktop behind them. The editor keeps showing the original desktop pixels. Moving, resizing, or replacing the selection cancels this transparency effect, even if you later return to the original bounds. Transparent captures are saved as PNG by default and keep their alpha when copied or pinned. Choosing JPEG explicitly produces an opaque image.
+
+Window screenshots also have a **Show background** toolbar toggle (D). The editor preloads the wallpaper in the background and prepares the composition once window pixels are ready; subsequent toggles reuse it. It centers the original-size window on the current system wallpaper inside a rounded canvas. Horizontal and vertical margins use the same percentage of the window width and height, keeping the original aspect ratio. The selection outline, handles, and size label follow the full background canvas and preview the composition before copying, saving, or pinning. Turning it off restores the transparent-window export. Changing the selection cancels both effects. Exiting the editor cancels pending background work and releases its images; the history job releases its own image data after saving. Editable history retains the wallpaper and toggle state.

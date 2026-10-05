@@ -957,11 +957,11 @@ func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 	if got := screenshotEditorToolTooltip(int(screenshotEditorToolRect), configured); got != "Localized rectangle (R)" {
 		t.Fatalf("configured tooltip = %q", got)
 	}
-	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{})
+	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{})
 	if anchor.X != 10 || actionTooltip != "Localized cursor (C)" {
 		t.Fatalf("cursor tooltip = anchor:%+v text:%q", anchor, actionTooltip)
 	}
-	saveAnchor, saveTooltip := screenshotEditorActionTooltip(screenshotEditorActionSave, ScreenshotActionTooltips{Save: "Localized save"}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{X: 40, Y: 20, Width: 40, Height: 40}, Rect{})
+	saveAnchor, saveTooltip := screenshotEditorActionTooltip(screenshotEditorActionSave, ScreenshotActionTooltips{Save: "Localized save"}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{X: 40, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{})
 	if saveAnchor.X != 40 || !strings.HasPrefix(saveTooltip, "Localized save (") {
 		t.Fatalf("save tooltip = anchor:%+v text:%q", saveAnchor, saveTooltip)
 	}

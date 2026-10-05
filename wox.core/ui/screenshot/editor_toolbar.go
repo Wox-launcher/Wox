@@ -1,7 +1,7 @@
 package screenshot
 
 // screenshotEditorToolbarLayout wraps complete button slots on narrow or scaled displays without shrinking hit targets.
-func screenshotEditorToolbarLayout(frameWidth, scale float32, hideTools, recording, scrolling bool, extraCount int) (Size, []Rect) {
+func screenshotEditorToolbarLayout(frameWidth, scale float32, hideTools, recording, scrolling, background bool, extraCount int) (Size, []Rect) {
 	steps := make([]float32, 0, int(screenshotEditorToolCount)+extraCount+8)
 	width := float32(182)
 	if !hideTools {
@@ -16,6 +16,10 @@ func screenshotEditorToolbarLayout(frameWidth, scale float32, hideTools, recordi
 		width = 398 + 48*float32(screenshotEditorToolCount-1)
 		if !scrolling {
 			width -= 54
+		}
+		if background {
+			steps = append(steps, 54)
+			width += 54
 		}
 		if recording {
 			steps = append(steps, 48)

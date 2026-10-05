@@ -2,7 +2,36 @@
 
 package screenshot
 
-import "testing"
+import (
+	"image"
+	"testing"
+	"wox/util/window"
+)
+
+// TestWindowsScreenshotWindowCandidates covers mixed-DPI frames in physical pixels and negative origins.
+func TestWindowsScreenshotWindowCandidates(t *testing.T) {
+	desktop := image.Rect(-1920, -200, 2560, 1440)
+	windows := []window.ManagedWindow{
+		{Bounds: window.WindowRect{X: -2000, Y: -250, Width: 980, Height: 750}},
+		{Bounds: window.WindowRect{X: 200, Y: 100, Width: 900, Height: 600}},
+		{Bounds: window.WindowRect{X: -100, Y: 200, Width: 450, Height: 300}},
+		{Bounds: window.WindowRect{X: 3000, Y: 0, Width: 400, Height: 300}},
+	}
+	want := []Rect{
+		{X: 0, Y: 0, Width: 900, Height: 700},
+		{X: 2120, Y: 300, Width: 900, Height: 600},
+		{X: 1820, Y: 400, Width: 450, Height: 300},
+	}
+	got := windowsScreenshotWindowCandidates(windows, desktop)
+	if len(got) != len(want) {
+		t.Fatalf("candidates = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("candidate %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
 
 func TestWindowsScreenshotPointerCoordinateKeepsPixelCenterInsideTarget(t *testing.T) {
 	tests := []struct {

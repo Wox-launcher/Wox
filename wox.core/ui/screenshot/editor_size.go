@@ -42,6 +42,14 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 			Enabled: state.activeSizeDialog() == nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		}}
 		state.mu.Lock()
+		if state.backgroundRect.Width > 0 {
+			tree.RootIDs = append(tree.RootIDs, 3)
+			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
+				ID: 3, AutomationID: "screenshot.background", Role: woxui.AccessibilityRoleButton,
+				Label: state.actionTooltips.Background, Value: strconv.FormatBool(state.showBackground), Bounds: state.surfaceRect(state.backgroundRect),
+				Enabled: state.windowSource != nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			})
+		}
 		if state.editFontSizeRect.Width > 0 {
 			tree.RootIDs = append(tree.RootIDs, 2)
 			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
@@ -54,6 +62,10 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 		state.mu.Unlock()
 	}
 	_ = state.window.UpdateAccessibility(tree, func(id woxui.AccessibilityNodeID, action woxui.AccessibilityAction, value string) error {
+		if id == 3 && action == woxui.AccessibilityActionActivate {
+			state.toggleWindowBackground()
+			return nil
+		}
 		if id == 2 {
 			return state.fontSizeAccessibilityAction(action, value)
 		}
@@ -73,18 +85,18 @@ func (state *screenshotEditorOverlayState) activeSizeDialog() *screenshotSizeDia
 // openSizeDialog uses a separate native surface so ordinary controls retain logical sizing on mixed-DPI desktops.
 func (state *screenshotEditorOverlayState) openSizeDialog() bool {
 	state.mu.Lock()
-	if !state.hasSelection || state.dragging || state.annotationDragging || state.editMode != screenshotEditorEditNone || state.textEditing || state.autoConfirm || state.scrolling || state.scrollingStarting || state.saving || state.sizeDialog != nil || state.image == nil {
+	if !state.hasSelection || state.dragging || state.annotationDragging || state.editMode != screenshotEditorEditNone || state.textEditing || state.autoConfirm || state.scrolling || state.scrollingStarting || (state.showBackground && state.backgroundLoading) || state.saving || state.sizeDialog != nil || state.image == nil {
 		state.mu.Unlock()
 		return false
 	}
-	pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, state.image.Width, state.image.Height), state.selection, state.frameSize)
+	pixels, err := state.selectionPixelBoundsLocked()
 	if err != nil {
 		state.mu.Unlock()
 		return false
 	}
 	dialog := &screenshotSizeDialog{
 		editor: state, width: woxwidget.NewTextEditingController(strconv.Itoa(pixels.Dx())), height: woxwidget.NewTextEditingController(strconv.Itoa(pixels.Dy())),
-		maxWidth: state.image.Width - pixels.Min.X, maxHeight: state.image.Height - pixels.Min.Y,
+		maxWidth: max(pixels.Dx(), state.image.Width-max(0, pixels.Min.X)), maxHeight: max(pixels.Dy(), state.image.Height-max(0, pixels.Min.Y)),
 	}
 	dialog.width.SelectAll()
 	state.sizeDialog = dialog
@@ -267,7 +279,7 @@ func (dialog *screenshotSizeDialog) setRatioLocked(locked bool) {
 	}
 	state := dialog.editor
 	state.mu.Lock()
-	pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, state.image.Width, state.image.Height), state.selection, state.frameSize)
+	pixels, err := state.selectionPixelBoundsLocked()
 	state.mu.Unlock()
 	if err != nil {
 		dialog.lockRatio = false
@@ -324,7 +336,11 @@ func (dialog *screenshotSizeDialog) apply() {
 	}
 	state := dialog.editor
 	state.mu.Lock()
-	state.selection = screenshotEditorSelectionWithPixelSize(state.selection, state.frameSize, image.Pt(state.image.Width, state.image.Height), width, height)
+	pixels, err := state.selectionPixelBoundsLocked()
+	if err == nil && (pixels.Dx() != width || pixels.Dy() != height) {
+		selection := screenshotEditorSelectionWithPixelSize(state.selectionBoundsLocked(), state.frameSize, image.Pt(state.image.Width, state.image.Height), width, height)
+		state.setSelectionLocked(normalizeScreenshotEditorRect(selection, state.frameSize))
+	}
 	state.mu.Unlock()
 	state.closeSizeDialog(true)
 }

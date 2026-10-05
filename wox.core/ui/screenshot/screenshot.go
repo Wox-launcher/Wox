@@ -74,12 +74,15 @@ type RecordingTooltips struct {
 
 // ScreenshotActionTooltips carries localized labels for screenshot-wide actions.
 type ScreenshotActionTooltips struct {
-	Undo             string
-	ScrollingCapture string
-	Cursor           string
-	Pin              string
-	Record           string
-	Cancel           string
+	Undo              string
+	ScrollingCapture  string
+	Cursor            string
+	Background        string
+	BackgroundLoading string
+	BackgroundFailed  string
+	Pin               string
+	Record            string
+	Cancel            string
 	// Save labels the download control. SaveTitle is the native Save As dialog title.
 	Save      string
 	SaveTitle string

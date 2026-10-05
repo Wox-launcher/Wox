@@ -35,7 +35,7 @@ var index = struct {
 }{hashes: make(map[string]map[string]bool)}
 
 // Save commits a self-contained scene before publishing its clipboard fingerprints.
-func Save(path string, state json.RawMessage, source, cursor, composited image.Image) error {
+func Save(path string, state json.RawMessage, source, cursor, composited, window, background image.Image) error {
 	exportHash, err := fileHash(path)
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func Save(path string, state json.RawMessage, source, cursor, composited image.I
 	for _, resource := range []struct {
 		name string
 		img  image.Image
-	}{{"source.png", source}, {"cursor.png", cursor}} {
+	}{{"source.png", source}, {"cursor.png", cursor}, {"window.png", window}, {"background.png", background}} {
 		if resource.img == nil {
 			continue
 		}
@@ -148,42 +148,46 @@ func readMetadata(files []*zip.File) (Metadata, error) {
 }
 
 // Load verifies the exported file before allocating the scene's lossless image resources.
-func Load(path string) (Metadata, image.Image, image.Image, error) {
+func Load(path string) (Metadata, image.Image, image.Image, image.Image, image.Image, error) {
 	archive, err := zip.OpenReader(path + Suffix)
 	if err != nil {
-		return Metadata{}, nil, nil, err
+		return Metadata{}, nil, nil, nil, nil, err
 	}
 	defer archive.Close()
 	metadata, err := readMetadata(archive.File)
 	if err != nil {
-		return Metadata{}, nil, nil, err
+		return Metadata{}, nil, nil, nil, nil, err
 	}
 	hash, err := fileHash(path)
 	if err != nil {
-		return Metadata{}, nil, nil, err
+		return Metadata{}, nil, nil, nil, nil, err
 	}
 	if hash != metadata.ExportHash {
-		return Metadata{}, nil, nil, errors.New("screenshot image no longer matches its scene")
+		return Metadata{}, nil, nil, nil, nil, errors.New("screenshot image no longer matches its scene")
 	}
-	var source, cursor image.Image
+	var source, cursor, window, background image.Image
 	for _, file := range archive.File {
-		if file.Name != "source.png" && file.Name != "cursor.png" {
+		if file.Name != "source.png" && file.Name != "cursor.png" && file.Name != "window.png" && file.Name != "background.png" {
 			continue
 		}
 		img, err := readImage(file)
 		if err != nil {
-			return Metadata{}, nil, nil, err
+			return Metadata{}, nil, nil, nil, nil, err
 		}
 		if file.Name == "source.png" {
 			source = img
-		} else {
+		} else if file.Name == "cursor.png" {
 			cursor = img
+		} else if file.Name == "window.png" {
+			window = img
+		} else {
+			background = img
 		}
 	}
 	if source == nil {
-		return Metadata{}, nil, nil, errors.New("screenshot source image is missing")
+		return Metadata{}, nil, nil, nil, nil, errors.New("screenshot source image is missing")
 	}
-	return metadata, source, cursor, nil
+	return metadata, source, cursor, window, background, nil
 }
 
 // readImage checks decoded dimensions before a corrupt local archive can allocate arbitrary memory.

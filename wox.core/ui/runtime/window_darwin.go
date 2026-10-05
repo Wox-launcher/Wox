@@ -1528,6 +1528,10 @@ func testDarwinFractionalDamage(scale float32, origin Point) int32 {
 	return int32(C.wox_darwin_test_fractional_damage(C.float(scale), C.float(origin.X), C.float(origin.Y)))
 }
 
+func testDarwinScreenshotWindowSelection() int32 {
+	return int32(C.wox_darwin_test_screenshot_window_selection())
+}
+
 // testRenderDarwinMaterial exercises the native renderer without opening a window.
 func testRenderDarwinMaterial(scale float32, alpha uint8, mode int) ([]byte, int) {
 	size := int(96 * scale)

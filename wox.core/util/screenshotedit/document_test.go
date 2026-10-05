@@ -41,7 +41,7 @@ func TestSceneBackgroundCommitDoesNotResurrectDeletedScreenshot(t *testing.T) {
 	}
 	source := &blockedSceneImage{Image: pixels, started: make(chan struct{}), release: make(chan struct{})}
 	done := make(chan error, 1)
-	go func() { done <- Save(path, json.RawMessage(`{}`), source, nil, pixels) }()
+	go func() { done <- Save(path, json.RawMessage(`{}`), source, nil, pixels, nil, nil) }()
 	defer func() {
 		select {
 		case <-source.release:
@@ -116,7 +116,7 @@ func TestSceneRejectsCorruptAndUnsupportedArchives(t *testing.T) {
 			if err := os.WriteFile(path+Suffix, buffer.Bytes(), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, _, err := Load(path); err == nil {
+			if _, _, _, _, _, err := Load(path); err == nil {
 				t.Fatal("invalid scene accepted")
 			}
 		})
@@ -124,7 +124,7 @@ func TestSceneRejectsCorruptAndUnsupportedArchives(t *testing.T) {
 	if err := os.WriteFile(path+Suffix, []byte("broken ZIP"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := Load(path); err == nil {
+	if _, _, _, _, _, err := Load(path); err == nil {
 		t.Fatal("invalid ZIP accepted")
 	}
 	if Resolve(strings.Repeat("0", 64)) != "" {
@@ -156,7 +156,7 @@ func TestSceneClipboardIndexAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = Remove(path) })
-	if err := Save(path, json.RawMessage(`{"test":true}`), source, nil, source); err != nil {
+	if err := Save(path, json.RawMessage(`{"test":true}`), source, nil, source, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, hash := range []string{rawHash, jpegHash} {
@@ -164,7 +164,7 @@ func TestSceneClipboardIndexAndLifecycle(t *testing.T) {
 			t.Fatal("clipboard copy variant lost scene association")
 		}
 	}
-	metadata, loaded, _, err := Load(path)
+	metadata, loaded, _, _, _, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestSceneClipboardIndexAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = Remove(other) })
-	if err := Save(other, json.RawMessage(`{"test":false}`), source, nil, source); err != nil {
+	if err := Save(other, json.RawMessage(`{"test":false}`), source, nil, source, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if Resolve(rawHash) != "" {
@@ -204,7 +204,7 @@ func TestSceneClipboardIndexAndLifecycle(t *testing.T) {
 	if err := os.WriteFile(path, []byte("replaced"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := Load(path); err == nil {
+	if _, _, _, _, _, err := Load(path); err == nil {
 		t.Fatal("replaced export accepted")
 	}
 	if err := Remove(path); err != nil {
@@ -231,7 +231,7 @@ func TestSceneSaveFailureKeepsExport(t *testing.T) {
 	if err := os.Mkdir(path+Suffix, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(path, json.RawMessage(`{}`), source, nil, source); err == nil {
+	if err := Save(path, json.RawMessage(`{}`), source, nil, source, nil, nil); err == nil {
 		t.Fatal("expected scene commit failure")
 	}
 	actual, err := os.ReadFile(path)

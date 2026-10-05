@@ -275,6 +275,7 @@ const (
 	ScreenshotBrush            = "screenshot.brush"
 	ScreenshotEraser           = "screenshot.eraser"
 	ScreenshotScrollingCapture = "screenshot.scrolling-capture"
+	ScreenshotBackground       = "screenshot.background"
 	ScreenshotCursor           = "screenshot.cursor"
 	ScreenshotPin              = "screenshot.pin"
 	UsageShare                 = "usage.share"

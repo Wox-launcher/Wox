@@ -56,6 +56,14 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		})
 	}
 	defer dismissSelection()
+	var windowSource *image.RGBA
+	var windowWidth, windowHeight C.int32_t
+	if C.wox_darwin_copy_screenshot_window_rgba(C.uintptr_t(sessionHandle), &windowWidth, &windowHeight, nil) == 0 {
+		windowSource = image.NewRGBA(image.Rect(0, 0, int(windowWidth), int(windowHeight)))
+		if C.wox_darwin_copy_screenshot_window_rgba(C.uintptr_t(sessionHandle), &windowWidth, &windowHeight, unsafe.Pointer(&windowSource.Pix[0])) != 0 {
+			windowSource = nil
+		}
+	}
 	platform := screenshotEditorPlatform{
 		setWindowBounds: func(window *Window) error {
 			return window.SetBounds(bounds)
@@ -118,8 +126,9 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				})
 			}, nil
 		},
-		frameSize:        Size{Width: bounds.Width, Height: bounds.Height},
-		initialSelection: &selection,
+		frameSize:           Size{Width: bounds.Width, Height: bounds.Height},
+		initialSelection:    &selection,
+		initialWindowSource: windowSource,
 		afterShow: func() {
 			dismissSelection()
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_toolbar stage=editor_shown editorUs=%d", time.Since(editorStartedAt).Microseconds()))

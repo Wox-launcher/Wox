@@ -802,7 +802,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
 // drawColorInspector mirrors the portable editor's pre-selection sampler. macOS selects on a
 // native overlay first, so this UI has to live here or the color inspector never appears.
 - (void)drawColorInspector {
-  if (!_hover_visible || _has_selection || _capture == nil) {
+  if (!_hover_visible || _capture == nil) {
     return;
   }
   int32_t pixel_x = 0;
@@ -929,7 +929,7 @@ static void wox_screenshot_draw_text(NSString *text, NSRect rect, CGFloat size, 
   }
   _selection_border.frame = local;
   _selection_border.hidden = !selected;
-  _inspector.hidden = !_hover_visible || _has_selection;
+  _inspector.hidden = !_hover_visible;
   if (!_inspector.hidden) {
     _inspector.frame = [self inspectorRect];
     _inspector.needsDisplay = YES;
@@ -1023,14 +1023,108 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
   woxGoDarwinScreenshotDiagnostic(message.UTF8String);
 }
 
+// WindowServer's top-left origin belongs to the primary display; Wox's origin is the top of the virtual desktop.
+// Keep both in logical points so a display above the primary display does not shift hit tests or window crops.
+static NSArray *screenshot_window_candidates_in_desktop(NSArray *windows, CGFloat primary_offset_y) {
+  NSMutableArray *mapped = [NSMutableArray arrayWithCapacity:windows.count];
+  for (NSDictionary *info in windows) {
+    CGRect bounds;
+    CFDictionaryRef dictionary = (CFDictionaryRef)info[(id)kCGWindowBounds];
+    if (dictionary == NULL || !CGRectMakeWithDictionaryRepresentation(dictionary, &bounds)) continue;
+    bounds.origin.y += primary_offset_y;
+    NSMutableDictionary *entry = [[info mutableCopy] autorelease];
+    CFDictionaryRef coordinates = CGRectCreateDictionaryRepresentation(bounds);
+    entry[(id)kCGWindowBounds] = (NSDictionary *)coordinates;
+    CFRelease(coordinates);
+    [mapped addObject:entry];
+  }
+  return mapped;
+}
+
+// Resolve WindowServer's front-to-back logical frames without touching live NSWindows or backing pixels.
+static NSRect screenshot_window_at_point(NSArray *candidates, NSRect display_bounds, NSPoint point) {
+  for (NSDictionary *info in candidates) {
+    NSNumber *layer = info[(id)kCGWindowLayer];
+    NSNumber *alpha = info[(id)kCGWindowAlpha];
+    if (layer == nil || layer.integerValue != 0 || alpha.doubleValue <= 0) continue;
+    CGRect bounds;
+    CFDictionaryRef dictionary = (CFDictionaryRef)info[(id)kCGWindowBounds];
+    if (dictionary == NULL || !CGRectMakeWithDictionaryRepresentation(dictionary, &bounds)) continue;
+    NSRect frame = NSRectFromCGRect(bounds);
+    if (!NSPointInRect(point, frame)) continue;
+    NSRect visible = NSIntersectionRect(frame, display_bounds);
+    if (NSWidth(visible) >= 2.0 && NSHeight(visible) >= 2.0) return visible;
+  }
+  return NSZeroRect;
+}
+
+// Capture the selected WindowServer surface directly so its real alpha excludes the desktop behind rounded corners.
+static CGImageRef screenshot_window_image(NSArray *candidates, NSRect selection, NSPoint point) {
+  typedef CGImageRef (*CaptureWindow)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
+  CaptureWindow capture = (CaptureWindow)dlsym(RTLD_DEFAULT, "CGWindowListCreateImage");
+  if (capture == NULL) return NULL;
+  for (NSDictionary *info in candidates) {
+    NSNumber *layer = info[(id)kCGWindowLayer];
+    if (layer == nil || layer.integerValue != 0 || [info[(id)kCGWindowAlpha] doubleValue] <= 0) continue;
+    CGRect bounds;
+    CFDictionaryRef dictionary = (CFDictionaryRef)info[(id)kCGWindowBounds];
+    if (dictionary == NULL || !CGRectMakeWithDictionaryRepresentation(dictionary, &bounds) || !CGRectContainsPoint(bounds, NSPointToCGPoint(point))) continue;
+    CGWindowID window = [info[(id)kCGWindowNumber] unsignedIntValue];
+    CGImageRef image = capture(CGRectNull, kCGWindowListOptionIncludingWindow, window,
+                              kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution);
+    if (image == NULL) return NULL;
+    CGFloat scale_x = CGImageGetWidth(image) / bounds.size.width;
+    CGFloat scale_y = CGImageGetHeight(image) / bounds.size.height;
+    CGRect clip = CGRectMake((NSMinX(selection)-bounds.origin.x)*scale_x, (NSMinY(selection)-bounds.origin.y)*scale_y,
+                             NSWidth(selection)*scale_x, NSHeight(selection)*scale_y);
+    CGImageRef cropped = CGImageCreateWithImageInRect(image, clip);
+    CGImageRelease(image);
+    return cropped;
+  }
+  return NULL;
+}
+
+// Exercise native filtering, overlap order, and display clipping without opening a selector or requesting permission.
+int32_t wox_darwin_test_screenshot_window_selection(void) {
+  @autoreleasepool {
+    NSRect front = NSMakeRect(-100, 40, 300, 200);
+    NSRect back = NSMakeRect(-300, 0, 800, 600);
+    NSDictionary *(^candidate)(NSRect, NSInteger, double) = ^NSDictionary *(NSRect frame, NSInteger layer, double alpha) {
+      NSDictionary *bounds = (NSDictionary *)CGRectCreateDictionaryRepresentation(NSRectToCGRect(frame));
+      NSDictionary *info = @{
+        (id)kCGWindowBounds: bounds,
+        (id)kCGWindowLayer: @(layer),
+        (id)kCGWindowAlpha: @(alpha)
+      };
+      [bounds release];
+      return info;
+    };
+    NSArray *windows = @[candidate(back, 1, 1), candidate(back, 0, 0),
+                         candidate(front, 0, 1), candidate(back, 0, 1)];
+    NSRect left_display = NSMakeRect(-500, 0, 500, 600);
+    NSRect right_display = NSMakeRect(0, 0, 800, 600);
+    if (!NSEqualRects(screenshot_window_at_point(windows, left_display, NSMakePoint(-50, 80)), NSMakeRect(-100, 40, 100, 200))) return 1;
+    if (!NSEqualRects(screenshot_window_at_point(windows, right_display, NSMakePoint(50, 80)), NSMakeRect(0, 40, 200, 200))) return 2;
+    if (!NSEqualRects(screenshot_window_at_point(windows, left_display, NSMakePoint(-200, 80)), NSMakeRect(-300, 0, 300, 600))) return 3;
+    if (!NSIsEmptyRect(screenshot_window_at_point(windows, right_display, NSMakePoint(600, 80)))) return 4;
+    if (!NSIsEmptyRect(screenshot_window_at_point(@[], right_display, NSMakePoint(50, 80)))) return 5;
+    NSArray *above_primary = screenshot_window_candidates_in_desktop(windows, 600);
+    NSRect shifted_display = NSOffsetRect(left_display, 0, 600);
+    if (!NSEqualRects(screenshot_window_at_point(above_primary, shifted_display, NSMakePoint(-50, 680)), NSMakeRect(-100, 640, 100, 200))) return 6;
+    return 0;
+  }
+}
+
 @interface WoxScreenshotSelectionSession () {
   NSArray *_captures;
   NSArray *_windows;
+  NSArray *_window_candidates;
   id _event_monitor;
   dispatch_semaphore_t _completion;
   NSPoint _drag_start;
   NSPoint _hover_point;
   BOOL _dragging;
+  BOOL _selection_dragged;
   BOOL _completed;
   BOOL _cancelled;
   BOOL _dismissed;
@@ -1038,6 +1132,8 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
   WoxScreenshotDisplayCapture *_drag_capture;
   WoxScreenshotDisplayCapture *_selected_capture;
   NSRect _selection;
+  NSRect _pressed_window;
+  CGImageRef _selected_window_image;
   NSString *_copied_color;
 }
 - (instancetype)initWithCaptures:(NSArray *)captures;
@@ -1047,6 +1143,7 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
 - (NSString *)copiedColor;
 - (WoxScreenshotDisplayCapture *)selectedCapture;
 - (NSRect)selection;
+- (CGImageRef)selectedWindowImage;
 - (dispatch_semaphore_t)completion;
 @end
 
@@ -1057,6 +1154,13 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
     return nil;
   }
   _captures = [captures copy];
+  // Snapshot front-to-back WindowServer bounds before creating the selector panels.
+  // These are global top-left logical points; capture backing pixels are mapped separately.
+  NSArray *window_info = (NSArray *)CGWindowListCopyWindowInfo(
+      kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+  CGFloat primary_offset_y = desktop_top() - NSMaxY([NSScreen screens].firstObject.frame);
+  _window_candidates = [screenshot_window_candidates_in_desktop(window_info, primary_offset_y) copy];
+  [window_info release];
   _completion = dispatch_semaphore_create(0);
   NSMutableArray *windows = [NSMutableArray arrayWithCapacity:_captures.count];
   for (WoxScreenshotDisplayCapture *capture in _captures) {
@@ -1137,12 +1241,23 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
   }
 }
 
+// windowAtPoint: clips the frontmost normal window to the display that owns the editor handoff.
+- (NSRect)windowAtPoint:(NSPoint)point {
+  WoxScreenshotDisplayCapture *capture = [self captureAtPoint:point];
+  if (capture == nil) return NSZeroRect;
+  return screenshot_window_at_point(_window_candidates, capture->logical_bounds, point);
+}
+
 // updateHoverAt:visible: keeps the inspector on the display under the pointer until a drag starts.
 - (void)updateHoverAt:(NSPoint)point visible:(BOOL)visible {
   _hover_point = point;
   _hover_visible = visible && [self captureAtPoint:point] != nil;
   for (WoxScreenshotPanel *window in _windows) {
     [(WoxScreenshotSelectionView *)window.contentView.subviews.firstObject setHoverPoint:point visible:_hover_visible];
+  }
+  if (!_dragging) {
+    NSRect candidate = visible ? [self windowAtPoint:point] : NSZeroRect;
+    [self updateSelection:candidate visible:!NSIsEmptyRect(candidate)];
   }
 }
 
@@ -1347,6 +1462,8 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
       }
       NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
       session->_drag_start = point;
+      session->_pressed_window = [session windowAtPoint:point];
+      session->_selection_dragged = NO;
       session->_dragging = YES;
       [session updateHoverAt:point visible:NO];
       [session updateSelection:[session rectFromStart:point end:point] visible:YES];
@@ -1356,12 +1473,23 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
       // The portable annotation editor owns one display after handoff. Keeping the native drag on
       // its starting display avoids presenting a cross-display selection that export would crop.
       NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
+      session->_selection_dragged = session->_selection_dragged ||
+          hypot(point.x - session->_drag_start.x, point.y - session->_drag_start.y) >= 4.0;
       [session updateSelection:[session rectFromStart:session->_drag_start end:point] visible:YES];
       return nil;
     }
     if (event.type == NSEventTypeLeftMouseUp && session->_dragging) {
       NSPoint point = [session clampPoint:mouse_location toBounds:session->_drag_capture->logical_bounds];
       NSRect selection = [session rectFromStart:session->_drag_start end:point];
+      // Ignore click jitter, but never snap a gesture that previously crossed the drag threshold.
+      if (!session->_selection_dragged && hypot(point.x - session->_drag_start.x, point.y - session->_drag_start.y) < 4.0 &&
+          !NSIsEmptyRect(session->_pressed_window)) {
+        selection = session->_pressed_window;
+        session->_selected_window_image = screenshot_window_image(session->_window_candidates, selection, session->_drag_start);
+        if (session->_selected_window_image == NULL) {
+          woxGoDarwinScreenshotDiagnostic("stage=window_alpha_capture_unavailable");
+        }
+      }
       [session updateSelection:selection visible:YES];
       [session completeCancelled:NO selection:selection];
       return nil;
@@ -1431,6 +1559,10 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
   return _selection;
 }
 
+- (CGImageRef)selectedWindowImage {
+  return _selected_window_image;
+}
+
 - (dispatch_semaphore_t)completion {
   return _completion;
 }
@@ -1440,6 +1572,8 @@ static void log_screenshot_window_state(const char *stage, const void *session, 
   [_copied_color release];
   [_selected_capture release];
   [_windows release];
+  [_window_candidates release];
+  if (_selected_window_image != NULL) CGImageRelease(_selected_window_image);
   [_captures release];
 #if !OS_OBJECT_USE_OBJC
   dispatch_release(_completion);
@@ -3781,6 +3915,22 @@ int32_t wox_darwin_copy_screenshot_selection_rgba(uintptr_t session_handle, int3
     return -1;
   }
   return copy_screenshot_image_rgba(capture->image, width, height, pixels);
+}
+
+// Query or copy the native window image while the retained selector session owns its pixels.
+int32_t wox_darwin_copy_screenshot_window_rgba(uintptr_t session_handle, int32_t *width, int32_t *height, void *pixels) {
+  if (session_handle == 0 || width == NULL || height == NULL) return -1;
+  CGImageRef image = [(WoxScreenshotSelectionSession *)session_handle selectedWindowImage];
+  if (image == NULL) return 1;
+  int32_t image_width = (int32_t)CGImageGetWidth(image), image_height = (int32_t)CGImageGetHeight(image);
+  if (image_width <= 0 || image_height <= 0 || image_width > 16384 || image_height > 16384) return -1;
+  if (pixels == NULL) {
+    *width = image_width;
+    *height = image_height;
+    return 0;
+  }
+  if (*width != image_width || *height != image_height) return -1;
+  return copy_screenshot_image_rgba(image, image_width, image_height, pixels);
 }
 
 // Exercise the production conversion with asymmetric colors and alpha without screen permissions.

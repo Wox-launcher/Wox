@@ -7,7 +7,7 @@ import (
 	"image"
 	"image/draw"
 	_ "image/jpeg"
-	_ "image/png"
+	"image/png"
 	"os"
 )
 
@@ -81,5 +81,13 @@ func newClipboardImage(source image.Image, encodedPNG []byte) (*clipboardImage, 
 	}
 	normalized := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(normalized, normalized.Bounds(), source, bounds.Min, draw.Src)
+	// Windows' compatibility DIB format is often read without alpha. Publish PNG too for transparent captures.
+	if len(encodedPNG) == 0 && !normalized.Opaque() {
+		var encoded bytes.Buffer
+		if err := png.Encode(&encoded, normalized); err != nil {
+			return nil, fmt.Errorf("encode transparent clipboard image: %w", err)
+		}
+		encodedPNG = encoded.Bytes()
+	}
 	return &clipboardImage{width: bounds.Dx(), height: bounds.Dy(), stride: normalized.Stride, pixels: normalized.Pix, png: encodedPNG}, nil
 }
