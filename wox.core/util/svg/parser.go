@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"image/color"
@@ -90,6 +91,13 @@ func Parse(reader io.Reader) (*Icon, error) {
 
 // parseIcon reads the SVG subset and resolves currentColor before shapes are stored.
 func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("read SVG: %w", err)
+	}
+	// A <style> block may follow the shapes it colors, so collect those rules first.
+	rules := collectStyleRules(data)
+
 	icon := &Icon{gradients: map[string]*rasterx.Gradient{}, masks: map[string][]svgShape{}, preserveAspectRatio: "xMidYMid meet"}
 	style := defaultPathStyle()
 	if currentColor != nil {
@@ -97,7 +105,7 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 	}
 	styles := []pathStyle{style}
 	stack := []openElement{{group: -1, shape: -1}}
-	decoder := xml.NewDecoder(reader)
+	decoder := xml.NewDecoder(bytes.NewReader(data))
 	defsDepth := 0
 	maskIDs := []string{}
 	var currentGradient *rasterx.Gradient
@@ -123,7 +131,7 @@ func parseIcon(reader io.Reader, currentColor color.Color) (*Icon, error) {
 				stack = append(stack, openElement{group: -1, shape: -1})
 				continue
 			}
-			style, err := applyStyle(styles[len(styles)-1], attributes)
+			style, err := applyStyle(styles[len(styles)-1], element.Name.Local, attributes, rules)
 			if err != nil {
 				return nil, fmt.Errorf("parse <%s> style: %w", element.Name.Local, err)
 			}
@@ -269,9 +277,16 @@ func attributeMap(attributes []xml.Attr) map[string]string {
 	return result
 }
 
-func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error) {
-	properties := make(map[string]string, len(attributes))
+// applyStyle layers presentation attributes, author <style> rules, then the inline style attribute.
+func applyStyle(base pathStyle, tag string, attributes map[string]string, rules []cssRule) (pathStyle, error) {
+	properties := make(map[string]string, len(attributes)+4)
 	for key, value := range attributes {
+		if key == "style" {
+			continue
+		}
+		properties[key] = value
+	}
+	for key, value := range matchingStyleProperties(tag, attributes, rules) {
 		properties[key] = value
 	}
 	if inline := attributes["style"]; inline != "" {
@@ -282,7 +297,11 @@ func applyStyle(base pathStyle, attributes map[string]string) (pathStyle, error)
 			}
 		}
 	}
+	return applyProperties(base, properties)
+}
 
+// applyProperties writes one flat set of presentation values onto a copy of base.
+func applyProperties(base pathStyle, properties map[string]string) (pathStyle, error) {
 	style := base
 	style.localMatrix = rasterx.Identity
 	style.localOpacity = 1
