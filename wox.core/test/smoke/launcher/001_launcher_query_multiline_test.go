@@ -17,7 +17,7 @@ import (
 
 // Test001LauncherQueryMultiline verifies multiline keyboard input, clipboard paste, and wheel scrolling in the native query box.
 // Flow: show launcher -> insert a line with Shift+Enter -> paste mixed newline text with the platform shortcut -> scroll the overflowing query toward earlier lines.
-// Evidence: the query semantics preserve normalized line breaks and move vertically after the wheel event without changing their value.
+// Evidence: internal line endings are normalized, leading and trailing line endings are dropped, and the query moves vertically after the wheel event without changing its value.
 func Test001LauncherQueryMultiline(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.PreserveClipboard(t)
@@ -39,11 +39,11 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 			t.Fatalf("wait for Shift+Enter multiline query: %v", err)
 		}
 
-		if err := clipboard.WriteText("\r\nthree\r\nfour\rfive\nsix"); err != nil {
+		if err := clipboard.WriteText("\r\nthree\r\nfour\rfive\nsix\r\n"); err != nil {
 			t.Fatalf("prepare multiline clipboard text: %v", err)
 		}
 		clipboardText, err := clipboard.ReadText()
-		if err != nil || clipboardText != "\r\nthree\r\nfour\rfive\nsix" {
+		if err != nil || clipboardText != "\r\nthree\r\nfour\rfive\nsix\r\n" {
 			t.Fatalf("verify multiline clipboard text: value %q err %v", clipboardText, err)
 		}
 		modifier := woxui.KeyModifierControl
@@ -57,7 +57,8 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		if !handled {
 			t.Fatal("paste multiline query text: key was not handled")
 		}
-		expected := "one\ntwo\nthree\nfour\nfive\nsix"
+		// The pasted text starts and ends with line endings, so "three" continues the current line.
+		expected := "one\ntwothree\nfour\nfive\nsix"
 		pasteCtx, cancelPaste := context.WithTimeout(ctx, 5*time.Second)
 		defer cancelPaste()
 		snapshot, err := client.WaitFor(pasteCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
