@@ -51,14 +51,17 @@ var (
 )
 
 // linuxForegroundBackend chooses who can answer "which application is focused".
-// Hyprland exposes it through hyprctl. X11 exposes it through EWMH. GNOME and
-// KDE Wayland do not give a normal client the focused window's application id.
-func linuxForegroundBackend(wayland bool, hyprland bool) string {
+// Hyprland exposes it through hyprctl, Plasma through a one-shot KWin script,
+// and X11 through EWMH. GNOME Wayland does not give a normal client that window.
+func linuxForegroundBackend(wayland bool, hyprland bool, kde bool) string {
 	if !wayland {
 		return "x11"
 	}
 	if hyprland {
 		return "hyprland"
+	}
+	if kde {
+		return "kde"
 	}
 	return ""
 }
@@ -132,9 +135,11 @@ func currentLinuxForeground() (linuxForegroundApp, error) {
 }
 
 func queryLinuxForeground(ctx context.Context) (linuxForegroundApp, error) {
-	switch linuxForegroundBackend(util.IsLinuxWaylandSession(), util.IsHyprlandSession()) {
+	switch linuxForegroundBackend(util.IsLinuxWaylandSession(), util.IsHyprlandSession(), util.IsKDEDesktopSession()) {
 	case "hyprland":
 		return queryHyprlandForeground(ctx)
+	case "kde":
+		return queryKDEForeground(ctx)
 	case "x11":
 		return queryX11Foreground(ctx)
 	default:
