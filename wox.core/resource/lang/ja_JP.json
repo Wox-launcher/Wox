@@ -2608,6 +2608,7 @@
   "plugin_folder_open": "開く",
   "plugin_folder_open_containing_folder": "含むフォルダーを開く",
   "plugin_folder_enter": "フォルダーに入る",
+  "plugin_folder_go_to_parent": "親フォルダーへ戻る",
   "plugin_folder_browse_containing_folder": "フォルダーを参照",
   "plugin_folder_copy_path": "パスをコピー",
   "plugin_folder_copy_name": "名前をコピー",

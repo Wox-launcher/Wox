@@ -15,7 +15,7 @@ import (
 
 // Test001LauncherFolderBrowse verifies that an exact folder result can enter one-level browsing.
 // Flow: query an exact temporary folder -> invoke Enter folder -> wait for its immediate children.
-// Evidence: the query gains a trailing separator and exposes the folder and two files while omitting the hidden file.
+// Evidence: the query gains a trailing separator, leads with the parent directory, and exposes the folder and two files while omitting the hidden file.
 func Test001LauncherFolderBrowse(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		root := t.TempDir()
@@ -46,6 +46,10 @@ func Test001LauncherFolderBrowse(t *testing.T) {
 			t.Fatalf("wait for folder children: %v", err)
 		}
 
+		parent, parentFound := folderResultByPath(snapshot, filepath.Dir(root))
+		if !parentFound || parent.Label != ".." {
+			t.Fatalf("parent directory result = %+v, want ..", parent)
+		}
 		for _, path := range []string{
 			filepath.Join(root, "child-folder"),
 			filepath.Join(root, "alpha.txt"),

@@ -165,7 +165,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ScreenshotEraser:           newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m14 3 7 7-10 10H6l-4-4zM7 11l7 7M11 20h10"/>`),
 	ScreenshotMosaic:           newMonochromeUIIcon(`<rect x="3.5" y="3.5" width="17" height="17" rx=".75"/><path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="#fff" stroke="none"/>`),
 	ScreenshotScrollingCapture: newMonochromeUIIcon(`<path d="m8 7 4-4 4 4M12 3v18M8 17l4 4 4-4"/>`),
-	ScreenshotBackground:       newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/><path d="m3 16 4-4m10 0 4 4"/>`),
+	ScreenshotBackground:       newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/>`),
 	ScreenshotCursor:           common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4.5 2.5v16.2l4.1-4 3.4 7.1 3.8-1.8-3.3-6.8h6.1L4.5 2.5Z" fill="#fff" stroke="#171717" stroke-width="1.6" stroke-linejoin="round"/></svg>`),
 	ScreenshotPin:              newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
 

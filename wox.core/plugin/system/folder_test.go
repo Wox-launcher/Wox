@@ -250,8 +250,74 @@ func TestFolderQueryListsWindowsEnvPathChildren(t *testing.T) {
 		Search: `%LOCALAPPDATA%/Programs/cursor/`,
 	})
 
-	if len(response.Results) != 1 || response.Results[0].Title != "resources" || response.Results[0].SubTitle != resourcesPath {
-		t.Fatalf("results = %#v, want resources at %q", response.Results, resourcesPath)
+	parentPath := filepath.Dir(filepath.Dir(resourcesPath))
+	if len(response.Results) != 2 || response.Results[0].Title != ".." || response.Results[0].SubTitle != parentPath {
+		t.Fatalf("results = %#v, want parent %q then resources", response.Results, parentPath)
+	}
+	if response.Results[1].Title != "resources" || response.Results[1].SubTitle != resourcesPath {
+		t.Fatalf("child = %#v, want resources at %q", response.Results[1], resourcesPath)
+	}
+}
+
+func TestFolderQueryListsParentDirectoryFirst(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "projects")
+	if err := os.Mkdir(child, 0o755); err != nil {
+		t.Fatalf("create child folder: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(child, "notes.txt"), []byte("notes"), 0o644); err != nil {
+		t.Fatalf("write notes: %v", err)
+	}
+
+	api := &chatTestAPI{}
+	folderPlugin := &FolderPlugin{api: api}
+	response := folderPlugin.Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: child + string(os.PathSeparator),
+	})
+
+	if len(response.Results) != 2 {
+		t.Fatalf("result count = %d, want parent and notes.txt", len(response.Results))
+	}
+	parent := response.Results[0]
+	if parent.Title != ".." || parent.SubTitle != root || parent.Score != folderResultScore || !parent.RankAboveUsage {
+		t.Fatalf("parent result = %#v, want .. at %q", parent, root)
+	}
+	if parent.Actions[0].Id != folderGoToParentActionID || !parent.Actions[0].IsDefault || !parent.Actions[0].PreventHideAfterAction {
+		t.Fatalf("parent default action = %#v", parent.Actions[0])
+	}
+	parent.Actions[0].Action(t.Context(), plugin.ActionContext{})
+	if api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != root+string(os.PathSeparator) {
+		t.Fatalf("parent query = %+v, want %q", api.changed, root+string(os.PathSeparator))
+	}
+	if response.Results[1].Title != "notes.txt" {
+		t.Fatalf("child = %#v, want notes.txt", response.Results[1])
+	}
+
+	filtered := folderPlugin.Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: filepath.Join(child, "notes"),
+	})
+	if len(filtered.Results) != 1 || filtered.Results[0].Title != "notes.txt" {
+		t.Fatalf("filtered results = %#v, want only notes.txt", filtered.Results)
+	}
+}
+
+func TestFolderParentPathStopsAtRoot(t *testing.T) {
+	if _, ok := folderParentPath(string(os.PathSeparator)); ok {
+		t.Fatal("filesystem root should not have a parent row")
+	}
+	root := t.TempDir()
+	parent, ok := folderParentPath(filepath.Join(root, "child"))
+	if !ok || parent != root {
+		t.Fatalf("parent = %q ok=%v, want %q", parent, ok, root)
+	}
+	volume := filepath.VolumeName(root)
+	if volume == "" {
+		return
+	}
+	if _, ok := folderParentPath(volume + string(os.PathSeparator)); ok {
+		t.Fatalf("volume root %q should not have a parent row", volume)
 	}
 }
 

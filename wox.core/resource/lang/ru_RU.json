@@ -2363,6 +2363,7 @@
   "plugin_folder_open": "Открыть",
   "plugin_folder_open_containing_folder": "Открыть содержащую папку",
   "plugin_folder_enter": "Войти в папку",
+  "plugin_folder_go_to_parent": "Перейти в родительскую папку",
   "plugin_folder_browse_containing_folder": "Просмотреть папку",
   "plugin_folder_copy_path": "Копировать путь",
   "plugin_folder_copy_name": "Копировать имя",

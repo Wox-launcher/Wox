@@ -2609,6 +2609,7 @@
   "plugin_folder_open": "打开",
   "plugin_folder_open_containing_folder": "打开所在文件夹",
   "plugin_folder_enter": "进入文件夹",
+  "plugin_folder_go_to_parent": "返回上级目录",
   "plugin_folder_browse_containing_folder": "浏览目录",
   "plugin_folder_copy_path": "复制路径",
   "plugin_folder_copy_name": "复制名称",

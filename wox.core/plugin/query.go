@@ -280,6 +280,9 @@ type QueryResult struct {
 	Preview           WoxPreview
 	// Score of the result, the higher the score, the more relevant the result is, more likely to be displayed on top
 	Score int64
+	// RankAboveUsage keeps a system-plugin navigation row ahead of action history.
+	// A query pin still ranks higher. json:"-" keeps it off the plugin SDK wire format.
+	RankAboveUsage bool `json:"-"`
 	// ScoreKey is an optional stable identity when title or subtitle is dynamic.
 	// Wox uses it for actioned-result scoring, and as the MRU identity hash when
 	// the plugin's MRU HashBy is "scoreKey".

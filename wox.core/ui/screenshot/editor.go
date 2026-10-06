@@ -1134,7 +1134,6 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			} else if backgroundEnabled {
 				displayList.FillRoundedRect(backgroundRect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
 				backgroundColor = green
-				drawScreenshotEditorToolbarIconSized(displayList, "control.check", Rect{X: backgroundRect.X + scaled(24), Y: backgroundRect.Y + scaled(24), Width: scaled(16), Height: scaled(16)}, green, uiScale, 12)
 			}
 			if hasHoveredAction && hoveredAction == screenshotEditorActionBackground && !backgroundLoading {
 				displayList.StrokeRoundedRect(backgroundRect, scaled(10), scaled(1), green)

@@ -54,7 +54,9 @@ const (
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
 	globalQueryPluginScoreLimit  = 200
-	fileSearchPluginID           = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	// rankAboveUsageScore sits above action history and below the query-pin boost.
+	rankAboveUsageScore int64 = 50000
+	fileSearchPluginID        = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
 )
 
 type debounceTimer struct {
@@ -3438,6 +3440,10 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.GetName(ctx), result.Title, score))
 			result.Score += score
 		}
+	}
+	// System plugins use this to keep a navigation row, such as "..", first in global search.
+	if result.RankAboveUsage && !isMRUQuery {
+		result.Score += rankAboveUsageScore
 	}
 	AutoScoreCost := util.GetSystemTimestamp() - autoScoreStart
 	AutoScoreCostUs := time.Since(autoScoreTimingStart).Microseconds()

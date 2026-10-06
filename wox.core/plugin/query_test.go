@@ -274,3 +274,12 @@ func Test_BuildQueryCompletionHint_NoHintWhenOriginalInputPrefixDoesNotMatchComp
 
 	assert.Nil(t, hint)
 }
+
+func TestRankAboveUsageIsNotDecodedFromPluginJSON(t *testing.T) {
+	var result QueryResult
+	err := json.Unmarshal([]byte(`{"Title":"..","RankAboveUsage":true,"Score":1000}`), &result)
+	assert.NoError(t, err)
+	assert.False(t, result.RankAboveUsage)
+	assert.Equal(t, "..", result.Title)
+	assert.Equal(t, int64(1000), result.Score)
+}

@@ -28,6 +28,7 @@ const (
 	folderResultScore int64 = 1000
 
 	folderOpenActionID                   = "open_folder"
+	folderGoToParentActionID             = "go_to_parent_folder"
 	folderEnterActionID                  = "enter_folder"
 	folderBrowseContainingFolderActionID = "browse_containing_folder"
 	folderOpenContainingFolderActionID   = "open_containing_folder"
@@ -289,6 +290,9 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 		if p.api != nil {
 			p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read folder: path=%q err=%s", folderPath, readErr.Error()))
 		}
+		if parent, ok := p.parentDirectoryResult(ctx, folderPath, namePrefix, p.loadFavorites(ctx)); ok {
+			return []plugin.QueryResult{parent}
+		}
 		return []plugin.QueryResult{}
 	}
 
@@ -305,9 +309,12 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 		return leftName < rightName
 	})
 
-	results := make([]plugin.QueryResult, 0, len(entries))
+	results := make([]plugin.QueryResult, 0, len(entries)+1)
 	showHiddenFiles := p.showHiddenFiles.Load()
 	favorites := p.loadFavorites(ctx)
+	if parent, ok := p.parentDirectoryResult(ctx, folderPath, namePrefix, favorites); ok {
+		results = append(results, parent)
+	}
 	for _, entry := range entries {
 		if !showHiddenFiles && isHiddenFolderEntry(entry) {
 			continue
@@ -328,6 +335,92 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 		results = append(results, p.buildPathResult(fullPath, entry.Name(), entry.IsDir(), score, favoriteMatch))
 	}
 	return results
+}
+
+// parentDirectoryResult is the ".." row for a full directory listing.
+// Name completion omits it so a typed prefix still resolves to real children.
+func (p *FolderPlugin) parentDirectoryResult(ctx context.Context, folderPath string, namePrefix string, favorites []folderFavorite) (plugin.QueryResult, bool) {
+	if namePrefix != "" {
+		return plugin.QueryResult{}, false
+	}
+	parentPath, ok := folderParentPath(folderPath)
+	if !ok {
+		return plugin.QueryResult{}, false
+	}
+	return p.buildParentDirectoryResult(parentPath, p.findFavoriteByPath(ctx, parentPath, favorites)), true
+}
+
+// folderParentPath returns the directory above folderPath.
+// Volume roots and filesystem roots have no parent row.
+func folderParentPath(folderPath string) (string, bool) {
+	cleaned := filepath.Clean(folderPath)
+	parent := filepath.Dir(cleaned)
+	if parent == "" || parent == "." || parent == cleaned {
+		return "", false
+	}
+	return parent, true
+}
+
+// buildParentDirectoryResult is the first browsing row, like ".." in file navigation.
+// Enter returns to the parent listing inside Wox.
+func (p *FolderPlugin) buildParentDirectoryResult(parentPath string, favoriteMatch *folderFavoriteMatch) plugin.QueryResult {
+	return plugin.QueryResult{
+		Title:          "..",
+		SubTitle:       parentPath,
+		Icon:           getFolderPluginPathIcon(parentPath, true),
+		Score:          folderResultScore,
+		RankAboveUsage: true,
+		ScoreKey:       parentPath,
+		Preview: plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeFile,
+			PreviewData: parentPath,
+		},
+		Tails:   buildFolderFavoriteTails(favoriteMatch),
+		Actions: attachFolderMRUContext(p.buildParentDirectoryActions(parentPath, favoriteMatch), parentPath),
+		DragData: &plugin.QueryResultDragData{
+			Type:  plugin.QueryResultDragDataTypeFiles,
+			Files: []string{parentPath},
+		},
+	}
+}
+
+// buildParentDirectoryActions makes Enter browse upward and keeps Open for the file manager.
+func (p *FolderPlugin) buildParentDirectoryActions(parentPath string, favoriteMatch *folderFavoriteMatch) []plugin.QueryResultAction {
+	actions := []plugin.QueryResultAction{
+		{
+			Id:                     folderGoToParentActionID,
+			Name:                   "i18n:plugin_folder_go_to_parent",
+			Icon:                   icons.Get(icons.ActionMoveUp),
+			IsDefault:              true,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if p.api != nil {
+					p.api.ChangeQuery(ctx, common.PlainQuery{
+						QueryType: plugin.QueryTypeInput,
+						QueryText: ensureFolderQueryTrailingSeparator(parentPath),
+					})
+				}
+			},
+		},
+		{
+			Id:   folderOpenActionID,
+			Name: "i18n:plugin_folder_open",
+			Icon: icons.Get(icons.ActionOpen),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				_ = shell.Open(parentPath)
+			},
+		},
+		p.buildCopyPathAction(parentPath),
+		p.buildCopyNameAction("", parentPath),
+		p.buildExecuteCommandAtLocationAction(parentPath, true),
+	}
+	if favoriteMatch != nil {
+		actions = append(actions, p.buildEditFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index), p.buildDeleteFavoriteAction(favoriteMatch.Name, favoriteMatch.Path, favoriteMatch.Index))
+	} else {
+		actions = append(actions, p.buildAddFavoriteAction(filepath.Base(parentPath), parentPath))
+	}
+	actions = append(actions, p.buildToggleHiddenFilesAction())
+	return actions
 }
 
 // buildPathResult creates a draggable file or folder result with preview support.
