@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.4.6 - 2026-10-06
+
+此版本主要增强了截图插件，Folder插件以及其他BUG修复。同时我们还微调了Wox的内置主题样式。您现在也可以使用`Ctrl/Cmd + P`来暂时隐藏/显示预览面板。
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/guide/plugin_screenshot_show_background.png)
+
+- Improve
+  - [`Screenshot`] 可截取窗口或任意区域，在图上涂写，并保存为 PNG 或 GIF、WebP、MP4 短动画。按 Space 把壁纸铺在选区后面，也可从历史或剪贴板再次编辑。
+  - [`Folder`] 文件夹列表以 `..` 开头，Enter 返回上一级。Shift+Enter 在 Wox 里打开文件夹，或文件所在的文件夹。
+  - [`Clipboard`] 再次复制链接后，搜索时显示网页标题和图片。Hyprland、X11 和 Plasma 上，复制的文字可以显示来源应用。未开启「默认显示收藏项」时，普通列表不显示收藏，`cb fav` 按使用次数排序 [#4592](https://github.com/Wox-launcher/Wox/issues/4592)。
+  - [`Converter`] 支持 156 种货币，并区分 Mbps 和 MBps。
+  - [`Calculator`] 计算时可使用数字分隔符，例如 `1,000` 或 `1_000`。
+  - [`Preview`] 可用 Ctrl/Cmd+P 打开收起的预览，源代码文件显示为带颜色的代码。
+  - [`Launcher`] 界面大小也用于聊天、设置和其他窗口 [#4586](https://github.com/Wox-launcher/Wox/issues/4586)。可选择启动器出现在哪块屏幕 [#4597](https://github.com/Wox-launcher/Wox/issues/4597)。工具栏只保留主要操作。
+  - [`Hotkey`] 可单独用 Windows 键唤起启动器，开始菜单保持关闭 [#4595](https://github.com/Wox-launcher/Wox/issues/4595)。
+  - [`Theme`] 在桌面支持时模糊启动器背景，并可调节工具栏的磨砂程度。
+  - [`Cloud Sync`] 同步状态显示 Free 或 Pro、等待同步的数量，以及每次同步的大小。
+  - [`AI Chat`] 可跨段落、列表和代码选中并复制回答。
+  - [`Plugin`] 密码输入会遮住内容。卸载插件时可以选择保留缓存。
+  - [`Feedback`] 可只用内置插件重启来排查问题。提示会一直显示，直到正常启动并恢复其他插件。
+
+- Fix
+  - [`Query`] 修复没有结果时搜索一直转圈：已禁用的插件仍会被询问 [#4615](https://github.com/Wox-launcher/Wox/issues/4615)。粘贴的查询会去掉开头和结尾的空行。
+  - [`AI Chat`] 修复从选中内容、文件或历史打开聊天时，自定义关键词不生效 [#4611](https://github.com/Wox-launcher/Wox/issues/4611)。
+  - [`App`] 修复同一个 Windows 程序同时以快捷方式和可执行文件出现时列出多条 [#4599](https://github.com/Wox-launcher/Wox/issues/4599)。
+  - [`Screenshot`] 修复钉住的截图被其他窗口挡住。
+  - [`Launcher`] 修复从开始页移除一项后启动器关闭，以及清空热键或链接带入的查询后不回到最近使用。
+  - [`Notes`] 修复在预览中插入文字后标题级别跑到别的行，以及图片滚出屏幕后高度变化。
+  - [`Color`] 修复搜索过的颜色没有记入历史。
+  - [`Hotkey`] 修复 Wox 无法接管的 Windows 键组合，Win+L 仍会锁定电脑 [#4604](https://github.com/Wox-launcher/Wox/issues/4604)。GNOME 上，Wox 注册热键后，残留的自定义快捷键不再抢走按键。
+  - [`Onboarding`] 修复 macOS 首次引导跳过权限步骤 [#4603](https://github.com/Wox-launcher/Wox/issues/4603)。
+  - [`Plugin`] 修复插件重新连接后操作没有反应 [#4588](https://github.com/Wox-launcher/Wox/issues/4588)。修复 Windows 上插件文件解压到错误目录，以及从开始页打开插件时使用了 `*` 而不是关键词。
+  - [`Icon`] 修复部分应用图标变成纯黑，例如 Code - OSS。
+
+- Store
+  - Plugin
+    - [股票](https://gist.github.com/qianlifeng/a99f529ece21561ff7b73d872e72998c) 查询 A 股、港股和美股报价。 [@qianlifeng](https://github.com/qianlifeng)
+    - [Stopwatch](https://github.com/lmgarret/wox-stopwatch-plugin) Stopwatch with laps, live in the launcher [@lmgarret](https://github.com/lmgarret)
+    - [天气](https://gist.github.com/qianlifeng/25d66a91de168cb7e210f2cf756960c2) 用 wttr.in 查看当前天气和未来几天。 [@qianlifeng](https://github.com/qianlifeng)
+    - [词数统计](https://gist.github.com/qianlifeng/bf1b14e74b6cbecd6fcc8fc6ede94f7f) 统计查询文本或选中文本中的词数及文本信息 [@qianlifeng](https://github.com/qianlifeng)
+    - [游戏](https://github.com/Wox-launcher/Wox.Plugin.Games) 搜索 Steam、Epic、GOG、Ubisoft Connect、EA、Battle.net、Xbox 和 itch.io 里已安装的游戏。 [@Wox-launcher](https://github.com/Wox-launcher)
+    - [IMDB](https://gist.github.com/qianlifeng/dc6511115bdde92b3976369c4b675ebe) Search TMDB movies and TV, with posters and ratings [@qianlifeng](https://github.com/qianlifeng)
+    - [Clash Verge](https://gist.github.com/qianlifeng/db55c71d2bef5359af515f309be4d23d) 查看本机 Clash Verge 运行状态，并切换代理节点。 [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.5 - 2026-09-23
 
 此版本新增给任意结果设置全局快捷键或者搜索别名。

@@ -1,5 +1,50 @@
 # Changelog
 
+## v2.4.6 - 2026-10-06
+
+This version mainly enhances the screenshot plugin, Folder plugin, and other bug fixes. We also fine-tuned the built-in theme styles of Wox. You can now also use `Ctrl/Cmd + P` to temporarily hide/show the preview panel.
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/guide/plugin_screenshot_show_background.png)
+
+- Improve
+  - [`Screenshot`] Capture a window or a free region, draw and write on it, and save a PNG or a short GIF, WebP, or MP4. Press Space to put the wallpaper behind the selection, and edit the capture again from history or the clipboard.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/screenshot_window_capture.png)
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/screenshot_edit.png)
+  - [`Folder`] A folder listing starts with `..`, and Enter goes up. Shift+Enter browses a folder, or the folder that contains a file, inside Wox.
+  - [`Clipboard`] Show a copied link's title and image after you copy it again. On Hyprland, X11, and Plasma, copied text can show which app it came from. Favorites stay out of the normal list unless Show favorite by default is on, and `cb fav` ranks them by use [#4592](https://github.com/Wox-launcher/Wox/issues/4592).
+  - [`Converter`] Support 156 currencies, and tell Mbps apart from MBps.
+  - [`Calculator`] Accept digit separators in numbers, such as `1,000` or `1_000`.
+  - [`Preview`] Open a closed preview with Ctrl/Cmd+P, and show source files as colored code.
+  - [`Launcher`] Apply the interface size to chat, settings, and other windows [#4586](https://github.com/Wox-launcher/Wox/issues/4586). Choose which screen the launcher opens on [#4597](https://github.com/Wox-launcher/Wox/issues/4597). The toolbar keeps the main action.
+  - [`Hotkey`] Use the Windows key by itself as the launcher hotkey, and keep the Start menu closed [#4595](https://github.com/Wox-launcher/Wox/issues/4595).
+  - [`Theme`] Blur the launcher background where the desktop supports it, and adjust how frosted the toolbar looks.
+  - [`Cloud Sync`] Show Free or Pro on the sync status, how many changes are waiting, and the size of past syncs.
+  - [`AI Chat`] Select and copy an answer across paragraphs, lists, and code.
+  - [`Plugin`] Mask password fields, and let you keep a plugin's cache when uninstalling it.
+  - [`Feedback`] Restart with only built-in plugins to troubleshoot. A warning stays up until you start normally and bring the others back.
+
+- Fix
+  - [`Query`] Fix a search with no results keeping the spinner when a disabled plugin was still included [#4615](https://github.com/Wox-launcher/Wox/issues/4615). Trim blank lines from the start and end of a pasted query.
+  - [`AI Chat`] Fix a custom chat keyword being ignored when opening chat from a selection, a file, or history [#4611](https://github.com/Wox-launcher/Wox/issues/4611).
+  - [`App`] Fix the same Windows program appearing more than once as a shortcut and an executable [#4599](https://github.com/Wox-launcher/Wox/issues/4599).
+  - [`Screenshot`] Fix a pinned capture dropping behind other windows.
+  - [`Launcher`] Fix the start page closing after you remove an item, and recent results not returning after you clear a query opened from a hotkey or a link.
+  - [`Notes`] Fix a heading changing type when lines are inserted in preview, and a note image changing height after it scrolls away.
+  - [`Color`] Fix a searched color not being saved to history.
+  - [`Hotkey`] Fix Windows key shortcuts that Wox could not take over, while Win+L still locks the PC [#4604](https://github.com/Wox-launcher/Wox/issues/4604). On GNOME, leftover shortcuts no longer swallow keys after Wox registers them.
+  - [`Onboarding`] Fix first-run setup on macOS skipping the permission steps [#4603](https://github.com/Wox-launcher/Wox/issues/4603).
+  - [`Plugin`] Fix plugin actions that did nothing after a plugin reconnected [#4588](https://github.com/Wox-launcher/Wox/issues/4588). Fix plugin files extracting into the wrong folders on Windows, and the start page opening a plugin with `*` instead of its keyword.
+  - [`Icon`] Fix some app icons, such as Code - OSS, showing as solid black.
+
+- Store
+  - Plugin
+    - [Stock](https://gist.github.com/qianlifeng/a99f529ece21561ff7b73d872e72998c) Look up A-share, Hong Kong, and US quotes. [@qianlifeng](https://github.com/qianlifeng)
+    - [Stopwatch](https://github.com/lmgarret/wox-stopwatch-plugin) Stopwatch with laps, live in the launcher [@lmgarret](https://github.com/lmgarret)
+    - [Weather](https://gist.github.com/qianlifeng/25d66a91de168cb7e210f2cf756960c2) Current weather and the next few days from wttr.in. [@qianlifeng](https://github.com/qianlifeng)
+    - [Word Count](https://gist.github.com/qianlifeng/bf1b14e74b6cbecd6fcc8fc6ede94f7f) Count words and text statistics from a query or selection [@qianlifeng](https://github.com/qianlifeng)
+    - [Games](https://github.com/Wox-launcher/Wox.Plugin.Games) Search installed games from Steam, Epic, GOG, Ubisoft Connect, EA, Battle.net, Xbox, and itch.io. [@Wox-launcher](https://github.com/Wox-launcher)
+    - [IMDB](https://gist.github.com/qianlifeng/dc6511115bdde92b3976369c4b675ebe) Search TMDB movies and TV, with posters and ratings [@qianlifeng](https://github.com/qianlifeng)
+    - [Clash Verge](https://gist.github.com/qianlifeng/db55c71d2bef5359af515f309be4d23d) Show the local Clash Verge core and switch proxy nodes. [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.5 - 2026-09-23
 
 This release lets you set a global hotkey or a search alias on any result.
