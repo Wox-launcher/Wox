@@ -242,7 +242,7 @@ else
 		-internal-name "WoxFileIndexService" -original-name "wox-file-index-service.exe" \
 		-product-version "$(FILE_INDEX_SERVICE_VERSION)" -file-version "$(FILE_INDEX_SERVICE_VERSION)" \
 		-propagate-ver-strings
-	CGO_ENABLED=0 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-H windowsgui -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(FILE_INDEX_SERVICE_EXE) ./cmd/file_index_service
+	CGO_ENABLED=0 GOOS=windows GOARCH=$(GOARCH) go build -ldflags "-s -w -H windowsgui -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(FILE_INDEX_SERVICE_EXE) ./cmd/file_index_service
 	rm -f $(FILE_INDEX_SERVICE_VERSIONINFO)
 endif
 else
