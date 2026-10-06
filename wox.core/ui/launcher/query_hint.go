@@ -27,19 +27,27 @@ type queryHintEditor struct {
 	redo        []queryHintSnapshot
 }
 
-// queryHintSnapshot is one query-box undo entry: document, hint, caret, and routing.
+// queryHintSnapshot is one query-box undo entry: document, hint, caret, routing, and result selection.
 type queryHintSnapshot struct {
-	template    *common.QueryHint
-	hint        *common.QueryHint
-	text        string
-	active      int
-	prefix      string
-	queryType   string
-	scope       queryScope
-	selection   selection
-	refinements map[string]string
-	contextData map[string]string
-	caret       woxui.TextSelection
+	template        *common.QueryHint
+	hint            *common.QueryHint
+	text            string
+	active          int
+	prefix          string
+	queryType       string
+	scope           queryScope
+	selection       selection
+	refinements     map[string]string
+	contextData     map[string]string
+	caret           woxui.TextSelection
+	resultSelection *queryResultSelection
+}
+
+// queryResultSelection identifies an undo target without query-specific plugin result IDs.
+type queryResultSelection struct {
+	title    string
+	subTitle string
+	index    int
 }
 
 // captureQuerySnapshot records the query box document and routing state for undo.
@@ -59,18 +67,28 @@ func (a *App) captureQuerySnapshot() queryHintSnapshot {
 			caret = woxui.TextSelection{Anchor: end, Focus: end}
 		}
 	}
+	var resultSelection *queryResultSelection
+	if pending := a.pendingSelection; pending != nil && pending.queryID == a.query.QueryID && pending.querySnapshot != nil {
+		// Rapid undo/redo must retain the intended target, not a partial or stale result list.
+		copy := *pending.querySnapshot
+		resultSelection = &copy
+	} else if a.resultsQueryID == a.query.QueryID && a.selected >= 0 && a.selected < len(a.results) && !a.results[a.selected].IsGroup {
+		result := a.results[a.selected]
+		resultSelection = &queryResultSelection{title: result.Title, subTitle: result.SubTitle, index: a.selected}
+	}
 	return queryHintSnapshot{
-		template:    s.template.Clone(),
-		hint:        a.query.QueryHint.Clone(),
-		text:        a.query.QueryText,
-		active:      s.active,
-		prefix:      s.prefix,
-		queryType:   queryType,
-		scope:       cloneQueryScope(a.query.QueryScope),
-		selection:   cloneSelection(a.query.QuerySelection),
-		refinements: cloneStringMap(a.query.QueryRefinements),
-		contextData: cloneStringMap(a.query.ContextData),
-		caret:       caret,
+		template:        s.template.Clone(),
+		hint:            a.query.QueryHint.Clone(),
+		text:            a.query.QueryText,
+		active:          s.active,
+		prefix:          s.prefix,
+		queryType:       queryType,
+		scope:           cloneQueryScope(a.query.QueryScope),
+		selection:       cloneSelection(a.query.QuerySelection),
+		refinements:     cloneStringMap(a.query.QueryRefinements),
+		contextData:     cloneStringMap(a.query.ContextData),
+		caret:           caret,
+		resultSelection: resultSelection,
 	}
 }
 
@@ -105,6 +123,7 @@ func (a *App) rememberQueryHint() {
 func (a *App) appendQueryUndo(snapshot queryHintSnapshot) {
 	s := &a.queryHintEditorState
 	if len(s.undo) > 0 && querySnapshotSameContent(s.undo[len(s.undo)-1], snapshot) {
+		s.undo[len(s.undo)-1].resultSelection = snapshot.resultSelection
 		s.redo = nil
 		return
 	}
@@ -135,7 +154,7 @@ func (a *App) applyQuerySnapshot(snapshot queryHintSnapshot) {
 		a.editor.SetSelection(snapshot.caret.Anchor, snapshot.caret.Focus)
 	}
 	s.suppressed = snapshot.text
-	a.queryHintChanged()
+	a.queryHintChangedWithSelection(snapshot.resultSelection)
 }
 
 // installQueryHint installs semantic content without splitting the native text editor.
@@ -269,7 +288,17 @@ func (a *App) updateQueryHintText(text string) string {
 
 // queryHintChanged shares normal query invalidation without treating full text as a slot edit.
 func (a *App) queryHintChanged() {
+	a.queryHintChangedWithSelection(nil)
+}
+
+// queryHintChangedWithSelection binds an undo target before services can return query results.
+func (a *App) queryHintChangedWithSelection(resultSelection *queryResultSelection) {
 	a.beginQueryGenerationLocked()
+	if resultSelection != nil {
+		copy := *resultSelection
+		a.pendingSelection = &pendingResultSelection{queryID: a.query.QueryID, querySnapshot: &copy}
+		a.resultScrollDetached = false
+	}
 	a.beginQueryTransitionLocked(false)
 	a.completionHint = nil
 	a.canRecallHistory = false

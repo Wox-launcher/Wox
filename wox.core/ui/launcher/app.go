@@ -919,6 +919,7 @@ func (a *App) beginQueryGenerationLocked() {
 		a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
 	}
 	a.query.QueryID = newID()
+	a.pendingSelection = nil
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
 	a.queryComplete = false
@@ -953,6 +954,7 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	query.QueryHint = query.QueryHint.Clone()
 	query.QueryHint = query.QueryHint.NormalizeForQuery(query.QueryType, query.QueryText)
 	a.query = query
+	a.pendingSelection = nil
 	a.attentionQueryWasGlobal = false
 	a.queryContext = queryContext{}
 	a.queryContextKnown = false
@@ -1925,6 +1927,9 @@ func (a *App) moveSelection(delta int) {
 			}
 		}
 	}
+	if target >= 0 && target < len(a.results) && !a.results[target].IsGroup {
+		a.cancelQuerySelectionRestore(target)
+	}
 	if target != a.selected {
 		a.selected = target
 		a.resultScrollDetached = false
@@ -1947,6 +1952,9 @@ func (a *App) moveSelectionByGroup(direction int) {
 		return
 	}
 	target := groupSelectionIndex(a.results, a.selected, direction)
+	if target >= 0 && target < len(a.results) && !a.results[target].IsGroup {
+		a.cancelQuerySelectionRestore(target)
+	}
 	if target != a.selected {
 		a.selected = target
 		a.resultScrollDetached = false
@@ -1966,6 +1974,7 @@ func (a *App) selectResult(index int) {
 	valid := false
 	if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
 		valid = true
+		a.cancelQuerySelectionRestore(index)
 		changed := a.selected != index
 		a.selected = index
 		closedPanel = a.resetActionPanelLocked()
@@ -2163,6 +2172,9 @@ func restoreRefreshSelection(results []queryResult, pending *pendingResultSelect
 	if pending == nil || pending.queryID != queryID {
 		return selected, false, false
 	}
+	if pending.querySnapshot != nil {
+		return restoreQueryResultSelection(results, *pending.querySnapshot), true, !complete
+	}
 	if pending.resultID != "" {
 		if index := resultIndexByID(results, pending.resultID); index >= 0 {
 			return index, true, !complete
@@ -2175,7 +2187,40 @@ func restoreRefreshSelection(results []queryResult, pending *pendingResultSelect
 	return selectableIndexFrom(results, pending.index), true, false
 }
 
-// pendingResultSelection restores the highlight after RefreshQuery.
+// restoreQueryResultSelection follows matching text before falling back to the old row or first result.
+func restoreQueryResultSelection(results []queryResult, snapshot queryResultSelection) int {
+	if snapshot.index >= 0 && snapshot.index < len(results) {
+		result := results[snapshot.index]
+		if !result.IsGroup && result.Title == snapshot.title && result.SubTitle == snapshot.subTitle {
+			return snapshot.index
+		}
+	}
+	for index, result := range results {
+		if !result.IsGroup && result.Title == snapshot.title && result.SubTitle == snapshot.subTitle {
+			return index
+		}
+	}
+	if snapshot.index >= 0 && snapshot.index < len(results) {
+		for index := snapshot.index; index < len(results); index++ {
+			if !results[index].IsGroup {
+				return index
+			}
+		}
+	}
+	return selectableIndex(results)
+}
+
+// cancelQuerySelectionRestore lets explicit navigation override a pending undo target.
+func (a *App) cancelQuerySelectionRestore(index int) {
+	if a.pendingSelection != nil && a.pendingSelection.querySnapshot != nil {
+		// IDs remain stable within this query, so later snapshots can retain the user's choice.
+		a.pendingSelection = &pendingResultSelection{
+			queryID: a.query.QueryID, index: index, resultID: a.results[index].ID, preserveIndex: true,
+		}
+	}
+}
+
+// pendingResultSelection restores the highlight after RefreshQuery or query undo/redo.
 // resultID follows one result when the plugin rebuilds it with the same id.
 // preserveIndex keeps the old row when resultID is empty or that result is gone.
 type pendingResultSelection struct {
@@ -2183,6 +2228,8 @@ type pendingResultSelection struct {
 	index         int
 	resultID      string
 	preserveIndex bool
+	// querySnapshot uses text matching and first-row overflow fallback only for undo/redo.
+	querySnapshot *queryResultSelection
 }
 
 type plainQuery struct {

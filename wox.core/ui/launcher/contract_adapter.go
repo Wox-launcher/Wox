@@ -900,7 +900,13 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	}
 	a.results = append(a.results, results...)
 	a.resultsSectionRevision++
-	if a.selected < 0 {
+	if a.pendingSelection != nil && a.pendingSelection.queryID == queryID && a.pendingSelection.querySnapshot != nil {
+		selected, _, keep := restoreRefreshSelection(a.results, a.pendingSelection, queryID, a.queryComplete)
+		a.selected = selected
+		if !keep {
+			a.pendingSelection = nil
+		}
+	} else if a.selected < 0 {
 		a.selected = selectableIndex(a.results)
 	}
 	a.reconcileSelectedPreview()

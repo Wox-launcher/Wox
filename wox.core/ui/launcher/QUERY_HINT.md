@@ -8,6 +8,17 @@ hold freely editable values, and `block` elements are atomic. Invalid annotation
 are discarded without rejecting the user's input. Selection, clipboard, undo and
 IME use the actual document, never the painted guidance.
 
+## Query undo and redo
+
+Query snapshots retain the selected result's exact title, subtitle, and list index.
+Undo and redo match that text across new result IDs, preferring the old index
+when multiple results match. If no result matches, selection falls back to the
+old index, skipping group headers; an unavailable index falls back to the first
+selectable result. Partial snapshots and pushed batches keep the target until
+the query completes. Explicit result navigation replaces the undo target with
+the user's selection. This does not add selection-only undo steps or change the
+native text editor's own undo history.
+
 ## Suggestions
 
 An argument's optional `Suggestions` list supplies literal, ordered candidate
