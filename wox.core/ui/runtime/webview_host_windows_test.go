@@ -183,6 +183,30 @@ func TestWindowsWebViewActionHotkeyMatchesConfiguredKeyOnly(t *testing.T) {
 	}
 }
 
+// TestWindowsWebViewWindowShortcutsReachWindowDispatcher verifies reserved commands and IME ownership.
+func TestWindowsWebViewWindowShortcutsReachWindowDispatcher(t *testing.T) {
+	const owner = 0xA11179
+	var events []KeyEvent
+	window := &platformWindow{options: WindowOptions{OnKey: func(event KeyEvent) bool {
+		events = append(events, event)
+		return !event.Composing && IsWindowShortcut(event.Key, event.Modifiers)
+	}}}
+	nativeWindows.Store(uintptr(owner), window)
+	defer nativeWindows.Delete(uintptr(owner))
+	for _, key := range []string{",", "w"} {
+		if dispatchWindowsWebViewReservedHotkey(owner, key) != 1 {
+			t.Fatalf("focused WebView did not forward %q", key)
+		}
+	}
+	window.inputComposing = true
+	if dispatchWindowsWebViewReservedHotkey(owner, ",") != 0 {
+		t.Fatal("composing WebView triggered a window command")
+	}
+	if len(events) != 3 || !events[2].Composing {
+		t.Fatalf("forwarded events = %+v", events)
+	}
+}
+
 func TestFocusWebViewQueuesUntilControllerExists(t *testing.T) {
 	window := &platformWindow{}
 	result, handled := window.executeWebViewCommand(windowCommand{kind: windowCommandFocusWebView})

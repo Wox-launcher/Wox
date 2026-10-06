@@ -37,7 +37,7 @@ import (
 var fileIcon = icons.Get(icons.PluginFile)
 
 const (
-	PluginID                  = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	PluginID                  = common.FileSearchPluginID
 	ToolSearch                = "search"
 	ToolSearchEntryTypeFolder = "folder"
 )

@@ -2776,7 +2776,10 @@ static NSString *web_view_shortcut_script(void) {
           "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
           "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
           "if(k==='esc')return'escape';return k};"
-          "document.addEventListener('keydown',e=>{if(e.repeat)return;const k=woxKey(e);const a=window.__woxActionHotkey;"
+          "document.addEventListener('keydown',e=>{if(e.isComposing)return;const k=woxKey(e);const a=window.__woxActionHotkey;"
+          "if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&(k===','||k==='w')){"
+          "e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}"
+          "if(e.repeat)return;"
           "if(a&&a.key&&k===a.key&&!!e.ctrlKey===!!a.ctrl&&!!e.metaKey===!!a.meta&&!!e.altKey===!!a.alt&&!!e.shiftKey===!!a.shift){"
           "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
           "if(e.metaKey&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&(k==='r'||k==='o'||k==='['||k===']')){"
@@ -5528,6 +5531,17 @@ int32_t wox_darwin_call(uintptr_t context) {
     return 0;
   }
   dispatch_sync(dispatch_get_main_queue(), ^{
+    woxGoDarwinCall(context);
+  });
+  return 0;
+}
+
+// Always enqueue, including script messages already running on the AppKit main thread.
+int32_t wox_darwin_post(uintptr_t context) {
+  if (context == 0 || [NSApplication sharedApplication] == nil) {
+    return -1;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
     woxGoDarwinCall(context);
   });
   return 0;

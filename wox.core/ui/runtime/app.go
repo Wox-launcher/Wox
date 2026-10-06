@@ -20,3 +20,12 @@ func Call(fn func()) error {
 	}
 	return platformCall(fn)
 }
+
+// Post queues fn on the native UI thread, even when called from that thread.
+// Native callbacks can use it to defer teardown until their current dispatch returns.
+func Post(fn func()) error {
+	if fn == nil {
+		return errors.New("UI callback is required")
+	}
+	return platformPost(fn)
+}

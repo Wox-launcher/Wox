@@ -10,6 +10,7 @@ import (
 
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 func TestAboutMenuEntriesUseStableIDsAndLocalDispatch(t *testing.T) {
@@ -296,7 +297,7 @@ func TestAboutMenuTails(t *testing.T) {
 	byID := map[string]actionPanelEntry{}
 	for _, entry := range aboutMenuEntries("2.4.4") {
 		byID[entry.ID] = entry
-		if entry.Hotkey != "" {
+		if entry.ID != aboutMenuSettingsID && entry.Hotkey != "" {
 			t.Fatalf("%s must not show an Enter hotkey", entry.ID)
 		}
 	}
@@ -309,8 +310,11 @@ func TestAboutMenuTails(t *testing.T) {
 	if byID[aboutMenuChangelogID].Tail != "v2.4.4" {
 		t.Fatalf("changelog tail = %q", byID[aboutMenuChangelogID].Tail)
 	}
-	if byID[aboutMenuSettingsID].TailIcon != fromCoreImage(icons.Get(icons.BrandWox)) {
-		t.Fatal("settings tail must be the Wox logo")
+	if byID[aboutMenuSettingsID].TailIcon.ImageData != "" {
+		t.Fatal("settings shortcut must not be accompanied by a tail icon")
+	}
+	if byID[aboutMenuSettingsID].Hotkey != primaryHotkey(",") {
+		t.Fatalf("settings shortcut = %q", byID[aboutMenuSettingsID].Hotkey)
 	}
 	if byID[aboutMenuGuideID].Tail != aboutMenuGuideTail {
 		t.Fatalf("guide tail = %q", byID[aboutMenuGuideID].Tail)
@@ -331,5 +335,40 @@ func TestAboutMenuTails(t *testing.T) {
 		if byID[id].Tail != "" || byID[id].TailIcon.ImageData != "" {
 			t.Fatalf("%s should have no tail", id)
 		}
+	}
+}
+
+// TestAboutMenuSettingsShortcutIsRendered guards against suppressing all About-menu keycaps.
+func TestAboutMenuSettingsShortcutIsRendered(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	entries := aboutMenuEntries("2.4.6")
+	// Icon identities are covered separately; this headless test only exercises keycap rendering.
+	for index := range entries {
+		entries[index].Icon = woxImage{}
+		entries[index].TailIcon = woxImage{}
+	}
+	panel, _, _ := app.buildActionPanel(viewSnapshot{
+		palette: defaultPalette(), actionPanelPurpose: actionPanelPurposeAbout,
+		actionEntries: entries, actionIndices: actionPanelUnfilteredIndices(entries),
+	}, 600, 600, 60, 40, 1)
+	props := panel.(woxwidget.Stateful).Widget.(launcherview.ActionsProps)
+	modifier := "Ctrl"
+	if runtime.GOOS == "darwin" {
+		modifier = "Cmd"
+	}
+	found := false
+	for _, item := range props.Items {
+		if item.ID == aboutMenuSettingsID {
+			found = true
+			if len(item.HotkeyLabels) != 2 || item.HotkeyLabels[0] != modifier || item.HotkeyLabels[1] != "," {
+				t.Fatalf("settings row lost its shortcut: %+v", item)
+			}
+		} else if len(item.HotkeyLabels) != 0 {
+			t.Fatalf("About row %q gained an unrelated shortcut", item.ID)
+		}
+	}
+	if !found {
+		t.Fatal("settings row was not rendered")
 	}
 }

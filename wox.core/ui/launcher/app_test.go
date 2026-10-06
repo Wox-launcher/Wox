@@ -450,6 +450,7 @@ func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
 		visible:            true,
 		editor:             woxui.NewTextEditor("webview ig"),
 		query:              newInputQuery("webview ig"),
+		queryContext:       queryContext{PluginID: common.WebViewPluginID},
 		webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`,
 	}
 	app.closeWebViewPage()

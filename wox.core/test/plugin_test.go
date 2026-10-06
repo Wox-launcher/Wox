@@ -170,11 +170,11 @@ func TestPluginTriggerKeywordConflict(t *testing.T) {
 	suite := NewTestSuite(t)
 	ctx := util.WithSessionContext(suite.ctx, fmt.Sprintf("trigger-conflict-%d", time.Now().UnixNano()))
 
-	colorPlugin := findPluginInstance("5e6e7d7a-6af7-4bf0-8f64-2c4b76a2fb36")
+	colorPlugin := findPluginInstance(common.ColorPluginID)
 	if colorPlugin == nil {
 		t.Fatal("color plugin instance not found")
 	}
-	doctorPlugin := findPluginInstance("3e7444df-e8d1-44bc-91d3-12a070efb458")
+	doctorPlugin := findPluginInstance(common.DoctorPluginID)
 	if doctorPlugin == nil {
 		t.Fatal("doctor plugin instance not found")
 	}
@@ -278,7 +278,7 @@ func TestFilePlugin_CustomRoots(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -327,7 +327,7 @@ func TestFilePlugin_OverlappingRootsKeepParent(t *testing.T) {
 		t.Fatalf("failed to marshal overlapping roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -404,7 +404,7 @@ func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -480,7 +480,7 @@ func TestFilePlugin_CustomRootsExcludeOutsidePaths(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -526,7 +526,7 @@ func TestFilePlugin_CustomRootsIgnoresDSStore(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -568,7 +568,7 @@ func TestFilePlugin_WildcardExtensionFilter(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -611,7 +611,7 @@ func TestFilePlugin_PathFragmentSearch(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -660,7 +660,7 @@ func TestFilePlugin_PinyinInitialSearch(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -693,7 +693,7 @@ func TestFilePlugin_PolicyUpdateRemovesIndexedPath(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -761,7 +761,7 @@ func TestFilePlugin_CustomRootsIncrementalSync(t *testing.T) {
 		t.Fatalf("failed to marshal file search roots setting: %v", err)
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}
@@ -1189,7 +1189,7 @@ func waitForFileSearchEngine(timeout time.Duration) (*filesearch.Engine, error) 
 }
 
 func getFileSearchEngine() (*filesearch.Engine, error) {
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		return nil, fmt.Errorf("file plugin instance not found")
 	}

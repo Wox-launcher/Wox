@@ -341,10 +341,7 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 				}
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
-				if host.Key(event) {
-					return true
-				}
-				return c.onKey(event)
+				return c.app.dispatchWindowKey(event, host, common.NotesPluginID, c.requestClose, c.onKey)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
 			OnCloseRequested: c.requestClose,

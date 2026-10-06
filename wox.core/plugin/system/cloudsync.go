@@ -42,7 +42,7 @@ type CloudSyncPlugin struct {
 // GetMetadata declares the local query surface for cloud sync status and manual sync.
 func (p *CloudSyncPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "8867b6af-dc86-45d5-bcc3-32966adcee27",
+		Id:            common.CloudSyncPluginID,
 		Name:          "i18n:plugin_cloudsync_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"wox/common"
 	"wox/common/icons"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -178,10 +179,7 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 				}
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
-				if host.Key(event) {
-					return true
-				}
-				return a.onDedicatedChatKey(event)
+				return a.dispatchWindowKey(event, host, common.AIChatPluginID, a.requestCloseChatWindow, a.onDedicatedChatKey)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
 			OnFileDrop:       a.handleChatWindowFileDrop,

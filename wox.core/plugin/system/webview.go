@@ -51,7 +51,7 @@ func init() {
 
 func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "2ac1b5cf-bf55-41f0-8c34-421c323be780",
+		Id:            common.WebViewPluginID,
 		Name:          "i18n:plugin_webview_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

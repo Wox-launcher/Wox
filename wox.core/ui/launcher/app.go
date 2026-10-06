@@ -52,6 +52,7 @@ type App struct {
 	nativeHoverTooltipShown map[string]nativeHoverTooltipIdentity
 	terminalSubscribed      string
 	terminalDesired         atomic.Value
+	openingSettingsShortcut atomic.Bool
 
 	isDev          bool
 	isPrimary      bool
@@ -60,6 +61,7 @@ type App struct {
 	windowID       woxui.WindowID
 	services       contract.Services
 	uiCall         func(func()) error
+	uiPost         func(func()) error
 	windows        *woxui.WindowManager
 	instances      *appInstanceRegistry
 	primary        *App
@@ -329,6 +331,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 		windowID:               windowID,
 		services:               services,
 		uiCall:                 woxui.Call,
+		uiPost:                 woxui.Post,
 		windows:                windows,
 		instances:              instances,
 		primary:                primary,
@@ -456,10 +459,13 @@ func (a *App) start() error {
 			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
 				return true
 			}
-			if host.Key(event) {
-				return true
+			settingsPluginID := ""
+			if a.chatFullscreen {
+				settingsPluginID = common.AIChatPluginID
+			} else if a.webViewPreviewData != "" {
+				settingsPluginID = firstNonEmpty(a.queryContext.PluginID, common.WebViewPluginID)
 			}
-			return a.onKey(event)
+			return a.dispatchWindowKey(event, host, settingsPluginID, a.requestLauncherShortcutClose, a.onKey)
 		},
 		OnTextInput: func(event woxui.TextInputEvent) {
 			if !host.TextInput(event) {

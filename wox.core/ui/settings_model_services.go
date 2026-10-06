@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wox/common"
 	"wox/plugin"
 	dictationplugin "wox/plugin/system/dictation"
 	"wox/ui/contract"
@@ -12,7 +13,7 @@ import (
 	"wox/util/ocr"
 )
 
-const dictationPluginID = "a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e"
+const dictationPluginID = common.DictationPluginID
 
 // ManagedModelStatuses returns live download state for one model family.
 func (s *CoreServices) ManagedModelStatuses(ctx context.Context, sessionID string, kind contract.ManagedModelKind) ([]contract.ManagedModelStatus, error) {

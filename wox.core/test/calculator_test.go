@@ -3,11 +3,12 @@ package test
 import (
 	"testing"
 	"time"
+	"wox/common"
 	"wox/plugin"
 	"wox/util"
 )
 
-const calculatorPluginID = "bd723c38-f28d-4152-8621-76fd21d6456e"
+const calculatorPluginID = common.CalculatorPluginID
 
 func setCalculatorSeparators(t *testing.T, decimalMode string, thousandsMode string) {
 	t.Helper()
@@ -348,7 +349,7 @@ func TestCalculatorSeparators(t *testing.T) {
 	suite := NewTestSuite(t)
 	setCalculatorSeparators(t, "Dot", "Comma")
 	waitForCalculatorReady(t, suite)
-	calculatorId := "bd723c38-f28d-4152-8621-76fd21d6456e"
+	calculatorId := common.CalculatorPluginID
 
 	// Find the plugin instance to ensure we update the correct setting store
 	var calcInstance *plugin.Instance

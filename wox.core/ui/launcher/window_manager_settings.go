@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	windowManagerPluginID          = "5b7d9f22-4d87-4c0f-a2c1-8e2b50c8bca0"
+	windowManagerPluginID          = common.WindowManagerPluginID
 	windowManagerGroupsSettingKey  = "windowGroups"
 	windowManagerExtensionStoreURL = "https://chromewebstore.google.com/detail/wox/bjbkdpjdnagiongdfemjhepkkglnailh"
 )

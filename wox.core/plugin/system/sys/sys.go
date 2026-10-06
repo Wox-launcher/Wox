@@ -73,7 +73,7 @@ const (
 
 func (r *SysPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "227f7d64-df08-4e35-ad05-98a26d540d06",
+		Id:            common.SysPluginID,
 		Name:          "i18n:plugin_sys_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

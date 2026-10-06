@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -66,7 +67,7 @@ func Test001SettingUIMaximumResults(t *testing.T) {
 // configureMaximumResultsShellCommands creates a deterministic result set through the real Shell settings form.
 func configureMaximumResultsShellCommands(t *testing.T, ctx context.Context, client *automationdriver.Client, count int) {
 	t.Helper()
-	smoke.OpenInstalledPluginSettings(t, ctx, client, "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d")
+	smoke.OpenInstalledPluginSettings(t, ctx, client, common.ShellPluginID)
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 		add, found := automationdriver.Find(snapshot, "plugin-settings-field-3-add")
 		return found && add.Enabled

@@ -56,7 +56,7 @@ const (
 	globalQueryPluginScoreLimit  = 200
 	// rankAboveUsageScore sits above action history and below the query-pin boost.
 	rankAboveUsageScore int64 = 50000
-	fileSearchPluginID        = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	fileSearchPluginID        = common.FileSearchPluginID
 )
 
 type debounceTimer struct {

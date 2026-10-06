@@ -58,7 +58,7 @@ type browserTab struct {
 
 func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "8f68a760-86a0-46a9-b331-58dcaf091daa",
+		Id:            common.BrowserPluginID,
 		Name:          "i18n:plugin_browser_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

@@ -414,7 +414,7 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 // handleDictationHotkeyPress finds the loaded DictationPlugin and starts
 // the recording session.
 func (m *Manager) handleDictationHotkeyPress(ctx context.Context, actionID string) {
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
 	if sp == nil {
 		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey press callback: action=%s", actionID))
 		return
@@ -431,7 +431,7 @@ func (m *Manager) handleDictationHotkeyPress(ctx context.Context, actionID strin
 // the recording session, producing the recognized text.
 func (m *Manager) handleDictationHotkeyRelease(ctx context.Context, actionID string) {
 	logger.Info(ctx, fmt.Sprintf("dictation: handleDictationHotkeyRelease enter, action=%s", actionID))
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
 	if sp == nil {
 		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey release callback: action=%s", actionID))
 		return
@@ -450,7 +450,7 @@ func (m *Manager) handleDictationHotkeyRelease(ctx context.Context, actionID str
 // handleDictationHotkeyPressAction finds the loaded DictationPlugin and runs
 // the press-triggered dictation action.
 func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context, actionID string) {
-	sp := plugin.GetPluginManager().GetSystemPlugin("a3f7b8c2-d1e4-4f6a-9b0c-7e2d1a5f8b3e")
+	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
 	if sp == nil {
 		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey callback: action=%s", actionID))
 		return

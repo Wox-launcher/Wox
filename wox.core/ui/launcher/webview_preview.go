@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"wox/common"
 
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
@@ -416,14 +417,32 @@ func (a *App) canHideWebViewPage() bool {
 	return a.isWebViewFullPreviewWindow() && a.hasCacheableWebViewPreviewLocked()
 }
 
-// closeWebViewPage destroys the native browser. Full-preview hotkey windows close
-// immediately; typed queries stay open on `webview` so the next show cannot reload the site.
+// closeWebViewPage restores search previews to their owner rather than switching every browser to the WebView plugin.
 func (a *App) closeWebViewPage() {
+	if a.webViewFullscreen {
+		a.exitWebViewPreviewMode()
+		return
+	}
 	a.resetWebView()
 	a.deactivateWebViewPreview()
-	if a.isWebViewFullPreviewWindow() {
+	if a.isWebViewFullPreviewWindow() || (a.queryContext.PluginID != common.WebViewPluginID && launcherPreviewRatio(a.layout, false) == 0) {
 		if err := a.hideWindow(true); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("close full-preview webview page: %v", err))
+		}
+		return
+	}
+	if a.queryContext.PluginID != common.WebViewPluginID {
+		// HTML and media file previews share the native browser. Suppress the pane
+		// until manual reopening or the next query so reconciliation cannot reload it.
+		a.reconcilePreviewVisibility()
+		visible := false
+		a.previewVisibility.visible = &visible
+		a.reconcileSelectedPreview()
+		a.restoreQueryFocusAfterShow()
+		a.restoreQueryTextInput()
+		_ = a.applyWindowBounds()
+		if a.window != nil {
+			_ = a.window.Invalidate()
 		}
 		return
 	}

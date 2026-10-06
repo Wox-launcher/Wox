@@ -69,7 +69,9 @@ Action icons should be theme-adaptive SVG (`svg:` / inline markup with `var(--wo
 
 Return refinements on `QueryResponse.refinements`. Read selected values from `query.refinements` on the next query. See `references/refinements.md`.
 
-`hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `sys.platform == "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token.
+When assigned, refinement `hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `sys.platform == "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token; an empty string leaves it unbound.
+
+`ResultAction.hotkey` is optional too. Before assigning either an action or refinement binding, read [built-in hotkeys and collisions](hotkeys.md). Prefer the platform primary modifier for action defaults, avoid duplicate bindings, and keep the action accessible through the Action Panel when leaving it unbound.
 
 ## Public API Methods
 

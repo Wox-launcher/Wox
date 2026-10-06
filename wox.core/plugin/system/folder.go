@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	PluginID                = "527ba64f-c8f5-4fc7-bb98-306f79d27f32"
+	PluginID                = common.FolderPluginID
 	ToolBrowsePath          = "browse_path"
 	folderResultScore int64 = 1000
 

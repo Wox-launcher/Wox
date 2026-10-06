@@ -44,7 +44,7 @@ var screenshotDefaultRetentionDays = 15
 var screenshotOCRSidecarVersion = 1
 
 const screenshotPermissionDeniedErrorCode = "permission_denied"
-const screenshotPluginID = "78fc701b-a87e-4d5f-a7f2-13cbad9f7d1d"
+const screenshotPluginID = common.ScreenshotPluginID
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ScreenshotPlugin{})

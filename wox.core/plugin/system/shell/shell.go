@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	PluginID                        = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
+	PluginID                        = common.ShellPluginID
 	ToolOpenAtDirectory             = "open_at_directory"
 	QueryContextWorkingDirectoryKey = "wox:shell:working_directory"
 

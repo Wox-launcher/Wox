@@ -67,7 +67,7 @@ type indicatorMatchedCommand struct {
 
 func (i *IndicatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "38564bf0-75ad-4b3e-8afe-a0e0a287c42e",
+		Id:            common.IndicatorPluginID,
 		Name:          "i18n:plugin_indicator_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

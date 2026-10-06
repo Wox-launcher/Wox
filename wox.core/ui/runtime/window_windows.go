@@ -27,10 +27,12 @@ import (
 )
 
 const (
-	windowClassName         = "WoxGoUIWindow"
-	windowCommandMessage    = win.WM_APP + 1
-	windowTextInputMessage  = win.WM_APP + 2
-	runtimeCallMessage      = win.WM_APP + 3
+	windowClassName        = "WoxGoUIWindow"
+	windowCommandMessage   = win.WM_APP + 1
+	windowTextInputMessage = win.WM_APP + 2
+	runtimeCallMessage     = win.WM_APP + 3
+	// Fatal renderer failures destroy the HWND without invoking a user close policy.
+	windowForceCloseMessage = win.WM_APP + 4
 	windowBlurGuardDuration = 300 * time.Millisecond
 	// Keep the renderer warm for quick launcher toggles before accepting the measured cold-show penalty.
 	windowsRendererTrimDelay       = 30 * time.Second
@@ -433,13 +435,13 @@ func platformCall(fn func()) error {
 	return <-done
 }
 
-// platformPost schedules fn on the native UI thread without making a COM callback wait for it.
+// platformPost always queues fn so COM callbacks can return before teardown starts.
 func platformPost(fn func()) error {
 	_, err := queuePlatformCall(fn, nil)
 	return err
 }
 
-// queuePlatformCall executes directly on the UI thread or posts one runtime callback.
+// queuePlatformCall only executes synchronous calls directly on the UI thread.
 func queuePlatformCall(fn func(), done chan error) (bool, error) {
 	platformRuntime.Lock()
 	if !platformRuntime.running {
@@ -447,7 +449,7 @@ func queuePlatformCall(fn func(), done chan error) (bool, error) {
 		return false, errors.New("window runtime is not running")
 	}
 	uiThreadID := platformRuntime.uiThreadID
-	if uiThreadID == win.GetCurrentThreadId() {
+	if done != nil && uiThreadID == win.GetCurrentThreadId() {
 		platformRuntime.Unlock()
 		fn()
 		return false, nil
@@ -1334,7 +1336,7 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			}
 			if err != nil {
 				window.setRunError(err)
-				win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
+				win.PostMessage(hwnd, windowForceCloseMessage, 0, 0)
 			} else if window.focus.visible && width > 0 && height > 0 && !prepared {
 				// Shrinks and mixed-axis resizes cannot be prepared while the old HWND
 				// still clips the surface. Paint them now instead of waiting for WM_PAINT.
@@ -1555,6 +1557,12 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.handleBlur(win.HWND(wParam))
 		return 0
 	case win.WM_CLOSE:
+		if window.options.OnCloseRequested != nil {
+			window.options.OnCloseRequested()
+			return 0
+		}
+		fallthrough
+	case windowForceCloseMessage:
 		window.hideNative()
 		win.DestroyWindow(hwnd)
 		return 0
@@ -2626,7 +2634,7 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	}
 	if err != nil {
 		w.setRunError(err)
-		win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
+		win.PostMessage(hwnd, windowForceCloseMessage, 0, 0)
 	}
 }
 

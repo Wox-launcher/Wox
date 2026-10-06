@@ -37,7 +37,7 @@ type Converter struct {
 
 func (c *Converter) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "a48dc5f0-dab9-4112-b883-b68129d6782b",
+		Id:            common.ConverterPluginID,
 		Name:          "i18n:plugin_converter_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",
@@ -132,7 +132,7 @@ func newCatalog() *engine.Catalog {
 func numberOptions() engine.ParseOptions {
 	decimalMode := calc.DecimalSeparatorSystem
 	thousandsMode := calc.ThousandsSeparatorSystem
-	if instance := plugin.GetPluginManager().GetPluginInstanceById("bd723c38-f28d-4152-8621-76fd21d6456e"); instance != nil && instance.Setting != nil {
+	if instance := plugin.GetPluginManager().GetPluginInstanceById(common.CalculatorPluginID); instance != nil && instance.Setting != nil {
 		if value, ok := instance.Setting.Get("DecimalSeparator"); ok && value != "" {
 			decimalMode = calc.DecimalSeparator(value)
 		}

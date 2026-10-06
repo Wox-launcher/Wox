@@ -57,6 +57,12 @@ static int32_t woxGoLinuxStart(uintptr_t context) {
   assert(context == 1 && is_main_thread());
   if (scenario == 1) return -1;
   if (scenario == 2) return 0;
+  if (scenario == 3) {
+    int before = callback_count;
+    assert(wox_linux_post(42) == 0);
+    assert(callback_count == before);
+    return 0;
+  }
   assert(pthread_create(&worker, NULL, background_load, NULL) == 0);
   while (!g_atomic_int_get(&worker_started)) g_thread_yield();
   // Force the catalog worker to dispatch while the startup callback is still running.
@@ -65,7 +71,7 @@ static int32_t woxGoLinuxStart(uintptr_t context) {
 }
 
 int main(void) {
-  for (scenario = 0; scenario < 3; scenario++) {
+  for (scenario = 0; scenario < 4; scenario++) {
     loop = g_main_loop_new(NULL, FALSE);
     wox_linux_window_count = scenario == 2 ? 0 : 1;
     assert(wox_linux_run(1) == (scenario == 1 ? -1 : 0));
@@ -73,7 +79,9 @@ int main(void) {
       pthread_join(worker, NULL);
       assert(dispatch_result == 0 && callback_count == 1);
     }
+    if (scenario == 3) assert(callback_count == 2);
     assert(!wox_linux_runtime_running && !wox_linux_loop_active);
+    assert(wox_linux_post(42) == -1);
     g_main_loop_unref(loop);
   }
   return 0;
@@ -87,4 +95,4 @@ with tempfile.TemporaryDirectory(prefix="wox-startup-test-") as directory:
     flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "glib-2.0"], text=True))
     subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", str(test), "-o", str(binary), "-pthread", *flags], check=True)
     subprocess.run([str(binary)], check=True, timeout=10)
-print("PASS: startup background dispatch, startup failure, and no-window shutdown")
+print("PASS: startup background dispatch, deferred UI dispatch, startup failure, and no-window shutdown")

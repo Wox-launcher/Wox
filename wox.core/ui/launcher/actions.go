@@ -362,9 +362,6 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 			Tail: aboutMenuItemTail(action, a.translate), TailIcon: a.imageForSize(action.TailIcon, physicalImageSize(int(snapshot.densityMetrics.scaled(launcherview.ActionTailIconSize)), imageScale)),
 			HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		}
-		if snapshot.actionPanelPurpose == actionPanelPurposeAbout {
-			item.HotkeyLabels = nil
-		}
 		return item
 	})
 	return launcherview.ActionsBoundary(launcherview.ActionsProps{

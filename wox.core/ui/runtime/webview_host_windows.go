@@ -519,7 +519,18 @@ func dispatchWindowsWebViewReservedHotkey(owner C.uintptr_t, key string) C.int32
 		return 0
 	}
 	window := value.(*platformWindow)
-	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: Key(key), Modifiers: KeyModifierControl, Down: true}) {
+	composing := window.inputComposing
+	if IsWindowShortcut(Key(key), KeyModifierControl) {
+		// A focused WebView owns its IME context independently of the Go query editor.
+		focus := win.GetFocus()
+		ime, _, _ := immGetContext.Call(uintptr(focus))
+		if ime != 0 {
+			length, _, _ := immGetCompositionString.Call(ime, gcsCompositionString, 0, 0)
+			immReleaseContext.Call(uintptr(focus), ime)
+			composing = composing || int32(length) > 0
+		}
+	}
+	if window.options.OnKey != nil && window.options.OnKey(KeyEvent{Key: Key(key), Modifiers: KeyModifierControl, Down: true, Composing: composing}) {
 		return 1
 	}
 	return 0

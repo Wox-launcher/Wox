@@ -273,30 +273,12 @@ func (a *App) DispatchAutomationKey(event woxui.KeyEvent) (bool, error) {
 	if window := a.independentAutomationWindow(); window != nil {
 		return window.DispatchKey(event)
 	}
-	target := a.resolveAutomationTarget()
-	host, window, kind := a.automationSurface()
+	host, window, _ := a.automationSurface()
 	if host == nil {
 		return false, errors.New("active widget host is not initialized")
 	}
-	if kind == automationSurfaceOverlay || kind == automationSurfaceNotes {
-		return window.DispatchKey(event)
-	}
-	handled := false
-	err := woxui.Call(func() {
-		handled = host.Key(event)
-		if handled {
-			return
-		}
-		switch kind {
-		case automationSurfaceOnboarding:
-			handled = a.onOnboardingWindowKey(event)
-		case automationSurfaceSettings:
-			handled = a.onSettingsWindowKey(event)
-		default:
-			handled = target.onKey(event)
-		}
-	})
-	return handled, err
+	// Native and automation input must share recording and reserved shortcut precedence.
+	return window.DispatchKey(event)
 }
 
 // EnterAutomationText commits UTF-8 text through the active text-input owner.

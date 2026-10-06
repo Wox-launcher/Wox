@@ -29,7 +29,7 @@ type ThemePlugin struct {
 
 func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "58a59382-8b3a-48c2-89ac-0a9a0e12e03f",
+		Id:            common.ThemePluginID,
 		Name:          "i18n:plugin_theme_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

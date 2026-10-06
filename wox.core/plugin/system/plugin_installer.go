@@ -34,7 +34,7 @@ type PluginInstallerPlugin struct {
 
 func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "1aee0f80-2bcd-489a-a2c6-81f9f2e54cad",
+		Id:            common.PluginInstallerPluginID,
 		Name:          "i18n:plugin_plugin_installer_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

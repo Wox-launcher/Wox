@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	webSearchPluginID       = "c1e350a7-c521-4dc3-b4ff-509f720fde86"
+	webSearchPluginID       = common.WebSearchPluginID
 	webSearchesTableAddID   = "plugin-settings-field-2-add"
 	webSearchKeywordFieldID = "form-table-row-field-1"
 	webSearchTitleFieldID   = "form-table-row-field-2"

@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"strings"
+	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
@@ -21,7 +22,7 @@ type QueryHistoryPlugin struct {
 
 func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "fa51ecc4-e491-4e4b-b1f3-70df8a3966d8",
+		Id:            common.QueryHistoryPluginID,
 		Name:          "i18n:plugin_query_history_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

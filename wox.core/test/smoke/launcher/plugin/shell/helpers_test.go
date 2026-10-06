@@ -10,13 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-const shellPluginID = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
+const shellPluginID = common.ShellPluginID
 
 func shellResult(snapshot woxwidget.AutomationSnapshot, command string) (string, bool) {
 	return smoke.FindLauncherResult(snapshot, command)

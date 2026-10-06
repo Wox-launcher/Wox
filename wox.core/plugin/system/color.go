@@ -52,7 +52,7 @@ type parsedColor struct {
 
 func (c *ColorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "5e6e7d7a-6af7-4bf0-8f64-2c4b76a2fb36",
+		Id:            common.ColorPluginID,
 		Name:          "i18n:plugin_color_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

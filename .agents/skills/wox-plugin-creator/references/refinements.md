@@ -30,15 +30,11 @@ def primary_hotkey(key: str) -> str:
 QueryRefinement(..., hotkey=primary_hotkey("t"))
 ```
 
-Pick a mnemonic letter (`t` for type, `s` for sort or status). Leave `Hotkey` empty only when the control should have no shortcut.
+Pick a mnemonic after checking [Wox built-in hotkeys](hotkeys.md) and the actions shown alongside the refinement. The `t` examples illustrate platform formatting; they are not universally conflict-free defaults. Leave `Hotkey` empty when no suitable binding is available.
 
 ### Reserved shortcuts
 
-Do not reuse Wox launcher chords:
-
-- `cmd+j` / `ctrl+j` — action panel
-- `cmd+f` / `ctrl+f` — open the refinements/filters panel
-- `enter` and `cmd+enter` / `ctrl+enter` — default and alternate result actions
+Avoid window commands (`Primary+,`, `Primary+W`) and launcher defaults such as Action Panel (`Primary+K`, legacy `Primary+J`), filters (`Primary+F`), Attention (`Primary+U`), and preview toggle (`Primary+P`). See [hotkeys.md](hotkeys.md) for scopes, focused-editor and preview bindings, configurable shortcuts, and conflict checking. Enter and primary+Enter belong to action execution/submission, not refinement toggles.
 
 ## Read selected values
 

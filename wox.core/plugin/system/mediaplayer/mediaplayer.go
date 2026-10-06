@@ -27,7 +27,7 @@ var mediaIcon = icons.Get(icons.PluginMediaPlayer)
 
 const (
 	// PluginID identifies the built-in media player plugin for internal plugin tools.
-	PluginID = "b8f3d4e5-6c7a-4b9c-8d1e-2f3a4b5c6d7e"
+	PluginID = common.MediaPlayerPluginID
 
 	ToolGetStatus = "get_status"
 	ToolPlay      = "play"

@@ -22,8 +22,8 @@ import (
 	"wox/util/sqlitememory"
 )
 
-const pluginID = "8a81b2cd-0d43-4085-a7e6-05806a309e5a"
-const legacyGlancePluginID = "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6"
+const pluginID = common.WoxMemoryPluginID
+const legacyGlancePluginID = common.GlancePluginID
 const glanceID = "wox_memory"
 const profileCommand = "profile"
 const goCommand = "go"

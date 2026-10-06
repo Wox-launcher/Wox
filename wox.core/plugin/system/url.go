@@ -34,7 +34,7 @@ type UrlPlugin struct {
 
 func (r *UrlPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "1af58721-6c97-4901-b291-620daf08d9c9",
+		Id:            common.URLPluginID,
 		Name:          "i18n:plugin_url_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

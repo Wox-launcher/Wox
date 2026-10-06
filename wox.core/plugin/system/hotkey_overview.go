@@ -25,7 +25,7 @@ type HotkeyOverviewPlugin struct{}
 // GetMetadata declares the dedicated shortcut overview plugin context.
 func (p *HotkeyOverviewPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "0c8f1d9e-4f7a-4c0f-8b7f-2efb6d0b12a4",
+		Id:            common.HotkeyOverviewPluginID,
 		Name:          "i18n:plugin_hotkey_overview_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

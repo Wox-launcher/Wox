@@ -53,7 +53,7 @@
  * - Use "actions" field with an array of action objects (even for single action)
  * - Each action can have a "name" field (displayed in UI, defaults to "Execute")
  * - Set isDefault: true to make Enter run that action. The first action is the default if omitted.
- * - Set hotkey for extra shortcuts, such as "ctrl+enter"
+ * - Optional hotkey: prefer cmd on macOS / ctrl on Windows and Linux; avoid Wox built-ins and duplicate bindings
  * - Set preventHideAfterAction: true on an action to keep Wox open after it runs
  * - Action icons must be monochrome svg: markup using var(--wox-theme-icon-color). Do not use emoji as the leading action icon.
  *

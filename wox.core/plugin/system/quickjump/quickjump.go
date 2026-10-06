@@ -52,7 +52,7 @@ const (
 	quickJumpPathsSettingKey      = "quickJumpPaths"
 	ignoredApplicationsSettingKey = "ignoredApplications"
 
-	quickJumpPluginID                = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
+	quickJumpPluginID                = common.QuickJumpPluginID
 	quickJumpCommandAdd              = "add"
 	quickJumpDialogHintOverlayName   = "quickjump_dialog_hint"
 	quickJumpDialogHintCloseDelay    = 250 * time.Millisecond
@@ -98,7 +98,7 @@ type QuickJumpPlugin struct {
 
 func (c *QuickJumpPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e",
+		Id:            common.QuickJumpPluginID,
 		Name:          "i18n:plugin_quickjump_plugin_name",
 		Author:        "Wox Launcher",
 		Version:       "1.0.0",

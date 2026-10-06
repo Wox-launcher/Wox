@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -20,7 +21,7 @@ import (
 
 // Field 0 is the shared trigger-keywords table prepended to every plugin form.
 const (
-	clipboardPluginID                   = "5f815d98-27f5-488d-a756-c317ea39935b"
+	clipboardPluginID                   = common.ClipboardPluginID
 	clipboardIgnoredApplicationsFieldID = "plugin-settings-field-10"
 )
 

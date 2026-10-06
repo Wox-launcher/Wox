@@ -38,7 +38,7 @@ func (s *CoreServices) BrowserExtensionConnected(_ context.Context, _ string) (b
 
 // browserExtensionConnected keeps the typed service and compatibility route on one status source.
 func browserExtensionConnected() bool {
-	const browserPluginID = "8f68a760-86a0-46a9-b331-58dcaf091daa"
+	const browserPluginID = common.BrowserPluginID
 	sp := plugin.GetPluginManager().GetSystemPlugin(browserPluginID)
 	if sp == nil {
 		return false

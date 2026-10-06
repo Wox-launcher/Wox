@@ -132,6 +132,26 @@ func platformCall(fn func()) error {
 	return nil
 }
 
+// platformPost keeps the callback handle alive until the GTK loop consumes it.
+func platformPost(fn func()) error {
+	linuxRuntime.Lock()
+	running := linuxRuntime.current != nil
+	linuxRuntime.Unlock()
+	if !running {
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	var handle cgo.Handle
+	handle = cgo.NewHandle(func() {
+		defer handle.Delete()
+		fn()
+	})
+	if C.wox_linux_post(C.uintptr_t(handle)) != 0 {
+		handle.Delete()
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	return nil
+}
+
 func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	linuxRuntime.Lock()
 	run := linuxRuntime.current
@@ -1040,6 +1060,18 @@ func woxGoLinuxFocus(context C.uintptr_t, epoch C.uint64_t, active C.int32_t) {
 	if window.options.OnFocus != nil {
 		window.options.OnFocus(FocusEvent{Epoch: FocusEpoch(epoch), Active: active != 0})
 	}
+}
+
+// woxGoLinuxCloseRequested lets application windows save or hide before GTK destroys them.
+//
+//export woxGoLinuxCloseRequested
+func woxGoLinuxCloseRequested(context C.uintptr_t) C.int32_t {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnCloseRequested == nil {
+		return 0
+	}
+	window.options.OnCloseRequested()
+	return 1
 }
 
 //export woxGoLinuxDestroyed

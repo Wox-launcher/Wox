@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
@@ -19,7 +20,7 @@ type DoctorPlugin struct {
 
 func (r *DoctorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:              "3e7444df-e8d1-44bc-91d3-12a070efb458",
+		Id:              common.DoctorPluginID,
 		Name:            "i18n:plugin_doctor_plugin_name",
 		Author:          "Wox Launcher",
 		Website:         "https://github.com/Wox-launcher/Wox",

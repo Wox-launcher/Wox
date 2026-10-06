@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/struCoder/pidusage"
+
+	"wox/common"
 )
 
 type fileSearchBaselineResult struct {
@@ -55,7 +57,7 @@ func TestCaptureFileSearchIndexedOnlyBaseline(t *testing.T) {
 		}
 	}
 
-	filePlugin := findPluginInstance("979d6363-025a-4f51-88d3-0b04e9dc56bf")
+	filePlugin := findPluginInstance(common.FileSearchPluginID)
 	if filePlugin == nil {
 		t.Fatal("file plugin instance not found")
 	}

@@ -268,7 +268,7 @@ type ApplicationPlugin struct {
 
 func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "ea2b6859-14bc-4c89-9c88-627da7379141",
+		Id:            common.AppPluginID,
 		Name:          "i18n:plugin_app_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

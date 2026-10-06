@@ -470,7 +470,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		AppFontFamily:                      NewPlatformValue(store, "AppFontFamily", "", "", ""),
 		EnableQueryCompletionHint:          NewWoxSettingValue(store, "EnableQueryCompletionHint", false),
 		EnableGlance:                       NewWoxSettingValue(store, "EnableGlance", true),
-		PrimaryGlance:                      NewWoxSettingValue(store, "PrimaryGlance", GlanceRef{PluginId: "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6" /* system glance plugin id*/, GlanceId: "time"}),
+		PrimaryGlance:                      NewWoxSettingValue(store, "PrimaryGlance", GlanceRef{PluginId: common.GlancePluginID /* system glance plugin id*/, GlanceId: "time"}),
 		HideGlanceIcon:                     NewWoxSettingValue(store, "HideGlanceIcon", false),
 		ShowScoreTail:                      NewWoxSettingValue(store, "ShowScoreTail", false),
 		ShowPerformanceTail:                NewWoxSettingValue(store, "ShowPerformanceTail", false),

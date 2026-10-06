@@ -3,10 +3,11 @@ package launcher
 import (
 	"strings"
 
+	"wox/common"
 	launcherview "wox/ui/launcher/view"
 )
 
-const fileSearchPluginID = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+const fileSearchPluginID = common.FileSearchPluginID
 
 func isFileSearchRootsTable(idPrefix string, definition formDefinition, pluginID string) bool {
 	return idPrefix == "plugin-settings" && pluginID == fileSearchPluginID && definition.Value.Key == "roots"

@@ -200,6 +200,7 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		return previewview.HotkeyOverviewPreviewEntry{RawShortcut: strings.TrimSpace(shortcut), Labels: labels, Action: action, Detail: detail, Scope: scope, Source: source}
 	}
 	globalScope := a.translate("i18n:ui_hotkey_overview_global")
+	windowScope := a.translate("i18n:ui_hotkey_overview_window")
 	launcherScope := a.translate("i18n:ui_hotkey_overview_launcher")
 	previewScope := a.translate("i18n:ui_hotkey_overview_preview")
 	settingSource := a.translate("i18n:ui_hotkey_overview_source_setting")
@@ -209,6 +210,10 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		{Title: globalScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
 			entry(settings.MainHotkey, a.translate("i18n:ui_hotkey_overview_open_wox"), globalScope, settingSource, "", true),
 			entry(settings.SelectionHotkey, a.translate("i18n:ui_hotkey_overview_search_selection"), globalScope, settingSource, "", true),
+		}},
+		{Title: windowScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
+			entry(primaryHotkey(","), a.translate("i18n:ui_hotkey_overview_open_settings"), windowScope, builtinSource, "", true),
+			entry(primaryHotkey("w"), a.translate("i18n:ui_hotkey_overview_close_window"), windowScope, builtinSource, a.translate("i18n:ui_hotkey_overview_close_window_detail"), true),
 		}},
 		{Title: launcherScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
 			entry(primaryHotkey("p"), a.translate("i18n:ui_hotkey_overview_preview_toggle"), launcherScope, builtinSource, "", true),

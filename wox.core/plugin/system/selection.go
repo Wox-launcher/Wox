@@ -31,7 +31,7 @@ const selectionCommandPreview = "preview"
 
 const (
 	enableSpaceQuickLookSettingKey = "enableSpaceQuickLook"
-	selectionPluginID              = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483"
+	selectionPluginID              = common.SelectionPluginID
 	// quickLookInstanceName is the named secondary launcher session owned by the
 	// Space Quick Look preview. It stays distinct from the selection hotkey
 	// session so the two never replace each other's window.
@@ -62,7 +62,7 @@ type selectionSpaceQuickLookState struct {
 
 func (i *SelectionPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "d9e557ed-89bd-4b8b-bd64-2a7632cf3483",
+		Id:            common.SelectionPluginID,
 		Name:          "i18n:plugin_selection_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

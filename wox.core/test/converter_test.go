@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"wox/common"
 	"wox/plugin"
 )
 
 func TestConverterCrypto(t *testing.T) {
 	suite := NewTestSuite(t)
-	converter := plugin.GetPluginManager().GetPluginInstanceById("a48dc5f0-dab9-4112-b883-b68129d6782b")
+	converter := plugin.GetPluginManager().GetPluginInstanceById(common.ConverterPluginID)
 	if converter == nil {
 		t.Fatal("converter plugin is not initialized")
 	}

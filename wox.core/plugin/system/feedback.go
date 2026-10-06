@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"wox/common"
 	"wox/common/icons"
 	"wox/diagnostic"
 	"wox/plugin"
@@ -35,7 +36,7 @@ const (
 
 func (p *FeedbackPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "b7f6f0f3-9d18-4f17-b74d-f28d19b1b541",
+		Id:            common.FeedbackPluginID,
 		Name:          "i18n:plugin_feedback_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

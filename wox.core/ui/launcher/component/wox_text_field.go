@@ -688,10 +688,10 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				if event.Modifiers&woxui.KeyModifierShift != 0 {
 					break
 				}
-				if original.OnCut != nil && original.OnCut() {
+				if !allowsMutation || original.Protected {
 					return true
 				}
-				if !allowsMutation || original.Protected {
+				if original.OnCut != nil && original.OnCut() {
 					return true
 				}
 				return cutSelection()
@@ -701,17 +701,17 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				}
 				return pasteClipboard()
 			case woxui.Key("z"):
-				if event.Modifiers&woxui.KeyModifierShift != 0 && original.OnRedo != nil && original.OnRedo() {
-					notifySelection()
-					invalidate()
-					return true
-				}
-				if original.OnUndo != nil && original.OnUndo() {
-					notifySelection()
-					invalidate()
-					return true
-				}
 				if !allowsMutation {
+					return true
+				}
+				// An exhausted custom redo must not invoke the document's undo callback.
+				command := original.OnUndo
+				if event.Modifiers&woxui.KeyModifierShift != 0 {
+					command = original.OnRedo
+				}
+				if command != nil && command() {
+					notifySelection()
+					invalidate()
 					return true
 				}
 				handled, changed := s.controller.HandleKey(event)
@@ -724,6 +724,9 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 				}
 				return handled
 			case woxui.Key("y"):
+				if !allowsMutation {
+					return true
+				}
 				if original.OnRedo != nil && original.OnRedo() {
 					notifySelection()
 					invalidate()
@@ -1020,6 +1023,14 @@ func handleTextFieldControllerKey(controller *woxwidget.TextEditingController, m
 	}
 	if !event.Down || event.Composing {
 		return false, false
+	}
+	// Document and Command line navigation precede visual-line movement.
+	// Otherwise multiline fields turn Ctrl+Home/End and Cmd+Up/Down into local moves.
+	if event.Modifiers.HasLineModifier() || (event.Modifiers.HasPrimary() && (event.Key == woxui.KeyHome || event.Key == woxui.KeyEnd)) {
+		switch event.Key {
+		case woxui.KeyArrowLeft, woxui.KeyArrowRight, woxui.KeyArrowUp, woxui.KeyArrowDown, woxui.KeyHome, woxui.KeyEnd:
+			return controller.HandleKey(event)
+		}
 	}
 	state := controller.State()
 	if len(lines) == 0 {

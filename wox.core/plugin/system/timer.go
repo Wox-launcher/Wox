@@ -31,7 +31,7 @@ var (
 )
 
 const (
-	timerPluginID            = "a3f8c2e1-9b4d-4e7a-8c1f-2d5e6a7b8c9d"
+	timerPluginID            = common.TimerPluginID
 	timerOverlayIDPrefix     = "wox_timer_overlay_"
 	timerPersistedSettingKey = "activeTimers"
 	timerResultScoreBase     = int64(1_000_000)

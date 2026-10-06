@@ -44,7 +44,7 @@ type CalculatorPlugin struct {
 
 func (c *CalculatorPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "bd723c38-f28d-4152-8621-76fd21d6456e",
+		Id:            common.CalculatorPluginID,
 		Name:          "i18n:plugin_calculator_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

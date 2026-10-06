@@ -105,7 +105,7 @@ type WindowManagerPlugin struct {
 
 func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "5b7d9f22-4d87-4c0f-a2c1-8e2b50c8bca0",
+		Id:            common.WindowManagerPluginID,
 		Name:          "i18n:plugin_window_manager_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

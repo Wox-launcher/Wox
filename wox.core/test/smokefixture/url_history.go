@@ -4,10 +4,12 @@ import (
 	"crypto/md5"
 	"fmt"
 	"path/filepath"
+
+	"wox/common"
 )
 
 const (
-	URLPluginID                       = "1af58721-6c97-4901-b291-620daf08d9c9"
+	URLPluginID                       = common.URLPluginID
 	MissingFaviconURLHistoryURL       = "https://wox-smoke-missing-favicon.invalid/path"
 	MissingFaviconURLHistoryQuery     = "wox-smoke-missing-favicon"
 	missingFaviconURLHistoryCacheHost = "https://wox-smoke-missing-favicon.invalid"

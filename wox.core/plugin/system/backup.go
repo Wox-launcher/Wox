@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"time"
+	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
@@ -26,7 +27,7 @@ type BackupPlugin struct {
 
 func (c *BackupPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "0feebaec-1a66-45af-9856-566343518638",
+		Id:            common.BackupPluginID,
 		Name:          "i18n:plugin_backup_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

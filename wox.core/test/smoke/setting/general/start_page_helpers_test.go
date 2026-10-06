@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	converterPluginID = "a48dc5f0-dab9-4112-b883-b68129d6782b"
+	converterPluginID = common.ConverterPluginID
 	converterMRUQuery = "1 m to cm"
 )
 

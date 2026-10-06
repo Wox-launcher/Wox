@@ -45,7 +45,7 @@ func (s *CoreServices) AutomationOpenQuickJumpQuery(ctx context.Context, session
 		WindowPositionHeight: initialWindowHeight,
 		WindowWidth:          windowWidth,
 	}
-	const quickJumpPluginID = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
+	const quickJumpPluginID = common.QuickJumpPluginID
 	plugin.GetPluginManager().GetUI().OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
 		Role:         common.WoxInstanceRoleSecondary,
 		InstanceName: string(common.ShowSourceQuickJump),

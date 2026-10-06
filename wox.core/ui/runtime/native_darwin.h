@@ -14,6 +14,7 @@ enum {
 
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
+int32_t wox_darwin_post(uintptr_t context);
 int32_t wox_darwin_acquire_screenshot_cursor(void);
 int32_t wox_darwin_release_screenshot_cursor(void);
 enum {

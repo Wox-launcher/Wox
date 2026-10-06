@@ -19,7 +19,7 @@ type AttentionActionType string
 
 const (
 	// AttentionPluginID is the system Attention inbox plugin that owns the query-box unread badge.
-	AttentionPluginID = "3644c342-9033-44b7-8db6-246088681917"
+	AttentionPluginID = common.AttentionPluginID
 
 	AttentionActionTypeChangeQuery AttentionActionType = "change_query"
 	// OpenPluginSettings opens the source plugin's settings without accepting an arbitrary target.

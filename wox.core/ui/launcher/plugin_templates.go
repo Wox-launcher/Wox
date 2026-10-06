@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	"wox/ui/contract"
 	"wox/util"
 )
 
-const aiCommandPluginID = "c9910664-1c28-47ae-bad6-e7332a02d471"
+const aiCommandPluginID = common.AICommandPluginID
 
 // selectedPluginID returns the catalog identity behind the current detail pane.
 func (a *App) selectedPluginID() string {

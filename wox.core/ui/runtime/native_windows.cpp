@@ -1168,9 +1168,13 @@ struct WoxWindowsWebView {
     if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0) {
       modifiers |= 1 << 3;
     }
-    const bool action_hotkey = woxGoWindowsWebViewActionHotkeyMatches(reinterpret_cast<uintptr_t>(owner), virtual_key, modifiers) != 0;
+    // Window commands take precedence over a configurable Action Hotkey.
+    const bool window_hotkey = modifiers == (1 << 1) && (virtual_key == VK_OEM_COMMA || virtual_key == 'W');
+    const bool action_hotkey = !window_hotkey && woxGoWindowsWebViewActionHotkeyMatches(reinterpret_cast<uintptr_t>(owner), virtual_key, modifiers) != 0;
     const char *reserved_key = nullptr;
-    if (!action_hotkey && control && no_alt_shift) {
+    if (window_hotkey) {
+      reserved_key = virtual_key == 'W' ? "w" : ",";
+    } else if (!action_hotkey && control && no_alt_shift) {
       if (virtual_key == 'R') {
         reserved_key = "r";
       } else if (virtual_key == 'O') {
@@ -1189,6 +1193,12 @@ struct WoxWindowsWebView {
     }
     using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
     webview_method<PutHandled>(args, 8)(args, TRUE);
+    if (window_hotkey) {
+      int32_t key_lparam = 0;
+      if (SUCCEEDED(webview_method<GetInt32>(args, 5)(args, &key_lparam)) && (static_cast<uint32_t>(key_lparam) & (1u << 30)) != 0) {
+        return;
+      }
+    }
     // Navigation shortcuts keep page focus; Action Hotkey and Escape return to the host.
     if (action_hotkey || host_escape) {
       SetFocus(owner);

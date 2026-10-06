@@ -97,7 +97,7 @@ type WebSearchPlugin struct {
 
 func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "c1e350a7-c521-4dc3-b4ff-509f720fde86",
+		Id:            common.WebSearchPluginID,
 		Name:          "i18n:plugin_websearch_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

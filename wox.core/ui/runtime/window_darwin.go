@@ -125,6 +125,26 @@ func platformCall(fn func()) error {
 	return nil
 }
 
+// platformPost keeps the callback handle alive until the main queue consumes it.
+func platformPost(fn func()) error {
+	darwinRuntime.Lock()
+	running := darwinRuntime.current != nil
+	darwinRuntime.Unlock()
+	if !running {
+		return errors.New("woxui: AppKit runtime is not running")
+	}
+	var handle cgo.Handle
+	handle = cgo.NewHandle(func() {
+		defer handle.Delete()
+		fn()
+	})
+	if C.wox_darwin_post(C.uintptr_t(handle)) != 0 {
+		handle.Delete()
+		return errors.New("woxui: AppKit runtime is not running")
+	}
+	return nil
+}
+
 func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	darwinRuntime.Lock()
 	run := darwinRuntime.current

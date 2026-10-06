@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"time"
+	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
@@ -30,7 +31,7 @@ type MenusPlugin struct {
 
 func (i *MenusPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:            "7e17292d-9539-4ed6-b2da-44cb7c585be7",
+		Id:            common.MenusPluginID,
 		Name:          "i18n:plugin_menus_plugin_name",
 		Author:        "Wox Launcher",
 		Website:       "https://github.com/Wox-launcher/Wox",

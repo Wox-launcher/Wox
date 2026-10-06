@@ -39,6 +39,7 @@ extern void woxGoLinuxInfo(const char *message);
 extern int32_t woxGoLinuxCosmicUsesLayerShell(void);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
+extern int32_t woxGoLinuxCloseRequested(uintptr_t context);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
 extern void woxGoLinuxWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
 extern void woxGoLinuxTextInput(uintptr_t context, uint8_t kind, const char *text);
@@ -664,14 +665,24 @@ static void on_webview_escape_prevented_no_change_forwarded_message(gpointer man
 }
 
 static void on_webview_action_panel_message(gpointer manager, gpointer javascript_result, gpointer data) {
-  (void)manager;
-  (void)javascript_result;
   WoxLinuxWindow *window = data;
-  if (window == NULL || window->closed || window->context == 0 || window->action_hotkey_key[0] == '\0') {
+  if (window == NULL || window->closed || window->context == 0 || window->active_web_view == NULL ||
+      wox_webkit.get_user_content_manager == NULL || wox_webkit.get_user_content_manager(window->active_web_view) != manager ||
+      wox_webkit.javascript_result_get_js_value == NULL || wox_webkit.jsc_value_to_string == NULL) {
     return;
   }
-  gtk_widget_grab_focus(window->gl_area);
-  woxGoLinuxKey(window->context, window->action_hotkey_key, window->action_hotkey_modifiers, 1, 0, 0);
+  gpointer value = wox_webkit.javascript_result_get_js_value(javascript_result);
+  gchar *key = value != NULL ? wox_webkit.jsc_value_to_string(value) : NULL;
+  if (key == NULL) {
+    return;
+  }
+  if (strcmp(key, ",") == 0 || strcmp(key, "w") == 0) {
+    woxGoLinuxKey(window->context, key, WOX_KEY_MODIFIER_CONTROL, 1, 0, 0);
+  } else if (strcmp(key, "action-panel") == 0 && window->action_hotkey_key[0] != '\0') {
+    gtk_widget_grab_focus(window->gl_area);
+    woxGoLinuxKey(window->context, window->action_hotkey_key, window->action_hotkey_modifiers, 1, 0, 0);
+  }
+  g_free(key);
 }
 
 static const char *const wox_webview_radius_key = "wox-webview-corner-radius";
@@ -778,7 +789,10 @@ static const char *linux_webview_shortcut_script(void) {
          "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
          "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
          "if(k==='esc')return'escape';return k};"
-         "document.addEventListener('keydown',e=>{if(e.repeat)return;const a=window.__woxActionHotkey;const k=woxKey(e);"
+         "document.addEventListener('keydown',e=>{if(e.isComposing)return;const a=window.__woxActionHotkey;const k=woxKey(e);"
+         "if(e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&(k===','||k==='w')){"
+         "e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)window.webkit.messageHandlers.woxWebViewActionPanel.postMessage(k);return}"
+         "if(e.repeat)return;"
          "if(a&&a.key&&k===a.key&&!!e.ctrlKey===!!a.ctrl&&!!e.metaKey===!!a.meta&&!!e.altKey===!!a.alt&&!!e.shiftKey===!!a.shift){"
          "e.preventDefault();e.stopImmediatePropagation();window.webkit.messageHandlers.woxWebViewActionPanel.postMessage('action-panel');return}"
          "if(e.key!=='Escape')return;const f=document.activeElement;let m=false;const o=new MutationObserver(()=>{m=true});"
@@ -1129,6 +1143,23 @@ int32_t wox_linux_call(uintptr_t context) {
     return -1;
   }
   return 0;
+}
+
+static gboolean execute_go_post(gpointer data) {
+  execute_go_call(data);
+  return G_SOURCE_REMOVE;
+}
+
+// Attaching an idle source avoids g_main_context_invoke's inline execution on the UI thread.
+int32_t wox_linux_post(uintptr_t context) {
+  if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) == 0) {
+    return -1;
+  }
+  GSource *source = g_idle_source_new();
+  g_source_set_callback(source, execute_go_post, (void *)context, NULL);
+  guint source_id = g_source_attach(source, g_main_context_default());
+  g_source_unref(source);
+  return source_id != 0 ? 0 : -1;
 }
 
 static void premultiplied_color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha, float color[4]) {
@@ -3172,6 +3203,14 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
   return FALSE;
 }
 
+// User close requests honor the application policy; gtk_widget_destroy remains unconditional.
+static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data) {
+  (void)widget;
+  (void)event;
+  WoxLinuxWindow *window = data;
+  return window != NULL && !window->closed && window->context != 0 && woxGoLinuxCloseRequested(window->context) != 0;
+}
+
 static void on_window_destroy(GtkWidget *widget, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
@@ -3536,6 +3575,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   g_signal_connect(window->window, "key-release-event", G_CALLBACK(on_key_release), window);
   g_signal_connect(window->window, "realize", G_CALLBACK(on_linux_pointer_passthrough_realize), window);
   g_signal_connect(window->window, "destroy", G_CALLBACK(on_window_destroy), window);
+  g_signal_connect(window->window, "delete-event", G_CALLBACK(on_window_delete), window);
   g_signal_connect(window->im_context, "commit", G_CALLBACK(on_ime_commit), window);
   g_signal_connect(window->im_context, "preedit-changed", G_CALLBACK(on_ime_preedit_changed), window);
 

@@ -38,7 +38,7 @@ type updatePreviewData struct {
 
 func (p *UpdatePlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
-		Id:              "2a9e9f06-6ff1-49c9-9f75-9db7f7a0b7b7",
+		Id:              common.UpdatePluginID,
 		Name:            "i18n:plugin_update_plugin_name",
 		Author:          "Wox Launcher",
 		Website:         "https://github.com/Wox-launcher/Wox",

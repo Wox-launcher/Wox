@@ -63,7 +63,7 @@ interface QueryRefinement {
 }
 ```
 
-`Hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `process.platform === "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token.
+When assigned, `Hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `process.platform === "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token. Check [built-in hotkeys and collisions](hotkeys.md) before choosing a refinement binding; an empty string leaves it unbound.
 
 ### Result
 
@@ -85,9 +85,12 @@ interface ResultAction {
   Id: string;
   Name: string;
   IsDefault?: boolean;
+  Hotkey?: string;
   Action: (ctx: Context, actionContext: ActionContext) => Promise<void>;
 }
 ```
+
+Action `Hotkey` is optional. Prefer the platform primary modifier and follow [hotkeys.md](hotkeys.md) to avoid Wox commands and duplicate refinement/action bindings. Keep the action accessible through the Action Panel when leaving it unbound.
 
 ### WoxImage
 

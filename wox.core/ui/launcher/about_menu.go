@@ -72,7 +72,7 @@ func aboutMenuEntries(version string) []actionPanelEntry {
 		{Key: "about:feedback", ID: aboutMenuFeedbackID, Name: "i18n:ui_about_menu_feedback", Icon: fromCoreImage(icons.Get(icons.ActionFeedback)), TailIcon: fromCoreImage(icons.Get(icons.PluginFeedback)), Source: local},
 		{Key: "about:guide", ID: aboutMenuGuideID, Name: "i18n:ui_about_menu_guide", Icon: settingControlIconSource("documentation"), Tail: aboutMenuGuideTail, Source: local},
 		{Key: "about:changelog", ID: aboutMenuChangelogID, Name: "i18n:ui_about_menu_changelog", Icon: settingControlIconSource("article"), Tail: aboutMenuVersionTail(version), Source: local},
-		{Key: "about:settings", ID: aboutMenuSettingsID, Name: "i18n:ui_about_menu_settings", Icon: fromCoreImage(icons.Get(icons.ActionSettings)), TailIcon: fromCoreImage(icons.Get(icons.BrandWox)), Source: local},
+		{Key: "about:settings", ID: aboutMenuSettingsID, Name: "i18n:ui_about_menu_settings", Icon: fromCoreImage(icons.Get(icons.ActionSettings)), Hotkey: primaryHotkey(","), Source: local},
 		{Key: "about:plugin-store", ID: aboutMenuPluginStoreID, Name: "i18n:ui_about_menu_plugin_store", Icon: settingNavIconSource("plugins.installed"), TailIcon: fromCoreImage(icons.Get(icons.PluginWPM)), Source: local},
 		{Key: "about:community", ID: aboutMenuCommunityID, Name: "i18n:ui_about_menu_community", IsGroupHeader: true, Source: local},
 		{Key: "about:github", ID: aboutMenuGithubID, Name: "i18n:ui_about_menu_github", Icon: fromCoreImage(icons.Get(icons.BrandGithubMonochrome)), Tail: aboutMenuGithubTail, Source: local},

@@ -1,8 +1,5 @@
 package common
 
-// NotesPluginID is the stable identity of the built-in Notes plugin.
-const NotesPluginID = "4d8b0a4e-1fd5-4d96-9c51-6d64793683fa"
-
 // NoteBlockType identifies the visual and semantic role of one document block.
 type NoteBlockType string
 

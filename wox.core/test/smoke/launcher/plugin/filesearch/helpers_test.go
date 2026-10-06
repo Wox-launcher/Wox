@@ -18,6 +18,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"wox/common"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -25,7 +26,7 @@ import (
 )
 
 const (
-	fileSearchPluginID            = "979d6363-025a-4f51-88d3-0b04e9dc56bf"
+	fileSearchPluginID            = common.FileSearchPluginID
 	fileSearchInitialIndexTimeout = 30 * time.Second
 	fileSearchIncrementalTimeout  = 8 * time.Second
 	fileSearchIndexPollInterval   = 25 * time.Millisecond

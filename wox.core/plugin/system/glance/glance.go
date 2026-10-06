@@ -16,7 +16,7 @@ import (
 	"wox/util"
 )
 
-const systemGlancePluginId = "e3ad9f18-fbbe-4f22-8c1b-8274c751f6e6"
+const systemGlancePluginId = common.GlancePluginID
 const systemMetricRefreshIntervalMs = 3000
 
 const (
