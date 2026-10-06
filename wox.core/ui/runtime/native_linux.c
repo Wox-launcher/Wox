@@ -5139,10 +5139,8 @@ static void configure_text_layout(PangoLayout *layout, const char *font_family, 
   pango_layout_set_single_paragraph_mode(layout, TRUE);
 }
 
-// measure_text_layout returns logical Pango metrics without a surface. It is the
-// measurement measure_text_main reports and the one the drawn-fit test checks
-// against.
-static void measure_text_layout(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+// measure_pango_line returns one string's own Pango line box, before the stable-script expansion.
+static void measure_pango_line(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
   PangoContext *context = pango_font_map_create_context(pango_cairo_font_map_get_default());
   PangoLayout *layout = pango_layout_new(context);
   pango_layout_set_text(layout, text, -1);
@@ -5154,6 +5152,83 @@ static void measure_text_layout(const char *text, const char *font_family, float
   *baseline = (float)pango_layout_get_baseline(layout) / PANGO_SCALE;
   g_object_unref(layout);
   g_object_unref(context);
+}
+
+// Ag中あ한 in UTF-8. Fontconfig falls Han, Kana, and Hangul back to different
+// faces, and the line box has to cover every run or the baseline moves.
+static const char kStableScriptSample[] = "Ag\xe4\xb8\xad\xe3\x81\x82\xed\x95\x9c";
+
+enum { kStableLineBoxes = 24 };
+
+typedef struct {
+  char family[96];
+  float size;
+  uint8_t weight;
+  uint8_t italic;
+  float baseline;
+  float height;
+  bool occupied;
+} WoxStableLineBox;
+
+static WoxStableLineBox stable_line_boxes[kStableLineBoxes];
+static int stable_line_box_cursor = 0;
+static GMutex stable_line_box_mutex;
+
+static const char *resolved_font_family(const char *font_family) {
+  if (font_family == NULL || font_family[0] == '\0') {
+    return "Sans";
+  }
+  return font_family;
+}
+
+// stable_script_line_box returns the line box of Ag中あ한 for this face.
+static void stable_script_line_box(const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *height, float *baseline) {
+  const char *family = resolved_font_family(font_family);
+  g_mutex_lock(&stable_line_box_mutex);
+  for (int index = 0; index < kStableLineBoxes; index++) {
+    if (stable_line_boxes[index].occupied && stable_line_boxes[index].size == font_size && stable_line_boxes[index].weight == font_weight && stable_line_boxes[index].italic == italic && strcmp(stable_line_boxes[index].family, family) == 0) {
+      *height = stable_line_boxes[index].height;
+      *baseline = stable_line_boxes[index].baseline;
+      g_mutex_unlock(&stable_line_box_mutex);
+      return;
+    }
+  }
+  float width = 0.0f;
+  measure_pango_line(kStableScriptSample, family, font_size, font_weight, italic, &width, height, baseline);
+  WoxStableLineBox *slot = &stable_line_boxes[stable_line_box_cursor % kStableLineBoxes];
+  stable_line_box_cursor++;
+  snprintf(slot->family, sizeof(slot->family), "%s", family);
+  slot->size = font_size;
+  slot->weight = font_weight;
+  slot->italic = italic;
+  slot->baseline = *baseline;
+  slot->height = *height;
+  slot->occupied = true;
+  g_mutex_unlock(&stable_line_box_mutex);
+}
+
+// expand_line_box raises a measured line to the stable script box when that box is taller.
+static void expand_line_box(float *height, float *baseline, float ref_height, float ref_baseline) {
+  float descent = *height - *baseline;
+  float ref_descent = ref_height - ref_baseline;
+  if (*baseline < ref_baseline) {
+    *baseline = ref_baseline;
+  }
+  if (descent < ref_descent) {
+    descent = ref_descent;
+  }
+  *height = *baseline + descent;
+}
+
+// measure_text_layout returns logical Pango metrics without a surface. It is the
+// measurement measure_text_main reports and the one the drawn-fit test checks
+// against. Han, Kana, and Hangul share one baseline with Latin.
+static void measure_text_layout(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+  measure_pango_line(text, font_family, font_size, font_weight, italic, width, height, baseline);
+  float ref_height = 0.0f;
+  float ref_baseline = 0.0f;
+  stable_script_line_box(font_family, font_size, font_weight, italic, &ref_height, &ref_baseline);
+  expand_line_box(height, baseline, ref_height, ref_baseline);
 }
 
 // measure_text_main returns logical Pango metrics without allocating a render texture.
@@ -5204,6 +5279,23 @@ static bool rasterize_text_line(WoxLinuxTextRaster *raster, const char *text, co
   raster->layout = pango_cairo_create_layout(raster->cairo);
   pango_layout_set_text(raster->layout, text, -1);
   configure_text_layout(raster->layout, font_family, font_size, font_weight, italic);
+  // Show the glyphs on the stable baseline. The layout's own baseline follows
+  // whichever fallback face this string used, so a Han-only line would otherwise
+  // sit higher or lower than the same line once Latin, Kana, or Hangul joins it.
+  PangoRectangle logical;
+  pango_layout_get_extents(raster->layout, NULL, &logical);
+  float content_height = (float)logical.height / PANGO_SCALE;
+  float content_baseline = (float)pango_layout_get_baseline(raster->layout) / PANGO_SCALE;
+  float ref_height = 0.0f;
+  float ref_baseline = 0.0f;
+  stable_script_line_box(font_family, font_size, font_weight, italic, &ref_height, &ref_baseline);
+  float baseline = content_baseline;
+  float height = content_height;
+  expand_line_box(&height, &baseline, ref_height, ref_baseline);
+  float shift = baseline - content_baseline;
+  if (shift > 0.01f) {
+    cairo_translate(raster->cairo, 0.0, shift);
+  }
   pango_cairo_show_layout(raster->cairo, raster->layout);
   cairo_surface_flush(raster->surface);
   return true;

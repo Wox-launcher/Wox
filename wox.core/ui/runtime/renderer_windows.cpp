@@ -29,6 +29,20 @@ struct CachedImageBitmap {
   ID2D1Bitmap1 *bitmap = nullptr;
 };
 
+// StableLineBox is the line box of a string that contains Latin, Han, Kana, and Hangul.
+// Caching it keeps every later string on that same baseline.
+struct StableLineBox {
+  std::wstring family;
+  float font_size = 0;
+  uint8_t weight = 0;
+  uint8_t italic = 0;
+  uint8_t font_slot = 0;
+  bool cjk_override = false;
+  float baseline = 0;
+  float height = 0;
+  bool occupied = false;
+};
+
 struct WoxRenderer {
   ID3D11Device *device = nullptr;
   IDXGISwapChain1 *swap_chain = nullptr;
@@ -91,6 +105,9 @@ struct WoxRenderer {
   HRESULT last_present_result = S_OK;
   uint32_t width = 1;
   uint32_t height = 1;
+  // Line boxes for the mixed-script sample, keyed by font, size, and style.
+  StableLineBox stable_line_boxes[16] = {};
+  int stable_line_box_cursor = 0;
 };
 
 static std::mutex shared_d3d_device_mutex;
@@ -529,8 +546,35 @@ static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstr
   return S_OK;
 }
 
-// create_text_layout keeps drawing and measurement on the same font fallback path.
-static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout **layout) {
+// Ag中あ한. Han is assigned Microsoft YaHei UI on the default UI font; Kana and
+// Hangul stay on DirectWrite's fallback (Yu Gothic UI and Malgun Gothic here).
+// One line box has to cover every run or the baseline moves as scripts come and go.
+static const wchar_t kStableScriptSample[] = L"Ag\u4E2D\u3042\uD55C";
+
+// layout_line_box reads the tallest baseline and the deepest descent in a layout.
+static bool layout_line_box(IDWriteTextLayout *layout, float *baseline, float *height) {
+  UINT32 line_count = 0;
+  layout->GetLineMetrics(nullptr, 0, &line_count);
+  if (line_count == 0) {
+    return false;
+  }
+  std::vector<DWRITE_LINE_METRICS> lines(line_count);
+  if (FAILED(layout->GetLineMetrics(lines.data(), line_count, &line_count))) {
+    return false;
+  }
+  float line_baseline = 0;
+  float descent = 0;
+  for (UINT32 index = 0; index < line_count; index++) {
+    line_baseline = std::max(line_baseline, lines[index].baseline);
+    descent = std::max(descent, lines[index].height - lines[index].baseline);
+  }
+  *baseline = line_baseline;
+  *height = line_baseline + descent;
+  return true;
+}
+
+// create_text_layout_unpinned builds one layout on the same font path as drawing, without a stable line box.
+static HRESULT create_text_layout_unpinned(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout **layout) {
   IDWriteTextFormat *format = nullptr;
   HRESULT result = create_text_format(renderer, font_size, font_weight, font_family, italic, &format);
   if (FAILED(result)) {
@@ -544,6 +588,73 @@ static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &tex
     if (FAILED(result)) {
       release_com(layout);
     }
+  }
+  return result;
+}
+
+// stable_script_line_box returns the line box of the mixed-script sample for this face.
+static bool stable_script_line_box(WoxRenderer *renderer, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *baseline, float *height) {
+  const bool cjk_override = renderer->uses_default_font_family && font_family == 0;
+  const int slot_count = static_cast<int>(sizeof(renderer->stable_line_boxes) / sizeof(renderer->stable_line_boxes[0]));
+  for (const StableLineBox &slot : renderer->stable_line_boxes) {
+    if (slot.occupied && slot.family == renderer->font_family && slot.font_size == font_size && slot.weight == font_weight && slot.italic == italic && slot.font_slot == font_family && slot.cjk_override == cjk_override) {
+      *baseline = slot.baseline;
+      *height = slot.height;
+      return true;
+    }
+  }
+  IDWriteTextLayout *layout = nullptr;
+  HRESULT result = create_text_layout_unpinned(renderer, kStableScriptSample, font_size, font_weight, font_family, italic, 1000000.0f, 1000000.0f, &layout);
+  if (FAILED(result)) {
+    return false;
+  }
+  const bool measured = layout_line_box(layout, baseline, height);
+  layout->Release();
+  if (!measured) {
+    return false;
+  }
+  StableLineBox &slot = renderer->stable_line_boxes[renderer->stable_line_box_cursor % slot_count];
+  renderer->stable_line_box_cursor++;
+  slot.family = renderer->font_family;
+  slot.font_size = font_size;
+  slot.weight = font_weight;
+  slot.italic = italic;
+  slot.font_slot = font_family;
+  slot.cjk_override = cjk_override;
+  slot.baseline = *baseline;
+  slot.height = *height;
+  slot.occupied = true;
+  return true;
+}
+
+// pin_stable_script_line_box keeps Han, Kana, Hangul, and Latin on one baseline.
+// A line otherwise adopts whichever fallback face it happens to use: YaHei UI is
+// shorter than Segoe UI, and Malgun Gothic is taller, so the glyphs jump as the
+// script mix changes.
+static void pin_stable_script_line_box(WoxRenderer *renderer, IDWriteTextLayout *layout, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic) {
+  float baseline = 0;
+  float height = 0;
+  if (!stable_script_line_box(renderer, font_size, font_weight, font_family, italic, &baseline, &height)) {
+    return;
+  }
+  float content_baseline = 0;
+  float content_height = 0;
+  if (!layout_line_box(layout, &content_baseline, &content_height)) {
+    return;
+  }
+  const float descent = std::max(height - baseline, content_height - content_baseline);
+  baseline = std::max(baseline, content_baseline);
+  height = baseline + descent;
+  if (content_baseline + 0.01f < baseline || content_height + 0.01f < height) {
+    layout->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, height, baseline);
+  }
+}
+
+// create_text_layout keeps drawing and measurement on the same font fallback path.
+static HRESULT create_text_layout(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout **layout) {
+  HRESULT result = create_text_layout_unpinned(renderer, text, font_size, font_weight, font_family, italic, width, height, layout);
+  if (SUCCEEDED(result)) {
+    pin_stable_script_line_box(renderer, *layout, font_size, font_weight, font_family, italic);
   }
   return result;
 }
@@ -1546,6 +1657,23 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
     }
   }
   layout->Release();
+  return result;
+}
+
+// wox_renderer_measure_default_text_for_test exercises the default UI font path without a window.
+extern "C" int32_t wox_renderer_measure_default_text_for_test(const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline) {
+  if (text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
+    return E_INVALIDARG;
+  }
+  WoxRenderer renderer;
+  HRESULT result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown **>(&renderer.dwrite_factory));
+  if (FAILED(result)) {
+    return result;
+  }
+  renderer.font_family = L"Segoe UI";
+  renderer.uses_default_font_family = true;
+  result = wox_renderer_measure_text(&renderer, text, font_size, font_weight, 0, 0, width, height, baseline);
+  release_com(&renderer.dwrite_factory);
   return result;
 }
 

@@ -215,6 +215,17 @@ func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics,
 	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
 }
 
+// measureDefaultUITextForTest measures one string with the default UI font and YaHei fallback.
+func measureDefaultUITextForTest(text string, size float32, weight uint8) (TextMetrics, int32) {
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	var width C.float
+	var height C.float
+	var baseline C.float
+	result := C.wox_renderer_measure_default_text_for_test(nativeText, C.float(size), C.uint8_t(weight), &width, &height, &baseline)
+	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, int32(result)
+}
+
 // render replays one logical display list into the physical DirectComposition surface.
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	r.traceFrameCount++

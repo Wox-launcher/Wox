@@ -15,6 +15,7 @@
 
 #include <dlfcn.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -5197,6 +5198,89 @@ static NSFont *wox_font(const char *font_family, CGFloat size, uint8_t font_weig
   return font;
 }
 
+// Ag中あ한. CoreText falls Han, Kana, and Hangul back to different faces, and the
+// line box has to cover every one of them or the baseline moves as scripts change.
+static const unichar kDarwinStableScriptSample[] = {'A', 'g', 0x4E2D, 0x3042, 0xD55C};
+static const NSUInteger kDarwinStableScriptSampleLength = 5;
+
+enum { kDarwinStableLineBoxes = 24 };
+
+typedef struct {
+  char family[96];
+  float size;
+  uint8_t weight;
+  uint8_t italic;
+  float ascent;
+  float descent;
+  float leading;
+  bool occupied;
+} DarwinStableLineBox;
+
+static DarwinStableLineBox darwin_stable_line_boxes[kDarwinStableLineBoxes];
+static int darwin_stable_line_box_cursor = 0;
+static pthread_mutex_t darwin_stable_line_box_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static bool darwin_line_box_matches(const DarwinStableLineBox *slot, const char *family, float size, uint8_t weight, uint8_t italic) {
+  if (!slot->occupied || slot->size != size || slot->weight != weight || slot->italic != italic) {
+    return false;
+  }
+  return strcmp(slot->family, family == NULL ? "" : family) == 0;
+}
+
+// darwin_expand_line_metrics raises a line to the box of Ag中あ한 in this font.
+// Typographic bounds follow the fallback face, so a Han, Kana, or Hangul run
+// otherwise moves the baseline relative to Latin.
+static void darwin_expand_line_metrics(NSFont *font, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, CGFloat *ascent, CGFloat *descent, CGFloat *leading) {
+  if (font == nil || ascent == NULL || descent == NULL || leading == NULL) {
+    return;
+  }
+  pthread_mutex_lock(&darwin_stable_line_box_mutex);
+  CGFloat ref_ascent = 0;
+  CGFloat ref_descent = 0;
+  CGFloat ref_leading = 0;
+  bool found = false;
+  for (int index = 0; index < kDarwinStableLineBoxes; index++) {
+    if (darwin_line_box_matches(&darwin_stable_line_boxes[index], font_family, font_size, font_weight, italic)) {
+      ref_ascent = darwin_stable_line_boxes[index].ascent;
+      ref_descent = darwin_stable_line_boxes[index].descent;
+      ref_leading = darwin_stable_line_boxes[index].leading;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    NSString *sample = [NSString stringWithCharacters:kDarwinStableScriptSample length:kDarwinStableScriptSampleLength];
+    NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:sample attributes:@{(id)kCTFontAttributeName : font}];
+    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
+    if (line != NULL) {
+      CTLineGetTypographicBounds(line, &ref_ascent, &ref_descent, &ref_leading);
+      CFRelease(line);
+      DarwinStableLineBox *slot = &darwin_stable_line_boxes[darwin_stable_line_box_cursor % kDarwinStableLineBoxes];
+      darwin_stable_line_box_cursor++;
+      const char *family = font_family == NULL ? "" : font_family;
+      snprintf(slot->family, sizeof(slot->family), "%s", family);
+      slot->size = font_size;
+      slot->weight = font_weight;
+      slot->italic = italic;
+      slot->ascent = (float)ref_ascent;
+      slot->descent = (float)ref_descent;
+      slot->leading = (float)ref_leading;
+      slot->occupied = true;
+    }
+    [attributed release];
+  }
+  pthread_mutex_unlock(&darwin_stable_line_box_mutex);
+  if (*ascent < ref_ascent) {
+    *ascent = ref_ascent;
+  }
+  if (*descent < ref_descent) {
+    *descent = ref_descent;
+  }
+  if (*leading < ref_leading) {
+    *leading = ref_leading;
+  }
+}
+
 // wox_darwin_window_measure_text returns logical CoreText metrics for the configured UI font.
 int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
   if (window == NULL || text == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || italic > 1) {
@@ -5223,6 +5307,7 @@ int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text
     CGFloat descent = 0.0;
     CGFloat leading = 0.0;
     double measured_width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+    darwin_expand_line_metrics(font, font_family, font_size, font_weight, italic, &ascent, &descent, &leading);
     *width = (float)measured_width;
     *height = (float)(ascent + descent + leading);
     *baseline = (float)ascent;
@@ -5618,7 +5703,10 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:attributes];
   CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
   CGFloat ascent = 0.0;
-  CTLineGetTypographicBounds(line, &ascent, NULL, NULL);
+  CGFloat descent = 0.0;
+  CGFloat leading = 0.0;
+  CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+  darwin_expand_line_metrics(font, font_family, font_size, font_weight, italic, &ascent, &descent, &leading);
   CGContextSaveGState(renderer->context);
   CGContextClipToRect(renderer->context, CGRectMake(x, y, width, height));
   CGContextSetTextMatrix(renderer->context, CGAffineTransformMakeScale(1.0, -1.0));
