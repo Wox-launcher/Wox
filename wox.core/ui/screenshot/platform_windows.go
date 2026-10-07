@@ -98,6 +98,10 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	source, virtualBounds := captured.capture.Image, captured.capture.Bounds
 	platform := screenshotEditorPlatform{
 		windowCandidates: windowsScreenshotWindowCandidates(windowCandidates, virtualBounds),
+		displayCandidates: screenshotSelectionDisplayBounds(options.capturedDisplays, Rect{
+			X: float32(virtualBounds.Min.X), Y: float32(virtualBounds.Min.Y), Width: float32(virtualBounds.Dx()), Height: float32(virtualBounds.Dy()),
+		}, true),
+		objectQuery: windowsScreenshotObjectQuery(windowCandidates, virtualBounds),
 		captureWindow: func(selection Rect) (*image.RGBA, error) {
 			return captureWindowsSelectedWindow(windowCandidates, virtualBounds, selection)
 		},

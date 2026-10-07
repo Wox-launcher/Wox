@@ -1,6 +1,6 @@
 //go:build darwin
 
-package woxui
+package screenshot
 
 import "testing"
 

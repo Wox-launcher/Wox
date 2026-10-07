@@ -1452,11 +1452,11 @@ func woxGoDarwinPresentationDiagnostic(context C.uintptr_t, frameID C.uint64_t, 
 	))
 }
 
-// woxGoDarwinScreenshotDiagnostic routes native Space and window-order snapshots through Wox's logger.
+// woxGoDarwinWindowDiagnostic routes native window and Space snapshots through Wox's logger.
 //
-//export woxGoDarwinScreenshotDiagnostic
-func woxGoDarwinScreenshotDiagnostic(detail *C.char) {
-	util.GetLogger().Debug(context.Background(), "darwin_screenshot "+C.GoString(detail))
+//export woxGoDarwinWindowDiagnostic
+func woxGoDarwinWindowDiagnostic(detail *C.char) {
+	util.GetLogger().Debug(context.Background(), "darwin_window "+C.GoString(detail))
 }
 
 //export woxGoDarwinFocus
@@ -1552,10 +1552,6 @@ func (w *platformWindow) setWindowChrome(custom bool, radius float32, background
 
 func testDarwinFractionalDamage(scale float32, origin Point) int32 {
 	return int32(C.wox_darwin_test_fractional_damage(C.float(scale), C.float(origin.X), C.float(origin.Y)))
-}
-
-func testDarwinScreenshotWindowSelection() int32 {
-	return int32(C.wox_darwin_test_screenshot_window_selection())
 }
 
 // testRenderDarwinMaterial exercises the native renderer without opening a window.

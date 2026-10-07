@@ -7,6 +7,7 @@ package screenshot
 #cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit
 #include <stdlib.h>
 #include "../runtime/native_darwin.h"
+#include "selection_darwin.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
 int32_t wox_screenshot_set_cursor_position(float x, float y);
 int32_t wox_screenshot_cursor_png(const char *path, float *hotspot_x, float *hotspot_y);
@@ -65,6 +66,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		}
 	}
 	platform := screenshotEditorPlatform{
+		displayCandidates: []Rect{{Width: bounds.Width, Height: bounds.Height}},
 		setWindowBounds: func(window *Window) error {
 			return window.SetBounds(bounds)
 		},
@@ -327,4 +329,16 @@ func darwinScreenshotTestPixels() (*image.RGBA, error) {
 		return nil, errors.New("convert native screenshot fixture")
 	}
 	return pixels, nil
+}
+
+// woxGoDarwinScreenshotDiagnostic routes native selector diagnostics through Wox's logger.
+//
+//export woxGoDarwinScreenshotDiagnostic
+func woxGoDarwinScreenshotDiagnostic(detail *C.char) {
+	util.GetLogger().Debug(context.Background(), "darwin_screenshot "+C.GoString(detail))
+}
+
+// testDarwinScreenshotWindowSelection exercises native stacking and coordinate mapping without opening a window.
+func testDarwinScreenshotWindowSelection() int32 {
+	return int32(C.wox_darwin_test_screenshot_window_selection())
 }

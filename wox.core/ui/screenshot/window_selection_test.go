@@ -3,6 +3,7 @@ package screenshot
 import (
 	"fmt"
 	"testing"
+	"wox/util/screen"
 )
 
 // TestScreenshotWindowSelection distinguishes a click from freeform selection and later editing.
@@ -14,9 +15,10 @@ func TestScreenshotWindowSelection(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/scale=%v", scenario, scale), func(t *testing.T) {
 				state := &screenshotEditorOverlayState{
 					frameSize: Size{Width: 800, Height: 600}, uiScale: scale,
-					windowCandidates: []Rect{front, back},
-					result:           make(chan screenshotEditorOverlayOutcome, 1),
-					autoConfirm:      scenario == "auto confirm",
+					windowCandidates:  []Rect{front, back},
+					displayCandidates: []Rect{{Width: 800, Height: 600}},
+					result:            make(chan screenshotEditorOverlayOutcome, 1),
+					autoConfirm:       scenario == "auto confirm",
 				}
 				start, end := Point{X: 60, Y: 60}, Point{X: 60, Y: 60}
 				want := front
@@ -26,7 +28,7 @@ func TestScreenshotWindowSelection(t *testing.T) {
 					end = Point{X: 180, Y: 140}
 					want = Rect{X: 60, Y: 60, Width: 120, Height: 80}
 				} else if scenario == "empty desktop" {
-					start, end, want = Point{X: 300, Y: 300}, Point{X: 300, Y: 300}, Rect{X: 300, Y: 300}
+					start, end, want = Point{X: 300, Y: 300}, Point{X: 300, Y: 300}, Rect{Width: 800, Height: 600}
 				}
 				state.pointer(PointerEvent{Kind: PointerMove, Position: start})
 				if state.hasSelection {
@@ -62,6 +64,40 @@ func TestScreenshotWindowSelection(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestScreenshotDisplayFallbackMapsMixedDPI checks both platform coordinate spaces, monitor transitions, gaps, and clipped captures.
+func TestScreenshotDisplayFallbackMapsMixedDPI(t *testing.T) {
+	displays := screenshotDisplayLayout([]screen.Display{
+		{Bounds: screen.Rect{X: -1280, Width: 1280, Height: 800}, PixelBounds: screen.Rect{X: -1600, Width: 1600, Height: 1000}, Scale: 1.25},
+		{Bounds: screen.Rect{Width: 1440, Height: 900}, PixelBounds: screen.Rect{Width: 2880, Height: 1800}, Scale: 2},
+		{Bounds: screen.Rect{Y: -600, Width: 800, Height: 600}, PixelBounds: screen.Rect{Y: -900, Width: 1200, Height: 900}, Scale: 1.5},
+	})
+	for _, physical := range []bool{false, true} {
+		capture := Rect{X: -1280, Y: -600, Width: 2720, Height: 1500}
+		want := []Rect{{Y: 600, Width: 1280, Height: 800}, {X: 1280, Y: 600, Width: 1440, Height: 900}, {X: 1280, Width: 800, Height: 600}}
+		if physical {
+			capture = Rect{X: -1600, Y: -900, Width: 4480, Height: 2700}
+			want = []Rect{{Y: 900, Width: 1600, Height: 1000}, {X: 1600, Y: 900, Width: 2880, Height: 1800}, {X: 1600, Width: 1200, Height: 900}}
+		}
+		state := &screenshotEditorOverlayState{displayCandidates: screenshotSelectionDisplayBounds(displays, capture, physical)}
+		for _, display := range want {
+			point := Point{X: display.X + 10, Y: display.Y + 10}
+			state.updateObjectSelectionLocked(point)
+			if got := state.objectAtPointLocked(point); got != display {
+				t.Fatalf("physical=%v display at %+v = %+v, want %+v", physical, point, got, display)
+			}
+		}
+		for _, point := range []Point{{X: 10, Y: 10}, {X: capture.Width, Y: capture.Height}, {X: -1, Y: 10}} {
+			if state.selectionFallbackAtPoint(point) != (Rect{}) {
+				t.Fatalf("physical=%v selected a monitor gap or outside point %+v", physical, point)
+			}
+		}
+	}
+	clipped := screenshotSelectionDisplayBounds(displays, Rect{X: -1200, Y: 20, Width: 800, Height: 600}, false)
+	if len(clipped) != 1 || clipped[0] != (Rect{Width: 800, Height: 600}) {
+		t.Fatalf("display fallback escaped the captured region: %+v", clipped)
 	}
 }
 

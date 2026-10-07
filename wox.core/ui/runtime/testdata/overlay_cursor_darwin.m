@@ -59,11 +59,11 @@ int main(int argc, const char *argv[]) {
   @autoreleasepool {
     [NSApplication sharedApplication];
     if (argc == 2 && strcmp(argv[1], "--reset-cursor") == 0) {
-      if (wox_darwin_acquire_screenshot_cursor() != 0) return fail(@"external cursor reset lease failed");
+      if (wox_darwin_acquire_overlay_cursor() != 0) return fail(@"external cursor reset lease failed");
       [[NSCursor arrowCursor] set];
       [[NSFileHandle fileHandleWithStandardOutput] writeData:[@"1" dataUsingEncoding:NSUTF8StringEncoding]];
       [[NSFileHandle fileHandleWithStandardInput] readDataToEndOfFile];
-      wox_darwin_release_screenshot_cursor();
+      wox_darwin_release_overlay_cursor();
       return 0;
     }
     ConnectionID connection_id = (ConnectionID)dlsym(RTLD_DEFAULT, "CGSMainConnectionID");
@@ -82,9 +82,9 @@ int main(int argc, const char *argv[]) {
         }
         // Selector and recording border coexist during handoff.
         leases++;
-        if (wox_darwin_acquire_screenshot_cursor() != 0) { result = fail(@"first panel lease failed"); break; }
+        if (wox_darwin_acquire_overlay_cursor() != 0) { result = fail(@"first panel lease failed"); break; }
         leases++;
-        if (wox_darwin_acquire_screenshot_cursor() != 0) { result = fail(@"overlapping panel lease failed"); break; }
+        if (wox_darwin_acquire_overlay_cursor() != 0) { result = fail(@"overlapping panel lease failed"); break; }
         for (NSCursor *cursor in @[[NSCursor resizeLeftRightCursor], [NSCursor resizeUpDownCursor], [NSCursor openHandCursor]]) {
           [cursor set];
           if (!system_cursor_matches(cursor)) { result = fail(@"system cursor pixels do not match requested resize/move cursor"); break; }
@@ -94,12 +94,12 @@ int main(int argc, const char *argv[]) {
           result = fail(@"reapplying the same hand cursor did not recover from another process's reset");
           break;
         }
-        wox_darwin_release_screenshot_cursor();
+        wox_darwin_release_overlay_cursor();
         leases--;
         [[NSCursor crosshairCursor] set];
         if (!system_cursor_matches([NSCursor crosshairCursor])) { result = fail(@"closing selector disabled the remaining panel cursor"); break; }
         [original set];
-        if (wox_darwin_release_screenshot_cursor() != 0) { result = fail(@"last panel policy restoration failed"); leases--; break; }
+        if (wox_darwin_release_overlay_cursor() != 0) { result = fail(@"last panel policy restoration failed"); leases--; break; }
         leases--;
         CFTypeRef restored = NULL;
         CGError status = copy_property(connection, connection, CFSTR("SetsCursorInBackground"), &restored);
@@ -111,7 +111,7 @@ int main(int argc, const char *argv[]) {
       // Restore the real pointer even when a pixel comparison fails.
       set_property(connection, connection, CFSTR("SetsCursorInBackground"), kCFBooleanTrue);
       [original set];
-      while (leases-- > 0) wox_darwin_release_screenshot_cursor();
+      while (leases-- > 0) wox_darwin_release_overlay_cursor();
       [original release];
     }
     return result;

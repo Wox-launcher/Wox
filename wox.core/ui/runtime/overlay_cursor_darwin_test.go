@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-// TestDarwinScreenshotSystemCursor compares actual WindowServer cursor pixels in a background process.
+// TestDarwinOverlaySystemCursor compares actual WindowServer cursor pixels in a background process.
 // Opt in because this briefly changes the desktop cursor; ordinary unit tests must remain headless.
-func TestDarwinScreenshotSystemCursor(t *testing.T) {
+func TestDarwinOverlaySystemCursor(t *testing.T) {
 	if os.Getenv("WOX_TEST_NATIVE_CURSOR") != "1" {
 		t.Skip("set WOX_TEST_NATIVE_CURSOR=1 to verify the live macOS system cursor")
 	}
 	binary := filepath.Join(t.TempDir(), "screenshot-cursor")
 	command := exec.Command("clang", "-fblocks", "-Wno-deprecated-declarations", "-framework", "Cocoa",
-		"testdata/screenshot_cursor_darwin.m", "screenshot_cursor_darwin.m", "-o", binary)
+		"testdata/overlay_cursor_darwin.m", "overlay_cursor_darwin.m", "-o", binary)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build native cursor test: %v\n%s", err, output)
 	}

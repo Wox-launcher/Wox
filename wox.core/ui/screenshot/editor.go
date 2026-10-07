@@ -164,10 +164,17 @@ type screenshotEditorOverlayState struct {
 	workspaceSize    Size
 	start            Point
 	selection        Rect
-	// Window candidates use editor coordinates, ordered from front to back before the overlay opens.
-	windowCandidates []Rect
-	pressedWindow    Rect
-	selectionDragged bool
+	// Window and display candidates use editor coordinates; windows retain the pre-overlay stacking order.
+	windowCandidates  []Rect
+	displayCandidates []Rect
+	objectSelection   screenshotObjectSelection
+	objectQuery       screenshotObjectQuery
+	objectRequests    chan screenshotObjectRequest
+	objectCancel      context.CancelFunc
+	objectStop        context.CancelFunc
+	objectClosed      bool
+	pressedWindow     Rect
+	selectionDragged  bool
 	// Native window pixels are export-only; any selection change cancels their use.
 	originalSource      image.Image
 	windowSource        *image.RGBA
@@ -303,6 +310,8 @@ type screenshotEditorPlatform struct {
 	frameSize               Size
 	initialSelection        *Rect
 	windowCandidates        []Rect
+	displayCandidates       []Rect
+	objectQuery             screenshotObjectQuery
 	captureWindow           func(Rect) (*image.RGBA, error)
 	initialWindowSource     *image.RGBA
 	initialBackgroundSource *image.RGBA
@@ -346,6 +355,8 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		sizeDialogOptions:   options,
 		frameSize:           platform.frameSize,
 		windowCandidates:    platform.windowCandidates,
+		displayCandidates:   platform.displayCandidates,
+		objectQuery:         platform.objectQuery,
 		autoConfirm:         options.AutoConfirm,
 		hideTools:           options.HideAnnotationToolbar,
 		allowVideoRecording: options.AllowVideoRecording,
@@ -416,6 +427,8 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	}
 
 	state := newScreenshotEditorOverlayState(options, uiImage, platform)
+	state.startObjectSelection()
+	defer state.stopObjectSelection()
 	state.originalSource = source
 	state.backgroundWallpaper = wallpaper
 	defer state.releaseWindowBackground()
@@ -476,6 +489,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 				state.mu.Lock()
 				state.pointerPosition = *pointer
 				state.pointerInside = true
+				state.updateObjectSelectionLocked(*pointer)
 				state.mu.Unlock()
 			}
 		}
@@ -828,7 +842,13 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	previewWindow := !hasSelection && state.pointerInside
 	if previewWindow {
-		selection = state.windowAtPoint(state.pointerPosition)
+		state.updateObjectSelectionLocked(state.pointerPosition)
+		var animating bool
+		selection, animating = state.objectSelection.transition.sample(time.Now())
+		state.objectSelection.transition.presented = selection.Width >= 2 && selection.Height >= 2
+		if animating && state.window != nil {
+			defer state.window.RequestAnimationFrame()
+		}
 		backgroundBounds = selection
 		hasSelection = selection.Width >= 2 && selection.Height >= 2
 	}
@@ -1882,10 +1902,27 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		}
 		return
 	}
-	if event.Button != PointerButtonPrimary && event.Kind != PointerMove && event.Kind != PointerLeave {
+	if event.Button != PointerButtonPrimary && event.Kind != PointerMove && event.Kind != PointerLeave && event.Kind != PointerScroll {
 		return
 	}
 	switch event.Kind {
+	case PointerScroll:
+		state.mu.Lock()
+		if !state.hasSelection && !state.dragging && event.Scroll.Y != 0 {
+			state.pointerPosition, state.pointerInside = event.Position, true
+			state.updateObjectSelectionLocked(event.Position)
+			selection := &state.objectSelection
+			step := 1
+			if event.Scroll.Y < 0 {
+				step = -1
+			}
+			selection.index = min(max(selection.index+step, 0), max(0, len(selection.path)-1))
+			selection.explicit = true
+			selection.transition.present(state.objectAtPointLocked(event.Position), time.Now())
+		}
+		state.mu.Unlock()
+		state.invalidate()
+		return
 	case PointerDown:
 		state.mu.Lock()
 		if state.hasSelection && screenshotEditorRectContains(state.sizeLabelRect, event.Position) {
@@ -2158,7 +2195,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			autoConfirm := state.autoConfirm && state.hasSelection
 			selection, generation := state.selection, state.windowCaptureGeneration
 			var captureDone chan struct{}
-			if windowClick && state.captureWindow != nil {
+			if windowClick && state.captureWindow != nil && selection == state.windowAtPoint(state.start) {
 				captureDone = make(chan struct{})
 				state.windowCaptureDone = captureDone
 				state.windowSelection = &selection
@@ -2684,7 +2721,11 @@ func (state *screenshotEditorOverlayState) beginPointerToolActionLocked(event Po
 			state.backgroundSource, state.backgroundPreview = nil, nil
 			state.showBackground, state.backgroundLoading, state.backgroundFailed = false, false, false
 			state.start = event.Position
-			state.pressedWindow = state.windowAtPoint(event.Position)
+			state.updateObjectSelectionLocked(event.Position)
+			state.pressedWindow = state.objectAtPointLocked(event.Position)
+			if state.objectCancel != nil {
+				state.objectCancel()
+			}
 			state.selectionDragged = false
 			state.selection = Rect{X: event.Position.X, Y: event.Position.Y}
 			state.dragging = true

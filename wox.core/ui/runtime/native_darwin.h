@@ -16,8 +16,8 @@ enum {
 int32_t wox_darwin_run(uintptr_t context);
 int32_t wox_darwin_call(uintptr_t context);
 int32_t wox_darwin_post(uintptr_t context);
-int32_t wox_darwin_acquire_screenshot_cursor(void);
-int32_t wox_darwin_release_screenshot_cursor(void);
+int32_t wox_darwin_acquire_overlay_cursor(void);
+int32_t wox_darwin_release_overlay_cursor(void);
 enum {
   WOX_TITLE_BAR_CLOSE = 1,
   WOX_TITLE_BAR_MINIMIZE = 2,
@@ -32,14 +32,6 @@ int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height);
 int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y, float *width, float *height);
 int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path);
-int32_t wox_darwin_select_screenshot_region(int32_t *pixel_width, int32_t *pixel_height, uintptr_t *session_handle, uint32_t *display_id, float *display_x, float *display_y, float *display_width, float *display_height, float *selection_x, float *selection_y, float *selection_width, float *selection_height, char **copied_color);
-int32_t wox_darwin_test_screenshot_rgba(void *pixels);
-int32_t wox_darwin_test_screenshot_window_selection(void);
-int32_t wox_darwin_copy_screenshot_selection_rgba(uintptr_t session_handle, int32_t width, int32_t height, void *pixels);
-int32_t wox_darwin_copy_screenshot_window_rgba(uintptr_t session_handle, int32_t *width, int32_t *height, void *pixels);
-void wox_darwin_dismiss_screenshot_selection(uintptr_t session_handle);
-uintptr_t wox_darwin_show_screenshot_border(float x, float y, float width, float height, float thickness);
-void wox_darwin_dismiss_screenshot_border(uintptr_t border_handle);
 int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path);
 int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t y, int32_t width, int32_t height, void *pixels);
 int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
@@ -101,9 +93,6 @@ int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float sca
 int32_t wox_darwin_test_fractional_damage(float scale, float x, float y);
 int32_t wox_darwin_test_cached_image_owns_pixels(void);
 int32_t wox_darwin_test_large_image_admission(void);
-int32_t wox_darwin_test_screenshot_pixel_at_point(int32_t image_width, int32_t image_height, float frame_width, float frame_height, float x, float y, int32_t *pixel_x, int32_t *pixel_y);
-int32_t wox_darwin_test_screenshot_inspector_rect(float frame_width, float frame_height, float pointer_x, float pointer_y, float panel_width, float panel_height, float ui_scale, float *x, float *y, float *width, float *height);
-int32_t wox_darwin_test_screenshot_color_shortcut(uint16_t key_code, int32_t *as_hex);
 
 int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius);
 
