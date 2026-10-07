@@ -10,6 +10,7 @@ import (
 	"sync"
 	"wox/common"
 	"wox/common/icons"
+	"wox/internal/assetfs"
 	"wox/plugin"
 	"wox/plugin/system"
 	"wox/setting"
@@ -32,7 +33,9 @@ var (
 )
 
 //go:embed emoji-data.json
-var emojiFS embed.FS
+var rawEmojiFS embed.FS
+
+var emojiFS = assetfs.New(rawEmojiFS)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &EmojiPlugin{})
