@@ -354,16 +354,22 @@ func parseNoteBlock(raw string, previous common.NoteBlockType, checked bool) (co
 		}
 	}
 	indent, listValue := noteListIndent(raw)
-	for _, rule := range []prefixRule{{"- [ ] ", common.NoteBlockTask}, {"[ ] ", common.NoteBlockTask}, {"- [x] ", common.NoteBlockTask}, {"[x] ", common.NoteBlockTask}, {"- ", common.NoteBlockBullet}, {"• ", common.NoteBlockBullet}} {
-		if strings.HasPrefix(strings.ToLower(listValue), strings.ToLower(rule.prefix)) {
-			return rule.typeID, strings.Contains(strings.ToLower(rule.prefix), "x"), indent, listValue[len(rule.prefix):]
+	// "- " turns the line into a bullet on the keystroke that completes it, so by the time the
+	// checkbox is typed the marker has already been consumed and reprojected as "• ". Strip the
+	// bullet marker first and retry the task prefix on what is left, otherwise "- [ ] " is only
+	// ever reachable when a whole line arrives at once (Markdown import or paste).
+	for _, marker := range []string{"- ", "• "} {
+		if !strings.HasPrefix(listValue, marker) {
+			continue
 		}
+		rest := listValue[len(marker):]
+		if blockType, taskChecked, text, ok := parseNoteTaskPrefix(rest); ok {
+			return blockType, taskChecked, indent, text
+		}
+		return common.NoteBlockBullet, false, indent, rest
 	}
-	if strings.HasPrefix(listValue, "☐ ") {
-		return common.NoteBlockTask, false, indent, strings.TrimPrefix(listValue, "☐ ")
-	}
-	if strings.HasPrefix(listValue, "☑ ") {
-		return common.NoteBlockTask, true, indent, strings.TrimPrefix(listValue, "☑ ")
+	if blockType, taskChecked, text, ok := parseNoteTaskPrefix(listValue); ok {
+		return blockType, taskChecked, indent, text
 	}
 	if noteOrderedPrefix.MatchString(listValue) {
 		return common.NoteBlockOrdered, false, indent, noteOrderedPrefix.ReplaceAllString(listValue, "")
@@ -375,6 +381,20 @@ func parseNoteBlock(raw string, previous common.NoteBlockType, checked bool) (co
 		previous = common.NoteBlockParagraph
 	}
 	return previous, checked && previous == common.NoteBlockTask, 0, raw
+}
+
+// parseNoteTaskPrefix reports whether value opens with a checkbox marker, returning the task block
+// it describes and the text that follows the marker.
+func parseNoteTaskPrefix(value string) (common.NoteBlockType, bool, string, bool) {
+	for _, rule := range []struct {
+		prefix  string
+		checked bool
+	}{{"[ ] ", false}, {"[x] ", true}, {"\u2610 ", false}, {"\u2611 ", true}} {
+		if strings.HasPrefix(strings.ToLower(value), rule.prefix) {
+			return common.NoteBlockTask, rule.checked, value[len(rule.prefix):], true
+		}
+	}
+	return common.NoteBlockParagraph, false, value, false
 }
 
 func noteListIndent(value string) (int, string) {
