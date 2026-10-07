@@ -3052,6 +3052,12 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   return YES;
 }
 
+// The transparent render view owns Go hit testing, including controls inside
+// the hidden title bar. Native window dragging must not consume their presses.
+- (BOOL)mouseDownCanMoveWindow {
+  return NO;
+}
+
 - (void)dealloc {
   [_marked_text release];
   [_tracking_area release];
