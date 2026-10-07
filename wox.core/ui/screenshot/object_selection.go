@@ -7,6 +7,7 @@ import (
 )
 
 const screenshotSelectionTransitionDuration = 101 * time.Millisecond
+const screenshotObjectForegroundBudget = 168 * time.Millisecond
 
 // screenshotSelectionTransition keeps visual interpolation separate from the rectangle committed by a click.
 type screenshotSelectionTransition struct {
@@ -191,6 +192,10 @@ func (state *screenshotEditorOverlayState) startObjectSelection() {
 	requests := state.objectRequests
 	state.mu.Unlock()
 	go func() {
+		// Native providers release session caches on their worker after outstanding IPC returns.
+		if state.objectQueryClose != nil {
+			defer state.objectQueryClose()
+		}
 		for {
 			var request screenshotObjectRequest
 			select {
@@ -198,11 +203,11 @@ func (state *screenshotEditorOverlayState) startObjectSelection() {
 				return
 			case request = <-requests:
 			}
-			for _, budget := range []time.Duration{168 * time.Millisecond, 1500 * time.Millisecond} {
+			for _, budget := range []time.Duration{screenshotObjectForegroundBudget, 1500 * time.Millisecond} {
 				if ctx.Err() != nil || request.ctx.Err() != nil {
 					break
 				}
-				request.refinement = budget > 168*time.Millisecond
+				request.refinement = budget > screenshotObjectForegroundBudget
 				if request.refinement {
 					timer := time.NewTimer(max(time.Duration(0), 80*time.Millisecond-time.Since(request.started)))
 					select {

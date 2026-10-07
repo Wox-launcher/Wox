@@ -86,7 +86,8 @@ func windowsScreenshotWindowCandidates(windows []window.ManagedWindow, desktop i
 }
 
 // windowsScreenshotObjectQuery restricts UIA to the frontmost frozen window, keeping the overlay and covered windows out of selection.
-func windowsScreenshotObjectQuery(windows []window.ManagedWindow, desktop image.Rectangle) screenshotObjectQuery {
+func windowsScreenshotObjectQuery(windows []window.ManagedWindow, desktop image.Rectangle) (screenshotObjectQuery, func()) {
+	selector := &windowsScreenshotObjectSelector{}
 	return func(ctx context.Context, point Point) []Rect {
 		physical := Point{X: point.X + float32(desktop.Min.X), Y: point.Y + float32(desktop.Min.Y)}
 		for _, candidate := range windows {
@@ -101,10 +102,12 @@ func windowsScreenshotObjectQuery(windows []window.ManagedWindow, desktop image.
 			}
 			// Recheck the frozen DWM frame; UIA must never describe a window moved after the pixels were captured.
 			if !windowsScreenshotFrameMatches(uintptr(hwnd), bounds) {
+				selector.reset()
 				return nil
 			}
-			rects := windowsScreenshotElements(ctx, uintptr(hwnd), physical)
+			rects := selector.elements(ctx, uintptr(hwnd), physical)
 			if !windowsScreenshotFrameMatches(uintptr(hwnd), bounds) {
+				selector.reset()
 				return nil
 			}
 			for index := range rects {
@@ -114,7 +117,7 @@ func windowsScreenshotObjectQuery(windows []window.ManagedWindow, desktop image.
 			return rects
 		}
 		return nil
-	}
+	}, selector.close
 }
 
 // windowsScreenshotFrameMatches uses the same DWM/GetWindowRect fallback as the frozen managed-window snapshot.

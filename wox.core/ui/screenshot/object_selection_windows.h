@@ -8,7 +8,12 @@ extern "C" {
 typedef struct {
   int32_t left, top, right, bottom;
 } WoxScreenshotElementRect;
-int32_t wox_windows_screenshot_elements(uintptr_t window, int32_t x, int32_t y, uint32_t budget_ms, uintptr_t cancellation,
+typedef struct WoxScreenshotObjectSelector WoxScreenshotObjectSelector;
+WoxScreenshotObjectSelector *wox_windows_screenshot_selector_create(void);
+void wox_windows_screenshot_selector_reset(WoxScreenshotObjectSelector *selector);
+void wox_windows_screenshot_selector_destroy(WoxScreenshotObjectSelector *selector);
+int32_t wox_windows_screenshot_elements(WoxScreenshotObjectSelector *selector, uintptr_t window, int32_t x, int32_t y,
+                                        uint32_t budget_ms, int32_t refinement, uintptr_t cancellation,
                                         WoxScreenshotElementRect *rects, int32_t capacity);
 #ifdef __cplusplus
 }

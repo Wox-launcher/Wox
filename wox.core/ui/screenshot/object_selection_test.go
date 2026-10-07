@@ -248,3 +248,41 @@ func TestScreenshotObjectRefinementDwell(t *testing.T) {
 		t.Fatal("refinement did not run")
 	}
 }
+
+// TestScreenshotObjectQueryCleanup waits for foreign IPC on the worker without blocking editor teardown.
+func TestScreenshotObjectQueryCleanup(t *testing.T) {
+	entered, release, closed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	state := &screenshotEditorOverlayState{
+		windowCandidates: []Rect{{Width: 400, Height: 300}}, pointerInside: true,
+		objectQuery: func(context.Context, Point) []Rect {
+			close(entered)
+			<-release
+			return nil
+		},
+		objectQueryClose: func() { close(closed) },
+	}
+	state.startObjectSelection()
+	defer state.stopObjectSelection()
+	defer close(release)
+	state.mu.Lock()
+	state.updateObjectSelectionLocked(Point{X: 20, Y: 20})
+	state.mu.Unlock()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("query worker did not start")
+	}
+	state.stopObjectSelection()
+	select {
+	case <-closed:
+		t.Fatal("provider references were released while IPC was outstanding")
+	default:
+	}
+	// Release the simulated provider before checking asynchronous cleanup.
+	release <- struct{}{}
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("query worker did not release its session cache")
+	}
+}

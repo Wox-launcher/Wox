@@ -3,7 +3,7 @@
 This package owns screenshot capture workflows, the portable editor, object selection, export, and recording orchestration. Screenshot-specific native code belongs here too:
 
 - `object_selection.go` owns portable selection paths, cancellation, foreground/refinement scheduling, and preview transitions.
-- `object_selection_darwin.*`, `object_selection_windows.*`, and `object_selection_linux*` implement bounded native geometry queries. AX/UIA/AT-SPI references stay inside the query lifetime; the editor receives rectangle values.
+- `object_selection_darwin.*`, `object_selection_windows.*`, and `object_selection_linux*` implement bounded native geometry queries; the editor receives rectangle values. Windows keeps a lazy cache for the current frozen HWND on a single MTA worker, capped at 4096 nodes. Expanded nodes retain only geometry; unloaded nodes and partially decoded sibling batches retain UIA references until expansion, window changes, or session cleanup. Cancellation preserves cache progress. AX/AT-SPI references stay inside the query lifetime.
 - `selection_darwin.m` owns the macOS capture snapshot, selection session, inspector, selection layers, click/drag handling, and scrolling border. `selection_darwin.h` is its package-local C bridge; `platform_darwin.go` owns the Go handoff.
 - `platform_*.go` maps capture and native coordinates into the editor. Linux desktop-specific capture behavior stays in the corresponding environment file.
 
@@ -13,7 +13,7 @@ Dependencies point from `screenshot` to `runtime`. Runtime supplies general wind
 
 macOS native selection uses global top-left logical points and maps captured pixels using the actual image dimensions. Windows selection uses physical desktop pixels relative to the captured virtual desktop. Linux selection uses the capture's logical bounds, with native pixel geometry converted at the platform boundary. Selection chrome follows the active display's scale.
 
-Display and window geometry is frozen before capture overlays appear. A failed control query falls back to its frozen window; empty desktop falls back to the queried display. Monitor gaps stay unselectable, and the display fallback does not qualify for isolated window-image capture.
+Display and window geometry is frozen before capture overlays appear. A failed control query falls back to its frozen window; empty desktop falls back to the queried display. Windows refreshes its UIA tree once on pointer dwell because Chromium/Electron may expose descendants after the initial request; subsequent foreground and refinement queries reuse the cache. Monitor gaps stay unselectable, and the display fallback does not qualify for isolated window-image capture.
 
 ## Verification
 

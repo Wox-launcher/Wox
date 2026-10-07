@@ -169,6 +169,7 @@ type screenshotEditorOverlayState struct {
 	displayCandidates []Rect
 	objectSelection   screenshotObjectSelection
 	objectQuery       screenshotObjectQuery
+	objectQueryClose  func()
 	objectRequests    chan screenshotObjectRequest
 	objectCancel      context.CancelFunc
 	objectStop        context.CancelFunc
@@ -312,6 +313,7 @@ type screenshotEditorPlatform struct {
 	windowCandidates        []Rect
 	displayCandidates       []Rect
 	objectQuery             screenshotObjectQuery
+	objectQueryClose        func()
 	captureWindow           func(Rect) (*image.RGBA, error)
 	initialWindowSource     *image.RGBA
 	initialBackgroundSource *image.RGBA
@@ -357,6 +359,7 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		windowCandidates:    platform.windowCandidates,
 		displayCandidates:   platform.displayCandidates,
 		objectQuery:         platform.objectQuery,
+		objectQueryClose:    platform.objectQueryClose,
 		autoConfirm:         options.AutoConfirm,
 		hideTools:           options.HideAnnotationToolbar,
 		allowVideoRecording: options.AllowVideoRecording,
