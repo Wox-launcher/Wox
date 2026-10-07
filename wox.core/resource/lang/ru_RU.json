@@ -1612,6 +1612,7 @@
   "plugin_app_already_hidden": "Это приложение уже скрыто",
   "plugin_app_uninstall": "Удалить",
   "plugin_app_uninstall_started": "Деинсталлятор запущен",
+  "plugin_app_uninstall_trashed": "Перемещено в Корзину",
   "plugin_app_uninstall_not_found": "Не удалось найти сведения для удаления этого приложения",
   "plugin_app_uninstall_not_allowed": "Это приложение нельзя удалить",
   "plugin_app_uninstall_failed": "Не удалось удалить: %s",

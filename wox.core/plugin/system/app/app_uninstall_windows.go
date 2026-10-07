@@ -26,15 +26,15 @@ var (
 	windowsUninstallCacheExpires time.Time
 )
 
-func isWindowsUninstallNotFound(err error) bool {
+func isAppUninstallNotFound(err error) bool {
 	return errors.Is(err, errWindowsUninstallNotFound)
 }
 
-func isWindowsUninstallNotAllowed(err error) bool {
+func isAppUninstallNotAllowed(err error) bool {
 	return errors.Is(err, errWindowsUninstallNotAllowed)
 }
 
-func executeWindowsUninstall(ctx context.Context, info appInfo) error {
+func executeAppUninstall(ctx context.Context, info appInfo) error {
 	if info.Type == AppTypeUWP {
 		familyName := uwpPackageFamilyName(info.Path)
 		if familyName == "" {

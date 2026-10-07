@@ -1612,6 +1612,7 @@
   "plugin_app_already_hidden": "Este aplicativo já está oculto",
   "plugin_app_uninstall": "Desinstalar",
   "plugin_app_uninstall_started": "Desinstalador iniciado",
+  "plugin_app_uninstall_trashed": "Movido para o Lixo",
   "plugin_app_uninstall_not_found": "Não foi possível encontrar informações de desinstalação deste aplicativo",
   "plugin_app_uninstall_not_allowed": "Este aplicativo não pode ser desinstalado",
   "plugin_app_uninstall_failed": "Falha ao desinstalar: %s",

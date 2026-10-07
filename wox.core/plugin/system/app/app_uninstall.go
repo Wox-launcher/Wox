@@ -259,8 +259,60 @@ func findWindowsUninstallEntry(info appInfo, targetPaths []string, entries []win
 	return nil
 }
 
+// shouldOfferUninstall reports whether this platform can remove the indexed app.
+func shouldOfferUninstall(info appInfo) bool {
+	if util.IsWindows() {
+		return shouldOfferWindowsUninstall(info)
+	}
+	if util.IsMacOS() {
+		return shouldOfferMacUninstall(info)
+	}
+	return false
+}
+
+// shouldOfferMacUninstall allows user-installed bundles. System locations are
+// protected, and a bundle nested inside another .app belongs to its parent.
+func shouldOfferMacUninstall(info appInfo) bool {
+	comparable := macUninstallComparablePath(info.Path)
+	if pathpkg.Ext(comparable) != ".app" {
+		return false
+	}
+	if strings.HasPrefix(comparable, "x-apple.systempreferences:") {
+		return false
+	}
+	return !macUninstallPathIsProtected(comparable) && !macUninstallPathIsNestedBundle(comparable)
+}
+
+func macUninstallComparablePath(appPath string) string {
+	slashPath := strings.ReplaceAll(strings.TrimSpace(appPath), `\`, "/")
+	return strings.TrimSuffix(strings.ToLower(pathpkg.Clean(slashPath)), "/")
+}
+
+func macUninstallPathIsProtected(comparablePath string) bool {
+	for _, prefix := range []string{
+		"/system/",
+		"/usr/bin/",
+		"/usr/sbin/",
+		"/usr/lib/",
+		"/usr/libexec/",
+		"/usr/share/",
+		"/bin/",
+		"/sbin/",
+		"/library/apple/",
+	} {
+		if strings.HasPrefix(comparablePath, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func macUninstallPathIsNestedBundle(comparablePath string) bool {
+	return strings.Contains(pathpkg.Dir(comparablePath), ".app/")
+}
+
 func (a *ApplicationPlugin) buildUninstallAction(info appInfo, displayName string, contextData map[string]string) (plugin.QueryResultAction, bool) {
-	if !util.IsWindows() || !shouldOfferWindowsUninstall(info) {
+	if !shouldOfferUninstall(info) {
 		return plugin.QueryResultAction{}, false
 	}
 
@@ -282,15 +334,15 @@ func (a *ApplicationPlugin) buildUninstallAction(info appInfo, displayName strin
 }
 
 func (a *ApplicationPlugin) executeUninstall(ctx context.Context, info appInfo, displayName string) {
-	// Hide before ShellExecute so the UAC prompt or vendor uninstaller is not covered by the launcher.
+	// Hide before the platform uninstall UI so a Windows UAC prompt or macOS authorization dialog is not covered by the launcher.
 	a.api.HideApp(ctx)
-	if err := executeWindowsUninstall(ctx, info); err != nil {
+	if err := executeAppUninstall(ctx, info); err != nil {
 		a.api.Log(ctx, plugin.LogLevelError, "uninstall failed for "+displayName+": "+err.Error())
-		if isWindowsUninstallNotFound(err) {
+		if isAppUninstallNotFound(err) {
 			a.api.Notify(ctx, a.api.GetTranslation(ctx, "plugin_app_uninstall_not_found"))
 			return
 		}
-		if isWindowsUninstallNotAllowed(err) {
+		if isAppUninstallNotAllowed(err) {
 			a.api.Notify(ctx, a.api.GetTranslation(ctx, "plugin_app_uninstall_not_allowed"))
 			return
 		}
@@ -298,7 +350,11 @@ func (a *ApplicationPlugin) executeUninstall(ctx context.Context, info appInfo, 
 		return
 	}
 
-	a.api.Notify(ctx, a.api.GetTranslation(ctx, "plugin_app_uninstall_started"))
+	successKey := "plugin_app_uninstall_started"
+	if util.IsMacOS() {
+		successKey = "plugin_app_uninstall_trashed"
+	}
+	a.api.Notify(ctx, a.api.GetTranslation(ctx, successKey))
 }
 
 func fmtUninstallMessage(template string, value string) string {

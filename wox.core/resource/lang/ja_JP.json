@@ -1719,6 +1719,7 @@
   "plugin_app_already_hidden": "このアプリはすでに非表示です",
   "plugin_app_uninstall": "アンインストール",
   "plugin_app_uninstall_started": "アンインストーラーを起動しました",
+  "plugin_app_uninstall_trashed": "ゴミ箱に移動しました",
   "plugin_app_uninstall_not_found": "このアプリのアンインストール情報が見つかりませんでした",
   "plugin_app_uninstall_not_allowed": "このアプリはアンインストールできません",
   "plugin_app_uninstall_failed": "アンインストールに失敗しました : %s",

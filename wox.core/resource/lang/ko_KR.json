@@ -1719,6 +1719,7 @@
   "plugin_app_already_hidden": "이 앱은 이미 숨겨져 있습니다",
   "plugin_app_uninstall": "제거",
   "plugin_app_uninstall_started": "제거 프로그램이 시작되었습니다",
+  "plugin_app_uninstall_trashed": "휴지통으로 이동했습니다",
   "plugin_app_uninstall_not_found": "이 앱의 제거 정보를 찾을 수 없습니다",
   "plugin_app_uninstall_not_allowed": "이 앱은 제거할 수 없습니다",
   "plugin_app_uninstall_failed": "제거하지 못했습니다: %s",

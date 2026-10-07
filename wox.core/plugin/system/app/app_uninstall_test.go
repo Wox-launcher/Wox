@@ -139,6 +139,35 @@ func TestUwpPackageFamilyName(t *testing.T) {
 	}
 }
 
+func TestShouldOfferMacUninstall(t *testing.T) {
+	testCases := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{name: "applications bundle", path: "/Applications/Visual Studio Code.app", want: true},
+		{name: "user applications bundle", path: "/Users/me/Applications/Foo.app", want: true},
+		{name: "utilities folder", path: "/Applications/Utilities/Custom.app", want: true},
+		{name: "system applications", path: "/System/Applications/Calculator.app"},
+		{name: "core services", path: "/System/Library/CoreServices/Applications/Archive Utility.app"},
+		{name: "library apple", path: "/Library/Apple/System/Library/CoreServices/Foo.app"},
+		{name: "usr local bundle", path: "/usr/local/Foo.app", want: true},
+		{name: "usr bin bundle", path: "/usr/bin/Foo.app"},
+		{name: "nested helper", path: "/Applications/Parent.app/Contents/Helpers/Helper.app"},
+		{name: "preference pane", path: "/Library/PreferencePanes/Foo.prefPane"},
+		{name: "system settings uri", path: "x-apple.systempreferences:com.apple.wifi"},
+		{name: "windows executable", path: `C:\Apps\Editor.exe`},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := shouldOfferMacUninstall(appInfo{Path: testCase.path}); got != testCase.want {
+				t.Fatalf("got %t, want %t", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestBuildAppActionsIncludesUninstallOnWindows(t *testing.T) {
 	plugin := &ApplicationPlugin{}
 	actions := plugin.buildAppActions(appInfo{Path: `C:\Apps\Editor.exe`, Type: AppTypeDesktop}, "Editor", nil)
@@ -153,5 +182,28 @@ func TestBuildAppActionsIncludesUninstallOnWindows(t *testing.T) {
 
 	if hasUninstall != util.IsWindows() {
 		t.Fatalf("uninstall action presence = %t, want %t", hasUninstall, util.IsWindows())
+	}
+}
+
+func TestBuildAppActionsIncludesUninstallOnMac(t *testing.T) {
+	plugin := &ApplicationPlugin{}
+
+	userActions := plugin.buildAppActions(appInfo{Path: "/Applications/Example.app"}, "Example", nil)
+	hasUserUninstall := false
+	for _, action := range userActions {
+		if action.Name == "i18n:plugin_app_uninstall" {
+			hasUserUninstall = true
+			break
+		}
+	}
+	if hasUserUninstall != util.IsMacOS() {
+		t.Fatalf("user app uninstall action presence = %t, want %t", hasUserUninstall, util.IsMacOS())
+	}
+
+	systemActions := plugin.buildAppActions(appInfo{Path: "/System/Applications/Calculator.app"}, "Calculator", nil)
+	for _, action := range systemActions {
+		if action.Name == "i18n:plugin_app_uninstall" {
+			t.Fatal("system apps must not offer uninstall")
+		}
 	}
 }

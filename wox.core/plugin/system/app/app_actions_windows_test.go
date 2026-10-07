@@ -3,7 +3,6 @@ package app
 import (
 	"path/filepath"
 	"testing"
-	"wox/util"
 )
 
 func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.T) {
@@ -45,7 +44,7 @@ func TestBuildAppActionsIncludesAdministratorActionForExecutableApps(t *testing.
 					break
 				}
 			}
-			wantUninstallAction := shouldOfferWindowsUninstall(testCase.info) && util.IsWindows()
+			wantUninstallAction := shouldOfferUninstall(testCase.info)
 			if hasUninstallAction != wantUninstallAction {
 				t.Fatalf("uninstall action presence = %t, want %t", hasUninstallAction, wantUninstallAction)
 			}

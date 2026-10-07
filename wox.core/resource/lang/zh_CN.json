@@ -1719,6 +1719,7 @@
   "plugin_app_already_hidden": "此应用已隐藏",
   "plugin_app_uninstall": "卸载",
   "plugin_app_uninstall_started": "已启动卸载程序",
+  "plugin_app_uninstall_trashed": "已移到废纸篓",
   "plugin_app_uninstall_not_found": "找不到此应用的卸载信息",
   "plugin_app_uninstall_not_allowed": "此应用不允许卸载",
   "plugin_app_uninstall_failed": "卸载失败：%s",

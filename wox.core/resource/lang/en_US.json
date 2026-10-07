@@ -1719,6 +1719,7 @@
   "plugin_app_already_hidden": "This app is already hidden",
   "plugin_app_uninstall": "Uninstall",
   "plugin_app_uninstall_started": "Uninstaller started",
+  "plugin_app_uninstall_trashed": "Moved to Trash",
   "plugin_app_uninstall_not_found": "Could not find uninstall information for this app",
   "plugin_app_uninstall_not_allowed": "This app cannot be uninstalled",
   "plugin_app_uninstall_failed": "Failed to uninstall: %s",
