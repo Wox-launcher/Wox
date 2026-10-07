@@ -40,7 +40,6 @@ func init() {
 
 type EmojiData struct {
 	Emoji       string
-	Codes       string
 	Categories  map[string]string // language code -> category name
 	Names       map[string]string // language code -> emoji name
 	SearchTerms []string
@@ -98,7 +97,6 @@ func loadEmojiCatalog() ([]EmojiData, error) {
 
 				entries = append(entries, EmojiData{
 					Emoji:       char,
-					Codes:       emoji.Get("codes").String(),
 					Categories:  categoryNames,
 					Names:       names,
 					SearchTerms: emojisearch.BuildTerms(names, categoryNames),
