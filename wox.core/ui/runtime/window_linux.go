@@ -24,6 +24,7 @@ import (
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/mouse"
 )
 
@@ -432,16 +433,19 @@ func (w *platformWindow) openExternalURL(rawURL string) error {
 }
 
 func (w *platformWindow) writeClipboardText(text string) error {
-	native, err := w.openNative()
-	if err != nil {
+	var publishErr error
+	if err := platformCall(func() {
+		native, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		owner := uintptr(C.wox_linux_window_display(native))
+		publishErr = clipboard.PublishText(owner, text)
+	}); err != nil {
 		return err
 	}
-	nativeText := C.CString(text)
-	defer C.free(unsafe.Pointer(nativeText))
-	if C.wox_linux_window_write_clipboard_text(native, nativeText) != 0 {
-		return errors.New("woxui: failed to write Linux clipboard text")
-	}
-	return nil
+	return publishErr
 }
 
 // applyWindowIcon replaces the desktop-shell icon so minimized notes are not the Wox app glyph.
@@ -461,30 +465,20 @@ func (w *platformWindow) applyWindowIcon() {
 	}
 }
 
-func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
-	native, err := w.openNative()
-	if err != nil {
+func (w *platformWindow) writeClipboardImage(image *clipboard.PreparedImage) error {
+	var publishErr error
+	if err := platformCall(func() {
+		native, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		owner := uintptr(C.wox_linux_window_display(native))
+		publishErr = image.Publish(owner)
+	}); err != nil {
 		return err
 	}
-	if image == nil || (len(image.pixels) == 0 && len(image.png) == 0) {
-		return errors.New("woxui: clipboard image is empty")
-	}
-	if len(image.png) > 0 {
-		if C.wox_linux_window_write_clipboard_png(native, (*C.uint8_t)(unsafe.Pointer(&image.png[0])), C.size_t(len(image.png))) != 0 {
-			return errors.New("woxui: failed to write Linux clipboard PNG")
-		}
-		return nil
-	}
-	if C.wox_linux_window_write_clipboard_image(
-		native,
-		(*C.uint8_t)(unsafe.Pointer(&image.pixels[0])),
-		C.int32_t(image.width),
-		C.int32_t(image.height),
-		C.int32_t(image.stride),
-	) != 0 {
-		return errors.New("woxui: failed to write Linux clipboard image")
-	}
-	return nil
+	return publishErr
 }
 
 func (w *platformWindow) invalidate() error {

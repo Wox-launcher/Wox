@@ -36,6 +36,7 @@ import (
 	"wox/util"
 	"wox/util/appearance"
 	"wox/util/autostart"
+	"wox/util/clipboard"
 	"wox/util/fuzzymatch"
 	utilhotkey "wox/util/hotkey"
 	"wox/util/ime"
@@ -1967,7 +1968,7 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start private mode cleanup: %s", err.Error()))
 		}
-		if err := woxui.FlushClipboard(); err != nil {
+		if err := clipboard.Flush(woxui.Call); err != nil {
 			util.GetLogger().Warn(ctx, err.Error())
 		}
 		os.Exit(0)

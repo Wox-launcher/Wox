@@ -47,11 +47,38 @@ func TestScreenshotSceneStraightAlpha(t *testing.T) {
 	}
 }
 
+// BenchmarkScreenshotSceneWindowSnapshot measures the foreground work needed before the native editor can close.
+func BenchmarkScreenshotSceneWindowSnapshot(b *testing.B) {
+	source := image.NewRGBA(image.Rect(0, 0, 5136, 2792))
+	draw.Draw(source, source.Bounds(), image.NewUniform(color.RGBA{R: 77, G: 91, B: 128, A: 255}), image.Point{}, draw.Src)
+	b.Run("straight_alpha_synchronous", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			pixels := image.NewNRGBA64(source.Rect)
+			copyScreenshotSceneStraightAlpha(pixels, source, source.Rect.Min)
+		}
+	})
+	b.Run("packed_snapshot", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			pixels := image.NewRGBA(source.Rect)
+			copyScreenshotCapture(pixels, source, source.Rect.Min)
+		}
+	})
+}
+
 func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 32, 32))
 	source.SetRGBA(4, 5, color.RGBA{R: 255, A: 255})
 	state := newScreenshotEditorOverlayState(ScreenshotOptions{}, nil, screenshotEditorPlatform{frameSize: Size{Width: 32, Height: 32}})
 	state.selection = Rect{Width: 32, Height: 32}
+	state.originalSource = source
+	window := image.NewRGBA(source.Rect)
+	edge := color.RGBA{R: 3, G: 17, B: 51, A: 85}
+	window.SetRGBA(4, 5, edge)
+	if err := state.installWindowCapture(state.selection, window); err != nil {
+		t.Fatal(err)
+	}
 	state.cursorPixel = &Point{X: 8, Y: 9}
 	state.annotations = []screenshotEditorAnnotation{{tool: screenshotEditorToolBrush, points: []Point{{X: 3, Y: 3}, {X: 6, Y: 6}}, strokeRadius: 2, color: Color{A: 255}}}
 	path := filepath.Join(t.TempDir(), "capture.png")
@@ -72,6 +99,7 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	}
 	// The native source and editor are gone before the plugin starts the deferred write.
 	clear(source.Pix)
+	clear(state.windowSource.Pix)
 	state.annotations[0].points[0] = Point{X: 30, Y: 30}
 	state.cursorPixel.X = 31
 	if err := save(); err != nil {
@@ -83,6 +111,9 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	}
 	if color.RGBAModel.Convert(restored.At(4, 5)) != (color.RGBA{R: 255, A: 255}) || marks[0].points[0] != (Point{X: 3, Y: 3}) || doc.CursorPixel.X != 8 {
 		t.Fatal("background save retained mutable editor or native capture data")
+	}
+	if doc.windowPixels.RGBAAt(4, 5) != edge {
+		t.Fatal("background window conversion retained mutable pixels or rounded translucent edges")
 	}
 }
 

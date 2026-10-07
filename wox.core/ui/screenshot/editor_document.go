@@ -1,13 +1,17 @@
 package screenshot
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/draw"
 	"math"
 	"sync"
+	"time"
 
+	"wox/util"
 	"wox/util/screen"
 	"wox/util/screenshotedit"
 )
@@ -83,8 +87,9 @@ func screenshotDisplayLayoutMatches(saved []screenshotDisplay, current []screen.
 }
 
 // prepareScreenshotDocumentSave detaches the scene from native pixels and mutable editor state.
-// Compression, fingerprints, and disk writes belong to the returned background job.
+// High-precision conversion, compression, fingerprints, and disk writes belong to the returned background job.
 func prepareScreenshotDocumentSave(path string, source, composited image.Image, state *screenshotEditorOverlayState) (func() error, error) {
+	startedAt := time.Now()
 	document := screenshotDocument{
 		Displays: append([]screenshotDisplay(nil), state.capturedDisplays...),
 		Frame:    state.frameSize, PixelWidth: source.Bounds().Dx(), PixelHeight: source.Bounds().Dy(),
@@ -100,11 +105,12 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 			return nil, err
 		}
 		// Keep original desktop pixels for re-editing and native window pixels as a separate export resource.
-		// Sixteen-bit straight alpha avoids rounding the compositor's premultiplied edge colors on reload.
-		pixels := image.NewNRGBA64(image.Rectangle{Max: clip.Size()})
-		copyScreenshotSceneStraightAlpha(pixels, state.windowSource, clip.Min)
+		// Detach packed pixels now; the background job performs the expensive 16-bit conversion.
+		pixels := image.NewRGBA(image.Rectangle{Max: clip.Size()})
+		copyScreenshotCapture(pixels, state.windowSource, clip.Min)
 		window = pixels
 	}
+	windowPreparedAt := time.Now()
 	if state.backgroundSource != nil {
 		background = state.backgroundSource
 	}
@@ -121,6 +127,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 			Number: mark.number, PaintOrder: mark.paintOrder,
 		})
 	}
+	cursorStartedAt := time.Now()
 	var cursor image.Image
 	if state.capturedCursor != nil && state.capturedCursor.raster != nil {
 		cursor = state.capturedCursor.raster
@@ -143,10 +150,16 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		copyScreenshotSceneStraightAlpha(lossless, cursor, cursor.Bounds().Min)
 		cursor = lossless
 	}
+	cursorPreparedAt := time.Now()
 	// Windows captures are backed by a DIB that is freed when CaptureScreenshot returns.
 	// The existing packed-pixel copy avoids a slow per-pixel image.Image conversion here.
 	detachedSource := image.NewRGBA(image.Rect(0, 0, source.Bounds().Dx(), source.Bounds().Dy()))
 	copyScreenshotCapture(detachedSource, source, source.Bounds().Min)
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+		"screenshot_scene_snapshot windowMs=%d cursorMs=%d desktopMs=%d totalMs=%d desktop=%dx%d window=%t",
+		windowPreparedAt.Sub(startedAt).Milliseconds(), cursorPreparedAt.Sub(cursorStartedAt).Milliseconds(),
+		time.Since(cursorPreparedAt).Milliseconds(), time.Since(startedAt).Milliseconds(), source.Bounds().Dx(), source.Bounds().Dy(), window != nil,
+	))
 	var saveMu sync.Mutex
 	var saved bool
 	return func() error {
@@ -154,6 +167,12 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		defer saveMu.Unlock()
 		if saved {
 			return nil
+		}
+		if raster, ok := window.(*image.RGBA); ok {
+			// Sixteen-bit straight alpha avoids rounding native window edges when re-editing.
+			lossless := image.NewNRGBA64(raster.Bounds())
+			copyScreenshotSceneStraightAlpha(lossless, raster, raster.Bounds().Min)
+			window = lossless
 		}
 		encoded, err := json.Marshal(document)
 		if err != nil {
@@ -170,7 +189,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 }
 
 // copyScreenshotSceneStraightAlpha preserves edge precision without allocating a color object per pixel.
-// Large native windows must detach before the editor closes; generic 16-bit draw conversion delays history publication.
+// The background save uses this instead of allocating a color object for every native window pixel.
 func copyScreenshotSceneStraightAlpha(destination *image.NRGBA64, source image.Image, sourcePoint image.Point) {
 	raster, ok := source.(*image.RGBA)
 	if !ok {

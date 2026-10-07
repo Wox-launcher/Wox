@@ -24,6 +24,7 @@ import (
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
+	"wox/util/clipboard"
 )
 
 type darwinRunState struct {
@@ -519,42 +520,33 @@ func (w *platformWindow) openExternalURL(rawURL string) error {
 }
 
 func (w *platformWindow) writeClipboardText(text string) error {
-	native, err := w.openNative()
-	if err != nil {
+	var publishErr error
+	if err := platformCall(func() {
+		_, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		publishErr = clipboard.PublishText(0, text)
+	}); err != nil {
 		return err
 	}
-	nativeText := C.CString(text)
-	defer C.free(unsafe.Pointer(nativeText))
-	if C.wox_darwin_window_write_clipboard_text(native, nativeText) != 0 {
-		return errors.New("woxui: failed to write macOS clipboard text")
-	}
-	return nil
+	return publishErr
 }
 
-func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
-	native, err := w.openNative()
-	if err != nil {
+func (w *platformWindow) writeClipboardImage(image *clipboard.PreparedImage) error {
+	var publishErr error
+	if err := platformCall(func() {
+		_, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		publishErr = image.Publish(0)
+	}); err != nil {
 		return err
 	}
-	if image == nil || (len(image.pixels) == 0 && len(image.png) == 0) {
-		return errors.New("woxui: clipboard image is empty")
-	}
-	if len(image.png) > 0 {
-		if C.wox_darwin_write_clipboard_png((*C.uint8_t)(unsafe.Pointer(&image.png[0])), C.size_t(len(image.png))) != 0 {
-			return errors.New("woxui: failed to write macOS clipboard PNG")
-		}
-		return nil
-	}
-	if C.wox_darwin_window_write_clipboard_image(
-		native,
-		(*C.uint8_t)(unsafe.Pointer(&image.pixels[0])),
-		C.int32_t(image.width),
-		C.int32_t(image.height),
-		C.int32_t(image.stride),
-	) != 0 {
-		return errors.New("woxui: failed to write macOS clipboard image")
-	}
-	return nil
+	return publishErr
 }
 
 func (w *platformWindow) invalidate() error {

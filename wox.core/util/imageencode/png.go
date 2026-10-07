@@ -52,24 +52,7 @@ func PNG(writer io.Writer, source image.Image) error {
 	row := make([]byte, bounds.Dx()*bytesPerPixel+1)
 	row[0] = 1 // Sub predicts each byte from the same channel of its left neighbor.
 	for y := 0; y < bounds.Dy(); y++ {
-		copy(row[1:], pixels[y*stride:y*stride+len(row)-1])
-		if premultiplied {
-			for x := 1; x < len(row); x += 4 {
-				alpha := uint32(row[x+3])
-				if alpha == 0 {
-					clear(row[x : x+3])
-				} else if alpha != 255 {
-					// Match color.NRGBAModel, including its 16-bit division before truncation.
-					for channel := x; channel < x+3; channel++ {
-						row[channel] = byte((uint32(row[channel]) * 65535 / alpha) >> 8)
-					}
-				}
-			}
-		}
-		// Work backwards so predictors still contain the original, unfiltered bytes.
-		for x := len(row) - 1; x > bytesPerPixel; x-- {
-			row[x] -= row[x-bytesPerPixel]
-		}
+		filterPNGRow(row[1:], pixels[y*stride:y*stride+len(row)-1], premultiplied, bytesPerPixel)
 		if _, err := compressed.Write(row); err != nil {
 			_ = compressed.Close()
 			return err

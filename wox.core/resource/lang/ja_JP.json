@@ -1673,6 +1673,8 @@
   "plugin_screenshot_capture_failed": "スクリーンショットに失敗しました",
   "plugin_screenshot_permission_denied": "スクリーンショットには画面録画権限が必要です。システム設定で Wox にアクセスを許可してください。",
   "plugin_screenshot_capture_success": "スクリーンショットを保存しました",
+  "plugin_screenshot_capture_clipboard_success": "スクリーンショットをクリップボードにコピーしました",
+  "plugin_screenshot_capture_history_save_failed": "スクリーンショットをクリップボードにコピーしましたが、履歴への保存に失敗しました",
   "plugin_screenshot_color_copy_success": "色をコピーしました : %s",
   "plugin_screenshot_capture_clipboard_warning": "スクリーンショットを保存しましたが、クリップボードへのコピーに失敗しました",
   "plugin_screenshot_pin_failed": "スクリーンショットのピン留めに失敗しました",

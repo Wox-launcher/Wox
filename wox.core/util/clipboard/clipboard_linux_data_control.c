@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <wayland-client.h>
 
-#include "ext-data-control-v1-client-protocol.h"
+#include "clipboard_ext_data_control_v1_client_protocol.h"
 
 #define WOX_DATA_CONTROL_MAX_BYTES (64U * 1024U * 1024U)
 #define WOX_DATA_CONTROL_READ_TIMEOUT_MS 2000

@@ -2,10 +2,16 @@
 
 package woxui
 
+/*
+#include "image_bgra_windows.h"
+*/
+import "C"
+
 import (
 	"fmt"
 	"image"
 	"image/color"
+	"unsafe"
 )
 
 // PackedBGRA exposes an immutable Windows desktop buffer without swapping every pixel before preview.
@@ -79,17 +85,13 @@ func (source *PackedBGRA) WriteRGBA(dst *image.RGBA, origin image.Point) {
 		}
 		srcOff := (srcY-source.Rect.Min.Y)*source.Stride + (srcX-source.Rect.Min.X)*4
 		dstOff := y*dst.Stride + (srcX-origin.X)*4
-		for x := 0; x < count; x++ {
-			si := srcOff + x*4
-			di := dstOff + x*4
-			if si+3 >= len(source.Pix) || di+3 >= len(dst.Pix) {
-				break
-			}
-			dst.Pix[di+0] = source.Pix[si+2]
-			dst.Pix[di+1] = source.Pix[si+1]
-			dst.Pix[di+2] = source.Pix[si+0]
-			dst.Pix[di+3] = 255
+		count = min(count, (len(source.Pix)-srcOff)/4, (len(dst.Pix)-dstOff)/4)
+		if count <= 0 {
+			continue
 		}
+		// Clip and validate each row once, then swap channels in native packed code.
+		// Per-pixel Go bounds checks are especially costly in the screenshot debug build.
+		C.wox_copy_bgrx_to_rgba((*C.uint8_t)(unsafe.Pointer(&source.Pix[srcOff])), (*C.uint8_t)(unsafe.Pointer(&dst.Pix[dstOff])), C.size_t(count))
 	}
 }
 

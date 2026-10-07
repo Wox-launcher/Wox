@@ -1,4 +1,4 @@
-#import "../native_darwin.h"
+#import "../clipboard_image_darwin.h"
 #import <Cocoa/Cocoa.h>
 #include <math.h>
 #include <stdio.h>
@@ -31,7 +31,7 @@ int main(int argc, const char *argv[]) {
     if (strcmp(argv[1], "read") == 0) {
       return clipboard_matches(png) ? 0 : fail("PNG or TIFF is unavailable");
     }
-    if (wox_darwin_write_clipboard_png(png.bytes, png.length) != 0) {
+    if (wox_clipboard_darwin_write_png(png.bytes, png.length) != 0) {
       return fail("cannot publish PNG");
     }
     // Let another process request TIFF while the provider services AppKit callbacks.
@@ -54,11 +54,11 @@ int main(int argc, const char *argv[]) {
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     [pasteboard clearContents];
     [pasteboard setString:@"new clipboard owner" forType:NSPasteboardTypeString];
-    if (wox_darwin_flush_clipboard() != 0 ||
+    if (wox_clipboard_darwin_flush() != 0 ||
         ![[pasteboard stringForType:NSPasteboardTypeString] isEqualToString:@"new clipboard owner"]) {
       return fail("flush changed a newer clipboard write");
     }
-    if (wox_darwin_write_clipboard_png(png.bytes, png.length) != 0 || wox_darwin_flush_clipboard() != 0) {
+    if (wox_clipboard_darwin_write_png(png.bytes, png.length) != 0 || wox_clipboard_darwin_flush() != 0) {
       return fail("cannot materialize TIFF before exit");
     }
     return 0;

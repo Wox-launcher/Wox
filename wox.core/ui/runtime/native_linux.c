@@ -13,7 +13,6 @@
 #endif
 
 #include "native_linux_background_effect.h"
-#include "native_linux_clipboard.h"
 
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -4545,139 +4544,12 @@ void wox_linux_free_string(char *value) {
   g_free(value);
 }
 
-typedef struct {
-  WoxLinuxWindow *window;
-  const char *text;
-  int32_t result;
-} WoxClipboardTextCall;
-
-static void write_clipboard_text_main(void *data) {
-  WoxClipboardTextCall *call = data;
-  if (call->window->closed) {
-    call->result = -1;
-    return;
+// The caller is on GTK's owning thread; the display is a generic native window capability.
+uintptr_t wox_linux_window_display(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed) {
+    return 0;
   }
-  GdkDisplay *display = gtk_widget_get_display(call->window->window);
-  GtkClipboard *clipboard = display != NULL ? gtk_clipboard_get_default(display) : NULL;
-  if (clipboard == NULL) {
-    call->result = -1;
-    return;
-  }
-  gtk_clipboard_set_text(clipboard, call->text, -1);
-  gtk_clipboard_store(clipboard);
-}
-
-int32_t wox_linux_window_write_clipboard_text(WoxLinuxWindow *window, const char *text) {
-  if (window == NULL || text == NULL) {
-    return -1;
-  }
-  WoxClipboardTextCall call = {.window = window, .text = text};
-  return run_on_main_sync(write_clipboard_text_main, &call) ? call.result : -1;
-}
-
-typedef struct {
-  WoxLinuxWindow *window;
-  const uint8_t *pixels;
-  int width;
-  int height;
-  int row_stride;
-  int32_t result;
-} WoxClipboardImageCall;
-
-static void free_pixbuf_pixels(guchar *pixels, gpointer data) {
-  (void)data;
-  g_free(pixels);
-}
-
-static void write_clipboard_image_main(void *data) {
-  WoxClipboardImageCall *call = data;
-  if (call->window->closed) {
-    call->result = -1;
-    return;
-  }
-  size_t byte_count = (size_t)call->row_stride * (size_t)call->height;
-  guchar *copy = g_malloc(byte_count);
-  if (copy == NULL) {
-    call->result = -1;
-    return;
-  }
-  memcpy(copy, call->pixels, byte_count);
-  GdkPixbuf *pixbuf = gdk_pixbuf_new_from_data(
-      copy,
-      GDK_COLORSPACE_RGB,
-      TRUE,
-      8,
-      call->width,
-      call->height,
-      call->row_stride,
-      free_pixbuf_pixels,
-      NULL);
-  if (pixbuf == NULL) {
-    g_free(copy);
-    call->result = -1;
-    return;
-  }
-  GdkDisplay *display = gtk_widget_get_display(call->window->window);
-  GtkClipboard *clipboard = display != NULL ? gtk_clipboard_get_default(display) : NULL;
-  if (clipboard == NULL) {
-    g_object_unref(pixbuf);
-    call->result = -1;
-    return;
-  }
-  gtk_clipboard_set_image(clipboard, pixbuf);
-  gtk_clipboard_store(clipboard);
-  g_object_unref(pixbuf);
-}
-
-int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride) {
-  if (window == NULL || pixels == NULL || width <= 0 || height <= 0 || row_stride < width * 4) {
-    return -1;
-  }
-  WoxClipboardImageCall call = {
-      .window = window,
-      .pixels = pixels,
-      .width = width,
-      .height = height,
-      .row_stride = row_stride,
-  };
-  return run_on_main_sync(write_clipboard_image_main, &call) ? call.result : -1;
-}
-
-typedef struct {
-  WoxLinuxWindow *window;
-  const uint8_t *png;
-  size_t length;
-  int32_t result;
-} WoxClipboardPNGCall;
-
-// Publish encoded image bytes on the same GTK thread as the existing text and pixbuf clipboard paths.
-static void write_clipboard_png_main(void *data) {
-  WoxClipboardPNGCall *call = data;
-  if (call->window->closed) {
-    call->result = -1;
-    return;
-  }
-  GdkDisplay *display = gtk_widget_get_display(call->window->window);
-  GtkClipboard *clipboard = display != NULL ? gtk_clipboard_get_default(display) : NULL;
-  call->result = wox_linux_clipboard_set_png(clipboard, call->png, call->length) ? 0 : -1;
-}
-
-// Keep Go's temporary encoded buffer alive until main-thread publication has copied it.
-int32_t wox_linux_window_write_clipboard_png(WoxLinuxWindow *window, const uint8_t *png, size_t length) {
-  if (window == NULL || png == NULL || length == 0 || length > G_MAXINT) {
-    return -1;
-  }
-  WoxClipboardPNGCall call = {.window = window, .png = png, .length = length};
-  return run_on_main_sync(write_clipboard_png_main, &call) ? call.result : -1;
-}
-
-static void flush_clipboard_png_main(void *data) {
-  (void)data;
-  wox_linux_clipboard_flush_png();
-}
-
-int32_t wox_linux_flush_clipboard(void) {
-  return run_on_main_sync(flush_clipboard_png_main, NULL) ? 0 : -1;
+  return (uintptr_t)gtk_widget_get_display(window->window);
 }
 
 static gboolean linux_invalidate_idle(gpointer data) {

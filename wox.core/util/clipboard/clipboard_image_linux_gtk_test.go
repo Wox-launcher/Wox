@@ -1,6 +1,6 @@
 //go:build linux
 
-package woxui
+package clipboard
 
 import (
 	"bytes"
@@ -36,7 +36,7 @@ func TestLinuxClipboardPNG(t *testing.T) {
 		t.Fatalf("find GTK compiler flags: %v\n%s", err, flags)
 	}
 	binary := filepath.Join(directory, "clipboard")
-	arguments := []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "testdata/clipboard_linux.c", "native_linux_clipboard.c", "-o", binary}
+	arguments := []string{"-std=c11", "-Wall", "-Wextra", "-Werror", "testdata/clipboard_image_linux_gtk.c", "clipboard_image_linux_gtk.c", "-o", binary}
 	arguments = append(arguments, strings.Fields(string(flags))...)
 	if output, err := exec.Command("cc", arguments...).CombinedOutput(); err != nil {
 		t.Fatalf("build native clipboard test: %v\n%s", err, output)

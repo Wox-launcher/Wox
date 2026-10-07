@@ -19,6 +19,7 @@ import (
 	webviewruntime "wox/ui/runtime/internal/webview"
 	"wox/util"
 	"wox/util/browser"
+	"wox/util/clipboard"
 	"wox/util/ime"
 	"wox/util/osvariant"
 	"wox/util/screen"
@@ -173,7 +174,7 @@ type windowCommand struct {
 	pointerPassthrough          bool
 	externalURL                 string
 	clipboardText               string
-	clipboard                   *clipboardImage
+	clipboard                   *clipboard.PreparedImage
 	webView                     WebViewContent
 	webViewBounds               Rect
 	nativeFilePath              string
@@ -653,7 +654,7 @@ func (w *platformWindow) writeClipboardText(text string) error {
 	return w.call(windowCommand{kind: windowCommandWriteClipboardText, clipboardText: text}).err
 }
 
-func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
+func (w *platformWindow) writeClipboardImage(image *clipboard.PreparedImage) error {
 	return w.call(windowCommand{kind: windowCommandWriteClipboardImage, clipboard: image}).err
 }
 
@@ -2004,9 +2005,9 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 	case windowCommandOpenExternalURL:
 		return windowCommandResult{err: openExternalURLNative(w.hwnd, command.externalURL)}
 	case windowCommandWriteClipboardText:
-		return windowCommandResult{err: writeClipboardTextNative(uintptr(w.hwnd), command.clipboardText)}
+		return windowCommandResult{err: clipboard.PublishText(uintptr(w.hwnd), command.clipboardText)}
 	case windowCommandWriteClipboardImage:
-		return windowCommandResult{err: writeClipboardImageNative(uintptr(w.hwnd), command.clipboard)}
+		return windowCommandResult{err: command.clipboard.Publish(uintptr(w.hwnd))}
 	case windowCommandShowNativeFilePreview:
 		if command.nativeFilePreviewGeneration < w.nativeFilePreviewGeneration {
 			return windowCommandResult{}

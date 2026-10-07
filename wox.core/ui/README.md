@@ -12,11 +12,15 @@ macOS caption controls use AppKit's standard window buttons through `WindowOptio
 
 ## Architecture contract
 
-The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, renderer submission, font measurement, clipboard, file dialogs, external browser dispatch, and IME integration:
+The portable Go layer owns widget layout, focus routing, text editing state, scrolling, Wox protocol DTOs, query behavior, previews, actions, and settings pages. Platform files are deliberately thin and own only the native window/event loop, renderer submission, font measurement, clipboard thread dispatch, file dialogs, external browser dispatch, and IME integration:
 
 - Windows: Win32 + Direct2D/DirectWrite.
 - macOS: AppKit + CoreGraphics/CoreText.
 - Linux: GTK3 + GtkGLArea/OpenGL/Pango, with layer-shell and WebKitGTK used when available.
+
+`util/clipboard` owns clipboard formats, native bridges, prepared image resources, promised-format providers, and exit persistence. Runtime window methods are thin adapters: they prepare through that package and dispatch publication to the window's UI thread with a Windows HWND or Linux display capability. Runtime native headers and implementations contain no clipboard-specific symbols or includes. Windows prepares detached DIB and PNG handles before queuing the short commit; prepared resources serialize publication and teardown. The UI manager supplies generic thread dispatch to `clipboard.Flush` before normal exit. See [clipboard ownership](../util/clipboard/README.md).
+
+Windows desktop capture exposes immutable packed BGRX pixels. Cropped RGBA copies clip physical coordinates and row lengths in Go, then convert channels with the native packed-row primitive, including forced opaque alpha for the capture's padding byte. This keeps full-desktop scene detachment from becoming a per-pixel Go loop when debugging disables compiler optimization.
 
 Display-list and widget changes must compile unchanged on all three platforms. A platform-specific feature should first expose a small capability on `Window`; business widgets must not import Win32, AppKit, GTK, or renderer APIs.
 

@@ -84,7 +84,7 @@ func SequenceNumber() uint64 {
 	return readClipboardSequenceNumber()
 }
 
-// SetNativeImageFileWriter registers a UI-owned image clipboard writer for platforms where
+// SetNativeImageFileWriter registers a window-thread adapter for platforms where
 // background clipboard ownership is restricted by the compositor.
 func SetNativeImageFileWriter(writer func(context.Context, string) error) {
 	nativeImageFileWriterMu.Lock()
@@ -92,7 +92,7 @@ func SetNativeImageFileWriter(writer func(context.Context, string) error) {
 	nativeImageFileWriter = writer
 }
 
-// writeNativeImageFile calls the registered UI-owned image clipboard writer.
+// writeNativeImageFile dispatches through the registered window-thread adapter.
 func writeNativeImageFile(ctx context.Context, filePath string) error {
 	nativeImageFileWriterMu.RLock()
 	writer := nativeImageFileWriter

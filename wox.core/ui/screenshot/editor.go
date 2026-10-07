@@ -678,7 +678,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		))
 		// Publish before filesystem work; history reuses the exact bytes after the image becomes pasteable.
 		clipboardStartedAt := time.Now()
-		if err := overlay.WriteClipboardImageWithPNG(exportedImage, clipboardPNG.Bytes()); err != nil {
+		if err := publishScreenshotClipboard(overlay.WriteClipboardImageWithPNG, exportedImage, clipboardPNG.Bytes(), options.OnClipboardReady); err != nil {
 			result.ClipboardWarningMessage = err.Error()
 		} else {
 			result.ClipboardWriteSucceeded = true
@@ -713,6 +713,10 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		if err == nil && !screenshotDisplayLayoutMatches(options.capturedDisplays, displays) {
 			err = ErrScreenshotDisplayLayoutChanged
 		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+			"screenshot_export stage=scene_display_checked durationMs=%d totalMs=%d success=%t",
+			time.Since(sceneStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), err == nil,
+		))
 		if err == nil {
 			state.mu.Lock()
 			result.SaveEditableScene, err = prepareScreenshotDocumentSave(exportPath, source, exportedImage, state)

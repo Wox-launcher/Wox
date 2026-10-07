@@ -3,6 +3,7 @@ package imageencode
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -31,10 +32,18 @@ func TestPNGRoundTrip(t *testing.T) {
 			gray.SetGray(x, y, color.Gray{Y: byte(random.Uint32())})
 		}
 	}
-	for name, source := range map[string]image.Image{
+	sources := map[string]image.Image{
 		"premultiplied": rgba.SubImage(crop), "straight": nrgba.SubImage(crop),
 		"sixteen_bit": nrgba64.SubImage(crop), "opaque": opaque.SubImage(crop), "fallback": gray.SubImage(crop),
-	} {
+	}
+	// Tiny rows exercise predictor boundaries in both the native and pure-Go implementations.
+	for width := 1; width <= 3; width++ {
+		bounds := image.Rect(-9, -5, -9+width, -2)
+		sources[fmt.Sprintf("tiny_rgba_%d", width)] = rgba.SubImage(bounds)
+		sources[fmt.Sprintf("tiny_nrgba_%d", width)] = nrgba.SubImage(bounds)
+		sources[fmt.Sprintf("tiny_sixteen_bit_%d", width)] = nrgba64.SubImage(bounds)
+	}
+	for name, source := range sources {
 		t.Run(name, func(t *testing.T) {
 			var standard, fast bytes.Buffer
 			if err := png.Encode(&standard, source); err != nil {
@@ -54,8 +63,8 @@ func TestPNGRoundTrip(t *testing.T) {
 			if got.Bounds() != want.Bounds() {
 				t.Fatalf("bounds: got %v want %v", got.Bounds(), want.Bounds())
 			}
-			for y := 0; y < crop.Dy(); y++ {
-				for x := 0; x < crop.Dx(); x++ {
+			for y := 0; y < source.Bounds().Dy(); y++ {
+				for x := 0; x < source.Bounds().Dx(); x++ {
 					if color.NRGBA64Model.Convert(got.At(x, y)) != color.NRGBA64Model.Convert(want.At(x, y)) {
 						t.Fatalf("pixel (%d,%d): got %v want %v", x, y, got.At(x, y), want.At(x, y))
 					}

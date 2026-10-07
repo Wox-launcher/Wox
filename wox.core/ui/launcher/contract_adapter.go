@@ -445,6 +445,7 @@ func (a *App) screenshotControlTheme() woxcomponent.ControlTheme {
 // CaptureScreenshot starts the native capture session without changing launcher visibility.
 func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
+		OnClipboardReady:  request.OnClipboardReady,
 		SaveEditableScene: request.SaveEditableScene, EditScreenshotPath: request.EditScreenshotPath,
 		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,

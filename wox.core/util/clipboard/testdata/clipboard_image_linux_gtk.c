@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "../native_linux_clipboard.h"
+#include "../clipboard_image_linux_gtk.h"
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -95,26 +95,26 @@ int main(int argc, char *argv[]) {
   }
   guint8 *temporary = g_malloc(length);
   memcpy(temporary, png, length);
-  if (!wox_linux_clipboard_set_png(clipboard, temporary, length)) {
+  if (!wox_clipboard_gtk_set_png(clipboard, temporary, length)) {
     return fail("cannot publish PNG");
   }
   memset(temporary, 0, length);
   g_free(temporary);
-  if (wox_linux_clipboard_set_png(clipboard, NULL, length) ||
-      wox_linux_clipboard_set_png(clipboard, (const guint8 *)png, 0) ||
-      wox_linux_clipboard_set_png(clipboard, (const guint8 *)png, (gsize)G_MAXINT + 1) ||
+  if (wox_clipboard_gtk_set_png(clipboard, NULL, length) ||
+      wox_clipboard_gtk_set_png(clipboard, (const guint8 *)png, 0) ||
+      wox_clipboard_gtk_set_png(clipboard, (const guint8 *)png, (gsize)G_MAXINT + 1) ||
       !run_reader(argv[0], argv[2])) {
     return fail("publication retained caller pixels or failed to serve another process");
   }
   gtk_clipboard_set_text(clipboard, "new clipboard owner", -1);
-  wox_linux_clipboard_flush_png();
+  wox_clipboard_gtk_flush();
   gchar *text = gtk_clipboard_wait_for_text(clipboard);
   gboolean replaced = g_strcmp0(text, "new clipboard owner") == 0;
   g_free(text);
-  if (!replaced || !wox_linux_clipboard_set_png(clipboard, (const guint8 *)png, length)) {
+  if (!replaced || !wox_clipboard_gtk_set_png(clipboard, (const guint8 *)png, length)) {
     return fail("flush changed a newer clipboard write or republishing failed");
   }
-  wox_linux_clipboard_flush_png();
+  wox_clipboard_gtk_flush();
   printf("persistence=%d\n", gdk_display_supports_clipboard_persistence(gdk_display_get_default()));
   g_free(png);
   return 0;

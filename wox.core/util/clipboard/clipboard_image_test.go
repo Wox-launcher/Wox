@@ -1,4 +1,4 @@
-package woxui
+package clipboard
 
 import (
 	"bytes"
@@ -10,6 +10,26 @@ import (
 	"path/filepath"
 	"testing"
 )
+
+// TestPreparedImageCloseDropsBuffers keeps the job reachable to detect resources retained after publication teardown.
+func TestPreparedImageCloseDropsBuffers(t *testing.T) {
+	source := image.NewRGBA(image.Rect(-3, -2, 2, 1))
+	prepared, err := PrepareImage(source, []byte("pre-encoded PNG"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Size() != source.Bounds().Size() {
+		t.Fatal("preparation changed physical image dimensions")
+	}
+	prepared.Close()
+	prepared.Close()
+	if prepared.payload != nil || prepared.native != nil {
+		t.Fatal("closed preparation retained formats or input buffers")
+	}
+	if err := prepared.Publish(0); err == nil {
+		t.Fatal("closed preparation reached native publication")
+	}
+}
 
 func TestLoadClipboardImageDoesNotReencodeJPEG(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "clipboard.jpg")
@@ -84,6 +104,10 @@ func TestClipboardImageReusesEncodedPNG(t *testing.T) {
 	if clipboardUsesEncodedPNG {
 		if len(clipboard.pixels) != 0 {
 			t.Fatal("native PNG publication retained an uncompressed raster")
+		}
+	} else if clipboardAcceptsPackedRGBA {
+		if !clipboard.premultiplied || &clipboard.pixels[0] != &source.Pix[0] {
+			t.Fatal("native DIB preparation copied or mislabeled the packed source")
 		}
 	} else if !bytes.Equal(clipboard.pixels, []byte{0, 0, 0, 0, 79, 39, 19, 128}) {
 		t.Fatalf("clipboard changed straight-alpha pixels: %v", clipboard.pixels)

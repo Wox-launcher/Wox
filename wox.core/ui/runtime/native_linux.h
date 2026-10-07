@@ -7,6 +7,7 @@
 #include "native_renderer_stats.h"
 
 typedef struct WoxLinuxWindow WoxLinuxWindow;
+uintptr_t wox_linux_window_display(WoxLinuxWindow *window);
 
 int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
@@ -41,10 +42,6 @@ int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window
 int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_webview_action_hotkey(WoxLinuxWindow *window, const char *js, const char *key, uint8_t modifiers);
 void wox_linux_free_string(char *value);
-int32_t wox_linux_window_write_clipboard_text(WoxLinuxWindow *window, const char *text);
-int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
-int32_t wox_linux_window_write_clipboard_png(WoxLinuxWindow *window, const uint8_t *png, size_t length);
-int32_t wox_linux_flush_clipboard(void);
 int32_t wox_linux_window_invalidate(WoxLinuxWindow *window);
 int32_t wox_linux_window_request_animation_frame(WoxLinuxWindow *window);
 int32_t wox_linux_window_stop_animation_frames(WoxLinuxWindow *window);

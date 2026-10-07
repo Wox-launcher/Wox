@@ -1,4 +1,6 @@
 {
+  "plugin_screenshot_capture_clipboard_success": "Captura copiada para a área de transferência",
+  "plugin_screenshot_capture_history_save_failed": "Captura copiada para a área de transferência, mas não foi possível salvá-la no histórico",
   "plugin_converter_rates_offline_fallback": "Modo offline ativado; usando taxas de câmbio de reserva",
   "ui_plugin_offline_paused": "Pausado pelo modo offline",
   "ui_offline_open_settings": "Ir para configurações",

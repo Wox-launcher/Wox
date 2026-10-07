@@ -12,6 +12,8 @@ var ErrScreenshotDisplayLayoutChanged = errors.New("screenshot display layout is
 
 // ScreenshotOptions configures one interactive desktop-region capture.
 type ScreenshotOptions struct {
+	// OnClipboardReady runs on the capture worker before file writes and editable-scene preparation.
+	OnClipboardReady      func()
 	capturedDisplays      []screenshotDisplay
 	SaveEditableScene     bool
 	EditScreenshotPath    string

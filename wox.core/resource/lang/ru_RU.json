@@ -1,4 +1,6 @@
 {
+  "plugin_screenshot_capture_clipboard_success": "Снимок скопирован в буфер обмена",
+  "plugin_screenshot_capture_history_save_failed": "Снимок скопирован в буфер обмена, но сохранить его в историю не удалось",
   "plugin_converter_rates_offline_fallback": "Автономный режим включён; используются резервные курсы валют",
   "ui_plugin_offline_paused": "Приостановлено автономным режимом",
   "ui_offline_open_settings": "Перейти к настройкам",

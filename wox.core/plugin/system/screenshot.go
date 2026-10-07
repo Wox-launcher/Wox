@@ -956,7 +956,29 @@ func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 		hasConfiguredAIProvider(setting.GetSettingManager().GetWoxSetting(ctx).AIProviders.Get()),
 		p.api.GetTranslation(ctx, "ui_screenshot_tool_ai"),
 	)
-	result, err := plugin.GetPluginManager().GetUI().CaptureScreenshot(ctx, request)
+	p.runScreenshotRequest(ctx, editPath, request, plugin.GetPluginManager().GetUI())
+}
+
+// runScreenshotRequest notifies as soon as pixels become pasteable; the capture worker then finishes history and scene preparation.
+func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath string, request common.CaptureScreenshotRequest, ui common.UI) {
+	clipboardNotified := false
+	request.OnClipboardReady = func() {
+		if !clipboardNotified {
+			clipboardNotified = true
+			p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_success")
+		}
+	}
+	result, err := ui.CaptureScreenshot(ctx, request)
+	if clipboardNotified && (err != nil || result.Status == common.CaptureScreenshotStatusFailed) {
+		// A failed history write cannot undo the clipboard image already delivered to the user.
+		detail := result.ErrorMessage
+		if err != nil {
+			detail = err.Error()
+		}
+		util.GetLogger().Warn(ctx, "failed to save screenshot history after clipboard publication: "+detail)
+		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_history_save_failed")
+		return
+	}
 	if err != nil {
 		// The screenshot session spans Go, UI, and the native bridge, so transport failures need a local
 		// notification here instead of silently falling through to keep the action predictable for the user.
@@ -1020,7 +1042,9 @@ func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 			return
 		}
 
-		p.api.Notify(ctx, "plugin_screenshot_capture_success")
+		if !clipboardNotified {
+			p.api.Notify(ctx, "plugin_screenshot_capture_success")
+		}
 		if result.ClipboardWarningMessage != "" {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("screenshot clipboard warning: %s", result.ClipboardWarningMessage))
 			p.api.Notify(ctx, "plugin_screenshot_capture_clipboard_warning")

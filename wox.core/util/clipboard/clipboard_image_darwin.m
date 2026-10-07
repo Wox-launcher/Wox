@@ -1,6 +1,6 @@
 //go:build darwin
 
-#import "native_darwin.h"
+#import "clipboard_image_darwin.h"
 #import <Cocoa/Cocoa.h>
 #import <ImageIO/ImageIO.h>
 #import <dispatch/dispatch.h>
@@ -63,7 +63,7 @@ static void clipboard_on_main_sync(dispatch_block_t block) {
 }
 
 // Publish encoded bytes without normalizing, copying, or retaining an uncompressed raster.
-int32_t wox_darwin_write_clipboard_png(const uint8_t *png, size_t length) {
+int32_t wox_clipboard_darwin_write_png(const uint8_t *png, size_t length) {
   if (png == NULL || length == 0) {
     return -1;
   }
@@ -85,7 +85,7 @@ int32_t wox_darwin_write_clipboard_png(const uint8_t *png, size_t length) {
 }
 
 // Complete outstanding promises before os.Exit, so TIFF remains pasteable without the provider process.
-int32_t wox_darwin_flush_clipboard(void) {
+int32_t wox_clipboard_darwin_flush(void) {
   __block int32_t result = 0;
   clipboard_on_main_sync(^{
     @autoreleasepool {
@@ -98,3 +98,61 @@ int32_t wox_darwin_flush_clipboard(void) {
   });
   return result;
 }
+
+int32_t wox_clipboard_darwin_write_text(const char *text) {
+  if (text == NULL) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  clipboard_on_main_sync(^{
+    NSString *value = [NSString stringWithUTF8String:text];
+    if (value == nil) {
+      result = -1;
+      return;
+    }
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    if (![pasteboard setString:value forType:NSPasteboardTypeString]) {
+      result = -1;
+    }
+  });
+  return result;
+}
+
+int32_t wox_clipboard_darwin_write_pixels(const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride) {
+  if (pixels == NULL || width <= 0 || height <= 0 || row_stride < width * 4) {
+    return -1;
+  }
+  __block int32_t result = 0;
+  clipboard_on_main_sync(^{
+    NSBitmapImageRep *representation = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL
+                  pixelsWide:width
+                  pixelsHigh:height
+               bitsPerSample:8
+             samplesPerPixel:4
+                    hasAlpha:YES
+                    isPlanar:NO
+              colorSpaceName:NSCalibratedRGBColorSpace
+                 bitmapFormat:NSBitmapFormatAlphaNonpremultiplied
+                  bytesPerRow:row_stride
+                 bitsPerPixel:32];
+    if (representation == nil || representation.bitmapData == NULL) {
+      [representation release];
+      result = -1;
+      return;
+    }
+    memcpy(representation.bitmapData, pixels, (size_t)row_stride * (size_t)height);
+    NSImage *image = [[NSImage alloc] initWithSize:NSMakeSize(width, height)];
+    [image addRepresentation:representation];
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    if (![pasteboard writeObjects:@[ image ]]) {
+      result = -1;
+    }
+    [image release];
+    [representation release];
+  });
+  return result;
+}
+

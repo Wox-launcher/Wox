@@ -2,6 +2,8 @@
 
 package woxui
 
+import "wox/util/clipboard"
+
 type platformWindow struct{}
 
 func nativeWindowMaterialAvailable() bool {
@@ -148,7 +150,7 @@ func (w *platformWindow) writeClipboardText(text string) error {
 	return ErrPlatformUnsupported
 }
 
-func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
+func (w *platformWindow) writeClipboardImage(image *clipboard.PreparedImage) error {
 	return ErrPlatformUnsupported
 }
 

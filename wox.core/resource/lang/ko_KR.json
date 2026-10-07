@@ -1673,6 +1673,8 @@
   "plugin_screenshot_capture_failed": "스크린샷에 실패했습니다",
   "plugin_screenshot_permission_denied": "스크린샷에는 화면 기록 권한이 필요합니다. 시스템 설정에서 Wox 액세스를 허용하세요.",
   "plugin_screenshot_capture_success": "스크린샷이 저장되었습니다",
+  "plugin_screenshot_capture_clipboard_success": "스크린샷이 클립보드에 복사되었습니다",
+  "plugin_screenshot_capture_history_save_failed": "스크린샷이 클립보드에 복사되었지만 기록에 저장하지 못했습니다",
   "plugin_screenshot_color_copy_success": "색상이 복사되었습니다: %s",
   "plugin_screenshot_capture_clipboard_warning": "스크린샷은 저장되었지만 클립보드 복사에 실패했습니다",
   "plugin_screenshot_pin_failed": "스크린샷 고정에 실패했습니다",

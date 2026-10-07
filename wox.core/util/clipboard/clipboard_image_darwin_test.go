@@ -1,6 +1,6 @@
 //go:build darwin
 
-package woxui
+package clipboard
 
 import (
 	"image"
@@ -33,7 +33,7 @@ func TestDarwinClipboardPNG(t *testing.T) {
 	}
 	binary := filepath.Join(directory, "clipboard")
 	command := exec.Command("clang", "-fblocks", "-Wno-deprecated-declarations", "-framework", "Cocoa", "-framework", "ImageIO",
-		"testdata/clipboard_darwin.m", "clipboard_darwin.m", "-o", binary)
+		"testdata/clipboard_image_darwin.m", "clipboard_image_darwin.m", "-o", binary)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build native clipboard test: %v\n%s", err, output)
 	}

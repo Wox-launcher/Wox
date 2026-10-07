@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/setting"
@@ -28,6 +29,115 @@ func (api *screenshotSceneTestAPI) RefreshQuery(_ context.Context, options plugi
 
 func (api *screenshotSceneTestAPI) Notify(_ context.Context, message string) {
 	api.notified <- message
+}
+
+func (api *screenshotSceneTestAPI) Log(context.Context, plugin.LogLevel, string) {}
+
+// screenshotCompletionTestUI models clipboard publication followed by a blocked history write.
+type screenshotCompletionTestUI struct {
+	common.UI
+	clipboardReady bool
+	release        <-chan struct{}
+	result         common.CaptureScreenshotResult
+	err            error
+}
+
+// CaptureScreenshot separates clipboard readiness from the file-backed result without touching the system clipboard.
+func (ui *screenshotCompletionTestUI) CaptureScreenshot(_ context.Context, request common.CaptureScreenshotRequest) (common.CaptureScreenshotResult, error) {
+	if ui.clipboardReady {
+		request.OnClipboardReady()
+	}
+	if ui.release != nil {
+		<-ui.release
+	}
+	return ui.result, ui.err
+}
+
+// TestScreenshotNotifiesBeforeHistoryCompletes guards the user-visible boundary while history work remains blocked.
+func TestScreenshotNotifiesBeforeHistoryCompletes(t *testing.T) {
+	api := &screenshotSceneTestAPI{notified: make(chan string, 4)}
+	p := &ScreenshotPlugin{api: api}
+	release, returned := make(chan struct{}), make(chan struct{})
+	ui := &screenshotCompletionTestUI{
+		clipboardReady: true, release: release,
+		result: common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCompleted, ScreenshotPath: "capture.png", ClipboardWriteSucceeded: true},
+	}
+	go func() {
+		p.runScreenshotRequest(context.Background(), "", common.DefaultCaptureScreenshotRequest(), ui)
+		close(returned)
+	}()
+	defer func() { close(release); <-returned }()
+	select {
+	case message := <-api.notified:
+		if message != "i18n:plugin_screenshot_capture_clipboard_success" {
+			t.Fatal(message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("clipboard success waited for history persistence")
+	}
+	select {
+	case <-returned:
+		t.Fatal("capture returned a history path before its file write finished")
+	default:
+	}
+}
+
+// TestScreenshotCompletionPreservesClipboardSuccess checks late persistence errors and the non-clipboard fallback.
+func TestScreenshotCompletionPreservesClipboardSuccess(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		ready  bool
+		result common.CaptureScreenshotResult
+		err    error
+		want   []string
+	}{
+		{
+			name: "ready", ready: true,
+			result: common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCompleted, ScreenshotPath: "capture.png"},
+			want:   []string{"i18n:plugin_screenshot_capture_clipboard_success"},
+		},
+		{
+			name: "history failed", ready: true,
+			result: common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusFailed, ErrorMessage: "disk full"},
+			want:   []string{"i18n:plugin_screenshot_capture_clipboard_success", "i18n:plugin_screenshot_capture_history_save_failed"},
+		},
+		{
+			name: "request failed after publication", ready: true, err: errors.New("disk full"),
+			want: []string{"i18n:plugin_screenshot_capture_clipboard_success", "i18n:plugin_screenshot_capture_history_save_failed"},
+		},
+		{
+			name:   "file output",
+			result: common.CaptureScreenshotResult{Status: common.CaptureScreenshotStatusCompleted, ScreenshotPath: "capture.png"},
+			want:   []string{"plugin_screenshot_capture_success"},
+		},
+		{
+			name: "clipboard failed",
+			result: common.CaptureScreenshotResult{
+				Status: common.CaptureScreenshotStatusCompleted, ScreenshotPath: "capture.png", ClipboardWarningMessage: "busy",
+			},
+			want: []string{"plugin_screenshot_capture_success", "plugin_screenshot_capture_clipboard_warning"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			api := &screenshotSceneTestAPI{notified: make(chan string, 4)}
+			p := &ScreenshotPlugin{api: api}
+			ui := &screenshotCompletionTestUI{clipboardReady: test.ready, result: test.result, err: test.err}
+			p.runScreenshotRequest(context.Background(), "", common.DefaultCaptureScreenshotRequest(), ui)
+			for _, want := range test.want {
+				select {
+				case got := <-api.notified:
+					if got != want {
+						t.Fatalf("got %q want %q", got, want)
+					}
+				default:
+					t.Fatalf("missing notification %q", want)
+				}
+			}
+			if len(api.notified) != 0 {
+				t.Fatal("capture completion notified success twice")
+			}
+		})
+	}
 }
 
 func TestScreenshotSceneSaveRunsInBackgroundAndFinishesBeforeUnload(t *testing.T) {
