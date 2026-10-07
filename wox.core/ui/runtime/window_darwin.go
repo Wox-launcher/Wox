@@ -536,8 +536,14 @@ func (w *platformWindow) writeClipboardImage(image *clipboardImage) error {
 	if err != nil {
 		return err
 	}
-	if image == nil || len(image.pixels) == 0 {
+	if image == nil || (len(image.pixels) == 0 && len(image.png) == 0) {
 		return errors.New("woxui: clipboard image is empty")
+	}
+	if len(image.png) > 0 {
+		if C.wox_darwin_write_clipboard_png((*C.uint8_t)(unsafe.Pointer(&image.png[0])), C.size_t(len(image.png))) != 0 {
+			return errors.New("woxui: failed to write macOS clipboard PNG")
+		}
+		return nil
 	}
 	if C.wox_darwin_window_write_clipboard_image(
 		native,

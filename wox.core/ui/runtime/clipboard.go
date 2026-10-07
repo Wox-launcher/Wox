@@ -19,6 +19,11 @@ type clipboardImage struct {
 	png    []byte
 }
 
+// FlushClipboard materializes promised native formats before the process exits.
+func FlushClipboard() error {
+	return flushClipboard()
+}
+
 // WriteClipboardText publishes UTF-8 text through the native desktop clipboard.
 func (w *Window) WriteClipboardText(text string) error {
 	if w == nil || w.native == nil {
@@ -75,7 +80,7 @@ func loadClipboardImage(filePath string) (*clipboardImage, error) {
 	return newClipboardImage(source, encoded)
 }
 
-// newClipboardImage normalizes native clipboard input to straight-alpha RGBA.
+// newClipboardImage prepares encoded PNG or straight-alpha pixels for the platform clipboard.
 func newClipboardImage(source image.Image, encodedPNG []byte) (*clipboardImage, error) {
 	if source == nil {
 		return nil, errors.New("clipboard image is empty")
@@ -83,6 +88,10 @@ func newClipboardImage(source image.Image, encodedPNG []byte) (*clipboardImage, 
 	bounds := source.Bounds()
 	if bounds.Empty() || bounds.Dx() > 16384 || bounds.Dy() > 16384 {
 		return nil, fmt.Errorf("clipboard image dimensions are invalid: %dx%d", bounds.Dx(), bounds.Dy())
+	}
+	if clipboardUsesEncodedPNG && len(encodedPNG) > 0 {
+		// Encoded native publication needs no additional normalized full-size raster.
+		return &clipboardImage{width: bounds.Dx(), height: bounds.Dy(), png: encodedPNG}, nil
 	}
 	normalized := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	draw.Draw(normalized, normalized.Bounds(), source, bounds.Min, draw.Src)

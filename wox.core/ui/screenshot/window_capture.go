@@ -86,19 +86,32 @@ func clipScreenshotWindowAlpha(output *image.RGBA, source image.Image, selection
 	if err != nil {
 		return
 	}
+	raster, _ := source.(*image.RGBA)
 	for y := 0; y < output.Bounds().Dy(); y++ {
-		for x := 0; x < output.Bounds().Dx(); x++ {
-			_, _, _, mask := source.At(clip.Min.X+x, clip.Min.Y+y).RGBA()
-			alpha := uint8(mask >> 8)
-			offset := output.PixOffset(output.Rect.Min.X+x, output.Rect.Min.Y+y)
-			old := output.Pix[offset+3]
+		offset := output.PixOffset(output.Rect.Min.X, output.Rect.Min.Y+y)
+		row := output.Pix[offset : offset+output.Bounds().Dx()*4]
+		var maskRow []byte
+		if raster != nil {
+			// Native window captures are RGBA. Reading packed alpha avoids boxing a color for every pixel.
+			start := raster.PixOffset(clip.Min.X, clip.Min.Y+y)
+			maskRow = raster.Pix[start : start+len(row)]
+		}
+		for x := 0; x < len(row); x += 4 {
+			var alpha uint8
+			if maskRow != nil {
+				alpha = maskRow[x+3]
+			} else {
+				_, _, _, mask := source.At(clip.Min.X+x/4, clip.Min.Y+y).RGBA()
+				alpha = uint8(mask >> 8)
+			}
+			old := row[x+3]
 			if alpha >= old {
 				continue
 			}
 			for channel := 0; channel < 3; channel++ {
-				output.Pix[offset+channel] = uint8(uint16(output.Pix[offset+channel]) * uint16(alpha) / uint16(old))
+				row[x+channel] = uint8(uint16(row[x+channel]) * uint16(alpha) / uint16(old))
 			}
-			output.Pix[offset+3] = alpha
+			row[x+3] = alpha
 		}
 	}
 }

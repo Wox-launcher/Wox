@@ -2,6 +2,7 @@
 #define WOX_UI_GO_NATIVE_DARWIN_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "native_renderer_stats.h"
 
@@ -68,6 +69,8 @@ int32_t wox_darwin_window_focus_webview(WoxDarwinWindow *window);
 int32_t wox_darwin_window_set_webview_action_hotkey(WoxDarwinWindow *window, const char *js, const char *key, uint8_t modifiers);
 int32_t wox_darwin_window_write_clipboard_text(WoxDarwinWindow *window, const char *text);
 int32_t wox_darwin_window_write_clipboard_image(WoxDarwinWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
+int32_t wox_darwin_write_clipboard_png(const uint8_t *png, size_t length);
+int32_t wox_darwin_flush_clipboard(void);
 int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);
 int32_t wox_darwin_window_request_animation_frame(WoxDarwinWindow *window);
 int32_t wox_darwin_window_stop_animation_frames(WoxDarwinWindow *window);

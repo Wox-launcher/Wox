@@ -594,7 +594,8 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			return ScreenshotResult{}, composeErr
 		}
 		exportedImage = composited
-		if windowCapture {
+		// Unpainted window pixels already carry their original alpha; only new paint needs clipping.
+		if windowCapture && (len(annotations) > 0 || (showCursor && cursorPixel != nil)) {
 			clipScreenshotWindowAlpha(composited, exportSource, selection, frameSize)
 		}
 		if showBackground {
@@ -638,25 +639,6 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		))
 	}
 	copyToClipboard := options.CopyToClipboard && !outcome.pinned && outcome.saveAsPath == ""
-	var clipboardPNG bytes.Buffer
-	var pngCopy *bytes.Buffer
-	if copyToClipboard {
-		pngCopy = &clipboardPNG
-	}
-	fileStartedAt := time.Now()
-	if err := writeScreenshotImageWithPNG(exportPath, exportedImage, pngCopy); err != nil {
-		return ScreenshotResult{}, err
-	}
-	util.GetLogger().Debug(context.Background(), fmt.Sprintf(
-		"screenshot_export stage=file_written durationMs=%d totalMs=%d format=%s retainedPNGBytes=%d",
-		time.Since(fileStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), filepath.Ext(exportPath), clipboardPNG.Len(),
-	))
-	if savePath := screenshotSaveAsExportPath(outcome.saveAsPath); savePath != "" && !screenshotExportPathsEqual(savePath, exportPath) {
-		if err := writeScreenshotImage(savePath, exportedImage); err != nil {
-			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to write screenshot download: path=%s err=%s", savePath, err.Error()))
-		}
-	}
-
 	result := ScreenshotResult{
 		PinToScreen:             outcome.pinned,
 		PinOverlayShown:         pinOverlayShown,
@@ -667,7 +649,17 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		LogicalSelection:        logicalSelection,
 		ExtraActionID:           outcome.extraActionID,
 	}
+	var clipboardPNG bytes.Buffer
 	if copyToClipboard {
+		encodeStartedAt := time.Now()
+		if err := imageencode.PNG(&clipboardPNG, exportedImage); err != nil {
+			return ScreenshotResult{}, fmt.Errorf("encode screenshot clipboard image: %w", err)
+		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+			"screenshot_export stage=png_encoded durationMs=%d totalMs=%d bytes=%d",
+			time.Since(encodeStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), clipboardPNG.Len(),
+		))
+		// Publish before filesystem work; history reuses the exact bytes after the image becomes pasteable.
 		clipboardStartedAt := time.Now()
 		if err := overlay.WriteClipboardImageWithPNG(exportedImage, clipboardPNG.Bytes()); err != nil {
 			result.ClipboardWarningMessage = err.Error()
@@ -678,6 +670,24 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 			"screenshot_export stage=clipboard_ready durationMs=%d totalMs=%d success=%t reusedPNG=%t",
 			time.Since(clipboardStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), result.ClipboardWriteSucceeded, clipboardPNG.Len() > 0,
 		))
+	}
+	fileStartedAt := time.Now()
+	if copyToClipboard {
+		err = writeScreenshotPNG(exportPath, clipboardPNG.Bytes())
+	} else {
+		err = writeScreenshotImage(exportPath, exportedImage)
+	}
+	if err != nil {
+		return ScreenshotResult{}, err
+	}
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf(
+		"screenshot_export stage=file_written durationMs=%d totalMs=%d format=%s retainedPNGBytes=%d",
+		time.Since(fileStartedAt).Milliseconds(), time.Since(completionStartedAt).Milliseconds(), filepath.Ext(exportPath), clipboardPNG.Len(),
+	))
+	if savePath := screenshotSaveAsExportPath(outcome.saveAsPath); savePath != "" && !screenshotExportPathsEqual(savePath, exportPath) {
+		if err := writeScreenshotImage(savePath, exportedImage); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("failed to write screenshot download: path=%s err=%s", savePath, err.Error()))
+		}
 	}
 	if options.SaveEditableScene && !scrolling {
 		sceneStartedAt := time.Now()
@@ -737,11 +747,21 @@ func screenshotEditorPixelSelection(sourceBounds image.Rectangle, selection Rect
 
 // writeScreenshotImage uses the same PNG encoder for history and user-chosen destinations.
 func writeScreenshotImage(path string, source image.Image) error {
-	return writeScreenshotImageWithPNG(path, source, nil)
+	return writeScreenshotExport(path, func(writer io.Writer) error {
+		return imageencode.PNG(writer, source)
+	})
 }
 
-// writeScreenshotImageWithPNG retains only confirmed PNG exports needed by the clipboard, sharing the same compression pass.
-func writeScreenshotImageWithPNG(path string, source image.Image, pngCopy *bytes.Buffer) error {
+// writeScreenshotPNG saves the already-published clipboard image without another encoding pass.
+func writeScreenshotPNG(path string, encoded []byte) error {
+	return writeScreenshotExport(path, func(writer io.Writer) error {
+		_, err := writer.Write(encoded)
+		return err
+	})
+}
+
+// writeScreenshotExport atomically publishes an encoded image so history never reads an incomplete export.
+func writeScreenshotExport(path string, write func(io.Writer) error) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create screenshot export directory: %w", err)
 	}
@@ -751,13 +771,9 @@ func writeScreenshotImageWithPNG(path string, source image.Image, pngCopy *bytes
 		return fmt.Errorf("create screenshot export file: %w", err)
 	}
 	defer os.Remove(file.Name())
-	var writer io.Writer = file
-	if pngCopy != nil {
-		writer = io.MultiWriter(file, pngCopy)
-	}
-	if err := imageencode.PNG(writer, source); err != nil {
+	if err := write(file); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("encode screenshot image: %w", err)
+		return fmt.Errorf("write screenshot image: %w", err)
 	}
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close screenshot export file: %w", err)

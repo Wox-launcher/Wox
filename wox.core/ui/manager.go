@@ -1967,6 +1967,9 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start private mode cleanup: %s", err.Error()))
 		}
+		if err := woxui.FlushClipboard(); err != nil {
+			util.GetLogger().Warn(ctx, err.Error())
+		}
 		os.Exit(0)
 	})
 }

@@ -2,6 +2,7 @@
 #define WOX_UI_GO_NATIVE_LINUX_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "native_renderer_stats.h"
 
@@ -42,6 +43,8 @@ int32_t wox_linux_window_set_webview_action_hotkey(WoxLinuxWindow *window, const
 void wox_linux_free_string(char *value);
 int32_t wox_linux_window_write_clipboard_text(WoxLinuxWindow *window, const char *text);
 int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
+int32_t wox_linux_window_write_clipboard_png(WoxLinuxWindow *window, const uint8_t *png, size_t length);
+int32_t wox_linux_flush_clipboard(void);
 int32_t wox_linux_window_invalidate(WoxLinuxWindow *window);
 int32_t wox_linux_window_request_animation_frame(WoxLinuxWindow *window);
 int32_t wox_linux_window_stop_animation_frames(WoxLinuxWindow *window);

@@ -13,6 +13,7 @@
 #endif
 
 #include "native_linux_background_effect.h"
+#include "native_linux_clipboard.h"
 
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -4640,6 +4641,43 @@ int32_t wox_linux_window_write_clipboard_image(WoxLinuxWindow *window, const uin
       .row_stride = row_stride,
   };
   return run_on_main_sync(write_clipboard_image_main, &call) ? call.result : -1;
+}
+
+typedef struct {
+  WoxLinuxWindow *window;
+  const uint8_t *png;
+  size_t length;
+  int32_t result;
+} WoxClipboardPNGCall;
+
+// Publish encoded image bytes on the same GTK thread as the existing text and pixbuf clipboard paths.
+static void write_clipboard_png_main(void *data) {
+  WoxClipboardPNGCall *call = data;
+  if (call->window->closed) {
+    call->result = -1;
+    return;
+  }
+  GdkDisplay *display = gtk_widget_get_display(call->window->window);
+  GtkClipboard *clipboard = display != NULL ? gtk_clipboard_get_default(display) : NULL;
+  call->result = wox_linux_clipboard_set_png(clipboard, call->png, call->length) ? 0 : -1;
+}
+
+// Keep Go's temporary encoded buffer alive until main-thread publication has copied it.
+int32_t wox_linux_window_write_clipboard_png(WoxLinuxWindow *window, const uint8_t *png, size_t length) {
+  if (window == NULL || png == NULL || length == 0 || length > G_MAXINT) {
+    return -1;
+  }
+  WoxClipboardPNGCall call = {.window = window, .png = png, .length = length};
+  return run_on_main_sync(write_clipboard_png_main, &call) ? call.result : -1;
+}
+
+static void flush_clipboard_png_main(void *data) {
+  (void)data;
+  wox_linux_clipboard_flush_png();
+}
+
+int32_t wox_linux_flush_clipboard(void) {
+  return run_on_main_sync(flush_clipboard_png_main, NULL) ? 0 : -1;
 }
 
 static gboolean linux_invalidate_idle(gpointer data) {

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"wox/util/imageencode"
 )
 
 // TestScreenshotExportRetainsClipboardPNG verifies shared encoding for opaque and transparent captures.
@@ -26,7 +28,10 @@ func TestScreenshotExportRetainsClipboardPNG(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "capture.png")
 			var retained bytes.Buffer
-			if err := writeScreenshotImageWithPNG(path, source, &retained); err != nil {
+			if err := imageencode.PNG(&retained, source); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeScreenshotPNG(path, retained.Bytes()); err != nil {
 				t.Fatal(err)
 			}
 			written, err := os.ReadFile(path)

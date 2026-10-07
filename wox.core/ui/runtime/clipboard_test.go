@@ -78,7 +78,14 @@ func TestClipboardImageReusesEncodedPNG(t *testing.T) {
 	if len(clipboard.png) != encoded.Len() || &clipboard.png[0] != &encoded.Bytes()[0] {
 		t.Fatal("clipboard did not reuse the exported PNG")
 	}
-	if clipboard.width != 2 || clipboard.height != 1 || !bytes.Equal(clipboard.pixels, []byte{0, 0, 0, 0, 79, 39, 19, 128}) {
+	if clipboard.width != 2 || clipboard.height != 1 {
+		t.Fatalf("clipboard dimensions = %dx%d", clipboard.width, clipboard.height)
+	}
+	if clipboardUsesEncodedPNG {
+		if len(clipboard.pixels) != 0 {
+			t.Fatal("native PNG publication retained an uncompressed raster")
+		}
+	} else if !bytes.Equal(clipboard.pixels, []byte{0, 0, 0, 0, 79, 39, 19, 128}) {
 		t.Fatalf("clipboard changed straight-alpha pixels: %v", clipboard.pixels)
 	}
 }

@@ -1,6 +1,7 @@
 package screenshot
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -12,6 +13,36 @@ import (
 
 	"wox/util/screenshotedit"
 )
+
+// TestScreenshotWindowAlphaPackedRows covers cropped strides, negative origins, and the generic image fallback.
+func TestScreenshotWindowAlphaPackedRows(t *testing.T) {
+	parent := image.NewRGBA(image.Rect(-20, -10, 40, 30))
+	for y := parent.Rect.Min.Y; y < parent.Rect.Max.Y; y++ {
+		for x := parent.Rect.Min.X; x < parent.Rect.Max.X; x++ {
+			alpha := uint8((x - parent.Rect.Min.X + y - parent.Rect.Min.Y) * 7)
+			parent.SetRGBA(x, y, color.RGBA{R: alpha / 2, G: alpha / 3, B: alpha / 4, A: alpha})
+		}
+	}
+	source := parent.SubImage(image.Rect(-11, -4, 25, 22)).(*image.RGBA)
+	selection := Rect{X: 3, Y: 2, Width: 9, Height: 7}
+	frame := Size{Width: 18, Height: 13}
+	clip, err := screenshotEditorPixelSelection(source.Bounds(), selection, frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := image.NewRGBA(image.Rect(8, -12, 8+clip.Dx(), -12+clip.Dy()))
+	for i := 0; i < len(want.Pix); i += 4 {
+		want.Pix[i], want.Pix[i+1], want.Pix[i+2], want.Pix[i+3] = 80, 40, 20, 160
+	}
+	got := image.NewRGBA(want.Rect)
+	copy(got.Pix, want.Pix)
+	// Wrapping the raster hides its concrete type and exercises the original per-pixel semantics.
+	clipScreenshotWindowAlpha(want, struct{ image.Image }{source}, selection, frame)
+	clipScreenshotWindowAlpha(got, source, selection, frame)
+	if !bytes.Equal(got.Pix, want.Pix) {
+		t.Fatal("packed alpha clipping differs from generic image semantics")
+	}
+}
 
 // screenshotImageHasTransparency checks capture resources without assuming a decoded raster type.
 func screenshotImageHasTransparency(pixels image.Image) bool {
