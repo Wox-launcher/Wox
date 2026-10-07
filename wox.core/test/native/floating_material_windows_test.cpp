@@ -1,6 +1,6 @@
 // Run from the repository root:
 // g++ -std=c++17 wox.core/test/native/floating_material_windows_test.cpp -o tone-test.exe && ./tone-test.exe
-#include "../../ui/runtime/floating_material_windows_tone.h"
+#include "../../ui/runtime/internal/window/floating_material_windows_tone.h"
 #include <algorithm>
 #include <array>
 #include <cassert>

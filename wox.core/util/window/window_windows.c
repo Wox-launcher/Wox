@@ -14,6 +14,7 @@
 #include <string.h>
 #include <wchar.h>
 #include "file_dialog_detect_windows.h"
+#include "window_thread_input_windows.h"
 
 typedef struct
 {
@@ -2455,21 +2456,7 @@ static int activateWindowForManagementHwnd(HWND hwnd)
         ShowWindow(hwnd, SW_SHOW);
     }
 
-    HWND foreground = GetForegroundWindow();
-    DWORD currentThreadId = GetCurrentThreadId();
-    DWORD foregroundThreadId = foreground ? GetWindowThreadProcessId(foreground, NULL) : 0;
-    DWORD targetThreadId = GetWindowThreadProcessId(hwnd, NULL);
-    BOOL attachedForeground = FALSE;
-    BOOL attachedTarget = FALSE;
-
-    if (foregroundThreadId != 0 && foregroundThreadId != currentThreadId)
-    {
-        attachedForeground = AttachThreadInput(currentThreadId, foregroundThreadId, TRUE);
-    }
-    if (targetThreadId != 0 && targetThreadId != currentThreadId && targetThreadId != foregroundThreadId)
-    {
-        attachedTarget = AttachThreadInput(currentThreadId, targetThreadId, TRUE);
-    }
+    WoxWindowThreadInputAttachment attachment = wox_window_attach_thread_input((uintptr_t)hwnd, WOX_THREAD_INPUT_CURRENT_TO_QUEUES);
 
     SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetForegroundWindow(hwnd);
@@ -2478,14 +2465,7 @@ static int activateWindowForManagementHwnd(HWND hwnd)
     // Activation lets the application restore its editor focus. Focusing the
     // top-level HWND here steals Ctrl+V from child controls such as Scintilla.
 
-    if (attachedTarget)
-    {
-        AttachThreadInput(currentThreadId, targetThreadId, FALSE);
-    }
-    if (attachedForeground)
-    {
-        AttachThreadInput(currentThreadId, foregroundThreadId, FALSE);
-    }
+    wox_window_detach_thread_input(&attachment);
 
     HWND actualForeground = GetForegroundWindow();
     return actualForeground && rootWindowForManagement(actualForeground) == hwnd;

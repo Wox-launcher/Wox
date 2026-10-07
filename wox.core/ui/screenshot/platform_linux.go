@@ -4,7 +4,7 @@ package screenshot
 
 /*
 #include <stdlib.h>
-#include "../runtime/native_linux.h"
+#include "../runtime/internal/window/native_linux.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
 int32_t wox_screenshot_set_cursor_position(int32_t x, int32_t y);
 */

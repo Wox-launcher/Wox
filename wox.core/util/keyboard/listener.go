@@ -3,7 +3,6 @@ package keyboard
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // ErrGlobalHotkeysUnavailable distinguishes a missing registration backend from a key conflict.
@@ -146,7 +145,7 @@ const (
 )
 
 func ParseKey(token string) (Key, error) {
-	switch strings.ToLower(strings.TrimSpace(token)) {
+	switch normalizeKeyAlias(token) {
 	case "a":
 		return KeyA, nil
 	case "b":

@@ -7,7 +7,7 @@ This package owns screenshot capture workflows, the portable editor, object sele
 - `selection_darwin.m` owns the macOS capture snapshot, selection session, inspector, selection layers, click/drag handling, and scrolling border. `selection_darwin.h` is its package-local C bridge; `platform_darwin.go` owns the Go handoff.
 - `platform_*.go` maps capture and native coordinates into the editor. Linux desktop-specific capture behavior stays in the corresponding environment file.
 
-Dependencies point from `screenshot` to `runtime`. Runtime supplies general window/event-loop, cursor, coordinate, and image-capture capabilities; it does not own selection policy or call screenshot implementations. `runtime/native_darwin_platform.h` exposes the shared overlay panel and platform primitives to native feature code without depending on screenshot headers or session types. Selector tests and native provider fixtures live in this package; shared overlay cursor tests stay in runtime.
+Dependencies point from `screenshot` to `runtime`. Runtime supplies general window/event-loop, cursor, coordinate, and image-capture capabilities; it does not own selection policy or call screenshot implementations. `runtime/internal/window/native_darwin_platform.h` exposes the shared overlay panel and platform primitives to native feature code without depending on screenshot headers or session types. Selector tests and native provider fixtures live in this package; shared overlay cursor tests stay in runtime.
 
 ## Coordinate contract
 

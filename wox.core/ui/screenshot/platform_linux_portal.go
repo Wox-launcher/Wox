@@ -6,7 +6,7 @@ package screenshot
 #cgo CFLAGS: -std=c11 -D_GNU_SOURCE -D_REENTRANT -Wall -Wextra -Werror -I/usr/include/pipewire-0.3 -I/usr/include/spa-0.2
 #cgo LDFLAGS: -ldl
 #include <stdlib.h>
-#include "../runtime/native_linux.h"
+#include "../runtime/internal/window/native_linux.h"
 #include "platform_linux_pipewire.h"
 */
 import "C"

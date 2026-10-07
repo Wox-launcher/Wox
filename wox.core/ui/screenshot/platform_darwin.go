@@ -6,7 +6,7 @@ package screenshot
 #cgo CFLAGS: -fblocks -Wno-deprecated-declarations
 #cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit
 #include <stdlib.h>
-#include "../runtime/native_darwin.h"
+#include "../runtime/internal/window/native_darwin.h"
 #include "selection_darwin.h"
 int32_t wox_screenshot_cursor_position(float *x, float *y);
 int32_t wox_screenshot_set_cursor_position(float x, float y);

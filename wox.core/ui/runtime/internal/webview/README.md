@@ -25,11 +25,13 @@ launcher preview and widget Host
 
 The layers have distinct responsibilities:
 
-- `runtime.Window` keeps the public WebView API and converts public runtime types to this package's portable types.
+- `runtime.Window` aliases the window backend's public WebView API; `internal/window` converts window types to this package's portable types.
 - `Controller` validates content, tracks visibility, forwards navigation and pointer operations, and owns reset and close transitions.
 - `Driver` is the narrow contract implemented by the Windows, macOS, and Linux host adapters.
-- Platform host adapters remain in the parent `runtime` package because they must access its private native window, renderer, UI-thread command queue, and window callbacks. Moving them into this package would reverse the dependency and create an import cycle.
+- Platform host adapters live in `internal/window` with the private native window, renderer, UI-thread command queue, and callbacks they require. Moving those adapters into this package would reverse the dependency and create an import cycle.
 - Native WebView engines remain owned by their platform window trees. The controller coordinates their lifecycle but does not own launcher layout or focus policy.
+
+Opening the current page in an external browser reads the live native navigation state. This package owns the HTTP(S)-only page policy; platform adapters delegate launching to `util/browser` through the window's GUI thread. Native WebView engines do not launch external applications directly.
 
 ## Ownership boundaries
 

@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"wox/util/keyboard"
-
-	"github.com/samber/lo"
 )
 
 type hotkeySpec struct {
@@ -44,35 +42,18 @@ func IsWindowsKeyHotkeyString(combineKey string) bool {
 }
 
 func (h *Hotkey) parseCombineKey(combineKey string) (hotkeySpec, error) {
-	tokens := lo.Map(strings.Split(combineKey, "+"), func(item string, index int) string {
-		return strings.TrimSpace(item)
-	})
-
-	var spec hotkeySpec
-	var modifierKeys []keyboard.Key
-
-	for _, token := range tokens {
-		normalizedToken := strings.ToLower(strings.TrimSpace(token))
-		if isCapsLockToken(normalizedToken) && len(tokens) > 1 {
-			spec.capsLock = true
-			continue
-		}
-
-		modifier, modifierKey, ok := parseModifierToken(token)
-		if ok {
-			spec.modifiers |= modifier
-			modifierKeys = append(modifierKeys, modifierKey)
-			continue
-		}
-
-		key, err := keyboard.ParseKey(token)
+	parsed, err := parseTokens(combineKey)
+	if err != nil {
+		return hotkeySpec{}, err
+	}
+	spec := hotkeySpec{capsLock: parsed.capsLock, modifiers: parsed.Modifiers}
+	modifierKeys := parsed.modifierKeys
+	if parsed.Key != "" {
+		// Native key support remains separate from local editor navigation keys.
+		spec.key, err = keyboard.ParseKey(parsed.Key)
 		if err != nil {
 			return hotkeySpec{}, err
 		}
-		if spec.key != keyboard.KeyUnknown {
-			return hotkeySpec{}, fmt.Errorf("multiple keys in hotkey: %s", combineKey)
-		}
-		spec.key = key
 	}
 
 	if spec.key == keyboard.KeyUnknown {

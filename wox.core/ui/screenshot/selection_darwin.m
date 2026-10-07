@@ -2,7 +2,7 @@
 
 #import "selection_darwin.h"
 #import "object_selection_darwin.h"
-#import "../runtime/native_darwin_platform.h"
+#import "../runtime/internal/window/native_darwin_platform.h"
 
 #import <QuartzCore/QuartzCore.h>
 #include <dlfcn.h>

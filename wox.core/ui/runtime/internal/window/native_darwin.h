@@ -1,0 +1,98 @@
+#ifndef WOX_UI_GO_NATIVE_DARWIN_H
+#define WOX_UI_GO_NATIVE_DARWIN_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#include "native_renderer_stats.h"
+
+typedef struct WoxDarwinWindow WoxDarwinWindow;
+
+enum {
+  WOX_DARWIN_FRAME_SKIPPED = 1,
+  WOX_DARWIN_FRAME_SURFACE_BUSY = 2,
+};
+
+int32_t wox_darwin_run(uintptr_t context);
+int32_t wox_darwin_call(uintptr_t context);
+int32_t wox_darwin_post(uintptr_t context);
+int32_t wox_darwin_acquire_overlay_cursor(void);
+int32_t wox_darwin_release_overlay_cursor(void);
+enum {
+  WOX_TITLE_BAR_CLOSE = 1,
+  WOX_TITLE_BAR_MINIMIZE = 2,
+  WOX_TITLE_BAR_MAXIMIZE = 4,
+};
+
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
+int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float height, uint8_t controls);
+uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
+int32_t wox_darwin_window_hide(WoxDarwinWindow *window);
+int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window);
+int32_t wox_darwin_window_set_bounds(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_get_bounds(WoxDarwinWindow *window, float *x, float *y, float *width, float *height);
+int32_t wox_darwin_window_capture_png(WoxDarwinWindow *window, const char *path);
+int32_t wox_darwin_capture_display_png(uint32_t display_id, const char *path);
+int32_t wox_darwin_capture_display_bgra(uint32_t display_id, int32_t x, int32_t y, int32_t width, int32_t height, void *pixels);
+int32_t wox_darwin_window_center(WoxDarwinWindow *window, float width, float height);
+int32_t wox_darwin_window_start_dragging(WoxDarwinWindow *window);
+int32_t wox_darwin_window_start_file_drag(WoxDarwinWindow *window, const char *paths);
+int32_t wox_darwin_window_minimize(WoxDarwinWindow *window);
+int32_t wox_darwin_window_set_hide_on_blur(WoxDarwinWindow *window, int32_t enabled);
+int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dark);
+int32_t wox_darwin_window_set_topmost(WoxDarwinWindow *window, int32_t topmost);
+int32_t wox_darwin_window_set_min_size(WoxDarwinWindow *window, float width, float height);
+int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path);
+int32_t wox_darwin_window_save_file(WoxDarwinWindow *window, const char *title, const char *default_name, const char *extension, char **path);
+int32_t wox_darwin_window_set_pointer_passthrough(WoxDarwinWindow *window, int32_t enabled);
+int32_t wox_darwin_window_show_webview(WoxDarwinWindow *window, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, float x, float y, float width, float height, float corner_radius);
+int32_t wox_darwin_window_hide_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_reset_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_evict_webview(WoxDarwinWindow *window, const char *cache_key);
+int32_t wox_darwin_window_webview_go_back(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_go_forward(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_reload(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_open_dev_tools(WoxDarwinWindow *window);
+int32_t wox_darwin_window_webview_navigation_state(WoxDarwinWindow *window, char **url, int32_t *can_go_back, int32_t *can_go_forward);
+int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window, uint8_t kind);
+int32_t wox_darwin_window_focus_webview(WoxDarwinWindow *window);
+int32_t wox_darwin_window_set_webview_action_hotkey(WoxDarwinWindow *window, const char *js, const char *key, uint8_t modifiers);
+int32_t wox_darwin_window_invalidate(WoxDarwinWindow *window);
+int32_t wox_darwin_window_request_animation_frame(WoxDarwinWindow *window);
+int32_t wox_darwin_window_stop_animation_frames(WoxDarwinWindow *window);
+int32_t wox_darwin_window_set_text_input_state(WoxDarwinWindow *window, int32_t enabled, float x, float y, float width, float height);
+int32_t wox_darwin_window_set_pointer_cursor(WoxDarwinWindow *window, uint8_t cursor);
+int32_t wox_darwin_accessibility_begin(WoxDarwinWindow *window, uint64_t generation);
+int32_t wox_darwin_accessibility_add_node(WoxDarwinWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region);
+int32_t wox_darwin_accessibility_end(WoxDarwinWindow *window);
+int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline);
+int32_t wox_darwin_window_close(WoxDarwinWindow *window);
+void *wox_darwin_autorelease_pool_push(void);
+void wox_darwin_autorelease_pool_pop(void *pool);
+
+int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window);
+int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces);
+int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
+int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius);
+int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
+int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
+int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
+int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float scale, uint8_t background_alpha, int32_t mode);
+int32_t wox_darwin_test_fractional_damage(float scale, float x, float y);
+int32_t wox_darwin_test_cached_image_owns_pixels(void);
+int32_t wox_darwin_test_large_image_admission(void);
+
+int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius);
+
+#endif
+
+int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_end_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, float top, float bottom);
+
+int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);

@@ -52,6 +52,7 @@ type shellExecuteInfo struct {
 }
 
 type shellExecuteRequest struct {
+	Owner          uintptr
 	File           string
 	Verb           string
 	Parameters     string
@@ -62,6 +63,12 @@ type shellExecuteRequest struct {
 
 func Open(path string) error {
 	return executeShellVerb(path, "open")
+}
+
+// OpenWithOwner associates shell error UI and activation with a caller-supplied HWND.
+func OpenWithOwner(path string, owner uintptr) error {
+	_, err := shellExecute(shellExecuteRequest{Owner: owner, File: path, Verb: "open", Show: shellExecuteShowNormal})
+	return err
 }
 
 // OpenAsAdministrator launches an application through the Windows runas verb.
@@ -141,6 +148,7 @@ func shellExecute(req shellExecuteRequest) (WaitFunc, error) {
 		cbSize: uint32(unsafe.Sizeof(shellExecuteInfo{})),
 		// Keep the direct Shell path handling but let Windows finish DDE/delegate launch work asynchronously.
 		fMask:        mask,
+		hwnd:         req.Owner,
 		lpVerb:       operationPtr,
 		lpFile:       pathPtr,
 		lpParameters: parameterPtr,

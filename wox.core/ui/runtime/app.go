@@ -1,31 +1,20 @@
 package woxui
 
-import "errors"
+import (
+	window "wox/ui/runtime/internal/window"
+)
 
-// ErrPlatformUnsupported reports that the current OS has no native backend yet.
-var ErrPlatformUnsupported = errors.New("woxui: platform backend is not implemented")
+var ErrPlatformUnsupported = window.ErrPlatformUnsupported
 
 // Run initializes the platform, calls start on the UI thread, and owns that thread's event loop.
-func Run(start func() error) error {
-	if start == nil {
-		return errors.New("start callback is required")
-	}
-	return platformRun(start)
-}
+func Run(start func() error) error { return window.Run(start) }
 
 // Call executes fn synchronously on the native UI thread owned by Run.
-func Call(fn func()) error {
-	if fn == nil {
-		return errors.New("UI callback is required")
-	}
-	return platformCall(fn)
-}
+func Call(fn func()) error { return window.Call(fn) }
 
 // Post queues fn on the native UI thread, even when called from that thread.
 // Native callbacks can use it to defer teardown until their current dispatch returns.
-func Post(fn func()) error {
-	if fn == nil {
-		return errors.New("UI callback is required")
-	}
-	return platformPost(fn)
-}
+func Post(fn func()) error { return window.Post(fn) }
+
+// SetProtocolURLHandler installs the application-level handler and drains URLs received before startup finished.
+func SetProtocolURLHandler(handler func(string)) { window.SetProtocolURLHandler(handler) }

@@ -1,0 +1,1161 @@
+//go:build linux
+
+package window
+
+/*
+#cgo CFLAGS: -std=c11 -Wall -Wextra -Werror
+#cgo pkg-config: gtk+-3.0 epoxy x11 wayland-client
+#cgo LDFLAGS: -ldl -lm
+#include <stdlib.h>
+#include "native_linux.h"
+*/
+import "C"
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"runtime/cgo"
+	"sync"
+	"time"
+	"unsafe"
+
+	webviewruntime "wox/ui/runtime/internal/webview"
+	"wox/util"
+	"wox/util/browser"
+	"wox/util/clipboard"
+	"wox/util/mouse"
+)
+
+const linuxRenderTraceEnvironment = "WOX_LINUX_RENDER_TRACE"
+
+// applyLinuxAppIdentity publishes Wox's desktop id to GTK before gtk_init.
+func applyLinuxAppIdentity() {
+	appID := C.CString(util.LinuxDesktopAppID)
+	wmClass := C.CString(util.LinuxDesktopWMClass)
+	defer C.free(unsafe.Pointer(appID))
+	defer C.free(unsafe.Pointer(wmClass))
+	var iconPath *C.char
+	if path, err := util.LinuxDesktopIconPath(); err == nil && path != "" {
+		iconPath = C.CString(path)
+		defer C.free(unsafe.Pointer(iconPath))
+	}
+	C.wox_linux_set_app_identity(appID, wmClass, iconPath)
+}
+
+type linuxRunState struct {
+	start     func() error
+	err       error
+	mu        sync.Mutex
+	accepting bool
+	windows   []*platformWindow
+}
+
+var linuxRuntime struct {
+	sync.Mutex
+	current *linuxRunState
+}
+
+type platformWindow struct {
+	mu                  sync.Mutex
+	native              *C.WoxLinuxWindow
+	options             WindowOptions
+	handle              cgo.Handle
+	closing             bool
+	closed              bool
+	renderErr           error
+	fontFamily          string
+	pendingDamage       Rect
+	damagePending       bool
+	fullDamage          bool
+	webView             *webviewruntime.Controller
+	webViewActionHotkey string
+}
+
+// GTK and its OpenGL context stay on the process main thread for the runtime lifetime.
+func init() {
+	runtime.LockOSThread()
+}
+
+func platformRun(start func() error) error {
+	state := &linuxRunState{start: start, accepting: true}
+	linuxRuntime.Lock()
+	if linuxRuntime.current != nil {
+		linuxRuntime.Unlock()
+		return errors.New("woxui: Run is already active on Linux")
+	}
+	linuxRuntime.current = state
+	linuxRuntime.Unlock()
+	defer func() {
+		linuxRuntime.Lock()
+		linuxRuntime.current = nil
+		linuxRuntime.Unlock()
+	}()
+
+	renderTraceEnabled := os.Getenv(linuxRenderTraceEnvironment) == "1"
+	renderTrace := C.int32_t(0)
+	if renderTraceEnabled {
+		renderTrace = 1
+	}
+	C.wox_linux_set_render_trace(renderTrace)
+	applyLinuxAppIdentity()
+	handle := cgo.NewHandle(state)
+	result := C.wox_linux_run(C.uintptr_t(handle))
+	handle.Delete()
+	if state.err != nil {
+		return state.err
+	}
+	if result == -2 {
+		return errors.New("woxui: GTK could not connect to a Linux display")
+	}
+	if result == -3 {
+		return errors.New("woxui: failed to initialize Xlib thread support")
+	}
+	if result != 0 {
+		return fmt.Errorf("woxui: GTK event loop failed with status %d", int32(result))
+	}
+	return nil
+}
+
+func platformCall(fn func()) error {
+	linuxRuntime.Lock()
+	running := linuxRuntime.current != nil
+	linuxRuntime.Unlock()
+	if !running {
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	handle := cgo.NewHandle(fn)
+	defer handle.Delete()
+	if C.wox_linux_call(C.uintptr_t(handle)) != 0 {
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	return nil
+}
+
+// platformPost keeps the callback handle alive until the GTK loop consumes it.
+func platformPost(fn func()) error {
+	linuxRuntime.Lock()
+	running := linuxRuntime.current != nil
+	linuxRuntime.Unlock()
+	if !running {
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	var handle cgo.Handle
+	handle = cgo.NewHandle(func() {
+		defer handle.Delete()
+		fn()
+	})
+	if C.wox_linux_post(C.uintptr_t(handle)) != 0 {
+		handle.Delete()
+		return errors.New("woxui: GTK runtime is not running")
+	}
+	return nil
+}
+
+func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
+	linuxRuntime.Lock()
+	run := linuxRuntime.current
+	linuxRuntime.Unlock()
+	if run != nil {
+		run.mu.Lock()
+		accepting := run.accepting
+		run.mu.Unlock()
+		if !accepting {
+			run = nil
+		}
+	}
+	if run == nil {
+		return nil, errors.New("woxui: Open must be called from Run's start callback or a UI callback on Linux")
+	}
+
+	window := &platformWindow{options: options}
+	window.handle = cgo.NewHandle(window)
+	title := C.CString(options.Title)
+	defer C.free(unsafe.Pointer(title))
+	hideOnBlur := C.int32_t(0)
+	if options.HideOnBlur {
+		hideOnBlur = 1
+	}
+	nonactivating := C.int32_t(0)
+	if options.Nonactivating {
+		nonactivating = 1
+	}
+	resizable := C.int32_t(0)
+	if options.Resizable {
+		resizable = 1
+	}
+	window.native = C.wox_linux_window_create(
+		title,
+		C.float(options.Size.Width),
+		C.float(options.Size.Height),
+		hideOnBlur,
+		C.int32_t(options.Role),
+		nonactivating,
+		resizable,
+		C.float(options.AspectRatio),
+		C.uintptr_t(window.handle),
+	)
+	if window.native == nil {
+		window.handle.Delete()
+		return nil, errors.New("woxui: failed to create GTK window or OpenGL renderer")
+	}
+	if options.MinSize.Width > 0 || options.MinSize.Height > 0 {
+		_ = C.wox_linux_window_set_min_size(window.native, C.float(options.MinSize.Width), C.float(options.MinSize.Height))
+	}
+	// GTK utility windows start keep-above; honor an explicit unpinned utility window.
+	if options.Role != WindowRoleApplication {
+		_ = window.setTopmost(options.Topmost)
+	}
+	window.applyWindowIcon()
+	window.webView = webviewruntime.New(&linuxWebViewDriver{window: window}, Call)
+	run.mu.Lock()
+	run.windows = append(run.windows, window)
+	run.mu.Unlock()
+	return window, nil
+}
+
+func (w *platformWindow) show() (FocusEpoch, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return 0, err
+	}
+	epoch := C.wox_linux_window_show(native)
+	if epoch == 0 {
+		return 0, errors.New("woxui: failed to show Linux window")
+	}
+	return FocusEpoch(epoch), nil
+}
+
+func (w *platformWindow) hide() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_hide(native) != 0 {
+		return errors.New("woxui: failed to hide Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) setBounds(bounds Rect) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_set_bounds(native, C.float(bounds.X), C.float(bounds.Y), C.float(bounds.Width), C.float(bounds.Height)) != 0 {
+		return errors.New("woxui: failed to set Linux window bounds")
+	}
+	return nil
+}
+
+func (w *platformWindow) bounds() (Rect, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return Rect{}, err
+	}
+	var x, y, width, height C.float
+	if C.wox_linux_window_get_bounds(native, &x, &y, &width, &height) != 0 {
+		return Rect{}, errors.New("woxui: failed to read Linux window bounds")
+	}
+	return Rect{X: float32(x), Y: float32(y), Width: float32(width), Height: float32(height)}, nil
+}
+
+func (w *platformWindow) capturePNG(path string) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativePath := C.CString(path)
+	defer C.free(unsafe.Pointer(nativePath))
+	if C.wox_linux_window_capture_png(native, nativePath) != 0 {
+		return errors.New("woxui: failed to capture Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) center(size Size) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_center(native, C.float(size.Width), C.float(size.Height)) != 0 {
+		return errors.New("woxui: failed to center Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) startDragging() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_start_dragging(native) != 0 {
+		return errors.New("woxui: failed to start Linux window drag")
+	}
+	return nil
+}
+
+func (w *platformWindow) startFileDrag(paths []string) (FileDragStatus, error) {
+	return FileDragStatusCancel, ErrPlatformUnsupported
+}
+
+func (w *platformWindow) minimize() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_minimize(native) != 0 {
+		return errors.New("woxui: failed to minimize Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) setTopmost(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_linux_window_set_topmost(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update Linux topmost behavior")
+	}
+	w.options.Topmost = enabled
+	return nil
+}
+
+func (w *platformWindow) setHideOnBlur(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_linux_window_set_hide_on_blur(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update Linux hide-on-blur behavior")
+	}
+	return nil
+}
+
+func (w *platformWindow) focusReadyForBlur() bool {
+	return true
+}
+
+func (w *platformWindow) setAppearance(isDark bool) error {
+	return nil
+}
+
+func (w *platformWindow) setFontFamily(family string) error {
+	w.mu.Lock()
+	w.fontFamily = family
+	w.mu.Unlock()
+	return w.invalidate()
+}
+
+func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return "", err
+	}
+	directory := C.int32_t(0)
+	if options.Directory {
+		directory = 1
+	}
+	var path *C.char
+	result := C.wox_linux_window_pick_file(native, directory, &path)
+	if result == 1 {
+		return "", nil
+	}
+	if result != 0 {
+		return "", errors.New("woxui: failed to open Linux file dialog")
+	}
+	if path == nil {
+		return "", errors.New("woxui: Linux file dialog returned no path")
+	}
+	defer C.wox_linux_free_string(path)
+	return C.GoString(path), nil
+}
+
+func (w *platformWindow) saveFile(options SaveFileOptions) (string, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return "", err
+	}
+	title := C.CString(options.Title)
+	defaultName := C.CString(options.DefaultFileName)
+	extension := C.CString(options.Extension)
+	defer C.free(unsafe.Pointer(title))
+	defer C.free(unsafe.Pointer(defaultName))
+	defer C.free(unsafe.Pointer(extension))
+	var path *C.char
+	result := C.wox_linux_window_save_file(native, title, defaultName, extension, &path)
+	if result == 1 {
+		return "", nil
+	}
+	if result != 0 || path == nil {
+		return "", errors.New("woxui: failed to open Linux save dialog")
+	}
+	defer C.wox_linux_free_string(path)
+	return C.GoString(path), nil
+}
+
+func (w *platformWindow) setPointerPassthrough(enabled bool) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	nativeEnabled := C.int32_t(0)
+	if enabled {
+		nativeEnabled = 1
+	}
+	if C.wox_linux_window_set_pointer_passthrough(native, nativeEnabled) != 0 {
+		return errors.New("woxui: failed to update Linux pointer passthrough")
+	}
+	return nil
+}
+
+func (w *platformWindow) openExternalURL(rawURL string) error {
+	var openErr error
+	if err := platformCall(func() {
+		native, err := w.openNative()
+		if err != nil {
+			openErr = err
+			return
+		}
+		openErr = browser.OpenExternalURL(rawURL, uintptr(C.wox_linux_window_handle(native)))
+	}); err != nil {
+		return err
+	}
+	return openErr
+}
+
+func (w *platformWindow) writeClipboardText(text string) error {
+	var publishErr error
+	if err := platformCall(func() {
+		native, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		owner := uintptr(C.wox_linux_window_display(native))
+		publishErr = clipboard.PublishText(owner, text)
+	}); err != nil {
+		return err
+	}
+	return publishErr
+}
+
+// applyWindowIcon replaces the desktop-shell icon so minimized notes are not the Wox app glyph.
+func (w *platformWindow) applyWindowIcon() {
+	if w == nil || w.native == nil || w.options.Icon == nil || len(w.options.Icon.NativePixels()) == 0 {
+		return
+	}
+	icon := w.options.Icon
+	if C.wox_linux_window_set_icon(
+		w.native,
+		(*C.uint8_t)(unsafe.Pointer(&icon.NativePixels()[0])),
+		C.int32_t(icon.Width),
+		C.int32_t(icon.Height),
+		C.int32_t(icon.Width*4),
+	) != 0 {
+		util.GetLogger().Warn(context.Background(), "failed to set Linux window icon")
+	}
+}
+
+func (w *platformWindow) writeClipboardImage(image *clipboard.PreparedImage) error {
+	var publishErr error
+	if err := platformCall(func() {
+		native, err := w.openNative()
+		if err != nil {
+			publishErr = err
+			return
+		}
+		owner := uintptr(C.wox_linux_window_display(native))
+		publishErr = image.Publish(owner)
+	}); err != nil {
+		return err
+	}
+	return publishErr
+}
+
+func (w *platformWindow) invalidate() error {
+	w.mu.Lock()
+	if w.renderErr != nil {
+		err := w.renderErr
+		w.mu.Unlock()
+		return err
+	}
+	w.fullDamage = true
+	w.pendingDamage = Rect{}
+	w.damagePending = true
+	w.mu.Unlock()
+
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_invalidate(native) != 0 {
+		return errors.New("woxui: failed to invalidate Linux window")
+	}
+	return nil
+}
+
+func (w *platformWindow) invalidateRect(rect Rect) error {
+	w.mu.Lock()
+	if w.renderErr != nil {
+		err := w.renderErr
+		w.mu.Unlock()
+		return err
+	}
+	if !w.fullDamage {
+		w.pendingDamage = unionRects(w.pendingDamage, rect)
+	}
+	w.damagePending = true
+	w.mu.Unlock()
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_invalidate(native) != 0 {
+		return errors.New("woxui: failed to invalidate Linux window rectangle")
+	}
+	return nil
+}
+
+// Linux records the full command stream because a GL context recreation can invalidate the FBO before Go observes it.
+func (*platformWindow) displayListDamageCullingEnabled() bool { return false }
+
+func (w *platformWindow) requestAnimationFrame() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_request_animation_frame(native) != 0 {
+		return errors.New("woxui: failed to request a Linux animation frame")
+	}
+	return nil
+}
+
+func (w *platformWindow) stopAnimationFrames() error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_stop_animation_frames(native) != 0 {
+		return errors.New("woxui: failed to stop Linux animation frames")
+	}
+	return nil
+}
+
+// setTextInputState updates GtkIMContext activation and candidate geometry on the GTK thread.
+func (w *platformWindow) setTextInputState(state TextInputState) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	enabled := C.int32_t(0)
+	if state.Enabled {
+		enabled = 1
+	}
+	if C.wox_linux_window_set_text_input_state(
+		native,
+		enabled,
+		C.float(state.CursorRect.X),
+		C.float(state.CursorRect.Y),
+		C.float(state.CursorRect.Width),
+		C.float(state.CursorRect.Height),
+	) != 0 {
+		return errors.New("woxui: failed to update Linux text input state")
+	}
+	return nil
+}
+
+func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_set_pointer_cursor(native, C.uint8_t(cursor)) != 0 {
+		return errors.New("woxui: failed to update Linux pointer cursor")
+	}
+	return nil
+}
+
+// measureText uses Pango on the GTK thread so it matches the native renderer.
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return TextMetrics{}, err
+	}
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	w.mu.Unlock()
+	if style.Family == FontFamilyMonospace {
+		fontFamily = "monospace"
+	}
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	var width C.float
+	var height C.float
+	var baseline C.float
+	result := C.wox_linux_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
+	if result != 0 {
+		return TextMetrics{}, errors.New("woxui: failed to measure Linux text")
+	}
+	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
+}
+
+func (w *platformWindow) close() error {
+	w.mu.Lock()
+	if w.closed || w.closing {
+		w.mu.Unlock()
+		return nil
+	}
+	w.closing = true
+	native := w.native
+	w.mu.Unlock()
+
+	if native == nil || C.wox_linux_window_close(native) != 0 {
+		w.mu.Lock()
+		w.closing = false
+		w.mu.Unlock()
+		return errors.New("woxui: failed to close Linux window")
+	}
+	w.markClosed()
+	return nil
+}
+
+func (w *platformWindow) openNative() (*C.WoxLinuxWindow, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed || w.closing || w.native == nil {
+		return nil, errors.New("woxui: window is closed")
+	}
+	return w.native, nil
+}
+
+func (w *platformWindow) markClosed() {
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return
+	}
+	w.native = nil
+	webView := w.webView
+	w.webView = nil
+	w.closing = false
+	w.closed = true
+	handle := w.handle
+	w.handle = 0
+	onClosed := w.options.OnClosed
+	w.mu.Unlock()
+	if webView != nil {
+		webView.Close()
+	}
+	if handle != 0 {
+		handle.Delete()
+	}
+	if onClosed != nil {
+		onClosed()
+	}
+}
+
+func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
+	w.mu.Lock()
+	firstError := w.renderErr == nil
+	if w.renderErr == nil {
+		w.renderErr = fmt.Errorf("woxui: %s failed with status %d", operation, int32(result))
+	}
+	renderErr := w.renderErr
+	w.mu.Unlock()
+	if firstError {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("linux renderer error: operation=%q status=%d error=%q", operation, int32(result), renderErr.Error()))
+	}
+}
+
+func (w *platformWindow) drawFrame(frame FrameInfo) {
+	frame.Damage = w.consumePendingDamage()
+	displayList := &DisplayList{}
+	if w.options.frameMetrics != nil {
+		displayList.frameID = w.options.frameMetrics.beginFrame()
+	}
+	if w.options.OnFrame != nil {
+		w.options.OnFrame(displayList, frame)
+	}
+
+	nativeStart := time.Now()
+	native, err := w.openNative()
+	if err != nil {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(displayList.frameID)
+		}
+		return
+	}
+	w.mu.Lock()
+	fontFamily := w.fontFamily
+	w.mu.Unlock()
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	nativeMonospaceFontFamily := C.CString("monospace")
+	defer C.free(unsafe.Pointer(nativeMonospaceFontFamily))
+	nativeDamage := displayList.NativeDamage()
+	result := C.wox_linux_window_begin_frame(
+		native,
+		C.uint64_t(displayList.frameID),
+		C.float(frame.Size.Width),
+		C.float(frame.Size.Height),
+		C.float(frame.Scale),
+		C.float(nativeDamage.X),
+		C.float(nativeDamage.Y),
+		C.float(nativeDamage.Width),
+		C.float(nativeDamage.Height),
+		C.uint8_t(displayList.clearColor.R),
+		C.uint8_t(displayList.clearColor.G),
+		C.uint8_t(displayList.clearColor.B),
+		C.uint8_t(displayList.clearColor.A),
+	)
+	if result > 0 {
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(displayList.frameID)
+		}
+		return
+	}
+	if result < 0 {
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
+		w.recordRenderError("begin OpenGL frame", result)
+		return
+	}
+
+	displayList.forEachCommand(func(command displayCommand) bool {
+		switch command.kind {
+		case displayCommandFillRoundedRect:
+			result = C.wox_linux_window_fill_rounded_rect(
+				native,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
+		case displayCommandFillConvexPolygon:
+			result = C.wox_linux_window_fill_convex_polygon(
+				native,
+				(*C.float)(unsafe.Pointer(&command.points[0])),
+				C.int32_t(len(command.points)),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
+		case displayCommandStrokeRoundedRect:
+			result = C.wox_linux_window_stroke_rounded_rect(
+				native,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(command.stroke),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
+		case displayCommandDrawText:
+			text := C.CString(command.text)
+			drawFontFamily := nativeFontFamily
+			if command.style.Family == FontFamilyMonospace {
+				drawFontFamily = nativeMonospaceFontFamily
+			}
+			result = C.wox_linux_window_draw_text(
+				native,
+				text,
+				drawFontFamily,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.style.Size),
+				C.uint8_t(command.style.Weight),
+				C.uint8_t(boolByte(command.style.Italic)),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+			)
+			C.free(unsafe.Pointer(text))
+		case displayCommandDrawImage:
+			result = C.wox_linux_window_draw_image(
+				native,
+				C.uint64_t(command.image.ID()),
+				(*C.uint8_t)(unsafe.Pointer(&command.image.NativePixels()[0])),
+				C.int32_t(command.image.Width),
+				C.int32_t(command.image.Height),
+				C.int32_t(command.image.Width*4),
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.rotation),
+				C.float(command.radius),
+			)
+		case displayCommandBeginEmbeddedSurfaceOverlay:
+			result = C.wox_linux_window_begin_embedded_surface_overlay(native)
+		case displayCommandFloatingMaterial:
+			result = C.wox_linux_window_floating_material(
+				native,
+				C.float(command.rect.X),
+				C.float(command.rect.Y),
+				C.float(command.rect.Width),
+				C.float(command.rect.Height),
+				C.float(command.radius),
+				C.float(command.material.Sigma),
+				C.float(3*command.material.Sigma), C.float(command.material.Brightness), C.float(command.material.Saturation),
+				C.uint8_t(command.color.R),
+				C.uint8_t(command.color.G),
+				C.uint8_t(command.color.B),
+				C.uint8_t(command.color.A),
+				C.uint8_t(command.edge.R),
+				C.uint8_t(command.edge.G),
+				C.uint8_t(command.edge.B),
+				C.uint8_t(command.edge.A),
+			)
+		case displayCommandBeginEdgeFade:
+			result = C.wox_linux_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandEndEdgeFade:
+			result = C.wox_linux_window_end_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
+		case displayCommandSetClipRect:
+			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandClearClip:
+			result = C.wox_linux_window_clear_clip(native)
+		}
+		if result != 0 {
+			return false
+		}
+		return true
+	})
+
+	C.wox_linux_window_trace_encode(native)
+	presentStart := time.Now()
+	endResult := C.wox_linux_window_end_frame(native)
+	presentCost := time.Since(presentStart)
+	if result != 0 {
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
+		w.recordRenderError("encode OpenGL frame", result)
+		return
+	}
+	result = endResult
+	if w.options.frameMetrics != nil {
+		w.recordNativeResourceMetrics(native, displayList)
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-presentCost, presentCost, result == 0)
+	}
+	if result != 0 {
+		w.recordRenderError("finish OpenGL frame", result)
+	}
+}
+
+// woxGoLinuxRenderTrace routes native GTK/OpenGL diagnostics through Wox logging.
+//
+//export woxGoLinuxRenderTrace
+func woxGoLinuxRenderTrace(message *C.char) {
+	if message == nil {
+		return
+	}
+	util.GetLogger().Info(context.Background(), "linux render trace: "+C.GoString(message))
+}
+
+// rendererResourcesFromNative copies one native encode-stat snapshot into portable metrics.
+func rendererResourcesFromNative(stats C.WoxRendererResourceStats) FrameRendererResourceMetrics {
+	return FrameRendererResourceMetrics{
+		TextRasterizations: int(stats.text_rasterizations),
+		ImageCreates:       int(stats.image_creates),
+		ImageUploads:       int(stats.image_uploads),
+		CacheHits:          int(stats.cache_hits),
+		CacheEvictions:     int(stats.cache_evictions),
+		ResidentBytes:      int64(stats.resident_bytes),
+	}
+}
+
+// recordNativeResourceMetrics stores actual native cache hits instead of the uncached baseline.
+func (w *platformWindow) recordNativeResourceMetrics(native *C.WoxLinuxWindow, displayList *DisplayList) {
+	if w.options.frameMetrics == nil || displayList == nil {
+		return
+	}
+	var stats C.WoxRendererResourceStats
+	if native != nil && C.wox_linux_window_take_frame_resource_stats(native, &stats) == 0 {
+		w.options.frameMetrics.recordRendererResources(displayList.frameID, rendererResourcesFromNative(stats))
+		return
+	}
+	w.options.frameMetrics.recordEncodedResources(displayList)
+}
+
+// testLinuxResourceCacheGeneration wraps the native generation/release check for Go tests.
+func testLinuxResourceCacheGeneration() int32 {
+	return int32(C.wox_linux_test_resource_cache_generation())
+}
+
+// testLinuxDrawnTextFit wraps the native single-slot text layout for Go tests.
+// It returns the drawn overflow in device pixels and the drawn line count.
+func testLinuxDrawnTextFit(text, fontFamily string, fontSize, scale float32) (int32, int32) {
+	nativeText := C.CString(text)
+	defer C.free(unsafe.Pointer(nativeText))
+	nativeFontFamily := C.CString(fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	var lines C.int32_t
+	overflow := int32(C.wox_linux_test_drawn_text_fit(nativeText, nativeFontFamily, C.float(fontSize), C.float(scale), &lines))
+	return overflow, int32(lines)
+}
+
+func testLinuxResizeHit(x, y float32, width, height, grip int32) int32 {
+	return int32(C.wox_linux_test_resize_hit(C.float(x), C.float(y), C.int32_t(width), C.int32_t(height), C.int32_t(grip)))
+}
+
+func nativeWindowMaterialAvailable() bool {
+	return C.wox_linux_background_blur_available() != 0
+}
+
+func testLinuxWindowRequestsBackgroundBlur(screenshot, blurAvailable bool) bool {
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	nativeBlur := C.int32_t(0)
+	if blurAvailable {
+		nativeBlur = 1
+	}
+	return C.wox_linux_test_window_requests_background_blur(nativeScreenshot, nativeBlur) != 0
+}
+
+func testLinuxCustomChromeCornerRadius(custom bool, requested float32) float32 {
+	nativeCustom := C.int32_t(0)
+	if custom {
+		nativeCustom = 1
+	}
+	return float32(C.wox_linux_test_custom_chrome_corner_radius(nativeCustom, C.float(requested)))
+}
+
+func testLinuxWindowUsesPerPixelAlpha(application, nonactivating, screenshot, blurAvailable bool) bool {
+	nativeApplication := C.int32_t(0)
+	if application {
+		nativeApplication = 1
+	}
+	nativeNonactivating := C.int32_t(0)
+	if nonactivating {
+		nativeNonactivating = 1
+	}
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	nativeBlur := C.int32_t(0)
+	if blurAvailable {
+		nativeBlur = 1
+	}
+	return C.wox_linux_test_window_uses_per_pixel_alpha(nativeApplication, nativeNonactivating, nativeScreenshot, nativeBlur) != 0
+}
+
+func testLinuxLayerShellStackLayer(topmost, screenshot bool) int32 {
+	nativeTopmost := C.int32_t(0)
+	if topmost {
+		nativeTopmost = 1
+	}
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	return int32(C.wox_linux_test_layer_shell_stack_layer(nativeTopmost, nativeScreenshot))
+}
+
+func (w *platformWindow) consumePendingDamage() Rect {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.damagePending || w.fullDamage {
+		w.pendingDamage = Rect{}
+		w.damagePending = false
+		w.fullDamage = false
+		return Rect{}
+	}
+	damage := w.pendingDamage
+	w.pendingDamage = Rect{}
+	w.damagePending = false
+	return damage
+}
+
+//export woxGoLinuxInfo
+func woxGoLinuxInfo(message *C.char) {
+	if message == nil {
+		return
+	}
+	util.GetLogger().Info(context.Background(), C.GoString(message))
+}
+
+//export woxGoLinuxStart
+func woxGoLinuxStart(runHandle C.uintptr_t) C.int32_t {
+	state := cgo.Handle(runHandle).Value().(*linuxRunState)
+	state.err = state.start()
+	if C.wox_linux_background_blur_available() != 0 {
+		util.GetLogger().Info(context.Background(), "linux window material: ext-background-effect-v1 blur")
+	} else {
+		util.GetLogger().Info(context.Background(), "linux window material: opaque theme wash")
+	}
+	if state.err == nil && os.Getenv(linuxRenderTraceEnvironment) == "1" {
+		util.GetLogger().Info(context.Background(), fmt.Sprintf(
+			"linux render trace enabled: %s=1 XDG_CURRENT_DESKTOP=%q XDG_SESSION_DESKTOP=%q DESKTOP_SESSION=%q XDG_SESSION_TYPE=%q GDK_BACKEND=%q DISPLAY=%q WAYLAND_DISPLAY=%q",
+			linuxRenderTraceEnvironment,
+			os.Getenv("XDG_CURRENT_DESKTOP"),
+			os.Getenv("XDG_SESSION_DESKTOP"),
+			os.Getenv("DESKTOP_SESSION"),
+			os.Getenv("XDG_SESSION_TYPE"),
+			os.Getenv("GDK_BACKEND"),
+			os.Getenv("DISPLAY"),
+			os.Getenv("WAYLAND_DISPLAY"),
+		))
+	}
+	if state.err != nil {
+		state.mu.Lock()
+		state.accepting = false
+		windows := append([]*platformWindow(nil), state.windows...)
+		state.mu.Unlock()
+		for _, window := range windows {
+			_ = window.close()
+		}
+		return -1
+	}
+	return 0
+}
+
+//export woxGoLinuxCall
+func woxGoLinuxCall(context C.uintptr_t) {
+	cgo.Handle(context).Value().(func())()
+}
+
+//export woxGoLinuxFrame
+func woxGoLinuxFrame(context C.uintptr_t, width C.float, height C.float, pixelWidth C.int32_t, pixelHeight C.int32_t, scale C.float) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	window.drawFrame(FrameInfo{
+		Size:      Size{Width: float32(width), Height: float32(height)},
+		PixelSize: PixelSize{Width: int(pixelWidth), Height: int(pixelHeight)},
+		Scale:     float32(scale),
+	})
+}
+
+//export woxGoLinuxFocus
+func woxGoLinuxFocus(context C.uintptr_t, epoch C.uint64_t, active C.int32_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnFocus != nil {
+		window.options.OnFocus(FocusEvent{Epoch: FocusEpoch(epoch), Active: active != 0})
+	}
+}
+
+// woxGoLinuxCloseRequested lets application windows save or hide before GTK destroys them.
+//
+//export woxGoLinuxCloseRequested
+func woxGoLinuxCloseRequested(context C.uintptr_t) C.int32_t {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnCloseRequested == nil {
+		return 0
+	}
+	window.options.OnCloseRequested()
+	return 1
+}
+
+//export woxGoLinuxDestroyed
+func woxGoLinuxDestroyed(context C.uintptr_t, epoch C.uint64_t, active C.int32_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if active != 0 && window.options.OnFocus != nil {
+		window.options.OnFocus(FocusEvent{Epoch: FocusEpoch(epoch), Active: false})
+	}
+	window.markClosed()
+}
+
+// woxGoLinuxKey forwards a normalized GDK key event into the window callback.
+//
+//export woxGoLinuxKey
+func woxGoLinuxKey(context C.uintptr_t, key *C.char, modifiers C.uint8_t, down C.int32_t, repeat C.int32_t, composing C.int32_t) C.int32_t {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnKey == nil {
+		return 0
+	}
+	handled := window.options.OnKey(KeyEvent{
+		Key:       Key(C.GoString(key)),
+		Modifiers: KeyModifiers(modifiers),
+		Down:      down != 0,
+		Repeat:    repeat != 0,
+		Composing: composing != 0,
+	})
+	if handled {
+		return 1
+	}
+	return 0
+}
+
+// woxGoLinuxTextInput forwards GtkIMContext commit and preedit changes.
+//
+//export woxGoLinuxTextInput
+func woxGoLinuxTextInput(context C.uintptr_t, kind C.uint8_t, text *C.char) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnTextInput != nil {
+		window.options.OnTextInput(TextInputEvent{Kind: TextInputEventKind(kind), Text: C.GoString(text)})
+	}
+}
+
+// woxGoLinuxObservePointer records desktop pointer coordinates for tooltip tracking.
+//
+//export woxGoLinuxObservePointer
+func woxGoLinuxObservePointer(context C.uintptr_t, desktopX C.float, desktopY C.float, inside C.int32_t) {
+	mouse.ObserveWindowPointer(uintptr(context), mouse.Point{X: float64(desktopX), Y: float64(desktopY)}, inside != 0)
+}
+
+// woxGoLinuxPointer forwards GDK mouse and trackpad events in logical coordinates.
+//
+//export woxGoLinuxPointer
+func woxGoLinuxPointer(context C.uintptr_t, kind C.uint8_t, x C.float, y C.float, button C.uint8_t, scrollX C.float, scrollY C.float, modifiers C.uint8_t) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnPointer != nil {
+		window.options.OnPointer(PointerEvent{
+			Kind:      PointerEventKind(kind),
+			Position:  Point{X: float32(x), Y: float32(y)},
+			Button:    PointerButton(button),
+			Scroll:    Point{X: float32(scrollX), Y: float32(scrollY)},
+			Modifiers: KeyModifiers(modifiers),
+		})
+	}
+}
+
+//export woxGoLinuxFileDrop
+func woxGoLinuxFileDrop(context C.uintptr_t, paths *C.char) {
+	window := cgo.Handle(context).Value().(*platformWindow)
+	if window.options.OnFileDrop == nil || paths == nil {
+		return
+	}
+	values := splitFileDropPayload(C.GoString(paths))
+	if len(values) > 0 {
+		window.options.OnFileDrop(values)
+	}
+}
+
+// testLinuxEdgeFade reads native mask pixels from an offscreen GL target.
+func testLinuxEdgeFade(scale, top, bottom float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_linux_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
+	return pixels, int(status)
+}

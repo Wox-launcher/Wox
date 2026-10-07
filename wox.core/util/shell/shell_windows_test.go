@@ -17,6 +17,13 @@ func TestOpenAsAdministratorRejectsInvalidPath(t *testing.T) {
 	}
 }
 
+func TestOpenWithOwnerRejectsInvalidPath(t *testing.T) {
+	err := OpenWithOwner("invalid\x00path", 0x1234)
+	if err == nil || !strings.Contains(err.Error(), "encode ShellExecute path") {
+		t.Fatalf("invalid owner-aware launch error = %v", err)
+	}
+}
+
 func TestRunElevatedRejectsInvalidPath(t *testing.T) {
 	_, err := RunElevated("invalid\x00path.exe", "-Command echo", "")
 	if err == nil {

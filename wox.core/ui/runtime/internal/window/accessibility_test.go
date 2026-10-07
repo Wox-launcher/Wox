@@ -1,0 +1,177 @@
+package window
+
+import "testing"
+
+func TestAccessibilityTreeContentHashIgnoresGeneration(t *testing.T) {
+	tree := AccessibilityTree{Generation: 1, RootIDs: []AccessibilityNodeID{1}, Nodes: []AccessibilityNode{{ID: 1}}}
+	changed := cloneAccessibilityTree(tree)
+	changed.Generation = 2
+	if accessibilityTreeContentHash(tree) != accessibilityTreeContentHash(changed) {
+		t.Fatal("generation-only changes should not rebuild native accessibility objects")
+	}
+	changed.WindowFocused = true
+	if accessibilityTreeContentHash(tree) != accessibilityTreeContentHash(changed) {
+		t.Fatal("window-focus-only changes should not rebuild native accessibility objects")
+	}
+}
+
+func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
+	base := AccessibilityTree{Nodes: []AccessibilityNode{{}}}
+	cases := []struct {
+		name   string
+		change func(*AccessibilityTree)
+	}{
+		{name: "root IDs", change: func(tree *AccessibilityTree) { tree.RootIDs = []AccessibilityNodeID{1} }},
+		{name: "ID", change: func(tree *AccessibilityTree) { tree.Nodes[0].ID = 1 }},
+		{name: "parent ID", change: func(tree *AccessibilityTree) { tree.Nodes[0].ParentID = 1 }},
+		{name: "children", change: func(tree *AccessibilityTree) { tree.Nodes[0].Children = []AccessibilityNodeID{1} }},
+		{name: "automation ID", change: func(tree *AccessibilityTree) { tree.Nodes[0].AutomationID = "query" }},
+		{name: "role", change: func(tree *AccessibilityTree) { tree.Nodes[0].Role = AccessibilityRoleTextField }},
+		{name: "label", change: func(tree *AccessibilityTree) { tree.Nodes[0].Label = "Query" }},
+		{name: "description", change: func(tree *AccessibilityTree) { tree.Nodes[0].Description = "Description" }},
+		{name: "value", change: func(tree *AccessibilityTree) { tree.Nodes[0].Value = "Value" }},
+		{name: "bounds x", change: func(tree *AccessibilityTree) { tree.Nodes[0].Bounds.X = 1 }},
+		{name: "bounds y", change: func(tree *AccessibilityTree) { tree.Nodes[0].Bounds.Y = 1 }},
+		{name: "bounds width", change: func(tree *AccessibilityTree) { tree.Nodes[0].Bounds.Width = 1 }},
+		{name: "bounds height", change: func(tree *AccessibilityTree) { tree.Nodes[0].Bounds.Height = 1 }},
+		{name: "actions", change: func(tree *AccessibilityTree) {
+			tree.Nodes[0].Actions = []AccessibilityAction{AccessibilityActionActivate}
+		}},
+		{name: "live region", change: func(tree *AccessibilityTree) { tree.Nodes[0].LiveRegion = AccessibilityLiveRegionPolite }},
+		{name: "enabled", change: func(tree *AccessibilityTree) { tree.Nodes[0].Enabled = true }},
+		{name: "focusable", change: func(tree *AccessibilityTree) { tree.Nodes[0].Focusable = true }},
+		{name: "focused", change: func(tree *AccessibilityTree) { tree.Nodes[0].Focused = true }},
+		{name: "selected", change: func(tree *AccessibilityTree) { tree.Nodes[0].Selected = true }},
+		{name: "hovered", change: func(tree *AccessibilityTree) { tree.Nodes[0].Hovered = true }},
+		{name: "checked", change: func(tree *AccessibilityTree) { tree.Nodes[0].Checked = true }},
+		{name: "expanded", change: func(tree *AccessibilityTree) { tree.Nodes[0].Expanded = true }},
+		{name: "read only", change: func(tree *AccessibilityTree) { tree.Nodes[0].ReadOnly = true }},
+		{name: "protected", change: func(tree *AccessibilityTree) { tree.Nodes[0].Protected = true }},
+		{name: "hidden", change: func(tree *AccessibilityTree) { tree.Nodes[0].Hidden = true }},
+		{name: "native boundary", change: func(tree *AccessibilityTree) { tree.Nodes[0].NativeBoundary = true }},
+		{name: "text lines", change: func(tree *AccessibilityTree) {
+			tree.Nodes[0].TextLines = []AccessibilityTextLine{{Text: "☐ 顺序", Indent: 16}}
+		}},
+	}
+	baseHash := accessibilityTreeContentHash(base)
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			changed := cloneAccessibilityTree(base)
+			test.change(&changed)
+			if accessibilityTreeContentHash(changed) == baseHash {
+				t.Fatalf("field change did not affect accessibility content hash: %+v", changed)
+			}
+		})
+	}
+}
+
+func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{Generation: 1}})
+
+	originalUpdate := updateNativeAccessibility
+	nativeUpdateCalled := false
+	updateNativeAccessibility = func(*platformWindow, AccessibilityTree) error {
+		nativeUpdateCalled = true
+		return nil
+	}
+	defer func() {
+		updateNativeAccessibility = originalUpdate
+		accessibilityWindows.Delete(window)
+	}()
+
+	clearAccessibility(window)
+
+	if nativeUpdateCalled {
+		t.Fatal("closing a window must not publish an empty accessibility tree")
+	}
+	if _, ok := accessibilityWindows.Load(window); ok {
+		t.Fatal("closing a window must remove its accessibility action state")
+	}
+}
+
+func TestSelectedTextFromFocusedWindowUsesFocusedEditor(t *testing.T) {
+	useSnapshotSelectionFocus(t)
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: true,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "hello 世界",
+			SelectionStart: 6, SelectionEnd: 8,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if !handled || text != "世界" {
+		t.Fatalf("selected text = %q handled=%t, want 世界", text, handled)
+	}
+}
+
+func TestSelectedTextFromFocusedWindowIgnoresBackgroundWindows(t *testing.T) {
+	useSnapshotSelectionFocus(t)
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: false,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "background",
+			SelectionStart: 0, SelectionEnd: 10,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if handled || text != "" {
+		t.Fatalf("background window leaked selection %q handled=%t", text, handled)
+	}
+}
+
+func TestSelectedTextFromFocusedWindowTreatsCollapsedCaretAsHandled(t *testing.T) {
+	useSnapshotSelectionFocus(t)
+	window := &platformWindow{}
+	accessibilityWindows.Store(window, accessibilityWindowState{tree: AccessibilityTree{
+		WindowFocused: true,
+		Nodes: []AccessibilityNode{{
+			ID: 1, Focused: true, HasTextSelection: true, Value: "note",
+			SelectionStart: 2, SelectionEnd: 2,
+		}},
+	}})
+	t.Cleanup(func() { accessibilityWindows.Delete(window) })
+
+	text, handled := SelectedTextFromFocusedWindow()
+	if !handled || text != "" {
+		t.Fatalf("collapsed caret = %q handled=%t, want handled empty", text, handled)
+	}
+}
+
+// useSnapshotSelectionFocus isolates selection slicing from native window focus.
+func useSnapshotSelectionFocus(t *testing.T) {
+	original := accessibilityWindowFocused
+	accessibilityWindowFocused = func(_ *platformWindow, tree AccessibilityTree) bool { return tree.WindowFocused }
+	t.Cleanup(func() { accessibilityWindowFocused = original })
+}
+
+func TestSelectedTextFromAccessibilityTreeSkipsProtectedFields(t *testing.T) {
+	got := selectedTextFromAccessibilityTree(AccessibilityTree{Nodes: []AccessibilityNode{{
+		Focused: true, HasTextSelection: true, Protected: true, Value: "secret",
+		SelectionStart: 0, SelectionEnd: 6,
+	}}})
+	if got != "" {
+		t.Fatalf("protected selection = %q", got)
+	}
+}
+
+func TestDiffAccessibilityTreesReportsFocusUpserts(t *testing.T) {
+	previous := AccessibilityTree{Generation: 1, RootIDs: []AccessibilityNodeID{1}, Nodes: []AccessibilityNode{
+		{ID: 1, Label: "one", Focused: true},
+		{ID: 2, Label: "two"},
+	}}
+	next := AccessibilityTree{Generation: 2, RootIDs: []AccessibilityNodeID{1}, Nodes: []AccessibilityNode{
+		{ID: 1, Label: "one"},
+		{ID: 2, Label: "two", Focused: true},
+	}}
+	update := DiffAccessibilityTrees(previous, next, false)
+	if update.Full != nil || len(update.Removes) != 0 || len(update.Upserts) != 2 {
+		t.Fatalf("focus update = %+v, want 2 upserts", update)
+	}
+}

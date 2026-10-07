@@ -1,0 +1,1952 @@
+//go:build windows
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#include <shobjidl.h>
+#include <shlobj.h>
+#include <shellapi.h>
+
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <algorithm>
+#include <atomic>
+#include <cstdarg>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "native_windows.h"
+#include "renderer_windows.h"
+
+extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
+extern "C" void woxGoWindowsWebViewInitializationDiagnostic(uintptr_t owner, const char *stage, uint64_t elapsed_ms, int32_t result);
+extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
+extern "C" int32_t woxGoWindowsWebViewActionHotkeyMatches(uintptr_t owner, uint32_t virtual_key, uint8_t modifiers);
+extern "C" int32_t woxGoWindowsWebViewActionHotkey(uintptr_t owner);
+extern "C" int32_t woxGoWindowsWebViewReservedHotkey(uintptr_t owner, const char *key);
+extern "C" void woxGoWindowsWebViewNavigationChanged(uintptr_t owner, const char *url, int32_t can_go_back, int32_t can_go_forward);
+extern "C" void woxGoWindowsWebViewCursorChanged(uintptr_t owner, uintptr_t cursor);
+
+static void webview_debug(const char *format, ...) {
+  static const bool enabled = [] {
+    char value[8] = {};
+    return GetEnvironmentVariableA("WOX_UI_WEBVIEW_DEBUG", value, sizeof(value)) > 0 && value[0] == '1';
+  }();
+  if (!enabled) {
+    return;
+  }
+  std::fprintf(stderr, "[wox-webview] ");
+  va_list arguments;
+  va_start(arguments, format);
+  std::vfprintf(stderr, format, arguments);
+  va_end(arguments);
+  std::fprintf(stderr, "\n");
+  std::fflush(stderr);
+}
+
+static std::string wide_to_utf8(const wchar_t *value) {
+  if (value == nullptr || *value == L'\0') {
+    return {};
+  }
+  const int length = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, nullptr, 0, nullptr, nullptr);
+  if (length <= 1) {
+    return {};
+  }
+  std::string result(static_cast<size_t>(length), '\0');
+  if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, result.data(), length, nullptr, nullptr) == 0) {
+    return {};
+  }
+  result.pop_back();
+  return result;
+}
+
+extern "C" void woxGoNativeFileDialogChanged(uintptr_t window, int32_t opened);
+
+// Accessed only on the UI thread; Show keeps each registered COM object alive.
+static std::unordered_map<HWND, IFileDialog *> active_file_dialogs;
+
+// Report the initialized picker HWND instead of inferring it from foreground windows.
+class WoxFileDialogEvents final : public IFileDialogEvents {
+ public:
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override {
+    if (object == nullptr) return E_POINTER;
+    *object = nullptr;
+    if (iid != IID_IUnknown && iid != IID_IFileDialogEvents) return E_NOINTERFACE;
+    *object = static_cast<IFileDialogEvents *>(this);
+    AddRef();
+    return S_OK;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG remaining = --references_;
+    if (remaining == 0) delete this;
+    return remaining;
+  }
+  HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog *dialog) override {
+    if (window_ != nullptr) return S_OK;
+    IOleWindow *native = nullptr;
+    if (SUCCEEDED(dialog->QueryInterface(IID_PPV_ARGS(&native)))) {
+      native->GetWindow(&window_);
+      native->Release();
+      if (window_ != nullptr) {
+        active_file_dialogs[window_] = dialog;
+        woxGoNativeFileDialogChanged(reinterpret_cast<uintptr_t>(window_), 1);
+      }
+    }
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE OnFileOk(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnFolderChanging(IFileDialog *, IShellItem *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnTypeChange(IFileDialog *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *response) override {
+    *response = FDESVR_DEFAULT;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *response) override {
+    *response = FDEOR_DEFAULT;
+    return S_OK;
+  }
+  void Closed() {
+    if (window_ != nullptr) {
+      active_file_dialogs.erase(window_);
+      woxGoNativeFileDialogChanged(reinterpret_cast<uintptr_t>(window_), 0);
+    }
+  }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HWND window_ = nullptr;
+};
+
+// All pickers share open/close notifications, including cancellation and Show failures.
+static HRESULT show_file_dialog(IFileDialog *dialog, HWND owner) {
+  auto *events = new WoxFileDialogEvents();
+  DWORD cookie = 0;
+  const HRESULT advised = dialog->Advise(events, &cookie);
+  const HRESULT result = dialog->Show(owner);
+  events->Closed();
+  if (SUCCEEDED(advised)) dialog->Unadvise(cookie);
+  events->Release();
+  return result;
+}
+
+// SetFolder navigates without invoking the picker's confirmation action.
+extern "C" int32_t wox_windows_navigate_file_dialog(uintptr_t window, const wchar_t *path) {
+  auto found = active_file_dialogs.find(reinterpret_cast<HWND>(window));
+  if (found == active_file_dialogs.end()) return E_INVALIDARG;
+  IShellItem *folder = nullptr;
+  HRESULT result = SHCreateItemFromParsingName(path, nullptr, IID_PPV_ARGS(&folder));
+  if (SUCCEEDED(result)) {
+    result = found->second->SetFolder(folder);
+    folder->Release();
+  }
+  return result;
+}
+
+extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, char **path) {
+  if (owner == 0 || path == nullptr) {
+    return E_INVALIDARG;
+  }
+  *path = nullptr;
+
+  IFileOpenDialog *dialog = nullptr;
+  HRESULT result = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+  if (FAILED(result)) {
+    return result;
+  }
+
+  FILEOPENDIALOGOPTIONS options = 0;
+  result = dialog->GetOptions(&options);
+  if (SUCCEEDED(result)) {
+    options |= FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR;
+    if (directory != 0) {
+      options |= FOS_PICKFOLDERS;
+    }
+    result = dialog->SetOptions(options);
+  }
+  if (SUCCEEDED(result)) {
+    result = show_file_dialog(dialog, reinterpret_cast<HWND>(owner));
+  }
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    dialog->Release();
+    return 1;
+  }
+
+  IShellItem *item = nullptr;
+  if (SUCCEEDED(result)) {
+    result = dialog->GetResult(&item);
+  }
+  PWSTR native_path = nullptr;
+  if (SUCCEEDED(result)) {
+    result = item->GetDisplayName(SIGDN_FILESYSPATH, &native_path);
+  }
+  std::string utf8_path;
+  if (SUCCEEDED(result)) {
+    utf8_path = wide_to_utf8(native_path);
+    if (utf8_path.empty()) {
+      result = E_FAIL;
+    }
+  }
+  if (native_path != nullptr) {
+    CoTaskMemFree(native_path);
+  }
+  if (item != nullptr) {
+    item->Release();
+  }
+  dialog->Release();
+  if (FAILED(result)) {
+    return result;
+  }
+
+  *path = static_cast<char *>(std::malloc(utf8_path.size() + 1));
+  if (*path == nullptr) {
+    return E_OUTOFMEMORY;
+  }
+  std::memcpy(*path, utf8_path.c_str(), utf8_path.size() + 1);
+  return 0;
+}
+
+extern "C" void wox_windows_free_string(char *value) {
+  std::free(value);
+}
+
+static std::wstring utf8_to_wide(const char *value);
+
+namespace {
+
+static HGLOBAL create_file_drop_global(const std::vector<std::wstring> &files) {
+  size_t path_char_count = 1;
+  for (const auto &file : files) {
+    path_char_count += file.size() + 1;
+  }
+
+  const SIZE_T data_size = sizeof(DROPFILES) + path_char_count * sizeof(wchar_t);
+  HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, data_size);
+  if (memory == nullptr) {
+    return nullptr;
+  }
+
+  auto *drop_files = static_cast<DROPFILES *>(::GlobalLock(memory));
+  if (drop_files == nullptr) {
+    ::GlobalFree(memory);
+    return nullptr;
+  }
+
+  drop_files->pFiles = sizeof(DROPFILES);
+  drop_files->fWide = TRUE;
+  auto *cursor = reinterpret_cast<wchar_t *>(reinterpret_cast<BYTE *>(drop_files) + sizeof(DROPFILES));
+  for (const auto &file : files) {
+    std::copy(file.begin(), file.end(), cursor);
+    cursor += file.size();
+    *cursor++ = L'\0';
+  }
+  *cursor = L'\0';
+  ::GlobalUnlock(memory);
+  return memory;
+}
+
+static HGLOBAL duplicate_global_memory(HGLOBAL source) {
+  const SIZE_T size = ::GlobalSize(source);
+  if (size == 0) {
+    return nullptr;
+  }
+
+  HGLOBAL target = ::GlobalAlloc(GMEM_MOVEABLE, size);
+  if (target == nullptr) {
+    return nullptr;
+  }
+
+  void *source_ptr = ::GlobalLock(source);
+  void *target_ptr = ::GlobalLock(target);
+  if (source_ptr == nullptr || target_ptr == nullptr) {
+    if (source_ptr != nullptr) {
+      ::GlobalUnlock(source);
+    }
+    if (target_ptr != nullptr) {
+      ::GlobalUnlock(target);
+    }
+    ::GlobalFree(target);
+    return nullptr;
+  }
+
+  std::memcpy(target_ptr, source_ptr, size);
+  ::GlobalUnlock(source);
+  ::GlobalUnlock(target);
+  return target;
+}
+
+static bool is_file_format(const FORMATETC *format) {
+  return format != nullptr && format->cfFormat == CF_HDROP && (format->tymed & TYMED_HGLOBAL) != 0 && format->dwAspect == DVASPECT_CONTENT;
+}
+
+class WoxFormatEtcEnumerator final : public IEnumFORMATETC {
+ public:
+  explicit WoxFormatEtcEnumerator(const FORMATETC &format) : format_(format) {}
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IEnumFORMATETC) {
+      *object = static_cast<IEnumFORMATETC *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE Next(ULONG count, FORMATETC *formats, ULONG *fetched) override {
+    if (formats == nullptr) {
+      return E_POINTER;
+    }
+    if (fetched != nullptr) {
+      *fetched = 0;
+    }
+    if (index_ > 0 || count == 0) {
+      return S_FALSE;
+    }
+
+    formats[0] = format_;
+    index_ = 1;
+    if (fetched != nullptr) {
+      *fetched = 1;
+    }
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Skip(ULONG count) override {
+    if (count == 0 || index_ > 0) {
+      return S_FALSE;
+    }
+    index_ = 1;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Reset() override {
+    index_ = 0;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE Clone(IEnumFORMATETC **result) override {
+    if (result == nullptr) {
+      return E_POINTER;
+    }
+    auto *clone = new WoxFormatEtcEnumerator(format_);
+    clone->index_ = index_;
+    *result = clone;
+    return S_OK;
+  }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  FORMATETC format_{};
+  ULONG index_ = 0;
+};
+
+class WoxFileDataObject final : public IDataObject {
+ public:
+  explicit WoxFileDataObject(HGLOBAL hdrop) : hdrop_(hdrop) {
+    format_.cfFormat = CF_HDROP;
+    format_.dwAspect = DVASPECT_CONTENT;
+    format_.lindex = -1;
+    format_.tymed = TYMED_HGLOBAL;
+  }
+
+  ~WoxFileDataObject() {
+    if (hdrop_ != nullptr) {
+      ::GlobalFree(hdrop_);
+    }
+  }
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IDataObject) {
+      *object = static_cast<IDataObject *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE GetData(FORMATETC *format, STGMEDIUM *medium) override {
+    if (!is_file_format(format) || medium == nullptr) {
+      return DV_E_FORMATETC;
+    }
+    HGLOBAL copy = duplicate_global_memory(hdrop_);
+    if (copy == nullptr) {
+      return STG_E_MEDIUMFULL;
+    }
+    medium->tymed = TYMED_HGLOBAL;
+    medium->hGlobal = copy;
+    medium->pUnkForRelease = nullptr;
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE GetDataHere(FORMATETC *, STGMEDIUM *) override { return DATA_E_FORMATETC; }
+
+  HRESULT STDMETHODCALLTYPE QueryGetData(FORMATETC *format) override { return is_file_format(format) ? S_OK : DV_E_FORMATETC; }
+
+  HRESULT STDMETHODCALLTYPE GetCanonicalFormatEtc(FORMATETC *, FORMATETC *format) override {
+    if (format != nullptr) {
+      format->ptd = nullptr;
+    }
+    return DATA_S_SAMEFORMATETC;
+  }
+
+  HRESULT STDMETHODCALLTYPE SetData(FORMATETC *, STGMEDIUM *, BOOL) override { return E_NOTIMPL; }
+
+  HRESULT STDMETHODCALLTYPE EnumFormatEtc(DWORD direction, IEnumFORMATETC **result) override {
+    if (result == nullptr) {
+      return E_POINTER;
+    }
+    if (direction != DATADIR_GET) {
+      *result = nullptr;
+      return E_NOTIMPL;
+    }
+    *result = new WoxFormatEtcEnumerator(format_);
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE DAdvise(FORMATETC *, DWORD, IAdviseSink *, DWORD *) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+  HRESULT STDMETHODCALLTYPE DUnadvise(DWORD) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+  HRESULT STDMETHODCALLTYPE EnumDAdvise(IEnumSTATDATA **) override { return OLE_E_ADVISENOTSUPPORTED; }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HGLOBAL hdrop_ = nullptr;
+  FORMATETC format_{};
+};
+
+class WoxFileDragSource final : public IDropSource {
+ public:
+  explicit WoxFileDragSource(HWND owner) : owner_(owner) {}
+
+  bool released_in_source() const { return released_in_source_; }
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **object) override {
+    if (object == nullptr) {
+      return E_POINTER;
+    }
+    if (riid == IID_IUnknown || riid == IID_IDropSource) {
+      *object = static_cast<IDropSource *>(this);
+      AddRef();
+      return S_OK;
+    }
+    *object = nullptr;
+    return E_NOINTERFACE;
+  }
+
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+  ULONG STDMETHODCALLTYPE Release() override {
+    ULONG count = --references_;
+    if (count == 0) {
+      delete this;
+    }
+    return count;
+  }
+
+  HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape_pressed, DWORD key_state) override {
+    if (escape_pressed) {
+      return DRAGDROP_S_CANCEL;
+    }
+    if ((key_state & MK_LBUTTON) == 0) {
+      POINT cursor{};
+      RECT source_rect{};
+      if (owner_ != nullptr && ::GetCursorPos(&cursor) && ::GetWindowRect(owner_, &source_rect) && ::PtInRect(&source_rect, cursor)) {
+        released_in_source_ = true;
+        return DRAGDROP_S_CANCEL;
+      }
+      // The launcher owns post-drag visibility, including PreventHideAfterDrag.
+      // Hiding the HWND here bypasses that policy and leaves Go visibility state stale.
+      return DRAGDROP_S_DROP;
+    }
+    return S_OK;
+  }
+
+  HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD) override { return DRAGDROP_S_USEDEFAULTCURSORS; }
+
+ private:
+  std::atomic<ULONG> references_{1};
+  HWND owner_ = nullptr;
+  bool released_in_source_ = false;
+};
+
+}  // namespace
+
+extern "C" int32_t wox_windows_start_file_drag(uintptr_t owner, const char *const *paths, int32_t path_count) {
+  if (paths == nullptr || path_count <= 0) {
+    return -1;
+  }
+
+  std::vector<std::wstring> files;
+  files.reserve(static_cast<size_t>(path_count));
+  for (int32_t index = 0; index < path_count; ++index) {
+    std::wstring path = utf8_to_wide(paths[index]);
+    if (path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+      continue;
+    }
+    files.push_back(std::move(path));
+  }
+  if (files.empty()) {
+    return -1;
+  }
+
+  HGLOBAL hdrop = create_file_drop_global(files);
+  if (hdrop == nullptr) {
+    return -1;
+  }
+
+  auto *data_object = new WoxFileDataObject(hdrop);
+  auto *drop_source = new WoxFileDragSource(reinterpret_cast<HWND>(owner));
+  if (owner != 0) {
+    ::ReleaseCapture();
+  }
+  DWORD effect = DROPEFFECT_NONE;
+  HRESULT result = ::DoDragDrop(data_object, drop_source, DROPEFFECT_COPY, &effect);
+  bool released_in_source = drop_source->released_in_source();
+  data_object->Release();
+  drop_source->Release();
+
+  if (result == DRAGDROP_S_DROP && (effect & DROPEFFECT_COPY) != 0) {
+    return 0;
+  }
+  if (released_in_source) {
+    return 2;
+  }
+  if (result == DRAGDROP_S_CANCEL) {
+    return 1;
+  }
+  return -1;
+}
+
+template <typename Function>
+static Function webview_method(IUnknown *object, size_t index) {
+  return reinterpret_cast<Function>((*reinterpret_cast<void ***>(object))[index]);
+}
+
+// These slots include inherited methods from the corresponding WebView2 interfaces.
+static constexpr size_t kEnvironment3CreateCompositionControllerMethod = 9;
+static constexpr size_t kCompositionControllerPutRootVisualTargetMethod = 4;
+static constexpr size_t kCompositionControllerSendMouseInputMethod = 5;
+static constexpr size_t kCompositionControllerGetCursorMethod = 7;
+static constexpr size_t kCompositionControllerAddCursorChangedMethod = 9;
+static constexpr size_t kCompositionControllerRemoveCursorChangedMethod = 10;
+static constexpr size_t kControllerMoveFocusMethod = 12;
+static constexpr size_t kSettings2PutUserAgentMethod = 22;
+
+static const GUID kCoreWebView2Environment3Iid = {0x80a22ae3, 0xbe7c, 0x4ce2, {0xaf, 0xe1, 0x5a, 0x50, 0x05, 0x6c, 0xde, 0xeb}};
+static const GUID kCoreWebView2ControllerIid = {0x4d00c0d1, 0x9434, 0x4eb6, {0x80, 0x78, 0x86, 0x97, 0xa5, 0x60, 0x33, 0x4f}};
+static const GUID kCoreWebView2CompositionControllerIid = {0x3df9b733, 0xb9ae, 0x4a15, {0x86, 0xb4, 0xeb, 0x9e, 0xe9, 0x82, 0x64, 0x69}};
+static const GUID kCoreWebView2Settings2Iid = {0xee9a0f68, 0xf46c, 0x4e32, {0xac, 0x23, 0xef, 0x8c, 0xac, 0x22, 0x4d, 0x2a}};
+
+static void webview_add_ref(IUnknown *object) {
+  if (object != nullptr) {
+    webview_method<ULONG(STDMETHODCALLTYPE *)(IUnknown *)>(object, 1)(object);
+  }
+}
+
+static void webview_release(IUnknown *&object) {
+  if (object != nullptr) {
+    webview_method<ULONG(STDMETHODCALLTYPE *)(IUnknown *)>(object, 2)(object);
+    object = nullptr;
+  }
+}
+
+static std::wstring utf8_to_wide(const char *value) {
+  if (value == nullptr || value[0] == '\0') {
+    return {};
+  }
+  int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, nullptr, 0);
+  if (length <= 1) {
+    return {};
+  }
+  std::wstring result(static_cast<size_t>(length), L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, result.data(), length) == 0) {
+    return {};
+  }
+  result.pop_back();
+  return result;
+}
+
+static std::wstring javascript_string(const std::wstring &value) {
+  std::wstring result = L"\"";
+  for (wchar_t character : value) {
+    switch (character) {
+    case L'\\':
+      result += L"\\\\";
+      break;
+    case L'\"':
+      result += L"\\\"";
+      break;
+    case L'\n':
+      result += L"\\n";
+      break;
+    case L'\r':
+      result += L"\\r";
+      break;
+    case L'\t':
+      result += L"\\t";
+      break;
+    default:
+      if (character < 0x20) {
+        wchar_t escape[7] = {};
+        swprintf(escape, 7, L"\\u%04x", static_cast<unsigned int>(character));
+        result += escape;
+      } else {
+        result += character;
+      }
+      break;
+    }
+  }
+  result += L'\"';
+  return result;
+}
+
+static HMODULE load_webview2_loader() {
+  wchar_t configured[MAX_PATH] = {};
+  DWORD configured_length = GetEnvironmentVariableW(L"WOX_WEBVIEW2_LOADER_PATH", configured, MAX_PATH);
+  if (configured_length > 0 && configured_length < MAX_PATH) {
+    HMODULE library = LoadLibraryW(configured);
+    if (library != nullptr) {
+      return library;
+    }
+  }
+  HMODULE library = LoadLibraryW(L"WebView2Loader.dll");
+  if (library != nullptr) {
+    return library;
+  }
+  wchar_t executable[MAX_PATH] = {};
+  DWORD length = GetModuleFileNameW(nullptr, executable, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return nullptr;
+  }
+  wchar_t *separator = wcsrchr(executable, L'\\');
+  if (separator == nullptr) {
+    return nullptr;
+  }
+  *(separator + 1) = L'\0';
+  if (wcslen(executable) + wcslen(L"WebView2Loader.dll") >= MAX_PATH) {
+    return nullptr;
+  }
+  wcscat(executable, L"WebView2Loader.dll");
+  return LoadLibraryW(executable);
+}
+
+static std::wstring webview_user_data_folder() {
+  wchar_t local_app_data[MAX_PATH] = {};
+  DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local_app_data, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return {};
+  }
+  std::wstring parent = std::wstring(local_app_data) + L"\\Wox";
+  CreateDirectoryW(parent.c_str(), nullptr);
+  std::wstring folder = parent + L"\\GoUIWebView2";
+  CreateDirectoryW(folder.c_str(), nullptr);
+  return folder;
+}
+
+struct WoxWindowsWebViewSession {
+  std::string cache_key;
+  std::wstring signature;
+  std::wstring content_key;
+  std::wstring url;
+  std::wstring html;
+  std::wstring user_agent;
+  IUnknown *controller = nullptr;
+  IUnknown *composition_controller = nullptr;
+  void *composition_visual = nullptr;
+  IUnknown *core = nullptr;
+  RECT bounds = {};
+  float corner_radius = 0.0f;
+  bool transient = false;
+  bool controller_pending = false;
+  bool script_pending = false;
+  bool script_ready = false;
+  bool visible = false;
+  bool retired = false;
+  int64_t web_message_token = 0;
+  bool web_message_registered = false;
+  int64_t history_token = 0;
+  bool history_registered = false;
+  int64_t source_token = 0;
+  bool source_registered = false;
+  int64_t accelerator_token = 0;
+  bool accelerator_registered = false;
+  int64_t cursor_changed_token = 0;
+  bool cursor_changed_registered = false;
+  std::wstring loaded_content_key;
+  HRESULT error = S_OK;
+};
+
+struct WoxWindowsWebView;
+
+struct WoxWebViewEnvironmentCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *environment) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewEnvironmentCompletedCallback, 0x4e8a3389, 0xc9d8, 0x4bd2, 0xb6, 0xb5, 0x12, 0x4f, 0xee, 0x6c, 0xc1, 0x4d)
+
+struct WoxWebViewControllerCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *controller) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewControllerCompletedCallback, 0x02fab84b, 0x1428, 0x4fb7, 0xad, 0x45, 0x1b, 0x2e, 0x64, 0x73, 0x61, 0x84)
+
+struct WoxWebViewScriptCompletedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, const wchar_t *script_id) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewScriptCompletedCallback, 0xb99369f3, 0x9b11, 0x47b5, 0xbc, 0x6f, 0x8e, 0x78, 0x95, 0xfc, 0xea, 0x17)
+
+struct WoxWebViewMessageCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewMessageCallback, 0x57213f19, 0x00e6, 0x49fa, 0x8e, 0x07, 0x89, 0x8e, 0xa0, 0x1e, 0xcb, 0xd2)
+
+struct WoxWebViewHistoryChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewHistoryChangedCallback, 0xc79a420c, 0xefd9, 0x4058, 0x92, 0x95, 0x3e, 0x8b, 0x4b, 0xc8, 0x6a, 0xfe)
+
+struct WoxWebViewSourceChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewSourceChangedCallback, 0x3c067f9f, 0x5388, 0x4772, 0x8b, 0x48, 0x67, 0xed, 0x72, 0xc6, 0xbe, 0xcd)
+
+struct WoxWebViewAcceleratorKeyPressedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewAcceleratorKeyPressedCallback, 0xb29c7e28, 0xfa79, 0x41a8, 0x8e, 0x44, 0x65, 0x81, 0x1c, 0x76, 0xdc, 0xb2)
+
+struct WoxWebViewCursorChangedCallback : public IUnknown {
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args) = 0;
+};
+__CRT_UUID_DECL(WoxWebViewCursorChangedCallback, 0x9da43ccc, 0x26e1, 0x4dad, 0xb5, 0x6c, 0xd8, 0x96, 0x1c, 0x94, 0xc5, 0x71)
+
+class WoxEnvironmentCompletedHandler final : public WoxWebViewEnvironmentCompletedCallback {
+public:
+  explicit WoxEnvironmentCompletedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *environment);
+
+private:
+  ~WoxEnvironmentCompletedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxControllerCompletedHandler final : public WoxWebViewControllerCompletedCallback {
+public:
+  WoxControllerCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, IUnknown *controller);
+
+private:
+  ~WoxControllerCompletedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+  WoxWindowsWebViewSession *session_;
+};
+
+class WoxScriptCompletedHandler final : public WoxWebViewScriptCompletedCallback {
+public:
+  WoxScriptCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, const wchar_t *script_id);
+
+private:
+  ~WoxScriptCompletedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+  WoxWindowsWebViewSession *session_;
+};
+
+class WoxWebMessageHandler final : public WoxWebViewMessageCallback {
+public:
+  explicit WoxWebMessageHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxWebMessageHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxHistoryChangedHandler final : public WoxWebViewHistoryChangedCallback {
+public:
+  explicit WoxHistoryChangedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxHistoryChangedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxSourceChangedHandler final : public WoxWebViewSourceChangedCallback {
+public:
+  explicit WoxSourceChangedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxSourceChangedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxAcceleratorKeyPressedHandler final : public WoxWebViewAcceleratorKeyPressedCallback {
+public:
+  explicit WoxAcceleratorKeyPressedHandler(WoxWindowsWebView *owner);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxAcceleratorKeyPressedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+};
+
+class WoxCursorChangedHandler final : public WoxWebViewCursorChangedCallback {
+public:
+  WoxCursorChangedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session);
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override;
+  ULONG STDMETHODCALLTYPE AddRef() override;
+  ULONG STDMETHODCALLTYPE Release() override;
+  virtual HRESULT STDMETHODCALLTYPE Invoke(IUnknown *sender, IUnknown *args);
+
+private:
+  ~WoxCursorChangedHandler() = default;
+  std::atomic<ULONG> references_{1};
+  WoxWindowsWebView *owner_;
+  WoxWindowsWebViewSession *session_;
+};
+
+struct WoxWindowsWebView {
+  using CreateEnvironment = HRESULT(STDAPICALLTYPE *)(const wchar_t *, const wchar_t *, IUnknown *, IUnknown *);
+
+  WoxWindowsWebView(HWND owner_window, WoxRenderer *renderer_handle) : owner(owner_window), renderer(renderer_handle) {}
+
+  void retain() { references.fetch_add(1, std::memory_order_relaxed); }
+
+  void release() {
+    if (references.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      delete this;
+    }
+  }
+
+  HRESULT initialize() {
+    // The loader and environment call can block before WebView2's asynchronous callback.
+    // Record boundaries in the Wox log so an automation timeout identifies the native stage.
+    const ULONGLONG started = GetTickCount64();
+    auto diagnostic = [this, started](const char *stage, HRESULT result) {
+      woxGoWindowsWebViewInitializationDiagnostic(reinterpret_cast<uintptr_t>(owner), stage, GetTickCount64() - started, result);
+    };
+    diagnostic("load-loader-start", S_OK);
+    loader = load_webview2_loader();
+    if (loader == nullptr) {
+      webview_debug("loader missing");
+      diagnostic("load-loader-failed", HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND));
+      return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
+    }
+    diagnostic("load-loader-complete", S_OK);
+    FARPROC procedure = GetProcAddress(loader, "CreateCoreWebView2EnvironmentWithOptions");
+    if (procedure == nullptr) {
+      diagnostic("resolve-create-environment-failed", HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND));
+      return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+    }
+    CreateEnvironment create_environment = nullptr;
+    static_assert(sizeof(create_environment) == sizeof(procedure));
+    std::memcpy(&create_environment, &procedure, sizeof(create_environment));
+    diagnostic("user-data-folder-start", S_OK);
+    std::wstring user_data = webview_user_data_folder();
+    diagnostic("user-data-folder-complete", S_OK);
+    // Set the initial background before controller creation: CSS and the controller property
+    // take effect too late to prevent WebView2's initial white frame. Keep explicit overrides.
+    if (GetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", nullptr, 0) == 0 && !SetEnvironmentVariableW(L"WEBVIEW2_DEFAULT_BACKGROUND_COLOR", L"00000000")) {
+      return HRESULT_FROM_WIN32(GetLastError());
+    }
+    auto *handler = new WoxEnvironmentCompletedHandler(this);
+    diagnostic("create-environment-start", S_OK);
+    HRESULT result = create_environment(nullptr, user_data.empty() ? nullptr : user_data.c_str(), nullptr, handler);
+    diagnostic("create-environment-returned", result);
+    webview_debug("create environment returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    return result;
+  }
+
+  void environment_completed(HRESULT result, IUnknown *created_environment) {
+    webview_debug("environment completed 0x%08X environment=%p", static_cast<unsigned int>(result), created_environment);
+    if (closing) {
+      return;
+    }
+    if (FAILED(result) || created_environment == nullptr) {
+      fatal_error = FAILED(result) ? result : E_FAIL;
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    environment = created_environment;
+    webview_add_ref(environment);
+    result = environment->QueryInterface(kCoreWebView2Environment3Iid, reinterpret_cast<void **>(&environment3));
+    if (FAILED(result) || environment3 == nullptr) {
+      fatal_error = FAILED(result) ? result : E_NOINTERFACE;
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    if (active != nullptr) {
+      create_controller(active);
+    }
+    InvalidateRect(owner, nullptr, FALSE);
+  }
+
+  void create_controller(WoxWindowsWebViewSession *session) {
+    if (environment3 == nullptr || session == nullptr || session->controller != nullptr || session->controller_pending || session->retired) {
+      return;
+    }
+    session->controller_pending = true;
+    auto *handler = new WoxControllerCompletedHandler(this, session);
+    using CreateController = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, HWND, IUnknown *);
+    HRESULT result = webview_method<CreateController>(environment3, kEnvironment3CreateCompositionControllerMethod)(environment3, owner, handler);
+    webview_debug("create composition controller returned 0x%08X session=%p", static_cast<unsigned int>(result), session);
+    handler->Release();
+    if (FAILED(result)) {
+      session->controller_pending = false;
+      session->error = result;
+      InvalidateRect(owner, nullptr, FALSE);
+    }
+  }
+
+  void controller_completed(WoxWindowsWebViewSession *session, HRESULT result, IUnknown *created_controller) {
+    webview_debug("controller completed 0x%08X session=%p controller=%p", static_cast<unsigned int>(result), session, created_controller);
+    session->controller_pending = false;
+    if (closing || session->retired) {
+      if (created_controller != nullptr) {
+        IUnknown *controller = nullptr;
+        using Close = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+        if (SUCCEEDED(created_controller->QueryInterface(kCoreWebView2ControllerIid, reinterpret_cast<void **>(&controller))) && controller != nullptr) {
+          webview_method<Close>(controller, 24)(controller);
+          controller->Release();
+        }
+      }
+      return;
+    }
+    if (FAILED(result) || created_controller == nullptr) {
+      session->error = FAILED(result) ? result : E_FAIL;
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    result = created_controller->QueryInterface(kCoreWebView2CompositionControllerIid, reinterpret_cast<void **>(&session->composition_controller));
+    if (FAILED(result) || session->composition_controller == nullptr) {
+      session->error = FAILED(result) ? result : E_NOINTERFACE;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    result = session->composition_controller->QueryInterface(kCoreWebView2ControllerIid, reinterpret_cast<void **>(&session->controller));
+    if (FAILED(result) || session->controller == nullptr) {
+      session->error = FAILED(result) ? result : E_NOINTERFACE;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    register_cursor_changed_handler(session);
+    void *root_visual_target = nullptr;
+    result = wox_renderer_create_webview_visual(renderer, &session->composition_visual, &root_visual_target);
+    if (SUCCEEDED(result)) {
+      using PutRootVisualTarget = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
+      result = webview_method<PutRootVisualTarget>(session->composition_controller, kCompositionControllerPutRootVisualTargetMethod)(session->composition_controller, static_cast<IUnknown *>(root_visual_target));
+    }
+    if (FAILED(result)) {
+      session->error = result;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    using GetCore = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown **);
+    result = webview_method<GetCore>(session->controller, 25)(session->controller, &session->core);
+    webview_debug("get core returned 0x%08X core=%p", static_cast<unsigned int>(result), session->core);
+    if (FAILED(result) || session->core == nullptr) {
+      session->error = FAILED(result) ? result : E_FAIL;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    result = configure_user_agent(session);
+    if (FAILED(result)) {
+      session->error = result;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    register_message_handler(session);
+    register_navigation_handlers(session);
+    register_accelerator_handler(session);
+    if (!session->retired) {
+      configure_script(session);
+    }
+  }
+
+  // configure_user_agent applies only explicit overrides so WebView2 can keep its installed desktop identity by default.
+  HRESULT configure_user_agent(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->core == nullptr || session->user_agent.empty()) {
+      return S_OK;
+    }
+    IUnknown *settings = nullptr;
+    using GetSettings = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown **);
+    HRESULT result = webview_method<GetSettings>(session->core, 3)(session->core, &settings);
+    if (FAILED(result) || settings == nullptr) {
+      webview_release(settings);
+      return FAILED(result) ? result : E_NOINTERFACE;
+    }
+    IUnknown *settings2 = nullptr;
+    result = settings->QueryInterface(kCoreWebView2Settings2Iid, reinterpret_cast<void **>(&settings2));
+    webview_release(settings);
+    if (FAILED(result) || settings2 == nullptr) {
+      webview_release(settings2);
+      return FAILED(result) ? result : E_NOINTERFACE;
+    }
+    using PutUserAgent = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *);
+    result = webview_method<PutUserAgent>(settings2, kSettings2PutUserAgentMethod)(settings2, session->user_agent.c_str());
+    webview_release(settings2);
+    return result;
+  }
+
+  void register_message_handler(WoxWindowsWebViewSession *session) {
+    auto *handler = new WoxWebMessageHandler(this);
+    using AddWebMessageHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    HRESULT result = webview_method<AddWebMessageHandler>(session->core, 34)(session->core, handler, &session->web_message_token);
+    webview_debug("add web message handler returned 0x%08X token=%lld", static_cast<unsigned int>(result), static_cast<long long>(session->web_message_token));
+    handler->Release();
+    if (FAILED(result)) {
+      session->error = result;
+      dispose_session(session);
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    session->web_message_registered = true;
+  }
+
+  void register_navigation_handlers(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->core == nullptr || session->retired) {
+      return;
+    }
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    if (!session->history_registered) {
+      auto *handler = new WoxHistoryChangedHandler(this);
+      HRESULT result = webview_method<AddHandler>(session->core, 13)(session->core, handler, &session->history_token);
+      webview_debug("add history changed handler returned 0x%08X", static_cast<unsigned int>(result));
+      handler->Release();
+      if (SUCCEEDED(result)) {
+        session->history_registered = true;
+      }
+    }
+    if (!session->source_registered) {
+      auto *handler = new WoxSourceChangedHandler(this);
+      HRESULT result = webview_method<AddHandler>(session->core, 11)(session->core, handler, &session->source_token);
+      webview_debug("add source changed handler returned 0x%08X", static_cast<unsigned int>(result));
+      handler->Release();
+      if (SUCCEEDED(result)) {
+        session->source_registered = true;
+      }
+    }
+    notify_navigation_changed(session);
+  }
+
+  void register_accelerator_handler(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->controller == nullptr || session->retired || session->accelerator_registered) {
+      return;
+    }
+    auto *handler = new WoxAcceleratorKeyPressedHandler(this);
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    HRESULT result = webview_method<AddHandler>(session->controller, 19)(session->controller, handler, &session->accelerator_token);
+    webview_debug("add accelerator handler returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    if (SUCCEEDED(result)) {
+      session->accelerator_registered = true;
+    }
+  }
+
+  // Composition-hosted WebView2 surfaces rely on the owner HWND to apply the cursor selected by page hit testing.
+  void register_cursor_changed_handler(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->composition_controller == nullptr || session->retired || session->cursor_changed_registered) {
+      return;
+    }
+    auto *handler = new WoxCursorChangedHandler(this, session);
+    using AddHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *, int64_t *);
+    HRESULT result = webview_method<AddHandler>(session->composition_controller, kCompositionControllerAddCursorChangedMethod)(session->composition_controller, handler, &session->cursor_changed_token);
+    webview_debug("add cursor changed handler returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    if (SUCCEEDED(result)) {
+      session->cursor_changed_registered = true;
+    }
+  }
+
+  // cursor_changed preserves WebView2's HCURSOR, including custom CSS cursors, for subsequent WM_SETCURSOR messages.
+  void cursor_changed(WoxWindowsWebViewSession *session, IUnknown *composition_controller) {
+    if (closing || session == nullptr || active != session || !session->visible || composition_controller == nullptr) {
+      return;
+    }
+    HCURSOR cursor = nullptr;
+    using GetCursor = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, HCURSOR *);
+    HRESULT result = webview_method<GetCursor>(composition_controller, kCompositionControllerGetCursorMethod)(composition_controller, &cursor);
+    if (SUCCEEDED(result)) {
+      woxGoWindowsWebViewCursorChanged(reinterpret_cast<uintptr_t>(owner), reinterpret_cast<uintptr_t>(cursor));
+    }
+  }
+
+  void accelerator_key_pressed(IUnknown *args) {
+    if (closing || args == nullptr) {
+      return;
+    }
+    int32_t kind = 0;
+    uint32_t virtual_key = 0;
+    using GetInt32 = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t *);
+    using GetUInt32 = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, uint32_t *);
+    HRESULT kind_result = webview_method<GetInt32>(args, 3)(args, &kind);
+    HRESULT key_result = webview_method<GetUInt32>(args, 4)(args, &virtual_key);
+    if (FAILED(kind_result) || FAILED(key_result) || kind != 0) {
+      return;
+    }
+    const bool no_alt_shift = (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
+    const bool control = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    uint8_t modifiers = 0;
+    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
+      modifiers |= 1 << 0;
+    }
+    if (control) {
+      modifiers |= 1 << 1;
+    }
+    if ((GetKeyState(VK_MENU) & 0x8000) != 0) {
+      modifiers |= 1 << 2;
+    }
+    if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0) {
+      modifiers |= 1 << 3;
+    }
+    // Window commands take precedence over a configurable Action Hotkey.
+    const bool window_hotkey = modifiers == (1 << 1) && (virtual_key == VK_OEM_COMMA || virtual_key == 'W');
+    const bool action_hotkey = !window_hotkey && woxGoWindowsWebViewActionHotkeyMatches(reinterpret_cast<uintptr_t>(owner), virtual_key, modifiers) != 0;
+    const char *reserved_key = nullptr;
+    if (window_hotkey) {
+      reserved_key = virtual_key == 'W' ? "w" : ",";
+    } else if (!action_hotkey && control && no_alt_shift) {
+      if (virtual_key == 'R') {
+        reserved_key = "r";
+      } else if (virtual_key == 'O') {
+        reserved_key = "o";
+      } else if (virtual_key == VK_OEM_4) {
+        reserved_key = "[";
+      } else if (virtual_key == VK_OEM_6) {
+        reserved_key = "]";
+      }
+    }
+    // Programmatic page focus is launcher chrome: Google-like pages mutate on Escape and
+    // the document script then treats it as page-owned, so the query box never comes back.
+    const bool host_escape = reserve_host_escape && virtual_key == VK_ESCAPE && !control && no_alt_shift;
+    if (!action_hotkey && reserved_key == nullptr && !host_escape) {
+      return;
+    }
+    using PutHandled = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
+    webview_method<PutHandled>(args, 8)(args, TRUE);
+    if (window_hotkey) {
+      int32_t key_lparam = 0;
+      if (SUCCEEDED(webview_method<GetInt32>(args, 5)(args, &key_lparam)) && (static_cast<uint32_t>(key_lparam) & (1u << 30)) != 0) {
+        return;
+      }
+    }
+    // Navigation shortcuts keep page focus; Action Hotkey and Escape return to the host.
+    if (action_hotkey || host_escape) {
+      SetFocus(owner);
+    }
+    if (action_hotkey) {
+      woxGoWindowsWebViewActionHotkey(reinterpret_cast<uintptr_t>(owner));
+      return;
+    }
+    if (reserved_key != nullptr) {
+      woxGoWindowsWebViewReservedHotkey(reinterpret_cast<uintptr_t>(owner), reserved_key);
+      return;
+    }
+    woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), "host-reserved-escape");
+    woxGoWindowsWebViewEscape(reinterpret_cast<uintptr_t>(owner));
+  }
+
+  void notify_navigation_changed(WoxWindowsWebViewSession *session) {
+    if (closing || session == nullptr || session->core == nullptr || session != active) {
+      return;
+    }
+    wchar_t *source = nullptr;
+    using GetSource = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    webview_method<GetSource>(session->core, 4)(session->core, &source);
+    BOOL can_go_back = FALSE;
+    BOOL can_go_forward = FALSE;
+    using GetBool = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL *);
+    webview_method<GetBool>(session->core, 38)(session->core, &can_go_back);
+    webview_method<GetBool>(session->core, 39)(session->core, &can_go_forward);
+    std::string utf8 = wide_to_utf8(source != nullptr ? source : L"");
+    if (source != nullptr) {
+      CoTaskMemFree(source);
+    }
+    woxGoWindowsWebViewNavigationChanged(reinterpret_cast<uintptr_t>(owner), utf8.c_str(), can_go_back ? 1 : 0, can_go_forward ? 1 : 0);
+  }
+
+  HRESULT go_back() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using GoBack = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<GoBack>(active->core, 40)(active->core);
+  }
+
+  HRESULT go_forward() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using GoForward = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<GoForward>(active->core, 41)(active->core);
+  }
+
+  HRESULT reload() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    using Reload = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<Reload>(active->core, 31)(active->core);
+  }
+
+  HRESULT open_dev_tools() {
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    // OpenDevToolsWindow is slot 51 on the stable base ICoreWebView2 interface.
+    using OpenDevToolsWindow = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+    return webview_method<OpenDevToolsWindow>(active->core, 51)(active->core);
+  }
+
+  HRESULT navigation_state(char **url, int32_t *can_go_back, int32_t *can_go_forward) {
+    if (url == nullptr || can_go_back == nullptr || can_go_forward == nullptr) {
+      return E_INVALIDARG;
+    }
+    *url = nullptr;
+    *can_go_back = 0;
+    *can_go_forward = 0;
+    if (active == nullptr || active->core == nullptr) {
+      return E_FAIL;
+    }
+    wchar_t *source = nullptr;
+    using GetSource = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    HRESULT result = webview_method<GetSource>(active->core, 4)(active->core, &source);
+    if (FAILED(result)) {
+      return result;
+    }
+    std::string utf8 = wide_to_utf8(source != nullptr ? source : L"");
+    if (source != nullptr) {
+      CoTaskMemFree(source);
+    }
+    *url = static_cast<char *>(std::malloc(utf8.size() + 1));
+    if (*url == nullptr) {
+      return E_OUTOFMEMORY;
+    }
+    std::memcpy(*url, utf8.c_str(), utf8.size() + 1);
+    BOOL back = FALSE;
+    BOOL forward = FALSE;
+    using GetBool = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL *);
+    webview_method<GetBool>(active->core, 38)(active->core, &back);
+    webview_method<GetBool>(active->core, 39)(active->core, &forward);
+    *can_go_back = back ? 1 : 0;
+    *can_go_forward = forward ? 1 : 0;
+    return S_OK;
+  }
+
+  HRESULT pointer(int32_t kind, POINT point, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers) {
+    if (active == nullptr || active->controller == nullptr || active->composition_controller == nullptr || !active->visible) {
+      return E_FAIL;
+    }
+    uint32_t virtual_keys = 0;
+    if ((modifiers & 1) != 0) virtual_keys |= 0x0004;
+    if ((modifiers & 2) != 0) virtual_keys |= 0x0008;
+    if ((GetKeyState(VK_LBUTTON) & 0x8000) != 0) virtual_keys |= 0x0001;
+    if ((GetKeyState(VK_RBUTTON) & 0x8000) != 0) virtual_keys |= 0x0002;
+    if ((GetKeyState(VK_MBUTTON) & 0x8000) != 0) virtual_keys |= 0x0010;
+
+    uint32_t event_kind = 0x0200;
+    uint32_t mouse_data = 0;
+    if (kind == 2) {
+      event_kind = 0x02A3;
+      virtual_keys = 0;
+      point = {};
+    } else if (kind == 3 || kind == 4) {
+      const bool down = kind == 3;
+      if (button == 1) event_kind = down ? 0x0201 : 0x0202;
+      if (button == 2) event_kind = down ? 0x0204 : 0x0205;
+      if (button == 3) event_kind = down ? 0x0207 : 0x0208;
+      if (down) {
+        move_keyboard_focus();
+      }
+    } else if (kind == 5) {
+      event_kind = scroll_x != 0 ? 0x020E : 0x020A;
+      const int32_t wheel_delta = scroll_x != 0 ? scroll_x : scroll_y;
+      // SendMouseInput takes the signed wheel delta itself, not WM_MOUSEWHEEL's packed wParam.
+      mouse_data = static_cast<uint32_t>(wheel_delta);
+    }
+    using SendMouseInput = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, uint32_t, uint32_t, uint32_t, POINT);
+    return webview_method<SendMouseInput>(active->composition_controller, kCompositionControllerSendMouseInputMethod)(active->composition_controller, event_kind, virtual_keys, mouse_data, point);
+  }
+
+  void web_message_received(IUnknown *args) {
+    if (closing || args == nullptr) {
+      return;
+    }
+    wchar_t *message = nullptr;
+    using TryGetString = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, wchar_t **);
+    HRESULT result = webview_method<TryGetString>(args, 5)(args, &message);
+    webview_debug("web message received 0x%08X value=%ls", static_cast<unsigned int>(result), message != nullptr ? message : L"");
+    constexpr wchar_t escape_diagnostic_prefix[] = L"wox-escape-diagnostic:";
+    constexpr size_t escape_diagnostic_prefix_length = (sizeof(escape_diagnostic_prefix) / sizeof(wchar_t)) - 1;
+    if (SUCCEEDED(result) && message != nullptr && wcsncmp(message, escape_diagnostic_prefix, escape_diagnostic_prefix_length) == 0) {
+      std::string detail = wide_to_utf8(message + escape_diagnostic_prefix_length);
+      woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), detail.c_str());
+    } else if (SUCCEEDED(result) && message != nullptr && wcscmp(message, L"wox-unhandled-escape") == 0) {
+      // The Go Host can choose the next logical focus owner only after the native WebView releases keyboard focus.
+      SetFocus(owner);
+      woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), GetFocus() == owner ? "native-focus-restored" : "native-focus-missing");
+      woxGoWindowsWebViewEscape(reinterpret_cast<uintptr_t>(owner));
+    }
+    if (message != nullptr) {
+      CoTaskMemFree(message);
+    }
+  }
+
+  void configure_script(WoxWindowsWebViewSession *session) {
+    // WebView2 runs document-created scripts before HTML parsing, so attach CSS as soon as the parser creates a root node.
+    // Global page routers may always prevent Escape, so only an observable page transition claims it.
+    std::wstring script = L"(()=>{const c=" + javascript_string(session->signature) +
+                          L";if(c){const apply=()=>{const root=document.head||document.documentElement;if(!root)return false;let s=document.getElementById('wox-webview-preview-style');if(!s){s=document.createElement('style');s.id='wox-webview-preview-style';root.appendChild(s)}s.textContent=c;return true};if(!apply()){const observer=new MutationObserver(()=>{if(apply())observer.disconnect()});observer.observe(document,{childList:true})}}"
+                          L"if(window.__woxUnhandledEscapeInstalled__)return;window.__woxUnhandledEscapeInstalled__=true;document.addEventListener('keydown',e=>{if(e.key!=='Escape'||e.repeat)return;const f=document.activeElement;const d=n=>!n?'none':(n.tagName||'node').toLowerCase()+(n.type?'[type='+n.type+']':'');let m=false;const o=new MutationObserver(()=>{m=true});if(document.documentElement)o.observe(document.documentElement,{attributes:true,childList:true,characterData:true,subtree:true});setTimeout(()=>{o.disconnect();const a=document.activeElement;const r=(f&&f!==a)?'page-focus-changed':m?'page-dom-changed':e.defaultPrevented?'page-prevented-no-change-forwarded':'page-forwarded';window.chrome.webview.postMessage('wox-escape-diagnostic:'+r+' before='+d(f)+' after='+d(a));if(r==='page-forwarded'||r==='page-prevented-no-change-forwarded')window.chrome.webview.postMessage('wox-unhandled-escape')},0)},true)})()";
+    session->script_pending = true;
+    auto *handler = new WoxScriptCompletedHandler(this, session);
+    using AddScript = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *, IUnknown *);
+    HRESULT result = webview_method<AddScript>(session->core, 27)(session->core, script.c_str(), handler);
+    webview_debug("add startup script returned 0x%08X", static_cast<unsigned int>(result));
+    handler->Release();
+    if (FAILED(result)) {
+      session->script_pending = false;
+      session->error = result;
+      InvalidateRect(owner, nullptr, FALSE);
+    }
+  }
+
+  void script_completed(WoxWindowsWebViewSession *session, HRESULT result) {
+    webview_debug("startup script completed 0x%08X session=%p", static_cast<unsigned int>(result), session);
+    session->script_pending = false;
+    if (closing || session->retired) {
+      return;
+    }
+    if (FAILED(result)) {
+      session->error = result;
+      InvalidateRect(owner, nullptr, FALSE);
+      return;
+    }
+    session->script_ready = true;
+    apply_session(session);
+  }
+
+  void apply_session(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->controller == nullptr || session->core == nullptr || !session->script_ready || session->retired || FAILED(session->error)) {
+      return;
+    }
+    using PutBounds = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, RECT);
+    using PutVisible = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
+    RECT local_bounds = {0, 0, session->bounds.right - session->bounds.left, session->bounds.bottom - session->bounds.top};
+    HRESULT result = webview_method<PutBounds>(session->controller, 6)(session->controller, local_bounds);
+    if (SUCCEEDED(result)) {
+      result = wox_renderer_set_webview_visual_bounds(renderer, session->composition_visual, static_cast<float>(session->bounds.left), static_cast<float>(session->bounds.top), static_cast<float>(local_bounds.right), static_cast<float>(local_bounds.bottom), session->corner_radius);
+    }
+    if (SUCCEEDED(result)) {
+      result = webview_method<PutVisible>(session->controller, 4)(session->controller, session->visible ? TRUE : FALSE);
+    }
+    webview_debug("apply bounds/visibility returned 0x%08X visible=%d", static_cast<unsigned int>(result), session->visible ? 1 : 0);
+    if (FAILED(result)) {
+      session->error = result;
+      return;
+    }
+    if (session->visible) {
+      apply_keyboard_focus();
+    }
+    if (!session->visible || session->loaded_content_key == session->content_key) {
+      return;
+    }
+    using Navigate = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *);
+    if (!session->html.empty()) {
+      result = webview_method<Navigate>(session->core, 6)(session->core, session->html.c_str());
+      webview_debug("navigate HTML returned 0x%08X chars=%zu", static_cast<unsigned int>(result), session->html.size());
+    } else {
+      result = webview_method<Navigate>(session->core, 5)(session->core, session->url.c_str());
+      webview_debug("navigate URL returned 0x%08X", static_cast<unsigned int>(result));
+    }
+    if (SUCCEEDED(result)) {
+      session->loaded_content_key = session->content_key;
+      notify_navigation_changed(session);
+    } else {
+      session->error = result;
+    }
+  }
+
+  void set_visible(WoxWindowsWebViewSession *session, bool visible) {
+    if (session == nullptr || session->retired) {
+      return;
+    }
+    session->visible = visible;
+    apply_session(session);
+  }
+
+  void dispose_session(WoxWindowsWebViewSession *session) {
+    if (session == nullptr || session->retired) {
+      return;
+    }
+    session->retired = true;
+    session->visible = false;
+    if (session->core != nullptr) {
+      using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+      if (session->history_registered) {
+        webview_method<RemoveHandler>(session->core, 14)(session->core, session->history_token);
+        session->history_registered = false;
+      }
+      if (session->source_registered) {
+        webview_method<RemoveHandler>(session->core, 12)(session->core, session->source_token);
+        session->source_registered = false;
+      }
+      if (session->web_message_registered) {
+        webview_method<RemoveHandler>(session->core, 35)(session->core, session->web_message_token);
+        session->web_message_registered = false;
+      }
+    }
+    if (session->controller != nullptr) {
+      using PutVisible = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, BOOL);
+      using Close = HRESULT(STDMETHODCALLTYPE *)(IUnknown *);
+      if (session->accelerator_registered) {
+        using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+        webview_method<RemoveHandler>(session->controller, 20)(session->controller, session->accelerator_token);
+        session->accelerator_registered = false;
+      }
+      webview_method<PutVisible>(session->controller, 4)(session->controller, FALSE);
+      webview_method<Close>(session->controller, 24)(session->controller);
+    }
+    if (session->composition_controller != nullptr) {
+      if (session->cursor_changed_registered) {
+        using RemoveHandler = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int64_t);
+        webview_method<RemoveHandler>(session->composition_controller, kCompositionControllerRemoveCursorChangedMethod)(session->composition_controller, session->cursor_changed_token);
+        session->cursor_changed_registered = false;
+      }
+      using PutRootVisualTarget = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
+      webview_method<PutRootVisualTarget>(session->composition_controller, kCompositionControllerPutRootVisualTargetMethod)(session->composition_controller, nullptr);
+    }
+    if (session->composition_visual != nullptr) {
+      wox_renderer_remove_webview_visual(renderer, session->composition_visual);
+      session->composition_visual = nullptr;
+    }
+    webview_release(session->core);
+    webview_release(session->controller);
+    webview_release(session->composition_controller);
+    // Retired shells stay valid for late creation callbacks, but must not retain HTML payloads.
+    std::string().swap(session->cache_key);
+    std::wstring().swap(session->signature);
+    std::wstring().swap(session->content_key);
+    std::wstring().swap(session->loaded_content_key);
+    std::wstring().swap(session->url);
+    std::wstring().swap(session->html);
+    std::wstring().swap(session->user_agent);
+  }
+
+  // evict removes only an inactive cached page, never the currently displayed browser.
+  HRESULT evict(const char *cache_key) {
+    auto cached = cache.find(cache_key);
+    if (cached == cache.end()) {
+      return S_OK;
+    }
+    if (cached->second == active) {
+      return E_UNEXPECTED;
+    }
+    dispose_session(cached->second);
+    cache.erase(cached);
+    // Let the driver release the environment as well when no browser still needs it.
+    return active == nullptr && cache.empty() ? S_FALSE : S_OK;
+  }
+
+  HRESULT show(const char *url, const char *html, const char *inject_css, const char *user_agent, bool cache_disabled, const char *cache_key, RECT bounds, float corner_radius) {
+    if (closing) {
+      return E_FAIL;
+    }
+    if (FAILED(fatal_error)) {
+      return fatal_error;
+    }
+    std::wstring wide_url = utf8_to_wide(url);
+    std::wstring wide_html = utf8_to_wide(html);
+    std::wstring signature = utf8_to_wide(inject_css);
+    std::wstring wide_user_agent = utf8_to_wide(user_agent);
+    std::wstring content_key = (wide_html.empty() ? L"url|" + wide_url : L"html|" + wide_html);
+    std::string key = cache_key != nullptr ? cache_key : "";
+    bool use_cache = !cache_disabled && !key.empty();
+    WoxWindowsWebViewSession *session = nullptr;
+    if (use_cache) {
+      auto cached = cache.find(key);
+      if (cached != cache.end() && !cached->second->retired && cached->second->signature == signature && cached->second->user_agent == wide_user_agent) {
+        session = cached->second;
+      } else {
+        if (cached != cache.end()) {
+          dispose_session(cached->second);
+        }
+        session = new_session(key, signature, wide_user_agent, false);
+        cache[key] = session;
+      }
+    } else if (active != nullptr && active->transient && !active->retired && active->signature == signature && active->user_agent == wide_user_agent && active->content_key == content_key) {
+      session = active;
+    } else {
+      session = new_session({}, signature, wide_user_agent, true);
+    }
+    if (active != session) {
+      if (active != nullptr) {
+        if (active->transient) {
+          dispose_session(active);
+        } else {
+          set_visible(active, false);
+        }
+      }
+      active = session;
+    }
+    session->url = std::move(wide_url);
+    session->html = std::move(wide_html);
+    if (session->content_key != content_key) {
+      // A changed document gets a fresh navigation attempt even if the previous one failed.
+      session->error = S_OK;
+    }
+    session->content_key = std::move(content_key);
+    session->bounds = bounds;
+    session->corner_radius = corner_radius;
+    session->visible = true;
+    if (environment != nullptr) {
+      create_controller(session);
+      apply_session(session);
+    }
+    return session->error;
+  }
+
+  // Composition-hosted WebView2 only receives keyboard after MoveFocus. Clicks already
+  // do this; a programmatic preview open must queue the same handoff until the controller exists.
+  HRESULT focus() {
+    if (closing) {
+      return E_FAIL;
+    }
+    pending_keyboard_focus = true;
+    reserve_host_escape = true;
+    apply_keyboard_focus();
+    return S_OK;
+  }
+
+  void apply_keyboard_focus() {
+    if (!pending_keyboard_focus || active == nullptr || active->controller == nullptr || !active->visible) {
+      return;
+    }
+    move_keyboard_focus();
+    pending_keyboard_focus = false;
+  }
+
+  void move_keyboard_focus() {
+    if (active == nullptr || active->controller == nullptr) {
+      return;
+    }
+    using MoveFocus = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, int32_t);
+    webview_method<MoveFocus>(active->controller, kControllerMoveFocusMethod)(active->controller, 0);
+  }
+
+  HRESULT hide() {
+    pending_keyboard_focus = false;
+    reserve_host_escape = false;
+    if (active == nullptr) {
+      return S_OK;
+    }
+    if (active->transient) {
+      dispose_session(active);
+    } else {
+      set_visible(active, false);
+    }
+    active = nullptr;
+    return S_OK;
+  }
+
+  void close() {
+    if (closing) {
+      return;
+    }
+    closing = true;
+    active = nullptr;
+    for (const auto &session : sessions) {
+      dispose_session(session.get());
+    }
+    cache.clear();
+    webview_release(environment3);
+    webview_release(environment);
+  }
+
+  WoxWindowsWebViewSession *new_session(std::string key, std::wstring signature, std::wstring user_agent, bool transient) {
+    auto session = std::make_unique<WoxWindowsWebViewSession>();
+    session->cache_key = std::move(key);
+    session->signature = std::move(signature);
+    session->user_agent = std::move(user_agent);
+    session->transient = transient;
+    WoxWindowsWebViewSession *value = session.get();
+    sessions.push_back(std::move(session));
+    return value;
+  }
+
+  ~WoxWindowsWebView() {
+    close();
+    if (loader != nullptr) {
+      FreeLibrary(loader);
+    }
+  }
+
+  std::atomic<ULONG> references{1};
+  HWND owner;
+  WoxRenderer *renderer;
+  HMODULE loader = nullptr;
+  IUnknown *environment = nullptr;
+  IUnknown *environment3 = nullptr;
+  std::vector<std::unique_ptr<WoxWindowsWebViewSession>> sessions;
+  std::unordered_map<std::string, WoxWindowsWebViewSession *> cache;
+  WoxWindowsWebViewSession *active = nullptr;
+  HRESULT fatal_error = S_OK;
+  bool closing = false;
+  bool pending_keyboard_focus = false;
+  bool reserve_host_escape = false;
+};
+
+static HRESULT callback_query_interface(IUnknown *self, REFIID iid, REFIID supported_iid, void **object) {
+  if (object == nullptr) {
+    return E_POINTER;
+  }
+  *object = nullptr;
+  if (!IsEqualIID(iid, IID_IUnknown) && !IsEqualIID(iid, supported_iid)) {
+    return E_NOINTERFACE;
+  }
+  *object = self;
+  webview_add_ref(self);
+  return S_OK;
+}
+
+WoxEnvironmentCompletedHandler::WoxEnvironmentCompletedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxEnvironmentCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewEnvironmentCompletedCallback), object); }
+ULONG WoxEnvironmentCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxEnvironmentCompletedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxEnvironmentCompletedHandler::Invoke(HRESULT error, IUnknown *environment) {
+  owner_->environment_completed(error, environment);
+  return S_OK;
+}
+
+WoxControllerCompletedHandler::WoxControllerCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
+HRESULT WoxControllerCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewControllerCompletedCallback), object); }
+ULONG WoxControllerCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxControllerCompletedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxControllerCompletedHandler::Invoke(HRESULT error, IUnknown *controller) {
+  owner_->controller_completed(session_, error, controller);
+  return S_OK;
+}
+
+WoxScriptCompletedHandler::WoxScriptCompletedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
+HRESULT WoxScriptCompletedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewScriptCompletedCallback), object); }
+ULONG WoxScriptCompletedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxScriptCompletedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxScriptCompletedHandler::Invoke(HRESULT error, const wchar_t *) {
+  owner_->script_completed(session_, error);
+  return S_OK;
+}
+
+WoxWebMessageHandler::WoxWebMessageHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxWebMessageHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewMessageCallback), object); }
+ULONG WoxWebMessageHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxWebMessageHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxWebMessageHandler::Invoke(IUnknown *, IUnknown *args) {
+  owner_->web_message_received(args);
+  return S_OK;
+}
+
+WoxHistoryChangedHandler::WoxHistoryChangedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxHistoryChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewHistoryChangedCallback), object); }
+ULONG WoxHistoryChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxHistoryChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxHistoryChangedHandler::Invoke(IUnknown *, IUnknown *) {
+  if (owner_->active != nullptr) {
+    owner_->notify_navigation_changed(owner_->active);
+  }
+  return S_OK;
+}
+
+WoxSourceChangedHandler::WoxSourceChangedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxSourceChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewSourceChangedCallback), object); }
+ULONG WoxSourceChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxSourceChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxSourceChangedHandler::Invoke(IUnknown *, IUnknown *) {
+  if (owner_->active != nullptr) {
+    owner_->notify_navigation_changed(owner_->active);
+  }
+  return S_OK;
+}
+
+WoxAcceleratorKeyPressedHandler::WoxAcceleratorKeyPressedHandler(WoxWindowsWebView *owner) : owner_(owner) { owner_->retain(); }
+HRESULT WoxAcceleratorKeyPressedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewAcceleratorKeyPressedCallback), object); }
+ULONG WoxAcceleratorKeyPressedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxAcceleratorKeyPressedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxAcceleratorKeyPressedHandler::Invoke(IUnknown *, IUnknown *args) {
+  owner_->accelerator_key_pressed(args);
+  return S_OK;
+}
+
+extern "C" int32_t wox_windows_save_file(uintptr_t owner, const char *title, const char *default_name, const char *extension, char **path) {
+  if (owner == 0 || path == nullptr) {
+    return E_INVALIDARG;
+  }
+  *path = nullptr;
+
+  IFileSaveDialog *dialog = nullptr;
+  HRESULT result = CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+  if (FAILED(result)) {
+    return result;
+  }
+  FILEOPENDIALOGOPTIONS options = 0;
+  if (SUCCEEDED(dialog->GetOptions(&options))) {
+    result = dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | FOS_OVERWRITEPROMPT);
+  }
+  const std::wstring native_title = utf8_to_wide(title);
+  const std::wstring native_name = utf8_to_wide(default_name);
+  const std::wstring native_extension = utf8_to_wide(extension);
+  if (SUCCEEDED(result) && !native_title.empty()) {
+    result = dialog->SetTitle(native_title.c_str());
+  }
+  if (SUCCEEDED(result) && !native_name.empty()) {
+    result = dialog->SetFileName(native_name.c_str());
+  }
+  if (SUCCEEDED(result) && !native_extension.empty()) {
+    const std::wstring filter_name = native_extension + L" file";
+    const std::wstring filter_pattern = L"*." + native_extension;
+    COMDLG_FILTERSPEC filter = {filter_name.c_str(), filter_pattern.c_str()};
+    result = dialog->SetFileTypes(1, &filter);
+    if (SUCCEEDED(result)) {
+      result = dialog->SetDefaultExtension(native_extension.c_str());
+    }
+  }
+  if (SUCCEEDED(result)) {
+    result = show_file_dialog(dialog, reinterpret_cast<HWND>(owner));
+  }
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    dialog->Release();
+    return 1;
+  }
+
+  IShellItem *item = nullptr;
+  if (SUCCEEDED(result)) {
+    result = dialog->GetResult(&item);
+  }
+  PWSTR native_path = nullptr;
+  if (SUCCEEDED(result)) {
+    result = item->GetDisplayName(SIGDN_FILESYSPATH, &native_path);
+  }
+  std::string utf8_path;
+  if (SUCCEEDED(result)) {
+    utf8_path = wide_to_utf8(native_path);
+    if (utf8_path.empty()) {
+      result = E_FAIL;
+    }
+  }
+  if (native_path != nullptr) {
+    CoTaskMemFree(native_path);
+  }
+  if (item != nullptr) {
+    item->Release();
+  }
+  dialog->Release();
+  if (FAILED(result)) {
+    return result;
+  }
+  *path = static_cast<char *>(std::malloc(utf8_path.size() + 1));
+  if (*path == nullptr) {
+    return E_OUTOFMEMORY;
+  }
+  std::memcpy(*path, utf8_path.c_str(), utf8_path.size() + 1);
+  return 0;
+}
+
+WoxCursorChangedHandler::WoxCursorChangedHandler(WoxWindowsWebView *owner, WoxWindowsWebViewSession *session) : owner_(owner), session_(session) { owner_->retain(); }
+HRESULT WoxCursorChangedHandler::QueryInterface(REFIID iid, void **object) { return callback_query_interface(this, iid, __uuidof(WoxWebViewCursorChangedCallback), object); }
+ULONG WoxCursorChangedHandler::AddRef() { return references_.fetch_add(1) + 1; }
+ULONG WoxCursorChangedHandler::Release() {
+  ULONG remaining = references_.fetch_sub(1) - 1;
+  if (remaining == 0) {
+    owner_->release();
+    delete this;
+  }
+  return remaining;
+}
+HRESULT WoxCursorChangedHandler::Invoke(IUnknown *sender, IUnknown *) {
+  owner_->cursor_changed(session_, sender);
+  return S_OK;
+}
+
+extern "C" int32_t wox_windows_webview_create(uintptr_t owner, WoxRenderer *renderer, WoxWindowsWebView **webview) {
+  if (owner == 0 || renderer == nullptr || webview == nullptr) {
+    return E_INVALIDARG;
+  }
+  *webview = new WoxWindowsWebView(reinterpret_cast<HWND>(owner), renderer);
+  HRESULT result = (*webview)->initialize();
+  if (FAILED(result)) {
+    (*webview)->release();
+    *webview = nullptr;
+  }
+  return result;
+}
+
+extern "C" int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height, float corner_radius) {
+  if (webview == nullptr || url == nullptr || html == nullptr || inject_css == nullptr || user_agent == nullptr || cache_key == nullptr || width <= 0 || height <= 0) {
+    return E_INVALIDARG;
+  }
+  RECT bounds = {x, y, x + width, y + height};
+  return webview->show(url, html, inject_css, user_agent, cache_disabled != 0, cache_key, bounds, corner_radius);
+}
+
+extern "C" int32_t wox_windows_webview_hide(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->hide() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_evict(WoxWindowsWebView *webview, const char *cache_key) {
+  return webview != nullptr && cache_key != nullptr ? webview->evict(cache_key) : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_go_back(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->go_back() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_go_forward(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->go_forward() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_reload(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->reload() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_open_dev_tools(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->open_dev_tools() : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_navigation_state(WoxWindowsWebView *webview, char **url, int32_t *can_go_back, int32_t *can_go_forward) {
+  return webview != nullptr ? webview->navigation_state(url, can_go_back, can_go_forward) : E_INVALIDARG;
+}
+
+extern "C" int32_t wox_windows_webview_pointer(WoxWindowsWebView *webview, int32_t kind, int32_t x, int32_t y, int32_t button, int32_t scroll_x, int32_t scroll_y, uint32_t modifiers) {
+  if (webview == nullptr) {
+    return E_INVALIDARG;
+  }
+  return webview->pointer(kind, POINT{x, y}, button, scroll_x, scroll_y, modifiers);
+}
+
+extern "C" int32_t wox_windows_webview_focus(WoxWindowsWebView *webview) {
+  return webview != nullptr ? webview->focus() : E_INVALIDARG;
+}
+
+extern "C" void wox_windows_webview_destroy(WoxWindowsWebView *webview) {
+  if (webview != nullptr) {
+    webview->close();
+    webview->release();
+  }
+}
