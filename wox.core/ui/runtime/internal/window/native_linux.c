@@ -4093,7 +4093,11 @@ int32_t wox_linux_window_set_min_size(WoxLinuxWindow *window, float width, float
   return run_on_main_sync(set_min_size_main, &call) ? call.result : -1;
 }
 
-static void free_pixbuf_pixels(guchar *pixels, gpointer data);
+// Window icons own their pixel copy independently of clipboard publication.
+static void free_pixbuf_pixels(guchar *pixels, gpointer data) {
+  (void)data;
+  g_free(pixels);
+}
 
 typedef struct {
   WoxLinuxWindow *window;
