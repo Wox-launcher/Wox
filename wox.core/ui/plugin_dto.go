@@ -10,14 +10,42 @@ import (
 	"wox/ui/dto"
 	"wox/util"
 
-	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 )
 
-func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Instance) (installedPlugin dto.PluginDto, err error) {
-	if err := copier.Copy(&installedPlugin, &pluginInstance.Metadata); err != nil {
-		return dto.PluginDto{}, err
+// pluginMetadataDTO maps metadata without dynamic method lookup, allowing the linker
+// to discard unrelated exported methods. Slice fields retain their shallow-copy semantics.
+func pluginMetadataDTO(metadata *plugin.Metadata) dto.PluginDto {
+	return dto.PluginDto{
+		Id: metadata.Id, Name: string(metadata.Name), Author: metadata.Author,
+		Version: metadata.Version, MinWoxVersion: metadata.MinWoxVersion,
+		Runtime: metadata.Runtime, Description: string(metadata.Description),
+		Website: metadata.Website, Entry: metadata.Entry,
+		TriggerKeywords: metadata.TriggerKeywords, Commands: metadata.Commands,
+		SupportedOS: metadata.SupportedOS, Features: metadata.Features,
+		Glances: metadata.Glances, SettingDefinitions: metadata.SettingDefinitions,
+		IsDev: metadata.IsDev,
 	}
+}
+
+// storeManifestDTOs maps the store catalog while preserving non-nil empty results
+// and shallow slice fields from the previous conversion.
+func storeManifestDTOs(manifests []plugin.StorePluginManifest) []dto.PluginDto {
+	plugins := make([]dto.PluginDto, len(manifests))
+	for i, manifest := range manifests {
+		plugins[i] = dto.PluginDto{
+			Id: manifest.Id, Name: manifest.Name, Author: manifest.Author,
+			Version: manifest.Version, MinWoxVersion: manifest.MinWoxVersion,
+			Runtime: string(manifest.Runtime), Description: manifest.Description,
+			Website: manifest.Website, ScreenshotUrls: manifest.ScreenshotUrls,
+			SupportedOS: manifest.SupportedOS,
+		}
+	}
+	return plugins
+}
+
+func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Instance) (installedPlugin dto.PluginDto, err error) {
+	installedPlugin = pluginMetadataDTO(&pluginInstance.Metadata)
 	installedPlugin.Name = pluginInstance.GetName(ctx)
 	installedPlugin.NameEn = pluginInstance.Metadata.GetNameEn(ctx)
 	installedPlugin.Description = pluginInstance.GetDescription(ctx)

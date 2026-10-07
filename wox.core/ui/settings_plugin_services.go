@@ -12,7 +12,6 @@ import (
 	"wox/ui/contract"
 	"wox/ui/dto"
 
-	"github.com/jinzhu/copier"
 	"github.com/samber/lo"
 )
 
@@ -175,10 +174,7 @@ func getInstalledPluginDTOs(ctx context.Context) ([]dto.PluginDto, error) {
 // getStorePluginDTOs builds the legacy DTO catalog with installation state.
 func getStorePluginDTOs(ctx context.Context) ([]dto.PluginDto, error) {
 	manifests := plugin.GetStoreManager().GetStorePluginManifests(ctx)
-	plugins := make([]dto.PluginDto, len(manifests))
-	if err := copier.Copy(&plugins, &manifests); err != nil {
-		return nil, err
-	}
+	plugins := storeManifestDTOs(manifests)
 
 	for index, storePlugin := range plugins {
 		instance, installed := lo.Find(plugin.GetPluginManager().GetPluginInstances(), func(item *plugin.Instance) bool {
