@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/network"
 	"wox/util"
 	"wox/util/shell"
 
@@ -19,6 +20,14 @@ var mcpTools = util.NewHashMap[string, []common.MCPTool]()
 var mcpToolNames = util.NewHashMap[string, []string]()
 
 func getMCPSession(ctx context.Context, config common.AIChatMCPServerConfig) (*mcp.ClientSession, error) {
+	if network.IsOffline() {
+		if config.Type == common.AIChatMCPServerTypeSTDIO || strings.TrimSpace(config.HeadersHelper) != "" {
+			return nil, network.ErrOffline
+		}
+		if err := network.Check(interpolateMCPValue(config.Url)); err != nil {
+			return nil, err
+		}
+	}
 	if session, ok := mcpSessions.Load(config.Name); ok {
 		return session, nil
 	}
@@ -112,6 +121,9 @@ func CachedMCPToolNames(serverName string) ([]string, bool) {
 
 // MCPListTools lists the tools for a given MCP server config with timeout protection
 func MCPListTools(ctx context.Context, config common.AIChatMCPServerConfig) ([]common.MCPTool, error) {
+	if network.IsOffline() && (config.Type == common.AIChatMCPServerTypeSTDIO || strings.TrimSpace(config.HeadersHelper) != "") {
+		return nil, network.ErrOffline
+	}
 	if tools, ok := mcpTools.Load(config.Name); ok {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Listing tools for MCP server from cache: %s", config.Name))
 		return tools, nil
@@ -274,6 +286,14 @@ func processToolsFromSession(ctx context.Context, session *mcp.ClientSession, co
 			Description: toolDescription,
 			Parameters:  parameters,
 			Callback: func(ctx context.Context, args map[string]any) (common.Conversation, error) {
+				if network.IsOffline() {
+					if config.Type == common.AIChatMCPServerTypeSTDIO || config.HeadersHelper != "" {
+						return common.Conversation{}, network.ErrOffline
+					}
+					if err := network.Check(interpolateMCPValue(config.Url)); err != nil {
+						return common.Conversation{}, err
+					}
+				}
 				util.GetLogger().Debug(ctx, fmt.Sprintf("MCP: Tool call: %s, args: %v", toolName, args))
 
 				callCtx := ctx

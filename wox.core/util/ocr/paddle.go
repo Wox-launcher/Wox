@@ -421,12 +421,12 @@ func verifyPaddleModelFile(path string, expectedSize int64, expectedSHA256 strin
 }
 
 // downloadPaddleModelFile streams one upstream file while validating its digest.
-func downloadPaddleModelFile(ctx context.Context, url string, destination string, expectedSize int64, expectedSHA256 string, onProgress func(int64)) error {
+func downloadPaddleModelFile(ctx context.Context, url string, destination string, expectedSize int64, expectedSHA256 string, onProgress func(int64)) (resultErr error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := util.GetHTTPClient(ctx).Do(request)
 	if err != nil {
 		return err
 	}
@@ -442,7 +442,15 @@ func downloadPaddleModelFile(ctx context.Context, url string, destination string
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		closeErr := file.Close()
+		if resultErr == nil {
+			resultErr = closeErr
+		}
+		if resultErr != nil {
+			_ = os.Remove(destination)
+		}
+	}()
 
 	hasher := sha256.New()
 	buffer := make([]byte, paddleModelDownloadBufferLen)

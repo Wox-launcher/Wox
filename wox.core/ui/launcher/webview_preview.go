@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"wox/common"
+	"wox/network"
 
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
@@ -64,6 +65,9 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 
 func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
 	theme := palette.componentTheme()
+	if network.IsOffline() {
+		return webViewPreviewSemantics("offline", previewview.WebViewPreviewMessage(a.translate("i18n:ui_offline_unavailable"), theme.PreviewText, theme, width, height))
+	}
 	data, err := decodeWebViewPreview(previewData)
 	if err != nil {
 		return webViewPreviewSemantics("error: "+err.Error(), previewview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height))
@@ -82,7 +86,7 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	content := data.content()
 	content.CornerRadius = previewview.WebViewPreviewCornerRadius
 	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
-		if a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
+		if network.IsOffline() || a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
 			return
 		}
 		a.syncWebViewActionHotkey()

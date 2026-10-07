@@ -14,6 +14,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
+	"wox/network"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
@@ -353,6 +354,11 @@ func (s *ScriptPlugin) executeAction(ctx context.Context, actionData map[string]
 
 // executeScriptRaw executes the script with the given JSON-RPC request and returns the raw response
 func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
+	ctx, release, offlineErr := network.Default.Begin(ctx)
+	if offlineErr != nil {
+		return nil, offlineErr
+	}
+	defer release()
 	// Convert request to JSON
 	requestJSON, err := json.Marshal(request)
 	if err != nil {
@@ -380,6 +386,12 @@ func (s *ScriptPlugin) executeScriptRaw(ctx context.Context, request map[string]
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Executing command: %s", s.scriptPath))
 	}
 
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			shell.TerminateProcessTree(cmd.Process.Pid)
+		}
+		return nil
+	}
 	pluginCacheDirectory := ""
 	if cacheDir, cacheErr := util.GetLocation().EnsurePluginCacheDirectory(s.metadata.Id); cacheErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to create script plugin cache folder: %s", cacheErr.Error()))

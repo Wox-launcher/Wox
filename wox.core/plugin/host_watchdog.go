@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"wox/network"
 	"wox/util"
 )
 
@@ -90,6 +91,9 @@ func (m *Manager) stopHostWatchdog() {
 // checkHostsHealth verifies every shared runtime host is still alive and
 // recovers dead hosts by restarting them together with their plugins.
 func (m *Manager) checkHostsHealth(ctx context.Context) {
+	if network.IsOffline() {
+		return
+	}
 	for _, pluginHost := range AllHosts {
 		runtimeName := pluginHost.GetRuntime(ctx)
 		if runtimeName == PLUGIN_RUNTIME_GO || runtimeName == PLUGIN_RUNTIME_SCRIPT {

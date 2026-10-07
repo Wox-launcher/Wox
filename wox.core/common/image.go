@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+	"wox/network"
 	"wox/util"
 	"wox/util/fileicon"
 	"wox/util/imagecache"
@@ -322,6 +323,9 @@ func (w *WoxImage) emojiImageCachePath(emoji string) (string, error) {
 
 // downloadEmojiImage tries Twemoji filename variants because some assets omit text/presentation variation selectors.
 func (w *WoxImage) downloadEmojiImage(ctx context.Context, emoji string, dest string) error {
+	if network.IsOffline() {
+		return network.ErrOffline
+	}
 	codePoints, err := w.emojiImageCodePointCandidates(emoji)
 	if err != nil {
 		return err

@@ -17,6 +17,7 @@ import (
 	"wox/cloudsync"
 	"wox/database"
 	"wox/i18n"
+	"wox/network"
 	"wox/setting"
 	"wox/util"
 	"wox/util/trash"
@@ -209,6 +210,9 @@ func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
 }
 
 func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {
+	if network.IsOffline() {
+		return nil
+	}
 	var storePluginManifests []StorePluginManifest
 
 	for _, store := range s.getStoreManifests(ctx) {

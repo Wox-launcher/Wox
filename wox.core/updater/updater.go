@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"wox/network"
 	"wox/setting"
 
 	"wox/util"
@@ -245,6 +246,12 @@ func CheckForUpdates(ctx context.Context) {
 }
 
 func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallback) {
+	if network.IsOffline() {
+		if callback != nil {
+			callback(UpdateInfo{Status: UpdateStatusError, UpdateError: network.ErrOffline})
+		}
+		return
+	}
 	util.GetLogger().Info(ctx, "start checking for updates")
 
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
@@ -460,6 +467,9 @@ func getUpdateChannelVersions(ctx context.Context, fetchManifest versionManifest
 
 // GetUpdateChannelVersions returns the latest manifest version for each update channel.
 func GetUpdateChannelVersions(ctx context.Context) []UpdateChannelVersion {
+	if network.IsOffline() {
+		return nil
+	}
 	return getUpdateChannelVersions(ctx, getLatestVersion)
 }
 

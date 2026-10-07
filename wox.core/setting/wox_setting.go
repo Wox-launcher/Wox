@@ -104,6 +104,7 @@ type WoxSetting struct {
 
 	// Anonymous usage statistics
 	EnableAnonymousUsageStats *WoxSettingValue[bool]
+	EnableOfflineMode         *WoxSettingValue[bool]
 
 	// IgnoredDoctorChecks stores doctor check types the user has dismissed.
 	// Ignored checks are skipped in the toolbar but still visible in the
@@ -503,6 +504,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
 		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
 		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
+		EnableOfflineMode:                  NewLocalWoxSettingValue(store, "EnableOfflineMode", false),
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),
 		IgnoredDoctorChecks:                NewWoxSettingValue(store, "IgnoredDoctorChecks", []string{}),
 	}

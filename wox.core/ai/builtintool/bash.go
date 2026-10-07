@@ -3,6 +3,7 @@ package tool
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/network"
 	"wox/util/shell"
 
 	"github.com/tmc/langchaingo/jsonschema"
@@ -46,6 +48,11 @@ func BashTool() common.Tool {
 }
 
 func bashCallback(ctx context.Context, args map[string]any) (common.ToolResult, error) {
+	ctx, release, offlineErr := network.Default.Begin(ctx)
+	if offlineErr != nil {
+		return common.ToolResult{}, offlineErr
+	}
+	defer release()
 	command, _ := args["command"].(string)
 	if command == "" {
 		return common.ToolResult{}, fmt.Errorf("command is required")
@@ -70,6 +77,12 @@ func bashCallback(ctx context.Context, args map[string]any) (common.ToolResult, 
 		configureBashCMD(cmd, command)
 	}
 
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			shell.TerminateProcessTree(cmd.Process.Pid)
+		}
+		return nil
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -99,8 +112,11 @@ func bashCallback(ctx context.Context, args map[string]any) (common.ToolResult, 
 	}
 
 	if err != nil {
-		if ctx.Err() != nil {
-			return common.ToolResult{}, fmt.Errorf("%s\n\nCommand timed out after %d seconds", output, timeoutSec)
+		if cause := context.Cause(ctx); cause != nil {
+			if errors.Is(cause, context.DeadlineExceeded) && timeoutSec > 0 {
+				return common.ToolResult{}, fmt.Errorf("%s\n\nCommand timed out after %d seconds: %w", output, timeoutSec, cause)
+			}
+			return common.ToolResult{}, fmt.Errorf("%s\n\n%w", output, cause)
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return common.ToolResult{}, fmt.Errorf("%s\n\nCommand exited with code %d", output, exitErr.ExitCode())

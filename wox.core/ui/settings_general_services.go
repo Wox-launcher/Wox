@@ -72,6 +72,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		ReleaseChannel:                     woxSetting.ReleaseChannel.Get(),
 		EnableAnonymousUsageStats:          woxSetting.EnableAnonymousUsageStats.Get(),
 		EnablePrivacyMode:                  privacy.IsEnabled(),
+		EnableOfflineMode:                  woxSetting.EnableOfflineMode.Get(),
 		CustomPythonPath:                   woxSetting.CustomPythonPath.Get(),
 		CustomNodejsPath:                   woxSetting.CustomNodejsPath.Get(),
 		CloudSyncServerURL:                 woxSetting.CloudSyncServerUrl.Get(),
@@ -358,6 +359,10 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		if !boolValue {
 			telemetry.DeleteTelemetryState(ctx)
 		}
+	case "EnableOfflineMode":
+		if err := setOfflineMode(ctx, woxSetting, boolValue); err != nil {
+			return err
+		}
 	case "EnablePrivacyMode":
 		if err := privacy.SetEnabled(boolValue, woxSetting); err != nil {
 			return err
@@ -366,7 +371,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 		return fmt.Errorf("unknown setting key: %s", key)
 	}
 
-	if key != "EnablePrivacyMode" {
+	if key != "EnablePrivacyMode" && key != "EnableOfflineMode" {
 		if err := privacy.RefreshPreservedSettings(woxSetting); err != nil {
 			return err
 		}

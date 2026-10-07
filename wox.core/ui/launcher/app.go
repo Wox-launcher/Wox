@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/network"
 	"wox/setting"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
@@ -369,6 +370,22 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.terminalDesired.Store("")
 	app.unsubscribersMu.Lock()
 	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
+	app.unsubscribers = append(app.unsubscribers, network.Subscribe(func(enabled bool) {
+		_ = app.runOnUI("apply offline mode", func() {
+			if enabled {
+				app.resetWebView()
+			} else {
+				app.imageMu.Lock()
+				for key := range app.imageErrors {
+					delete(app.imageRequested, key)
+				}
+				clear(app.imageErrors)
+				app.imageMu.Unlock()
+			}
+			_ = app.window.Invalidate()
+			app.invalidateSettingsWindow()
+		})
+	}))
 	app.unsubscribersMu.Unlock()
 	deps := CommonDeps{
 		Invalidate: app.invalidateSettingsWindow,

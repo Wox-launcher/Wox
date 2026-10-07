@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 	"wox/common"
+	"wox/network"
 	"wox/setting"
 	"wox/util"
 
@@ -776,6 +777,9 @@ func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
 		option.WithHeaderDel("X-Stainless-Timeout"),
 	}
 
+	if network.IsOffline() {
+		requestOption = append(requestOption, option.WithMaxRetries(0))
+	}
 	// with custom headers
 	if o.options.Headers != nil {
 		for k, v := range o.options.Headers {

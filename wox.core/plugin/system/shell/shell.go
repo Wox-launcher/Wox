@@ -1682,6 +1682,7 @@ func (s *ShellPlugin) queryCommands(ctx context.Context, query plugin.Query, int
 }
 
 // executeCommandWithUpdateResult executes a shell command and updates metadata via UpdateResult.
+// User-requested commands are independent of the offline policy for Wox-managed networking.
 func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, resultId string, data shellContextData) {
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Executing shell command: %s with interpreter: %s", data.Command, data.Interpreter))
 	data.WorkingDirectory = s.resolveExecutionWorkingDirectory(ctx, data.WorkingDirectory, true)

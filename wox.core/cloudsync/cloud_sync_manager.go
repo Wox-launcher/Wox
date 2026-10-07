@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 	"wox/database"
+	"wox/network"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -116,6 +117,9 @@ func (m *CloudSyncManager) Start(ctx context.Context) {
 }
 
 func (m *CloudSyncManager) updateCurrentDevice(ctx context.Context) error {
+	if network.IsOffline() {
+		return nil
+	}
 	if m.client == nil || m.deviceProvider == nil {
 		return nil
 	}
@@ -152,6 +156,9 @@ func (m *CloudSyncManager) runSyncLoop(ctx context.Context) {
 }
 
 func (m *CloudSyncManager) isAutoSyncAllowed(ctx context.Context) bool {
+	if network.IsOffline() {
+		return false
+	}
 	if m.autoSyncAllowed == nil {
 		return true
 	}
@@ -1351,6 +1358,9 @@ func (m *CloudSyncManager) isBackoffActive(ctx context.Context) bool {
 }
 
 func (m *CloudSyncManager) recordFailure(ctx context.Context, err error) {
+	if network.IsOffline() {
+		return
+	}
 	if err == nil {
 		return
 	}

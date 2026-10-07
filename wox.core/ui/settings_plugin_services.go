@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"wox/common"
+	"wox/network"
 	"wox/plugin"
 	"wox/setting"
 	"wox/ui/contract"
@@ -26,6 +27,9 @@ func (s *CoreServices) Plugins(ctx context.Context, sessionID string, catalog co
 	case contract.PluginCatalogInstalled:
 		plugins, err = getInstalledPluginDTOs(ctx)
 	case contract.PluginCatalogStore:
+		if network.IsOffline() {
+			return nil, network.ErrOffline
+		}
 		plugins, err = getStorePluginDTOs(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported plugin catalog %q", catalog)

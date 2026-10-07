@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"time"
 
+	"wox/network"
 	"wox/setting"
 	"wox/updater"
 	"wox/util"
@@ -51,6 +52,9 @@ type PresenceData struct {
 }
 
 func SendPresenceIfNeeded(ctx context.Context) {
+	if network.IsOffline() {
+		return
+	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 
 	// Check if anonymous usage stats is enabled

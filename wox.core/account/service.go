@@ -15,6 +15,7 @@ import (
 	"time"
 	"wox/cloudsync"
 	"wox/database"
+	"wox/network"
 	"wox/util"
 
 	"gorm.io/gorm"
@@ -385,11 +386,14 @@ func (s *Service) runTokenRefreshLoop(ctx context.Context) {
 		case <-timer.C:
 		}
 
+		if network.IsOffline() {
+			continue
+		}
 		state := s.loadState(ctx)
 		if !s.isLoggedIn(ctx, state) || state.SessionExpired {
 			continue
 		}
-		if _, err := s.RefreshAccessToken(ctx); err != nil {
+		if _, err := s.RefreshAccessToken(ctx); err != nil && !network.IsOffline() {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to refresh account token: %v", err))
 			s.waitTokenRefreshRetry(ctx)
 		}
@@ -397,6 +401,9 @@ func (s *Service) runTokenRefreshLoop(ctx context.Context) {
 }
 
 func (s *Service) nextTokenRefreshDelay(ctx context.Context) time.Duration {
+	if network.IsOffline() {
+		return tokenRefreshIdleDelay
+	}
 	state := s.loadState(ctx)
 	if !s.isLoggedIn(ctx, state) || state.SessionExpired {
 		return tokenRefreshIdleDelay
@@ -590,6 +597,9 @@ func (s *Service) postAuthenticated(ctx context.Context, path string, body any, 
 }
 
 func (s *Service) get(ctx context.Context, path string, target any, accessToken string) error {
+	if network.IsOffline() {
+		return network.ErrOffline
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.BaseURL()+path, nil)
 	if err != nil {
 		return err
@@ -628,6 +638,9 @@ func (s *Service) getAuthenticated(ctx context.Context, path string, target any)
 }
 
 func (s *Service) postEnvelope(ctx context.Context, path string, body any, accessToken string) (responseEnvelope, error) {
+	if network.IsOffline() {
+		return responseEnvelope{}, network.ErrOffline
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return responseEnvelope{}, err

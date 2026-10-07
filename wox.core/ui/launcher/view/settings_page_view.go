@@ -73,19 +73,21 @@ type SettingRowProps struct {
 	Width         float32
 	Background    woxui.Color
 	Disabled      bool
-	Kind          string
-	ControlWidth  float32
-	BrowseFile    bool
-	Editing       woxui.TextEditingState
-	Focused       bool
-	Window        *woxui.Window
-	Theme         woxcomponent.ControlTheme
-	OnTap         func()
-	OnChoiceTap   func(woxui.Rect)
-	OnFocus       func()
-	OnChanged     func(string)
-	OnKey         func(woxui.KeyEvent) bool
-	OnBrowse      func()
+	// PreserveLabelColor keeps policy-paused settings readable alongside their reason.
+	PreserveLabelColor bool
+	Kind               string
+	ControlWidth       float32
+	BrowseFile         bool
+	Editing            woxui.TextEditingState
+	Focused            bool
+	Window             *woxui.Window
+	Theme              woxcomponent.ControlTheme
+	OnTap              func()
+	OnChoiceTap        func(woxui.Rect)
+	OnFocus            func()
+	OnChanged          func(string)
+	OnKey              func(woxui.KeyEvent) bool
+	OnBrowse           func()
 }
 
 func SettingChoiceAnchorKey(id string) woxwidget.Key {
@@ -97,7 +99,9 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 	fieldTheme := props.Theme
 	valueColor := props.Theme.Text
 	if props.Disabled {
-		fieldTheme.Text = props.Theme.TextSecondary
+		if !props.PreserveLabelColor {
+			fieldTheme.Text = props.Theme.TextSecondary
+		}
 		valueColor = props.Theme.TextSecondary
 	}
 	valueWidth := woxcomponent.SettingsChoiceControlWidth

@@ -2,11 +2,13 @@ package tool
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"wox/network"
 )
 
 // TestBashCallback verifies real shell execution, quoting, and nonzero exits.
@@ -31,5 +33,17 @@ func TestBashCallback(t *testing.T) {
 	}
 	if !strings.Contains(BashTool().Description, getShell()) {
 		t.Fatal("tool schema does not identify its shell")
+	}
+}
+
+// TestBashCancellationCause distinguishes offline and caller cancellation from a timeout.
+func TestBashCancellationCause(t *testing.T) {
+	for _, cause := range []error{network.ErrOffline, context.Canceled} {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		cancel(cause)
+		_, err := bashCallback(ctx, map[string]any{"command": "echo unused", "timeout": float64(0)})
+		if !errors.Is(err, cause) || strings.Contains(err.Error(), "timed out") {
+			t.Fatalf("cause %v reported as %v", cause, err)
+		}
 	}
 }

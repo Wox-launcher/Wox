@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"wox/network"
 
 	woxplugin "wox/plugin"
 	woxcomponent "wox/ui/launcher/component"
@@ -87,6 +88,9 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 			badge = a.translate("i18n:ui_setting_plugin_system_tag")
 		} else if plugin.IsDev {
 			badge = a.translate("i18n:ui_plugin_dev_tag")
+		}
+		if network.IsOffline() && !plugin.IsSystem {
+			badge = a.translate("i18n:ui_plugin_offline_paused")
 		}
 		itemIndex := visibleIndex
 		visibleIndex++
@@ -803,6 +807,16 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 			ID: "plugin-directory", Label: label, Width: width, Enabled: !busy, OnTap: a.openSelectedPluginDirectory,
 		})
 	}
+	if network.IsOffline() && !plugin.IsSystem {
+		for index := range actions {
+			if actions[index].ID == "plugin-enable" || actions[index].ID == "plugin-disable" || actions[index].ID == "plugin-upgrade" {
+				actions[index].Enabled = false
+				actions[index].Label = a.translate("i18n:ui_plugin_offline_paused")
+				actions[index].OnTap = nil
+			}
+		}
+	}
+
 	return actions
 }
 

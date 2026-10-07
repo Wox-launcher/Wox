@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 	"wox/i18n"
+	"wox/network"
 	"wox/util"
 
 	"github.com/samber/lo"
@@ -93,6 +94,9 @@ func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
 }
 
 func (s *Store) GetStoreAICommandManifests(ctx context.Context) []StoreAICommandManifest {
+	if network.IsOffline() {
+		return nil
+	}
 	var storeAICommandManifests []StoreAICommandManifest
 	categories := map[string]StoreAICommandCategory{}
 

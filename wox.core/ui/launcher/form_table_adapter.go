@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"wox/network"
 
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
@@ -207,6 +208,10 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		secondaryLabel = a.translate("i18n:ui_ai_command_template_add_from_store")
 		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
+		if network.IsOffline() {
+			secondaryLabel = a.translate("i18n:ui_offline_title") + " · " + a.translate("i18n:ui_offline_open_settings")
+			onSecondary = func() { a.selectSettingTab("privacy") }
+		}
 	}
 	hideCloneAction := false
 	hideAddAction := false

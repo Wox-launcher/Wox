@@ -165,6 +165,7 @@ type GeneralSettings struct {
 	ReleaseChannel                     setting.ReleaseChannel
 	EnableAnonymousUsageStats          bool
 	EnablePrivacyMode                  bool
+	EnableOfflineMode                  bool
 	CustomPythonPath                   string
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string

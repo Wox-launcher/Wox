@@ -22,6 +22,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
+	"wox/network"
 	"wox/setting"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -173,9 +174,11 @@ type Manager struct {
 	applyResultBindings          ResultBindingApplier
 	runtimeTriggerRegistrationMu sync.Mutex
 	instances                    []*Instance
-	instancesMu                  sync.RWMutex
-	systemPluginsReady           chan struct{}
-	ui                           common.UI
+	// Mode transitions wait for in-flight loads before suspending their instances.
+	offlineLifecycle   sync.RWMutex
+	instancesMu        sync.RWMutex
+	systemPluginsReady chan struct{}
+	ui                 common.UI
 
 	// Query pipelines are concurrent in core even though UI displays only
 	// one active query. Key by session and query id so a late pipeline cannot
@@ -385,6 +388,11 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 
 	// load system plugin first
 	m.loadSystemPlugins(ctx)
+	return m.loadUserPlugins(ctx, false)
+}
+
+// loadUserPlugins restores installed plugins without changing their persisted enablement.
+func (m *Manager) loadUserPlugins(ctx context.Context, wait bool) error {
 	if util.IsThirdPartyPluginsDisabled() {
 		logger.Info(ctx, "troubleshooting mode: skipping third-party plugins and runtime hosts")
 		return nil
@@ -474,27 +482,63 @@ func (m *Manager) loadPlugins(ctx context.Context) error {
 
 	logger.Info(ctx, fmt.Sprintf("start loading user plugins, found %d user plugins", len(metaDataList)))
 
+	var pending sync.WaitGroup
+	var loadMu sync.Mutex
+	var loadErrors []error
 	for _, host := range AllHosts {
-		util.Go(ctx, fmt.Sprintf("[%s] start host", host.GetRuntime(ctx)), func() {
-			newCtx := util.NewTraceContext()
-			hostErr := host.Start(newCtx)
-			if hostErr != nil {
-				logger.Error(newCtx, fmt.Errorf("[%s HOST] %w", host.GetRuntime(newCtx), hostErr).Error())
-				return
+		if network.IsOffline() {
+			for _, metadata := range metaDataList {
+				if strings.EqualFold(metadata.Runtime, string(host.GetRuntime(ctx))) {
+					if err := m.registerOfflinePlugin(ctx, host, metadata); err != nil {
+						util.GetLogger().Warn(ctx, err.Error())
+					}
+				}
 			}
-
+			continue
+		}
+		if wait {
+			hasPending := false
+			for _, metadata := range metaDataList {
+				if strings.EqualFold(metadata.Runtime, string(host.GetRuntime(ctx))) {
+					hasPending = true
+					break
+				}
+			}
+			if !hasPending {
+				continue
+			}
+		}
+		pending.Add(1)
+		util.Go(ctx, fmt.Sprintf("[%s] start host", host.GetRuntime(ctx)), func() {
+			defer pending.Done()
+			newCtx := util.NewTraceContext()
+			recordError := func(err error) {
+				loadMu.Lock()
+				loadErrors = append(loadErrors, err)
+				loadMu.Unlock()
+				if !network.IsOffline() {
+					util.GetLogger().Error(newCtx, err.Error())
+				}
+			}
+			if !host.IsStarted(newCtx) {
+				if err := host.Start(newCtx); err != nil {
+					recordError(err)
+					return
+				}
+			}
 			for _, metadata := range metaDataList {
 				if !strings.EqualFold(metadata.Runtime, string(host.GetRuntime(newCtx))) {
 					continue
 				}
-
-				loadErr := m.loadHostPlugin(newCtx, host, metadata)
-				if loadErr != nil {
-					logger.Error(newCtx, fmt.Errorf("[%s HOST] %w", host.GetRuntime(newCtx), loadErr).Error())
-					continue
+				if err := m.loadHostPlugin(newCtx, host, metadata); err != nil {
+					recordError(err)
 				}
 			}
 		})
+	}
+	if wait {
+		pending.Wait()
+		return errors.Join(loadErrors...)
 	}
 
 	return nil
@@ -581,6 +625,8 @@ func (m *Manager) loadHostPlugin(ctx context.Context, host Host, metadata Metada
 }
 
 func (m *Manager) loadHostPluginLocked(ctx context.Context, host Host, metadata Metadata) error {
+	m.offlineLifecycle.RLock()
+	defer m.offlineLifecycle.RUnlock()
 	// Installs and reloads must not bypass the startup-only troubleshooting mode.
 	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
 		return err
@@ -681,6 +727,9 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 
 // ensureThirdPartyPluginsEnabled also stops installers before they replace files that cannot be loaded in this session.
 func ensureThirdPartyPluginsEnabled(ctx context.Context) error {
+	if network.IsOffline() {
+		return network.ErrOffline
+	}
 	if util.IsThirdPartyPluginsDisabled() {
 		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_feedback_third_party_plugins_disabled"))
 	}
@@ -720,6 +769,11 @@ func (m *Manager) DisablePlugin(ctx context.Context, pluginId string) error {
 // EnablePlugin marks a plugin enabled and initializes its runtime if it was
 // previously deactivated by DisablePlugin.
 func (m *Manager) EnablePlugin(ctx context.Context, pluginId string) error {
+	if instance := m.GetPluginInstanceById(pluginId); instance != nil && instance.Host != nil {
+		if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+			return err
+		}
+	}
 	pluginInstance := m.GetPluginInstanceById(pluginId)
 	if pluginInstance == nil {
 		return fmt.Errorf("can't find plugin")
@@ -750,7 +804,7 @@ func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance
 	defer pluginInstance.initLifecycleMu.Unlock()
 	pluginInstance.stopPluginTools()
 	initialized, _ := pluginInstance.initStatus()
-	if initialized {
+	if initialized && !(network.IsOffline() && pluginInstance.Host != nil) {
 		for _, callback := range pluginInstance.UnloadCallbacks {
 			callback(ctx)
 		}
@@ -759,7 +813,9 @@ func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance
 	pluginInstance.resetInitState()
 
 	if pluginInstance.Host != nil && pluginInstance.RuntimeLoaded {
-		pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+		if !network.IsOffline() {
+			pluginInstance.Host.UnloadPlugin(ctx, pluginInstance.Metadata)
+		}
 		pluginInstance.RuntimeLoaded = false
 		pluginInstance.Plugin = nil
 	}
@@ -768,6 +824,13 @@ func (m *Manager) deactivatePlugin(ctx context.Context, pluginInstance *Instance
 // activatePlugin loads host runtime state if needed and runs Init once for the
 // current enabled lifecycle.
 func (m *Manager) activatePlugin(ctx context.Context, pluginInstance *Instance) error {
+	m.offlineLifecycle.RLock()
+	defer m.offlineLifecycle.RUnlock()
+	if pluginInstance != nil && pluginInstance.Host != nil {
+		if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+			return err
+		}
+	}
 	if pluginInstance == nil {
 		return fmt.Errorf("can't find plugin")
 	}
@@ -1056,6 +1119,10 @@ func (m *Manager) initPlugin(ctx context.Context, instance *Instance) {
 
 // initPluginLocked runs Init while the caller holds the instance lifecycle lock.
 func (m *Manager) initPluginLocked(ctx context.Context, instance *Instance) {
+	if network.IsOffline() && instance.Host != nil {
+		instance.finishInit(false, network.ErrOffline)
+		return
+	}
 	logger.Info(ctx, fmt.Sprintf("start init plugin: %s", instance.Metadata.GetName(ctx)))
 	instance.InitStartTimestamp = util.GetSystemTimestamp()
 	defer func() {
@@ -1341,6 +1408,9 @@ func pluginInstanceDisabled(instance *Instance) bool {
 }
 
 func (m *Manager) canOperateQuery(ctx context.Context, pluginInstance *Instance, query Query) bool {
+	if network.IsOffline() && pluginInstance.Host != nil {
+		return false
+	}
 	if pluginInstanceDisabled(pluginInstance) {
 		return false
 	}
@@ -4768,6 +4838,9 @@ func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId s
 		return fmt.Errorf("result cache not found for result id (execute action): %s", resultId)
 	}
 
+	if network.IsOffline() && resultCache.PluginInstance.Host != nil {
+		return network.ErrOffline
+	}
 	// Find the action in cache
 	var actionCache *QueryResultAction
 	for i := range resultCache.Result.Actions {
@@ -4806,6 +4879,10 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
 	if !found {
 		return fmt.Errorf("result cache not found for result id (submit form action): %s", resultId)
+	}
+
+	if network.IsOffline() && resultCache.PluginInstance.Host != nil {
+		return network.ErrOffline
 	}
 
 	var actionCache *QueryResultAction
@@ -5439,6 +5516,9 @@ func (m *Manager) normalizeGlanceItem(ctx context.Context, pluginInstance *Insta
 }
 
 func (m *Manager) ExecuteGlanceAction(ctx context.Context, pluginId string, glanceId string, actionId string) error {
+	if instance := m.GetPluginInstanceById(pluginId); network.IsOffline() && instance != nil && instance.Host != nil {
+		return network.ErrOffline
+	}
 	action, found := m.glanceActions.Load(glanceActionCacheKey(pluginId, glanceId, actionId))
 	if !found {
 		return fmt.Errorf("glance action not found: %s/%s/%s", pluginId, glanceId, actionId)
@@ -5515,6 +5595,9 @@ func (m *Manager) ExecuteToolbarMsgAction(ctx context.Context, sessionId string,
 		return fmt.Errorf("toolbar msg not found: %s", toolbarMsgId)
 	}
 
+	if instance := m.GetPluginInstanceById(entry.PluginId); network.IsOffline() && instance != nil && instance.Host != nil {
+		return network.ErrOffline
+	}
 	action, found := entry.Actions[actionId]
 	if !found {
 		return fmt.Errorf("toolbar msg action not found: %s", actionId)

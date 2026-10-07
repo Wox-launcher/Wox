@@ -95,7 +95,7 @@ func (t *mcpOAuthTransport) clientCredentialsToken(ctx context.Context, authServ
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := util.GetHTTPClient(ctx).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -258,7 +258,7 @@ func discoverMCPAuthServer(ctx context.Context, metadataURL, resource string) (*
 	if metadataURL != "" {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 		if err == nil {
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := util.GetHTTPClient(ctx).Do(req)
 			if err == nil {
 				defer resp.Body.Close()
 				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -289,7 +289,7 @@ func discoverMCPAuthServer(ctx context.Context, metadataURL, resource string) (*
 		if err != nil {
 			continue
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := util.GetHTTPClient(ctx).Do(req)
 		if err != nil {
 			continue
 		}

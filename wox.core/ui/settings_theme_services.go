@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"wox/ai"
+	"wox/network"
 	"wox/plugin"
 	"wox/resource"
 
@@ -33,7 +34,16 @@ func (s *CoreServices) Themes(ctx context.Context, sessionID string, catalog con
 	var themes []common.Theme
 	switch catalog {
 	case contract.ThemeCatalogStore:
+		if network.IsOffline() {
+			return nil, network.ErrOffline
+		}
 		manifests := GetStoreManager().GetThemeManifests()
+		if len(manifests) == 0 {
+			if err := GetStoreManager().RefreshThemeManifests(ctx); err != nil {
+				return nil, err
+			}
+			manifests = GetStoreManager().GetThemeManifests()
+		}
 		result := make([]contract.ThemeCatalogItem, 0, len(manifests))
 		for _, manifest := range manifests {
 			result = append(result, contract.ThemeCatalogItem{

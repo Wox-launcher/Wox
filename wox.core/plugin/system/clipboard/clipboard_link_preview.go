@@ -25,6 +25,7 @@ import (
 
 	"wox/common"
 	"wox/common/icons"
+	"wox/network"
 	"wox/plugin"
 	"wox/util"
 	"wox/util/clipboard"
@@ -775,7 +776,7 @@ func newClipboardLinkHTTPClient(ctx context.Context) *http.Client {
 	var proxy func(*http.Request) (*url.URL, error)
 	base := util.GetHTTPClient(ctx)
 	if base != nil {
-		if transport, ok := base.Transport.(*http.Transport); ok && transport != nil {
+		if transport, ok := network.BaseTransport(base.Transport).(*http.Transport); ok && transport != nil {
 			proxy = transport.Proxy
 		}
 	}
@@ -788,7 +789,7 @@ func newClipboardLinkHTTPClient(ctx context.Context) *http.Client {
 		DisableKeepAlives:     true,
 	}
 	return &http.Client{
-		Transport: transport,
+		Transport: network.Wrap(transport),
 		Timeout:   clipboardLinkFetchTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= clipboardLinkMaxRedirects {

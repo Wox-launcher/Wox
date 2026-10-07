@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"wox/network"
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/common"
@@ -74,6 +75,7 @@ type settingsData struct {
 	ReleaseChannel                     string
 	EnableAnonymousUsageStats          bool
 	EnablePrivacyMode                  bool
+	EnableOfflineMode                  bool
 	CustomPythonPath                   string
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string `json:"CloudSyncServerUrl"`
@@ -660,6 +662,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		ReleaseChannel:                     string(loaded.ReleaseChannel),
 		EnableAnonymousUsageStats:          loaded.EnableAnonymousUsageStats,
 		EnablePrivacyMode:                  loaded.EnablePrivacyMode,
+		EnableOfflineMode:                  loaded.EnableOfflineMode,
 		CustomPythonPath:                   loaded.CustomPythonPath,
 		CustomNodejsPath:                   loaded.CustomNodejsPath,
 		CloudSyncServerURL:                 loaded.CloudSyncServerURL,
@@ -1108,6 +1111,9 @@ func (a *App) activateSetting(direction int) {
 		return
 	}
 	item := items[snapshot.row]
+	if network.IsOffline() && (item.key == "EnableAutoUpdate" || item.key == "EnableAnonymousUsageStats") {
+		return
+	}
 	if item.disabled {
 		return
 	}
@@ -1291,6 +1297,13 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 			} else if item.text {
 				a.generalSettings.Editor().SetText(choice.value, false)
 				restoreTextInput = true
+			}
+		}
+		if item.key == "EnableOfflineMode" || item.key == "EnablePrivacyMode" {
+			if err != nil {
+				a.privacySettings.SetError(err.Error())
+			} else {
+				a.privacySettings.SetError("")
 			}
 		}
 		if err != nil {
@@ -1511,7 +1524,8 @@ func settingItems(tab string, data settingsData) []settingItem {
 		}
 	case "privacy":
 		return []settingItem{
-			{key: "EnablePrivacyMode", title: "Private mode", description: "Clear local data after exit while retaining non-sensitive settings", value: boolValue(data.EnablePrivacyMode), choices: boolChoices},
+			{key: "EnablePrivacyMode", title: "Clear local data on exit", description: "Clear local data after exit while retaining non-sensitive settings", value: boolValue(data.EnablePrivacyMode), choices: boolChoices},
+			{key: "EnableOfflineMode", title: "Offline mode", description: "Pause network features and third-party plugins", value: boolValue(data.EnableOfflineMode), choices: boolChoices},
 			{key: "EnableAnonymousUsageStats", title: "Anonymous usage stats", description: "Help improve Wox with anonymous telemetry", value: boolValue(data.EnableAnonymousUsageStats), choices: boolChoices},
 		}
 	default:

@@ -1,6 +1,7 @@
 package icons
 
 const (
+	StatusOffline = "status.offline"
 	// Plugin identity.
 	PluginSelection     = "plugin.selection"
 	PluginAttention     = "plugin.attention"

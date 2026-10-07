@@ -13,6 +13,7 @@ import (
 	"wox/cloudsync"
 	"wox/common"
 	"wox/i18n"
+	"wox/network"
 	"wox/updater"
 	"wox/util"
 	"wox/util/trash"
@@ -88,6 +89,9 @@ func (s *Store) GetStoreThemes(ctx context.Context) ([]common.StoreThemeManifest
 
 // RefreshThemeManifests replaces the catalog only after a successful fetch.
 func (s *Store) RefreshThemeManifests(ctx context.Context) error {
+	if network.IsOffline() {
+		return nil
+	}
 	manifests, err := s.GetStoreThemes(ctx)
 	if err != nil {
 		return err

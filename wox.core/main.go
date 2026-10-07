@@ -14,6 +14,7 @@ import (
 	"wox/database"
 	"wox/diagnostic"
 	"wox/migration"
+	"wox/network"
 	"wox/privacy"
 	"wox/telemetry"
 
@@ -289,11 +290,16 @@ func run() {
 	}
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
 
+	network.Default.SetOffline(woxSetting.EnableOfflineMode.Get())
+
 	// update proxy
 	if woxSetting.HttpProxyEnabled.Get() {
 		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
 	}
 
+	network.SetErrorTranslator(func() string {
+		return i18n.GetI18nManager().TranslateWox(context.Background(), "ui_offline_unavailable")
+	})
 	initCloudSync(ctx)
 
 	langErr := i18n.GetI18nManager().UpdateLang(ctx, woxSetting.LangCode.Get())

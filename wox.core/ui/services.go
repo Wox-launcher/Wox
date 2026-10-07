@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"wox/network"
 
 	"wox/common"
 	"wox/plugin"
@@ -49,6 +50,9 @@ func browserExtensionConnected() bool {
 
 // UpdateChannelVersions returns typed update metadata for the settings UI.
 func (s *CoreServices) UpdateChannelVersions(ctx context.Context, sessionID string) ([]contract.UpdateChannelVersion, error) {
+	if network.IsOffline() {
+		return nil, network.ErrOffline
+	}
 	versions := updateChannelVersionsProvider(uiServiceContext(ctx, sessionID))
 	converted := make([]contract.UpdateChannelVersion, len(versions))
 	for index, version := range versions {

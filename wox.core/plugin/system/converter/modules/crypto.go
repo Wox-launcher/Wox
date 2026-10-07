@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/network"
 	"wox/util"
 )
 
@@ -66,7 +67,7 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context, onInitialSync
 		prices, err := m.fetchCryptoPrices(syncCtx)
 		if err == nil {
 			m.applyPrices(prices)
-		} else if syncCtx.Err() == nil {
+		} else if syncCtx.Err() == nil && !network.IsOffline() {
 			util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch initial crypto prices: %s", err.Error()))
 		}
 		if syncCtx.Err() == nil && onInitialSyncFinished != nil {
@@ -80,10 +81,13 @@ func (m *CryptoModule) StartPriceSyncSchedule(ctx context.Context, onInitialSync
 			case <-syncCtx.Done():
 				return
 			case <-ticker.C:
+				if network.IsOffline() {
+					continue
+				}
 				prices, err := m.fetchCryptoPrices(syncCtx)
 				if err == nil {
 					m.applyPrices(prices)
-				} else if syncCtx.Err() == nil {
+				} else if syncCtx.Err() == nil && !network.IsOffline() {
 					util.GetLogger().Error(syncCtx, fmt.Sprintf("Failed to fetch crypto prices: %s", err.Error()))
 				}
 			}
@@ -103,6 +107,9 @@ func (m *CryptoModule) StopPriceSyncSchedule() {
 }
 
 func (m *CryptoModule) fetchCryptoPrices(ctx context.Context) (map[string]float64, error) {
+	if network.IsOffline() {
+		return nil, network.ErrOffline
+	}
 	body, err := util.HttpGet(ctx, "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,binancecoin&vs_currencies=usd")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch prices: %w", err)

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"wox/network"
 	"wox/util"
 
 	"github.com/PuerkitoBio/goquery"
@@ -226,6 +227,9 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 		}
 
 		for _, source := range sources {
+			if network.IsOffline() {
+				break
+			}
 			rates, err := source.parse(ctx)
 			if err != nil {
 				util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: %s", source.name, err.Error()))
@@ -253,6 +257,9 @@ func (m *CurrencyModule) StartExchangeRateSyncSchedule(ctx context.Context) {
 			case <-ticker.C:
 			}
 			for _, source := range sources {
+				if network.IsOffline() {
+					break
+				}
 				rates, err := source.parse(ctx)
 				if err != nil {
 					util.GetLogger().Warn(ctx, fmt.Sprintf("Failed to update rates from %s: %s", source.name, err.Error()))

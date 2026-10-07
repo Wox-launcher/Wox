@@ -326,13 +326,13 @@ func (m *ModelManager) setDownloadStatus(modelID string, state DownloadState, pr
 // downloadFile downloads a file with progress reporting. The onProgress
 // callback is called with the percentage of bytes downloaded (0-100).
 // If the server does not provide Content-Length, progress is reported as 0.
-func downloadFile(ctx context.Context, url, destPath string, onProgress func(int)) error {
+func downloadFile(ctx context.Context, url, destPath string, onProgress func(int)) (resultErr error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := util.GetHTTPClient(ctx).Do(req)
 	if err != nil {
 		return err
 	}
@@ -346,7 +346,15 @@ func downloadFile(ctx context.Context, url, destPath string, onProgress func(int
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		closeErr := out.Close()
+		if resultErr == nil {
+			resultErr = closeErr
+		}
+		if resultErr != nil {
+			_ = os.Remove(destPath)
+		}
+	}()
 
 	totalSize := resp.ContentLength
 	var downloaded int64

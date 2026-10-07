@@ -5,6 +5,7 @@ import "wox/common"
 var tuneUIIcon = common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>`)
 
 var defaultUIIcons = map[string]common.WoxImage{
+	StatusOffline:      newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m3 3 18 18M2 8.8a16 16 0 0 1 3.2-2.1M9 5.2a16 16 0 0 1 13 3.6M5 12a11 11 0 0 1 3.5-1.9M13 9.1a11 11 0 0 1 6 2.9M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"/>`),
 	ControlPreviewOpen: common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="var(--wox-theme-icon-color)" stroke-width="2"/><path d="M15 5h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4z" fill="var(--wox-theme-icon-color)"/></svg>`),
 
 	// Settings navigation.

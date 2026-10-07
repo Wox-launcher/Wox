@@ -9,6 +9,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/network"
 	"wox/plugin"
 	appplugin "wox/plugin/system/app"
 	"wox/setting"
@@ -129,6 +130,9 @@ func (s *CoreServices) AIModels(ctx context.Context, sessionID string) ([]contra
 
 // AICommandTemplates returns the translated template catalog owned by core.
 func (s *CoreServices) AICommandTemplates(ctx context.Context, sessionID string) ([]contract.AICommandTemplate, error) {
+	if network.IsOffline() {
+		return nil, network.ErrOffline
+	}
 	ctx = uiServiceContext(ctx, sessionID)
 	templates := ai.GetStoreManager().GetCommands(ctx)
 	converted := make([]contract.AICommandTemplate, len(templates))

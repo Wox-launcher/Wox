@@ -8,6 +8,7 @@ import (
 	"time"
 	"wox/common"
 	"wox/common/icons"
+	"wox/network"
 	"wox/plugin"
 	"wox/plugin/system/converter/engine"
 	"wox/plugin/system/converter/modules"
@@ -235,8 +236,15 @@ func (c *Converter) buildResultTails(ctx context.Context, result engine.Presenta
 	if !result.Currency {
 		return nil
 	}
+	if network.IsOffline() && result.RateUpdatedAt != 0 {
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, "ui_offline_title")), plugin.NewQueryResultTailText(fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated"), c.formatCurrencyRateUpdatedAgo(ctx, result.RateUpdatedAt)))}
+	}
 	if result.RateUpdatedAt == 0 {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, "plugin_converter_rates_fallback"))}
+		key := "plugin_converter_rates_fallback"
+		if network.IsOffline() {
+			key = "plugin_converter_rates_offline_fallback"
+		}
+		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(c.api.GetTranslation(ctx, key))}
 	}
 	return []plugin.QueryResultTail{plugin.NewQueryResultTailText(fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_converter_rates_updated"), c.formatCurrencyRateUpdatedAgo(ctx, result.RateUpdatedAt)))}
 }

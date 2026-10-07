@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/network"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -213,6 +214,11 @@ func resolveMCPHeaders(ctx context.Context, config common.AIChatMCPServerConfig)
 }
 
 func runMCPHeadersHelper(ctx context.Context, command, cwd string) map[string]string {
+	ctx, release, err := network.Default.Begin(ctx)
+	if err != nil {
+		return nil
+	}
+	defer release()
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -224,6 +230,12 @@ func runMCPHeadersHelper(ctx context.Context, command, cwd string) map[string]st
 	}
 	if cwd != "" {
 		cmd.Dir = cwd
+	}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			shell.TerminateProcessTree(cmd.Process.Pid)
+		}
+		return nil
 	}
 	output, err := cmd.Output()
 	if err != nil {
@@ -251,7 +263,7 @@ func newMCPHTTPClient(ctx context.Context, config common.AIChatMCPServerConfig) 
 	return &http.Client{
 		Timeout: 0,
 		Transport: &mcpHeaderRoundTripper{
-			base:    http.DefaultTransport,
+			base:    network.Wrap(nil),
 			headers: headers,
 			oauth:   oauth,
 		},
@@ -267,7 +279,7 @@ type mcpHeaderRoundTripper struct {
 func (t *mcpHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	base := t.base
 	if base == nil {
-		base = http.DefaultTransport
+		base = network.Wrap(nil)
 	}
 	cloned := req.Clone(req.Context())
 	for key, value := range t.headers {

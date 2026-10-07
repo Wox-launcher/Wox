@@ -4,6 +4,8 @@ import (
 	"context"
 	"os/exec"
 	"sort"
+	"sync"
+	"wox/network"
 	"wox/util"
 	"wox/util/shell"
 
@@ -50,6 +52,16 @@ type lifetimeBoundCommandTransport struct {
 }
 
 func (t *lifetimeBoundCommandTransport) Connect(ctx context.Context) (mcp.Connection, error) {
+	policyCtx, release, policyErr := network.Default.Begin(context.WithoutCancel(ctx))
+	if policyErr != nil {
+		return nil, policyErr
+	}
+	success := false
+	defer func() {
+		if !success {
+			release()
+		}
+	}()
 	shell.PrepareLifetimeBoundCmd(t.command)
 
 	connection, err := (&mcp.CommandTransport{Command: t.command}).Connect(ctx)
@@ -65,5 +77,16 @@ func (t *lifetimeBoundCommandTransport) Connect(ctx context.Context) (mcp.Connec
 	}
 
 	mcpServerProcesses.Store(t.serverName, t.command.Process.Pid)
-	return connection, nil
+	stop := context.AfterFunc(policyCtx, func() { shell.TerminateProcessTree(t.command.Process.Pid) })
+	success = true
+	return &offlineMCPConnection{Connection: connection, release: func() { stop(); shell.TerminateProcessTree(t.command.Process.Pid); release() }}, nil
 }
+
+// offlineMCPConnection retains the policy registration for the entire subprocess lifetime.
+type offlineMCPConnection struct {
+	mcp.Connection
+	once    sync.Once
+	release func()
+}
+
+func (c *offlineMCPConnection) Close() error { c.once.Do(c.release); return c.Connection.Close() }

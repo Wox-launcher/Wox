@@ -2,6 +2,7 @@ package woxui
 
 import (
 	"errors"
+	"wox/network"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
 )
@@ -39,6 +40,10 @@ type WebViewTooltipEvent struct {
 
 // ShowWebView attaches or updates the window's system WebView in logical client coordinates.
 func (w *Window) ShowWebView(content WebViewContent, bounds Rect) error {
+	// HTML can load remote subresources, so offline mode blocks the entire embedded surface.
+	if network.IsOffline() {
+		return network.ErrOffline
+	}
 	if w == nil || w.native == nil {
 		return errors.New("window is not initialized")
 	}

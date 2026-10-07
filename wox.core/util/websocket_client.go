@@ -3,8 +3,10 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
+	"wox/network"
 
 	"github.com/gorilla/websocket"
 )
@@ -18,8 +20,9 @@ type WebsocketClient struct {
 	isConnected          bool
 	mu                   sync.RWMutex
 	// stopped is closed by Close to make a pending reconnect loop give up.
-	stopped  chan struct{}
-	stopOnce sync.Once
+	stopped       chan struct{}
+	stopOnce      sync.Once
+	policyRelease func()
 }
 
 func NewWebsocketClient(url string) *WebsocketClient {
@@ -36,31 +39,58 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 	default:
 	}
 
-	conn, _, dialErr := websocket.DefaultDialer.Dial(w.url, nil)
+	parsed, parseErr := url.Parse(w.url)
+	if parseErr != nil {
+		return parseErr
+	}
+	connectionParent := ctx
+	dialer := *websocket.DefaultDialer
+	release := func() {}
+	if network.LocalURL(parsed) {
+		dialer.Proxy = nil
+		dialer.NetDialContext = network.DialLocal
+	} else {
+		var err error
+		ctx, release, err = network.Default.Begin(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	conn, _, dialErr := dialer.DialContext(ctx, w.url, nil)
 	if dialErr != nil {
+		release()
 		return dialErr
 	}
 
+	if ctx.Err() != nil {
+		conn.Close()
+		release()
+		return ctx.Err()
+	}
+	stopPolicy := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	cleanup := func() { stopPolicy(); release() }
 	cancelReceiveMsgChan := make(chan struct{})
 	w.mu.Lock()
 	select {
 	case <-w.stopped:
 		w.mu.Unlock()
 		conn.Close()
+		cleanup()
 		return fmt.Errorf("websocket client is closed")
 	default:
 	}
+	w.policyRelease = cleanup
 	w.conn = conn
 	w.cancelReceiveMsgChan = cancelReceiveMsgChan
 	w.isConnected = true
 	w.mu.Unlock()
 
 	Go(ctx, "receive websocket msg", func() {
-		w.receiveMsg(ctx, conn, cancelReceiveMsgChan)
+		w.receiveMsg(connectionParent, conn, cancelReceiveMsgChan)
 	})
 
 	Go(ctx, "ping websocket server", func() {
-		w.ping(ctx, conn, cancelReceiveMsgChan)
+		w.ping(connectionParent, conn, cancelReceiveMsgChan)
 	})
 
 	return nil
@@ -130,6 +160,10 @@ func (w *WebsocketClient) Close(ctx context.Context) {
 
 func (w *WebsocketClient) reconnect(ctx context.Context, reason string) {
 	for {
+		if network.Check(w.url) != nil {
+			w.disconnect(ctx)
+			return
+		}
 		GetLogger().Info(ctx, fmt.Sprintf("%s, try reconnecting", reason))
 		connErr := w.Connect(ctx)
 		if connErr == nil {
@@ -189,6 +223,8 @@ func (w *WebsocketClient) disconnect(ctx context.Context) {
 	GetLogger().Info(ctx, "disconnecting existing websocket client")
 	cancelReceiveMsgChan := w.cancelReceiveMsgChan
 	conn := w.conn
+	cleanup := w.policyRelease
+	w.policyRelease = nil
 	w.cancelReceiveMsgChan = nil
 	w.conn = nil
 	w.isConnected = false
@@ -196,6 +232,9 @@ func (w *WebsocketClient) disconnect(ctx context.Context) {
 
 	if cancelReceiveMsgChan != nil {
 		close(cancelReceiveMsgChan)
+	}
+	if cleanup != nil {
+		cleanup()
 	}
 	if conn != nil {
 		conn.Close()

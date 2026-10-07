@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"wox/network"
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/ui/contract"
@@ -97,11 +98,19 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 	if snapshot.engine.Error != "" {
 		engineLabel += " · " + snapshot.engine.Error
 	}
+	if network.IsOffline() && !snapshot.engine.Ready {
+		engineEnabled = false
+		engineLabel = a.translate("i18n:ui_offline_paused")
+	}
 	options := make([]launcherview.ModelManagerOption, 0, len(snapshot.options))
 	for index, option := range snapshot.options {
 		selected := modelOptionID(option) == snapshot.selected
 		usable := modelOptionUsable(snapshot.kind, option)
 		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "", downloadLabel, retryLabel, extractingLabel, finalizingLabel)
+		if network.IsOffline() && !usable {
+			actionState.enabled = false
+			actionState.label = a.translate("i18n:ui_offline_title")
+		}
 		action := func() { a.runModelManagerAction(actionState.operation, index) }
 		if actionState.operation == "select" {
 			action = func() { a.chooseManagedModel(index) }

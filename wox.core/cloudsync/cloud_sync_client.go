@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 	"wox/i18n"
+	"wox/network"
 	"wox/util"
 )
 
@@ -221,6 +222,9 @@ func (c *CloudSyncHTTPClient) ResetKey(ctx context.Context, req CloudSyncKeyRese
 }
 
 func (c *CloudSyncHTTPClient) post(ctx context.Context, path string, body any, target any) error {
+	if network.IsOffline() {
+		return network.ErrOffline
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("failed to encode request: %w", err)
@@ -302,7 +306,9 @@ func (c *CloudSyncHTTPClient) postWithToken(ctx context.Context, path string, pa
 
 	prepareCost = time.Since(started)
 	httpStarted := time.Now()
-	resp, err := client.Do(req)
+	guarded := *client
+	guarded.Transport = network.Wrap(client.Transport)
+	resp, err := guarded.Do(req)
 	httpCost = time.Since(httpStarted)
 	if err != nil {
 		return err

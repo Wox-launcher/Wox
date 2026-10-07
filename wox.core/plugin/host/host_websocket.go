@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"wox/common"
+	"wox/network"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -21,11 +22,13 @@ import (
 )
 
 type WebsocketHost struct {
-	ws          *util.WebsocketClient
-	host        plugin.Host
-	requestMap  *util.HashMap[string, chan JsonRpcResponse]
-	hostProcess *os.Process
-	statusLock  sync.RWMutex
+	ws             *util.WebsocketClient
+	host           plugin.Host
+	requestMap     *util.HashMap[string, chan JsonRpcResponse]
+	hostProcess    *os.Process
+	statusLock     sync.RWMutex
+	lifecycle      sync.Mutex
+	offlineRelease func()
 	// Opaque tokens bind nested tool RPCs to a live parent on this host and plugin.
 	pluginToolCalls sync.Map
 
@@ -62,6 +65,25 @@ func (w *WebsocketHost) getHostName(ctx context.Context) string {
 }
 
 func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, entry string, envs []string, executableArgs ...string) error {
+	w.lifecycle.Lock()
+	defer w.lifecycle.Unlock()
+	if w.IsHostStarted(ctx) {
+		return nil
+	}
+	if w.offlineRelease != nil {
+		w.offlineRelease()
+		w.offlineRelease = nil
+	}
+	ctx, release, policyErr := network.Default.Begin(context.WithoutCancel(ctx))
+	if policyErr != nil {
+		return policyErr
+	}
+	started := false
+	defer func() {
+		if !started {
+			release()
+		}
+	}()
 	w.setStartState(executablePath, "")
 
 	port, portErr := util.GetAvailableTcpPort(ctx)
@@ -88,9 +110,19 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 		w.setStartState(executablePath, startErr.Error())
 		return startErr
 	}
+	stopOffline := context.AfterFunc(ctx, func() { shell.TerminateProcessTree(cmd.Process.Pid) })
+	defer func() {
+		if !started {
+			stopOffline()
+		}
+	}()
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host pid: %d", w.getHostName(ctx), cmd.Process.Pid))
 
 	time.Sleep(time.Second) // wait for host to start
+	if ctx.Err() != nil {
+		w.terminateHostProcess(ctx, cmd.Process)
+		return network.ErrOffline
+	}
 	if connectErr := w.startWebsocketServer(ctx, port); connectErr != nil {
 		w.terminateHostProcess(ctx, cmd.Process)
 		startErr := fmt.Errorf("host process started but websocket connection failed: %w", connectErr)
@@ -100,29 +132,34 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 
 	w.statusLock.Lock()
 	w.hostProcess = cmd.Process
+	started = true
+	w.offlineRelease = func() { stopOffline(); release() }
 	w.statusLock.Unlock()
 	w.setStartState(executablePath, "")
 	return nil
 }
 
 func (w *WebsocketHost) StopHost(ctx context.Context) {
-	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> stopping host", w.getHostName(ctx)))
-	// Close the websocket client so its receive goroutine and reconnect loop give
-	// up instead of retrying a dead or replaced host process forever.
-	if w.ws != nil {
-		w.ws.Close(ctx)
+	w.lifecycle.Lock()
+	defer w.lifecycle.Unlock()
+	if w.offlineRelease != nil {
+		w.offlineRelease()
+		w.offlineRelease = nil
 	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> stopping host", w.getHostName(ctx)))
+	// Detach state before closing it because in-flight RPCs may observe this host.
 	w.statusLock.Lock()
+	client := w.ws
+	w.ws = nil
 	hostProcess := w.hostProcess
 	w.hostProcess = nil
 	w.statusLock.Unlock()
+	if client != nil {
+		client.Close(ctx)
+	}
 	if hostProcess != nil {
 		w.terminateHostProcess(ctx, hostProcess)
 	}
-	// Bug fix: StopHost used to leave the websocket client object in place, so
-	// status checks could briefly report a killed host as still connected. Clear
-	// local process state immediately; a fresh StartHost creates a new client.
-	w.ws = nil
 }
 
 // ProcessID returns the active shared runtime host PID for release diagnostics.
@@ -153,7 +190,15 @@ func (w *WebsocketHost) terminateHostProcess(ctx context.Context, process *os.Pr
 }
 
 func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {
-	return w.ws != nil && w.ws.IsConnected()
+	client := w.websocketClient()
+	return client != nil && client.IsConnected()
+}
+
+// websocketClient snapshots the connection while mode switches can detach it.
+func (w *WebsocketHost) websocketClient() *util.WebsocketClient {
+	w.statusLock.RLock()
+	defer w.statusLock.RUnlock()
+	return w.ws
 }
 
 func (w *WebsocketHost) GetExecutablePath() string {
@@ -203,7 +248,13 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 }
 
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
-	if w.ws == nil || !w.ws.IsConnected() {
+	ctx, release, err := network.Default.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	client := w.websocketClient()
+	if client == nil || !client.IsConnected() {
 		return "", fmt.Errorf("host is not connected")
 	}
 
@@ -232,7 +283,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 	defer w.requestMap.Delete(request.Id)
 
 	startTimestamp := util.GetSystemTimestamp()
-	sendErr := w.ws.Send(ctx, jsonData)
+	sendErr := client.Send(ctx, jsonData)
 	if sendErr != nil {
 		return "", sendErr
 	}
@@ -241,7 +292,7 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return "", fmt.Errorf("request canceled, request id: %s: %w", request.Id, ctx.Err())
+		return "", fmt.Errorf("request canceled, request id: %s: %w", request.Id, context.Cause(ctx))
 	case <-timer.C:
 		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
 		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
@@ -347,8 +398,11 @@ func isEmptyDynamicSettingHostResult(result any) bool {
 }
 
 func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) error {
-	w.ws = util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
-	w.ws.OnMessage(ctx, func(data []byte) {
+	client := util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
+	w.statusLock.Lock()
+	w.ws = client
+	w.statusLock.Unlock()
+	client.OnMessage(ctx, func(data []byte) {
 		util.Go(ctx, fmt.Sprintf("<%s> onMessage", w.getHostName(ctx)), func() {
 			w.onMessage(string(data))
 		})
@@ -357,7 +411,10 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) erro
 	const baseDelay = 200 * time.Millisecond
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		connErr := w.ws.Connect(ctx)
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+		connErr := client.Connect(ctx)
 		if connErr == nil {
 			return nil
 		}
@@ -367,7 +424,11 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) erro
 			break
 		}
 		util.GetLogger().Info(ctx, fmt.Sprintf("<%s> failed to connect to host (attempt %d/%d): %s", w.getHostName(ctx), attempt, maxAttempts, connErr))
-		time.Sleep(time.Duration(attempt) * baseDelay)
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-time.After(time.Duration(attempt) * baseDelay):
+		}
 	}
 
 	return fmt.Errorf("failed to connect to host websocket on port %d after %d attempts: %w", port, maxAttempts, lastErr)
@@ -415,6 +476,10 @@ func (w *WebsocketHost) onMessage(data string) {
 }
 
 func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request JsonRpcRequest) {
+	if network.IsOffline() {
+		w.sendResponseErrToHost(ctx, request, network.ErrOffline)
+		return
+	}
 	// Preserve the originating launcher when a plugin calls back into the UI.
 	if request.SessionId != "" {
 		ctx = util.WithSessionContext(ctx, request.SessionId)
@@ -1082,7 +1147,11 @@ func (w *WebsocketHost) sendResponseToHost(ctx context.Context, request JsonRpcR
 		return
 	}
 
-	sendErr := w.ws.Send(ctx, responseJson)
+	client := w.websocketClient()
+	if client == nil || network.IsOffline() {
+		return
+	}
+	sendErr := client.Send(ctx, responseJson)
 	if sendErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to send response: %s", request.PluginName, sendErr))
 		return
@@ -1102,7 +1171,12 @@ func (w *WebsocketHost) sendResponseErrToHost(ctx context.Context, request JsonR
 		return
 	}
 
-	sendErr := w.ws.Send(ctx, responseJson)
+	client := w.websocketClient()
+	// Local host replies must remain available while offline shutdown is in progress.
+	if client == nil {
+		return
+	}
+	sendErr := client.Send(ctx, responseJson)
 	if sendErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] failed to send error response: %s", request.PluginName, sendErr))
 		return

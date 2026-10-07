@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"wox/network"
 
 	"wox/common"
 	"wox/ui/contract"
@@ -109,6 +110,14 @@ func (a *App) showAICommandTemplateChoices(fieldIndex int, templates []contract.
 // beginAICommandTemplateRow opens the normal row editor with template values so
 // users can review the model and command before committing the plugin setting.
 func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AICommandTemplate, defaultModel contract.AIModel) {
+	if network.IsOffline() {
+		if form := a.pluginSettings.Form(); form != nil {
+			form.status = a.translate("i18n:ui_offline_unavailable")
+			form.statusError = true
+		}
+		a.invalidateSettingsWindow()
+		return
+	}
 	form := a.pluginSettings.Form()
 	if form == nil || form.pluginID != aiCommandPluginID {
 		return

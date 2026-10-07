@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/network"
 
 	"wox/common"
 	"wox/common/icons"
@@ -408,7 +410,9 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 		loaded, err := a.services.ResolveImage(ctx, a.sessionID, common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}, max(svgWidth, svgHeight))
 		cancel()
 		if err != nil {
-			log.Printf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err)
+			if !errors.Is(err, network.ErrOffline) {
+				util.GetLogger().Warn(a.lifecycleCtx, fmt.Sprintf("resolve %s result image %q: %v", source.ImageType, source.ImageData, err))
+			}
 			a.storeImageError(key, err)
 			return
 		}
