@@ -401,6 +401,8 @@ export interface PluginSettingValueNewline extends PluginSettingDefinitionValue 
  * ```
  */
 export interface PluginSettingValueSelect extends PluginSettingDefinitionValue {
+  /** Show dropdown search. Defaults to false. */
+  Filterable?: boolean
   /**
    * Unique key for storing this setting.
    */

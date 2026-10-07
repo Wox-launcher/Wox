@@ -53,31 +53,16 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 			return Evaluation{}, err
 		}
 	}
-	if len(q.target) == 0 && c.dimensions(v.Unit)["money"] == 1 {
+	if c.dimensions(v.Unit)["money"] == 1 && c.dimensions(q.target)["money"] == 0 {
 		target := env.DefaultCurrency
 		if target == "" {
 			target = "USD"
 		}
-		// Mixed fiat keeps the authored unit ($200 + €200 stays euros).
-		// Lone crypto and crypto+crypto convert to default fiat (1BTC, 1BTC+1ETH).
-		// Crypto plus a bare number keeps the coin (1btc + 1 → 2 BTC).
-		keepFiat := false
-		for k := range v.Unit {
-			if c.Units[k].Dimension == "money" && k != target && !c.Crypto[k] {
-				keepFiat = true
-			}
-		}
-		keepCrypto := false
-		for k := range v.Unit {
-			if c.Crypto[k] && hasBareNumberAddend(q.root) {
-				keepCrypto = true
-			}
-		}
-		if !keepFiat && !keepCrypto {
-			v, err = c.convert(v, Unit{target: 1}, env, nil)
-			if err != nil {
-				return Evaluation{}, err
-			}
+		// A currency-only target replaces the money factor and preserves rate units.
+		// Apply it after arithmetic and explicit time conversion unless a currency was requested.
+		v, err = c.convert(v, Unit{target: 1}, env, nil)
+		if err != nil {
+			return Evaluation{}, err
 		}
 	}
 	if q.speed != nil {
@@ -852,22 +837,4 @@ func isYearNumber(v Value) bool {
 func yearAsDate(v Value, env Env) Value {
 	y := int(v.Number.Num().Int64())
 	return Value{Kind: Date, Time: time.Date(y, 1, 1, 0, 0, 0, 0, env.Local)}
-}
-
-// hasBareNumberAddend reports +/− of a money quantity with a dimensionless number.
-func hasBareNumberAddend(n *node) bool {
-	if n == nil || (n.op != "+" && n.op != "-") || len(n.args) != 2 {
-		return false
-	}
-	return isBareNumberNode(n.args[0]) || isBareNumberNode(n.args[1])
-}
-
-func isBareNumberNode(n *node) bool {
-	if n == nil {
-		return false
-	}
-	if n.op == "value" && n.value.Kind == Number {
-		return true
-	}
-	return n.op == "quantity" && len(n.value.Unit) == 0
 }

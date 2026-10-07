@@ -61,6 +61,8 @@ class PluginSettingDefinitionType(str, Enum):
 
     Allows users to choose from a predefined list of options.
     Each option has a label (shown to user) and value (stored).
+    In static metadata, set Value.Filterable to true to show search.
+    Omitted values keep search disabled.
     """
 
     LABEL = "label"

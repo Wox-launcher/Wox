@@ -18,6 +18,185 @@ func fixture() (*Catalog, Env) {
 	return c, Env{Now: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC), Local: time.UTC, DefaultCurrency: "USD", Prices: prices}
 }
 
+// TestDefaultCurrencyConversions tests default currencies, explicit targets, rates, and output formatting.
+func TestDefaultCurrencyConversions(t *testing.T) {
+	c, env := fixture()
+	env.Prices["BRL"] = rational("0.2")
+	check := func(t *testing.T, input, want, defaultCurrency string) {
+		t.Helper()
+		testEnv := env
+		testEnv.DefaultCurrency = defaultCurrency
+		q, err := c.Parse(input, ParseOptions{DecimalSeparator: "."})
+		if err != nil {
+			t.Fatalf("parse %q: %v", input, err)
+		}
+		r, err := c.Evaluate(context.Background(), q, testEnv)
+		if err != nil {
+			t.Fatalf("evaluate %q: %v", input, err)
+		}
+		if p := c.Format(r, FormatOptions{}); p.Raw != want {
+			t.Fatalf("%s, default %q: raw %q, want %q", input, defaultCurrency, p.Raw, want)
+		}
+	}
+	for _, tc := range []struct{ input, raw string }{
+		{"1 usd", "5 BRL"}, {"1usd", "5 BRL"}, {"1 eur", "10 BRL"},
+		{"5 usd", "25 BRL"}, {"25 eur", "250 BRL"}, {"0.002 btc", "800 BRL"},
+		{"0 usd", "0 BRL"}, {"-5 usd", "-25 BRL"}, {"-0.002 btc", "-800 BRL"},
+		{"(5 usd)", "25 BRL"}, {"$5", "25 BRL"}, {"USD5", "25 BRL"},
+		{"USD1K", "5000 BRL"}, {"$20 + 30", "250 BRL"},
+		{"12% of (100 USD + 50 USD)", "90 BRL"},
+		{"15% tip on 42 usd", "31.5 BRL"}, {"20% off 80 eur", "640 BRL"},
+		{"5.005 usd to 2 dp", "25.03 BRL"},
+		{"21 usd rounded up to nearest 5", "105 BRL"}, {"5 usd as number", "25"},
+		{"21 usd to eur to nearest 5", "10 EUR"}, {"1.01 usd to eur to 2 dp", "0.51 EUR"},
+		{"1 btc", "400000 BRL"}, {"1 eth", "15000 BRL"}, {"1 usdt", "5 BRL"}, {"1 bnb", "4250 BRL"},
+		{"1 brl", "1 BRL"}, {"1 usd to eur", "0.5 EUR"}, {"1 btc to eur", "40000 EUR"},
+		{"1 usd + 1 eur", "15 BRL"}, {"1 btc + 1", "800000 BRL"},
+		{"1 + 1 btc", "800000 BRL"}, {"1 btc - 1", "0 BRL"},
+		{"1 btc + 1 eth", "415000 BRL"}, {"1 usd + 0.001 btc", "405 BRL"},
+		{"2 eur - 1 usd", "15 BRL"}, {"5 usd * 2", "50 BRL"}, {"5 usd / 2", "12.5 BRL"},
+		{"10% of 20 eur", "20 BRL"}, {"(1 usd + 1 eur) * 2", "30 BRL"},
+		{"1 usd + 1 eur to gbp", "2.4 GBP"}, {"1 btc + 1 to btc", "2 BTC"},
+		{"8 usd/hour", "40 BRL/h"}, {"1 usd / 1 eur", "0.5"},
+		{"-8 usd/hour", "-40 BRL/h"}, {"0 usd/hour", "0 BRL/h"},
+		{"0.001 btc/hour", "400 BRL/h"},
+		{"8 usd/hour + 2 eur/hour", "60 BRL/h"},
+		{"8 usd/hour * 30 minutes", "20 BRL"},
+		{"60 usd/hour to /minute", "5 BRL/min"},
+		{"8 usd/hour to eur", "4 EUR/h"},
+		{"60 usd/hour to eur/minute", "0.5 EUR/min"},
+		{"2 usd/meter", "10 BRL/m"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			check(t, tc.input, tc.raw, "BRL")
+		})
+	}
+	for _, tc := range []struct{ input, currency, raw string }{
+		{"5 usd", "EUR", "2.5 EUR"}, {"5 usd", "USD", "5 USD"}, {"5 usd", "", "5 USD"},
+		{"1 usd + 1 eur", "EUR", "1.5 EUR"}, {"1 usd + 1 eur", "USD", "3 USD"}, {"1 usd + 1 eur", "", "3 USD"},
+		{"8 usd/hour", "EUR", "4 EUR/h"}, {"8 usd/hour", "USD", "8 USD/h"}, {"8 usd/hour", "", "8 USD/h"},
+	} {
+		check(t, tc.input, tc.raw, tc.currency)
+	}
+}
+
+// TestCurrencyWeekMonthConversions tests currency and period conversions without intermediate rounding.
+func TestCurrencyWeekMonthConversions(t *testing.T) {
+	c, env := fixture()
+	c.AddCurrency("CHF", false)
+	env.Prices["CHF"] = rational("3")
+	env.Prices["BRL"] = rational("0.2")
+	env.DefaultCurrency = "BRL"
+	for _, tc := range []struct{ input, number, currency, period string }{
+		{"8 usd/week to eur/month", "52/3", "EUR", "mo"},
+		{"8 usd/month to eur/week", "12/13", "EUR", "w"},
+		{"8 usd/week to usd/month", "104/3", "USD", "mo"},
+		{"8 usd/month to usd/week", "24/13", "USD", "w"},
+		{"8 usd/week to /month", "520/3", "BRL", "mo"},
+		{"8 usd/month to /week", "120/13", "BRL", "w"},
+		{"-8 usd/week to eur/month", "-52/3", "EUR", "mo"},
+		{"0 usd/month to eur/week", "0", "EUR", "w"},
+		{"1.5 usd/week to eur/month", "13/4", "EUR", "mo"},
+		{"0.001 btc/week to eur/month", "520/3", "EUR", "mo"},
+		{"8 chf/week to usd/month", "104", "USD", "mo"},
+		{"8 usd/week to chf/month", "104/9", "CHF", "mo"},
+		{"8 chf/month to usd/week", "72/13", "USD", "w"},
+		{"8 usd/month to chf/week", "8/13", "CHF", "w"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			q, err := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
+			if err != nil {
+				t.Fatalf("parse %q: %v", tc.input, err)
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatalf("evaluate %q: %v", tc.input, err)
+			}
+			if r.Value.Number.Cmp(rational(tc.number)) != 0 || !sameUnit(r.Value.Unit, Unit{tc.currency: 1, tc.period: -1}) {
+				t.Fatalf("got %s %v, want %s %s/%s", r.Value.Number, r.Value.Unit, tc.number, tc.currency, tc.period)
+			}
+		})
+	}
+}
+
+// TestCurrencyWeekMonthMissingPrices tests errors for missing, zero, and negative prices.
+func TestCurrencyWeekMonthMissingPrices(t *testing.T) {
+	for _, input := range []string{"8 usd/week to eur/month", "8 usd/month to eur/week"} {
+		for _, code := range []string{"USD", "EUR"} {
+			for _, price := range []*big.Rat{nil, rational("0"), rational("-1")} {
+				c, env := fixture()
+				env.Prices[code] = price
+				q, err := c.Parse(input, ParseOptions{DecimalSeparator: "."})
+				if err != nil {
+					t.Fatalf("parse %q: %v", input, err)
+				}
+				_, err = c.Evaluate(context.Background(), q, env)
+				if e, ok := err.(*Error); !ok || e.Kind != Unavailable {
+					t.Fatalf("%s, %s price %v: got %v, want unavailable", input, code, price, err)
+				}
+			}
+		}
+	}
+}
+
+// TestCurrencySpecialRateFactors keeps currency prices in compound period conversions.
+func TestCurrencySpecialRateFactors(t *testing.T) {
+	c, env := fixture()
+	c.AddCurrency("CHF", false)
+	env.Prices["CHF"] = rational("3")
+	env.Prices["BRL"] = rational("0.2")
+	env.DefaultCurrency = "BRL"
+	for _, tc := range []struct {
+		input, number string
+		unit          Unit
+	}{
+		{"8 usd*week/workday", "40", Unit{"BRL": 1, "w": 1, "workday": -1}},
+		{"8 usd*week/workday to chf", "8/3", Unit{"CHF": 1, "w": 1, "workday": -1}},
+		{"8 chf*mo/week to usd", "24", Unit{"USD": 1, "mo": 1, "w": -1}},
+	} {
+		q, err := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.input, err)
+		}
+		want := rational(tc.number)
+		r, err := c.Evaluate(context.Background(), q, env)
+		if err != nil {
+			t.Fatalf("evaluate %q: %v", tc.input, err)
+		}
+		if r.Value.Number.Cmp(want) != 0 || !sameUnit(r.Value.Unit, tc.unit) {
+			t.Fatalf("%s: got %s %v, want %s %v", tc.input, r.Value.Number, r.Value.Unit, want, tc.unit)
+		}
+	}
+	for _, period := range []Unit{{"w": 1, "workday": -1}, {"mo": 1, "w": -1}} {
+		for _, code := range []string{"USD", "CHF"} {
+			period[code] = 1
+			for _, price := range []*big.Rat{nil, rational("0"), rational("-1")} {
+				env.Prices[code] = price
+				_, err := c.factor(period, env)
+				if e, ok := err.(*Error); !ok || e.Kind != Unavailable {
+					t.Fatalf("%s price %v in %v: got %v, want unavailable", code, price, period, err)
+				}
+			}
+			delete(period, code)
+		}
+	}
+}
+
+// TestZeroExponentCurrencyFactor tests that a zero exponent needs no currency price.
+func TestZeroExponentCurrencyFactor(t *testing.T) {
+	c, env := fixture()
+	delete(env.Prices, "EUR")
+	for _, tc := range []struct {
+		unit Unit
+		want int64
+	}{{Unit{"EUR": 0}, 1}, {Unit{"USD": 1, "EUR": 0}, 1}, {Unit{"w": 1, "workday": -1, "EUR": 0}, 5}} {
+		got, err := c.factor(tc.unit, env)
+		if err != nil || got.Cmp(big.NewRat(tc.want, 1)) != 0 {
+			t.Fatalf("%v: got %v, error %v, want %d", tc.unit, got, err, tc.want)
+		}
+	}
+}
+
 // TestCompatibilityCorpus is executable documentation; rates and time never depend on network or wall time.
 func TestCompatibilityCorpus(t *testing.T) {
 	c, env := fixture()

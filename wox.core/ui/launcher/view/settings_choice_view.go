@@ -489,6 +489,10 @@ func settingsChoiceRoundedEndBackground(width, height float32, color woxui.Color
 
 // handleKey owns modal navigation while leaving ordinary editing keys to WoxTextField.
 func (s *settingsChoiceState) handleKey(context woxwidget.StateContext, props SettingsChoiceProps, visible []visibleSettingsChoice, event woxui.KeyEvent) bool {
+	// IME candidate keys belong to text input; key releases must not repeat menu actions.
+	if !event.Down || event.Composing {
+		return false
+	}
 	switch event.Key {
 	case woxui.KeyEscape:
 		if props.OnCancel != nil {

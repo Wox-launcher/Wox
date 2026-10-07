@@ -1,13 +1,54 @@
 package launcher
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
+	"wox/setting/definition"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestPluginChoiceSearch checks that dropdown search is opt-in for any list size.
+func TestPluginChoiceSearch(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = nil
+	for _, count := range []int{1, 157} {
+		for flag, want := range map[string]bool{"": false, `,"Filterable":false`: false, `,"Filterable":true`: true} {
+			t.Run(fmt.Sprintf("%d/%s", count, flag), func(t *testing.T) {
+				var item definition.PluginSettingDefinitionItem
+				if err := json.Unmarshal([]byte(`{"Type":"select","Value":{"Key":"currency"`+flag+`}}`), &item); err != nil {
+					t.Fatal(err)
+				}
+				options := make([]formOption, count)
+				for i := range options {
+					options[i] = formOption{Label: "USD", Value: "USD"}
+				}
+				converted, ok := fromCoreFormDefinition(item)
+				if !ok || converted.Value.Filterable != want {
+					t.Fatal("search flag was not carried to the form")
+				}
+				converted.Value.Options = options
+				a.pluginSettings.SetForm(&pluginSettingsFormState{
+					pluginID:        "test",
+					formFieldsState: newFormFieldsState([]formDefinition{converted}, map[string]string{"currency": "USD"}, true),
+				})
+				a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+				picker := a.generalSettings.ChoicePicker()
+				if picker == nil || picker.item.filterable != want {
+					t.Fatal("wrong search state")
+				}
+				if picker.item.value != "USD" || len(picker.item.choices) != count {
+					t.Fatal("opening the list changed its value or options")
+				}
+			})
+		}
+	}
+}
 
 func TestPluginMatchesFiltersExclusiveDropdowns(t *testing.T) {
 	enabled := pluginSettingsPlugin{ID: "a", Runtime: "nodejs"}

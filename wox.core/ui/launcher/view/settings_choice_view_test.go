@@ -8,6 +8,63 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestSettingsChoiceInputKeys checks IME and key releases through the focused search field.
+func TestSettingsChoiceInputKeys(t *testing.T) {
+	chosen, cancelled := -1, false
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return SettingsChoiceView(SettingsChoiceProps{
+			ID: "currency", Width: 640, Height: 480, Filterable: true, CurrentValue: "USD",
+			Choices:  []SettingsChoice{{Value: "USD", Label: "USD"}, {Value: "CNY", Label: "CNY"}},
+			OnChoose: func(index int) { chosen = index }, OnCancel: func() { cancelled = true },
+		})
+	})
+	defer host.Dispose()
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 640, Height: 480}, PixelSize: woxui.PixelSize{Width: 640, Height: 480}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	for _, event := range []woxui.KeyEvent{{Down: true, Composing: true}, {Down: false}} {
+		for _, key := range []woxui.Key{woxui.KeyEnter, woxui.KeyEscape, woxui.KeyArrowUp, woxui.KeyArrowDown} {
+			event.Key = key
+			if host.Key(event) || chosen != -1 || cancelled {
+				t.Fatalf("key %s (down=%t, composing=%t) changed the dropdown", key, event.Down, event.Composing)
+			}
+		}
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || chosen != 0 {
+		t.Fatal("ignored keys changed the selection")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || chosen != 1 {
+		t.Fatal("Down and Enter did not select CNY")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyArrowUp, Down: true}) || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || chosen != 0 {
+		t.Fatal("Up and Enter did not select USD")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || !cancelled {
+		t.Fatal("Escape did not close the dropdown")
+	}
+}
+
+// TestSettingsChoiceCurrencySearch checks code matching and clearing the search.
+func TestSettingsChoiceCurrencySearch(t *testing.T) {
+	choices := []SettingsChoice{
+		{Value: "auto", Label: "Auto"}, {Value: "BRL", Label: "BRL"},
+		{Value: "EUR", Label: "EUR"}, {Value: "USD", Label: "USD"},
+	}
+	for query, want := range map[string]string{"brl": "BRL", " UsD ": "USD", "ur": "EUR", "auto": "auto", "xyz": ""} {
+		visible := filteredSettingsChoices(choices, query)
+		if want == "" {
+			if len(visible) != 0 {
+				t.Fatalf("%q: expected no matches", query)
+			}
+		} else if len(visible) != 1 || visible[0].choice.Value != want {
+			t.Fatalf("%q: expected %s", query, want)
+		}
+	}
+	if len(filteredSettingsChoices(choices, "")) != len(choices) {
+		t.Fatal("clearing search did not restore the list")
+	}
+}
+
 func TestFilteredSettingsChoicesInsertsGroupHeaders(t *testing.T) {
 	choices := []SettingsChoice{
 		{Value: "groq", Label: "groq", Group: "API"},
