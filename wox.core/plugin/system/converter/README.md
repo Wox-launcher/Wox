@@ -78,7 +78,7 @@ polling have been removed. `modules` now contains the existing price services;
   relative percentage adjustments.
 - Workdays are Monday–Friday, eight hours per day. Date offsets in workdays also
   skip New Year's Day, Independence Day, Thanksgiving, Christmas, and Boxing Day.
-  `workhours in 2023` is 2080 hours. No new persisted settings are introduced.
+  `workhours in 2023` is 2080 hours.
 - Omitted timezone dates use the source zone's today. IST explicitly means
   Asia/Kolkata. CET/CEST preserve the Europe/Paris alias and use seasonal offsets.
   `GMT+8` / `UTC-7` are fixed offsets. `Tokyo time` is `time in Tokyo`.
@@ -103,7 +103,7 @@ polling have been removed. `modules` now contains the existing price services;
   operators, pace, file-transfer time, inflation phrases, income tax, time zones,
   and comments / ignored words on one line. Clock literals with am/pm subtract as
   an absolute same-day interval; 24-hour clocks stay signed. Mixed currencies keep
-  the last unit. Formatted dimensionless and money values of 100,000 or more use
+  the last unit during calculation. Formatted dimensionless and money values of 100,000 or more use
   SI compact symbols (`3.3M`, `$7B`); rates such as `182,621.25/year` stay
   expanded. Sheet variables, line references, live weather, Wolfram, historical
   FX, and custom units stay out of Converter.

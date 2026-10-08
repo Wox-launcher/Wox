@@ -1404,6 +1404,7 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	item := settingItem{
 		key: "plugin:" + state.pluginID + ":" + definition.Value.Key, title: a.translate(definition.Value.Label),
 		value: state.values[definition.Value.Key], choices: choices,
+		filterable: definition.Value.Filterable,
 	}
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
 		item: item, anchor: anchor,

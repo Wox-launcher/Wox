@@ -236,18 +236,27 @@ func (c *Catalog) absolute(u Unit) bool {
 
 // factor produces a per-query conversion factor, including the captured money prices.
 func (c *Catalog) factor(u Unit, env Env) (*big.Rat, error) {
-	if f, ok := specialRateFactor(u); ok {
-		return f, nil
+	f, special := c.specialRateFactor(u)
+	if !special {
+		f = big.NewRat(1, 1)
 	}
-	f := big.NewRat(1, 1)
 	for k, n := range u {
+		if n == 0 {
+			continue
+		}
 		d := c.Units[k]
-		r := rational(d.Scale)
+		// The special ratio accounts for period factors, but currency prices must still be validated and applied.
+		if special && d.Dimension != "money" {
+			continue
+		}
+		var r *big.Rat
 		if d.Dimension == "money" {
 			r = env.Prices[k]
 			if r == nil || r.Sign() <= 0 {
 				return nil, &Error{Kind: Unavailable, Message: "missing price for " + k}
 			}
+		} else {
+			r = rational(d.Scale)
 		}
 		if r == nil {
 			return nil, invalid("unknown unit " + k)
@@ -268,52 +277,32 @@ func (c *Catalog) factor(u Unit, env Env) (*big.Rat, error) {
 
 // specialRateFactor uses Soulver's business-day and calendar-month rate ratios
 // instead of raw second scales (5 workdays/week, 52 weeks/12 months).
-func specialRateFactor(u Unit) (*big.Rat, bool) {
-	timeU := Unit{}
-	for k, n := range u {
-		if n == 0 {
-			continue
-		}
-		if d, ok := catalogDim(k); ok && d == "money" {
-			continue
-		}
-		timeU[k] = n
-	}
-	if len(timeU) != 2 {
+func (c *Catalog) specialRateFactor(u Unit) (*big.Rat, bool) {
+	if c.nonMoneyUnitCount(u) != 2 {
 		return nil, false
 	}
-	if timeU["w"] == 1 && timeU["workday"] == -1 {
+	switch {
+	case u["w"] == 1 && u["workday"] == -1:
 		return big.NewRat(5, 1), true
-	}
-	if timeU["w"] == -1 && timeU["workday"] == 1 {
+	case u["w"] == -1 && u["workday"] == 1:
 		return big.NewRat(1, 5), true
-	}
-	if timeU["mo"] == 1 && timeU["w"] == -1 {
+	case u["mo"] == 1 && u["w"] == -1:
 		return big.NewRat(52, 12), true
-	}
-	if timeU["mo"] == -1 && timeU["w"] == 1 {
+	case u["mo"] == -1 && u["w"] == 1:
 		return big.NewRat(12, 52), true
 	}
 	return nil, false
 }
 
-func nonMoneyUnits(u Unit) Unit {
-	out := Unit{}
+// nonMoneyUnitCount checks period-only conversions without copying units.
+func (c *Catalog) nonMoneyUnitCount(u Unit) int {
+	count := 0
 	for k, n := range u {
-		if d, ok := catalogDim(k); ok && d == "money" {
-			continue
+		if n != 0 && c.Units[k].Dimension != "money" {
+			count++
 		}
-		out[k] = n
 	}
-	return out
-}
-
-func catalogDim(symbol string) (string, bool) {
-	switch symbol {
-	case "USD", "EUR", "GBP", "JPY", "CNY", "INR", "HKD", "BTC", "ETH", "USDT", "BNB", "RUB", "AUD", "DKK", "NZD", "CAD", "SGD", "TWD", "BRL":
-		return "money", true
-	}
-	return "", false
+	return count
 }
 
 // convert requires complete dimensional agreement, except a single currency target
@@ -346,17 +335,18 @@ func (c *Catalog) convert(v Value, target Unit, env Env, ppi *big.Rat) (Value, e
 		}
 		target = merged
 	}
-	if v.Unit["w"] == -1 && target["mo"] == -1 && len(nonMoneyUnits(v.Unit)) == 1 && len(nonMoneyUnits(target)) == 1 {
+	// Normalize the period without replacing the currency. The common conversion
+	// path must still validate dimensions and apply the captured exchange rates.
+	if v.Unit["w"] == -1 && target["mo"] == -1 && c.nonMoneyUnitCount(v.Unit) == 1 && c.nonMoneyUnitCount(target) == 1 {
 		v.Number = new(big.Rat).Mul(v.Number, big.NewRat(52, 12))
-		v.Unit = copyUnit(target)
-		v.Kind = Quantity
-		return checked(v)
-	}
-	if v.Unit["mo"] == -1 && target["w"] == -1 && len(nonMoneyUnits(v.Unit)) == 1 && len(nonMoneyUnits(target)) == 1 {
+		v.Unit = copyUnit(v.Unit)
+		delete(v.Unit, "w")
+		v.Unit["mo"] = -1
+	} else if v.Unit["mo"] == -1 && target["w"] == -1 && c.nonMoneyUnitCount(v.Unit) == 1 && c.nonMoneyUnitCount(target) == 1 {
 		v.Number = new(big.Rat).Mul(v.Number, big.NewRat(12, 52))
-		v.Unit = copyUnit(target)
-		v.Kind = Quantity
-		return checked(v)
+		v.Unit = copyUnit(v.Unit)
+		delete(v.Unit, "mo")
+		v.Unit["w"] = -1
 	}
 	if env.Substance != "" {
 		if converted, ok, err := convertCooking(v, target, env.Substance); ok || err != nil {

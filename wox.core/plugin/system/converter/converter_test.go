@@ -10,6 +10,8 @@ import (
 	"wox/plugin"
 	"wox/plugin/system/converter/engine"
 	"wox/plugin/system/converter/modules"
+	"wox/setting/definition"
+	"wox/util/locale"
 )
 
 // TestMiddleEasternCurrencies covers the production catalog and offline price path
@@ -50,6 +52,7 @@ func TestMiddleEasternCurrencies(t *testing.T) {
 
 type converterTestAPI struct {
 	plugin.API
+	settings map[string]string
 }
 
 // TestFiatCurrencyCatalog exercises every registered code through the production
@@ -115,7 +118,7 @@ func TestFiatCurrencyUnitCollisions(t *testing.T) {
 	}
 }
 
-func (converterTestAPI) GetSetting(ctx context.Context, key string) string { return "" }
+func (a converterTestAPI) GetSetting(ctx context.Context, key string) string { return a.settings[key] }
 func (converterTestAPI) GetTranslation(ctx context.Context, key string) string {
 	if key == "plugin_converter_time_format" {
 		return "%02d:%02d (%s)"
@@ -214,6 +217,131 @@ func TestConverterRoutingAndCopyActions(t *testing.T) {
 			if a.ContextData["query"] != input {
 				t.Fatal("MRU lost original query")
 			}
+		}
+	}
+}
+
+// TestDefaultCurrencyForRegion covers regional currencies, aliases, and fallback.
+func TestDefaultCurrencyForRegion(t *testing.T) {
+	for _, tc := range []struct{ region, currency string }{
+		{"BR", "BRL"}, {"br", "BRL"}, {"US", "USD"}, {"GB", "GBP"}, {"UK", "GBP"},
+		{"EU", "EUR"}, {"PT", "EUR"}, {"IE", "EUR"},
+		{"IN", "INR"}, {"CH", "CHF"}, {"NZ", "NZD"}, {"KR", "KRW"}, {"ZA", "ZAR"},
+		{"AE", "AED"}, {"SA", "SAR"}, {"EG", "EGP"}, {"JO", "JOD"}, {"KW", "KWD"},
+		{"ST", "STN"}, {"PS", "ILS"},
+		{"", "USD"}, {"ZZ", "USD"}, {"AQ", "USD"}, {"419", "USD"}, {"invalid", "USD"}, {"pt-BR", "USD"},
+	} {
+		t.Run(tc.region, func(t *testing.T) {
+			if got := currencyForRegion(tc.region); got != tc.currency {
+				t.Fatalf("got %s, want %s", got, tc.currency)
+			}
+		})
+	}
+}
+
+// TestDefaultCurrencyCatalog tests the default currency for the current OS locale.
+func TestDefaultCurrencyCatalog(t *testing.T) {
+	selected := currencyForRegion(locale.GetCurrencyRegion())
+	want := "USD"
+	for _, code := range modules.CurrencyCodes() {
+		if strings.EqualFold(selected, code) {
+			want = selected
+			break
+		}
+	}
+	if got := GetUserDefaultCurrency(); got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+// TestDefaultCurrencySetting tests Auto, every fiat option, and invalid saved values.
+func TestDefaultCurrencySetting(t *testing.T) {
+	ctx := context.Background()
+	settings := map[string]string{}
+	c := &Converter{api: converterTestAPI{settings: settings}, catalog: newCatalog()}
+	metadata := c.GetMetadata()
+	if len(metadata.SettingDefinitions) != 1 {
+		t.Fatalf("got %d settings, want 1", len(metadata.SettingDefinitions))
+	}
+	selectSetting, ok := metadata.SettingDefinitions[0].Value.(*definition.PluginSettingValueSelect)
+	if !ok || selectSetting.Key != defaultCurrencySettingKey || selectSetting.DefaultValue != "auto" || !selectSetting.Filterable {
+		t.Fatalf("invalid default currency setting: %+v", metadata.SettingDefinitions[0])
+	}
+	codes := modules.CurrencyCodes()
+	if len(selectSetting.Options) != len(codes)+1 || selectSetting.Options[0].Value != "auto" {
+		t.Fatal("expected Auto and all fiat currencies")
+	}
+	for i, code := range codes {
+		want := strings.ToUpper(code)
+		if selectSetting.Options[i+1].Value != want {
+			t.Fatalf("option %d: got %q, want %q", i+1, selectSetting.Options[i+1].Value, want)
+		}
+		settings[defaultCurrencySettingKey] = want
+		if got := c.defaultCurrency(ctx); got != want {
+			t.Fatalf("setting %q: got %q, want %q", want, got, want)
+		}
+	}
+	for _, value := range []string{"", "auto", "invalid", "BTC", "m"} {
+		settings[defaultCurrencySettingKey] = value
+		if got := c.defaultCurrency(ctx); got != GetUserDefaultCurrency() {
+			t.Fatalf("setting %q: got %q, want Auto", value, got)
+		}
+	}
+	settings[defaultCurrencySettingKey] = " eur "
+	if got := c.defaultCurrency(ctx); got != "EUR" {
+		t.Fatalf("got %q, want EUR", got)
+	}
+}
+
+// TestConverterDefaultCurrencyQueries tests setting changes and conversion after arithmetic.
+func TestConverterDefaultCurrencyQueries(t *testing.T) {
+	ctx := context.Background()
+	settings := map[string]string{cryptoPriceSyncConsentSettingKey: "true"}
+	c := &Converter{api: converterTestAPI{settings: settings}, catalog: newCatalog(), currencyModule: modules.NewCurrencyModule(), cryptoModule: modules.NewCryptoModule()}
+	prices, _ := c.currencyModule.Snapshot()
+	for code, price := range c.cryptoModule.Snapshot() {
+		prices[code] = price
+	}
+	options := numberOptions()
+	for _, selected := range []string{"auto", "BRL", "EUR", "USD", ""} {
+		// Reuse the same plugin to ensure setting changes do not require initialization.
+		settings[defaultCurrencySettingKey] = selected
+		for _, tc := range []struct{ input, amount, source, target, period string }{
+			{"5 usd", "5", "USD", "", ""},
+			{"25 eur", "25", "EUR", "", ""},
+			{"USD1K", "1000", "USD", "", ""},
+			{"$20 + 30", "50", "USD", "", ""},
+			{"12% of (100 USD + 50 USD)", "18", "USD", "", ""},
+			{"0.001 btc", "0.001", "BTC", "", ""},
+			{"1 eur + 1", "2", "EUR", "", ""},
+			{"1 btc + 1", "2", "BTC", "", ""},
+			{"8 usd/hour", "8", "USD", "", "h"},
+			{"60 usd/hour to /minute", "1", "USD", "", "min"},
+			{"5 usd to eur", "5", "USD", "EUR", ""},
+			{"8 usd/hour to eur", "8", "USD", "EUR", "h"},
+			{"8 usd/week to eur/month", "104/3", "USD", "EUR", "mo"},
+		} {
+			t.Run(selected+"/"+tc.input, func(t *testing.T) {
+				target := tc.target
+				if target == "" {
+					target = selected
+					if target == "auto" || target == "" {
+						target = GetUserDefaultCurrency()
+					}
+				}
+				number, _ := new(big.Rat).SetString(tc.amount)
+				number.Mul(number, prices[tc.source]).Quo(number, prices[target])
+				unit := engine.Unit{target: 1}
+				if tc.period != "" {
+					unit[tc.period] = -1
+				}
+				want := c.catalog.Format(engine.Evaluation{Value: engine.Value{Kind: engine.Quantity, Number: number, Unit: unit}}, engine.FormatOptions{DecimalSeparator: options.DecimalSeparator, ThousandsSeparator: options.ThousandsSeparator}).Formatted
+				input := strings.ReplaceAll(tc.input, ".", options.DecimalSeparator)
+				response := c.Query(ctx, plugin.Query{Search: input})
+				if len(response.Results) != 1 || response.Results[0].Title != want {
+					t.Fatalf("got %+v, want %q", response, want)
+				}
+			})
 		}
 	}
 }

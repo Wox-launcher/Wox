@@ -16,6 +16,9 @@ type PluginSettingValueSelect struct {
 	Options      []PluginSettingValueSelectOption
 	Validators   []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 
+	// Filterable enables dropdown search. Omitted values keep search disabled.
+	Filterable bool `json:"Filterable,omitempty"`
+
 	Style PluginSettingValueStyle `json:"-"` // Deprecated: ignored on load so Wox keeps setting layouts consistent.
 }
 

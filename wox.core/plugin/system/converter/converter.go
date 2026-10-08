@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 	"wox/common"
 	"wox/common/icons"
@@ -12,13 +14,18 @@ import (
 	"wox/plugin"
 	"wox/plugin/system/converter/engine"
 	"wox/plugin/system/converter/modules"
+	"wox/setting/definition"
 	"wox/util"
 	"wox/util/calc"
 	"wox/util/clipboard"
 	"wox/util/locale"
+
+	"golang.org/x/text/currency"
+	"golang.org/x/text/language"
 )
 
 const (
+	defaultCurrencySettingKey        = "defaultCurrency"
 	cryptoPriceSyncConsentSettingKey = "cryptoPriceSyncConsent"
 	cryptoConsentResultID            = "converter_crypto_price_sync_consent"
 	cryptoConsentActionID            = "converter_crypto_price_sync_consent_allow"
@@ -37,6 +44,11 @@ type Converter struct {
 }
 
 func (c *Converter) GetMetadata() plugin.Metadata {
+	currencyOptions := []definition.PluginSettingValueSelectOption{{Label: "i18n:plugin_converter_default_currency_auto", Value: "auto"}}
+	for _, code := range modules.CurrencyCodes() {
+		code = strings.ToUpper(code)
+		currencyOptions = append(currencyOptions, definition.PluginSettingValueSelectOption{Label: code, Value: code})
+	}
 	return plugin.Metadata{
 		Id:            common.ConverterPluginID,
 		Name:          "i18n:plugin_converter_plugin_name",
@@ -65,6 +77,19 @@ func (c *Converter) GetMetadata() plugin.Metadata {
 				},
 			},
 		},
+		SettingDefinitions: definition.PluginSettingDefinitions{
+			{
+				Type: definition.PluginSettingDefinitionTypeSelect,
+				Value: &definition.PluginSettingValueSelect{
+					Key:          defaultCurrencySettingKey,
+					Label:        "i18n:plugin_converter_default_currency",
+					DefaultValue: "auto",
+					Filterable:   true,
+					Options:      currencyOptions,
+					Tooltip:      "i18n:plugin_converter_default_currency_description",
+				},
+			},
+		},
 	}
 }
 
@@ -87,34 +112,43 @@ func (c *Converter) Init(ctx context.Context, initParams plugin.InitParams) {
 	c.api.OnMRURestore(ctx, c.handleMRURestore)
 }
 
-// GetUserDefaultCurrency returns the user's default currency based on their locale
-func GetUserDefaultCurrency() string {
-	var regionToCurrency = map[string]string{
-		"AE": "AED", // United Arab Emirates -> UAE Dirham
-		"SA": "SAR", // Saudi Arabia -> Saudi Riyal
-		"EG": "EGP", // Egypt -> Egyptian Pound
-		"JO": "JOD", // Jordan -> Jordanian Dinar
-		"KW": "KWD", // Kuwait -> Kuwaiti Dinar
-		"CN": "CNY", // China -> Chinese Yuan
-		"US": "USD", // United States -> US Dollar
-		"GB": "GBP", // United Kingdom -> British Pound
-		"JP": "JPY", // Japan -> Japanese Yen
-		"EU": "EUR", // European Union -> Euro
-		"DE": "EUR", // Germany -> Euro
-		"FR": "EUR", // France -> Euro
-		"IT": "EUR", // Italy -> Euro
-		"ES": "EUR", // Spain -> Euro
-		"AU": "AUD", // Australia -> Australian Dollar
-		"CA": "CAD", // Canada -> Canadian Dollar
-		"BR": "BRL", // Brazil -> Brazilian Real
-		"RU": "RUB", // Russia -> Russian Ruble
+// Match the existing OS locale cache lifetime and validate the catalog only once.
+var cachedDefaultCurrency = sync.OnceValue(func() string {
+	code := currencyForRegion(locale.GetCurrencyRegion())
+	if slices.Contains(modules.CurrencyCodes(), strings.ToLower(code)) {
+		return code
 	}
+	return "USD"
+})
 
-	_, region := locale.GetLocale()
-	if currency, ok := regionToCurrency[strings.ToUpper(region)]; ok {
-		return currency
+// GetUserDefaultCurrency selects a supported fiat currency from the OS locale's region.
+func GetUserDefaultCurrency() string {
+	return cachedDefaultCurrency()
+}
+
+// defaultCurrency reads the current display setting; only the Auto locale lookup is cached.
+func (c *Converter) defaultCurrency(ctx context.Context) string {
+	code := strings.ToUpper(strings.TrimSpace(c.api.GetSetting(ctx, defaultCurrencySettingKey)))
+	if unit, ok := c.catalog.Units[code]; ok && unit.Dimension == "money" && !c.catalog.Crypto[code] {
+		return code
 	}
-	return "USD" // fallback to USD
+	return GetUserDefaultCurrency()
+}
+
+// currencyForRegion uses the existing dependency's regional data with a USD fallback.
+func currencyForRegion(region string) string {
+	region = strings.ToUpper(region)
+	if len(region) != 2 {
+		return "USD"
+	}
+	r, err := language.ParseRegion(region)
+	if err != nil {
+		return "USD"
+	}
+	if unit, ok := currency.FromRegion(r.Canonicalize()); ok {
+		return unit.String()
+	}
+	return "USD"
 }
 
 // newCatalog binds static vocabulary without creating any data services.
@@ -171,7 +205,11 @@ func (c *Converter) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			prices[code] = price
 		}
 	}
-	evaluation, err := c.catalog.Evaluate(ctx, parsed, engine.Env{Now: time.Now(), Local: time.Local, DefaultCurrency: GetUserDefaultCurrency(), Prices: prices, RateUpdatedAt: updated})
+	defaultCurrency := ""
+	if parsed.Money {
+		defaultCurrency = c.defaultCurrency(ctx)
+	}
+	evaluation, err := c.catalog.Evaluate(ctx, parsed, engine.Env{Now: time.Now(), Local: time.Local, DefaultCurrency: defaultCurrency, Prices: prices, RateUpdatedAt: updated})
 	if err != nil {
 		return plugin.QueryResponse{}
 	}
