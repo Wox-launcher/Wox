@@ -104,6 +104,9 @@ type App struct {
 	resultsQueryID            string
 	queryComplete             bool
 	queryTransitionTimer      *time.Timer
+	queryRefreshHoldQueryID   string
+	queryRefreshHoldTimer     *time.Timer
+	queryRefreshSnapshot      *refreshResultSnapshot
 	queryLoading              bool
 	queryLoadingTimer         *time.Timer
 	quickSelectMode           bool
@@ -938,6 +941,7 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 // a QueryID without clearing them keeps reporting that older state for the new query.
 // Callers that replace the whole query, such as setQuery, own this bookkeeping already.
 func (a *App) beginQueryGenerationLocked() {
+	a.releaseRefreshResultHoldLocked()
 	if a.queryContextKnown {
 		a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
 	}
@@ -989,6 +993,7 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 		a.query.QueryText = a.updateQueryHintText(query.QueryText)
 	}
 	a.resetQueryTransitionLocked()
+	a.releaseRefreshResultHoldLocked()
 	a.resetQueryLoadingLocked()
 	a.results = nil
 	a.resultsSectionRevision++
@@ -1125,6 +1130,10 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
 		return
 	}
+	if a.holdRefreshResultsLocked(queryID, results, layout, refinements, context, queryStartTimestamp, complete) {
+		return
+	}
+	a.releaseRefreshResultHoldLocked()
 	if a.isDev && a.generalSettings.Data().ShowPerformanceTail && a.generalSettings.Data().ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
 		appendUIReceivedTails(results, max(int64(0), time.Now().UnixMilli()-queryStartTimestamp))
 	}
@@ -1218,6 +1227,33 @@ func launcherResultAreaHeight(results []queryResult, layout queryLayout, width f
 		contentHeight = int(listResultsContentHeight(results[:visibleRows], 0, 0, float32(resultRowHeight), groupHeaderHeight, float32(resultRowGap)))
 	}
 	return resultPaddingTop + resultPaddingBottom + contentHeight
+}
+
+// resultAreaHeightLocked resolves the same logical geometry for refresh snapshots and window sizing.
+func (a *App) resultAreaHeightLocked(results []queryResult, layout queryLayout) int {
+	width := a.show.WindowWidth
+	if width <= 0 {
+		width = defaultWidth
+	}
+	if a.webViewFullscreen && a.webViewPreviewWidth > 0 {
+		width = a.webViewPreviewWidth
+	}
+	contentWidth := max(float32(0), float32(width)-2*a.palette.AppContentInset)
+	if a.palette.Surfaces != nil {
+		extra := a.palette.Surfaces.ContentInsets
+		contentWidth = max(0, contentWidth-extra.Left-extra.Right)
+	}
+	maxResults := a.show.MaxResultCount
+	if maxResults <= 0 {
+		maxResults = defaultMaxResult
+	}
+	paddingTop, paddingBottom := int(a.palette.resultContainerPadding.Top), int(a.palette.resultContainerPadding.Bottom)
+	if layout.GridLayout == nil && len(results) > 0 {
+		padding := launcherListPadding(a.palette, a.show)
+		paddingTop, paddingBottom = int(padding.Top), int(padding.Bottom)
+	}
+	density := a.densityMetrics.normalized()
+	return launcherResultAreaHeight(results, layout, contentWidth, maxResults, int(density.resultRowHeight(a.palette)), paddingTop, paddingBottom, density.groupHeaderHeight())
 }
 
 func (a *App) applyWindowBounds() error {
@@ -1323,12 +1359,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		height += int(densityMetrics.refinementBarHeight)
 	}
 	if visibleResults > 0 {
-		contentWidth := max(float32(0), float32(width)-2*palette.AppContentInset)
-		if palette.Surfaces != nil {
-			extra := palette.Surfaces.ContentInsets
-			contentWidth = max(0, contentWidth-extra.Left-extra.Right)
-		}
-		height += launcherResultAreaHeight(results, layout, contentWidth, maxResults, resultRowHeight, resultPaddingTop, resultPaddingBottom, densityMetrics.groupHeaderHeight())
+		height += a.resultAreaHeightLocked(results, layout)
 	}
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)

@@ -672,10 +672,15 @@ export interface Result {
   Score?: number
 
   /**
-   * Stable identity used for actioned-result ranking.
+   * Stable result identity for usage history, MRU restore, and query pins.
    *
    * Optional. Set this when Title or SubTitle changes over time but the result
-   * should keep the same usage score in global search.
+   * should stay the same item. ScoreKey is the older name and is still accepted.
+   */
+  IdentityKey?: string
+
+  /**
+   * @deprecated Use IdentityKey. Still accepted by Wox.
    */
   ScoreKey?: string
 

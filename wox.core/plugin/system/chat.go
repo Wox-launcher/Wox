@@ -130,7 +130,7 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -234,7 +234,7 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 		{
 			Title:    fallbackSearchTitle,
 			Icon:     aiChatIcon,
-			ScoreKey: query.RawQuery,
+			IdentityKey: query.RawQuery,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_chat_start_chat",
@@ -1364,7 +1364,7 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 		Title:    "i18n:ui_ai_chat_new_chat",
 		SubTitle: "i18n:ui_ai_chat_create_new_chat",
 		Icon:     aiChatIcon,
-		ScoreKey: activeChatId,
+		IdentityKey: activeChatId,
 		Actions: []plugin.QueryResultAction{
 			{
 				Id:                     aiChatEnterChatModeActionId,
@@ -1721,7 +1721,7 @@ func (r *AIChatPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUD
 		Title:    foundTitle,
 		SubTitle: "i18n:plugin_ai_chat_start_chat",
 		Icon:     aiChatIcon,
-		ScoreKey: foundID,
+		IdentityKey: foundID,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_ai_chat_start_chat",

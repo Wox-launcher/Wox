@@ -27,6 +27,9 @@ const (
 	clipboardDiagLogThrottleMs = 2000
 )
 
+// lastSeqNum is the sequence a poll has already observed. Writers advance it
+// when they publish so an overlapping poll does not read a half-written
+// clipboard. pendingOwnChange still lets history record that copy.
 var lastSeqNum uint32
 var lastClipboardDiagLogTs int64
 
@@ -304,7 +307,6 @@ func writeTextData(text string) error {
 		return fmt.Errorf("clipboard: writeText failed (code=%d, %s)", int(ret), buildWatchSnapshot())
 	}
 
-	// Update lastSeqNum to avoid triggering watchChange on our own writes
 	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
 	return nil
 }
@@ -426,7 +428,6 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 		return fmt.Errorf("clipboard: writeImage failed (code=%d)", int(ret))
 	}
 
-	// Update lastSeqNum to avoid triggering watchChange on our own writes
 	lastSeqNum = uint32(C.clipboardGetSequenceNumber())
 	return nil
 }

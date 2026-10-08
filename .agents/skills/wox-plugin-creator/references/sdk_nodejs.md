@@ -72,6 +72,7 @@ interface Result {
   Title: string; // Supports "i18n:key" prefix for auto-translation
   SubTitle?: string; // Supports "i18n:key" prefix
   Icon: WoxImage;
+  IdentityKey?: string; // Durable results only. Unique to this result, stable when title or query changes. Omit on a temporary prompt, empty or error state, or one-time status.
   Actions: ResultAction[];
   Score?: number; // 0-100, optional
   ContextData?: any; // Data passed to actions
@@ -239,7 +240,7 @@ class MyPlugin implements Plugin {
     await this.api.OnMRURestore(ctx, async (_ctx, mruData) => {
       const id = mruData.ContextData?.id;
       if (!id) return null;
-      return { Title: id, Actions: [{ Name: "Open", ContextData: { id }, Action: async () => {} }] };
+      return { Title: id, IdentityKey: id, Actions: [{ Name: "Open", ContextData: { id }, Action: async () => {} }] };
     });
   }
 

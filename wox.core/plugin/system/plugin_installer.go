@@ -59,7 +59,7 @@ func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -155,10 +155,10 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
-		Title:    fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.GetName(ctx)),
-		SubTitle: fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx)),
-		Icon:     pluginIcon,
-		ScoreKey: pluginMetadata.Id,
+		Title:       fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.GetName(ctx)),
+		SubTitle:    fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx)),
+		Icon:        pluginIcon,
+		IdentityKey: pluginMetadata.Id,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   actionButtonName,
@@ -239,10 +239,10 @@ func (i *PluginInstallerPlugin) handleMRURestore(ctx context.Context, mruData pl
 	}); ok {
 		keyword := inst.PrimaryTriggerKeyword()
 		result := plugin.QueryResult{
-			Title:    inst.GetName(ctx),
-			SubTitle: inst.GetDescription(ctx),
-			Icon:     common.ParseWoxImageOrDefault(inst.Metadata.Icon, icons.Get(icons.PluginInstaller)),
-			ScoreKey: inst.Metadata.Id,
+			Title:       inst.GetName(ctx),
+			SubTitle:    inst.GetDescription(ctx),
+			Icon:        common.ParseWoxImageOrDefault(inst.Metadata.Icon, icons.Get(icons.PluginInstaller)),
+			IdentityKey: inst.Metadata.Id,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_start_using",
@@ -341,7 +341,7 @@ func (i *PluginInstallerPlugin) queryThemePackage(ctx context.Context, filePath 
 		return []plugin.QueryResult{{Title: "i18n:plugin_theme_package_invalid", SubTitle: err.Error(), Icon: themeIcon, Score: 3000}}
 	}
 	// Match .wox installation priority above generic file-selection actions (AI Chat: 2000).
-	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), Icon: themeIcon, Score: 3000, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
+	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), IdentityKey: theme.ThemeId, Icon: themeIcon, Score: 3000, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
 		if err := ui.GetStoreManager().Install(ctx, theme); err != nil {
 			i.api.Notify(ctx, err.Error())
 		} else {

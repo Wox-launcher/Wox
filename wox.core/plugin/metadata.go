@@ -288,7 +288,7 @@ type MetadataFeatureParamsMRU struct {
 	//   - "title"    (default): use result Title + SubTitle (backward compatible)
 	//   - "rawQuery": use original Query.RawQuery as identity
 	//   - "search":  use Query.Search as identity
-	//   - "scoreKey": use result ScoreKey as identity when available
+	//   - "identityKey": use result IdentityKey when available. "scoreKey" is the older name.
 	HashBy string
 }
 

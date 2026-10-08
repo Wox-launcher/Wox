@@ -264,7 +264,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -822,7 +822,7 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 			Title:    command.Name,
 			SubTitle: modelLabel,
 			Icon:     aiCommandIcon,
-			ScoreKey: command.Command,
+			IdentityKey: command.Command,
 			Preview:  c.buildSelectionPreview(ctx, command, query),
 			Actions:  attachAICommandMRUContext(c.buildAICommandActions(ctx, command, conversations, modelLabel, query), command.Command, query.Search),
 		}
@@ -858,7 +858,7 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 			Title:    command.Command,
 			SubTitle: command.Name,
 			Icon:     aiCommandIcon,
-			ScoreKey: command.Command,
+			IdentityKey: command.Command,
 			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_command_run",
@@ -944,7 +944,7 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 		Id:       uuid.NewString(),
 		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
 		SubTitle: chatModelLabel,
-		ScoreKey: aiCommandSetting.Command + "\x1f" + query.Search,
+		IdentityKey: aiCommandSetting.Command + "\x1f" + query.Search,
 		// Behavior change: input AI command queries are now lazy. The preview shows
 		// the exact text that will be sent when the user chooses Run or Run And Paste,
 		// avoiding the previous expensive request on every query refresh.
@@ -995,7 +995,7 @@ func (c *Plugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (
 			Title:    command.Command,
 			SubTitle: command.Name,
 			Icon:     aiCommandIcon,
-			ScoreKey: command.Command,
+			IdentityKey: command.Command,
 			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_ai_command_run",

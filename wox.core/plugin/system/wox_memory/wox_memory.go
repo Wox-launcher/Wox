@@ -259,10 +259,11 @@ func (p *WoxMemoryPlugin) heapProfileResult(ctx context.Context) plugin.QueryRes
 		subTitle = translateMemory(ctx, "plugin_wox_memory_profile_disabled")
 	}
 	return plugin.QueryResult{
-		Id:       "memory.profile",
-		Title:    translateMemory(ctx, "plugin_wox_memory_profile_action"),
-		SubTitle: subTitle,
-		Icon:     icons.Get(icons.ActionCPUProfile),
+		Id:          "memory.profile",
+		IdentityKey: "memory.profile",
+		Title:       translateMemory(ctx, "plugin_wox_memory_profile_action"),
+		SubTitle:    subTitle,
+		Icon:        icons.Get(icons.ActionCPUProfile),
 		Actions: []plugin.QueryResultAction{{
 			Name: translateMemory(ctx, "plugin_wox_memory_profile_action"),
 			Icon: icons.Get(icons.ActionCPUProfile),
@@ -936,7 +937,7 @@ func owningProcessIndex(processID int, parents, ownerIndexByProcessID map[int]in
 }
 
 func memoryDiagnosticResult(id, title, subtitle string, bytes uint64, group string, groupScore int64) plugin.QueryResult {
-	return plugin.QueryResult{Id: id, Title: title, SubTitle: subtitle, Icon: icons.Get(icons.ActionCPUProfile), Score: int64(bytes), ScoreKey: id, Group: group, GroupScore: groupScore}
+	return plugin.QueryResult{Id: id, Title: title, SubTitle: subtitle, Icon: icons.Get(icons.ActionCPUProfile), Score: int64(bytes), IdentityKey: id, Group: group, GroupScore: groupScore}
 }
 
 func translateMemory(ctx context.Context, key string) string {

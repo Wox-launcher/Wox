@@ -112,10 +112,11 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			}
 
 			results = append(results, plugin.QueryResult{
-				Title:    history.Url,
-				SubTitle: history.Title,
-				Score:    100,
-				Icon:     r.getRecentUrlIcon(ctx, history),
+				Title:       history.Url,
+				SubTitle:    history.Title,
+				IdentityKey: util.NormalizeUrl(history.Url),
+				Score:       100,
+				Icon:        r.getRecentUrlIcon(ctx, history),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_url_open",
@@ -152,10 +153,11 @@ func (r *UrlPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		}
 
 		results = append(results, plugin.QueryResult{
-			Title:    query.Search,
-			SubTitle: "i18n:plugin_url_open_in_browser",
-			Score:    100,
-			Icon:     urlIcon,
+			Title:       query.Search,
+			SubTitle:    "i18n:plugin_url_open_in_browser",
+			IdentityKey: normalizedURL,
+			Score:       100,
+			Icon:        urlIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_url_open",
@@ -266,9 +268,10 @@ func (r *UrlPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 	}
 
 	result := &plugin.QueryResult{
-		Title:    url,
-		SubTitle: title,
-		Icon:     mruData.Icon,
+		Title:       url,
+		SubTitle:    title,
+		IdentityKey: url,
+		Icon:        mruData.Icon,
 	}
 
 	if typeStr == "history" {

@@ -462,10 +462,11 @@ func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title st
 	}
 
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: fullPath,
-		Icon:     icon,
-		Score:    score,
+		Title:       title,
+		SubTitle:    fullPath,
+		IdentityKey: fullPath,
+		Icon:        icon,
+		Score:       score,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name: "i18n:plugin_quickjump_open",
@@ -575,10 +576,11 @@ func (c *QuickJumpPlugin) queryJumpFolders(ctx context.Context, query plugin.Que
 
 func (c *QuickJumpPlugin) buildJumpFolderResult(query plugin.Query, title string, folderPath string, score int64) plugin.QueryResult {
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: folderPath,
-		Icon:     icons.Get(icons.PluginQuickJump),
-		Score:    score,
+		Title:       title,
+		SubTitle:    folderPath,
+		IdentityKey: folderPath,
+		Icon:        icons.Get(icons.PluginQuickJump),
+		Score:       score,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_quickjump_jump_to",

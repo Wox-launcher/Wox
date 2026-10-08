@@ -57,7 +57,7 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -108,10 +108,10 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 				themePath = packageManifest
 			}
 			result := plugin.QueryResult{
-				Title:    theme.GetName(ctx),
-				SubTitle: themeStoreSubtitle(theme.GetDescription(ctx), imageThemeIDs[theme.ThemeId], imageThemeHint),
-				Icon:     themeResultIcon(theme, iconCatalog),
-				ScoreKey: theme.ThemeId,
+				Title:       theme.GetName(ctx),
+				SubTitle:    themeStoreSubtitle(theme.GetDescription(ctx), imageThemeIDs[theme.ThemeId], imageThemeHint),
+				Icon:        themeResultIcon(theme, iconCatalog),
+				IdentityKey: theme.ThemeId,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   changeThemeText,
@@ -177,11 +177,12 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			icon = manifest.IconColors.SwatchImage()
 		}
 		return plugin.QueryResult{
-			Title:      manifest.GetName(ctx),
-			SubTitle:   themeStoreSubtitle(manifest.GetDescription(ctx), manifest.ImageTheme, imageThemeHint),
-			Icon:       icon,
-			Group:      storeGroup,
-			GroupScore: 0,
+			Title:       manifest.GetName(ctx),
+			SubTitle:    themeStoreSubtitle(manifest.GetDescription(ctx), manifest.ImageTheme, imageThemeHint),
+			IdentityKey: manifest.Id,
+			Icon:        icon,
+			Group:       storeGroup,
+			GroupScore:  0,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   installThemeText,
@@ -231,10 +232,10 @@ func (c *ThemePlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUDa
 
 	changeThemeText := i18n.GetI18nManager().TranslateWox(ctx, "plugin_theme_change_theme")
 	result := plugin.QueryResult{
-		Title:    found.GetName(ctx),
-		SubTitle: found.GetDescription(ctx),
-		Icon:     themeResultIcon(found, installedThemes),
-		ScoreKey: found.ThemeId,
+		Title:       found.GetName(ctx),
+		SubTitle:    found.GetDescription(ctx),
+		Icon:        themeResultIcon(found, installedThemes),
+		IdentityKey: found.ThemeId,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   changeThemeText,

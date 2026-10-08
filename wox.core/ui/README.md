@@ -38,6 +38,8 @@ The widget Host supports incremental retained `Stateful` elements alongside lega
 
 List result gutters are fixed outside the scrolling rows. Window sizing and list composition share the same resolved padding: `ResultContainerPaddingTop/Bottom` frame the viewport, and `AppPaddingBottom` is added below results only when neither a toolbar nor a bottom query box owns that edge. The result-count budget applies to row content; group headers add their own height without consuming a result slot. Selection following and quick selection use the inner viewport without padding. Lists with a bottom gutter stop painting at that viewport; edge-to-edge lists can extend behind the toolbar.
 
+Explicit query refreshes retain the visible result snapshot for up to 400 ms while buffering only the newest partial response. A final response or a partial response whose logical result-area height reaches the retained height commits immediately. The deadline commits the buffered response, including its layout, refinements, and context; if none arrived, it enters the normal waiting state. Refresh and window sizing share the same list/grid geometry calculation. New query generations cancel the refresh buffer; ordinary typed queries keep their existing short transition and display their first response immediately.
+
 ## Incremental rendering scope
 
 Fine-grained layout invalidation, `Boundary` decomposition, and repaint-region tuning target the Launcher window. Launcher interactions are continuous and latency-sensitive, so query editing, list and grid result fields, Glance, previews, and action surfaces should invalidate the smallest stable visual owner that actually changed.

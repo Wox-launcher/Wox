@@ -59,7 +59,11 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
+<<<<<<< HEAD
 	// Recursive so hosts/flow stays a directory beside the Python and Node host files.
+=======
+	// Hosts include nested runtimes such as hosts/flow; a flat extract reads those directories as files.
+>>>>>>> master
 	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", true)
 	if extractHostErr != nil {
 		return extractHostErr

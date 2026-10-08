@@ -142,7 +142,7 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -392,9 +392,10 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 				continue
 			}
 			results = append(results, plugin.QueryResult{
-				Title:    command.Command,
-				SubTitle: string(command.Description),
-				Icon:     wpmIcon,
+				Title:       command.Command,
+				SubTitle:    string(command.Description),
+				IdentityKey: command.Command,
+				Icon:        wpmIcon,
 				Actions: []plugin.QueryResultAction{{
 					Name:                   command.Command,
 					Icon:                   icons.Get(icons.ActionOpen),
@@ -473,13 +474,13 @@ func (w *WPMPlugin) buildGlobalStorePluginResult(ctx context.Context, pluginMani
 	// explicit WPM install command instead of installing immediately. This keeps
 	// the existing install preview and confirmation flow in one place.
 	return plugin.QueryResult{
-		Id:       uuid.NewString(),
-		Title:    pluginName,
-		SubTitle: pluginManifest.GetDescription(ctx),
-		Icon:     w.buildPluginDetailIcon(pluginManifest),
-		ScoreKey: pluginManifest.Id,
-		Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_store"))},
-		Preview:  w.buildPluginDetailPreview(ctx, pluginManifest, false, false),
+		Id:          uuid.NewString(),
+		Title:       pluginName,
+		SubTitle:    pluginManifest.GetDescription(ctx),
+		Icon:        w.buildPluginDetailIcon(pluginManifest),
+		IdentityKey: pluginManifest.Id,
+		Tails:       []plugin.QueryResultTail{plugin.NewQueryResultTailText(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_plugin_store"))},
+		Preview:     w.buildPluginDetailPreview(ctx, pluginManifest, false, false),
 		Actions: attachWPMMRUContext([]plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_wpm_view_install",
@@ -732,11 +733,11 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 		icon = common.ConvertRelativePathToAbsolutePath(ctx, icon, pluginInstance.PluginDirectory)
 
 		return plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    pluginInstance.GetName(ctx),
-			SubTitle: pluginInstance.GetDescription(ctx),
-			Icon:     icon,
-			ScoreKey: pluginInstance.Metadata.Id,
+			Id:          uuid.NewString(),
+			Title:       pluginInstance.GetName(ctx),
+			SubTitle:    pluginInstance.GetDescription(ctx),
+			Icon:        icon,
+			IdentityKey: pluginInstance.Metadata.Id,
 			Actions: attachWPMMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_uninstall",
@@ -1104,14 +1105,14 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		pluginDescription := pluginManifest.GetDescription(ctx)
 
 		results = append(results, plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    pluginName,
-			SubTitle: pluginDescription,
-			Icon:     icon,
-			ScoreKey: pluginManifest.Id,
-			Tails:    tails,
-			Preview:  w.buildPluginDetailPreview(ctx, pluginManifest, installedFlag, false),
-			Actions:  attachWPMMRUContext(actions, pluginManifest.Id),
+			Id:          uuid.NewString(),
+			Title:       pluginName,
+			SubTitle:    pluginDescription,
+			Icon:        icon,
+			IdentityKey: pluginManifest.Id,
+			Tails:       tails,
+			Preview:     w.buildPluginDetailPreview(ctx, pluginManifest, installedFlag, false),
+			Actions:     attachWPMMRUContext(actions, pluginManifest.Id),
 		})
 	}
 	return results
@@ -1198,8 +1199,9 @@ func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
 func (w *WPMPlugin) reloadDevCommand(ctx context.Context) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
-			Title: "i18n:plugin_wpm_reload_all_plugins",
-			Icon:  wpmIcon,
+			Title:       "i18n:plugin_wpm_reload_all_plugins",
+			IdentityKey: "wpm:reload-all",
+			Icon:        wpmIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_reload",
@@ -1653,10 +1655,10 @@ func (w *WPMPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 		icon := common.ParseWoxImageOrDefault(inst.Metadata.Icon, wpmIcon)
 		icon = common.ConvertRelativePathToAbsolutePath(ctx, icon, inst.PluginDirectory)
 		result := plugin.QueryResult{
-			Title:    inst.GetName(ctx),
-			SubTitle: inst.GetDescription(ctx),
-			Icon:     icon,
-			ScoreKey: inst.Metadata.Id,
+			Title:       inst.GetName(ctx),
+			SubTitle:    inst.GetDescription(ctx),
+			Icon:        icon,
+			IdentityKey: inst.Metadata.Id,
 			Actions: attachWPMMRUContext([]plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_wpm_start_using",

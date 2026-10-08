@@ -201,6 +201,7 @@ func (a *App) queryScopeIdentityLocked(text string) string {
 
 // beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
 func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
+	a.releaseRefreshResultHoldLocked()
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
 	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0 || a.show.StartPage == "mru") {

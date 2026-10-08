@@ -55,7 +55,7 @@ const (
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
 	globalQueryPluginScoreLimit  = 200
-	// rankAboveUsageScore sits above action history and below the query-pin boost.
+	// rankAboveUsageScore sits above action history. Query pins are a separate display tier.
 	rankAboveUsageScore int64 = 50000
 	fileSearchPluginID        = common.FileSearchPluginID
 )
@@ -1936,60 +1936,34 @@ func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instanc
 }
 
 func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
-	title := result.Title
-	subTitle := result.SubTitle
-	scoreKey := result.ScoreKey
-	resultHash := setting.NewResultHashFromParts(pluginInstance.Metadata.Id, title, subTitle, scoreKey)
+	// Pins and usage history share one identity. Translate first so an i18n title
+	// hashes the same way calculateResultScore does after polish.
+	scoreResult := result
+	scoreResult.Title = m.translatePlugin(ctx, pluginInstance, result.Title)
+	scoreResult.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
+	resultHash := resultIdentityHash(pluginInstance.Metadata.Id, scoreResult)
 	settingManager := setting.GetSettingManager()
 	// Declare both actions first
 	var pinInQueryAction func(context.Context, ActionContext)
 	var unpinInQueryAction func(context.Context, ActionContext)
 
-	// Define pin in current query action
+	// Define pin in current query action. Refresh rebuilds scores so only this query moves the row up.
 	pinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
-		settingManager.PinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
-
-		// Get API instance
+		settingManager.PinResult(ctx, resultHash, query.RawQuery)
 		api := NewAPI(pluginInstance)
 		api.Notify(ctx, "i18n:plugin_manager_pin_in_query_success")
-
-		// Get current result state
-		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
-		if updatableResult == nil {
-			return // Result no longer visible
-		}
-
-		// Update the result to refresh UI
-		// Note: We don't need to manually add the pin tail here because:
-		// 1. GetUpdatableResult filters out system tails (including the pin icon)
-		// 2. PolishUpdatableResult will automatically add the pin tail back if this result is pinned
-		// 3. This ensures the pin tail is always managed by the system
-		api.UpdateResult(ctx, *updatableResult)
+		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
 	}
 
-	// Define unpin from current query action
+	// Define unpin from current query action.
 	unpinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
-		settingManager.UnpinResult(ctx, pluginInstance.Metadata.Id, title, subTitle)
-
-		// Get API instance
+		settingManager.UnpinResult(ctx, resultHash, query.RawQuery)
 		api := NewAPI(pluginInstance)
 		api.Notify(ctx, "i18n:plugin_manager_unpin_in_query_success")
-
-		// Get current result state
-		updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
-		if updatableResult == nil {
-			return // Result no longer visible
-		}
-
-		// Update the result to refresh UI
-		// Note: We don't need to manually remove the pin tail here because:
-		// 1. GetUpdatableResult filters out system tails (including the pin icon)
-		// 2. PolishUpdatableResult will NOT add the pin tail back if this result is no longer pinned
-		// 3. This ensures the pin tail is always managed by the system
-		api.UpdateResult(ctx, *updatableResult)
+		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
 	}
 
-	if settingManager.IsPinedResult(ctx, pluginInstance.Metadata.Id, title, subTitle) {
+	if settingManager.IsPinedResult(ctx, resultHash, query.RawQuery) {
 		defaultActions = append(defaultActions, QueryResultAction{
 			Id:                     systemActionUnpinInQueryID,
 			Name:                   "i18n:plugin_manager_unpin_in_query",
@@ -2016,9 +1990,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		api.Notify(ctx, "i18n:plugin_manager_reset_ranking_success")
 		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
 	}
-	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, QueryResult{
-		Title: title, SubTitle: subTitle, ScoreKey: scoreKey,
-	}, query.RawQuery)
+	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, scoreResult, query.RawQuery)
 	defaultActions = append(defaultActions, QueryResultAction{
 		Id:                     systemActionResetRankingID,
 		Name:                   "i18n:plugin_manager_reset_ranking",
@@ -2357,14 +2329,14 @@ func limitGlobalQueryPluginScore(query Query, score int64) int64 {
 	return globalQueryPluginScoreLimit
 }
 
-func resultScoreHash(pluginId string, result QueryResult) setting.ResultHash {
-	return setting.NewResultHashFromParts(pluginId, result.Title, result.SubTitle, result.ScoreKey)
+func resultIdentityHash(pluginId string, result QueryResult) setting.ResultHash {
+	return setting.NewResultHashFromParts(pluginId, result.Title, result.SubTitle, result.IdentityKey)
 }
 
 func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, currentQuery string) int64 {
 	var score int64 = 0
 
-	resultHash := resultScoreHash(pluginId, result)
+	resultHash := resultIdentityHash(pluginId, result)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	actionResults, ok := woxSetting.ActionedResults.Get().Load(resultHash)
 	if !ok {
@@ -3094,6 +3066,14 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 		}
 		return 1
 	}
+	// Pin is its own tier. Plugin scores, such as clipboard copy times, stay inside
+	// that tier and only order pins against other pins.
+	if aPinned, bPinned := queryResultPinned(a.Result), queryResultPinned(b.Result); aPinned != bPinned {
+		if aPinned {
+			return -1
+		}
+		return 1
+	}
 	switch {
 	case a.Result.Score > b.Result.Score:
 		return -1
@@ -3124,7 +3104,7 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 }
 
 // BuildQueryResultsSnapshot builds a snapshot of all cached query results for the given session and query id.
-// Results are grouped by their group name, and both groups and results within groups are sorted by score.
+// Query pins come first. Remaining results are grouped by name, and both groups and results within groups are sorted by score.
 func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []QueryResultUI {
 	return m.buildQueryResultsSnapshot(sessionId, queryId, nil)
 }
@@ -3201,13 +3181,27 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		return finalResults
 	}
 
+	// Pins leave their group and stay above every group header. Otherwise a pinned
+	// clipboard row remains inside Today, where a later copy's timestamp still
+	// sorts first, and an older day group would keep the pin below Today.
 	groupScores := map[string]int64{}
+	var pinnedResults []*QueryResultCache
+	groupedResults := make(map[string][]*QueryResultCache)
 	for _, resultCache := range resultCaches {
+		if queryResultPinned(resultCache.Result) {
+			pinnedResults = append(pinnedResults, resultCache)
+			continue
+		}
 		result := resultCache.Result
 		if score, ok := groupScores[result.Group]; !ok || result.GroupScore > score {
 			groupScores[result.Group] = result.GroupScore
 		}
+		groupedResults[result.Group] = append(groupedResults[result.Group], resultCache)
 	}
+	// Every pin is already in the same tier, so this keeps their original score order.
+	sort.SliceStable(pinnedResults, func(i, j int) bool {
+		return compareQueryResultCachesForDisplay(pinnedResults[i], pinnedResults[j]) < 0
+	})
 
 	var groups []string
 	for group := range groupScores {
@@ -3222,12 +3216,6 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		return scoreA > scoreB
 	})
 
-	groupedResults := make(map[string][]*QueryResultCache)
-	for _, result := range resultCaches {
-		group := result.Result.Group
-		groupedResults[group] = append(groupedResults[group], result)
-	}
-
 	for group := range groupedResults {
 		groupResults := groupedResults[group]
 		sort.Slice(groupResults, func(i, j int) bool {
@@ -3238,6 +3226,9 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 
 	finalResults := make([]QueryResultUI, 0, len(aliasResults)+len(resultCaches)+len(groups))
 	for _, resultCache := range aliasResults {
+		finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
+	}
+	for _, resultCache := range pinnedResults {
 		finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
 	}
 	for _, group := range groups {
@@ -3552,14 +3543,10 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	AutoScoreCostUs := time.Since(autoScoreTimingStart).Microseconds()
 	favoriteStart := util.GetSystemTimestamp()
 	favoriteTimingStart := time.Now()
-	// check if the user pinned this result in the current query
-	// a pinned result will not be affected by ignoreAutoScore setting, except on the MRU page where MRU score owns ranking.
-	isPinned := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, result.Title, result.SubTitle)
+	// A pin applies only to the query text it was saved with.
+	// It still ignores ignoreAutoScore, except on the MRU page where MRU score owns ranking.
+	isPinned := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, resultIdentityHash(pluginInstance.Metadata.Id, result), query.RawQuery)
 	if isPinned {
-		pinScore := int64(100000)
-		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is pinned in current query, add score: %d", pluginInstance.GetName(ctx), result.Title, pinScore))
-		result.Score += pinScore
-
 		// Add pin icon to tails if not already present
 		hasPinTail := false
 		for _, tail := range result.Tails {
@@ -3569,12 +3556,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 			}
 		}
 		if !hasPinTail {
-			result.Tails = append(result.Tails, QueryResultTail{
-				Type:         QueryResultTailTypeImage,
-				Image:        icons.Get(icons.ActionPin),
-				ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify the pin tail
-				IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
-			})
+			result.Tails = append(result.Tails, pinnedInQueryTail(ctx))
 		}
 	}
 	FavoriteCost := util.GetSystemTimestamp() - favoriteStart
@@ -3961,8 +3943,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 			}
 		}
 
-		// Add pin icon to tails if this result is pinned in the current query
-		isPinned := setting.GetSettingManager().IsPinedResult(ctx, pluginInstance.Metadata.Id, resultCache.Result.Title, resultCache.Result.SubTitle)
+		// Add pin icon to tails if this result is pinned for the current query text.
+		isPinned := !resultCache.Query.Env.IsMRU && setting.GetSettingManager().IsPinedResult(ctx, resultIdentityHash(pluginInstance.Metadata.Id, resultCache.Result), resultCache.Query.RawQuery)
 		if isPinned {
 			// Check if pin tail already exists
 			hasPinTail := false
@@ -3973,12 +3955,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 				}
 			}
 			if !hasPinTail {
-				tails = append(tails, QueryResultTail{
-					Type:         QueryResultTailTypeImage,
-					Image:        icons.Get(icons.ActionPin),
-					ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue}, // Use ContextData to identify the pin tail
-					IsSystemTail: true,                                                                         // Mark as system tail so it will be filtered out in GetUpdatableResult
-				})
+				tails = append(tails, pinnedInQueryTail(ctx))
 			}
 		}
 
@@ -4048,6 +4025,28 @@ func (m *Manager) serializeContextData(contextData map[string]string) string {
 		return ""
 	}
 	return string(data)
+}
+
+// queryResultPinned reports the query-pin tail attached during polish.
+func queryResultPinned(result QueryResult) bool {
+	for _, tail := range result.Tails {
+		if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
+			return true
+		}
+	}
+	return false
+}
+
+// pinnedInQueryTail marks a result pinned to the current query.
+// ContextData identifies this system tail, and IsSystemTail keeps it out of plugin updates.
+func pinnedInQueryTail(ctx context.Context) QueryResultTail {
+	return QueryResultTail{
+		Type:         QueryResultTailTypeImage,
+		Image:        icons.Get(icons.ActionPin),
+		Tooltip:      i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_pin_in_query"),
+		ContextData:  common.ContextData{favoriteTailContextDataKey: favoriteTailContextDataValue},
+		IsSystemTail: true,
+	}
 }
 
 func (m *Manager) appendDevScoreTail(ctx context.Context, tails []QueryResultTail, score int64) []QueryResultTail {
@@ -4961,7 +4960,7 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 
 	// Ranking history describes how often a result is used, so maintenance actions
 	// that only change Wox configuration must not boost the result they were run from.
-	scoreHash := resultScoreHash(meta.Id, resultCache.Result)
+	scoreHash := resultIdentityHash(meta.Id, resultCache.Result)
 	setting.GetSettingManager().AddActionedResultByHash(ctx, scoreHash, resultCache.Query.RawQuery)
 
 	// Add to MRU if plugin supports it

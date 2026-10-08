@@ -194,13 +194,14 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		}
 
 		results = append(results, plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    triggerKeywordToUse,
-			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), entry.pluginName),
-			Score:    resultBaseScore,
-			Icon:     resultIcon,
-			Tails:    upgradeTails,
-			Actions:  actions,
+			Id:          uuid.NewString(),
+			IdentityKey: pluginInstance.Metadata.Id + ":" + triggerKeywordToUse,
+			Title:       triggerKeywordToUse,
+			SubTitle:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_indicator_activate_plugin"), entry.pluginName),
+			Score:       resultBaseScore,
+			Icon:        resultIcon,
+			Tails:       upgradeTails,
+			Actions:     actions,
 		})
 
 		var commandsToShow []indicatorMatchedCommand
@@ -246,13 +247,14 @@ func (i *IndicatorPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			}
 
 			results = append(results, plugin.QueryResult{
-				Id:       uuid.NewString(),
-				Title:    fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
-				SubTitle: string(metadataCommand.Description),
-				Score:    commandScore,
-				Icon:     resultIcon,
-				Tails:    upgradeTails,
-				Actions:  commandActions,
+				Id:          uuid.NewString(),
+				IdentityKey: pluginInstance.Metadata.Id + ":" + triggerKeywordToUse + ":" + metadataCommand.Command,
+				Title:       fmt.Sprintf("%s %s ", triggerKeywordToUse, metadataCommand.Command),
+				SubTitle:    string(metadataCommand.Description),
+				Score:       commandScore,
+				Icon:        resultIcon,
+				Tails:       upgradeTails,
+				Actions:     commandActions,
 			})
 		}
 	}

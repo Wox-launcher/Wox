@@ -104,10 +104,11 @@ func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 		childArg = diagnostic.ArgChild
 	}
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: subtitle,
-		Icon:     icons.Get(icons.ControlRefresh),
-		Score:    50,
+		Title:       title,
+		SubTitle:    subtitle,
+		IdentityKey: "feedback:restart",
+		Icon:        icons.Get(icons.ControlRefresh),
+		Score:       50,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   title,
@@ -144,10 +145,11 @@ func (p *FeedbackPlugin) buildCrashResults(ctx context.Context) []plugin.QueryRe
 
 func (p *FeedbackPlugin) buildBugResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Title:    "i18n:plugin_feedback_bug_title",
-		SubTitle: "i18n:plugin_feedback_bug_subtitle",
-		Icon:     icons.Get(icons.PluginFeedback),
-		Score:    300,
+		Title:       "i18n:plugin_feedback_bug_title",
+		SubTitle:    "i18n:plugin_feedback_bug_subtitle",
+		IdentityKey: "feedback:bug",
+		Icon:        icons.Get(icons.PluginFeedback),
+		Score:       300,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_feedback_bug_title",
@@ -163,10 +165,11 @@ func (p *FeedbackPlugin) buildBugResult() plugin.QueryResult {
 
 func (p *FeedbackPlugin) buildFeatureResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Title:    "i18n:plugin_feedback_feature_title",
-		SubTitle: "i18n:plugin_feedback_feature_subtitle",
-		Icon:     icons.Get(icons.PluginNotes),
-		Score:    200,
+		Title:       "i18n:plugin_feedback_feature_title",
+		SubTitle:    "i18n:plugin_feedback_feature_subtitle",
+		IdentityKey: "feedback:feature",
+		Icon:        icons.Get(icons.PluginNotes),
+		Score:       200,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_feedback_feature_title",
@@ -182,10 +185,11 @@ func (p *FeedbackPlugin) buildFeatureResult() plugin.QueryResult {
 
 func (p *FeedbackPlugin) buildClearLogsResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Title:    "i18n:plugin_feedback_clear_logs_title",
-		SubTitle: "i18n:plugin_feedback_clear_logs_subtitle",
-		Icon:     icons.Get(icons.ActionDelete),
-		Score:    100,
+		Title:       "i18n:plugin_feedback_clear_logs_title",
+		IdentityKey: "feedback:clear-logs",
+		SubTitle:    "i18n:plugin_feedback_clear_logs_subtitle",
+		Icon:        icons.Get(icons.ActionDelete),
+		Score:       100,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_feedback_clear_logs_title",
@@ -240,9 +244,10 @@ func (p *FeedbackPlugin) buildCrashIncidentResult(ctx context.Context, incident 
 		incident.ReportPath,
 	)
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: subtitle,
-		Icon:     icons.Get(icons.PluginFeedback),
+		Title:       title,
+		SubTitle:    subtitle,
+		IdentityKey: incident.ID,
+		Icon:        icons.Get(icons.PluginFeedback),
 		// The launcher re-sorts cached results by score, so preserve newest-first event ordering here.
 		Score: incident.DetectedAt,
 		Preview: plugin.WoxPreview{

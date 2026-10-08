@@ -819,6 +819,99 @@ func TestRefreshMRUPreservesSelection(t *testing.T) {
 	}
 }
 
+// TestRefreshQueryKeepsListUntilSnapshotStopsShrinking covers pin/refresh.
+// The first snapshot is often only the fastest plugins, and painting it collapses
+// the window until the rest of the results arrive.
+func TestRefreshQueryKeepsListUntilSnapshotStopsShrinking(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	query := newInputQuery("setting")
+	app := newSendQueryTestApp(services, query, showAppParams{MaxResultCount: 8})
+	app.visible = true
+	app.results = make([]queryResult, 8)
+	for index := range app.results {
+		app.results[index] = queryResult{ID: fmt.Sprintf("old-%d", index), QueryID: query.QueryID}
+	}
+	app.resultsQueryID = query.QueryID
+	app.selected = 1
+
+	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{SelectedResultId: "old-1"}); err != nil {
+		t.Fatalf("refresh query: %v", err)
+	}
+	t.Cleanup(func() {
+		app.resetQueryTransitionLocked()
+		app.releaseRefreshResultHoldLocked()
+		app.resetQueryLoadingLocked()
+	})
+	refreshedQueryID := app.query.QueryID
+	if app.queryRefreshHoldQueryID != refreshedQueryID || app.queryRefreshHoldTimer == nil {
+		t.Fatal("refresh did not hold the previous results")
+	}
+
+	app.applyResults(refreshedQueryID, []queryResult{{ID: "fast-1"}, {ID: "fast-2"}, {ID: "fast-3"}}, &queryLayout{}, nil, nil, 0, false)
+	if len(app.results) != 8 || app.results[0].ID != "old-0" || app.resultsQueryID != query.QueryID {
+		t.Fatalf("early snapshot replaced retained results: %#v query %q", app.results, app.resultsQueryID)
+	}
+	if app.queryRefreshHoldQueryID != refreshedQueryID {
+		t.Fatal("early snapshot cancelled the refresh hold")
+	}
+
+	final := make([]queryResult, 8)
+	for index := range final {
+		final[index] = queryResult{ID: fmt.Sprintf("new-%d", index)}
+	}
+	app.applyResults(refreshedQueryID, final, &queryLayout{}, nil, nil, 0, true)
+	if len(app.results) != 8 || app.results[0].ID != "new-0" || app.resultsQueryID != refreshedQueryID {
+		t.Fatalf("final snapshot = %#v query %q", app.results, app.resultsQueryID)
+	}
+	if app.queryRefreshHoldQueryID != "" || app.queryRefreshHoldTimer != nil {
+		t.Fatal("final snapshot left the refresh hold active")
+	}
+}
+
+func TestRefreshQueryKeepsVisibleGlance(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	app := newSendQueryTestApp(services, newInputQuery("setting"), showAppParams{})
+	app.visible = true
+	app.results = []queryResult{{ID: "old", QueryID: app.query.QueryID}}
+	app.resultsQueryID = app.query.QueryID
+	app.glanceItem = &glanceItem{Text: "638.3 MB"}
+
+	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{SelectedResultId: "old"}); err != nil {
+		t.Fatalf("refresh query: %v", err)
+	}
+	t.Cleanup(func() {
+		app.resetQueryTransitionLocked()
+		app.releaseRefreshResultHoldLocked()
+		app.resetQueryLoadingLocked()
+	})
+	if app.glanceItem == nil || app.glanceItem.Text != "638.3 MB" {
+		t.Fatalf("refresh glance = %#v, want the previous accessory kept", app.glanceItem)
+	}
+}
+
+func TestRefreshResultHoldClearsWhenResultsStayLate(t *testing.T) {
+	app := &App{
+		visible:        true,
+		query:          newInputQuery("setting"),
+		show:           showAppParams{MaxResultCount: 8},
+		results:        []queryResult{{ID: "old", QueryID: "old-query"}},
+		resultsQueryID: "old-query",
+		selected:       0,
+	}
+	app.query.QueryID = "refresh"
+	app.beginRefreshResultHoldLocked()
+	if app.queryRefreshHoldTimer == nil {
+		t.Fatal("refresh hold timer is nil")
+	}
+	app.queryRefreshHoldTimer.Stop()
+	app.queryRefreshHoldTimer = nil
+
+	app.expireRefreshResultHold("refresh")
+	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 || app.queryRefreshHoldQueryID != "" {
+		t.Fatalf("expired hold = results %#v query %q selected %d hold %q", app.results, app.resultsQueryID, app.selected, app.queryRefreshHoldQueryID)
+	}
+}
+
 func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {
 	app := &App{
 		selected: 2,

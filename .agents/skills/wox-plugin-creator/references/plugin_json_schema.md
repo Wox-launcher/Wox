@@ -458,15 +458,15 @@ The restore callback must return immediately from memory or local cache. Wox wai
 
 `HashBy` options:
 
-- `title` (default): `Title` + `SubTitle`
+- `identityKey`: result `IdentityKey`. Use this for a durable result. Its `IdentityKey` / `identity_key` identifies that result alone and stays the same when its title changes. Omit it on a temporary prompt, empty or error state, or one-time status. `scoreKey` is the older name and is still accepted.
+- `title` (default when `HashBy` is omitted): `Title` + `SubTitle`
 - `rawQuery`: original `Query.RawQuery`
 - `search`: `Query.Search`
-- `scoreKey`: result `ScoreKey` when titles are unstable
 
 ```json
 {
   "Name": "mru",
-  "Params": { "HashBy": "title" }
+  "Params": { "HashBy": "identityKey" }
 }
 ```
 

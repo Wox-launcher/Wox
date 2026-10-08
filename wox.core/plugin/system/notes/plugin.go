@@ -61,7 +61,7 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDeepLink},
 			{Name: plugin.MetadataFeatureIgnoreAutoScore},
-			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "scoreKey"}},
+			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "identityKey"}},
 		},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
 	}
@@ -115,7 +115,7 @@ func (p *Plugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResp
 
 func (p *Plugin) newResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: icons.Get(icons.PluginNotes), Score: 1_000_000, ScoreKey: "note:new",
+		Id: "notes:new", Title: "i18n:plugin_notes_new", SubTitle: "i18n:plugin_notes_new_subtitle", Icon: icons.Get(icons.PluginNotes), Score: 1_000_000, IdentityKey: "note:new",
 		Actions: []plugin.QueryResultAction{{Id: "new", Name: "i18n:plugin_notes_action_new", IsDefault: true, Icon: icons.Get(icons.ActionAdd), ContextData: noteActionContext(notesMRUNewID), Action: func(ctx context.Context, _ plugin.ActionContext) {
 			p.createAndOpen(ctx)
 		}}},
@@ -161,7 +161,7 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 func (p *Plugin) noteResult(record common.NoteRecord) plugin.QueryResult {
 	group, groupScore := noteResultGroup(record)
 	return plugin.QueryResult{
-		Id: record.ID, Title: NoteTitle(record.Document), SubTitle: util.FormatTimestamp(record.UpdatedAt), Icon: icons.Get(icons.PluginNotes), ScoreKey: "note:" + record.ID,
+		Id: record.ID, Title: NoteTitle(record.Document), SubTitle: util.FormatTimestamp(record.UpdatedAt), Icon: icons.Get(icons.PluginNotes), IdentityKey: "note:" + record.ID,
 		Group: group, GroupScore: groupScore,
 		Preview: noteResultPreview(record),
 		Actions: p.noteActions(record),

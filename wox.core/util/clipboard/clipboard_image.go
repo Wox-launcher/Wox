@@ -66,7 +66,7 @@ func prepareImagePayload(payload *clipboardImage) (*PreparedImage, error) {
 func (prepared *PreparedImage) Size() image.Point { return prepared.size }
 
 // Publish transfers formats on the owner's UI thread: HWND on Windows, GdkDisplay on Linux, system pasteboard on macOS.
-// High-level Write tracks self-writes; this low-level entry keeps UI writes observable by clipboard history.
+// High-level Write reaches clipboard history after its settle window. This entry does not open that window.
 func (prepared *PreparedImage) Publish(owner uintptr) error {
 	if prepared == nil {
 		return errors.New("clipboard image is empty")
@@ -92,7 +92,7 @@ func (prepared *PreparedImage) Close() {
 	prepared.native, prepared.payload = nil, nil
 }
 
-// PublishText commits text on the owner's UI thread without changing high-level self-write bookkeeping.
+// PublishText commits text on the owner's UI thread without opening the high-level settle window.
 func PublishText(owner uintptr, text string) error { return publishNativeText(owner, text) }
 
 // Flush materializes promised formats before exit; the caller supplies only generic UI-thread dispatch.

@@ -354,7 +354,7 @@ func TestFolderMRURestoreRebuildsExistingPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore folder: %v", err)
 	}
-	if restored.SubTitle != dir || restored.ScoreKey != dir {
+	if restored.SubTitle != dir || restored.IdentityKey != dir {
 		t.Fatalf("restored folder = %#v", restored)
 	}
 	if restored.Actions[0].ContextData[folderMRUPathKey] != dir {

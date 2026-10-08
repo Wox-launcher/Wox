@@ -238,7 +238,7 @@ class HelloPlugin(Plugin):
         item_id = (mru_data.context_data or {}).get("id")
         if not item_id:
             return None
-        return Result(title=item_id, actions=[])
+        return Result(title=item_id, identity_key=item_id, actions=[])
 
     async def query(self, ctx, query):
         # I18n with formatting

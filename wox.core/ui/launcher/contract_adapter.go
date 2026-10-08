@@ -120,10 +120,12 @@ func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions
 			a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
 		}
 		a.query.QueryID = newInputQuery("").QueryID
+		a.queryComplete = false
 		a.queryContext = queryContext{}
 		a.queryContextKnown = false
 		a.completionHint = nil
-		a.stopGlanceLocked(true)
+		// Keep the visible glance through the refresh. Clearing it blanks the query accessory until results return.
+		a.stopGlanceLocked(false)
 		if options.SelectedResultId == "" && !options.PreserveSelectedIndex {
 			a.pendingSelection = nil
 			a.selected = -1
@@ -138,6 +140,7 @@ func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions
 			a.selected = selected
 		}
 		a.reconcileSelectedPreview()
+		a.beginRefreshResultHoldLocked()
 	}); err != nil {
 		return err
 	}
@@ -885,6 +888,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	}
 	a.resetQueryLoadingLocked()
 	a.resetQueryTransitionLocked()
+	a.releaseRefreshResultHoldLocked()
 	if a.resultsQueryID != queryID {
 		a.results = nil
 		a.resultsSectionRevision++

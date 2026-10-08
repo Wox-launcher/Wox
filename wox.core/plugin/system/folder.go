@@ -91,7 +91,7 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -370,7 +370,7 @@ func (p *FolderPlugin) buildParentDirectoryResult(parentPath string, favoriteMat
 		Icon:           getFolderPluginPathIcon(parentPath, true),
 		Score:          folderResultScore,
 		RankAboveUsage: true,
-		ScoreKey:       parentPath,
+		IdentityKey:       parentPath,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: parentPath,
@@ -434,7 +434,7 @@ func (p *FolderPlugin) buildPathResult(path string, title string, isDir bool, sc
 		SubTitle: path,
 		Icon:     getFolderPluginPathIcon(path, isDir),
 		Score:    score,
-		ScoreKey: path,
+		IdentityKey: path,
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,
 			PreviewData: path,
@@ -455,7 +455,7 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteInd
 		SubTitle: path,
 		Icon:     getFolderPluginPathIcon(path, true),
 		Score:    folderResultScore + scoreBoost,
-		ScoreKey: path,
+		IdentityKey: path,
 		Group:    "i18n:plugin_folder_favorites",
 		Preview: plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeFile,

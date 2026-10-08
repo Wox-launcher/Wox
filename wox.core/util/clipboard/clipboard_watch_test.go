@@ -26,10 +26,13 @@ func installFakeClipboardEdge(t *testing.T) *fakeClipboardEdge {
 	edge := &fakeClipboardEdge{}
 	previousDetect := detectClipboardChange
 	previousTimestamp := lastWriteTimestamp.Load()
+	previousOwnCopy := pendingOwnChange.Load()
 	detectClipboardChange = edge.detect
+	pendingOwnChange.Store(false)
 	t.Cleanup(func() {
 		detectClipboardChange = previousDetect
 		lastWriteTimestamp.Store(previousTimestamp)
+		pendingOwnChange.Store(previousOwnCopy)
 	})
 	return edge
 }
@@ -47,7 +50,7 @@ func TestSelfWriteWindowKeepsAnExternalChangePending(t *testing.T) {
 	// Another application copies while Wox is still settling its own write.
 	edge.pending = true
 
-	if claimExternalChange() {
+	if claimClipboardChange() {
 		t.Fatal("claimed a change while Wox owned the write")
 	}
 	if !edge.pending {
@@ -55,27 +58,66 @@ func TestSelfWriteWindowKeepsAnExternalChangePending(t *testing.T) {
 	}
 
 	lastWriteTimestamp.Store(time.Now().Add(-2 * selfWriteWindow).UnixMilli())
-	if !claimExternalChange() {
+	if !claimClipboardChange() {
 		t.Fatal("external change was never delivered once the write window passed")
+	}
+	if edge.pending {
+		t.Fatal("delivered change left the platform edge pending")
+	}
+	if claimClipboardChange() {
+		t.Fatal("external change was delivered twice")
 	}
 }
 
-// TestSelfWriteClaimsItsOwnChange covers the other half of the contract. Wox has to
-// consume the edge its own write produces, otherwise the first tick after the window
-// reports that write back as if some other application had made it.
-func TestSelfWriteClaimsItsOwnChange(t *testing.T) {
+// TestOwnCopyStaysVisibleAfterTheSettleWindow covers copies made inside Wox.
+// The settle window delays the read, and the first tick after it must still see
+// the copy when the platform already acknowledged the write.
+func TestOwnCopyStaysVisibleAfterTheSettleWindow(t *testing.T) {
 	edge := installFakeClipboardEdge(t)
 
 	beginSelfWrite()
-	edge.pending = true // the platform write raises an edge
 	endSelfWrite()
 
+	if claimClipboardChange() {
+		t.Fatal("claimed a Wox copy while the write was still settling")
+	}
 	if edge.pending {
-		t.Fatal("Wox left its own change edge pending")
+		t.Fatal("settle window invented a platform edge")
 	}
 
 	lastWriteTimestamp.Store(time.Now().Add(-2 * selfWriteWindow).UnixMilli())
-	if claimExternalChange() {
-		t.Fatal("reported Wox's own write as an external change")
+	if !claimClipboardChange() {
+		t.Fatal("Wox copy was dropped after the platform edge was already consumed")
+	}
+	if claimClipboardChange() {
+		t.Fatal("Wox copy was delivered twice")
+	}
+}
+
+// TestOwnCopyAndPlatformEdgeDeliverOnce keeps a real platform edge that arrives
+// with the write, and delivers that copy once the settle window has passed.
+func TestOwnCopyAndPlatformEdgeDeliverOnce(t *testing.T) {
+	edge := installFakeClipboardEdge(t)
+
+	beginSelfWrite()
+	edge.pending = true
+	endSelfWrite()
+
+	if claimClipboardChange() {
+		t.Fatal("claimed a Wox copy while the write was still settling")
+	}
+	if !edge.pending {
+		t.Fatal("a tick inside the settle window consumed the copy")
+	}
+
+	lastWriteTimestamp.Store(time.Now().Add(-2 * selfWriteWindow).UnixMilli())
+	if !claimClipboardChange() {
+		t.Fatal("Wox copy was not delivered once the write window passed")
+	}
+	if edge.pending {
+		t.Fatal("delivered copy left the platform edge pending")
+	}
+	if claimClipboardChange() {
+		t.Fatal("Wox copy was delivered twice")
 	}
 }
