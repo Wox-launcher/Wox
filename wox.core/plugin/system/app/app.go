@@ -113,9 +113,11 @@ const (
 const (
 	// Optimization: broad global app queries used to return hundreds of
 	// applications, making result action creation and manager/UI polish dominate
-	// latency while adding little value to the aggregated result list. Plugin
+	// latency while adding little value to the aggregated result list. The
+	// returned rows are polished as one response before they can join the first
+	// flush, so 25 keeps that work inside the first-batch window. Plugin
 	// context and launchpad remain full browsing surfaces.
-	appQueryResultLimitInGloablQuery = 50
+	appQueryResultLimitInGloablQuery = 25
 )
 
 const (

@@ -55,7 +55,7 @@ const (
 	previewDataMaxSize           = 1024
 	maxCachedQueriesPerSession   = 32
 	globalQueryPluginScoreLimit  = 200
-	// rankAboveUsageScore sits above action history and below the query-pin boost.
+	// rankAboveUsageScore sits above action history. Query pins are a separate display tier.
 	rankAboveUsageScore int64 = 50000
 	fileSearchPluginID        = common.FileSearchPluginID
 )
@@ -3033,6 +3033,14 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 		}
 		return 1
 	}
+	// Pin is its own tier. Plugin scores, such as clipboard copy times, stay inside
+	// that tier and only order pins against other pins.
+	if aPinned, bPinned := queryResultPinned(a.Result), queryResultPinned(b.Result); aPinned != bPinned {
+		if aPinned {
+			return -1
+		}
+		return 1
+	}
 	switch {
 	case a.Result.Score > b.Result.Score:
 		return -1
@@ -3063,7 +3071,7 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 }
 
 // BuildQueryResultsSnapshot builds a snapshot of all cached query results for the given session and query id.
-// Results are grouped by their group name, and both groups and results within groups are sorted by score.
+// Query pins come first. Remaining results are grouped by name, and both groups and results within groups are sorted by score.
 func (m *Manager) BuildQueryResultsSnapshot(sessionId string, queryId string) []QueryResultUI {
 	return m.buildQueryResultsSnapshot(sessionId, queryId, nil)
 }
@@ -3140,13 +3148,27 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		return finalResults
 	}
 
+	// Pins leave their group and stay above every group header. Otherwise a pinned
+	// clipboard row remains inside Today, where a later copy's timestamp still
+	// sorts first, and an older day group would keep the pin below Today.
 	groupScores := map[string]int64{}
+	var pinnedResults []*QueryResultCache
+	groupedResults := make(map[string][]*QueryResultCache)
 	for _, resultCache := range resultCaches {
+		if queryResultPinned(resultCache.Result) {
+			pinnedResults = append(pinnedResults, resultCache)
+			continue
+		}
 		result := resultCache.Result
 		if score, ok := groupScores[result.Group]; !ok || result.GroupScore > score {
 			groupScores[result.Group] = result.GroupScore
 		}
+		groupedResults[result.Group] = append(groupedResults[result.Group], resultCache)
 	}
+	// Every pin is already in the same tier, so this keeps their original score order.
+	sort.SliceStable(pinnedResults, func(i, j int) bool {
+		return compareQueryResultCachesForDisplay(pinnedResults[i], pinnedResults[j]) < 0
+	})
 
 	var groups []string
 	for group := range groupScores {
@@ -3161,12 +3183,6 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 		return scoreA > scoreB
 	})
 
-	groupedResults := make(map[string][]*QueryResultCache)
-	for _, result := range resultCaches {
-		group := result.Result.Group
-		groupedResults[group] = append(groupedResults[group], result)
-	}
-
 	for group := range groupedResults {
 		groupResults := groupedResults[group]
 		sort.Slice(groupResults, func(i, j int) bool {
@@ -3177,6 +3193,9 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 
 	finalResults := make([]QueryResultUI, 0, len(aliasResults)+len(resultCaches)+len(groups))
 	for _, resultCache := range aliasResults {
+		finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
+	}
+	for _, resultCache := range pinnedResults {
 		finalResults = append(finalResults, m.buildResultUI(resultCache, queryId))
 	}
 	for _, group := range groups {
@@ -3495,10 +3514,6 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	// It still ignores ignoreAutoScore, except on the MRU page where MRU score owns ranking.
 	isPinned := !isMRUQuery && setting.GetSettingManager().IsPinedResult(ctx, resultIdentityHash(pluginInstance.Metadata.Id, result), query.RawQuery)
 	if isPinned {
-		pinScore := int64(100000)
-		logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) is pinned in current query, add score: %d", pluginInstance.GetName(ctx), result.Title, pinScore))
-		result.Score += pinScore
-
 		// Add pin icon to tails if not already present
 		hasPinTail := false
 		for _, tail := range result.Tails {
@@ -3977,6 +3992,16 @@ func (m *Manager) serializeContextData(contextData map[string]string) string {
 		return ""
 	}
 	return string(data)
+}
+
+// queryResultPinned reports the query-pin tail attached during polish.
+func queryResultPinned(result QueryResult) bool {
+	for _, tail := range result.Tails {
+		if tail.ContextData[favoriteTailContextDataKey] == favoriteTailContextDataValue {
+			return true
+		}
+	}
+	return false
 }
 
 // pinnedInQueryTail marks a result pinned to the current query.
