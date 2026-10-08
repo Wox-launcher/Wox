@@ -213,7 +213,12 @@ func waitForRecordedHistory(t *testing.T, ctx context.Context, client *automatio
 	smoke.ShowLauncher(t, ctx, client)
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
-	query := "h " + historyQuery
+	// The second text only forces the launcher to run the search again. Its
+	// search term still has to be contained by the stored query: a trailing
+	// space is parsed into Search and can never contain-match "1+1".
+	fullQuery := "h " + historyQuery
+	alternateQuery := "h " + historyQuery[:len(historyQuery)-1]
+	query := fullQuery
 	for {
 		snapshot := smoke.ReplaceLauncherQuery(t, ctx, client, query)
 		for _, node := range snapshot.Tree.Nodes {
@@ -221,10 +226,10 @@ func waitForRecordedHistory(t *testing.T, ctx context.Context, client *automatio
 				return
 			}
 		}
-		if strings.HasSuffix(query, " ") {
-			query = strings.TrimSuffix(query, " ")
+		if query == fullQuery {
+			query = alternateQuery
 		} else {
-			query += " "
+			query = fullQuery
 		}
 		select {
 		case <-ctx.Done():

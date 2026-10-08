@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"wox/cloudsync"
 	"wox/database"
@@ -64,27 +65,40 @@ func (s *WoxSettingStore) Delete(key string) error {
 }
 
 func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
+	// The setting row and its oplog commit together. SettingValue.Set publishes
+	// memory only after this returns nil, so a committed row with a failed oplog
+	// stayed invisible to in-process readers such as Query History.
 	return cloudsync.WithLocalSyncMutation(func() error {
-		if err := s.Set(key, value); err != nil {
-			return err
-		}
-		if !syncable {
-			return nil
-		}
-		return s.logOplog(key, value, cloudsync.OpUpsert)
+		return retrySQLiteWrite(func() error {
+			return s.db.Transaction(func(tx *gorm.DB) error {
+				txStore := &WoxSettingStore{db: tx}
+				if err := txStore.Set(key, value); err != nil {
+					return err
+				}
+				if !syncable {
+					return nil
+				}
+				return txStore.logOplog(key, value, cloudsync.OpUpsert)
+			})
+		})
 	})
 }
 
 func (s *WoxSettingStore) DeleteWithSync(key string, syncable bool) error {
 	return cloudsync.WithLocalSyncMutation(func() error {
-		result := s.db.Delete(&database.WoxSetting{Key: key})
-		if result.Error != nil {
-			return result.Error
-		}
-		if !syncable || result.RowsAffected == 0 {
-			return nil
-		}
-		return s.logOplog(key, nil, cloudsync.OpDelete)
+		return retrySQLiteWrite(func() error {
+			return s.db.Transaction(func(tx *gorm.DB) error {
+				txStore := &WoxSettingStore{db: tx}
+				result := txStore.db.Delete(&database.WoxSetting{Key: key})
+				if result.Error != nil {
+					return result.Error
+				}
+				if !syncable || result.RowsAffected == 0 {
+					return nil
+				}
+				return txStore.logOplog(key, nil, cloudsync.OpDelete)
+			})
+		})
 	})
 }
 
@@ -189,36 +203,46 @@ func (s *PluginSettingStore) DeleteAll() error {
 
 func (s *PluginSettingStore) SetWithSync(key string, value interface{}, syncable bool) error {
 	return cloudsync.WithLocalSyncMutation(func() error {
-		if err := s.set(key, value, !syncable); err != nil {
-			return err
-		}
-		if !syncable {
-			return s.discardPendingOplogs(key)
-		}
-		return s.logOplog(key, value, cloudsync.OpUpsert)
+		return retrySQLiteWrite(func() error {
+			return s.db.Transaction(func(tx *gorm.DB) error {
+				txStore := &PluginSettingStore{db: tx, pluginId: s.pluginId}
+				if err := txStore.set(key, value, !syncable); err != nil {
+					return err
+				}
+				if !syncable {
+					return txStore.discardPendingOplogs(key)
+				}
+				return txStore.logOplog(key, value, cloudsync.OpUpsert)
+			})
+		})
 	})
 }
 
 func (s *PluginSettingStore) DeleteWithSync(key string, syncable bool) error {
 	return cloudsync.WithLocalSyncMutation(func() error {
-		wasLocal := false
-		if syncable {
-			var existing database.PluginSetting
-			findErr := s.db.Select("is_local").Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&existing).Error
-			if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
-				return findErr
-			}
-			wasLocal = findErr == nil && existing.IsLocal
-		}
+		return retrySQLiteWrite(func() error {
+			return s.db.Transaction(func(tx *gorm.DB) error {
+				txStore := &PluginSettingStore{db: tx, pluginId: s.pluginId}
+				wasLocal := false
+				if syncable {
+					var existing database.PluginSetting
+					findErr := txStore.db.Select("is_local").Where("plugin_id = ? AND key = ?", s.pluginId, key).First(&existing).Error
+					if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
+						return findErr
+					}
+					wasLocal = findErr == nil && existing.IsLocal
+				}
 
-		result := s.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
-		if result.Error != nil {
-			return result.Error
-		}
-		if !syncable || wasLocal || result.RowsAffected == 0 {
-			return nil
-		}
-		return s.logOplog(key, nil, cloudsync.OpDelete)
+				result := txStore.db.Delete(&database.PluginSetting{PluginID: s.pluginId, Key: key})
+				if result.Error != nil {
+					return result.Error
+				}
+				if !syncable || wasLocal || result.RowsAffected == 0 {
+					return nil
+				}
+				return txStore.logOplog(key, nil, cloudsync.OpDelete)
+			})
+		})
 	})
 }
 
@@ -245,6 +269,33 @@ func (s *PluginSettingStore) logOplog(key string, value interface{}, op string) 
 	}
 
 	return writeCloudSyncOplog(s.db, oplog)
+}
+
+const sqliteWriteAttempts = 3
+
+// retrySQLiteWrite repeats a short transaction after SQLite reports that another
+// connection holds the write lock. Busy waits already happen inside the driver.
+func retrySQLiteWrite(operation func() error) error {
+	var err error
+	for attempt := 0; attempt < sqliteWriteAttempts; attempt++ {
+		err = operation()
+		if err == nil || !isSQLiteLockError(err) || attempt == sqliteWriteAttempts-1 {
+			return err
+		}
+		time.Sleep(time.Duration(20*(attempt+1)) * time.Millisecond)
+	}
+	return err
+}
+
+func isSQLiteLockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "database is locked") ||
+		strings.Contains(text, "database table is locked") ||
+		strings.Contains(text, "sqlite_busy") ||
+		strings.Contains(text, "sqlite_locked")
 }
 
 // writeCloudSyncOplog persists a local sync row according to the built-in CloudSync timing policy.

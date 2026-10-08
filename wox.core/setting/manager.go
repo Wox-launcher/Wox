@@ -221,7 +221,9 @@ func (m *Manager) AddQueryHistory(ctx context.Context, query common.PlainQuery) 
 		histories = histories[len(histories)-1000:]
 	}
 
-	m.woxSetting.QueryHistories.Set(histories)
+	if err := m.woxSetting.QueryHistories.Set(histories); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to persist query history: %s", err.Error()))
+	}
 }
 
 func plainQueryHistoryEqual(left, right common.PlainQuery) bool {
