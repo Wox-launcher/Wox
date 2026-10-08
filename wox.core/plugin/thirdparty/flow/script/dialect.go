@@ -17,8 +17,9 @@ const (
 // is placed on PYTHONPATH ahead of paths a plugin appends, which is the same
 // import order a long-lived host uses. A plugin that reads the request from
 // argv, or that ships its own argv client directly in the plugin root, is
-// started once per call instead. A client under lib/ does not force that path,
-// because an appended lib directory loses to PYTHONPATH.
+// started once per call instead. The host replaces an appended flowlauncher
+// package, so that copy under lib/ stays on the long-lived protocol. Any other
+// library under lib/ that reads argv does not, and is started once per call.
 func detectFlowDialect(directory, language, entry string) string {
 	switch strings.ToLower(language) {
 	case "executable":
@@ -28,6 +29,9 @@ func detectFlowDialect(directory, language, entry string) string {
 			return flowDialectV1
 		}
 		if flowTreeUsesArgv(filepath.Join(directory, "flowlauncher")) || flowFileUses(filepath.Join(directory, "flowlauncher.py"), "sys.argv") {
+			return flowDialectV1
+		}
+		if flowLibUsesArgv(directory) {
 			return flowDialectV1
 		}
 		return flowDialectV2
@@ -40,6 +44,35 @@ func detectFlowDialect(directory, language, entry string) string {
 	default:
 		return flowDialectV1
 	}
+}
+
+// flowLibUsesArgv reports an argv client under lib/ that the host does not replace.
+func flowLibUsesArgv(directory string) bool {
+	root := filepath.Join(directory, "lib")
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	found := false
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || found {
+			return err
+		}
+		if entry.IsDir() {
+			if strings.EqualFold(entry.Name(), "flowlauncher") || entry.Name() == "__pycache__" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.EqualFold(entry.Name(), "flowlauncher.py") {
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(path), ".py") && flowFileUses(path, "sys.argv") {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 func flowTreeUsesArgv(root string) bool {

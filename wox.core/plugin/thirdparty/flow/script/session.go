@@ -47,6 +47,9 @@ type flowSession struct {
 	nodePath   string
 	clientDir  string
 	bridge     flowBridge
+	// launcherRoot is the parent of the launcher-shaped working directory.
+	// Tests set it. An empty value uses the user plugin collection.
+	launcherRoot string
 
 	mu      sync.Mutex
 	writeMu sync.Mutex
@@ -117,7 +120,7 @@ func (s *flowSession) Invoke(ctx context.Context, method string, params []any, s
 	util.GetLogger().Info(ctx, fmt.Sprintf("[flow-jsonrpc:%s] process exited before a JSON-RPC response, retrying once as a one-shot call", s.name))
 	oneShotReply, oneShotErr := s.invokeV1(ctx, method, params, settings)
 	if oneShotErr != nil {
-		return flowReply{}, err
+		return flowReply{}, oneShotErr
 	}
 	s.mu.Lock()
 	s.dialect = flowDialectV1
@@ -218,7 +221,7 @@ func (s *flowSession) startV2Locked() error {
 		return err
 	}
 	cmd := shell.BuildCommand(program, nil, args...)
-	cmd.Dir = s.directory
+	cmd.Dir = s.processDir()
 	cmd.Env = env
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -355,7 +358,7 @@ func (s *flowSession) invokeV1(ctx context.Context, method string, params []any,
 		return flowReply{}, err
 	}
 	cmd := shell.BuildCommand(program, nil, args...)
-	cmd.Dir = s.directory
+	cmd.Dir = s.processDir()
 	cmd.Env = env
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

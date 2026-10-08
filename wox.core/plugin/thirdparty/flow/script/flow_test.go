@@ -34,6 +34,10 @@ func TestDetectFlowDialect(t *testing.T) {
 			"main.py":                "print('ok')\n",
 			"flowlauncher/client.py": "import sys\nprint(sys.argv)\n",
 		}, language: "python", entry: "main.py", want: flowDialectV1},
+		{name: "argv library under lib", files: map[string]string{
+			"main.py":       "print('ok')\n",
+			"lib/client.py": "import sys\nprint(sys.argv)\n",
+		}, language: "python", entry: "main.py", want: flowDialectV1},
 		{name: "node argv", files: map[string]string{"main.js": "console.log(process.argv)\n"}, language: "javascript", entry: "main.js", want: flowDialectV1},
 		{name: "node stdin", files: map[string]string{"main.js": "process.stdin.on('data', () => {})\nconsole.log(process.argv)\n"}, language: "javascript", entry: "main.js", want: flowDialectV2},
 	}
@@ -174,6 +178,73 @@ func TestFlowV1QueryParameterIsSearchText(t *testing.T) {
 	rewritten := flowV1CallParameters("startTimer", action)
 	if len(rewritten) != 3 || rewritten[0] != "--always-on-top" || action[0] != "--always-on-top" {
 		t.Fatalf("action params %#v original %#v", rewritten, action)
+	}
+}
+
+func TestFlowLauncherWorkDir(t *testing.T) {
+	pluginDir := t.TempDir()
+	root := t.TempDir()
+	link, err := flowLauncherWorkDir(root, pluginDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(filepath.Clean(link), filepath.Clean(filepath.Join("FlowLauncher", "UserData", "Plugins"))) {
+		t.Fatalf("link %s", link)
+	}
+	target, err := os.Readlink(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameDirectoryPath(target, pluginDir) && !sameDirectoryPath(filepath.Join(filepath.Dir(link), target), pluginDir) {
+		t.Fatalf("link target %s", target)
+	}
+	settings, err := os.ReadFile(filepath.Join(root, "FlowLauncher", "UserData", "Settings", "Settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(settings), `"PluginSettings"`) {
+		t.Fatalf("settings %s", settings)
+	}
+	again, err := flowLauncherWorkDir(root, pluginDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameDirectoryPath(again, link) {
+		t.Fatalf("recreated link %s", again)
+	}
+}
+
+func TestFlowScriptLauncherWorkDir(t *testing.T) {
+	python := findPython(t)
+	directory := t.TempDir()
+	writeScriptFile(t, directory, "main.py", `
+import json, sys
+from pathlib import Path
+path = Path.cwd()
+if "FlowLauncher" not in path.parts:
+    raise SystemExit("missing FlowLauncher")
+found = None
+while len(path.parts) > 1:
+    if (path / "Settings").is_dir():
+        found = path
+        break
+    path = path.parent
+if found is None or found.name != "UserData":
+    raise SystemExit("missing UserData settings")
+json.loads((found / "Settings" / "Settings.json").read_text(encoding="utf-8"))
+request = json.loads(sys.argv[1])
+print(json.dumps({"result": [{"Title": "emoji " + request["parameters"][0]}]}))
+`)
+	session := newFlowSession("emoji", directory, "main.py", "python", flowDialectV1, python, "", "", &recordBridge{})
+	session.launcherRoot = t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	reply, err := session.Invoke(ctx, "query", []any{map[string]any{"Search": "smile"}}, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reply.Results) != 1 || reply.Results[0].Title != "emoji smile" {
+		t.Fatalf("reply %+v", reply.Results)
 	}
 }
 
