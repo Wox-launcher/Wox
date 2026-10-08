@@ -25,7 +25,7 @@ const (
 	DirectoryName = "flow-jsonrpc"
 	// RuntimeJSONRPC is the script host runtime. It is not a Wox plugin.json runtime.
 	RuntimeJSONRPC plugin.Runtime = "FLOWJSONRPC"
-	// RuntimeDotNet is the C# and F# host runtime. Its host is not registered yet.
+	// RuntimeDotNet is the C# and F# host runtime. It runs only on Windows.
 	RuntimeDotNet plugin.Runtime = "FLOWDOTNET"
 	// KindScript is a Python, Node, or executable plugin.
 	KindScript = "script"
@@ -145,7 +145,7 @@ func Parse(directory string) (Descriptor, error) {
 			Website:         flowFieldString(document, "Website"),
 			Entry:           entry,
 			TriggerKeywords: keywords,
-			SupportedOS:     []string{"Windows", "Darwin", "Linux"},
+			SupportedOS:     []string{"Windows"},
 			Features: []plugin.MetadataFeature{{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
 			}},

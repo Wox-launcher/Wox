@@ -136,13 +136,8 @@ func discoverMetadata(ctx context.Context, root string) ([]plugin.Metadata, erro
 	}
 	var metadata []plugin.Metadata
 	for _, descriptor := range descriptors {
-		switch descriptor.Kind {
-		case manifest.KindScript:
+		if descriptor.Kind == manifest.KindScript {
 			metadata = append(metadata, descriptor.Metadata)
-		case manifest.KindDotNet:
-			// The dotnet host is not registered yet, so these directories would
-			// otherwise disappear without a log.
-			util.GetLogger().Warn(ctx, fmt.Sprintf("skip flow plugin %s: .NET plugins are not supported yet", descriptor.Metadata.Directory))
 		}
 	}
 	return metadata, nil

@@ -5,6 +5,7 @@ package flow
 
 import (
 	"wox/plugin"
+	"wox/plugin/thirdparty/flow/dotnet"
 	"wox/plugin/thirdparty/flow/manifest"
 	"wox/plugin/thirdparty/flow/script"
 )
@@ -21,7 +22,7 @@ func (flowLayer) Name() string { return "flow" }
 func (flowLayer) Directory() string { return manifest.DirectoryName }
 
 func (flowLayer) Hosts() []plugin.Host {
-	return []plugin.Host{&script.Host{}}
+	return []plugin.Host{&script.Host{}, &dotnet.Host{}}
 }
 
 func (flowLayer) Store() plugin.ExternalStore { return manifest.Store() }

@@ -69,7 +69,28 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
 	props.Entries = a.pluginListEntries(snapshot, filtered)
+	props.ResolveIcon = a.pluginListIconResolver(filtered, imageScale)
 	return props
+}
+
+// pluginListIconResolver decodes a catalog icon at the row's physical size.
+// The list asks for it only while the row is on screen. Decoding every store
+// icon at 256px overflows the shared image cache, and visible rows then
+// flicker between artwork and the fallback color.
+func (a *App) pluginListIconResolver(filtered []filteredPlugin, imageScale float32) func(string) *woxui.Image {
+	icons := make(map[string]woxImage, len(filtered))
+	for _, entry := range filtered {
+		icons[entry.plugin.ID] = entry.plugin.Icon
+	}
+	size := physicalImageSize(launcherview.PluginListIconSize, imageScale)
+	background := settingsPalette().Background
+	return func(id string) *woxui.Image {
+		source, ok := icons[id]
+		if !ok {
+			return nil
+		}
+		return a.imageForSurface(source, size, background)
+	}
 }
 
 // pluginListEntries builds catalog rows, grouping installed plugins by enabled state.
@@ -98,7 +119,7 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 			ID: plugin.ID,
 			Item: launcherview.PluginListItem{
 				ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
-				Icon: a.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[itemIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
+				FallbackColor: resultColors[itemIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
 				Highlighted: snapshot.highlight == "plugin:"+plugin.ID, Disabled: plugin.IsDisable,
 				OnSelect: func() { a.selectPlugin(index) },
 			},
@@ -742,27 +763,37 @@ func (a *App) pluginFilterChoices(id string, store bool) []settingChoice {
 	case "runtime":
 		choices := []settingChoice{all, {value: pluginFilterRuntimeNodeJS, label: a.translate("i18n:ui_runtime_name_nodejs")}, {value: pluginFilterRuntimePython, label: a.translate("i18n:ui_runtime_name_python")}}
 		if store {
-			return append(choices, settingChoice{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")})
+			choices = append(choices, settingChoice{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")})
+		} else {
+			choices = append(choices,
+				settingChoice{value: pluginFilterRuntimeScriptNodeJS, label: a.translate("i18n:ui_plugin_filter_runtime_script_nodejs")},
+				settingChoice{value: pluginFilterRuntimeScriptPython, label: a.translate("i18n:ui_plugin_filter_runtime_script_python")},
+			)
 		}
-		return append(choices,
-			settingChoice{value: pluginFilterRuntimeScriptNodeJS, label: a.translate("i18n:ui_plugin_filter_runtime_script_nodejs")},
-			settingChoice{value: pluginFilterRuntimeScriptPython, label: a.translate("i18n:ui_plugin_filter_runtime_script_python")},
-		)
+		for _, runtime := range thirdPartyRuntimeFilterValues() {
+			choices = append(choices, settingChoice{value: runtime, label: a.localizedRuntimeDisplayName(runtime)})
+		}
+		return choices
 	default:
 		return nil
 	}
 }
 
-// pluginRuntimeLabel normalizes host runtimes for the detail chip. Go is omitted
-// because it is the native plugin host and the tag adds no useful distinction.
+// pluginRuntimeLabel normalizes host runtimes for the detail chip. Wox and Flow
+// prefixes keep the two plugin families distinct. Go is omitted because it is
+// the native plugin host and the tag adds no useful distinction.
 func pluginRuntimeLabel(runtime string) string {
 	switch strings.ToLower(strings.TrimSpace(runtime)) {
 	case "nodejs":
-		return "NodeJS"
+		return "Wox Node.js"
 	case "python":
-		return "Python"
+		return "Wox Python"
 	case "script":
-		return "Script"
+		return "Wox Script"
+	case "flowjsonrpc":
+		return "Flow JSON-RPC"
+	case "flowdotnet":
+		return "Flow .NET"
 	case "go":
 		return ""
 	default:

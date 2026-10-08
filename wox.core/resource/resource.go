@@ -59,7 +59,8 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", false)
+	// Recursive so hosts/flow stays a directory beside the Python and Node host files.
+	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", true)
 	if extractHostErr != nil {
 		return extractHostErr
 	}

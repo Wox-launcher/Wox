@@ -248,7 +248,43 @@ func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string, sto
 	case pluginFilterRuntimeScriptPython:
 		return !store && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".py")
 	default:
+		return strings.EqualFold(plugin.Runtime, runtime)
+	}
+}
+
+// thirdPartyRuntimeFilterValues lists host runtimes that are not the built-in Node.js, Python, script, or Go hosts.
+// The catalog filter appends one choice for each so a compatibility host can be selected on its own.
+func thirdPartyRuntimeFilterValues() []string {
+	seen := map[string]struct{}{}
+	values := make([]string, 0)
+	for _, host := range plugin.AllHosts {
+		if host == nil {
+			continue
+		}
+		runtime := strings.TrimSpace(string(host.GetRuntime(context.Background())))
+		key := strings.ToLower(runtime)
+		if key == "" || isBuiltinRuntimeFilter(key) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, runtime)
+	}
+	sort.Slice(values, func(i, j int) bool {
+		return strings.ToLower(values[i]) < strings.ToLower(values[j])
+	})
+	return values
+}
+
+// isBuiltinRuntimeFilter reports runtimes that already have their own filter rows.
+func isBuiltinRuntimeFilter(runtime string) bool {
+	switch strings.ToLower(strings.TrimSpace(runtime)) {
+	case pluginFilterRuntimeNodeJS, pluginFilterRuntimePython, pluginFilterRuntimeScript, "go":
 		return true
+	default:
+		return false
 	}
 }
 

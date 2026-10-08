@@ -35,12 +35,12 @@ func TestFlowStoreManifestsFromJSON(t *testing.T) {
 	for _, manifest := range manifests {
 		byID[strings.ToLower(manifest.Id)] = manifest
 	}
-	for _, hidden := range []string{"cs", "fs", "a/b", "..", "nourl"} {
+	for _, hidden := range []string{"a/b", "..", "nourl"} {
 		if _, found := byID[hidden]; found {
 			t.Fatalf("catalog kept %s", hidden)
 		}
 	}
-	for _, visible := range []string{"py", "js", "ts", "num", "exe", "dup", "noname"} {
+	for _, visible := range []string{"py", "js", "ts", "num", "exe", "cs", "fs", "dup", "noname"} {
 		if _, found := byID[visible]; !found {
 			t.Fatalf("catalog dropped %s", visible)
 		}
@@ -51,7 +51,13 @@ func TestFlowStoreManifestsFromJSON(t *testing.T) {
 	if byID["py"].Runtime != RuntimeJSONRPC {
 		t.Fatalf("runtime %s", byID["py"].Runtime)
 	}
-	if len(byID["py"].SupportedOS) != 3 || byID["py"].SupportedOS[0] != "Windows" || byID["py"].SupportedOS[1] != "Darwin" || byID["py"].SupportedOS[2] != "Linux" {
+	if byID["cs"].Runtime != RuntimeDotNet || len(byID["cs"].SupportedOS) != 1 || byID["cs"].SupportedOS[0] != "Windows" {
+		t.Fatalf("csharp %#v", byID["cs"])
+	}
+	if byID["fs"].Runtime != RuntimeDotNet || len(byID["fs"].SupportedOS) != 1 || byID["fs"].SupportedOS[0] != "Windows" {
+		t.Fatalf("fsharp %#v", byID["fs"])
+	}
+	if len(byID["py"].SupportedOS) != 1 || byID["py"].SupportedOS[0] != "Windows" {
 		t.Fatalf("os %#v", byID["py"].SupportedOS)
 	}
 	if byID["ts"].Website != "https://example.com/ts" {
@@ -198,7 +204,7 @@ func TestStageFlowPluginFlatAndNested(t *testing.T) {
 	}
 }
 
-func TestStageFlowPluginRejectsMismatchAndDotNet(t *testing.T) {
+func TestStageFlowPluginRejectsMismatch(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "flow-jsonrpc")
 	flat := t.TempDir()
 	writeFlowPlugin(t, flat, "flat-id", "Flat", "print('flat')\n")
@@ -218,8 +224,19 @@ func TestStageFlowPluginRejectsMismatchAndDotNet(t *testing.T) {
 		"ExecuteFileName": "main.dll",
 		"Version": "1.0.0"
 	}`)
-	if _, err := stageFlowPlugin(dotnet, root, "cs-id"); err == nil {
-		t.Fatal("expected csharp archive to be rejected")
+	dotnetMeta, err := stageFlowPlugin(dotnet, root, "cs-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dotnetDescriptor, err := Parse(dotnetMeta.Directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dotnetDescriptor.Kind != KindDotNet || dotnetDescriptor.Metadata.Runtime != string(RuntimeDotNet) {
+		t.Fatalf("kind %s runtime %s", dotnetDescriptor.Kind, dotnetDescriptor.Metadata.Runtime)
+	}
+	if len(dotnetDescriptor.Metadata.SupportedOS) != 1 || dotnetDescriptor.Metadata.SupportedOS[0] != "Windows" {
+		t.Fatalf("os %#v", dotnetDescriptor.Metadata.SupportedOS)
 	}
 
 	ambiguous := t.TempDir()

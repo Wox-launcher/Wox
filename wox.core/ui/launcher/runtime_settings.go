@@ -132,6 +132,10 @@ func (a *App) localizedRuntimeDisplayName(runtime string) string {
 		key = "ui_runtime_name_script"
 	case "GO":
 		key = "ui_runtime_name_go"
+	case "FLOWJSONRPC":
+		key = "ui_runtime_name_flowjsonrpc"
+	case "FLOWDOTNET":
+		key = "ui_runtime_name_flowdotnet"
 	}
 	if key == "" {
 		return runtime

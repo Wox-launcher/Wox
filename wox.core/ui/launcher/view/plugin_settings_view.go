@@ -87,12 +87,15 @@ type PluginListProps struct {
 	EmptyDescription      string
 	EmptyIcon             *woxui.Image
 	Theme                 woxcomponent.ControlTheme
-	OnClear               func()
-	OnSearchKey           func(woxui.KeyEvent) bool
-	OnSearchFocusChange   func(bool)
-	OnSearchChanged       func(string)
-	OnSetSearchValue      func(string) error
-	OnFilter              func()
+	// ResolveIcon decodes one catalog icon while its row is materialized.
+	// LazyList calls it only for the visible window plus overscan.
+	ResolveIcon         func(id string) *woxui.Image
+	OnClear             func()
+	OnSearchKey         func(woxui.KeyEvent) bool
+	OnSearchFocusChange func(bool)
+	OnSearchChanged     func(string)
+	OnSetSearchValue    func(string) error
+	OnFilter            func()
 }
 
 // PluginList builds the searchable plugin catalog.
@@ -154,6 +157,9 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 }
 
 const pluginListRowHeight = float32(62)
+
+// PluginListIconSize is the logical edge of the icon drawn in a catalog row.
+const PluginListIconSize = 32
 
 func pluginListEntryKey(entry PluginListEntry) woxwidget.Key {
 	if entry.Header != "" {
@@ -259,9 +265,13 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 			background.A = 41
 		}
 	}
-	var icon woxwidget.Widget = woxwidget.Container{Width: 32, Height: 32, Radius: 7, Color: item.FallbackColor}
-	if item.Icon != nil {
-		icon = woxwidget.Image{Source: item.Icon, Width: 32, Height: 32, Fit: woxwidget.ImageFitContain}
+	iconImage := item.Icon
+	if iconImage == nil && props.ResolveIcon != nil {
+		iconImage = props.ResolveIcon(item.ID)
+	}
+	var icon woxwidget.Widget = woxwidget.Container{Width: PluginListIconSize, Height: PluginListIconSize, Radius: 7, Color: item.FallbackColor}
+	if iconImage != nil {
+		icon = woxwidget.Image{Source: iconImage, Width: PluginListIconSize, Height: PluginListIconSize, Fit: woxwidget.ImageFitContain}
 	}
 	rowChildren := []woxwidget.Widget{icon,
 		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {

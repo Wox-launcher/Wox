@@ -128,7 +128,7 @@ help:
 	@echo "  plugin-health  Install store plugins headlessly and probe init/query"
 	@echo "  www        Run docs dev server"
 	@echo "  clean      Clean release directory"
-	@echo "  host       Build plugin hosts"
+	@echo "  host       Build plugin hosts, including the .NET flow host on Windows"
 	@echo "  release    Create a new release (reads version from CHANGELOG.md)"
 	@echo "  release-continue Re-push the existing top CHANGELOG release tag after a failed release run"
 	@echo "  winget-update Check the latest stable Wox release and confirm before submitting its winget update"
@@ -174,6 +174,9 @@ dev: _check_deps ensure-resources
 host:
 	$(MAKE) -C wox.plugin.host.nodejs build
 	$(MAKE) -C wox.plugin.host.python build
+ifeq ($(PLATFORM),windows)
+	$(MAKE) -C wox.core/plugin/thirdparty/flow/dotnet/hostapp build
+endif
 
 # SDK releases bump both SDK patch versions before publish because both npm and
 # PyPI reject already-published versions. The host dependency update still waits

@@ -1094,6 +1094,38 @@ func TestPluginListKeepVisibleAccountsForSectionHeaders(t *testing.T) {
 	}
 }
 
+func TestPluginListResolvesIconsForVisibleRowsOnly(t *testing.T) {
+	const count = 40
+	entries := make([]PluginListEntry, count)
+	for index := range entries {
+		id := fmt.Sprintf("plugin-%d", index)
+		entries[index] = PluginListEntry{ID: id, Item: PluginListItem{ID: id, Name: id}}
+	}
+	preset := &woxui.Image{}
+	entries[0].Item.Icon = preset
+	resolved := map[string]int{}
+	icon := &woxui.Image{}
+	height := float32(62) + pluginListRowHeight*3
+	list := PluginList(PluginListProps{
+		Width: 260, Height: height, Entries: entries,
+		ResolveIcon: func(id string) *woxui.Image {
+			resolved[id]++
+			return icon
+		},
+		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
+	})
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return list })
+	host.AttachServices(translatedLabelHostServices{})
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 260, Height: height}})
+	host.Dispose()
+	if resolved["plugin-0"] != 0 {
+		t.Fatalf("preset icon was decoded %d times", resolved["plugin-0"])
+	}
+	if len(resolved) == 0 || len(resolved) >= count-1 {
+		t.Fatalf("resolved %d of %d catalog icons, want only the visible window", len(resolved), count-1)
+	}
+}
+
 func TestPluginListOmitsVariableExtentWithoutSectionHeaders(t *testing.T) {
 	rows := pluginListLazyList(PluginList(PluginListProps{
 		Width: 260, Height: 660,

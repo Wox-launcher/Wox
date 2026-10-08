@@ -1,12 +1,14 @@
 package launcher
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
 	"wox/setting/definition"
 
+	"wox/plugin"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -89,6 +91,49 @@ func TestPluginMatchesFiltersExclusiveDropdowns(t *testing.T) {
 		t.Fatal("empty filters must keep every plugin visible")
 	}
 }
+
+func TestPluginRuntimeFilterMatchesThirdPartyHost(t *testing.T) {
+	dotnet := pluginSettingsPlugin{ID: "cs", Runtime: "FLOWDOTNET"}
+	script := pluginSettingsPlugin{ID: "py", Runtime: "FLOWJSONRPC"}
+	if !pluginMatchesRuntimeFilter(dotnet, "FLOWDOTNET", false) {
+		t.Fatal("dotnet plugin must match its host runtime")
+	}
+	if pluginMatchesRuntimeFilter(script, "FLOWDOTNET", false) || pluginMatchesRuntimeFilter(dotnet, pluginFilterRuntimePython, true) {
+		t.Fatal("a third-party host filter must not keep other runtimes")
+	}
+}
+
+func TestThirdPartyRuntimeFilterValuesSkipBuiltinHosts(t *testing.T) {
+	previous := plugin.AllHosts
+	t.Cleanup(func() { plugin.AllHosts = previous })
+	plugin.AllHosts = []plugin.Host{
+		runtimeFilterHost{runtime: plugin.PLUGIN_RUNTIME_PYTHON},
+		runtimeFilterHost{runtime: "FLOWDOTNET"},
+		runtimeFilterHost{runtime: "FLOWJSONRPC"},
+		runtimeFilterHost{runtime: "FLOWDOTNET"},
+		runtimeFilterHost{runtime: plugin.PLUGIN_RUNTIME_GO},
+	}
+	got := thirdPartyRuntimeFilterValues()
+	if !reflect.DeepEqual(got, []string{"FLOWDOTNET", "FLOWJSONRPC"}) {
+		t.Fatalf("runtimes = %#v", got)
+	}
+}
+
+type runtimeFilterHost struct {
+	runtime plugin.Runtime
+}
+
+func (h runtimeFilterHost) GetRuntime(context.Context) plugin.Runtime { return h.runtime }
+func (h runtimeFilterHost) Start(context.Context) error               { return nil }
+func (h runtimeFilterHost) Stop(context.Context)                      {}
+func (h runtimeFilterHost) IsStarted(context.Context) bool            { return false }
+func (h runtimeFilterHost) RuntimeStatus(context.Context) plugin.RuntimeHostStatus {
+	return plugin.RuntimeHostStatus{}
+}
+func (h runtimeFilterHost) LoadPlugin(context.Context, plugin.Metadata, string) (plugin.Plugin, error) {
+	return nil, nil
+}
+func (h runtimeFilterHost) UnloadPlugin(context.Context, plugin.Metadata) {}
 
 func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
 	app := &App{

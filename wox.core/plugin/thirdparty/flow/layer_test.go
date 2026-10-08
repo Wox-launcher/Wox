@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"context"
 	"testing"
 
 	"wox/plugin"
@@ -14,7 +15,11 @@ func TestFlowLayerRegistration(t *testing.T) {
 	if manifest.Store() == nil {
 		t.Fatal("missing store")
 	}
-	if hosts := (flowLayer{}).Hosts(); len(hosts) != 1 || hosts[0] == nil {
+	hosts := (flowLayer{}).Hosts()
+	if len(hosts) != 2 || hosts[0] == nil || hosts[1] == nil {
 		t.Fatalf("hosts %#v", hosts)
+	}
+	if hosts[0].GetRuntime(context.Background()) != manifest.RuntimeJSONRPC || hosts[1].GetRuntime(context.Background()) != manifest.RuntimeDotNet {
+		t.Fatalf("runtimes %s %s", hosts[0].GetRuntime(context.Background()), hosts[1].GetRuntime(context.Background()))
 	}
 }

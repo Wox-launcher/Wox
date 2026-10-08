@@ -60,6 +60,9 @@ func TestPluginListEntriesGroupInstalledAndStayFlatInStore(t *testing.T) {
 	if store[0].Item.ID != "off" || store[0].Item.Status != "1.0.0  A" || strings.Contains(store[0].Item.Status, "Disabled") {
 		t.Fatalf("store disabled status = %q", store[0].Item.Status)
 	}
+	if installed[1].Item.Icon != nil || store[0].Item.Icon != nil {
+		t.Fatal("catalog rows must leave icons unresolved until the row is built")
+	}
 }
 
 func TestPluginListEntriesOmitScriptBadge(t *testing.T) {
@@ -88,8 +91,20 @@ func TestPluginRuntimeLabelOmitsNativeGoHost(t *testing.T) {
 	if got := pluginRuntimeLabel("Go"); got != "" {
 		t.Fatalf("Go runtime label = %q, want empty so native plugins hide the chip", got)
 	}
-	if got := pluginRuntimeLabel("python"); got != "Python" {
-		t.Fatalf("python runtime label = %q, want Python", got)
+	if got := pluginRuntimeLabel("python"); got != "Wox Python" {
+		t.Fatalf("python runtime label = %q, want Wox Python", got)
+	}
+	if got := pluginRuntimeLabel("nodejs"); got != "Wox Node.js" {
+		t.Fatalf("nodejs runtime label = %q, want Wox Node.js", got)
+	}
+	if got := pluginRuntimeLabel("script"); got != "Wox Script" {
+		t.Fatalf("script runtime label = %q, want Wox Script", got)
+	}
+	if got := pluginRuntimeLabel("FLOWJSONRPC"); got != "Flow JSON-RPC" {
+		t.Fatalf("jsonrpc runtime label = %q, want Flow JSON-RPC", got)
+	}
+	if got := pluginRuntimeLabel("FLOWDOTNET"); got != "Flow .NET" {
+		t.Fatalf("dotnet runtime label = %q, want Flow .NET", got)
 	}
 }
 

@@ -117,6 +117,9 @@ func TestParseFlowPluginKeywordsAndDotNet(t *testing.T) {
 	if len(globalDescriptor.Metadata.TriggerKeywords) != 1 || globalDescriptor.Metadata.TriggerKeywords[0] != "*" {
 		t.Fatalf("keywords %#v", globalDescriptor.Metadata.TriggerKeywords)
 	}
+	if len(globalDescriptor.Metadata.SupportedOS) != 1 || globalDescriptor.Metadata.SupportedOS[0] != "Windows" {
+		t.Fatalf("os %#v", globalDescriptor.Metadata.SupportedOS)
+	}
 
 	descriptors, err := LoadDirectory(context.Background(), root)
 	if err != nil {
@@ -131,6 +134,9 @@ func TestParseFlowPluginKeywordsAndDotNet(t *testing.T) {
 			sawDotNet = true
 			if descriptor.Metadata.Runtime != string(RuntimeDotNet) {
 				t.Fatalf("dotnet runtime %s", descriptor.Metadata.Runtime)
+			}
+			if len(descriptor.Metadata.SupportedOS) != 1 || descriptor.Metadata.SupportedOS[0] != "Windows" {
+				t.Fatalf("dotnet os %#v", descriptor.Metadata.SupportedOS)
 			}
 		}
 	}

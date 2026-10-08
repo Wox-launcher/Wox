@@ -40,7 +40,7 @@ func (flowStore) AppendManifests(ctx context.Context, manifests []plugin.StorePl
 }
 
 func (flowStore) Owns(manifest plugin.StorePluginManifest) bool {
-	return strings.EqualFold(string(manifest.Runtime), string(RuntimeJSONRPC))
+	return flowStoreOwnsRuntime(manifest.Runtime)
 }
 
 func (flowStore) Install(ctx context.Context, manifest plugin.StorePluginManifest, progress plugin.InstallProgressCallback) error {
@@ -48,7 +48,7 @@ func (flowStore) Install(ctx context.Context, manifest plugin.StorePluginManifes
 }
 
 func (flowStore) OwnsInstance(instance *plugin.Instance) bool {
-	return instance != nil && strings.EqualFold(instance.Metadata.Runtime, string(RuntimeJSONRPC))
+	return instance != nil && flowStoreOwnsRuntime(plugin.Runtime(instance.Metadata.Runtime))
 }
 
 func (flowStore) Uninstall(ctx context.Context, instance *plugin.Instance, skipCleanSetting bool, preserveCache bool, progress plugin.UninstallProgressCallback) (bool, error) {
@@ -99,8 +99,7 @@ func fetchFlowStoreManifests(ctx context.Context) ([]plugin.StorePluginManifest,
 	return nil, lastErr
 }
 
-// flowStoreManifestsFromJSON keeps Python, Node, and executable plugins.
-// C# and F# rows are dropped until the dotnet host can start them.
+// flowStoreManifestsFromJSON keeps Python, Node, executable, C#, and F# plugins.
 // MinimumAppVersion belongs to the other app and is not copied onto MinWoxVersion.
 func flowStoreManifestsFromJSON(raw []byte) ([]plugin.StorePluginManifest, error) {
 	if len(raw) >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF {
@@ -134,7 +133,11 @@ func flowStoreManifestsFromJSON(raw []byte) ([]plugin.StorePluginManifest, error
 // flowStoreManifestFromDocument converts one catalog object. A missing required
 // field or an unsupported language skips that object without failing the array.
 func flowStoreManifestFromDocument(document map[string]any) (plugin.StorePluginManifest, bool) {
-	if document == nil || LanguageKind(flowFieldString(document, "Language")) != KindScript {
+	if document == nil {
+		return plugin.StorePluginManifest{}, false
+	}
+	kind := LanguageKind(flowFieldString(document, "Language"))
+	if kind != KindScript && kind != KindDotNet {
 		return plugin.StorePluginManifest{}, false
 	}
 	id := flowFieldString(document, "ID", "Id")
@@ -151,18 +154,22 @@ func flowStoreManifestFromDocument(document map[string]any) (plugin.StorePluginM
 	if website == "" {
 		website = flowFieldString(document, "UrlSourceCode")
 	}
+	runtimeName := RuntimeJSONRPC
+	if kind == KindDotNet {
+		runtimeName = RuntimeDotNet
+	}
 	return plugin.StorePluginManifest{
 		Id:            id,
 		Name:          name,
 		Author:        flowFieldString(document, "Author"),
 		Version:       version,
 		MinWoxVersion: minWoxVersion,
-		Runtime:       RuntimeJSONRPC,
+		Runtime:       runtimeName,
 		Description:   flowFieldString(document, "Description"),
 		IconUrl:       flowFieldString(document, "IcoPath"),
 		Website:       website,
 		DownloadUrl:   downloadURL,
-		SupportedOS:   []string{"Windows", "Darwin", "Linux"},
+		SupportedOS:   []string{"Windows"},
 		DateCreated:   flowFieldString(document, "DateCreated"),
 		DateUpdated:   flowFieldString(document, "DateUpdated"),
 	}, true
@@ -272,7 +279,7 @@ func installFlowStorePlugin(ctx context.Context, manifest plugin.StorePluginMani
 // flowStoreInstallRejection reports why this manifest must not replace an install.
 // A newer installed semver is the only version that blocks replacement.
 func flowStoreInstallRejection(manifest plugin.StorePluginManifest, installed *plugin.Instance, root string) error {
-	if !strings.EqualFold(string(manifest.Runtime), string(RuntimeJSONRPC)) {
+	if !flowStoreOwnsRuntime(manifest.Runtime) {
 		return fmt.Errorf("flow plugin store cannot install runtime %s", manifest.Runtime)
 	}
 	if !flowStoreIDSafe(manifest.Id) {
@@ -373,7 +380,7 @@ func validateFlowStoreDescriptor(descriptor Descriptor, expectedID string) error
 	if !strings.EqualFold(descriptor.Metadata.Id, expectedID) {
 		return fmt.Errorf("flow plugin id %s does not match %s", descriptor.Metadata.Id, expectedID)
 	}
-	if descriptor.Kind != KindScript {
+	if descriptor.Kind != KindScript && descriptor.Kind != KindDotNet {
 		return fmt.Errorf("flow plugin %s language %s is not supported", descriptor.Metadata.Id, descriptor.Language)
 	}
 	if !flowStoreIDSafe(descriptor.Metadata.Id) {
@@ -563,7 +570,7 @@ func restoreFlowPlugin(ctx context.Context, directory string) {
 		return
 	}
 	descriptor, err := Parse(directory)
-	if err != nil || descriptor.Kind != KindScript {
+	if err != nil || (descriptor.Kind != KindScript && descriptor.Kind != KindDotNet) {
 		return
 	}
 	if err := plugin.GetPluginManager().LoadRuntimePlugin(ctx, descriptor.Metadata); err != nil {
@@ -580,6 +587,11 @@ func reportFlowProgress(ctx context.Context, progress func(string), key string, 
 		message = fmt.Sprintf(message, args...)
 	}
 	progress(message)
+}
+
+func flowStoreOwnsRuntime(runtime plugin.Runtime) bool {
+	text := string(runtime)
+	return strings.EqualFold(text, string(RuntimeJSONRPC)) || strings.EqualFold(text, string(RuntimeDotNet))
 }
 
 func flowStoreVersionGreater(candidate, current string) bool {

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseAppHost>false</UseAppHost>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Wox.Flow.DotNetHost</RootNamespace>
+    <AssemblyName>Wox.Flow.DotNetHost</AssemblyName>
+    <RollForward>LatestMajor</RollForward>
+    <DebugType>none</DebugType>
+    <!-- The versioned Windows TFM injects Microsoft.Windows.SDK.NET.Ref.
+         That projection is about 25 MB and this host does not call WinRT.
+         Plugins that ship the projection still resolve it from their own directory. -->
+    <IncludeWindowsSDKRefFrameworkReferences>false</IncludeWindowsSDKRefFrameworkReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Flow.Launcher.Plugin" Version="5.3.2" />
+  </ItemGroup>
+
+</Project>
