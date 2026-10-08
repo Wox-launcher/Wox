@@ -28,6 +28,7 @@ func init() {
 		requestMap: util.NewHashMap[string, chan JsonRpcResponse](),
 	}
 	plugin.AllHosts = append(plugin.AllHosts, host)
+	plugin.ResolveNodePath = host.resolveNodejsPath
 }
 
 type NodejsHost struct {

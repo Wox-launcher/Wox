@@ -28,6 +28,7 @@ func init() {
 		requestMap: util.NewHashMap[string, chan JsonRpcResponse](),
 	}
 	plugin.AllHosts = append(plugin.AllHosts, host)
+	plugin.ResolvePythonPath = host.resolvePythonPath
 }
 
 type PythonHost struct {

@@ -42,6 +42,7 @@ import (
 	woxui "wox/ui/runtime"
 
 	_ "wox/plugin/host"
+	_ "wox/plugin/thirdparty"
 
 	// import all hosts
 

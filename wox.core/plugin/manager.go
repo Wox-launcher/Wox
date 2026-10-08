@@ -464,6 +464,19 @@ func (m *Manager) loadUserPlugins(ctx context.Context, wait bool) error {
 		metaDataList = append(metaDataList, singleFileMetaDataList...)
 	}
 
+	for _, host := range AllHosts {
+		catalog, ok := host.(ExternalCatalog)
+		if !ok {
+			continue
+		}
+		discovered, discoverErr := catalog.DiscoverMetadata(ctx)
+		if discoverErr != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to load %s plugins: %s", host.GetRuntime(ctx), discoverErr.Error()))
+			continue
+		}
+		metaDataList = append(metaDataList, discovered...)
+	}
+
 	uniqueMetadata := make([]Metadata, 0, len(metaDataList))
 	seenPluginIDs := make(map[string]Metadata, len(metaDataList))
 	for _, instance := range m.pluginInstancesSnapshot() {
@@ -723,6 +736,26 @@ func (m *Manager) LoadPlugin(ctx context.Context, pluginDirectory string) error 
 	}
 
 	return nil
+}
+
+// LoadRuntimePlugin loads metadata that did not come from ParseMetadata.
+// Compatibility layers use it because their plugin manifest is not a Wox plugin.json.
+func (m *Manager) LoadRuntimePlugin(ctx context.Context, metadata Metadata) error {
+	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
+		return err
+	}
+	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
+		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Runtime)
+	})
+	if !exist {
+		return fmt.Errorf("unsupported runtime: %s", metadata.Runtime)
+	}
+	if !pluginHost.IsStarted(ctx) {
+		if err := pluginHost.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start host for runtime %s: %w", metadata.Runtime, err)
+		}
+	}
+	return m.loadHostPlugin(ctx, pluginHost, metadata)
 }
 
 // ensureThirdPartyPluginsEnabled also stops installers before they replace files that cannot be loaded in this session.

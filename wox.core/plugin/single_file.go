@@ -18,8 +18,9 @@ const (
 )
 
 // IsReservedUserPluginDirectory reports directories that must not be scanned as packaged plugins.
+// Compatibility layers reserve their own collection names through RegisterThirdParty.
 func IsReservedUserPluginDirectory(name string) bool {
-	return name == userScriptPluginsDirName || name == userSingleFilePluginsDirName
+	return name == userScriptPluginsDirName || name == userSingleFilePluginsDirName || isRegisteredReservedPluginDirectory(name)
 }
 
 // IsSingleFilePlugin reports whether metadata points at the shared single-file directory.

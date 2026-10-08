@@ -245,6 +245,10 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 		}
 	}
 
+	for _, externalStore := range externalStores {
+		storePluginManifests = externalStore.AppendManifests(ctx, storePluginManifests)
+	}
+
 	logger.Info(ctx, fmt.Sprintf("found %d plugins from stores", len(storePluginManifests)))
 	return storePluginManifests
 }
@@ -423,6 +427,27 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 	// "loading number alternate abnormally" symptom reported in issue #4401.
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
+
+	// Runtimes outside the official set belong to a compatibility layer.
+	// ClassifyPluginArtifact rejects them, so the layer must run before that check.
+	for _, externalStore := range externalStores {
+		if !externalStore.Owns(manifest) {
+			continue
+		}
+		logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
+		if err := externalStore.Install(ctx, manifest, progressCallback); err != nil {
+			logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, err.Error()))
+			return err
+		}
+		reloadSettingPlugins(ctx)
+		if syncInstall {
+			s.logInstalledPluginUpsert(ctx, manifest)
+		}
+		return nil
+	}
+	if !IsSupportedRuntime(string(manifest.Runtime)) {
+		return fmt.Errorf("plugin runtime %s is not available", manifest.Runtime)
+	}
 
 	logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
 
@@ -987,6 +1012,29 @@ func (s *Store) uninstallWithProgress(ctx context.Context, plugin *Instance, ski
 // lock itself. This lets InstallWithProgress call it internally without
 // deadlocking (InstallWithProgress already holds installMu).
 func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipCleanSetting bool, preserveCache bool, progressCallback UninstallProgressCallback) error {
+	// Compatibility plugins must not use the generic uninstall. Its failure path
+	// reloads the directory with ParseMetadata.
+	if plugin != nil {
+		for _, externalStore := range externalStores {
+			if !externalStore.OwnsInstance(plugin) {
+				continue
+			}
+			handled, err := externalStore.Uninstall(ctx, plugin, skipCleanSetting, preserveCache, progressCallback)
+			if !handled {
+				return fmt.Errorf("plugin %s is not installed in the %s directory", plugin.Metadata.Id, externalStore.Name())
+			}
+			if err != nil {
+				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))
+				return err
+			}
+			reloadSettingPlugins(ctx)
+			return nil
+		}
+		if !IsSupportedRuntime(plugin.Metadata.Runtime) {
+			return fmt.Errorf("plugin runtime %s is not available", plugin.Metadata.Runtime)
+		}
+	}
+
 	logger.Info(ctx, fmt.Sprintf("start to uninstall plugin %s(%s)", plugin.Metadata.GetName(ctx), plugin.Metadata.Version))
 	pluginAlreadyUnloaded := false
 	reportProgress := func(key string, args ...any) {

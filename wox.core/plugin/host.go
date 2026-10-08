@@ -38,3 +38,9 @@ type Host interface {
 	LoadPlugin(ctx context.Context, metadata Metadata, pluginDirectory string) (Plugin, error)
 	UnloadPlugin(ctx context.Context, metadata Metadata)
 }
+
+// ExternalCatalog is implemented by hosts that discover plugins outside the
+// packaged plugin.json scan. The manager calls it while loading user plugins.
+type ExternalCatalog interface {
+	DiscoverMetadata(ctx context.Context) ([]Metadata, error)
+}
