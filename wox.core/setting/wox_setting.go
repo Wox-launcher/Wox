@@ -99,7 +99,7 @@ type WoxSetting struct {
 
 	QueryHistories           *WoxSettingValue[[]QueryHistory]
 	QueryCompletionFeedbacks *WoxSettingValue[[]QueryCompletionFeedback]
-	PinedResults             *WoxSettingValue[*util.HashMap[ResultHash, bool]]
+	PinedResults             *WoxSettingValue[*util.HashMap[ResultHash, PinedQueryResult]]
 	ActionedResults          *WoxSettingValue[*util.HashMap[ResultHash, []ActionedResult]]
 
 	// Anonymous usage statistics
@@ -343,10 +343,10 @@ func NewResultHash(pluginId, title, subTitle string) ResultHash {
 	return ResultHash(util.Md5([]byte(fmt.Sprintf("%s%s%s", pluginId, title, subTitle))))
 }
 
-// NewResultHashFromParts resolves the stable result identity used by ranking and favorites.
-func NewResultHashFromParts(pluginId, title, subTitle, scoreKey string) ResultHash {
-	if strings.TrimSpace(scoreKey) != "" {
-		return NewResultHash(pluginId, scoreKey, "")
+// NewResultHashFromParts resolves the stable result identity used by usage history, MRU restore, and query pins.
+func NewResultHashFromParts(pluginId, title, subTitle, identityKey string) ResultHash {
+	if strings.TrimSpace(identityKey) != "" {
+		return NewResultHash(pluginId, identityKey, "")
 	}
 	return NewResultHash(pluginId, title, subTitle)
 }
@@ -502,7 +502,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		AIDisabledBuiltinTools:             NewWoxSettingValue(store, "AIDisabledBuiltinTools", []string{}),
 		QueryHistories:                     NewWoxSettingValue(store, "QueryHistories", []QueryHistory{}),
 		QueryCompletionFeedbacks:           NewWoxSettingValue(store, "QueryCompletionFeedback", []QueryCompletionFeedback{}),
-		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, bool]()),
+		PinedResults:                       NewWoxSettingValue(store, "PinedResults", util.NewHashMap[ResultHash, PinedQueryResult]()),
 		ActionedResults:                    NewWoxSettingValue(store, "ActionedResults", util.NewHashMap[ResultHash, []ActionedResult]()),
 		EnableOfflineMode:                  NewLocalWoxSettingValue(store, "EnableOfflineMode", false),
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),

@@ -112,10 +112,11 @@ func (c *BrowserBookmarkPlugin) Query(ctx context.Context, query plugin.Query) p
 				icon = cachedIcon
 			}
 			results = append(results, plugin.QueryResult{
-				Title:    bookmark.Name,
-				SubTitle: bookmark.Url,
-				Score:    matchScore,
-				Icon:     icon,
+				Title:       bookmark.Name,
+				SubTitle:    bookmark.Url,
+				IdentityKey: bookmark.Url,
+				Score:       matchScore,
+				Icon:        icon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_browser_bookmark_open_in_browser",
@@ -442,9 +443,10 @@ func (c *BrowserBookmarkPlugin) handleMRURestore(ctx context.Context, mruData pl
 	}
 
 	result := &plugin.QueryResult{
-		Title:    name,
-		SubTitle: url,
-		Icon:     mruData.Icon,
+		Title:       name,
+		SubTitle:    url,
+		IdentityKey: url,
+		Icon:        mruData.Icon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_browser_bookmark_open_in_browser",

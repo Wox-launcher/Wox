@@ -32,7 +32,7 @@ func TestColorMRURestoreRebuildsHex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore color: %v", err)
 	}
-	if restored.ScoreKey != "#4F7CFF" || restored.Actions[0].ContextData["hex"] != "#4F7CFF" {
+	if restored.IdentityKey != "#4F7CFF" || restored.Actions[0].ContextData["hex"] != "#4F7CFF" {
 		t.Fatalf("restored color = %#v", restored)
 	}
 	if _, err := colorPlugin.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {

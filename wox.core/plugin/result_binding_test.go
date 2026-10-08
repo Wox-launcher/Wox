@@ -195,9 +195,9 @@ func TestValidateQueryHotkeysAgainstBindings(t *testing.T) {
 // TestAliasDedupePreservesDifferentIdentities protects same-title notes and actions.
 func TestAliasDedupePreservesDifferentIdentities(t *testing.T) {
 	instance := &Instance{Metadata: Metadata{Id: "notes", Features: []MetadataFeature{{Name: MetadataFeatureMRU, Params: map[string]any{"HashBy": "scorekey"}}}}}
-	alias := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", ScoreKey: "note:1"}, AliasMatchKind: aliasMatchExact}
-	other := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", ScoreKey: "note:2"}}
-	duplicate := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", ScoreKey: "note:1"}}
+	alias := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", IdentityKey: "note:1"}, AliasMatchKind: aliasMatchExact}
+	other := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", IdentityKey: "note:2"}}
+	duplicate := &QueryResultCache{PluginInstance: instance, Result: QueryResult{Title: "Shopping", IdentityKey: "note:1"}}
 	got := dropResultCachesDuplicateOfAlias([]*QueryResultCache{alias}, []*QueryResultCache{other, duplicate})
 	if len(got) != 1 || got[0] != other {
 		t.Fatal("dedupe hid a different note or kept the duplicate")

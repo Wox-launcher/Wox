@@ -529,15 +529,15 @@ func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
 			hasUp = hasUp || action.Name == "i18n:plugin_clipboard_move_favorite_up"
 			hasDown = hasDown || action.Name == "i18n:plugin_clipboard_move_favorite_down"
 		}
-		if result.Id != result.ScoreKey {
-			t.Fatalf("favorite result id = %q, score key = %q", result.Id, result.ScoreKey)
+		if result.Id != result.IdentityKey {
+			t.Fatalf("favorite result id = %q, score key = %q", result.Id, result.IdentityKey)
 		}
 		if hasUp != (i > 0) || hasDown != (i+1 < len(initialResults)) {
-			t.Fatalf("favorite %s at %d has up=%v down=%v", result.ScoreKey, i, hasUp, hasDown)
+			t.Fatalf("favorite %s at %d has up=%v down=%v", result.IdentityKey, i, hasUp, hasDown)
 		}
 	}
 	for _, result := range initialResults {
-		if result.ScoreKey != "b" {
+		if result.IdentityKey != "b" {
 			continue
 		}
 		for _, action := range result.Actions {
@@ -560,7 +560,7 @@ func TestClipboardFavoriteUsageAndManualRank(t *testing.T) {
 	response := c.Query(ctx, plugin.Query{Command: "fav"})
 	resultScores := map[string]int64{}
 	for _, result := range response.Results {
-		resultScores[result.ScoreKey] = result.Score
+		resultScores[result.IdentityKey] = result.Score
 	}
 	if !(resultScores["top"] > resultScores["b"] && resultScores["b"] > resultScores["a"] && resultScores["a"] > resultScores["c"]) {
 		t.Fatalf("cb fav scores = %v", resultScores)
@@ -794,8 +794,8 @@ func TestHandleMRURestoreRestoresFavoriteWhenHistoryRowIsGone(t *testing.T) {
 	if restored.Title != "Another option is Wox Launcher." {
 		t.Fatalf("title = %q", restored.Title)
 	}
-	if restored.ScoreKey != "fav-1" {
-		t.Fatalf("score key = %q", restored.ScoreKey)
+	if restored.IdentityKey != "fav-1" {
+		t.Fatalf("score key = %q", restored.IdentityKey)
 	}
 }
 

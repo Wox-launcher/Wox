@@ -511,8 +511,30 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 		})
 	}
 	return plugin.QueryResult{
-		Title: renderWebSearchTemplate(search.Title, values, false), Score: 100, Icon: search.Icon, Actions: actions,
+		Title: renderWebSearchTemplate(search.Title, values, false), IdentityKey: webSearchIdentityKey(search.Keyword, values), Score: 100, Icon: search.Icon, Actions: actions,
 	}
+}
+
+// webSearchIdentityKey identifies one engine plus its parameter values, independent of the translated title.
+func webSearchIdentityKey(keyword string, values map[string]string) string {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	var identity strings.Builder
+	identity.WriteString(keyword)
+	for _, key := range keys {
+		identity.WriteString("\x1f")
+		identity.WriteString(key)
+		identity.WriteString("=")
+		identity.WriteString(values[key])
+	}
+	return identity.String()
 }
 
 func supportsWebViewPreview() bool {

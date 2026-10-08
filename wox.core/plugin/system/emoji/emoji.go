@@ -197,7 +197,7 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -526,7 +526,7 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, query plugin.Query,
 		Title:    title,
 		SubTitle: subTitle,
 		Icon:     common.NewWoxImageEmoji(emoji),
-		ScoreKey: emoji,
+		IdentityKey: emoji,
 		Actions:  attachEmojiMRUContext(e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed), emoji),
 	}
 }

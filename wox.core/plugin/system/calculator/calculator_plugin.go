@@ -166,10 +166,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		autoRecordQueryHistory = true
 
 		results = append(results, plugin.QueryResult{
-			Title:    formattedResult,
-			Icon:     calculatorIcon,
-			Score:    calculatorExpressionScore,
-			ScoreKey: calculatorExpressionScoreKey(query.Search),
+			Title:       formattedResult,
+			Icon:        calculatorIcon,
+			Score:       calculatorExpressionScore,
+			IdentityKey: calculatorExpressionIdentityKey(query.Search),
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_calculator_copy_result",
@@ -216,10 +216,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 			autoRecordQueryHistory = true
 
 			results = append(results, plugin.QueryResult{
-				Title:    formattedResult,
-				Icon:     calculatorIcon,
-				Score:    calculatorExpressionScore,
-				ScoreKey: calculatorExpressionScoreKey(query.Search),
+				Title:       formattedResult,
+				Icon:        calculatorIcon,
+				Score:       calculatorExpressionScore,
+				IdentityKey: calculatorExpressionIdentityKey(query.Search),
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:        "i18n:plugin_calculator_copy_result",
@@ -261,9 +261,10 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 				}
 
 				results = append(results, plugin.QueryResult{
-					Title:    h.Expression,
-					SubTitle: formattedHistoryResult,
-					Icon:     calculatorIcon,
+					Title:       h.Expression,
+					SubTitle:    formattedHistoryResult,
+					IdentityKey: calculatorExpressionIdentityKey(h.Expression),
+					Icon:        calculatorIcon,
 					Actions: []plugin.QueryResultAction{
 						{
 							Name:        "i18n:plugin_calculator_copy_result",
@@ -311,7 +312,7 @@ func (c *CalculatorPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	return plugin.QueryResponse{Results: results, AutoRecordQueryHistory: autoRecordQueryHistory}
 }
 
-func calculatorExpressionScoreKey(expression string) string {
+func calculatorExpressionIdentityKey(expression string) string {
 	return "calculator:" + strings.TrimSpace(expression)
 }
 
@@ -334,10 +335,10 @@ func (c *CalculatorPlugin) handleMRURestore(ctx context.Context, mruData plugin.
 	result := val.String()
 	formattedResult := c.formatWithSeparators(val, thousandsSep, decimalSep)
 	return &plugin.QueryResult{
-		Title:    formattedResult,
-		SubTitle: query,
-		Icon:     calculatorIcon,
-		ScoreKey: calculatorExpressionScoreKey(query),
+		Title:       formattedResult,
+		SubTitle:    query,
+		Icon:        calculatorIcon,
+		IdentityKey: calculatorExpressionIdentityKey(query),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_calculator_copy_result",

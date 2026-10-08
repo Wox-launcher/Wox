@@ -696,9 +696,10 @@ func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 			}
 
 			results = append(results, plugin.QueryResult{
-				Title: title,
-				Score: matchScore,
-				Icon:  pluginIcon,
+				Title:       title,
+				IdentityKey: "plugin-settings:" + instance.Metadata.Id,
+				Score:       matchScore,
+				Icon:        pluginIcon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name: "i18n:plugin_sys_execute",
@@ -862,12 +863,28 @@ func (r *SysPlugin) buildCommandResult(ctx context.Context, query plugin.Query, 
 	}
 
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: subtitle,
-		Score:    score,
-		Icon:     command.Icon,
-		Actions:  []plugin.QueryResultAction{r.buildCommandAction(command, contextData)},
+		Title:       title,
+		SubTitle:    subtitle,
+		IdentityKey: sysCommandIdentityKey(command, contextData),
+		Score:       score,
+		Icon:        command.Icon,
+		Actions:     []plugin.QueryResultAction{r.buildCommandAction(command, contextData)},
 	}
+}
+
+// sysCommandIdentityKey keeps a system command stable across translated titles.
+// Set Volume includes the entered percent so each volume is its own result.
+func sysCommandIdentityKey(command SysCommand, contextData common.ContextData) string {
+	id := strings.TrimSpace(command.ID)
+	if id == "" {
+		return ""
+	}
+	if id == "set-volume" {
+		if volume := strings.TrimSpace(contextData[sysCommandVolumeContextKey]); volume != "" {
+			return id + ":" + volume
+		}
+	}
+	return id
 }
 
 func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
@@ -893,10 +910,11 @@ func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData
 	}
 
 	result := &plugin.QueryResult{
-		Title:    foundCommand.Title,
-		SubTitle: foundCommand.SubTitle,
-		Icon:     foundCommand.Icon,
-		Actions:  []plugin.QueryResultAction{r.buildCommandAction(*foundCommand, mruData.ContextData)},
+		Title:       foundCommand.Title,
+		SubTitle:    foundCommand.SubTitle,
+		IdentityKey: sysCommandIdentityKey(*foundCommand, mruData.ContextData),
+		Icon:        foundCommand.Icon,
+		Actions:     []plugin.QueryResultAction{r.buildCommandAction(*foundCommand, mruData.ContextData)},
 	}
 
 	return result, nil

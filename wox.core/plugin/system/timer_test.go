@@ -239,8 +239,8 @@ func TestTimerMRURestoreRebuildsStartResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore timer: %v", err)
 	}
-	if restored.ScoreKey != timerStartScoreKey(time.Minute, "tea") {
-		t.Fatalf("score key = %q", restored.ScoreKey)
+	if restored.IdentityKey != timerStartIdentityKey(time.Minute, "tea") {
+		t.Fatalf("score key = %q", restored.IdentityKey)
 	}
 	if _, err := timer.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {
 		t.Fatal("empty context should fail restore")

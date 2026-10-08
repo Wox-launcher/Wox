@@ -167,7 +167,7 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 			{
@@ -271,7 +271,7 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 		SubTitle: subtitle,
 		Icon:     windowManagerCommandIcon(command.Op),
 		Score:    score,
-		ScoreKey: "window-command:" + command.Command,
+		IdentityKey: "window-command:" + command.Command,
 		Tails:    targetWindowIconTail(query.Env.ActiveWindowIcon),
 		Actions: []plugin.QueryResultAction{
 			{

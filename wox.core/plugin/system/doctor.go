@@ -93,10 +93,11 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		}
 
 		result := plugin.QueryResult{
-			Title:    check.Name,
-			SubTitle: check.Description,
-			Icon:     icon,
-			Actions:  actions,
+			Title:       check.Name,
+			SubTitle:    check.Description,
+			IdentityKey: string(check.Type),
+			Icon:        icon,
+			Actions:     actions,
 		}
 
 		results = append(results, result)

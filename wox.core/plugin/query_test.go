@@ -283,3 +283,25 @@ func TestRankAboveUsageIsNotDecodedFromPluginJSON(t *testing.T) {
 	assert.Equal(t, "..", result.Title)
 	assert.Equal(t, int64(1000), result.Score)
 }
+
+func TestQueryResultAcceptsLegacyScoreKey(t *testing.T) {
+	var legacy QueryResult
+	err := json.Unmarshal([]byte(`{"Title":"Open","ScoreKey":"open_system_settings"}`), &legacy)
+	assert.NoError(t, err)
+	assert.Equal(t, "open_system_settings", legacy.IdentityKey)
+
+	var snake QueryResult
+	err = json.Unmarshal([]byte(`{"Title":"Open","score_key":"open_system_settings"}`), &snake)
+	assert.NoError(t, err)
+	assert.Equal(t, "open_system_settings", snake.IdentityKey)
+
+	var current QueryResult
+	err = json.Unmarshal([]byte(`{"Title":"Open","IdentityKey":"open_system_settings","score_key":"old"}`), &current)
+	assert.NoError(t, err)
+	assert.Equal(t, "open_system_settings", current.IdentityKey)
+
+	var snakeIdentity QueryResult
+	err = json.Unmarshal([]byte(`{"Title":"Open","identity_key":"open_system_settings","score_key":"old"}`), &snakeIdentity)
+	assert.NoError(t, err)
+	assert.Equal(t, "open_system_settings", snakeIdentity.IdentityKey)
+}

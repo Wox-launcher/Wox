@@ -78,7 +78,7 @@ func (p *WebViewPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -252,7 +252,7 @@ func (p *WebViewPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Title:    site.Url,
 			Icon:     currentSite.Icon,
 			Score:    100,
-			ScoreKey: site.Keyword,
+			IdentityKey: site.Keyword,
 			Preview: plugin.WoxPreview{
 				PreviewType: plugin.WoxPreviewTypeWebView,
 				PreviewData: string(previewPayload),

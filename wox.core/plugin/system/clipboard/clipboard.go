@@ -222,7 +222,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -1269,7 +1269,7 @@ func (c *ClipboardPlugin) convertRecordToResult(ctx context.Context, record Clip
 	if record.ID != "" {
 		result.Id = record.ID
 	}
-	result.ScoreKey = record.ID
+	result.IdentityKey = record.ID
 	result.Actions = attachClipboardMRUContext(result.Actions, record.ID)
 	return result
 }

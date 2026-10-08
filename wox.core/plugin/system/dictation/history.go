@@ -280,15 +280,16 @@ func (h *historyStore) buildHistoryResult(ctx context.Context, record historyRec
 	})
 
 	return plugin.QueryResult{
-		Id:         record.ID,
-		Title:      truncateHistoryTitle(record.Content),
-		SubTitle:   util.FormatTimestamp(record.Timestamp),
-		Icon:       dictationIcon,
-		Group:      group,
-		GroupScore: groupScore,
-		Score:      record.Timestamp,
-		Preview:    buildHistoryPreview(ctx, record, audioFiles),
-		Actions:    actions,
+		Id:          record.ID,
+		IdentityKey: record.ID,
+		Title:       truncateHistoryTitle(record.Content),
+		SubTitle:    util.FormatTimestamp(record.Timestamp),
+		Icon:        dictationIcon,
+		Group:       group,
+		GroupScore:  groupScore,
+		Score:       record.Timestamp,
+		Preview:     buildHistoryPreview(ctx, record, audioFiles),
+		Actions:     actions,
 	}
 }
 

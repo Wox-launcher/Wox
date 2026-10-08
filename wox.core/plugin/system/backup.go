@@ -65,9 +65,10 @@ func (c *BackupPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.QueryResult {
 	return []plugin.QueryResult{
 		{
-			Title:    "i18n:plugin_backup_now",
-			SubTitle: "i18n:plugin_backup_subtitle",
-			Icon:     backupIcon,
+			Title:       "i18n:plugin_backup_now",
+			SubTitle:    "i18n:plugin_backup_subtitle",
+			IdentityKey: "backup:now",
+			Icon:        backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_backup_action",
@@ -107,9 +108,10 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 	var results []plugin.QueryResult
 	for index, backup := range backups {
 		results = append(results, plugin.QueryResult{
-			Title:    fmt.Sprintf("#%d", index+1),
-			SubTitle: fmt.Sprintf("%s - %s", backup.Type, util.FormatTimestamp(backup.Timestamp)),
-			Icon:     backupIcon,
+			Title:       fmt.Sprintf("#%d", index+1),
+			SubTitle:    fmt.Sprintf("%s - %s", backup.Type, util.FormatTimestamp(backup.Timestamp)),
+			IdentityKey: backup.Id,
+			Icon:        backupIcon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:                   "i18n:plugin_backup_restore",

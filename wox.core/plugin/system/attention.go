@@ -104,15 +104,16 @@ func (a *AttentionPlugin) buildItemResults(ctx context.Context, items []database
 		}
 
 		results = append(results, plugin.QueryResult{
-			Id:         item.IdentityKey,
-			Title:      item.Title,
-			SubTitle:   item.Description,
-			Icon:       plugin.ParseAttentionIcon(item.Icon),
-			Score:      score,
-			Group:      group,
-			GroupScore: groupScore,
-			Tails:      a.buildItemTails(ctx, item),
-			Actions:    a.buildItemActions(ctx, itemCopy),
+			Id:          item.IdentityKey,
+			IdentityKey: item.IdentityKey,
+			Title:       item.Title,
+			SubTitle:    item.Description,
+			Icon:        plugin.ParseAttentionIcon(item.Icon),
+			Score:       score,
+			Group:       group,
+			GroupScore:  groupScore,
+			Tails:       a.buildItemTails(ctx, item),
+			Actions:     a.buildItemActions(ctx, itemCopy),
 		})
 	}
 	return results

@@ -102,7 +102,7 @@ func (t *TimerPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -162,7 +162,7 @@ func (t *TimerPlugin) buildStartResult(ctx context.Context, duration time.Durati
 		SubTitle: subTitle,
 		Icon:     timerPluginIcon,
 		Score:    timerStartResultScore,
-		ScoreKey: timerStartScoreKey(duration, note),
+		IdentityKey: timerStartIdentityKey(duration, note),
 		Actions: attachTimerMRUContext([]plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_timer_action_start_pinned",
@@ -195,7 +195,7 @@ func (t *TimerPlugin) buildTimerResult(ctx context.Context, entry *timerEntry) p
 		SubTitle: subTitle,
 		Icon:     timerResultIcon(entry),
 		Score:    timerResultScoreBase - int64(remaining/time.Second),
-		ScoreKey: "timer:" + entry.ID,
+		IdentityKey: "timer:" + entry.ID,
 		Tails:    t.timerTails(ctx, entry),
 		Actions:  attachTimerMRUContext(t.buildTimerActions(ctx, entry.ID), timerEntryMRUContext(entry)),
 	}
@@ -838,7 +838,7 @@ func formatTimerRemaining(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
-func timerStartScoreKey(duration time.Duration, note string) string {
+func timerStartIdentityKey(duration time.Duration, note string) string {
 	return fmt.Sprintf("timer:start:%d:%s", int64(duration), strings.TrimSpace(note))
 }
 

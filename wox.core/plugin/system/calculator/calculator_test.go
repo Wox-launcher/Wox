@@ -182,7 +182,7 @@ func TestCalculatorMRURestoreRecalculatesExpression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore calculator: %v", err)
 	}
-	if restored.ScoreKey != calculatorExpressionScoreKey("1+1") || restored.Actions[0].ContextData["query"] != "1+1" {
+	if restored.IdentityKey != calculatorExpressionIdentityKey("1+1") || restored.Actions[0].ContextData["query"] != "1+1" {
 		t.Fatalf("restored calculator = %#v", restored)
 	}
 	if _, err := calculator.handleMRURestore(context.Background(), plugin.MRUData{}); err == nil {

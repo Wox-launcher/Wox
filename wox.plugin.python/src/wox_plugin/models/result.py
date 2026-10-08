@@ -769,7 +769,7 @@ class Result:
         sub_title: Secondary display text
         preview: Preview content for detail view
         score: Relevance score for sorting
-        score_key: Stable identity for actioned-result ranking
+        identity_key: Stable result identity for usage history, MRU, and query pins
         group: Group name for categorization
         group_score: Group relevance score
         tails: Additional visual elements
@@ -866,13 +866,16 @@ class Result:
     - 0: Default/neutral
     """
 
-    score_key: str = field(default="")
+    identity_key: str = field(default="")
     """
-    Stable identity for actioned-result ranking.
+    Stable result identity for usage history, MRU restore, and query pins.
 
     Set this when title or sub_title changes over time but the result should
-    keep the same usage score in global search.
+    stay the same item. score_key is the older name and is still accepted.
     """
+
+    score_key: str = field(default="")
+    """Older name for identity_key. Prefer identity_key."""
 
     group: str = field(default="")
     """
@@ -937,7 +940,8 @@ class Result:
             "Id": self.id,
             "SubTitle": self.sub_title,
             "Score": self.score,
-            "ScoreKey": self.score_key,
+            "IdentityKey": self.identity_key or self.score_key,
+            "ScoreKey": self.identity_key or self.score_key,
             "Group": self.group,
             "GroupScore": self.group_score,
         }
@@ -987,7 +991,8 @@ class Result:
             sub_title=data.get("SubTitle", ""),
             preview=preview,
             score=data.get("Score", 0.0),
-            score_key=data.get("ScoreKey", ""),
+            identity_key=data.get("IdentityKey") or data.get("ScoreKey") or "",
+            score_key=data.get("ScoreKey") or data.get("IdentityKey") or "",
             group=data.get("Group", ""),
             group_score=data.get("GroupScore", 0.0),
             tails=tails,

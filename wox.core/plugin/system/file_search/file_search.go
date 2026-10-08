@@ -172,7 +172,7 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 		},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDisableAutoCommandHint},
-			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "scoreKey"}},
+			{Name: plugin.MetadataFeatureMRU, Params: map[string]any{"HashBy": "identityKey"}},
 		},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{
@@ -1054,7 +1054,7 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 			SubTitle:   item.Path,
 			Icon:       icon,
 			Score:      item.Score,
-			ScoreKey:   item.Path,
+			IdentityKey:   item.Path,
 			Group:      group,
 			GroupScore: groupScore,
 			Tails:      fileSearchResultTails(item, recent),

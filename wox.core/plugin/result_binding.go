@@ -70,9 +70,9 @@ func mruIdentityHash(meta Metadata, query Query, result QueryResult) string {
 				hashTitle = query.Search
 				hashSubTitle = ""
 			}
-		case "scorekey":
-			if result.ScoreKey != "" {
-				hashTitle = result.ScoreKey
+		case "identitykey", "scorekey":
+			if result.IdentityKey != "" {
+				hashTitle = result.IdentityKey
 				hashSubTitle = ""
 			}
 		}

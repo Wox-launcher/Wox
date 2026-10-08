@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"wox/common"
 	"wox/setting/definition"
@@ -283,10 +284,10 @@ type QueryResult struct {
 	// RankAboveUsage keeps a system-plugin navigation row ahead of action history.
 	// A query pin still ranks higher. json:"-" keeps it off the plugin SDK wire format.
 	RankAboveUsage bool `json:"-"`
-	// ScoreKey is an optional stable identity when title or subtitle is dynamic.
-	// Wox uses it for actioned-result scoring, and as the MRU identity hash when
-	// the plugin's MRU HashBy is "scoreKey".
-	ScoreKey string
+	// IdentityKey optionally identifies one durable item or command, independent of its displayed text.
+	// Omit it for placeholders, prompts, and transient states without a durable identity.
+	// Usage history, MRU restore, and query pins use it; MRU HashBy also accepts the older "scoreKey".
+	IdentityKey string
 	// Group results, Wox will group results by group name
 	Group string
 	// Score of the group, the higher the score, the more relevant the group is, more likely to be displayed on top
@@ -415,6 +416,37 @@ type ActionContext struct {
 type FormActionContext struct {
 	ActionContext
 	Values map[string]string
+}
+
+// UnmarshalJSON accepts IdentityKey and older plugin names.
+// identity_key wins over score_key when a plugin sends only the older field.
+func (q *QueryResult) UnmarshalJSON(data []byte) error {
+	type queryResultAlias QueryResult
+	aux := &struct {
+		*queryResultAlias
+		IdentityKeyCamel string `json:"identityKey"`
+		IdentityKeySnake string `json:"identity_key"`
+		ScoreKey         string `json:"ScoreKey"`
+		ScoreKeyCamel    string `json:"scoreKey"`
+		ScoreKeySnake    string `json:"score_key"`
+	}{queryResultAlias: (*queryResultAlias)(q)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if strings.TrimSpace(q.IdentityKey) == "" {
+		q.IdentityKey = firstResultIdentityKey(aux.IdentityKeyCamel, aux.IdentityKeySnake, aux.ScoreKey, aux.ScoreKeyCamel, aux.ScoreKeySnake)
+	}
+	return nil
+}
+
+// firstResultIdentityKey returns the first non-blank identity sent by a plugin.
+func firstResultIdentityKey(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (q *QueryResult) ToUI() QueryResultUI {

@@ -87,7 +87,7 @@ func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -172,7 +172,7 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 			Title:    tab.Title,
 			SubTitle: tab.Url,
 			Score:    util.MaxInt64(titleScore, urlScore),
-			ScoreKey: tab.Url,
+			IdentityKey: tab.Url,
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
@@ -491,7 +491,7 @@ func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRU
 		result := plugin.QueryResult{
 			Title:    current.Title,
 			SubTitle: current.Url,
-			ScoreKey: current.Url,
+			IdentityKey: current.Url,
 			Icon:     icon,
 			Actions: []plugin.QueryResultAction{
 				{
@@ -517,7 +517,7 @@ func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRU
 	result := plugin.QueryResult{
 		Title:    title,
 		SubTitle: url,
-		ScoreKey: url,
+		IdentityKey: url,
 		Icon:     browserIcon,
 		Actions: []plugin.QueryResultAction{
 			{

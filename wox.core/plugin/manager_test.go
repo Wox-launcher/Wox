@@ -816,9 +816,21 @@ func TestRestoreMRUItemSkipsSlowPluginAndKeepsFastOne(t *testing.T) {
 	}
 }
 
-func TestNewResultHashFromPartsPrefersScoreKey(t *testing.T) {
-	byScoreKey := setting.NewResultHashFromParts("plugin-id", "title", "subtitle", "score-key")
-	assert.Equal(t, setting.NewResultHash("plugin-id", "score-key", ""), byScoreKey)
+func TestResultIdentityHashIgnoresTranslatedTitleWhenIdentityKeyIsSet(t *testing.T) {
+	raw := resultIdentityHash("sys", QueryResult{Title: "i18n:plugin_sys_open_system_settings", IdentityKey: "open_system_settings"})
+	translated := resultIdentityHash("sys", QueryResult{Title: "Open System Settings", IdentityKey: "open_system_settings"})
+	if raw != translated {
+		t.Fatalf("score key identity changed after translation: %s vs %s", raw, translated)
+	}
+	byTitle := resultIdentityHash("sys", QueryResult{Title: "Open System Settings"})
+	if byTitle == translated {
+		t.Fatal("title identity should differ from score key identity")
+	}
+}
+
+func TestNewResultHashFromPartsPrefersIdentityKey(t *testing.T) {
+	byIdentityKey := setting.NewResultHashFromParts("plugin-id", "title", "subtitle", "score-key")
+	assert.Equal(t, setting.NewResultHash("plugin-id", "score-key", ""), byIdentityKey)
 
 	byTitle := setting.NewResultHashFromParts("plugin-id", "title", "subtitle", "")
 	assert.Equal(t, setting.NewResultHash("plugin-id", "title", "subtitle"), byTitle)

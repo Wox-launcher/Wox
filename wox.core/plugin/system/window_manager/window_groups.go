@@ -276,7 +276,7 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 		SubTitle: subtitle,
 		Icon:     windowManagerIcon,
 		Score:    score,
-		ScoreKey: "window-group:" + group.Id,
+		IdentityKey: "window-group:" + group.Id,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_window_manager_group_action_apply",

@@ -62,9 +62,10 @@ func (i *QueryHistoryPlugin) Query(ctx context.Context, query plugin.Query) plug
 
 		if strings.Contains(history.Query.String(), query.Search) {
 			results = append(results, plugin.QueryResult{
-				Title:    history.Query.String(),
-				SubTitle: util.FormatTimestamp(history.Timestamp),
-				Icon:     queryHistoryIcon,
+				Title:       history.Query.String(),
+				SubTitle:    util.FormatTimestamp(history.Timestamp),
+				IdentityKey: history.Query.String(),
+				Icon:        queryHistoryIcon,
 				Actions: []plugin.QueryResultAction{
 					{
 						Name:                   "i18n:plugin_query_history_use",

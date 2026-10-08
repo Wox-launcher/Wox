@@ -170,6 +170,14 @@ type appQueryMatch struct {
 	score       int64
 }
 
+// appResultIdentityKey prefers the indexed app identity, then the launch path.
+func appResultIdentityKey(info appInfo) string {
+	if identity := strings.TrimSpace(info.Identity); identity != "" {
+		return identity
+	}
+	return strings.TrimSpace(info.Path)
+}
+
 func (a *appInfo) GetDisplayPath() string {
 	if a.Type == AppTypeUWP || a.Type == AppTypeAppsFolder || a.Type == AppTypeWindowsSetting {
 		return ""
@@ -688,12 +696,13 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		resultIconSelectUs := time.Since(iconSelectStart).Microseconds()
 		iconSelectUs += resultIconSelectUs
 		result := plugin.QueryResult{
-			Id:       resultID,
-			Title:    match.displayName,
-			SubTitle: match.displayPath,
-			Icon:     icon,
-			Score:    match.score,
-			Actions:  actions,
+			Id:          resultID,
+			Title:       match.displayName,
+			SubTitle:    match.displayPath,
+			IdentityKey: appResultIdentityKey(entry.info),
+			Icon:        icon,
+			Score:       match.score,
+			Actions:     actions,
 		}
 
 		// Launchpad mode is a static app grid that replaces macOS Launchpad's removed entry point.
@@ -2506,11 +2515,12 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
 	}
 	result := &plugin.QueryResult{
-		Id:       uuid.NewString(),
-		Title:    displayName,
-		SubTitle: displayPath,
-		Icon:     appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
-		Actions:  a.buildAppActions(*appInfo, displayName, mruData.ContextData),
+		Id:          uuid.NewString(),
+		Title:       displayName,
+		SubTitle:    displayPath,
+		IdentityKey: appResultIdentityKey(*appInfo),
+		Icon:        appInfo.Icon, // Use current icon instead of cached MRU icon to handle cache invalidation
+		Actions:     a.buildAppActions(*appInfo, displayName, mruData.ContextData),
 	}
 
 	// Track this result for periodic refresh (refreshRunningApps will handle running state)

@@ -79,7 +79,7 @@ func (c *ColorPlugin) GetMetadata() plugin.Metadata {
 			{
 				Name: plugin.MetadataFeatureMRU,
 				Params: map[string]any{
-					"HashBy": "scoreKey",
+					"HashBy": "identityKey",
 				},
 			},
 		},
@@ -198,7 +198,7 @@ func (c *ColorPlugin) buildColorResult(ctx context.Context, color parsedColor, i
 		Score:      item.LastSeenAt,
 		Group:      group,
 		GroupScore: groupScore,
-		ScoreKey:   color.Hex,
+		IdentityKey:   color.Hex,
 		Tails:      c.buildColorTails(ctx, complement, analogousLeft, analogousRight),
 		Actions:    attachColorMRUContext(c.buildColorActions(ctx, color, item, complement, analogousLeft, analogousRight, rgb, hsl), color.Hex),
 	}

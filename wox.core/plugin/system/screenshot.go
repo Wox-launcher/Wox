@@ -270,9 +270,10 @@ type screenshotOCRSidecar struct {
 
 func (p *ScreenshotPlugin) newScreenshotResult() plugin.QueryResult {
 	return plugin.QueryResult{
-		Title:    "i18n:plugin_screenshot_capture_title",
-		SubTitle: "i18n:plugin_screenshot_capture_subtitle",
-		Icon:     screenshotIcon,
+		Title:       "i18n:plugin_screenshot_capture_title",
+		SubTitle:    "i18n:plugin_screenshot_capture_subtitle",
+		IdentityKey: "screenshot:capture",
+		Icon:        screenshotIcon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_screenshot_capture_action",
@@ -790,6 +791,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 	result := plugin.QueryResult{
 		Title:             item.fileName,
 		SubTitle:          util.FormatTimestamp(item.timestamp),
+		IdentityKey:       item.path,
 		Icon:              iconImage,
 		IconShowContainer: thumbnailsReady,
 		Group:             group,
