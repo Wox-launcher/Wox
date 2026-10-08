@@ -539,25 +539,40 @@ func TestActiveThemeExplainsDisabledApply(t *testing.T) {
 	}
 }
 
-func TestThemeStoreImageTagMatchesPluginTrailingBadge(t *testing.T) {
-	props := ThemeSettingsProps{Mode: "store", ImageLabel: "Image"}
-	for _, selected := range []bool{false, true} {
-		item := ThemeCatalogItem{ID: "knit", Name: "Knit", ImageTheme: true, IsInstalled: true, Selected: selected}
-		slot := themeListRow(props, item, 250).(woxwidget.Container)
-		row := focusedControlGesture(slot.Child).Child.(woxwidget.Container)
-		children := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
-		tag := children[2].(woxwidget.Container)
-		label := tag.Child.(woxwidget.TextBlock)
-		if len(children) != 4 || tag.Width != 0 || tag.Height != 22 || tag.BorderWidth != 0 || label.Value != "Image" || label.Style.Size != woxcomponent.TagFontSize {
-			t.Fatal("Image must use the plugin badge slot before the installed icon")
+func TestThemeImageTagMatchesPluginTrailingBadge(t *testing.T) {
+	for _, mode := range []string{"store", "installed"} {
+		props := ThemeSettingsProps{Mode: mode, ImageLabel: "Image"}
+		for _, selected := range []bool{false, true} {
+			item := ThemeCatalogItem{ID: "knit", Name: "Knit", ImageTheme: true, IsInstalled: true, Selected: selected}
+			slot := themeListRow(props, item, 250).(woxwidget.Container)
+			row := focusedControlGesture(slot.Child).Child.(woxwidget.Container)
+			children := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children
+			tag := children[2].(woxwidget.Container)
+			label := tag.Child.(woxwidget.TextBlock)
+			// The store row also keeps the installed check after the image badge.
+			wantChildren := 3
+			if mode == "store" {
+				wantChildren = 4
+			}
+			if len(children) != wantChildren || tag.Width != 0 || tag.Height != 22 || tag.BorderWidth != 0 || label.Value != "Image" || label.Style.Size != woxcomponent.TagFontSize {
+				t.Fatalf("Image badge in %s = %d children, label %#v", mode, len(children), label)
+			}
 		}
 	}
 }
 
-func TestThemeStoreImageDetailKeepsMetadataAndMemoryVisible(t *testing.T) {
-	props := ThemeSettingsProps{Mode: "store", ImageLabel: "Image", ImageMemoryLabel: "Image · uses more memory"}
-	props.Theme.Warning = woxui.Color{R: 253, G: 186, B: 116, A: 255}
+func TestThemeImageDetailKeepsMetadataAndMemoryVisible(t *testing.T) {
 	item := ThemeCatalogItem{Author: "qianlifeng", ImageTheme: true}
+	for _, mode := range []string{"store", "installed"} {
+		props := ThemeSettingsProps{Mode: mode, ImageLabel: "Image", ImageMemoryLabel: "Image · uses more memory"}
+		props.Theme.Warning = woxui.Color{R: 253, G: 186, B: 116, A: 255}
+		assertThemeImageDetail(t, props, item)
+	}
+}
+
+// assertThemeImageDetail checks the image badge and memory warning in one catalog mode.
+func assertThemeImageDetail(t *testing.T, props ThemeSettingsProps, item ThemeCatalogItem) {
+	t.Helper()
 	for _, width := range []float32{280, 600} {
 		meta := themeDetailMeta(props, item, woxwidget.Container{Width: 104, Height: 32})
 		group := meta[0].(woxwidget.Expanded).Child.(woxwidget.Flex)

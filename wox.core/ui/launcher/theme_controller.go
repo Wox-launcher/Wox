@@ -247,9 +247,12 @@ func (c *themeSettingsController) ReloadThemes(ctx context.Context, service cont
 			continue
 		}
 		source := item.Theme
+		// Installed documents do not carry the store ImageTheme flag. Packaged surface images are the same memory cost.
+		sources, sourceErr := source.ThemeAssetSources()
 		themes = append(themes, themeSettingsTheme{
 			ID: source.ThemeId, Name: source.GetName(ctx), Author: source.ThemeAuthor, URL: source.ThemeUrl, Version: source.Version, Description: source.GetDescription(ctx),
 			IsSystem: source.IsSystem, IsInstalled: source.IsInstalled, IsUpgradable: item.IsUpgradable, IsAuto: source.IsAutoAppearance,
+			ImageTheme:  sourceErr == nil && len(sources) > 0,
 			DarkThemeID: source.DarkThemeId, LightThemeID: source.LightThemeId,
 			previewTheme: fromCoreTheme(source),
 		})

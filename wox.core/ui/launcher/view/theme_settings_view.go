@@ -303,7 +303,7 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 			}}}
 		}}},
 	}
-	if props.Mode == "store" && item.ImageTheme && props.ImageLabel != "" {
+	if item.ImageTheme && props.ImageLabel != "" {
 		rowChildren = append(rowChildren, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary, props.Theme))
 	}
 	if trailing != nil {
@@ -366,7 +366,7 @@ func themeDetailMeta(props ThemeSettingsProps, theme ThemeCatalogItem, website w
 	meta := []woxwidget.Widget{
 		woxwidget.Flexible{Child: woxwidget.Text{Value: theme.Author, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: props.Theme.TextSecondary}},
 	}
-	if props.Mode == "store" && theme.ImageTheme && props.ImageLabel != "" {
+	if theme.ImageTheme && props.ImageLabel != "" {
 		meta = append(meta, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary, props.Theme))
 	}
 	return []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: meta}}, website}
@@ -431,7 +431,7 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary,
 		}})
 	}
-	if props.Mode == "store" && theme.ImageTheme && props.ImageMemoryLabel != "" {
+	if theme.ImageTheme && props.ImageMemoryLabel != "" {
 		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
 			Value: props.ImageMemoryLabel, Width: innerWidth, LineHeight: 20,
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Warning,

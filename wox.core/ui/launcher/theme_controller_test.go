@@ -194,6 +194,29 @@ func TestThemeControllerReloadStoreManifest(t *testing.T) {
 	}
 }
 
+func TestThemeControllerReloadInstalledImageTheme(t *testing.T) {
+	deps, _ := newThemeControllerDeps()
+	controller := newThemeSettingsController(deps)
+	var imageTheme common.Theme
+	if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"knit","ThemeName":"Knit","ThemeAuthor":"qianlifeng","Version":"1.1.1","MinWoxVersion":"2.0.0","BaseBackgroundColor":"#F5F1E9","BaseTextColor":"#243140","BaseAccentColor":"#526F89","Surfaces":{"App":{"Background":{"Source":"frame.png","Mode":"stretch"}}}}`), &imageTheme); err != nil {
+		t.Fatal(err)
+	}
+	var plain common.Theme
+	if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"plain","ThemeName":"Plain","Version":"1.0.0","MinWoxVersion":"2.0.0","BaseBackgroundColor":"#111111","BaseTextColor":"#ffffff","BaseAccentColor":"#ffffff"}`), &plain); err != nil {
+		t.Fatal(err)
+	}
+	service := &themeFakeService{themes: map[contract.ThemeCatalog][]contract.ThemeCatalogItem{
+		contract.ThemeCatalogInstalled: {{Theme: imageTheme}, {Theme: plain}},
+	}}
+	if err := controller.ReloadThemes(context.Background(), service, "session", "installed", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	themes := controller.Snapshot().Themes
+	if len(themes) != 2 || themes[0].ID != "knit" || !themes[0].ImageTheme || themes[1].ID != "plain" || themes[1].ImageTheme {
+		t.Fatalf("installed image marker = %#v", themes)
+	}
+}
+
 func TestThemeAutoPickerItemsSkipAutoThemes(t *testing.T) {
 	items := themeAutoPickerItems([]themeSettingsTheme{
 		{ID: "auto", Name: "Wox Auto", IsAuto: true, LightThemeID: "light", DarkThemeID: "dark"},
