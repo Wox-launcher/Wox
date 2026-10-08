@@ -59,7 +59,8 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", false)
+	// Hosts include nested runtimes such as hosts/flow; a flat extract reads those directories as files.
+	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", true)
 	if extractHostErr != nil {
 		return extractHostErr
 	}

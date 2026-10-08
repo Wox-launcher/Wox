@@ -27,32 +27,35 @@ var nativeImageFileWriterMu sync.RWMutex
 var nativeImageFileWriter func(context.Context, string) error
 
 // selfWriteWindow is how long the watcher stays away from the clipboard around a
-// Wox write. It only has to cover the gap between marking the write and claiming
-// the change it produces, so ownership can settle without the watcher racing it.
+// Wox write. It only has to cover the gap until the platform write has landed,
+// so a poll cannot read a half-published clipboard.
 const selfWriteWindow = 200 * time.Millisecond
 
 // lastWriteTimestamp tracks the last time Wox wrote to the clipboard (UnixMilli).
 // Used to keep the polling loop away from the clipboard while Wox owns the write.
 var lastWriteTimestamp atomic.Int64
 
+// pendingOwnChange remembers a finished Wox write until history can observe it.
+// Windows advances its sequence baseline inside the write, and the Linux portal
+// ignores selections Wox itself owns, so the platform edge alone drops those copies.
+var pendingOwnChange atomic.Bool
+
 // detectClipboardChange reports whether the clipboard changed and consumes the edge
 // it reports, so only the first caller after a change ever sees it. It is a variable
 // so tests can exercise that contract without a real clipboard.
 var detectClipboardChange = isClipboardChanged
 
-// beginSelfWrite opens the window before the platform write so a watcher tick that
-// overlaps the write cannot mistake it for somebody else's copy.
+// beginSelfWrite opens the settle window before the platform write so a watcher
+// tick cannot read the clipboard while the write is still landing.
 func beginSelfWrite() {
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
 }
 
-// endSelfWrite claims the change edge Wox's own write just produced. The platform
-// detectors consume the edge they report, so whoever asks first is the only one who
-// sees it. Claiming it at the source is what lets the watcher trust that any edge
-// still pending belongs to another application, instead of inferring ownership from
-// a timestamp and discarding a user copy that happened to land in the same window.
+// endSelfWrite marks a write that landed. The settle window still keeps the
+// watcher away, but the copy stays pending so clipboard history records searches,
+// previews, and other copies Wox itself puts on the clipboard.
 func endSelfWrite() {
-	detectClipboardChange()
+	pendingOwnChange.Store(true)
 	lastWriteTimestamp.Store(time.Now().UnixMilli())
 }
 
@@ -61,17 +64,16 @@ func withinSelfWriteWindow() bool {
 	return time.Since(time.UnixMilli(lastWriteTimestamp.Load())) < selfWriteWindow
 }
 
-// claimExternalChange reports whether this tick owns a change made outside Wox.
-// The order is the whole point: the platform detectors consume the edge they
-// report, so asking first and bailing afterwards destroys the only notice of an
-// external copy that landed next to a Wox write. Skipping first leaves that edge
-// pending for a later tick, and Wox's own edge is already claimed by endSelfWrite.
-func claimExternalChange() bool {
+// claimClipboardChange reports whether this tick should read the clipboard.
+// Skipping while the settle window is open must not consume either the platform
+// edge or the pending Wox copy. A later tick reads whichever content is current.
+func claimClipboardChange() bool {
 	if withinSelfWriteWindow() {
 		util.GetLogger().Info(context.Background(), "clipboard: watcher tick skipped while Wox owns the write")
 		return false
 	}
-	return detectClipboardChange()
+	ownCopy := pendingOwnChange.Swap(false)
+	return detectClipboardChange() || ownCopy
 }
 
 // NoDataErr returns the sentinel error reported when the clipboard contains no recognizable data.
@@ -207,7 +209,7 @@ func Write(data Data) error {
 	}
 
 	// A failed write leaves the clipboard untouched, so only a write that landed
-	// may claim a change edge; claiming one otherwise would eat somebody else's.
+	// may stay pending for history.
 	endSelfWrite()
 	return nil
 }
@@ -278,7 +280,7 @@ func watchChange() {
 		}
 	}()
 
-	if !claimExternalChange() {
+	if !claimClipboardChange() {
 		return
 	}
 

@@ -3,6 +3,7 @@
 package clipboard
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -39,6 +40,8 @@ type linuxPortalClipboard struct {
 	latest        portalClipboardOffer
 	lastNoData    time.Time
 	writePayloads map[string][]byte
+	// ownsSelection gates local reads; payloads remain available for pending transfers after ownership changes.
+	ownsSelection bool
 	initialized   bool
 	unavailable   bool
 	unavailableE  error
@@ -509,13 +512,24 @@ func handleLinuxPortalSelectionOwnerChangedLocked(signal *dbus.Signal) bool {
 	if !ok {
 		return false
 	}
+	mimeTypes := portalVariantStringSlice(options["mime_types"])
 	if sessionIsOwnerVariant, ok := options["session_is_owner"]; ok {
 		if sessionIsOwner, valid := sessionIsOwnerVariant.Value().(bool); valid && sessionIsOwner {
+			linuxClipboardPortal.ownsSelection = true
+			// An earlier external offer may still be queued when SetSelection returns.
+			// Restore our advertised formats when its ownership notification arrives.
+			contentType := portalMimeTypesContentType(mimeTypes)
+			linuxClipboardPortal.latest = portalClipboardOffer{
+				contentType: contentType,
+				mimeTypes:   mimeTypes,
+				fingerprint: hashLinuxPortalSelectionPayload(contentType, mimeTypes, linuxClipboardPortal.writePayloads),
+			}
 			return false
 		}
 	}
+	// Clear ownership before fingerprinting, even when the new offer matches the previous one.
+	linuxClipboardPortal.ownsSelection = false
 
-	mimeTypes := portalVariantStringSlice(options["mime_types"])
 	contentType := portalMimeTypesContentType(mimeTypes)
 	fingerprint := strings.Join(mimeTypes, "\x00")
 	if contentType == ClipboardTypeText {
@@ -629,6 +643,7 @@ func setLinuxPortalSelectionLocked(contentType Type, mimeTypes []string, mimePay
 		mimeTypes:   append([]string(nil), mimeTypes...),
 		fingerprint: hashLinuxPortalSelectionPayload(contentType, mimeTypes, payloads),
 	}
+	linuxClipboardPortal.ownsSelection = true
 	return nil
 }
 
@@ -660,7 +675,17 @@ func finishLinuxPortalSelectionWriteLocked(serial uint32, success bool) {
 	).Err
 }
 
+// readLinuxPortalSelectionLocked reads owned bytes locally because GNOME rejects SelectionRead for the session's own selection.
 func readLinuxPortalSelectionLocked(mimeType string) ([]byte, error) {
+	if linuxClipboardPortal.ownsSelection {
+		data := linuxClipboardPortal.writePayloads[mimeType]
+		if len(data) == 0 {
+			return nil, noDataErr
+		}
+		// Readers and deferred image decoding must not share mutable provider storage.
+		return bytes.Clone(data), nil
+	}
+
 	var fd dbus.UnixFD
 	call := linuxClipboardPortal.conn.Object(portalBusName, portalObjectPath).Call(
 		portalClipboardIFace+".SelectionRead",

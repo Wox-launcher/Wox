@@ -24,10 +24,15 @@ Borrowed input pixels and PNG bytes remain immutable until publication returns.
 before normal process exit. Windows eager formats need no dispatcher. The
 clipboard package never calls a UI-specific native symbol or stores a UI window type.
 
-High-level `Write`, `WriteImageBytes`, and `WriteAnimatedGIF` preserve their
-self-write tracking. Low-level UI publication remains observable by the history
-watcher, matching the existing screenshot and widget behavior. These entry points
-have different caller policies, not separate ownership of clipboard resources.
+High-level `Write`, `WriteImageBytes`, and `WriteAnimatedGIF` open a short
+settle window so the watcher does not read a half-published clipboard. The copy
+stays visible after that window, so clipboard history records text and images
+Wox itself copies. Low-level UI publication is observable immediately. These
+entry points have different caller policies, not separate ownership of clipboard
+resources. Sequential paste restore still opts out in the clipboard plugin.
+The Linux portal backend reads its own selection from retained publication bytes,
+because GNOME rejects reading the owning session through `SelectionRead`.
+Ownership changes disable these local reads, even when the offered formats match.
 Linux desktop selection remains in `clipboard_linux.go` with each environment's
 implementation in its own file. `clipboard_image_linux_gtk.*` is the UI-thread transport;
 it does not select or alter GNOME, KDE, Hyprland, or X11 policies.
