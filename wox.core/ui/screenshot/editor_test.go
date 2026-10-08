@@ -669,8 +669,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 836 || state.toolbarRect.Height != 48 {
-		t.Fatalf("toolbar bounds = %+v, want 836x48", state.toolbarRect)
+	if state.toolbarRect.Width != 848 || state.toolbarRect.Height != 48 {
+		t.Fatalf("toolbar bounds = %+v, want 848x48", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -715,6 +715,54 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 }
 
+func TestScreenshotEditorToolbarGripDragsTheBar(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image:        testScreenshotImage(t, 1, 1),
+		selection:    Rect{X: 100, Y: 100, Width: 900, Height: 400},
+		hasSelection: true,
+		result:       make(chan screenshotEditorOverlayOutcome, 1),
+	}
+	frame := FrameInfo{Size: Size{Width: 1200, Height: 700}}
+	state.draw(&DisplayList{}, frame)
+	origin := state.toolbarRect
+	firstTool := state.toolRects[screenshotEditorToolRect]
+	grip := state.toolbarGripRect
+	if grip.Width != 28 || grip.Height != 48 || grip.X != origin.X || grip.X+grip.Width > firstTool.X {
+		t.Fatalf("grip = %+v, toolbar = %+v, first tool = %+v", grip, origin, firstTool)
+	}
+	gripIcon := screenshotEditorToolbarIconRect(grip, 16, 1)
+	toolIcon := screenshotEditorToolbarIconRect(firstTool, 24, 1)
+	if gripIcon.Y+gripIcon.Height/2 != toolIcon.Y+toolIcon.Height/2 {
+		t.Fatalf("grip icon %+v is not on the tool icon center line %+v", gripIcon, toolIcon)
+	}
+	press := Point{X: grip.X + 4, Y: grip.Y + 8}
+	state.pointer(PointerEvent{Kind: PointerMove, Position: press})
+	if state.pointerCursor != PointerCursorMove || state.activeTool != screenshotEditorToolSelect {
+		t.Fatalf("grip hover cursor = %v tool = %d", state.pointerCursor, state.activeTool)
+	}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: press})
+	if state.activeTool != screenshotEditorToolSelect || !state.toolbarDragging {
+		t.Fatalf("grip press activated tool %d or failed to drag", state.activeTool)
+	}
+	release := Point{X: press.X - 80, Y: press.Y - 40}
+	state.pointer(PointerEvent{Kind: PointerMove, Button: PointerButtonPrimary, Position: release})
+	state.pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: release})
+	if state.toolbarDragging || !state.toolbarMoved {
+		t.Fatalf("drag state dragging=%t moved=%t", state.toolbarDragging, state.toolbarMoved)
+	}
+	state.draw(&DisplayList{}, frame)
+	if state.toolbarRect.X != origin.X-80 || state.toolbarRect.Y != origin.Y-40 {
+		t.Fatalf("toolbar = %+v, want moved from %+v by (-80,-40)", state.toolbarRect, origin)
+	}
+	if state.toolRects[screenshotEditorToolRect].X != firstTool.X-80 || state.toolbarGripRect.X != grip.X-80 {
+		t.Fatalf("grip/tool did not follow the toolbar: grip %+v tool %+v", state.toolbarGripRect, state.toolRects[screenshotEditorToolRect])
+	}
+	state.draw(&DisplayList{}, frame)
+	if state.toolbarRect.X != origin.X-80 || state.toolbarRect.Y != origin.Y-40 {
+		t.Fatalf("toolbar snapped back to %+v", state.toolbarRect)
+	}
+}
+
 func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testing.T) {
 	action := common.ScreenshotExtraAction{ID: "ai", Icon: "control.sparkles", Tooltip: "Send to AI Chat"}
 	state := newScreenshotEditorOverlayState(ScreenshotOptions{
@@ -724,7 +772,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 944 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+	if state.toolbarRect.Width != 956 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
 		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
 	}
 	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
@@ -735,7 +783,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 890 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 902 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
@@ -758,7 +806,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 890 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 902 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -766,7 +814,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 836 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 848 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
@@ -1054,8 +1102,8 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 1254 || state.toolbarRect.Height != 72 {
-		t.Fatalf("scaled toolbar = %+v, want 1254x72", state.toolbarRect)
+	if state.toolbarRect.Width != 1272 || state.toolbarRect.Height != 72 {
+		t.Fatalf("scaled toolbar = %+v, want 1272x72", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)

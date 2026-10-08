@@ -3,6 +3,8 @@ package notes
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +26,9 @@ const (
 	ToolOpenNote           = "open_note"
 	createNoteMaxFileBytes = 256 * 1024
 )
+
+// notePreviewImageDestination matches a portable notes-image token, including scale and size.
+var notePreviewImageDestination = regexp.MustCompile(`notes-image:[^)\s]+`)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &Plugin{})
@@ -156,11 +161,32 @@ func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) [
 func (p *Plugin) noteResult(record common.NoteRecord) plugin.QueryResult {
 	group, groupScore := noteResultGroup(record)
 	return plugin.QueryResult{
-		Id: record.ID, Title: NoteTitle(record.Document), Icon: icons.Get(icons.PluginNotes), ScoreKey: "note:" + record.ID,
+		Id: record.ID, Title: NoteTitle(record.Document), SubTitle: util.FormatTimestamp(record.UpdatedAt), Icon: icons.Get(icons.PluginNotes), ScoreKey: "note:" + record.ID,
 		Group: group, GroupScore: groupScore,
-		Tails:   []plugin.QueryResultTail{plugin.NewQueryResultTailText(util.FormatTimestamp(record.UpdatedAt))},
+		Preview: noteResultPreview(record),
 		Actions: p.noteActions(record),
 	}
+}
+
+// noteResultPreview opens beside the note list. A fresh query uses this default
+// until the user hides the preview for that query.
+func noteResultPreview(record common.NoteRecord) plugin.WoxPreview {
+	return plugin.WoxPreview{
+		PreviewType: plugin.WoxPreviewTypeMarkdown,
+		PreviewData: noteResultPreviewMarkdown(record.Document),
+	}
+}
+
+// noteResultPreviewMarkdown exports the note and points local pictures at attachment
+// files. The shared Markdown preview only loads http, file, and absolute paths.
+func noteResultPreviewMarkdown(document common.NoteDocument) string {
+	return notePreviewImageDestination.ReplaceAllStringFunc(ToMarkdown(document), func(token string) string {
+		path := ResolveNoteImagePath(common.NoteImage{ID: ParseNoteImageRef(token)})
+		if path == "" {
+			return token
+		}
+		return filepath.ToSlash(path)
+	})
 }
 
 func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultAction {

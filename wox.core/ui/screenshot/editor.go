@@ -210,6 +210,12 @@ type screenshotEditorOverlayState struct {
 	extraActionRects        []Rect
 	hoveredExtraIndex       int
 	toolbarRect             Rect
+	toolbarGripRect         Rect
+	// toolbarMoved keeps a dragged toolbar at the user's position instead of snapping back to the selection.
+	toolbarMoved            bool
+	toolbarOrigin           Point
+	toolbarDragging         bool
+	toolbarDragGrab         Point
 	toolRects               [screenshotEditorToolCount]Rect
 	tooltips                [screenshotEditorToolCount]string
 	actionTooltips          ScreenshotActionTooltips
@@ -815,6 +821,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.cancelRect = cancel
 		state.saveRect = save
 		state.toolbarRect = toolbar
+		state.toolbarGripRect = Rect{}
 		state.sizeLabelRect = Rect{}
 		state.mu.Unlock()
 		state.publishSizeLabel(Rect{}, "")
@@ -897,6 +904,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	activeTool := state.activeTool
 	hideTools := state.hideTools
+	toolbarMoved := state.toolbarMoved
+	toolbarOrigin := state.toolbarOrigin
 	annotationColor := state.annotationColor
 	mosaicRadius := state.mosaicRadius
 	showMosaicCursor := activeTool == screenshotEditorToolMosaic && !state.autoConfirm && state.pointerCursor == PointerCursorHidden &&
@@ -980,6 +989,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.backgroundRect = Rect{}
 	state.recordRect = Rect{}
 	state.toolbarRect = Rect{}
+	state.toolbarGripRect = Rect{}
 	state.sizeLabelRect = Rect{}
 	state.toolRects = [screenshotEditorToolCount]Rect{}
 	state.editBarRect = Rect{}
@@ -1058,6 +1068,10 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			toolbarStackHeight += editHeight + scaled(8)
 		}
 		toolbarRect = screenshotEditorToolbarPlacement(backgroundBounds, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
+		if toolbarMoved {
+			origin := clampScreenshotEditorToolbarOrigin(toolbarOrigin, toolbarWidth, toolbarHeight, frame.Size, uiScale)
+			toolbarRect.X, toolbarRect.Y = origin.X, origin.Y
+		}
 	}
 	label := fmt.Sprintf("%.0f x %.0f", selection.Width, selection.Height)
 	if previewImage != nil {
@@ -1080,6 +1094,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if pointerInside && screenshotEditorRectContains(chip, pointerPosition) {
 		displayList.StrokeRoundedRect(chip, scaled(10), scaled(1), green)
 	}
+	gripRect := screenshotEditorToolbarGripRect(toolbarRect, uiScale)
 	buttonIndex := 0
 	nextButton := func() Rect {
 		rect := toolbarButtons[buttonIndex]
@@ -1121,6 +1136,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	confirmRect := nextButton()
 	state.mu.Lock()
 	state.toolbarRect = toolbarRect
+	state.toolbarGripRect = gripRect
 	state.toolRects = toolRects
 	state.pinRect = pinRect
 	state.undoRect = undoRect
@@ -1135,6 +1151,10 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.mu.Unlock()
 
 	displayList.FillRoundedRect(toolbarRect, scaled(12), Color{R: 30, G: 26, B: 24, A: 255})
+	if gripRect.Width > 0 {
+		// Smaller and dimmer than the action icons so the handle reads as chrome, not a tool.
+		drawScreenshotEditorToolbarIconSized(displayList, icons.ControlGripDots, gripRect, Color{R: 255, G: 255, B: 255, A: 153}, uiScale, 16)
+	}
 	if !hideTools {
 		highlightedTool := activeTool
 		if hasSelectedMark {
@@ -1729,11 +1749,10 @@ func drawScreenshotEditorToolbarIcon(displayList *DisplayList, name string, rect
 }
 
 func drawScreenshotEditorToolbarIconSized(displayList *DisplayList, name string, rect Rect, color Color, uiScale, logicalSize float32) {
-	size := logicalSize * uiScale
-	inset := (rect.Width - size) / 2
+	slot := screenshotEditorToolbarIconRect(rect, logicalSize, uiScale)
 	key := screenshotEditorIconCacheKey{name: name, color: color}
 	if cached, ok := screenshotEditorIconCache.Load(key); ok {
-		displayList.DrawImage(cached.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
+		displayList.DrawImage(cached.(*Image), slot)
 		return
 	}
 	icon := icons.Get(name)
@@ -1758,7 +1777,17 @@ func drawScreenshotEditorToolbarIconSized(displayList *DisplayList, name string,
 		return
 	}
 	actual, _ := screenshotEditorIconCache.LoadOrStore(key, image)
-	displayList.DrawImage(actual.(*Image), Rect{X: rect.X + inset, Y: rect.Y + inset, Width: size, Height: size})
+	displayList.DrawImage(actual.(*Image), slot)
+}
+
+// screenshotEditorToolbarIconRect centers a glyph in its slot on both axes.
+// Slots are not always square; the drag handle is a full-height strip beside 40px tool buttons.
+func screenshotEditorToolbarIconRect(slot Rect, logicalSize, uiScale float32) Rect {
+	size := logicalSize * max(float32(1), uiScale)
+	return Rect{
+		X: slot.X + (slot.Width-size)/2, Y: slot.Y + (slot.Height-size)/2,
+		Width: size, Height: size,
+	}
 }
 
 // drawScreenshotEditorCursor previews the captured pointer with the same marker exported to the image.
@@ -1940,6 +1969,17 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		}
 		state.pointerPosition = event.Position
 		state.pointerInside = true
+		if state.hasSelection && screenshotEditorRectContains(state.toolbarGripRect, event.Position) {
+			state.toolbarDragging = true
+			state.toolbarMoved = true
+			state.toolbarDragGrab = Point{X: event.Position.X - state.toolbarRect.X, Y: event.Position.Y - state.toolbarRect.Y}
+			state.toolbarOrigin = Point{X: state.toolbarRect.X, Y: state.toolbarRect.Y}
+			state.pointerCursor = PointerCursorMove
+			state.mu.Unlock()
+			state.setPointerCursor(PointerCursorMove)
+			state.invalidate()
+			return
+		}
 		if state.activeTool == screenshotEditorToolMosaic || state.activeTool == screenshotEditorToolBrush || state.activeTool == screenshotEditorToolEraser || state.pointerCursor == PointerCursorHidden {
 			state.updateHoverLocked(event.Position)
 		}
@@ -2113,6 +2153,22 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		pointerChanged := !state.pointerInside || state.pointerPosition != event.Position
 		state.pointerPosition = event.Position
 		state.pointerInside = true
+		if state.toolbarDragging {
+			origin := clampScreenshotEditorToolbarOrigin(
+				Point{X: event.Position.X - state.toolbarDragGrab.X, Y: event.Position.Y - state.toolbarDragGrab.Y},
+				state.toolbarRect.Width, state.toolbarRect.Height, state.frameSize, state.uiScale,
+			)
+			moved := state.toolbarOrigin != origin
+			state.toolbarOrigin = origin
+			state.toolbarMoved = true
+			state.pointerCursor = PointerCursorMove
+			state.mu.Unlock()
+			state.setPointerCursor(PointerCursorMove)
+			if moved {
+				state.invalidate()
+			}
+			return
+		}
 		if state.fontSizeDragging {
 			props := screenshotEditorFontSizeSliderProps(state.editFontSizeRect, state.uiScale, state.fontSizeLocked())
 			state.setFontSizeLocked(props.ValueAt(event.Position.X - state.editFontSizeRect.X))
@@ -2171,6 +2227,10 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		state.invalidate()
 	case PointerLeave:
 		state.mu.Lock()
+		if state.toolbarDragging {
+			state.mu.Unlock()
+			return
+		}
 		hoverChanged := state.pointerInside || state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.pointerCursor != PointerCursorDefault
 		state.pointerInside = false
 		state.hasHoveredMark = false
@@ -2184,6 +2244,15 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		}
 	case PointerUp:
 		state.mu.Lock()
+		if state.toolbarDragging {
+			state.toolbarDragging = false
+			state.updateHoverLocked(event.Position)
+			cursor := state.pointerCursor
+			state.mu.Unlock()
+			state.setPointerCursor(cursor)
+			state.invalidate()
+			return
+		}
 		state.fontSizeDragging = false
 		state.textSelecting = false
 		if state.dragging {
@@ -3221,6 +3290,10 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 	if screenshotEditorRectContains(state.sizeLabelRect, point) {
 		state.pointerCursor = PointerCursorHand
 		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorHand
+	}
+	if screenshotEditorRectContains(state.toolbarGripRect, point) {
+		state.pointerCursor = PointerCursorMove
+		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorMove
 	}
 	for index := 1; index < len(state.toolRects); index++ {
 		if screenshotEditorRectContains(state.toolRects[index], point) {

@@ -134,6 +134,7 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	editor.hasSelection = true
 	editor.annotations = nil
 	editor.toolbarRect = Rect{}
+	editor.toolbarGripRect = Rect{}
 	editor.toolRects = [screenshotEditorToolCount]Rect{}
 	editor.editBarRect = Rect{}
 	editor.undoRect = Rect{}
