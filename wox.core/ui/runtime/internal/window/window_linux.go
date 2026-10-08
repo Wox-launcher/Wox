@@ -101,6 +101,11 @@ func platformRun(start func() error) error {
 	}
 	C.wox_linux_set_render_trace(renderTrace)
 	applyLinuxAppIdentity()
+	stopLinuxUIWatch := make(chan struct{})
+	util.Go(context.Background(), "linux UI stage watchdog", func() {
+		watchLinuxUIStage(stopLinuxUIWatch)
+	})
+	defer close(stopLinuxUIWatch)
 	handle := cgo.NewHandle(state)
 	result := C.wox_linux_run(C.uintptr_t(handle))
 	handle.Delete()
@@ -117,6 +122,31 @@ func platformRun(start func() error) error {
 		return fmt.Errorf("woxui: GTK event loop failed with status %d", int32(result))
 	}
 	return nil
+}
+
+// watchLinuxUIStage reports a native stage that stays current while synchronous
+// UI callers are blocked. An idle gtk-main with no waiters stays quiet.
+func watchLinuxUIStage(stop <-chan struct{}) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+		}
+		var stage [160]C.char
+		var ageUS C.int64_t
+		var waiters C.int32_t
+		C.wox_linux_ui_stage_snapshot(&stage[0], C.int32_t(len(stage)), &ageUS, &waiters)
+		if waiters <= 0 || ageUS < 2_000_000 {
+			continue
+		}
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf(
+			"linux UI thread still in stage %q for %s with %d synchronous callers waiting",
+			C.GoString(&stage[0]), time.Duration(ageUS)*time.Microsecond, int32(waiters),
+		))
+	}
 }
 
 func platformCall(fn func()) error {

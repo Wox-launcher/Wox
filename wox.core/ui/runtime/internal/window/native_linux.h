@@ -12,6 +12,10 @@ uintptr_t wox_linux_window_handle(WoxLinuxWindow *window);
 
 int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
+// wox_linux_ui_stage_snapshot copies the UI thread's current native stage.
+// age_us is how long that stage has been current. waiters counts callers blocked
+// in wox_linux_call. A hang leaves the last stage in place while waiters stay positive.
+void wox_linux_ui_stage_snapshot(char *buffer, int32_t capacity, int64_t *age_us, int32_t *waiters);
 int32_t wox_linux_post(uintptr_t context);
 // wox_linux_set_app_identity records the desktop id, X11 class, and icon path before gtk_init.
 void wox_linux_set_app_identity(const char *app_id, const char *wm_class, const char *icon_path);

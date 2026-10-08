@@ -10,6 +10,7 @@ import (
 	"math"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf16"
@@ -73,6 +74,10 @@ const (
 	windowsWMNCActivate      = uint32(0x0086)
 	windowsResizeGrip        = float32(10)
 )
+
+// windowsUIMessage is the Win32 message currently inside windowProcedure.
+// Inline UI work does not re-enter that procedure, so a stall there still names the outer message.
+var windowsUIMessage atomic.Uint32
 
 var (
 	dwmFlush                             = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
@@ -1287,6 +1292,8 @@ func ensureWindowClass() error {
 
 // windowProcedure serializes window, renderer, and focus transitions on the UI thread.
 func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uintptr {
+	previousMessage := windowsUIMessage.Swap(message)
+	defer windowsUIMessage.Store(previousMessage)
 	if message == runtimeCallMessage {
 		runWindowsRuntimeCall(wParam)
 		return 0

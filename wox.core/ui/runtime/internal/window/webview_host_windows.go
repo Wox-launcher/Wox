@@ -13,6 +13,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -438,11 +440,44 @@ func webViewHRESULT(operation string, result C.int32_t) error {
 	return fmt.Errorf("woxui: %s failed with HRESULT 0x%08X", operation, uint32(result))
 }
 
+// windowsWebViewCreateBlocked counts CreateCoreWebView2EnvironmentWithOptions calls
+// that have logged their start and not yet their return. The call is synchronous.
+var windowsWebViewCreateBlocked atomic.Int32
+
+// watchWindowsWebViewCreate logs when environment creation is still inside the
+// synchronous loader call. The outer window message is the only extra clue the Go stack cannot name.
+func watchWindowsWebViewCreate(owner uintptr) {
+	waited := time.Duration(0)
+	for _, delay := range []time.Duration{2 * time.Second, 6 * time.Second} {
+		time.Sleep(delay)
+		waited += delay
+		if windowsWebViewCreateBlocked.Load() <= 0 {
+			return
+		}
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf(
+			"webview initialization still blocked: stage=create-environment-start elapsed=%s owner=%#x uiMessage=0x%04X",
+			waited, owner, windowsUIMessage.Load(),
+		))
+	}
+}
+
 // woxGoWindowsWebViewInitializationDiagnostic identifies native startup stalls that Go stacks cannot resolve.
 //
 //export woxGoWindowsWebViewInitializationDiagnostic
 func woxGoWindowsWebViewInitializationDiagnostic(owner C.uintptr_t, stage *C.char, elapsedMS C.uint64_t, result C.int32_t) {
-	util.GetLogger().Info(context.Background(), fmt.Sprintf("webview initialization: owner=%#x stage=%s elapsedMs=%d result=0x%08X", uintptr(owner), C.GoString(stage), uint64(elapsedMS), uint32(result)))
+	stageName := C.GoString(stage)
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("webview initialization: owner=%#x stage=%s elapsedMs=%d result=0x%08X uiMessage=0x%04X", uintptr(owner), stageName, uint64(elapsedMS), uint32(result), windowsUIMessage.Load()))
+	switch stageName {
+	case "create-environment-start":
+		if windowsWebViewCreateBlocked.Add(1) == 1 {
+			ownerHandle := uintptr(owner)
+			util.Go(context.Background(), "webview create watchdog", func() {
+				watchWindowsWebViewCreate(ownerHandle)
+			})
+		}
+	case "create-environment-returned":
+		windowsWebViewCreateBlocked.Add(-1)
+	}
 }
 
 // woxGoWindowsWebViewEscapeDiagnostic records the page decision and native focus handoff.

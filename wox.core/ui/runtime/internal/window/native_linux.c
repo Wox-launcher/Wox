@@ -1101,6 +1101,38 @@ static gboolean execute_main_call(gpointer data) {
   return G_SOURCE_REMOVE;
 }
 
+// The UI thread's last native stage. Go stacks stop at gtk_main, so a stall is
+// identified by whichever of these names is still current while callers wait.
+// stage is always a string literal; the snapshot only reads that text.
+static GMutex wox_linux_ui_stage_mutex;
+static const char *wox_linux_ui_stage = "startup";
+static gint64 wox_linux_ui_stage_us;
+static volatile gint wox_linux_ui_waiters;
+
+static void wox_linux_note_stage(const char *stage) {
+  g_mutex_lock(&wox_linux_ui_stage_mutex);
+  wox_linux_ui_stage = stage;
+  wox_linux_ui_stage_us = g_get_monotonic_time();
+  g_mutex_unlock(&wox_linux_ui_stage_mutex);
+}
+
+void wox_linux_ui_stage_snapshot(char *buffer, int32_t capacity, int64_t *age_us, int32_t *waiters) {
+  g_mutex_lock(&wox_linux_ui_stage_mutex);
+  const char *stage = wox_linux_ui_stage != NULL ? wox_linux_ui_stage : "";
+  gint64 stage_us = wox_linux_ui_stage_us;
+  g_mutex_unlock(&wox_linux_ui_stage_mutex);
+  if (buffer != NULL && capacity > 0) {
+    snprintf(buffer, (size_t)capacity, "%s", stage);
+  }
+  if (age_us != NULL) {
+    gint64 now = g_get_monotonic_time();
+    *age_us = stage_us > 0 && now > stage_us ? now - stage_us : 0;
+  }
+  if (waiters != NULL) {
+    *waiters = g_atomic_int_get(&wox_linux_ui_waiters);
+  }
+}
+
 // run_on_main_sync keeps GTK and OpenGL ownership on the runtime thread.
 static bool run_on_main_sync(WoxMainFunction function, void *data) {
   if (is_main_thread()) {
@@ -1124,18 +1156,22 @@ static bool run_on_main_sync(WoxMainFunction function, void *data) {
     return false;
   }
 
+  g_atomic_int_add(&wox_linux_ui_waiters, 1);
   g_mutex_lock(&call.mutex);
   while (!call.done) {
     g_cond_wait(&call.condition, &call.mutex);
   }
   g_mutex_unlock(&call.mutex);
+  g_atomic_int_add(&wox_linux_ui_waiters, -1);
   g_cond_clear(&call.condition);
   g_mutex_clear(&call.mutex);
   return true;
 }
 
 static void execute_go_call(void *data) {
+  wox_linux_note_stage("ui-call");
   woxGoLinuxCall((uintptr_t)data);
+  wox_linux_note_stage("gtk-after-ui-call");
 }
 
 int32_t wox_linux_call(uintptr_t context) {
@@ -2950,8 +2986,10 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
   Window xid = x11_window_id(window);
   if (gdk_display != NULL && display != NULL && xid != None) {
     gdk_x11_display_error_trap_push(gdk_display);
+    wox_linux_note_stage("x11-resize-flush");
     XResizeWindow(display, xid, (unsigned int)width, (unsigned int)height);
     XFlush(display);
+    wox_linux_note_stage("x11-resize-flush-done");
     gdk_x11_display_error_trap_pop_ignored(gdk_display);
   }
 #endif
@@ -2981,9 +3019,11 @@ static void present_linux_window_now(WoxLinuxWindow *window) {
   GdkWindow *gdk_window = gtk_widget_get_window(window->window);
   if (gdk_window != NULL) {
     gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+    wox_linux_note_stage("process-updates");
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     gdk_window_process_updates(gdk_window, TRUE);
     G_GNUC_END_IGNORE_DEPRECATIONS
+    wox_linux_note_stage("process-updates-done");
   }
   window->presenting = false;
   trace_linux_window_geometry(window, "present_now_end");
@@ -3120,10 +3160,12 @@ static void present_linux_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *ren
 }
 
 static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer data) {
+  wox_linux_note_stage("gl-render");
   WoxLinuxWindow *window = data;
   WoxLinuxRenderer *renderer = GTK_WIDGET(area) == window->overlay_gl_area ? &window->overlay_renderer : &window->renderer;
   trace_linux_render("event=gtk_render frameId=%llu surface=%s context=%p allocated=%dx%d scale=%d closed=%d visible=%d ready=%d", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), (void *)context, gtk_widget_get_allocated_width(GTK_WIDGET(area)), gtk_widget_get_allocated_height(GTK_WIDGET(area)), gtk_widget_get_scale_factor(GTK_WIDGET(area)), window->closed, window->visible, renderer->ready);
   if (window->closed || !window->visible || window->context == 0 || !renderer->ready) {
+    wox_linux_note_stage("gtk-after-gl-render");
     return TRUE;
   }
   if (GTK_WIDGET(area) == window->overlay_gl_area) {
@@ -3135,8 +3177,11 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
       glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
       glClear(GL_COLOR_BUFFER_BIT);
     } else {
+      wox_linux_note_stage("gl-present");
       present_linux_renderer(window, renderer);
+      wox_linux_note_stage("gl-present-done");
     }
+    wox_linux_note_stage("gtk-after-gl-render");
     return TRUE;
   }
   int width = gtk_widget_get_allocated_width(GTK_WIDGET(area));
@@ -3150,6 +3195,7 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
     woxGoLinuxFrame(window->context, (float)width, (float)height, width * scale, height * scale, (float)scale);
     window->rendering = false;
   }
+  wox_linux_note_stage("gtk-after-gl-render");
   return TRUE;
 }
 
@@ -3171,7 +3217,9 @@ static gboolean on_focus_in(GtkWidget *widget, GdkEventFocus *event, gpointer da
   if (!window->closed && window->visible) {
     g_hash_table_remove_all(window->pressed_keys);
     if (window->input_enabled) {
+      wox_linux_note_stage("im-focus-in");
       gtk_im_context_focus_in(window->im_context);
+      wox_linux_note_stage("im-focus-in-done");
     }
     emit_focus(window, true);
   }
@@ -3187,8 +3235,10 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
   }
   g_hash_table_remove_all(window->pressed_keys);
   if (window->input_enabled) {
+    wox_linux_note_stage("im-focus-out");
     gtk_im_context_focus_out(window->im_context);
     gtk_im_context_reset(window->im_context);
+    wox_linux_note_stage("im-focus-out-done");
   }
   window->input_composing = false;
   if (window->native_dialog_active) {
@@ -3304,7 +3354,9 @@ int32_t wox_linux_run(uintptr_t context) {
   WoxLinuxStart start = {.context = context, .result = -1};
   g_idle_add(start_linux_runtime, &start);
   g_atomic_int_set(&wox_linux_loop_active, 1);
+  wox_linux_note_stage("gtk-main");
   gtk_main();
+  wox_linux_note_stage("gtk-main-done");
   g_atomic_int_set(&wox_linux_loop_active, 0);
   g_atomic_int_set(&wox_linux_runtime_running, 0);
   return start.result == 0 ? 0 : -1;
@@ -4648,12 +4700,16 @@ static void set_text_input_main(void *data) {
   if (window->input_enabled && !call->enabled) {
     window->input_enabled = false;
     window->input_composing = false;
+    wox_linux_note_stage("im-focus-out");
     gtk_im_context_focus_out(window->im_context);
     gtk_im_context_reset(window->im_context);
+    wox_linux_note_stage("im-focus-out-done");
   } else if (!window->input_enabled && call->enabled) {
     window->input_enabled = true;
     if (window->active) {
+      wox_linux_note_stage("im-focus-in");
       gtk_im_context_focus_in(window->im_context);
+      wox_linux_note_stage("im-focus-in-done");
     }
   }
   window->input_cursor_rect = call->cursor_rect;
@@ -4854,7 +4910,10 @@ static bool linux_atk_bus_available(void) {
   }
   state = 0;
   GError *error = NULL;
+  // g_bus_get_sync has no timeout. A missing session bus leaves this stage current.
+  wox_linux_note_stage("a11y-bus");
   GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
+  wox_linux_note_stage("a11y-bus-done");
   if (bus == NULL) {
     g_clear_error(&error);
     return false;
@@ -4879,7 +4938,9 @@ static gboolean linux_accessibility_idle(gpointer data) {
   WoxLinuxWindow *window = data;
   window->accessibility_idle = 0;
   if (!window->closed && window->context != 0) {
+    wox_linux_note_stage("a11y-flush");
     woxGoLinuxAccessibilityFlush(window->context);
+    wox_linux_note_stage("gtk-after-a11y");
   }
   return G_SOURCE_REMOVE;
 }
@@ -4906,6 +4967,7 @@ int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generatio
     return -1;
   }
   window->updating_accessibility = true;
+  wox_linux_note_stage("a11y-rebuild");
   GList *children = gtk_container_get_children(GTK_CONTAINER(window->accessibility_layer));
   for (GList *item = children; item != NULL; item = item->next) {
     gtk_widget_destroy(GTK_WIDGET(item->data));
@@ -4975,6 +5037,7 @@ int32_t wox_linux_accessibility_end(WoxLinuxWindow *window) {
   }
   apply_linux_pointer_cursor(window);
   window->updating_accessibility = false;
+  wox_linux_note_stage("a11y-rebuild-done");
   if (window->closed || window->accessibility_layer == NULL) {
     return -1;
   }
@@ -5240,7 +5303,9 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
     }
     return -1;
   }
+  wox_linux_note_stage("make-current");
   gtk_gl_area_make_current(GTK_GL_AREA(gl_area));
+  wox_linux_note_stage("make-current-done");
   GError *context_error = gtk_gl_area_get_error(GTK_GL_AREA(gl_area));
   if (context_error != NULL) {
     trace_linux_render("event=frame_begin_failed frameId=%llu surface=%s reason=context error=%s", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), context_error->message);
@@ -6045,7 +6110,9 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
     // Embedded drawing already made the overlay context current. GTK still
     // composites the background drawable after this signal returns.
     if (switched_to_overlay && linux_gl_area_can_make_current(window->gl_area)) {
+      wox_linux_note_stage("end-frame-make-current");
       gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+      wox_linux_note_stage("end-frame-make-current-done");
     }
     return result;
   }
@@ -6062,7 +6129,9 @@ int32_t wox_linux_window_end_frame(WoxLinuxWindow *window) {
     gtk_gl_area_queue_render(GTK_GL_AREA(window->overlay_gl_area));
   }
   if (linux_gl_area_can_make_current(window->gl_area)) {
+    wox_linux_note_stage("end-frame-make-current");
     gtk_gl_area_make_current(GTK_GL_AREA(window->gl_area));
+    wox_linux_note_stage("end-frame-make-current-done");
   }
   window->active_renderer = NULL;
   window->active_gl_area = NULL;
