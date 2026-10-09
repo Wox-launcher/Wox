@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <PackageReference Include="Flow.Launcher.Plugin" Version="5.3.2" />
+    <!-- Flow settings panels such as Window Manager's NumberBox are compiled against ModernWpf. -->
+    <PackageReference Include="ModernWpfUI" Version="0.9.4" />
   </ItemGroup>
 
 </Project>

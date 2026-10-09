@@ -28,3 +28,5 @@ build:
 	cp "$(PUBLISH_DIR)/Wox.Flow.DotNetHost.runtimeconfig.json" "$(HOSTS_DIR)/"
 	cp "$(PUBLISH_DIR)/Flow.Launcher.Plugin.dll" "$(HOSTS_DIR)/"
 	cp "$(PUBLISH_DIR)/JetBrains.Annotations.dll" "$(HOSTS_DIR)/"
+	cp "$(PUBLISH_DIR)/ModernWpf.dll" "$(HOSTS_DIR)/"
+	cp "$(PUBLISH_DIR)/ModernWpf.Controls.dll" "$(HOSTS_DIR)/"

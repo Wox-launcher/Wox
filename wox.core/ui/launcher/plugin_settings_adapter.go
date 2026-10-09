@@ -220,9 +220,13 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		ScrollID: "plugin-detail-" + plugin.ID,
 		Error:    plugins.PluginOperationError,
 	}
+	labelWidth := a.pluginFormLabelWidth(form.definitions[1:])
+	if plugin.HasNativeSettings {
+		labelWidth = max(labelWidth, a.pluginFormLabelWidth([]formDefinition{{Value: formDefinitionValue{Label: "i18n:ui_plugin_native_settings_title"}}}))
+	}
 	callbacks := formFieldCallbacks{
 		idPrefix:          "plugin-settings",
-		labelWidth:        a.pluginFormLabelWidth(form.definitions[1:]),
+		labelWidth:        labelWidth,
 		imageScale:        imageScale,
 		focus:             a.focusPluginFormField,
 		blur:              a.blurPluginFormField,
@@ -281,6 +285,24 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette,
 		})
 		rows = append(rows, woxwidget.Keyed{Key: pluginSettingRowKey(formIndex), Child: target})
+	}
+	if plugin.HasNativeSettings {
+		pluginID := plugin.ID
+		field := launcherview.FormButtonField(launcherview.FormButtonFieldProps{
+			ID: "plugin-native-settings-field", Label: a.translate("i18n:ui_plugin_native_settings_title"),
+			Description: a.translate("i18n:ui_plugin_native_settings_description"),
+			ButtonID:    "plugin-native-settings", ButtonLabel: a.translate("i18n:ui_plugin_native_settings_open"),
+			Disabled: a.nativeSettingsPluginID == pluginID, Width: innerWidth, LabelWidth: callbacks.labelWidth, Theme: snapshot.palette,
+			OnTap: func() { a.openNativePluginSettings(pluginID) },
+		})
+		rows = append([]woxwidget.Widget{woxwidget.Keyed{Key: "plugin-native-settings-row", Child: field}}, rows...)
+	}
+	if form.statusError && strings.TrimSpace(form.status) != "" {
+		status := woxwidget.TextBlock{
+			Value: form.status, Width: innerWidth, LineHeight: 18,
+			Style: woxui.TextStyle{Size: snapshot.palette.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: snapshot.palette.Error,
+		}
+		rows = append([]woxwidget.Widget{woxwidget.Keyed{Key: "plugin-settings-status", Child: status}}, rows...)
 	}
 	editor.Form = &launcherview.PluginFormProps{
 		SectionLabel: a.translate("i18n:ui_plugin_tab_settings"),

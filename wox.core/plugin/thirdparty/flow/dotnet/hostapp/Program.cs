@@ -1,8 +1,13 @@
 using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Windows.Documents;
+using Microsoft.Win32;
 using System.Text;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using Flow.Launcher.Plugin;
 
 namespace Wox.Flow.DotNetHost;
@@ -58,7 +63,9 @@ sealed class PluginProcess
     readonly Dictionary<string, Result> actions = new();
     BridgeApi api;
     IAsyncPlugin plugin;
+    ISettingProvider settingProvider;
     IContextMenu contextMenus;
+    string pluginName;
     int actionSerial;
 
     public PluginProcess(StreamWriter stdout)
@@ -99,6 +106,9 @@ sealed class PluginProcess
                     case "visibility":
                         ApplyVisibility(root);
                         break;
+                    case "showSettings":
+                        ShowSettings(id);
+                        break;
                     default:
                         Write(new { id, ok = false, error = "unknown method " + method });
                         break;
@@ -123,6 +133,9 @@ sealed class PluginProcess
         }
 
         Directory.SetCurrentDirectory(directory);
+        // ModernWpf asks the default context for the 18362 projection. The plugin
+        // ships a newer copy beside its own assembly; share that one copy.
+        EnablePluginProjectionResolve(directory);
         var metadata = new PluginMetadata
         {
             ID = Text(root, "pluginId"),
@@ -172,6 +185,214 @@ sealed class PluginProcess
             // ReQuery keeps the refresh event. ResultsUpdated carries the list to show.
             updated.ResultsUpdated += OnResultsUpdated;
         }
+        settingProvider = instance as ISettingProvider;
+        pluginName = metadata.Name;
+        Write(new { id, ok = true, hasSettingPanel = settingProvider != null });
+    }
+
+    static string projectionDirectory;
+    static int projectionResolveRegistered;
+
+    // EnablePluginProjectionResolve lets the default context load WinRT projections
+    // from the plugin directory. ModernWpf references Microsoft.Windows.SDK.NET 10.0.18362.10,
+    // and plugins ship a newer build of that same assembly.
+    static void EnablePluginProjectionResolve(string directory)
+    {
+        projectionDirectory = directory;
+        if (Interlocked.Exchange(ref projectionResolveRegistered, 1) != 0)
+        {
+            return;
+        }
+        AssemblyLoadContext.Default.Resolving += ResolveProjectionAssembly;
+    }
+
+    static Assembly ResolveProjectionAssembly(AssemblyLoadContext context, AssemblyName name)
+    {
+        if (name.Name is not ("Microsoft.Windows.SDK.NET" or "WinRT.Runtime"))
+        {
+            return null;
+        }
+        foreach (var loaded in context.Assemblies)
+        {
+            if (string.Equals(loaded.GetName().Name, name.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return loaded;
+            }
+        }
+        if (string.IsNullOrEmpty(projectionDirectory))
+        {
+            return null;
+        }
+        var path = Path.Combine(projectionDirectory, name.Name + ".dll");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+        return context.LoadFromAssemblyPath(path);
+    }
+
+    static bool flowSettingsResourcesReady;
+    static bool settingsUseDarkTheme;
+    static SolidColorBrush settingsWindowBrush = Brushes.White;
+    static SolidColorBrush settingsTextBrush = Brushes.Black;
+
+    // SystemAppsUseDarkTheme reads the Windows app theme. ModernWpf follows it only
+    // after ApplicationTheme is set; otherwise the window, labels, and popups each pick a different palette.
+    static bool SystemAppsUseDarkTheme()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // EnsureFlowSettingsResources supplies the Flow settings-page resources that plugin
+    // panels reference. Those panels are built to live inside Flow, so StaticResource
+    // keys and ModernWpf controls are missing until this host provides them.
+    static void EnsureFlowSettingsResources()
+    {
+        if (flowSettingsResourcesReady)
+        {
+            return;
+        }
+        var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        settingsUseDarkTheme = SystemAppsUseDarkTheme();
+        var theme = settingsUseDarkTheme ? ModernWpf.ApplicationTheme.Dark : ModernWpf.ApplicationTheme.Light;
+        settingsWindowBrush = new SolidColorBrush(settingsUseDarkTheme ? Color.FromRgb(0x20, 0x20, 0x20) : Colors.White);
+        settingsTextBrush = new SolidColorBrush(settingsUseDarkTheme ? Color.FromRgb(0xF3, 0xF3, 0xF3) : Color.FromRgb(0x1A, 0x1A, 0x1A));
+        settingsWindowBrush.Freeze();
+        settingsTextBrush.Freeze();
+        try
+        {
+            ModernWpf.ThemeManager.Current.ApplicationTheme = theme;
+            app.Resources.MergedDictionaries.Add(new ModernWpf.ThemeResources { RequestedTheme = theme });
+            app.Resources.MergedDictionaries.Add(new ModernWpf.Controls.XamlControlsResources());
+        }
+        catch (Exception)
+        {
+            // A plain WPF panel does not need the ModernWpf theme. Panels that do
+            // will fail again in CreateSettingPanel, with the load error intact.
+        }
+        var border = new SolidColorBrush(settingsUseDarkTheme ? Color.FromRgb(0x5A, 0x5A, 0x5A) : Color.FromRgb(0xD6, 0xD6, 0xD6));
+        var secondary = new SolidColorBrush(settingsUseDarkTheme ? Color.FromRgb(0xC8, 0xC8, 0xC8) : Color.FromRgb(0x5C, 0x5C, 0x5C));
+        border.Freeze();
+        secondary.Freeze();
+        var resources = new ResourceDictionary
+        {
+            ["SettingPanelMargin"] = new Thickness(70, 13.5, 18, 13.5),
+            ["SettingPanelItemLeftMargin"] = new Thickness(9, 0, 0, 0),
+            ["SettingPanelItemRightMargin"] = new Thickness(0, 0, 9, 0),
+            ["SettingPanelItemTopBottomMargin"] = new Thickness(0, 4.5, 0, 4.5),
+            ["SettingPanelItemLeftTopBottomMargin"] = new Thickness(9, 4.5, 0, 4.5),
+            ["SettingPanelItemRightTopBottomMargin"] = new Thickness(0, 4.5, 9, 4.5),
+            ["SettingPanelTextBoxMinWidth"] = 180d,
+            ["SettingPanelPathTextBoxWidth"] = 240d,
+            ["SettingPanelAreaTextBoxMinHeight"] = 150d,
+            ["Color03B"] = border,
+            ["Color04B"] = secondary
+        };
+        var separator = new Style(typeof(Separator));
+        separator.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(-70, 13.5, -18, 13.5)));
+        separator.Setters.Add(new Setter(FrameworkElement.HeightProperty, 1d));
+        separator.Setters.Add(new Setter(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Top));
+        separator.Setters.Add(new Setter(Control.BackgroundProperty, border));
+        resources["SettingPanelSeparatorStyle"] = separator;
+        var description = new Style(typeof(TextBlock));
+        description.Setters.Add(new Setter(TextBlock.FontSizeProperty, 12d));
+        description.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(0, 2, 0, 0)));
+        description.Setters.Add(new Setter(TextBlock.ForegroundProperty, secondary));
+        resources["SettingPanelTextBlockDescriptionStyle"] = description;
+        // Plugin labels are TextBlocks. They do not inherit Control.Foreground, so a dark
+        // window otherwise leaves them black and invisible.
+        var labels = new Style(typeof(TextBlock));
+        if (app.TryFindResource(typeof(TextBlock)) is Style themeLabels)
+        {
+            labels.BasedOn = themeLabels;
+        }
+        labels.Setters.Add(new Setter(TextBlock.ForegroundProperty, settingsTextBrush));
+        resources.Add(typeof(TextBlock), labels);
+        app.Resources.MergedDictionaries.Add(resources);
+        flowSettingsResourcesReady = true;
+    }
+
+    // ApplySettingsWindowTheme keeps the dialog, its labels, and ModernWpf popups on one palette.
+    static void ApplySettingsWindowTheme(Window window)
+    {
+        window.Background = settingsWindowBrush;
+        window.Foreground = settingsTextBrush;
+        window.SetValue(TextElement.ForegroundProperty, settingsTextBrush);
+        ModernWpf.ThemeManager.SetRequestedTheme(window, settingsUseDarkTheme ? ModernWpf.ElementTheme.Dark : ModernWpf.ElementTheme.Light);
+    }
+
+    static void BringSettingsToFront(Window window)
+    {
+        window.Activate();
+        window.Topmost = true;
+        window.Topmost = false;
+        window.Focus();
+    }
+
+    // ShowSettings hosts the plugin's WPF panel on this STA thread.
+    // The request stays open until the user closes the window.
+    void ShowSettings(string id)
+    {
+        if (settingProvider == null)
+        {
+            Write(new { id, ok = false, error = "plugin has no settings panel" });
+            return;
+        }
+        try
+        {
+            EnsureFlowSettingsResources();
+            api?.ApplyTranslations(Application.Current.Resources);
+        }
+        catch (Exception ex)
+        {
+            Write(new { id, ok = false, error = ex.Message });
+            return;
+        }
+        Control panel;
+        try
+        {
+            panel = settingProvider.CreateSettingPanel();
+        }
+        catch (Exception ex)
+        {
+            Write(new { id, ok = false, error = ex.Message });
+            return;
+        }
+        if (panel == null)
+        {
+            Write(new { id, ok = false, error = "plugin did not create a settings panel" });
+            return;
+        }
+        var title = string.IsNullOrWhiteSpace(pluginName) ? "Settings" : pluginName;
+        var window = new Window
+        {
+            Title = title,
+            Content = new ScrollViewer
+            {
+                Content = panel,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            },
+            Width = 560,
+            SizeToContent = SizeToContent.Height,
+            MinHeight = 240,
+            MaxHeight = 720,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ShowActivated = true
+        };
+        ApplySettingsWindowTheme(window);
+        // Wox grants foreground permission before this request. The window still
+        // has to activate itself; a background host is not brought forward by ShowDialog alone.
+        window.Loaded += (_, _) => BringSettingsToFront(window);
+        window.ShowDialog();
         Write(new { id, ok = true });
     }
 
@@ -522,7 +743,12 @@ sealed class PluginLoadContext : AssemblyLoadContext
 
     protected override Assembly Load(AssemblyName assemblyName)
     {
-        if (string.Equals(assemblyName.Name, "Flow.Launcher.Plugin", StringComparison.OrdinalIgnoreCase))
+        // These stay on the default context. Flow.Launcher.Plugin is the host's API
+        // assembly. The WinRT projections are shared with ModernWpf, which loads them
+        // from the plugin directory through ResolveProjectionAssembly.
+        if (string.Equals(assemblyName.Name, "Flow.Launcher.Plugin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName.Name, "Microsoft.Windows.SDK.NET", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName.Name, "WinRT.Runtime", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

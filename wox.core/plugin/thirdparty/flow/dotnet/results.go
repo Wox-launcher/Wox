@@ -33,20 +33,21 @@ type dotnetAction struct {
 
 // dotnetMessage is a reply or an event from the plugin process.
 type dotnetMessage struct {
-	ID        string         `json:"id"`
-	OK        bool           `json:"ok"`
-	Error     string         `json:"error"`
-	Event     string         `json:"event"`
-	Query     string         `json:"query"`
-	Title     string         `json:"title"`
-	Subtitle  string         `json:"subtitle"`
-	Text      string         `json:"text"`
-	Path      string         `json:"path"`
-	Directory string         `json:"directory"`
-	File      string         `json:"file"`
-	Command   string         `json:"command"`
-	Program   string         `json:"program"`
-	Results   []dotnetResult `json:"results"`
+	ID              string         `json:"id"`
+	OK              bool           `json:"ok"`
+	HasSettingPanel bool           `json:"hasSettingPanel"`
+	Error           string         `json:"error"`
+	Event           string         `json:"event"`
+	Query           string         `json:"query"`
+	Title           string         `json:"title"`
+	Subtitle        string         `json:"subtitle"`
+	Text            string         `json:"text"`
+	Path            string         `json:"path"`
+	Directory       string         `json:"directory"`
+	File            string         `json:"file"`
+	Command         string         `json:"command"`
+	Program         string         `json:"program"`
+	Results         []dotnetResult `json:"results"`
 	// Epoch is the launcher-visibility generation a hide event belongs to.
 	Epoch int64 `json:"epoch"`
 	// Preview is set when the event line is read while its query call is still waiting.

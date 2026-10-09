@@ -46,6 +46,7 @@ type pluginSettingsPlugin struct {
 	Store              string             `json:"Store"`
 	SettingDefinitions []formDefinition   `json:"SettingDefinitions"`
 	Setting            pluginSettingsData `json:"Setting"`
+	HasNativeSettings  bool               `json:"HasNativeSettings"`
 }
 
 type pluginCommand struct {
@@ -1406,6 +1407,42 @@ func (a *App) runFocusedPluginServiceAction(index int) {
 			return
 		}
 	}
+}
+
+// openNativePluginSettings shows the plugin host's own settings window.
+// The button stays disabled until that window closes and the plugin reloads.
+func (a *App) openNativePluginSettings(pluginID string) {
+	pluginID = strings.TrimSpace(pluginID)
+	if pluginID == "" || a.services == nil || a.nativeSettingsPluginID != "" {
+		return
+	}
+	a.nativeSettingsPluginID = pluginID
+	a.invalidateSettingsWindow()
+	util.Go(a.lifecycleCtx, "open native plugin settings", func() {
+		err := a.services.OpenNativePluginSettings(context.Background(), a.sessionID, pluginID)
+		if err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open native plugin settings: %v", err))
+		}
+		var reloadErr error
+		if err == nil {
+			reloadErr = a.reloadPlugins(false, pluginID)
+		}
+		_ = a.runOnUI("finish native plugin settings", func() {
+			if a.nativeSettingsPluginID == pluginID {
+				a.nativeSettingsPluginID = ""
+			}
+			if current := a.pluginSettings.Form(); current != nil && current.pluginID == pluginID {
+				if err != nil {
+					current.status = err.Error()
+					current.statusError = true
+				} else if reloadErr != nil {
+					current.status = reloadErr.Error()
+					current.statusError = true
+				}
+			}
+			a.invalidateSettingsWindow()
+		})
+	})
 }
 
 // runPluginServiceAction executes one service lifecycle operation and reloads its dynamic state.

@@ -18,6 +18,7 @@ import (
 	"wox/plugin"
 	"wox/plugin/thirdparty/flow/brand"
 	"wox/plugin/thirdparty/flow/manifest"
+	"wox/plugin/thirdparty/settings"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -297,6 +298,31 @@ func (p *dotnetPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	p.mu.Unlock()
 	return plugin.QueryResponse{Results: rows}
 }
+
+// HasNativeSettings reports the host settings window discovered during init.
+func (p *dotnetPlugin) HasNativeSettings() bool {
+	if p.session == nil {
+		return false
+	}
+	return p.session.HasSettingPanel()
+}
+
+// OpenNativeSettings shows the plugin's own settings window, then reloads the plugin so Init reads the saved values.
+// The reload starts Init in the background. Waiting for that Init keeps the settings row, which is only known once the new process reports its panel.
+func (p *dotnetPlugin) OpenNativeSettings(ctx context.Context) error {
+	if p.session == nil || !p.session.HasSettingPanel() {
+		return errors.New("plugin has no settings panel")
+	}
+	if err := p.session.ShowSettings(ctx); err != nil {
+		return err
+	}
+	if err := plugin.GetPluginManager().ReloadPlugin(ctx, p.metadata); err != nil {
+		return err
+	}
+	return plugin.GetPluginManager().WaitPluginInit(ctx, p.metadata.Id)
+}
+
+var _ settings.Native = (*dotnetPlugin)(nil)
 
 func (p *dotnetPlugin) icon() common.WoxImage {
 	image, err := common.ParseWoxImage(p.metadata.Icon)

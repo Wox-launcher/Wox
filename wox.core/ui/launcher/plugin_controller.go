@@ -401,6 +401,7 @@ func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pl
 			Commands: commands, SupportedOS: append([]string(nil), item.SupportedOS...), Features: features, Glances: glances,
 			IsSystem: item.IsSystem, IsDev: item.IsDev, IsInstalled: item.IsInstalled, IsDisable: item.IsDisable, IsUpgradable: item.IsUpgradable,
 			SettingDefinitions: definitions,
+			HasNativeSettings:  item.HasNativeSettings,
 			Setting: pluginSettingsData{
 				Disabled: item.Setting.Disabled, TriggerKeywords: append([]string(nil), item.Setting.TriggerKeywords...), Settings: cloneStringMap(item.Setting.Settings),
 			},

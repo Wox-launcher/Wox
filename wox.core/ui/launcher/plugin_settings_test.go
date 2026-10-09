@@ -1042,6 +1042,40 @@ func findPluginSemanticsByAutomationID(widget woxwidget.Widget, automationID str
 	return woxwidget.Semantics{}, false
 }
 
+func TestPluginDetailShowsNativeSettingsButton(t *testing.T) {
+	plugins := newPluginSettingsController(CommonDeps{})
+	plugins.SetPlugins([]pluginSettingsPlugin{{ID: "dict", Name: "Dictionary", HasNativeSettings: true}})
+	plugins.SetSelected(0)
+	plugins.SetForm(&pluginSettingsFormState{
+		pluginID:        "dict",
+		formFieldsState: newFormFieldsState([]formDefinition{pluginTriggerKeywordDefinition()}, map[string]string{}, false),
+	})
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings = plugins
+	a.translations = map[string]string{
+		"ui_plugin_tab_settings":                "Settings",
+		"ui_plugin_tab_commands":                "Commands",
+		"ui_plugin_tab_description":             "Description",
+		"ui_plugin_tab_trigger_keywords":        "Keywords",
+		"ui_plugin_tab_privacy":                 "Privacy",
+		"ui_plugin_native_settings_title":       "Settings window",
+		"ui_plugin_native_settings_description": "This plugin opens its settings in its own window.",
+		"ui_plugin_native_settings_open":        "Open settings",
+	}
+	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	if props.Editor == nil || props.Editor.Form == nil || len(props.Editor.Form.Rows) == 0 {
+		t.Fatal("native settings should add a settings row")
+	}
+	button, ok := findPluginSemanticsByAutomationID(props.Editor.Form.Rows[0], "plugin-native-settings")
+	if !ok {
+		t.Fatal("native settings row is missing the open button")
+	}
+	if button.Label != "Open settings" || button.Disabled {
+		t.Fatalf("open button = %+v", button)
+	}
+}
+
 func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()

@@ -225,26 +225,27 @@ type App struct {
 	refinementTooltipRevision     atomic.Uint64
 	glanceTimer                   *time.Timer
 	// Settings controllers (zero App back-dependency; populated by newApp).
-	generalSettings      *generalSettingsController
-	appearanceSettings   *appearanceSettingsController
-	networkSettings      *networkSettingsController
-	dataSettings         *dataSettingsController
-	cloudSettings        *cloudSettingsController
-	runtimeSettings      *runtimeSettingsController
-	themeSettings        *themeSettingsController
-	pluginSettings       *pluginSettingsController
-	aiSettings           *aiSettingsController
-	usageSettings        *usageSettingsController
-	updateSettings       *updateSettingsController
-	privacySettings      *privacySettingsController
-	aboutSettings        *aboutSettingsController
-	hotkeySettings       *hotkeySettingsController
-	settingsSearch       *settingsSearchController
-	sharedEdit           *sharedEditState
-	palette              uiPalette
-	densityMetrics       launcherDensityMetrics
-	translations         map[string]string
-	translationsRevision atomic.Uint64
+	generalSettings        *generalSettingsController
+	appearanceSettings     *appearanceSettingsController
+	networkSettings        *networkSettingsController
+	dataSettings           *dataSettingsController
+	cloudSettings          *cloudSettingsController
+	runtimeSettings        *runtimeSettingsController
+	themeSettings          *themeSettingsController
+	pluginSettings         *pluginSettingsController
+	nativeSettingsPluginID string
+	aiSettings             *aiSettingsController
+	usageSettings          *usageSettingsController
+	updateSettings         *updateSettingsController
+	privacySettings        *privacySettingsController
+	aboutSettings          *aboutSettingsController
+	hotkeySettings         *hotkeySettingsController
+	settingsSearch         *settingsSearchController
+	sharedEdit             *sharedEditState
+	palette                uiPalette
+	densityMetrics         launcherDensityMetrics
+	translations           map[string]string
+	translationsRevision   atomic.Uint64
 	// imageMu protects the image cache because image decoding completes on background goroutines.
 	imageMu sync.RWMutex
 	// appIcon is decoded during app construction so native title bars never start without their icon.

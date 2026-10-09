@@ -471,6 +471,33 @@ type FormSwitchFieldProps struct {
 	OnOpenLink  func(string)
 }
 
+// FormButtonFieldProps is one settings row whose control is a button.
+type FormButtonFieldProps struct {
+	ID          string
+	Label       string
+	Description string
+	ButtonID    string
+	ButtonLabel string
+	Disabled    bool
+	Width       float32
+	Height      float32
+	LabelWidth  float32
+	Theme       woxcomponent.ControlTheme
+	OnTap       func()
+	OnOpenLink  func(string)
+}
+
+// FormButtonField places a title on the left and a button on the right, with help text under the button.
+func FormButtonField(props FormButtonFieldProps) woxwidget.Widget {
+	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: props.ButtonID, Label: props.ButtonLabel, Variant: woxcomponent.ButtonSecondary,
+		Disabled: props.Disabled, IntrinsicWidth: true, Height: woxcomponent.SettingsControlHeight,
+		Theme: props.Theme, OnTap: props.OnTap,
+	})
+	control := woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{button}}
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, nil)
+}
+
 // FormSwitchField builds a real switch instead of exposing the boolean as text.
 func FormSwitchField(props FormSwitchFieldProps) woxwidget.Widget {
 	control := woxcomponent.WoxSwitch(woxcomponent.SwitchProps{ID: props.ID, Label: props.Label, Value: props.Checked, OnChange: props.OnChange, Theme: props.Theme})

@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Media;
 using System.Xml.Linq;
 using Flow.Launcher.Plugin;
@@ -194,6 +195,20 @@ sealed class BridgeApi : IPublicAPI
 
     // LoadTranslations fills the dictionary before the plugin initializes.
     // uiLanguage uses Wox codes such as en_US and zh_CN.
+    // ApplyTranslations copies loaded plugin strings into the WPF resource scope.
+    // Settings panels bind their labels with DynamicResource.
+    public void ApplyTranslations(ResourceDictionary dictionary)
+    {
+        if (dictionary == null)
+        {
+            return;
+        }
+        foreach (var pair in translations)
+        {
+            dictionary[pair.Key] = pair.Value;
+        }
+    }
+
     public void LoadTranslations(string pluginDirectory, string uiLanguage)
     {
         var dir = Path.Combine(pluginDirectory ?? "", "Languages");

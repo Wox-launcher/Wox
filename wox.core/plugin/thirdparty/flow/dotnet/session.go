@@ -87,6 +87,8 @@ type dotnetSession struct {
 	// A fast query response discards it so the launcher paints the complete list once.
 	previewHeld  *dotnetMessage
 	previewTimer *time.Timer
+	// hasSettingPanel is true when the loaded plugin implements Flow's settings panel.
+	hasSettingPanel bool
 }
 
 func newDotNetSession(launch dotNetLaunch) *dotnetSession {
@@ -139,6 +141,45 @@ func (s *dotnetSession) Start(ctx context.Context) error {
 		s.Close()
 		if reply.Error == "" {
 			reply.Error = "plugin init failed"
+		}
+		return errors.New(reply.Error)
+	}
+	s.mu.Lock()
+	s.hasSettingPanel = reply.HasSettingPanel
+	s.mu.Unlock()
+	return nil
+}
+
+// processID is the host process that will own the settings window.
+func (s *dotnetSession) processID() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd == nil || s.cmd.Process == nil {
+		return 0
+	}
+	return s.cmd.Process.Pid
+}
+
+// HasSettingPanel reports whether init found a Flow ISettingProvider.
+func (s *dotnetSession) HasSettingPanel() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hasSettingPanel
+}
+
+// ShowSettings opens the plugin's WPF settings window and waits until it closes.
+// The wait is not bounded by the normal call timeout, because the user dismisses the window.
+func (s *dotnetSession) ShowSettings(ctx context.Context) error {
+	// The host is a background process. Windows only lets it take the foreground
+	// after the foreground process (Wox) grants permission for its pid.
+	allowHostSetForeground(s.processID())
+	reply, err := s.callWithTimeout(ctx, map[string]any{"method": "showSettings"}, 0)
+	if err != nil {
+		return err
+	}
+	if !reply.OK {
+		if reply.Error == "" {
+			reply.Error = "plugin settings failed"
 		}
 		return errors.New(reply.Error)
 	}
@@ -227,13 +268,20 @@ func (s *dotnetSession) startLocked() error {
 }
 
 func (s *dotnetSession) call(ctx context.Context, payload map[string]any) (dotnetMessage, error) {
+	return s.callWithTimeout(ctx, payload, dotnetCallTimeout)
+}
+
+// callWithTimeout sends one request. A non-positive timeout keeps the call open until the process exits or ctx ends.
+func (s *dotnetSession) callWithTimeout(ctx context.Context, payload map[string]any, timeout time.Duration) (dotnetMessage, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, dotnetCallTimeout)
-		defer cancel()
+	if timeout > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
 	}
 	s.mu.Lock()
 	if !s.alive || s.stdin == nil {
