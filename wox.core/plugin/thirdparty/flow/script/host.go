@@ -15,6 +15,7 @@ import (
 	"sync"
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/thirdparty/flow/brand"
 	"wox/plugin/thirdparty/flow/manifest"
 	"wox/util"
 	"wox/util/shell"
@@ -46,6 +47,11 @@ type Host struct {
 
 func (h *Host) GetRuntime(ctx context.Context) plugin.Runtime {
 	return manifest.RuntimeJSONRPC
+}
+
+// Icon is the Flow Launcher mark shown beside this runtime.
+func (h *Host) Icon(ctx context.Context) common.WoxImage {
+	return brand.Image()
 }
 
 // Start resolves interpreters and writes the injected Python client.

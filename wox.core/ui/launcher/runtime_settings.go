@@ -209,6 +209,8 @@ func runtimeFallbackMark(runtime string) string {
 		return "PY"
 	case "SCRIPT":
 		return "SC"
+	case "FLOWJSONRPC", "FLOWDOTNET":
+		return "FL"
 	default:
 		return "RT"
 	}

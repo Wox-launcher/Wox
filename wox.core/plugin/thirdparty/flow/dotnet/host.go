@@ -16,6 +16,7 @@ import (
 	"wox/common"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/thirdparty/flow/brand"
 	"wox/plugin/thirdparty/flow/manifest"
 	"wox/util"
 	"wox/util/shell"
@@ -36,6 +37,11 @@ type Host struct {
 
 func (h *Host) GetRuntime(ctx context.Context) plugin.Runtime {
 	return manifest.RuntimeDotNet
+}
+
+// Icon is the Flow Launcher mark shown beside this runtime.
+func (h *Host) Icon(ctx context.Context) common.WoxImage {
+	return brand.Image()
 }
 
 // Start finds the dotnet host and the published loader.

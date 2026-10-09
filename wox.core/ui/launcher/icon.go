@@ -1,9 +1,11 @@
 package launcher
 
 import (
+	"context"
 	"strings"
 
 	"wox/common/icons"
+	woxplugin "wox/plugin"
 )
 
 func settingNavIconSource(id string) woxImage {
@@ -19,6 +21,9 @@ func usageIconSource(id string) woxImage {
 }
 
 func runtimeIconSource(runtime string) woxImage {
+	if icon, ok := woxplugin.HostRuntimeIcon(context.Background(), runtime); ok {
+		return fromCoreImage(icon)
+	}
 	name := strings.ToLower(runtime)
 	if name != "python" && name != "nodejs" {
 		name = "script"
@@ -27,6 +32,9 @@ func runtimeIconSource(runtime string) woxImage {
 }
 
 func pluginMetadataIconSource(kind string) woxImage {
+	if icon, ok := woxplugin.HostRuntimeIcon(context.Background(), kind); ok {
+		return fromCoreImage(icon)
+	}
 	if kind == "go" {
 		return fromCoreImage(icons.Get(icons.ControlCode))
 	}

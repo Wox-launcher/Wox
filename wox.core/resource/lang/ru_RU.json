@@ -580,8 +580,6 @@
   "ui_plugin_filter_system": "Системные",
   "ui_plugin_filter_third_party": "Сторонние",
   "ui_plugin_filter_installed": "Установленные",
-  "ui_plugin_filter_runtime_script_nodejs": "Wox Скрипт Node.js",
-  "ui_plugin_filter_runtime_script_python": "Wox Скрипт Python",
   "ui_plugin_filter_reset": "Сбросить",
   "ui_filter_placeholder": "Фильтр...",
   "ui_not_installed": "Не установлено",

@@ -580,8 +580,6 @@
   "ui_plugin_filter_system": "Sistema",
   "ui_plugin_filter_third_party": "Terceiros",
   "ui_plugin_filter_installed": "Instalados",
-  "ui_plugin_filter_runtime_script_nodejs": "Wox Script Node.js",
-  "ui_plugin_filter_runtime_script_python": "Wox Script Python",
   "ui_plugin_filter_reset": "Redefinir",
   "ui_filter_placeholder": "Filtrar...",
   "ui_not_installed": "Não instalado",

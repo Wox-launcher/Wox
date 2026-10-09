@@ -27,12 +27,18 @@ sealed class BridgeApi : IPublicAPI
     readonly Dictionary<Type, object> settings = new();
     readonly Dictionary<string, object> caches = new();
     readonly Dictionary<string, string> translations = new(StringComparer.Ordinal);
+    readonly object visibilityLock = new();
+    // mainWindowVisible stays true until Wox has hidden the launcher for this epoch.
+    // Window Manager waits on IsMainWindowVisible, then minimizes GetForegroundWindow.
+    int mainWindowVisible = 1;
+    int visibilityEpoch;
 
     public IAsyncPlugin Plugin { get; set; }
 
-    // Plugins can subscribe. This process does not raise theme or visibility events.
-#pragma warning disable CS0067
     public event VisibilityChangedEventHandler VisibilityChanged;
+
+    // Theme changes are not raised from this process.
+#pragma warning disable CS0067
     public event ActualApplicationThemeChangedEventHandler ActualApplicationThemeChanged;
 #pragma warning restore CS0067
 
@@ -88,13 +94,72 @@ sealed class BridgeApi : IPublicAPI
         ShowMsg(title, subTitle);
     }
 
-    public void ShowMainWindow() => emit(new { @event = "show" });
+    public void ShowMainWindow()
+    {
+        MarkLauncherVisible();
+        emit(new { @event = "show" });
+    }
 
     public void FocusQueryTextBox() => ShowMainWindow();
 
-    public void HideMainWindow() => emit(new { @event = "hide" });
+    public void HideMainWindow() => emit(new { @event = "hide", epoch = VisibilityEpoch });
 
-    public bool IsMainWindowVisible() => true;
+    public bool IsMainWindowVisible() => Volatile.Read(ref mainWindowVisible) != 0;
+
+    // MarkLauncherVisible starts a new generation because a query or action means the launcher is open.
+    // A hide report that still carries the previous generation must not flip this one back to hidden.
+    public int MarkLauncherVisible()
+    {
+        int epoch;
+        bool changed;
+        lock (visibilityLock)
+        {
+            visibilityEpoch++;
+            epoch = visibilityEpoch;
+            changed = ExchangeVisible(true);
+        }
+        RaiseVisibility(changed, true);
+        return epoch;
+    }
+
+    public int VisibilityEpoch => Volatile.Read(ref visibilityEpoch);
+
+    // MarkLauncherHidden accepts the generation the plugin attached to this hide.
+    public void MarkLauncherHidden(int epoch)
+    {
+        bool changed;
+        lock (visibilityLock)
+        {
+            if (epoch != visibilityEpoch)
+            {
+                return;
+            }
+            changed = ExchangeVisible(false);
+        }
+        RaiseVisibility(changed, false);
+    }
+
+    bool ExchangeVisible(bool visible)
+    {
+        var next = visible ? 1 : 0;
+        return Interlocked.Exchange(ref mainWindowVisible, next) != next;
+    }
+
+    void RaiseVisibility(bool changed, bool visible)
+    {
+        if (!changed)
+        {
+            return;
+        }
+        try
+        {
+            VisibilityChanged?.Invoke(this, new VisibilityChangedEventArgs { IsVisible = visible });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("visibility: " + ex.Message);
+        }
+    }
 
     public void ShowMsg(string title, string subTitle = "", string iconPath = "")
     {

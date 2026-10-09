@@ -82,11 +82,9 @@ const (
 	pluginFilterInstalled   = "installed"
 	pluginFilterUninstalled = "uninstalled"
 
-	pluginFilterRuntimeNodeJS       = "nodejs"
-	pluginFilterRuntimePython       = "python"
-	pluginFilterRuntimeScript       = "script"
-	pluginFilterRuntimeScriptNodeJS = "script-nodejs"
-	pluginFilterRuntimeScriptPython = "script-python"
+	pluginFilterRuntimeNodeJS = "nodejs"
+	pluginFilterRuntimePython = "python"
+	pluginFilterRuntimeScript = "script"
 )
 
 // pluginFilterState stores exclusive catalog dropdowns. Empty or "all" means no restriction.
@@ -228,11 +226,11 @@ func pluginMatchesFilters(plugin pluginSettingsPlugin, filters pluginFilterState
 			return false
 		}
 	}
-	return pluginMatchesRuntimeFilter(plugin, filters.runtime, store)
+	return pluginMatchesRuntimeFilter(plugin, filters.runtime)
 }
 
-// pluginMatchesRuntimeFilter keeps store script and installed script-language filters exclusive.
-func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string, store bool) bool {
+// pluginMatchesRuntimeFilter treats every Wox script plugin as one runtime, in both catalogs.
+func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string) bool {
 	if pluginFilterIsAll(runtime) {
 		return true
 	}
@@ -242,11 +240,7 @@ func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string, sto
 	case pluginFilterRuntimePython:
 		return strings.EqualFold(plugin.Runtime, "python")
 	case pluginFilterRuntimeScript:
-		return store && strings.EqualFold(plugin.Runtime, "script")
-	case pluginFilterRuntimeScriptNodeJS:
-		return !store && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".js")
-	case pluginFilterRuntimeScriptPython:
-		return !store && strings.EqualFold(plugin.Runtime, "script") && strings.HasSuffix(strings.ToLower(plugin.Entry), ".py")
+		return strings.EqualFold(plugin.Runtime, "script")
 	default:
 		return strings.EqualFold(plugin.Runtime, runtime)
 	}

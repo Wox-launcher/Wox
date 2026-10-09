@@ -96,6 +96,9 @@ sealed class PluginProcess
                     case "action":
                         Action(id, Text(root, "action"));
                         break;
+                    case "visibility":
+                        ApplyVisibility(root);
+                        break;
                     default:
                         Write(new { id, ok = false, error = "unknown method " + method });
                         break;
@@ -193,6 +196,7 @@ sealed class PluginProcess
         var terms = string.IsNullOrEmpty(search)
             ? Array.Empty<string>()
             : search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        api.MarkLauncherVisible();
         var query = new Query
         {
             SearchTerms = terms,
@@ -326,6 +330,7 @@ sealed class PluginProcess
                 throw new InvalidOperationException("action is no longer available");
             }
         }
+        var epoch = api.MarkLauncherVisible();
         var context = new ActionContext { SpecialKeyState = SpecialKeyState.Default };
         var hide = true;
         if (result.AsyncAction != null)
@@ -338,9 +343,26 @@ sealed class PluginProcess
         }
         if (hide)
         {
-            Emit(new { @event = "hide" });
+            Emit(new { @event = "hide", epoch });
         }
         Write(new { id, ok = true });
+    }
+
+    // ApplyVisibility records that hide has finished.
+    // The notice is read on this thread, so a plugin waiting inside Action cannot observe it.
+    // Window Manager waits on a background task after Action has returned.
+    void ApplyVisibility(JsonElement root)
+    {
+        if (api == null)
+        {
+            return;
+        }
+        if (Bool(root, "visible"))
+        {
+            api.MarkLauncherVisible();
+            return;
+        }
+        api.MarkLauncherHidden(Int(root, "epoch"));
     }
 
     void Emit(object message)
@@ -421,6 +443,34 @@ sealed class PluginProcess
             throw new InvalidOperationException(name + " is required");
         }
         return value;
+    }
+
+    static bool Bool(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value))
+        {
+            return false;
+        }
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(value.GetString(), out var parsed) && parsed,
+            _ => false
+        };
+    }
+
+    static int Int(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value))
+        {
+            return 0;
+        }
+        if (value.TryGetInt32(out var number))
+        {
+            return number;
+        }
+        return int.TryParse(value.ToString(), out var parsed) ? parsed : 0;
     }
 
     static string Text(JsonElement root, string name)

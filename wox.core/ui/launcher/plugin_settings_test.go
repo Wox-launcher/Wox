@@ -78,8 +78,12 @@ func TestPluginMatchesFiltersExclusiveDropdowns(t *testing.T) {
 	if got := pluginMatchesFilters(enabled, pluginFilterState{pluginType: pluginFilterSystem}, false); got {
 		t.Fatal("third-party plugin must not match system type")
 	}
-	if got := pluginMatchesFilters(script, pluginFilterState{runtime: pluginFilterRuntimeScriptNodeJS}, false); !got {
-		t.Fatal("javascript script plugin must match the Node.js script runtime")
+	if got := pluginMatchesFilters(script, pluginFilterState{runtime: pluginFilterRuntimeScript}, false); !got {
+		t.Fatal("javascript script plugin must match the script runtime")
+	}
+	pythonScript := pluginSettingsPlugin{ID: "py-script", Runtime: "script", Entry: "main.py"}
+	if got := pluginMatchesFilters(pythonScript, pluginFilterState{runtime: pluginFilterRuntimeScript}, false); !got {
+		t.Fatal("python script plugin must match the same script runtime")
 	}
 	if got := pluginMatchesFilters(script, pluginFilterState{runtime: pluginFilterRuntimePython}, false); got {
 		t.Fatal("javascript script plugin must not match the Python runtime")
@@ -95,10 +99,10 @@ func TestPluginMatchesFiltersExclusiveDropdowns(t *testing.T) {
 func TestPluginRuntimeFilterMatchesThirdPartyHost(t *testing.T) {
 	dotnet := pluginSettingsPlugin{ID: "cs", Runtime: "FLOWDOTNET"}
 	script := pluginSettingsPlugin{ID: "py", Runtime: "FLOWJSONRPC"}
-	if !pluginMatchesRuntimeFilter(dotnet, "FLOWDOTNET", false) {
+	if !pluginMatchesRuntimeFilter(dotnet, "FLOWDOTNET") {
 		t.Fatal("dotnet plugin must match its host runtime")
 	}
-	if pluginMatchesRuntimeFilter(script, "FLOWDOTNET", false) || pluginMatchesRuntimeFilter(dotnet, pluginFilterRuntimePython, true) {
+	if pluginMatchesRuntimeFilter(script, "FLOWDOTNET") || pluginMatchesRuntimeFilter(dotnet, pluginFilterRuntimePython) {
 		t.Fatal("a third-party host filter must not keep other runtimes")
 	}
 }

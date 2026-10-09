@@ -47,6 +47,8 @@ type dotnetMessage struct {
 	Command   string         `json:"command"`
 	Program   string         `json:"program"`
 	Results   []dotnetResult `json:"results"`
+	// Epoch is the launcher-visibility generation a hide event belongs to.
+	Epoch int64 `json:"epoch"`
 	// Preview is set when the event line is read while its query call is still waiting.
 	Preview bool `json:"-"`
 	// Generation is the query call that was in flight when the event was read.

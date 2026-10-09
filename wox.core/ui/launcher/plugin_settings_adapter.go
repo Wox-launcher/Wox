@@ -712,7 +712,6 @@ func (a *App) pluginFilterFields(filters pluginFilterState, store bool) []launch
 // pluginFilterChoiceItem adapts one catalog filter dropdown to the shared settings picker.
 func (a *App) pluginFilterChoiceItem(id string) settingItem {
 	filters := a.pluginSettings.Filters()
-	store := a.pluginSettings.PluginsStore()
 	var value string
 	var title string
 	switch id {
@@ -732,7 +731,7 @@ func (a *App) pluginFilterChoiceItem(id string) settingItem {
 	if pluginFilterIsAll(value) {
 		value = pluginFilterAll
 	}
-	return settingItem{key: "plugin-filter-" + id, title: title, value: value, choices: a.pluginFilterChoices(id, store)}
+	return settingItem{key: "plugin-filter-" + id, title: title, value: value, choices: a.pluginFilterChoices(id)}
 }
 
 // pluginFilterChoiceLabel returns the visible value for one exclusive filter dropdown.
@@ -740,7 +739,7 @@ func (a *App) pluginFilterChoiceLabel(id, value string) string {
 	if pluginFilterIsAll(value) {
 		value = pluginFilterAll
 	}
-	for _, choice := range a.pluginFilterChoices(id, a.pluginSettings.PluginsStore()) {
+	for _, choice := range a.pluginFilterChoices(id) {
 		if choice.value == value {
 			return choice.label
 		}
@@ -749,7 +748,7 @@ func (a *App) pluginFilterChoiceLabel(id, value string) string {
 }
 
 // pluginFilterChoices lists the exclusive options for one catalog filter dropdown.
-func (a *App) pluginFilterChoices(id string, store bool) []settingChoice {
+func (a *App) pluginFilterChoices(id string) []settingChoice {
 	all := settingChoice{value: pluginFilterAll, label: a.translate("i18n:ui_all")}
 	switch id {
 	case "enabled":
@@ -761,14 +760,11 @@ func (a *App) pluginFilterChoices(id string, store bool) []settingChoice {
 	case "install":
 		return []settingChoice{all, {value: pluginFilterInstalled, label: a.translate("i18n:ui_plugin_filter_installed")}, {value: pluginFilterUninstalled, label: a.translate("i18n:ui_not_installed")}}
 	case "runtime":
-		choices := []settingChoice{all, {value: pluginFilterRuntimeNodeJS, label: a.translate("i18n:ui_runtime_name_nodejs")}, {value: pluginFilterRuntimePython, label: a.translate("i18n:ui_runtime_name_python")}}
-		if store {
-			choices = append(choices, settingChoice{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")})
-		} else {
-			choices = append(choices,
-				settingChoice{value: pluginFilterRuntimeScriptNodeJS, label: a.translate("i18n:ui_plugin_filter_runtime_script_nodejs")},
-				settingChoice{value: pluginFilterRuntimeScriptPython, label: a.translate("i18n:ui_plugin_filter_runtime_script_python")},
-			)
+		choices := []settingChoice{
+			all,
+			{value: pluginFilterRuntimeNodeJS, label: a.translate("i18n:ui_runtime_name_nodejs")},
+			{value: pluginFilterRuntimePython, label: a.translate("i18n:ui_runtime_name_python")},
+			{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")},
 		}
 		for _, runtime := range thirdPartyRuntimeFilterValues() {
 			choices = append(choices, settingChoice{value: runtime, label: a.localizedRuntimeDisplayName(runtime)})

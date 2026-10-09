@@ -595,8 +595,6 @@
   "ui_plugin_filter_system": "系统",
   "ui_plugin_filter_third_party": "第三方",
   "ui_plugin_filter_installed": "已安装",
-  "ui_plugin_filter_runtime_script_nodejs": "Wox Node.js 脚本",
-  "ui_plugin_filter_runtime_script_python": "Wox Python 脚本",
   "ui_plugin_filter_reset": "重置",
   "ui_filter_placeholder": "筛选...",
   "ui_not_installed": "未安装",

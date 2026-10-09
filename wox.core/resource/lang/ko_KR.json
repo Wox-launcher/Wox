@@ -595,8 +595,6 @@
   "ui_plugin_filter_system": "시스템",
   "ui_plugin_filter_third_party": "서드파티",
   "ui_plugin_filter_installed": "설치됨",
-  "ui_plugin_filter_runtime_script_nodejs": "Wox Node.js 스크립트",
-  "ui_plugin_filter_runtime_script_python": "Wox Python 스크립트",
   "ui_plugin_filter_reset": "재설정",
   "ui_filter_placeholder": "필터...",
   "ui_not_installed": "설치되지 않음",

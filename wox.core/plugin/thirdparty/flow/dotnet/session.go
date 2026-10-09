@@ -20,6 +20,18 @@ import (
 
 const dotnetCallTimeout = 60 * time.Second
 
+// previewResultHold waits out a fast query before painting an in-flight result
+// preview. Dictionary publishes the exact match, then returns the full list a
+// few milliseconds later. Painting that one-row preview collapses the window,
+// and the complete list opens it again. A query still running after the hold
+// is slow enough that the early rows are worth showing.
+const previewResultHold = 50 * time.Millisecond
+
+// mainWindowHideReportDelay is the pause after the launcher is hidden before
+// the plugin is told. Flow does the same so GetForegroundWindow returns the
+// window that was in front, not the launcher. Window Manager minimizes that window.
+const mainWindowHideReportDelay = 50 * time.Millisecond
+
 // dotNetLaunch is everything the plugin process needs before the first query.
 type dotNetLaunch struct {
 	Name       string
@@ -71,6 +83,10 @@ type dotnetSession struct {
 	// A results event during that window is a preview of the list Query will return.
 	queryInFlight   bool
 	queryGeneration int64
+	// previewHeld is the latest in-flight result list waiting out previewResultHold.
+	// A fast query response discards it so the launcher paints the complete list once.
+	previewHeld  *dotnetMessage
+	previewTimer *time.Timer
 }
 
 func newDotNetSession(launch dotNetLaunch) *dotnetSession {
@@ -174,6 +190,7 @@ func (s *dotnetSession) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
+	s.discardHeldPreviewLocked()
 	s.killLocked()
 }
 
@@ -367,6 +384,25 @@ func (s *dotnetSession) drainEvents() {
 	}
 }
 
+// reportMainWindowHidden tells the plugin the launcher is gone for this hide's generation.
+// An older report is ignored once a newer query or action has marked the launcher open.
+func (s *dotnetSession) reportMainWindowHidden(epoch int64) {
+	s.mu.Lock()
+	stdin := s.stdin
+	closed := s.closed
+	s.mu.Unlock()
+	if stdin == nil || closed {
+		return
+	}
+	if err := s.writeJSON(map[string]any{
+		"method":  "visibility",
+		"visible": false,
+		"epoch":   epoch,
+	}); err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("[flow-dotnet:%s] visibility: %s", s.launch.Name, err.Error()))
+	}
+}
+
 func (s *dotnetSession) handleEvent(message dotnetMessage) {
 	bridge := s.launch.Bridge
 	if bridge == nil {
@@ -378,6 +414,10 @@ func (s *dotnetSession) handleEvent(message dotnetMessage) {
 		bridge.ChangeQuery(ctx, message.Query)
 	case "hide":
 		bridge.HideApp(ctx)
+		epoch := message.Epoch
+		time.AfterFunc(mainWindowHideReportDelay, func() {
+			s.reportMainWindowHidden(epoch)
+		})
 	case "show":
 		bridge.ShowApp(ctx)
 	case "notify":
@@ -399,19 +439,72 @@ func (s *dotnetSession) handleEvent(message dotnetMessage) {
 	case "refresh":
 		bridge.Refresh(ctx)
 	case "results":
-		if !s.shouldApplyResultUpdate(message) {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("[flow-dotnet:%s] dropped preview results", s.launch.Name))
+		if message.Preview {
+			s.holdPreviewResult(message)
 			return
 		}
-		util.GetLogger().Info(ctx, fmt.Sprintf("[flow-dotnet:%s] results updated: %d", s.launch.Name, len(message.Results)))
-		bridge.UpdateResults(ctx, message.Query, message.Results)
+		s.publishResultUpdate(message)
 	}
+}
+
+// holdPreviewResult keeps the latest in-flight list until the query has had time to finish.
+// A newer preview replaces the pending list without extending the wait.
+func (s *dotnetSession) holdPreviewResult(message dotnetMessage) {
+	if !s.shouldApplyResultUpdate(message) {
+		s.logDroppedPreview()
+		return
+	}
+	held := message
+	s.mu.Lock()
+	s.previewHeld = &held
+	if s.previewTimer != nil {
+		s.mu.Unlock()
+		return
+	}
+	s.previewTimer = time.AfterFunc(previewResultHold, s.releaseHeldPreview)
+	s.mu.Unlock()
+}
+
+// releaseHeldPreview paints the pending preview, or drops it when the query already returned.
+func (s *dotnetSession) releaseHeldPreview() {
+	s.mu.Lock()
+	message := s.previewHeld
+	timer := s.previewTimer
+	s.previewHeld = nil
+	s.previewTimer = nil
+	s.mu.Unlock()
+	if timer != nil {
+		timer.Stop()
+	}
+	if message == nil {
+		return
+	}
+	s.publishResultUpdate(*message)
+}
+
+// publishResultUpdate applies one result list, dropping a preview that lost the race with its query response.
+func (s *dotnetSession) publishResultUpdate(message dotnetMessage) {
+	bridge := s.launch.Bridge
+	if bridge == nil {
+		return
+	}
+	if !s.shouldApplyResultUpdate(message) {
+		s.logDroppedPreview()
+		return
+	}
+	util.GetLogger().Info(context.Background(), fmt.Sprintf("[flow-dotnet:%s] results updated: %d", s.launch.Name, len(message.Results)))
+	bridge.UpdateResults(context.Background(), message.Query, message.Results)
+}
+
+func (s *dotnetSession) logDroppedPreview() {
+	util.GetLogger().Debug(context.Background(), fmt.Sprintf("[flow-dotnet:%s] dropped preview results", s.launch.Name))
 }
 
 // beginQuery marks the call whose response is the complete result list.
 func (s *dotnetSession) beginQuery() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.discardHeldPreviewLocked()
 	s.queryGeneration++
 	s.queryInFlight = true
 	return s.queryGeneration
@@ -424,7 +517,17 @@ func (s *dotnetSession) endQuery(generation int64) {
 	defer s.mu.Unlock()
 	if s.queryGeneration == generation {
 		s.queryInFlight = false
+		s.discardHeldPreviewLocked()
 	}
+}
+
+// discardHeldPreviewLocked drops a preview that must not paint after its query ends.
+func (s *dotnetSession) discardHeldPreviewLocked() {
+	if s.previewTimer != nil {
+		s.previewTimer.Stop()
+		s.previewTimer = nil
+	}
+	s.previewHeld = nil
 }
 
 // noteResultUpdate stamps a results event at read time.

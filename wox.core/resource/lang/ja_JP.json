@@ -595,8 +595,6 @@
   "ui_plugin_filter_system": "システム",
   "ui_plugin_filter_third_party": "サードパーティ",
   "ui_plugin_filter_installed": "インストール済み",
-  "ui_plugin_filter_runtime_script_nodejs": "Wox Node.js スクリプト",
-  "ui_plugin_filter_runtime_script_python": "Wox Python スクリプト",
   "ui_plugin_filter_reset": "リセット",
   "ui_filter_placeholder": "フィルター...",
   "ui_not_installed": "未インストール",
