@@ -97,6 +97,8 @@ type Manager struct {
 	mainHotkeyRegistrationError string
 	trayEmojiWarmMu             sync.Mutex
 	trayEmojiWarmInFlight       map[string]struct{}
+	trayMu                      sync.Mutex
+	trayVisible                 bool
 }
 
 func GetUIManager() *Manager {
@@ -1375,6 +1377,15 @@ func (m *Manager) IsThemeUpgradable(id string, version string) bool {
 }
 
 func (m *Manager) ShowTray() {
+	m.trayMu.Lock()
+	defer m.trayMu.Unlock()
+	// CreateTray starts another message loop and adds a second icon. Re-applying
+	// ShowTray, including a migration that leaves the icon visible, must not do that.
+	if m.trayVisible {
+		return
+	}
+	m.trayVisible = true
+
 	ctx := util.NewTraceContext()
 	tray.CreateTray(resource.GetAppIcon(), func() {
 		m.GetUI(ctx).ToggleApp(ctx, common.ShowContext{
@@ -1404,6 +1415,9 @@ func (m *Manager) ShowTray() {
 }
 
 func (m *Manager) HideTray() {
+	m.trayMu.Lock()
+	defer m.trayMu.Unlock()
+	m.trayVisible = false
 	tray.RemoveTray()
 }
 

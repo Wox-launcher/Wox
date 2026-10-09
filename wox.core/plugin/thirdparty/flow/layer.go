@@ -8,10 +8,12 @@ import (
 	"wox/plugin/thirdparty/flow/dotnet"
 	"wox/plugin/thirdparty/flow/manifest"
 	"wox/plugin/thirdparty/flow/script"
+	"wox/plugin/thirdparty/migrate"
 )
 
 func init() {
 	plugin.RegisterThirdParty(flowLayer{})
+	migrate.Register(flowMigrationSource{})
 }
 
 // flowLayer is the compatibility entry for this directory.

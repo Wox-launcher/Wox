@@ -329,6 +329,20 @@ func CheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.check", size, color)
 }
 
+// BadgeCheckGlyph returns the compact check drawn inside a filled selection disc.
+// The standalone check fills its view box and looks cramped and lopsided in a small circle.
+func BadgeCheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	if size <= 0 {
+		size = 12
+	}
+	const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 5 14 14" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m8 12 3 3 5-6"/></svg>`
+	image := svgSourceImage("control.badge-check", source, size, color)
+	if image == nil {
+		return woxwidget.Painter{Width: size, Height: size}
+	}
+	return woxwidget.Image{Source: image, Width: size, Height: size}
+}
+
 // CheckCircleGlyph returns the shared successful-status icon.
 func CheckCircleGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.check-circle", size, color)

@@ -196,6 +196,7 @@ type App struct {
 	onboardingQueryHotkey         *onboardingQueryHotkeyState
 	onboardingPlugins             onboardingPluginState
 	onboardingTheme               onboardingThemeState
+	onboardingMigration           onboardingMigrationState
 	permissionFlowHost            *macOSPermissionFlowHost
 	settingsCtx                   settingWindowContext
 	settingTab                    string
@@ -458,7 +459,8 @@ func (a *App) start() error {
 	host := woxwidget.NewHost(a.buildLauncher)
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title: "Wox",
-		Size:  woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom + a.densityMetrics.toolbarHeight},
+		// The idle launcher has no results yet, so this first size omits the about-menu-only toolbar.
+		Size: woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom},
 		// Windows uses HWND_TOPMOST so the query window stays above other apps.
 		// macOS floating level and Linux layer-shell TOP already do that without
 		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
@@ -1347,7 +1349,8 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		// Preserve the existing outer-edge budget for grids and empty launchers.
 		resultBottomInset = int(palette.appPadding.Bottom)
 	}
-	toolbarHasContent := resultCount > 0 || toolbarMessageVisible || !params.HideToolbar
+	aboutMenuOpen := actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout
+	toolbarHasContent := launcherToolbarHasContent(resultCount, toolbarMessageVisible, aboutMenuOpen || a.form != nil)
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
 	height := 0
 	if !params.HideQueryBox {
@@ -1523,6 +1526,13 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 
 func launcherReservesFullPreviewHeight(params showAppParams, previewVisible bool) bool {
 	return previewVisible || params.ShowPreviewTitleBar && params.HideQueryBox && params.HideToolbar
+}
+
+// launcherToolbarHasContent keeps the footer for result actions, status, or an open about menu.
+// A query with no results would only show the about-menu button, so that strip stays hidden
+// until the window grows with the results.
+func launcherToolbarHasContent(resultCount int, messageVisible, overlayOpen bool) bool {
+	return resultCount > 0 || messageVisible || overlayOpen
 }
 
 // launcherToolbarHeightIncluded preserves the hidden toolbar's space only in Flutter's chat mode.

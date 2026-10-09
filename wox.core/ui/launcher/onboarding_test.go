@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"testing"
 
+	"wox/common"
+	"wox/plugin/thirdparty/migrate"
 	"wox/resource"
 	"wox/ui/contract"
 	"wox/util/keyboard"
@@ -40,6 +42,100 @@ func TestOnboardingRetainsHotkeySaveFailureAfterRecorderCloses(t *testing.T) {
 	if app.onboardingError != "" || app.generalSettings.Data().MainHotkey != "Alt+K" {
 		t.Fatalf("successful retry: error=%q hotkey=%q", app.onboardingError, app.generalSettings.Data().MainHotkey)
 	}
+}
+
+func TestOnboardingMigrationStepFollowsWelcome(t *testing.T) {
+	plain := (&App{}).onboardingSteps()
+	for _, step := range plain {
+		if step.ID == "migrate" {
+			t.Fatal("migration step appears without a detected launcher")
+		}
+	}
+	if plain[len(plain)-1].ID != "finish" {
+		t.Fatalf("last step = %q", plain[len(plain)-1].ID)
+	}
+	app := &App{onboardingMigration: onboardingMigrationState{installations: []migrate.Installation{
+		onboardingMigrationStub{id: "flow", name: "Flow Launcher"},
+		onboardingMigrationStub{id: "other", name: "Other"},
+	}}}
+	steps := app.onboardingSteps()
+	wantIndex := 1
+	if runtime.GOOS == "darwin" {
+		wantIndex = 2
+		if steps[1].ID != "permissions" {
+			t.Fatalf("steps %#v", steps)
+		}
+	}
+	if steps[0].ID != "welcome" || steps[wantIndex].ID != "migrate" || steps[wantIndex+1].ID != "mainHotkey" {
+		t.Fatalf("steps start %#v", []string{steps[0].ID, steps[wantIndex].ID, steps[wantIndex+1].ID})
+	}
+	app.onboardingStep = wantIndex
+	app.onboardingMigration.selectedID = "flow"
+	app.selectOnboardingStep(wantIndex - 1)
+	if app.onboardingStep != wantIndex || !app.onboardingMigration.choosing || app.onboardingMigration.selectedID != "" {
+		t.Fatalf("back from items step=%d choosing=%v selected=%q", app.onboardingStep, app.onboardingMigration.choosing, app.onboardingMigration.selectedID)
+	}
+}
+
+func TestSingleDetectedLauncherSkipsTheChooser(t *testing.T) {
+	one := newOnboardingMigrationState([]migrate.Installation{onboardingMigrationStub{id: "flow", name: "Flow Launcher"}})
+	if one.choosing || one.selectedID != "flow" {
+		t.Fatalf("one launcher = choosing %v selected %q", one.choosing, one.selectedID)
+	}
+	many := newOnboardingMigrationState([]migrate.Installation{
+		onboardingMigrationStub{id: "flow"}, onboardingMigrationStub{id: "other"},
+	})
+	if !many.choosing || many.selectedID != "" {
+		t.Fatalf("many launchers = choosing %v selected %q", many.choosing, many.selectedID)
+	}
+}
+
+func TestNormalizeLauncherHotkeyAcceptsFlowSpacing(t *testing.T) {
+	got, ok := normalizeLauncherHotkey("Alt + Space")
+	if !ok || got != "Alt+Space" {
+		t.Fatalf("hotkey = %q ok=%v", got, ok)
+	}
+	if _, ok := normalizeLauncherHotkey("not a hotkey"); ok {
+		t.Fatal("accepted an invalid hotkey")
+	}
+}
+
+func TestMigrationHotkeyMessageDoesNotNameTheOccupant(t *testing.T) {
+	taken := fmt.Errorf("failed to register hotkey (err=1409)")
+	if got := migrationHotkeyPageMessage(taken); got != "i18n:onboarding_migrate_hotkey_next" {
+		t.Fatalf("occupied shortcut message = %q", got)
+	}
+	if got := migrationApplyError(taken); got != migrationHotkeyTaken {
+		t.Fatalf("occupied shortcut row = %q", got)
+	}
+	generic := fmt.Errorf("failed to register main hotkey: Alt+Space")
+	if got := migrationHotkeyPageMessage(generic); got != "i18n:ui_hotkey_registration_failed" {
+		t.Fatalf("generic registration message = %q", got)
+	}
+	if got := migrationApplyError(fmt.Errorf("portal: %w", keyboard.ErrHotkeyConflict)); got != migrationHotkeyTaken {
+		t.Fatalf("confirmed conflict row = %q", got)
+	}
+}
+
+type onboardingMigrationStub struct {
+	id   string
+	name string
+}
+
+func (s onboardingMigrationStub) ID() string            { return s.id }
+func (s onboardingMigrationStub) Name() string          { return s.name }
+func (s onboardingMigrationStub) Version() string       { return "" }
+func (s onboardingMigrationStub) Location() string      { return "" }
+func (s onboardingMigrationStub) Icon() common.WoxImage { return common.WoxImage{} }
+func (s onboardingMigrationStub) Hotkey() string        { return "" }
+func (s onboardingMigrationStub) Plugins(context.Context) ([]migrate.Plugin, error) {
+	return nil, nil
+}
+func (s onboardingMigrationStub) Catalog(context.Context) ([]migrate.Category, error) {
+	return nil, nil
+}
+func (s onboardingMigrationStub) Import(context.Context, []string) (migrate.ImportResult, error) {
+	return migrate.ImportResult{}, nil
 }
 
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {

@@ -163,6 +163,7 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 		Icon:          fileIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
+			"*",
 			"f",
 		},
 		SupportedOS: []string{
@@ -1050,15 +1051,15 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 
 		group, groupScore := fileSearchResultGroup(query)
 		queryResult := plugin.QueryResult{
-			Title:      item.Name,
-			SubTitle:   item.Path,
-			Icon:       icon,
-			Score:      item.Score,
-			IdentityKey:   item.Path,
-			Group:      group,
-			GroupScore: groupScore,
-			Tails:      fileSearchResultTails(item, recent),
-			Actions:    attachFileSearchMRUContext(actions, item.Path),
+			Title:       item.Name,
+			SubTitle:    item.Path,
+			Icon:        icon,
+			Score:       item.Score,
+			IdentityKey: item.Path,
+			Group:       group,
+			GroupScore:  groupScore,
+			Tails:       fileSearchResultTails(item, recent),
+			Actions:     attachFileSearchMRUContext(actions, item.Path),
 			DragData: &plugin.QueryResultDragData{
 				Type:  plugin.QueryResultDragDataTypeFiles,
 				Files: []string{item.Path},

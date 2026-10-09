@@ -25,25 +25,6 @@ const (
 	converterMRUQuery = "1 m to cm"
 )
 
-// configureStartPage selects fresh launch behavior and one Start Page option, restoring both settings after the case.
-func configureStartPage(t *testing.T, ctx context.Context, client *automationdriver.Client, startPageOption int) {
-	t.Helper()
-	previousLaunchMode := smoke.OpenGeneralSettingsAndReadChoice(t, ctx, client, "LaunchMode")
-	freshMode := smoke.SelectSettingChoiceByIndex(t, ctx, client, "LaunchMode", 0)
-	if previousLaunchMode != freshMode {
-		t.Cleanup(func() { smoke.RestoreGeneralSettingChoice(t, client, "LaunchMode", previousLaunchMode) })
-	}
-
-	previousStartPage := smoke.OpenGeneralSettingsAndReadChoice(t, ctx, client, "StartPage")
-	selectedStartPage := smoke.SelectSettingChoiceByIndex(t, ctx, client, "StartPage", startPageOption)
-	if previousStartPage != selectedStartPage {
-		t.Cleanup(func() { smoke.RestoreGeneralSettingChoice(t, client, "StartPage", previousStartPage) })
-	}
-	if err := client.Hide(ctx); err != nil {
-		t.Fatalf("close General settings after configuring Start Page: %v", err)
-	}
-}
-
 // seedConverterMRU executes one deterministic conversion enough times to cross the product's MRU eligibility threshold.
 func seedConverterMRU(t *testing.T, ctx context.Context, client *automationdriver.Client) string {
 	t.Helper()

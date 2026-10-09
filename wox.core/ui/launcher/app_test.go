@@ -93,12 +93,24 @@ func TestLauncherToolbarHeightIncludedInChatFullscreen(t *testing.T) {
 	}
 }
 
-func TestLauncherToolbarIncludesAboutMenuWhenEmpty(t *testing.T) {
+func TestLauncherToolbarHidesAboutMenuWhenIdle(t *testing.T) {
+	if launcherToolbarHasContent(0, false, false) {
+		t.Fatal("a query with no results should hide the about-menu-only toolbar")
+	}
+	if !launcherToolbarHasContent(1, false, false) {
+		t.Fatal("results should keep the toolbar")
+	}
+	if !launcherToolbarHasContent(0, true, false) || !launcherToolbarHasContent(0, false, true) {
+		t.Fatal("a status message or open about menu should keep the toolbar")
+	}
+	if launcherToolbarHeightIncluded(false, false, false, false) {
+		t.Fatal("an idle launcher should not reserve toolbar height")
+	}
 	if !launcherToolbarHeightIncluded(false, true, false, false) {
-		t.Fatal("an empty query still reserves toolbar height for the about menu button")
+		t.Fatal("toolbar content should still reserve height")
 	}
 	if launcherToolbarHeightIncluded(true, true, false, false) {
-		t.Fatal("HideToolbar must still omit the about menu button")
+		t.Fatal("HideToolbar must still omit the toolbar")
 	}
 }
 

@@ -243,7 +243,8 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		queryHeight, _ = launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, queryAtBottom)
 	}
 	toolbarHeight := float32(0)
-	if !snapshot.show.HideToolbar && !chromeFullscreen {
+	aboutMenuOpen := snapshot.actionPanel && snapshot.actionPanelPurpose == actionPanelPurposeAbout
+	if !snapshot.show.HideToolbar && !chromeFullscreen && launcherToolbarHasContent(len(snapshot.results), snapshot.toolbarMsg != nil, aboutMenuOpen || snapshot.form != nil) {
 		toolbarHeight = snapshot.densityMetrics.toolbarHeight
 	}
 	refinementHeight := float32(0)

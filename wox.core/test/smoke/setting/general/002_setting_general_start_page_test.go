@@ -22,7 +22,7 @@ import (
 // Evidence: the real launcher input is empty and exposes no result rows despite the persisted MRU seed.
 func Test002SettingGeneralStartPageBlank(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		configureStartPage(t, ctx, client, 0)
+		smoke.ConfigureStartPage(t, ctx, client, 0)
 		seedConverterMRU(t, ctx, client)
 
 		smoke.ShowLauncher(t, ctx, client)
@@ -45,7 +45,7 @@ func Test002SettingGeneralStartPageMRUAfterQueryHotkey(t *testing.T) {
 		t.Skip("native query hotkey recording and activation are covered on Windows")
 	}
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		configureStartPage(t, ctx, client, 1)
+		smoke.ConfigureStartPage(t, ctx, client, 1)
 		mruLabel := seedConverterMRU(t, ctx, client)
 		const tableID = "hotkey-settings-field-5"
 		if err := client.OpenSettings(ctx, "/hotkeys"); err != nil {
@@ -153,7 +153,7 @@ func Test002SettingGeneralStartPageMRUAfterQueryHotkey(t *testing.T) {
 // Evidence: the real launcher keeps an empty input while exposing the restored Converter result in a completed generation.
 func Test002SettingGeneralStartPageMRU(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		configureStartPage(t, ctx, client, 1)
+		smoke.ConfigureStartPage(t, ctx, client, 1)
 		mruLabel := seedConverterMRU(t, ctx, client)
 
 		smoke.ShowLauncher(t, ctx, client)

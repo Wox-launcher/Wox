@@ -83,6 +83,7 @@ func (a *App) openOnboarding() error {
 	}
 	wasSettings := false
 	var settingsView *woxui.ManagedWindow
+	installations := detectOnboardingMigrations(context.Background())
 	if err := a.runOnUI("prepare onboarding", func() {
 		wasSettings = a.settingsOpen
 		a.settingsOpen = false
@@ -94,6 +95,7 @@ func (a *App) openOnboarding() error {
 		a.onboardingQueryHotkey = nil
 		a.onboardingPlugins = onboardingPluginState{}
 		a.onboardingTheme = onboardingThemeState{selectedID: onboardingGlassID}
+		a.onboardingMigration = newOnboardingMigrationState(installations)
 		a.stopHotkeyRecording()
 		settingsView = a.settingsView
 		if form := a.hotkeySettings.Form(); form != nil {
@@ -207,6 +209,9 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	labels["hotkey.preview"] = a.translate("i18n:onboarding_hotkey_preview")
 	if a.onboardingError != "" {
 		labels[step.ID+".body"] = a.onboardingError
+	}
+	if step.ID == "migrate" && a.onboardingMigration.choosing && len(a.onboardingMigration.installations) > 1 {
+		labels["migrate.body"] = labels["migrate.choose"]
 	}
 
 	choices := a.onboardingChoices(snapshot, a.onboardingChoice, frame.Scale)
@@ -333,6 +338,27 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	if step.ID == "themeInstall" {
 		nextDisabled = a.onboardingTheme.loading || len(themes) == 0
 	}
+	migrationSources, migrationCategories := a.onboardingMigrationView(frame.Scale, snapshot.palette.Background, labels)
+	nextLabel := ""
+	skipLabel := ""
+	var onSkip func()
+	if step.ID == "migrate" {
+		if a.onboardingMigration.importing || (a.onboardingMigration.loading && !a.onboardingMigration.loaded && !a.onboardingMigration.choosing) {
+			nextDisabled = true
+		}
+		if !a.onboardingMigration.done && (a.onboardingMigrationCanImport() || a.onboardingMigration.importing) {
+			nextLabel = labels["migrate.import"]
+			if !a.onboardingMigration.importing {
+				skipLabel = labels["migrate.skip"]
+				onSkip = func() { a.selectOnboardingStep(active + 1) }
+			}
+		} else if !a.onboardingMigration.done {
+			nextLabel = labels["migrate.skip"]
+		}
+	}
+	if step.ID == "mainHotkey" && a.onboardingMigration.mainHotkeyPending {
+		nextDisabled = true
+	}
 	return launcherview.OnboardingView(launcherview.OnboardingProps{
 		Width: frame.Size.Width, Height: frame.Size.Height, AppIcon: a.imageFor(appIconImageSource),
 		Wallpaper: snapshot.theme.ThemeWallpaperImage, WallpaperBlurred: snapshot.theme.ThemeWallpaperBlurred,
@@ -344,6 +370,9 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		QueryHotkeyRecording: queryHotkeyRecording, QueryHotkeyReady: queryHotkeyReady, QueryHotkeySelected: queryHotkeySelected, QueryHotkeyBusy: queryHotkeyBusy,
 		Plugins: plugins, PluginsLoading: a.onboardingPlugins.loading, PluginsError: a.onboardingPlugins.error,
 		Themes: themes, ThemesLoading: a.onboardingTheme.loading, ThemesApplying: a.onboardingTheme.applying, ThemesError: a.onboardingTheme.error,
+		MigrationChoosing: a.onboardingMigration.choosing, MigrationSources: migrationSources, MigrationCategories: migrationCategories,
+		MigrationLoading: a.onboardingMigration.loading, MigrationImporting: a.onboardingMigration.importing, MigrationDone: a.onboardingMigration.done,
+		MigrationActiveID: a.onboardingMigration.activeID, MigrationError: a.onboardingMigration.error,
 		ThemePreviewTitle: a.translate("i18n:ui_theme_preview_title"), ThemePreviewTexts: previewTexts,
 		ThemePreviewSubs: previewSubtitles, ThemePreviewOpen: a.translate("i18n:ui_theme_preview_open"),
 		Permissions: permissions, PermissionLoading: a.onboardingLoading,
@@ -354,15 +383,23 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 				_ = window.StartDragging()
 			}
 		},
-		NextDisabled: nextDisabled,
-		OnStep:       a.selectOnboardingStep, OnBack: func() { a.selectOnboardingStep(active - 1) }, OnNext: func() { a.selectOnboardingStep(active + 1) },
+		NextDisabled: nextDisabled, NextLabel: nextLabel, SkipLabel: skipLabel, OnSkip: onSkip,
+		OnStep: a.selectOnboardingStep, OnBack: func() { a.selectOnboardingStep(active - 1) }, OnNext: func() {
+			if step.ID == "migrate" && !a.onboardingMigration.done && a.onboardingMigrationCanImport() {
+				a.importOnboardingMigration()
+				return
+			}
+			a.selectOnboardingStep(active + 1)
+		},
 		OnFinish: a.finishOnboarding, OnToggleGlance: a.setOnboardingGlanceEnabled,
-		OnRecordHotkey:      func() { a.focusOnboardingHotkey(0); a.recordHotkeySettingsField(0) },
-		OnRecordQueryHotkey: a.recordOnboardingQueryHotkey,
-		OnToggleQueryHotkey: a.toggleOnboardingQueryHotkey,
-		OnInstallPlugin:     a.installOnboardingPlugin,
-		OnSelectTheme:       a.selectOnboardingTheme,
-		OnOpenChoice:        a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
+		OnRecordHotkey:        func() { a.focusOnboardingHotkey(0); a.recordHotkeySettingsField(0) },
+		OnRecordQueryHotkey:   a.recordOnboardingQueryHotkey,
+		OnToggleQueryHotkey:   a.toggleOnboardingQueryHotkey,
+		OnInstallPlugin:       a.installOnboardingPlugin,
+		OnSelectTheme:         a.selectOnboardingTheme,
+		OnChooseMigration:     a.chooseOnboardingMigration,
+		OnToggleMigrationItem: a.toggleOnboardingMigrationItem,
+		OnOpenChoice:          a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
 	})
 }
 
@@ -375,6 +412,10 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 	if runtime.GOOS == "darwin" {
 		specs = append(specs, onboardingStepSpec{"permissions", "onboarding_permissions_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
 	}
+	// Migration is the next page, after permissions on macOS, so the hotkey pages can still adjust what was imported.
+	if len(a.onboardingMigration.installations) > 0 {
+		specs = append(specs, onboardingStepSpec{"migrate", "onboarding_migrate_title", woxui.Color{R: 20, G: 184, B: 166, A: 255}})
+	}
 	specs = append(specs,
 		onboardingStepSpec{"mainHotkey", "onboarding_main_hotkey_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}},
 		onboardingStepSpec{"glance", "onboarding_glance_title", woxui.Color{R: 250, G: 204, B: 21, A: 255}},
@@ -383,8 +424,8 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 	specs = append(specs,
 		onboardingStepSpec{"wpmInstall", "onboarding_wpm_install_title", woxui.Color{R: 56, G: 189, B: 248, A: 255}},
 		onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}},
-		onboardingStepSpec{"finish", "onboarding_finish_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}},
 	)
+	specs = append(specs, onboardingStepSpec{"finish", "onboarding_finish_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}})
 	steps := make([]launcherview.OnboardingStep, len(specs))
 	for index, spec := range specs {
 		steps[index] = launcherview.OnboardingStep{ID: spec.id, Title: a.translate("i18n:" + spec.key), Accent: spec.accent}
@@ -423,6 +464,18 @@ func (a *App) onboardingLabels() map[string]string {
 		"trayQueries.body":              a.translate("i18n:onboarding_tray_queries_body"),
 		"wpmInstall.body":               a.translate("i18n:onboarding_wpm_install_body"),
 		"themeInstall.body":             a.translate("i18n:onboarding_theme_install_body"),
+		"migrate.body":                  a.translate("i18n:onboarding_migrate_body"),
+		"migrate.choose":                a.translate("i18n:onboarding_migrate_choose_body"),
+		"migrate.import":                a.translate("i18n:onboarding_migrate_import"),
+		"migrate.skip":                  a.translate("i18n:onboarding_migrate_skip"),
+		"migrate.empty":                 a.translate("i18n:onboarding_migrate_empty"),
+		"migrate.loading":               a.translate("i18n:onboarding_migrate_loading"),
+		"migrate.imported":              a.translate("i18n:onboarding_migrate_status_imported"),
+		"migrate.unsupported":           a.translate("i18n:onboarding_migrate_status_unsupported"),
+		"migrate.copying":               a.translate("i18n:onboarding_migrate_status_importing"),
+		"migrate.copied":                a.translate("i18n:onboarding_migrate_status_done"),
+		"migrate.failed":                a.translate("i18n:onboarding_migrate_status_failed"),
+		"migrate.python":                a.translate("i18n:onboarding_migrate_python"),
 		"finish.body":                   a.translate("i18n:onboarding_finish_card_body"),
 		"finish.hotkey":                 a.translate("i18n:onboarding_finish_summary_hotkey"),
 		"finish.glance":                 a.translate("i18n:onboarding_finish_summary_glance"),
@@ -465,7 +518,7 @@ func (a *App) onboardingLabels() map[string]string {
 		"demo.finish.settings":          a.translate("i18n:plugin_sys_open_wox_settings"),
 		"demo.finish.system_settings":   a.translate("i18n:plugin_sys_open_system_settings"),
 	}
-	for _, step := range []string{"welcome", "permissions", "mainHotkey", "selectionHotkey", "glance", "queryHotkeys", "trayQueries", "wpmInstall", "themeInstall", "finish"} {
+	for _, step := range []string{"welcome", "permissions", "mainHotkey", "selectionHotkey", "glance", "queryHotkeys", "trayQueries", "wpmInstall", "themeInstall", "migrate", "finish"} {
 		labels[step+".preview"] = labels[step+".body"]
 	}
 	return labels
@@ -475,6 +528,14 @@ func (a *App) selectOnboardingStep(index int) {
 	steps := a.onboardingSteps()
 	if index < 0 || index >= len(steps) {
 		return
+	}
+	if a.onboardingStep >= 0 && a.onboardingStep < len(steps) && steps[a.onboardingStep].ID == "migrate" && index != a.onboardingStep {
+		if a.onboardingMigration.importing {
+			return
+		}
+		if index == a.onboardingStep-1 && a.retreatOnboardingMigration() {
+			return
+		}
 	}
 	if index > a.onboardingStep && steps[a.onboardingStep].ID == "mainHotkey" {
 		data := a.generalSettings.Data()
@@ -500,6 +561,9 @@ func (a *App) selectOnboardingStep(index int) {
 			setFormFieldsFocusLocked(form, 1)
 		}
 	}
+	if steps[index].ID == "mainHotkey" {
+		a.applyStagedMigrationHotkey()
+	}
 	if steps[index].ID == "permissions" && runtime.GOOS == "darwin" {
 		util.Go(a.lifecycleCtx, "refresh onboarding permission status", a.loadOnboardingPermissionStatus)
 	}
@@ -511,6 +575,9 @@ func (a *App) selectOnboardingStep(index int) {
 	}
 	if steps[index].ID == "themeInstall" {
 		a.loadOnboardingThemes()
+	}
+	if steps[index].ID == "migrate" {
+		a.prepareOnboardingMigration()
 	}
 	a.invalidateOnboardingWindow()
 }
