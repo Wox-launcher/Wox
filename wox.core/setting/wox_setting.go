@@ -57,6 +57,9 @@ type WoxSetting struct {
 	// synced because each device may target a different test server.
 	CloudSyncServerUrl       *WoxSettingValue[string]
 	CloudSyncDisabledPlugins *WoxSettingValue[[]string]
+	// HiddenPluginStores lists catalog ids omitted from the store plugin page.
+	// An empty list shows every catalog. The official Wox store is never omitted.
+	HiddenPluginStores *WoxSettingValue[[]string]
 
 	// HTTP proxy settings
 	HttpProxyEnabled *PlatformValue[bool]
@@ -486,6 +489,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
 		CloudSyncServerUrl:                 NewLocalWoxSettingValue(store, "CloudSyncServerUrl", ""),
 		CloudSyncDisabledPlugins:           NewWoxSettingValue(store, "CloudSyncDisabledPlugins", []string{}),
+		HiddenPluginStores:                 NewWoxSettingValue(store, "HiddenPluginStores", []string{}),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),
 		ReleaseChannel:                     NewWoxSettingValueWithValidator(store, "ReleaseChannel", ReleaseChannelStable, IsValidReleaseChannel),

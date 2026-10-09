@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		CustomNodejsPath:                   woxSetting.CustomNodejsPath.Get(),
 		CloudSyncServerURL:                 woxSetting.CloudSyncServerUrl.Get(),
 		CloudSyncDisabledPlugins:           append([]string(nil), woxSetting.CloudSyncDisabledPlugins.Get()...),
+		HiddenPluginStores:                 append([]string(nil), woxSetting.HiddenPluginStores.Get()...),
 		AppWidth:                           woxSetting.AppWidth.Get(),
 		MaxResultCount:                     woxSetting.MaxResultCount.Get(),
 		UIDensity:                          woxSetting.UiDensity.Get(),
@@ -251,6 +253,12 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			return err
 		}
 		woxSetting.CloudSyncDisabledPlugins.Set(disabledPlugins)
+	case "HiddenPluginStores":
+		var stores []string
+		if err := json.Unmarshal([]byte(value), &stores); err != nil {
+			return err
+		}
+		woxSetting.HiddenPluginStores.Set(normalizeHiddenPluginStores(stores))
 	case "TrayQueries":
 		trayQueries, err := decodeTrayQueries(value)
 		if err != nil {
@@ -410,4 +418,23 @@ func decodeTrayQueries(value string) ([]setting.TrayQuery, error) {
 		queries = append(queries, query)
 	}
 	return queries, nil
+}
+
+// normalizeHiddenPluginStores drops blanks and the official catalog. Wox Store stays visible.
+func normalizeHiddenPluginStores(stores []string) []string {
+	seen := map[string]struct{}{}
+	next := make([]string, 0, len(stores))
+	for _, id := range stores {
+		id = strings.ToLower(strings.TrimSpace(id))
+		if id == "" || id == plugin.OfficialPluginStoreID {
+			continue
+		}
+		if _, found := seen[id]; found {
+			continue
+		}
+		seen[id] = struct{}{}
+		next = append(next, id)
+	}
+	sort.Strings(next)
+	return next
 }

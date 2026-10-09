@@ -13,6 +13,7 @@ type PluginSettingsPageProps struct {
 	List        PluginListProps
 	Detail      PluginDetailProps
 	FilterPanel *PluginFilterPanelProps
+	StorePanel  *PluginStoreVisibilityPanelProps
 	Theme       woxcomponent.ControlTheme
 }
 
@@ -26,22 +27,49 @@ func PluginSettingsPage(props PluginSettingsPageProps) woxwidget.Widget {
 		woxwidget.Container{Width: 10, Height: innerHeight},
 		woxwidget.Container{Width: props.Detail.Width, Height: innerHeight, Child: PluginDetail(props.Detail)},
 	}}}
-	if props.FilterPanel == nil {
+	if props.FilterPanel == nil && props.StorePanel == nil {
 		return content
 	}
-	// Anchor to the trailing 30px filter action (plus the 4px search inset), 4px below the 40px search field.
-	panelLeft := 20 + max(float32(0), props.List.Width-34)
-	panelProps := *props.FilterPanel
-	panelProps.Width = min(panelProps.Width, max(float32(0), props.Width-panelLeft-12))
-	if panelProps.Width < 360 {
-		panelProps.Width = min(props.FilterPanel.Width, max(float32(0), props.Width-24))
-		panelLeft = min(max(float32(12), panelLeft), max(float32(12), props.Width-panelProps.Width-12))
+	children := []woxwidget.StackChild{{Child: content}}
+	if props.FilterPanel != nil {
+		// The filter button is the trailing 30px action plus the 4px search inset.
+		// Keep the historical 360px floor so a wider measured panel can clip instead of jumping.
+		panelLeft, panelWidth := pluginCatalogPopoverFrame(props.Width, props.List.Width, 34, props.FilterPanel.Width, 360)
+		panelProps := *props.FilterPanel
+		panelProps.Width = panelWidth
+		children = append(children,
+			woxwidget.StackChild{Child: woxwidget.Gesture{ID: "plugin-filter-dismiss", OnTap: props.FilterPanel.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
+			woxwidget.StackChild{Left: panelLeft, Top: 64, Child: PluginFilterPanel(panelProps)},
+		)
 	}
-	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-		{Child: content},
-		{Child: woxwidget.Gesture{ID: "plugin-filter-dismiss", OnTap: props.FilterPanel.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
-		{Left: panelLeft, Top: 64, Child: PluginFilterPanel(panelProps)},
-	}}
+	if props.StorePanel != nil {
+		// The gear sits one 30px action to the left of the filter button.
+		requested := props.StorePanel.Width
+		if requested <= 0 {
+			requested = 280
+		}
+		panelLeft, panelWidth := pluginCatalogPopoverFrame(props.Width, props.List.Width, 64, requested, requested)
+		panelProps := *props.StorePanel
+		panelProps.Width = panelWidth
+		children = append(children,
+			woxwidget.StackChild{Child: woxwidget.Gesture{ID: "plugin-store-settings-dismiss", OnTap: props.StorePanel.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
+			woxwidget.StackChild{Left: panelLeft, Top: 64, Child: PluginStoreVisibilityPanel(panelProps)},
+		)
+	}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: children}
+}
+
+// pluginCatalogPopoverFrame anchors a catalog popover to a trailing search action, 4px below the 40px field.
+// anchorFromRight is the action's left edge measured from the list's right edge. The panel shifts left when
+// the fitted width falls below minimumWidth.
+func pluginCatalogPopoverFrame(pageWidth, listWidth, anchorFromRight, requestedWidth, minimumWidth float32) (left, width float32) {
+	left = 20 + max(float32(0), listWidth-anchorFromRight)
+	width = min(requestedWidth, max(float32(0), pageWidth-left-12))
+	if width < minimumWidth {
+		width = min(requestedWidth, max(float32(0), pageWidth-24))
+		left = min(max(float32(12), left), max(float32(12), pageWidth-width-12))
+	}
+	return left, width
 }
 
 // PluginListItem contains one rendered plugin catalog entry.
@@ -63,8 +91,14 @@ type PluginListItem struct {
 type PluginListEntry struct {
 	ID     string
 	Header string
-	Item   PluginListItem
+	// HasHeaderIcon reserves a mark beside the section title. HeaderIcon fills it once decoded.
+	HasHeaderIcon bool
+	HeaderIcon    *woxui.Image
+	Item          PluginListItem
 }
+
+// PluginListSectionIconSize is the logical edge of a store mark in a section header.
+const PluginListSectionIconSize = 16
 
 // PluginListProps contains plugin catalog data and search state.
 type PluginListProps struct {
@@ -82,6 +116,8 @@ type PluginListProps struct {
 	InstalledSelectedIcon *woxui.Image
 	FilterLabel           string
 	FilterActive          bool
+	StoreSettingsIcon     *woxui.Image
+	StoreSettingsLabel    string
 	EmptyLabel            string
 	EmptyTitle            string
 	EmptyDescription      string
@@ -96,6 +132,7 @@ type PluginListProps struct {
 	OnSearchChanged     func(string)
 	OnSetSearchValue    func(string) error
 	OnFilter            func()
+	OnStoreSettings     func()
 }
 
 // PluginList builds the searchable plugin catalog.
@@ -145,18 +182,28 @@ func PluginList(props PluginListProps) woxwidget.Widget {
 	// Catalog search chrome sits with plugin titles. Keep the placeholder and field
 	// outline on Text so TextSecondary cannot restyle this box.
 	searchTheme.TextSecondary = props.Theme.Text
+	actions := make([]woxcomponent.SearchFieldAction, 0, 2)
+	if props.OnStoreSettings != nil {
+		actions = append(actions, woxcomponent.SearchFieldAction{
+			ID: "plugin-store-settings", Label: props.StoreSettingsLabel, Icon: props.StoreSettingsIcon, OnTap: props.OnStoreSettings,
+		})
+	}
+	actions = append(actions, woxcomponent.SearchFieldAction{
+		ID: "plugin-filter", Label: props.FilterLabel, Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter,
+	})
 	searchField := woxcomponent.WoxSearchField(woxcomponent.SearchFieldProps{
 		ID: "plugin-search", Label: props.Placeholder, Width: searchFieldWidth, Value: props.Search.Text, Focused: props.Focused, Autofocus: props.Focused,
-		Actions: []woxcomponent.SearchFieldAction{
-			{ID: "plugin-filter", Label: props.FilterLabel, Icon: props.FilterIcon, Active: props.FilterActive, OnTap: props.OnFilter},
-		},
-		Window: props.Window, Theme: searchTheme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
+		Actions: actions,
+		Window:  props.Window, Theme: searchTheme, OnClear: props.OnClear, OnKey: props.OnSearchKey,
 		OnFocusChange: props.OnSearchFocusChange, OnChanged: props.OnSearchChanged, OnSetValue: props.OnSetSearchValue,
 	})
 	return woxwidget.Container{Width: props.Width, Height: props.Height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 20, Children: []woxwidget.Widget{searchField, list}}}
 }
 
 const pluginListRowHeight = float32(62)
+
+// pluginListSectionTrail is the space under a catalog group title before its first plugin.
+const pluginListSectionTrail = float32(12)
 
 // PluginListIconSize is the logical edge of the icon drawn in a catalog row.
 const PluginListIconSize = 32
@@ -186,13 +233,13 @@ func pluginListSectionHasLead(entries []PluginListEntry, index int) bool {
 	return false
 }
 
-// pluginListEntryExtent keeps section headers shorter than plugin rows, and adds
-// lead only before a following group so the first header sits flush under search.
+// pluginListEntryExtent keeps section headers shorter than plugin rows. The first
+// header stays flush under search, and every header keeps a gap above its plugins.
 func pluginListEntryExtent(entries []PluginListEntry, index int) float32 {
 	if index < 0 || index >= len(entries) || entries[index].Header == "" {
 		return pluginListRowHeight
 	}
-	height := woxcomponent.SettingsNavGroupHeight
+	height := woxcomponent.SettingsNavGroupHeight + pluginListSectionTrail
 	if pluginListSectionHasLead(entries, index) {
 		height += woxcomponent.SettingsNavGroupLead
 	}
@@ -222,15 +269,26 @@ func pluginListEntry(entry PluginListEntry, lead bool, props PluginListProps) wo
 // pluginListSectionHeader uses the compact Settings rail group chrome, not the wide page divider.
 func pluginListSectionHeader(entry PluginListEntry, lead bool, props PluginListProps) woxwidget.Widget {
 	label, size := woxcomponent.SettingsChromeLabel(entry.Header)
+	text := woxwidget.Text{
+		Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
+	}
+	var content woxwidget.Widget = text
+	if entry.HasHeaderIcon {
+		var mark woxwidget.Widget = woxwidget.Container{Width: PluginListSectionIconSize, Height: PluginListSectionIconSize}
+		if entry.HeaderIcon != nil {
+			mark = woxwidget.Image{Source: entry.HeaderIcon, Width: PluginListSectionIconSize, Height: PluginListSectionIconSize, Fit: woxwidget.ImageFitContain}
+		}
+		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{mark, text}}
+	}
 	row := woxwidget.Container{
 		Width: props.Width, Height: woxcomponent.SettingsNavGroupHeight, Padding: woxwidget.Insets{Left: 6, Right: 6},
-		Child: woxwidget.Align{Height: woxcomponent.SettingsNavGroupHeight, Vertical: 0.5, Child: woxwidget.Text{
-			Value: label, Style: woxui.TextStyle{Size: size, Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
-		}},
+		Child: woxwidget.Align{Height: woxcomponent.SettingsNavGroupHeight, Vertical: 0.5, Child: content},
 	}
+	padding := woxwidget.Insets{Bottom: pluginListSectionTrail}
 	if lead {
-		row = woxwidget.Container{Width: props.Width, Padding: woxwidget.Insets{Top: woxcomponent.SettingsNavGroupLead}, Child: row}
+		padding.Top = woxcomponent.SettingsNavGroupLead
 	}
+	row = woxwidget.Container{Width: props.Width, Padding: padding, Child: row}
 	return woxwidget.Semantics{
 		Key: pluginListEntryKey(entry), AutomationID: string(pluginListEntryKey(entry)),
 		Role: woxui.AccessibilityRoleGroup, Label: entry.Header, Child: row,
@@ -343,6 +401,70 @@ func PluginFilterPanel(props PluginFilterPanelProps) woxwidget.Widget {
 	return woxwidget.FocusScope{Key: "plugin-filter-panel", Modal: true, Child: woxwidget.Container{
 		Width: props.Width, Height: height, Radius: 8, Floating: true, Color: props.Theme.Surface, BorderColor: props.Theme.Border, BorderWidth: 1,
 		Padding: woxwidget.UniformInsets(horizontalPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: rowGap, Children: rows},
+	}}
+}
+
+// PluginStoreVisibilityRow is one catalog in the store visibility checklist.
+type PluginStoreVisibilityRow struct {
+	ID       string
+	Label    string
+	Icon     *woxui.Image
+	Checked  bool
+	Locked   bool
+	OnToggle func(bool)
+}
+
+// PluginStoreVisibilityPanelProps contains the anchored store visibility checklist.
+type PluginStoreVisibilityPanelProps struct {
+	Width     float32
+	Rows      []PluginStoreVisibilityRow
+	Theme     woxcomponent.ControlTheme
+	OnDismiss func()
+}
+
+// PluginStoreVisibilityPanel builds the catalog checklist. Locked rows stay checked.
+func PluginStoreVisibilityPanel(props PluginStoreVisibilityPanelProps) woxwidget.Widget {
+	const rowGap = float32(8)
+	const horizontalPadding = float32(16)
+	rowHeight := woxcomponent.SettingsControlHeight
+	innerWidth := max(float32(0), props.Width-horizontalPadding*2)
+	rows := make([]woxwidget.Widget, 0, len(props.Rows))
+	for _, row := range props.Rows {
+		rows = append(rows, pluginStoreVisibilityRow(row, innerWidth, rowHeight, props.Theme))
+	}
+	height := horizontalPadding*2 + float32(len(rows))*rowHeight + float32(max(0, len(rows)-1))*rowGap
+	return woxwidget.FocusScope{Key: "plugin-store-settings-panel", Modal: true, Child: woxwidget.Container{
+		Width: props.Width, Height: height, Radius: 8, Floating: true, Color: props.Theme.Surface, BorderColor: props.Theme.Border, BorderWidth: 1,
+		Padding: woxwidget.UniformInsets(horizontalPadding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: rowGap, Children: rows},
+	}}
+}
+
+func pluginStoreVisibilityRow(row PluginStoreVisibilityRow, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	onToggle := row.OnToggle
+	onChange := onToggle
+	if row.Locked && onChange == nil {
+		onChange = func(bool) {}
+	}
+	var mark woxwidget.Widget = woxwidget.Container{Width: 16, Height: 16}
+	if row.Icon != nil {
+		mark = woxwidget.Image{Source: row.Icon, Width: 16, Height: 16}
+	}
+	label := woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{
+		Value: row.Label, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text,
+	}}
+	var labelWidget woxwidget.Widget = label
+	if !row.Locked && onToggle != nil {
+		checked := row.Checked
+		labelWidget = woxwidget.Gesture{ID: "plugin-store-visible-label-" + row.ID, OnTap: func() { onToggle(!checked) }, Child: label}
+	}
+	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
+				ID: "plugin-store-visible-" + row.ID, Label: row.Label, Value: row.Checked, Disabled: row.Locked, OnChange: onChange, Theme: theme,
+			}),
+			mark,
+			woxwidget.Expanded{Child: labelWidget},
+		},
 	}}
 }
 

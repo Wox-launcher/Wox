@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"wox/common/icons"
 	"wox/network"
 
 	woxplugin "wox/plugin"
@@ -28,6 +29,7 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 		List:        a.pluginListProps(snapshot, listWidth, innerHeight, imageScale),
 		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight, imageScale),
 		FilterPanel: a.pluginFilterPanelProps(snapshot),
+		StorePanel:  a.pluginStorePanelProps(snapshot, imageScale),
 		Theme:       snapshot.palette,
 	})
 }
@@ -55,6 +57,11 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
 		OnFilter: a.togglePluginFilterPanel,
 	}
+	if plugins.PluginsStore {
+		props.StoreSettingsLabel = a.translate("i18n:ui_plugin_store_settings")
+		props.StoreSettingsIcon = a.imageForTint(fromCoreImage(icons.Get(icons.ActionSettings)), &iconTint, physicalImageSize(16, imageScale))
+		props.OnStoreSettings = a.togglePluginStorePanel
+	}
 	if plugins.PluginsLoading && len(plugins.Plugins) == 0 {
 		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 		return props
@@ -66,9 +73,12 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	}
 
 	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore, snapshot.general.Data.UsePinYin)
+	if plugins.PluginsStore {
+		filtered = omitHiddenPluginStores(filtered, snapshot.general.Data.HiddenPluginStores)
+	}
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
-	props.Entries = a.pluginListEntries(snapshot, filtered)
+	props.Entries = a.pluginListEntries(snapshot, filtered, imageScale)
 	props.ResolveIcon = a.pluginListIconResolver(filtered, imageScale)
 	return props
 }
@@ -93,8 +103,10 @@ func (a *App) pluginListIconResolver(filtered []filteredPlugin, imageScale float
 	}
 }
 
-// pluginListEntries builds catalog rows, grouping installed plugins by enabled state.
-func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPlugin) []launcherview.PluginListEntry {
+// pluginListEntries builds catalog rows. Installed plugins group by enabled state.
+// Store plugins group by catalog, with the official store first. A single visible
+// catalog stays a flat list so the header is not repeated above every row.
+func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPlugin, imageScale float32) []launcherview.PluginListEntry {
 	plugins := snapshot.plugins
 	visibleIndex := 0
 	appendItem := func(entries []launcherview.PluginListEntry, entry filteredPlugin) []launcherview.PluginListEntry {
@@ -126,9 +138,17 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 		})
 	}
 	if plugins.PluginsStore {
-		entries := make([]launcherview.PluginListEntry, 0, len(filtered))
-		for _, entry := range filtered {
-			entries = appendItem(entries, entry)
+		sections := groupStorePlugins(filtered)
+		showHeaders := len(sections) > 1
+		entries := make([]launcherview.PluginListEntry, 0, len(filtered)+len(sections))
+		for _, section := range sections {
+			if showHeaders {
+				label, icon := a.pluginStoreSection(section.ID, imageScale)
+				entries = append(entries, launcherview.PluginListEntry{ID: section.ID, Header: label, HasHeaderIcon: true, HeaderIcon: icon})
+			}
+			for _, entry := range section.Plugins {
+				entries = appendItem(entries, entry)
+			}
 		}
 		return entries
 	}
@@ -145,6 +165,17 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 		}
 	}
 	return entries
+}
+
+// pluginStoreSection resolves one catalog title and its brand mark.
+func (a *App) pluginStoreSection(storeID string, imageScale float32) (string, *woxui.Image) {
+	label, source := woxplugin.PluginStorePresentation(storeID)
+	label = a.translate(label)
+	if a.imageLastUsed == nil || source.IsEmpty() {
+		return label, nil
+	}
+	size := physicalImageSize(launcherview.PluginListSectionIconSize, imageScale)
+	return label, a.imageForSurface(fromCoreImage(source), size, settingsPalette().Background)
 }
 
 func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, plugins pluginSettingsSnapshot, filtered []filteredPlugin, iconTint woxui.Color, imageScale float32) {
@@ -660,6 +691,33 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		Keywords:   a.pluginKeywordsFormProps(snapshot, plugin, contentWidth, imageScale, true),
 		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true, false, nil),
 		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot,
+	}
+}
+
+// pluginStorePanelProps builds the catalog visibility checklist. It is absent on the installed page and while the gear is closed.
+func (a *App) pluginStorePanelProps(snapshot settingsSnapshot, imageScale float32) *launcherview.PluginStoreVisibilityPanelProps {
+	plugins := snapshot.plugins
+	if !plugins.PluginsStore || !plugins.PluginStorePanelOpen {
+		return nil
+	}
+	hidden := hiddenPluginStoreSet(snapshot.general.Data.HiddenPluginStores)
+	ids := pluginStoreVisibilityOptions(plugins.Plugins)
+	rows := make([]launcherview.PluginStoreVisibilityRow, 0, len(ids))
+	for _, id := range ids {
+		storeID := id
+		label, icon := a.pluginStoreSection(storeID, imageScale)
+		locked := storeID == woxplugin.OfficialPluginStoreID
+		_, isHidden := hidden[storeID]
+		rows = append(rows, launcherview.PluginStoreVisibilityRow{
+			ID: storeID, Label: label, Icon: icon, Checked: locked || !isHidden, Locked: locked,
+			OnToggle: func(visible bool) { a.setPluginStoreVisible(storeID, visible) },
+		})
+	}
+	return &launcherview.PluginStoreVisibilityPanelProps{
+		Width: 280, Rows: rows, Theme: snapshot.palette, OnDismiss: func() {
+			a.pluginSettings.SetStorePanelOpen(false)
+			a.invalidateSettingsWindow()
+		},
 	}
 }
 

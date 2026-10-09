@@ -11,9 +11,11 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"wox/common"
 	"wox/database"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/thirdparty/flow/brand"
 	"wox/setting"
 	"wox/util"
 	"wox/util/trash"
@@ -34,6 +36,12 @@ var flowStoreCatalogURLs = []string{
 type flowStore struct{}
 
 func (flowStore) Name() string { return "flow" }
+
+// Label is the settings section title for this catalog.
+func (flowStore) Label() string { return "i18n:ui_plugin_store_flow" }
+
+// Icon is the Flow Launcher mark shown beside that title.
+func (flowStore) Icon() common.WoxImage { return brand.Image() }
 
 func (flowStore) AppendManifests(ctx context.Context, manifests []plugin.StorePluginManifest) []plugin.StorePluginManifest {
 	return appendFlowStoreManifests(ctx, manifests)
@@ -172,6 +180,7 @@ func flowStoreManifestFromDocument(document map[string]any) (plugin.StorePluginM
 		SupportedOS:   []string{"Windows"},
 		DateCreated:   flowFieldString(document, "DateCreated"),
 		DateUpdated:   flowFieldString(document, "DateUpdated"),
+		Store:         flowStore{}.Name(),
 	}, true
 }
 

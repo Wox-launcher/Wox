@@ -186,6 +186,81 @@ func TestGroupInstalledPluginsPutsEnabledFirstAndOmitsEmptySections(t *testing.T
 	}
 }
 
+func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
+	filtered := []filteredPlugin{
+		{index: 0, plugin: pluginSettingsPlugin{ID: "flow-b", Name: "Beta", Store: "flow"}},
+		{index: 1, plugin: pluginSettingsPlugin{ID: "acme", Name: "Middle", Store: "acme"}},
+		{index: 2, plugin: pluginSettingsPlugin{ID: "wox-z", Name: "Zinc", Store: "wox"}},
+		{index: 3, plugin: pluginSettingsPlugin{ID: "flow-a", Name: "Alpine", Store: "FLOW"}},
+		{index: 4, plugin: pluginSettingsPlugin{ID: "wox-a", Name: "Alpha"}},
+	}
+	got := groupStorePlugins(filtered)
+	if len(got) != 3 || got[0].ID != plugin.OfficialPluginStoreID || got[1].ID != "acme" || got[2].ID != "flow" {
+		t.Fatalf("sections = %#v", got)
+	}
+	if ids := installedSectionPluginIDs(installedPluginSection{Plugins: got[0].Plugins}); !reflect.DeepEqual(ids, []string{"wox-a", "wox-z"}) {
+		t.Fatalf("wox order = %v", ids)
+	}
+	if ids := installedSectionPluginIDs(installedPluginSection{Plugins: got[2].Plugins}); !reflect.DeepEqual(ids, []string{"flow-a", "flow-b"}) {
+		t.Fatalf("flow order = %v", ids)
+	}
+	if got := groupStorePlugins(nil); len(got) != 0 {
+		t.Fatalf("empty filter = %#v", got)
+	}
+	if !pluginCatalogLess(pluginSettingsPlugin{Name: "Zebra", Store: "wox"}, pluginSettingsPlugin{Name: "Alpha", Store: "flow"}, true) {
+		t.Fatal("official store must sort above other catalogs")
+	}
+	if pluginCatalogLess(pluginSettingsPlugin{Name: "Alpha", Store: "flow"}, pluginSettingsPlugin{Name: "Zebra", Store: "wox"}, true) {
+		t.Fatal("another catalog must not sort above the official store")
+	}
+}
+
+func TestOmitHiddenPluginStoresKeepsOfficialStore(t *testing.T) {
+	filtered := []filteredPlugin{
+		{index: 0, plugin: pluginSettingsPlugin{ID: "wox-a", Store: ""}},
+		{index: 1, plugin: pluginSettingsPlugin{ID: "flow-a", Store: "flow"}},
+		{index: 2, plugin: pluginSettingsPlugin{ID: "acme", Store: "acme"}},
+	}
+	got := omitHiddenPluginStores(filtered, []string{"flow", "wox", "FLOW"})
+	if len(got) != 2 || got[0].plugin.ID != "wox-a" || got[1].plugin.ID != "acme" {
+		t.Fatalf("visible = %#v, want Wox kept and flow removed", got)
+	}
+	if got := pluginStoreVisibilityOptions([]pluginSettingsPlugin{{Store: "flow"}, {Store: "wox"}, {Store: ""}}); !reflect.DeepEqual(got, []string{"wox", "flow"}) {
+		t.Fatalf("visibility options = %v", got)
+	}
+}
+
+func TestSetPluginStoreVisibleKeepsWoxAndMovesSelection(t *testing.T) {
+	app := &App{
+		pluginSettings:  newPluginSettingsController(CommonDeps{}),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+	}
+	app.pluginSettings.SetPluginsStore(true)
+	app.pluginSettings.SetPlugins([]pluginSettingsPlugin{
+		{ID: "wox-a", Name: "Alpha", Store: "wox"},
+		{ID: "flow-a", Name: "Alpine", Store: "flow"},
+	})
+	app.pluginSettings.SetSelected(1)
+	app.setPluginStoreVisible("wox", false)
+	if len(app.generalSettings.Data().HiddenPluginStores) != 0 {
+		t.Fatalf("hidden = %v, want Wox to stay visible", app.generalSettings.Data().HiddenPluginStores)
+	}
+	if app.pluginSettings.Selected() != 1 {
+		t.Fatalf("selection = %d, want the flow plugin to stay selected", app.pluginSettings.Selected())
+	}
+	app.setPluginStoreVisible("FLOW", false)
+	if !reflect.DeepEqual(app.generalSettings.Data().HiddenPluginStores, []string{"flow"}) {
+		t.Fatalf("hidden = %v", app.generalSettings.Data().HiddenPluginStores)
+	}
+	if app.pluginSettings.Selected() != 0 {
+		t.Fatalf("selection = %d, want the remaining Wox plugin", app.pluginSettings.Selected())
+	}
+	app.setPluginStoreVisible("flow", true)
+	if len(app.generalSettings.Data().HiddenPluginStores) != 0 {
+		t.Fatalf("hidden = %v, want every catalog visible again", app.generalSettings.Data().HiddenPluginStores)
+	}
+}
+
 func installedSectionPluginIDs(section installedPluginSection) []string {
 	ids := make([]string, len(section.Plugins))
 	for index, entry := range section.Plugins {

@@ -27,4 +27,8 @@ func TestFlowLayerRegistration(t *testing.T) {
 	if !scriptOK || !dotnetOK || scriptIcon.IsEmpty() || scriptIcon.ImageData != dotnetIcon.ImageData {
 		t.Fatalf("flow runtime icons script=%+v dotnet=%+v", scriptIcon, dotnetIcon)
 	}
+	label, icon := plugin.PluginStorePresentation("flow")
+	if label != "i18n:ui_plugin_store_flow" || icon.IsEmpty() || icon.ImageData != scriptIcon.ImageData {
+		t.Fatalf("flow store presentation = %q icon=%+v", label, icon)
+	}
 }

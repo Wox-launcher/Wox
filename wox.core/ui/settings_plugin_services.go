@@ -48,6 +48,7 @@ func (s *CoreServices) Plugins(ctx context.Context, sessionID string, catalog co
 			Commands: append([]plugin.MetadataCommand(nil), item.Commands...), SupportedOS: append([]string(nil), item.SupportedOS...),
 			Features: append([]plugin.MetadataFeature(nil), item.Features...), Glances: append([]plugin.MetadataGlance(nil), item.Glances...),
 			IsSystem: item.IsSystem, IsDev: item.IsDev, IsInstalled: item.IsInstalled, IsDisable: item.IsDisable, IsUpgradable: item.IsUpgradable,
+			Store:              item.Store,
 			SettingDefinitions: item.SettingDefinitions,
 			Setting: contract.PluginSetting{
 				Disabled: item.Setting.Disabled, TriggerKeywords: append([]string(nil), item.Setting.TriggerKeywords...), Settings: cloneStringMap(item.Setting.Settings),

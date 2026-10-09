@@ -28,6 +28,9 @@ import (
 
 const pluginDownloadTimeout = 2 * time.Minute
 
+// OfficialPluginStoreID is the built-in plugin catalog. Settings lists it above other stores.
+const OfficialPluginStoreID = "wox"
+
 type storeManifest struct {
 	Name string
 	Url  string
@@ -49,6 +52,9 @@ type StorePluginManifest struct {
 	SupportedOS    []string
 	DateCreated    string
 	DateUpdated    string
+	// Store is the catalog that published this manifest. It is assigned while
+	// catalogs are merged and is not part of the downloaded JSON.
+	Store string `json:"-"`
 
 	// I18n holds inline translations for the store manifest.
 	// Map structure: langCode -> key -> translatedValue
@@ -240,13 +246,18 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 			if !IsAnySupportedInCurrentOS(manifest.SupportedOS) {
 				continue
 			}
+			if manifest.Store == "" {
+				manifest.Store = OfficialPluginStoreID
+			}
 
 			storePluginManifests = append(storePluginManifests, manifest)
 		}
 	}
 
 	for _, externalStore := range externalStores {
+		known := pluginStoreManifestIDs(storePluginManifests)
 		storePluginManifests = externalStore.AppendManifests(ctx, storePluginManifests)
+		assignPluginStore(storePluginManifests, externalStore.Name(), known)
 	}
 
 	logger.Info(ctx, fmt.Sprintf("found %d plugins from stores", len(storePluginManifests)))

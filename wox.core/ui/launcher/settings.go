@@ -94,6 +94,7 @@ type settingsData struct {
 	AIDisabledBuiltinTools             []string
 	AIConfigurableBuiltinTools         []aiBuiltinToolInfo
 	CloudSyncDisabledPlugins           []string
+	HiddenPluginStores                 []string
 	ShowScoreTail                      bool
 	ShowPerformanceTail                bool
 	ShowPerformanceTailBatch           bool
@@ -681,6 +682,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		AIDisabledBuiltinTools:             append([]string(nil), loaded.AIDisabledBuiltinTools...),
 		AIConfigurableBuiltinTools:         aiBuiltinToolInfosFromContract(loaded.AIConfigurableBuiltinTools),
 		CloudSyncDisabledPlugins:           append([]string(nil), loaded.CloudSyncDisabledPlugins...),
+		HiddenPluginStores:                 append([]string(nil), loaded.HiddenPluginStores...),
 		ShowScoreTail:                      loaded.ShowScoreTail,
 		ShowPerformanceTail:                loaded.ShowPerformanceTail,
 		ShowPerformanceTailBatch:           loaded.ShowPerformanceTailBatch,

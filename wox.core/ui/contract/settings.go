@@ -170,6 +170,7 @@ type GeneralSettings struct {
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string
 	CloudSyncDisabledPlugins           []string
+	HiddenPluginStores                 []string
 	AppWidth                           int
 	MaxResultCount                     int
 	UIDensity                          setting.UiDensity
@@ -433,6 +434,7 @@ type PluginCatalogItem struct {
 	IsInstalled        bool
 	IsDisable          bool
 	IsUpgradable       bool
+	Store              string
 	SettingDefinitions definition.PluginSettingDefinitions
 	Setting            PluginSetting
 }

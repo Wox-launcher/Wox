@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"wox/ui/contract"
@@ -28,6 +27,7 @@ type pluginSettingsSnapshot struct {
 	PluginSearchFocused  bool
 	PluginFilters        pluginFilterState
 	PluginFilterOpen     bool
+	PluginStorePanelOpen bool
 	PluginDetailTab      string
 	PluginForm           *pluginSettingsFormSnapshot
 	PluginsStore         bool
@@ -57,6 +57,9 @@ type pluginSettingsController struct {
 	pluginSearchFocused  bool
 	pluginFilters        pluginFilterState
 	pluginFilterOpen     bool
+	pluginStorePanelOpen bool
+	// hiddenStoreRevision ignores a failed save once a newer visibility change exists.
+	hiddenStoreRevision  uint64
 	pluginDetailTab      string
 	pluginForm           *pluginSettingsFormState
 	pluginsStore         bool
@@ -170,6 +173,14 @@ func (c *pluginSettingsController) SetFilterOpen(open bool) {
 	c.pluginFilterOpen = open
 }
 
+func (c *pluginSettingsController) StorePanelOpen() bool {
+	return c.pluginStorePanelOpen
+}
+
+func (c *pluginSettingsController) SetStorePanelOpen(open bool) {
+	c.pluginStorePanelOpen = open
+}
+
 func (c *pluginSettingsController) DetailTab() string {
 	return c.pluginDetailTab
 }
@@ -240,6 +251,7 @@ func (c *pluginSettingsController) ReleaseWindowMemory() {
 	c.pluginSearchFocused = false
 	c.pluginFilters = pluginFilterState{}
 	c.pluginFilterOpen = false
+	c.pluginStorePanelOpen = false
 	c.pluginDetailTab = "settings"
 	c.pluginForm = nil
 	c.pluginOperationError = ""
@@ -344,10 +356,7 @@ func loadPluginSettingsPlugins(ctx context.Context, service contract.PluginCatal
 		return nil, err
 	}
 	sort.SliceStable(plugins, func(i, j int) bool {
-		if !store && plugins[i].IsSystem != plugins[j].IsSystem {
-			return plugins[i].IsSystem
-		}
-		return strings.ToLower(plugins[i].Name) < strings.ToLower(plugins[j].Name)
+		return pluginCatalogLess(plugins[i], plugins[j], store)
 	})
 	return plugins, nil
 }
@@ -386,7 +395,7 @@ func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pl
 		plugins[index] = pluginSettingsPlugin{
 			ID: item.ID, Name: item.Name, NameEn: item.NameEn, Description: item.Description, DescriptionEn: item.DescriptionEn,
 			Author: item.Author, Website: item.Website, Version: item.Version,
-			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory,
+			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory, Store: item.Store,
 			Icon:           woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData},
 			ScreenshotURLs: append([]string(nil), item.ScreenshotURLs...), TriggerKeywords: append([]string(nil), item.TriggerKeywords...),
 			Commands: commands, SupportedOS: append([]string(nil), item.SupportedOS...), Features: features, Glances: glances,
@@ -434,6 +443,7 @@ func (c *pluginSettingsController) Snapshot() pluginSettingsSnapshot {
 		PluginSearchFocused:  c.pluginSearchFocused,
 		PluginFilters:        c.pluginFilters,
 		PluginFilterOpen:     c.pluginFilterOpen,
+		PluginStorePanelOpen: c.pluginStorePanelOpen,
 		PluginDetailTab:      c.pluginDetailTab,
 		PluginForm:           snapshotPluginSettingsFormLocked(c.pluginForm),
 		PluginsStore:         c.pluginsStore,

@@ -48,7 +48,7 @@ func TestFlowStoreManifestsFromJSON(t *testing.T) {
 	if got := byID["py"]; got.MinWoxVersion != minWoxVersion || got.MinWoxVersion == "9.9.9" || got.IconUrl != "https://example.com/py.png" || got.Website != "https://example.com/py" {
 		t.Fatalf("python manifest %#v", got)
 	}
-	if byID["py"].Runtime != RuntimeJSONRPC {
+	if byID["py"].Runtime != RuntimeJSONRPC || byID["py"].Store != "flow" {
 		t.Fatalf("runtime %s", byID["py"].Runtime)
 	}
 	if byID["cs"].Runtime != RuntimeDotNet || len(byID["cs"].SupportedOS) != 1 || byID["cs"].SupportedOS[0] != "Windows" {

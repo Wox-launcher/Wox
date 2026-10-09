@@ -24,6 +24,7 @@ func TestSettingsDataFromContract(t *testing.T) {
 		QueryAliases:             []setting.QueryAlias{{Alias: "g", Query: "google {0}"}},
 		TrayQueries:              []setting.TrayQuery{{Query: "clipboard", HideQueryBox: true}},
 		CloudSyncDisabledPlugins: []string{"plugin-a"},
+		HiddenPluginStores:       []string{"flow"},
 		PrimaryGlance:            setting.GlanceRef{PluginId: "plugin-a", GlanceId: "weather"},
 		UIDensity:                setting.UiDensityCompact,
 		EnablePrivacyMode:        true,
@@ -50,6 +51,9 @@ func TestSettingsDataFromContract(t *testing.T) {
 	}
 	if len(data.ResultBindings) != 1 || data.ResultBindings[0].Alias != "ch" {
 		t.Fatalf("result bindings = %+v", data.ResultBindings)
+	}
+	if len(data.HiddenPluginStores) != 1 || data.HiddenPluginStores[0] != "flow" {
+		t.Fatalf("hidden plugin stores = %+v", data.HiddenPluginStores)
 	}
 	if data.PrimaryGlance.PluginID != "plugin-a" || data.PrimaryGlance.GlanceID != "weather" {
 		t.Fatalf("primary glance = %+v", data.PrimaryGlance)

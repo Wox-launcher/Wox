@@ -38,7 +38,7 @@ func storeManifestDTOs(manifests []plugin.StorePluginManifest) []dto.PluginDto {
 			Version: manifest.Version, MinWoxVersion: manifest.MinWoxVersion,
 			Runtime: string(manifest.Runtime), Description: manifest.Description,
 			Website: manifest.Website, ScreenshotUrls: manifest.ScreenshotUrls,
-			SupportedOS: manifest.SupportedOS,
+			SupportedOS: manifest.SupportedOS, Store: manifest.Store,
 		}
 	}
 	return plugins
