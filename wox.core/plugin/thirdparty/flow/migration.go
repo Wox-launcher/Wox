@@ -103,6 +103,8 @@ func (f flowInstallation) pluginFromDirectory(ctx context.Context, directory str
 		Keywords:    migrationTriggerKeywords(document),
 		Status:      migrate.PluginUnsupported,
 	}
+	// The imported path returns before manifest parsing, so the icon has to be resolved here.
+	item.Icon = woxImageFromString(manifest.PluginIcon(directory, migrationFieldString(document, "IcoPath", "IconPath")))
 	if id == "" || !flowMigrationIDSafe(id) {
 		return item
 	}
@@ -130,7 +132,6 @@ func (f flowInstallation) pluginFromDirectory(ctx context.Context, directory str
 	item.Name = descriptor.Metadata.GetName(ctx)
 	item.Description = descriptor.Metadata.GetDescription(ctx)
 	item.Version = descriptor.Metadata.Version
-	item.Icon = woxImageFromString(descriptor.Metadata.Icon)
 	item.Status = migrate.PluginReady
 	item.Selectable = true
 	if pythonMissing && strings.EqualFold(descriptor.Language, "python") {

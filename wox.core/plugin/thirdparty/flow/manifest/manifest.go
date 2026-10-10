@@ -122,7 +122,7 @@ func Parse(directory string) (Descriptor, error) {
 		version = "1.0.0"
 	}
 	keywords := flowTriggerKeywords(document)
-	icon := flowPluginIcon(directory, flowFieldString(document, "IcoPath", "IconPath"))
+	icon := PluginIcon(directory, flowFieldString(document, "IcoPath", "IconPath"))
 	settings, kinds, err := parseFlowSettingsTemplate(directory)
 	if err != nil {
 		return Descriptor{}, err
@@ -217,7 +217,8 @@ func flowTriggerKeywords(document map[string]any) []string {
 	return keywords
 }
 
-func flowPluginIcon(directory, icoPath string) string {
+// PluginIcon resolves a Flow IcoPath into the image string stored on plugin metadata.
+func PluginIcon(directory, icoPath string) string {
 	resolved := resolveFlowAssetPath(directory, icoPath)
 	if resolved == "" {
 		return ""

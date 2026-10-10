@@ -21,9 +21,10 @@ func TestFlowMigrationDetectsUserPluginsAndHotkey(t *testing.T) {
 		"PluginSettings": {"Plugins": {"hello": {"ID": "hello", "Disabled": true, "ActionKeywords": ["hey"]}}}
 	}`)
 	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Hello", "plugin.json"), `{
-		"ID": "hello", "Name": "Hello", "Language": "python", "ExecuteFileName": "main.py", "Description": "Says hello", "Version": "1.2.0", "ActionKeyword": "hi"
+		"ID": "hello", "Name": "Hello", "Language": "python", "ExecuteFileName": "main.py", "Description": "Says hello", "Version": "1.2.0", "ActionKeyword": "hi", "IcoPath": "icon.png"
 	}`)
 	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Hello", "main.py"), "print('hi')\n")
+	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Hello", "icon.png"), "png")
 	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Old", "plugin.json"), `{
 		"ID": "old", "Name": "Old", "Language": "unknown", "ExecuteFileName": "main.exe"
 	}`)
@@ -36,9 +37,10 @@ func TestFlowMigrationDetectsUserPluginsAndHotkey(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Taken", "plugin.json"), `{
-		"ID": "taken", "Name": "Taken", "Language": "python", "ExecuteFileName": "main.py"
+		"ID": "taken", "Name": "Taken", "Language": "python", "ExecuteFileName": "main.py", "IcoPath": "icon.png"
 	}`)
 	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Taken", "main.py"), "print('taken')\n")
+	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Plugins", "Taken", "icon.png"), "png")
 
 	installation, err := (flowMigrationSource{}).Detect(context.Background())
 	if err != nil {
@@ -56,14 +58,15 @@ func TestFlowMigrationDetectsUserPluginsAndHotkey(t *testing.T) {
 		byID[item.ID] = item
 	}
 	hello := byID["hello"]
-	if !hello.Selectable || hello.Status != migrate.PluginReady || hello.Version != "1.2.0" || len(hello.Keywords) != 1 || hello.Keywords[0] != "hey" {
+	if !hello.Selectable || hello.Status != migrate.PluginReady || hello.Version != "1.2.0" || len(hello.Keywords) != 1 || hello.Keywords[0] != "hey" || !strings.HasSuffix(filepath.ToSlash(hello.Icon.ImageData), "Plugins/Hello/icon.png") {
 		t.Fatalf("hello %#v", hello)
 	}
 	if byID["old"].Selectable || byID["old"].Status != migrate.PluginUnsupported {
 		t.Fatalf("old %#v", byID["old"])
 	}
-	if byID["taken"].Selectable || byID["taken"].Status != migrate.PluginImported {
-		t.Fatalf("taken %#v", byID["taken"])
+	taken := byID["taken"]
+	if taken.Selectable || taken.Status != migrate.PluginImported || taken.Icon.ImageType != "absolute" || !strings.HasSuffix(filepath.ToSlash(taken.Icon.ImageData), "Plugins/Taken/icon.png") {
+		t.Fatalf("taken %#v", taken)
 	}
 
 	result, err := installation.Import(context.Background(), []string{"hello", "old"})
