@@ -15,6 +15,8 @@ import (
 const defaultCloudSyncBaseURL = "https://sync.woxlauncher.com"
 
 func initCloudSync(ctx context.Context) {
+	cloudsync.StartOplogMaintenance(ctx)
+
 	baseURL := resolveCloudSyncBaseURL(ctx)
 	accountService := account.NewService(baseURL)
 	account.SetService(accountService)

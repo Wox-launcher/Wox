@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"wox/database"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -135,7 +136,9 @@ func (m *Manager) Backup(ctx context.Context, backupType BackupType) error {
 	backupPath := path.Join(util.GetLocation().GetBackupDirectory(), backupName)
 	logger.Info(ctx, fmt.Sprintf("backup path: %s", backupPath))
 
-	err := cp.Copy(util.GetLocation().GetUserDataDirectory(), backupPath)
+	err := database.WithFileMaintenance(func() error {
+		return cp.Copy(util.GetLocation().GetUserDataDirectory(), backupPath)
+	})
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to backup data: %s", err.Error()))
 		return err
