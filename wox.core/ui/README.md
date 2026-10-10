@@ -110,7 +110,18 @@ Rules that follow from it:
 - Result actions capture identifiers, not domain values. The theme plugin used to capture whole `common.Theme` values (and, for MRU restore, a pointer into the entire installed catalog) in action closures that live in the query and MRU caches.
 - Many-record plugin data is one plugin setting per record (`note:{id}`, `chat:{id}`), loaded on demand with only summaries resident. The AI Chat history moved from one `ai_chats` array to `chat:{id}` keys in the `20260922_split_ai_chats` migration; per-key settings also let Cloud Sync merge records edited on different devices.
 
-What is left after these changes is mostly native: about 10 MB of committed-but-free NT heap fragmentation from show/hide churn, the swap chain and Direct2D targets that survive hide, private DLL pages, and Go runtime metadata that scales with the heap. The next lever is releasing the Windows swap chain and Direct2D targets at the 30-second stage the way macOS releases its surface pool.
+What is left after these changes is mostly native: about 10 MB of committed-but-free NT heap fragmentation from show/hide churn, private DLL pages, and Go runtime metadata that scales with the heap.
+
+The 30-second stage destroys the whole Windows renderer: swap chains, Direct2D targets and device, and this window's reference to the shared D3D device, which is released when no other window holds it. The native WebView host keeps a raw pointer to the renderer's composition visuals, so the renderer can only be released after the WebView. Pages opened with caching enabled, such as sites with "keep in background" turned on, intentionally survive hiding; while one exists, the stage is skipped and the renderer stays resident. Every other page is already discarded on hide, so the stage closes the idle WebView controller and then releases the renderer. The stage used to be skipped whenever a controller existed, and the controller outlives every hide, so a single ordinary web preview kept the renderer resident for the rest of the hidden period.
+
+On the same Windows machine (October 10, 2026; `sqlite_fts5,wox_automation` build, isolated data directory, one `webview x` preview, then hidden), the private working set 45 seconds after hide was:
+
+| Build | Hidden + 5 s | Hidden + 45 s | Commit at 45 s |
+| --- | ---: | ---: | ---: |
+| Any WebView controller skips the stage | 100.7 MB | 94.6 MB | 162 MB |
+| Stage closes a controller without background pages | 101.8 MB | 60.4 MB | 122 MB |
+
+Without any web preview, both builds settle at about 59 MB.
 
 ## SVG theme colors
 

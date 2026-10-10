@@ -72,11 +72,13 @@ func TestWindowsHTMLCacheEviction(t *testing.T) {
 	}
 }
 
-// TestWebViewRetainsHiddenRenderer exercises trimming with a real native renderer and cached controller.
-func TestWebViewRetainsHiddenRenderer(t *testing.T) {
+// TestTrimKeepsOnlyBackgroundWebViewSessions exercises trimming with a real native renderer.
+func TestTrimKeepsOnlyBackgroundWebViewSessions(t *testing.T) {
 	if os.Getenv("WOX_WINDOWS_WEBVIEW_TRIM_INTEGRATION") != "1" {
 		t.Skip("set WOX_WINDOWS_WEBVIEW_TRIM_INTEGRATION=1 to run the native renderer lifetime test")
 	}
+	immediate := func(fn func()) error { fn(); return nil }
+	bounds := webviewruntime.Rect{Width: 100, Height: 80}
 	err := Run(func() error {
 		window, err := Open(WindowOptions{Title: "Wox WebView renderer lifetime test", Size: Size{Width: 320, Height: 240}})
 		if err != nil {
@@ -88,20 +90,39 @@ func TestWebViewRetainsHiddenRenderer(t *testing.T) {
 		if original == nil || native.focus.visible {
 			return fmt.Errorf("expected an initialized hidden renderer")
 		}
-		native.webView = webviewruntime.New(&webViewNavigationDriver{}, Call)
+
+		background := &webViewNavigationDriver{}
+		native.webView = webviewruntime.New(background, immediate)
+		if err := native.webView.Show(webviewruntime.Content{URL: "https://example.com", CacheKey: "site"}, bounds, 1); err != nil {
+			return err
+		}
+		if err := native.webView.Hide(); err != nil {
+			return err
+		}
 		if result := native.executeCommand(windowCommand{kind: windowCommandTrimRenderer}); result.err != nil {
 			return result.err
 		}
-		if native.renderer.handle != original {
-			return fmt.Errorf("trim destroyed the renderer retained by a cached WebView")
+		if native.webView == nil || background.closed || native.renderer.handle != original {
+			return fmt.Errorf("trim released a WebView page kept in background")
 		}
 		native.webView.Close()
-		native.webView = nil
+
+		transient := &webViewNavigationDriver{}
+		native.webView = webviewruntime.New(transient, immediate)
+		if err := native.webView.Show(webviewruntime.Content{URL: "https://example.com", CacheKey: "site", CacheDisabled: true}, bounds, 1); err != nil {
+			return err
+		}
+		if err := native.webView.Hide(); err != nil {
+			return err
+		}
 		if result := native.executeCommand(windowCommand{kind: windowCommandTrimRenderer}); result.err != nil {
 			return result.err
 		}
+		if native.webView != nil || !transient.closed {
+			return fmt.Errorf("trim kept a WebView controller with no background page")
+		}
 		if native.renderer.handle != nil {
-			return fmt.Errorf("trim retained the renderer after the WebView was released")
+			return fmt.Errorf("trim retained the renderer after releasing the WebView")
 		}
 		return nil
 	})
@@ -114,6 +135,7 @@ type webViewNavigationDriver struct {
 	backCalls    int
 	forwardCalls int
 	focusCalled  bool
+	closed       bool
 }
 
 func (*webViewNavigationDriver) Show(webviewruntime.Content, webviewruntime.Rect, float32) error {
@@ -141,7 +163,7 @@ func (d *webViewNavigationDriver) Focus() error {
 	d.focusCalled = true
 	return nil
 }
-func (*webViewNavigationDriver) Close() {}
+func (d *webViewNavigationDriver) Close() { d.closed = true }
 
 func TestWebViewCursorOverridesHostOnlyWhilePointerIsOverSurface(t *testing.T) {
 	const webViewCursor = win.HCURSOR(123)

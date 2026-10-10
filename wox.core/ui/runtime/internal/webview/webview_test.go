@@ -69,6 +69,44 @@ func TestControllerOwnsVisibleLifecycle(t *testing.T) {
 	}
 }
 
+func TestControllerReportsOnlyCachedURLSessionsAsBackground(t *testing.T) {
+	bounds := Rect{Width: 100, Height: 80}
+	controller := New(&fakeDriver{}, immediateDispatch)
+	for _, content := range []Content{
+		{HTML: "<p>temporary</p>"},
+		{URL: "https://example.com"},
+		{URL: "https://example.com", CacheKey: "site", CacheDisabled: true},
+	} {
+		if err := controller.Show(content, bounds, 1); err != nil {
+			t.Fatalf("show %+v: %v", content, err)
+		}
+		if controller.RetainsBackgroundSessions() {
+			t.Fatalf("%+v was reported as a background session", content)
+		}
+	}
+	if err := controller.Hide(); err != nil {
+		t.Fatal(err)
+	}
+
+	failing := &fakeDriver{showErr: errors.New("load failed")}
+	controller = New(failing, immediateDispatch)
+	_ = controller.Show(Content{URL: "https://example.com", CacheKey: "site"}, bounds, 1)
+	if !controller.RetainsBackgroundSessions() {
+		t.Fatal("a cached URL session that failed to load may still be retained by the driver")
+	}
+	if err := controller.Hide(); err != nil || !controller.RetainsBackgroundSessions() {
+		t.Fatalf("hide released the background session flag: %v", err)
+	}
+	if err := controller.Reset(); err != nil || controller.RetainsBackgroundSessions() {
+		t.Fatalf("reset kept the background session flag: %v", err)
+	}
+	_ = controller.Show(Content{URL: "https://example.com", CacheKey: "site"}, bounds, 1)
+	controller.Close()
+	if controller.RetainsBackgroundSessions() {
+		t.Fatal("close kept the background session flag")
+	}
+}
+
 func TestControllerDoesNotPublishFailedShow(t *testing.T) {
 	driver := &fakeDriver{showErr: errors.New("show failed")}
 	controller := New(driver, immediateDispatch)

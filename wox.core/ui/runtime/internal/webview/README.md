@@ -50,6 +50,8 @@ One controller represents the WebView capability of one native window:
 1. `Show` validates the content and bounds, asks the driver to attach or update the native surface, and marks it visible only after the driver succeeds.
 2. `Hide` removes the surface from the visible composition and focus domain. HTML uses one window-local temporary slot, ignoring plugin cache keys and cache-disable flags. Hiding HTML or switching to a URL starts a 10-second idle deadline; showing HTML again cancels it. Expiration evicts only that slot, preserving URL sessions. Visible HTML never expires just because the user stops typing.
 3. `Reset` destroys active and cached browser state while keeping the controller reusable.
-4. `Close` permanently releases the driver when the owning native window is destroyed.
+4. `Close` permanently releases the driver when the owning native window is destroyed. On Windows, a window that stays hidden until its renderer trim also closes the controller unless `RetainsBackgroundSessions` reports a cache-enabled URL page, and the next `Show` creates a new controller.
+
+A URL shown with caching enabled and a cache key is a background session: the driver keeps it after `Hide` until `Reset` or `Close`. URLs with caching disabled are discarded on `Hide`, and the HTML slot expires on its own deadline, so neither counts as a background session.
 
 All lifecycle mutations, including timer completion, run through the owning window's UI dispatcher. A generation check rejects expired callbacks queued before reuse, reset, or close. URL cache keys occupy a separate native namespace from the HTML slot.

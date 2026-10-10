@@ -2064,10 +2064,21 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 		w.nativeFilePreview = nil
 		return windowCommandResult{err: err}
 	case windowCommandTrimRenderer:
-		// Cached WebViews retain the native renderer and its composition visuals while hidden.
-		// Destroying it here leaves their raw renderer pointer dangling on the next Show.
-		if w.focus.visible || w.renderer == nil || w.webView != nil {
+		if w.focus.visible || w.renderer == nil {
 			return windowCommandResult{}
+		}
+		// The native WebView holds a raw pointer to this renderer's composition visuals, so the
+		// renderer can only go after the WebView. Pages kept in background must survive the hide,
+		// which pins the renderer. Any other page was already discarded on Hide, yet the idle
+		// controller used to pin the renderer and shared D3D device (about 35 MB) for the whole
+		// hidden period; close it so the next paint's ShowWebView creates a fresh one.
+		if w.webView != nil {
+			if w.webView.RetainsBackgroundSessions() {
+				return windowCommandResult{}
+			}
+			w.clearWebViewPointerState()
+			w.webView.Close()
+			w.webView = nil
 		}
 		return windowCommandResult{err: w.renderer.trim()}
 	case windowCommandRestoreForeground:
