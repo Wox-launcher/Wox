@@ -570,6 +570,7 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
 		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
 		OnFocus:     func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
+		OnBlur:      func() { a.blurBuiltInSettingEdit(item) },
 		OnChanged:   func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 		OnBrowse: func() { a.selectSettingRow(index); a.browseBuiltInSettingFile(item) },
 	})

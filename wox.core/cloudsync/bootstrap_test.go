@@ -452,6 +452,8 @@ type testCloudSyncClient struct {
 	snapshotRequests     []CloudSyncPullRequest
 	pushRequests         []CloudSyncPushRequest
 	pullRequests         []CloudSyncPullRequest
+	calls                []string
+	pushErr              error
 	recordKeyRequests    []CloudSyncRecordKeyListRequest
 	deviceUpdateRequests []CloudSyncDeviceUpdateRequest
 	deviceUpdateStarted  chan CloudSyncDeviceUpdateRequest
@@ -460,7 +462,11 @@ type testCloudSyncClient struct {
 
 func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest) (*CloudSyncPushResponse, error) {
 	_ = ctx
+	c.calls = append(c.calls, "push")
 	c.pushRequests = append(c.pushRequests, req)
+	if c.pushErr != nil {
+		return nil, c.pushErr
+	}
 	applied := make([]CloudSyncAppliedChange, 0, len(req.Changes))
 	for _, change := range req.Changes {
 		applied = append(applied, CloudSyncAppliedChange{ChangeID: change.ChangeID, Status: "ok"})
@@ -470,6 +476,7 @@ func (c *testCloudSyncClient) Push(ctx context.Context, req CloudSyncPushRequest
 
 func (c *testCloudSyncClient) Pull(ctx context.Context, req CloudSyncPullRequest) (*CloudSyncPullResponse, error) {
 	_ = ctx
+	c.calls = append(c.calls, "pull")
 	c.pullRequests = append(c.pullRequests, req)
 	if len(c.pullResponses) == 0 {
 		return &CloudSyncPullResponse{NextCursor: "pulled"}, nil
@@ -883,5 +890,104 @@ func (k *testCloudSyncKeyring) Set(ctx context.Context, key string, value string
 func (k *testCloudSyncKeyring) Delete(ctx context.Context, key string) error {
 	_ = ctx
 	delete(k.values, key)
+	return nil
+}
+
+func TestRestoreSnapshotPushRunsBeforePull(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+	if err := MarkPendingRestoreSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(pendingRestoreSnapshotPath()) != util.GetLocation().GetWoxDataDirectory() {
+		t.Fatal("restore marker is not in the wox data directory")
+	}
+	if filepath.Dir(pendingRestoreSnapshotPath()) == util.GetLocation().GetUserDataDirectory() {
+		t.Fatal("restore marker is inside the user data directory")
+	}
+
+	store := &testCloudSyncOplogStore{}
+	history := &loopCloudSyncHistoryStore{}
+	client := &testCloudSyncClient{}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Client:         client,
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     store,
+		Snapshotter:    &restoreSnapshotter{store: store},
+		Applier:        &testCloudSyncApplier{},
+		HistoryStore:   history,
+	})
+
+	manager.Pull(ctx, "startup")
+
+	if HasPendingRestoreSnapshot() {
+		t.Fatal("restore marker was not cleared after the push")
+	}
+	if len(client.calls) < 2 || client.calls[0] != "push" || client.calls[1] != "pull" {
+		t.Fatalf("sync order = %#v, want push then pull", client.calls)
+	}
+	records := history.records
+	if len(records) == 0 || records[0].operation != CloudSyncProgressOperationPush || records[0].reason != RestoreBackupPushReason {
+		t.Fatalf("history = %#v", records)
+	}
+	if len(client.pushRequests) != 1 || len(client.pushRequests[0].Changes) != 1 || client.pushRequests[0].Changes[0].ClientTs != 4242 {
+		t.Fatalf("push = %#v", client.pushRequests)
+	}
+}
+
+func TestRestoreSnapshotPushFailureSkipsPull(t *testing.T) {
+	ctx := context.Background()
+	initCloudSyncTestDatabase(t)
+	if err := MarkPendingRestoreSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	store := &testCloudSyncOplogStore{}
+	history := &loopCloudSyncHistoryStore{}
+	client := &testCloudSyncClient{pushErr: errors.New("push failed")}
+	manager := NewCloudSyncManager(DefaultCloudSyncConfig(), CloudSyncDependencies{
+		Client:         client,
+		Crypto:         testCloudSyncCrypto{},
+		DeviceProvider: testCloudSyncDeviceProvider{deviceID: "device-a"},
+		OplogStore:     store,
+		Snapshotter:    &restoreSnapshotter{store: store},
+		Applier:        &testCloudSyncApplier{},
+		HistoryStore:   history,
+	})
+
+	manager.Pull(ctx, "startup")
+
+	if !HasPendingRestoreSnapshot() {
+		t.Fatal("restore marker was cleared after a failed push")
+	}
+	if len(client.calls) != 1 || client.calls[0] != "push" {
+		t.Fatalf("sync order = %#v, want only the failed push", client.calls)
+	}
+	records := history.records
+	if len(records) != 1 || records[0].operation != CloudSyncProgressOperationPush || records[0].reason != RestoreBackupPushReason {
+		t.Fatalf("history = %#v", records)
+	}
+}
+
+type restoreSnapshotter struct {
+	store *testCloudSyncOplogStore
+}
+
+func (s *restoreSnapshotter) EnqueueLocalSnapshot(ctx context.Context) error {
+	_ = ctx
+	s.store.pending = append(s.store.pending, database.Oplog{
+		ID:         7,
+		EntityType: EntityWoxSetting,
+		Operation:  OpUpsert,
+		Key:        "ThemeId",
+		Value:      "restored",
+		Timestamp:  4242,
+	})
+	return nil
+}
+
+func (s *restoreSnapshotter) EnqueueMissingLocalSnapshot(ctx context.Context, remoteKeys []CloudSyncRecordKey) error {
+	_ = ctx
+	_ = remoteKeys
 	return nil
 }

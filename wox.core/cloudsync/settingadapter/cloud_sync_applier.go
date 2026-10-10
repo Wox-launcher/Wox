@@ -43,7 +43,14 @@ func (a *LocalSettingApplier) ApplyWoxSetting(ctx context.Context, key string, o
 	if value, ok := findWoxSettingValueByKey(woxSetting, key); ok {
 		switch op {
 		case cloudsync.OpDelete:
-			return value.DeleteLocal()
+			if err := value.DeleteLocal(); err != nil {
+				return err
+			}
+			// Deletes do not go through PostSettingUpdate, so the live client is refreshed here.
+			if httpProxySettingKey(key) {
+				woxSetting.ApplyHTTPProxy(ctx)
+			}
+			return nil
 		case cloudsync.OpUpsert:
 			if err := value.SetFromString(rawValue); err != nil {
 				return err
@@ -180,6 +187,15 @@ func (a *LocalSettingApplier) ApplyInstalledTheme(ctx context.Context, themeID s
 	default:
 		return fmt.Errorf("unknown oplog op: %s", op)
 	}
+}
+
+// httpProxySettingKey reports keys whose change must refresh the shared HTTP client.
+func httpProxySettingKey(key string) bool {
+	baseKey, _, ok := setting.SplitPlatformSettingKey(key)
+	if !ok {
+		baseKey = key
+	}
+	return baseKey == "HttpProxyEnabled" || baseKey == "HttpProxyUrl"
 }
 
 type syncValue interface {

@@ -184,24 +184,27 @@ type App struct {
 	bottomAnchorY float32
 	// automationFocusInstance routes smoke Snapshot/Bounds/Perform to a named
 	// secondary when set; empty keeps the primary launcher surface.
-	automationFocusInstance       string
-	settingsOpen                  bool
-	onboardingOpen                bool
-	onboardingStep                int
-	onboardingChoice              string
-	onboardingChoiceAnchor        woxui.Rect
-	onboardingPermission          contract.MacOSPermissionStatus
-	onboardingLoading             bool
-	onboardingError               string
-	onboardingQueryHotkey         *onboardingQueryHotkeyState
-	onboardingPlugins             onboardingPluginState
-	onboardingTheme               onboardingThemeState
-	onboardingMigration           onboardingMigrationState
-	permissionFlowHost            *macOSPermissionFlowHost
-	settingsCtx                   settingWindowContext
-	settingTab                    string
-	settingRow                    int
-	settingSaving                 bool
+	automationFocusInstance string
+	settingsOpen            bool
+	onboardingOpen          bool
+	onboardingStep          int
+	onboardingChoice        string
+	onboardingChoiceAnchor  woxui.Rect
+	onboardingPermission    contract.MacOSPermissionStatus
+	onboardingLoading       bool
+	onboardingError         string
+	onboardingQueryHotkey   *onboardingQueryHotkeyState
+	onboardingPlugins       onboardingPluginState
+	onboardingTheme         onboardingThemeState
+	onboardingMigration     onboardingMigrationState
+	permissionFlowHost      *macOSPermissionFlowHost
+	settingsCtx             settingWindowContext
+	settingTab              string
+	settingRow              int
+	settingSaving           bool
+	// pendingBuiltInText is a text value whose field already lost focus. It is held
+	// until the pointer click that caused the blur either saves another setting or releases.
+	pendingBuiltInText            *pendingBuiltInText
 	settingFlash                  string
 	settingFlashTimer             *time.Timer
 	settingsInlineTooltip         *settingsInlineTooltipState

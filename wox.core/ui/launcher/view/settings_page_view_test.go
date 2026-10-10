@@ -119,6 +119,29 @@ func TestSettingRowWrapsHelpWithoutOverlappingNextRow(t *testing.T) {
 	}
 }
 
+func TestSettingRowTextBlurReportsFocusLossOnlyWhileEditing(t *testing.T) {
+	focused, blurred := 0, 0
+	row := SettingRow(SettingRowProps{
+		ID: "HttpProxyUrl", Title: "Proxy URL", Kind: "text", Focused: true, Editing: woxui.TextEditingState{Text: "sdfdf"},
+		OnFocus: func() { focused++ }, OnBlur: func() { blurred++ },
+	}).(woxwidget.Container)
+	input := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	input.OnFocusChange(true)
+	input.OnFocusChange(false)
+	if focused != 1 || blurred != 1 {
+		t.Fatalf("focus=%d blur=%d, want 1 and 1", focused, blurred)
+	}
+
+	idle := SettingRow(SettingRowProps{
+		ID: "HttpProxyUrl", Kind: "text", OnBlur: func() { blurred++ },
+	}).(woxwidget.Container)
+	idleInput := idle.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	idleInput.OnFocusChange(false)
+	if blurred != 1 {
+		t.Fatalf("blur=%d, want an idle field to ignore focus loss", blurred)
+	}
+}
+
 // TestSettingsScrollbarUsesRightGutter preserves content width across window sizes.
 func TestSettingsScrollbarUsesRightGutter(t *testing.T) {
 	for _, width := range []float32{600, 880, 1100} {

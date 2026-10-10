@@ -1,11 +1,13 @@
 //go:build darwin || linux
 
-package diagnostic
+package supervisor
 
 import (
 	"os/exec"
 	"syscall"
 )
+
+func hideWindow(cmd *exec.Cmd) {}
 
 // IsProcessRunning reports whether a process is still executing.
 func IsProcessRunning(pid int) bool {

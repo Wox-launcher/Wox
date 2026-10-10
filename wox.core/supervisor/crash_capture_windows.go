@@ -1,6 +1,6 @@
 //go:build windows
 
-package diagnostic
+package supervisor
 
 import (
 	"archive/zip"
@@ -17,8 +17,6 @@ import (
 	"strings"
 	"time"
 	"unsafe"
-	"wox/resource"
-	"wox/util"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -29,13 +27,17 @@ const (
 	windowsWERTempWindow     = 10 * time.Second
 	windowsCrashHandlerKey   = `Software\Wox\CrashHandler`
 	windowsWERModuleKey      = `Software\Microsoft\Windows\Windows Error Reporting\RuntimeExceptionHelperModules`
-	windowsCrashHandlerAsset = "others/crash_handler/WoxCrashHandler64.dll"
 )
 
 var werRegisterRuntimeExceptionModule = windows.NewLazySystemDLL("kernel32.dll").NewProc("WerRegisterRuntimeExceptionModule")
 
+// CrashCaptureAssets carries caller-owned bytes this package does not embed.
+type CrashCaptureAssets struct {
+	WindowsHandler []byte
+}
+
 // ConfigureCrashCapture registers Wox's per-user out-of-process WER dump writer.
-func (m *Manager) ConfigureCrashCapture(ctx context.Context) error {
+func (m *Manager) ConfigureCrashCapture(ctx context.Context, assets CrashCaptureAssets) error {
 	if err := m.EnsureDirectories(); err != nil {
 		return err
 	}
@@ -49,7 +51,10 @@ func (m *Manager) ConfigureCrashCapture(ctx context.Context) error {
 	if !m.IsChildArg(os.Args) {
 		return nil
 	}
-	handlerPath, err := m.extractWindowsCrashHandler()
+	if len(assets.WindowsHandler) == 0 {
+		return fmt.Errorf("windows crash handler is missing")
+	}
+	handlerPath, err := m.extractWindowsCrashHandler(assets.WindowsHandler)
 	if err != nil {
 		return err
 	}
@@ -59,16 +64,15 @@ func (m *Manager) ConfigureCrashCapture(ctx context.Context) error {
 	if err := registerWindowsCrashHandler(handlerPath); err != nil {
 		return err
 	}
-	util.GetLogger().Info(ctx, fmt.Sprintf("registered Windows crash handler: module=%s dumpDirectory=%s", handlerPath, m.CrashDumpsDirectory()))
+	m.logf("registered Windows crash handler: module=%s dumpDirectory=%s", handlerPath, m.CrashDumpsDirectory())
 	return nil
 }
 
 // extractWindowsCrashHandler writes a content-addressed DLL outside the normal
 // resource tree, which is replaced later during startup.
-func (m *Manager) extractWindowsCrashHandler() (string, error) {
-	data, err := resource.OthersFS.ReadFile(windowsCrashHandlerAsset)
-	if err != nil {
-		return "", fmt.Errorf("read embedded crash handler: %w", err)
+func (m *Manager) extractWindowsCrashHandler(data []byte) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("windows crash handler is missing")
 	}
 	digest := sha256.Sum256(data)
 	handlerDirectory := filepath.Join(m.DiagnosticsDirectory(), "crash-handler")

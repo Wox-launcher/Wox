@@ -1,4 +1,4 @@
-package diagnostic
+package supervisor
 
 import (
 	"os"

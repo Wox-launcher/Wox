@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -9,6 +10,7 @@ import (
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/setting"
+	"wox/supervisor"
 	"wox/ui/contract"
 	"wox/util"
 	"wox/util/shell"
@@ -43,9 +45,43 @@ func (s *CoreServices) CreateDataBackup(ctx context.Context, sessionID string) e
 	return setting.GetSettingManager().Backup(uiServiceContext(ctx, sessionID), setting.BackupTypeManual)
 }
 
-// RestoreDataBackup replaces current settings with one persisted backup.
+// RestoreDataBackup asks the supervisor to replace user data after this process exits.
 func (s *CoreServices) RestoreDataBackup(ctx context.Context, sessionID string, backupID string) error {
-	return setting.GetSettingManager().Restore(uiServiceContext(ctx, sessionID), backupID)
+	return RequestUserDataRestore(uiServiceContext(ctx, sessionID), backupID)
+}
+
+// RequestUserDataRestore asks the supervisor to replace user data after this process exits.
+func RequestUserDataRestore(ctx context.Context, backupID string) error {
+	backups, err := setting.GetSettingManager().FindAllBackups(ctx)
+	if err != nil {
+		return err
+	}
+	var backupPath string
+	for _, backup := range backups {
+		if backup.Id == backupID {
+			backupPath = backup.Path
+			break
+		}
+	}
+	if backupPath == "" {
+		return fmt.Errorf("backup not found: %s", backupID)
+	}
+	payload, err := json.Marshal(map[string]string{
+		"backupPath":  backupPath,
+		"userDataDir": util.GetLocation().GetUserDataDirectory(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := supervisor.Submit(ctx, supervisor.Task{
+		Type:     supervisor.TaskRestore,
+		RunAfter: supervisor.RunAfterExit,
+		Payload:  payload,
+	}); err != nil {
+		return err
+	}
+	GetUIManager().ExitApp(ctx)
+	return nil
 }
 
 // ChangeDataLocation moves user-managed data through the core UI manager.

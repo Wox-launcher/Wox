@@ -1,4 +1,4 @@
-package diagnostic
+package supervisor
 
 import (
 	"archive/zip"
@@ -13,14 +13,12 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"wox/updater"
-	"wox/util"
 )
 
 const (
-	ArgSupervisor = "--bug-aware-supervisor"
-	ArgChild      = "--bug-aware-child"
-	ArgWaitParent = "--bug-aware-wait-parent"
+	ArgSupervisor = "--supervisor"
+	ArgChild      = "--supervisor-child"
+	ArgWaitParent = "--supervisor-wait-parent"
 )
 
 type State struct {
@@ -77,7 +75,15 @@ func (m *Manager) IsChildArg(args []string) bool {
 }
 
 func (m *Manager) DiagnosticsDirectory() string {
-	return filepath.Join(util.GetLocation().GetWoxDataDirectory(), "diagnostics")
+	return filepath.Join(dataDirectory(), "diagnostics")
+}
+
+func (m *Manager) LogDirectory() string {
+	return filepath.Join(dataDirectory(), "log")
+}
+
+func (m *Manager) RuntimeDirectory() string {
+	return filepath.Join(dataDirectory(), "supervisor")
 }
 
 func (m *Manager) StatePath() string {
@@ -89,7 +95,7 @@ func (m *Manager) BreadcrumbPath() string {
 }
 
 func (m *Manager) SupervisorLogPath() string {
-	return filepath.Join(m.DiagnosticsDirectory(), "supervisor.log")
+	return filepath.Join(m.LogDirectory(), "supervisor.log")
 }
 
 func (m *Manager) ExportsDirectory() string {
@@ -118,7 +124,7 @@ func (m *Manager) CrashIncidentPath() string {
 }
 
 func (m *Manager) EnsureDirectories() error {
-	for _, dir := range []string{m.DiagnosticsDirectory(), m.ExportsDirectory(), m.CrashDumpsDirectory(), m.CrashReportsDirectory(), m.CrashIncidentsDirectory()} {
+	for _, dir := range []string{m.DiagnosticsDirectory(), m.LogDirectory(), m.RuntimeDirectory(), m.ExportsDirectory(), m.CrashDumpsDirectory(), m.CrashReportsDirectory(), m.CrashIncidentsDirectory()} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -154,7 +160,7 @@ func (m *Manager) RecordRunStart(ctx context.Context, child bool) {
 	defer m.mu.Unlock()
 
 	state := m.LoadState()
-	now := util.GetSystemTimestamp()
+	now := time.Now().UnixMilli()
 	state.RunId = fmt.Sprintf("%d-%d", now, os.Getpid())
 	state.StartedAt = now
 	state.LastHeartbeatAt = now
@@ -173,7 +179,7 @@ func (m *Manager) MarkCleanExit(ctx context.Context) {
 
 	state := m.LoadState()
 	state.LastCleanExit = true
-	state.LastHeartbeatAt = util.GetSystemTimestamp()
+	state.LastHeartbeatAt = time.Now().UnixMilli()
 	_ = m.SaveState(state)
 	m.AppendBreadcrumb(ctx, "clean_exit", map[string]any{"pid": os.Getpid()})
 }
@@ -201,7 +207,7 @@ func (m *Manager) RecordSupervisorExit(ctx context.Context, pid int, waitErr err
 	state.LastCoreExitCode = exitCode
 	state.LastCoreSignal = signalName
 	state.LastCleanExit = waitErr == nil
-	state.LastHeartbeatAt = util.GetSystemTimestamp()
+	state.LastHeartbeatAt = time.Now().UnixMilli()
 	_ = m.SaveState(state)
 	m.AppendBreadcrumb(ctx, "core_child_exit", map[string]any{"pid": pid, "exitCode": exitCode, "signal": signalName, "durationMs": durationMs})
 }
@@ -210,7 +216,7 @@ func (m *Manager) AppendBreadcrumb(ctx context.Context, event string, data map[s
 	if err := m.EnsureDirectories(); err != nil {
 		return
 	}
-	entry := Breadcrumb{Timestamp: util.GetSystemTimestamp(), Event: event, Data: data}
+	entry := Breadcrumb{Timestamp: time.Now().UnixMilli(), Event: event, Data: data}
 	encoded, err := json.Marshal(entry)
 	if err != nil {
 		return
@@ -262,11 +268,7 @@ func (m *Manager) exportLocked(ctx context.Context, exportPath string) (string, 
 	zipWriter := zip.NewWriter(file)
 	defer zipWriter.Close()
 
-	currentLogPath := util.GetLogger().CurrentLogPath()
-	addExistingFile(zipWriter, currentLogPath, "log/"+filepath.Base(currentLogPath))
-	addExistingFile(zipWriter, filepath.Join(util.GetLocation().GetLogDirectory(), "ui.log"), "log/ui.log")
-	addExistingFile(zipWriter, filepath.Join(util.GetLocation().GetLogDirectory(), "crash.log"), "log/crash.log")
-	addExistingFile(zipWriter, m.SupervisorLogPath(), "diagnostics/supervisor.log")
+	m.addLogFiles(zipWriter)
 	addExistingFile(zipWriter, m.StatePath(), "diagnostics/state.json")
 	addExistingFile(zipWriter, m.BreadcrumbPath(), "diagnostics/breadcrumbs.jsonl")
 	m.addMetadata(zipWriter)
@@ -387,10 +389,27 @@ func (m *Manager) TakePendingCrashIncident() (CrashIncident, bool) {
 	return incident, true
 }
 
+func (m *Manager) addLogFiles(zipWriter *zip.Writer) {
+	entries, err := os.ReadDir(m.LogDirectory())
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		lower := strings.ToLower(name)
+		if lower == "supervisor.log" || lower == "ui.log" || lower == "crash.log" || strings.HasPrefix(lower, "wox") {
+			addExistingFile(zipWriter, filepath.Join(m.LogDirectory(), name), filepath.Join("log", name))
+		}
+	}
+}
+
 func (m *Manager) addMetadata(zipWriter *zip.Writer) {
 	state := m.LoadState()
 	metadata := map[string]any{
-		"version": updater.CURRENT_VERSION,
+		"version": currentVersion(),
 		"os":      runtime.GOOS,
 		"arch":    runtime.GOARCH,
 		"state":   state,
@@ -407,7 +426,7 @@ func (m *Manager) addMetadata(zipWriter *zip.Writer) {
 }
 
 func (m *Manager) addMacOSCrashReports(zipWriter *zip.Writer) {
-	if !util.IsMacOS() {
+	if runtime.GOOS != "darwin" {
 		return
 	}
 	home, err := os.UserHomeDir()

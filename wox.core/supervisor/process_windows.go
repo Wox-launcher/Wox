@@ -1,9 +1,10 @@
 //go:build windows
 
-package diagnostic
+package supervisor
 
 import (
 	"os/exec"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 )
@@ -34,6 +35,10 @@ func IsProcessRunning(pid int) bool {
 	// still executing, so use GetExitCodeProcess and treat STILL_ACTIVE as the
 	// running state instead of equating an openable process handle with liveness.
 	return exitCode == windowsProcessStillActive
+}
+
+func hideWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 }
 
 func ResolveProcessExit(waitErr error) (int, string) {

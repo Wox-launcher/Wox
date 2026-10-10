@@ -11,11 +11,12 @@ import (
 	"wox/ai"
 	"wox/analytics"
 	"wox/appcontrol"
+	"wox/cloudsync"
 	"wox/database"
-	"wox/diagnostic"
 	"wox/migration"
 	"wox/network"
 	"wox/privacy"
+	"wox/supervisor"
 	"wox/telemetry"
 
 	"runtime"
@@ -86,7 +87,42 @@ import (
 
 var embeddedGoUIApp *golauncher.App
 
+func configureSupervisor() {
+	supervisor.SetVersion(updater.CURRENT_VERSION)
+	supervisor.PreserveArgOnRestart(util.ArgNoThirdPartyPlugins)
+	supervisor.Register(supervisor.TaskRestore, runSupervisorRestore)
+}
+
+func runSupervisorRestore(ctx context.Context, payload json.RawMessage) error {
+	var request struct {
+		BackupPath  string `json:"backupPath"`
+		UserDataDir string `json:"userDataDir"`
+	}
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return err
+	}
+	if err := setting.RestoreUserDataDirectory(ctx, request.BackupPath, request.UserDataDir); err != nil {
+		return err
+	}
+	// The marker sits outside the replaced user data directory, so the next launch can push this backup before pulling.
+	return cloudsync.MarkPendingRestoreSnapshot()
+}
+
+func crashCaptureAssets() supervisor.CrashCaptureAssets {
+	var assets supervisor.CrashCaptureAssets
+	if !util.IsWindows() {
+		return assets
+	}
+	data, err := resource.OthersFS.ReadFile("others/crash_handler/WoxCrashHandler64.dll")
+	if err != nil {
+		return assets
+	}
+	assets.WindowsHandler = data
+	return assets
+}
+
 func main() {
+	configureSupervisor()
 	if privacy.IsCleanupProcess(os.Args) {
 		os.Exit(privacy.RunCleanupProcess(os.Args))
 	}
@@ -100,12 +136,13 @@ func main() {
 		}
 		return
 	}
-	if diagnostic.GetManager().IsSupervisorArg(os.Args) {
+	if supervisor.GetManager().IsSupervisorArg(os.Args) {
 		ctx := util.NewTraceContext()
 		if locationErr := util.GetLocation().Init(); locationErr != nil {
 			os.Exit(1)
 		}
-		os.Exit(diagnostic.GetManager().RunSupervisor(ctx, os.Args))
+		supervisor.SetDataDirectory(util.GetLocation().GetWoxDataDirectory())
+		os.Exit(supervisor.GetManager().RunSupervisor(ctx, os.Args))
 	}
 	// Query workloads have a small live Go heap but high allocation churn.
 	// Keep the default heap growth bounded while preserving GOGC as a diagnostic override.
@@ -157,6 +194,7 @@ func run() {
 	if locationErr != nil {
 		panic(locationErr)
 	}
+	supervisor.SetDataDirectory(util.GetLocation().GetWoxDataDirectory())
 
 	defer util.GoRecover(context.Background(), "main panic", func(err error) {
 		util.GetLogger().Error(context.Background(), fmt.Sprintf("main panic: %s", err.Error()))
@@ -214,14 +252,14 @@ func run() {
 	}
 
 	if util.IsProd() {
-		if captureErr := diagnostic.GetManager().ConfigureCrashCapture(ctx); captureErr != nil {
+		if captureErr := supervisor.GetManager().ConfigureCrashCapture(ctx, crashCaptureAssets()); captureErr != nil {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure crash capture: %s", captureErr.Error()))
 		}
 	}
 	// Production launches run under a small external supervisor so native crashes
 	// can still be recorded after the Go process is no longer able to write logs.
-	if util.IsProd() && !diagnostic.GetManager().IsChildArg(os.Args) {
-		if supervisorErr := diagnostic.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
+	if util.IsProd() && !supervisor.GetManager().IsChildArg(os.Args) {
+		if supervisorErr := supervisor.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start crash supervisor; continuing without supervision: %s", supervisorErr.Error()))
 		} else {
 			util.GetLogger().Info(ctx, "crash supervisor started, exiting bootstrap process")
@@ -236,12 +274,12 @@ func run() {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to relaunch from Linux desktop entry: %s", relaunchErr.Error()))
 		} else {
 			util.GetLogger().Info(ctx, "relaunched from Linux desktop entry, exiting current process")
-			diagnostic.GetManager().MarkCleanExit(ctx)
+			supervisor.GetManager().MarkCleanExit(ctx)
 			os.Exit(0)
 		}
 	}
 
-	diagnostic.GetManager().RecordRunStart(ctx, diagnostic.GetManager().IsChildArg(os.Args))
+	supervisor.GetManager().RecordRunStart(ctx, supervisor.GetManager().IsChildArg(os.Args))
 
 	util.GetLogger().Info(ctx, "no existing instance found, proceeding with full startup")
 
@@ -293,10 +331,7 @@ func run() {
 
 	network.Default.SetOffline(woxSetting.EnableOfflineMode.Get())
 
-	// update proxy
-	if woxSetting.HttpProxyEnabled.Get() {
-		util.UpdateHTTPProxy(ctx, woxSetting.HttpProxyUrl.Get())
-	}
+	woxSetting.ApplyHTTPProxy(ctx)
 
 	network.SetErrorTranslator(func() string {
 		return i18n.GetI18nManager().TranslateWox(context.Background(), "ui_offline_unavailable")
@@ -324,12 +359,26 @@ func run() {
 			break
 		}
 	}
-	if incident, ok := diagnostic.GetManager().TakePendingCrashIncident(); ok {
+	if incident, ok := supervisor.GetManager().TakePendingCrashIncident(); ok {
 		ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
 			Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_previous_crash_github_issue"),
 			DisplaySeconds: 60,
 		})
 		util.GetLogger().Info(ctx, fmt.Sprintf("pending crash report is ready for a GitHub issue: %s", incident.ReportPath))
+	}
+	if result, ok := supervisor.TakeTaskResult(); ok && result.Type == supervisor.TaskRestore {
+		if result.OK {
+			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+				Icon:           icons.Get(icons.StatusInstalled).String(),
+				Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_data_backup_restore_restarted"),
+				DisplaySeconds: 5,
+			})
+		} else {
+			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+				Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_backup_restore_failed"), result.Error),
+				DisplaySeconds: 8,
+			})
+		}
 	}
 
 	themeErr := ui.GetUIManager().Start(ctx)

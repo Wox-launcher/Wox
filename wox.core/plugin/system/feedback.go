@@ -9,8 +9,8 @@ import (
 	"time"
 	"wox/common"
 	"wox/common/icons"
-	"wox/diagnostic"
 	"wox/plugin"
+	"wox/supervisor"
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
@@ -101,7 +101,7 @@ func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 		title = "i18n:plugin_feedback_restart_title"
 		subtitle = "i18n:plugin_feedback_restart_subtitle"
 		// An explicit child argument avoids forwarding the current troubleshooting flag.
-		childArg = diagnostic.ArgChild
+		childArg = supervisor.ArgChild
 	}
 	return plugin.QueryResult{
 		Title:       title,
@@ -117,7 +117,7 @@ func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					// A fresh launch must not replay the file or deeplink that originally opened Wox.
-					if err := diagnostic.GetManager().StartSupervisorDetached(ctx, true, childArg); err != nil {
+					if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, childArg); err != nil {
 						util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
 						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error()))
 						return
@@ -131,7 +131,7 @@ func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 
 // buildCrashResults lists retained crash events under the explicit crash command.
 func (p *FeedbackPlugin) buildCrashResults(ctx context.Context) []plugin.QueryResult {
-	incidents := diagnostic.GetManager().ListCrashIncidents()
+	incidents := supervisor.GetManager().ListCrashIncidents()
 	if len(incidents) == 0 {
 		return []plugin.QueryResult{p.buildNoCrashResult()}
 	}
@@ -217,7 +217,7 @@ func (p *FeedbackPlugin) buildNoCrashResult() plugin.QueryResult {
 }
 
 // buildCrashIncidentResult creates one actionable result for a retained crash event.
-func (p *FeedbackPlugin) buildCrashIncidentResult(ctx context.Context, incident diagnostic.CrashIncident) plugin.QueryResult {
+func (p *FeedbackPlugin) buildCrashIncidentResult(ctx context.Context, incident supervisor.CrashIncident) plugin.QueryResult {
 	signal := incident.Signal
 	if signal == "" {
 		signal = p.api.GetTranslation(ctx, "plugin_feedback_crash_signal_none")
@@ -259,7 +259,7 @@ func (p *FeedbackPlugin) buildCrashIncidentResult(ctx context.Context, incident 
 }
 
 // buildCrashIncidentActions provides event-scoped packaging and issue actions.
-func (p *FeedbackPlugin) buildCrashIncidentActions(incident diagnostic.CrashIncident) []plugin.QueryResultAction {
+func (p *FeedbackPlugin) buildCrashIncidentActions(incident supervisor.CrashIncident) []plugin.QueryResultAction {
 	return []plugin.QueryResultAction{
 		{
 			Name:                   "i18n:plugin_feedback_action_package_issue",
@@ -289,7 +289,7 @@ func (p *FeedbackPlugin) buildCrashIncidentActions(incident diagnostic.CrashInci
 }
 
 // openCrashIssue prepares the selected package and opens its GitHub issue form.
-func (p *FeedbackPlugin) openCrashIssue(ctx context.Context, incident diagnostic.CrashIncident) {
+func (p *FeedbackPlugin) openCrashIssue(ctx context.Context, incident supervisor.CrashIncident) {
 	reportPath, created, err := p.ensureCrashReport(ctx, incident)
 	if err != nil {
 		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error()))
@@ -302,16 +302,16 @@ func (p *FeedbackPlugin) openCrashIssue(ctx context.Context, incident diagnostic
 }
 
 // ensureCrashReport reuses an automatic package or creates one if it was removed.
-func (p *FeedbackPlugin) ensureCrashReport(ctx context.Context, incident diagnostic.CrashIncident) (string, bool, error) {
+func (p *FeedbackPlugin) ensureCrashReport(ctx context.Context, incident supervisor.CrashIncident) (string, bool, error) {
 	if info, err := os.Stat(incident.ReportPath); err == nil && !info.IsDir() {
 		return incident.ReportPath, false, nil
 	}
-	reportPath, err := diagnostic.GetManager().ExportCrash(ctx)
+	reportPath, err := supervisor.GetManager().ExportCrash(ctx)
 	if err != nil {
 		return "", false, err
 	}
 	incident.ReportPath = reportPath
-	if err := diagnostic.GetManager().SaveCrashIncident(incident); err != nil {
+	if err := supervisor.GetManager().SaveCrashIncident(incident); err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update crash incident package path: %s", err.Error()))
 	}
 	return reportPath, true, nil
@@ -355,7 +355,7 @@ func githubIssueURL(template, title string) string {
 }
 
 // crashIssueURL pre-fills the GitHub issue title with the selected event time.
-func crashIssueURL(incident diagnostic.CrashIncident) string {
+func crashIssueURL(incident supervisor.CrashIncident) string {
 	return githubIssueURL(feedbackBugTemplate, fmt.Sprintf("[Crash] %s", util.FormatTimestampWithMs(incident.DetectedAt)))
 }
 
@@ -368,7 +368,7 @@ func formatCrashDuration(durationMs int64) string {
 }
 
 func (p *FeedbackPlugin) exportDiagnostics(ctx context.Context) {
-	exportPath, err := diagnostic.GetManager().Export(ctx)
+	exportPath, err := supervisor.GetManager().Export(ctx)
 	if err != nil {
 		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error()))
 		return

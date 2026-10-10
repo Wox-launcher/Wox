@@ -18,7 +18,7 @@ type dataSettingsSnapshot struct {
 	Loaded          bool
 	Busy            string
 	Error           string
-	RestoreArmed    string
+	ErrorSection    string
 	PendingLocation string
 	ClearLogsArmed  bool
 }
@@ -35,7 +35,7 @@ type dataSettingsController struct {
 	loaded          bool
 	busy            string
 	errMsg          string
-	restoreArmed    string
+	errSection      string
 	pendingLocation string
 	clearLogsArmed  bool
 
@@ -44,8 +44,26 @@ type dataSettingsController struct {
 	pickDirectory  func() (string, error)
 }
 
+// Error sections match the data settings view. An empty section is page-level.
+const (
+	dataErrorSectionStorage = "storage"
+	dataErrorSectionBackup  = "backup"
+	dataErrorSectionLogs    = "logs"
+)
+
 func newDataSettingsController(deps CommonDeps) *dataSettingsController {
 	return &dataSettingsController{deps: deps}
+}
+
+// setError records a failure beside the section the user just used.
+func (c *dataSettingsController) setError(message, section string) {
+	c.errMsg = message
+	c.errSection = section
+}
+
+func (c *dataSettingsController) clearError() {
+	c.errMsg = ""
+	c.errSection = ""
 }
 
 // BindCrossDomain wires App-owned helpers used by data operations. Called by newApp
@@ -64,7 +82,7 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 			return
 		}
 		c.loading = true
-		c.errMsg = ""
+		c.clearError()
 		shouldLoad = true
 		c.deps.Invalidate()
 	}) || !shouldLoad {
@@ -84,12 +102,17 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 	sort.SliceStable(backups, func(i, j int) bool { return backups[i].Timestamp > backups[j].Timestamp })
 
 	errorText := ""
+	errorSection := ""
 	if locationErr != nil {
 		errorText = "load data location: " + locationErr.Error()
+		errorSection = dataErrorSectionStorage
 	}
 	if backupsErr != nil {
 		if errorText != "" {
 			errorText += " · "
+			errorSection = ""
+		} else {
+			errorSection = dataErrorSectionBackup
 		}
 		errorText += "load backups: " + backupsErr.Error()
 	}
@@ -103,7 +126,7 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 		if backupsErr == nil {
 			c.backups = backups
 		}
-		c.errMsg = errorText
+		c.setError(errorText, errorSection)
 		c.deps.Invalidate()
 	})
 }
@@ -115,7 +138,7 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 		return
 	}
 	c.busy = "backup"
-	c.errMsg = ""
+	c.clearError()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "create data backup", func() {
@@ -126,7 +149,7 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 		c.deps.OnUI("apply data backup creation", func() {
 			c.busy = ""
 			if err != nil {
-				c.errMsg = "Could not create backup: " + err.Error()
+				c.setError("Could not create backup: "+err.Error(), dataErrorSectionBackup)
 			}
 			c.deps.Invalidate()
 		})
@@ -136,21 +159,14 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 	})
 }
 
-// RestoreBackup requires two explicit activations before core replaces current
-// settings. The first call arms confirmation for the given backup id; the second
-// fires the async restore and reloads all settings on success.
+// RestoreBackup replaces current settings with one backup. The button owns the
+// second-click confirmation, so this starts the restore immediately.
 func (c *dataSettingsController) RestoreBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string, id string) {
 	if c.busy != "" || strings.TrimSpace(id) == "" {
 		return
 	}
-	if c.restoreArmed != id {
-		c.restoreArmed = id
-		c.deps.Invalidate()
-		return
-	}
-	c.restoreArmed = ""
 	c.busy = "restore"
-	c.errMsg = ""
+	c.clearError()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "restore data backup", func() {
@@ -164,7 +180,7 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 		c.deps.OnUI("apply data backup restore", func() {
 			c.busy = ""
 			if err != nil {
-				c.errMsg = "Could not restore backup: " + err.Error()
+				c.setError("Could not restore backup: "+err.Error(), dataErrorSectionBackup)
 			}
 			c.deps.Invalidate()
 		})
@@ -179,7 +195,7 @@ func (c *dataSettingsController) ChooseLocation() {
 	}
 	path, err := c.pickDirectory()
 	if err != nil {
-		c.errMsg = "Could not select data directory: " + err.Error()
+		c.setError("Could not select data directory: "+err.Error(), dataErrorSectionStorage)
 	} else if strings.TrimSpace(path) != "" && path != c.location {
 		c.pendingLocation = path
 	}
@@ -202,7 +218,7 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, serv
 	}
 	c.pendingLocation = ""
 	c.busy = "location"
-	c.errMsg = ""
+	c.clearError()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "change data location", func() {
@@ -214,7 +230,7 @@ func (c *dataSettingsController) ConfirmLocationChange(ctx context.Context, serv
 			c.busy = ""
 			if err != nil {
 				c.pendingLocation = location
-				c.errMsg = "Could not move data directory: " + err.Error()
+				c.setError("Could not move data directory: "+err.Error(), dataErrorSectionStorage)
 			} else {
 				c.location = location
 			}
@@ -236,7 +252,7 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 	}
 	c.clearLogsArmed = false
 	c.busy = "logs"
-	c.errMsg = ""
+	c.clearError()
 	c.deps.Invalidate()
 
 	util.Go(ctx, "clear logs", func() {
@@ -247,7 +263,7 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 		c.deps.OnUI("apply clear logs result", func() {
 			c.busy = ""
 			if err != nil {
-				c.errMsg = "Could not clear logs: " + err.Error()
+				c.setError("Could not clear logs: "+err.Error(), dataErrorSectionLogs)
 			}
 			c.deps.Invalidate()
 		})
@@ -255,7 +271,7 @@ func (c *dataSettingsController) ClearLogs(ctx context.Context, service contract
 }
 
 // OpenPath delegates platform shell behavior to the core data service.
-func (c *dataSettingsController) OpenPath(ctx context.Context, service contract.DataSettingsServices, sessionID string, path string) {
+func (c *dataSettingsController) OpenPath(ctx context.Context, service contract.DataSettingsServices, sessionID string, path, section string) {
 	if strings.TrimSpace(path) == "" {
 		return
 	}
@@ -265,7 +281,7 @@ func (c *dataSettingsController) OpenPath(ctx context.Context, service contract.
 		cancel()
 		if err != nil {
 			c.deps.OnUI("apply open data path error", func() {
-				c.errMsg = "Could not open path: " + err.Error()
+				c.setError("Could not open path: "+err.Error(), section)
 				c.deps.Invalidate()
 			})
 		}
@@ -281,12 +297,12 @@ func (c *dataSettingsController) OpenBackupFolder(ctx context.Context, service c
 		cancel()
 		if err != nil {
 			c.deps.OnUI("apply open backup folder error", func() {
-				c.errMsg = "Could not open backup folder: " + err.Error()
+				c.setError("Could not open backup folder: "+err.Error(), dataErrorSectionBackup)
 				c.deps.Invalidate()
 			})
 			return
 		}
-		c.OpenPath(ctx, service, sessionID, path)
+		c.OpenPath(ctx, service, sessionID, path, dataErrorSectionBackup)
 	})
 }
 
@@ -298,7 +314,7 @@ func (c *dataSettingsController) OpenLog(ctx context.Context, service contract.D
 		cancel()
 		if err != nil {
 			c.deps.OnUI("apply open log error", func() {
-				c.errMsg = "Could not open log: " + err.Error()
+				c.setError("Could not open log: "+err.Error(), dataErrorSectionLogs)
 				c.deps.Invalidate()
 			})
 		}
@@ -314,7 +330,7 @@ func (c *dataSettingsController) Snapshot() dataSettingsSnapshot {
 		Loaded:          c.loaded,
 		Busy:            c.busy,
 		Error:           c.errMsg,
-		RestoreArmed:    c.restoreArmed,
+		ErrorSection:    c.errSection,
 		PendingLocation: c.pendingLocation,
 		ClearLogsArmed:  c.clearLogsArmed,
 	}

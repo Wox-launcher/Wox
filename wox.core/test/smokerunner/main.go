@@ -130,6 +130,7 @@ func run(caseSelector string) (int, error) {
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
 			"WOX_DEBUG_REPAINT=verify",
+			"WOX_SUPERVISOR_CONTROL_ADDRESS=" + suiteControlAddress(suiteDirectory),
 		},
 		StartupTimeout: 45 * time.Second,
 	}
@@ -152,9 +153,28 @@ func run(caseSelector string) (int, error) {
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedUserDataDirectoryEnvironment, userDataDirectory)
 	suiteStarted = time.Now()
+	supervisorOwned := false
 	for _, target := range targets {
+		if smokePackageUsesSupervisor(target.dir) != supervisorOwned {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close shared Wox before switching supervisor ownership: %w", err)
+			}
+			if smokePackageUsesSupervisor(target.dir) {
+				launchOptions.Args = []string{"--supervisor"}
+			} else {
+				launchOptions.Args = nil
+			}
+			process, err = launchProcess()
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("launch Wox for %s: %w", target.dir, err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+			supervisorOwned = smokePackageUsesSupervisor(target.dir)
+		}
 		phaseCount := 1
-		// ponytail: privacy is the only restart case; add lifecycle descriptors when a second case needs phases.
+		// ponytail: privacy is the only multi-phase restart case; add lifecycle descriptors when another case needs phases.
 		if target.dir == "test/smoke/setting/privacy" {
 			phaseCount = 4
 		}
@@ -382,6 +402,25 @@ type smokeTarget struct {
 
 func (target smokeTarget) importPath() string {
 	return smokeModulePath + "/" + target.dir
+}
+
+// suiteControlAddress keeps this suite's supervisor off the default endpoint, which a running Wox already owns.
+func suiteControlAddress(suiteDirectory string) string {
+	if runtime.GOOS == "windows" {
+		return `\\.\pipe\WoxSupervisor-` + filepath.Base(suiteDirectory)
+	}
+	return filepath.Join(suiteDirectory, "supervisor.sock")
+}
+
+// smokePackageUsesSupervisor reports packages whose Wox process must be the supervisor's child.
+// Crash restart and backup restore are performed by that supervisor, so the runner cannot own the child directly.
+func smokePackageUsesSupervisor(dir string) bool {
+	switch dir {
+	case "test/smoke/supervisor", "test/smoke/setting/data":
+		return true
+	default:
+		return false
+	}
 }
 
 // binaryName is the file go test -c -o <dir> writes for this package.

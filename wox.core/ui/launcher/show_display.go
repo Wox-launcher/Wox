@@ -93,10 +93,7 @@ func (a *App) chooseShowDisplay(index int) {
 	if err != nil {
 		return
 	}
-	a.beginSettingSave()
-	util.Go(a.lifecycleCtx, "save show display", func() {
-		a.saveSetting(settingItem{key: "ShowDisplay"}, settingChoice{value: string(encoded)})
-	})
+	a.startGeneralSettingSave("save show display", settingItem{key: "ShowDisplay"}, settingChoice{value: string(encoded)})
 }
 
 // retryShowDisplays reloads the map after an enumeration failure.

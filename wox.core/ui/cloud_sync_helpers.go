@@ -99,7 +99,7 @@ func scheduleCloudSyncBootstrapInitialPush(ctx context.Context, service *cloudsy
 		if service == nil || service.Manager == nil {
 			return
 		}
-		service.Manager.PushLocalSnapshot(ctx, "bootstrap")
+		_ = service.Manager.PushLocalSnapshot(ctx, "bootstrap")
 		state, err := cloudsync.LoadCloudSyncState(ctx)
 		if err != nil {
 			cloudsync.RecordCloudSyncBootstrapFailure(ctx, err)

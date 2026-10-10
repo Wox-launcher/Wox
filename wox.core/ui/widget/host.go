@@ -71,6 +71,9 @@ type Host struct {
 	pressed       woxui.AccessibilityNodeID
 	pressedAt     woxui.Point
 	dragging      bool
+	// pointerDispatch counts nested Pointer calls so blur handlers can tell a press
+	// from a keyboard focus change. The press blurs on pointer-down and activates on pointer-up.
+	pointerDispatch int
 	// selecting tracks the gesture node that started a drag-based selection, so subsequent
 	// pointer-move events extend its selection until the pointer is released.
 	selecting          woxui.AccessibilityNodeID
@@ -1298,11 +1301,19 @@ func (h *Host) trackPointer(event woxui.PointerEvent) {
 	}
 }
 
+// DispatchingPointer reports whether Host.Pointer is on the stack.
+// Focus changes caused by a press are nested inside that call; keyboard focus changes are not.
+func (h *Host) DispatchingPointer() bool {
+	return h != nil && h.pointerDispatch > 0
+}
+
 // Pointer dispatches hover, focus, tap, drag, and scroll by retained node identity.
 func (h *Host) Pointer(event woxui.PointerEvent) {
 	if h.root == nil {
 		return
 	}
+	h.pointerDispatch++
+	defer func() { h.pointerDispatch-- }()
 	if event.Kind == woxui.PointerDown || event.Kind == woxui.PointerScroll {
 		h.revealCaret = false
 	}

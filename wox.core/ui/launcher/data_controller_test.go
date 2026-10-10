@@ -179,6 +179,35 @@ func TestDataControllerReloadAggregatesErrors(t *testing.T) {
 	if !strings.Contains(snap.Error, "location down") || !strings.Contains(snap.Error, "backups down") {
 		t.Fatalf("Error should include both underlying messages: %q", snap.Error)
 	}
+	if snap.ErrorSection != "" {
+		t.Fatalf("ErrorSection = %q, want page-level when both loads fail", snap.ErrorSection)
+	}
+}
+
+func TestDataControllerRestoreFailureStaysOnBackupSection(t *testing.T) {
+	ui := &testUIRunner{}
+	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
+	c := newDataSettingsController(deps)
+	c.BindCrossDomain(func() error { return nil }, func() (string, error) { return "", nil })
+	service := &dataFakeService{pathErrors: map[string]error{"/backup/restore": errors.New("Access is denied.")}}
+
+	c.RestoreBackup(context.Background(), service, "session", "backup-1")
+
+	deadline := time.Now().Add(2 * time.Second)
+	var snap dataSettingsSnapshot
+	for time.Now().Before(deadline) {
+		snap = dataSnapshotOnUI(ui, c)
+		if snap.Busy == "" && snap.Error != "" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !strings.Contains(snap.Error, "Could not restore backup") || !strings.Contains(snap.Error, "Access is denied.") {
+		t.Fatalf("Error = %q, want the restore failure", snap.Error)
+	}
+	if snap.ErrorSection != dataErrorSectionBackup {
+		t.Fatalf("ErrorSection = %q, want %q", snap.ErrorSection, dataErrorSectionBackup)
+	}
 }
 
 func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
@@ -227,7 +256,7 @@ func TestDataControllerCreateBackupSetsBusyThenClears(t *testing.T) {
 
 }
 
-func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
+func TestDataControllerRestoreBackupStartsImmediately(t *testing.T) {
 	ui := &testUIRunner{}
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }, RunOnUI: ui.Run}
 	c := newDataSettingsController(deps)
@@ -244,24 +273,10 @@ func TestDataControllerRestoreBackupTwoStepArming(t *testing.T) {
 		release: release,
 	}
 
-	// First activation: arms confirmation, no Post.
 	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
 	snap := dataSnapshotOnUI(ui, c)
-	if snap.RestoreArmed != "backup-1" {
-		t.Fatalf("RestoreArmed = %q after first activation, want \"backup-1\"", snap.RestoreArmed)
-	}
-	if snap.Busy != "" {
-		t.Fatalf("Busy = %q after first activation, want empty (no Post yet)", snap.Busy)
-	}
-
-	// Second activation: clears RestoreArmed, sets Busy, fires Post.
-	c.RestoreBackup(context.Background(), blockingService, "session", "backup-1")
-	snap = dataSnapshotOnUI(ui, c)
-	if snap.RestoreArmed != "" {
-		t.Fatalf("RestoreArmed = %q after second activation, want empty", snap.RestoreArmed)
-	}
 	if snap.Busy != "restore" {
-		t.Fatalf("Busy = %q after second activation, want \"restore\"", snap.Busy)
+		t.Fatalf("Busy = %q after restore, want \"restore\"", snap.Busy)
 	}
 
 	select {

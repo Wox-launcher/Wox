@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+func TestSmokePackageUsesSupervisorForCrashAndRestore(t *testing.T) {
+	if !smokePackageUsesSupervisor("test/smoke/supervisor") || !smokePackageUsesSupervisor("test/smoke/setting/data") {
+		t.Fatal("crash restart and backup restore must run under the supervisor")
+	}
+	if smokePackageUsesSupervisor("test/smoke/setting/privacy") || smokePackageUsesSupervisor("test/smoke/launcher") {
+		t.Fatal("unrelated packages were marked as supervisor-owned")
+	}
+}
+
 func TestSuiteArtifactRootCreatesConfiguredDirectory(t *testing.T) {
 	root, err := suiteArtifactRoot()
 	if err != nil {

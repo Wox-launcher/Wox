@@ -1,6 +1,7 @@
 package setting
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"regexp"
@@ -512,4 +513,12 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		EnableAnonymousUsageStats:          NewWoxSettingValue(store, "EnableAnonymousUsageStats", true),
 		IgnoredDoctorChecks:                NewWoxSettingValue(store, "IgnoredDoctorChecks", []string{}),
 	}
+}
+
+// ApplyHTTPProxy pushes the saved proxy switch and address onto the shared HTTP client.
+func (w *WoxSetting) ApplyHTTPProxy(ctx context.Context) {
+	if w == nil || w.HttpProxyEnabled == nil || w.HttpProxyUrl == nil {
+		return
+	}
+	util.ApplyHTTPProxy(ctx, w.HttpProxyEnabled.Get(), w.HttpProxyUrl.Get())
 }

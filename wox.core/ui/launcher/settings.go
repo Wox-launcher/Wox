@@ -1136,11 +1136,8 @@ func (a *App) activateSetting(direction int) {
 	if !ok {
 		return
 	}
-	a.beginSettingSave()
 	a.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save setting choice", func() {
-		a.saveSetting(item, next)
-	})
+	a.startGeneralSettingSave("save setting choice", item, next)
 }
 
 // startBuiltInSettingEdit gives a core-backed text value shared editor and native IME ownership.
@@ -1189,12 +1186,41 @@ func (a *App) submitBuiltInSettingEdit() {
 	}
 	item := items[index]
 	value := snapshot.general.Editing.Text
-	a.beginSettingSave()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save setting text value", func() {
-		a.saveSetting(item, settingChoice{value: value, label: value})
-	})
+	a.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
+}
+
+// blurBuiltInSettingEdit ends a built-in text session when its field loses focus.
+// A press blurs the field on pointer-down and activates the clicked control on pointer-up,
+// so a changed value waits for that click and is written with it when the click saves another setting.
+func (a *App) blurBuiltInSettingEdit(item settingItem) {
+	if !item.text || a.settingSaving || a.generalSettings.EditKey() != item.key {
+		return
+	}
+	value := item.value
+	if editor := a.generalSettings.Editor(); editor != nil {
+		value = editor.State().Text
+	}
+	a.cancelBuiltInSettingEdit()
+	if value == item.value {
+		return
+	}
+	if a.settingsHost != nil && a.settingsHost.DispatchingPointer() {
+		a.pendingBuiltInText = &pendingBuiltInText{key: item.key, value: value}
+		return
+	}
+	a.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
+}
+
+// finishSettingsPointer writes a blurred text value when the click that left the field did not save one itself.
+func (a *App) finishSettingsPointer(event woxui.PointerEvent) {
+	if event.Kind != woxui.PointerUp || event.Button != woxui.PointerButtonPrimary || a.settingSaving || a.pendingBuiltInText == nil {
+		return
+	}
+	pending := *a.pendingBuiltInText
+	a.startGeneralSettingSave("save setting text value", settingItem{key: pending.key, text: true}, settingChoice{value: pending.value, label: pending.value})
+	a.invalidateSettingsWindow()
 }
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
@@ -1260,6 +1286,51 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 
 func (a *App) beginSettingSave() {
 	a.settingSaving = true
+}
+
+// pendingBuiltInText is one blurred text value waiting to be written with the click that left the field.
+type pendingBuiltInText struct {
+	key   string
+	value string
+}
+
+// startGeneralSettingSave writes one setting and, when a blurred text value is still waiting, writes that first.
+func (a *App) startGeneralSettingSave(job string, item settingItem, choice settingChoice) {
+	leadingKey, leadingValue := "", ""
+	if a.pendingBuiltInText != nil && a.pendingBuiltInText.key != item.key {
+		leadingKey = a.pendingBuiltInText.key
+		leadingValue = a.pendingBuiltInText.value
+	}
+	a.pendingBuiltInText = nil
+	a.beginSettingSave()
+	util.Go(a.lifecycleCtx, job, func() {
+		if leadingKey != "" {
+			if err := a.writeGeneralSetting(leadingKey, leadingValue); err != nil {
+				a.saveSettingFailed(leadingKey, err)
+				return
+			}
+		}
+		a.saveSetting(item, choice)
+	})
+}
+
+// writeGeneralSetting persists one key without reloading the settings snapshot.
+func (a *App) writeGeneralSetting(key, value string) error {
+	if a.services == nil {
+		return fmt.Errorf("settings services are unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	return a.services.UpdateGeneralSetting(ctx, a.sessionID, key, value)
+}
+
+// saveSettingFailed releases the saving flag when a leading write fails before the main save.
+func (a *App) saveSettingFailed(key string, err error) {
+	_ = a.runOnUI("apply general setting save", func() {
+		a.settingSaving = false
+		log.Printf("save setting %s: %v", key, err)
+		a.invalidateSettingsWindow()
+	})
 }
 
 func (a *App) saveSetting(item settingItem, choice settingChoice) {

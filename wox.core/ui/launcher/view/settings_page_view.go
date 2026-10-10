@@ -85,9 +85,11 @@ type SettingRowProps struct {
 	OnTap              func()
 	OnChoiceTap        func(woxui.Rect)
 	OnFocus            func()
-	OnChanged          func(string)
-	OnKey              func(woxui.KeyEvent) bool
-	OnBrowse           func()
+	// OnBlur runs when a text field that owns the edit session loses focus.
+	OnBlur    func()
+	OnChanged func(string)
+	OnKey     func(woxui.KeyEvent) bool
+	OnBrowse  func()
 }
 
 func SettingChoiceAnchorKey(id string) woxwidget.Key {
@@ -125,6 +127,11 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			OnFocusChange: func(focused bool) {
 				if focused && props.OnFocus != nil {
 					props.OnFocus()
+				}
+				// props.Focused is this build's edit session. A later unfocus after the
+				// session has already closed must not commit the field again.
+				if !focused && props.Focused && props.OnBlur != nil {
+					props.OnBlur()
 				}
 			},
 		})

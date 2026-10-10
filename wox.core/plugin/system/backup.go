@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
@@ -118,15 +117,9 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 					Icon:                   icons.Get(icons.ActionUpdate),
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						restoreErr := setting.GetSettingManager().Restore(ctx, backup.Id)
+						restoreErr := ui.RequestUserDataRestore(ctx, backup.Id)
 						if restoreErr != nil {
 							c.api.Notify(ctx, restoreErr.Error())
-						} else {
-							c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_restore_success"))
-							util.Go(ctx, "exit after restore", func() {
-								time.Sleep(2000 * time.Millisecond)
-								ui.GetUIManager().ExitApp(ctx)
-							})
 						}
 					},
 				},

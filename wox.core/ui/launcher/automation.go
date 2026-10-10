@@ -255,6 +255,9 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 	}
 	return woxui.Call(func() {
 		host.Pointer(event)
+		if host == a.settingsHost {
+			a.finishSettingsPointer(event)
+		}
 	})
 }
 

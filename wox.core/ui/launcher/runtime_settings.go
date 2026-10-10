@@ -8,7 +8,6 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
-	"wox/util"
 )
 
 type runtimeStatus struct {
@@ -188,16 +187,13 @@ func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
 		return
 	}
 	a.generalSettings.EndEdit()
-	a.beginSettingSave()
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
 	label := value
 	if label == "" {
 		label = a.translate("i18n:ui_runtime_clear")
 	}
-	util.Go(a.lifecycleCtx, "save runtime executable path", func() {
-		a.saveSetting(item, settingChoice{value: value, label: label})
-	})
+	a.startGeneralSettingSave("save runtime executable path", item, settingChoice{value: value, label: label})
 }
 
 // runtimeFallbackMark remains visible during the first asynchronous SVG decode.

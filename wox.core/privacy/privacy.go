@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 	"wox/database"
-	"wox/diagnostic"
 	"wox/setting"
+	"wox/supervisor"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -215,7 +215,7 @@ func RunCleanupProcess(args []string) int {
 	}
 	parentPID, _ := strconv.Atoi(args[2])
 	deadline := time.Now().Add(30 * time.Second)
-	for diagnostic.IsProcessRunning(parentPID) && time.Now().Before(deadline) {
+	for supervisor.IsProcessRunning(parentPID) && time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	for time.Now().Before(deadline) {

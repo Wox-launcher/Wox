@@ -219,36 +219,38 @@ func (m *CloudSyncManager) PushPending(ctx context.Context, reason string) {
 	m.pushMu.Lock()
 	defer m.pushMu.Unlock()
 
-	m.pushPendingLocked(ctx, reason)
+	_ = m.pushPendingLocked(ctx, reason)
 }
 
 // PushLocalSnapshot queues the current local settings before reusing the normal pending-oplog push path.
-func (m *CloudSyncManager) PushLocalSnapshot(ctx context.Context, reason string) {
+func (m *CloudSyncManager) PushLocalSnapshot(ctx context.Context, reason string) error {
 	m.pushMu.Lock()
 	defer m.pushMu.Unlock()
 
 	if err := m.ensureConfigured(); err != nil {
 		m.recordFailure(ctx, err)
-		return
+		return err
 	}
 	if m.snapshotter == nil {
-		m.recordFailure(ctx, fmt.Errorf("cloud sync local snapshotter not configured"))
-		return
+		err := fmt.Errorf("cloud sync local snapshotter not configured")
+		m.recordFailure(ctx, err)
+		return err
 	}
 
 	if m.isBackoffActive(ctx) {
-		return
+		return errCloudSyncBackoff
 	}
 
 	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationSnapshot})
 	if err := m.snapshotter.EnqueueLocalSnapshot(ctx); err != nil {
-		m.recordFailure(ctx, fmt.Errorf("failed to enqueue local snapshot: %w", err))
+		err = fmt.Errorf("failed to enqueue local snapshot: %w", err)
+		m.recordFailure(ctx, err)
 		m.clearProgress(CloudSyncProgressOperationSnapshot)
-		return
+		return err
 	}
 
 	m.clearProgress(CloudSyncProgressOperationSnapshot)
-	m.pushPendingLocked(ctx, reason)
+	return m.pushPendingLocked(ctx, reason)
 }
 
 // PushMissingLocalSnapshot uploads persisted local records whose identities do not exist on the server yet.
@@ -293,10 +295,10 @@ func (m *CloudSyncManager) PushMissingLocalSnapshot(ctx context.Context, reason 
 	}
 
 	m.clearProgress(CloudSyncProgressOperationSnapshot)
-	m.pushPendingLocked(ctx, reason)
+	_ = m.pushPendingLocked(ctx, reason)
 }
 
-func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string) {
+func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string) error {
 	startedAt := util.GetSystemTimestamp()
 	historyItemCount := 0
 	entityCounts := map[string]int{}
@@ -315,11 +317,11 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 
 	if err := m.ensureConfigured(); err != nil {
 		fail(err)
-		return
+		return historyErr
 	}
 
 	if m.isBackoffActive(ctx) {
-		return
+		return errCloudSyncBackoff
 	}
 
 	total := m.countPendingOplogs(ctx)
@@ -334,16 +336,16 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 	for {
 		if ctx.Err() != nil {
 			historyStatus = "cancelled"
-			return
+			return ctx.Err()
 		}
 
 		pending, err := m.oplogStore.LoadPending(ctx, m.config.MaxBatchCount*4)
 		if err != nil {
 			fail(fmt.Errorf("failed to load pending oplogs: %w", err))
-			return
+			return historyErr
 		}
 		if len(pending) == 0 {
-			return
+			return nil
 		}
 
 		if !progressStarted {
@@ -364,23 +366,23 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 				m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationPush, Current: processed, Total: total})
 				continue
 			}
-			return
+			return nil
 		}
 
 		changes, oplogIds, err := m.buildPushBatch(ctx, eligible)
 		if err != nil {
 			fail(fmt.Errorf("failed to build push batch: %w", err))
-			return
+			return historyErr
 		}
 		if len(changes) == 0 {
-			return
+			return nil
 		}
 
 		m.setProgressFromOplog(CloudSyncProgressOperationPush, eligible[0], processed, total)
 		deviceId, err := m.deviceProvider.DeviceID(ctx)
 		if err != nil {
 			fail(fmt.Errorf("failed to get device id: %w", err))
-			return
+			return historyErr
 		}
 
 		resp, err := m.client.Push(ctx, CloudSyncPushRequest{
@@ -390,18 +392,18 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 		})
 		if err != nil {
 			fail(fmt.Errorf("cloud sync push failed: %w", err))
-			return
+			return historyErr
 		}
 
 		syncedIds, rejectedFailures, err := m.resolvePushResults(resp, changes, oplogIds, eligible)
 		if err != nil {
 			fail(err)
-			return
+			return historyErr
 		}
 		if len(syncedIds) > 0 {
 			if err := m.oplogStore.MarkSynced(ctx, syncedIds); err != nil {
 				fail(fmt.Errorf("failed to mark oplogs synced: %w", err))
-				return
+				return historyErr
 			}
 			syncedChanges := cloudSyncChangesForIDs(changes, oplogIds, syncedIds)
 			addCloudSyncChangeEntityCounts(entityCounts, syncedChanges)
@@ -410,7 +412,7 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 		if len(rejectedFailures) > 0 {
 			if err := m.oplogStore.MarkPushFailed(ctx, rejectedFailures); err != nil {
 				fail(fmt.Errorf("failed to mark oplogs failed: %w", err))
-				return
+				return historyErr
 			}
 			historyStatus = CloudSyncHistoryStatusFailed
 			if len(syncedIds) > 0 {
@@ -431,15 +433,19 @@ func (m *CloudSyncManager) pushPendingLocked(ctx context.Context, reason string)
 		m.recordPushSuccess(ctx, resp)
 
 		if len(rejectedFailures) > 0 {
-			return
+			return historyErr
 		}
 		if len(eligible) <= len(oplogIds) {
-			return
+			return nil
 		}
 	}
 }
 
 func (m *CloudSyncManager) Pull(ctx context.Context, reason string) {
+	// A restored backup is uploaded before this pull. Newer cloud timestamps would otherwise replace it.
+	if !m.ensureRestoredSnapshotPushed(ctx) {
+		return
+	}
 	m.pullMu.Lock()
 	defer m.pullMu.Unlock()
 

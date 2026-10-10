@@ -127,13 +127,10 @@ func (a *App) chooseSettingChoice(index int) {
 		a.invalidateSettingsWindow()
 		return
 	}
-	a.beginSettingSave()
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save setting choice", func() {
-		a.saveSetting(item, choice)
-	})
+	a.startGeneralSettingSave("save setting choice", item, choice)
 }
 
 func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {

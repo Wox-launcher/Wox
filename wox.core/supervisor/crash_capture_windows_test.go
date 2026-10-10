@@ -1,6 +1,6 @@
 //go:build windows
 
-package diagnostic
+package supervisor
 
 import (
 	"io"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"wox/util"
+	"wox/resource"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -58,8 +58,7 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 	defer cleanupWindowsCrashIntegrationRegistry(handlerDirectory, previousDumpFolder, hadPreviousDumpFolder)
 	command := exec.Command(os.Args[0], "-test.run=^TestWindowsCrashHandlerIntegration$")
 	command.Env = append(os.Environ(),
-		util.TestWoxDataDirEnv+"="+dataDirectory,
-		util.TestUserDataDirEnv+"="+filepath.Join(dataDirectory, "user"),
+		"WOX_SUPERVISOR_DATA_DIR="+dataDirectory,
 		windowsCrashIntegrationChildEnv+"=1",
 	)
 	err := command.Run()
@@ -99,14 +98,16 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 // runWindowsCrashIntegrationChild registers the module before terminating this subprocess.
 func runWindowsCrashIntegrationChild(t *testing.T) {
 	debug.SetTraceback("wer")
-	if err := util.GetLocation().Init(); err != nil {
-		t.Fatal(err)
-	}
+	SetDataDirectory(os.Getenv("WOX_SUPERVISOR_DATA_DIR"))
 	manager := GetManager()
 	if err := manager.EnsureDirectories(); err != nil {
 		t.Fatal(err)
 	}
-	handlerPath, err := manager.extractWindowsCrashHandler()
+	handler, err := resource.OthersFS.ReadFile("others/crash_handler/WoxCrashHandler64.dll")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlerPath, err := manager.extractWindowsCrashHandler(handler)
 	if err != nil {
 		t.Fatal(err)
 	}

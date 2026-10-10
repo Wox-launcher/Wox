@@ -92,6 +92,9 @@ func TestCloudSyncHistorySummarySize(t *testing.T) {
 			t.Fatalf("tail[%d] = %q, want %q", i, tails[i].Text, want)
 		}
 	}
+	if got := p.historyReasonLabel(ctx, cloudsync.RestoreBackupPushReason); got != p.tr(ctx, "plugin_cloudsync_history_reason_restore_backup") {
+		t.Fatalf("restore reason = %q, want %q", got, p.tr(ctx, "plugin_cloudsync_history_reason_restore_backup"))
+	}
 	wantSubtitle := strings.Join([]string{
 		p.labelValue(ctx, "plugin_cloudsync_history_label_source", p.historyReasonLabel(ctx, record.Reason)),
 		p.labelValue(ctx, "plugin_cloudsync_history_label_types", p.formatHistoryEntityCounts(ctx, record.EntityCounts)),

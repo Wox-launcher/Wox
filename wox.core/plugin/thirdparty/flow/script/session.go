@@ -15,14 +15,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"wox/internal/assetfs"
 	"wox/util"
 	"wox/util/shell"
 
-	_ "embed"
+	"embed"
 )
 
 //go:embed client/flowlauncher/__init__.py
-var flowLauncherClientSource string
+var rawFlowLauncherClientFS embed.FS
+
+var flowLauncherClientFS = assetfs.New(rawFlowLauncherClientFS)
 
 var errFlowProcessExited = errors.New("plugin process exited")
 
@@ -577,5 +580,9 @@ func materializeFlowClient(dir string) error {
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(target, "__init__.py"), []byte(flowLauncherClientSource), 0o644)
+	source, err := flowLauncherClientFS.ReadFile("client/flowlauncher/__init__.py")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(target, "__init__.py"), source, 0o644)
 }

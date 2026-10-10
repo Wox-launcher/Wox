@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"wox/diagnostic"
 	"wox/plugin"
+	"wox/supervisor"
 	"wox/updater"
 	"wox/util"
 
@@ -199,11 +199,11 @@ func TestQueryCrashCommandListsCrashOrEmptyState(t *testing.T) {
 func TestBuildCrashIncidentResultPreservesNewestFirstOrdering(t *testing.T) {
 	pluginInstance := &FeedbackPlugin{api: feedbackTestAPI{}}
 
-	older := pluginInstance.buildCrashIncidentResult(context.Background(), diagnostic.CrashIncident{
+	older := pluginInstance.buildCrashIncidentResult(context.Background(), supervisor.CrashIncident{
 		ID:         "older",
 		DetectedAt: 100,
 	})
-	newer := pluginInstance.buildCrashIncidentResult(context.Background(), diagnostic.CrashIncident{
+	newer := pluginInstance.buildCrashIncidentResult(context.Background(), supervisor.CrashIncident{
 		ID:         "newer",
 		DetectedAt: 200,
 	})

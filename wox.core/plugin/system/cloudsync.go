@@ -539,6 +539,8 @@ func (p *CloudSyncPlugin) historyReasonLabel(ctx context.Context, reason string)
 		return p.tr(ctx, "plugin_cloudsync_history_reason_tick")
 	case "bootstrap":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_bootstrap")
+	case cloudsync.RestoreBackupPushReason:
+		return p.tr(ctx, "plugin_cloudsync_history_reason_restore_backup")
 	case "done":
 		return p.tr(ctx, "plugin_cloudsync_history_reason_shutdown")
 	default:

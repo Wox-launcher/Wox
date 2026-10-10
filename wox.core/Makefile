@@ -224,7 +224,7 @@ else
 	@echo "Window hook is only supported on Windows"
 endif
 
-CRASH_HANDLER_SOURCE := diagnostic/native/wox_crash_handler.c
+CRASH_HANDLER_SOURCE := supervisor/native/wox_crash_handler.c
 CRASH_HANDLER_DIR := resource/others/crash_handler
 
 FILE_INDEX_SERVICE_DIR := resource/others/file_index_service

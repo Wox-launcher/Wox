@@ -1,6 +1,6 @@
 //go:build !windows
 
-package diagnostic
+package supervisor
 
 import (
 	"archive/zip"
@@ -8,8 +8,13 @@ import (
 	"time"
 )
 
+// CrashCaptureAssets carries caller-owned bytes this package does not embed.
+type CrashCaptureAssets struct {
+	WindowsHandler []byte
+}
+
 // ConfigureCrashCapture prepares the portable crash report directories.
-func (m *Manager) ConfigureCrashCapture(ctx context.Context) error {
+func (m *Manager) ConfigureCrashCapture(ctx context.Context, _ CrashCaptureAssets) error {
 	if err := m.EnsureDirectories(); err != nil {
 		return err
 	}

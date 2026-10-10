@@ -21,7 +21,7 @@ func TestShouldRelaunchLinuxFromDesktopEntrySkipsDevBuilds(t *testing.T) {
 	}
 
 	ProdEnv = "true"
-	if ShouldRelaunchLinuxFromDesktopEntry([]string{"--bug-aware-child"}) {
+	if ShouldRelaunchLinuxFromDesktopEntry([]string{"--supervisor-child"}) {
 		t.Fatal("supervisor children should not relaunch from the desktop entry")
 	}
 }

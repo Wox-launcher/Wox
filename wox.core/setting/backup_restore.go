@@ -128,32 +128,49 @@ func (m *Manager) Restore(ctx context.Context, backupId string) error {
 	}
 
 	backupPath := path.Join(util.GetLocation().GetBackupDirectory(), backupName)
+	return RestoreUserDataDirectory(ctx, backupPath, util.GetLocation().GetUserDataDirectory())
+}
+
+const (
+	restoreRenameAttempts = 25
+	restoreRenameInterval = 200 * time.Millisecond
+)
+
+// RestoreUserDataDirectory replaces userDataDir with the backup directory.
+// Callers must already have released every handle inside userDataDir. Windows
+// refuses to rename a directory while any file in it is open, so the supervisor
+// runs this only after Wox has exited. The rename is retried briefly because
+// plugin processes can disappear a moment after the main process.
+func RestoreUserDataDirectory(ctx context.Context, backupPath string, userDataDir string) error {
+	backupPath = filepath.Clean(backupPath)
+	userDataDir = filepath.Clean(userDataDir)
+	if backupPath == "" || userDataDir == "" {
+		return fmt.Errorf("backup path and user data directory are required")
+	}
+	if backupPath == userDataDir {
+		return fmt.Errorf("backup path and user data directory are the same")
+	}
 	if _, statErr := os.Stat(backupPath); statErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to stat backup directory: %s", statErr.Error()))
+		logRestore(ctx, fmt.Sprintf("failed to stat backup directory: %s", statErr.Error()))
 		return statErr
 	}
 
-	userDataDir := util.GetLocation().GetUserDataDirectory()
 	var userDataBackupDir string
 	if _, statErr := os.Stat(userDataDir); statErr == nil {
-		ts := util.GetSystemTimestamp()
-		candidate := fmt.Sprintf("%s.before_restore_%d", userDataDir, ts)
+		candidate := fmt.Sprintf("%s.before_restore_%d", userDataDir, util.GetSystemTimestamp())
 		userDataBackupDir = ensureUniquePath(candidate)
-
-		renameErr := os.Rename(userDataDir, userDataBackupDir)
-		if renameErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to rename user data directory: %s", renameErr.Error()))
+		if renameErr := renameForRestore(userDataDir, userDataBackupDir); renameErr != nil {
+			logRestore(ctx, fmt.Sprintf("failed to rename user data directory: %s", renameErr.Error()))
 			return renameErr
 		}
-		logger.Info(ctx, fmt.Sprintf("user data directory renamed to: %s", userDataBackupDir))
+		logRestore(ctx, fmt.Sprintf("user data directory renamed to: %s", userDataBackupDir))
 	} else if !os.IsNotExist(statErr) {
-		logger.Error(ctx, fmt.Sprintf("failed to stat user data directory: %s", statErr.Error()))
+		logRestore(ctx, fmt.Sprintf("failed to stat user data directory: %s", statErr.Error()))
 		return statErr
 	}
 
-	cpErr := cp.Copy(backupPath, userDataDir)
-	if cpErr != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to restore backup data to user data directory: %s", cpErr.Error()))
+	if cpErr := cp.Copy(backupPath, userDataDir); cpErr != nil {
+		logRestore(ctx, fmt.Sprintf("failed to restore backup data to user data directory: %s", cpErr.Error()))
 		if userDataBackupDir != "" {
 			_ = os.RemoveAll(userDataDir)
 			_ = os.Rename(userDataBackupDir, userDataDir)
@@ -161,15 +178,38 @@ func (m *Manager) Restore(ctx context.Context, backupId string) error {
 		return cpErr
 	}
 
-	backupInfoPath := path.Join(userDataDir, "backup.json")
+	backupInfoPath := filepath.Join(userDataDir, "backup.json")
 	if rmErr := os.Remove(backupInfoPath); rmErr != nil && !os.IsNotExist(rmErr) {
-		logger.Error(ctx, fmt.Sprintf("failed to remove restored backup info: %s", rmErr.Error()))
+		logRestore(ctx, fmt.Sprintf("failed to remove restored backup info: %s", rmErr.Error()))
 		return rmErr
 	}
 
-	logger.Info(ctx, "backup data restored successfully")
-
+	logRestore(ctx, "backup data restored successfully")
 	return nil
+}
+
+func renameForRestore(from string, to string) error {
+	var renameErr error
+	for attempt := 1; attempt <= restoreRenameAttempts; attempt++ {
+		renameErr = os.Rename(from, to)
+		if renameErr == nil {
+			return nil
+		}
+		if attempt == restoreRenameAttempts {
+			break
+		}
+		time.Sleep(restoreRenameInterval)
+	}
+	return renameErr
+}
+
+func logRestore(ctx context.Context, message string) {
+	// Tests point the data directory at a temporary folder. Opening the log there
+	// keeps the file locked until the process exits and makes cleanup fail.
+	if util.GetLocation().GetWoxDataDirectory() == "" || util.IsTestMode() {
+		return
+	}
+	util.GetLogger().Info(ctx, message)
 }
 
 func ensureUniquePath(candidate string) string {

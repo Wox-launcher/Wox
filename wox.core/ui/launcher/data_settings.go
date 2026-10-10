@@ -8,7 +8,6 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
-	"wox/util"
 )
 
 type backupInfo struct {
@@ -28,8 +27,8 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
-		Backups: backups, RestoreArmed: snapshot.dataState.RestoreArmed, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
-		Error:      snapshot.dataState.Error,
+		Backups: backups, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
+		Error: snapshot.dataState.Error, ErrorSection: snapshot.dataState.ErrorSection,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
 		OnRestoreBackup: a.restoreDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
@@ -115,14 +114,12 @@ func (a *App) toggleDataAutoBackup() {
 	if next {
 		label = "On"
 	}
-	a.beginSettingSave()
 	a.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save automatic backup setting", func() {
-		a.saveSetting(
-			settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
-			settingChoice{value: fmt.Sprintf("%t", next), label: label},
-		)
-	})
+	a.startGeneralSettingSave(
+		"save automatic backup setting",
+		settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
+		settingChoice{value: fmt.Sprintf("%t", next), label: label},
+	)
 }
 
 // openDataLogLevelPicker uses the same anchored choice menu as other settings dropdowns.
@@ -146,8 +143,8 @@ func (a *App) clearDataLogs() {
 }
 
 // openDataPath delegates to dataSettingsController.
-func (a *App) openDataPath(path string) {
-	a.dataSettings.OpenPath(context.Background(), a.services, a.sessionID, path)
+func (a *App) openDataPath(path, section string) {
+	a.dataSettings.OpenPath(context.Background(), a.services, a.sessionID, path, section)
 }
 
 // openDataBackupFolder delegates to dataSettingsController.

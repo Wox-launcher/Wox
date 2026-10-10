@@ -33,7 +33,10 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 			Role:             woxui.WindowRoleApplication,
 			TitleBarControls: woxui.TitleBarControls{Height: launcherview.SettingsTitleBarHeight, Close: true, Minimize: true},
 			OnFrame:          host.Frame,
-			OnPointer:        host.Pointer,
+			OnPointer: func(event woxui.PointerEvent) {
+				host.Pointer(event)
+				a.finishSettingsPointer(event)
+			},
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
 			},

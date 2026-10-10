@@ -46,8 +46,10 @@ type ButtonProps struct {
 	Disabled          bool
 	Variant           ButtonVariant
 	OnTap             func()
+	OnHoverAt         func(bool, woxui.Rect)
 	OnTrailingHoverAt func(bool, woxui.Rect)
 	OnFocusChange     func(bool)
+	OnKey             func(woxui.KeyEvent) bool
 	Theme             ControlTheme
 }
 
@@ -180,7 +182,12 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		if hovered {
 			buttonBackground = controlHoverColor(background, foreground)
 		}
-		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+			onHoverAt(inside, bounds)
+			if props.OnHoverAt != nil {
+				props.OnHoverAt(inside, bounds)
+			}
+		}, Child: woxwidget.Container{
 			Width: buttonWidth, Height: height, Radius: radius, Color: buttonBackground, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
 			Child: alignedChild,
 		}}
@@ -189,6 +196,9 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
+			if props.OnKey != nil && props.OnKey(event) {
+				return true
+			}
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}

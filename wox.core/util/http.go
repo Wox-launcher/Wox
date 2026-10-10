@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"wox/network"
@@ -170,25 +171,56 @@ func HttpDownloadWithProgress(ctx context.Context, url string, dest string, prog
 	return httpDownloadWithClient(ctx, req, dest, progressCallback, GetHTTPClient(ctx), true)
 }
 
+// ApplyHTTPProxy installs the current proxy switch and address on the shared client.
+// A disabled switch clears the explicit proxy immediately, even when an address is still stored.
+func ApplyHTTPProxy(ctx context.Context, enabled bool, proxyURL string) {
+	if !enabled {
+		proxyURL = ""
+	}
+	UpdateHTTPProxy(ctx, proxyURL)
+}
+
 func UpdateHTTPProxy(ctx context.Context, proxyUrl string) {
 	clientMutex.Lock()
 	defer clientMutex.Unlock()
 
-	GetLogger().Info(ctx, fmt.Sprintf("updating HTTP proxy, url: %s", proxyUrl))
-
-	transport := &http.Transport{}
-	if proxyUrl != "" {
-		proxyURL, err := url.Parse(proxyUrl)
-		if err != nil {
-			GetLogger().Error(ctx, fmt.Sprintf("failed to parse proxy url: %s", err.Error()))
+	proxyUrl = strings.TrimSpace(proxyUrl)
+	previous := httpClient
+	if proxyUrl == "" {
+		// An empty address means Wox's own proxy is off. Drop the explicit client so the
+		// next request uses the same default transport as a startup with the switch off.
+		// Keeping the previous client is why turning the switch off still dialed the old proxy.
+		if httpClient == nil {
 			return
 		}
-		transport.Proxy = http.ProxyURL(proxyURL)
+		httpClient = nil
+		GetLogger().Info(ctx, "cleared HTTP proxy")
+		closeIdleHTTPClient(previous)
+		return
 	}
 
-	httpClient = &http.Client{
-		Transport: network.Wrap(transport),
+	proxyURL, err := url.Parse(proxyUrl)
+	if err != nil {
+		GetLogger().Error(ctx, fmt.Sprintf("failed to parse proxy url: %s", err.Error()))
+		return
 	}
+
+	GetLogger().Info(ctx, fmt.Sprintf("updating HTTP proxy, url: %s", proxyUrl))
+	httpClient = &http.Client{
+		Transport: network.Wrap(&http.Transport{Proxy: http.ProxyURL(proxyURL)}),
+	}
+	closeIdleHTTPClient(previous)
+}
+
+func closeIdleHTTPClient(client *http.Client) {
+	if client == nil || client.Transport == nil {
+		return
+	}
+	closer, ok := client.Transport.(interface{ CloseIdleConnections() })
+	if !ok {
+		return
+	}
+	closer.CloseIdleConnections()
 }
 
 func getClient() *http.Client {

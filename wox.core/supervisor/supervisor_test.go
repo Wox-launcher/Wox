@@ -1,4 +1,4 @@
-package diagnostic
+package supervisor
 
 import (
 	"fmt"
@@ -7,13 +7,14 @@ import (
 	"reflect"
 	"testing"
 	"time"
-	"wox/util"
 )
 
 func TestSupervisedChildArgsPreserveTroubleshootingMode(t *testing.T) {
-	args := []string{"wox.exe", ArgSupervisor, ArgWaitParent, "1234", util.ArgNoThirdPartyPlugins, "wox://query?q=test"}
+	const troubleshooting = "--no-third-party-plugins"
+	PreserveArgOnRestart(troubleshooting)
+	args := []string{"wox.exe", ArgSupervisor, ArgWaitParent, "1234", troubleshooting, "wox://query?q=test"}
 	for _, firstLaunch := range []bool{true, false} {
-		want := []string{ArgChild, util.ArgNoThirdPartyPlugins}
+		want := []string{ArgChild, troubleshooting}
 		if firstLaunch {
 			want = append(want, "wox://query?q=test")
 		}

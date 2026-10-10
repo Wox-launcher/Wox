@@ -21,7 +21,6 @@ import (
 	"wox/analytics"
 	"wox/common"
 	"wox/common/icons"
-	"wox/diagnostic"
 	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
@@ -30,6 +29,7 @@ import (
 	"wox/privacy"
 	"wox/resource"
 	"wox/setting"
+	"wox/supervisor"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	"wox/updater"
@@ -1454,6 +1454,8 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		}
 	case "LogLevel":
 		util.GetLogger().SetLevel(vs)
+	case "HttpProxyEnabled", "HttpProxyUrl":
+		setting.GetSettingManager().GetWoxSetting(ctx).ApplyHTTPProxy(ctx)
 	case "QueryHotkeys":
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 		if err := m.registerWoxHotkeys(ctx, corehotkey.WoxConfigFromSetting(woxSetting), false); err != nil {
@@ -1977,7 +1979,7 @@ func (m *Manager) ExitApp(ctx context.Context) {
 		plugin.GetPluginManager().Stop(ctx)
 		ai.ResetMCPClients()
 		shell.CloseLifetimeBoundJob()
-		diagnostic.GetManager().MarkCleanExit(ctx)
+		supervisor.GetManager().MarkCleanExit(ctx)
 		util.GetLogger().Info(ctx, "bye~")
 		if err := privacy.StartExitCleanup(setting.GetSettingManager().GetWoxSetting(ctx)); err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start private mode cleanup: %s", err.Error()))
