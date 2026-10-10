@@ -11,9 +11,11 @@ import (
 	"wox/common"
 	corehotkey "wox/hotkey"
 	"wox/plugin/thirdparty/migrate"
+	"wox/setting"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	"wox/util"
+	utilhotkey "wox/util/hotkey"
 	"wox/util/keyboard"
 )
 
@@ -444,13 +446,132 @@ func (a *App) applyOnboardingMigrationSetting(ctx context.Context, write migrate
 	if write.Key == "" {
 		return nil
 	}
+	value, skip, err := a.migrationSettingValue(write.Key, write.Value)
+	if err != nil || skip {
+		return err
+	}
 	if a.services != nil {
-		if err := a.services.UpdateGeneralSetting(ctx, a.sessionID, write.Key, write.Value); err != nil {
+		if err := a.services.UpdateGeneralSetting(ctx, a.sessionID, write.Key, value); err != nil {
 			return err
 		}
 	}
-	a.rememberOnboardingMigrationSetting(write.Key, write.Value)
+	a.rememberOnboardingMigrationSetting(write.Key, value)
 	return nil
+}
+
+// migrationSettingValue prepares one imported setting for storage.
+// Query hotkeys and query aliases are table rows, so the selected rows are added
+// beside the rows already stored. A repeated hotkey chord or alias is left as it is.
+// skip is true when every imported row is already present.
+func (a *App) migrationSettingValue(key, incoming string) (value string, skip bool, err error) {
+	switch key {
+	case "QueryHotkeys":
+		var rows []queryHotkeySetting
+		if err := json.Unmarshal([]byte(incoming), &rows); err != nil {
+			return "", false, err
+		}
+		var current []queryHotkeySetting
+		if a.generalSettings != nil {
+			current = a.generalSettings.Data().QueryHotkeys
+		}
+		merged := appendImportedQueryHotkeys(current, rows)
+		if len(merged) == len(current) {
+			return "", true, nil
+		}
+		raw, err := json.Marshal(merged)
+		if err != nil {
+			return "", false, err
+		}
+		return string(raw), false, nil
+	case "QueryAliases":
+		var rows []queryAliasSetting
+		if err := json.Unmarshal([]byte(incoming), &rows); err != nil {
+			return "", false, err
+		}
+		var current []queryAliasSetting
+		if a.generalSettings != nil {
+			current = a.generalSettings.Data().QueryAliases
+		}
+		merged := appendImportedQueryAliases(current, rows)
+		if len(merged) == len(current) {
+			return "", true, nil
+		}
+		raw, err := json.Marshal(merged)
+		if err != nil {
+			return "", false, err
+		}
+		return string(raw), false, nil
+	default:
+		return incoming, false, nil
+	}
+}
+
+// appendImportedQueryHotkeys keeps current query hotkeys and adds imported rows that use a new chord.
+func appendImportedQueryHotkeys(current, incoming []queryHotkeySetting) []queryHotkeySetting {
+	seen := map[string]struct{}{}
+	for _, item := range current {
+		if id := queryHotkeyChord(item.Hotkey); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	merged := append([]queryHotkeySetting(nil), current...)
+	for _, item := range incoming {
+		item.Hotkey = strings.TrimSpace(item.Hotkey)
+		item.Query = strings.TrimSpace(item.Query)
+		id := queryHotkeyChord(item.Hotkey)
+		if id == "" || item.Query == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		if strings.TrimSpace(item.Position) == "" {
+			item.Position = string(setting.QueryHotkeyPositionSystemDefault)
+		}
+		merged = append(merged, item)
+	}
+	return merged
+}
+
+// appendImportedQueryAliases keeps current aliases and adds imported rows whose alias is new.
+func appendImportedQueryAliases(current, incoming []queryAliasSetting) []queryAliasSetting {
+	seen := map[string]struct{}{}
+	for _, item := range current {
+		if id := queryAliasIdentity(item.Alias); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	merged := append([]queryAliasSetting(nil), current...)
+	for _, item := range incoming {
+		item.Alias = strings.TrimSpace(item.Alias)
+		item.Query = strings.TrimSpace(item.Query)
+		id := queryAliasIdentity(item.Alias)
+		if id == "" || item.Query == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		merged = append(merged, item)
+	}
+	return merged
+}
+
+func queryHotkeyChord(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if key, err := utilhotkey.BindingKey(value); err == nil && key != "" {
+		return key
+	}
+	return strings.ToLower(strings.ReplaceAll(value, " ", ""))
+}
+
+func queryAliasIdentity(alias string) string {
+	return strings.ToLower(strings.TrimSpace(alias))
 }
 
 // rememberOnboardingMigrationSetting keeps the in-memory snapshot aligned with a setting just imported.
@@ -514,6 +635,16 @@ func (a *App) rememberOnboardingMigrationSetting(key, value string) {
 		if key == "MainHotkey" && a.hotkeySettings != nil {
 			if form := a.hotkeySettings.Form(); form != nil {
 				form.values["MainHotkey"] = value
+			}
+		}
+		if key == "QueryHotkeys" && a.hotkeySettings != nil {
+			if form := a.hotkeySettings.Form(); form != nil {
+				form.values["QueryHotkeys"] = value
+			}
+		}
+		if key == "QueryAliases" && a.generalSettings != nil {
+			if form := a.generalSettings.Form(); form != nil {
+				form.values["QueryAliases"] = value
 			}
 		}
 		a.invalidateOnboardingWindow()

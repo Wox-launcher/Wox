@@ -106,6 +106,8 @@ type ImportResult struct {
 }
 
 // SettingWrite is one Wox setting value produced by the selected items.
+// QueryHotkeys and QueryAliases contain only the selected rows. Callers add those
+// rows to the stored table and leave existing rows in place. Other keys replace the current value.
 type SettingWrite struct {
 	ItemIDs []string
 	Key     string

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"wox/common"
@@ -97,6 +98,108 @@ func TestNormalizeLauncherHotkeyAcceptsFlowSpacing(t *testing.T) {
 	}
 	if _, ok := normalizeLauncherHotkey("not a hotkey"); ok {
 		t.Fatal("accepted an invalid hotkey")
+	}
+}
+
+type migrationSettingWriter struct {
+	contract.Services
+	values map[string]string
+}
+
+func (s *migrationSettingWriter) UpdateGeneralSetting(_ context.Context, _, key, value string) error {
+	if s.values == nil {
+		s.values = map[string]string{}
+	}
+	s.values[key] = value
+	return nil
+}
+
+func TestImportedQueryHotkeysAreAppended(t *testing.T) {
+	services := &migrationSettingWriter{}
+	app := &App{
+		services:        services,
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+	}
+	app.generalSettings.ApplyData(settingsData{QueryHotkeys: []queryHotkeySetting{{
+		Hotkey: "Ctrl+Shift+V", Query: "cb ", Position: "system_default",
+	}}})
+	form := newFormFieldsState(nil, map[string]string{"QueryHotkeys": `[{"Hotkey":"Ctrl+Shift+V","Query":"cb "}]`}, true)
+	app.hotkeySettings.SetForm(&form)
+
+	err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{
+		Key:   "QueryHotkeys",
+		Value: `[{"Hotkey":"Ctrl+Shift+E","Query":"test on flow"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := app.generalSettings.Data().QueryHotkeys
+	if len(got) != 2 || got[0].Query != "cb " || got[1].Hotkey != "Ctrl+Shift+E" || got[1].Query != "test on flow" || got[1].Position != "system_default" {
+		t.Fatalf("query hotkeys = %+v", got)
+	}
+	stored := services.values["QueryHotkeys"]
+	if !strings.Contains(stored, `"Query":"cb "`) || !strings.Contains(stored, `"Query":"test on flow"`) {
+		t.Fatalf("stored %s", stored)
+	}
+	if form.values["QueryHotkeys"] != stored {
+		t.Fatalf("form %s", form.values["QueryHotkeys"])
+	}
+}
+
+func TestImportedQueryHotkeyKeepsTheExistingChord(t *testing.T) {
+	services := &migrationSettingWriter{}
+	app := &App{
+		services:        services,
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+	}
+	app.generalSettings.ApplyData(settingsData{QueryHotkeys: []queryHotkeySetting{{
+		Hotkey: "Ctrl+Shift+E", Query: "keep",
+	}}})
+	err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{
+		Key:   "QueryHotkeys",
+		Value: `[{"Hotkey":"Ctrl + Shift + E","Query":"replace"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := app.generalSettings.Data().QueryHotkeys
+	if len(got) != 1 || got[0].Query != "keep" {
+		t.Fatalf("query hotkeys = %+v", got)
+	}
+	if _, wrote := services.values["QueryHotkeys"]; wrote {
+		t.Fatalf("stored %s", services.values["QueryHotkeys"])
+	}
+}
+
+func TestImportedQueryAliasesAreAppended(t *testing.T) {
+	services := &migrationSettingWriter{}
+	app := &App{
+		services:        services,
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+	}
+	app.generalSettings.ApplyData(settingsData{QueryAliases: []queryAliasSetting{{
+		Alias: "hw", Query: "hello world",
+	}}})
+	form := newFormFieldsState(nil, map[string]string{"QueryAliases": `[{"Shortcut":"hw","Query":"hello world"}]`}, true)
+	app.generalSettings.SetForm(&form)
+
+	err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{
+		Key:   "QueryAliases",
+		Value: `[{"Shortcut":"HW","Query":"other"},{"Shortcut":"gg","Query":"google"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := app.generalSettings.Data().QueryAliases
+	if len(got) != 2 || got[0].Alias != "hw" || got[0].Query != "hello world" || got[1].Alias != "gg" || got[1].Query != "google" {
+		t.Fatalf("aliases = %+v", got)
+	}
+	if !strings.Contains(services.values["QueryAliases"], `"Shortcut":"hw"`) || !strings.Contains(services.values["QueryAliases"], `"Shortcut":"gg"`) {
+		t.Fatalf("stored %s", services.values["QueryAliases"])
+	}
+	if strings.Contains(services.values["QueryAliases"], `"Query":"other"`) {
+		t.Fatalf("stored replaced an alias: %s", services.values["QueryAliases"])
 	}
 }
 

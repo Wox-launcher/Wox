@@ -23,6 +23,8 @@ var logger *util.Log
 type Manager struct {
 	woxSetting *WoxSetting
 	mruManager *MRUManager
+	// autoBackupOnce keeps the daily backup loop from being scheduled twice.
+	autoBackupOnce sync.Once
 }
 
 const queryCompletionFeedbackLimit = 1000
@@ -71,8 +73,6 @@ func CurrentUiDensityScale() float32 {
 }
 
 func (m *Manager) Init(ctx context.Context) error {
-	m.StartAutoBackup(ctx)
-
 	if err := m.checkAutostart(ctx); err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to check autostart status: %v", err))
 	}

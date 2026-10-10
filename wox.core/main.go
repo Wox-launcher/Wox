@@ -405,7 +405,7 @@ func run() {
 
 	selection.InitSelection()
 
-	// Start auto backup if enabled
+	// Daily automatic backup. The loop itself checks the setting and whether today already has one.
 	setting.GetSettingManager().StartAutoBackup(ctx)
 
 	// Start MRU cleanup

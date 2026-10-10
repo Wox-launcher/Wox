@@ -32,27 +32,99 @@ type Backup struct {
 	Path      string // backup file path
 }
 
+const (
+	// autoBackupStartupDelay keeps the copy off the startup path.
+	autoBackupStartupDelay = time.Minute
+	// autoBackupRetryInterval is how soon a failed daily backup is tried again.
+	autoBackupRetryInterval = time.Hour
+)
+
+// StartAutoBackup starts one loop that keeps a single automatic backup per local day.
+// time.Timer fires once, so each wait creates a new timer. The first check runs shortly
+// after startup, which still backs up after a restart that never stays up for 24 hours.
 func (m *Manager) StartAutoBackup(ctx context.Context) {
-	util.Go(ctx, "backup", func() {
-		for range time.NewTimer(24 * time.Hour).C {
-			// Check if auto backup is enabled in settings
-			settings := m.GetWoxSetting(ctx)
-			if settings == nil {
-				logger.Error(ctx, "failed to get settings: settings is nil")
-				continue
+	if util.IsTestMode() {
+		return
+	}
+	m.autoBackupOnce.Do(func() {
+		util.Go(ctx, "backup", func() {
+			if !waitForAutoBackup(ctx, autoBackupStartupDelay) {
+				return
 			}
-
-			if !settings.EnableAutoBackup.Get() {
-				logger.Info(ctx, "auto backup is disabled, skipping")
-				continue
+			for {
+				retry := m.backupIfDue(ctx)
+				wait := durationUntilNextLocalMidnight(time.Now())
+				if retry && autoBackupRetryInterval < wait {
+					wait = autoBackupRetryInterval
+				}
+				if !waitForAutoBackup(ctx, wait) {
+					return
+				}
 			}
-
-			backupErr := m.Backup(ctx, BackupTypeAuto)
-			if backupErr != nil {
-				logger.Error(ctx, fmt.Sprintf("failed to backup data: %s", backupErr.Error()))
-			}
-		}
+		})
 	})
+}
+
+func waitForAutoBackup(ctx context.Context, wait time.Duration) bool {
+	timer := time.NewTimer(wait)
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		timer.Stop()
+		return false
+	}
+}
+
+// backupIfDue creates today's automatic backup when the setting is on and today does not have one yet.
+// It returns true when the attempt failed and should be retried before the next midnight.
+func (m *Manager) backupIfDue(ctx context.Context) bool {
+	settings := m.GetWoxSetting(ctx)
+	if settings == nil {
+		logger.Error(ctx, "failed to get settings: settings is nil")
+		return true
+	}
+	if !settings.EnableAutoBackup.Get() {
+		logger.Info(ctx, "auto backup is disabled, skipping")
+		return false
+	}
+
+	backups, err := m.FindAllBackups(ctx)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to list backups before auto backup: %s", err.Error()))
+		return true
+	}
+	if hasAutoBackupOnLocalDay(backups, time.Now()) {
+		logger.Info(ctx, "auto backup already exists for today, skipping")
+		return false
+	}
+
+	if backupErr := m.Backup(ctx, BackupTypeAuto); backupErr != nil {
+		logger.Error(ctx, fmt.Sprintf("failed to backup data: %s", backupErr.Error()))
+		return true
+	}
+	return false
+}
+
+// hasAutoBackupOnLocalDay reports whether an automatic backup already falls on now's local calendar day.
+func hasAutoBackupOnLocalDay(backups []Backup, now time.Time) bool {
+	year, month, day := now.Date()
+	location := now.Location()
+	for _, backup := range backups {
+		if backup.Type != BackupTypeAuto {
+			continue
+		}
+		backupYear, backupMonth, backupDay := time.UnixMilli(backup.Timestamp).In(location).Date()
+		if backupYear == year && backupMonth == month && backupDay == day {
+			return true
+		}
+	}
+	return false
+}
+
+func durationUntilNextLocalMidnight(now time.Time) time.Duration {
+	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	return nextMidnight.Sub(now)
 }
 
 func (m *Manager) Backup(ctx context.Context, backupType BackupType) error {
