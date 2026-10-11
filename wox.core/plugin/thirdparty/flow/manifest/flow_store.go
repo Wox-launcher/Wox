@@ -70,7 +70,12 @@ var _ plugin.ExternalStore = flowStore{}
 
 // appendFlowStoreManifests adds script plugins from the flow catalog.
 // A fetch or parse failure keeps the Wox list that the caller already built.
+// Flow Launcher plugins only run on Windows, including Python and Node plugins,
+// so other systems keep the caller list and do not download the catalog.
 func appendFlowStoreManifests(ctx context.Context, manifests []plugin.StorePluginManifest) []plugin.StorePluginManifest {
+	if !util.IsWindows() {
+		return manifests
+	}
 	fetched, err := fetchFlowStoreManifests(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("flow plugin store was not loaded: %s", err.Error()))
@@ -218,6 +223,9 @@ func mergeFlowStoreManifests(existing, fetched []plugin.StorePluginManifest, ins
 // installFlowStorePlugin downloads one catalog zip into plugins/flow-jsonrpc/<id>.
 // The caller already holds the store install lock.
 func installFlowStorePlugin(ctx context.Context, manifest plugin.StorePluginManifest, progress plugin.InstallProgressCallback) error {
+	if !util.IsWindows() {
+		return fmt.Errorf("flow plugins are only available on Windows")
+	}
 	var installed *plugin.Instance
 	if manager := plugin.GetPluginManager(); manager != nil {
 		installed = manager.GetPluginInstanceById(manifest.Id)

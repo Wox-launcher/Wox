@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -77,6 +78,17 @@ func TestFlowStoreManifestsFromJSON(t *testing.T) {
 	}
 	if manifests, err := flowStoreManifestsFromJSON([]byte(`[]`)); err != nil || len(manifests) != 0 {
 		t.Fatalf("empty catalog manifests=%d err=%v", len(manifests), err)
+	}
+}
+
+func TestAppendFlowStoreManifestsSkipsNonWindows(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the flow catalog is listed on Windows")
+	}
+	existing := []plugin.StorePluginManifest{{Id: "keep"}}
+	got := appendFlowStoreManifests(context.Background(), existing)
+	if len(got) != 1 || got[0].Id != "keep" {
+		t.Fatalf("catalog %#v", got)
 	}
 }
 

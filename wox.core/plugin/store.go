@@ -260,8 +260,24 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 		assignPluginStore(storePluginManifests, externalStore.Name(), known)
 	}
 
+	// External catalogs are merged after the per-store OS check above.
+	// Apply the same rule to the combined list so a Windows-only catalog
+	// cannot appear on another system.
+	storePluginManifests = selectCurrentOSManifests(storePluginManifests)
+
 	logger.Info(ctx, fmt.Sprintf("found %d plugins from stores", len(storePluginManifests)))
 	return storePluginManifests
+}
+
+// selectCurrentOSManifests keeps plugins this machine can run.
+func selectCurrentOSManifests(manifests []StorePluginManifest) []StorePluginManifest {
+	filtered := make([]StorePluginManifest, 0, len(manifests))
+	for _, manifest := range manifests {
+		if IsAnySupportedInCurrentOS(manifest.SupportedOS) {
+			filtered = append(filtered, manifest)
+		}
+	}
+	return filtered
 }
 
 func (s *Store) GetStorePluginManifest(ctx context.Context, store storeManifest) ([]StorePluginManifest, error) {

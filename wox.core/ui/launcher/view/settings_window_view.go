@@ -46,7 +46,15 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 		Child: props.Page,
 	}
 	var bodyChild woxwidget.Widget
-	if props.Platform == "darwin" || props.Platform == "windows" || props.Platform == "linux" {
+	if props.Platform == "darwin" {
+		// The page stays in front of the full-width drag strip. Its empty top padding
+		// falls through to that gesture, while controls sharing the caption row keep their presses.
+		bodyChild = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+			{Child: props.TitleBar},
+			{Left: props.RailWidth, Top: SettingsPageTop(props.Platform), Child: page},
+			{Top: SettingsTitleBarHeight, Child: props.Rail},
+		}}
+	} else if props.Platform == "windows" || props.Platform == "linux" {
 		// Let the page's top gutter share the chrome area instead of stacking both blank spaces.
 		bodyChild = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
 			{Left: props.RailWidth, Top: SettingsPageTop(props.Platform), Child: page},
@@ -70,7 +78,7 @@ func SettingsWindow(props SettingsWindowProps) woxwidget.Widget {
 // SettingsTitleBarProps contains the title and native window actions.
 type SettingsTitleBarProps struct {
 	Width float32
-	// RailWidth continues the settings rail's surface into the title bar; macOS also limits dragging to the rail.
+	// RailWidth continues the settings rail's surface into the title bar.
 	RailWidth float32
 	// CloseOnly hides platform minimize and zoom controls for preview title bars.
 	CloseOnly  bool
@@ -143,11 +151,7 @@ func (s *settingsTitleBarState) Dispose() {}
 func buildSettingsTitleBar(props SettingsTitleBarProps, hovered string, onHover func(string, bool)) woxwidget.Widget {
 	height := SettingsTitleBarHeight
 	titleStyle := woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}
-	dragWidth := props.Width
-	if props.Platform == "darwin" && props.RailWidth > 0 {
-		dragWidth = props.RailWidth
-	}
-	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: dragWidth, Height: height}}
+	dragArea := woxwidget.Gesture{ID: "settings-title-drag", OnDragStart: props.OnDrag, Child: woxwidget.Container{Width: props.Width, Height: height}}
 	children := make([]woxwidget.StackChild, 0, 7)
 	if (props.Platform == "darwin" || props.Platform == "windows") && props.RailWidth > 0 {
 		// Continue the rail tint above its search field so the title bar has no horizontal color seam.

@@ -127,7 +127,11 @@ func (h *Host) RuntimeStatus(ctx context.Context) plugin.RuntimeHostStatus {
 }
 
 // DiscoverMetadata reads script plugins from the user flow-jsonrpc directory.
+// The catalog is Windows-only, so installed copies stay unloaded on other systems.
 func (h *Host) DiscoverMetadata(ctx context.Context) ([]plugin.Metadata, error) {
+	if !util.IsWindows() {
+		return nil, nil
+	}
 	root := manifest.CollectionDirectory()
 	if err := util.GetLocation().EnsureDirectoryExist(root); err != nil {
 		return nil, err

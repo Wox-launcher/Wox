@@ -35,12 +35,15 @@ func TestSettingsWindowMacKeepsTitleBarOutOfPageColumn(t *testing.T) {
 	body := root.Children[0].Child.(woxwidget.Container)
 	layout := body.Child.(woxwidget.Stack)
 	if len(layout.Children) != 3 {
-		t.Fatalf("macOS settings child count = %d, want page, rail, and title bar", len(layout.Children))
+		t.Fatalf("macOS settings child count = %d, want title bar, page, and rail", len(layout.Children))
 	}
-	if page := layout.Children[0]; page.Left != 240 || page.Top != 0 {
+	if title := layout.Children[0]; title.Left != 0 || title.Top != 0 {
+		t.Fatalf("macOS title bar position = (%v, %v), want (0, 0) behind the page", title.Left, title.Top)
+	}
+	if page := layout.Children[1]; page.Left != 240 || page.Top != 0 {
 		t.Fatalf("macOS page position = (%v, %v), want (240, 0)", page.Left, page.Top)
 	}
-	if rail := layout.Children[1]; rail.Left != 0 || rail.Top != SettingsTitleBarHeight {
+	if rail := layout.Children[2]; rail.Left != 0 || rail.Top != SettingsTitleBarHeight {
 		t.Fatalf("macOS rail position = (%v, %v), want (0, %v)", rail.Left, rail.Top, SettingsTitleBarHeight)
 	}
 }
@@ -88,11 +91,51 @@ func TestSettingsWindowLinuxSharesPageGutterWithTitleBar(t *testing.T) {
 	}
 }
 
-func TestSettingsTitleBarMacLimitsDragAreaToRail(t *testing.T) {
+func TestSettingsTitleBarMacDragsTheFullCaption(t *testing.T) {
 	titleBar := buildSettingsTitleBar(SettingsTitleBarProps{Width: 1200, RailWidth: 240, Platform: "darwin"}, "", nil).(woxwidget.Stack)
 	drag := titleBar.Children[1].Child.(woxwidget.Gesture)
-	if width := drag.Child.(woxwidget.Container).Width; width != 240 {
-		t.Fatalf("macOS title-bar drag width = %v, want rail width 240", width)
+	if width := drag.Child.(woxwidget.Container).Width; width != 1200 {
+		t.Fatalf("macOS title-bar drag width = %v, want the full caption", width)
+	}
+}
+
+func TestSettingsWindowMacContentGutterDragsWithoutCoveringPageControls(t *testing.T) {
+	var drags int
+	var taps int
+	const railWidth = float32(240)
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return SettingsWindow(SettingsWindowProps{
+			Width: 1200, Height: 800, PageID: "cloud", Platform: "darwin", RailWidth: railWidth,
+			TitleBar: SettingsTitleBar(SettingsTitleBarProps{
+				Width: 1200, RailWidth: railWidth, Platform: "darwin", OnDrag: func() { drags++ },
+			}),
+			Rail: woxwidget.Container{Width: railWidth, Height: 760},
+			Page: woxwidget.Container{Width: 960, Height: 800, Padding: woxwidget.Insets{Top: 34}, Child: woxwidget.Gesture{
+				ID: "page-control", OnTap: func() { taps++ }, Child: woxwidget.Container{Width: 120, Height: 32},
+			}},
+		})
+	})
+	host.AttachServices(settingsWindowHostServices{})
+	defer host.Dispose()
+
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 1200, Height: 800}}
+	var displayList woxui.DisplayList
+	host.Frame(&displayList, frame)
+
+	dragFrom := func(start, end woxui.Point) {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: start})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Button: woxui.PointerButtonPrimary, Position: end})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: end})
+	}
+	dragFrom(woxui.Point{X: 420, Y: 12}, woxui.Point{X: 460, Y: 12})
+	dragFrom(woxui.Point{X: 120, Y: 12}, woxui.Point{X: 120, Y: 28})
+	if drags != 2 {
+		t.Fatalf("drags = %d, want the content gutter and the rail caption", drags)
+	}
+	before := drags
+	dragFrom(woxui.Point{X: 280, Y: 36}, woxui.Point{X: 292, Y: 36})
+	if drags != before || taps != 1 {
+		t.Fatalf("control in the caption row: drags %d taps %d, want the control to keep the press", drags, taps)
 	}
 }
 
