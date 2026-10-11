@@ -13,6 +13,9 @@ const (
 	TestServerPortEnv       = "WOX_TEST_SERVER_PORT"
 	TestDisableTelemetryEnv = "WOX_TEST_DISABLE_TELEMETRY"
 	TestSkipOnboardingEnv   = "WOX_TEST_SKIP_ONBOARDING"
+	// TestFlowUserDataEnv points launcher import at one fixture directory.
+	// Smoke sets it so onboarding does not read a developer's real Flow install.
+	TestFlowUserDataEnv = "WOX_TEST_FLOW_USER_DATA"
 )
 
 func GetTestWoxDataDirectoryOverride() string {

@@ -33,16 +33,16 @@ func Test004SettingGeneralQueryAlias(t *testing.T) {
 		t.Cleanup(func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), smoke.CaseTimeout)
 			defer cancel()
-			removeQueryAlias(t, cleanupCtx, client)
+			removeQueryAlias(t, cleanupCtx, client, smokeQueryAlias)
 		})
 
-		removeQueryAlias(t, ctx, client)
+		removeQueryAlias(t, ctx, client, smokeQueryAlias)
 		addQueryAlias(t, ctx, client, smokeQueryAlias, smokeAliasQuery)
 		waitForQueryAlias(t, ctx, smokeQueryAlias, true)
 		confirmQueryAlias(t, ctx, client, smokeQueryAlias, smokeAliasQuery)
 		assertAliasQuery(t, ctx, client, true)
 
-		removeQueryAlias(t, ctx, client)
+		removeQueryAlias(t, ctx, client, smokeQueryAlias)
 		waitForQueryAlias(t, ctx, smokeQueryAlias, false)
 		assertAliasQuery(t, ctx, client, false)
 	})
@@ -129,7 +129,7 @@ func confirmQueryAlias(t *testing.T, ctx context.Context, client *automationdriv
 	}
 }
 
-func removeQueryAlias(t *testing.T, ctx context.Context, client *automationdriver.Client) {
+func removeQueryAlias(t *testing.T, ctx context.Context, client *automationdriver.Client, shortcut string) {
 	t.Helper()
 	openQueryAliasSettings(t, ctx, client)
 	closeAliasEditorIfOpen(t, ctx, client)
@@ -138,7 +138,7 @@ func removeQueryAlias(t *testing.T, ctx context.Context, client *automationdrive
 		if err != nil {
 			t.Fatalf("read query alias rows: %v", err)
 		}
-		rowIndex, found := aliasRowIndex(snapshot, smokeQueryAlias)
+		rowIndex, found := aliasRowIndex(snapshot, shortcut)
 		if !found {
 			break
 		}

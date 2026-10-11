@@ -307,7 +307,14 @@ func flowPythonMissing(ctx context.Context) bool {
 // flowUserDataRoot is the Flow data directory that contains Settings and Plugins.
 // Portable installs, including Scoop, keep that directory beside the app.
 // The roaming directory is used only when no portable UserData is present.
+// A test-mode override replaces both so a smoke process does not import the
+// developer's real installation. An empty override means Flow is not installed.
 func flowUserDataRoot() string {
+	if util.IsTestMode() {
+		if root := strings.TrimSpace(os.Getenv(util.TestFlowUserDataEnv)); root != "" {
+			return flowSettingsRoot(root)
+		}
+	}
 	if root := flowPortableUserData(); root != "" {
 		return root
 	}

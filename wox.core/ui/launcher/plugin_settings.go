@@ -2080,8 +2080,11 @@ func (a *App) submitPluginSettings() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, persistedValues)
+		var saveRevision uint64
 		_ = a.runOnUI("apply plugin settings save", func() {
-			if a.reconcilePluginSettingSave(submitted, pluginID, submittedValues, persistedValues, saveErr) {
+			resubmit := a.reconcilePluginSettingSave(submitted, pluginID, submittedValues, persistedValues, saveErr)
+			saveRevision = a.pluginSettings.settingSaveRevisions[pluginID]
+			if resubmit {
 				a.submitPluginSettings()
 			}
 			a.invalidateSettingsWindow()
@@ -2091,7 +2094,7 @@ func (a *App) submitPluginSettings() {
 			return
 		}
 		// Dynamic settings may depend on any saved value, so always resolve them again.
-		a.refreshPluginFormDefinitions(pluginID)
+		a.refreshPluginFormDefinitions(pluginID, saveRevision)
 	})
 }
 
@@ -2123,6 +2126,7 @@ func (a *App) reconcilePluginSettingSave(submitted *pluginSettingsFormState, plu
 	if saveErr != nil {
 		return false
 	}
+	a.pluginSettings.settingSaveRevisions[pluginID]++
 	a.applySavedPluginSettingValues(pluginID, persistedValues)
 	if sameForm {
 		return pluginFormDirty(form.definitions, form.values, form.initial)
@@ -2140,7 +2144,7 @@ func (a *App) reconcilePluginSettingSave(submitted *pluginSettingsFormState, plu
 }
 
 // refreshPluginFormDefinitions reloads one installed plugin's setting definitions without flashing the catalog.
-func (a *App) refreshPluginFormDefinitions(pluginID string) {
+func (a *App) refreshPluginFormDefinitions(pluginID string, saveRevision uint64) {
 	plugins, err := loadPluginSettingsPlugins(a.lifecycleCtx, a.services, a.sessionID, false)
 	if err != nil {
 		log.Printf("refresh plugin form definitions: %v", err)
@@ -2149,6 +2153,11 @@ func (a *App) refreshPluginFormDefinitions(pluginID string) {
 	requestModels := false
 	requestProviders := false
 	_ = a.runOnUI("refresh plugin form definitions", func() {
+		// Catalog reads include setting values as well as dynamic definitions. A
+		// slower earlier read must not overwrite values committed by a later save.
+		if saveRevision != a.pluginSettings.settingSaveRevisions[pluginID] {
+			return
+		}
 		current := a.pluginSettings.Plugins()
 		for index := range current {
 			if current[index].ID != pluginID {

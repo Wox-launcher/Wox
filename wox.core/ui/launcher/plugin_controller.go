@@ -67,10 +67,12 @@ type pluginSettingsController struct {
 	pluginOperationError string
 	pluginUninstallArmed string
 	memoryRevision       uint64
+	// settingSaveRevisions prevents an earlier definition refresh from reverting a later save of the same plugin.
+	settingSaveRevisions map[string]uint64
 }
 
 func newPluginSettingsController(deps CommonDeps) *pluginSettingsController {
-	return &pluginSettingsController{deps: deps}
+	return &pluginSettingsController{deps: deps, settingSaveRevisions: make(map[string]uint64)}
 }
 
 func (c *pluginSettingsController) Plugins() []pluginSettingsPlugin {

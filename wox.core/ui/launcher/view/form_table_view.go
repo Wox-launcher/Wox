@@ -1819,7 +1819,7 @@ func QueryHotkeyEditorHeader(props QueryHotkeyEditorHeaderProps) woxwidget.Widge
 		}
 		buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
 			ID: "query-hotkey-preset-" + item.id, Label: item.label, Width: buttonWidth, Radius: 8, FontSize: 12,
-			Variant: variant, OnTap: func() { props.OnSelect(item.id) }, Theme: props.Theme,
+			Variant: variant, Selected: item.id == props.Selected, OnTap: func() { props.OnSelect(item.id) }, Theme: props.Theme,
 		}))
 	}
 	var demo woxwidget.Widget

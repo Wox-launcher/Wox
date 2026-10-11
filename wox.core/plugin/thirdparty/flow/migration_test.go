@@ -115,6 +115,32 @@ func TestFlowMigrationDetectsScoopPortableUserData(t *testing.T) {
 	}
 }
 
+func TestFlowMigrationTestRootHidesTheDeveloperInstall(t *testing.T) {
+	isolateFlowMigrationHome(t)
+	t.Setenv(util.TestWoxDataDirEnv, t.TempDir())
+	real := t.TempDir()
+	t.Setenv("APPDATA", real)
+	writeMigrationFile(t, filepath.Join(real, "FlowLauncher", "Settings", "Settings.json"), `{"Hotkey":"Ctrl + Space"}`)
+	fixture := t.TempDir()
+	t.Setenv(util.TestFlowUserDataEnv, fixture)
+
+	missing, err := (flowMigrationSource{}).Detect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing != nil {
+		t.Fatalf("empty fixture detected %#v", missing)
+	}
+	writeMigrationFile(t, filepath.Join(fixture, "Settings", "Settings.json"), `{"Hotkey":"Alt + Space"}`)
+	installation, err := (flowMigrationSource{}).Detect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installation == nil || installation.Location() != fixture || installation.Hotkey() != "Alt + Space" {
+		t.Fatalf("installation %#v", installation)
+	}
+}
+
 func TestFlowMigrationCatalogGroupsSettingsAndPlugins(t *testing.T) {
 	isolateFlowMigrationHome(t)
 	root := t.TempDir()

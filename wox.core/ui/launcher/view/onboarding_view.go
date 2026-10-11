@@ -1247,7 +1247,7 @@ func onboardingFooter(props OnboardingProps, active int) woxwidget.Widget {
 		}
 		dots = append(dots, woxwidget.Semantics{
 			Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: step.Title,
-			Actions: actions, Disabled: disabled,
+			Actions: actions, Disabled: disabled, Selected: index == active,
 			Child: woxwidget.Gesture{ID: id, OnTap: onTap, Child: woxwidget.Align{Width: 22, Height: 36, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Container{Width: size, Height: size, Radius: size / 2, Color: color}}},
 		})
 	}

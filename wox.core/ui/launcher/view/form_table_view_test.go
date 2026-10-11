@@ -338,6 +338,12 @@ func TestQueryHotkeyEditorHeaderUsesFourEqualPresets(t *testing.T) {
 	if len(buttons.Children) != 4 || buttons.Gap != 8 {
 		t.Fatalf("preset buttons = %d gap %.0f", len(buttons.Children), buttons.Gap)
 	}
+	for index, button := range buttons.Children {
+		semantics := button.(woxwidget.Semantics)
+		if semantics.Selected != (index == 1) || semantics.Role != woxui.AccessibilityRoleButton || semantics.AutomationID == "" {
+			t.Fatalf("preset %d semantics = id %q selected %v", index, semantics.AutomationID, semantics.Selected)
+		}
+	}
 	preview := focusedControlGesture(buttons.Children[1])
 	preview.OnTap()
 	if selected != "web-panel" {

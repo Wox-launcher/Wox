@@ -42,8 +42,10 @@ type ButtonProps struct {
 	FontSize     float32
 	// FontWeight overrides the default regular button label. Leave zero unless
 	// a specific surface needs extra emphasis.
-	FontWeight        woxui.FontWeight
-	Disabled          bool
+	FontWeight woxui.FontWeight
+	Disabled   bool
+	// Selected marks the active choice when several buttons form one selector.
+	Selected          bool
 	Variant           ButtonVariant
 	OnTap             func()
 	OnHoverAt         func(bool, woxui.Rect)
@@ -194,7 +196,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 	})
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
-		Actions: actions, Disabled: props.Disabled,
+		Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
 			if props.OnKey != nil && props.OnKey(event) {
 				return true

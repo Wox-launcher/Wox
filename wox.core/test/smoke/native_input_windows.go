@@ -2,6 +2,76 @@
 
 package smoke
 
+/*
+#include <windows.h>
+
+// woxSmokeSendChord releases a stuck copy of the chord before pressing it.
+// RegisterHotKey uses MOD_NOREPEAT, so a key left down by a recorder or a
+// previous injection is ignored until it is released and pressed again.
+static const char* woxSmokeSendChord(const unsigned short* keys, int count) {
+    if (count <= 0 || count > 8) {
+        return "invalid Windows smoke chord";
+    }
+
+    INPUT inputs[24];
+    int n = 0;
+    WORD releaseFirst[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LSHIFT, VK_RSHIFT};
+    for (int i = 0; i < 6; i++) {
+        if (GetAsyncKeyState(releaseFirst[i]) & 0x8000) {
+            DWORD flags = KEYEVENTF_KEYUP;
+            if (releaseFirst[i] == VK_RCONTROL || releaseFirst[i] == VK_RMENU || releaseFirst[i] == VK_RSHIFT) {
+                flags |= KEYEVENTF_EXTENDEDKEY;
+            }
+            INPUT *ip = &inputs[n++];
+            ZeroMemory(ip, sizeof(*ip));
+            ip->type = INPUT_KEYBOARD;
+            ip->ki.wVk = releaseFirst[i];
+            ip->ki.wScan = (WORD)MapVirtualKeyW(releaseFirst[i], MAPVK_VK_TO_VSC);
+            ip->ki.dwFlags = flags;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        if (GetAsyncKeyState(keys[i]) & 0x8000) {
+            INPUT *ip = &inputs[n++];
+            ZeroMemory(ip, sizeof(*ip));
+            ip->type = INPUT_KEYBOARD;
+            ip->ki.wVk = keys[i];
+            ip->ki.wScan = (WORD)MapVirtualKeyW(keys[i], MAPVK_VK_TO_VSC);
+            ip->ki.dwFlags = KEYEVENTF_KEYUP;
+        }
+    }
+    if (n > 0) {
+        UINT released = SendInput((UINT)n, inputs, sizeof(INPUT));
+        if (released != (UINT)n) {
+            return "failed to release stuck Windows smoke keys";
+        }
+    }
+
+    n = 0;
+    for (int i = 0; i < count; i++) {
+        INPUT *ip = &inputs[n++];
+        ZeroMemory(ip, sizeof(*ip));
+        ip->type = INPUT_KEYBOARD;
+        ip->ki.wVk = keys[i];
+        ip->ki.wScan = (WORD)MapVirtualKeyW(keys[i], MAPVK_VK_TO_VSC);
+    }
+    for (int i = count - 1; i >= 0; i--) {
+        INPUT *ip = &inputs[n++];
+        ZeroMemory(ip, sizeof(*ip));
+        ip->type = INPUT_KEYBOARD;
+        ip->ki.wVk = keys[i];
+        ip->ki.wScan = (WORD)MapVirtualKeyW(keys[i], MAPVK_VK_TO_VSC);
+        ip->ki.dwFlags = KEYEVENTF_KEYUP;
+    }
+    UINT sent = SendInput((UINT)n, inputs, sizeof(INPUT));
+    if (sent != (UINT)n) {
+        return "failed to send Windows smoke chord";
+    }
+    return NULL;
+}
+*/
+import "C"
+
 import (
 	"context"
 	"fmt"
@@ -17,8 +87,6 @@ import (
 	woxwindow "wox/util/window"
 )
 
-const windowsKeyEventFlagKeyUp = 0x0002
-
 // windowsVisibleWindowSearch carries one title match through EnumWindows.
 type windowsVisibleWindowSearch struct {
 	window uintptr
@@ -27,7 +95,6 @@ type windowsVisibleWindowSearch struct {
 }
 
 var (
-	windowsKeybdEvent         = windows.NewLazySystemDLL("user32.dll").NewProc("keybd_event")
 	windowsEnumWindows        = windows.NewLazySystemDLL("user32.dll").NewProc("EnumWindows")
 	windowsGetWindowProcessID = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowThreadProcessId")
 	windowsGetWindowText      = windows.NewLazySystemDLL("user32.dll").NewProc("GetWindowTextW")
@@ -55,8 +122,8 @@ var (
 
 // SendNativeKeyChord posts one chord through the real Windows input path.
 func SendNativeKeyChord(keys ...string) error {
-	keyCodes := map[string]uintptr{"ctrl": 0x11, "alt": 0x12, "space": 0x20, "a": 0x41, "c": 0x43, "f12": 0x7B}
-	resolved := make([]uintptr, 0, len(keys))
+	keyCodes := map[string]C.ushort{"ctrl": 0x11, "alt": 0x12, "space": 0x20, "a": 0x41, "c": 0x43, "f12": 0x7B}
+	resolved := make([]C.ushort, 0, len(keys))
 	for _, key := range keys {
 		code, ok := keyCodes[strings.ToLower(key)]
 		if !ok {
@@ -67,14 +134,8 @@ func SendNativeKeyChord(keys ...string) error {
 	if len(resolved) == 0 {
 		return fmt.Errorf("empty Windows smoke chord")
 	}
-	if err := windowsKeybdEvent.Find(); err != nil {
-		return fmt.Errorf("resolve keybd_event: %w", err)
-	}
-	for _, key := range resolved {
-		windowsKeybdEvent.Call(key, 0, 0, 0)
-	}
-	for index := len(resolved) - 1; index >= 0; index-- {
-		windowsKeybdEvent.Call(resolved[index], 0, windowsKeyEventFlagKeyUp, 0)
+	if message := C.woxSmokeSendChord(&resolved[0], C.int(len(resolved))); message != nil {
+		return fmt.Errorf("%s", C.GoString(message))
 	}
 	return nil
 }

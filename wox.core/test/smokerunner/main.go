@@ -24,6 +24,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smokefixture"
+	"wox/util"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -122,6 +123,11 @@ func run(caseSelector string) (int, error) {
 			return 1, err
 		}
 	}
+	flowUserDataDirectory := filepath.Join(suiteDirectory, "flow-user-data")
+	if err := os.MkdirAll(flowUserDataDirectory, 0o755); err != nil {
+		retainSuiteDirectory = true
+		return 1, fmt.Errorf("create flow import fixture directory: %w", err)
+	}
 	launchOptions := automationdriver.LaunchOptions{
 		Environment: []string{
 			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
@@ -129,6 +135,7 @@ func run(caseSelector string) (int, error) {
 			fmt.Sprintf("WOX_TEST_SERVER_PORT=%d", port),
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
+			util.TestFlowUserDataEnv + "=" + flowUserDataDirectory,
 			"WOX_DEBUG_REPAINT=verify",
 		},
 		StartupTimeout: 45 * time.Second,
@@ -157,6 +164,7 @@ func run(caseSelector string) (int, error) {
 	testEnvironment := replaceEnvironment(os.Environ(), automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedUserDataDirectoryEnvironment, userDataDirectory)
+	testEnvironment = replaceEnvironment(testEnvironment, util.TestFlowUserDataEnv, flowUserDataDirectory)
 	suiteStarted = time.Now()
 	supervisorOwned := false
 	for _, target := range targets {

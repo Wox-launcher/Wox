@@ -364,6 +364,10 @@ func TestOnboardingThemeStepUsesContinueLabel(t *testing.T) {
 	if button.Label != "Continue" {
 		t.Fatalf("theme step action = %q", button.Label)
 	}
+	dots := footer.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if !dots.Children[0].(woxwidget.Semantics).Selected || dots.Children[1].(woxwidget.Semantics).Selected {
+		t.Fatal("active onboarding step dot is not the selected step")
+	}
 }
 
 func TestOnboardingFinishVisualShowsSettingQueryAndConfiguredSummary(t *testing.T) {
