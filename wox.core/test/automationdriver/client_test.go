@@ -764,6 +764,65 @@ func TestFindByAutomationIDPrefix(t *testing.T) {
 	}
 }
 
+// TestPressKeyWithTimeoutIsScopedToRequest covers native startup without weakening ordinary actions or caller deadlines.
+func TestPressKeyWithTimeoutIsScopedToRequest(t *testing.T) {
+	t.Setenv(SmokeStepDelayEnvironment, "0")
+	client, err := NewClient(automation.Info{Address: "http://wox-automation.test", Token: "test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wantBudget time.Duration
+	client.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		deadline, ok := r.Context().Deadline()
+		remaining := time.Until(deadline)
+		if !ok || remaining > wantBudget || remaining < wantBudget-time.Second {
+			t.Fatalf("effective request budget = %s, want about %s", remaining, wantBudget)
+		}
+		var payload struct {
+			Method string
+			Params struct {
+				Key       woxui.Key
+				Modifiers woxui.KeyModifiers
+			}
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Method != "input.key" || payload.Params.Key != woxui.KeyEnter || payload.Params.Modifiers != woxui.KeyModifierControl {
+			t.Fatalf("unexpected key request: %+v", payload)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"result":true}`)), Header: make(http.Header)}, nil
+	})
+	for _, tc := range []struct {
+		name      string
+		explicit  time.Duration
+		parent    time.Duration
+		effective time.Duration
+	}{
+		{name: "cold startup", explicit: 30 * time.Second, parent: time.Minute, effective: 30 * time.Second},
+		{name: "next ordinary action", parent: time.Minute, effective: ActionTimeout},
+		{name: "earlier caller deadline", explicit: 30 * time.Second, parent: 3 * time.Second, effective: 3 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wantBudget = tc.effective
+			ctx, cancel := context.WithTimeout(context.Background(), tc.parent)
+			defer cancel()
+			var err error
+			if tc.explicit == 0 {
+				err = client.PressKey(ctx, woxui.KeyEnter, woxui.KeyModifierControl)
+			} else {
+				err = client.PressKeyWithTimeout(ctx, woxui.KeyEnter, woxui.KeyModifierControl, tc.explicit)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if client.http.Timeout != ActionTimeout+time.Second {
+				t.Fatalf("shared HTTP timeout changed to %s", client.http.Timeout)
+			}
+		})
+	}
+}
+
 type roundTripFunc func(request *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

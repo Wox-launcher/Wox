@@ -44,7 +44,7 @@ const (
 	SharedLifecycleStateEnvironment = "WOX_GO_UI_SMOKE_LIFECYCLE_STATE"
 )
 
-// ActionTimeout is the longest one smoke wait may block. A longer hang is a product bug.
+// ActionTimeout bounds ordinary smoke interactions. Native engine startup can use an explicit request budget.
 const ActionTimeout = 10 * time.Second
 
 // withActionTimeout caps one wait so a stuck predicate fails in 10s instead of the case budget.
@@ -401,6 +401,15 @@ func (c *Client) PressKey(ctx context.Context, key woxui.Key, modifiers woxui.Ke
 	return err
 }
 
+// PressKeyWithTimeout gives one key-triggered native startup its own budget without changing subsequent interactions.
+func (c *Client) PressKeyWithTimeout(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers, timeout time.Duration) error {
+	if timeout <= 0 {
+		return errors.New("key press timeout must be positive")
+	}
+	_, err := callWithTimeout[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers}, timeout)
+	return c.pauseAfterStep(ctx, err)
+}
+
 // PressKeyHandled sends one complete semantic key press and reports whether the product handled it.
 func (c *Client) PressKeyHandled(ctx context.Context, key woxui.Key, modifiers woxui.KeyModifiers) (bool, error) {
 	handled, err := call[bool](ctx, c, "input.key", map[string]any{"key": key, "modifiers": modifiers})
@@ -523,7 +532,12 @@ func (c *Client) Capture(ctx context.Context, path string) error {
 }
 
 func call[T any](ctx context.Context, client *Client, method string, params any) (T, error) {
-	ctx, cancel := withActionTimeout(ctx)
+	return callWithTimeout[T](ctx, client, method, params, ActionTimeout)
+}
+
+// callWithTimeout keeps the request and HTTP transport budgets aligned while honoring an earlier caller deadline.
+func callWithTimeout[T any](ctx context.Context, client *Client, method string, params any, timeout time.Duration) (T, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var result T
 	payload, err := json.Marshal(request{JSONRPC: "2.0", ID: client.nextID.Add(1), Method: method, Params: params})
@@ -536,7 +550,15 @@ func call[T any](ctx context.Context, client *Client, method string, params any)
 	}
 	httpRequest.Header.Set("Authorization", "Bearer "+client.token)
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpResponse, err := client.http.Do(httpRequest)
+	httpClient := client.http
+	if timeout > ActionTimeout {
+		// The shared client's default transport deadline would otherwise cut off
+		// cold startup even when the request context allows it to finish.
+		startupClient := *client.http
+		startupClient.Timeout = timeout + time.Second
+		httpClient = &startupClient
+	}
+	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		return result, err
 	}

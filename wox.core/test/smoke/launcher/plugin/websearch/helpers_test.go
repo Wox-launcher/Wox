@@ -403,7 +403,15 @@ func startWebSearchPreviewServer(t *testing.T) *httptest.Server {
 
 func openWebSearchWebViewPreview(t *testing.T, ctx context.Context, client *automationdriver.Client, query, previewURL string) {
 	t.Helper()
-	if err := client.PressKey(ctx, woxui.KeyEnter, webSearchPrimaryModifier()); err != nil {
+	var err error
+	if runtime.GOOS == "windows" {
+		// WebView2 environment creation synchronously blocked the CI UI thread for
+		// 9.89s on a cold profile, leaving no room in the ordinary 10s key budget.
+		err = client.PressKeyWithTimeout(ctx, woxui.KeyEnter, webSearchPrimaryModifier(), 30*time.Second)
+	} else {
+		err = client.PressKey(ctx, woxui.KeyEnter, webSearchPrimaryModifier())
+	}
+	if err != nil {
 		t.Fatalf("open Web Search WebView preview: %v", err)
 	}
 	waitForWebSearchWebViewPreview(t, ctx, client, query, previewURL)
