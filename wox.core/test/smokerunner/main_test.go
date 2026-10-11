@@ -11,6 +11,19 @@ import (
 	"time"
 )
 
+// TestSuiteControlAddressSeparatesLaunches covers the Windows pipe and Unix socket naming policy.
+func TestSuiteControlAddressSeparatesLaunches(t *testing.T) {
+	directory := t.TempDir()
+	first := suiteControlAddress(directory, 1)
+	second := suiteControlAddress(directory, 2)
+	if first == second {
+		t.Fatalf("successive launches share control address %q", first)
+	}
+	if first != suiteControlAddress(directory, 1) {
+		t.Fatal("a launch's control address changed")
+	}
+}
+
 func TestSmokePackageUsesSupervisorForCrashAndRestore(t *testing.T) {
 	if !smokePackageUsesSupervisor("test/smoke/supervisor") || !smokePackageUsesSupervisor("test/smoke/setting/data") {
 		t.Fatal("crash restart and backup restore must run under the supervisor")

@@ -408,7 +408,7 @@ test-isolated:
 
 # The fast Go UI layer runs on every relevant change and never opens a native window.
 test-go-ui-unit: ensure-resources
-	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./ui/widget ./ui/launcher ./test/automationdriver -count=1
+	cd wox.core && go test -tags "wox_automation" ./appcontrol ./ui/automation ./ui/runtime ./ui/widget ./ui/launcher ./test/automationdriver ./test/smokerunner -count=1
 
 GO_UI_SMOKE_BINARY_NAME := wox-go-ui-smoke$(if $(filter windows,$(PLATFORM)),.exe,)
 GO_UI_SMOKE_BINARY := $(CURDIR)/wox.core/.tmp/$(GO_UI_SMOKE_BINARY_NAME)

@@ -1087,6 +1087,8 @@ typedef struct {
   void *data;
 } WoxMainCall;
 
+static void linux_ui_call_completed(void);
+
 static bool is_main_thread(void) {
   return g_atomic_int_get(&wox_linux_runtime_running) != 0 && pthread_equal(pthread_self(), wox_linux_main_thread);
 }
@@ -1094,6 +1096,7 @@ static bool is_main_thread(void) {
 static gboolean execute_main_call(gpointer data) {
   WoxMainCall *call = data;
   call->function(call->data);
+  linux_ui_call_completed();
   g_mutex_lock(&call->mutex);
   call->done = true;
   g_cond_signal(&call->condition);
@@ -1107,7 +1110,33 @@ static gboolean execute_main_call(gpointer data) {
 static GMutex wox_linux_ui_stage_mutex;
 static const char *wox_linux_ui_stage = "startup";
 static gint64 wox_linux_ui_stage_us;
-static volatile gint wox_linux_ui_waiters;
+static int32_t wox_linux_ui_waiters;
+static gint64 wox_linux_ui_backlog_us;
+static uint64_t wox_linux_ui_completed_calls;
+
+// Track continuous backlog separately from the native stage: rendering can keep
+// changing stages while idle-priority UI calls never get a turn.
+static void linux_ui_wait_started(void) {
+  g_mutex_lock(&wox_linux_ui_stage_mutex);
+  if (wox_linux_ui_waiters++ == 0) {
+    wox_linux_ui_backlog_us = g_get_monotonic_time();
+  }
+  g_mutex_unlock(&wox_linux_ui_stage_mutex);
+}
+
+static void linux_ui_wait_finished(void) {
+  g_mutex_lock(&wox_linux_ui_stage_mutex);
+  if (--wox_linux_ui_waiters == 0) {
+    wox_linux_ui_backlog_us = 0;
+  }
+  g_mutex_unlock(&wox_linux_ui_stage_mutex);
+}
+
+static void linux_ui_call_completed(void) {
+  g_mutex_lock(&wox_linux_ui_stage_mutex);
+  wox_linux_ui_completed_calls++;
+  g_mutex_unlock(&wox_linux_ui_stage_mutex);
+}
 
 static void wox_linux_note_stage(const char *stage) {
   g_mutex_lock(&wox_linux_ui_stage_mutex);
@@ -1116,10 +1145,17 @@ static void wox_linux_note_stage(const char *stage) {
   g_mutex_unlock(&wox_linux_ui_stage_mutex);
 }
 
-void wox_linux_ui_stage_snapshot(char *buffer, int32_t capacity, int64_t *age_us, int32_t *waiters) {
+void wox_linux_ui_stage_snapshot(char *buffer, int32_t capacity, int64_t *age_us, int32_t *waiters, int64_t *backlog_age_us, uint64_t *completed_calls) {
   g_mutex_lock(&wox_linux_ui_stage_mutex);
   const char *stage = wox_linux_ui_stage != NULL ? wox_linux_ui_stage : "";
   gint64 stage_us = wox_linux_ui_stage_us;
+  gint64 backlog_us = wox_linux_ui_backlog_us;
+  if (waiters != NULL) {
+    *waiters = wox_linux_ui_waiters;
+  }
+  if (completed_calls != NULL) {
+    *completed_calls = wox_linux_ui_completed_calls;
+  }
   g_mutex_unlock(&wox_linux_ui_stage_mutex);
   if (buffer != NULL && capacity > 0) {
     snprintf(buffer, (size_t)capacity, "%s", stage);
@@ -1128,8 +1164,9 @@ void wox_linux_ui_stage_snapshot(char *buffer, int32_t capacity, int64_t *age_us
     gint64 now = g_get_monotonic_time();
     *age_us = stage_us > 0 && now > stage_us ? now - stage_us : 0;
   }
-  if (waiters != NULL) {
-    *waiters = g_atomic_int_get(&wox_linux_ui_waiters);
+  if (backlog_age_us != NULL) {
+    gint64 now = g_get_monotonic_time();
+    *backlog_age_us = backlog_us > 0 && now > backlog_us ? now - backlog_us : 0;
   }
 }
 
@@ -1148,21 +1185,22 @@ static bool run_on_main_sync(WoxMainFunction function, void *data) {
   g_cond_init(&call.condition);
   GSource *source = g_idle_source_new();
   g_source_set_callback(source, execute_main_call, &call, NULL);
+  linux_ui_wait_started();
   guint source_id = g_source_attach(source, g_main_context_default());
   g_source_unref(source);
   if (source_id == 0) {
+    linux_ui_wait_finished();
     g_cond_clear(&call.condition);
     g_mutex_clear(&call.mutex);
     return false;
   }
 
-  g_atomic_int_add(&wox_linux_ui_waiters, 1);
   g_mutex_lock(&call.mutex);
   while (!call.done) {
     g_cond_wait(&call.condition, &call.mutex);
   }
   g_mutex_unlock(&call.mutex);
-  g_atomic_int_add(&wox_linux_ui_waiters, -1);
+  linux_ui_wait_finished();
   g_cond_clear(&call.condition);
   g_mutex_clear(&call.mutex);
   return true;

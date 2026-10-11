@@ -18,6 +18,7 @@ harness = r"""
 #include <stdbool.h>
 #include <stdint.h>
 #include <assert.h>
+#include <stdio.h>
 
 static GMainLoop *loop;
 static pthread_t wox_linux_main_thread, worker;
@@ -66,7 +67,21 @@ static int32_t woxGoLinuxStart(uintptr_t context) {
   assert(pthread_create(&worker, NULL, background_load, NULL) == 0);
   while (!g_atomic_int_get(&worker_started)) g_thread_yield();
   // Force the catalog worker to dispatch while the startup callback is still running.
+  char stage[160];
+  int64_t stage_age, backlog_age;
+  int32_t waiters;
+  uint64_t completed;
+  // Wait until the worker has queued its synchronous call, then simulate changing
+  // render stages. Stage freshness must not erase the pending-call evidence.
+  do {
+    wox_linux_ui_stage_snapshot(stage, sizeof(stage), &stage_age, &waiters, &backlog_age, &completed);
+    g_thread_yield();
+  } while (waiters == 0);
   g_usleep(100000);
+  wox_linux_note_stage("gl-render");
+  wox_linux_ui_stage_snapshot(stage, sizeof(stage), &stage_age, &waiters, &backlog_age, &completed);
+  assert(waiters == 1 && completed == 0);
+  assert(backlog_age >= 100000 && backlog_age > stage_age);
   return 0;
 }
 
@@ -78,6 +93,11 @@ int main(void) {
     if (scenario == 0) {
       pthread_join(worker, NULL);
       assert(dispatch_result == 0 && callback_count == 1);
+      int64_t backlog_age;
+      int32_t waiters;
+      uint64_t completed;
+      wox_linux_ui_stage_snapshot(NULL, 0, NULL, &waiters, &backlog_age, &completed);
+      assert(waiters == 0 && backlog_age == 0 && completed == 1);
     }
     if (scenario == 3) assert(callback_count == 2);
     assert(!wox_linux_runtime_running && !wox_linux_loop_active);
@@ -95,4 +115,4 @@ with tempfile.TemporaryDirectory(prefix="wox-startup-test-") as directory:
     flags = shlex.split(subprocess.check_output(["pkg-config", "--cflags", "--libs", "glib-2.0"], text=True))
     subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", str(test), "-o", str(binary), "-pthread", *flags], check=True)
     subprocess.run([str(binary)], check=True, timeout=10)
-print("PASS: startup background dispatch, deferred UI dispatch, startup failure, and no-window shutdown")
+print("PASS: startup background dispatch, backlog diagnostics across stage changes, deferred UI dispatch, startup failure, and no-window shutdown")

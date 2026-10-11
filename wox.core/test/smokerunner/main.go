@@ -130,11 +130,16 @@ func run(caseSelector string) (int, error) {
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
 			"WOX_DEBUG_REPAINT=verify",
-			"WOX_SUPERVISOR_CONTROL_ADDRESS=" + suiteControlAddress(suiteDirectory),
 		},
 		StartupTimeout: 45 * time.Second,
 	}
+	launchNumber := 0
 	launchProcess := func() (*automationdriver.Process, error) {
+		launchNumber++
+		// A force-killed supervisor can leave its Unix socket behind. Each launch
+		// gets a new endpoint without unlinking a socket another process may own.
+		launchOptions.Environment = replaceEnvironment(launchOptions.Environment,
+			"WOX_SUPERVISOR_CONTROL_ADDRESS", suiteControlAddress(suiteDirectory, launchNumber))
 		process, err := automationdriver.Launch(ctx, absoluteExecutable, launchOptions)
 		if err != nil {
 			return nil, err
@@ -404,12 +409,12 @@ func (target smokeTarget) importPath() string {
 	return smokeModulePath + "/" + target.dir
 }
 
-// suiteControlAddress keeps this suite's supervisor off the default endpoint, which a running Wox already owns.
-func suiteControlAddress(suiteDirectory string) string {
+// suiteControlAddress isolates launches and keeps Unix filenames short for macOS's socket path limit.
+func suiteControlAddress(suiteDirectory string, launchNumber int) string {
 	if runtime.GOOS == "windows" {
-		return `\\.\pipe\WoxSupervisor-` + filepath.Base(suiteDirectory)
+		return fmt.Sprintf(`\\.\pipe\WoxSupervisor-%s-%d`, filepath.Base(suiteDirectory), launchNumber)
 	}
-	return filepath.Join(suiteDirectory, "supervisor.sock")
+	return filepath.Join(suiteDirectory, fmt.Sprintf("sv%d.sock", launchNumber))
 }
 
 // smokePackageUsesSupervisor reports packages whose Wox process must be the supervisor's child.

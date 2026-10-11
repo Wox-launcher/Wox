@@ -37,6 +37,8 @@ jobs:
           cache: false
       - name: Test UI contracts
         run: make test-go-ui-unit
+      - name: Test Linux native dispatch
+        run: python3 wox.core/ui/runtime/internal/window/testdata/test_linux_startup.py
 
   native-smoke:
     name: Native launcher smoke (${{ matrix.name }})

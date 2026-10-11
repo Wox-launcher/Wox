@@ -124,11 +124,12 @@ func platformRun(start func() error) error {
 	return nil
 }
 
-// watchLinuxUIStage reports a native stage that stays current while synchronous
-// UI callers are blocked. An idle gtk-main with no waiters stays quiet.
+// watchLinuxUIStage reports persistent UI-call backlog even if rendering keeps
+// changing native stages. Completion counts distinguish slow progress from starvation.
 func watchLinuxUIStage(stop <-chan struct{}) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	var previousCompleted uint64
 	for {
 		select {
 		case <-stop:
@@ -137,14 +138,19 @@ func watchLinuxUIStage(stop <-chan struct{}) {
 		}
 		var stage [160]C.char
 		var ageUS C.int64_t
+		var backlogAgeUS C.int64_t
 		var waiters C.int32_t
-		C.wox_linux_ui_stage_snapshot(&stage[0], C.int32_t(len(stage)), &ageUS, &waiters)
-		if waiters <= 0 || ageUS < 2_000_000 {
+		var completed C.uint64_t
+		C.wox_linux_ui_stage_snapshot(&stage[0], C.int32_t(len(stage)), &ageUS, &waiters, &backlogAgeUS, &completed)
+		completedSinceSample := uint64(completed) - previousCompleted
+		previousCompleted = uint64(completed)
+		if waiters <= 0 || backlogAgeUS < 2_000_000 {
 			continue
 		}
 		util.GetLogger().Warn(context.Background(), fmt.Sprintf(
-			"linux UI thread still in stage %q for %s with %d synchronous callers waiting",
-			C.GoString(&stage[0]), time.Duration(ageUS)*time.Microsecond, int32(waiters),
+			"linux UI call backlog: duration=%s waiters=%d completedSinceSample=%d stage=%q stageAge=%s",
+			time.Duration(backlogAgeUS)*time.Microsecond, int32(waiters), completedSinceSample,
+			C.GoString(&stage[0]), time.Duration(ageUS)*time.Microsecond,
 		))
 	}
 }
