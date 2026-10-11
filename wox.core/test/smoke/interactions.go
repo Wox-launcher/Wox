@@ -417,6 +417,14 @@ func OpenInstalledPluginSettings(t *testing.T, ctx context.Context, client *auto
 	if err := client.Perform(selectCtx, listID, woxui.AccessibilityActionActivate, ""); err != nil {
 		t.Fatalf("select installed plugin %q: %v", pluginID, err)
 	}
+	// Actions update selection before the next frame replaces the old plugin's
+	// controls. Generic IDs such as plugin-disable can still belong to that plugin.
+	if _, err := client.WaitFor(selectCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		row, found := automationdriver.Find(snapshot, listID)
+		return found && row.Selected
+	}); err != nil {
+		t.Fatalf("wait for installed plugin %q to be selected: %v", pluginID, err)
+	}
 }
 
 // WaitForApplicationCatalog waits until the shared application picker has a complete platform catalog.
