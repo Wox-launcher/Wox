@@ -27,6 +27,10 @@ func (flowLayer) Hosts() []plugin.Host {
 	return []plugin.Host{&script.Host{}, &dotnet.Host{}}
 }
 
+// SupportedOS keeps Flow off macOS and Linux. Flow Launcher plugins, including
+// the Python and Node plugins in this layer, run only on Windows.
+func (flowLayer) SupportedOS() []string { return []string{"Windows"} }
+
 func (flowLayer) Store() plugin.ExternalStore { return manifest.Store() }
 
 var _ plugin.Layer = flowLayer{}

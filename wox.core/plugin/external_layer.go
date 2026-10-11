@@ -19,6 +19,12 @@ type Layer interface {
 	Hosts() []Host
 	// Store is nil when the layer has no plugin catalog.
 	Store() ExternalStore
+	// SupportedOS lists the platforms whose hosts may be installed.
+	// Names match plugin metadata: Windows, Darwin, and Linux.
+	// An empty list means every platform. Runtime settings, host startup,
+	// and the plugin runtime filter all read the installed host list, so a
+	// layer that cannot run here must not contribute hosts.
+	SupportedOS() []string
 }
 
 // ExternalStore is a plugin catalog whose install path is not the official store.
@@ -48,19 +54,34 @@ var (
 
 // RegisterThirdParty adds a compatibility layer's hosts, store, and directory.
 // init calls this once. Owns implementations must not claim the same plugin.
+// The directory and store stay registered on every system. Hosts are installed
+// only where SupportedOS includes the current platform.
 func RegisterThirdParty(layer Layer) {
 	if layer == nil {
 		return
 	}
 	RegisterReservedPluginDirectory(layer.Directory())
+	if store := layer.Store(); store != nil {
+		externalStores = append(externalStores, store)
+	}
+	if !layerRunsOnCurrentOS(layer) {
+		return
+	}
 	for _, host := range layer.Hosts() {
 		if host != nil {
 			AllHosts = append(AllHosts, host)
 		}
 	}
-	if store := layer.Store(); store != nil {
-		externalStores = append(externalStores, store)
+}
+
+// layerRunsOnCurrentOS reports whether this machine may install the layer's hosts.
+// An empty SupportedOS list means the layer runs on every platform.
+func layerRunsOnCurrentOS(layer Layer) bool {
+	supported := layer.SupportedOS()
+	if len(supported) == 0 {
+		return true
 	}
+	return IsAnySupportedInCurrentOS(supported)
 }
 
 // RegisterReservedPluginDirectory keeps a user-plugins child out of the packaged plugin scan.
