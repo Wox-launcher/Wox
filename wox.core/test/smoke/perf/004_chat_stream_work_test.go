@@ -53,7 +53,7 @@ func Test004ChatStreamWork(t *testing.T) {
 			t.Fatalf("wait for chat stream completion: %v", err)
 		}
 		waitForSnapshotQuiet(t, ctx, client, 350*time.Millisecond)
-		steadySamples := waitForPresentedSamples(t, ctx, client)
+		steadySamples := collectPresentedSamples(t, ctx, client)
 		assertSettledWork(t, steadySamples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 

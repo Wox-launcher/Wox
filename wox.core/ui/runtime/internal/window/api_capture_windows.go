@@ -21,6 +21,11 @@ func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
 	return capture.CaptureWindowsVirtualDesktop()
 }
 
+// CaptureWindowsDesktopRegion captures composited desktop pixels within physical bounds.
+func CaptureWindowsDesktopRegion(bounds image.Rectangle) (*WindowsDesktopCapture, error) {
+	return capture.CaptureWindowsDesktopRegion(bounds)
+}
+
 // WindowsRectCapturer reuses one DIB so recording can copy a fixed rectangle every frame.
 type WindowsRectCapturer = capture.WindowsRectCapturer
 

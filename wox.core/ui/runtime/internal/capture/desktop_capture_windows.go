@@ -62,13 +62,31 @@ func FlushWindowsDesktopComposition() {
 
 // CaptureWindowsVirtualDesktop captures directly into one mapped top-down BGRX DIB.
 func CaptureWindowsVirtualDesktop() (*WindowsDesktopCapture, error) {
-	startedAt := time.Now()
+	return captureWindowsDesktopRegion(windowsVirtualDesktopBounds())
+}
+
+// CaptureWindowsDesktopRegion captures a physical desktop rectangle, clipping
+// offscreen pixels just as cropping a full virtual-desktop capture would.
+func CaptureWindowsDesktopRegion(bounds image.Rectangle) (*WindowsDesktopCapture, error) {
+	return captureWindowsDesktopRegion(bounds.Intersect(windowsVirtualDesktopBounds()))
+}
+
+// windowsVirtualDesktopBounds preserves physical coordinates, including negative monitor origins.
+func windowsVirtualDesktopBounds() image.Rectangle {
 	x := win.GetSystemMetrics(win.SM_XVIRTUALSCREEN)
 	y := win.GetSystemMetrics(win.SM_YVIRTUALSCREEN)
 	width := win.GetSystemMetrics(win.SM_CXVIRTUALSCREEN)
 	height := win.GetSystemMetrics(win.SM_CYVIRTUALSCREEN)
+	return image.Rect(int(x), int(y), int(x+width), int(y+height))
+}
+
+// captureWindowsDesktopRegion shares the GDI ownership path for full and bounded captures.
+func captureWindowsDesktopRegion(bounds image.Rectangle) (*WindowsDesktopCapture, error) {
+	startedAt := time.Now()
+	x, y := int32(bounds.Min.X), int32(bounds.Min.Y)
+	width, height := int32(bounds.Dx()), int32(bounds.Dy())
 	if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
-		return nil, fmt.Errorf("invalid virtual desktop size: %dx%d", width, height)
+		return nil, fmt.Errorf("invalid desktop capture size: %dx%d", width, height)
 	}
 
 	screenDC := win.GetDC(0)

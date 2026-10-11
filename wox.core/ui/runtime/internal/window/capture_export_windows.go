@@ -18,7 +18,17 @@ func writeWindowsCapturePNG(path string, source image.Image) error {
 	if err != nil {
 		return err
 	}
-	if err := png.Encode(file, source); err != nil {
+	// PNG has a direct RGBA path. Walking the native BGRX image through At
+	// boxes every pixel and repeats the channel conversion during encoding.
+	if packed, ok := source.(*PackedBGRA); ok {
+		rgba := image.NewRGBA(image.Rect(0, 0, packed.Bounds().Dx(), packed.Bounds().Dy()))
+		packed.WriteRGBA(rgba, packed.Bounds().Min)
+		source = rgba
+	}
+	// Automation compares decoded pixels, so favor latency over artifact size.
+	// Slow compression can block the UI thread through an entire caret phase.
+	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
+	if err := encoder.Encode(file, source); err != nil {
 		_ = file.Close()
 		return err
 	}

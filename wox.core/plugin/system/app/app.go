@@ -251,6 +251,10 @@ type ApplicationPlugin struct {
 	indexing         atomic.Bool
 	appIndexStatusMu sync.RWMutex
 	appIndexStatus   appIndexStatus
+	// Full scans record source ownership so directory edits preserve apps also
+	// discovered by platform catalogs or overlapping default directories.
+	indexedUserDirectories []appDirectory
+	extraAppPathKeys       map[string]bool
 
 	apps      []appInfo
 	retriever Retriever
@@ -413,11 +417,8 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 
 	a.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == "AppDirectories" {
-			// Full app rescans (especially UWP) are expensive side effects of a
-			// settings write. Keep them off the caller so cloud-sync apply and the
-			// settings UI do not stay blocked in a "syncing/restoring" state.
-			util.Go(a.runtimeCtx, "index apps after AppDirectories change", func() {
-				a.rebuildAppIndex(a.runtimeCtx, false)
+			util.Go(a.runtimeCtx, "update app directories", func() {
+				a.refreshUserAppDirectories(a.runtimeCtx)
 			})
 			return
 		}
@@ -1787,7 +1788,9 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 			extraAppPaths = paths
 		}
 	}
-	appPaths := a.getAppPaths(ctx, a.getAppDirectories(ctx))
+	userDirectories := a.getUserAddedPaths(ctx)
+	directories := append(append([]appDirectory(nil), userDirectories...), a.retriever.GetAppDirectories(ctx)...)
+	appPaths := a.getAppPaths(ctx, directories)
 	appPaths = a.deduplicateAppPaths(append(appPaths, extraAppPaths...))
 	extraApps, err := a.retriever.GetExtraApps(ctx)
 	if err != nil {
@@ -1837,6 +1840,14 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	appInfos = a.removeDuplicateApps(ctx, appInfos)
 
 	a.apps = appInfos
+	a.indexedUserDirectories = userDirectories
+	a.extraAppPathKeys = make(map[string]bool, len(extraAppPaths)+len(extraApps))
+	for _, appPath := range extraAppPaths {
+		a.extraAppPathKeys[a.pathCacheKey(appPath)] = true
+	}
+	for _, extraApp := range extraApps {
+		a.extraAppPathKeys[a.pathCacheKey(extraApp.Path)] = true
+	}
 	a.rebuildHotkeyAppCandidates(ctx)
 	a.rebuildQueryEntries(ctx)
 	a.saveAppToCache(ctx)

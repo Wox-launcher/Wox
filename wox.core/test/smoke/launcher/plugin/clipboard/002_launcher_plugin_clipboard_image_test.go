@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -40,8 +41,24 @@ func Test002LauncherPluginClipboardImage(t *testing.T) {
 		smoke.SelectLauncherResultDescriptionContains(t, ctx, client, dimensions)
 
 		snapshot := smoke.OpenResultActionPanel(t, ctx, client)
-		copyAction, found := automationdriver.FindByAutomationIDPrefix(snapshot, "action-result-")
-		if !found {
+		// Paste is the default action and sorts first; choosing it can leave native
+		// input running after this case finishes and interfere with the next case.
+		copyLabels := make(map[string]bool)
+		for _, language := range i18n.GetSupportedLanguages() {
+			translations, err := i18n.GetI18nManager().GetLangMap(ctx, language.Code)
+			if err != nil {
+				t.Fatalf("load Clipboard Copy action translation for %s: %v", language.Code, err)
+			}
+			copyLabels[translations["plugin_clipboard_primary_action_copy_to_clipboard"]] = true
+		}
+		var copyAction woxui.AccessibilityNode
+		for _, node := range snapshot.Tree.Nodes {
+			if strings.HasPrefix(node.AutomationID, "action-result-") && node.Role == woxui.AccessibilityRoleMenuItem && copyLabels[node.Label] {
+				copyAction = node
+				break
+			}
+		}
+		if copyAction.AutomationID == "" {
 			t.Fatal("Clipboard image Copy action was not exposed")
 		}
 		if err := client.Perform(ctx, copyAction.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {

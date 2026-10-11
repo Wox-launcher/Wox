@@ -69,7 +69,9 @@ func (p *smokeAutomationPlugin) queryChatFixture() plugin.QueryResponse {
 	api := p.api
 	go func() {
 		for step := 1; step <= smokeAutomationChatStreamCount; step++ {
-			time.Sleep(120 * time.Millisecond)
+			// Keep all 50 payload updates, with several vsyncs between them, without
+			// spending six seconds replaying a synthetic stream in every smoke run.
+			time.Sleep(40 * time.Millisecond)
 			// Grow the actual answer so adapter preparation is included in frame costs.
 			preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeChat, PreviewData: chatFixturePreview(true, step), ScrollPosition: plugin.WoxPreviewScrollPositionBottom}
 			api.UpdateResult(context.Background(), plugin.UpdatableResult{Id: resultID, Preview: &preview})

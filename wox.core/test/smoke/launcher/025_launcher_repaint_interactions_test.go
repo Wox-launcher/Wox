@@ -37,6 +37,11 @@ func Test025LauncherRepaintInteractions(t *testing.T) {
 			if err := client.SetRepaintDebugMode(ctx, mode); err != nil {
 				t.Fatal(err)
 			}
+			// The mode switch can repaint the whole window. Each assertion then
+			// waits for its own frames to settle, so later actions need only a reset.
+			if err := waitForInteractionFrames(ctx, client, interactionSettleBudget, false); err != nil {
+				t.Fatal(err)
+			}
 			for cycle := 0; cycle < 2; cycle++ {
 				assertInteractionDamage(t, ctx, client, panel, "filter", func() error { return client.EnterText(ctx, "__missing__") })
 				assertInteractionDamage(t, ctx, client, panel, "continued typing", func() error { return client.EnterText(ctx, "x") })
@@ -85,10 +90,10 @@ const (
 	interactionObserveBudget = 900 * time.Millisecond
 )
 
-// assertInteractionDamage drains frames already in flight, then checks every frame the action presents.
+// assertInteractionDamage checks every frame the action presents, starting from a settled stream.
 func assertInteractionDamage(t *testing.T, ctx context.Context, client *automationdriver.Client, allowed woxui.Rect, label string, action func() error) {
 	t.Helper()
-	if err := drainInteractionFrames(ctx, client); err != nil {
+	if err := client.ResetFrameMetrics(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := action(); err != nil {
@@ -120,14 +125,6 @@ func assertInteractionDamage(t *testing.T, ctx context.Context, client *automati
 	if checked == 0 {
 		t.Fatalf("%s produced no observed frames", label)
 	}
-}
-
-// drainInteractionFrames waits until completed frames stop arriving, then forgets them.
-func drainInteractionFrames(ctx context.Context, client *automationdriver.Client) error {
-	if err := waitForInteractionFrames(ctx, client, interactionSettleBudget, false); err != nil {
-		return err
-	}
-	return client.ResetFrameMetrics(ctx)
 }
 
 // waitForInteractionFrames polls until completed frames stop arriving.

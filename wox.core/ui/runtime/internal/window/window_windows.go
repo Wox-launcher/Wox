@@ -314,25 +314,20 @@ func (w *platformWindow) capturePNG(path string) error {
 	if hwnd == 0 {
 		return errors.New("woxui: Windows window is not initialized")
 	}
-	desktop, err := CaptureWindowsVirtualDesktop()
-	if err != nil {
-		return err
-	}
-	defer desktop.Close()
 	var nativeBounds win.RECT
 	if !win.GetWindowRect(hwnd, &nativeBounds) {
 		return errors.New("woxui: failed to read Windows capture bounds")
 	}
-	crop := image.Rect(
-		int(nativeBounds.Left)-desktop.Bounds.Min.X,
-		int(nativeBounds.Top)-desktop.Bounds.Min.Y,
-		int(nativeBounds.Right)-desktop.Bounds.Min.X,
-		int(nativeBounds.Bottom)-desktop.Bounds.Min.Y,
-	).Intersect(desktop.Image.Bounds())
-	if crop.Empty() {
-		return errors.New("woxui: Windows capture bounds are empty")
+	// GetWindowRect and desktop capture both use physical pixels. Copy only the
+	// window region; copying every monitor makes frequent automation captures stall.
+	desktop, err := CaptureWindowsDesktopRegion(image.Rect(
+		int(nativeBounds.Left), int(nativeBounds.Top), int(nativeBounds.Right), int(nativeBounds.Bottom),
+	))
+	if err != nil {
+		return err
 	}
-	return writeWindowsCapturePNG(path, desktop.Image.SubImage(crop))
+	defer desktop.Close()
+	return writeWindowsCapturePNG(path, desktop.Image)
 }
 
 // platformRun owns the Win32 message pump on the caller's OS main thread.
