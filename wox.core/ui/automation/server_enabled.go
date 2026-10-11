@@ -134,6 +134,19 @@ func newHandler(controller Controller, token string) http.Handler {
 
 func dispatch(ctx context.Context, controller Controller, method string, rawParams json.RawMessage) (any, *rpcError) {
 	switch method {
+	case "perf.query_state":
+		reader, ok := controller.(interface{ AutomationQueryState() (QueryState, error) })
+		if !ok {
+			return resultOrError(nil, errors.New("query state is unavailable"))
+		}
+		return resultOrError(reader.AutomationQueryState())
+	case "perf.runtime_stats":
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		return resultOrError(RuntimeStats{
+			PID: os.Getpid(), GOMAXPROCS: runtime.GOMAXPROCS(0), HeapAlloc: stats.HeapAlloc,
+			Retained: stats.Sys - stats.HeapReleased, StackInuse: stats.StackInuse, MemProfileRate: runtime.MemProfileRate,
+		}, nil)
 	case "render.metrics":
 		return resultOrError(controller.AutomationFrameMetrics())
 	case "render.metrics.reset":

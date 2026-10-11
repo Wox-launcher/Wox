@@ -14,6 +14,26 @@ type Info struct {
 	Token   string `json:"token"`
 }
 
+// QueryState correlates current launcher results with the retained semantics frame.
+// Visible and Complete never describe rows retained from an older query.
+type QueryState struct {
+	QueryID     string `json:"queryId"`
+	QueryText   string `json:"queryText"`
+	ResultCount int    `json:"resultCount"`
+	Visible     bool   `json:"visible"`
+	Complete    bool   `json:"complete"`
+}
+
+// RuntimeStats captures Go ownership without forcing GC or showing the launcher.
+type RuntimeStats struct {
+	PID            int    `json:"pid"`
+	GOMAXPROCS     int    `json:"gomaxprocs"`
+	HeapAlloc      uint64 `json:"heapAlloc"`
+	Retained       uint64 `json:"retained"`
+	StackInuse     uint64 `json:"stackInuse"`
+	MemProfileRate int    `json:"memProfileRate"`
+}
+
 // WindowState describes one real managed window exposed to lifecycle smoke tests.
 type WindowState struct {
 	Exists    bool   `json:"exists"`

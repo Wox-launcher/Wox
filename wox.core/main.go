@@ -149,6 +149,17 @@ func main() {
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(50)
 	}
+	// Bound per-P runtime caches on high-core systems while preserving explicit
+	// overrides and smaller defaults selected for CPU affinity or quota limits.
+	// Measured on 2026-10-11 with Go 1.27.1, GOGC=50 and 22 logical CPUs on Windows:
+	// three paired 22-vs-8 runs reduced median hidden private working set from
+	// 75.5 to 64.6 MiB and Go retained memory from 36.7 to 27.7 MiB. Completed-frame
+	// p95 stayed at 75.6 vs 75.7 ms; average query CPU fell from 37.0% to 32.5%
+	// (one core = 100%). Direct production runs confirmed 60.2 to 52.3 MiB after
+	// 45s hidden, with completed-frame p95 at 75.0 vs 74.6 ms.
+	if os.Getenv("GOMAXPROCS") == "" && runtime.GOMAXPROCS(0) > 8 {
+		runtime.GOMAXPROCS(8)
+	}
 	// Heap profiling samples every allocation and keeps a stack-hash table that only
 	// grows (about 1.5 MB after a normal session). Production builds do not need it
 	// unless a heap profile is being captured; GODEBUG=memprofilerate=N restores it.

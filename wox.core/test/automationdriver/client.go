@@ -138,6 +138,16 @@ func (c *Client) Snapshot(ctx context.Context) (woxwidget.AutomationSnapshot, er
 	return call[woxwidget.AutomationSnapshot](ctx, c, "semantics.snapshot", nil)
 }
 
+// QueryState returns readiness for the current query and its retained result frame.
+func (c *Client) QueryState(ctx context.Context) (automation.QueryState, error) {
+	return call[automation.QueryState](ctx, c, "perf.query_state", nil)
+}
+
+// RuntimeStats reads Go memory without changing the launcher's visibility or GC state.
+func (c *Client) RuntimeStats(ctx context.Context) (automation.RuntimeStats, error) {
+	return call[automation.RuntimeStats](ctx, c, "perf.runtime_stats", nil)
+}
+
 // FrameMetrics returns correlated Host and native frame timings for the active window.
 func (c *Client) FrameMetrics(ctx context.Context) (woxui.FrameMetricsSnapshot, error) {
 	return call[woxui.FrameMetricsSnapshot](ctx, c, "render.metrics", nil)

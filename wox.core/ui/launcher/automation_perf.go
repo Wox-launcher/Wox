@@ -4,11 +4,50 @@ package launcher
 
 import (
 	"fmt"
+	"strings"
+
+	"wox/ui/automation"
 
 	woxui "wox/ui/runtime"
 )
 
 const automationPerfCatalogCount = 500
+
+// AutomationQueryState rejects stale retained rows while observing result readiness.
+func (a *App) AutomationQueryState() (automation.QueryState, error) {
+	target := a.resolveAutomationTarget()
+	var state automation.QueryState
+	err := target.runOnUI("read automation query state", func() {
+		state.QueryID = target.query.QueryID
+		state.QueryText = target.query.QueryText
+		state.ResultCount = len(target.results)
+		if target.host == nil || target.resultsQueryID != state.QueryID {
+			return
+		}
+		snapshot := target.host.Snapshot()
+		inputMatches, frameComplete, hasRows := false, false, false
+		currentIDs := make(map[string]bool, len(target.results))
+		for _, result := range target.results {
+			currentIDs["launcher.result."+result.ID] = true
+		}
+		for _, node := range snapshot.Tree.Nodes {
+			switch node.AutomationID {
+			case "launcher.query.input":
+				inputMatches = node.Value == state.QueryText
+			case "launcher.results":
+				frameComplete = node.Value == "complete"
+			default:
+				if strings.HasPrefix(node.AutomationID, "launcher.result.") {
+					hasRows = true
+					state.Visible = state.Visible || currentIDs[node.AutomationID]
+				}
+			}
+		}
+		state.Visible = state.Visible && inputMatches
+		state.Complete = inputMatches && target.queryComplete && frameComplete && (state.Visible || (len(target.results) == 0 && !hasRows))
+	})
+	return state, err
+}
 
 // InstallAutomationPerfFixture installs deterministic large catalogs used by performance smoke.
 func (a *App) InstallAutomationPerfFixture(name string) error {

@@ -80,6 +80,42 @@ On Windows, use the corresponding `.exe` and PowerShell sleep command:
 Start-Sleep -Seconds 10
 ```
 
+## Measure Query Latency
+
+Use the workload's `latency` mode for query responsiveness. The `queries` mode only
+checks input updates and drives CPU activity; its fixed waits are not latency samples.
+Build the workload before measuring, then warm the same process with 40 completed
+queries and measure a deterministic sequence:
+
+```powershell
+& .tmp\cpu-debug\wox-cpu-workload.exe -info .tmp\cpu-debug\automation.json -mode latency -query-count 40 -seed 1 -output .tmp\cpu-debug\warmup.json
+& .tmp\cpu-debug\wox-cpu-workload.exe -info .tmp\cpu-debug\automation.json -mode latency -query-count 160 -seed 11 -output .tmp\cpu-debug\latency.json
+```
+
+The report contains raw per-query samples and nearest-rank p50/p95 for input
+dispatch to the first current result in the retained semantics frame, and to the
+completed result frame. Polling is every 5 ms plus RPC/scheduling overhead; these
+are client-observed UI-frame timings, not native presentation or icon-decode
+completion timings. Queries with no results contribute only to completion latency.
+Each query has a 10-second timeout; a failed run is invalid and must not contribute
+partial samples to the aggregate. Compare query families as well as aggregate p95.
+
+`perf.query_state` correlates the query generation, result ownership, input value,
+and retained row IDs, so an older retained result or completion cannot satisfy the
+measurement. `-mode stats` reads PID, effective GOMAXPROCS, Go heap allocation,
+Go retained memory (`Sys - HeapReleased`), stack allocation, and MemProfileRate
+without showing Wox or forcing GC.
+
+When comparing startup GOMAXPROCS policies, use a fresh process for each arm,
+with identical isolated settings, warm-up, query sequence, and GOGC. Preserve each
+PID through that run's warm-up and measurements. Alternate arm order across at
+least three pairs. Do not compile, run tests, or run another profiler during a
+measurement window. Collect process CPU in separate `queries` windows, recording
+completed query counts, then sample memory at 45 seconds after hide so both staged
+release deadlines have passed. Keep private working set, total working set, private
+committed bytes, and Go retained memory distinct. Repeat decisive measurements in
+an optimized production-configured build, where development heap profiling is off.
+
 ## Capture Continuous-Query Go CPU
 
 Trigger Wox's built-in 30-second `runtime/pprof` action and keep deterministic queries running for that complete window:

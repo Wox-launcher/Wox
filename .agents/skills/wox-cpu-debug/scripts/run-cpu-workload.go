@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -40,7 +42,8 @@ var queryPool = []string{
 
 func main() {
 	infoPath := flag.String("info", "", "automation endpoint info file")
-	mode := flag.String("mode", "queries", "queries, hidden, profile-queries, or profile-hidden")
+	mode := flag.String("mode", "queries", "queries, latency, stats, hidden, profile-queries, or profile-hidden")
+	queryCount := flag.Int("query-count", 160, "number of completed queries in latency mode")
 	duration := flag.Duration("duration", 30*time.Second, "workload duration for queries or hidden mode")
 	seed := flag.Int64("seed", 1, "random seed")
 	fixedQuery := flag.String("query", "", "fixed query to repeat instead of random queries")
@@ -71,6 +74,14 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	switch *mode {
+	case "latency":
+		err = runLatency(ctx, client, *queryCount, *seed, *fixedQuery, *outputPath, *readyPath)
+	case "stats":
+		stats, statsErr := client.RuntimeStats(ctx)
+		err = statsErr
+		if err == nil {
+			err = json.NewEncoder(os.Stdout).Encode(stats)
+		}
 	case "queries":
 		err = runQueriesFor(ctx, client, *duration, *seed, *fixedQuery, *readyPath)
 	case "hidden":
@@ -85,6 +96,133 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// queryLatency keeps raw samples so aggregate p95 cannot hide a slow query family.
+type queryLatency struct {
+	Query         string   `json:"query"`
+	FirstResultMS *float64 `json:"firstResultMs"`
+	CompleteMS    float64  `json:"completeMs"`
+	ResultCount   int      `json:"resultCount"`
+}
+
+// runLatency measures from input dispatch through a current-query semantics frame.
+// Unlike the CPU replay, every query finishes; empty results have no first-result sample.
+func runLatency(ctx context.Context, client *automationdriver.Client, count int, seed int64, fixedQuery, outputPath, readyPath string) error {
+	if count <= 0 || outputPath == "" {
+		return fmt.Errorf("latency mode requires positive -query-count and -output")
+	}
+	if err := showAndWaitForInput(ctx, client); err != nil {
+		return err
+	}
+	if err := signalReady(readyPath); err != nil {
+		return err
+	}
+	random := rand.New(rand.NewSource(seed))
+	samples := make([]queryLatency, 0, count)
+	for index := range count {
+		// Finish the empty query before timing, so retained rows and completion
+		// from the previous query cannot satisfy the next observation.
+		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, ""); err != nil {
+			return err
+		}
+		if _, err := waitQuery(ctx, client, "", "", nil); err != nil {
+			return fmt.Errorf("clear before query %d: %w", index+1, err)
+		}
+		before, err := client.QueryState(ctx)
+		if err != nil {
+			return err
+		}
+		query := fixedQuery
+		if query == "" {
+			query = queryPool[random.Intn(len(queryPool))]
+		}
+		sample := queryLatency{Query: query}
+		started := time.Now()
+		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, query); err != nil {
+			return err
+		}
+		state, err := waitQuery(ctx, client, query, before.QueryID, func(state automation.QueryState) {
+			if state.Visible && sample.FirstResultMS == nil {
+				elapsed := float64(time.Since(started)) / float64(time.Millisecond)
+				sample.FirstResultMS = &elapsed
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("query %d %q: %w", index+1, query, err)
+		}
+		sample.CompleteMS = float64(time.Since(started)) / float64(time.Millisecond)
+		sample.ResultCount = state.ResultCount
+		samples = append(samples, sample)
+		if err := waitUntil(ctx, time.Now().Add(50*time.Millisecond)); err != nil {
+			return err
+		}
+	}
+	if err := client.Hide(ctx); err != nil {
+		return err
+	}
+	first, complete := make([]float64, 0, count), make([]float64, 0, count)
+	for _, sample := range samples {
+		if sample.FirstResultMS != nil {
+			first = append(first, *sample.FirstResultMS)
+		}
+		complete = append(complete, sample.CompleteMS)
+	}
+	sort.Float64s(first)
+	sort.Float64s(complete)
+	report := struct {
+		Seed               int64          `json:"seed"`
+		PollIntervalMS     int            `json:"pollIntervalMs"`
+		FirstResultSamples int            `json:"firstResultSamples"`
+		FirstP50MS         float64        `json:"firstP50Ms"`
+		FirstP95MS         float64        `json:"firstP95Ms"`
+		CompleteP50MS      float64        `json:"completeP50Ms"`
+		CompleteP95MS      float64        `json:"completeP95Ms"`
+		Samples            []queryLatency `json:"samples"`
+	}{seed, 5, len(first), percentile(first, .5), percentile(first, .95), percentile(complete, .5), percentile(complete, .95), samples}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("queries=%d first_samples=%d first_p50_ms=%.2f first_p95_ms=%.2f complete_p50_ms=%.2f complete_p95_ms=%.2f output=%s\n", count, len(first), report.FirstP50MS, report.FirstP95MS, report.CompleteP50MS, report.CompleteP95MS, outputPath)
+	return nil
+}
+
+// waitQuery bounds each query and observes current results at 5 ms resolution.
+func waitQuery(ctx context.Context, client *automationdriver.Client, query, previousID string, observe func(automation.QueryState)) (automation.QueryState, error) {
+	ctx, cancel := context.WithTimeout(ctx, automationdriver.ActionTimeout)
+	defer cancel()
+	for {
+		state, err := client.QueryState(ctx)
+		if err != nil {
+			return state, err
+		}
+		if state.QueryText == query && state.QueryID != previousID {
+			if observe != nil {
+				observe(state)
+			}
+			if state.Complete {
+				return state, nil
+			}
+		}
+		if err := waitUntil(ctx, time.Now().Add(5*time.Millisecond)); err != nil {
+			return state, err
+		}
+	}
+}
+
+// percentile uses the nearest-rank definition on sorted samples.
+func percentile(sorted []float64, fraction float64) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	return sorted[max(0, int(math.Ceil(float64(len(sorted))*fraction))-1)]
 }
 
 // runProfile activates Wox's fixed 30-second CPU profile and drives the selected state.
@@ -269,6 +407,9 @@ func signalReady(path string) error {
 }
 
 func defaultCPUProfilePath() (string, error) {
+	if dataDir := strings.TrimSpace(os.Getenv("WOX_TEST_DATA_DIR")); dataDir != "" {
+		return filepath.Join(dataDir, "cpu.prof"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
