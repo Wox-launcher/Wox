@@ -462,6 +462,9 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	queryBoxHeight := snapshot.densityMetrics.queryBoxHeightForText(snapshot.editing.Text, queryLineHeight)
 	queryEditorHeight := queryLineHeight + snapshot.densityMetrics.scaled(4) + float32(queryLineCount-1)*queryLineHeight
 	queryLeftPadding := snapshot.densityMetrics.scaled(8)
+	if snapshot.palette.QueryBoxPaddingLeft != nil {
+		queryLeftPadding = float32(max(0, *snapshot.palette.QueryBoxPaddingLeft))
+	}
 	accessoryGap := snapshot.densityMetrics.scaled(12)
 	horizontalPadding := snapshot.palette.appPadding.Left + snapshot.palette.appPadding.Right
 	contentWidth := max(float32(0), width-horizontalPadding-queryLeftPadding-snapshot.densityMetrics.scaled(6))
@@ -565,6 +568,7 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 		Attention: attention, AttentionWidth: attentionWidth, Glance: glance, GlanceWidth: glanceWidth, Icon: queryIcon, Icons: queryIcons,
 		StatusLabel: statusLabel, StatusDescription: statusDescription, StatusWidth: statusWidth,
 		Loading: loading, LoadingWidth: loadingWidth, LoadingSize: loadingSize, LoadingColor: snapshot.palette.cursor,
+		ShowQuerySeparator: len(snapshot.results) > 0,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start launcher window drag: %v", err)

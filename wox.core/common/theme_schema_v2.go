@@ -55,12 +55,19 @@ type ThemeSchemaV2 struct {
 	AppPaddingRight        *int    `json:",omitempty"`
 	AppPaddingBottom       *int    `json:",omitempty"`
 
-	QueryBoxFontColor                    *string `json:",omitempty"`
-	QueryBoxBackgroundColor              *string `json:",omitempty"`
-	QueryBoxBorderRadius                 *int    `json:",omitempty"`
-	QueryBoxCursorColor                  *string `json:",omitempty"`
-	QueryBoxBorderBottomColor            *string `json:",omitempty"`
-	QueryBoxBorderBottomWidth            *int    `json:",omitempty"`
+	QueryBoxFontColor       *string `json:",omitempty"`
+	QueryBoxBackgroundColor *string `json:",omitempty"`
+	QueryBoxBorderRadius    *int    `json:",omitempty"`
+	QueryBoxCursorColor     *string `json:",omitempty"`
+	// QueryBoxPaddingLeft replaces the built-in text inset when a theme places the query further in.
+	QueryBoxPaddingLeft *int `json:",omitempty"`
+	// QuerySeparator is the line under the query. Thickness is its stroke size.
+	// Left and right padding inset it from the window edges; omitted padding runs
+	// the line across the window, and omitted thickness draws nothing.
+	QuerySeparatorColor                  *string `json:",omitempty"`
+	QuerySeparatorThickness              *int    `json:",omitempty"`
+	QuerySeparatorPaddingLeft            *int    `json:",omitempty"`
+	QuerySeparatorPaddingRight           *int    `json:",omitempty"`
 	QueryBoxTextSelectionBackgroundColor *string `json:",omitempty"`
 	QueryBoxTextSelectionColor           *string `json:",omitempty"`
 
@@ -512,7 +519,7 @@ func (d ThemeSchemaV2) resolve() ([]byte, error) {
 		"ResultContainerPaddingLeft": 0, "ResultContainerPaddingTop": 8, "ResultContainerPaddingRight": 0, "ResultContainerPaddingBottom": 0,
 		"ResultItemBorderRadius": 8, "ResultItemPaddingLeft": 8, "ResultItemPaddingTop": 3, "ResultItemPaddingRight": 8, "ResultItemPaddingBottom": 3,
 		"ResultItemTitleColor": d.BaseTextColor, "ResultItemSubTitleColor": secondary, "ResultItemTailTextColor": secondary,
-		"QueryBoxBorderBottomColor": d.BaseAccentColor, "QueryBoxBorderBottomWidth": 0, "ResultItemBorderLeftWidth": 0, "ResultItemActiveIndicatorWidth": 0, "ResultItemActiveIndicatorColor": d.BaseAccentColor,
+		"ResultItemBorderLeftWidth": 0, "ResultItemActiveIndicatorWidth": 0, "ResultItemActiveIndicatorColor": d.BaseAccentColor,
 		"ResultItemActiveBackgroundColor": selected, "ResultItemActiveTitleColor": d.BaseTextColor, "ResultItemActiveSubTitleColor": d.BaseTextColor, "ResultItemActiveTailTextColor": d.BaseTextColor,
 		"QueryBoxFontColor": d.BaseTextColor, "QueryBoxBackgroundColor": d.BaseBackgroundColor, "QueryBoxBorderRadius": 8, "QueryBoxCursorColor": d.BaseAccentColor,
 		"QueryBoxTextSelectionBackgroundColor": selection, "QueryBoxTextSelectionColor": d.BaseTextColor,

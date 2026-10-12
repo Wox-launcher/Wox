@@ -11,7 +11,7 @@ import (
 func TestDemoEditorGeometry(t *testing.T) {
 	zero := 0
 	geometry := &LauncherDemoGeometry{AppPadding: woxwidget.Insets{Left: 2, Top: 4, Right: 6, Bottom: 8}, ResultPadding: woxwidget.Insets{Left: 3, Top: 5, Right: 7}, ItemPadding: woxwidget.Insets{Left: 9, Top: 2, Right: 11, Bottom: 4}, ActionPadding: woxwidget.Insets{Left: 2, Top: 3, Right: 4, Bottom: 5}, ToolbarPadding: woxwidget.Insets{Left: 7, Right: 9}}
-	props := LauncherDemoProps{Width: 600, Height: 400, Opacity: 1, ShowQuery: true, ShowToolbar: true, Geometry: geometry, Theme: Theme{QueryBoxBorderBottomWidth: &zero, ResultItemActiveIndicatorWidth: &zero}, Results: []LauncherDemoResult{{Title: "Result"}}}
+	props := LauncherDemoProps{Width: 600, Height: 400, Opacity: 1, ShowQuery: true, ShowToolbar: true, Geometry: geometry, Theme: Theme{QuerySeparatorThickness: &zero, ResultItemActiveIndicatorWidth: &zero}, Results: []LauncherDemoResult{{Title: "Result"}}}
 	demo := WoxLauncherDemo(props).(woxwidget.Clip).Child.(woxwidget.Stack)
 	query := demo.Children[2]
 	if query.Left != 2 || query.Top != 4 || query.Right != 6 || query.Child.(woxwidget.Container).Radius != 0 {

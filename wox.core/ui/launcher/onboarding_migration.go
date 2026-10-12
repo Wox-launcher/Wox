@@ -32,8 +32,11 @@ type onboardingMigrationState struct {
 	done                   bool
 	error                  string
 	stagedMainHotkey       string
+	stagedMainHotkeyError  string
 	mainHotkeyPending      bool
 	mainHotkeyApplyStarted bool
+	// themeImported means a launcher theme was installed and selected, so the later theme page would replace it.
+	themeImported bool
 }
 
 type onboardingMigrationCategory struct {
@@ -252,6 +255,7 @@ const migrationHotkeyTaken = "hotkey_taken"
 
 type migrationWriteGroup struct {
 	writes  []migrate.SettingWrite
+	themes  []migrate.ThemeWrite
 	applied bool
 	err     string
 }
@@ -276,20 +280,10 @@ func (a *App) prepareOnboardingMigrationSettings(ctx context.Context, installati
 		return groups, failures
 	}
 	for _, write := range result.Settings {
-		var group *migrationWriteGroup
-		for _, id := range write.ItemIDs {
-			if existing := groups[id]; existing != nil {
-				group = existing
-				break
-			}
-		}
-		if group == nil {
-			group = &migrationWriteGroup{}
-		}
-		group.writes = append(group.writes, write)
-		for _, id := range write.ItemIDs {
-			groups[id] = group
-		}
+		attachMigrationWrite(groups, write.ItemIDs, &write, nil)
+	}
+	for _, theme := range result.Themes {
+		attachMigrationWrite(groups, theme.ItemIDs, nil, &theme)
 	}
 	for _, item := range result.Plugins {
 		if item.Error != "" {
@@ -326,8 +320,54 @@ func (a *App) applyMigrationWriteGroup(ctx context.Context, group *migrationWrit
 			errs = append(errs, migrationApplyError(err))
 		}
 	}
+	for _, theme := range group.themes {
+		if err := a.applyMigratedTheme(ctx, theme.Theme); err != nil {
+			errs = append(errs, migrationApplyError(err))
+		}
+	}
 	group.err = strings.Join(errs, " ")
 	return group.err
+}
+
+// attachMigrationWrite keeps every selected item that shares a stored value on one group.
+func attachMigrationWrite(groups map[string]*migrationWriteGroup, ids []string, write *migrate.SettingWrite, theme *migrate.ThemeWrite) {
+	if len(ids) == 0 {
+		return
+	}
+	var group *migrationWriteGroup
+	for _, id := range ids {
+		if existing := groups[id]; existing != nil {
+			group = existing
+			break
+		}
+	}
+	if group == nil {
+		group = &migrationWriteGroup{}
+	}
+	if write != nil {
+		group.writes = append(group.writes, *write)
+	}
+	if theme != nil {
+		group.themes = append(group.themes, *theme)
+	}
+	for _, id := range ids {
+		groups[id] = group
+	}
+}
+
+// applyMigratedTheme installs the mapped theme and makes it the current theme.
+func (a *App) applyMigratedTheme(ctx context.Context, theme common.Theme) error {
+	if strings.TrimSpace(theme.ThemeId) == "" || a.services == nil {
+		return errors.New("theme cannot be imported")
+	}
+	if err := a.services.InstallMigratedTheme(ctx, a.sessionID, theme); err != nil {
+		return err
+	}
+	a.rememberOnboardingMigrationSetting("ThemeId", theme.ThemeId)
+	_ = a.runOnUI("remember imported onboarding theme", func() {
+		a.onboardingMigration.themeImported = true
+	})
+	return nil
 }
 
 func (a *App) importOnboardingMigrationPlugin(ctx context.Context, installation migrate.Installation, id string) string {
@@ -380,9 +420,15 @@ func (a *App) stageMigratedMainHotkey(hotkey string) {
 }
 
 // applyStagedMigrationHotkey registers the staged main shortcut once the hotkey page is open.
+// The imported chord is shown immediately. Registration can take a moment when another
+// program still holds it, and the page must not keep the previous Alt+Space until that returns.
 func (a *App) applyStagedMigrationHotkey() {
 	hotkey := strings.TrimSpace(a.onboardingMigration.stagedMainHotkey)
-	if hotkey == "" || a.onboardingMigration.mainHotkeyApplyStarted || a.services == nil {
+	if hotkey == "" {
+		return
+	}
+	a.presentStagedMigrationHotkey(hotkey)
+	if a.onboardingMigration.mainHotkeyApplyStarted || a.services == nil {
 		return
 	}
 	a.onboardingMigration.mainHotkeyApplyStarted = true
@@ -394,21 +440,56 @@ func (a *App) applyStagedMigrationHotkey() {
 		cancel()
 		_ = a.runOnUI("apply migrated main hotkey result", func() {
 			a.onboardingMigration.mainHotkeyPending = false
-			if err != nil && a.generalSettings != nil {
-				a.generalSettings.Update(func(data *settingsData) {
-					data.MainHotkey = hotkey
-					data.MainHotkeyRegistrationFailed = true
-					data.MainHotkeyRegistrationError = migrationHotkeyPageMessage(err)
-				})
-			}
-			if a.hotkeySettings != nil {
-				if form := a.hotkeySettings.Form(); form != nil {
-					form.values["MainHotkey"] = hotkey
+			if err != nil {
+				a.onboardingMigration.stagedMainHotkeyError = migrationHotkeyPageMessage(err)
+				if a.generalSettings != nil {
+					a.generalSettings.Update(func(data *settingsData) {
+						data.MainHotkey = hotkey
+						data.MainHotkeyRegistrationFailed = true
+						data.MainHotkeyRegistrationError = a.onboardingMigration.stagedMainHotkeyError
+					})
+				}
+			} else {
+				// Persistence now matches the imported chord, so later reloads can read it directly.
+				a.onboardingMigration.stagedMainHotkey = ""
+				a.onboardingMigration.stagedMainHotkeyError = ""
+				if a.generalSettings != nil {
+					a.generalSettings.Update(func(data *settingsData) {
+						data.MainHotkey = hotkey
+						data.MainHotkeyRegistrationFailed = false
+						data.MainHotkeyRegistrationError = ""
+					})
 				}
 			}
+			a.presentStagedMigrationHotkey(hotkey)
 			a.invalidateOnboardingWindow()
 		})
 	})
+}
+
+// presentStagedMigrationHotkey paints the imported chord before registration finishes.
+func (a *App) presentStagedMigrationHotkey(hotkey string) {
+	if a.hotkeySettings == nil {
+		return
+	}
+	if form := a.hotkeySettings.Form(); form != nil {
+		form.values["MainHotkey"] = hotkey
+	}
+}
+
+// overlayStagedMigrationHotkey keeps a settings reload from putting the old main shortcut back.
+// The imported chord is not persisted until registration succeeds, so a reload still loads Alt+Space.
+func overlayStagedMigrationHotkey(data settingsData, state onboardingMigrationState) settingsData {
+	hotkey := strings.TrimSpace(state.stagedMainHotkey)
+	if hotkey == "" {
+		return data
+	}
+	data.MainHotkey = hotkey
+	if state.stagedMainHotkeyError != "" {
+		data.MainHotkeyRegistrationFailed = true
+		data.MainHotkeyRegistrationError = state.stagedMainHotkeyError
+	}
+	return data
 }
 
 // migrationHotkeyPageMessage describes a failed main-hotkey registration.
@@ -629,6 +710,8 @@ func (a *App) rememberOnboardingMigrationSetting(key, value string) {
 					data.HttpProxyURL = value
 				case "EnableAutoUpdate":
 					data.EnableAutoUpdate, _ = strconv.ParseBool(value)
+				case "ThemeId":
+					data.ThemeID = value
 				}
 			})
 		}

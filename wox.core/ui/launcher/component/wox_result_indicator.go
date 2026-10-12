@@ -53,14 +53,21 @@ func ResultIndicatorBackground(width, height, radius float32, color woxui.Color,
 	}}
 }
 
-// QueryBottomBorder resolves the optional inset query outline without affecting layout.
-func (t Theme) QueryBottomBorder() (woxui.Color, float32) {
-	color, width := woxui.Color{}, float32(0)
-	if t.QueryBoxBorderBottomColor != nil {
-		color = *t.QueryBoxBorderBottomColor
+// QuerySeparator resolves the line under the query. Thickness is the stroke size
+// in logical pixels. Left and right padding inset the line from the window edges;
+// zero padding runs it across the window. An omitted thickness draws nothing.
+func (t Theme) QuerySeparator() (color woxui.Color, thickness, padLeft, padRight float32) {
+	if t.QuerySeparatorColor != nil {
+		color = *t.QuerySeparatorColor
 	}
-	if t.QueryBoxBorderBottomWidth != nil {
-		width = max(float32(0), float32(*t.QueryBoxBorderBottomWidth))
+	if t.QuerySeparatorThickness != nil {
+		thickness = max(float32(0), float32(*t.QuerySeparatorThickness))
 	}
-	return color, width
+	if t.QuerySeparatorPaddingLeft != nil {
+		padLeft = max(float32(0), float32(*t.QuerySeparatorPaddingLeft))
+	}
+	if t.QuerySeparatorPaddingRight != nil {
+		padRight = max(float32(0), float32(*t.QuerySeparatorPaddingRight))
+	}
+	return color, thickness, padLeft, padRight
 }

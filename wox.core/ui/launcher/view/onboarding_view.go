@@ -314,7 +314,8 @@ func onboardingMainHotkeyVisual(props OnboardingProps, width float32, accent wox
 	keyBorder := settingsColorAlpha(props.Theme.Border, 180)
 	keyBorderWidth := float32(1)
 	if props.HotkeyRecording {
-		keyBorder = accent
+		// The accent is also the confirmed status, so listening uses the text color.
+		keyBorder = onboardingHotkeyRecordingBorder(props.Theme)
 		keyBorderWidth = 2
 	}
 	if props.HotkeyError {
@@ -511,7 +512,7 @@ func onboardingQueryHotkeysVisual(props OnboardingProps, width float32, accent w
 	keyBorder := settingsColorAlpha(props.Theme.Border, 96)
 	keyBorderWidth := float32(1)
 	if props.QueryHotkeyRecording {
-		keyBorder = accent
+		keyBorder = onboardingHotkeyRecordingBorder(props.Theme)
 		keyBorderWidth = 2
 	}
 	if props.QueryHotkeyError {
@@ -1202,6 +1203,15 @@ func onboardingMigrationItemRow(props OnboardingProps, item OnboardingMigrationI
 		BottomBorderColor: settingsColorAlpha(props.Theme.Border, 48), BottomBorderWidth: bottomBorder,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
 	}
+}
+
+// onboardingHotkeyRecordingBorder marks a key that is waiting for input.
+// A missing text color falls back to white, which stays visible on the dark page.
+func onboardingHotkeyRecordingBorder(theme woxcomponent.ControlTheme) woxui.Color {
+	if theme.Text.A != 0 {
+		return theme.Text
+	}
+	return woxui.Color{R: 255, G: 255, B: 255, A: 255}
 }
 
 func onboardingMigrationSuccessColor(theme woxcomponent.ControlTheme) woxui.Color {

@@ -423,8 +423,11 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 	)
 	specs = append(specs,
 		onboardingStepSpec{"wpmInstall", "onboarding_wpm_install_title", woxui.Color{R: 56, G: 189, B: 248, A: 255}},
-		onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}},
 	)
+	// The migration page already installed and selected a theme. Showing the bundled picker would replace it.
+	if !a.onboardingMigration.themeImported {
+		specs = append(specs, onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}})
+	}
 	specs = append(specs, onboardingStepSpec{"finish", "onboarding_finish_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}})
 	steps := make([]launcherview.OnboardingStep, len(specs))
 	for index, spec := range specs {

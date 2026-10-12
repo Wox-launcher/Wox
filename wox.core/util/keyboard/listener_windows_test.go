@@ -7,6 +7,24 @@ import (
 	"time"
 )
 
+func TestTakenHotkeyIsNotRetriedUnlessThisProcessJustReleasedIt(t *testing.T) {
+	chord := releasedHotkeyChord{modifiers: ModifierCtrl | ModifierShift, vk: 0x20}
+	releasedHotkeys.Delete(chord)
+	t.Cleanup(func() { releasedHotkeys.Delete(chord) })
+
+	if got := registrationAttempts(chord.modifiers, chord.vk, hotkeyRegistrationMaxAttempts); got != 1 {
+		t.Fatalf("attempts for a chord this process did not release = %d, want 1", got)
+	}
+	noteHotkeyReleased(chord.modifiers, chord.vk)
+	if got := registrationAttempts(chord.modifiers, chord.vk, hotkeyRegistrationMaxAttempts); got != hotkeyRegistrationMaxAttempts {
+		t.Fatalf("attempts just after release = %d, want %d", got, hotkeyRegistrationMaxAttempts)
+	}
+	releasedHotkeys.Store(chord, time.Now().Add(-hotkeyReleaseRetryWindow-time.Millisecond))
+	if got := registrationAttempts(chord.modifiers, chord.vk, hotkeyRegistrationMaxAttempts); got != 1 {
+		t.Fatalf("attempts after the release window = %d, want 1", got)
+	}
+}
+
 func TestRefineWindowsModifierKeyUsesScanCodeAndExtendedFlag(t *testing.T) {
 	if got := refineWindowsModifierKey(KeyShift, 0x10, 0x2A, 0); got != KeyLeftShift {
 		t.Fatalf("left shift scan = %v, want left shift", got)

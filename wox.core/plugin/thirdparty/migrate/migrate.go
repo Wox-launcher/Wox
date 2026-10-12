@@ -23,11 +23,12 @@ const (
 	// DetailPythonMissing means a Python plugin can be copied before Python is installed.
 	DetailPythonMissing = "python_missing"
 
-	// CategoryHotkeys, CategoryQueries, CategoryGeneral, and CategoryPlugins are the
-	// stable group ids onboarding translates. A launcher omits a group that has no items.
+	// CategoryHotkeys, CategoryQueries, CategoryGeneral, CategoryThemes, and CategoryPlugins
+	// are the stable group ids onboarding translates. A launcher omits a group that has no items.
 	CategoryHotkeys = "hotkeys"
 	CategoryQueries = "queries"
 	CategoryGeneral = "general"
+	CategoryThemes  = "themes"
 	CategoryPlugins = "plugins"
 
 	// ValueOn and the other value ids are stable labels for a setting's current choice.
@@ -61,7 +62,7 @@ type Installation interface {
 	// Catalog groups every setting and plugin the user can choose. Empty groups are omitted.
 	Catalog(ctx context.Context) ([]Category, error)
 	// Import copies the requested item IDs. It does not remove or modify the source launcher.
-	// Setting changes are returned for the caller to persist.
+	// Setting changes and mapped themes are returned for the caller to persist.
 	Import(ctx context.Context, itemIDs []string) (ImportResult, error)
 }
 
@@ -100,9 +101,18 @@ type Plugin struct {
 
 // ImportResult is the outcome of one import.
 // One SettingWrite can cover several items when Wox stores them as a single list.
+// Themes are new Wox themes mapped from the source. The caller installs each one and selects it.
 type ImportResult struct {
 	Plugins  []PluginResult
 	Settings []SettingWrite
+	Themes   []ThemeWrite
+}
+
+// ThemeWrite is one Wox theme produced by mapping a source launcher theme.
+// Installing it and selecting its id is the whole theme migration.
+type ThemeWrite struct {
+	ItemIDs []string
+	Theme   common.Theme
 }
 
 // SettingWrite is one Wox setting value produced by the selected items.

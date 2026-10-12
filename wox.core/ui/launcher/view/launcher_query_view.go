@@ -192,6 +192,8 @@ type LauncherHeaderProps struct {
 	// OnDragStart starts a window drag when the pointer presses the header's
 	// empty padding around the query pill (e.g. above the input box).
 	OnDragStart func()
+	// ShowQuerySeparator paints the line under the query only while results are visible.
+	ShowQuerySeparator bool
 }
 
 type launcherQueryLoadingProps struct {
@@ -219,6 +221,9 @@ func (p launcherQueryLoadingProps) Equal(other launcherQueryLoadingProps) bool {
 // LauncherHeaderView builds the query box and prepared accessory views.
 func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	queryLeftPadding := scaledLauncherSize(8, props.DensityScale)
+	if props.Theme.QueryBoxPaddingLeft != nil {
+		queryLeftPadding = float32(max(0, *props.Theme.QueryBoxPaddingLeft))
+	}
 	accessoryGap := scaledLauncherSize(12, props.DensityScale)
 	query := props.QueryHint
 	if query == nil {
@@ -318,7 +323,6 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 			},
 		})
 	}
-	queryBorderColor, queryBorderWidth := props.Theme.QueryBottomBorder()
 	header := woxwidget.Widget(woxwidget.Container{
 		Width: props.Width, Height: props.Height,
 		// Bottom padding is used when the query box is anchored at the bottom so
@@ -327,17 +331,38 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		Padding: woxwidget.Insets{Left: props.AppPadding.Left, Top: props.AppPadding.Top, Right: props.AppPadding.Right, Bottom: props.AppPadding.Bottom},
 		Child: woxwidget.Constrained{FillWidth: true, Child: woxwidget.Container{
 			Height: props.QueryBoxHeight, Radius: props.QueryRadius, Color: props.Theme.QueryBackground, Surface: props.Theme.Surfaces.Get("QueryBox"),
-			BottomBorderColor: queryBorderColor, BottomBorderWidth: queryBorderWidth,
 			Padding: woxwidget.Insets{Left: queryLeftPadding, Right: scaledLauncherSize(6, props.DensityScale)},
 			Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: accessoryGap, Children: children},
 		}},
 	})
+	header = queryHeaderSeparator(props, header)
 	if props.OnDragStart == nil {
 		return header
 	}
 	// Nested gestures (query editor, buttons) still win the hit test over this
 	// wrapper, so only the empty padding around the pill starts a window drag.
 	return woxwidget.Gesture{ID: "launcher-header-drag", OnDragStart: props.OnDragStart, Child: header}
+}
+
+// queryHeaderSeparator paints the line under the query while results are showing.
+// Padding insets it from the window edges, so zero padding reaches both sides and a larger inset stays under the query box.
+func queryHeaderSeparator(props LauncherHeaderProps, header woxwidget.Widget) woxwidget.Widget {
+	color, thickness, padLeft, padRight := props.Theme.QuerySeparator()
+	if !props.ShowQuerySeparator || thickness <= 0 || color.A == 0 {
+		return header
+	}
+	top := props.Height - props.AppPadding.Bottom - thickness
+	if top < 0 {
+		top = 0
+	}
+	width := props.Width - padLeft - padRight
+	if width <= 0 {
+		return header
+	}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+		{Child: header},
+		{Left: padLeft, Top: top, Child: woxwidget.Container{Width: width, Height: thickness, Color: color}},
+	}}
 }
 
 // LauncherQueryView builds the query editor from adapter-prepared text metrics.

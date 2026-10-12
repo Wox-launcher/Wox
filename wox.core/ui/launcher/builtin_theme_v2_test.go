@@ -74,7 +74,7 @@ func TestBuiltinThemesUseV2(t *testing.T) {
 			left, right := reflect.ValueOf(expected), reflect.ValueOf(fromCoreTheme(after))
 			for i := 0; i < left.NumField(); i++ {
 				field := left.Type().Field(i).Name
-				if strings.HasPrefix(field, "ResultItemActiveIndicator") || strings.HasPrefix(field, "ResultItemActiveBorderLeft") || strings.HasPrefix(field, "QueryBoxBorderBottom") {
+				if strings.HasPrefix(field, "ResultItemActiveIndicator") || strings.HasPrefix(field, "ResultItemActiveBorderLeft") {
 					continue
 				}
 				if left.Field(i).Kind() == reflect.String && left.Field(i).String() == "" {

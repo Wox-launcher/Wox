@@ -535,6 +535,10 @@ func (a *App) reloadSettingsWithForms(forceForms bool) error {
 	var applyErr error
 	densityChanged := false
 	if err := a.runOnUI("apply general settings snapshot", func() {
+		// A reload still returns the shortcut that was registered before import.
+		if a.onboardingOpen {
+			data = overlayStagedMigrationHotkey(data, a.onboardingMigration)
+		}
 		if forceForms || a.settingsOpen || a.onboardingOpen {
 			aiForm := newAISettingsForm(data)
 			hotkeyForm := newHotkeySettingsForm(data)

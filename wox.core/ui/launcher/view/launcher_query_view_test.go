@@ -503,6 +503,27 @@ func TestLauncherHeaderExposesScopeIconGroup(t *testing.T) {
 	}
 }
 
+func TestLauncherHeaderHidesQuerySeparatorWithoutResults(t *testing.T) {
+	thickness := 1
+	color := woxui.Color{R: 255, G: 255, B: 255, A: 36}
+	props := LauncherHeaderProps{
+		Width: 400, Height: 60, QueryBoxHeight: 50, QueryWidth: 300,
+		Theme: woxcomponent.Theme{QuerySeparatorThickness: &thickness, QuerySeparatorColor: &color},
+	}
+	if _, ok := LauncherHeaderView(props).(woxwidget.Container); !ok {
+		t.Fatal("query separator painted while no results are showing")
+	}
+	props.ShowQuerySeparator = true
+	stack, ok := LauncherHeaderView(props).(woxwidget.Stack)
+	if !ok || len(stack.Children) != 2 {
+		t.Fatalf("header with results = %T, want the query and its separator", LauncherHeaderView(props))
+	}
+	line := stack.Children[1].Child.(woxwidget.Container)
+	if line.Height != 1 || line.Color.A == 0 {
+		t.Fatalf("separator = %#v, want a 1px line under the query", line)
+	}
+}
+
 func TestLauncherHeaderAppliesBottomAppPaddingForBottomQueryChrome(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 400, Height: 65, QueryBoxHeight: 55, QueryWidth: 300,

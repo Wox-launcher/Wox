@@ -27,9 +27,12 @@ type themeData struct {
 	ResultItemActiveIndicatorInsetTop          *int
 	ResultItemActiveIndicatorInsetBottom       *int
 	ResultItemActiveIndicatorBorderRadius      *int
-	QueryBoxBorderBottomWidth                  *int
+	QuerySeparatorThickness                    *int
+	QuerySeparatorPaddingLeft                  *int
+	QuerySeparatorPaddingRight                 *int
+	QueryBoxPaddingLeft                        *int
 	ResultItemActiveIndicatorColor             string
-	QueryBoxBorderBottomColor                  string
+	QuerySeparatorColor                        string
 	PreviewTagBorderRadius                     *int
 	PreviewTagFontColor                        string
 	PreviewTagBackgroundColor                  string
@@ -167,9 +170,12 @@ type uiPalette struct {
 	ResultItemActiveIndicatorInsetTop          *int
 	ResultItemActiveIndicatorInsetBottom       *int
 	ResultItemActiveIndicatorBorderRadius      *int
-	QueryBoxBorderBottomWidth                  *int
+	QuerySeparatorThickness                    *int
+	QuerySeparatorPaddingLeft                  *int
+	QuerySeparatorPaddingRight                 *int
+	QueryBoxPaddingLeft                        *int
 	ResultItemActiveIndicatorColor             *woxui.Color
-	QueryBoxBorderBottomColor                  *woxui.Color
+	QuerySeparatorColor                        *woxui.Color
 	PreviewTagBorderRadius                     *int
 	PreviewTagFontColor                        *woxui.Color
 	PreviewTagBackgroundColor                  *woxui.Color
@@ -301,9 +307,12 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		ResultItemActiveIndicatorInsetTop:          palette.ResultItemActiveIndicatorInsetTop,
 		ResultItemActiveIndicatorInsetBottom:       palette.ResultItemActiveIndicatorInsetBottom,
 		ResultItemActiveIndicatorBorderRadius:      palette.ResultItemActiveIndicatorBorderRadius,
-		QueryBoxBorderBottomWidth:                  palette.QueryBoxBorderBottomWidth,
+		QuerySeparatorThickness:                    palette.QuerySeparatorThickness,
+		QuerySeparatorPaddingLeft:                  palette.QuerySeparatorPaddingLeft,
+		QuerySeparatorPaddingRight:                 palette.QuerySeparatorPaddingRight,
+		QueryBoxPaddingLeft:                        palette.QueryBoxPaddingLeft,
 		ResultItemActiveIndicatorColor:             palette.ResultItemActiveIndicatorColor,
-		QueryBoxBorderBottomColor:                  palette.QueryBoxBorderBottomColor,
+		QuerySeparatorColor:                        palette.QuerySeparatorColor,
 		PreviewTagBorderRadius:                     palette.PreviewTagBorderRadius,
 		PreviewTagFontColor:                        palette.PreviewTagFontColor,
 		PreviewTagBackgroundColor:                  palette.PreviewTagBackgroundColor,
@@ -593,9 +602,12 @@ func paletteForTheme(theme themeData) uiPalette {
 		ResultItemActiveIndicatorInsetTop:          theme.ResultItemActiveIndicatorInsetTop,
 		ResultItemActiveIndicatorInsetBottom:       theme.ResultItemActiveIndicatorInsetBottom,
 		ResultItemActiveIndicatorBorderRadius:      theme.ResultItemActiveIndicatorBorderRadius,
-		QueryBoxBorderBottomWidth:                  theme.QueryBoxBorderBottomWidth,
+		QuerySeparatorThickness:                    theme.QuerySeparatorThickness,
+		QuerySeparatorPaddingLeft:                  theme.QuerySeparatorPaddingLeft,
+		QuerySeparatorPaddingRight:                 theme.QuerySeparatorPaddingRight,
+		QueryBoxPaddingLeft:                        theme.QueryBoxPaddingLeft,
 		ResultItemActiveIndicatorColor:             optionalThemeColor(theme.ResultItemActiveIndicatorColor),
-		QueryBoxBorderBottomColor:                  optionalThemeColor(theme.QueryBoxBorderBottomColor),
+		QuerySeparatorColor:                        optionalThemeColor(theme.QuerySeparatorColor),
 		PreviewTagBorderRadius:                     theme.PreviewTagBorderRadius,
 		PreviewTagFontColor:                        optionalThemeColor(theme.PreviewTagFontColor),
 		PreviewTagBackgroundColor:                  optionalThemeColor(theme.PreviewTagBackgroundColor),

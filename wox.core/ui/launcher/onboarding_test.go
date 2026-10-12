@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"wox/common"
 	"wox/plugin/thirdparty/migrate"
@@ -114,6 +115,43 @@ func (s *migrationSettingWriter) UpdateGeneralSetting(_ context.Context, _, key,
 	return nil
 }
 
+type migrationThemeInstaller struct {
+	contract.Services
+	theme common.Theme
+}
+
+func (s *migrationThemeInstaller) InstallMigratedTheme(_ context.Context, _ string, theme common.Theme) error {
+	s.theme = theme
+	return nil
+}
+
+func TestMigratedThemeIsInstalledAndSelected(t *testing.T) {
+	var theme common.Theme
+	if err := json.Unmarshal([]byte(`{"SchemaVersion":2,"ThemeId":"flow-cyan","ThemeName":"Cyan Dark","BaseBackgroundColor":"#0F1F26","BaseTextColor":"#E7E9EB","BaseAccentColor":"#58C2B4"}`), &theme); err != nil {
+		t.Fatal(err)
+	}
+	services := &migrationThemeInstaller{}
+	app := &App{
+		services:        services,
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+	}
+	err := app.applyMigrationWriteGroup(context.Background(), &migrationWriteGroup{themes: []migrate.ThemeWrite{{
+		ItemIDs: []string{"setting:theme"},
+		Theme:   theme,
+	}}})
+	if err != "" {
+		t.Fatal(err)
+	}
+	if services.theme.ThemeId != "flow-cyan" || app.generalSettings.Data().ThemeID != "flow-cyan" {
+		t.Fatalf("installed %#v selected %s", services.theme.ThemeId, app.generalSettings.Data().ThemeID)
+	}
+	for _, step := range app.onboardingSteps() {
+		if step.ID == "themeInstall" {
+			t.Fatal("theme step still shown after a launcher theme was imported")
+		}
+	}
+}
+
 func TestImportedQueryHotkeysAreAppended(t *testing.T) {
 	services := &migrationSettingWriter{}
 	app := &App{
@@ -200,6 +238,106 @@ func TestImportedQueryAliasesAreAppended(t *testing.T) {
 	}
 	if strings.Contains(services.values["QueryAliases"], `"Query":"other"`) {
 		t.Fatalf("stored replaced an alias: %s", services.values["QueryAliases"])
+	}
+}
+
+func TestStagedMigrationHotkeyIsShownBeforeRegistration(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	services := &blockingMigrationHotkeyServices{started: started, release: release}
+	form := newFormFieldsState(nil, map[string]string{"MainHotkey": "alt+space"}, true)
+	app := &App{
+		services:        services,
+		lifecycleCtx:    context.Background(),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+	}
+	app.hotkeySettings.SetForm(&form)
+	app.onboardingMigration.stagedMainHotkey = "ctrl+shift+space"
+	app.applyStagedMigrationHotkey()
+	if form.values["MainHotkey"] != "ctrl+shift+space" {
+		t.Fatalf("hotkey before registration = %q", form.values["MainHotkey"])
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("registration did not start")
+	}
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for app.onboardingMigration.stagedMainHotkeyError == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if app.onboardingMigration.stagedMainHotkeyError == "" || form.values["MainHotkey"] != "ctrl+shift+space" {
+		t.Fatalf("after registration hotkey=%q error=%q", form.values["MainHotkey"], app.onboardingMigration.stagedMainHotkeyError)
+	}
+}
+
+func TestSettingsReloadKeepsTheStagedMigrationHotkey(t *testing.T) {
+	data := overlayStagedMigrationHotkey(settingsData{MainHotkey: "alt+space"}, onboardingMigrationState{
+		stagedMainHotkey:      "ctrl+shift+space",
+		stagedMainHotkeyError: "i18n:onboarding_migrate_hotkey_next",
+	})
+	if data.MainHotkey != "ctrl+shift+space" || !data.MainHotkeyRegistrationFailed || data.MainHotkeyRegistrationError != "i18n:onboarding_migrate_hotkey_next" {
+		t.Fatalf("reloaded hotkey = %+v", data.MainHotkey)
+	}
+	plain := overlayStagedMigrationHotkey(settingsData{MainHotkey: "alt+space"}, onboardingMigrationState{})
+	if plain.MainHotkey != "alt+space" || plain.MainHotkeyRegistrationFailed {
+		t.Fatalf("unstaged reload = %+v", plain.MainHotkey)
+	}
+}
+
+type blockingMigrationHotkeyServices struct {
+	contract.Services
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingMigrationHotkeyServices) UpdateGeneralSetting(context.Context, string, string, string) error {
+	close(s.started)
+	<-s.release
+	return fmt.Errorf("hotkey already registered: 1409")
+}
+
+type currentMainHotkeyServices struct {
+	contract.Services
+	saved string
+}
+
+func (s *currentMainHotkeyServices) CheckHotkeyAvailability(context.Context, string, string) (contract.HotkeyAvailability, error) {
+	return contract.HotkeyAvailability{Available: false, ConflictType: "main"}, nil
+}
+
+func (s *currentMainHotkeyServices) UpdateGeneralSetting(_ context.Context, _, key, value string) error {
+	s.saved = key + "=" + value
+	return nil
+}
+
+func TestRecordingTheCurrentMainHotkeyIsNotASelfConflict(t *testing.T) {
+	services := &currentMainHotkeyServices{}
+	form := newFormFieldsState(
+		[]formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey"}}},
+		map[string]string{"MainHotkey": "ctrl+shift+space"},
+		true,
+	)
+	app := &App{
+		services:        services,
+		onboardingOpen:  true,
+		lifecycleCtx:    context.Background(),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+		pluginSettings:  newPluginSettingsController(CommonDeps{}),
+		translations:    map[string]string{"ui_hotkey_conflict_main": "used by the main hotkey"},
+	}
+	app.generalSettings.ApplyData(settingsData{MainHotkey: "alt+space"})
+	app.hotkeySettings.SetForm(&form)
+	state := &hotkeyRecordingState{
+		diagnosticCtx: context.Background(), target: app.hotkeySettings.Form(), persistKey: "MainHotkey",
+	}
+	app.hotkeySettings.SetRecording(state)
+	app.checkRecordedHotkey(state, "alt+space")
+	if form.values["MainHotkey"] != "alt+space" || state.statusError || state.status == "used by the main hotkey" {
+		t.Fatalf("value=%q error=%v status=%q", form.values["MainHotkey"], state.statusError, state.status)
 	}
 }
 

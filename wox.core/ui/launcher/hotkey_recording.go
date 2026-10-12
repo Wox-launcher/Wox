@@ -302,6 +302,12 @@ func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 			return
 		}
 		if !availability.Available {
+			// Re-selecting the shortcut Wox already registered is not a conflict with itself.
+			// The availability check reports that chord as the current main hotkey.
+			if state.persistKey == "MainHotkey" && availability.ConflictType == "main" {
+				a.acceptRecordedHotkey(state, hotkey)
+				return
+			}
 			state.display = hotkey
 			state.status = a.hotkeyConflictMessage(availability.ConflictType, availability.ConflictValue)
 			state.statusError = true
@@ -398,6 +404,8 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 					d.MainHotkeyRegistrationFailed = false
 					d.MainHotkeyRegistrationError = ""
 				})
+				a.onboardingMigration.stagedMainHotkey = ""
+				a.onboardingMigration.stagedMainHotkeyError = ""
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 			case "ActionPanelHotkey":

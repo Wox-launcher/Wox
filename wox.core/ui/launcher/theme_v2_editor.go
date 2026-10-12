@@ -49,7 +49,7 @@ func themeEditorGroups(raw map[string]any) []themeColorGroup {
 	}})
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppContentBackgroundColor", label: "i18n:ui_theme_editor_token_app_content_background"})
 	groups[0].tokens = append(groups[0].tokens, themeColorToken{key: "AppBorderColor", label: "i18n:ui_theme_editor_window_border"})
-	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), themeColorToken{key: "QueryBoxBorderBottomColor", label: "i18n:ui_theme_editor_bottom_border"})
+	groups[1].tokens = append(append([]themeColorToken(nil), groups[1].tokens...), themeColorToken{key: "QuerySeparatorColor", label: "i18n:ui_theme_editor_query_separator"})
 	groups[2].tokens = append(append([]themeColorToken(nil), groups[2].tokens...), themeColorToken{key: "ResultItemActiveIndicatorColor", label: "i18n:ui_theme_editor_indicator"})
 	groups[4].tokens = append(append([]themeColorToken(nil), groups[4].tokens...), themeColorToken{key: "ActionContainerBorderColor", label: "i18n:ui_theme_editor_token_action_border"})
 	groups[5].tokens = append(append([]themeColorToken(nil), groups[5].tokens...), themeColorToken{key: "ToolbarBorderColor", label: "i18n:ui_theme_editor_bottom_border"})

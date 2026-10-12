@@ -17,9 +17,12 @@ type Theme struct {
 	ResultItemActiveIndicatorInsetTop          *int
 	ResultItemActiveIndicatorInsetBottom       *int
 	ResultItemActiveIndicatorBorderRadius      *int
-	QueryBoxBorderBottomWidth                  *int
+	QuerySeparatorThickness                    *int
+	QuerySeparatorPaddingLeft                  *int
+	QuerySeparatorPaddingRight                 *int
+	QueryBoxPaddingLeft                        *int
 	ResultItemActiveIndicatorColor             *woxui.Color
-	QueryBoxBorderBottomColor                  *woxui.Color
+	QuerySeparatorColor                        *woxui.Color
 	PreviewTagBorderRadius                     *int
 	PreviewTagFontColor                        *woxui.Color
 	PreviewTagBackgroundColor                  *woxui.Color

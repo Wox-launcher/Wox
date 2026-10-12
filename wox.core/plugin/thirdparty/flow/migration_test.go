@@ -241,6 +241,56 @@ func TestFlowMigrationCatalogGroupsSettingsAndPlugins(t *testing.T) {
 	}
 }
 
+func TestFlowWindowWidthDropsTheShadowMargin(t *testing.T) {
+	if !flowDropShadowApplies(true, false, true) || flowDropShadowApplies(false, false, true) || flowDropShadowApplies(true, true, true) {
+		t.Fatal("shadow rule does not match Flow")
+	}
+	if !flowDropShadowApplies(true, true, false) {
+		t.Fatal("blur theme still uses the shadow when backdrop is unavailable")
+	}
+
+	isolateFlowMigrationHome(t)
+	root := t.TempDir()
+	t.Setenv("APPDATA", root)
+	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Settings", "Settings.json"), `{
+		"Theme": "Cyan Dark",
+		"WindowSize": 580,
+		"UseDropShadowEffect": true
+	}`)
+	writeMigrationFile(t, filepath.Join(root, "FlowLauncher", "Themes", "Cyan Dark.xaml"), flowCyanTheme)
+
+	installation, err := (flowMigrationSource{}).Detect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	categories, err := installation.Catalog(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	general := itemsByID(categoryByID(t, categories, migrate.CategoryGeneral).Items)
+	if general["setting:app_width"].Detail != "516" {
+		t.Fatalf("catalog width %q", general["setting:app_width"].Detail)
+	}
+	result, err := installation.Import(context.Background(), []string{"setting:app_width"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Settings) != 1 || result.Settings[0].Key != "AppWidth" || result.Settings[0].Value != "516" {
+		t.Fatalf("import %#v", result.Settings)
+	}
+}
+
+func categoryByID(t *testing.T, categories []migrate.Category, id string) migrate.Category {
+	t.Helper()
+	for _, category := range categories {
+		if category.ID == id {
+			return category
+		}
+	}
+	t.Fatalf("missing category %s", id)
+	return migrate.Category{}
+}
+
 func categoryIDs(categories []migrate.Category) []string {
 	ids := make([]string, len(categories))
 	for index, category := range categories {

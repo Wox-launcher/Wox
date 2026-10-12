@@ -11,7 +11,7 @@ import (
 
 // TestV2IndicatorAndQueryBorder checks authored geometry, platform inheritance, and painted dimensions.
 func TestV2IndicatorAndQueryBorder(t *testing.T) {
-	raw := `{"SchemaVersion":2,"ThemeId":"indicator","ThemeName":"Indicator","BaseBackgroundColor":"#182020","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6","ResultItemActiveIndicatorWidth":3,"ResultItemActiveIndicatorInsetLeft":8,"ResultItemActiveIndicatorInsetTop":10,"ResultItemActiveIndicatorInsetBottom":12,"ResultItemActiveIndicatorBorderRadius":2,"QueryBoxBorderBottomWidth":1,"windows":{"QueryBoxBorderBottomColor":"transparent"}}`
+	raw := `{"SchemaVersion":2,"ThemeId":"indicator","ThemeName":"Indicator","BaseBackgroundColor":"#182020","BaseTextColor":"#E0F0E8","BaseAccentColor":"#70D6A6","ResultItemActiveIndicatorWidth":3,"ResultItemActiveIndicatorInsetLeft":8,"ResultItemActiveIndicatorInsetTop":10,"ResultItemActiveIndicatorInsetBottom":12,"ResultItemActiveIndicatorBorderRadius":2,"QuerySeparatorThickness":1,"QuerySeparatorPaddingLeft":10,"QuerySeparatorPaddingRight":12,"windows":{"QuerySeparatorColor":"transparent"}}`
 	var core common.Theme
 	if err := json.Unmarshal([]byte(raw), &core); err != nil {
 		t.Fatal(err)
@@ -31,9 +31,9 @@ func TestV2IndicatorAndQueryBorder(t *testing.T) {
 	if marker.Left != 8 || marker.Top != 10 || box.Width != 3 || box.Height != 38 || box.Radius != 1.5 {
 		t.Fatalf("wrong marker: %+v", box)
 	}
-	color, width := theme.QueryBottomBorder()
-	if width != 1 || color.A != 0 {
-		t.Fatal("query border override lost")
+	color, thickness, padLeft, padRight := theme.QuerySeparator()
+	if thickness != 1 || padLeft != 10 || padRight != 12 || color.A != 0 {
+		t.Fatal("query separator override lost")
 	}
 	saved, err := json.Marshal(core)
 	if err != nil {

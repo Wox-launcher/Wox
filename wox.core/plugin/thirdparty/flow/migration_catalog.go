@@ -14,8 +14,8 @@ import (
 	"wox/util/hotkey"
 )
 
-// Catalog lists Flow habits Wox can store: shortcuts, queries, general behavior, and user plugins.
-// Flow themes, window coordinates, and built-in plugin keyword remaps are left out because Wox has no matching store.
+// Catalog lists Flow habits Wox can store: shortcuts, queries, general behavior, the current theme, and user plugins.
+// Window coordinates and built-in plugin keyword remaps are left out because Wox has no matching store.
 func (f flowInstallation) Catalog(ctx context.Context) ([]migrate.Category, error) {
 	plugins, err := f.Plugins(ctx)
 	if err != nil {
@@ -30,6 +30,9 @@ func (f flowInstallation) Catalog(ctx context.Context) ([]migrate.Category, erro
 	}
 	if items := f.generalItems(); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryGeneral, Items: items})
+	}
+	if items := f.themeItems(ctx); len(items) > 0 {
+		categories = append(categories, migrate.Category{ID: migrate.CategoryThemes, Items: items})
 	}
 	if items := flowPluginItems(plugins); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryPlugins, Items: items})
@@ -51,7 +54,7 @@ func (f flowInstallation) settingImport(ids []string) ([]migrate.SettingWrite, [
 	}
 	var failures []migrate.PluginResult
 	for _, id := range ids {
-		if _, ok := covered[id]; ok {
+		if _, ok := covered[id]; ok || id == flowThemeSettingID {
 			continue
 		}
 		failures = append(failures, migrate.PluginResult{ID: id, Error: "setting cannot be imported"})
@@ -90,8 +93,8 @@ func (f flowInstallation) settingWrites(selected map[string]struct{}) []migrate.
 	add("setting:hide_on_start", "HideOnStart", strconv.FormatBool(f.settings.HideOnStartup))
 	add("setting:hide_on_lost_focus", "HideOnLostFocus", strconv.FormatBool(f.settings.HideWhenDeactivated))
 	add("setting:show_tray", "ShowTray", strconv.FormatBool(!f.settings.HideNotifyIcon))
-	if f.settings.WindowSize > 0 {
-		add("setting:app_width", "AppWidth", strconv.Itoa(f.settings.WindowSize))
+	if width := f.visibleWindowWidth(); width > 0 {
+		add("setting:app_width", "AppWidth", strconv.Itoa(width))
 	}
 	if f.settings.MaxResultsToShow > 0 {
 		add("setting:max_results", "MaxResultCount", strconv.Itoa(f.settings.MaxResultsToShow))
@@ -175,8 +178,8 @@ func (f flowInstallation) generalItems() []migrate.Item {
 		flowBoolItem("setting:hide_on_lost_focus", "hide_on_lost_focus", f.settings.HideWhenDeactivated),
 		flowBoolItem("setting:show_tray", "show_tray", !f.settings.HideNotifyIcon),
 	}
-	if f.settings.WindowSize > 0 {
-		items = append(items, flowSettingItem("setting:app_width", "app_width", "", strconv.Itoa(f.settings.WindowSize)))
+	if width := f.visibleWindowWidth(); width > 0 {
+		items = append(items, flowSettingItem("setting:app_width", "app_width", "", strconv.Itoa(width)))
 	}
 	if f.settings.MaxResultsToShow > 0 {
 		items = append(items, flowSettingItem("setting:max_results", "max_results", "", strconv.Itoa(f.settings.MaxResultsToShow)))

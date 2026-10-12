@@ -238,7 +238,8 @@ func TestOnboardingHotkeyRecordingHighlightsKeyBorders(t *testing.T) {
 	}, 640, accent).(woxwidget.Flex)
 	mainKeys := main.Children[0].(woxwidget.Align).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
 	mainKey := mainKeys.Children[0].(woxwidget.Container)
-	if mainKey.Width != 52 || mainKey.Height != 44 || mainKey.Radius != 7 || mainKey.BorderColor != accent || mainKey.BorderWidth != 2 {
+	recordingBorder := onboardingHotkeyRecordingBorder(woxcomponent.ControlTheme{})
+	if mainKey.Width != 52 || mainKey.Height != 44 || mainKey.Radius != 7 || mainKey.BorderColor != recordingBorder || mainKey.BorderWidth != 2 {
 		t.Fatalf("main recording key = %#v", mainKey)
 	}
 
@@ -247,7 +248,7 @@ func TestOnboardingHotkeyRecordingHighlightsKeyBorders(t *testing.T) {
 	}, 640, accent).(woxwidget.Flex)
 	queryKeys := query.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Flex)
 	queryKey := queryKeys.Children[0].(woxwidget.Container)
-	if queryKey.BorderColor != accent || queryKey.BorderWidth != 2 {
+	if queryKey.BorderColor != recordingBorder || queryKey.BorderWidth != 2 {
 		t.Fatalf("query recording border = %#v/%.0f", queryKey.BorderColor, queryKey.BorderWidth)
 	}
 }

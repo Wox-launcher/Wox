@@ -159,8 +159,11 @@ func (f flowInstallation) Import(ctx context.Context, itemIDs []string) (migrate
 		return result, err
 	}
 	writes, failures := f.settingImport(settingIDs)
+	themes, themeFailures := f.themeImport(ctx, settingIDs)
 	result.Settings = writes
+	result.Themes = themes
 	result.Plugins = append(result.Plugins, failures...)
+	result.Plugins = append(result.Plugins, themeFailures...)
 	return result, nil
 }
 
@@ -414,10 +417,14 @@ type flowLauncherSettings struct {
 	HideWhenDeactivated              bool                  `json:"HideWhenDeactivated"`
 	HideNotifyIcon                   bool                  `json:"HideNotifyIcon"`
 	WindowSize                       int                   `json:"WindowSize"`
+	UseDropShadowEffect              bool                  `json:"UseDropShadowEffect"`
 	MaxResultsToShow                 int                   `json:"MaxResultsToShow"`
 	SearchWindowScreen               string                `json:"SearchWindowScreen"`
 	Language                         string                `json:"Language"`
 	QueryBoxFont                     string                `json:"QueryBoxFont"`
+	Theme                            string                `json:"Theme"`
+	ColorScheme                      string                `json:"ColorScheme"`
+	ItemHeightSize                   int                   `json:"ItemHeightSize"`
 	AutoUpdates                      bool                  `json:"AutoUpdates"`
 	Proxy                            flowProxySettings     `json:"Proxy"`
 	PluginSettings                   flowPluginRuntimePath `json:"PluginSettings"`

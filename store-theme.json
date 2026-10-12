@@ -49,7 +49,7 @@
     "Author": "qianlifeng",
     "Version": "1.0.1",
     "MinWoxVersion": "2.4.4",
-    "Description": "Warm ivory surfaces, teal text, and a saffron query underline. A light theme showcasing the query bottom border.",
+    "Description": "Warm ivory surfaces, teal text, and a saffron line under the query.",
     "ImageTheme": false,
     "IconColors": {
       "Background": "#EEE9D5FF",

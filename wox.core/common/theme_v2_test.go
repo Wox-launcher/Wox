@@ -403,7 +403,7 @@ func TestBuiltinThemesWindowChrome(t *testing.T) {
 
 // TestThemeV2RejectsInvalidValues covers strict new-format validation without changing legacy parsing.
 func TestThemeV2RejectsInvalidValues(t *testing.T) {
-	for _, extra := range []string{`,"ResultItemActiveBorderLeftWidth":3`, `,"ResultItemActiveIndicatorWidth":-1`, `,"ResultItemActiveIndicatorInsetTop":1.5`, `,"QueryBoxBorderBottomWidth":-1`, `,"AppPaddingLeft":-1`, `,"AppPaddingLeft":1.5`, `,"ResultItemTitleColor":""`, `,"ToolbarBorderColor":"rgba(0,0,0,2)"`, `,"windows":{"variants":{"win11":{"ActionContainerBorderWidth":-1}}}`} {
+	for _, extra := range []string{`,"ResultItemActiveBorderLeftWidth":3`, `,"ResultItemActiveIndicatorWidth":-1`, `,"ResultItemActiveIndicatorInsetTop":1.5`, `,"QuerySeparatorThickness":-1`, `,"AppPaddingLeft":-1`, `,"AppPaddingLeft":1.5`, `,"ResultItemTitleColor":""`, `,"ToolbarBorderColor":"rgba(0,0,0,2)"`, `,"windows":{"variants":{"win11":{"ActionContainerBorderWidth":-1}}}`} {
 		var theme Theme
 		if err := json.Unmarshal([]byte(strings.TrimSuffix(minimalV2Theme, "}")+extra+`}`), &theme); err == nil {
 			t.Fatalf("accepted invalid %s", extra)

@@ -193,6 +193,10 @@ func WoxLauncherDemo(props LauncherDemoProps) woxwidget.Widget {
 	if props.ShowQuery {
 		query := demoQuery(props, queryHeight, alpha)
 		children = append(children, woxwidget.StackChild{Left: appInsets.Left, Top: appInsets.Top, Right: appInsets.Right, StretchWidth: true, Child: demoHighlight(query, max(float32(0), props.Width-appInsets.Left-appInsets.Right), queryHeight, demoQueryRadius(props.Theme), props.HighlightTarget == LauncherDemoHighlightQueryBackground, props.HighlightColor, props.HighlightCorners)})
+		if color, thickness, padLeft, padRight := props.Theme.QuerySeparator(); len(props.Results) > 0 && thickness > 0 && color.A != 0 {
+			lineWidth := max(float32(0), props.Width-padLeft-padRight)
+			children = append(children, woxwidget.StackChild{Left: padLeft, Top: appInsets.Top + queryHeight - thickness, Child: woxwidget.Container{Width: lineWidth, Height: thickness, Color: demoColorOpacity(color, props.Opacity)}})
+		}
 	}
 	for index, result := range props.Results {
 		resultAlpha := alpha
@@ -312,8 +316,7 @@ func demoQuery(props LauncherDemoProps, height float32, alpha uint8) woxwidget.W
 		children = append(children, props.QueryAccessory)
 	}
 	// Live query chrome uses 8px left / 6px right so glance sits on the same edge.
-	borderColor, borderWidth := props.Theme.QueryBottomBorder()
-	return woxwidget.Container{BottomBorderColor: demoColorOpacity(borderColor, props.Opacity), BottomBorderWidth: borderWidth, Height: height, Radius: demoQueryRadius(props.Theme), Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("QueryBox"), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
+	return woxwidget.Container{Height: height, Radius: demoQueryRadius(props.Theme), Color: demoColorOpacity(props.Theme.QueryBackground, props.Opacity), Surface: props.Theme.Surfaces.Get("QueryBox"), Padding: woxwidget.Insets{Left: 8, Right: 6}, Child: woxwidget.Flex{
 		Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children,
 	}}
 }
@@ -598,8 +601,9 @@ func demoAppPadding(theme Theme) float32 {
 }
 
 // demoQueryRadius keeps the previous 8-unit default when a Theme literal omits QueryRadius.
+// An authored separator thickness, including zero, marks that radius as explicit.
 func demoQueryRadius(theme Theme) float32 {
-	if theme.QueryRadius > 0 || theme.QueryBoxBorderBottomWidth != nil {
+	if theme.QueryRadius > 0 || theme.QuerySeparatorThickness != nil {
 		return theme.QueryRadius
 	}
 	return 8

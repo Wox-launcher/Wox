@@ -30,7 +30,7 @@ func themeEditorTokenSection(key string) string {
 		section = "tags"
 	case strings.HasPrefix(key, "PreviewProperty"):
 		section = "properties"
-	case strings.HasPrefix(key, "ActionQueryBox"):
+	case strings.HasPrefix(key, "ActionQueryBox"), strings.HasPrefix(key, "QuerySeparator"):
 		section = "query"
 	case strings.Contains(key, "Hotkey"):
 		section = "hotkeys"
@@ -61,7 +61,9 @@ var themeEditorGeometryGroups = [][]themeColorToken{
 	},
 	{
 		{key: "QueryBoxBorderRadius", label: "i18n:ui_theme_geometry_QueryBoxBorderRadius"},
-		{key: "QueryBoxBorderBottomWidth", label: "i18n:ui_theme_geometry_QueryBoxBorderBottomWidth"},
+		{key: "QuerySeparatorThickness", label: "i18n:ui_theme_geometry_QuerySeparatorThickness"},
+		{key: "QuerySeparatorPaddingLeft", label: "i18n:ui_theme_geometry_QuerySeparatorPaddingLeft"},
+		{key: "QuerySeparatorPaddingRight", label: "i18n:ui_theme_geometry_QuerySeparatorPaddingRight"},
 	},
 	{
 		{key: "ResultContainerPaddingLeft", label: "i18n:ui_theme_geometry_ResultContainerPaddingLeft"},

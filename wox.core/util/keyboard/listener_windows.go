@@ -22,14 +22,25 @@ const (
 	rawEventKeyDown = 0
 	rawEventKeyUp   = 1
 
-	hotkeyRegistrationMaxAttempts       = 10
+	// Retries cover a chord this process just released. Windows can still report
+	// it as registered for a short time. A chord another program owns is tried
+	// once, because later attempts do not succeed.
+	hotkeyRegistrationMaxAttempts       = 5
 	hotkeyRegistrationRetryDelay        = 75 * time.Millisecond
+	hotkeyReleaseRetryWindow            = time.Second
 	windowsErrorHotkeyAlreadyRegistered = 1409
 )
 
 type hotkeyRegistration struct {
-	id   int
-	once sync.Once
+	id        int
+	modifiers Modifier
+	vk        uint32
+	once      sync.Once
+}
+
+type releasedHotkeyChord struct {
+	modifiers Modifier
+	vk        uint32
 }
 
 type rawKeySubscription struct {
@@ -44,10 +55,37 @@ var (
 	hotkeyCallbacks  = map[int]func(){}
 	rawKeyListeners  = map[int]RawKeyHandler{}
 	rawHookIsEnabled bool
+	// releasedHotkeys records chords this process unregistered, keyed by modifier and virtual key.
+	releasedHotkeys sync.Map
 )
 
 func RegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
 	return registerGlobalHotkey(modifiers, key, callback, hotkeyRegistrationMaxAttempts)
+}
+
+// registrationAttempts retries only a chord this process released within the last second.
+func registrationAttempts(modifiers Modifier, vk uint32, requested int) int {
+	if requested <= 1 || !hotkeyReleasedRecently(modifiers, vk) {
+		return 1
+	}
+	return requested
+}
+
+func noteHotkeyReleased(modifiers Modifier, vk uint32) {
+	releasedHotkeys.Store(releasedHotkeyChord{modifiers: modifiers, vk: vk}, time.Now())
+}
+
+func hotkeyReleasedRecently(modifiers Modifier, vk uint32) bool {
+	value, ok := releasedHotkeys.Load(releasedHotkeyChord{modifiers: modifiers, vk: vk})
+	if !ok {
+		return false
+	}
+	releasedAt, ok := value.(time.Time)
+	if !ok || time.Since(releasedAt) > hotkeyReleaseRetryWindow {
+		releasedHotkeys.Delete(releasedHotkeyChord{modifiers: modifiers, vk: vk})
+		return false
+	}
+	return true
 }
 
 // TryRegisterGlobalHotkey probes a combination once. Availability checks use
@@ -81,6 +119,7 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 	if maxAttempts < 1 {
 		maxAttempts = 1
 	}
+	maxAttempts = registrationAttempts(modifiers, uint32(vkCode), maxAttempts)
 
 	var errCode C.ulong
 	registered := false
@@ -98,8 +137,7 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 		if hookFallback {
 			break
 		}
-		// A preceding availability probe can have just released this key. Windows
-		// may briefly report it as still registered before completing that release.
+		// This process just released the chord. Windows may still report it as registered.
 		time.Sleep(hotkeyRegistrationRetryDelay)
 	}
 	if !registered {
@@ -114,7 +152,7 @@ func registerGlobalHotkey(modifiers Modifier, key Key, callback func(), maxAttem
 	hotkeyCallbacks[id] = callback
 	managerMu.Unlock()
 
-	return &hotkeyRegistration{id: id}, nil
+	return &hotkeyRegistration{id: id, modifiers: modifiers, vk: uint32(vkCode)}, nil
 }
 
 // windowsWinHookFallbackCombo reports a Win chord that may be taken over by the
@@ -253,7 +291,9 @@ func (r *hotkeyRegistration) Unregister() error {
 		ok := C.woxKeyboardUnregisterHotkey(C.int(r.id), &errCode)
 		if ok == 0 {
 			unregisterErr = fmt.Errorf("failed to unregister hotkey (err=%d)", uint32(errCode))
+			return
 		}
+		noteHotkeyReleased(r.modifiers, r.vk)
 	})
 	return unregisterErr
 }

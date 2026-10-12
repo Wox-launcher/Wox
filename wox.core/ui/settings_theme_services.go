@@ -172,6 +172,22 @@ func (s *CoreServices) SaveTheme(ctx context.Context, sessionID string, name str
 	return theme, nil
 }
 
+// InstallMigratedTheme saves a theme mapped from another launcher and selects it.
+// The mapped id is kept so importing the same source theme again updates that file.
+func (s *CoreServices) InstallMigratedTheme(ctx context.Context, sessionID string, theme common.Theme) error {
+	ctx = uiServiceContext(ctx, sessionID)
+	if strings.TrimSpace(theme.ThemeId) == "" || strings.TrimSpace(theme.ThemeName) == "" {
+		return fmt.Errorf("migrated theme is incomplete")
+	}
+	if GetUIManager().IsSystemTheme(theme.ThemeId) {
+		return fmt.Errorf("cannot overwrite system theme")
+	}
+	theme.IsSystem = false
+	theme.IsInstalled = true
+	theme.IsAutoAppearance = false
+	return GetStoreManager().Install(ctx, theme)
+}
+
 // SaveAutoTheme persists one user Auto theme document without applying it.
 func (s *CoreServices) SaveAutoTheme(ctx context.Context, sessionID string, name string, lightThemeID string, darkThemeID string, themeID string, overwrite bool) (common.Theme, error) {
 	ctx = uiServiceContext(ctx, sessionID)

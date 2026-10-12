@@ -13,9 +13,12 @@ type Theme struct {
 	ResultItemActiveIndicatorInsetTop     *int              `json:",omitempty"`
 	ResultItemActiveIndicatorInsetBottom  *int              `json:",omitempty"`
 	ResultItemActiveIndicatorBorderRadius *int              `json:",omitempty"`
-	QueryBoxBorderBottomWidth             *int              `json:",omitempty"`
+	QuerySeparatorThickness               *int              `json:",omitempty"`
+	QuerySeparatorPaddingLeft             *int              `json:",omitempty"`
+	QuerySeparatorPaddingRight            *int              `json:",omitempty"`
+	QueryBoxPaddingLeft                   *int              `json:",omitempty"`
 	ResultItemActiveIndicatorColor        string            `json:",omitempty"`
-	QueryBoxBorderBottomColor             string            `json:",omitempty"`
+	QuerySeparatorColor                   string            `json:",omitempty"`
 	PreviewTagBorderRadius                *int              `json:",omitempty"`
 	AppBorderWidth                        *int              `json:",omitempty"`
 	AppBorderRadius                       *int              `json:",omitempty"`
