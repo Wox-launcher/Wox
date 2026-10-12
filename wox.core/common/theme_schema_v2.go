@@ -224,11 +224,8 @@ func decodeThemeV2(data []byte, t *Theme) error {
 			return err
 		}
 	}
-	for key := range raw {
-		if !themeV2DocumentFields[key] {
-			return fmt.Errorf("unknown v2 theme field %q", key)
-		}
-	}
+	// Fields this build does not know are left unread. A theme from another
+	// Wox version can carry them without failing to load.
 	var definition ThemeSchemaV2
 	if err := json.Unmarshal(data, &definition); err != nil {
 		return err

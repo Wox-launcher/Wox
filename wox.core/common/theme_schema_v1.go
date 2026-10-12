@@ -264,9 +264,9 @@ func marshalThemeV1(t Theme) ([]byte, error) {
 	})
 }
 
-// Only visual fields can be overridden by a platform node. Identity and control
-// fields stay top-level so a theme cannot become a different theme only on one
-// OS, and invalid keys fail while parsing instead of being silently ignored.
+// Only visual fields can be overridden by a platform node. Identity fields stay
+// top-level so a theme cannot become a different theme only on one OS.
+// Unrecognized names are ignored.
 var themeV1StyleFields = map[string]bool{
 	"BaseBackgroundColor":                  true,
 	"BaseTextColor":                        true,

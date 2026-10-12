@@ -33,7 +33,7 @@ func validateThemePlatformOverride(raw map[string]json.RawMessage, platformName 
 			}
 			continue
 		}
-		if !styleFields[fieldName] {
+		if themeOverrideRejectsField(fieldName, styleFields) {
 			return fmt.Errorf("platform theme override %q contains non-style field %q", platformName, fieldName)
 		}
 	}
@@ -74,7 +74,7 @@ func validateThemePlatformOverrideVariants(value json.RawMessage, platformName s
 				}
 				continue
 			}
-			if !styleFields[fieldName] {
+			if themeOverrideRejectsField(fieldName, styleFields) {
 				return fmt.Errorf("platform theme override %q variant %q contains non-style field %q", platformName, variantName, fieldName)
 			}
 		}
@@ -121,9 +121,24 @@ func validateThemeCapabilityOverride(data json.RawMessage, path string, styleFie
 		return fmt.Errorf("theme capability %q must be a JSON object", path)
 	}
 	for name := range fields {
-		if !styleFields[name] {
+		if themeOverrideRejectsField(name, styleFields) {
 			return fmt.Errorf("theme capability %q contains non-style field %q", path, name)
 		}
 	}
 	return nil
+}
+
+// themeIdentityFields stay at the document root. A platform node that sets one
+// would retarget the theme, so those names are still rejected.
+var themeIdentityFields = map[string]bool{
+	"I18n": true, "SchemaVersion": true, "MinWoxVersion": true, "ThemeId": true, "ThemeName": true,
+	"ThemeAuthor": true, "ThemeUrl": true, "Version": true, "Description": true, "IsSystem": true,
+	"IsInstalled": true, "IsAutoAppearance": true, "DarkThemeId": true, "LightThemeId": true,
+	"windows": true, "macos": true, "linux": true,
+}
+
+// themeOverrideRejectsField keeps identity fields out of platform, variant, and
+// capability nodes. Any other unrecognized name is ignored.
+func themeOverrideRejectsField(fieldName string, styleFields map[string]bool) bool {
+	return !styleFields[fieldName] && themeIdentityFields[fieldName]
 }

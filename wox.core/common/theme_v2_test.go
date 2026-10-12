@@ -401,9 +401,31 @@ func TestBuiltinThemesWindowChrome(t *testing.T) {
 	}
 }
 
+func TestThemeV2IgnoresUnknownFields(t *testing.T) {
+	input := strings.TrimSuffix(minimalV2Theme, "}") + `,"QueryBoxBorderBottomColor":"#E7B15A","ResultItemActiveBorderLeftWidth":3,"windows":{"QueryBoxBorderBottomWidth":2,"variants":{"win11":{"backgroundBlur":{"QueryBoxBorderBottomColor":"#FFFFFF"}}}}}`
+	var theme Theme
+	if err := json.Unmarshal([]byte(input), &theme); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(theme.AppBackgroundColor, "#182020B8") || theme.ResultItemActiveBorderLeftWidth != 0 {
+		t.Fatalf("unknown field was applied: background %s border %d", theme.AppBackgroundColor, theme.ResultItemActiveBorderLeftWidth)
+	}
+	saved, err := json.Marshal(theme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(saved, &document); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := document["QueryBoxBorderBottomColor"]; ok {
+		t.Fatalf("unknown root field was stored: %s", saved)
+	}
+}
+
 // TestThemeV2RejectsInvalidValues covers strict new-format validation without changing legacy parsing.
 func TestThemeV2RejectsInvalidValues(t *testing.T) {
-	for _, extra := range []string{`,"ResultItemActiveBorderLeftWidth":3`, `,"ResultItemActiveIndicatorWidth":-1`, `,"ResultItemActiveIndicatorInsetTop":1.5`, `,"QuerySeparatorThickness":-1`, `,"AppPaddingLeft":-1`, `,"AppPaddingLeft":1.5`, `,"ResultItemTitleColor":""`, `,"ToolbarBorderColor":"rgba(0,0,0,2)"`, `,"windows":{"variants":{"win11":{"ActionContainerBorderWidth":-1}}}`} {
+	for _, extra := range []string{`,"ResultItemActiveIndicatorWidth":-1`, `,"ResultItemActiveIndicatorInsetTop":1.5`, `,"QuerySeparatorThickness":-1`, `,"AppPaddingLeft":-1`, `,"AppPaddingLeft":1.5`, `,"ResultItemTitleColor":""`, `,"ToolbarBorderColor":"rgba(0,0,0,2)"`, `,"windows":{"variants":{"win11":{"ActionContainerBorderWidth":-1}}}`} {
 		var theme Theme
 		if err := json.Unmarshal([]byte(strings.TrimSuffix(minimalV2Theme, "}")+extra+`}`), &theme); err == nil {
 			t.Fatalf("accepted invalid %s", extra)
