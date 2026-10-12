@@ -14,9 +14,6 @@ func TestFlowLayerRegistration(t *testing.T) {
 	if !plugin.IsReservedUserPluginDirectory(manifest.DirectoryName) {
 		t.Fatal("flow collection directory was not reserved")
 	}
-	if manifest.Store() == nil {
-		t.Fatal("missing store")
-	}
 	hosts := (flowLayer{}).Hosts()
 	if len(hosts) != 2 || hosts[0] == nil || hosts[1] == nil {
 		t.Fatalf("hosts %#v", hosts)
@@ -35,11 +32,22 @@ func TestFlowLayerRegistration(t *testing.T) {
 		if !scriptOK || !dotnetOK || scriptIcon.ImageData != mark.ImageData || dotnetIcon.ImageData != mark.ImageData {
 			t.Fatalf("flow runtime icons script=%+v dotnet=%+v", scriptIcon, dotnetIcon)
 		}
+		for _, runtime := range []plugin.Runtime{manifest.RuntimeJSONRPC, manifest.RuntimeDotNet} {
+			host := registeredHost(runtime)
+			if host == nil || plugin.RuntimeSettingsVisible(host) {
+				t.Fatalf("%s must stay off the runtime settings page", runtime)
+			}
+		}
 	} else if scriptOK || dotnetOK {
 		t.Fatal("flow hosts must stay unregistered outside Windows")
 	}
-	label, icon := plugin.PluginStorePresentation("flow")
-	if label != "i18n:ui_plugin_store_flow" || icon.IsEmpty() || icon.ImageData != mark.ImageData {
-		t.Fatalf("flow store presentation = %q icon=%+v", label, icon)
+}
+
+func registeredHost(runtime plugin.Runtime) plugin.Host {
+	for _, host := range plugin.AllHosts {
+		if host != nil && host.GetRuntime(context.Background()) == runtime {
+			return host
+		}
 	}
+	return nil
 }

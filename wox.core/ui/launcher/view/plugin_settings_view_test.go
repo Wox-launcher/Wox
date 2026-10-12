@@ -70,84 +70,19 @@ func TestPluginSettingsFilterPanelUsesAvailableWidth(t *testing.T) {
 	}
 }
 
-func TestPluginSettingsStorePanelAlignsWithGear(t *testing.T) {
-	page := PluginSettingsPage(PluginSettingsPageProps{
-		Width: 1000, Height: 700,
-		List:       PluginListProps{Width: 250, Height: 660, Theme: woxcomponent.ControlTheme{}},
-		Detail:     PluginDetailProps{Width: 689, Height: 660, Theme: woxcomponent.ControlTheme{}},
-		StorePanel: &PluginStoreVisibilityPanelProps{Width: 280, Theme: woxcomponent.ControlTheme{}},
-		Theme:      woxcomponent.ControlTheme{},
-	}).(woxwidget.Stack)
-
-	positioned := page.Children[2]
-	panel := positioned.Child.(woxwidget.FocusScope).Child.(woxwidget.Container)
-	if positioned.Left != 206 || positioned.Top != 64 || panel.Width != 280 {
-		t.Fatalf("store panel geometry = left %v top %v width %v, want (206, 64) and width 280", positioned.Left, positioned.Top, panel.Width)
-	}
-	if page.Children[1].Child.(woxwidget.Gesture).ID != "plugin-store-settings-dismiss" {
-		t.Fatal("store panel must dismiss from the page backdrop")
-	}
-}
-
-func TestPluginListSearchIncludesStoreSettingsBeforeFilter(t *testing.T) {
+func TestPluginListSearchKeepsOnlyTheFilterAction(t *testing.T) {
 	list := PluginList(PluginListProps{
 		Width: 260, Height: 660, Placeholder: "Search 67 plugins",
 		FilterLabel: "Filter", FilterIcon: &woxui.Image{}, OnFilter: func() {},
-		StoreSettingsLabel: "Visible stores", StoreSettingsIcon: &woxui.Image{}, OnStoreSettings: func() {},
 		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}, SelectionBackground: woxui.Color{R: 1, G: 2, B: 3, A: 255}},
 	})
 	overlay := list.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Flex)
-	if len(overlay.Children) != 4 {
-		t.Fatalf("search overlay children = %d, want spacer, store settings, filter, and trailing inset", len(overlay.Children))
+	if len(overlay.Children) != 3 {
+		t.Fatalf("search overlay children = %d, want spacer, filter, and trailing inset", len(overlay.Children))
 	}
-	gear := overlay.Children[1].(woxwidget.Align).Child.(woxwidget.Stateful)
-	filter := overlay.Children[2].(woxwidget.Align).Child.(woxwidget.Stateful)
-	if gear.Key != "plugin-store-settings" || filter.Key != "plugin-filter" {
-		t.Fatalf("search actions = %q %q, want store settings then filter", gear.Key, filter.Key)
-	}
-	if gear.Widget.(woxcomponent.IconButtonProps).Background.A != 0 {
-		t.Fatal("store settings icon must stay unselected")
-	}
-}
-
-func TestPluginStoreVisibilityPanelLocksWox(t *testing.T) {
-	toggled := ""
-	panel := PluginStoreVisibilityPanel(PluginStoreVisibilityPanelProps{
-		Width: 280,
-		Rows: []PluginStoreVisibilityRow{
-			{ID: "wox", Label: "Wox Store", Checked: true, Locked: true, OnToggle: func(bool) { toggled = "wox" }},
-			{ID: "flow", Label: "Flow Store", Icon: &woxui.Image{}, Checked: false, OnToggle: func(visible bool) {
-				if visible {
-					toggled = "flow"
-				}
-			}},
-		},
-		Theme: woxcomponent.ControlTheme{Text: woxui.Color{A: 255}},
-	}).(woxwidget.FocusScope).Child.(woxwidget.Container)
-	if !panel.Floating || panel.Height != 32+32*2+8 {
-		t.Fatalf("store panel = floating %v height %v, want a floating checklist at 104px", panel.Floating, panel.Height)
-	}
-	rows := panel.Child.(woxwidget.Flex).Children
-	woxRow := rows[0].(woxwidget.Container).Child.(woxwidget.Flex)
-	woxCheck := woxRow.Children[0].(woxwidget.Semantics)
-	if woxCheck.Role != woxui.AccessibilityRoleCheckBox || !woxCheck.Checked || !woxCheck.Disabled || woxCheck.Label != "Wox Store" {
-		t.Fatalf("wox checkbox = %#v", woxCheck)
-	}
-	flowRow := rows[1].(woxwidget.Container).Child.(woxwidget.Flex)
-	flowCheck := flowRow.Children[0].(woxwidget.Semantics)
-	if flowCheck.Checked || flowCheck.Disabled || flowCheck.Label != "Flow Store" {
-		t.Fatalf("flow checkbox = %#v", flowCheck)
-	}
-	if _, ok := flowRow.Children[1].(woxwidget.Image); !ok {
-		t.Fatalf("flow mark = %T, want the store icon", flowRow.Children[1])
-	}
-	label := flowRow.Children[2].(woxwidget.Expanded).Child.(woxwidget.Gesture)
-	if label.ID != "plugin-store-visible-label-flow" || label.OnTap == nil {
-		t.Fatal("flow label must toggle the catalog")
-	}
-	label.OnTap()
-	if toggled != "flow" {
-		t.Fatalf("toggled = %q, want flow", toggled)
+	filter := overlay.Children[1].(woxwidget.Align).Child.(woxwidget.Stateful)
+	if filter.Key != "plugin-filter" {
+		t.Fatalf("search action = %q, want filter", filter.Key)
 	}
 }
 

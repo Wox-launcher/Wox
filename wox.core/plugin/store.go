@@ -254,15 +254,7 @@ func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManife
 		}
 	}
 
-	for _, externalStore := range externalStores {
-		known := pluginStoreManifestIDs(storePluginManifests)
-		storePluginManifests = externalStore.AppendManifests(ctx, storePluginManifests)
-		assignPluginStore(storePluginManifests, externalStore.Name(), known)
-	}
-
-	// External catalogs are merged after the per-store OS check above.
-	// Apply the same rule to the combined list so a Windows-only catalog
-	// cannot appear on another system.
+	// A catalog row for another operating system must not reach the settings list.
 	storePluginManifests = selectCurrentOSManifests(storePluginManifests)
 
 	logger.Info(ctx, fmt.Sprintf("found %d plugins from stores", len(storePluginManifests)))
@@ -455,23 +447,6 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 	s.installMu.Lock()
 	defer s.installMu.Unlock()
 
-	// Runtimes outside the official set belong to a compatibility layer.
-	// ClassifyPluginArtifact rejects them, so the layer must run before that check.
-	for _, externalStore := range externalStores {
-		if !externalStore.Owns(manifest) {
-			continue
-		}
-		logger.Info(ctx, fmt.Sprintf("start to install plugin %s(%s)", manifest.GetName(ctx), manifest.Version))
-		if err := externalStore.Install(ctx, manifest, progressCallback); err != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to install plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, err.Error()))
-			return err
-		}
-		reloadSettingPlugins(ctx)
-		if syncInstall {
-			s.logInstalledPluginUpsert(ctx, manifest)
-		}
-		return nil
-	}
 	if !IsSupportedRuntime(string(manifest.Runtime)) {
 		return fmt.Errorf("plugin runtime %s is not available", manifest.Runtime)
 	}
@@ -1042,13 +1017,10 @@ func (s *Store) uninstallLocked(ctx context.Context, plugin *Instance, skipClean
 	// Compatibility plugins must not use the generic uninstall. Its failure path
 	// reloads the directory with ParseMetadata.
 	if plugin != nil {
-		for _, externalStore := range externalStores {
-			if !externalStore.OwnsInstance(plugin) {
-				continue
-			}
-			handled, err := externalStore.Uninstall(ctx, plugin, skipCleanSetting, preserveCache, progressCallback)
+		for _, remover := range pluginRemovers {
+			handled, err := remover.Uninstall(ctx, plugin, skipCleanSetting, preserveCache, progressCallback)
 			if !handled {
-				return fmt.Errorf("plugin %s is not installed in the %s directory", plugin.Metadata.Id, externalStore.Name())
+				continue
 			}
 			if err != nil {
 				logger.Error(ctx, fmt.Sprintf("failed to uninstall plugin %s(%s): %s", plugin.Metadata.GetName(ctx), plugin.Metadata.Version, err.Error()))

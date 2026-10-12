@@ -27,7 +27,6 @@ type pluginSettingsSnapshot struct {
 	PluginSearchFocused  bool
 	PluginFilters        pluginFilterState
 	PluginFilterOpen     bool
-	PluginStorePanelOpen bool
 	PluginDetailTab      string
 	PluginForm           *pluginSettingsFormSnapshot
 	PluginsStore         bool
@@ -57,9 +56,6 @@ type pluginSettingsController struct {
 	pluginSearchFocused  bool
 	pluginFilters        pluginFilterState
 	pluginFilterOpen     bool
-	pluginStorePanelOpen bool
-	// hiddenStoreRevision ignores a failed save once a newer visibility change exists.
-	hiddenStoreRevision  uint64
 	pluginDetailTab      string
 	pluginForm           *pluginSettingsFormState
 	pluginsStore         bool
@@ -175,14 +171,6 @@ func (c *pluginSettingsController) SetFilterOpen(open bool) {
 	c.pluginFilterOpen = open
 }
 
-func (c *pluginSettingsController) StorePanelOpen() bool {
-	return c.pluginStorePanelOpen
-}
-
-func (c *pluginSettingsController) SetStorePanelOpen(open bool) {
-	c.pluginStorePanelOpen = open
-}
-
 func (c *pluginSettingsController) DetailTab() string {
 	return c.pluginDetailTab
 }
@@ -253,7 +241,6 @@ func (c *pluginSettingsController) ReleaseWindowMemory() {
 	c.pluginSearchFocused = false
 	c.pluginFilters = pluginFilterState{}
 	c.pluginFilterOpen = false
-	c.pluginStorePanelOpen = false
 	c.pluginDetailTab = "settings"
 	c.pluginForm = nil
 	c.pluginOperationError = ""
@@ -446,7 +433,6 @@ func (c *pluginSettingsController) Snapshot() pluginSettingsSnapshot {
 		PluginSearchFocused:  c.pluginSearchFocused,
 		PluginFilters:        c.pluginFilters,
 		PluginFilterOpen:     c.pluginFilterOpen,
-		PluginStorePanelOpen: c.pluginStorePanelOpen,
 		PluginDetailTab:      c.pluginDetailTab,
 		PluginForm:           snapshotPluginSettingsFormLocked(c.pluginForm),
 		PluginsStore:         c.pluginsStore,

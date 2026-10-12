@@ -17,15 +17,19 @@ type osLayer struct {
 func (l osLayer) Name() string          { return l.name }
 func (l osLayer) Directory() string     { return l.name }
 func (l osLayer) Hosts() []Host         { return []Host{l.host} }
-func (l osLayer) Store() ExternalStore  { return nil }
 func (l osLayer) SupportedOS() []string { return l.os }
 
 func TestRegisterThirdPartySkipsHostsOutsideSupportedOS(t *testing.T) {
 	previousHosts := AllHosts
-	previousStores := append([]ExternalStore(nil), externalStores...)
+	previousRemovers := append([]PluginRemover(nil), pluginRemovers...)
+	previousCompatibility := make(map[Host]struct{}, len(compatibilityHosts))
+	for host := range compatibilityHosts {
+		previousCompatibility[host] = struct{}{}
+	}
 	t.Cleanup(func() {
 		AllHosts = previousHosts
-		externalStores = previousStores
+		pluginRemovers = previousRemovers
+		compatibilityHosts = previousCompatibility
 		delete(reservedUserPluginDirectories, "os-limited")
 		delete(reservedUserPluginDirectories, "os-any")
 	})
@@ -38,6 +42,9 @@ func TestRegisterThirdPartySkipsHostsOutsideSupportedOS(t *testing.T) {
 	}
 	if !hostRuntimeRegistered("OSANY") {
 		t.Fatal("a layer with no OS limit must register its host")
+	}
+	if host := hostByRuntime("OSANY"); host == nil || RuntimeSettingsVisible(host) {
+		t.Fatal("a compatibility host must stay off the runtime settings page")
 	}
 	limited := hostRuntimeRegistered("OSLIMITED")
 	if util.IsWindows() {
@@ -52,10 +59,14 @@ func TestRegisterThirdPartySkipsHostsOutsideSupportedOS(t *testing.T) {
 }
 
 func hostRuntimeRegistered(runtime string) bool {
+	return hostByRuntime(runtime) != nil
+}
+
+func hostByRuntime(runtime string) Host {
 	for _, host := range AllHosts {
 		if host != nil && strings.EqualFold(string(host.GetRuntime(context.Background())), runtime) {
-			return true
+			return host
 		}
 	}
-	return false
+	return nil
 }

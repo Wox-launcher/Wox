@@ -697,8 +697,6 @@
   "ui_setting_plugin_section_enabled": "Включённые",
   "ui_setting_plugin_section_disabled": "Отключённые",
   "ui_plugin_store_wox": "Магазин Wox",
-  "ui_plugin_store_flow": "Магазин Flow",
-  "ui_plugin_store_settings": "Видимые магазины",
   "ui_setting_catalog_search_empty_subtitle": "Попробуйте другие ключевые слова или сбросьте активные фильтры.",
   "ui_delete_row_confirm": "Вы уверены, что хотите удалить эту строку?",
   "ui_clone_row": "Клонировать строку",

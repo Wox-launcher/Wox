@@ -19,6 +19,9 @@ func getRuntimeStatuses(ctx context.Context) []contract.RuntimeStatus {
 
 	statuses := make([]contract.RuntimeStatus, 0, len(plugin.AllHosts))
 	for _, runtimeHost := range plugin.AllHosts {
+		if !plugin.RuntimeSettingsVisible(runtimeHost) {
+			continue
+		}
 		runtime := string(runtimeHost.GetRuntime(ctx))
 
 		var pluginNames []string

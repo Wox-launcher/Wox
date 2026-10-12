@@ -141,6 +141,21 @@ func TestFlowMigrationTestRootHidesTheDeveloperInstall(t *testing.T) {
 	}
 }
 
+func TestFlowProxyURLAppendsPortWhenSchemeOmitsIt(t *testing.T) {
+	got := flowProxyURL(flowProxySettings{Enabled: true, Server: "http://127.0.0.1", Port: 7897})
+	if got != "http://127.0.0.1:7897" {
+		t.Fatalf("scheme without port = %q", got)
+	}
+	got = flowProxyURL(flowProxySettings{Enabled: true, Server: "http://127.0.0.1:1080", Port: 7897})
+	if got != "http://127.0.0.1:1080" {
+		t.Fatalf("explicit port = %q", got)
+	}
+	got = flowProxyURL(flowProxySettings{Enabled: true, Server: "127.0.0.1", Port: 7890})
+	if got != "http://127.0.0.1:7890" {
+		t.Fatalf("host and port = %q", got)
+	}
+}
+
 func TestFlowMigrationCatalogGroupsSettingsAndPlugins(t *testing.T) {
 	isolateFlowMigrationHome(t)
 	root := t.TempDir()

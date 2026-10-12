@@ -14,7 +14,6 @@ func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
 		"ui_setting_plugin_section_enabled":  "Enabled",
 		"ui_setting_plugin_section_disabled": "Disabled",
 		"ui_plugin_store_wox":                "Wox Store",
-		"ui_plugin_store_flow":               "Flow Store",
 	}}
 	installed := app.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{
@@ -96,32 +95,6 @@ func TestPluginListEntriesOmitHeaderWhenOneStoreRemains(t *testing.T) {
 	}
 	if entries[0].Item.ID != "wox-a" || entries[1].Item.ID != "wox-z" {
 		t.Fatalf("single-store order = %s %s", entries[0].Item.ID, entries[1].Item.ID)
-	}
-}
-
-func TestPluginStorePanelLocksWoxAndListsOtherStores(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_plugin_store_wox":  "Wox Store",
-		"ui_plugin_store_flow": "Flow Store",
-	}}
-	if panel := app.pluginStorePanelProps(settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: true}}, 1); panel != nil {
-		t.Fatal("closed store settings must not build a panel")
-	}
-	panel := app.pluginStorePanelProps(settingsSnapshot{
-		plugins: pluginSettingsSnapshot{
-			PluginsStore: true, PluginStorePanelOpen: true,
-			Plugins: []pluginSettingsPlugin{{Store: "flow"}, {Store: "wox"}, {Store: ""}},
-		},
-		general: generalSettingsSnapshot{Data: settingsData{HiddenPluginStores: []string{"flow", "wox"}}},
-	}, 1)
-	if panel == nil || len(panel.Rows) != 2 {
-		t.Fatalf("rows = %#v, want Wox and Flow", panel)
-	}
-	if panel.Rows[0].ID != "wox" || panel.Rows[0].Label != "Wox Store" || !panel.Rows[0].Locked || !panel.Rows[0].Checked {
-		t.Fatalf("wox row = %#v", panel.Rows[0])
-	}
-	if panel.Rows[1].ID != "flow" || panel.Rows[1].Label != "Flow Store" || panel.Rows[1].Locked || panel.Rows[1].Checked {
-		t.Fatalf("flow row = %#v", panel.Rows[1])
 	}
 }
 

@@ -220,63 +220,6 @@ func groupStorePlugins(filtered []filteredPlugin) []storePluginSection {
 	return sections
 }
 
-// hiddenPluginStoreSet returns catalogs the user hid. The official store is never included.
-func hiddenPluginStoreSet(hidden []string) map[string]struct{} {
-	set := make(map[string]struct{}, len(hidden))
-	for _, id := range hidden {
-		id = pluginStoreSectionID(id)
-		if id == plugin.OfficialPluginStoreID {
-			continue
-		}
-		set[id] = struct{}{}
-	}
-	return set
-}
-
-// hiddenPluginStoreList returns a sorted catalog id list safe to persist.
-func hiddenPluginStoreList(hidden map[string]struct{}) []string {
-	next := make([]string, 0, len(hidden))
-	for id := range hidden {
-		next = append(next, id)
-	}
-	sort.Strings(next)
-	return next
-}
-
-// omitHiddenPluginStores drops plugins whose catalog is hidden.
-func omitHiddenPluginStores(plugins []filteredPlugin, hidden []string) []filteredPlugin {
-	set := hiddenPluginStoreSet(hidden)
-	if len(set) == 0 {
-		return plugins
-	}
-	visible := make([]filteredPlugin, 0, len(plugins))
-	for _, entry := range plugins {
-		if _, hide := set[pluginStoreSectionID(entry.plugin.Store)]; hide {
-			continue
-		}
-		visible = append(visible, entry)
-	}
-	return visible
-}
-
-// pluginStoreVisibilityOptions lists catalogs on the store page, with Wox first.
-func pluginStoreVisibilityOptions(plugins []pluginSettingsPlugin) []string {
-	seen := map[string]struct{}{plugin.OfficialPluginStoreID: {}}
-	ids := []string{plugin.OfficialPluginStoreID}
-	for _, item := range plugins {
-		id := pluginStoreSectionID(item.Store)
-		if _, found := seen[id]; found {
-			continue
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-	sort.SliceStable(ids, func(i, j int) bool {
-		return pluginStoreSectionLess(ids[i], ids[j])
-	})
-	return ids
-}
-
 // sortInstalledPluginsByName keeps each section alphabetical, including system plugins.
 func sortInstalledPluginsByName(plugins []filteredPlugin) {
 	sort.SliceStable(plugins, func(i, j int) bool {
@@ -369,12 +312,12 @@ func pluginMatchesRuntimeFilter(plugin pluginSettingsPlugin, runtime string) boo
 }
 
 // thirdPartyRuntimeFilterValues lists host runtimes that are not the built-in Node.js, Python, script, or Go hosts.
-// The catalog filter appends one choice for each so a compatibility host can be selected on its own.
+// Compatibility hosts stay out of this list. Imported plugins still appear in the installed catalog.
 func thirdPartyRuntimeFilterValues() []string {
 	seen := map[string]struct{}{}
 	values := make([]string, 0)
 	for _, host := range plugin.AllHosts {
-		if host == nil {
+		if host == nil || !plugin.RuntimeSettingsVisible(host) {
 			continue
 		}
 		runtime := strings.TrimSpace(string(host.GetRuntime(context.Background())))
@@ -510,7 +453,6 @@ func (a *App) switchPluginList(store bool) {
 	a.settingsSearch.SetPanel(false)
 	a.pluginSettings.SetFilters(pluginFilterState{})
 	a.pluginSettings.SetFilterOpen(false)
-	a.pluginSettings.SetStorePanelOpen(false)
 	if store {
 		a.pluginSettings.SetDetailTab("description")
 	} else {
@@ -1001,88 +943,10 @@ func (a *App) togglePluginFilterPanel() {
 		a.closePluginFilterPanel()
 		return
 	}
-	a.pluginSettings.SetStorePanelOpen(false)
 	a.pluginSettings.SetFilterOpen(true)
 	a.pluginSettings.SetSearchFocused(false)
 	a.updateSettingsTextInput(false)
 	a.invalidateSettingsWindow()
-}
-
-// togglePluginStorePanel shows or hides the store visibility checklist.
-func (a *App) togglePluginStorePanel() {
-	if a.pluginSettings.StorePanelOpen() {
-		a.pluginSettings.SetStorePanelOpen(false)
-		a.invalidateSettingsWindow()
-		return
-	}
-	a.pluginSettings.SetFilterOpen(false)
-	if picker := a.generalSettings.ChoicePicker(); picker != nil && strings.HasPrefix(picker.item.key, "plugin-filter-") {
-		a.closeSettingChoicePicker()
-	}
-	a.pluginSettings.SetStorePanelOpen(true)
-	a.pluginSettings.SetSearchFocused(false)
-	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
-}
-
-// setPluginStoreVisible remembers whether one catalog appears in the store list.
-// The official store stays visible. The in-memory snapshot updates before the write
-// so the list can react immediately; a later successful write matches that snapshot.
-func (a *App) setPluginStoreVisible(storeID string, visible bool) {
-	storeID = pluginStoreSectionID(storeID)
-	if storeID == plugin.OfficialPluginStoreID || a.generalSettings == nil {
-		return
-	}
-	hidden := hiddenPluginStoreSet(a.generalSettings.Data().HiddenPluginStores)
-	if visible {
-		delete(hidden, storeID)
-	} else {
-		hidden[storeID] = struct{}{}
-	}
-	next := hiddenPluginStoreList(hidden)
-	data := a.generalSettings.Data()
-	data.HiddenPluginStores = next
-	a.generalSettings.ApplyData(data)
-	a.applyPluginFilters(a.pluginSettings.Filters())
-	a.persistHiddenPluginStores(next)
-}
-
-// persistHiddenPluginStores writes the hidden catalog list. A failed older save does not
-// reload over a newer toggle.
-func (a *App) persistHiddenPluginStores(next []string) {
-	if a.services == nil {
-		return
-	}
-	encoded, err := json.Marshal(next)
-	if err != nil {
-		util.GetLogger().Error(a.lifecycleCtx, "encode hidden plugin stores: "+err.Error())
-		return
-	}
-	a.pluginSettings.hiddenStoreRevision++
-	revision := a.pluginSettings.hiddenStoreRevision
-	payload := string(encoded)
-	ctx := a.lifecycleCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	util.Go(ctx, "save hidden plugin stores", func() {
-		saveCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.services.UpdateGeneralSetting(saveCtx, a.sessionID, "HiddenPluginStores", payload)
-		cancel()
-		if err == nil {
-			return
-		}
-		util.GetLogger().Error(ctx, "save hidden plugin stores: "+err.Error())
-		_ = a.runOnUI("revert hidden plugin stores", func() {
-			if a.pluginSettings.hiddenStoreRevision != revision {
-				return
-			}
-			if reloadErr := a.reloadSettings(); reloadErr != nil {
-				util.GetLogger().Error(ctx, "reload settings after hidden plugin store save: "+reloadErr.Error())
-			}
-			a.applyPluginFilters(a.pluginSettings.Filters())
-		})
-	})
 }
 
 func (a *App) closePluginFilterPanel() {
@@ -1142,18 +1006,14 @@ func (a *App) resetPluginFilters() {
 	a.applyPluginFilters(pluginFilterState{})
 }
 
-// filteredPluginCatalog applies search, dropdowns, and hidden stores to the visible catalog.
+// filteredPluginCatalog applies search and dropdowns to the visible catalog.
 func (a *App) filteredPluginCatalog() []filteredPlugin {
 	query := ""
 	if editor := a.pluginSettings.SearchEditor(); editor != nil {
 		query = editor.State().Text
 	}
 	store := a.pluginSettings.PluginsStore()
-	filtered := filterPlugins(a.pluginSettings.Plugins(), query, a.pluginSettings.Filters(), store, a.usePinYin())
-	if store {
-		filtered = omitHiddenPluginStores(filtered, a.generalSettings.Data().HiddenPluginStores)
-	}
-	return filtered
+	return filterPlugins(a.pluginSettings.Plugins(), query, a.pluginSettings.Filters(), store, a.usePinYin())
 }
 
 // applyPluginFilters commits catalog filters and keeps the current plugin selected when it still matches.

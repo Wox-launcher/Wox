@@ -712,8 +712,6 @@
   "ui_setting_plugin_section_enabled": "사용",
   "ui_setting_plugin_section_disabled": "사용 안 함",
   "ui_plugin_store_wox": "Wox 스토어",
-  "ui_plugin_store_flow": "Flow 스토어",
-  "ui_plugin_store_settings": "표시할 스토어",
   "ui_setting_catalog_search_empty_subtitle": "다른 키워드를 시도하거나 활성 필터를 지우세요.",
   "ui_delete_row_confirm": "이 행을 삭제하시겠습니까?",
   "ui_clone_row": "행 복제",

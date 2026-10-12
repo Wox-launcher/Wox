@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -372,12 +374,24 @@ func flowProxyURL(proxy flowProxySettings) string {
 		return ""
 	}
 	if strings.Contains(server, "://") {
-		return server
+		return flowProxyURLWithScheme(server, proxy.Port)
 	}
 	if proxy.Port > 0 && !strings.Contains(server, ":") {
 		server = fmt.Sprintf("%s:%d", server, proxy.Port)
 	}
 	return "http://" + server
+}
+
+// flowProxyURLWithScheme keeps Flow's separate Port when Server already has a scheme
+// but no port, such as "http://127.0.0.1" with Port 7897. Leaving that host as-is
+// makes later requests dial port 80.
+func flowProxyURLWithScheme(server string, port int) string {
+	parsed, err := url.Parse(server)
+	if err != nil || parsed.Host == "" || parsed.Port() != "" || port <= 0 {
+		return server
+	}
+	parsed.Host = net.JoinHostPort(parsed.Hostname(), strconv.Itoa(port))
+	return parsed.String()
 }
 
 func flowVisibleKeywords(keywords []string) string {

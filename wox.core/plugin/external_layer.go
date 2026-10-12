@@ -17,8 +17,6 @@ type Layer interface {
 	// An empty name means this layer does not own a collection directory.
 	Directory() string
 	Hosts() []Host
-	// Store is nil when the layer has no plugin catalog.
-	Store() ExternalStore
 	// SupportedOS lists the platforms whose hosts may be installed.
 	// Names match plugin metadata: Windows, Darwin, and Linux.
 	// An empty list means every platform. Runtime settings, host startup,
@@ -27,22 +25,18 @@ type Layer interface {
 	SupportedOS() []string
 }
 
-// ExternalStore is a plugin catalog whose install path is not the official store.
-// Owns reports which manifests and installed plugins belong to that catalog.
-// Label and Icon are the settings section for that catalog.
-type ExternalStore interface {
-	Name() string
-	Label() string
-	Icon() common.WoxImage
-	AppendManifests(ctx context.Context, manifests []StorePluginManifest) []StorePluginManifest
-	Owns(manifest StorePluginManifest) bool
-	Install(ctx context.Context, manifest StorePluginManifest, progress InstallProgressCallback) error
-	OwnsInstance(instance *Instance) bool
+// PluginRemover deletes a plugin this layer copied onto disk during import.
+// It is not a plugin catalog. A layer that does not implement it has nothing to remove.
+type PluginRemover interface {
 	Uninstall(ctx context.Context, instance *Instance, skipCleanSetting bool, preserveCache bool, progress UninstallProgressCallback) (bool, error)
 }
 
 var (
-	externalStores []ExternalStore
+	pluginRemovers []PluginRemover
+
+	// compatibilityHosts are runnable, but they stay off the runtime settings page.
+	// A compatibility layer is not a first-class runtime the user configures there.
+	compatibilityHosts = map[Host]struct{}{}
 
 	// ResolvePythonPath and ResolveNodePath are filled by the built-in interpreter
 	// hosts. Compatibility layers read them when a host starts, after init has finished.
@@ -52,26 +46,38 @@ var (
 	reservedUserPluginDirectories = map[string]struct{}{}
 )
 
-// RegisterThirdParty adds a compatibility layer's hosts, store, and directory.
-// init calls this once. Owns implementations must not claim the same plugin.
-// The directory and store stay registered on every system. Hosts are installed
-// only where SupportedOS includes the current platform.
+// RegisterThirdParty adds a compatibility layer's hosts and directory.
+// init calls this once. The directory stays reserved on every system.
+// Hosts are installed only where SupportedOS includes the current platform.
 func RegisterThirdParty(layer Layer) {
 	if layer == nil {
 		return
 	}
 	RegisterReservedPluginDirectory(layer.Directory())
-	if store := layer.Store(); store != nil {
-		externalStores = append(externalStores, store)
+	if remover, ok := layer.(PluginRemover); ok && remover != nil {
+		pluginRemovers = append(pluginRemovers, remover)
 	}
 	if !layerRunsOnCurrentOS(layer) {
 		return
 	}
 	for _, host := range layer.Hosts() {
-		if host != nil {
-			AllHosts = append(AllHosts, host)
+		if host == nil {
+			continue
 		}
+		AllHosts = append(AllHosts, host)
+		compatibilityHosts[host] = struct{}{}
 	}
+}
+
+// RuntimeSettingsVisible reports whether a host belongs on the runtime settings page.
+// Compatibility hosts still load imported plugins. They are omitted from that page
+// and from the plugin runtime filter so they are not presented as Wox runtimes.
+func RuntimeSettingsVisible(host Host) bool {
+	if host == nil {
+		return false
+	}
+	_, hidden := compatibilityHosts[host]
+	return !hidden
 }
 
 // layerRunsOnCurrentOS reports whether this machine may install the layer's hosts.
@@ -98,54 +104,12 @@ func isRegisteredReservedPluginDirectory(name string) bool {
 	return ok
 }
 
-// pluginStoreManifestIDs records manifests already claimed by an earlier catalog.
-func pluginStoreManifestIDs(manifests []StorePluginManifest) map[string]struct{} {
-	known := make(map[string]struct{}, len(manifests))
-	for _, manifest := range manifests {
-		if id := strings.TrimSpace(manifest.Id); id != "" {
-			known[id] = struct{}{}
-		}
-	}
-	return known
-}
-
-// assignPluginStore marks manifests this catalog added. Rows already present keep their store.
-func assignPluginStore(manifests []StorePluginManifest, storeID string, known map[string]struct{}) {
-	storeID = strings.TrimSpace(storeID)
-	if storeID == "" {
-		return
-	}
-	for index := range manifests {
-		if manifests[index].Store != "" {
-			continue
-		}
-		if _, found := known[manifests[index].Id]; found {
-			continue
-		}
-		manifests[index].Store = storeID
-	}
-}
-
 // PluginStorePresentation returns the settings section title and mark for one catalog.
 // An unknown id keeps a readable title and the generic store glyph.
 func PluginStorePresentation(id string) (label string, icon common.WoxImage) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	if id == "" || id == OfficialPluginStoreID {
 		return "i18n:ui_plugin_store_wox", icons.Get(icons.BrandWox)
-	}
-	for _, store := range externalStores {
-		if store == nil || !strings.EqualFold(store.Name(), id) {
-			continue
-		}
-		label = strings.TrimSpace(store.Label())
-		icon = store.Icon()
-		if label == "" {
-			label = fallbackPluginStoreLabel(id)
-		}
-		if icon.IsEmpty() {
-			icon = icons.Get(icons.PluginWPM)
-		}
-		return label, icon
 	}
 	return fallbackPluginStoreLabel(id), icons.Get(icons.PluginWPM)
 }

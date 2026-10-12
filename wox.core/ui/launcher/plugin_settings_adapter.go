@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"wox/common/icons"
 	"wox/network"
 
 	woxplugin "wox/plugin"
@@ -29,7 +28,6 @@ func (a *App) buildPluginSettingsPage(snapshot settingsSnapshot, width, height, 
 		List:        a.pluginListProps(snapshot, listWidth, innerHeight, imageScale),
 		Detail:      a.pluginDetailProps(snapshot, detailWidth, innerHeight, imageScale),
 		FilterPanel: a.pluginFilterPanelProps(snapshot),
-		StorePanel:  a.pluginStorePanelProps(snapshot, imageScale),
 		Theme:       snapshot.palette,
 	})
 }
@@ -57,11 +55,6 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		OnSearchChanged: func(value string) { _ = a.setPluginSearchValue(value) }, OnSetSearchValue: a.setPluginSearchValue,
 		OnFilter: a.togglePluginFilterPanel,
 	}
-	if plugins.PluginsStore {
-		props.StoreSettingsLabel = a.translate("i18n:ui_plugin_store_settings")
-		props.StoreSettingsIcon = a.imageForTint(fromCoreImage(icons.Get(icons.ActionSettings)), &iconTint, physicalImageSize(16, imageScale))
-		props.OnStoreSettings = a.togglePluginStorePanel
-	}
 	if plugins.PluginsLoading && len(plugins.Plugins) == 0 {
 		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 		return props
@@ -73,9 +66,6 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	}
 
 	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore, snapshot.general.Data.UsePinYin)
-	if plugins.PluginsStore {
-		filtered = omitHiddenPluginStores(filtered, snapshot.general.Data.HiddenPluginStores)
-	}
 	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
 	props.Entries = a.pluginListEntries(snapshot, filtered, imageScale)
@@ -713,33 +703,6 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 		Keywords:   a.pluginKeywordsFormProps(snapshot, plugin, contentWidth, imageScale, true),
 		Commands:   a.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true, false, nil),
 		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot,
-	}
-}
-
-// pluginStorePanelProps builds the catalog visibility checklist. It is absent on the installed page and while the gear is closed.
-func (a *App) pluginStorePanelProps(snapshot settingsSnapshot, imageScale float32) *launcherview.PluginStoreVisibilityPanelProps {
-	plugins := snapshot.plugins
-	if !plugins.PluginsStore || !plugins.PluginStorePanelOpen {
-		return nil
-	}
-	hidden := hiddenPluginStoreSet(snapshot.general.Data.HiddenPluginStores)
-	ids := pluginStoreVisibilityOptions(plugins.Plugins)
-	rows := make([]launcherview.PluginStoreVisibilityRow, 0, len(ids))
-	for _, id := range ids {
-		storeID := id
-		label, icon := a.pluginStoreSection(storeID, imageScale)
-		locked := storeID == woxplugin.OfficialPluginStoreID
-		_, isHidden := hidden[storeID]
-		rows = append(rows, launcherview.PluginStoreVisibilityRow{
-			ID: storeID, Label: label, Icon: icon, Checked: locked || !isHidden, Locked: locked,
-			OnToggle: func(visible bool) { a.setPluginStoreVisible(storeID, visible) },
-		})
-	}
-	return &launcherview.PluginStoreVisibilityPanelProps{
-		Width: 280, Rows: rows, Theme: snapshot.palette, OnDismiss: func() {
-			a.pluginSettings.SetStorePanelOpen(false)
-			a.invalidateSettingsWindow()
-		},
 	}
 }
 
