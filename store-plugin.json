@@ -1672,5 +1672,31 @@
         "plugin_description": "查看本机 Clash Verge 运行状态，并切换代理节点。"
       }
     }
+  },
+  {
+    "Id": "ad468a1d-fdb5-4fb0-88a9-d6778bb11d96",
+    "Name": "Wox.Plugin.Manasikāra",
+    "Author": "Archetype444",
+    "Version": "2.0.1",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Continuous focus and deep focus, three Pomodoro variants, meditation and countdown timers with configurable singing-bowl chimes and activity prompts.",
+    "IconUrl": "https://raw.githubusercontent.com/Archetype444/Wox.Plugin.Manasikara/main/assets/icon.svg",
+    "Website": "https://github.com/Archetype444/Wox.Plugin.Manasikara",
+    "DownloadUrl": "https://github.com/Archetype444/Wox.Plugin.Manasikara/releases/download/v2.0.1/Manasikara-v2.0.1.wox",
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-11 18:38:36",
+    "DateUpdated": "2026-10-11 18:38:36",
+    "ScreenshotUrls": [
+      "https://github.com/user-attachments/assets/f70a5376-fb4e-40b5-bb34-d14d56f211c9",
+      "https://github.com/user-attachments/assets/5deec5d6-1a29-4816-a96e-7e96e67a51e9",
+      "https://github.com/user-attachments/assets/77ac4d4e-692c-44e2-bd92-7e70145fa3e4",
+      "https://github.com/user-attachments/assets/edfa8e00-5d80-44df-a662-e9c4bd6be299",
+      "https://github.com/user-attachments/assets/c2f5aeef-1310-4496-b82c-87e56f7aab03"
+    ]
   }
 ]
