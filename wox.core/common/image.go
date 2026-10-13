@@ -1056,6 +1056,20 @@ func convertIconWithSize(ctx context.Context, image WoxImage, pluginDirectory st
 		size = ResultListIconSize
 	}
 
+	// Defer before calling the OS: resolving every app's file icon can block a
+	// whole grid even when the extracted raster is too small for the lazy probe.
+	if allowLazy && size >= ResultGridIconSize && image.ImageType == WoxImageTypeFileIcon {
+		newImage = NewWoxImageLazyLoadCandidate(image, size)
+		timing.Lazy = true
+		timing.LazyReason = "grid_file_icon"
+		timing.TotalCost = util.GetSystemTimestamp() - convertStart
+		timing.TotalCostUs = time.Since(convertTimingStart).Microseconds()
+		timing.OutputType = newImage.ImageType
+		timing.OutputDataLen = len(newImage.ImageData)
+		logIconConversionDiagnostics(ctx, diagnostics, timing, size, allowLazy, inputType, inputDataLen)
+		return newImage
+	}
+
 	fastCacheStart := util.GetSystemTimestamp()
 	fastCacheTimingStart := time.Now()
 	if isFinalResizeCacheImage(ctx, image, size) {
@@ -1182,6 +1196,10 @@ func convertIconWithSizeFast(ctx context.Context, image WoxImage, pluginDirector
 		size = ResultListIconSize
 	}
 
+	if allowLazy && size >= ResultGridIconSize && image.ImageType == WoxImageTypeFileIcon {
+		return NewWoxImageLazyLoadCandidate(image, size)
+	}
+
 	if isFinalResizeCacheImage(ctx, image, size) {
 		imagecache.Touch(ctx, image.ImageData, nil)
 		return image
@@ -1222,6 +1240,13 @@ func shouldLazyLoadImageIconDetailed(ctx context.Context, woxImage WoxImage, siz
 	}
 	if woxImage.ImageType != WoxImageTypeAbsolutePath || woxImage.IsAnimatedGif() || isSvgFilePath(woxImage.ImageData) {
 		return false, "not_absolute_raster", 0, 0
+	}
+
+	// Grid artwork is loaded only for visible cells. Even small cold rasters add
+	// significant crop/resize work across hundreds of results; warm caches have
+	// already returned above without opening or decoding the source.
+	if size >= ResultGridIconSize {
+		return true, "grid_raster", 0, 0
 	}
 
 	file, err := os.Open(woxImage.ImageData)

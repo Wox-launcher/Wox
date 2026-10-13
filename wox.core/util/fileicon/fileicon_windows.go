@@ -461,7 +461,12 @@ func HasDedicatedExecutableIcon(ctx context.Context, filePath string) (bool, err
 	if !strings.EqualFold(filepath.Ext(filePath), ".exe") {
 		return true, nil
 	}
+	return HasDedicatedFileIcon(ctx, filePath)
+}
 
+// HasDedicatedFileIcon checks the same embedded artwork used by file icon
+// conversion, without accepting a successful generic file-association fallback.
+func HasDedicatedFileIcon(ctx context.Context, filePath string) (bool, error) {
 	fileIcon, err := getHighResIcon(ctx, filePath)
 	if err != nil {
 		fileIcon, err = getIconUsingExtractIconEx(ctx, filePath)

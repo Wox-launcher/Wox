@@ -75,6 +75,8 @@ type appInfo struct {
 	launchKey string
 	// Used only to prefer an original shortcut over its bare executable in search results.
 	shortcutTarget string
+	// Derived when rebuilding query entries; filtering must not query the shell while typing.
+	launchpadHidden bool
 	// IsDefaultIcon is persisted so launchpad can hide entries whose icon fell
 	// back to a generic/default asset after a restart. Normal app search still
 	// keeps these entries visible.
@@ -86,6 +88,7 @@ func (info appInfo) equals(other appInfo) bool {
 	return info.Name == other.Name &&
 		info.launchKey == other.launchKey &&
 		info.shortcutTarget == other.shortcutTarget &&
+		info.launchpadHidden == other.launchpadHidden &&
 		slices.Equal(info.SearchableNames, other.SearchableNames) &&
 		info.Identity == other.Identity &&
 		info.Path == other.Path &&
@@ -317,9 +320,10 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 				Type:               definition.PluginSettingDefinitionTypeTable,
 				IsPlatformSpecific: true,
 				Value: &definition.PluginSettingValueTable{
-					Key:     "AppDirectories",
-					Title:   "i18n:plugin_app_directories",
-					Tooltip: "i18n:plugin_app_directories_tooltip",
+					Key:          "AppDirectories",
+					DefaultValue: defaultAppDirectories(),
+					Title:        "i18n:plugin_app_directories",
+					Tooltip:      "i18n:plugin_app_directories_tooltip",
 					Columns: []definition.PluginSettingValueTableColumn{
 						{
 							Key:   "Path",
@@ -1068,6 +1072,16 @@ func (a *ApplicationPlugin) getQueryResultIcon(info appInfo, isLaunchpadQuery bo
 		return info.Icon
 	}
 
+	if util.IsWindows() {
+		// Launch paths can be shortcuts or shell:AppsFolder IDs, not icon sources.
+		// Reuse the retriever's resolved executable/resource for full-size extraction;
+		// packaged apps and generated settings icons already have dedicated artwork.
+		if source := strings.TrimSpace(info.IconSourcePath); source != "" && info.Type != AppTypeUWP && info.Type != AppTypeWindowsSetting {
+			return common.NewWoxImageFileIcon(source)
+		}
+		return info.Icon
+	}
+
 	// Launchpad uses the generic grid icon polish path. Return the app path as a file icon source
 	// instead of the indexed list icon so Manager.PolishResult can resolve it at the core grid size.
 	if strings.TrimSpace(info.Path) != "" && info.Type != AppTypeWindowsSetting && !isMacSystemSettingsPath(info.Path) {
@@ -1083,7 +1097,7 @@ func (a *ApplicationPlugin) shouldShowInLaunchpad(info appInfo) bool {
 	// Launchpad is a visual app grid, so entries with no usable icon create
 	// noise and look broken. Keep the regular app query unchanged because users
 	// may still need to find and open those apps by name.
-	if info.IsDefaultIcon || info.Icon.IsEmpty() {
+	if info.launchpadHidden || info.IsDefaultIcon || info.Icon.IsEmpty() {
 		return false
 	}
 	return true
@@ -2149,8 +2163,13 @@ func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 	// Keep every source in a.apps/cache so incremental removal can promote another entry and
 	// deleted aliases disappear on rebuild. Filter before merging to preserve per-path ignore rules.
 	visibleApps = deduplicateAppLaunches(visibleApps)
+	userDirectories := a.indexedUserDirectories
+	if a.api != nil {
+		userDirectories = a.getUserAddedPaths(ctx)
+	}
 	entries := make([]appQueryEntry, 0, len(visibleApps))
 	for _, info := range visibleApps {
+		populateLaunchpadVisibility(ctx, &info, userDirectories...)
 		entries = append(entries, a.buildQueryEntry(info))
 	}
 

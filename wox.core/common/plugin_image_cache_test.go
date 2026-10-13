@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"encoding/base64"
+	"image"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,72 @@ import (
 	"wox/util"
 	"wox/util/imagecache"
 )
+
+// TestGridIconDeferredConversionReusesDiskCache verifies cold grids do no raster
+// work and retain full-size output across queries and a cold memory cache.
+func TestGridIconDeferredConversionReusesDiskCache(t *testing.T) {
+	initConvertIconTestLocation(t)
+	ctx := context.Background()
+	source := NewWoxImageAbsolutePath(writeTestImage(t, 256, 256))
+	config := IconConversion{Size: ResultGridIconSize, AllowLazy: true}
+	lazy, err := ConvertPluginIcon(ctx, source, "grid-cache", "", config)
+	if err != nil || lazy.ImageType != WoxImageTypeLazyLoad {
+		t.Fatalf("cold grid conversion = %+v, %v", lazy, err)
+	}
+	payload, err := ParseWoxLazyLoadImagePayload(lazy)
+	if err != nil || payload.Source == nil || *payload.Source != source || payload.TargetSize != 256 {
+		t.Fatalf("lazy source/size lost: %+v, %v", payload, err)
+	}
+	files, err := os.ReadDir(payload.CacheScope)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatal("cold query generated offscreen icon artifacts")
+	}
+	resolved, err := ConvertPluginIcon(ctx, source, "grid-cache", "", IconConversion{Size: payload.TargetSize, CacheScope: payload.CacheScope})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(resolved.ImageData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions, _, err := image.DecodeConfig(file)
+	file.Close()
+	if err != nil || dimensions.Width != 256 || dimensions.Height != 256 {
+		t.Fatalf("grid resolution degraded: %+v, %v", dimensions, err)
+	}
+	// Remove the source to prove reuse does not decode it again, even after
+	// forgetting positive path lookups as happens on process restart.
+	if err := os.Remove(source.ImageData); err != nil {
+		t.Fatal(err)
+	}
+	for _, coldMemory := range []bool{false, true} {
+		if coldMemory {
+			ClearConvertIconPathExistenceCache()
+		}
+		warm, err := ConvertPluginIcon(ctx, source, "grid-cache", "", config)
+		if err != nil || warm != resolved {
+			t.Fatalf("warm grid did not reuse disk artifact: %+v, %v", warm, err)
+		}
+	}
+}
+
+// TestGridFileIconDefersOSExtraction ensures missing paths cannot trigger shell
+// fallback or raster work before a visible cell requests its icon.
+func TestGridFileIconDefersOSExtraction(t *testing.T) {
+	initConvertIconTestLocation(t)
+	source := NewWoxImageFileIcon(filepath.Join(t.TempDir(), "missing.exe"))
+	icon, err := ConvertPluginIcon(context.Background(), source, "grid-file", "", IconConversion{Size: ResultGridIconSize, AllowLazy: true})
+	if err != nil || icon.ImageType != WoxImageTypeLazyLoad {
+		t.Fatalf("file icon was synchronously extracted: %+v, %v", icon, err)
+	}
+	payload, err := ParseWoxLazyLoadImagePayload(icon)
+	if err != nil || payload.Source == nil || *payload.Source != source || payload.TargetSize != ResultGridIconSize || payload.CacheScope == "" {
+		t.Fatalf("deferred file source lost: %+v, %v", payload, err)
+	}
+}
 
 func TestPluginImageCacheIsolationAndReload(t *testing.T) {
 	initConvertIconTestLocation(t)

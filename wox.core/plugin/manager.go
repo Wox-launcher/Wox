@@ -2664,6 +2664,13 @@ func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *In
 	// The authorization token is query-scoped, while the source hash is stable
 	// across queries so UI can reuse an already decoded icon.
 	cacheKey := fmt.Sprintf("%s-%s-%d", util.Md5([]byte(cacheScope)), normalized.Hash(), size)
+	if normalized.ImageType == common.WoxImageTypeFileIcon {
+		// Deferred file icons have not acquired the OS cache's versioned path yet.
+		// Match its source-mtime invalidation so an app update cannot reuse old UI pixels.
+		if info, err := os.Stat(normalized.ImageData); err == nil {
+			cacheKey += fmt.Sprintf("-%d", info.ModTime().UnixNano())
+		}
+	}
 	return common.NewWoxImageLazyLoad(token, cacheKey, icons.Get(icons.StatusImagePlaceholder), size)
 }
 
