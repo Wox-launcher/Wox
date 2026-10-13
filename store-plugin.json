@@ -1709,7 +1709,7 @@
     "Description": "「能不能好好说话？」拼音首字母缩写翻译工具",
     "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Nbnhhsh/main/images/icon.png",
     "Website": "https://github.com/dragonish/Wox.Plugin.Nbnhhsh",
-    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.Nbnhhsh/releases/download/v1.0.1/wox.plugin.nbnhhsh.wox",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.Nbnhhsh/releases/latest/download/wox.plugin.nbnhhsh.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Nbnhhsh/main/assets/preview.jpg"
     ],
