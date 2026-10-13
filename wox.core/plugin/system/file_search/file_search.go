@@ -1056,10 +1056,11 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 	// end-to-end query even though most files only need their shared type icon.
 	fileTypeIcons := map[string]common.WoxImage{}
 	showPreview := c.getConfiguredShowPreview(ctx)
+	contentSearchEnabled := c.isContentSearchEnabled(ctx)
 	queryResults := make([]plugin.QueryResult, 0, len(results))
 	for index, item := range results {
 		icon := resolveFileSearchResultIcon(ctx, item, fileTypeIcons, diagnostics)
-		actions := c.buildFileSearchResultActions(ctx, item)
+		actions := c.buildFileSearchResultActions(ctx, item, contentSearchEnabled)
 
 		group, groupScore := fileSearchResultGroup(query)
 		queryResult := plugin.QueryResult{
@@ -1217,7 +1218,7 @@ func fileSearchResultTails(item filesearch.SearchResult, recent bool) []plugin.Q
 }
 
 // buildFileSearchResultActions keeps folder navigation integrated with the path-browse plugin.
-func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, item filesearch.SearchResult) []plugin.QueryResultAction {
+func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, item filesearch.SearchResult, contentSearchEnabled bool) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{
 		{
 			Name: "i18n:plugin_file_open",
@@ -1310,7 +1311,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 		// and ordinary filename searches while still making recovery easy.
 		c.buildIndexFilesAction(),
 	)
-	if c.isContentSearchEnabled(ctx) {
+	if contentSearchEnabled {
 		actions = append(actions, c.buildRebuildContentIndexAction())
 	}
 

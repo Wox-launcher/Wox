@@ -1803,6 +1803,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 	openPluginSettingActionUs := time.Since(openPluginSettingActionStart).Microseconds()
 	// Default and plugin actions often repeat the same icons across every result.
 	actionIconCache := make(map[common.WoxImage]common.WoxImage)
+	resultIconCache := make(map[common.WoxImage]common.WoxImage)
 	for i := range response.Results {
 		resultStart := util.GetSystemTimestamp()
 		resultTimingStart := time.Now()
@@ -1817,7 +1818,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		polishStart := util.GetSystemTimestamp()
 		polishTimingStart := time.Now()
 		var polishTiming timetracking.ResultPolishTiming
-		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming, actionIconCache, "", aliasMatchNone)
+		response.Results[i], polishTiming = m.polishResult(ctx, pluginInstance, query, response.Layout, response.Results[i], collectResultTiming, actionIconCache, resultIconCache, "", aliasMatchNone)
 		polishCost := util.GetSystemTimestamp() - polishStart
 		polishCostUs := time.Since(polishTimingStart).Microseconds()
 		totalPolishCost += polishCost
@@ -3049,9 +3050,8 @@ func normalizeQueryResultDragData(dragData *QueryResultDragData) *QueryResultDra
 		if cleanPath == "." || !filepath.IsAbs(cleanPath) {
 			continue
 		}
-		if _, err := os.Stat(cleanPath); err != nil {
-			continue
-		}
+		// Existence is checked when native dragging actually starts. Probing every
+		// displayed result adds synchronous filesystem I/O to ordinary searches.
 		files = append(files, cleanPath)
 	}
 	if len(files) == 0 {
@@ -3273,12 +3273,12 @@ func (m *Manager) PolishResult(ctx context.Context, pluginInstance *Instance, qu
 
 // polishResultWithSource publishes restore identity together with the cached result.
 func (m *Manager) polishResultWithSource(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, sourceHash string, match aliasMatchKind) QueryResult {
-	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false, nil, sourceHash, match)
+	result, timing := m.polishResult(ctx, pluginInstance, query, layout, result, false, nil, nil, sourceHash, match)
 	m.logPolishResultTiming(ctx, query, queryDiagnosticPluginLabel(pluginInstance), result, timing)
 	return result
 }
 
-func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool, actionIconCache map[common.WoxImage]common.WoxImage, sourceHash string, match aliasMatchKind) (QueryResult, timetracking.ResultPolishTiming) {
+func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, result QueryResult, collectIconTiming bool, actionIconCache, resultIconCache map[common.WoxImage]common.WoxImage, sourceHash string, match aliasMatchKind) (QueryResult, timetracking.ResultPolishTiming) {
 	polishStart := util.GetSystemTimestamp()
 	polishTimingStart := time.Now()
 	var IconConversion timetracking.IconConversionTimingSummary
@@ -3337,7 +3337,17 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	ResultIconType := result.Icon.ImageType
 	resultIconStart := util.GetSystemTimestamp()
 	resultIconTimingStart := time.Now()
-	result.Icon = m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, result.Id, result.Title, result.Icon, iconRecorder)
+	sourceIcon := result.Icon
+	if converted, found := resultIconCache[sourceIcon]; found {
+		result.Icon = converted
+	} else {
+		result.Icon = m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, result.Id, result.Title, sourceIcon, iconRecorder)
+		// This batch has one plugin/layout/size. Share ordinary conversions only:
+		// lazy icons carry per-result tokens and must retain distinct ownership.
+		if resultIconCache != nil && len(resultIconCache) < 128 && result.Icon.ImageType != common.WoxImageTypeLazyLoad {
+			resultIconCache[sourceIcon] = result.Icon
+		}
+	}
 	ResultIconCost := util.GetSystemTimestamp() - resultIconStart
 	ResultIconCostUs := time.Since(resultIconTimingStart).Microseconds()
 	ConvertedResultIconType := result.Icon.ImageType

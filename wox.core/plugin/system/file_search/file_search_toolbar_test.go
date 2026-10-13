@@ -136,7 +136,7 @@ func TestFileSearchResultActionsIncludeNotesAndShell(t *testing.T) {
 	actions := plugin.buildFileSearchResultActions(context.Background(), filesearch.SearchResult{
 		Path:  `/Users/demo/main.go`,
 		IsDir: false,
-	})
+	}, false)
 
 	want := map[string]bool{
 		"i18n:plugin_file_copy_path":            false,
@@ -163,10 +163,10 @@ func TestFileSearchCopyActionsWorkForFilesAndFolders(t *testing.T) {
 	fileItem := filesearch.SearchResult{Path: `/Users/demo/main.go`, Name: "main.go", IsDir: false}
 	folderItem := filesearch.SearchResult{Path: `C:\Users\qianl\Droppy`, Name: "Droppy", IsDir: true}
 
-	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem), "i18n:plugin_file_copy_path", fileItem.Path)
-	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem), "i18n:plugin_file_copy_name", "main.go")
-	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem), "i18n:plugin_file_copy_path", folderItem.Path)
-	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem), "i18n:plugin_file_copy_name", "Droppy")
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem, false), "i18n:plugin_file_copy_path", fileItem.Path)
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), fileItem, false), "i18n:plugin_file_copy_name", "main.go")
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem, false), "i18n:plugin_file_copy_path", folderItem.Path)
+	assertFileSearchCopyAction(t, api, fileSearchPlugin.buildFileSearchResultActions(context.Background(), folderItem, false), "i18n:plugin_file_copy_name", "Droppy")
 }
 
 func assertFileSearchCopyAction(t *testing.T, api *fileSearchStatusCopyAPI, actions []plugin.QueryResultAction, name, want string) {

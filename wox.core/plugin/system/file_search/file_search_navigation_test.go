@@ -35,7 +35,7 @@ func TestFileSearchShiftEnterBrowsesFilesAndFolders(t *testing.T) {
 		t.Run(filepath.Base(item.Path), func(t *testing.T) {
 			api := &fileSearchNavigationAPI{}
 			search := &FileSearchPlugin{api: api}
-			actions := search.buildFileSearchResultActions(t.Context(), item)
+			actions := search.buildFileSearchResultActions(t.Context(), item, false)
 			if actions[0].Name != "i18n:plugin_file_open" || actions[0].PreventHideAfterAction {
 				t.Fatal("Enter must keep opening the result")
 			}

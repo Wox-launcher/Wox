@@ -2,6 +2,7 @@ package window
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -356,7 +357,26 @@ func (w *Window) StartFileDrag(paths []string) (FileDragStatus, error) {
 	if w == nil || w.native == nil {
 		return FileDragStatusCancel, errors.New("window is not initialized")
 	}
+	paths = existingFileDragPaths(paths)
+	if len(paths) == 0 {
+		return FileDragStatusCancel, errors.New("file drag has no existing absolute paths")
+	}
 	return w.native.startFileDrag(paths)
+}
+
+// existingFileDragPaths validates at use time, including files deleted since query.
+func existingFileDragPaths(paths []string) []string {
+	files := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.Clean(strings.TrimSpace(path))
+		if !filepath.IsAbs(path) {
+			continue
+		}
+		if _, err := os.Stat(path); err == nil {
+			files = append(files, path)
+		}
+	}
+	return files
 }
 
 // Minimize sends the window to the platform taskbar or dock.
