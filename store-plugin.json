@@ -1698,5 +1698,27 @@
       "https://github.com/user-attachments/assets/edfa8e00-5d80-44df-a662-e9c4bd6be299",
       "https://github.com/user-attachments/assets/c2f5aeef-1310-4496-b82c-87e56f7aab03"
     ]
+  },
+  {
+    "Id": "44ebc063-a997-473b-a70e-885fa28170ee",
+    "Name": "Nbnhhsh",
+    "Author": "dragonish",
+    "Version": "1.0.1",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "python",
+    "Description": "「能不能好好说话？」拼音首字母缩写翻译工具",
+    "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Nbnhhsh/main/images/icon.png",
+    "Website": "https://github.com/dragonish/Wox.Plugin.Nbnhhsh",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.Nbnhhsh/releases/download/v1.0.1/wox.plugin.nbnhhsh.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Nbnhhsh/main/assets/preview.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-13 21:19:11",
+    "DateUpdated": "2026-10-13 21:19:11"
   }
 ]
