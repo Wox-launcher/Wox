@@ -10,7 +10,6 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
-	woxwidget "wox/ui/widget"
 )
 
 // Test003SettingHotkeyFullscreen verifies that fullscreen suppression follows the setting and foreground window.
@@ -48,11 +47,10 @@ func Test003SettingHotkeyFullscreen(t *testing.T) {
 			if err := client.Hide(ctx); err != nil {
 				t.Fatal(err)
 			}
-			target(step.fullscreen)
-			if _, err := client.WaitFor(ctx, func(_ woxwidget.AutomationSnapshot) bool {
-				return fullscreenHotkeyTargetFocused()
-			}); err != nil {
-				t.Fatalf("%s: target did not gain foreground focus: %v", step.name, err)
+			// The native window confirms it is the foreground window before the hotkey.
+			// A hidden launcher can still report query-input focus in its own tree.
+			if err := target(step.fullscreen); err != nil {
+				t.Fatalf("%s: %v", step.name, err)
 			}
 			offset := currentHotkeyLogSize(t, logPath)
 			sendNativeHotkey(t, hotkey)

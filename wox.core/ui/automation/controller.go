@@ -32,6 +32,10 @@ type RuntimeStats struct {
 	Retained       uint64 `json:"retained"`
 	StackInuse     uint64 `json:"stackInuse"`
 	MemProfileRate int    `json:"memProfileRate"`
+	// ProcessMemoryBytes is the platform monitor figure for this process:
+	// private working set on Windows, physical footprint on macOS, and private
+	// resident memory on Linux.
+	ProcessMemoryBytes uint64 `json:"processMemoryBytes"`
 }
 
 // WindowState describes one real managed window exposed to lifecycle smoke tests.

@@ -141,6 +141,25 @@ func TestHandlerRequiresTokenAndReturnsSemantics(t *testing.T) {
 	}
 }
 
+func TestHandlerReportsProcessMemory(t *testing.T) {
+	t.Parallel()
+
+	handler := newHandler(&fakeController{}, "secret-token")
+	response := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"memory","method":"perf.runtime_stats"}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("runtime stats status = %d, body %s", response.Code, response.Body.String())
+	}
+	var decoded struct {
+		Result RuntimeStats `json:"result"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode runtime stats: %v", err)
+	}
+	if decoded.Result.ProcessMemoryBytes == 0 {
+		t.Fatal("process memory was empty")
+	}
+}
+
 func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	t.Parallel()
 

@@ -9,5 +9,6 @@ func requireFullscreenHotkeyRuntime(t *testing.T) {
 	t.Skip("fullscreen smoke requires the Windows native foreground-window fixture")
 }
 
-func fullscreenHotkeyTargetFocused() bool               { return false }
-func newFullscreenHotkeyTarget(t *testing.T) func(bool) { return func(bool) {} }
+func newFullscreenHotkeyTarget(t *testing.T) func(bool) error {
+	return func(bool) error { return nil }
+}

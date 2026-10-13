@@ -21,6 +21,7 @@ import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
+	"wox/util/processmemory"
 )
 
 const (
@@ -143,9 +144,14 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 	case "perf.runtime_stats":
 		var stats runtime.MemStats
 		runtime.ReadMemStats(&stats)
+		processBytes, err := processmemory.GetProcessMemoryBytes(os.Getpid())
+		if err != nil {
+			return resultOrError(nil, err)
+		}
 		return resultOrError(RuntimeStats{
 			PID: os.Getpid(), GOMAXPROCS: runtime.GOMAXPROCS(0), HeapAlloc: stats.HeapAlloc,
 			Retained: stats.Sys - stats.HeapReleased, StackInuse: stats.StackInuse, MemProfileRate: runtime.MemProfileRate,
+			ProcessMemoryBytes: processBytes,
 		}, nil)
 	case "render.metrics":
 		return resultOrError(controller.AutomationFrameMetrics())

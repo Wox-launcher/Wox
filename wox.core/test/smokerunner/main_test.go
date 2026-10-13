@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"wox/test/smokeperf"
 )
 
 // TestSuiteControlAddressSeparatesLaunches covers the Windows pipe and Unix socket naming policy.
@@ -161,7 +163,7 @@ func TestCollectSmokeResultsRecordsCaseDurationAndStatus(t *testing.T) {
 		"",
 	}, "\n")
 	var echoed bytes.Buffer
-	results, err := collectSmokeResults(strings.NewReader(output), &echoed, "test/smoke/launcher/plugin/calculator", "")
+	results, _, err := collectSmokeResults(strings.NewReader(output), &echoed, "test/smoke/launcher/plugin/calculator", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +186,7 @@ func TestCollectSmokeResultsRecordsCaseDurationAndStatus(t *testing.T) {
 
 func TestCollectSmokeResultsMarksACrashedCaseFailed(t *testing.T) {
 	output := "=== RUN   Test005Crash\npanic: boom\n"
-	results, err := collectSmokeResults(strings.NewReader(output), ioDiscard{}, "test/smoke/setting/privacy", "phase 2")
+	results, _, err := collectSmokeResults(strings.NewReader(output), ioDiscard{}, "test/smoke/setting/privacy", "phase 2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +203,7 @@ func TestPrintSmokeSummaryShowsNameDurationAndResult(t *testing.T) {
 	printSmokeSummary(&buffer, []smokeCaseResult{
 		{name: "launcher/plugin/calculator/Test001One", elapsed: 290 * time.Millisecond, status: smokeStatusPass},
 		{name: "setting/ui/Test002Slow", elapsed: 90*time.Second + 200*time.Millisecond, status: smokeStatusFail},
-	}, 2*time.Minute+5*time.Second)
+	}, 2*time.Minute+5*time.Second, smokeperf.Reference{})
 	text := buffer.String()
 	for _, line := range []string{
 		"NAME",
@@ -226,6 +228,54 @@ func TestPrintSmokeSummaryShowsNameDurationAndResult(t *testing.T) {
 	fast := strings.Index(text, "launcher/plugin/calculator/Test001One")
 	if slow < 0 || fast < 0 || slow > fast {
 		t.Fatalf("summary = %s, want the slower case before the faster one", text)
+	}
+	if strings.Contains(text, "Performance reference") {
+		t.Fatalf("summary = %s, want no performance section without a reading", text)
+	}
+}
+
+func TestPrintSmokeSummaryAppendsPerformanceReference(t *testing.T) {
+	ms := 18.4
+	queries := uint64(80 * 1024 * 1024)
+	hidden := uint64(55 * 1024 * 1024)
+	var buffer strings.Builder
+	printSmokeSummary(&buffer, []smokeCaseResult{
+		{name: "launcher/Test001One", elapsed: 290 * time.Millisecond, status: smokeStatusPass},
+	}, 2*time.Second, smokeperf.Reference{
+		When:               "fresh process, before cases",
+		ShowToVisibleP95Ms: &ms,
+		ShowSamples:        20,
+		QueryMemoryBytes:   &queries,
+		HiddenMemoryBytes:  &hidden,
+	})
+	text := buffer.String()
+	total := strings.Index(text, "TOTAL (wall)")
+	section := strings.Index(text, "Performance reference")
+	if total < 0 || section < 0 || section < total {
+		t.Fatalf("summary = %s, want the performance reference after the total", text)
+	}
+	if !strings.Contains(text, "18.4 ms") || !strings.Contains(text, "80.0 MB") || !strings.Contains(text, "55.0 MB") {
+		t.Fatalf("summary = %s, want the three readings", text)
+	}
+}
+
+func TestCollectSmokeResultsKeepsPerformanceReference(t *testing.T) {
+	ms := 18.4
+	line := smokeperf.Reference{ShowToVisibleP95Ms: &ms, ShowSamples: 20}.Line()
+	output := strings.Join([]string{
+		"=== RUN   Test008PerformanceReference",
+		"    008_performance_reference_test.go:40: " + line,
+		"--- PASS: Test008PerformanceReference (1.20s)",
+	}, "\n")
+	results, performance, err := collectSmokeResults(strings.NewReader(output), ioDiscard{}, "test/smoke/perf", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].status != smokeStatusPass {
+		t.Fatalf("results = %+v", results)
+	}
+	if performance.ShowToVisibleP95Ms == nil || *performance.ShowToVisibleP95Ms != ms {
+		t.Fatalf("performance = %+v", performance)
 	}
 }
 
