@@ -16,6 +16,9 @@ import (
 // cause constant window resizing and flickering. 32ms is roughly 30fps.
 const resultDebounceIntervalMs = 32
 
+// Slow plugins must not hold an empty global query past this fallback deadline.
+const fallbackMaxWait = 50 * time.Millisecond
+
 // queryRun owns the per-query execution state. Keeping this state together makes it clear that result
 // batching, fallback, and final response delivery are scoped by query id, not by
 // the session's latest visible query.
@@ -52,7 +55,7 @@ type queryRun struct {
 	acceptedResultMux sync.Mutex
 	// latestResponse keeps the newest context, layout, and refinement metadata for the next flush.
 	latestResponse plugin.QueryResponseUI
-	// fallbackHandled prevents duplicate fallback checks after fallbackReady and done both fire.
+	// fallbackHandled prevents duplicate fallback generation across the deadline and completion signals.
 	fallbackHandled bool
 	// resultDebouncer batches plugin results before flushing snapshots back to UI.
 	resultDebouncer *util.Debouncer[plugin.QueryResultUI]
@@ -130,12 +133,33 @@ func (r *queryRun) start() {
 		tracker.Log(r.ctx)
 	}
 	logger.Info(r.ctx, fmt.Sprintf("query %s: %s, result flushed (new start)", r.query.Type, r.query.String()))
+	r.waitForResults(execution)
+}
+
+// waitForResults bounds fallback latency without completing or cancelling pending plugin jobs.
+func (r *queryRun) waitForResults(execution plugin.QueryExecution) {
+	var fallbackDeadline <-chan time.Time
+	if r.query.IsGlobalQuery() {
+		// Include dispatch and scheduling time in the budget, just like the first flush.
+		timer := time.NewTimer(max(0, fallbackMaxWait-time.Since(r.startTime)))
+		defer timer.Stop()
+		fallbackDeadline = timer.C
+	}
 
 	for {
 		select {
 		case response := <-execution.Results:
 			r.addResponse(response)
+		case <-fallbackDeadline:
+			fallbackDeadline = nil
+			// A ready response may race the timer; accept it before deciding to show fallback.
+			r.drainPendingResults(execution.Results)
+			if r.totalResultCount == 0 && !r.fallbackHandled {
+				r.showFallbackResults()
+				r.resultDebouncer.FlushNow(r.ctx, "fallback_deadline")
+			}
 		case <-execution.ImmediateDone:
+			fallbackDeadline = nil
 			if tracker := timetracking.New("fallback_ready"); tracker.Enabled() {
 				tracker.SetRawString("queryId", r.queryId)
 				tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-r.startTimestamp)
@@ -288,9 +312,8 @@ func (r *queryRun) showFallbackResults() {
 		tracker.Log(r.ctx)
 	}
 
-	// fallbackReady only means "all fallback-blocking plugins are done". Late
-	// debounced plugins may still return afterward, so fallback is shown as an
-	// early best-effort option, not as a guarantee that no more real results exist.
+	// The deadline can show fallback while any plugin is still running. Keep the
+	// query open so later results are merged with these early best-effort options.
 	if r.fallbackHandled || r.totalResultCount > 0 {
 		return
 	}
