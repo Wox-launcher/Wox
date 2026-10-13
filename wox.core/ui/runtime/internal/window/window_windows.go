@@ -2349,9 +2349,9 @@ func (w *platformWindow) synchronizeBackdropAfterShow() {
 		_, _, _ = dwmSetWindowAttribute.Call(uintptr(w.hwnd), dwmwaSystemBackdrop, uintptr(unsafe.Pointer(&backdrop)), unsafe.Sizeof(backdrop))
 	}
 	w.applyBackdrop()
-	if dwmFlush.Find() == nil {
-		_, _, _ = dwmFlush.Call()
-	}
+	// DWM composes this policy with the already submitted window content. Waiting
+	// for a refresh here stalls the UI thread after ShowWindow, delaying query focus
+	// and input handling without preparing any additional pixels for the first frame.
 }
 
 // hideNative ends the current epoch and only restores a foreground window Wox still owns.
