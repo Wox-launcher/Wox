@@ -32,12 +32,11 @@ func main() {
 	}
 	var err error
 	ownerSID := argumentValue(args, "--owner-sid")
-	indexPath := argumentValue(args, "--index-dir")
 	switch args[0] {
 	case "install":
-		err = install(ownerSID, indexPath)
+		err = install(ownerSID)
 	case "start":
-		err = install(ownerSID, indexPath)
+		err = install(ownerSID)
 	case "uninstall":
 		err = uninstall()
 	case "finish-update":
@@ -93,49 +92,15 @@ func (service *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeReq
 	if err != nil {
 		return false, 1
 	}
-	index := filesearchservice.NewColumnIndex(ctx)
-	defer index.Close()
-	if indexPath, loadErr := filesearchservice.LoadIndexDirectory(ownerSID); loadErr == nil {
-		if resumeErr := index.Resume(ctx, ownerSID, indexPath); resumeErr != nil {
-			util.GetLogger().Warn(ctx, "file index service could not resume saved index: "+resumeErr.Error())
-		}
-	}
+	// The elevated process owns only native reads and management. Searchable
+	// columns, pinyin preparation and compaction belong to ordinary Wox.
+	endpointErrors := make(chan error, 2)
 	go func() {
-		_ = filesearchservice.ServeWithStats(ctx, ownerSID, index.Stats, func(request filesearchservice.Request, emit func(filesearchservice.SnapshotEntry) error) (func(), error) {
+		endpointErrors <- filesearchservice.ServeFacts(ctx, ownerSID)
+	}()
+	go func() {
+		endpointErrors <- filesearchservice.Serve(ctx, ownerSID, func(request filesearchservice.Request) (func(), error) {
 			switch request.Method {
-			case "search":
-				results, err := index.Search(ctx, request.Query, request.Limit, request.UsePinyin)
-				if err != nil {
-					return nil, err
-				}
-				for _, result := range results {
-					if err := emit(result); err != nil {
-						return nil, err
-					}
-				}
-				return nil, nil
-			case "rebuild":
-				index.RebuildAsync()
-				return nil, nil
-			case "pause":
-				service.operationMu.Lock()
-				defer service.operationMu.Unlock()
-				return nil, index.Pause(ctx)
-			case "resume":
-				service.operationMu.Lock()
-				defer service.operationMu.Unlock()
-				if err := index.Resume(ctx, ownerSID, request.IndexPath); err != nil {
-					return nil, err
-				}
-				return nil, filesearchservice.SaveIndexDirectory(ownerSID, request.IndexPath)
-			case "snapshot":
-				service.operationMu.Lock()
-				defer service.operationMu.Unlock()
-				rootPaths := request.RootPaths
-				if len(rootPaths) == 0 {
-					rootPaths = []string{request.RootPath}
-				}
-				return nil, filesearchservice.EnumerateSnapshots(ctx, rootPaths, emit)
 			case "update":
 				service.operationMu.Lock()
 				defer service.operationMu.Unlock()
@@ -157,6 +122,11 @@ func (service *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeReq
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	for {
 		select {
+		case err := <-endpointErrors:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				util.GetLogger().Error(ctx, "file index service endpoint failed: "+err.Error())
+			}
+			return false, 1
 		case <-service.updateRequested:
 			changes <- svc.Status{State: svc.StopPending}
 			return false, 0
@@ -175,11 +145,8 @@ func (service *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeReq
 	}
 }
 
-func install(ownerSID string, indexPath string) error {
+func install(ownerSID string) error {
 	if err := filesearchservice.SaveOwnerSID(ownerSID); err != nil {
-		return err
-	}
-	if err := filesearchservice.SaveIndexDirectory(ownerSID, indexPath); err != nil {
 		return err
 	}
 	programFiles := os.Getenv("ProgramFiles")

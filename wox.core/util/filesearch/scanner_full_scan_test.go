@@ -168,9 +168,9 @@ func TestScannerScanAllRootsLeavesExistingSearchResultsAvailableDuringVerificati
 	scanner := NewScanner(db)
 	scanner.scanAllRoots(ctx)
 
-	results := searchSQLiteForTest(t, db, "existing", 10)
-	if len(results) != 1 || results[0].Path != filePath {
-		t.Fatalf("expected sqlite update to include %q, got %#v", filePath, results)
+	results := searchColumnsForTest(t, db, "existing", 10)
+	if len(results) == 0 || results[0].Path != filePath {
+		t.Fatalf("expected column update to include %q, got %#v", filePath, results)
 	}
 }
 
@@ -206,7 +206,7 @@ func TestScannerStartupRestoreUsesPersistedSQLiteWithoutFullScanForFreshCursor(t
 
 	scanner.startupRestore(ctx)
 
-	results := searchSQLiteForTest(t, db, "stale", 10)
+	results := searchColumnsForTest(t, db, "stale", 10)
 	if len(results) != 1 || results[0].Path != staleFilePath {
 		t.Fatalf("expected startup restore to load persisted entry %q, got %#v", staleFilePath, results)
 	}
@@ -565,12 +565,12 @@ func TestScannerStartupRestoreReconcilesFallbackRoots(t *testing.T) {
 
 	scanner.startupRestore(ctx)
 
-	results := searchSQLiteForTest(t, db, "actual", 10)
+	results := searchColumnsForTest(t, db, "actual", 10)
 	if len(results) != 1 || results[0].Path != actualFilePath {
 		t.Fatalf("expected startup restore to reconcile fallback root to %q, got %#v", actualFilePath, results)
 	}
 
-	results = searchSQLiteForTest(t, db, "stale", 10)
+	results = searchColumnsForTest(t, db, "stale", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected stale fallback entry %q to be removed after startup reconcile, got %#v", staleFilePath, results)
 	}

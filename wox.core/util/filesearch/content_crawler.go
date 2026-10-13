@@ -43,7 +43,7 @@ type ContentCrawlProgress struct {
 // for isolated callers that do not provide a name database.
 type ContentCrawler struct {
 	db           *ContentSearchDB
-	nameDB       *FileSearchDB
+	nameDB       contentDirectory
 	extensions   map[string]bool
 	maxReadBytes int64
 	roots        []RootRecord
@@ -52,7 +52,7 @@ type ContentCrawler struct {
 }
 
 // setNameDB makes the persisted name index authoritative for stale-content cleanup.
-func (c *ContentCrawler) setNameDB(nameDB *FileSearchDB) {
+func (c *ContentCrawler) setNameDB(nameDB contentDirectory) {
 	c.nameDB = nameDB
 }
 
@@ -178,7 +178,8 @@ type contentCrawlCounters struct {
 
 // crawlNameIndex indexes only files already accepted by the authoritative name index.
 func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string]ContentEntryMetadata, seenPaths map[string]struct{}, counters *contentCrawlCounters, lastReport *time.Time) error {
-	var afterEntryID int64
+	selection := newContentSelection(c.roots, c.policy, true)
+	var afterEntryID ContentCandidateCursor
 	batch := make([]ContentIndexCandidate, 0, contentCrawlBatchSize)
 	batchReadBytes := int64(0)
 	flushBatch := func() error {
@@ -217,7 +218,25 @@ func (c *ContentCrawler) crawlNameIndex(ctx context.Context, existing map[string
 		}
 
 		for _, candidate := range candidates {
-			afterEntryID = candidate.EntryID
+			afterEntryID = candidate.Cursor
+			if !selection.allows(candidate.Path, false) {
+				continue
+			}
+			if _, seen := seenPaths[candidate.Path]; seen {
+				continue
+			}
+			// Native volume enumeration can omit metadata. Resolve it only for
+			// eligible content files, without statting the entire name index.
+			if !candidate.MetadataKnown {
+				info, err := os.Stat(candidate.Path)
+				if os.IsNotExist(err) {
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				candidate.Mtime, candidate.Size = info.ModTime().UnixMilli(), info.Size()
+			}
 			counters.visited++
 			seenPaths[candidate.Path] = struct{}{}
 			if metadata, ok := existing[candidate.Path]; ok && metadata.Mtime == candidate.Mtime && metadata.Size == candidate.Size && metadata.Extension == candidate.Extension {

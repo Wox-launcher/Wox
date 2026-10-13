@@ -22,7 +22,7 @@ const (
 	ContentHookKindDelete ContentHookKind = "delete"
 	// ContentHookKindScopeReplaced means a directory scope was fully replaced
 	// by a scanner run. The hook reconciles content entries under ScopePath:
-	// deletes content for paths no longer in the entries table, and queues
+	// deletes content for paths no longer in the shared directory view, and queues
 	// content indexing for newly searchable files.
 	ContentHookKindScopeReplaced ContentHookKind = "scope_replaced"
 )
@@ -50,9 +50,10 @@ type ContentHook interface {
 // reconcile) off the scanner's critical path.
 type ContentIndexHook struct {
 	contentDB    *ContentSearchDB
-	nameDB       *FileSearchDB
+	nameDB       contentDirectory
 	extensions   map[string]bool
 	maxReadBytes int64
+	selection    *contentSelection
 
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -67,15 +68,16 @@ type ContentIndexHook struct {
 }
 
 // NewContentIndexHook creates a running content hook. Call Close to stop the
-// background worker. Notifications arrive only after the authoritative name
-// index mutation, so the hook does not repeat traversal-policy evaluation.
-func NewContentIndexHook(contentDB *ContentSearchDB, nameDB *FileSearchDB, extensions map[string]bool, maxReadBytes int64) *ContentIndexHook {
+// background worker. Notifications arrive after the authoritative filename
+// mutation; content roots and policy are checked independently before extraction.
+func NewContentIndexHook(contentDB *ContentSearchDB, nameDB contentDirectory, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64) *ContentIndexHook {
 	hookCtx, cancel := context.WithCancel(context.Background())
 	h := &ContentIndexHook{
 		contentDB:    contentDB,
 		nameDB:       nameDB,
 		extensions:   extensions,
 		maxReadBytes: maxReadBytes,
+		selection:    newContentSelection(roots, policy, false),
 		ctx:          hookCtx,
 		cancel:       cancel,
 		wakeCh:       make(chan struct{}, 1),
@@ -98,15 +100,52 @@ func (h *ContentIndexHook) Notify(ctx context.Context, notification ContentHookN
 	default:
 	}
 
-	key := notification.Path
+	notifications := []ContentHookNotification{notification}
 	if notification.Kind == ContentHookKindScopeReplaced {
-		key = string(notification.Kind) + "\x00" + notification.RootID + "\x00" + notification.ScopePath
-	}
-	if key == "" {
-		return
+		notifications = nil
+		for _, root := range h.selection.roots {
+			scope := notification.ScopePath
+			if pathWithinScope(scope, root.Path) {
+				scope = root.Path
+			} else if !pathWithinScope(root.Path, scope) {
+				continue
+			}
+			notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: scope})
+		}
+	} else {
+		withinRoot := false
+		for _, root := range h.selection.roots {
+			withinRoot = withinRoot || pathWithinScope(root.Path, notification.Path)
+		}
+		if !withinRoot || !IsContentSearchableExtension(notification.Path, h.extensions) {
+			return
+		}
 	}
 	h.pendingMu.Lock()
-	h.pending[key] = notification
+	for _, notification := range notifications {
+		// Coalesce overflow into bounded content-root reconciliations. Once a
+		// root is queued, its scan subsumes later point notifications beneath it.
+		if len(h.pending) >= 8192 {
+			clear(h.pending)
+			for _, root := range h.selection.roots {
+				h.pending["scope\x00"+root.Path] = ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: root.Path}
+			}
+		}
+		key, path := notification.Path, notification.Path
+		if notification.Kind == ContentHookKindScopeReplaced {
+			key, path = "scope\x00"+notification.ScopePath, notification.ScopePath
+		}
+		covered := false
+		for _, root := range h.selection.roots {
+			if _, pending := h.pending["scope\x00"+root.Path]; pending && pathWithinScope(root.Path, path) {
+				covered = true
+				break
+			}
+		}
+		if !covered && key != "" {
+			h.pending[key] = notification
+		}
+	}
 	h.pendingMu.Unlock()
 
 	select {
@@ -187,7 +226,8 @@ func (h *ContentIndexHook) processUpsert(ctx context.Context, path string) {
 	if h.contentDB == nil {
 		return
 	}
-	if !IsContentSearchableExtension(path, h.extensions) {
+	if !IsContentSearchableExtension(path, h.extensions) || !h.selection.allows(path, false) {
+		_ = h.contentDB.DeleteContent(ctx, path)
 		return
 	}
 
@@ -274,6 +314,12 @@ func (h *ContentIndexHook) reconcileScope(ctx context.Context, rootID, scopePath
 	}
 	if err := h.contentDB.DeleteContentBatch(ctx, stalePaths); err != nil && ctx.Err() == nil {
 		util.GetLogger().Warn(ctx, "content hook reconcile: failed to delete stale paths under "+scopePath+": "+err.Error())
+	}
+	for _, path := range namePaths {
+		if ctx.Err() != nil {
+			return
+		}
+		h.processUpsert(ctx, path)
 	}
 }
 

@@ -16,6 +16,12 @@ const CaseTimeout = 60 * time.Second
 
 // Case runs one smoke case between mandatory resets of the shared Wox process.
 func Case(t *testing.T, run func(context.Context, *automationdriver.Client)) {
+	CaseWithTimeout(t, CaseTimeout, run)
+}
+
+// CaseWithTimeout keeps the shared-process reset contract for explicit, large
+// workloads whose operational timeout differs from ordinary interaction cases.
+func CaseWithTimeout(t *testing.T, timeout time.Duration, run func(context.Context, *automationdriver.Client)) {
 	t.Helper()
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)
 	client := sharedClient(t, connectCtx)
@@ -26,7 +32,7 @@ func Case(t *testing.T, run func(context.Context, *automationdriver.Client)) {
 	if err != nil {
 		t.Fatalf("reset shared Wox before case: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), CaseTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	t.Cleanup(cancel)
 	t.Cleanup(func() {
 		afterCtx, afterCancel := context.WithTimeout(context.Background(), automationdriver.ActionTimeout)

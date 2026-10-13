@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 	"wox/util"
+	"wox/util/filesearch/directoryread"
 )
 
 type SnapshotBuilder struct {
@@ -183,7 +184,7 @@ func (b *SnapshotBuilder) BuildDirectFilesJobSnapshot(ctx context.Context, root 
 		return batch, fmt.Errorf("direct-files scope %q is not a directory", scopePath)
 	}
 
-	dirEntries, err := os.ReadDir(scopePath)
+	dirEntries, err := directoryread.ReadDir(ctx, scopePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Dirty scopes may disappear after validation in temp/build folders.
@@ -273,7 +274,7 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 		return fmt.Errorf("direct-files scope %q is not a directory", scopePath)
 	}
 
-	dirEntries, err := os.ReadDir(scopePath)
+	dirEntries, err := directoryread.ReadDir(ctx, scopePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Streaming direct-files jobs still own the directory scope. If the
@@ -307,7 +308,7 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 		if batch == nil {
 			return nil
 		}
-		if len(batch.Directories) == 0 && len(batch.Entries) == 0 {
+		if len(batch.Directories) == 0 && len(batch.Entries) == 0 && len(batch.UnreadableScopes) == 0 {
 			return nil
 		}
 		return onBatch(*batch)
@@ -434,7 +435,7 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			continue
 		}
 
-		dirEntries, readErr := os.ReadDir(current.path)
+		dirEntries, readErr := directoryread.ReadDir(ctx, current.path)
 		if readErr != nil {
 			if errors.Is(readErr, os.ErrNotExist) {
 				// The snapshot builder used to record the directory as existing
@@ -457,6 +458,7 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			if current.path == scopePath {
 				return batch, fmt.Errorf("failed to read scope directory %s: %w", current.path, readErr)
 			}
+			batch.UnreadableScopes = append(batch.UnreadableScopes, current.path)
 			util.GetLogger().Warn(ctx, "filesearch skipped unreadable directory "+current.path+": "+readErr.Error())
 			continue
 		}
@@ -474,6 +476,9 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 			childPath := filepath.Join(current.path, dirEntry.Name())
 			isDir, info, infoErr := strictDirEntryType(current.path, dirEntry)
 			if infoErr != nil {
+				if !errors.Is(infoErr, os.ErrNotExist) {
+					batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
+				}
 				continue
 			}
 			if isDir && b.isExcludedPath(root.ID, childPath) {
@@ -495,6 +500,9 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 				// for entries that would never be indexed.
 				info, infoErr = strictDirEntryInfo(current.path, dirEntry)
 				if infoErr != nil {
+					if !errors.Is(infoErr, os.ErrNotExist) {
+						batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
+					}
 					continue
 				}
 			}
@@ -714,13 +722,13 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 		}
 	}
 	shouldFlush := func(batch SubtreeSnapshotBatch) bool {
-		return len(batch.Directories)+len(batch.Entries) >= maxRecordsPerBatch
+		return len(batch.Directories)+len(batch.Entries)+len(batch.UnreadableScopes) >= maxRecordsPerBatch
 	}
 	flushBatch := func(batch *SubtreeSnapshotBatch) error {
 		if batch == nil {
 			return nil
 		}
-		if len(batch.Directories) == 0 && len(batch.Entries) == 0 {
+		if len(batch.Directories) == 0 && len(batch.Entries) == 0 && len(batch.UnreadableScopes) == 0 {
 			return nil
 		}
 		select {
@@ -751,7 +759,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 			}
 
 			readStartedAt := time.Now()
-			dirEntries, readErr := os.ReadDir(current.path)
+			dirEntries, readErr := directoryread.ReadDir(ctx, current.path)
 			diagnostics.recordReadDir(time.Since(readStartedAt))
 			if readErr != nil {
 				if errors.Is(readErr, os.ErrNotExist) {
@@ -761,6 +769,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					return fmt.Errorf("failed to read scope directory %s: %w", current.path, readErr)
 				}
 				diagnostics.recordUnreadable(current.path, readErr)
+				batch.UnreadableScopes = append(batch.UnreadableScopes, current.path)
 				batch.Directories = append(batch.Directories, DirectoryRecord{
 					Path:         current.path,
 					RootID:       root.ID,
@@ -804,6 +813,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 				if infoErr != nil {
 					if !errors.Is(infoErr, os.ErrNotExist) {
 						diagnostics.recordUnreadable(childPath, infoErr)
+						batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
 					}
 					continue
 				}
@@ -826,6 +836,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					if infoErr != nil {
 						if !errors.Is(infoErr, os.ErrNotExist) {
 							diagnostics.recordUnreadable(childPath, infoErr)
+							batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
 						}
 						continue
 					}

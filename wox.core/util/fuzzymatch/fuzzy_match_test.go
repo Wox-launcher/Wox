@@ -32,7 +32,7 @@ func TestReleasePinyinDictionaryReloads(t *testing.T) {
 	}
 	ReleasePinyinDictionary()
 	pinyinDictMu.Lock()
-	unloaded := pinyinDict == nil
+	unloaded := pinyinDict.Load() == nil
 	pinyinDictMu.Unlock()
 	if !unloaded {
 		t.Fatal("pinyin dictionary was still loaded after release")
@@ -149,6 +149,9 @@ func TestFuzzxyMatchPinyinPolyphonicCharacter(t *testing.T) {
 func TestFuzzyMatchPinyinNonPinyinMixedSearch(t *testing.T) {
 	result := FuzzyMatch("QQ音乐,这是一个测试, 行走", "qqyy", true)
 	assert.True(t, result.IsMatch)
+	for _, query := range []string{"woxcs2026", "woxcs2026.txt", "woxceshi2026"} {
+		assert.True(t, FuzzyMatch("Wox测试2026.txt", query, true).IsMatch, query)
+	}
 }
 
 func TestFuzzyMatchScoreComparison(t *testing.T) {

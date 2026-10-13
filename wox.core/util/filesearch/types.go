@@ -277,6 +277,8 @@ type SubtreeSnapshotBatch struct {
 	ScopePath   string
 	Directories []DirectoryRecord
 	Entries     []EntryRecord
+	// UnreadableScopes retain prior facts when enumeration or stat fails.
+	UnreadableScopes []string
 }
 
 // JobApplyStats carries the entry counts observed at the write boundary. Full

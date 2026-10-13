@@ -5,14 +5,15 @@ import (
 	"strings"
 
 	"wox/util"
+	"wox/util/fuzzymatch"
 )
 
-// queryPlan is the shared query normalization contract for the single SQLite
-// search provider. The old in-memory query index kept many provider-specific
-// recall structures in this file; keeping only the plan and scorer here makes
-// the runtime flow easier to follow: SQLite recalls candidates, then this code
-// reranks them with the same wildcard, path, extension, and pinyin semantics.
+// queryPlan and its scorer define the common semantics after the column
+// provider's conservative candidate filters: wildcard, path, extension and
+// pinyin queries behave the same for native volumes and configured roots.
 type queryPlan struct {
+	pattern               *fuzzymatch.PreparedPattern
+	patternASCII          bool
 	andTerms              []SearchQuery
 	raw                   string
 	rawLower              string
@@ -67,7 +68,7 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 
 	rawLower := normalizeIndexText(raw)
 	lettersDigits := keepLettersAndDigits(rawLower)
-	pathLike := strings.ContainsAny(recallRaw, `/\`)
+	pathLike := strings.ContainsAny(inputRaw, `/\`)
 	pathQuery := normalizePathQuery(recallRaw)
 	pathSegments := splitDirectorySegments(pathQuery)
 
@@ -85,6 +86,7 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 
 	plan := &queryPlan{
 		raw:                raw,
+		pattern:            fuzzymatch.PreparePattern(strings.TrimSpace(raw)),
 		rawLower:           rawLower,
 		rawLettersDigits:   lettersDigits,
 		pathLike:           pathLike,
@@ -125,6 +127,13 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 		plan.preRerankLimit = 0
 	}
 
+	plan.patternASCII = true
+	for _, c := range raw {
+		if c >= 128 {
+			plan.patternASCII = false
+			break
+		}
+	}
 	return plan
 }
 
@@ -132,18 +141,17 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 // A large path substring bonus must never outrank a filename satisfying every
 // condition. Explicit path queries keep their existing path-oriented ranking.
 func scoreDocAgainstQuery(query SearchQuery, record docRecord) (bool, int64) {
-	if query.plan == nil || query.plan.pathLike || query.wildcard != nil {
+	if query.plan == nil || query.plan.pathLike {
 		return scoreDocMatch(query, record, false)
+	}
+	if query.wildcard != nil {
+		return scoreDocMatch(query, record, true)
 	}
 	const namePriorityScore = int64(1000000)
 	if nameMatched, nameScore := scoreDocMatch(query, record, true); nameMatched {
 		return true, namePriorityScore + min(max(nameScore, 0), namePriorityScore-1)
 	}
-	matched, score := scoreDocMatch(query, record, false)
-	if !matched {
-		return false, 0
-	}
-	return true, min(max(score, 0), namePriorityScore-1)
+	return false, 0
 }
 
 // scoreDocMatch shares matching semantics between full-path eligibility and

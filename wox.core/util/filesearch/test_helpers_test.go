@@ -49,36 +49,31 @@ func mustInsertRoot(t *testing.T, ctx context.Context, db *FileSearchDB, root Ro
 func mustInsertEntrySnapshots(t *testing.T, ctx context.Context, db *FileSearchDB, entries ...EntryRecord) {
 	t.Helper()
 
-	tx, err := db.db.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin entry snapshot tx: %v", err)
-	}
-	defer tx.Rollback()
-
+	grouped := map[string][]EntryRecord{}
 	for _, entry := range entries {
-		// Tests used to seed only the fact rows. SQLite-first reconcile depends on
-		// the derived FTS and bigram tables being in sync as well, so the shared
-		// helper now writes both layers together.
-		current, err := upsertEntryFactsTx(ctx, tx, buildStoredEntryRecord(entry))
-		if err != nil {
-			t.Fatalf("upsert entry snapshot %q: %v", entry.Path, err)
-		}
-		if err := insertEntrySearchArtifactsTx(ctx, tx, current); err != nil {
-			t.Fatalf("insert entry search artifacts %q: %v", entry.Path, err)
-		}
+		grouped[entry.RootID] = append(grouped[entry.RootID], entry)
 	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit entry snapshot tx: %v", err)
+	for rootID, added := range grouped {
+		root, err := db.FindRootByID(ctx, rootID)
+		if err != nil || root == nil {
+			t.Fatalf("root %s missing: %v", rootID, err)
+		}
+		existing, err := db.ListEntriesByRoot(ctx, rootID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.ReplaceRootEntries(ctx, *root, append(existing, added...), nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
-func searchSQLiteForTest(t *testing.T, db *FileSearchDB, raw string, limit int) []SearchResult {
+func searchColumnsForTest(t *testing.T, db *FileSearchDB, raw string, limit int) []SearchResult {
 	t.Helper()
 
-	results, err := NewSQLiteSearchProvider(db).Search(context.Background(), SearchQuery{Raw: raw}, limit)
+	results, err := (&columnSearchProvider{db: db}).Search(context.Background(), SearchQuery{Raw: raw}, limit)
 	if err != nil {
-		t.Fatalf("search sqlite provider for %q: %v", raw, err)
+		t.Fatalf("search column provider for %q: %v", raw, err)
 	}
 	return results
 }

@@ -65,55 +65,14 @@ func TestFileSearchDBInitExtendsRootsTableWithFeedColumns(t *testing.T) {
 	}
 }
 
-func TestFileSearchDBInitCreatesSQLiteSearchSchema(t *testing.T) {
+func TestFileSearchDBDoesNotCreateSQLFilenameIndex(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
-
-	rows, err := db.db.QueryContext(ctx, `PRAGMA table_info(entries)`)
-	if err != nil {
-		t.Fatalf("query entries schema: %v", err)
+	var count int
+	if err := db.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'entries' OR name LIKE 'entries_%'`).Scan(&count); err != nil {
+		t.Fatal(err)
 	}
-	defer rows.Close()
-
-	columnNames := map[string]bool{}
-	for rows.Next() {
-		var cid int
-		var name string
-		var columnType string
-		var notNull int
-		var defaultValue any
-		var pk int
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
-			t.Fatalf("scan entries schema: %v", err)
-		}
-		columnNames[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate entries schema: %v", err)
-	}
-
-	for _, columnName := range []string{"entry_id", "name_key", "extension"} {
-		if !columnNames[columnName] {
-			t.Fatalf("expected entries column %q to exist", columnName)
-		}
-	}
-
-	for _, tableName := range []string{
-		"entries_bigram",
-		"entries_name_fts",
-		"entries_path_fts",
-		"entries_pinyin_full_fts",
-		"entries_initials_fts",
-	} {
-		row := db.db.QueryRowContext(ctx, `
-			SELECT name
-			FROM sqlite_master
-			WHERE name = ?
-		`, tableName)
-
-		var found string
-		if err := row.Scan(&found); err != nil {
-			t.Fatalf("expected sqlite search table %q to exist: %v", tableName, err)
-		}
+	if count != 0 {
+		t.Fatalf("retired filename tables exist: %d", count)
 	}
 }
 
@@ -189,20 +148,20 @@ func TestFileSearchDBSearchIndexSnapshotReportsTopRootsAndByteFields(t *testing.
 	if len(snapshot.TopRoots) == 0 || snapshot.TopRoots[0].RootID != rootLarge.ID {
 		t.Fatalf("expected heavier root %q to lead top roots, got %#v", rootLarge.ID, snapshot.TopRoots)
 	}
-	if snapshot.DBTotalFileBytes <= 0 {
+	if snapshot.DiskBytes <= 0 {
 		t.Fatalf("expected sqlite snapshot to report total file bytes, got %#v", snapshot)
 	}
-	if snapshot.TopRoots[0].TotalBytesEstimate <= 0 {
-		t.Fatalf("expected top root bytes estimate to be populated, got %#v", snapshot.TopRoots[0])
+	if snapshot.TopRoots[0].Docs != 2 {
+		t.Fatalf("wrong top root count: %+v", snapshot.TopRoots[0])
 	}
 
-	summary := formatSQLiteIndexSnapshotSummary("test", snapshot)
-	if !strings.Contains(summary, "db_total_file_bytes=") || !strings.Contains(summary, "total_bytes_est=") {
+	summary := formatColumnIndexSnapshotSummary("test", snapshot)
+	if !strings.Contains(summary, "disk_bytes=") || !strings.Contains(summary, "disk_bytes=") {
 		t.Fatalf("expected sqlite snapshot summary to expose byte fields, got %q", summary)
 	}
 
-	topRoots := formatSQLiteIndexTopRoots("test", snapshot)
-	if !strings.Contains(topRoots, "top_roots=[") || !strings.Contains(topRoots, "total_bytes_est=") {
+	topRoots := formatColumnIndexTopRoots("test", snapshot)
+	if !strings.Contains(topRoots, "top_roots=[") || !strings.Contains(topRoots, "disk_bytes=") {
 		t.Fatalf("expected sqlite top roots summary to expose top_roots and bytes, got %q", topRoots)
 	}
 }
@@ -823,7 +782,7 @@ func TestFileSearchDBApplyDirectFilesJobStreamBulkSyncEmptyScopePreservesEntryCo
 		t.Fatalf("unexpected entry count after bulk direct-files stream apply: got %d want %d", got, want)
 	}
 
-	provider := NewSQLiteSearchProvider(db)
+	provider := (&columnSearchProvider{db: db})
 	results, err := provider.Search(context.Background(), SearchQuery{Raw: "alpha"}, 10)
 	if err != nil {
 		t.Fatalf("search direct-files bulk-sync entry: %v", err)
@@ -901,7 +860,7 @@ func TestFileSearchDBReplaceSubtreeSnapshotBulkSyncEmptyScopePreservesEntryCount
 		t.Fatalf("unexpected entry count after bulk subtree replace: got %d want %d", got, want)
 	}
 
-	provider := NewSQLiteSearchProvider(db)
+	provider := (&columnSearchProvider{db: db})
 	results, err := provider.Search(context.Background(), SearchQuery{Raw: "alpha"}, 10)
 	if err != nil {
 		t.Fatalf("search bulk subtree entry: %v", err)
@@ -986,6 +945,9 @@ func TestFileSearchDBPrepareBulkSyncFullRunRootPreservesResultsAcrossDisjointSco
 	}); err != nil {
 		t.Fatalf("replace subtree after preparing full-run root: %v", err)
 	}
+	if err := db.FinalizeRootRun(ctx, root); err != nil {
+		t.Fatalf("publish full root: %v", err)
+	}
 	if err := db.EndBulkSync(ctx); err != nil {
 		t.Fatalf("end bulk sync after prepared full-run root: %v", err)
 	}
@@ -998,7 +960,7 @@ func TestFileSearchDBPrepareBulkSyncFullRunRootPreservesResultsAcrossDisjointSco
 		t.Fatalf("unexpected entry count after prepared full-run bulk sync: got %d want %d", got, want)
 	}
 
-	provider := NewSQLiteSearchProvider(db)
+	provider := (&columnSearchProvider{db: db})
 	directResults, err := provider.Search(context.Background(), SearchQuery{Raw: "top"}, 10)
 	if err != nil {
 		t.Fatalf("search prepared full-run direct file: %v", err)
@@ -1347,8 +1309,9 @@ func TestFileSearchDBReplaceSubtreeSnapshotsIgnoresUpdatedAtOnlyChanges(t *testi
 	if len(entries) != 1 {
 		t.Fatalf("expected one entry after updated_at-only replace, got %#v", entries)
 	}
-	if got, want := entries[0].UpdatedAt, original.UpdatedAt; got != want {
-		t.Fatalf("expected updated_at-only change not to rewrite entry, got %d want %d", got, want)
+	// Scan timestamps are lifecycle metadata; filename columns retain file metadata only.
+	if entries[0].Mtime != original.Mtime || entries[0].Size != original.Size || entries[0].Path != original.Path {
+		t.Fatalf("scan timestamp changed file metadata: %+v", entries[0])
 	}
 }
 
@@ -1520,7 +1483,7 @@ func TestFileSearchDBReplaceSubtreeSnapshotRejectsMismatchedRootIDAndLeavesDBUnc
 	existingDirectoryPath := filepath.Join(scopePath, "existing-dir")
 	root := RootRecord{
 		ID:        "root-validation-mismatch",
-		Path:      filepath.Join(t.TempDir(), "root-validation-mismatch"),
+		Path:      rootBase,
 		Kind:      RootKindUser,
 		Status:    RootStatusIdle,
 		CreatedAt: now,
@@ -1596,7 +1559,7 @@ func TestFileSearchDBReplaceSubtreeSnapshotRejectsOutOfScopePathAndLeavesDBUncha
 	existingDirectoryPath := filepath.Join(scopePath, "existing-dir")
 	root := RootRecord{
 		ID:        "root-validation-out-of-scope",
-		Path:      filepath.Join(t.TempDir(), "root-validation-out-of-scope"),
+		Path:      rootBase,
 		Kind:      RootKindUser,
 		Status:    RootStatusIdle,
 		CreatedAt: now,
@@ -1744,7 +1707,7 @@ func TestFileSearchDBReplaceSubtreeSnapshotRejectsMismatchedEntryRootIDAndLeaves
 	existingDirectoryPath := filepath.Join(scopePath, "existing-dir")
 	root := RootRecord{
 		ID:        "root-validation-entry-root",
-		Path:      filepath.Join(t.TempDir(), "root-validation-entry-root"),
+		Path:      rootBase,
 		Kind:      RootKindUser,
 		Status:    RootStatusIdle,
 		CreatedAt: now,
@@ -2228,11 +2191,15 @@ func assertRootStateEqual(
 
 func queryEntryIDByPath(t *testing.T, db *FileSearchDB, ctx context.Context, entryPath string) int64 {
 	t.Helper()
-
-	row := db.db.QueryRowContext(ctx, `SELECT entry_id FROM entries WHERE path = ?`, entryPath)
-	var entryID int64
-	if err := row.Scan(&entryID); err != nil {
-		t.Fatalf("query entry_id for %q: %v", entryPath, err)
+	entries, err := db.ListEntries(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return entryID
+	for _, entry := range entries {
+		if entry.Path == entryPath {
+			return int64(directoryEntryID(entryPath))
+		}
+	}
+	t.Fatalf("entry missing: %s", entryPath)
+	return 0
 }

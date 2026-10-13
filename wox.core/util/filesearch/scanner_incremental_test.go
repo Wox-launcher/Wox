@@ -65,7 +65,7 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 	}
 	scanner.scanAllRoots(ctx)
 
-	results := searchSQLiteForTest(t, db, "initial", 10)
+	results := searchColumnsForTest(t, db, "initial", 10)
 	if len(results) != 1 || results[0].Path != initialFilePath {
 		t.Fatalf("expected sqlite provider to include initial file %q after full build, got %#v", initialFilePath, results)
 	}
@@ -101,12 +101,12 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 		t.Fatalf("process dirty queue: %v", err)
 	}
 
-	results = searchSQLiteForTest(t, db, "new", 10)
+	results = searchColumnsForTest(t, db, "new", 10)
 	if len(results) != 1 || results[0].Path != newFilePath {
 		t.Fatalf("expected sqlite provider to index new file %q, got %#v", newFilePath, results)
 	}
 
-	results = searchSQLiteForTest(t, db, "initial", 10)
+	results = searchColumnsForTest(t, db, "initial", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected removed file %q to be evicted from sqlite provider, got %#v", initialFilePath, results)
 	}
@@ -141,7 +141,7 @@ func TestScannerProcessDirtyQueueHandlesFileRenameSignals(t *testing.T) {
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 	scanner.scanAllRoots(ctx)
 
-	results := searchSQLiteForTest(t, db, "rename-old-report", 10)
+	results := searchColumnsForTest(t, db, "rename-old-report", 10)
 	if len(results) != 1 || results[0].Path != oldFilePath {
 		t.Fatalf("expected old file %q after full build, got %#v", oldFilePath, results)
 	}
@@ -169,12 +169,12 @@ func TestScannerProcessDirtyQueueHandlesFileRenameSignals(t *testing.T) {
 		t.Fatalf("process rename dirty queue: %v", err)
 	}
 
-	results = searchSQLiteForTest(t, db, "rename-old-report", 10)
+	results = searchColumnsForTest(t, db, "rename-old-report", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected renamed old file %q to disappear, got %#v", oldFilePath, results)
 	}
 
-	results = searchSQLiteForTest(t, db, "rename-new-report", 10)
+	results = searchColumnsForTest(t, db, "rename-new-report", 10)
 	if len(results) != 1 || results[0].Path != newFilePath {
 		t.Fatalf("expected renamed new file %q to be searchable, got %#v", newFilePath, results)
 	}
@@ -376,7 +376,7 @@ func TestScannerProcessDirtyQueueReloadsDirectChildUnderRoot(t *testing.T) {
 		t.Fatalf("process dirty queue: %v", err)
 	}
 
-	results := searchSQLiteForTest(t, db, "sync-target", 10)
+	results := searchColumnsForTest(t, db, "sync-target", 10)
 	if len(results) != 1 || results[0].Path != newFilePath {
 		t.Fatalf("expected direct child file %q to be searchable after dirty processing, got %#v", newFilePath, results)
 	}
@@ -478,12 +478,12 @@ func TestScannerProcessDirtyQueueRequeuesRemainingBatchesAfterFailure(t *testing
 		t.Fatalf("expected failed root to stay degraded without a root-wide retry, got %q", recoveredRoot.FeedState)
 	}
 
-	results := searchSQLiteForTest(t, db, "new-a", 10)
+	results := searchColumnsForTest(t, db, "new-a", 10)
 	if len(results) != 0 {
 		t.Fatalf("expected invalid failed scope not to trigger root-a full retry for %q, got %#v", rootANewFilePath, results)
 	}
 
-	results = searchSQLiteForTest(t, db, "new-b", 10)
+	results = searchColumnsForTest(t, db, "new-b", 10)
 	if len(results) != 1 || results[0].Path != rootBNewFilePath {
 		t.Fatalf("expected root-b new file %q after retry, got %#v", rootBNewFilePath, results)
 	}
@@ -605,9 +605,6 @@ func TestScannerQueuesDirtySignalsForNextRunDuringExecution(t *testing.T) {
 	}
 	engine := &Engine{db: db, scanner: scanner}
 	scanner.scanAllRoots(ctx)
-	if err := db.BuildMaintenanceEntryIndexes(ctx); err != nil {
-		t.Fatalf("build maintenance indexes after full scan: %v", err)
-	}
 
 	mustWriteTestFile(t, firstFilePath, "first")
 	if ok := scanner.enqueueDirtyForPath(ctx, firstFilePath); !ok {
@@ -652,7 +649,7 @@ func TestScannerQueuesDirtySignalsForNextRunDuringExecution(t *testing.T) {
 		t.Fatalf("expected queued second signal for next run, got roots=%d paths=%d", status.PendingDirtyRootCount, status.PendingDirtyPathCount)
 	}
 
-	results := searchSQLiteForTest(t, db, "first", 10)
+	results := searchColumnsForTest(t, db, "first", 10)
 	if len(results) != 1 || results[0].Path != firstFilePath {
 		t.Fatalf("expected first file %q after first incremental run, got %#v", firstFilePath, results)
 	}
@@ -669,7 +666,7 @@ func TestScannerQueuesDirtySignalsForNextRunDuringExecution(t *testing.T) {
 		t.Fatalf("expected dirty queue to drain after second run, got roots=%d paths=%d", status.PendingDirtyRootCount, status.PendingDirtyPathCount)
 	}
 
-	results = searchSQLiteForTest(t, db, "second", 10)
+	results = searchColumnsForTest(t, db, "second", 10)
 	if len(results) != 1 || results[0].Path != secondFilePath {
 		t.Fatalf("expected second file %q after second incremental run, got %#v", secondFilePath, results)
 	}

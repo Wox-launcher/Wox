@@ -40,15 +40,6 @@ func TestScannerProcessDirtyQueueDropsStaleBatchesForDeletedRoot(t *testing.T) {
 	scanner := NewScanner(db)
 	scanner.scanAllRoots(ctx)
 
-	// scanAllRoots kicks off background maintenance index building; wait for it
-	// to release SQLite before deleting the root row.
-	for i := 0; i < 100; i++ {
-		if ready, err := db.EntryMaintenanceIndexesReady(ctx); err == nil && ready {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
 	if err := db.DeleteRoot(ctx, deletedRoot.ID); err != nil {
 		t.Fatalf("delete root: %v", err)
 	}
@@ -77,7 +68,7 @@ func TestScannerProcessDirtyQueueDropsStaleBatchesForDeletedRoot(t *testing.T) {
 		t.Fatalf("expected dirty flush to drop the stale deleted-root batch instead of failing: %v", err)
 	}
 
-	results := searchSQLiteForTest(t, db, "live", 10)
+	results := searchColumnsForTest(t, db, "live", 10)
 	if len(results) != 2 || results[0].Path != liveRootPath {
 		t.Fatalf("expected live root to still reconcile alongside the dropped stale batch, got %#v", results)
 	}

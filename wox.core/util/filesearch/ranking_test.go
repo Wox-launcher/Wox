@@ -23,7 +23,7 @@ func TestFileSearchNameMatchesRankBeforeDirectoryMatches(t *testing.T) {
 				filepath.Join("/", "home", "amigasrc", "DariusZendehRegs.png"),
 			} {
 				matched, score := scoreDocAgainstQuery(query, docRecord{Path: path})
-				if !matched || score >= nameScore {
+				if matched {
 					t.Fatalf("filename score=%d, directory match=%v score=%d path=%s", nameScore, matched, score, path)
 				}
 			}
@@ -58,15 +58,15 @@ func TestFileSearchNamePrioritySurvivesCandidateLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, raw := range []string{"amiga png", "amiga .png", `"amiga" .png`} {
-		results, err := NewSQLiteSearchProvider(db).Search(ctx, SearchQuery{Raw: raw, DisablePinyin: true}, 10)
+		results, err := (&columnSearchProvider{db: db}).Search(ctx, SearchQuery{Raw: raw, DisablePinyin: true}, 10)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(results) == 0 || results[0].Path != target {
 			t.Fatalf("%q: filename did not rank first: %v", raw, results)
 		}
-		if len(results) < 2 {
-			t.Fatalf("%q: directory matches should remain available", raw)
+		if len(results) != 1 {
+			t.Fatalf("%q: implicit parent matches must be excluded", raw)
 		}
 	}
 }
@@ -89,8 +89,8 @@ func TestFileSearchNamePriorityPreservesOtherMatchModes(t *testing.T) {
 		query := normalizeSearchQuery(SearchQuery{Raw: "ceshi png", DisablePinyin: disabled})
 		nameMatched, nameScore := scoreDocAgainstQuery(query, chinese)
 		pathMatched, pathScore := scoreDocAgainstQuery(query, directory)
-		if !pathMatched {
-			t.Fatal("directory match lost")
+		if pathMatched {
+			t.Fatal("implicit directory match leaked")
 		}
 		if disabled && nameMatched {
 			t.Fatal("disabled pinyin still matched")

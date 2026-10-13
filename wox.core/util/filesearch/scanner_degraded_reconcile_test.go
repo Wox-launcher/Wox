@@ -127,12 +127,6 @@ func TestScannerSuppressedReconcileFiresWithoutFurtherEvents(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.scanAllRoots(ctx)
-	for i := 0; i < 100; i++ {
-		if ready, err := db.EntryMaintenanceIndexesReady(ctx); err == nil && ready {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 
 	// First reconcile signal passes and enqueues a root batch.
 	signalAt := time.Now()
@@ -174,7 +168,7 @@ func TestScannerSuppressedReconcileFiresWithoutFurtherEvents(t *testing.T) {
 	if err := scanner.processDirtyQueue(ctx, signalAt.Add(2*rootReconcileCooldown)); err != nil {
 		t.Fatalf("process released reconcile: %v", err)
 	}
-	results := searchSQLiteForTest(t, db, "late", 10)
+	results := searchColumnsForTest(t, db, "late", 10)
 	if len(results) == 0 {
 		t.Fatalf("expected retained reconcile to scan and index the new file without further events")
 	}

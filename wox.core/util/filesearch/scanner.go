@@ -11,10 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 	"wox/util"
+	"wox/util/filesearch/directoryread"
 )
 
 const (
-	defaultFTSOptimizeInterval = 12 * time.Hour
+	defaultColumnMaintenanceInterval = 30 * time.Second
 	// Bug fix: small interactive edits should reconcile quickly. Burst
 	// backpressure below still protects generated-output storms.
 	defaultDirtyDebounceWindow        = 2 * time.Second
@@ -178,14 +179,10 @@ func (s *Scanner) Start(ctx context.Context) {
 	util.Go(ctx, "filesearch scan loop", func() {
 		defer s.wg.Done()
 		util.GetLogger().Info(ctx, "filesearch scanner started")
-		if err := s.db.EnsureForegroundEntryIndexes(ctx); err != nil {
-			util.GetLogger().Warn(ctx, "filesearch failed to recover foreground entry indexes: "+err.Error())
-		}
 		s.startupRestore(ctx)
-		s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), false)
 
-		ftsOptimizeTimer := time.NewTimer(defaultFTSOptimizeInterval)
-		defer ftsOptimizeTimer.Stop()
+		columnMaintenanceTimer := time.NewTimer(defaultColumnMaintenanceInterval)
+		defer columnMaintenanceTimer.Stop()
 
 		dirtyTimer := time.NewTimer(time.Hour)
 		if !dirtyTimer.Stop() {
@@ -195,16 +192,14 @@ func (s *Scanner) Start(ctx context.Context) {
 
 		for {
 			select {
-			case <-ftsOptimizeTimer.C:
-				// Optimization: FTS optimize is global table maintenance, not a
-				// correctness step for each file change. Running it on a fixed
-				// 12-hour cadence keeps segment compaction available without making
-				// every incremental root finalize pay for all four FTS tables.
+			case <-columnMaintenanceTimer.C:
+				// Maintenance runs on the existing scanner worker. Small overlays
+				// are left alone; no helper or competing build goroutine is needed.
 				optimizeCtx := util.NewTraceContext()
-				if err := s.db.OptimizeFTSTables(optimizeCtx); err != nil {
-					util.GetLogger().Warn(optimizeCtx, "filesearch scheduled FTS optimize failed: "+err.Error())
+				if err := s.db.compactColumns(optimizeCtx); err != nil {
+					util.GetLogger().Warn(optimizeCtx, "filesearch column compaction failed: "+err.Error())
 				}
-				ftsOptimizeTimer.Reset(defaultFTSOptimizeInterval)
+				columnMaintenanceTimer.Reset(defaultColumnMaintenanceInterval)
 			case request := <-s.requestCh:
 				rescanCtx := contextWithTraceID(util.NewTraceContext(), request.TraceID)
 				util.GetLogger().Info(rescanCtx, fmt.Sprintf("filesearch full rescan triggered: reason=%s", request.Reason))
@@ -381,7 +376,7 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 				util.GetLogger().Warn(snapshotCtx, "filesearch failed to capture sqlite snapshot after full scan: "+err.Error())
 				return
 			}
-			logSQLiteIndexSnapshot(snapshotCtx, "full_scan_complete", snapshot, true)
+			logColumnIndexSnapshot(snapshotCtx, "full_scan_complete", snapshot, true)
 		})
 	}
 }
@@ -490,6 +485,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 			// "was this root empty?" answer across the whole run instead of issuing
 			// the same scope-level empty checks for every fresh subtree.
 			if err := s.db.prepareBulkSyncFullRunRoot(ctx, root.ID); err != nil {
+				_ = s.db.EndBulkSync(ctx)
 				return err
 			}
 		}
@@ -503,7 +499,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		}
 		bulkFinalizeStartedAt := util.GetSystemTimestamp()
 		if err := s.db.EndBulkSync(ctx); err != nil {
-			util.GetLogger().Warn(ctx, "filesearch failed to finalize bulk sqlite search sync: "+err.Error())
+			util.GetLogger().Warn(ctx, "filesearch failed to finalize column build lifecycle: "+err.Error())
 			if runSucceeded {
 				// Bug fix: the saving-index snapshot is emitted before EndBulkSync
 				// starts. If SQLite finalization fails, clear that transient state so
@@ -514,12 +510,11 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 			}
 			return
 		}
-		// Full runs intentionally defer the global FTS rebuild until the facts
-		// settle, so log the boundary explicitly instead of hiding that cost in a
-		// generic "scan cycle completed" message.
-		logFilesearchSQLiteMaintenance(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, len(filesearchFTSTables))
+		// Root finalize jobs already published complete generations. Dropping any
+		// remaining builder here cannot expose a partially scanned root.
+
 		logFilesearchIndexPhase(ctx, "bulk_finalize", string(kind), util.GetSystemTimestamp()-bulkFinalizeStartedAt, map[string]any{
-			"fts_tables": len(filesearchFTSTables),
+			"roots": len(roots),
 		})
 		// Run preparation, execution, and deferred bulk finalize all belong to one
 		// user-visible full-index attempt. Record that outer elapsed time here,
@@ -529,7 +524,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		logFilesearchFullIndexTotal(ctx, reason, elapsedMs, len(plan.RootPlans), len(plan.Jobs), plan.TotalWorkUnits)
 		if runSucceeded {
 			s.emitCompletedFullRunSummary(ctx, plan, elapsedMs)
-			s.buildMaintenanceEntryIndexesAsync(util.NewTraceContext(), true)
+			s.refreshChangeFeed(ctx)
 		}
 	}()
 
@@ -929,27 +924,6 @@ func rootRecordForRunLog(roots []RootRecord, rootID string) RootRecord {
 
 func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 	s.refreshChangeFeedWithRoots(ctx, nil)
-}
-
-// buildMaintenanceEntryIndexesAsync keeps maintenance-only SQLite indexes off
-// the user-visible full-index critical path.
-func (s *Scanner) buildMaintenanceEntryIndexesAsync(ctx context.Context, refreshChangeFeedAfter bool) {
-	if s == nil || s.db == nil {
-		return
-	}
-	util.Go(ctx, "filesearch build maintenance entry indexes", func() {
-		if err := s.db.BuildMaintenanceEntryIndexes(ctx); err != nil {
-			util.GetLogger().Warn(ctx, "filesearch failed to build maintenance entry indexes: "+err.Error())
-			return
-		}
-		if refreshChangeFeedAfter {
-			s.refreshChangeFeed(ctx)
-		}
-		select {
-		case s.dirtyCh <- struct{}{}:
-		default:
-		}
-	})
 }
 
 func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRecord) {
@@ -1388,7 +1362,7 @@ func (s *Scanner) buildScanPlan(ctx context.Context, root RootRecord, rootIndex 
 		state := queue[0]
 		queue = queue[1:]
 
-		dirEntries, readErr := os.ReadDir(state.path)
+		dirEntries, readErr := directoryread.ReadDir(ctx, state.path)
 		if readErr != nil {
 			processedDirectories++
 			s.updatePlanningProgress(ctx, root, rootIndex, rootTotal, processedDirectories, discoveredDirectories)
@@ -1468,7 +1442,7 @@ func (s *Scanner) collectEntries(ctx context.Context, root RootRecord, plan scan
 		default:
 		}
 
-		dirEntries, readErr := os.ReadDir(plannedDirectory.path)
+		dirEntries, readErr := directoryread.ReadDir(ctx, plannedDirectory.path)
 		if readErr != nil {
 			processedItems += int64(plannedDirectory.childCount)
 			s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, true)
@@ -1731,22 +1705,6 @@ func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
 func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	if s.dirtyQueue == nil {
 		return nil
-	}
-	if s.db != nil {
-		ready, err := s.db.EntryMaintenanceIndexesReady(ctx)
-		if err != nil {
-			return err
-		}
-		if !ready {
-			// Fresh full scans publish search before maintenance indexes finish.
-			// Finish that rebuild on this flush so watcher-created files are not
-			// stuck unsearchable while the background builder is pending or
-			// failed. If the rebuild still cannot run, continue anyway: scoped
-			// diffs become slower, but skipping the flush dropped live edits.
-			if err := s.db.BuildMaintenanceEntryIndexes(ctx); err != nil {
-				util.GetLogger().Warn(ctx, "filesearch dirty flush continuing without maintenance indexes: "+err.Error())
-			}
-		}
 	}
 
 	rootDirectoryCounts, rootsByID, _, err := s.loadDirtyQueueContext(ctx)
@@ -2661,7 +2619,7 @@ func (s *Scanner) logRootReloadIndexSnapshot(ctx context.Context) {
 		util.GetLogger().Warn(ctx, "filesearch failed to capture sqlite snapshot after root reload: "+err.Error())
 		return
 	}
-	logSQLiteIndexSnapshot(ctx, "root_reload_complete", snapshot, false)
+	logColumnIndexSnapshot(ctx, "root_reload_complete", snapshot, false)
 }
 
 func (s *Scanner) findRootByID(ctx context.Context, rootID string) (RootRecord, bool) {
@@ -2922,21 +2880,18 @@ func newEntryRecord(root RootRecord, fullPath string, info os.FileInfo) EntryRec
 	return newEntryRecordWithUpdatedAt(root, fullPath, info, util.GetSystemTimestamp())
 }
 
+// newEntryRecordWithUpdatedAt records filesystem facts only; name accelerators
+// belong to the interned dictionary rather than every scan observation.
 func newEntryRecordWithUpdatedAt(root RootRecord, fullPath string, info os.FileInfo, updatedAt int64) EntryRecord {
-	pinyinFull, pinyinInitials := buildPinyinFields(info.Name())
 	return EntryRecord{
-		Path:           fullPath,
-		RootID:         root.ID,
-		ParentPath:     filepath.Dir(fullPath),
-		Name:           info.Name(),
-		NormalizedName: strings.ToLower(info.Name()),
-		NormalizedPath: normalizePath(fullPath),
-		PinyinFull:     pinyinFull,
-		PinyinInitials: pinyinInitials,
-		IsDir:          info.IsDir(),
-		Mtime:          info.ModTime().UnixMilli(),
-		Size:           info.Size(),
-		UpdatedAt:      updatedAt,
+		Path:       fullPath,
+		RootID:     root.ID,
+		ParentPath: filepath.Dir(fullPath),
+		Name:       info.Name(),
+		IsDir:      info.IsDir(),
+		Mtime:      info.ModTime().UnixMilli(),
+		Size:       info.Size(),
+		UpdatedAt:  updatedAt,
 	}
 }
 

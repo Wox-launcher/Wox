@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// TestSQLiteSearchProviderMultiTermAND covers recall and scoring together, including
+// TestColumnSearchProviderMultiTermAND covers recall and scoring together, including
 // a matching entry beyond the normal candidate cap for a common extension.
-func TestSQLiteSearchProviderMultiTermAND(t *testing.T) {
+func TestColumnSearchProviderMultiTermAND(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
-	provider := NewSQLiteSearchProvider(db)
+	provider := (&columnSearchProvider{db: db})
 	now := time.Now().UnixMilli()
 	rootPath := filepath.Join(t.TempDir(), "search-root")
 	root := RootRecord{
@@ -66,8 +66,8 @@ func TestSQLiteSearchProviderMultiTermAND(t *testing.T) {
 		{`"amiga workbench" .txt`, nil},
 		{`"amiga notes" .txt`, []string{"amiga notes.txt"}},
 		{`amiga "workbench" .txt`, []string{"amiga_workbench.txt"}},
-		{"design README", []string{"README.md"}},
-		{"README design", []string{"README.md"}},
+		{"design README", nil},
+		{"README design", nil},
 		{"design/ README", []string{"README.md"}},
 		{"测试 报告 .txt", []string{"测试报告.txt"}},
 		{"amiga*.txt", []string{"amiga_workbench.txt", "amiga notes.txt", "amiga_folder.txt"}},
@@ -76,38 +76,6 @@ func TestSQLiteSearchProviderMultiTermAND(t *testing.T) {
 			results, err := provider.Search(ctx, SearchQuery{Raw: tc.query, DisablePinyin: true}, 100)
 			if err != nil {
 				t.Fatal(err)
-			}
-			// Exercise stale-index fallback recall without corrupting the live FTS
-			// tables or racing the provider's asynchronous repair goroutine.
-			query := normalizeSearchQuery(SearchQuery{Raw: tc.query, DisablePinyin: true})
-			if len(query.plan.andTerms) > 0 {
-				statement, args := buildANDCandidateSQL(query.plan, 100, false, false)
-				ids, err := provider.queryIDs(ctx, statement, args...)
-				if err != nil {
-					t.Fatal(err)
-				}
-				rows, err := provider.listEntriesByIDs(ctx, ids)
-				if err != nil {
-					t.Fatal(err)
-				}
-				var fallbackNames []string
-				for _, row := range rows {
-					if matched, _ := scoreDocAgainstQuery(query, docRecord{Path: row.Path, IsDir: row.IsDir}); matched {
-						fallbackNames = append(fallbackNames, row.Name)
-					}
-				}
-				if len(fallbackNames) != len(tc.names) {
-					t.Fatalf("fallback expected %v, got %v", tc.names, fallbackNames)
-				}
-				for _, name := range fallbackNames {
-					found := false
-					for _, expected := range tc.names {
-						found = found || name == expected
-					}
-					if !found {
-						t.Fatalf("unexpected fallback result %q", name)
-					}
-				}
 			}
 			got := map[string]bool{}
 			for _, result := range results {

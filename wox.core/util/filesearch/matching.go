@@ -14,6 +14,7 @@ type wildcardQuery struct {
 	expression       *regexp.Regexp
 	hasPathSeparator bool
 	literalCount     int
+	asciiSuffix      string
 }
 
 type quotedSearchQuery struct {
@@ -102,7 +103,7 @@ func matchSearchQuery(query SearchQuery, name string, path string, pinyinFull st
 		return scorePathMatch(path, query.plan.pathQuery)
 	}
 	usePinyin := !query.DisablePinyin
-	return scoreSearchTerms(query.Raw, buildSearchTerms(name, path, pinyinFull, pinyinInitials, usePinyin), usePinyin)
+	return scoreSearchTerms(query.Raw, buildSearchTerms(name, name, pinyinFull, pinyinInitials, usePinyin), usePinyin)
 }
 
 func scoreSearchTerms(query string, terms []string, usePinyin bool) (bool, int64) {
@@ -193,8 +194,19 @@ func buildWildcardQuery(raw string) *wildcardQuery {
 		return nil
 	}
 
+	suffix := ""
+	if strings.HasPrefix(pattern, "*") && strings.Count(pattern, "*") == 1 && !strings.Contains(pattern, "/") {
+		suffix = pattern[1:]
+		for _, c := range suffix {
+			if c >= 128 {
+				suffix = ""
+				break
+			}
+		}
+	}
 	return &wildcardQuery{
 		expression:       expression,
+		asciiSuffix:      suffix,
 		hasPathSeparator: strings.Contains(pattern, "/"),
 		literalCount:     len(strings.ReplaceAll(pattern, "*", "")),
 	}

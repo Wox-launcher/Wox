@@ -36,15 +36,15 @@ func Test003LauncherPluginFileSearchIgnoreAbsolutePath(t *testing.T) {
 
 		rootRow := addFileSearchRoot(t, ctx, client, root)
 		t.Cleanup(func() { removeFileSearchRoot(t, client, root, rootRow) })
-		waitForFileSearchDatabaseValue(t, ctx, "entries", ignoredPath, true, fileSearchInitialIndexTimeout)
-		waitForFileSearchDatabaseValue(t, ctx, "entries", keptPath, true, fileSearchInitialIndexTimeout)
+		waitForFileSearchResultPath(t, ctx, client, ignoredPath, true, fileSearchInitialIndexTimeout)
+		waitForFileSearchResultPath(t, ctx, client, keptPath, true, fileSearchInitialIndexTimeout)
 
 		addFileSearchIgnorePattern(t, ctx, client, ignorePattern)
 		indexCtx, indexCancel := context.WithTimeout(context.Background(), fileSearchInitialIndexTimeout)
 		defer indexCancel()
-		droppedLatency := waitForFileSearchDatabaseValue(t, indexCtx, "entries", ignoredPath, false, fileSearchInitialIndexTimeout)
+		droppedLatency := waitForFileSearchResultPath(t, indexCtx, client, ignoredPath, false, fileSearchInitialIndexTimeout)
 		t.Logf("File Search dropped ignored path %q after %s", ignoredPath, droppedLatency)
-		waitForFileSearchDatabaseValue(t, indexCtx, "entries", keptPath, true, fileSearchIncrementalTimeout)
+		waitForFileSearchResultPath(t, indexCtx, client, keptPath, true, fileSearchIncrementalTimeout)
 
 		smoke.ShowLauncher(t, ctx, client)
 		queryFileSearchResultAbsent(t, ctx, client, ignoredPath)

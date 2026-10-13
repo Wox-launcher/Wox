@@ -87,7 +87,7 @@ func contextWithTraceID(ctx context.Context, traceID string) context.Context {
 	return util.NewTraceContextWith(traceID)
 }
 
-func logSQLiteIndexSnapshot(ctx context.Context, stage string, snapshot sqliteIndexSnapshot, info bool) {
+func logColumnIndexSnapshot(ctx context.Context, stage string, snapshot columnIndexSnapshot, info bool) {
 	if !fileSearchDiagnosticLoggingEnabled {
 		return
 	}
@@ -96,8 +96,8 @@ func logSQLiteIndexSnapshot(ctx context.Context, stage string, snapshot sqliteIn
 	// evidence instead of coarse start/end logs. Keeping every expensive trace
 	// behind one constant lets us ship a noisy investigation build and turn it
 	// off later without hunting through scanner, executor, and SQLite code paths.
-	summary := formatSQLiteIndexSnapshotSummary(stage, snapshot)
-	topRoots := formatSQLiteIndexTopRoots(stage, snapshot)
+	summary := formatColumnIndexSnapshotSummary(stage, snapshot)
+	topRoots := formatColumnIndexTopRoots(stage, snapshot)
 	if info {
 		util.GetLogger().Info(ctx, summary)
 		if topRoots != "" {
@@ -303,50 +303,17 @@ func logFilesearchUnreadableSummary(ctx context.Context, scope string, count int
 	util.GetLogger().Warn(ctx, msg)
 }
 
-func formatSQLiteIndexSnapshotSummary(stage string, snapshot sqliteIndexSnapshot) string {
-	return fmt.Sprintf(
-		"filesearch sqlite snapshot: stage=%s roots=%d entries=%d files=%d bigram_rows=%d name_fts_vocab=%d path_fts_vocab=%d pinyin_full_fts_vocab=%d initials_fts_vocab=%d fact_bytes_est=%d fts_source_bytes_est=%d bigram_bytes_est=%d total_bytes_est=%d db_main_file_bytes=%d db_wal_file_bytes=%d db_shm_file_bytes=%d db_total_file_bytes=%d",
-		strings.TrimSpace(stage),
-		snapshot.RootCount,
-		snapshot.EntryCount,
-		snapshot.FileCount,
-		snapshot.BigramRowCount,
-		snapshot.NameFTSVocab,
-		snapshot.PathFTSVocab,
-		snapshot.PinyinFullFTSVocab,
-		snapshot.InitialsFTSVocab,
-		snapshot.FactBytesEstimate,
-		snapshot.FTSSourceBytesEstimate,
-		snapshot.BigramBytesEstimate,
-		snapshot.TotalBytesEstimate,
-		snapshot.DBMainFileBytes,
-		snapshot.DBWALFileBytes,
-		snapshot.DBSHMFileBytes,
-		snapshot.DBTotalFileBytes,
-	)
+func formatColumnIndexSnapshotSummary(stage string, snapshot columnIndexSnapshot) string {
+	return fmt.Sprintf("filesearch column snapshot: stage=%s roots=%d entries=%d files=%d disk_bytes=%d metadata_bytes=%d", strings.TrimSpace(stage), snapshot.RootCount, snapshot.EntryCount, snapshot.FileCount, snapshot.DiskBytes, snapshot.MetadataBytes)
 }
 
-func formatSQLiteIndexTopRoots(stage string, snapshot sqliteIndexSnapshot) string {
+func formatColumnIndexTopRoots(stage string, snapshot columnIndexSnapshot) string {
 	if len(snapshot.TopRoots) == 0 {
 		return ""
 	}
-
 	visible := make([]string, 0, min(len(snapshot.TopRoots), maxLoggedRoots))
 	for _, root := range snapshot.TopRoots[:min(len(snapshot.TopRoots), maxLoggedRoots)] {
-		visible = append(visible, fmt.Sprintf(
-			"%s(docs=%d,bigram_rows=%d,total_bytes_est=%d,fact_bytes_est=%d,fts_source_bytes_est=%d,bigram_bytes_est=%d)",
-			summarizeLogPath(root.Path),
-			root.Docs,
-			root.BigramRows,
-			root.TotalBytesEstimate,
-			root.FactBytesEstimate,
-			root.FTSSourceBytesEstimate,
-			root.BigramBytesEstimate,
-		))
+		visible = append(visible, fmt.Sprintf("%s(docs=%d,disk_bytes=%d)", summarizeLogPath(root.Path), root.Docs, root.DiskBytes))
 	}
-	return fmt.Sprintf(
-		"filesearch sqlite snapshot roots: stage=%s top_roots=[%s]",
-		strings.TrimSpace(stage),
-		strings.Join(visible, ", "),
-	)
+	return fmt.Sprintf("filesearch column snapshot roots: stage=%s top_roots=[%s]", strings.TrimSpace(stage), strings.Join(visible, ", "))
 }

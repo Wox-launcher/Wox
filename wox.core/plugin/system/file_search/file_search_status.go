@@ -181,15 +181,14 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot, c
 		}
 		builder.WriteString(fmt.Sprintf("- snapshot_error: `%s`\n", statusMarkdownCell(diagnostics.Index.Error)))
 	} else {
-		builder.WriteString(fmt.Sprintf("- entries=%s files=%s roots=%d bigram_rows=%s\n", formatFileSearchCount(diagnostics.Index.EntryCount), formatFileSearchCount(diagnostics.Index.FileCount), diagnostics.Index.RootCount, formatFileSearchCount(diagnostics.Index.BigramRowCount)))
-		builder.WriteString(fmt.Sprintf("- fts_vocab: name=%s path=%s pinyin_full=%s initials=%s\n", formatFileSearchCount(diagnostics.Index.NameFTSVocab), formatFileSearchCount(diagnostics.Index.PathFTSVocab), formatFileSearchCount(diagnostics.Index.PinyinFullFTSVocab), formatFileSearchCount(diagnostics.Index.InitialsFTSVocab)))
-		builder.WriteString(fmt.Sprintf("- bytes_est: fact=%s fts_source=%s bigram=%s total=%s db_total=%s\n", formatFileSearchCount(diagnostics.Index.FactBytesEstimate), formatFileSearchCount(diagnostics.Index.FTSSourceBytesEstimate), formatFileSearchCount(diagnostics.Index.BigramBytesEstimate), formatFileSearchCount(diagnostics.Index.TotalBytesEstimate), formatFileSearchCount(diagnostics.Index.DBTotalFileBytes)))
+		builder.WriteString(fmt.Sprintf("- entries=%s files=%s roots=%d\n", formatFileSearchCount(diagnostics.Index.EntryCount), formatFileSearchCount(diagnostics.Index.FileCount), diagnostics.Index.RootCount))
+		builder.WriteString(fmt.Sprintf("- disk_bytes=%s metadata_bytes=%s\n", formatFileSearchCount(diagnostics.Index.DiskBytes), formatFileSearchCount(diagnostics.Index.MetadataBytes)))
 		if len(diagnostics.Index.TopRoots) > 0 {
 			builder.WriteString("\n")
-			builder.WriteString("| top root | docs | bigrams | bytes_est |\n")
-			builder.WriteString("| --- | ---: | ---: | ---: |\n")
+			builder.WriteString("| top root | docs | disk bytes |\n")
+			builder.WriteString("| --- | ---: | ---: |\n")
 			for _, root := range diagnostics.Index.TopRoots {
-				builder.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", statusMarkdownCell(root.Path), formatFileSearchCount(root.Docs), formatFileSearchCount(root.BigramRows), formatFileSearchCount(root.TotalBytesEstimate)))
+				builder.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", statusMarkdownCell(root.Path), formatFileSearchCount(root.Docs), formatFileSearchCount(root.DiskBytes)))
 			}
 		}
 	}

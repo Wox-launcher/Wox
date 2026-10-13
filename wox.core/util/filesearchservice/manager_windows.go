@@ -92,7 +92,7 @@ func GetStatus() (result Status) {
 		health, healthErr := Health(healthCtx)
 		cancel()
 		if healthErr != nil {
-			if updateAvailable(result.InstalledVersion, EmbeddedVersion) {
+			if errors.Is(healthErr, ErrProtocolMismatch) || updateAvailable(result.InstalledVersion, EmbeddedVersion) {
 				result.State = StateNeedsUpdate
 				result.Detail = result.InstalledVersion + " → " + EmbeddedVersion
 			} else {
@@ -161,13 +161,6 @@ func Execute(ctx context.Context, action string) error {
 		return err
 	}
 	parameters := action + " --result " + strconv.Quote(resultPath) + " --owner-sid " + strconv.Quote(ownerSID)
-	if action == "install" || action == "start" {
-		indexPath := filepath.Join(util.GetLocation().GetFileSearchDirectory(), IndexDirectory)
-		if err := os.MkdirAll(indexPath, 0755); err != nil {
-			return err
-		}
-		parameters += " --index-dir " + strconv.Quote(indexPath)
-	}
 	wait, err := shell.RunElevated(executable, parameters, filepath.Dir(executable))
 	if err != nil {
 		return err
@@ -184,7 +177,6 @@ func Execute(ctx context.Context, action string) error {
 	}
 	if action == "uninstall" {
 		markStopped()
-		_ = os.RemoveAll(filepath.Join(util.GetLocation().GetFileSearchDirectory(), IndexDirectory))
 	} else {
 		if err := waitForHealthyService(ctx, EmbeddedVersion); err != nil {
 			return err

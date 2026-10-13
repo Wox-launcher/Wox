@@ -132,9 +132,8 @@ func testFileSearchDiagnosticSnapshot() filesearch.DiagnosticSnapshot {
 			},
 		},
 		Index: filesearch.IndexDiagnosticSnapshot{
-			EntryCount:     10,
-			FileCount:      8,
-			BigramRowCount: 0,
+			EntryCount: 10,
+			FileCount:  8,
 		},
 		Roots: []filesearch.RootDiagnostic{
 			{

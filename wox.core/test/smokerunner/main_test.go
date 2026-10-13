@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"wox/test/smokeperf"
+	"wox/test/smokereport"
 )
 
 // TestSuiteControlAddressSeparatesLaunches covers the Windows pipe and Unix socket naming policy.
@@ -276,6 +278,24 @@ func TestCollectSmokeResultsKeepsPerformanceReference(t *testing.T) {
 	}
 	if performance.ShowToVisibleP95Ms == nil || *performance.ShowToVisibleP95Ms != ms {
 		t.Fatalf("performance = %+v", performance)
+	}
+}
+
+// TestFeatureMeasurementsDoNotChangeSmokeResult distinguishes diagnostic values
+// from functional failure, including unavailable measurements.
+func TestFeatureMeasurementsDoNotChangeSmokeResult(t *testing.T) {
+	report := smokereport.Report{Title: "File Search", Scope: "fixed fixture"}
+	report.Add("query p95", 999999, "ms")
+	report.Missing("memory", fmt.Errorf("unavailable"))
+	output := "=== RUN   Test004Reference\n    reference_test.go:40: " + report.Line() + "\n--- PASS: Test004Reference (1.20s)\n"
+	results, performance, err := collectSmokeResults(strings.NewReader(output), ioDiscard{}, "test/smoke/launcher/plugin/filesearch", "")
+	if err != nil || len(results) != 1 || results[0].status != smokeStatusPass || len(results[0].reports) != 1 {
+		t.Fatalf("results=%+v error=%v", results, err)
+	}
+	var summary strings.Builder
+	printSmokeSummary(&summary, results, time.Second, performance)
+	if !strings.Contains(summary.String(), "File Search (report only)") || !strings.Contains(summary.String(), "memory: unavailable") {
+		t.Fatal(summary.String())
 	}
 }
 

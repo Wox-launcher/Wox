@@ -1,30 +1,6 @@
-.PHONY: clean build pack-resources help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build filesearch-real-index filesearch-real-index-release filesearch-content-real-index filesearch-content-real-index-release
+.PHONY: clean build pack-resources help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
-FILESEARCH_REAL_INDEX_ROOT ?= ~/
-FILESEARCH_REAL_INDEX_KEYWORD ?= Wox
-FILESEARCH_REAL_INDEX_ARTIFACT ?=
-# Default to the same no-optimization flags used by the debugger-launched Wox
-# core. That makes the local benchmark match the development app's real full
-# index latency; use filesearch-real-index-release for an optimized baseline.
-FILESEARCH_REAL_INDEX_GCFLAGS ?= all=-N -l
-FILESEARCH_REAL_INDEX_TAGS := $(strip $(SQLITE_BUILD_TAGS) filesearch_real_index)
-FILESEARCH_REAL_INDEX_ARGS := -filesearch-real-index -filesearch-real-index-root "$(FILESEARCH_REAL_INDEX_ROOT)" -filesearch-real-index-keyword "$(FILESEARCH_REAL_INDEX_KEYWORD)"
-ifneq ($(strip $(FILESEARCH_REAL_INDEX_ARTIFACT)),)
-FILESEARCH_REAL_INDEX_ARGS += -filesearch-real-index-artifact "$(FILESEARCH_REAL_INDEX_ARTIFACT)"
-endif
-FILESEARCH_REAL_INDEX_GOFLAGS :=
-ifneq ($(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),)
-FILESEARCH_REAL_INDEX_GOFLAGS += -gcflags="$(FILESEARCH_REAL_INDEX_GCFLAGS)"
-endif
-FILESEARCH_CONTENT_REAL_INDEX_ROOT ?= $(FILESEARCH_REAL_INDEX_ROOT)
-FILESEARCH_CONTENT_REAL_INDEX_KEYWORD ?= $(FILESEARCH_REAL_INDEX_KEYWORD)
-FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT ?=
-FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES ?= 262144
-FILESEARCH_CONTENT_REAL_INDEX_ARGS := -filesearch-content-real-index -filesearch-content-real-index-root "$(FILESEARCH_CONTENT_REAL_INDEX_ROOT)" -filesearch-content-real-index-keyword "$(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)" -filesearch-content-real-index-max-read-bytes $(FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES)
-ifneq ($(strip $(FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT)),)
-FILESEARCH_CONTENT_REAL_INDEX_ARGS += -filesearch-content-real-index-artifact "$(FILESEARCH_CONTENT_REAL_INDEX_ARTIFACT)"
-endif
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -73,10 +49,7 @@ help:
 	@echo "  make clean         - Clean build artifacts"
 	@echo "  make build         - Build Wox with the embedded Go UI for current platform ($(PLATFORM))"
 	@echo "  make ui-resources  - Prepare platform resources used by the embedded Go UI"
-	@echo "  make filesearch-real-index - Capture debugger-aligned filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
-	@echo "  make filesearch-real-index-release - Capture optimized filesearch/fd/rg comparison for $(FILESEARCH_REAL_INDEX_ROOT), keyword $(FILESEARCH_REAL_INDEX_KEYWORD)"
-	@echo "  make filesearch-content-real-index - Capture debugger-aligned content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
-	@echo "  make filesearch-content-real-index-release - Capture optimized content indexing and rg comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT), keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD)"
+	@echo "  File Search performance reports run in the root make smoke target (launcher/plugin/filesearch)."
 	@echo "  make woxmr-build   - Build and install WoxMR.bundle for current platform ($(PLATFORM))"
 
 clean:
@@ -265,31 +238,6 @@ ifeq ($(PLATFORM),windows)
 else
 	@echo "Crash handler is only supported on Windows"
 endif
-
-# Feature addition: real-root filesearch comparisons are intentionally exposed
-# through a local Make target instead of the normal test surface, so CI keeps
-# running deterministic tests while developers can opt into the expensive
-# workstation-sized scan with one command and a Makefile-controlled root. The
-# default target mirrors debugger-launched Wox because that is the app runtime
-# developers are comparing against during local profiling.
-filesearch-real-index:
-	@echo "Capturing filesearch real-index comparison for $(FILESEARCH_REAL_INDEX_ROOT) with keyword $(FILESEARCH_REAL_INDEX_KEYWORD), gcflags=$(if $(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),$(FILESEARCH_REAL_INDEX_GCFLAGS),<default>)"
-	WOX_FILESEARCH_REAL_INDEX_GCFLAGS="$(FILESEARCH_REAL_INDEX_GCFLAGS)" go test $(FILESEARCH_REAL_INDEX_GOFLAGS) -tags "$(FILESEARCH_REAL_INDEX_TAGS)" ./util/filesearch -run TestCaptureFileSearchRealIndexForProjectsRoot -count=1 -v -args $(FILESEARCH_REAL_INDEX_ARGS)
-
-# Diagnostic addition: keep the optimized baseline explicit so performance work
-# can separate debugger overhead from release-shaped scanner behavior.
-filesearch-real-index-release:
-	$(MAKE) filesearch-real-index FILESEARCH_REAL_INDEX_GCFLAGS=
-
-# Content indexing uses the same explicit real-root build tag and debugger/release
-# split as name indexing. Keeping it outside normal tests prevents CI from reading
-# workstation files while giving optimization work a repeatable cold/warm baseline.
-filesearch-content-real-index:
-	@echo "Capturing filesearch content-index comparison for $(FILESEARCH_CONTENT_REAL_INDEX_ROOT) with keyword $(FILESEARCH_CONTENT_REAL_INDEX_KEYWORD), max_read_bytes=$(FILESEARCH_CONTENT_REAL_INDEX_MAX_READ_BYTES), gcflags=$(if $(strip $(FILESEARCH_REAL_INDEX_GCFLAGS)),$(FILESEARCH_REAL_INDEX_GCFLAGS),<default>)"
-	WOX_FILESEARCH_REAL_INDEX_GCFLAGS="$(FILESEARCH_REAL_INDEX_GCFLAGS)" go test $(FILESEARCH_REAL_INDEX_GOFLAGS) -tags "$(FILESEARCH_REAL_INDEX_TAGS)" ./util/filesearch -run TestCaptureFileSearchContentRealIndex -count=1 -v -args $(FILESEARCH_CONTENT_REAL_INDEX_ARGS)
-
-filesearch-content-real-index-release:
-	$(MAKE) filesearch-content-real-index FILESEARCH_REAL_INDEX_GCFLAGS=
 
 # -----------------------------
 # MediaRemote XS (Perl) builder

@@ -20,9 +20,13 @@ func (e *Engine) GetIndexStats(ctx context.Context) (IndexStatsSnapshot, error) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if serviceStats, serviceRunning, err := getFileIndexServiceIndexStats(ctx); serviceRunning {
-		return serviceStats, err
+	e.mu.RLock()
+	if e.nativeIndex != nil {
+		_, stats, err := e.nativeIndex.Status(ctx)
+		e.mu.RUnlock()
+		return stats, err
 	}
+	e.mu.RUnlock()
 
 	status, err := e.GetStatus(ctx)
 	if err != nil {

@@ -11,11 +11,12 @@ import (
 var (
 	pinyinCache     sync.Map // map[string][]PinyinSegment
 	pinyinCacheSize atomic.Int32
+	pinyinCacheMu   sync.Mutex
 
 	// pinyinDict is the shared character table. It is built on the first Chinese
 	// lookup and dropped after a long hide so the map buckets do not stay resident.
 	pinyinDictMu sync.Mutex
-	pinyinDict   map[int][]string
+	pinyinDict   atomic.Pointer[map[int][]string]
 )
 
 const (
@@ -36,14 +37,18 @@ func getCharPinyin(r rune) []string {
 // LookupCharPinyin returns the tone-stripped syllables for one Han character.
 // The table is loaded on first use.
 func LookupCharPinyin(r rune) ([]string, bool) {
-	pinyinDictMu.Lock()
-	dict := pinyinDict
+	dict := pinyinDict.Load()
 	if dict == nil {
-		dict = loadPinyinDict()
-		pinyinDict = dict
+		pinyinDictMu.Lock()
+		dict = pinyinDict.Load()
+		if dict == nil {
+			loaded := loadPinyinDict()
+			dict = &loaded
+			pinyinDict.Store(dict)
+		}
+		pinyinDictMu.Unlock()
 	}
-	pinyinDictMu.Unlock()
-	pinyins, ok := dict[int(r)]
+	pinyins, ok := (*dict)[int(r)]
 	return pinyins, ok
 }
 
@@ -51,7 +56,7 @@ func LookupCharPinyin(r rune) ([]string, bool) {
 // stayed hidden. The next Chinese lookup rebuilds it.
 func ReleasePinyinDictionary() {
 	pinyinDictMu.Lock()
-	pinyinDict = nil
+	pinyinDict.Store(nil)
 	pinyinDictMu.Unlock()
 }
 
@@ -135,16 +140,16 @@ func getPinYin(term string) []PinyinSegment {
 	}
 	flushASCII()
 
-	// Store in cache (simple LRU-like: clear if too large)
-	if pinyinCacheSize.Load() >= maxPinyinCacheSize {
-		// Simple eviction: clear all
-		pinyinCache.Clear()
-		pinyinCacheSize.Store(0)
+	// A full-index scan can exceed this bound by only a few names. Clearing
+	// every entry at capacity made each subsequent scan rebuild the entire cache.
+	// Keep admitted entries until the existing idle-release lifecycle clears them.
+	pinyinCacheMu.Lock()
+	if pinyinCacheSize.Load() < maxPinyinCacheSize {
+		if _, loaded := pinyinCache.LoadOrStore(strings.Clone(term), segments); !loaded {
+			pinyinCacheSize.Add(1)
+		}
 	}
-	// Cache keys must own their bytes because callers may pass a short-lived
-	// view over a memory-mapped index or a much larger backing buffer.
-	pinyinCache.Store(strings.Clone(term), segments)
-	pinyinCacheSize.Add(1)
+	pinyinCacheMu.Unlock()
 
 	return segments
 }
@@ -153,6 +158,8 @@ func getPinYin(term string) []PinyinSegment {
 // Entries are cheap to recompute per term, so trading a cold lookup after the
 // next show for a smaller idle footprint is worthwhile.
 func ReleaseIdleCaches() {
+	pinyinCacheMu.Lock()
+	defer pinyinCacheMu.Unlock()
 	pinyinCache.Clear()
 	pinyinCacheSize.Store(0)
 }

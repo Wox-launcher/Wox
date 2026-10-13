@@ -1283,6 +1283,9 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		// Drop prepared search text before the pinyin table. Those indexes hold the
 		// table's syllable slices, so the table cannot be collected while they remain.
 		plugin.GetPluginManager().ReleasePreparedSearchText()
+		// Queries finishing during the first trim may have repopulated pinyin
+		// segments, which hold dictionary slices even after the dictionary drops.
+		fuzzymatch.ReleaseIdleCaches()
 		fuzzymatch.ReleasePinyinDictionary()
 		debug.FreeOSMemory()
 	})

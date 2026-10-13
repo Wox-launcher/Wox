@@ -11,7 +11,7 @@ func TestEngineDiagnosticsReportsRootsIndexAndDirtyQueue(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	engine := &Engine{
 		db:             db,
-		searchProvider: NewSQLiteSearchProvider(db),
+		searchProvider: (&columnSearchProvider{db: db}),
 		scanner:        NewScanner(db),
 	}
 

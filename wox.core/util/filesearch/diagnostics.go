@@ -2,10 +2,15 @@ package filesearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"wox/util/filesearch/column"
 )
 
 // DiagnosticSnapshot is intentionally broader than the user-facing status
@@ -66,36 +71,17 @@ type DirtyQueueDiagnostics struct {
 }
 
 type IndexDiagnosticSnapshot struct {
-	CountsAvailable        bool
-	RootCount              int
-	EntryCount             int64
-	FileCount              int64
-	BigramRowCount         int64
-	FactBytesEstimate      int64
-	FTSSourceBytesEstimate int64
-	BigramBytesEstimate    int64
-	TotalBytesEstimate     int64
-	DBMainFileBytes        int64
-	DBWALFileBytes         int64
-	DBSHMFileBytes         int64
-	DBTotalFileBytes       int64
-	NameFTSVocab           int64
-	PathFTSVocab           int64
-	PinyinFullFTSVocab     int64
-	InitialsFTSVocab       int64
-	TopRoots               []IndexRootDiagnostic
-	Error                  string
+	CountsAvailable          bool
+	RootCount                int
+	EntryCount, FileCount    int64
+	DiskBytes, MetadataBytes int64
+	TopRoots                 []IndexRootDiagnostic
+	Error                    string
 }
 
 type IndexRootDiagnostic struct {
-	RootID                 string
-	Path                   string
-	Docs                   int64
-	BigramRows             int64
-	FactBytesEstimate      int64
-	FTSSourceBytesEstimate int64
-	BigramBytesEstimate    int64
-	TotalBytesEstimate     int64
+	RootID, Path    string
+	Docs, DiskBytes int64
 }
 
 func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error) {
@@ -105,6 +91,13 @@ func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error)
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	e.mu.RLock()
+	if e.nativeIndex != nil {
+		diagnostics, err := nativeIndexDiagnostics(ctx, e.nativeIndex)
+		e.mu.RUnlock()
+		return diagnostics, err
+	}
+	e.mu.RUnlock()
 
 	status, err := e.GetStatus(ctx)
 	if err != nil {
@@ -181,9 +174,68 @@ func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error)
 			diagnostics.Index.Error = strings.TrimSpace(err.Error())
 		}
 	} else {
-		diagnostics.Index = indexDiagnosticFromSQLiteSnapshot(snapshot)
+		diagnostics.Index = indexDiagnosticFromColumnSnapshot(snapshot)
 	}
 
+	return diagnostics, nil
+}
+
+// nativeIndexDiagnostics reports the same volume-backed columns as search and
+// Settings. Configured roots can be empty while the native index contains files.
+func nativeIndexDiagnostics(ctx context.Context, index nativeNameIndex) (DiagnosticSnapshot, error) {
+	status, stats, err := index.Status(ctx)
+	if err != nil {
+		return DiagnosticSnapshot{}, err
+	}
+	diagnostics := DiagnosticSnapshot{
+		CapturedAt: time.Now(), Status: status,
+		RootCount: status.RootCount, UserVisibleRootCount: status.RootCount,
+		DefaultRootCount:    status.RootCount,
+		RootKindCounts:      map[RootKind]int{RootKindDefault: status.RootCount},
+		RootStatusCounts:    map[RootStatus]int{},
+		RootFeedTypeCounts:  map[RootFeedType]int{RootFeedTypeUSN: status.RootCount},
+		RootFeedStateCounts: map[RootFeedState]int{},
+		Index: IndexDiagnosticSnapshot{CountsAvailable: true, RootCount: stats.RootCount,
+			EntryCount: stats.EntryCount, FileCount: stats.FileCount, DiskBytes: stats.DiskBytes, Error: stats.Error},
+	}
+	directory := index.directoryView()
+	directory.mu.RLock()
+	defer directory.mu.RUnlock()
+	for _, shard := range directory.shards {
+		root := RootDiagnostic{ID: shard.root.ID, Path: shard.root.Path, Kind: RootKindDefault,
+			Status: RootStatusIdle, FeedType: RootFeedTypeUSN, FeedState: RootFeedStateReady}
+		if status.IsIndexing && (status.ActiveRootPath == "" || normalizePath(status.ActiveRootPath) == normalizePath(root.Path)) {
+			root.Status = RootStatusScanning
+		}
+		if normalizePath(status.ErrorRootPath) == normalizePath(root.Path) && status.LastError != "" {
+			root.Status, root.FeedState, root.LastError = RootStatusError, RootFeedStateDegraded, status.LastError
+		}
+		if err := shard.store.Read(func(view column.View) error {
+			root.FeedCursor = view.Cursor
+			return nil
+		}); errors.Is(err, column.ErrNotReady) {
+			root.Status, root.FeedState = RootStatusPreparing, RootFeedStateUnavailable
+		} else if err != nil {
+			return DiagnosticSnapshot{}, err
+		}
+		diagnostics.Roots = append(diagnostics.Roots, root)
+		diagnostics.RootStatusCounts[root.Status]++
+		diagnostics.RootFeedStateCounts[root.FeedState]++
+		_, entries, err := shard.store.Counts(ctx)
+		if err != nil && !errors.Is(err, column.ErrNotReady) {
+			return DiagnosticSnapshot{}, err
+		}
+		rootIndex := IndexRootDiagnostic{RootID: root.ID, Path: root.Path, Docs: entries}
+		_ = filepath.WalkDir(directory.shardDirectory(root.ID), func(path string, entry os.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() {
+				rootIndex.DiskBytes += fileSizeOrZero(path)
+			}
+			return ctx.Err()
+		})
+		diagnostics.Index.TopRoots = append(diagnostics.Index.TopRoots, rootIndex)
+	}
+	sort.Slice(diagnostics.Roots, func(i, j int) bool { return diagnostics.Roots[i].Path < diagnostics.Roots[j].Path })
+	sort.Slice(diagnostics.Index.TopRoots, func(i, j int) bool { return diagnostics.Index.TopRoots[i].Docs > diagnostics.Index.TopRoots[j].Docs })
 	return diagnostics, nil
 }
 
@@ -214,37 +266,10 @@ func rootDiagnosticFromRecord(root RootRecord) RootDiagnostic {
 	}
 }
 
-func indexDiagnosticFromSQLiteSnapshot(snapshot sqliteIndexSnapshot) IndexDiagnosticSnapshot {
-	diagnostics := IndexDiagnosticSnapshot{
-		CountsAvailable:        true,
-		RootCount:              snapshot.RootCount,
-		EntryCount:             snapshot.EntryCount,
-		FileCount:              snapshot.FileCount,
-		BigramRowCount:         snapshot.BigramRowCount,
-		FactBytesEstimate:      snapshot.FactBytesEstimate,
-		FTSSourceBytesEstimate: snapshot.FTSSourceBytesEstimate,
-		BigramBytesEstimate:    snapshot.BigramBytesEstimate,
-		TotalBytesEstimate:     snapshot.TotalBytesEstimate,
-		DBMainFileBytes:        snapshot.DBMainFileBytes,
-		DBWALFileBytes:         snapshot.DBWALFileBytes,
-		DBSHMFileBytes:         snapshot.DBSHMFileBytes,
-		DBTotalFileBytes:       snapshot.DBTotalFileBytes,
-		NameFTSVocab:           snapshot.NameFTSVocab,
-		PathFTSVocab:           snapshot.PathFTSVocab,
-		PinyinFullFTSVocab:     snapshot.PinyinFullFTSVocab,
-		InitialsFTSVocab:       snapshot.InitialsFTSVocab,
-	}
+func indexDiagnosticFromColumnSnapshot(snapshot columnIndexSnapshot) IndexDiagnosticSnapshot {
+	diagnostics := IndexDiagnosticSnapshot{CountsAvailable: true, RootCount: snapshot.RootCount, EntryCount: snapshot.EntryCount, FileCount: snapshot.FileCount, DiskBytes: snapshot.DiskBytes, MetadataBytes: snapshot.MetadataBytes}
 	for _, root := range snapshot.TopRoots {
-		diagnostics.TopRoots = append(diagnostics.TopRoots, IndexRootDiagnostic{
-			RootID:                 root.RootID,
-			Path:                   root.Path,
-			Docs:                   root.Docs,
-			BigramRows:             root.BigramRows,
-			FactBytesEstimate:      root.FactBytesEstimate,
-			FTSSourceBytesEstimate: root.FTSSourceBytesEstimate,
-			BigramBytesEstimate:    root.BigramBytesEstimate,
-			TotalBytesEstimate:     root.TotalBytesEstimate,
-		})
+		diagnostics.TopRoots = append(diagnostics.TopRoots, IndexRootDiagnostic{RootID: root.RootID, Path: root.Path, Docs: root.Docs, DiskBytes: root.DiskBytes})
 	}
 	return diagnostics
 }

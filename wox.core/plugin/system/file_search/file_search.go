@@ -139,6 +139,16 @@ type FileSearchPlugin struct {
 	rootsSyncGeneration      atomic.Int64
 }
 
+// ReleasePreparedSearchText uses the shared long-hide lifecycle to return clean
+// index pages. Query columns stay mapped and incur no heap rebuild on next use.
+func (c *FileSearchPlugin) ReleasePreparedSearchText() {
+	if c.engine != nil {
+		if err := c.engine.ReleaseIdleMemory(); err != nil {
+			util.GetLogger().Warn(context.Background(), "filesearch idle memory release: "+err.Error())
+		}
+	}
+}
+
 type fileSearchQueryDiagnostics struct {
 	toolbarElapsedMs int64
 	searchElapsedMs  int64
@@ -328,13 +338,6 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		filesearchservice.GetStatus()
 	}
 	serviceRunning := runtime.GOOS == "windows" && filesearchservice.IsRunning()
-	if serviceRunning {
-		indexPath := filepath.Join(util.GetLocation().GetFileSearchDirectory(), filesearchservice.IndexDirectory)
-		if err := filesearchservice.Resume(ctx, indexPath); err != nil {
-			serviceRunning = false
-			util.GetLogger().Warn(ctx, "file index service could not open its Wox cache directory: "+err.Error())
-		}
-	}
 	engine, initErr := filesearch.NewEngineWithOptions(ctx, filesearch.EngineOptions{
 		Policy:        c.indexPolicy.toFilesearchPolicy(),
 		SkipNameIndex: serviceRunning && !c.isContentSearchEnabled(ctx),
@@ -424,9 +427,13 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 				util.GetLogger().Warn(ctx, "failed to update file index service automatically: "+err.Error())
 				return
 			}
-			indexPath := filepath.Join(util.GetLocation().GetFileSearchDirectory(), filesearchservice.IndexDirectory)
-			if err := filesearchservice.Resume(ctx, indexPath); err != nil {
-				util.GetLogger().Warn(ctx, "updated file index service could not open its Wox cache directory: "+err.Error())
+			c.serviceSyncMu.Lock()
+			defer c.serviceSyncMu.Unlock()
+			generation := c.nextContentSearchGeneration()
+			c.stopContentCrawlWork()
+			defer c.requestContentCrawl(ctx, generation)
+			if err := c.engine.RefreshNativeNameIndex(ctx); err != nil {
+				util.GetLogger().Warn(ctx, "updated file index service could not start its source: "+err.Error())
 				return
 			}
 			if !c.isContentSearchEnabled(ctx) {
@@ -522,7 +529,16 @@ func (c *FileSearchPlugin) HandleSettingAction(ctx context.Context, actionID str
 	util.Go(backgroundCtx, "sync file search after service action", func() {
 		c.serviceSyncMu.Lock()
 		defer c.serviceSyncMu.Unlock()
+		generation := c.nextContentSearchGeneration()
+		c.stopContentCrawlWork()
+		defer c.requestContentCrawl(backgroundCtx, generation)
 		// Reconcile current state instead of replaying a stale start/uninstall action.
+		if err := c.engine.RefreshNativeNameIndex(backgroundCtx); err != nil {
+			util.GetLogger().Warn(backgroundCtx, "file search native source refresh failed: "+err.Error())
+			c.engine.EnableLocalNameIndex(backgroundCtx)
+			c.syncUserRoots(backgroundCtx)
+			return
+		}
 		if !filesearchservice.IsRunning() || c.isContentSearchEnabled(backgroundCtx) {
 			c.engine.EnableLocalNameIndex(backgroundCtx)
 		} else {
@@ -768,7 +784,7 @@ func (c *FileSearchPlugin) startContentHook(ctx context.Context, generation int6
 	}
 	exts := filesearch.ContentExtensionsFromList(filesearch.ContentExtensionListFromSetting(c.api.GetSetting(ctx, contentSearchExtensionsKey)))
 	c.runIfContentSearchCurrent(ctx, generation, func() {
-		c.engine.StartContentHook(ctx, exts, filesearch.ContentDefaultMaxReadBytes)
+		c.engine.StartContentHook(ctx, c.getContentSearchRootRecords(ctx), c.indexPolicy.toFilesearchPolicy(), exts, filesearch.ContentDefaultMaxReadBytes)
 	})
 }
 
@@ -804,11 +820,7 @@ func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
 		}
 		localIndexing, localErr := c.engine.IsLocalIndexing(ctx)
 		if (err != nil || !status.IsIndexing) && (localErr != nil || !localIndexing) {
-			// Also check if FTS rebuild is still in progress — the DB is locked
-			// during rebuild and content crawl writes would fail.
-			if !c.engine.NeedsSearchArtifactRebuild() {
-				return
-			}
+			return
 		}
 		select {
 		case <-ctx.Done():
@@ -1713,8 +1725,8 @@ func (c *FileSearchPlugin) syncUserRoots(ctx context.Context) {
 
 // getEngineRootPaths returns the local name-index roots. Filename directories
 // are omitted when the Windows service already owns full-disk filename search.
-// Content crawl still reads candidates from this index, so enabled content
-// directories stay included.
+// Content directories stay included here; the engine omits those already
+// covered by native volumes and scans only the remaining configured roots.
 func (c *FileSearchPlugin) getEngineRootPaths(ctx context.Context) []string {
 	var paths []string
 	if !c.usesServiceFilenameIndex() {

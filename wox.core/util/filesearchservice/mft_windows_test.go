@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func TestParseAndResolveUSNRecords(t *testing.T) {
+func TestParseUSNRecords(t *testing.T) {
 	buffer := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buffer, 99)
 	buffer = append(buffer, testUSNRecord(5, 5, "", true)...)
@@ -26,34 +26,13 @@ func TestParseAndResolveUSNRecords(t *testing.T) {
 	if next != 99 || len(nodes) != 5 {
 		t.Fatalf("next=%d nodes=%d", next, len(nodes))
 	}
-	nodeMap := make(map[uint64]mftNode, len(nodes))
-	for _, node := range nodes {
-		nodeMap[node.Reference] = node
+	if nodes[2].Reference != 11 || nodes[2].ParentReference != 10 || nodes[2].Name != "notes.txt" || nodes[2].IsDir {
+		t.Fatalf("decoded file=%+v", nodes[2])
 	}
-	entries, err := resolveMFTEntries(`C:\Users`, `C:\`, nodeMap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 2 || entries[1].Path != `C:\Users\notes.txt` || entries[1].IsDir {
-		t.Fatalf("entries=%+v", entries)
-	}
-	multiEntries, err := resolveMFTEntriesForRoots([]string{`C:\Users`, `C:\Windows`}, `C:\`, nodeMap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(multiEntries) != 4 || multiEntries[3].Path != `C:\Windows\system.ini` {
-		t.Fatalf("multi entries=%+v", multiEntries)
-	}
-	delete(nodeMap, 5)
-	entriesWithoutRootRecord, err := resolveMFTEntries(`C:\Users`, `C:\`, nodeMap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entriesWithoutRootRecord) != 2 || entriesWithoutRootRecord[1].Path != `C:\Users\notes.txt` {
-		t.Fatalf("entries without root record=%+v", entriesWithoutRootRecord)
+	if !nodes[1].IsDir || nodes[1].Name != "Users" {
+		t.Fatalf("decoded directory=%+v", nodes[1])
 	}
 }
-
 func TestParseUSNRecordsDoesNotAllocateEmptyBatch(t *testing.T) {
 	buffer := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buffer, 99)

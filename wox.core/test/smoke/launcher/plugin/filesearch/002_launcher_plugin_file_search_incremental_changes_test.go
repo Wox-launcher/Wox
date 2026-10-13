@@ -24,19 +24,19 @@ func Test002LauncherPluginFileSearchIncrementalChanges(t *testing.T) {
 
 		rowIndex := addFileSearchRoot(t, ctx, client, root)
 		t.Cleanup(func() { removeFileSearchRoot(t, client, root, rowIndex) })
-		waitForFileSearchDatabaseValue(t, ctx, "entries", baselinePath, true, fileSearchInitialIndexTimeout)
+		waitForFileSearchResultPath(t, ctx, client, baselinePath, true, fileSearchInitialIndexTimeout)
 
 		smoke.ShowLauncher(t, ctx, client)
 		queryFileSearchResult(t, ctx, client, baselinePath)
 
 		changedPath := filepath.Join(root, fmt.Sprintf("filesearch-incremental-%d.txt", time.Now().UnixNano()))
 		writeFileSearchFixture(t, changedPath)
-		addedLatency := waitForFileSearchDatabaseValue(t, ctx, "entries", changedPath, true, fileSearchIncrementalTimeout)
+		addedLatency := waitForFileSearchResultPath(t, ctx, client, changedPath, true, fileSearchIncrementalTimeout)
 		t.Logf("File Search indexed new file in %s", addedLatency)
 		queryFileSearchResult(t, ctx, client, changedPath)
 
 		removeFileSearchFixture(t, changedPath)
-		deletedLatency := waitForFileSearchDatabaseValue(t, ctx, "entries", changedPath, false, fileSearchIncrementalTimeout)
+		deletedLatency := waitForFileSearchResultPath(t, ctx, client, changedPath, false, fileSearchIncrementalTimeout)
 		t.Logf("File Search removed deleted file in %s", deletedLatency)
 		queryFileSearchResultAbsent(t, ctx, client, changedPath)
 	})

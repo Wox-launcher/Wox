@@ -11,16 +11,14 @@ const (
 	Name            = "WoxFileIndexService"
 	DisplayName     = "Wox File Index Service"
 	Description     = "Provides privileged NTFS file indexing support for Wox File Search."
-	ProtocolVersion = 2
+	ProtocolVersion = 3
 	PipeName        = `\\.\pipe\WoxFileIndexService`
-	IndexDirectory  = "file-index-service"
 )
 
-var EmbeddedVersion = "2.8.2"
+var EmbeddedVersion = "2.8.3"
 var running atomic.Bool
 
-// ErrIndexNotReady lets Wox keep using its local fallback during the first build.
-var ErrIndexNotReady = errors.New("file index service is still building its index")
+var ErrProtocolMismatch = errors.New("file index service protocol requires an update")
 
 // IsRunning returns the last SCM or health state observed by Wox.
 func IsRunning() bool { return running.Load() }
@@ -64,61 +62,20 @@ const (
 )
 
 type Request struct {
-	Protocol      int      `json:"protocol"`
-	Method        string   `json:"method"`
-	RootPath      string   `json:"rootPath,omitempty"`
-	RootPaths     []string `json:"rootPaths,omitempty"`
-	CandidatePath string   `json:"candidatePath,omitempty"`
-	Version       string   `json:"version,omitempty"`
-	SHA256        string   `json:"sha256,omitempty"`
-	Query         string   `json:"query,omitempty"`
-	Limit         int      `json:"limit,omitempty"`
-	UsePinyin     bool     `json:"usePinyin,omitempty"`
-	IndexPath     string   `json:"indexPath,omitempty"`
+	Protocol      int    `json:"protocol"`
+	Method        string `json:"method"`
+	CandidatePath string `json:"candidatePath,omitempty"`
+	Version       string `json:"version,omitempty"`
+	SHA256        string `json:"sha256,omitempty"`
 }
 
-type RequestHandler func(Request, func(SnapshotEntry) error) (afterResponse func(), err error)
+type RequestHandler func(Request) (afterResponse func(), err error)
 
 type Response struct {
-	OK         bool        `json:"ok"`
-	Error      string      `json:"error,omitempty"`
-	Protocol   int         `json:"protocol"`
-	Version    string      `json:"version"`
-	IndexStats *IndexStats `json:"indexStats,omitempty"`
-}
-
-// IndexStats is the service-owned column index state exposed to Wox.
-type IndexStats struct {
-	IsIndexing         bool     `json:"isIndexing"`
-	EntryCount         int64    `json:"entryCount"`
-	FileCount          int64    `json:"fileCount"`
-	IndexBytes         int64    `json:"indexBytes"`
-	IndexCapacityBytes int64    `json:"indexCapacityBytes,omitempty"`
-	HeapAllocBytes     int64    `json:"heapAllocBytes,omitempty"`
-	HeapInuseBytes     int64    `json:"heapInuseBytes,omitempty"`
-	HeapReleasedBytes  int64    `json:"heapReleasedBytes,omitempty"`
-	VolumeCount        int      `json:"volumeCount"`
-	VolumeIndex        int      `json:"volumeIndex"`
-	VolumeTotal        int      `json:"volumeTotal"`
-	CurrentVolume      string   `json:"currentVolume,omitempty"`
-	Volumes            []string `json:"volumes,omitempty"`
-	ElapsedMs          int64    `json:"elapsedMs"`
-	LastElapsedMs      int64    `json:"lastElapsedMs"`
-	Error              string   `json:"error,omitempty"`
-}
-
-// SnapshotEntry is the privileged filesystem fact streamed back to Wox.
-type SnapshotEntry struct {
-	Path  string `json:"path"`
-	IsDir bool   `json:"isDir"`
-	Score int64  `json:"score,omitempty"`
-}
-
-type snapshotFrame struct {
-	Entry   *SnapshotEntry  `json:"entry,omitempty"`
-	Entries []SnapshotEntry `json:"entries,omitempty"`
-	Done    bool            `json:"done,omitempty"`
-	Error   string          `json:"error,omitempty"`
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Protocol int    `json:"protocol"`
+	Version  string `json:"version"`
 }
 
 // Status describes the installed service without starting or modifying it.

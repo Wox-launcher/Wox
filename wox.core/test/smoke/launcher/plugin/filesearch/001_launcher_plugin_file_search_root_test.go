@@ -24,7 +24,7 @@ func Test001LauncherPluginFileSearchRoot(t *testing.T) {
 
 		rowIndex := addFileSearchRoot(t, ctx, client, root)
 		t.Cleanup(func() { removeFileSearchRoot(t, client, root, rowIndex) })
-		waitForFileSearchDatabaseValue(t, ctx, "entries", filePath, true, fileSearchInitialIndexTimeout)
+		waitForFileSearchResultPath(t, ctx, client, filePath, true, fileSearchInitialIndexTimeout)
 
 		smoke.ShowLauncher(t, ctx, client)
 		queryFileSearchResult(t, ctx, client, filePath)

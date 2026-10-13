@@ -10,23 +10,25 @@ import (
 	"sync"
 	"time"
 	"wox/util"
-	"wox/util/filesearchservice"
 
 	"github.com/google/uuid"
 )
 
 type Engine struct {
-	mu              sync.RWMutex
-	resetMu         sync.Mutex
-	closed          bool
-	db              *FileSearchDB
-	contentDB       *ContentSearchDB
-	searchProvider  *SQLiteSearchProvider
+	mu             sync.RWMutex
+	resetMu        sync.Mutex
+	closed         bool
+	db             *FileSearchDB
+	contentDB      *ContentSearchDB
+	searchProvider interface {
+		Search(context.Context, SearchQuery, int) ([]SearchResult, error)
+	}
 	scanner         *Scanner
 	policy          *policyState
 	statusListeners *util.HashMap[string, func(StatusSnapshot)]
 	contentHook     ContentHook
 	nameIndexActive bool
+	nativeIndex     nativeNameIndex
 }
 
 func NewEngine(ctx context.Context) (*Engine, error) {
@@ -42,29 +44,30 @@ func NewEngineWithOptions(ctx context.Context, options EngineOptions) (*Engine, 
 	policyState := newPolicyState(options.Policy)
 	engine := &Engine{
 		db:              db,
-		searchProvider:  NewSQLiteSearchProvider(db),
+		searchProvider:  &columnSearchProvider{db: db},
 		policy:          policyState,
 		statusListeners: util.NewHashMap[string, func(StatusSnapshot)](),
 	}
+	if err := engine.refreshNativeNameIndex(ctx); err != nil {
+		util.GetLogger().Warn(ctx, "filesearch native source unavailable, using configured roots: "+err.Error())
+	}
 
-	if !options.SkipNameIndex {
+	// Native workers may report status immediately after startup.
+	engine.mu.Lock()
+	if !options.SkipNameIndex || engine.nativeIndex == nil {
 		engine.scanner = newScannerWithPolicyState(db, policyState)
 		engine.scanner.SetStateChangeHandler(engine.notifyStatusChanged)
 		engine.nameIndexActive = true
 	}
+	engine.mu.Unlock()
 
-	// Keep the built-in file engine focused on the persisted SQLite search index.
-	// The previous runtime mirrored every entry into a second in-memory provider,
-	// which doubled storage responsibilities and made memory usage scale with the
-	// number of indexed roots.
-	if options.SkipNameIndex {
-		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=service-search local_name_index=disabled")
-	} else if db.NeedsSearchArtifactRebuild() {
-		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search search_artifacts=rebuilding")
-		engine.startScannerAfterSearchArtifactRebuild(ctx)
+	// Filename queries borrow mapped columns; the ordinary-process scanner owns
+	// publication and background compaction for every configured root.
+	if engine.scanner == nil {
+		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=column-search source=ntfs")
 	} else {
 		engine.scanner.Start(util.NewTraceContext())
-		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=sqlite-search")
+		util.GetLogger().Info(ctx, "filesearch engine initialized: indexed_provider=column-search")
 	}
 	engine.logInitSnapshotAsync(ctx)
 
@@ -113,56 +116,17 @@ func (e *Engine) DisableLocalNameIndex() {
 	}
 }
 
-// startScannerAfterSearchArtifactRebuild keeps schema migration work off the plugin init path.
-func (e *Engine) startScannerAfterSearchArtifactRebuild(ctx context.Context) {
-	util.Go(ctx, "filesearch search artifact rebuild", func() {
-		rebuildCtx := util.NewTraceContext()
-
-		e.resetMu.Lock()
-		defer e.resetMu.Unlock()
-
-		e.mu.RLock()
-		if e.closed || e.db == nil || e.scanner == nil {
-			e.mu.RUnlock()
-			return
-		}
-		db := e.db
-		scanner := e.scanner
-		e.mu.RUnlock()
-
-		startedAt := util.GetSystemTimestamp()
-		util.GetLogger().Info(rebuildCtx, "filesearch search artifact rebuild started")
-		if err := db.RebuildSearchArtifacts(rebuildCtx); err != nil {
-			util.GetLogger().Warn(rebuildCtx, "filesearch search artifact rebuild failed: "+err.Error())
-		} else {
-			util.GetLogger().Info(rebuildCtx, fmt.Sprintf("filesearch search artifact rebuild finished, cost %d ms", util.GetSystemTimestamp()-startedAt))
-		}
-
-		e.mu.RLock()
-		shouldStartScanner := !e.closed && e.scanner == scanner
-		e.mu.RUnlock()
-		if shouldStartScanner {
-			scanner.Start(util.NewTraceContext())
-		}
-	})
-}
-
 func (e *Engine) logInitSnapshotAsync(ctx context.Context) {
 	if e == nil || e.db == nil {
 		return
 	}
 	if !shouldCollectFileSearchDiagnosticSnapshot() {
-		// Optimization: init snapshots are logging-only and can scan FTS vocab
-		// tables, so skip the goroutine entirely outside dev diagnostics.
+		// Snapshot collection is logging-only and visits every shard.
 		return
 	}
 
-	// Capture the heavy SQLite snapshot after engine init returns because the
-	// previous synchronous fts5vocab sampling blocked plugin initialization on
-	// large databases. That prevented the file plugin instance from registering,
-	// so `f ` stopped entering file-plugin query mode even though the engine was
-	// otherwise healthy.
-	util.Go(ctx, "filesearch init sqlite snapshot", func() {
+	// Diagnostic work must not delay plugin registration on large indexes.
+	util.Go(ctx, "filesearch init column snapshot", func() {
 		snapshotCtx, cancel := context.WithTimeout(util.NewTraceContext(), 30*time.Second)
 		defer cancel()
 
@@ -174,10 +138,10 @@ func (e *Engine) logInitSnapshotAsync(ctx context.Context) {
 		snapshot, err := e.db.SearchIndexSnapshot(snapshotCtx)
 		e.mu.RUnlock()
 		if err != nil {
-			util.GetLogger().Warn(snapshotCtx, "filesearch failed to capture sqlite snapshot during init: "+err.Error())
+			util.GetLogger().Warn(snapshotCtx, "filesearch failed to capture column snapshot during init: "+err.Error())
 			return
 		}
-		logSQLiteIndexSnapshot(snapshotCtx, "engine_initialized", snapshot, true)
+		logColumnIndexSnapshot(snapshotCtx, "engine_initialized", snapshot, true)
 	})
 }
 
@@ -232,21 +196,9 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 	e.resetMu.Lock()
 	defer e.resetMu.Unlock()
-	servicePaused, err := pauseFileIndexService(ctx)
-	if err != nil {
-		return fmt.Errorf("pause file index service: %w", err)
+	if err := e.stopNativeNameIndex(); err != nil {
+		return fmt.Errorf("close native filename index: %w", err)
 	}
-	resumePending := servicePaused
-	defer func() {
-		if !resumePending {
-			return
-		}
-		resumeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := resumeFileIndexService(resumeCtx); err != nil {
-			util.GetLogger().Error(resumeCtx, "resume file index service after failed rebuild: "+err.Error())
-		}
-	}()
 
 	e.mu.RLock()
 	if e.closed {
@@ -292,12 +244,13 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 
 	fileSearchDir := util.GetLocation().GetFileSearchDirectory()
-	// SQLite and the service mappings must both be closed before replacing their
-	// shared parent directory, otherwise Windows can leave the rebuild blocked on
-	// an open database, WAL, or mapped column file.
-	if err := os.RemoveAll(fileSearchDir); err != nil {
-		e.mu.Unlock()
-		return fmt.Errorf("remove filesearch directory: %w", err)
+	// A previous service version may still map its own cache. Reset only the
+	// ordinary process's namespaces after closing their readers and writers.
+	for _, name := range []string{"columns", "native-columns", "directory.db", "directory.db-wal", "directory.db-shm", "contentsearch.db", "contentsearch.db-wal", "contentsearch.db-shm"} {
+		if err := os.RemoveAll(filepath.Join(fileSearchDir, name)); err != nil {
+			e.mu.Unlock()
+			return fmt.Errorf("remove filesearch cache %s: %w", name, err)
+		}
 	}
 
 	newDB, err := NewFileSearchDB(ctx)
@@ -307,7 +260,7 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	}
 	newScanner := newScannerWithPolicyState(newDB, e.policy)
 	newScanner.SetStateChangeHandler(e.notifyStatusChanged)
-	newProvider := NewSQLiteSearchProvider(newDB)
+	newProvider := &columnSearchProvider{db: newDB}
 
 	e.db = newDB
 	e.searchProvider = newProvider
@@ -322,11 +275,8 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	if nameIndexActive {
 		newScanner.Start(util.NewTraceContext())
 	}
-	if servicePaused {
-		if err := resumeFileIndexService(ctx); err != nil {
-			return fmt.Errorf("resume file index service: %w", err)
-		}
-		resumePending = false
+	if err := e.refreshNativeNameIndex(ctx); err != nil {
+		return fmt.Errorf("restart native filename source: %w", err)
 	}
 	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch storage rebuilt: directory=%s", fileSearchDir))
 	return nil
@@ -339,6 +289,7 @@ func (e *Engine) Close() error {
 
 	e.resetMu.Lock()
 	defer e.resetMu.Unlock()
+	nativeErr := e.stopNativeNameIndex()
 
 	e.mu.RLock()
 	scanner := e.scanner
@@ -355,7 +306,7 @@ func (e *Engine) Close() error {
 		e.contentHook = nil
 	}
 	if e.db != nil {
-		err := e.db.Close()
+		err := errors.Join(nativeErr, e.db.Close())
 		e.db = nil
 		e.searchProvider = nil
 		e.scanner = nil
@@ -369,11 +320,11 @@ func (e *Engine) Close() error {
 		return err
 	}
 	if e.contentDB != nil {
-		err := e.contentDB.Close()
+		err := errors.Join(nativeErr, e.contentDB.Close())
 		e.contentDB = nil
 		return err
 	}
-	return nil
+	return nativeErr
 }
 
 func (e *Engine) AddRoot(ctx context.Context, rootPath string) error {
@@ -495,9 +446,13 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if serviceStatus, serviceRunning, err := getFileIndexServiceStatus(ctx); serviceRunning {
-		return serviceStatus, err
+	e.mu.RLock()
+	if e.nativeIndex != nil {
+		status, _, err := e.nativeIndex.Status(ctx)
+		e.mu.RUnlock()
+		return status, err
 	}
+	e.mu.RUnlock()
 	return e.getLocalStatus(ctx)
 }
 
@@ -820,6 +775,16 @@ func (e *Engine) SyncUserRoots(ctx context.Context, rootPaths []string) error {
 		return fmt.Errorf("filesearch engine closed")
 	}
 
+	if e.nativeIndex != nil {
+		nativeRoots := nativeRootPaths(e.nativeIndex)
+		configured := make([]string, 0, len(rootPaths))
+		for _, path := range rootPaths {
+			if !coveredByNativeRoot(nativeRoots, path) {
+				configured = append(configured, path)
+			}
+		}
+		rootPaths = configured
+	}
 	_, err := syncUserRootsToDB(ctx, e.db, e.scanner, rootPaths, true)
 	return err
 }
@@ -973,44 +938,33 @@ func (e *Engine) Search(ctx context.Context, query SearchQuery, limit int) ([]Se
 	if e == nil {
 		return nil, nil
 	}
-	if results, used, err := tryServiceNameSearch(ctx, query, limit); used {
-		if err == nil {
-			return results, nil
-		}
-		// Service startup keeps the previous SQLite index usable while the new
-		// all-volume column snapshot is being prepared.
-		if !errors.Is(err, filesearchservice.ErrIndexNotReady) {
-			util.GetLogger().Warn(ctx, "file index service query failed, using SQLite fallback: "+err.Error())
-		}
-	}
-
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if e.closed || e.searchProvider == nil {
 		return nil, fmt.Errorf("filesearch engine closed")
 	}
 
-	// Filesearch now has one SQLite-backed provider, so the engine stays as a
-	// thin owner of lifecycle/policy state and returns the provider result
-	// directly instead of preserving the old stream/aggregation wrapper.
+	if e.nativeIndex != nil {
+		return e.nativeIndex.Search(ctx, query, limit)
+	}
 	return e.searchProvider.Search(ctx, query, limit)
 }
 
 func (e *Engine) IndexSnapshotSummary() string {
 	if e == nil {
-		return formatSQLiteIndexSnapshotSummary("manual", sqliteIndexSnapshot{})
+		return formatColumnIndexSnapshotSummary("manual", columnIndexSnapshot{})
 	}
 
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if e.closed || e.db == nil {
-		return formatSQLiteIndexSnapshotSummary("manual", sqliteIndexSnapshot{})
+		return formatColumnIndexSnapshotSummary("manual", columnIndexSnapshot{})
 	}
 	snapshot, err := e.db.SearchIndexSnapshot(context.Background())
 	if err != nil {
-		return fmt.Sprintf("filesearch sqlite snapshot: stage=manual error=%s", err.Error())
+		return fmt.Sprintf("filesearch column snapshot: stage=manual error=%s", err.Error())
 	}
-	return formatSQLiteIndexSnapshotSummary("manual", snapshot)
+	return formatColumnIndexSnapshotSummary("manual", snapshot)
 }
 
 func (e *Engine) IndexTopRootsSummary() string {
@@ -1027,7 +981,7 @@ func (e *Engine) IndexTopRootsSummary() string {
 	if err != nil {
 		return ""
 	}
-	return formatSQLiteIndexTopRoots("manual", snapshot)
+	return formatColumnIndexTopRoots("manual", snapshot)
 }
 
 // SearchContent queries the content index for files matching the query terms.
@@ -1140,7 +1094,7 @@ func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, poli
 
 	crawler := NewContentCrawler(contentDB, roots, policy, extensions, maxReadBytes, progressCB)
 	e.mu.RLock()
-	crawler.setNameDB(e.db)
+	crawler.setNameDB(e.contentDirectoryLocked())
 	e.mu.RUnlock()
 	go func() {
 		err := crawler.Run(ctx)
@@ -1160,7 +1114,7 @@ func (e *Engine) StartContentCrawl(ctx context.Context, roots []RootRecord, poli
 // reuses the same extension whitelist and max-read-bytes as the full crawler.
 // Call StopContentHook before installing a new hook or when content search is
 // disabled.
-func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]bool, maxReadBytes int64) {
+func (e *Engine) StartContentHook(ctx context.Context, roots []RootRecord, policy Policy, extensions map[string]bool, maxReadBytes int64) {
 	if e == nil {
 		return
 	}
@@ -1182,7 +1136,7 @@ func (e *Engine) StartContentHook(ctx context.Context, extensions map[string]boo
 	// take effect cleanly.
 	e.closeContentHookLocked()
 
-	hook := NewContentIndexHook(contentDB, e.db, extensions, maxReadBytes)
+	hook := NewContentIndexHook(contentDB, e.contentDirectoryLocked(), roots, policy, extensions, maxReadBytes)
 	e.contentHook = hook
 
 	scanner := e.scanner
@@ -1230,18 +1184,6 @@ func (e *Engine) ensureContentDBLocked(ctx context.Context) (*ContentSearchDB, e
 	}
 	e.contentDB = contentDB
 	return contentDB, nil
-}
-
-// NeedsSearchArtifactRebuild reports whether the FTS search artifacts are
-// still being rebuilt. The content crawl waits for this to return false
-// before starting, to avoid "database is locked" errors.
-func (e *Engine) NeedsSearchArtifactRebuild() bool {
-	if e == nil {
-		return false
-	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.db != nil && e.db.NeedsSearchArtifactRebuild()
 }
 
 // GetContentCrawlState returns the content crawl state from the DB meta table.

@@ -25,6 +25,7 @@ import (
 	"wox/test/automationdriver"
 	"wox/test/smokefixture"
 	"wox/test/smokeperf"
+	"wox/test/smokereport"
 	"wox/util"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -615,6 +616,7 @@ const (
 
 // smokeCaseResult is one top-level smoke case captured from the test binary.
 type smokeCaseResult struct {
+	reports []smokereport.Report
 	name    string
 	elapsed time.Duration
 	status  smokeStatus
@@ -675,6 +677,7 @@ func collectSmokeResults(reader io.Reader, echo io.Writer, packageDir, phaseLabe
 	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	var results []smokeCaseResult
 	var performance smokeperf.Reference
+	var reports []smokereport.Report
 	pending := ""
 	pendingAt := time.Time{}
 	finishPending := func() {
@@ -682,7 +685,10 @@ func collectSmokeResults(reader io.Reader, echo io.Writer, packageDir, phaseLabe
 			pending = ""
 			return
 		}
-		results = recordSmokeResult(echo, results, unfinishedSmokeResult(packageDir, pending, phaseLabel, pendingAt))
+		result := unfinishedSmokeResult(packageDir, pending, phaseLabel, pendingAt)
+		result.reports = reports
+		reports = nil
+		results = recordSmokeResult(echo, results, result)
 		pending = ""
 	}
 	for scanner.Scan() {
@@ -690,6 +696,9 @@ func collectSmokeResults(reader io.Reader, echo io.Writer, packageDir, phaseLabe
 		fmt.Fprintln(echo, line)
 		if ref, ok := smokeperf.ParseLine(line); ok {
 			performance = performance.Merge(ref)
+		}
+		if report, ok := smokereport.Parse(line); ok {
+			reports = append(reports, report)
 		}
 		if matches := smokeRunLinePattern.FindStringSubmatch(line); matches != nil {
 			name := matches[1]
@@ -725,10 +734,12 @@ func collectSmokeResults(reader io.Reader, echo io.Writer, packageDir, phaseLabe
 			status = smokeStatusSkip
 		}
 		results = recordSmokeResult(echo, results, smokeCaseResult{
+			reports: reports,
 			name:    qualifySmokeName(packageDir, testName, phaseLabel),
 			elapsed: elapsed,
 			status:  status,
 		})
+		reports = nil
 	}
 	finishPending()
 	return results, performance, scanner.Err()
@@ -810,6 +821,11 @@ func printSmokeSummary(w io.Writer, results []smokeCaseResult, total time.Durati
 	}
 	fmt.Fprintf(w, "%-*s  %*s  %s\n", nameWidth, "TOTAL (wall)", durationWidth, totalText, smokeResultCounts(results))
 	smokeperf.WriteSection(w, performance)
+	for _, result := range results {
+		for _, report := range result.reports {
+			report.Write(w)
+		}
+	}
 }
 
 // smokeResultCounts summarizes the table for the total row.

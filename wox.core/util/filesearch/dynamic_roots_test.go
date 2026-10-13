@@ -289,20 +289,20 @@ func TestScannerDemotesIdleDynamicRootAndRestoresParentOwnership(t *testing.T) {
 func assertEntryRoot(t *testing.T, ctx context.Context, db *FileSearchDB, path string, rootID string) {
 	t.Helper()
 
-	tx, err := db.db.BeginTx(ctx, nil)
+	entries, err := db.ListEntries(ctx)
 	if err != nil {
-		t.Fatalf("begin assert entry tx: %v", err)
+		t.Fatal(err)
 	}
-	defer tx.Rollback()
-
-	row, ok, err := selectStoredEntryByPathTx(ctx, tx, path)
-	if err != nil {
-		t.Fatalf("select entry %q: %v", path, err)
+	found := false
+	for _, entry := range entries {
+		if entry.Path == path {
+			if entry.RootID != rootID {
+				t.Fatalf("entry %s owned by %s, want %s", path, entry.RootID, rootID)
+			}
+			found = true
+		}
 	}
-	if !ok {
-		t.Fatalf("expected entry %q", path)
-	}
-	if row.RootID != rootID {
-		t.Fatalf("expected entry %q root %q, got %q", path, rootID, row.RootID)
+	if !found {
+		t.Fatalf("missing entry %s", path)
 	}
 }

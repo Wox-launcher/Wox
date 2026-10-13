@@ -86,6 +86,13 @@ The September 2026 Windows investigation (Intel integrated GPU, release-style bu
 
 Do not add `SetProcessWorkingSetSize(-1, -1)` / `EmptyWorkingSet` to this sequence. It was tried and drops the private working set to a few MB, but commit charge does not move: the pages only migrate to the standby list and fault back in on the next show, or turn into page-file hard faults under memory pressure. It changes the reported number without reducing memory use, so it is not an acceptable optimization for Wox.
 
+File search persists its query arrays in read-only index mappings rather than
+retaining heap copies. Its long-hide release targets only those clean file pages,
+under the store lease lock; it never trims the process-wide private working set.
+Report the reduced private commit separately from file-page residency: dropping
+mapped pages can leave them in the OS file cache, and the next query pays for
+faulting them back. Include first-after-idle latency in comparisons.
+
 Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
 
 ### Hidden-state ownership rules (September 22, 2026)

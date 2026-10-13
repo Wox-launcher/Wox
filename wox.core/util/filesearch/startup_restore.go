@@ -65,7 +65,7 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 			// production should not rescan SQLite just to feed disabled snapshot logs.
 			snapshot, err := s.db.SearchIndexSnapshot(ctx)
 			if err == nil {
-				logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+				logColumnIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
 			}
 		}
 		return
@@ -91,7 +91,7 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 		// Keep the completion snapshot available for dev triage, but avoid another
 		// expensive fts5vocab pass when diagnostic logging is disabled.
 		if snapshot, err := s.db.SearchIndexSnapshot(ctx); err == nil {
-			logSQLiteIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
+			logColumnIndexSnapshot(ctx, "startup_restore_complete", snapshot, true)
 		}
 	}
 }

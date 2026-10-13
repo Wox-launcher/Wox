@@ -33,11 +33,12 @@ type ContentEntryMetadata struct {
 
 // ContentIndexCandidate is one authoritative file candidate read from the name index.
 type ContentIndexCandidate struct {
-	EntryID   int64
-	Path      string
-	Mtime     int64
-	Size      int64
-	Extension string
+	Cursor        ContentCandidateCursor
+	MetadataKnown bool
+	Path          string
+	Mtime         int64
+	Size          int64
+	Extension     string
 }
 
 type contentIndexDocument struct {
@@ -202,54 +203,8 @@ func (d *ContentSearchDB) ListContentEntryMetadata(ctx context.Context) (map[str
 }
 
 // ListContentIndexCandidates reads one stable keyset page of eligible files from the name index.
-func (d *FileSearchDB) ListContentIndexCandidates(ctx context.Context, afterEntryID int64, extensions map[string]bool, limit int) ([]ContentIndexCandidate, error) {
-	if d == nil || d.db == nil {
-		return nil, fmt.Errorf("filesearch db not open")
-	}
-	if limit <= 0 || len(extensions) == 0 {
-		return nil, nil
-	}
-
-	extensionList := make([]string, 0, len(extensions))
-	for extension, enabled := range extensions {
-		if enabled {
-			extensionList = append(extensionList, extension)
-		}
-	}
-	if len(extensionList) == 0 {
-		return nil, nil
-	}
-	sort.Strings(extensionList)
-
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(extensionList)), ",")
-	args := make([]any, 0, len(extensionList)+2)
-	args = append(args, afterEntryID)
-	for _, extension := range extensionList {
-		args = append(args, extension)
-	}
-	args = append(args, limit)
-
-	rows, err := d.db.QueryContext(ctx, `
-		SELECT entry_id, path, mtime, size, extension
-		FROM entries
-		WHERE entry_id > ? AND is_dir = 0 AND extension IN (`+placeholders+`)
-		ORDER BY entry_id ASC
-		LIMIT ?
-	`, args...)
-	if err != nil {
-		return nil, fmt.Errorf("list content index candidates: %w", err)
-	}
-	defer rows.Close()
-
-	candidates := make([]ContentIndexCandidate, 0, limit)
-	for rows.Next() {
-		var candidate ContentIndexCandidate
-		if err := rows.Scan(&candidate.EntryID, &candidate.Path, &candidate.Mtime, &candidate.Size, &candidate.Extension); err != nil {
-			return nil, err
-		}
-		candidates = append(candidates, candidate)
-	}
-	return candidates, rows.Err()
+func (d *FileSearchDB) ListContentIndexCandidates(ctx context.Context, after ContentCandidateCursor, extensions map[string]bool, limit int) ([]ContentIndexCandidate, error) {
+	return d.directory.contentCandidates(ctx, after, extensions, limit)
 }
 
 // DeleteContent removes a file's content from the index.
@@ -481,31 +436,14 @@ func (d *ContentSearchDB) ListContentEntryPathsUnderScope(ctx context.Context, s
 
 // ListEntryPathsUnderScope returns indexed file paths for one authoritative name-index scope.
 func (d *FileSearchDB) ListEntryPathsUnderScope(ctx context.Context, rootID, scopePath string) ([]string, error) {
-	if d == nil || d.db == nil {
-		return nil, fmt.Errorf("filesearch db not open")
-	}
-	cleanScope := filepath.Clean(scopePath)
-	likePattern := escapeLikePattern(cleanScope+string(filepath.Separator)) + "%"
-	rows, err := d.db.QueryContext(ctx, `
-		SELECT path
-		FROM entries
-		WHERE root_id = ? AND is_dir = 0 AND (path = ? OR path LIKE ? ESCAPE '\')
-		ORDER BY path ASC
-	`, rootID, cleanScope, likePattern)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	paths := make([]string, 0)
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
-			return nil, err
+	var paths []string
+	err := d.directory.visit(ctx, rootID, func(entry EntryRecord) error {
+		if !entry.IsDir && pathWithinScope(scopePath, entry.Path) {
+			paths = append(paths, entry.Path)
 		}
-		paths = append(paths, path)
-	}
-	return paths, rows.Err()
+		return nil
+	})
+	return paths, err
 }
 
 func buildContentFTS5MatchExpression(query string) string {

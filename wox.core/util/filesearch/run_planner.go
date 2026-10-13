@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"wox/util"
+	"wox/util/filesearch/directoryread"
 )
 
 // RunPlanner builds one sealed indexing workload shape in memory before execution.
@@ -448,7 +449,7 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 		parentScopePath: cleanRootPath,
 	}}
 
-	dirEntries, err := os.ReadDir(cleanRootPath)
+	dirEntries, err := directoryread.ReadDir(ctx, cleanRootPath)
 	if err != nil {
 		return nil, fmt.Errorf("read root top-level scopes %q: %w", cleanRootPath, err)
 	}
