@@ -6,8 +6,8 @@ package directoryread
 #include <sys/attr.h>
 #include <unistd.h>
 
-// PACK_INVAL keeps the requested fields at fixed offsets. Returned bitmaps
-// still determine which metadata is valid for each object and filesystem.
+// PACK_INVAL keeps common attributes at fixed offsets. File attributes are
+// still omitted for directories; returned bitmaps decide which metadata is valid.
 static int wox_read_directory_attributes(int fd, void *buffer, size_t length) {
     struct attrlist attributes = {0};
     attributes.bitmapcount = ATTR_BIT_MAP_COUNT;

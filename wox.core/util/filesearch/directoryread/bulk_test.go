@@ -6,21 +6,40 @@ import (
 	"testing"
 )
 
-// bulkFixture mirrors Darwin's packed attribute order rather than Go alignment.
+// bulkFixture mirrors a Darwin file record: common attributes, then the
+// file-length slot, then the name.
 func bulkFixture(name string, kind uint32) []byte {
-	length := (bulkFixedBytes + len(name) + 1 + 7) &^ 7
+	nameAt := bulkCommonBytes + bulkFileBytes
+	length := (nameAt + len(name) + 1 + 7) &^ 7
 	buffer := make([]byte, length)
 	binary.LittleEndian.PutUint32(buffer[0:4], uint32(length))
 	binary.LittleEndian.PutUint32(buffer[4:8], bulkName|bulkReturned|bulkObjectType|bulkModified|bulkAccess|bulkError)
 	binary.LittleEndian.PutUint32(buffer[16:20], bulkDataLength)
-	binary.LittleEndian.PutUint32(buffer[28:32], bulkFixedBytes-28)
+	binary.LittleEndian.PutUint32(buffer[28:32], uint32(nameAt-28))
 	binary.LittleEndian.PutUint32(buffer[32:36], uint32(len(name)+1))
 	binary.LittleEndian.PutUint32(buffer[36:40], kind)
 	binary.LittleEndian.PutUint64(buffer[40:48], 12345)
 	binary.LittleEndian.PutUint64(buffer[48:56], 123)
 	binary.LittleEndian.PutUint32(buffer[56:60], 0640)
 	binary.LittleEndian.PutUint64(buffer[60:68], 42)
-	copy(buffer[bulkFixedBytes:], name)
+	copy(buffer[nameAt:], name)
+	return buffer
+}
+
+// directoryFixture mirrors a Darwin directory record. The file-length slot is
+// absent, and a one-character name fits in a 64-byte record.
+func directoryFixture(name string) []byte {
+	length := (bulkCommonBytes + len(name) + 1 + 7) &^ 7
+	buffer := make([]byte, length)
+	binary.LittleEndian.PutUint32(buffer[0:4], uint32(length))
+	binary.LittleEndian.PutUint32(buffer[4:8], bulkName|bulkReturned|bulkObjectType|bulkModified|bulkAccess|bulkError)
+	binary.LittleEndian.PutUint32(buffer[28:32], uint32(bulkCommonBytes-28))
+	binary.LittleEndian.PutUint32(buffer[32:36], uint32(len(name)+1))
+	binary.LittleEndian.PutUint32(buffer[36:40], 2)
+	binary.LittleEndian.PutUint64(buffer[40:48], 12345)
+	binary.LittleEndian.PutUint64(buffer[48:56], 123)
+	binary.LittleEndian.PutUint32(buffer[56:60], 0750)
+	copy(buffer[bulkCommonBytes:], name)
 	return buffer
 }
 
@@ -50,8 +69,8 @@ func TestBulkMalformedRecordsAreErrors(t *testing.T) {
 		func(b []byte) { binary.LittleEndian.PutUint32(b[28:32], 0xffffffff) },
 		func(b []byte) { binary.LittleEndian.PutUint32(b[32:36], 0xffffffff) },
 		func(b []byte) { binary.LittleEndian.PutUint32(b[4:8], 0) },
-		func(b []byte) { b[bulkFixedBytes+1] = 0 },
-		func(b []byte) { b[bulkFixedBytes] = '/' },
+		func(b []byte) { b[bulkCommonBytes+bulkFileBytes+1] = 0 },
+		func(b []byte) { b[bulkCommonBytes+bulkFileBytes] = '/' },
 	} {
 		buffer := bulkFixture("file", 1)
 		mutate(buffer)
@@ -61,6 +80,31 @@ func TestBulkMalformedRecordsAreErrors(t *testing.T) {
 	}
 	if _, err := decodeBulkEntries("root", bulkFixture("file", 1), 2); err == nil {
 		t.Fatal("accepted missing entry")
+	}
+}
+
+func TestBulkDirectoryNameOmitsFileLength(t *testing.T) {
+	buffer := directoryFixture("a")
+	if len(buffer) >= bulkCommonBytes+bulkFileBytes {
+		t.Fatalf("short directory record was padded to the file layout: %d", len(buffer))
+	}
+	entries, err := decodeBulkEntries(t.TempDir(), buffer, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].Name() != "a" || !entries[0].IsDir() {
+		t.Fatalf("entry=%s dir=%v", entries[0].Name(), entries[0].IsDir())
+	}
+	if _, err := entries[0].Info(); !os.IsNotExist(err) {
+		t.Fatalf("directory without file length was treated as complete metadata: %v", err)
+	}
+}
+
+func TestBulkNameCannotOverlapFileLength(t *testing.T) {
+	buffer := bulkFixture("file", 1)
+	binary.LittleEndian.PutUint32(buffer[28:32], uint32(bulkCommonBytes-28))
+	if _, err := decodeBulkEntries("root", buffer, 1); err == nil {
+		t.Fatal("accepted name overlapping file length")
 	}
 }
 

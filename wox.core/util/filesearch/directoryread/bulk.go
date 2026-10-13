@@ -19,7 +19,10 @@ const (
 	bulkError      = 0x20000000
 	bulkReturned   = 0x80000000
 	bulkDataLength = 0x00000200
-	bulkFixedBytes = 68
+	// Packed common attributes. ATTR_FILE_DATALENGTH is not included: Darwin
+	// omits file attributes for directories instead of reserving that slot.
+	bulkCommonBytes = 60
+	bulkFileBytes   = 8
 )
 
 type bulkEntry struct {
@@ -54,20 +57,20 @@ func (i bulkInfo) Mode() os.FileMode  { return i.mode }
 func (i bulkInfo) ModTime() time.Time { return i.modified }
 func (i bulkInfo) Sys() any           { return nil }
 
-// decodeBulkEntries reads Darwin's packed, four-byte-aligned attribute fields
-// without casting potentially unaligned native structs. It validates each
-// record and relative name range before retaining owned names across batches.
+// decodeBulkEntries reads Darwin's packed attribute fields without casting
+// potentially unaligned native structs. It validates each record and relative
+// name range before retaining owned names across batches.
 func decodeBulkEntries(parent string, buffer []byte, count int) ([]os.DirEntry, error) {
-	if count < 0 || count > len(buffer)/bulkFixedBytes {
+	if count < 0 || count > len(buffer)/bulkCommonBytes {
 		return nil, fmt.Errorf("invalid bulk entry count %d", count)
 	}
 	entries := make([]os.DirEntry, 0, count)
 	for index := 0; index < count; index++ {
-		if len(buffer) < bulkFixedBytes {
+		if len(buffer) < bulkCommonBytes {
 			return nil, fmt.Errorf("truncated bulk entry")
 		}
 		length := int(binary.LittleEndian.Uint32(buffer[:4]))
-		if length < bulkFixedBytes || length > len(buffer) {
+		if length < bulkCommonBytes || length > len(buffer) {
 			return nil, fmt.Errorf("invalid bulk entry length %d", length)
 		}
 		record := buffer[:length]
@@ -79,7 +82,15 @@ func decodeBulkEntries(parent string, buffer []byte, count int) ([]os.DirEntry, 
 		}
 		nameStart := int64(28) + int64(int32(binary.LittleEndian.Uint32(record[28:32])))
 		nameLength := int64(binary.LittleEndian.Uint32(record[32:36]))
-		if nameStart < bulkFixedBytes || nameLength < 2 || nameStart+nameLength > int64(length) {
+		// FSOPT_PACK_INVAL_ATTRS keeps common attributes at fixed offsets, but
+		// directories do not get the file-length slot. Their names therefore
+		// start at byte 60. Treating 68 as the minimum rejected those entries.
+		nameMin := int64(bulkCommonBytes)
+		hasFileLength := file&bulkDataLength != 0
+		if hasFileLength {
+			nameMin += bulkFileBytes
+		}
+		if nameStart < nameMin || nameLength < 2 || nameStart+nameLength > int64(length) {
 			return nil, fmt.Errorf("invalid bulk name range")
 		}
 		nameBytes := record[nameStart : nameStart+nameLength]
@@ -130,9 +141,11 @@ func decodeBulkEntries(parent string, buffer []byte, count int) ([]os.DirEntry, 
 		seconds := int64(binary.LittleEndian.Uint64(record[40:48]))
 		nanos := int64(binary.LittleEndian.Uint64(record[48:56]))
 		entry.modified = time.Unix(seconds, nanos)
-		entry.size = int64(binary.LittleEndian.Uint64(record[60:68]))
+		if hasFileLength {
+			entry.size = int64(binary.LittleEndian.Uint64(record[bulkCommonBytes : bulkCommonBytes+bulkFileBytes]))
+		}
 		required := uint32(bulkObjectType | bulkModified | bulkAccess)
-		entry.metadataKnown = common&required == required && file&bulkDataLength != 0 && nanos >= 0 && nanos < 1e9 && entry.size >= 0
+		entry.metadataKnown = common&required == required && hasFileLength && nanos >= 0 && nanos < 1e9 && entry.size >= 0
 		entries = append(entries, entry)
 	}
 	return entries, nil
