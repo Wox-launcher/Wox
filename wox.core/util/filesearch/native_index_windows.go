@@ -18,6 +18,9 @@ import (
 
 type nativeVolumeState struct {
 	building bool
+	pending  bool // Includes volumes queued for the shared slot and failed builds awaiting retry.
+	ready    bool // A published generation can remain searchable while a replacement is built.
+	progress nativeBuildProgress
 	started  time.Time
 	elapsed  int64
 	err      string
@@ -26,16 +29,17 @@ type nativeVolumeState struct {
 // ntfsNameIndex shares one build/compaction slot across volumes. Idle USN reads
 // run independently so a busy drive cannot delay changes on another drive.
 type ntfsNameIndex struct {
-	directory *directoryIndex
-	cancel    context.CancelFunc
-	workers   sync.WaitGroup
-	closeOnce sync.Once
-	closeErr  error
-	work      chan struct{}
-	mu        sync.Mutex
-	states    map[string]nativeVolumeState
-	notify    func()
-	callbacks nativeIndexCallbacks
+	directory  *directoryIndex
+	cancel     context.CancelFunc
+	workers    sync.WaitGroup
+	closeOnce  sync.Once
+	closeErr   error
+	work       chan struct{}
+	mu         sync.Mutex
+	states     map[string]nativeVolumeState
+	notify     func()
+	callbacks  nativeIndexCallbacks
+	runStarted time.Time
 }
 
 // openNativeNameIndex restores mappings immediately, then catches up each
@@ -64,11 +68,25 @@ func newNTFSNameIndex(ctx context.Context, dir string, roots []string, stream fa
 			_ = index.Close()
 			return nil, err
 		}
-		index.states[id] = nativeVolumeState{}
+		state := nativeVolumeState{}
+		state.pending = errors.Is(index.directory.shards[id].store.Read(func(column.View) error { return nil }), column.ErrNotReady)
+		state.ready = !state.pending
+		if callbacks.loadElapsed != nil {
+			elapsed, err := callbacks.loadElapsed(ctx, id)
+			if err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("filesearch failed to restore NTFS build duration for %s: %v", root, err))
+			} else {
+				state.elapsed = max(0, elapsed)
+			}
+		}
+		index.states[id] = state
 	}
 	for id, shard := range index.directory.shards {
 		index.workers.Add(1)
-		go index.runVolume(workerCtx, id, &ntfsSource{root: shard.root.Path, store: shard.store, stream: stream, notify: callbacks.content, wantsNotifications: callbacks.wantsContent})
+		go index.runVolume(workerCtx, id, &ntfsSource{
+			root: shard.root.Path, store: shard.store, stream: stream, notify: callbacks.content, wantsNotifications: callbacks.wantsContent,
+			progress: func(progress nativeBuildProgress) { index.updateProgress(id, progress) },
+		})
 	}
 	return index, nil
 }
@@ -87,9 +105,7 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 				return
 			}
 			if needsBuild {
-				i.setState(id, true, nil)
-				err = source.build(ctx)
-				i.setState(id, false, err)
+				err = i.buildVolume(ctx, id, source)
 				if err == nil {
 					needsBuild = false
 					if i.callbacks.content != nil {
@@ -113,7 +129,7 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 		if errors.Is(err, filesearchservice.ErrFactsReset) || errors.Is(err, column.ErrNotReady) {
 			needsBuild = true
 		}
-		i.setState(id, false, err)
+		i.setState(ctx, id, false, err)
 		util.GetLogger().Warn(ctx, fmt.Sprintf("filesearch NTFS source %s retrying: %v", source.root, err))
 		timer := time.NewTimer(5 * time.Second)
 		select {
@@ -125,15 +141,70 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 	}
 }
 
+// buildVolume emits a bounded heartbeat even while enumeration is waiting or
+// columns are being finalized. Its ticker is joined before the worker goes idle.
+func (i *ntfsNameIndex) buildVolume(ctx context.Context, id string, source *ntfsSource) error {
+	i.setState(ctx, id, true, nil)
+	done, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			case <-ticker.C:
+				if i.notify != nil {
+					i.notify()
+				}
+			}
+		}
+	}()
+	err := source.build(ctx)
+	close(done)
+	<-stopped
+	i.setState(ctx, id, false, err)
+	return err
+}
+
+// updateProgress consumes frame-level counters without issuing per-record UI calls.
+func (i *ntfsNameIndex) updateProgress(id string, progress nativeBuildProgress) {
+	i.mu.Lock()
+	state := i.states[id]
+	state.progress = progress
+	i.states[id] = state
+	i.mu.Unlock()
+}
+
 // setState publishes only lifecycle transitions, never one UI event per record.
-func (i *ntfsNameIndex) setState(id string, building bool, err error) {
+func (i *ntfsNameIndex) setState(ctx context.Context, id string, building bool, err error) {
 	i.mu.Lock()
 	state := i.states[id]
 	if building && !state.building {
+		// Pending volumes share this rebuild's clock and completed counts. Start
+		// a fresh clock only after all work from the previous rebuild has ended.
+		active := false
+		for _, current := range i.states {
+			active = active || current.pending || current.building
+		}
+		if i.runStarted.IsZero() || !active {
+			i.runStarted = time.Now()
+			for root, current := range i.states {
+				current.progress = nativeBuildProgress{}
+				i.states[root] = current
+			}
+		}
 		state.started = time.Now()
+		state.pending = true
+		state.progress = nativeBuildProgress{}
 	}
-	if !building && state.building {
-		state.elapsed = time.Since(state.started).Milliseconds()
+	completed := !building && state.building && err == nil
+	if completed {
+		state.elapsed = max(1, time.Since(state.started).Milliseconds())
+		state.pending, state.ready = false, true
 	}
 	state.building = building
 	state.err = ""
@@ -142,6 +213,15 @@ func (i *ntfsNameIndex) setState(id string, building bool, err error) {
 	}
 	i.states[id] = state
 	i.mu.Unlock()
+	if completed && i.callbacks.saveElapsed != nil {
+		// Only successful full builds replace the durable statistic. Completion
+		// may race shutdown, so give this small write a bounded uncancelled budget.
+		persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		if err := i.callbacks.saveElapsed(persistCtx, id, state.elapsed); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("filesearch failed to persist NTFS build duration for %s: %v", id, err))
+		}
+		cancel()
+	}
 	if i.notify != nil {
 		i.notify()
 	}
@@ -165,15 +245,32 @@ func (i *ntfsNameIndex) Search(ctx context.Context, query SearchQuery, limit int
 
 func (i *ntfsNameIndex) directoryView() *directoryIndex { return i.directory }
 
-// Status combines cheap per-revision counts with the ordinary worker's state;
-// the privileged service contributes no indexing or query statistics.
-func (i *ntfsNameIndex) Status(ctx context.Context) (StatusSnapshot, IndexStatsSnapshot, error) {
+// Progress borrows only small worker state; frequent UI notifications must not
+// walk disk files or recount millions of published rows during a build.
+func (i *ntfsNameIndex) Progress() StatusSnapshot {
+	status, _ := i.progressSnapshot()
+	return status
+}
+
+// progressSnapshot keeps live build counters separate from published index stats.
+func (i *ntfsNameIndex) progressSnapshot() (StatusSnapshot, int64) {
 	status := StatusSnapshot{}
-	stats := IndexStatsSnapshot{}
+	var elapsed int64
+	ready := false
 	i.mu.Lock()
+	defer i.mu.Unlock()
 	status.RootCount = len(i.states)
 	for root, state := range i.states {
-		stats.LastElapsedMs += state.elapsed
+		ready = ready || state.ready
+		status.ActiveRunFileCount += state.progress.files
+		status.ActiveRunEntryCount += state.progress.entries
+		if state.pending {
+			status.IsIndexing = true
+			status.ActiveRunKind = RunKindFull
+			if status.ActiveRunStatus == "" {
+				status.ActiveRunStatus = RunStatusPlanning
+			}
+		}
 		if state.building {
 			status.IsIndexing = true
 			status.ActiveRootPath = root
@@ -181,14 +278,31 @@ func (i *ntfsNameIndex) Status(ctx context.Context) (StatusSnapshot, IndexStatsS
 			status.ActiveRunStatus = RunStatusExecuting
 			status.ActiveRunKind = RunKindFull
 			status.ActiveStage = RunStageExecuting
-			status.ActiveRunElapsedMs = time.Since(state.started).Milliseconds()
+			if state.progress.finalizing {
+				status.ActiveRootStatus = RootStatusFinalizing
+				status.ActiveRunStatus = RunStatusFinalizing
+				status.ActiveStage = RunStageFinalizing
+			}
+			elapsed += max(1, time.Since(state.started).Milliseconds())
+		} else {
+			elapsed += state.elapsed
 		}
 		if state.err != "" {
 			status.ErrorRootCount++
 			status.ErrorRootPath, status.LastError = root, state.err
 		}
 	}
-	i.mu.Unlock()
+	if status.IsIndexing && !i.runStarted.IsZero() {
+		status.ActiveRunElapsedMs = time.Since(i.runStarted).Milliseconds()
+	}
+	status.IsInitialIndexing = status.IsIndexing && !ready
+	return status, elapsed
+}
+
+// Status combines published counts with worker progress for Settings and diagnostics.
+func (i *ntfsNameIndex) Status(ctx context.Context) (StatusSnapshot, IndexStatsSnapshot, error) {
+	status, elapsed := i.progressSnapshot()
+	stats := IndexStatsSnapshot{LastElapsedMs: elapsed}
 	i.directory.mu.RLock()
 	defer i.directory.mu.RUnlock()
 	for _, shard := range i.directory.shards {
@@ -212,7 +326,9 @@ func (i *ntfsNameIndex) Status(ctx context.Context) (StatusSnapshot, IndexStatsS
 	})
 	stats.RootCount, stats.IsIndexing, stats.Error = status.RootCount, status.IsIndexing, status.LastError
 	status.IsInitialIndexing = status.IsIndexing && stats.EntryCount == 0
-	status.ActiveRunEntryCount, status.ActiveRunFileCount = stats.EntryCount, stats.FileCount
+	if !status.IsIndexing {
+		status.ActiveRunEntryCount, status.ActiveRunFileCount = stats.EntryCount, stats.FileCount
+	}
 	return status, stats, nil
 }
 

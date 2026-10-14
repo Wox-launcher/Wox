@@ -103,7 +103,7 @@ func Test004LauncherPluginFileSearchPerformance(t *testing.T) {
 // any filename-storage table, so the same fixture works across index backends.
 func waitForFileSearchRootIdle(t *testing.T, ctx context.Context, root string) {
 	t.Helper()
-	databasePath := filepath.Join(os.Getenv(automationdriver.SharedDataDirectoryEnvironment), "filesearch", "directory.db")
+	databasePath := filepath.Join(os.Getenv(automationdriver.SharedDataDirectoryEnvironment), "filesearch", "metadata.db")
 	database, err := sql.Open("sqlite3", databasePath+"?mode=ro&_busy_timeout=1000")
 	if err != nil {
 		t.Fatal(err)

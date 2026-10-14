@@ -12,6 +12,15 @@ import (
 
 type fileSearchToolbarTestAPI struct{}
 
+type fullProgressToolbarAPI struct {
+	fileSearchToolbarTestAPI
+	messages []plugin.ToolbarMsg
+}
+
+func (a *fullProgressToolbarAPI) ShowToolbarMsg(_ context.Context, msg plugin.ToolbarMsg) {
+	a.messages = append(a.messages, msg)
+}
+
 func (a fileSearchToolbarTestAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {}
 func (a fileSearchToolbarTestAPI) HideApp(ctx context.Context)                              {}
 func (a fileSearchToolbarTestAPI) ShowApp(ctx context.Context)                              {}
@@ -22,6 +31,10 @@ func (a fileSearchToolbarTestAPI) Log(ctx context.Context, level plugin.LogLevel
 }
 func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string) string {
 	switch key {
+	case "plugin_file_status_full_indexing_progress":
+		return "Full indexing... %s files (%s/s) · %s"
+	case "plugin_file_status_full_indexing_saving":
+		return "Full indexing... %s files · %s · saving index"
 	case "plugin_file_status_incremental_indexing_elapsed":
 		return "Incremental indexing %s %s"
 	case "plugin_file_status_index_duration_seconds":
@@ -128,6 +141,48 @@ func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
 	}
 	if !strings.Contains(msg.Title, "Incremental indexing") {
 		t.Fatalf("expected incremental indexing title, got %q", msg.Title)
+	}
+}
+
+// TestFullIndexToolbarKeepsElapsedDuringSaving checks progress before the first
+// file, during scanning, and while counts stop changing during publication.
+func TestFullIndexToolbarKeepsElapsedDuringSaving(t *testing.T) {
+	c := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
+	status := filesearch.StatusSnapshot{IsIndexing: true, ActiveRunKind: filesearch.RunKindFull, ActiveRunStatus: filesearch.RunStatusPlanning}
+	msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false)
+	if !found || !msg.Indeterminate || !strings.Contains(msg.Title, "0 files") || !strings.Contains(msg.Title, "0s") {
+		t.Fatalf("initial progress: %+v", msg)
+	}
+	status.ActiveRunFileCount, status.ActiveRunElapsedMs = 12345, 5000
+	status.ActiveRunStatus = filesearch.RunStatusExecuting
+	scanning := c.buildIndexingToolbarTitle(context.Background(), status)
+	if !strings.Contains(scanning, "12,345 files") || !strings.Contains(scanning, "5s") {
+		t.Fatalf("scan progress: %s", scanning)
+	}
+	status.ActiveRunStatus = filesearch.RunStatusFinalizing
+	saving := c.buildIndexingToolbarTitle(context.Background(), status)
+	status.ActiveRunElapsedMs = 6000
+	later := c.buildIndexingToolbarTitle(context.Background(), status)
+	if !strings.Contains(saving, "saving index") || !strings.Contains(saving, "12,345 files") || !strings.Contains(later, "6s") || saving == later {
+		t.Fatalf("saving progress froze: %q -> %q", saving, later)
+	}
+}
+
+// TestNewFullIndexReplacesCompletionHold preserves the hold for incidental
+// incremental work, while a deliberate full rebuild shows progress immediately.
+func TestNewFullIndexReplacesCompletionHold(t *testing.T) {
+	api := &fullProgressToolbarAPI{}
+	c := &FileSearchPlugin{api: api}
+	c.armCompletionToolbarHold()
+	status := filesearch.StatusSnapshot{IsIndexing: true, ActiveRunKind: filesearch.RunKindIncremental, ActiveRunElapsedMs: 2000}
+	c.syncToolbarMsgWithStatus(context.Background(), status, false)
+	if len(api.messages) != 0 {
+		t.Fatal("incidental incremental work replaced the completion summary")
+	}
+	status.ActiveRunKind = filesearch.RunKindFull
+	c.syncToolbarMsgWithStatus(context.Background(), status, false)
+	if len(api.messages) != 1 || c.shouldHoldCompletionToolbar() {
+		t.Fatal("new full build remained hidden behind the previous completion hold")
 	}
 }
 

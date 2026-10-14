@@ -1461,6 +1461,11 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 	if c.engine == nil {
 		return
 	}
+	// Show feedback before closing the old readers and resetting persisted data.
+	c.cancelCompletionToolbarHold()
+	c.syncToolbarMsgWithStatus(ctx, filesearch.StatusSnapshot{
+		IsIndexing: true, ActiveRunKind: filesearch.RunKindFull, ActiveRunStatus: filesearch.RunStatusPlanning,
+	}, false)
 	generation := c.nextContentSearchGeneration()
 	c.stopContentCrawlWork()
 
@@ -1476,6 +1481,7 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 		if err := c.engine.RebuildIndex(rebuildCtx); err != nil {
 			c.api.Log(rebuildCtx, plugin.LogLevelError, "Failed to reset file search index: "+err.Error())
 			c.api.Notify(rebuildCtx, "i18n:plugin_file_index_files_failed")
+			c.syncToolbarMsgWithStatus(rebuildCtx, filesearch.StatusSnapshot{ErrorRootCount: 1, LastError: err.Error()}, false)
 			return
 		}
 		c.syncUserRoots(rebuildCtx)
@@ -2027,11 +2033,11 @@ func (c *FileSearchPlugin) syncToolbarMsgWithStatus(ctx context.Context, status 
 		return
 	}
 
-	if !completionSummary && !statusHasToolbarError(status) && c.shouldHoldCompletionToolbar() {
+	if !completionSummary && !statusHasToolbarError(status) && c.shouldHoldCompletionToolbar() && status.ActiveRunKind != filesearch.RunKindFull {
 		// Bug fix: the completion hold used to protect only against the idle clear
 		// emitted after the scanner removed its transient run state. A quick follow-up
 		// incremental run could still replace the "Indexed ..." summary in the next
-		// frame, so keep non-error progress behind the minimum completion window.
+		// frame. A newly started full rebuild must replace the summary immediately.
 		return
 	}
 
@@ -2160,17 +2166,23 @@ func (c *FileSearchPlugin) buildFullIndexCompletedToolbarTitle(ctx context.Conte
 
 func (c *FileSearchPlugin) buildIndexingToolbarTitle(ctx context.Context, status filesearch.StatusSnapshot) string {
 	indexedFileCount := status.ActiveRunFileCount
-	translationKey := "plugin_file_status_indexing_progress"
 	switch status.ActiveRunKind {
 	case filesearch.RunKindFull:
-		if status.ActiveRunStatus == filesearch.RunStatusFinalizing {
-			// Feature addition: full indexing now reports the deferred SQLite/FTS
-			// save phase explicitly. The previous rate-only title stopped changing
-			// once scan jobs finished, which made long bulk finalization look like a
-			// stalled or silent toolbar until the completion summary arrived.
-			return c.api.GetTranslation(ctx, "plugin_file_status_full_indexing_saving")
+		elapsed := c.formatFileSearchIndexDuration(ctx, status.ActiveRunElapsedMs)
+		if status.ActiveRunElapsedMs <= 0 {
+			elapsed = fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_status_index_duration_seconds"), 0)
 		}
-		translationKey = "plugin_file_status_full_indexing_progress"
+		if status.ActiveRunStatus == filesearch.RunStatusFinalizing {
+			// Column construction and publication can outlast ingestion. Keep the
+			// count and elapsed time visible instead of freezing the last scan rate.
+			return fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_status_full_indexing_saving"), formatFileSearchCount(indexedFileCount), elapsed)
+		}
+		return fmt.Sprintf(
+			c.api.GetTranslation(ctx, "plugin_file_status_full_indexing_progress"),
+			formatFileSearchCount(indexedFileCount),
+			formatFileSearchCount(estimateActiveIndexRate(indexedFileCount, status.ActiveRunElapsedMs)),
+			elapsed,
+		)
 	case filesearch.RunKindIncremental:
 		if status.ActiveJobKind == filesearch.JobKindFinalizeRoot && status.ActiveRunStatus == filesearch.RunStatusFinalizing {
 			// UX fix: incremental streaming can write many small SQLite batches while
@@ -2198,7 +2210,7 @@ func (c *FileSearchPlugin) buildIndexingToolbarTitle(ctx context.Context, status
 	// the generic key remains only for legacy/root-only snapshots that do not
 	// carry a run kind yet.
 	return fmt.Sprintf(
-		c.api.GetTranslation(ctx, translationKey),
+		c.api.GetTranslation(ctx, "plugin_file_status_indexing_progress"),
 		formatFileSearchCount(indexedFileCount),
 		formatFileSearchCount(indexRate),
 	)

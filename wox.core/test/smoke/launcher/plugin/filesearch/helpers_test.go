@@ -204,7 +204,7 @@ func waitForFileSearchDatabaseValue(t *testing.T, ctx context.Context, table, pa
 	t.Helper()
 	started := time.Now()
 	deadline := started.Add(timeout)
-	databasePath := filepath.Join(os.Getenv(automationdriver.SharedDataDirectoryEnvironment), "filesearch", "directory.db")
+	databasePath := filepath.Join(os.Getenv(automationdriver.SharedDataDirectoryEnvironment), "filesearch", "metadata.db")
 	var lastErr error
 	ticker := time.NewTicker(fileSearchIndexPollInterval)
 	defer ticker.Stop()

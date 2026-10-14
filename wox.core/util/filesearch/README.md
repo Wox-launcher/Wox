@@ -79,7 +79,7 @@ all sections at startup also incurs real I/O, even though only borrowed arrays
 remain afterward. Pinyin dictionary reconstruction after idle remains a latency
 cost. Numeric performance results are diagnostic and do not fail smoke tests.
 
-`directory.db` stores configured-root and traversal lifecycle metadata only.
+`metadata.db` stores configured-root and traversal lifecycle metadata only.
 Filename facts no longer have SQL entries/FTS tables. Content candidates use
 stable shard/entry cursors, so compaction can reorder rows between pages.
 Dynamic-root promotion publishes the destination before committing ownership;
@@ -103,6 +103,21 @@ Ordinary Wox restores its native mappings, serializes builds/compaction across
 volumes, retries transport failures, and retains the old generation until a
 complete catch-up. Metadata-only USN reads advance a volatile cursor without
 writing another journal checkpoint, preventing self-triggered writes.
+
+Settings restores each native volume's last successful full-build duration from
+`metadata.db` metadata and sums the currently indexed volumes. Active builds
+report live elapsed time; journal replay, compaction and failed builds do not
+replace the completed statistic. Manual index reset clears these duration keys.
+Older native indexes without recorded timings remain unknown until their next
+successful full build; restoring mappings is not counted as building an index.
+
+Native full builds publish scalar live counts after each fact frame, independently
+of the still-unpublished filename generation. A build-scoped 250 ms heartbeat
+updates toolbar elapsed time even while waiting for facts or finalizing columns;
+it is stopped and joined at completion or cancellation. Progress reads worker
+state only, so they do not recount mapped entries or walk disk files. Published
+index statistics remain separate. Serial volume builds share one run clock and
+keep completed volumes' live counts while the next volume is being ingested.
 
 ## macOS enumeration
 

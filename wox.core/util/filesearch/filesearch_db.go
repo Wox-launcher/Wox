@@ -39,7 +39,7 @@ func NewFileSearchDB(ctx context.Context) (*FileSearchDB, error) {
 		return nil, err
 	}
 
-	dbPath := filepath.Join(fileSearchDir, "directory.db")
+	dbPath := filepath.Join(fileSearchDir, "metadata.db")
 	dsn := dbPath + "?" +
 		"_journal_mode=WAL&" +
 		"_synchronous=NORMAL&" +
@@ -269,7 +269,7 @@ func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE kind = ?`, RootKindDynamic); err != nil {
 		return fmt.Errorf("reset dynamic roots: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, lastFullIndexElapsedMsKey); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM meta WHERE key = ? OR key GLOB ?`, lastFullIndexElapsedMsKey, nativeFullIndexElapsedMsPrefix+"*"); err != nil {
 		return fmt.Errorf("reset last full index duration: %w", err)
 	}
 	now := util.GetSystemTimestamp()

@@ -45,6 +45,7 @@ func awaitNativeMatches(t *testing.T, index *ntfsNameIndex, query string, count 
 }
 
 func TestNativeIndexSerialBuildsAndRestoresWithoutEnumeration(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
 	dir := t.TempDir()
 	started := make(chan string, 2)
 	release := make(chan struct{}, 2)
@@ -66,7 +67,9 @@ func TestNativeIndexSerialBuildsAndRestoresWithoutEnumeration(t *testing.T) {
 		}
 		return emitNativeIndexFixture(emit, boundary.Volume, "项目报告.txt")
 	}
-	index, err := newNTFSNameIndex(context.Background(), dir, []string{`C:\`, `D:\`}, stream, nativeIndexCallbacks{})
+	index, err := newNTFSNameIndex(ctx, dir, []string{`C:\`, `D:\`}, stream, nativeIndexCallbacks{
+		loadElapsed: db.lastNativeFullIndexElapsedMs, saveElapsed: db.setNativeFullIndexElapsedMs,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +89,22 @@ func TestNativeIndexSerialBuildsAndRestoresWithoutEnumeration(t *testing.T) {
 	if err := index.Close(); err != nil {
 		t.Fatal(err)
 	}
+	var elapsed int64
+	for _, root := range []string{`C:\`, `D:\`} {
+		value, err := db.lastNativeFullIndexElapsedMs(ctx, root)
+		if err != nil || value <= 0 {
+			t.Fatalf("completed duration for %s: %d, %v", root, value, err)
+		}
+		elapsed += value
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = NewFileSearchDB(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
 	var enumerations atomic.Int32
 	restored, err := newNTFSNameIndex(context.Background(), dir, []string{`C:\`, `D:\`}, func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
 		if kind == protocol.Enumerate {
@@ -94,14 +113,23 @@ func TestNativeIndexSerialBuildsAndRestoresWithoutEnumeration(t *testing.T) {
 		}
 		<-ctx.Done()
 		return ctx.Err()
-	}, nativeIndexCallbacks{})
+	}, nativeIndexCallbacks{loadElapsed: db.lastNativeFullIndexElapsedMs, saveElapsed: db.setNativeFullIndexElapsedMs})
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitNativeMatches(t, restored, "xmbg", 2)
 	_, stats, err := restored.Status(context.Background())
-	if err != nil || stats.FileCount != 2 || stats.RootCount != 2 || stats.DiskBytes == 0 {
+	if err != nil || stats.FileCount != 2 || stats.RootCount != 2 || stats.DiskBytes == 0 || stats.LastElapsedMs != elapsed {
 		t.Fatalf("stats=%+v error=%v", stats, err)
+	}
+	for _, shard := range restored.directory.shards {
+		if err := shard.store.Compact(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stats, err = (&Engine{nativeIndex: restored}).GetIndexStats(ctx)
+	if err != nil || stats.LastElapsedMs != elapsed {
+		t.Fatalf("compaction replaced Settings build duration: %+v, %v", stats, err)
 	}
 	closed := make(chan error, 1)
 	go func() { closed <- restored.Close() }()
@@ -115,6 +143,32 @@ func TestNativeIndexSerialBuildsAndRestoresWithoutEnumeration(t *testing.T) {
 	}
 	if enumerations.Load() != 0 {
 		t.Fatal("restart enumerated existing volumes")
+	}
+}
+
+// TestNativeIndexDurationKeepsLastSuccess covers live progress and failed retries.
+func TestNativeIndexDurationKeepsLastSuccess(t *testing.T) {
+	db, ctx := openTestFileSearchDB(t)
+	const root = `C:\`
+	if err := db.setNativeFullIndexElapsedMs(ctx, root, 6000); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().Add(-1500 * time.Millisecond)
+	index := &ntfsNameIndex{
+		directory:  newDirectoryIndex(t.TempDir()),
+		runStarted: started,
+		states:     map[string]nativeVolumeState{root: {building: true, started: started, elapsed: 6000}},
+		callbacks:  nativeIndexCallbacks{saveElapsed: db.setNativeFullIndexElapsedMs},
+	}
+	status, stats, err := index.Status(ctx)
+	if err != nil || !stats.IsIndexing || stats.LastElapsedMs < 1500 || stats.LastElapsedMs-status.ActiveRunElapsedMs > 10 {
+		t.Fatalf("live duration: %+v, %+v, %v", status, stats, err)
+	}
+	index.setState(ctx, root, false, errors.New("enumeration failed"))
+	_, stats, err = index.Status(ctx)
+	saved, loadErr := db.lastNativeFullIndexElapsedMs(ctx, root)
+	if err != nil || loadErr != nil || stats.LastElapsedMs != 6000 || saved != 6000 {
+		t.Fatalf("failed build replaced last success: stats=%+v saved=%d errors=%v/%v", stats, saved, err, loadErr)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 )
 
 const lastFullIndexElapsedMsKey = "last_full_index_elapsed_ms"
+const nativeFullIndexElapsedMsPrefix = "last_native_full_index_elapsed_ms:"
 
 // GetIndexStats returns persisted index volume, on-disk size, and last-run
 // duration without sampling FTS vocab or per-root estimates.
@@ -77,6 +78,16 @@ func resolveLastIndexElapsedMs(activeElapsedMs, persistedElapsedMs int64) int64 
 
 // SetLastFullIndexElapsedMs stores the completed full-index duration for Settings.
 func (d *FileSearchDB) SetLastFullIndexElapsedMs(ctx context.Context, elapsedMs int64) error {
+	return d.setIndexElapsedMs(ctx, lastFullIndexElapsedMsKey, elapsedMs)
+}
+
+// setNativeFullIndexElapsedMs keeps native volume builds separate from configured-root scans.
+func (d *FileSearchDB) setNativeFullIndexElapsedMs(ctx context.Context, root string, elapsedMs int64) error {
+	return d.setIndexElapsedMs(ctx, nativeFullIndexElapsedMsPrefix+normalizePath(root), elapsedMs)
+}
+
+// setIndexElapsedMs records completed work without changing filename facts or cursors.
+func (d *FileSearchDB) setIndexElapsedMs(ctx context.Context, key string, elapsedMs int64) error {
 	if d == nil || d.db == nil || elapsedMs <= 0 {
 		return nil
 	}
@@ -84,7 +95,7 @@ func (d *FileSearchDB) SetLastFullIndexElapsedMs(ctx context.Context, elapsedMs 
 		INSERT INTO meta(key, value)
 		VALUES(?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value
-	`, lastFullIndexElapsedMsKey, strconv.FormatInt(elapsedMs, 10))
+	`, key, strconv.FormatInt(elapsedMs, 10))
 	if err != nil {
 		return fmt.Errorf("set last full index duration: %w", err)
 	}
@@ -93,11 +104,21 @@ func (d *FileSearchDB) SetLastFullIndexElapsedMs(ctx context.Context, elapsedMs 
 
 // LastFullIndexElapsedMs returns the persisted last full-index duration.
 func (d *FileSearchDB) LastFullIndexElapsedMs(ctx context.Context) (int64, error) {
+	return d.indexElapsedMs(ctx, lastFullIndexElapsedMsKey)
+}
+
+// lastNativeFullIndexElapsedMs restores one volume's last successful full build.
+func (d *FileSearchDB) lastNativeFullIndexElapsedMs(ctx context.Context, root string) (int64, error) {
+	return d.indexElapsedMs(ctx, nativeFullIndexElapsedMsPrefix+normalizePath(root))
+}
+
+// indexElapsedMs tolerates absent or invalid optional statistics in older indexes.
+func (d *FileSearchDB) indexElapsedMs(ctx context.Context, key string) (int64, error) {
 	if d == nil || d.db == nil {
 		return 0, nil
 	}
 	var value string
-	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, lastFullIndexElapsedMsKey).Scan(&value)
+	err := d.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&value)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}

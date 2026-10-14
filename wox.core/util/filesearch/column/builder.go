@@ -15,6 +15,8 @@ type Builder struct {
 	deleted  map[uint64]uint64
 	metadata bool
 	versions bool
+	files    int64
+	entries  int64
 }
 
 func NewBuilder(root string, rootID uint64) *Builder {
@@ -29,6 +31,20 @@ func (b *Builder) Contains(id uint64) bool {
 	return found
 }
 
+// Counts reports retained non-structural rows before final reachability checks.
+// It uses scalar counters so progress never rescans a growing build.
+func (b *Builder) Counts() (files, entries int64) { return b.files, b.entries }
+
+// adjustCounts excludes structural parents from user-visible build progress.
+func (b *Builder) adjustCounts(flags byte, delta int64) {
+	if flags&Structural == 0 {
+		b.entries += delta
+		if flags&Directory == 0 {
+			b.files += delta
+		}
+	}
+}
+
 // Add permits newer observations to replace a row without changing its stable build row.
 func (b *Builder) Add(record Record) error {
 	if b.rows == nil {
@@ -38,7 +54,8 @@ func (b *Builder) Add(record Record) error {
 		record.ParentID = record.ID
 		record.Flags |= Directory
 	}
-	if version, deleted := b.deleted[record.ID]; deleted {
+	version, wasDeleted := b.deleted[record.ID]
+	if wasDeleted {
 		if record.Version <= version {
 			return nil
 		}
@@ -47,6 +64,10 @@ func (b *Builder) Add(record Record) error {
 	row, exists := b.rows[record.ID]
 	if exists && len(b.base.Versions) != 0 && record.Version < b.base.Versions[row] {
 		return nil
+	}
+	var previousFlags byte
+	if exists {
+		previousFlags = b.base.Flags[row]
 	}
 	name, known := b.names[record.Name]
 	if !known {
@@ -100,6 +121,10 @@ func (b *Builder) Add(record Record) error {
 			b.base.Versions[row] = record.Version
 		}
 	}
+	if exists && !wasDeleted {
+		b.adjustCounts(previousFlags, -1)
+	}
+	b.adjustCounts(record.Flags, 1)
 	return nil
 }
 
@@ -117,6 +142,11 @@ func (b *Builder) Remove(id, version uint64) error {
 	}
 	if b.deleted == nil {
 		b.deleted = make(map[uint64]uint64)
+	}
+	if _, deleted := b.deleted[id]; !deleted {
+		if row, exists := b.rows[id]; exists {
+			b.adjustCounts(b.base.Flags[row], -1)
+		}
 	}
 	if previous, exists := b.deleted[id]; !exists || version > previous {
 		b.deleted[id] = version

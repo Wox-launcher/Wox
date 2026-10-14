@@ -17,6 +17,11 @@ import (
 
 type factStream func(context.Context, protocol.Kind, protocol.Boundary, filesearchservice.FactSink) error
 
+type nativeBuildProgress struct {
+	files, entries int64
+	finalizing     bool
+}
+
 // ntfsSource runs in the ordinary Wox process and consumes facts only. Its store
 // cursor advances after durable records, so interrupted reads can be replayed.
 type ntfsSource struct {
@@ -28,6 +33,7 @@ type ntfsSource struct {
 	readCursor         protocol.Boundary
 	notify             func(context.Context, []ContentHookNotification)
 	wantsNotifications func() bool
+	progress           func(nativeBuildProgress)
 }
 
 // build retains the old searchable generation until enumeration and journal
@@ -35,6 +41,12 @@ type ntfsSource struct {
 func (s *ntfsSource) build(ctx context.Context) error {
 	revision := s.store.Revision()
 	var builder *column.Builder
+	reportProgress := func(finalizing bool) {
+		if s.progress != nil {
+			files, entries := builder.Counts()
+			s.progress(nativeBuildProgress{files: files, entries: entries, finalizing: finalizing})
+		}
+	}
 	var boundary, target protocol.Boundary
 	err := s.stream(ctx, protocol.Enumerate, protocol.Boundary{Volume: s.root}, func(kind protocol.Kind, payload []byte) error {
 		switch kind {
@@ -52,7 +64,7 @@ func (s *ntfsSource) build(ctx context.Context) error {
 			if builder == nil {
 				return errors.New("NTFS records arrived before build boundary")
 			}
-			return protocol.VisitEntries(payload, func(entry protocol.Entry) error {
+			err := protocol.VisitEntries(payload, func(entry protocol.Entry) error {
 				if entry.ID == boundary.RootID {
 					return nil
 				}
@@ -65,6 +77,10 @@ func (s *ntfsSource) build(ctx context.Context) error {
 				}
 				return builder.Add(record)
 			})
+			if err == nil {
+				reportProgress(false)
+			}
+			return err
 		case protocol.End:
 			var err error
 			target, err = protocol.DecodeBoundary(payload)
@@ -95,6 +111,7 @@ func (s *ntfsSource) build(ctx context.Context) error {
 					return err
 				}
 			}
+			reportProgress(false)
 			return nil
 		})
 		if err != nil {
@@ -108,6 +125,7 @@ func (s *ntfsSource) build(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	reportProgress(true)
 	base, err := builder.Finish()
 	if err != nil {
 		return err

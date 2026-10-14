@@ -246,7 +246,7 @@ func (e *Engine) RebuildIndex(ctx context.Context) error {
 	fileSearchDir := util.GetLocation().GetFileSearchDirectory()
 	// A previous service version may still map its own cache. Reset only the
 	// ordinary process's namespaces after closing their readers and writers.
-	for _, name := range []string{"columns", "native-columns", "directory.db", "directory.db-wal", "directory.db-shm", "contentsearch.db", "contentsearch.db-wal", "contentsearch.db-shm"} {
+	for _, name := range []string{"columns", "native-columns", "metadata.db", "metadata.db-wal", "metadata.db-shm", "contentsearch.db", "contentsearch.db-wal", "contentsearch.db-shm"} {
 		if err := os.RemoveAll(filepath.Join(fileSearchDir, name)); err != nil {
 			e.mu.Unlock()
 			return fmt.Errorf("remove filesearch cache %s: %w", name, err)
@@ -448,6 +448,10 @@ func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
 	}
 	e.mu.RLock()
 	if e.nativeIndex != nil {
+		if progress := e.nativeIndex.Progress(); progress.IsIndexing {
+			e.mu.RUnlock()
+			return progress, nil
+		}
 		status, _, err := e.nativeIndex.Status(ctx)
 		e.mu.RUnlock()
 		return status, err

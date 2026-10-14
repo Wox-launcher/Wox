@@ -12,6 +12,7 @@ import (
 type nativeNameIndex interface {
 	Search(context.Context, SearchQuery, int) ([]SearchResult, error)
 	Status(context.Context) (StatusSnapshot, IndexStatsSnapshot, error)
+	Progress() StatusSnapshot
 	Close() error
 	directoryView() *directoryIndex
 }
@@ -20,6 +21,8 @@ type nativeIndexCallbacks struct {
 	status       func()
 	content      func(context.Context, []ContentHookNotification)
 	wantsContent func() bool
+	loadElapsed  func(context.Context, string) (int64, error)
+	saveElapsed  func(context.Context, string, int64) error
 }
 
 // RefreshNativeNameIndex reconciles the source after a service install, update,
@@ -39,6 +42,7 @@ func (e *Engine) refreshNativeNameIndex(ctx context.Context) error {
 		return nil
 	}
 	previous := e.nativeIndex
+	db := e.db
 	e.closeContentHookLocked()
 	e.nativeIndex = nil
 	e.mu.Unlock()
@@ -51,6 +55,10 @@ func (e *Engine) refreshNativeNameIndex(ctx context.Context) error {
 		status:       func() { e.notifyStatusChanged(util.NewTraceContext()) },
 		content:      e.notifyNativeContent,
 		wantsContent: func() bool { e.mu.RLock(); defer e.mu.RUnlock(); return e.contentHook != nil },
+	}
+	if db != nil {
+		callbacks.loadElapsed = db.lastNativeFullIndexElapsedMs
+		callbacks.saveElapsed = db.setNativeFullIndexElapsedMs
 	}
 	index, err := openNativeNameIndex(ctx, filepath.Join(util.GetLocation().GetFileSearchDirectory(), "native-columns"), callbacks)
 	if err != nil {

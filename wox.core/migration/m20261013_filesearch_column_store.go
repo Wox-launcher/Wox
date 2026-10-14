@@ -22,7 +22,7 @@ func (*filesearchColumnStoreMigration) Description() string {
 
 // Up removes only the old derived filename cache. Root configuration remains in
 // plugin settings, content lives in its own database, and the replacement uses
-// directory.db. Running before plugin startup makes deletion safe and repeatable
+// metadata.db. Running before plugin startup makes deletion safe and repeatable
 // even if the application exits before its migration record commits.
 func (*filesearchColumnStoreMigration) Up(ctx context.Context, _ *gorm.DB) error {
 	return retireFilenameCache(ctx, util.GetLocation().GetFileSearchDirectory())

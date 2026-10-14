@@ -10,7 +10,7 @@ import (
 func TestRetireFilenameCachePreservesContentAndReplacement(t *testing.T) {
 	directory := t.TempDir()
 	legacy := []string{"filesearch.db", "filesearch.db-wal", "filesearch.db-shm"}
-	retained := []string{"directory.db", "contentsearch.db", "contentsearch.db-wal", "unrelated"}
+	retained := []string{"metadata.db", "contentsearch.db", "contentsearch.db-wal", "unrelated"}
 	for _, name := range append(legacy, retained...) {
 		if err := os.WriteFile(filepath.Join(directory, name), []byte(name), 0600); err != nil {
 			t.Fatal(err)
