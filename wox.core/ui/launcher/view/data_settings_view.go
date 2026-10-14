@@ -10,7 +10,8 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const dataBackupOperationColumnWidth = float32(140)
+// Wide enough for Restore, Open, and Delete before leftover table space is added.
+const dataBackupOperationColumnWidth = float32(220)
 
 // Data-page error sections. Empty is a page-level message under the header.
 const (
@@ -44,6 +45,7 @@ type DataSettingsLabels struct {
 	AutoBackupDescription string
 	BackupListTitle       string
 	BackupNow             string
+	BackupInProgress      string
 	BackupEmpty           string
 	BackupDate            string
 	BackupType            string
@@ -52,6 +54,9 @@ type DataSettingsLabels struct {
 	BackupTypeAuto        string
 	BackupRestore         string
 	BackupRestoreConfirm  string
+	BackupDelete          string
+	BackupDeleteConfirm   string
+	BackupDeleting        string
 	LogLevelTitle         string
 	LogLevelDescription   string
 	LogLevelInfo          string
@@ -73,6 +78,8 @@ type DataSettingsProps struct {
 	PendingLocation    string
 	AutoBackup         bool
 	Backups            []DataBackup
+	BackupRunning      bool
+	DeletingBackupID   string
 	LogLevel           string
 	ClearLogsArmed     bool
 	Error              string
@@ -84,6 +91,7 @@ type DataSettingsProps struct {
 	OnToggleAutoBackup func()
 	OnCreateBackup     func()
 	OnRestoreBackup    func(string)
+	OnDeleteBackup     func(string)
 	OnOpenLogLevel     func(woxui.Rect)
 	OnClearLogs        func()
 	OnOpenLog          func()
@@ -226,54 +234,81 @@ func dataBackupTable(props DataSettingsProps, width float32) woxwidget.Widget {
 	if visibleRows == 0 && strings.TrimSpace(props.Labels.BackupEmpty) != "" {
 		height += woxcomponent.SettingsControlHeight
 	}
+	backupLabel := props.Labels.BackupNow
+	if props.BackupRunning && props.Labels.BackupInProgress != "" {
+		backupLabel = props.Labels.BackupInProgress
+	}
 	return FormTableField(FormTableFieldProps{
 		ID: "data-backups", Title: props.Labels.BackupListTitle, Width: width,
-		Height: height, MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true,
+		Height: height, MaxHeight: maxHeight, InlineTitle: true, ReadOnly: true, Disabled: props.BackupRunning,
 		Columns: []FormTableColumn{{Label: props.Labels.BackupDate, Width: 350}, {Label: props.Labels.BackupType, Width: 220}, {Label: props.Labels.BackupOperation, Width: dataBackupOperationColumnWidth}},
-		Rows:    rows, SecondaryLabel: props.Labels.BackupNow, EmptyLabel: props.Labels.BackupEmpty,
+		Rows:    rows, SecondaryLabel: backupLabel, EmptyLabel: props.Labels.BackupEmpty,
 		HeaderWeight: woxui.FontWeightSemibold, Theme: props.Theme, OnSecondary: props.OnCreateBackup,
 	})
 }
 
-type dataBackupRestoreState struct {
+type dataBackupConfirmState struct {
 	confirm bool
 }
 
-type dataBackupRestoreWidget struct {
-	id           string
-	backupID     string
-	label        string
-	confirmLabel string
-	theme        woxcomponent.ControlTheme
-	onRestore    func(string)
+type dataBackupConfirmWidget struct {
+	id            string
+	backupID      string
+	label         string
+	confirmLabel  string
+	progressLabel string
+	busy          bool
+	theme         woxcomponent.ControlTheme
+	onConfirm     func(string)
 }
 
 // dataBackupRestoreButton confirms on the button itself. Pointer leave, blur, or
 // Escape returns it to Restore, matching chat delete and plugin uninstall.
 func dataBackupRestoreButton(props DataSettingsProps, backup DataBackup, rowIndex int) woxwidget.Widget {
+	return dataBackupConfirmButton(
+		fmt.Sprintf("data-backup-restore-%d", rowIndex), backup.ID,
+		props.Labels.BackupRestore, props.Labels.BackupRestoreConfirm, "", false, props.Theme, props.OnRestoreBackup,
+	)
+}
+
+// dataBackupDeleteButton confirms on the button itself before removing that backup.
+// While that backup is being removed, the label stays on the in-progress text.
+func dataBackupDeleteButton(props DataSettingsProps, backup DataBackup, rowIndex int) woxwidget.Widget {
+	return dataBackupConfirmButton(
+		fmt.Sprintf("data-backup-delete-%d", rowIndex), backup.ID,
+		props.Labels.BackupDelete, props.Labels.BackupDeleteConfirm, props.Labels.BackupDeleting,
+		props.DeletingBackupID != "" && props.DeletingBackupID == backup.ID, props.Theme, props.OnDeleteBackup,
+	)
+}
+
+// dataBackupConfirmButton arms on the first click and runs the action on the second.
+func dataBackupConfirmButton(id, backupID, label, confirmLabel, progressLabel string, busy bool, theme woxcomponent.ControlTheme, onConfirm func(string)) woxwidget.Widget {
 	return woxwidget.Stateful{
-		Key: woxwidget.Key("data-backup-restore-" + backup.ID), Type: (*dataBackupRestoreState)(nil),
-		Widget: dataBackupRestoreWidget{
-			id: fmt.Sprintf("data-backup-restore-%d", rowIndex), backupID: backup.ID,
-			label: props.Labels.BackupRestore, confirmLabel: props.Labels.BackupRestoreConfirm,
-			theme: props.Theme, onRestore: props.OnRestoreBackup,
+		Key: woxwidget.Key(id + "-" + backupID), Type: (*dataBackupConfirmState)(nil),
+		Widget: dataBackupConfirmWidget{
+			id: id, backupID: backupID, label: label, confirmLabel: confirmLabel,
+			progressLabel: progressLabel, busy: busy, theme: theme, onConfirm: onConfirm,
 		},
-		CreateState: func() woxwidget.State { return &dataBackupRestoreState{} },
+		CreateState: func() woxwidget.State { return &dataBackupConfirmState{} },
 	}
 }
 
-func (s *dataBackupRestoreState) InitState(_ woxwidget.StateContext, _ any) {}
+func (s *dataBackupConfirmState) InitState(_ woxwidget.StateContext, _ any) {}
 
-func (s *dataBackupRestoreState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
+func (s *dataBackupConfirmState) DidUpdateWidget(_ woxwidget.StateContext, _, _ any) {}
 
-func (s *dataBackupRestoreState) Dispose() {}
+func (s *dataBackupConfirmState) Dispose() {}
 
-func (s *dataBackupRestoreState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
-	props := widget.(dataBackupRestoreWidget)
+func (s *dataBackupConfirmState) Build(context woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(dataBackupConfirmWidget)
 	label := props.label
 	theme := props.theme
 	var weight woxui.FontWeight
-	if s.confirm {
+	if props.busy {
+		if props.progressLabel != "" {
+			label = props.progressLabel
+		}
+	} else if s.confirm {
 		label = props.confirmLabel
 		weight = woxui.FontWeightSemibold
 		if theme.Warning.A != 0 {
@@ -286,13 +321,16 @@ func (s *dataBackupRestoreState) Build(context woxwidget.StateContext, widget an
 		}
 	}
 	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: props.id, Label: label, FontWeight: weight,
+		ID: props.id, Label: label, FontWeight: weight, Disabled: props.busy,
 		Padding: woxwidget.Insets{Left: 4, Right: 4}, FontSize: woxcomponent.TableBodyFontSize, Variant: woxcomponent.ButtonText,
 		OnTap: func() {
+			if props.busy {
+				return
+			}
 			confirmed := false
 			context.SetState(func() { confirmed = s.advance() })
-			if confirmed && props.onRestore != nil {
-				props.onRestore(props.backupID)
+			if confirmed && props.onConfirm != nil {
+				props.onConfirm(props.backupID)
 			}
 		},
 		OnHoverAt: func(inside bool, _ woxui.Rect) {
@@ -318,8 +356,8 @@ func (s *dataBackupRestoreState) Build(context woxwidget.StateContext, widget an
 	})
 }
 
-// advance moves from Restore to Confirm, then clears confirmation and reports the second click.
-func (s *dataBackupRestoreState) advance() bool {
+// advance moves from the action label to Confirm, then clears confirmation and reports the second click.
+func (s *dataBackupConfirmState) advance() bool {
 	if !s.confirm {
 		s.confirm = true
 		return false
@@ -340,6 +378,7 @@ func dataBackupOperationCell(props DataSettingsProps, backup DataBackup, rowInde
 				}
 			}, Theme: props.Theme,
 		}),
+		dataBackupDeleteButton(props, backup, rowIndex),
 	}}
 }
 

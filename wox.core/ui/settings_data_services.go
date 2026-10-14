@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -42,12 +43,29 @@ func (s *CoreServices) DataBackups(ctx context.Context, sessionID string) ([]con
 
 // CreateDataBackup creates one manual settings backup.
 func (s *CoreServices) CreateDataBackup(ctx context.Context, sessionID string) error {
-	return setting.GetSettingManager().Backup(uiServiceContext(ctx, sessionID), setting.BackupTypeManual)
+	err := setting.GetSettingManager().Backup(uiServiceContext(ctx, sessionID), setting.BackupTypeManual)
+	if errors.Is(err, setting.ErrBackupInProgress) {
+		return contract.ErrBackupInProgress
+	}
+	return err
+}
+
+// WatchDataBackup follows the single in-flight backup shared by manual and automatic runs.
+func (s *CoreServices) WatchDataBackup(_ context.Context, _ string, onChange func(running bool, failure error)) func() {
+	if onChange == nil {
+		return func() {}
+	}
+	return setting.GetSettingManager().WatchBackup(onChange)
 }
 
 // RestoreDataBackup asks the supervisor to replace user data after this process exits.
 func (s *CoreServices) RestoreDataBackup(ctx context.Context, sessionID string, backupID string) error {
 	return RequestUserDataRestore(uiServiceContext(ctx, sessionID), backupID)
+}
+
+// DeleteDataBackup removes one finished backup directory.
+func (s *CoreServices) DeleteDataBackup(ctx context.Context, sessionID string, backupID string) error {
+	return setting.GetSettingManager().DeleteBackup(uiServiceContext(ctx, sessionID), backupID)
 }
 
 // RequestUserDataRestore asks the supervisor to replace user data after this process exits.

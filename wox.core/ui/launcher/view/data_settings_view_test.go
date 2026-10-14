@@ -81,7 +81,7 @@ func TestDataRestoreErrorStaysWithBackupList(t *testing.T) {
 }
 
 func TestDataBackupRestoreConfirmsOnTheButton(t *testing.T) {
-	state := &dataBackupRestoreState{}
+	state := &dataBackupConfirmState{}
 	if state.advance() {
 		t.Fatal("first restore activation must only enter confirmation")
 	}
@@ -143,6 +143,64 @@ func TestDataBackupRestoreLeavesConfirmationOnPointerExit(t *testing.T) {
 	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
 	if restored != "backup-1" {
 		t.Fatalf("second click restored %q, want backup-1", restored)
+	}
+}
+
+func TestDataBackupDeleteConfirmsOnTheButton(t *testing.T) {
+	deleted := ""
+	button := dataBackupDeleteButton(DataSettingsProps{
+		Labels:         DataSettingsLabels{BackupDelete: "Delete", BackupDeleteConfirm: "Confirm"},
+		Theme:          woxcomponent.ControlTheme{Warning: woxui.Color{R: 253, G: 186, B: 116, A: 255}, Text: woxui.Color{A: 255}},
+		OnDeleteBackup: func(id string) { deleted = id },
+	}, DataBackup{ID: "backup-1"}, 0)
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return button })
+	host.AttachServices(settingsWindowHostServices{})
+	defer host.Dispose()
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 40}, PixelSize: woxui.PixelSize{Width: 160, Height: 40}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+
+	bounds, ok := host.BoundsForKey(woxwidget.Key("data-backup-delete-0"))
+	if !ok {
+		t.Fatal("delete button has no bounds")
+	}
+	point := woxui.Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Frame(&woxui.DisplayList{}, frame)
+	if label := dataAutomationLabel(host, "data-backup-delete-0"); label != "Confirm" {
+		t.Fatalf("label after first click = %q, want Confirm", label)
+	}
+	if deleted != "" {
+		t.Fatalf("delete started after the first click: %q", deleted)
+	}
+
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+	if deleted != "backup-1" {
+		t.Fatalf("second click deleted %q, want backup-1", deleted)
+	}
+}
+
+func TestDataBackupDeleteShowsDeletingWhileTheRowIsRemoving(t *testing.T) {
+	button := dataBackupDeleteButton(DataSettingsProps{
+		Labels:           DataSettingsLabels{BackupDelete: "Delete", BackupDeleteConfirm: "Confirm", BackupDeleting: "Deleting"},
+		DeletingBackupID: "backup-1",
+	}, DataBackup{ID: "backup-1"}, 0)
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return button })
+	host.AttachServices(settingsWindowHostServices{})
+	defer host.Dispose()
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 40}, PixelSize: woxui.PixelSize{Width: 160, Height: 40}, Scale: 1})
+
+	label := ""
+	enabled := true
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "data-backup-delete-0" {
+			label = node.Label
+			enabled = node.Enabled
+		}
+	}
+	if label != "Deleting" || enabled {
+		t.Fatalf("delete button = label %q enabled %v, want Deleting and disabled", label, enabled)
 	}
 }
 
@@ -304,6 +362,38 @@ func dataWalkWidget(widget woxwidget.Widget, visit func(woxwidget.Widget) bool) 
 			dataWalkWidget(child, visit)
 		}
 	}
+}
+
+func TestDataBackupButtonFollowsTheRunningBackup(t *testing.T) {
+	labels := DataSettingsLabels{BackupListTitle: "Backup List", BackupNow: "Backup Now", BackupInProgress: "Backing up"}
+	idle := dataBackupButtonSemantics(t, dataBackupTable(DataSettingsProps{Labels: labels}, 880))
+	if idle.Label != "Backup Now" || idle.Disabled {
+		t.Fatalf("idle button = label %q disabled %v", idle.Label, idle.Disabled)
+	}
+
+	running := dataBackupButtonSemantics(t, dataBackupTable(DataSettingsProps{Labels: labels, BackupRunning: true}, 880))
+	if running.Label != "Backing up" || !running.Disabled {
+		t.Fatalf("running button = label %q disabled %v", running.Label, running.Disabled)
+	}
+}
+
+func dataBackupButtonSemantics(t *testing.T, widget woxwidget.Widget) woxwidget.Semantics {
+	t.Helper()
+	var semantics woxwidget.Semantics
+	found := false
+	dataWalkWidget(widget, func(node woxwidget.Widget) bool {
+		typed, ok := node.(woxwidget.Semantics)
+		if ok && typed.AutomationID == "data-backups-secondary" {
+			semantics = typed
+			found = true
+			return false
+		}
+		return true
+	})
+	if !found {
+		t.Fatal("backup button not found")
+	}
+	return semantics
 }
 
 func TestDataBackupTableKeepsOperationColumnInsideNarrowViewport(t *testing.T) {

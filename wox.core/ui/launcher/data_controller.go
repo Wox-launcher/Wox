@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -12,15 +13,17 @@ import (
 
 // dataSettingsSnapshot is the immutable Data tab state consumed by the view layer.
 type dataSettingsSnapshot struct {
-	Backups         []backupInfo
-	Location        string
-	Loading         bool
-	Loaded          bool
-	Busy            string
-	Error           string
-	ErrorSection    string
-	PendingLocation string
-	ClearLogsArmed  bool
+	Backups          []backupInfo
+	Location         string
+	Loading          bool
+	Loaded           bool
+	Busy             string
+	BackupRunning    bool
+	DeletingBackupID string
+	Error            string
+	ErrorSection     string
+	PendingLocation  string
+	ClearLogsArmed   bool
 }
 
 // dataSettingsController owns the Data tab state (backups, location, restore, logs).
@@ -29,15 +32,18 @@ type dataSettingsSnapshot struct {
 type dataSettingsController struct {
 	deps CommonDeps
 
-	backups         []backupInfo
-	location        string
-	loading         bool
-	loaded          bool
-	busy            string
-	errMsg          string
-	errSection      string
-	pendingLocation string
-	clearLogsArmed  bool
+	backups          []backupInfo
+	location         string
+	loading          bool
+	loaded           bool
+	busy             string
+	backupRunning    bool
+	deletingBackupID string
+	unwatchBackup    func()
+	errMsg           string
+	errSection       string
+	pendingLocation  string
+	clearLogsArmed   bool
 
 	// Cross-domain callbacks wired by App after construction.
 	reloadSettings func() error
@@ -76,6 +82,9 @@ func (c *dataSettingsController) BindCrossDomain(reloadSettings func() error, pi
 // Reload fetches the storage location and backup catalog. It is a no-op if a reload
 // is already in flight and aggregates location/backups errors into a single message.
 func (c *dataSettingsController) Reload(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
+	// Subscribe before the loading callback. The first watch event is synchronous, and
+	// the test UI runner deadlocks if that callback re-enters OnUI.
+	c.ensureBackupWatch(ctx, service, sessionID)
 	shouldLoad := false
 	if !c.deps.OnUI("start loading data settings", func() {
 		if c.loading {
@@ -131,10 +140,11 @@ func (c *dataSettingsController) Reload(ctx context.Context, service contract.Da
 	})
 }
 
-// CreateBackup starts a manual backup. While the async Post is in flight Busy is set
-// to "backup"; on success the catalog is refreshed.
+// CreateBackup starts a manual backup. The button stays on "backup" until the shared
+// run finishes, including when an automatic backup is the run that is already copying.
 func (c *dataSettingsController) CreateBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
-	if c.busy != "" {
+	c.ensureBackupWatch(ctx, service, sessionID)
+	if c.backupRunning || c.busy != "" {
 		return
 	}
 	c.busy = "backup"
@@ -142,12 +152,22 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 	c.deps.Invalidate()
 
 	util.Go(ctx, "create data backup", func() {
-		timeoutCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		// User data can be large. The copy does not observe this context, so this wait
+		// covers the copy and the list refresh happens after Backup returns.
+		timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 		err := service.CreateDataBackup(timeoutCtx, sessionID)
 		cancel()
 
 		c.deps.OnUI("apply data backup creation", func() {
-			c.busy = ""
+			// Another run owns the button. This request did not start a copy.
+			if errors.Is(err, contract.ErrBackupInProgress) {
+				c.deps.Invalidate()
+				return
+			}
+			// The watcher may already have cleared the optimistic busy when the run ended.
+			if c.busy == "backup" && !c.backupRunning {
+				c.busy = ""
+			}
 			if err != nil {
 				c.setError("Could not create backup: "+err.Error(), dataErrorSectionBackup)
 			}
@@ -157,6 +177,47 @@ func (c *dataSettingsController) CreateBackup(ctx context.Context, service contr
 			c.Reload(ctx, service, sessionID)
 		}
 	})
+}
+
+// ensureBackupWatch subscribes once to the shared backup run.
+// Call it outside OnUI: the first callback is synchronous and applies state through OnUI.
+func (c *dataSettingsController) ensureBackupWatch(ctx context.Context, service contract.DataSettingsServices, sessionID string) {
+	if c.unwatchBackup != nil || service == nil {
+		return
+	}
+	cancel := service.WatchDataBackup(ctx, sessionID, func(running bool, failure error) {
+		c.onBackupChanged(ctx, service, sessionID, running, failure)
+	})
+	if cancel == nil {
+		cancel = func() {}
+	}
+	c.unwatchBackup = cancel
+}
+
+// onBackupChanged mirrors the singleton onto the Backup Now button.
+// The initial snapshot is not a finished run, so an optimistic click stays busy until that run ends.
+// A successful finish reloads the list after OnUI returns.
+func (c *dataSettingsController) onBackupChanged(ctx context.Context, service contract.DataSettingsServices, sessionID string, running bool, failure error) {
+	refresh := false
+	c.deps.OnUI("apply backup run", func() {
+		ended := c.backupRunning && !running
+		c.backupRunning = running
+		if running {
+			if c.busy == "" {
+				c.busy = "backup"
+			}
+		} else if ended && c.busy == "backup" {
+			c.busy = ""
+		}
+		if !running && failure != nil && !errors.Is(failure, contract.ErrBackupInProgress) {
+			c.setError("Could not create backup: "+failure.Error(), dataErrorSectionBackup)
+		}
+		refresh = ended && failure == nil
+		c.deps.Invalidate()
+	})
+	if refresh {
+		c.Reload(ctx, service, sessionID)
+	}
 }
 
 // RestoreBackup replaces current settings with one backup. The button owns the
@@ -184,6 +245,51 @@ func (c *dataSettingsController) RestoreBackup(ctx context.Context, service cont
 			}
 			c.deps.Invalidate()
 		})
+	})
+}
+
+// DeleteBackup removes one backup after the row button confirms.
+// The catalog refreshes once that directory is gone.
+func (c *dataSettingsController) DeleteBackup(ctx context.Context, service contract.DataSettingsServices, sessionID string, id string) {
+	if c.busy != "" || c.backupRunning || strings.TrimSpace(id) == "" {
+		return
+	}
+	c.busy = "delete"
+	c.deletingBackupID = id
+	c.clearError()
+	c.deps.Invalidate()
+
+	util.Go(ctx, "delete data backup", func() {
+		// A backup directory is a full copy of user data, so removal can take a while.
+		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		err := service.DeleteDataBackup(timeoutCtx, sessionID, id)
+		cancel()
+		c.deps.OnUI("apply data backup deletion", func() {
+			if c.deletingBackupID == id {
+				c.deletingBackupID = ""
+			}
+			if c.busy == "delete" {
+				c.busy = ""
+				if c.backupRunning {
+					c.busy = "backup"
+				}
+			}
+			if err != nil {
+				c.setError("Could not delete backup: "+err.Error(), dataErrorSectionBackup)
+			} else {
+				kept := c.backups[:0]
+				for _, backup := range c.backups {
+					if backup.ID != id {
+						kept = append(kept, backup)
+					}
+				}
+				c.backups = kept
+			}
+			c.deps.Invalidate()
+		})
+		if err == nil {
+			c.Reload(ctx, service, sessionID)
+		}
 	})
 }
 
@@ -324,14 +430,16 @@ func (c *dataSettingsController) OpenLog(ctx context.Context, service contract.D
 // Snapshot returns a copy of the Data state for the view layer.
 func (c *dataSettingsController) Snapshot() dataSettingsSnapshot {
 	return dataSettingsSnapshot{
-		Backups:         append([]backupInfo(nil), c.backups...),
-		Location:        c.location,
-		Loading:         c.loading,
-		Loaded:          c.loaded,
-		Busy:            c.busy,
-		Error:           c.errMsg,
-		ErrorSection:    c.errSection,
-		PendingLocation: c.pendingLocation,
-		ClearLogsArmed:  c.clearLogsArmed,
+		Backups:          append([]backupInfo(nil), c.backups...),
+		Location:         c.location,
+		Loading:          c.loading,
+		Loaded:           c.loaded,
+		Busy:             c.busy,
+		BackupRunning:    c.backupRunning,
+		DeletingBackupID: c.deletingBackupID,
+		Error:            c.errMsg,
+		ErrorSection:     c.errSection,
+		PendingLocation:  c.pendingLocation,
+		ClearLogsArmed:   c.clearLogsArmed,
 	}
 }

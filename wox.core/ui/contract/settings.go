@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"errors"
 
 	"wox/account"
 	"wox/cloudsync"
@@ -94,12 +95,19 @@ type DataBackup struct {
 	Path      string
 }
 
+// ErrBackupInProgress is returned when a backup is requested while one is already running.
+var ErrBackupInProgress = errors.New("backup already in progress")
+
 // DataSettingsServices exposes user-data, backup, and log operations.
 type DataSettingsServices interface {
 	DataLocation(ctx context.Context, sessionID string) (string, error)
 	DataBackups(ctx context.Context, sessionID string) ([]DataBackup, error)
 	CreateDataBackup(ctx context.Context, sessionID string) error
+	// WatchDataBackup invokes onChange with the current run immediately and on each later change.
+	// onChange may run on the backup goroutine. The returned function removes the watcher.
+	WatchDataBackup(ctx context.Context, sessionID string, onChange func(running bool, failure error)) (cancel func())
 	RestoreDataBackup(ctx context.Context, sessionID string, backupID string) error
+	DeleteDataBackup(ctx context.Context, sessionID string, backupID string) error
 	ChangeDataLocation(ctx context.Context, sessionID string, location string) error
 	ClearLogs(ctx context.Context, sessionID string) error
 	OpenPath(ctx context.Context, sessionID string, path string) error

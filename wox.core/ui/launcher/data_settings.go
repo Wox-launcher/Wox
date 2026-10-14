@@ -27,11 +27,13 @@ func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height flo
 	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Labels: a.dataSettingsLabels(),
 		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
-		Backups: backups, LogLevel: snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
+		Backups: backups, BackupRunning: snapshot.dataState.BackupRunning || snapshot.dataState.Busy == "backup",
+		DeletingBackupID: snapshot.dataState.DeletingBackupID,
+		LogLevel:         snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
 		Error: snapshot.dataState.Error, ErrorSection: snapshot.dataState.ErrorSection,
 		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
 		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
-		OnRestoreBackup: a.restoreDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
+		OnRestoreBackup: a.restoreDataBackup, OnDeleteBackup: a.deleteDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
 	})
 }
 
@@ -53,6 +55,7 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 		AutoBackupDescription: a.translate("i18n:ui_data_backup_auto_tips"),
 		BackupListTitle:       a.translate("i18n:ui_data_backup_list_title"),
 		BackupNow:             a.translate("i18n:ui_data_backup_now"),
+		BackupInProgress:      a.translate("i18n:ui_data_backup_in_progress"),
 		BackupEmpty:           a.translate("i18n:ui_data_backup_empty"),
 		BackupDate:            a.translate("i18n:ui_data_backup_date"),
 		BackupType:            a.translate("i18n:ui_data_backup_type"),
@@ -61,6 +64,9 @@ func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
 		BackupTypeAuto:        a.translate("i18n:ui_data_backup_type_auto"),
 		BackupRestore:         a.translate("i18n:ui_data_backup_restore"),
 		BackupRestoreConfirm:  a.translate("i18n:ui_data_backup_restore_confirm"),
+		BackupDelete:          a.translate("i18n:ui_delete"),
+		BackupDeleteConfirm:   a.translate("i18n:ui_data_backup_restore_confirm"),
+		BackupDeleting:        a.translate("i18n:ui_data_backup_deleting"),
 		LogLevelTitle:         a.translate("i18n:ui_data_log_level_title"),
 		LogLevelDescription:   a.translate("i18n:ui_data_log_level_tips"),
 		LogLevelInfo:          a.translate("i18n:ui_data_log_level_info"),
@@ -86,6 +92,11 @@ func (a *App) createDataBackup() {
 // restoreDataBackup delegates to dataSettingsController.
 func (a *App) restoreDataBackup(id string) {
 	a.dataSettings.RestoreBackup(context.Background(), a.services, a.sessionID, id)
+}
+
+// deleteDataBackup delegates to dataSettingsController.
+func (a *App) deleteDataBackup(id string) {
+	a.dataSettings.DeleteBackup(context.Background(), a.services, a.sessionID, id)
 }
 
 // chooseDataLocation delegates to dataSettingsController, which uses the injected

@@ -717,6 +717,8 @@
   "ui_data_backup_auto_tips_suffix": "",
   "ui_data_backup_list_title": "Список резервных копий",
   "ui_data_backup_now": "Сделать резервную копию сейчас",
+  "ui_data_backup_in_progress": "Создание резервной копии",
+  "ui_data_backup_deleting": "Удаление",
   "ui_data_backup_refresh": "Обновить",
   "ui_data_backup_empty": "Резервные копии не найдены",
   "ui_data_backup_restore": "Восстановить",

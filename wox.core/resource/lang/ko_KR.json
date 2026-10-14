@@ -732,6 +732,8 @@
   "ui_data_backup_auto_tips_suffix": "에 데이터를 백업합니다",
   "ui_data_backup_list_title": "백업 목록",
   "ui_data_backup_now": "지금 백업",
+  "ui_data_backup_in_progress": "백업 중",
+  "ui_data_backup_deleting": "삭제 중",
   "ui_data_backup_refresh": "새로 고침",
   "ui_data_backup_empty": "백업을 찾을 수 없습니다",
   "ui_data_backup_restore": "복원",

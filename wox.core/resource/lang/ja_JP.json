@@ -732,6 +732,8 @@
   "ui_data_backup_auto_tips_suffix": "にバックアップします",
   "ui_data_backup_list_title": "バックアップ一覧",
   "ui_data_backup_now": "今すぐバックアップ",
+  "ui_data_backup_in_progress": "バックアップ中",
+  "ui_data_backup_deleting": "削除中",
   "ui_data_backup_refresh": "更新",
   "ui_data_backup_empty": "バックアップが見つかりません",
   "ui_data_backup_restore": "復元",

@@ -25,6 +25,11 @@ type Manager struct {
 	mruManager *MRUManager
 	// autoBackupOnce keeps the daily backup loop from being scheduled twice.
 	autoBackupOnce sync.Once
+	// backupMu guards the single in-flight backup and its watchers.
+	backupMu       sync.Mutex
+	backupRunning  bool
+	backupWatchSeq int
+	backupWatchers []backupWatch
 }
 
 const queryCompletionFeedbackLimit = 1000
