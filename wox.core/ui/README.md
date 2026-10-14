@@ -46,6 +46,8 @@ Fine-grained layout invalidation, `Boundary` decomposition, and repaint-region t
 
 Settings and other secondary pages are low-frequency surfaces and do not require per-field incremental rendering. Full-page or full-window refreshes are acceptable there; do not add fine-grained boundaries solely for those pages unless profiling demonstrates a user-visible performance problem. Shared widgets must remain correct in every window, but Launcher is the optimization target.
 
+Plugin form save state protects only editable setting values. Setting actions keep their progress and errors in the plugin controller independently of the form, so a catalog refresh or form replacement cannot discard an operation. When edits or a value save retain the form, display-only definitions still refresh using the shared form editability classification; editable definitions and editor state remain stable until the save completes.
+
 Settings, account, theme, resource catalogs, and other UI domains use typed services directly. The only production loopback HTTP surface is `appcontrol`; automation has a separate authenticated endpoint that exists only in `wox_automation` builds. Production builds register no UI business routes.
 
 ## Current migration surface

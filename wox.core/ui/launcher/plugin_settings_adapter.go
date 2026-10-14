@@ -234,11 +234,11 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		recordKey:         a.recordPluginFormHotkey,
 		runServiceAction:  a.runPluginServiceAction,
 		openLink:          a.openPluginSettingLink,
-		serviceBusy:       form.saving,
+		serviceBusy:       plugins.PluginSettingAction.actionID != "",
 		fieldErrors:       form.fieldErrors,
 	}
-	if form.statusError {
-		callbacks.serviceError = form.status
+	if plugins.PluginSettingAction.pluginID == plugin.ID {
+		callbacks.serviceError = plugins.PluginSettingAction.errorText
 	}
 	editor.DescriptionDetail = a.pluginStoreDetailProps(snapshot, plugin, width, imageScale)
 	metadata := a.pluginMetadataProps(plugin, "privacy")

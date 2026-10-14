@@ -224,6 +224,32 @@ func formDefinitionTextEditable(definition formDefinition) bool {
 	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath"
 }
 
+// formDefinitionValueEditable identifies fields whose values participate in settings saves.
+func formDefinitionValueEditable(definition formDefinition) bool {
+	switch definition.Type {
+	case "textbox", "password", "dirPath", "checkbox", "select", "selectAIModel", "table", "dictationModel", "ocrModel", "dictationHotkey":
+		return true
+	default:
+		return false
+	}
+}
+
+// refreshFormDisplayDefinitions updates presentation without replacing editable fields or their editor state.
+func refreshFormDisplayDefinitions(fields *formFieldsState, definitions []formDefinition) {
+	for index, current := range fields.definitions {
+		if formDefinitionValueEditable(current) {
+			continue
+		}
+		for updatedIndex, updated := range definitions {
+			// Keyed rows survive reordering; unkeyed static rows retain their positional identity.
+			if current.Type == updated.Type && current.Value.Key == updated.Value.Key && (current.Value.Key != "" || index == updatedIndex) {
+				fields.definitions[index] = updated
+				break
+			}
+		}
+	}
+}
+
 func syncFormFieldsEditorLocked(fields *formFieldsState) {
 	if fields == nil || fields.editor == nil || fields.focused < 0 || fields.focused >= len(fields.definitions) {
 		return

@@ -6,6 +6,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
+	"wox/util"
 	"wox/util/filesearchservice"
 )
 
@@ -41,6 +42,7 @@ func (c *FileSearchPlugin) serviceUpdateToolbarMsg(ctx context.Context) (plugin.
 		Icon:  fileIcon,
 		Actions: []plugin.ToolbarMsgAction{{
 			Id: "open-service-settings", Name: "i18n:plugin_file_setting_service_update", Icon: icons.Get(icons.ActionSettings), IsDefault: true, PreventHideAfterAction: true,
+			Hotkey: util.PrimaryHotkey("enter"),
 			Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
 				plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/plugin/setting", Param: PluginID})
 			},

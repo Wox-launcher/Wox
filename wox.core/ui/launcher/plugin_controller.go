@@ -33,13 +33,19 @@ type pluginSettingsSnapshot struct {
 	PluginOperation      string
 	PluginOperationError string
 	PluginUninstallArmed string
+	PluginSettingAction  pluginSettingActionState
 }
 
-// pluginSettingsController owns the Plugin tab state: installed/store catalog,
-// selection, search, advanced filters, detail tab, install/uninstall/enable/disable
-// operation progress, and the plugin settings inline form. All 15 fields that used to
-// live on App are held here; App methods became thin wrappers that call the controller's
-// getters/setters while coordinating cross-domain state in UI-thread transactions.
+// pluginSettingActionState belongs to the operation, so form refreshes cannot discard its progress or error.
+type pluginSettingActionState struct {
+	pluginID  string
+	actionID  string
+	errorText string
+}
+
+// pluginSettingsController owns plugin catalogs, selection, search, filters,
+// detail tabs, operation state, and editable settings forms. App coordinates
+// cross-domain work through UI-thread transactions.
 type pluginSettingsController struct {
 	deps CommonDeps
 
@@ -62,6 +68,7 @@ type pluginSettingsController struct {
 	pluginOperation      string
 	pluginOperationError string
 	pluginUninstallArmed string
+	settingAction        pluginSettingActionState
 	memoryRevision       uint64
 	// settingSaveRevisions prevents an earlier definition refresh from reverting a later save of the same plugin.
 	settingSaveRevisions map[string]uint64
@@ -439,5 +446,6 @@ func (c *pluginSettingsController) Snapshot() pluginSettingsSnapshot {
 		PluginOperation:      c.pluginOperation,
 		PluginOperationError: c.pluginOperationError,
 		PluginUninstallArmed: c.pluginUninstallArmed,
+		PluginSettingAction:  c.settingAction,
 	}
 }

@@ -365,7 +365,7 @@ type pluginSettingsFormState struct {
 	formFieldsState
 	pluginID    string
 	initial     map[string]string
-	saving      bool
+	saving      bool // Only editable setting values participate in this save transaction.
 	status      string
 	statusError bool
 	fieldErrors map[string]string
@@ -645,6 +645,7 @@ func (a *App) setPluginSelectionLocked(index int) {
 	plugin := plugins[index]
 	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
+		refreshFormDisplayDefinitions(&form.formFieldsState, pluginSettingsFormDefinitions(plugin))
 		if editor := a.settingsTableEditor; editor != nil && editor.target == &form.formFieldsState {
 			// A post-save definition refresh rebuilds this form. The settings overlay
 			// is published only while settingsTableEditor.target matches the live form
@@ -655,7 +656,6 @@ func (a *App) setPluginSelectionLocked(index int) {
 		// Refresh can arrive while a save is still in flight, before initial moves
 		// forward. An edit that matches the previous initial then looks clean, and
 		// replacing the form would drop it. A dirty form is kept for the same reason.
-		// ponytail: defer dynamic definitions until save or reopen; merge them in place if live updates are needed.
 		if form.saving || pluginFormDirty(form.definitions, form.values, form.initial) {
 			a.pluginSettings.SetSelected(index)
 			return
@@ -1308,13 +1308,11 @@ func (a *App) openNativePluginSettings(pluginID string) {
 // runPluginServiceAction executes one service lifecycle operation and reloads its dynamic state.
 func (a *App) runPluginServiceAction(actionID string) {
 	form := a.pluginSettings.Form()
-	if form == nil || form.saving || actionID == "" {
+	if form == nil || a.pluginSettings.settingAction.actionID != "" || actionID == "" {
 		return
 	}
 	pluginID := form.pluginID
-	form.saving = true
-	form.status = ""
-	form.statusError = false
+	a.pluginSettings.settingAction = pluginSettingActionState{pluginID: pluginID, actionID: actionID}
 	a.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "run plugin service action", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -1324,12 +1322,9 @@ func (a *App) runPluginServiceAction(actionID string) {
 			err = a.reloadPlugins(false, pluginID)
 		}
 		_ = a.runOnUI("finish plugin service action", func() {
-			if current := a.pluginSettings.Form(); current != nil && current.pluginID == pluginID {
-				current.saving = false
-				if err != nil {
-					current.status = err.Error()
-					current.statusError = true
-				}
+			a.pluginSettings.settingAction.actionID = ""
+			if err != nil {
+				a.pluginSettings.settingAction.errorText = err.Error()
 			}
 			a.invalidateSettingsWindow()
 		})
