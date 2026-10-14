@@ -372,7 +372,7 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 }
 
 func (p *ScreenshotPlugin) getScreenshotDirectory() string {
-	return filepath.Join(util.GetLocation().GetWoxDataDirectory(), "screenshots")
+	return util.GetLocation().GetScreenshotDirectory()
 }
 
 // isScreenshotAIToolbarEnabled follows the checkbox default of off when the value is missing.

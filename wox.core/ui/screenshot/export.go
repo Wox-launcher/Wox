@@ -11,7 +11,7 @@ import (
 
 // reserveScreenshotExportFilePath allocates a collision-safe PNG only after image confirmation.
 func reserveScreenshotExportFilePath() (string, error) {
-	directory := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "screenshots")
+	directory := util.GetLocation().GetScreenshotDirectory()
 	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
 		return "", fmt.Errorf("ensure screenshot directory: %w", err)
 	}
