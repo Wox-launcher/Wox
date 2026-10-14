@@ -1748,5 +1748,35 @@
         "plugin_desc": "允许用户从 Wox 启动某些 PowerToys 程序。"
       }
     }
+  },
+  {
+    "Id": "84a696e0-e250-4cf4-b9cc-e45115bb4119",
+    "Name": "QRCode",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.0.0",
+    "Runtime": "python",
+    "Description": "i18n:plugin_desc",
+    "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.QRCode/main/images/app.svg",
+    "Website": "https://github.com/dragonish/Wox.Plugin.QRCode",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.QRCode/releases/latest/download/wox.plugin.qrcode.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.QRCode/main/assets/screenshot.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-14 20:40:31",
+    "DateUpdated": "2026-10-14 20:40:31",
+    "I18n": {
+      "en_US": {
+        "plugin_desc": "Generate a QR Code / Screenshot to scan and recognize the QR Code."
+      },
+      "zh_CN": {
+        "plugin_desc": "生成二维码 / 截图识别二维码。"
+      }
+    }
   }
 ]
