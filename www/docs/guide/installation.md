@@ -30,6 +30,8 @@ Wox checks the stable update channel by default. To receive beta prereleases, op
 2. Extract it to a directory you control, such as `C:\Tools\Wox`.
 3. Run `Wox.exe`.
 
+To carry settings and plugins with this copy, create a `wox-user` folder next to `Wox.exe` before the first launch. See [Portable user data](#portable-user-data).
+
 If Windows SmartScreen asks for confirmation, check that the file came from the official Wox release page before continuing.
 
 ### macOS
@@ -69,6 +71,12 @@ Wox keeps settings, plugin data, cache, and logs outside the application directo
 | Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
 Back up this directory if you want to move your configuration to another machine.
+
+### Portable user data
+
+Create a `wox-user` directory next to the executable before you start that copy of Wox. Wox then stores settings, plugins, themes, and the user database in that directory.
+
+Logs, plugin hosts, caches, models, and the file index stay in the per-machine data directory above. Those files differ between computers. Wox does not create `wox-user` beside the executable by itself. Remove that directory to use the normal user-data location again.
 
 ## Uninstall
 

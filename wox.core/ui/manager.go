@@ -2313,6 +2313,9 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 // This includes creating the new directory structure and copying necessary data
 func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory string) error {
 	location := util.GetLocation()
+	if location.IsPortableUserData() {
+		return fmt.Errorf("portable mode uses the wox-user directory next to the executable")
+	}
 	oldDirectory := location.GetUserDataDirectory()
 
 	// check if new directory is valid
