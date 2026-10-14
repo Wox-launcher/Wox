@@ -28,7 +28,10 @@ class CurrentConnectionTest(unittest.IsolatedAsyncioTestCase):
         sent = []
 
         async def send(raw):
-            sent.append(json.loads(raw))
+            message = json.loads(raw)
+            # Logs share the websocket but do not carry request IDs.
+            if message.get("Method") == "HideApp":
+                sent.append(message)
 
         original = AsyncMock()
         replacement = AsyncMock()
