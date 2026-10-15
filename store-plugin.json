@@ -1754,7 +1754,7 @@
     "Name": "QRCode",
     "Author": "dragonish",
     "Version": "1.2.0",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.4.5",
     "Runtime": "python",
     "Description": "i18n:plugin_desc",
     "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.QRCode/main/images/app.svg",
