@@ -4,7 +4,7 @@
 
 此版本带来离线模式，便携支持，并支持在 Windows 上从 Flow Launcher 导入快捷键、主题和插件。
 
-(https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/import_from_flow_launcher.png)
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/import_from_flow_launcher.png)
 
 - Add
   - [`Privacy`] 开启离线模式可暂停 Wox 的联网功能和所有第三方插件，同时继续使用本地搜索。
