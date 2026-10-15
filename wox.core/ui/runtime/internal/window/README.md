@@ -17,6 +17,10 @@ they never include screenshot headers or retain screenshot sessions. Clipboard
 and external-link methods only supply native owner handles and thread dispatch
 to their utility packages.
 
+Linux synchronous UI calls and deferred posts use GLib's normal event priority,
+ahead of GTK redraw sources, so continuous rendering cannot starve them. Posts
+still attach a source rather than executing inline on the owning thread.
+
 Linux UI-call diagnostics track the current native stage, continuous synchronous
 call backlog, and completed calls per watchdog sample. Stage changes alone do not
 prove calls are being serviced: GTK rendering can keep idle-priority callbacks
@@ -25,6 +29,7 @@ dispatch starvation; an old stage helps locate a native stall. These are diagnos
 signals, not a replacement for a native stack when identifying the cause.
 
 Run `python3 testdata/test_linux_startup.py` on Linux with GLib development files
-to exercise native startup, deferred dispatch, and backlog accounting without a
-display. The scheduled UI workflow runs this fixture and the smoke runner's Unix
-socket relaunch regression alongside the UI contracts.
+to exercise native startup, deferred dispatch, backlog accounting, and both call
+and post dispatch during continuous redraw without a display. The scheduled UI
+workflow runs this fixture and the smoke runner's Unix socket relaunch regression
+alongside the UI contracts.

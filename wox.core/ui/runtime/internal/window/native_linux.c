@@ -1184,6 +1184,8 @@ static bool run_on_main_sync(WoxMainFunction function, void *data) {
   g_mutex_init(&call.mutex);
   g_cond_init(&call.condition);
   GSource *source = g_idle_source_new();
+  // UI calls must run ahead of GTK redraws, which can starve default-priority idle sources.
+  g_source_set_priority(source, G_PRIORITY_DEFAULT);
   g_source_set_callback(source, execute_main_call, &call, NULL);
   linux_ui_wait_started();
   guint source_id = g_source_attach(source, g_main_context_default());
@@ -1224,12 +1226,14 @@ static gboolean execute_go_post(gpointer data) {
   return G_SOURCE_REMOVE;
 }
 
-// Attaching an idle source avoids g_main_context_invoke's inline execution on the UI thread.
+// Attaching a source keeps Post deferred even on the UI thread. Normal event
+// priority lets it run during continuous GTK redraws instead of waiting for idle.
 int32_t wox_linux_post(uintptr_t context) {
   if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) == 0) {
     return -1;
   }
   GSource *source = g_idle_source_new();
+  g_source_set_priority(source, G_PRIORITY_DEFAULT);
   g_source_set_callback(source, execute_go_post, (void *)context, NULL);
   guint source_id = g_source_attach(source, g_main_context_default());
   g_source_unref(source);
