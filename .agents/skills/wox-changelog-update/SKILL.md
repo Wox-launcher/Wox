@@ -22,6 +22,7 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 
 - Run `git log --oneline --no-merges <range>`.
 - Open key commits with `git show --stat --oneline <sha>` to classify user-facing impact.
+- Check whether each included change came through a pull request. Inspect merge commits as well as the non-merge log, and use GitHub's commit-to-PR lookup or PR metadata for squash/rebase merges or unclear local history. Record the PR URL and the contributor's verified GitHub login; use the PR author, not the person who merged it. Do not infer a login from a commit display name or email. If attribution cannot be verified, report that gap instead of guessing or silently omitting it.
 - Ignore pure build/version bump commits unless they change user-visible behavior.
 - Collect store catalog additions separately from app/core commits. Compare `store-plugin.json` and `store-theme.json` at `last_release_tag` vs `HEAD`. A store item is new only when its `Id` (plugin) or `ThemeId` (theme) is absent from the last release file. Ignore version bumps, field edits, and other updates to existing store entries. Ignore bundled script plugin version bumps.
 - Do not put third-party store catalog changes in `Add`, `Improve`, or `Fix`. List only newly added store plugins and themes in `Store`.
@@ -54,6 +55,7 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 - If a new feature needs screenshots but the images are not available yet, leave clearly named screenshot placeholder image lines in the same bullet so the screenshots can be added later.
 - Prefer plugin/module prefix when clear, e.g. ``[`Shell`]`` or ``[`Clipboard`]``.
 - Write issue references as Markdown links, e.g. `[#4339](https://github.com/Wox-launcher/Wox/issues/4339)`. Do not leave a bare `#4339` for the preview to rewrite later.
+- Every changelog item originating from a PR must credit its contributor with `[@username](https://github.com/username)` and link the PR as `[#1234](https://github.com/Wox-launcher/Wox/pull/1234)`. Apply this to `Add`, `Improve`, `Fix`, and `Store`, with identical attribution in both languages. When a bullet combines contributions from several PRs, credit each relevant PR author once. Keep store author credits; if that author is also the PR contributor, reuse the existing mention, otherwise append the PR contributor separately. For example: ``  - [`Notes`] Fix typing `- [ ] ` not creating a task. [#4618](https://github.com/Wox-launcher/Wox/pull/4618) [@lmgarret](https://github.com/lmgarret)``.
 - Keep existing screenshots. Add new screenshot lines when screenshots already exist, or when a user explicitly asks to reserve screenshot positions for upcoming images.
 - Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is already-clickable Markdown: `[Name](page_url) Description [@github_username](https://github.com/github_username)`. Resolve `i18n:` names and descriptions from `I18n.en_US` in `CHANGELOG.md` and from `I18n.zh_CN` in `CHANGELOG.zh_CN.md` (`plugin_name`, `plugin_desc` or `plugin_description`). If a locale is missing, fall back to `en_US`, then `Name` / `Description`. Use `ThemeName` and `Description` for themes. Link the name to `Website` (plugin) or `ThemeUrl` (theme). If that URL is empty, write the plain name without a link. Append the author as a GitHub profile link. Prefer the username from a `github.com` / `gist.github.com` `Website` or `ThemeUrl`; otherwise use `Author` or `ThemeAuthor` when it is a single handle. Skip the author link when the author is only a display name. Do not add store screenshots, download URLs, or version numbers.
 
@@ -79,6 +81,7 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 
 - Ensure no duplicate bullets.
 - Ensure every `Add`/`Improve`/`Fix` bullet maps to at least one commit in range.
+- Ensure every PR-derived item includes its PR link and verified contributor mention in both languages, including when the same feature combines direct commits and PR contributions. Check merge history or GitHub associations so `--no-merges` does not hide attribution.
 - Ensure every `Store` bullet maps to a plugin `Id` or theme `ThemeId` that is new since `last_release_tag`.
 - Ensure every release section you create or update has a biggest-highlight paragraph under the version heading in both files, written in everyday language a typical user can understand.
 - Reread new bullets as a user: drop leftover implementation terms such as schema, chrome, prefetch, incremental index, DirectWrite, overlay, conversion mode, or host restart unless they are the feature name.
@@ -95,6 +98,7 @@ git tag --sort=-creatordate | head -n 20
 sed -n '1,120p' CHANGELOG.md
 sed -n '1,120p' CHANGELOG.zh_CN.md
 git log --oneline --no-merges <last_tag>..HEAD
+git log --oneline --merges <last_tag>..HEAD
 git show --stat --oneline <sha>
 git show <last_tag>:store-plugin.json
 git show <last_tag>:store-theme.json

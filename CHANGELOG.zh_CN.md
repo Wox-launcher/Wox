@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.4.7 - 2026-10-15
+
+此版本带来离线模式，便携支持，并支持在 Windows 上从 Flow Launcher 导入快捷键、主题和插件。
+
+(https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/import_from_flow_launcher.png)
+
+- Add
+  - [`Privacy`] 开启离线模式可暂停 Wox 的联网功能和所有第三方插件，同时继续使用本地搜索。
+  - [`Portable Mode`] 只需要在Wox可执行文件旁边新建`wox-user`目录，Wox下次启动的时候就会默认使用这个配置目录。这种方式允许您将Wox以及配置复制到任何地方启动，同时保留配置。
+  - [`Flow Launcher`] Windows 首次设置时可导入热键、查询别名、常规设置、当前主题和已安装插件，继续沿用熟悉的快捷键和插件。
+
+- Improve
+  - [`Screenshot`] 可选中指针下的按钮或窗口内其他区域，用滚轮选择更大的上层区域。可拖动编辑工具栏，更快粘贴截图，保存的截图也会跟随自定义用户数据目录。
+  - [`App`] 支持将 macOS 应用移到废纸篓来卸载。更新应用列表时更省 CPU，Windows 应用网格的列表更简洁，图标更清晰。
+  - [`File Search`] 无需输入 `f` 关键词，也能在搜索中找到文件。
+  - [`Converter`] 可选择默认显示货币，或跟随系统地区，货币计算时不必再指定目标货币。 [#4619](https://github.com/Wox-launcher/Wox/pull/4619) [@mtsgsr](https://github.com/mtsgsr)
+  - [`Notes`] 可在结果旁预览笔记及其中的图片，并查看最后更新时间。
+  - [`Hotkey`] 用 Ctrl/Cmd+, 打开设置，用 Ctrl/Cmd+W 关闭当前窗口或内嵌网页。从笔记或 AI 对话中打开设置时，会直接进入对应插件的设置页。
+  - [`Query`] 撤销或重做查询时，恢复之前选中的结果。
+  - [`Data`] 在可执行文件旁创建 `wox-user` 文件夹，即可将设置、插件、主题及其他用户数据保存在这份 Wox 旁边。
+  - [`Backup`] 开启自动备份后，Wox 运行期间每天备份一次。可在设置中删除旧备份，查看备份进度，已有备份进行时不会重复启动。
+  - [`Cloud Sync`] 夜间清理旧同步历史，减少磁盘占用。
+
+- Fix
+  - [`Query`] 置顶结果显示在所有分组之前，且仅对保存置顶时的查询生效。刷新时保留可见结果，备用搜索也不再等待响应较慢的插件。
+  - [`Clipboard`] 修复从 Wox 复制的文字和图片没有出现在剪贴板历史中 [#4620](https://github.com/Wox-launcher/Wox/issues/4620)。
+  - [`Plugin`] 修复使用相同入口文件名的 Python 插件互相干扰 [#4628](https://github.com/Wox-launcher/Wox/issues/4628)。
+  - [`Backup`] 修复恢复备份时文件仍被占用的问题，并防止恢复的数据被较旧的云端数据覆盖。跳过无法读取的插件文件，避免整个备份中断。
+  - [`Notes`] 修复输入 `- [ ] ` 没有创建待办事项。 [#4618](https://github.com/Wox-launcher/Wox/pull/4618) [@lmgarret](https://github.com/lmgarret)
+  - [`Settings`] 文本输入框在焦点移开后保存，关闭代理后正确应用更改，并恢复 macOS 设置窗口的拖动。
+  - [`Theme`] 修复主题包含其他 Wox 版本的选项时无法加载。
+  - [`Windows`] 修复关闭网页预览并隐藏 Wox 后，内存仍未释放。
+
+- Store
+  - Plugin
+    - [Wox.Plugin.Manasikāra](https://github.com/Archetype444/Wox.Plugin.Manasikara) Continuous focus and deep focus, three Pomodoro variants, meditation and countdown timers with configurable singing-bowl chimes and activity prompts. [#4621](https://github.com/Wox-launcher/Wox/pull/4621) [@Archetype444](https://github.com/Archetype444)
+    - [Nbnhhsh](https://github.com/dragonish/Wox.Plugin.Nbnhhsh) 「能不能好好说话？」拼音首字母缩写翻译工具 [#4624](https://github.com/Wox-launcher/Wox/pull/4624) [@dragonish](https://github.com/dragonish)
+    - [PowerToys](https://github.com/dragonish/Wox.Plugin.PowerToys) 允许用户从 Wox 启动某些 PowerToys 程序。 [#4626](https://github.com/Wox-launcher/Wox/pull/4626) [@dragonish](https://github.com/dragonish)
+    - [QRCode](https://github.com/dragonish/Wox.Plugin.QRCode) 生成二维码 / 截图识别二维码。 [#4630](https://github.com/Wox-launcher/Wox/pull/4630) [@dragonish](https://github.com/dragonish)
+
 ## v2.4.6 - 2026-10-06
 
 此版本主要增强了截图插件，Folder插件以及其他BUG修复。同时我们还微调了Wox的内置主题样式。您现在也可以使用`Ctrl/Cmd + P`来暂时隐藏/显示预览面板。
