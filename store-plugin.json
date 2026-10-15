@@ -132,7 +132,7 @@
     "Name": "Spotify",
     "Author": "Wox-launcher",
     "Version": "0.0.3",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.0.3",
     "Runtime": "nodejs",
     "Description": "Spotify integration",
     "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Spotify/main/images/app.png",
@@ -147,7 +147,7 @@
       "Linux"
     ],
     "DateCreated": "2024-07-05 15:00:00",
-    "DateUpdated": "2026-09-06 03:06:30"
+    "DateUpdated": "2026-10-15 15:05:45"
   },
   {
     "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
@@ -513,7 +513,7 @@
     "Name": "Iconify",
     "Author": "Wox-launcher",
     "Version": "0.1.1",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.4.5",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Iconify/master/image/app.png",
@@ -528,7 +528,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-09-30 06:10:10",
+    "DateUpdated": "2026-10-15 15:05:52",
     "I18n": {
       "en_US": {
         "plugin_description": "Search Iconify icons - Home of open source icon sets"
@@ -543,7 +543,7 @@
     "Name": "i18n:plugin_name",
     "Author": "Wox-launcher",
     "Version": "0.6.1",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.4.4",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_desc",
     "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.AIQuota/master/images/app.svg",
@@ -558,7 +558,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-09-19 03:06:29",
+    "DateUpdated": "2026-10-15 15:05:52",
     "I18n": {
       "en_US": {
         "plugin_name": "AI Quota",
@@ -701,7 +701,7 @@
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
     "Version": "0.0.2",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.4.5",
     "Runtime": "python",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Unsplash/main/images/app.png",
@@ -716,7 +716,7 @@
       "Linux"
     ],
     "DateCreated": "2026-04-26 15:15:06",
-    "DateUpdated": "2026-09-30 09:06:26",
+    "DateUpdated": "2026-10-15 15:05:55",
     "I18n": {
       "en_US": {
         "plugin_name": "Unsplash",
@@ -801,7 +801,7 @@
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
     "Version": "0.0.1",
-    "MinWoxVersion": "2.0.0",
+    "MinWoxVersion": "2.0.4",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Rimage/main/images/app.svg",
@@ -816,7 +816,7 @@
       "Linux"
     ],
     "DateCreated": "2026-05-06 19:48:30",
-    "DateUpdated": "2026-05-06 19:48:30",
+    "DateUpdated": "2026-10-15 15:05:57",
     "I18n": {
       "en_US": {
         "plugin_name": "RImage",
@@ -1474,7 +1474,7 @@
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
     "Version": "1.0.0",
-    "MinWoxVersion": "2.4.5",
+    "MinWoxVersion": "2.4.2",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://gist.github.com/user-attachments/assets/084b54d6-a803-4765-b9e4-f691a1d02889",
@@ -1489,7 +1489,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-23 22:07:37",
-    "DateUpdated": "2026-09-23 22:07:37",
+    "DateUpdated": "2026-10-15 15:06:05",
     "I18n": {
       "en_US": {
         "plugin_name": "Stock",
