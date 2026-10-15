@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
@@ -152,15 +154,62 @@ func TestReleasePreparedSearchTextRebuildsOnDemand(t *testing.T) {
 	if len(plugin.queryEntries) != 1 || len(plugin.queryEntries[0].preparedSearchCandidates) == 0 {
 		t.Fatalf("query entries = %+v, want prepared Notes text", plugin.queryEntries)
 	}
+	// Classification belongs to the indexed snapshot, including after long-hide cleanup.
+	plugin.queryEntries[0].info.launchpadHidden = true
+	previous, _ := plugin.getQueryEntriesSnapshot()
 
 	plugin.ReleasePreparedSearchText()
-	if plugin.queryEntries != nil {
-		t.Fatalf("released query entries = %+v, want nil", plugin.queryEntries)
+	if len(plugin.queryEntries) != 1 || len(plugin.queryEntries[0].preparedSearchCandidates) != 0 || plugin.queryEntriesPrepared {
+		t.Fatalf("released query entries = %+v, want retained metadata without prepared text", plugin.queryEntries)
+	}
+	if len(previous[0].preparedSearchCandidates) == 0 {
+		t.Fatal("release mutated a snapshot still held by a query")
 	}
 
+	// Query restoration must use retained metadata, not rerun the app index pipeline.
+	plugin.apps = nil
 	plugin.ensureQueryEntries(context.Background())
 	if len(plugin.queryEntries) != 1 || plugin.queryEntries[0].info.Name != "Notes" || len(plugin.queryEntries[0].preparedSearchCandidates) == 0 {
 		t.Fatalf("rebuilt query entries = %+v, want prepared Notes text", plugin.queryEntries)
+	}
+	if !plugin.queryEntries[0].info.launchpadHidden {
+		t.Fatal("query restoration discarded launchpad classification")
+	}
+}
+
+// TestConcurrentPreparedSearchTextRestore checks that a burst of cold queries publishes once.
+func TestConcurrentPreparedSearchTextRestore(t *testing.T) {
+	plugin := &ApplicationPlugin{
+		apps: []appInfo{{Name: "QQ音乐", Path: `C:\Apps\QQMusic.exe`}},
+	}
+	plugin.rebuildQueryEntries(context.Background())
+	plugin.ReleasePreparedSearchText()
+	released, generation := plugin.getQueryEntriesSnapshot()
+
+	var ready, finished sync.WaitGroup
+	start := make(chan struct{})
+	for range 32 {
+		ready.Add(1)
+		finished.Add(1)
+		go func() {
+			defer finished.Done()
+			ready.Done()
+			<-start
+			plugin.ensureQueryEntries(context.Background())
+		}()
+	}
+	ready.Wait()
+	close(start)
+	finished.Wait()
+	entries, restoredGeneration := plugin.getQueryEntriesSnapshot()
+	if restoredGeneration != generation+1 {
+		t.Fatalf("generation = %d, want one restore after %d", restoredGeneration, generation)
+	}
+	if len(entries) != 1 || len(entries[0].preparedSearchCandidates) == 0 {
+		t.Fatalf("restored entries = %+v, want prepared QQ Music text", entries)
+	}
+	if len(released[0].preparedSearchCandidates) != 0 {
+		t.Fatal("restore mutated the released snapshot")
 	}
 }
 
@@ -189,16 +238,20 @@ func TestBuildAppActionsIncludesIndexAction(t *testing.T) {
 
 func TestSyncAppIndexToolbarReplaysLatestStatus(t *testing.T) {
 	api := newRecordingAppAPI()
-	api.translations["plugin_app_index_scanning"] = "Scanning application folders"
-	api.translations["plugin_app_indexing_progress"] = "Indexing apps (%d/%d)"
+	api.translations["plugin_app_index_scanning"] = "Scanning application folders · %ds"
+	api.translations["plugin_app_indexing_progress"] = "Indexing apps (%d/%d) · %ds"
 	app := &ApplicationPlugin{api: api}
 
 	app.updateAppIndexStatus(context.Background(), "plugin_app_index_scanning", 0, 0)
+	startedAt := app.appIndexStatus.startedAt
 	app.updateAppIndexStatus(context.Background(), "plugin_app_indexing_progress", 25, 100)
+	if app.appIndexStatus.startedAt != startedAt {
+		t.Fatal("progress update reset the index timer")
+	}
 	api.toolbarMsgs = nil
 	app.syncAppIndexToolbar(context.Background())
 
-	if len(api.toolbarMsgs) != 1 || api.toolbarMsgs[0].Progress == nil || *api.toolbarMsgs[0].Progress != 25 || api.toolbarMsgs[0].Title != "Indexing apps (25/100)" {
+	if len(api.toolbarMsgs) != 1 || api.toolbarMsgs[0].Progress == nil || *api.toolbarMsgs[0].Progress != 25 || api.toolbarMsgs[0].Title != "Indexing apps (25/100) · 1s" {
 		t.Fatalf("unexpected replayed toolbar: %#v", api.toolbarMsgs)
 	}
 
@@ -207,6 +260,18 @@ func TestSyncAppIndexToolbarReplaysLatestStatus(t *testing.T) {
 	app.syncAppIndexToolbar(context.Background())
 	if len(api.toolbarMsgs) != 0 {
 		t.Fatalf("completed status was replayed: %#v", api.toolbarMsgs)
+	}
+}
+
+// TestAppIndexElapsedSeconds keeps live and completed durations consistent with file indexing.
+func TestAppIndexElapsedSeconds(t *testing.T) {
+	for _, test := range []struct {
+		elapsed time.Duration
+		want    int64
+	}{{0, 1}, {time.Second, 1}, {6100 * time.Millisecond, 7}} {
+		if got := appIndexElapsedSeconds(test.elapsed); got != test.want {
+			t.Errorf("elapsed seconds for %s = %d, want %d", test.elapsed, got, test.want)
+		}
 	}
 }
 

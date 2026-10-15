@@ -171,17 +171,24 @@ func (a *WindowsRetriever) GetAppExtensions(ctx context.Context) []string {
 
 func (a *WindowsRetriever) ParseAppInfo(ctx context.Context, path string) (appInfo, error) {
 	lowerPath := strings.ToLower(path)
-	if strings.HasSuffix(lowerPath, ".lnk") {
-		return a.parseShortcut(ctx, path)
-	}
-	if strings.HasSuffix(lowerPath, ".exe") {
+	var info appInfo
+	var err error
+	switch {
+	case strings.HasSuffix(lowerPath, ".lnk"):
+		info, err = a.parseShortcut(ctx, path)
+	case strings.HasSuffix(lowerPath, ".exe"):
+		// Executable parsing already classifies artwork to filter System32 helpers.
+		// Reuse that result for Launchpad instead of extracting the same icon again.
 		return a.parseExe(ctx, path)
+	case strings.HasSuffix(lowerPath, ".url"):
+		info, err = a.parseUrlShortcut(ctx, path)
+	default:
+		return appInfo{}, errors.New("not implemented")
 	}
-	if strings.HasSuffix(lowerPath, ".url") {
-		return a.parseUrlShortcut(ctx, path)
+	if err == nil {
+		populateLaunchpadIconMetadata(ctx, &info)
 	}
-
-	return appInfo{}, errors.New("not implemented")
+	return info, err
 }
 
 func resolveAppIdentityForPlatform(ctx context.Context, info appInfo) string {
@@ -271,12 +278,13 @@ func (a *WindowsRetriever) parseExe(ctx context.Context, appPath string) (appInf
 	}
 
 	return appInfo{
-		Name:           displayName,
-		Path:           filepath.Clean(appPath),
-		Icon:           icon,
-		IconSourcePath: filepath.Clean(appPath),
-		Type:           AppTypeDesktop,
-		IsDefaultIcon:  icon.ImageData == appIcon.ImageData,
+		Name:             displayName,
+		Path:             filepath.Clean(appPath),
+		Icon:             icon,
+		IconSourcePath:   filepath.Clean(appPath),
+		Type:             AppTypeDesktop,
+		IsDefaultIcon:    icon.ImageData == appIcon.ImageData,
+		HasDedicatedIcon: hasDedicatedIcon && iconCheckErr == nil,
 	}, nil
 }
 

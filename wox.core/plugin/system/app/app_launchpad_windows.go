@@ -12,8 +12,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// populateLaunchpadVisibility classifies entry points when rebuilding the query
-// index, so directory edits also update restored and previously indexed apps.
+// populateLaunchpadVisibility applies directory scope to the cached icon metadata.
+// Directory edits must not repeat native icon extraction for unchanged apps.
 func populateLaunchpadVisibility(ctx context.Context, info *appInfo, userDirectories ...appDirectory) {
 	roots := make([]string, 0, 2)
 	for _, id := range []*windows.KNOWNFOLDERID{windows.FOLDERID_StartMenu, windows.FOLDERID_CommonStartMenu} {
@@ -21,8 +21,14 @@ func populateLaunchpadVisibility(ctx context.Context, info *appInfo, userDirecto
 			roots = append(roots, root)
 		}
 	}
-	info.launchpadHidden = !windowsLaunchpadEntry(*info, roots, userDirectories...)
-	if info.launchpadHidden || info.IsDefaultIcon || info.Icon.IsEmpty() {
+	info.launchpadHidden = !info.HasDedicatedIcon || !windowsLaunchpadEntry(*info, roots, userDirectories...)
+}
+
+// populateLaunchpadIconMetadata classifies native artwork once when an app is parsed.
+// The existing app and icon-source freshness checks invalidate this persisted result.
+func populateLaunchpadIconMetadata(ctx context.Context, info *appInfo) {
+	info.HasDedicatedIcon = false
+	if info.IsDefaultIcon || info.Icon.IsEmpty() {
 		return
 	}
 	source := strings.TrimSpace(info.IconSourcePath)
@@ -33,14 +39,14 @@ func populateLaunchpadVisibility(ctx context.Context, info *appInfo, userDirecto
 		// A successful shell lookup can still return the generic Windows executable
 		// icon. IsDefaultIcon alone only detects Wox's own fallback artwork.
 		dedicated, err := fileicon.HasDedicatedFileIcon(ctx, source)
-		info.launchpadHidden = !dedicated || err != nil
+		info.HasDedicatedIcon = dedicated && err == nil
 		if err != nil {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("launchpad icon classification failed: path=%s err=%v", source, err))
 		}
-	} else if !isAppsFolderIndexedApp(*info) {
+	} else {
 		// Only shell-provided artwork without a file source bypasses extraction.
 		// AppsFolder .msc entries have real sources and must pass the check above.
-		info.launchpadHidden = true
+		info.HasDedicatedIcon = isAppsFolderIndexedApp(*info)
 	}
 }
 

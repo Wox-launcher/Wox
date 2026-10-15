@@ -79,6 +79,7 @@ func TestLaunchpadRejectsGenericExecutableIcon(t *testing.T) {
 	}
 	icon := common.NewWoxImageAbsolutePath(`C:\cache\generic.png`)
 	info := appInfo{Path: extraAppPath("Tools"), Type: AppTypeAppsFolder, IconSourcePath: source, Icon: icon}
+	populateLaunchpadIconMetadata(context.Background(), &info)
 	populateLaunchpadVisibility(context.Background(), &info)
 	app := &ApplicationPlugin{}
 	if app.shouldShowInLaunchpad(info) {
@@ -88,6 +89,7 @@ func TestLaunchpadRejectsGenericExecutableIcon(t *testing.T) {
 		t.Fatal("Launchpad classification changed ordinary search metadata")
 	}
 	info = appInfo{Path: extraAppPath("Music!App"), Type: AppTypeUWP, Icon: icon}
+	populateLaunchpadIconMetadata(context.Background(), &info)
 	populateLaunchpadVisibility(context.Background(), &info)
 	if !app.shouldShowInLaunchpad(info) {
 		t.Fatal("packaged app artwork was hidden")
@@ -108,11 +110,41 @@ func TestLaunchpadRejectsAppsFolderFilesWithoutArtwork(t *testing.T) {
 				t.Fatal(err)
 			}
 			info := appInfo{Path: extraAppPath(appsFolderSystem32GUID + name), Type: AppTypeAppsFolder, IconSourcePath: source, Icon: common.NewWoxImageAbsolutePath(`C:\cache\generic.png`)}
+			populateLaunchpadIconMetadata(context.Background(), &info)
 			populateLaunchpadVisibility(context.Background(), &info)
 			if (&ApplicationPlugin{}).shouldShowInLaunchpad(info) {
 				t.Fatal("AppsFolder file without dedicated artwork was shown")
 			}
 		})
+	}
+}
+
+// TestLaunchpadIconMetadataSurvivesCacheReload proves query rebuilds use the indexed
+// classification even when the native source is inaccessible until the next index refresh.
+func TestLaunchpadIconMetadataSurvivesCacheReload(t *testing.T) {
+	info := appInfo{
+		Name:             "Music",
+		Path:             extraAppPath("Music!App"),
+		Type:             AppTypeUWP,
+		Icon:             common.NewWoxImageAbsolutePath(`C:\cache\music.png`),
+		IconSourcePath:   filepath.Join(t.TempDir(), "unavailable.exe"),
+		HasDedicatedIcon: true,
+	}
+	data, err := json.Marshal(appCacheFile{Version: appCacheVersion, Apps: []appInfo{info}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	apps, err := parseAppCacheContent(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &ApplicationPlugin{apps: apps}
+	for range 2 {
+		app.rebuildQueryEntries(context.Background())
+		entries, _ := app.getQueryEntriesSnapshot()
+		if len(entries) != 1 || !app.shouldShowInLaunchpad(entries[0].info) {
+			t.Fatalf("query rebuild lost the cached icon classification: %+v", entries)
+		}
 	}
 }
 

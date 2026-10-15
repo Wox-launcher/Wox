@@ -74,6 +74,11 @@ func TestAppInfoEqualsIgnoresRuntimeOnlyState(t *testing.T) {
 	if base.equals(changedIcon) {
 		t.Fatal("expected icon change to be detected")
 	}
+	changedClassification := base
+	changedClassification.HasDedicatedIcon = true
+	if base.equals(changedClassification) {
+		t.Fatal("expected native icon classification change to be detected")
+	}
 	changedNames := base
 	changedNames.SearchableNames = []string{"cursor"}
 	if base.equals(changedNames) {

@@ -81,6 +81,9 @@ type appInfo struct {
 	// back to a generic/default asset after a restart. Normal app search still
 	// keeps these entries visible.
 	IsDefaultIcon bool `json:"is_default_icon,omitempty"`
+	// HasDedicatedIcon records Windows native icon classification during indexing.
+	// Keep it separate from IsDefaultIcon, which also affects ordinary search ranking.
+	HasDedicatedIcon bool `json:"has_dedicated_icon,omitempty"`
 }
 
 // equals compares index metadata, including derived launch semantics. Pid is intentionally ignored.
@@ -98,7 +101,8 @@ func (info appInfo) equals(other appInfo) bool {
 		info.Type == other.Type &&
 		info.LastModifiedUnix == other.LastModifiedUnix &&
 		info.CanRunAsAdministrator == other.CanRunAsAdministrator &&
-		info.IsDefaultIcon == other.IsDefaultIcon
+		info.IsDefaultIcon == other.IsDefaultIcon &&
+		info.HasDedicatedIcon == other.HasDedicatedIcon
 }
 
 type appCacheFile struct {
@@ -107,7 +111,7 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 15
+const appCacheVersion = 16
 
 const (
 	appCommandLaunchpad = "launchpad"
@@ -140,6 +144,7 @@ type appIndexStatus struct {
 	titleKey  string
 	processed int64
 	total     int64
+	startedAt time.Time
 }
 
 type appContextData struct {
@@ -268,6 +273,7 @@ type ApplicationPlugin struct {
 	queryEntries           []appQueryEntry
 	queryEntriesMutex      sync.RWMutex
 	queryEntriesGeneration uint64
+	queryEntriesPrepared   bool
 	querySessionCache      *util.HashMap[string, appQuerySessionCache]
 	ignoreMatchers         []appIgnoreMatcher
 	ignoredApps            []ignoredApp
@@ -577,7 +583,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	preparedPattern := fuzzymatch.PreparePattern(query.Search)
 
 	// Query against a stable snapshot so index rebuilds or settings changes do not
-	// force extra work in the middle of a keystroke. A long hide drops the snapshot.
+	// force extra work in the middle of a keystroke. A long hide drops only prepared text.
 	snapshotStart := time.Now()
 	a.ensureQueryEntries(ctx)
 	entries, generation := a.getQueryEntriesSnapshot()
@@ -1031,22 +1037,23 @@ func (a *ApplicationPlugin) startAppIndex() {
 	}
 	util.Go(a.runtimeCtx, "index apps", func() {
 		defer a.indexing.Store(false)
-		if !a.rebuildAppIndex(a.runtimeCtx, true) {
+		elapsed, completed := a.rebuildAppIndex(a.runtimeCtx, true)
+		if !completed {
 			return
 		}
-		a.api.Notify(a.runtimeCtx, "i18n:plugin_app_index_completed")
+		a.api.Notify(a.runtimeCtx, fmt.Sprintf(a.api.GetTranslation(a.runtimeCtx, "plugin_app_index_completed"), appIndexElapsedSeconds(elapsed)))
 		a.api.RefreshQuery(a.runtimeCtx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 	})
 }
 
 // rebuildAppIndex serializes full scans and restarts change monitoring around them.
-func (a *ApplicationPlugin) rebuildAppIndex(ctx context.Context, clearCache bool) bool {
+func (a *ApplicationPlugin) rebuildAppIndex(ctx context.Context, clearCache bool) (time.Duration, bool) {
 	a.appIndexMu.Lock()
 	defer a.appIndexMu.Unlock()
 
 	a.stopAppChangeWatcher()
 	if ctx.Err() != nil {
-		return false
+		return 0, false
 	}
 	if clearCache {
 		if err := os.Remove(a.getAppCachePath()); err == nil {
@@ -1059,12 +1066,14 @@ func (a *ApplicationPlugin) rebuildAppIndex(ctx context.Context, clearCache bool
 		a.hotkeyAppCandidates = nil
 	}
 
+	started := time.Now()
 	a.indexApps(ctx)
+	elapsed := time.Since(started)
 	if ctx.Err() != nil {
-		return false
+		return 0, false
 	}
 	a.startAppChangeWatcher()
-	return true
+	return elapsed, true
 }
 
 func (a *ApplicationPlugin) getQueryResultIcon(info appInfo, isLaunchpadQuery bool) common.WoxImage {
@@ -1789,9 +1798,31 @@ func (a *ApplicationPlugin) isPathAtOrUnderDirectory(appPath string, directoryPa
 
 func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	startTimestamp := util.GetSystemTimestamp()
+	phaseStarted := time.Now()
+	tracker := timetracking.New("app_index_done")
 	a.api.Log(ctx, plugin.LogLevelInfo, "start to get apps")
 	a.updateAppIndexStatus(ctx, "plugin_app_index_scanning", 0, 0)
-	defer a.clearAppIndexStatus(ctx)
+	statusCtx, cancelStatus := context.WithCancel(ctx)
+	statusDone := make(chan struct{})
+	util.Go(statusCtx, "refresh app index elapsed time", func() {
+		defer close(statusDone)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-statusCtx.Done():
+				return
+			case <-ticker.C:
+				a.syncAppIndexToolbar(statusCtx)
+			}
+		}
+	})
+	defer func() {
+		// Join the timer before clearing so a late tick cannot replace the completion message.
+		cancelStatus()
+		<-statusDone
+		a.clearAppIndexStatus(ctx)
+	}()
 
 	var extraAppPaths []string
 	if retriever, ok := a.retriever.(extraAppPathRetriever); ok {
@@ -1802,14 +1833,21 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 			extraAppPaths = paths
 		}
 	}
+	tracker.SetElapsedMs("extraPathsMs", phaseStarted.UnixMilli())
+	phaseStarted = time.Now()
 	userDirectories := a.getUserAddedPaths(ctx)
 	directories := append(append([]appDirectory(nil), userDirectories...), a.retriever.GetAppDirectories(ctx)...)
 	appPaths := a.getAppPaths(ctx, directories)
 	appPaths = a.deduplicateAppPaths(append(appPaths, extraAppPaths...))
+	tracker.SetElapsedMs("scanMs", phaseStarted.UnixMilli())
+	tracker.SetInt("paths", len(appPaths))
+	phaseStarted = time.Now()
 	extraApps, err := a.retriever.GetExtraApps(ctx)
 	if err != nil {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error getting extra apps: %s", err.Error()))
 	}
+	tracker.SetElapsedMs("extraDiscoveryMs", phaseStarted.UnixMilli())
+	tracker.SetInt("extraApps", len(extraApps))
 
 	total := int64(len(appPaths) + len(extraApps))
 	var processed atomic.Int64
@@ -1832,8 +1870,29 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	if total == 0 {
 		progress = nil
 	}
+	phaseStarted = time.Now()
+	// Platform catalog metadata and filesystem entries are independent. Prepare
+	// both before publishing the index instead of serializing their native I/O.
+	var extraIndexMs int64
+	var extraIndexComplete bool
+	var extraIndexWait sync.WaitGroup
+	extraIndexWait.Add(1)
+	util.Go(ctx, "index extra apps", func() {
+		defer extraIndexWait.Done()
+		started := time.Now()
+		extraApps = a.indexExtraApps(ctx, extraApps, progress)
+		extraIndexMs = time.Since(started).Milliseconds()
+		extraIndexComplete = true
+	})
 	appInfos := a.indexAppsByPaths(ctx, appPaths, progress)
-	extraApps = a.indexExtraApps(ctx, extraApps, progress)
+	tracker.SetElapsedMs("parseMs", phaseStarted.UnixMilli())
+	extraIndexWait.Wait()
+	if !extraIndexComplete {
+		return
+	}
+	tracker.SetInt64("extraMetadataMs", extraIndexMs)
+	tracker.SetElapsedMs("parallelIndexMs", phaseStarted.UnixMilli())
+	phaseStarted = time.Now()
 
 	//merge extra apps
 	for _, extraApp := range extraApps {
@@ -1864,7 +1923,12 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 	}
 	a.rebuildHotkeyAppCandidates(ctx)
 	a.rebuildQueryEntries(ctx)
+	tracker.SetElapsedMs("publishMs", phaseStarted.UnixMilli())
+	phaseStarted = time.Now()
 	a.saveAppToCache(ctx)
+	tracker.SetElapsedMs("saveMs", phaseStarted.UnixMilli())
+	tracker.SetInt64("totalMs", util.GetSystemTimestamp()-startTimestamp)
+	tracker.Log(ctx)
 
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("indexed %d apps, cost %d ms", len(a.apps), util.GetSystemTimestamp()-startTimestamp))
 }
@@ -1872,7 +1936,11 @@ func (a *ApplicationPlugin) indexApps(ctx context.Context) {
 // updateAppIndexStatus stores the global indexing snapshot before pushing it to an active app query.
 func (a *ApplicationPlugin) updateAppIndexStatus(ctx context.Context, titleKey string, processed int64, total int64) {
 	a.appIndexStatusMu.Lock()
-	a.appIndexStatus = appIndexStatus{titleKey: titleKey, processed: processed, total: total}
+	startedAt := a.appIndexStatus.startedAt
+	if startedAt.IsZero() || titleKey == "plugin_app_index_scanning" {
+		startedAt = time.Now()
+	}
+	a.appIndexStatus = appIndexStatus{titleKey: titleKey, processed: processed, total: total, startedAt: startedAt}
 	a.appIndexStatusMu.Unlock()
 	a.syncAppIndexToolbar(ctx)
 }
@@ -1887,14 +1955,21 @@ func (a *ApplicationPlugin) syncAppIndexToolbar(ctx context.Context) {
 	}
 
 	msg := plugin.ToolbarMsg{Id: appIndexToolbarMsgID, Title: a.api.GetTranslation(ctx, status.titleKey), Icon: appIcon}
+	seconds := appIndexElapsedSeconds(time.Since(status.startedAt))
 	if status.total <= 0 {
 		msg.Indeterminate = true
+		msg.Title = fmt.Sprintf(msg.Title, seconds)
 	} else {
 		percent := int(status.processed * 100 / status.total)
 		msg.Progress = &percent
-		msg.Title = fmt.Sprintf(msg.Title, status.processed, status.total)
+		msg.Title = fmt.Sprintf(msg.Title, status.processed, status.total, seconds)
 	}
 	a.api.ShowToolbarMsg(ctx, msg)
+}
+
+// appIndexElapsedSeconds follows the file index's rounded-up, minimum-one-second display.
+func appIndexElapsedSeconds(elapsed time.Duration) int64 {
+	return max(1, int64((elapsed+time.Second-1)/time.Second))
 }
 
 // clearAppIndexStatus removes the completed run snapshot and any visible toolbar message.
@@ -1963,6 +2038,12 @@ func (a *ApplicationPlugin) indexAppsByPaths(ctx context.Context, appPaths []str
 		util.Go(ctx, fmt.Sprintf("index app group: %d", groupIndex), func() {
 			for _, appPath := range appPathGroup {
 				func() {
+					started := time.Now()
+					defer func() {
+						if elapsed := time.Since(started); elapsed >= 250*time.Millisecond {
+							util.GetLogger().Info(ctx, fmt.Sprintf("app_index_slow_path path=%q costMs=%d", appPath, elapsed.Milliseconds()))
+						}
+					}()
 					if progress != nil {
 						defer progress()
 					}
@@ -2131,6 +2212,7 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context, apps []appInfo, 
 			// Classify the final platform icon before conversion changes its representation.
 			apps[i].IsDefaultIcon = apps[i].Icon.IsEmpty() || apps[i].Icon.ImageData == appIcon.ImageData
 		}
+		populateLaunchpadIconMetadata(ctx, &apps[i])
 		a.populateAppMetadata(ctx, apps[i].Path, &apps[i], nil)
 		apps[i].Icon = common.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
 		if progress != nil {
@@ -2176,6 +2258,7 @@ func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
 	a.queryEntriesMutex.Lock()
 	a.queryEntries = entries
 	a.queryEntriesGeneration++
+	a.queryEntriesPrepared = true
 	a.queryEntriesMutex.Unlock()
 	a.clearQuerySessionCache()
 
@@ -2199,25 +2282,45 @@ func (a *ApplicationPlugin) buildQueryEntry(info appInfo) appQueryEntry {
 	return entry
 }
 
-// ReleasePreparedSearchText drops precomputed app names after a long hide.
-// The next query rebuilds them from the in-memory app list.
+// ReleasePreparedSearchText drops precomputed app names after a long hide,
+// retaining index metadata so the next query does not repeat native icon classification.
 func (a *ApplicationPlugin) ReleasePreparedSearchText() {
 	a.queryEntriesMutex.Lock()
-	a.queryEntries = nil
+	// Readers may still hold the previous snapshot, so never clear its fields in place.
+	entries := slices.Clone(a.queryEntries)
+	for i := range entries {
+		entries[i].preparedSearchCandidates = nil
+	}
+	a.queryEntries = entries
 	a.queryEntriesGeneration++
+	a.queryEntriesPrepared = false
 	a.queryEntriesMutex.Unlock()
 	a.clearQuerySessionCache()
 }
 
-// ensureQueryEntries rebuilds the search snapshot after it was released.
+// ensureQueryEntries restores only search text, coalescing concurrent cold queries.
 func (a *ApplicationPlugin) ensureQueryEntries(ctx context.Context) {
 	a.queryEntriesMutex.RLock()
-	ready := a.queryEntries != nil
+	ready := a.queryEntriesPrepared
 	a.queryEntriesMutex.RUnlock()
 	if ready {
 		return
 	}
-	a.rebuildQueryEntries(ctx)
+
+	a.queryEntriesMutex.Lock()
+	defer a.queryEntriesMutex.Unlock()
+	if a.queryEntriesPrepared {
+		return
+	}
+	// Only indexing/settings rebuilds may classify apps. Restoring prepared text
+	// uses the retained immutable metadata and publishes one snapshot for all waiters.
+	entries := make([]appQueryEntry, len(a.queryEntries))
+	for i, entry := range a.queryEntries {
+		entries[i] = a.buildQueryEntry(entry.info)
+	}
+	a.queryEntries = entries
+	a.queryEntriesGeneration++
+	a.queryEntriesPrepared = true
 }
 
 func (a *ApplicationPlugin) getQueryEntriesSnapshot() ([]appQueryEntry, uint64) {
@@ -2336,8 +2439,29 @@ func (a *ApplicationPlugin) clearQuerySessionCache() {
 	a.querySessionCache.Clear()
 }
 
+// getAppPaths records each root separately so a broad filesystem crawl can be
+// distinguished from application parsing and platform catalog discovery.
 func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
-	var appExtensions = a.retriever.GetAppExtensions(ctx)
+	for _, directory := range appDirectories {
+		started := time.Now()
+		paths := a.scanAppPaths(ctx, []appDirectory{directory})
+		appPaths = append(appPaths, paths...)
+		tracker := timetracking.New("app_index_scan")
+		tracker.SetString("root", directory.Path)
+		tracker.SetInt("paths", len(paths))
+		tracker.SetInt64("costMs", time.Since(started).Milliseconds())
+		tracker.Log(ctx)
+	}
+	return
+}
+
+// scanAppPaths follows the configured recursion, exclusions and ignore rules.
+func (a *ApplicationPlugin) scanAppPaths(ctx context.Context, appDirectories []appDirectory) (appPaths []string) {
+	extensions := a.retriever.GetAppExtensions(ctx)
+	appExtensions := make([]string, len(extensions))
+	for i, extension := range extensions {
+		appExtensions[i] = "." + strings.ToLower(extension)
+	}
 	for _, dir := range appDirectories {
 
 		// Initialize excludeAbsPaths on first call
@@ -2357,10 +2481,10 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 		}
 		ignoreMatchers := a.getIgnoreRuleMatchersSnapshot()
 
-		matchCount := 0
 		for _, entry := range appPath {
+			name := strings.ToLower(entry.Name())
 			isExtensionMatch := lo.ContainsBy(appExtensions, func(ext string) bool {
-				return strings.HasSuffix(strings.ToLower(entry.Name()), fmt.Sprintf(".%s", strings.ToLower(ext)))
+				return strings.HasSuffix(name, ext)
 			})
 			if isExtensionMatch {
 				fullPath := filepath.Join(dir.Path, entry.Name())
@@ -2372,15 +2496,23 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 					continue
 				}
 				appPaths = append(appPaths, fullPath)
-				matchCount++
 
 				continue
 			}
 
-			// check if it's a directory
+			if !dir.Recursive || dir.RecursiveDepth <= 0 {
+				continue
+			}
+
 			subDir := filepath.Join(dir.Path, entry.Name())
-			isDirectory, dirErr := util.IsDirectory(subDir)
-			if dirErr != nil || !isDirectory {
+			// ReadDir already reports ordinary file/directory types. Stat only links
+			// to preserve directory symlink/junction traversal without reopening every
+			// unrelated file in broad roots such as AppData\Local.
+			isDirectory := entry.IsDir()
+			if !isDirectory && entry.Type()&os.ModeSymlink != 0 {
+				isDirectory, _ = util.IsDirectory(subDir)
+			}
+			if !isDirectory {
 				continue
 			}
 			if _, ignored := a.matchIgnoreRuleCandidates(subDir, []string{subDir}, ignoreMatchers); ignored {
@@ -2404,7 +2536,7 @@ func (a *ApplicationPlugin) getAppPaths(ctx context.Context, appDirectories []ap
 			}
 
 			if dir.Recursive && dir.RecursiveDepth > 0 {
-				appPaths = append(appPaths, a.getAppPaths(ctx, []appDirectory{{
+				appPaths = append(appPaths, a.scanAppPaths(ctx, []appDirectory{{
 					Path:            subDir,
 					Recursive:       true,
 					RecursiveDepth:  dir.RecursiveDepth - 1,
