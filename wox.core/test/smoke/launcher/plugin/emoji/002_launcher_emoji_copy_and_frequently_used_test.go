@@ -36,13 +36,13 @@ func Test002LauncherEmojiCopyAndFrequentlyUsed(t *testing.T) {
 			t.Fatalf("copy robot emoji: %v", err)
 		}
 		waitForClipboardText(t, ctx, "🤖")
-		// Copy runs off the UI thread. Hide is scheduled only after recordUsage
-		// returns, so waiting for it avoids reopening the stale first-query panel.
+		// The UI hides after scheduling Copy, before its usage write necessarily finishes.
 		if _, err := client.WaitForWindowState(ctx, "primary", func(state automationdriver.WindowState) bool {
 			return state.Exists && !state.Visible && state.Lifecycle == "hidden"
 		}); err != nil {
 			t.Fatalf("wait for launcher to hide after copying: %v", err)
 		}
+		waitForEmojiUsagePersisted(t, ctx, "🤖")
 
 		smoke.ShowLauncher(t, ctx, client)
 		snapshot = smoke.ReplaceLauncherQuery(t, ctx, client, "emoji 🤖")
