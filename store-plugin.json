@@ -1753,7 +1753,7 @@
     "Id": "84a696e0-e250-4cf4-b9cc-e45115bb4119",
     "Name": "QRCode",
     "Author": "dragonish",
-    "Version": "1.1.0",
+    "Version": "1.2.0",
     "MinWoxVersion": "2.0.0",
     "Runtime": "python",
     "Description": "i18n:plugin_desc",
@@ -1769,7 +1769,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-14 20:40:31",
-    "DateUpdated": "2026-10-15 09:06:33",
+    "DateUpdated": "2026-10-15 12:08:39",
     "I18n": {
       "en_US": {
         "plugin_desc": "Generate a QR Code / Screenshot to scan and recognize the QR Code."
