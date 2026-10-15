@@ -14,6 +14,14 @@ other modes retain configured roots. macOS uses bulk directory reads and
 FSEvents. Linux retains its watcher/reconcile strategy. Platform adapters must
 not depend on query policy or plugin implementations.
 
+Filename indexing prioritizes bounded memory, fast enumeration and low-latency
+queries. Results use the default relevance ranking without user-selectable sort
+orders. Size and modification-time sorting are not offered: the NTFS MFT/USN
+fact stream does not include those attributes, and a second whole-volume
+directory scan solely to populate them would delay index readiness. File previews
+may still read the selected file's attributes. Filename ranking requires no
+additional filesystem I/O.
+
 Content extraction and its SQLite/FTS database remain independent. Its configured
 roots can differ from filename roots. Candidate enumeration and stale-content
 reconciliation use the common directory view, not a second SQL filename index.
@@ -60,6 +68,9 @@ publication. Legacy version 1/2 reads remain write-free and supported; the order
 `20261013_filesearch_query_columns` migration upgrades published generations before
 engine startup. Replacement preserves the manifest, journal, cursors and policy,
 and an interrupted migration can safely retry. Orphan generations are not migrated.
+
+Transient development format 4 snapshots are also readable without retaining
+their discarded metadata-sort permutations. New publications retain format 3.
 
 The existing hidden-launcher lifecycle releases pinyin memoization after ten
 seconds. At thirty seconds it clears memoization again, drops prepared text and

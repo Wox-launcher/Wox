@@ -26,7 +26,7 @@ func (s *Snapshot) encodeQueryColumns() []byte {
 }
 
 // mapQueryColumns validates all lengths before exposing zero-copy scalar views.
-func (s *Snapshot) mapQueryColumns(data []byte) error {
+func (s *Snapshot) mapQueryColumns(data []byte, version uint32) error {
 	if len(data) < 8 {
 		return fmt.Errorf("missing query columns")
 	}
@@ -37,6 +37,11 @@ func (s *Snapshot) mapQueryColumns(data []byte) error {
 		return fmt.Errorf("invalid frequent-name count")
 	}
 	lengths := []uint64{names * 8, names * 8, words * 64 * 8, words * 26 * 8, words * 8, frequent * 4}
+	if version == 4 {
+		// Discarded development snapshots appended two metadata permutations.
+		// Validate their extent without mapping or rebuilding a query sort index.
+		lengths = append(lengths, uint64(s.Len())*4, uint64(s.Len())*4)
+	}
 	parts := make([][]byte, len(lengths))
 	offset := uint64(8)
 	for i, length := range lengths {

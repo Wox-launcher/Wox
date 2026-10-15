@@ -47,6 +47,53 @@ func TestQueryColumnsMappedAndTrimmed(t *testing.T) {
 	}
 }
 
+// TestDiscardedDevelopmentSortColumnsRemainReadable keeps developer snapshots
+// usable after removing the metadata-sort experiment, without rebuilding arrays.
+func TestDiscardedDevelopmentSortColumnsRemainReadable(t *testing.T) {
+	s := fixture(t)
+	path := filepath.Join(t.TempDir(), "development.columns")
+	if err := Write(path, s); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := data[32+15*24:]
+	start, length := binary.LittleEndian.Uint64(descriptor), binary.LittleEndian.Uint64(descriptor[8:])
+	extra := 2 * ((s.Len()*4 + 7) &^ 7)
+	data = append(data, make([]byte, extra)...)
+	// append may move the backing array; retain the descriptor in the new one.
+	descriptor = data[32+15*24:]
+	binary.LittleEndian.PutUint64(descriptor[8:], length+uint64(extra))
+	binary.LittleEndian.PutUint32(descriptor[16:], crc32.ChecksumIEEE(data[start:]))
+	binary.LittleEndian.PutUint32(data[8:], 4)
+	binary.LittleEndian.PutUint64(data[16:], uint64(len(data)))
+	binary.LittleEndian.PutUint32(data[24:], crc32.ChecksumIEEE(data[32:headerSize]))
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	mapped, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mapped.Close()
+	if !bytes.Equal(s.encodeQueryColumns(), mapped.encodeQueryColumns()) {
+		t.Fatal("filename query columns changed")
+	}
+	newPath := filepath.Join(t.TempDir(), "current.columns")
+	if err := Write(newPath, mapped); err != nil {
+		t.Fatal(err)
+	}
+	current, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary.LittleEndian.Uint32(current[8:]) != 3 {
+		t.Fatal("new snapshot retained discarded sort format")
+	}
+}
+
 // TestIdleTrimConcurrentReaders retains borrowed strings through eviction and shutdown.
 func TestIdleTrimConcurrentReaders(t *testing.T) {
 	store, _ := fixtureStore(t)

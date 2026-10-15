@@ -80,9 +80,8 @@ type SearchResult struct {
 	Name       string
 	ParentPath string
 	IsDir      bool
-	// Refinement sorting needs indexed metadata in the result envelope so the
-	// File Search plugin can sort already-recalled candidates without adding a
-	// second database lookup for every visible row.
+	// Metadata reflects source-provided attributes. Filename-only NTFS facts
+	// can omit it; search ranking never fetches extra filesystem attributes.
 	Mtime int64
 	Size  int64
 	Score int64

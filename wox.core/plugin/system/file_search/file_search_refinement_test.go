@@ -69,11 +69,11 @@ func TestFileSearchResultTailsMarksContentMatches(t *testing.T) {
 }
 
 func TestFileSearchResultLimitForContentUsesNameWindow(t *testing.T) {
-	if got := fileSearchResultLimitFor(fileSearchTypeRefinementContent, fileSearchSortRefinementRelevance); got != fileSearchResultLimit {
+	if got := fileSearchResultLimitFor(fileSearchTypeRefinementContent); got != fileSearchResultLimit {
 		t.Fatalf("content filter should use the full result window, got %d", got)
 	}
-	if got := fileSearchResultLimitFor(fileSearchTypeRefinementAll, fileSearchSortRefinementRelevance); got != fileSearchResultLimit+fileSearchContentResultLimit {
-		t.Fatalf("all+relevance should keep the extra content window, got %d", got)
+	if got := fileSearchResultLimitFor(fileSearchTypeRefinementAll); got != fileSearchResultLimit+fileSearchContentResultLimit {
+		t.Fatalf("all types should keep the extra content window, got %d", got)
 	}
 }
 

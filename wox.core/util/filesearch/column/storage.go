@@ -95,7 +95,7 @@ func Open(path string) (*Snapshot, error) {
 		return nil, err
 	}
 	version := binary.LittleEndian.Uint32(header[8:])
-	if string(header[:8]) != magic || version < 1 || version > 3 || binary.LittleEndian.Uint32(header[12:]) != sectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
+	if string(header[:8]) != magic || version < 1 || version > 4 || binary.LittleEndian.Uint32(header[12:]) != sectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
 		return nil, fmt.Errorf("invalid column header")
 	}
 	mapping, err := mapFile(file, int(stat.Size()))
@@ -136,7 +136,7 @@ func Open(path string) (*Snapshot, error) {
 		return nil, err
 	}
 	if version >= 3 {
-		if err := s.mapQueryColumns(sections[15]); err != nil {
+		if err := s.mapQueryColumns(sections[15], version); err != nil {
 			return nil, err
 		}
 	} else {

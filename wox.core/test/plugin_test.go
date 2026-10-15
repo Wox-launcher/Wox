@@ -355,14 +355,13 @@ func TestFilePlugin_OverlappingRootsKeepParent(t *testing.T) {
 	t.Fatalf("expected child file to remain searchable through parent root, got %d result(s)", len(results))
 }
 
-func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
+func TestFilePlugin_RefinementsType(t *testing.T) {
 	suite := NewTestSuite(t)
 	ctx := suite.ctx
 
 	rootPath := newStableFileSearchRoot(t, "filesearch-refinement-root")
 	stamp := time.Now().UnixNano()
 	typePrefix := fmt.Sprintf("refinement-type-%d", stamp)
-	sortPrefix := fmt.Sprintf("refinement-sort-%d", stamp)
 
 	typeFileName := typePrefix + ".txt"
 	typeFilePath := filepath.Join(rootPath, typeFileName)
@@ -374,27 +373,6 @@ func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
 	typeFolderPath := filepath.Join(rootPath, typeFolderName)
 	if err := os.MkdirAll(typeFolderPath, 0755); err != nil {
 		t.Fatalf("failed to create type folder: %v", err)
-	}
-
-	oldFileName := sortPrefix + "-old.txt"
-	oldFilePath := filepath.Join(rootPath, oldFileName)
-	if err := os.WriteFile(oldFilePath, []byte("old"), 0644); err != nil {
-		t.Fatalf("failed to create old sort file: %v", err)
-	}
-
-	newFileName := sortPrefix + "-new.txt"
-	newFilePath := filepath.Join(rootPath, newFileName)
-	if err := os.WriteFile(newFilePath, []byte("new"), 0644); err != nil {
-		t.Fatalf("failed to create new sort file: %v", err)
-	}
-
-	oldTime := time.Now().Add(-2 * time.Hour)
-	newTime := time.Now()
-	if err := os.Chtimes(oldFilePath, oldTime, oldTime); err != nil {
-		t.Fatalf("failed to set old sort file time: %v", err)
-	}
-	if err := os.Chtimes(newFilePath, newTime, newTime); err != nil {
-		t.Fatalf("failed to set new sort file time: %v", err)
 	}
 
 	rootSetting, err := json.Marshal([]map[string]string{
@@ -430,8 +408,11 @@ func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
 	if len(defaultResults) == 0 {
 		t.Fatal("expected default file search results")
 	}
-	if !hasQueryRefinement(refinements, "file_type") || !hasQueryRefinement(refinements, "file_sort") {
-		t.Fatalf("expected file type and sort refinements, got %#v", refinements)
+	if !hasQueryRefinement(refinements, "file_type") {
+		t.Fatalf("expected file type refinement, got %#v", refinements)
+	}
+	if hasQueryRefinement(refinements, "file_sort") {
+		t.Fatalf("file search should not expose a sort refinement, got %#v", refinements)
 	}
 	if hasQueryRefinementOption(refinements, "file_type", "content") {
 		t.Fatal("content type should stay hidden when content search is disabled")
@@ -446,23 +427,6 @@ func TestFilePlugin_RefinementsTypeAndSort(t *testing.T) {
 	}
 	if hasFileSearchResult(folderResults, typeFileName, typeFilePath) {
 		t.Fatalf("folder refinement should exclude file %q", typeFilePath)
-	}
-
-	if err := waitForFileSearchResult(ctx, "f "+sortPrefix, oldFileName, oldFilePath, 30*time.Second); err != nil {
-		t.Fatalf("old sort file did not become searchable: %v", err)
-	}
-	if err := waitForFileSearchResult(ctx, "f "+sortPrefix, newFileName, newFilePath, 30*time.Second); err != nil {
-		t.Fatalf("new sort file did not become searchable: %v", err)
-	}
-
-	modifiedResults, _, err := runQueryWithRefinements(ctx, "f "+sortPrefix, map[string]string{"file_sort": "modified"})
-	if err != nil {
-		t.Fatalf("failed to query modified sort refinement: %v", err)
-	}
-	newIndex := fileSearchResultIndex(modifiedResults, newFileName, newFilePath)
-	oldIndex := fileSearchResultIndex(modifiedResults, oldFileName, oldFilePath)
-	if newIndex < 0 || oldIndex < 0 || newIndex > oldIndex {
-		t.Fatalf("modified sort should put newest file before old file, newIndex=%d oldIndex=%d results=%#v", newIndex, oldIndex, modifiedResults)
 	}
 }
 
