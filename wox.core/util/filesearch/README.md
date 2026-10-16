@@ -22,9 +22,20 @@ directory scan solely to populate them would delay index readiness. File preview
 may still read the selected file's attributes. Filename ranking requires no
 additional filesystem I/O.
 
+On macOS, empty triggered File Search queries fall back to directory-index
+modification times when OS recents are unavailable or empty. This bounded lookup
+uses existing metadata, filters before limiting, and does not change ordinary
+filename ranking or Windows/Linux OS recents.
+
 Content extraction and its SQLite/FTS database remain independent. Its configured
 roots can differ from filename roots. Candidate enumeration and stale-content
 reconciliation use the common directory view, not a second SQL filename index.
+
+Deleting a configured root also deletes its dynamic descendants, directory
+metadata, and mapped filename shards. Independently configured roots are retained
+even when their paths overlap. Migration `20261016_filesearch_orphan_roots`
+removes legacy dynamic roots with no surviving configured ancestor before scanner
+startup, including their derived shards; it leaves the content index untouched.
 
 ## Columns and durability
 

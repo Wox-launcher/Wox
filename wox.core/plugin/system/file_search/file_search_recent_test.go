@@ -2,8 +2,11 @@ package system
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"wox/plugin"
 	"wox/util/filesearch"
@@ -88,4 +91,43 @@ func restoreRecentFilesFn(t *testing.T, files []recentfiles.File) {
 	t.Cleanup(func() {
 		listRecentFilesFn = previous
 	})
+}
+
+// Capture source diagnostics to verify that only unavailable macOS recents fall back.
+type recentSourceTestAPI struct {
+	fileSearchToolbarTestAPI
+	messages []string
+}
+
+func (a *recentSourceTestAPI) Log(_ context.Context, _ plugin.LogLevel, message string) {
+	a.messages = append(a.messages, message)
+}
+
+func TestFileSearchRecentFallbackPolicy(t *testing.T) {
+	filePath, _ := writeRecentFileFixtures(t)
+	for _, tc := range []struct {
+		name     string
+		items    []recentfiles.File
+		err      error
+		fallback bool
+	}{
+		{name: "system results", items: []recentfiles.File{{Path: filePath}}},
+		{name: "empty", fallback: true},
+		{name: "failure", err: errors.New("Spotlight unavailable"), fallback: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			previous := listRecentFilesFn
+			listRecentFilesFn = func(context.Context, recentfiles.ListOption) ([]recentfiles.File, error) { return tc.items, tc.err }
+			t.Cleanup(func() { listRecentFilesFn = previous })
+			api := &recentSourceTestAPI{}
+			response := (&FileSearchPlugin{api: api}).Query(context.Background(), plugin.Query{Type: plugin.QueryTypeInput, TriggerKeyword: "f"})
+			usedFallback := strings.Contains(strings.Join(api.messages, "\n"), "source=index_modified")
+			if usedFallback != (runtime.GOOS == "darwin" && tc.fallback) {
+				t.Fatalf("unexpected fallback policy: %v", api.messages)
+			}
+			if !tc.fallback && len(response.Results) != 1 {
+				t.Fatalf("system recents lost: %#v", response.Results)
+			}
+		})
+	}
 }

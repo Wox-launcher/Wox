@@ -216,22 +216,50 @@ func (d *FileSearchDB) ListRoots(ctx context.Context) ([]RootRecord, error) {
 	return roots, rows.Err()
 }
 
+// DeleteRoot retires dynamic descendants with their owner while preserving
+// independently configured roots, even when their paths overlap.
 func (d *FileSearchDB) DeleteRoot(ctx context.Context, rootID string) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM directories WHERE root_id = ?`, rootID); err != nil {
+	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE retired(id) AS (
+ SELECT ? UNION SELECT r.id FROM roots r JOIN retired p ON r.dynamic_parent_root_id = p.id WHERE r.kind = ?
+ ) SELECT id FROM retired`, rootID, RootKindDynamic)
+	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE id = ?`, rootID); err != nil {
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
 		return err
+	}
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM directories WHERE root_id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE id = ?`, id); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return d.directory.detach(rootID)
+	var detachErr error
+	for _, id := range ids {
+		detachErr = errors.Join(detachErr, d.directory.detach(id))
+	}
+	return detachErr
 }
 
 func (d *FileSearchDB) ResetIndex(ctx context.Context) error {

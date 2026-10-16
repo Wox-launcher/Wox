@@ -1008,23 +1008,42 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	return response
 }
 
-// queryRecentFiles lists OS-tracked recently accessed files for an empty triggered query.
+// queryRecentFiles prefers OS recents, with an indexed-modification fallback on macOS.
 func (c *FileSearchPlugin) queryRecentFiles(ctx context.Context, query plugin.Query, queryStartedAt int64) plugin.QueryResponse {
 	diagnostics := fileSearchQueryDiagnostics{}
 	searchStartedAt := util.GetSystemTimestamp()
 	items, err := listRecentFilesFn(ctx, recentfiles.ListOption{Limit: fileSearchRecentCandidateLimit})
-	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent files lookup failed: %s", err.Error()))
-		response := plugin.NewQueryResponse(nil)
-		response.Refinements = c.buildFileSearchRefinements(ctx)
-		return response
+		items = nil
 	}
-
 	selectedType := selectedFileSearchType(query)
 	results := recentFilesToSearchResults(items, c.getConfiguredSkipHiddenFiles(ctx))
+	// Spotlight can return no rows when indexing is disabled. Keep OS recents
+	// authoritative otherwise, and leave Windows/Linux recent-file behavior intact.
+	fallback := runtime.GOOS == "darwin" && (err != nil || len(items) == 0)
+	if fallback && ctx.Err() == nil {
+		skipHidden := c.getConfiguredSkipHiddenFiles(ctx)
+		results, err = c.engine.RecentModified(ctx, fileSearchRecentResultLimit, func(item filesearch.SearchResult) bool {
+			if skipHidden && isHiddenFileSearchPath(item.Path) {
+				return false
+			}
+			if selectedType == fileSearchTypeRefinementFile && item.IsDir || selectedType == fileSearchTypeRefinementFolder && !item.IsDir {
+				return false
+			}
+			_, statErr := os.Lstat(item.Path)
+			return statErr == nil
+		})
+		if err != nil {
+			c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent modified fallback failed: %s", err.Error()))
+		}
+	}
+	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	results = refineFileSearchResults(results, selectedType, fileSearchRecentResultLimit)
-	queryResults := c.materializeFileSearchResults(ctx, query, results, true, &diagnostics)
+	queryResults := c.materializeFileSearchResults(ctx, query, results, !fallback, &diagnostics)
+	if fallback {
+		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: source=index_modified visible=%d", len(queryResults)))
+	}
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: os=%d visible=%d", len(items), len(queryResults)))
 	c.logQueryDiagnostics(ctx, "recent", diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
