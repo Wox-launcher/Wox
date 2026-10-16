@@ -106,7 +106,9 @@ Report the reduced private commit separately from file-page residency: dropping
 mapped pages can leave them in the OS file cache, and the next query pays for
 faulting them back. Include first-after-idle latency in comparisons.
 
-Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
+Settings > Interface offers **Use software rendering (CPU)** (`UseSoftwareRendering`), a local-only preference applied after settings/privacy restoration and before the first window opens. Changes take effect after restarting Wox; the supervisor does not choose the rendering backend. Windows uses WARP; Linux requests Mesa software OpenGL (Mesa software drivers must be installed); macOS already rasterizes its IOSurfaces on the CPU, so both settings use that backend. This controls Wox UI drawing, not the desktop compositor or embedded web pages.
+
+In earlier measurements, using WARP was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
 
 On Windows, a final hidden check at 35 seconds requests `HeapOptimizeResources`
 after the independently scheduled renderer teardown. This asks the heap manager

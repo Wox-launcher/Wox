@@ -1,4 +1,9 @@
 {
+  "ui_rendering": "Renderização",
+  "plugin_sys_restart_wox": "Reiniciar o Wox",
+  "plugin_sys_restart_wox_failed": "Falha ao reiniciar o Wox: %s",
+  "ui_software_rendering": "Usar renderização por software (CPU)",
+  "ui_software_rendering_tips": "Renderiza a interface usando a CPU para contornar problemas com o driver gráfico. Pode aumentar o uso da CPU. Reinicie o Wox após alterar esta opção. Aplica-se apenas a este dispositivo.",
   "plugin_screenshot_capture_clipboard_success": "Captura copiada para a área de transferência",
   "plugin_screenshot_capture_history_save_failed": "Captura copiada para a área de transferência, mas não foi possível salvá-la no histórico",
   "plugin_converter_rates_offline_fallback": "Modo offline ativado; usando taxas de câmbio de reserva",

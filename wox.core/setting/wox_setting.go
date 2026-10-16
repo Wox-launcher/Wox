@@ -20,9 +20,11 @@ type WoxSetting struct {
 	IgnoreHotkeysOnFullscreen *PlatformValue[bool]
 	IgnoredHotkeyApps         *PlatformValue[[]IgnoredHotkeyApp]
 	LogLevel                  *WoxSettingValue[string]
-	UsePinYin                 *WoxSettingValue[bool]
-	SwitchInputMethodABC      *WoxSettingValue[bool]
-	HideOnStart               *WoxSettingValue[bool]
+	// UseSoftwareRendering is a device-local driver workaround, applied only at startup.
+	UseSoftwareRendering *WoxSettingValue[bool]
+	UsePinYin            *WoxSettingValue[bool]
+	SwitchInputMethodABC *WoxSettingValue[bool]
+	HideOnStart          *WoxSettingValue[bool]
 	// OnboardingFinished records whether this user data directory has already
 	// seen the first-run guide. This is independent of account age because old
 	// users who never saw the guide should still get one skippable pass.
@@ -455,6 +457,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {
 			return strings.EqualFold(level, LogLevelInfo) || strings.EqualFold(level, LogLevelDebug)
 		}),
+		UseSoftwareRendering: NewLocalWoxSettingValue(store, "UseSoftwareRendering", false),
 		UsePinYin:            NewWoxSettingValue(store, "UsePinYin", usePinYin),
 		SwitchInputMethodABC: NewWoxSettingValue(store, "SwitchInputMethodABC", false),
 		ShowTray:             NewWoxSettingValue(store, "ShowTray", true),

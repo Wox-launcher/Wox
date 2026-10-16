@@ -35,7 +35,6 @@ type nativeRenderer struct {
 
 const (
 	windowsRenderTraceEnvironment = "WOX_WINDOWS_RENDER_TRACE"
-	windowsForceWARPEnvironment   = "WOX_WINDOWS_FORCE_WARP"
 	windowsRenderTraceFrameLimit  = 5
 	d2dErrRecreateTarget          = uint32(0x8899000C)
 	dxgiErrDeviceRemoved          = uint32(0x887A0005)
@@ -63,10 +62,6 @@ func windowsRenderTraceEnabled() bool {
 	return os.Getenv(windowsRenderTraceEnvironment) == "1"
 }
 
-func windowsForceWARPEnabled() bool {
-	return os.Getenv(windowsForceWARPEnvironment) == "1"
-}
-
 func logWindowsRenderTrace(format string, args ...any) {
 	if windowsRenderTraceEnabled() {
 		util.GetLogger().Info(context.Background(), fmt.Sprintf("windows render trace: "+format, args...))
@@ -82,7 +77,7 @@ func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSu
 		enableOverlay = 1
 	}
 	forceWARP := C.int32_t(0)
-	if windowsForceWARPEnabled() {
+	if softwareRenderingEnabled.Load() {
 		forceWARP = 1
 	}
 	result := C.wox_renderer_create(C.uintptr_t(windowHandle), C.uint32_t(width), C.uint32_t(height), enableOverlay, forceWARP, &handle)
@@ -98,7 +93,9 @@ func newNativeRenderer(windowHandle uintptr, width, height int, enableEmbeddedSu
 		enableEmbeddedSurfaceOverlay: enableEmbeddedSurfaceOverlay,
 	}
 	if diagnostics, err := renderer.diagnostics(); err == nil {
-		logWindowsRenderTrace("event=renderer_init forceWARP=%t %s", windowsForceWARPEnabled(), diagnostics)
+		util.GetLogger().Info(context.Background(), fmt.Sprintf("windows renderer initialized: hwnd=%#x forceWARP=%t %s", windowHandle, softwareRenderingEnabled.Load(), diagnostics))
+	} else {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("windows renderer diagnostics failed: hwnd=%#x error=%v", windowHandle, err))
 	}
 	return renderer, nil
 }
@@ -460,5 +457,13 @@ func testWindowsEdgeFade(scale, top, bottom float32) ([]byte, int) {
 	size := int(96 * scale)
 	pixels := make([]byte, size*size*4)
 	status := C.wox_renderer_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
+	return pixels, int(status)
+}
+
+// testWindowsFloatingMaterial reads actual WARP blur pixels without a visible window.
+func testWindowsFloatingMaterial(scale float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_renderer_test_floating_material((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale))
 	return pixels, int(status)
 }

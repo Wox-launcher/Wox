@@ -159,3 +159,19 @@ func TestStructuredVolumeOnlyExecutesValidAction(t *testing.T) {
 		}
 	}
 }
+
+// TestRestartWoxCommandIsDiscoverable keeps app restart distinct from computer reboot.
+func TestRestartWoxCommandIsDiscoverable(t *testing.T) {
+	plugin := &SysPlugin{}
+	for _, command := range plugin.getMetadataCommands() {
+		if command.Command == "restart_wox" {
+			for _, alias := range command.Aliases {
+				if alias == "restart wox" {
+					return
+				}
+			}
+			t.Fatal("restart Wox search alias is missing")
+		}
+	}
+	t.Fatal("restart Wox command is missing")
+}

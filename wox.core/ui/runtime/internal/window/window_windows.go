@@ -2731,3 +2731,6 @@ func (w *platformWindow) setRunError(err error) {
 	}
 	platformRuntime.Unlock()
 }
+
+// Windows reads the preference when creating D3D devices.
+func platformConfigureSoftwareRendering(bool) {}

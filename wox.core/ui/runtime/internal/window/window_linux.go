@@ -1195,3 +1195,16 @@ func testLinuxEdgeFade(scale, top, bottom float32) ([]byte, int) {
 	status := C.wox_linux_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
 	return pixels, int(status)
 }
+
+// platformConfigureSoftwareRendering configures Mesa before any GLArea is realized.
+// Set only the native environment so Go-launched children (including a restart)
+// do not inherit a forced backend after the persisted preference is turned off.
+func platformConfigureSoftwareRendering(enabled bool) {
+	if enabled {
+		if C.wox_linux_enable_software_rendering() == 0 {
+			util.GetLogger().Error(context.Background(), "failed to configure Linux software rendering")
+		} else {
+			util.GetLogger().Info(context.Background(), "Linux software rendering requested: Mesa software OpenGL")
+		}
+	}
+}

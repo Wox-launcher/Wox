@@ -181,3 +181,6 @@ func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics,
 func (w *platformWindow) close() error {
 	return ErrPlatformUnsupported
 }
+
+// Unsupported platforms have no native renderer to configure.
+func platformConfigureSoftwareRendering(bool) {}

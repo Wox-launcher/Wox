@@ -450,6 +450,8 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 	}
 	if tab == "appearance" {
 		switch key {
+		case "UseSoftwareRendering":
+			return a.translate("i18n:ui_rendering")
 		case "LangCode":
 			return a.translate("i18n:ui_general_section_language")
 		case "MaxResultCount":
@@ -468,7 +470,8 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 
 func (a *App) localizedSettingItem(item settingItem) settingItem {
 	keys := map[string][2]string{
-		"EnableAutostart": {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
+		"UseSoftwareRendering": {"ui_software_rendering", "ui_software_rendering_tips"},
+		"EnableAutostart":      {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
 		"LaunchMode": {"ui_launch_mode", "ui_launch_mode_tips"}, "StartPage": {"ui_start_page", "ui_start_page_tips"},
 		"IgnoreHotkeysOnFullscreen": {"ui_hotkey_ignore_fullscreen", "ui_hotkey_ignore_fullscreen_tips"},
 		"HideOnLostFocus":           {"ui_hide_on_lost_focus", "ui_hide_on_lost_focus_tips"}, "UsePinYin": {"ui_use_pinyin", "ui_use_pinyin_tips"},

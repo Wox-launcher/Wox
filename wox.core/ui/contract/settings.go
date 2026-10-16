@@ -144,6 +144,7 @@ type GeneralSettings struct {
 	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  []setting.IgnoredHotkeyApp
 	LogLevel                           string
+	UseSoftwareRendering               bool
 	UsePinYin                          bool
 	SwitchInputMethodABC               bool
 	HideOnStart                        bool

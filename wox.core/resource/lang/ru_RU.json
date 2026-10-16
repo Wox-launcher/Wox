@@ -1,4 +1,9 @@
 {
+  "ui_rendering": "Отрисовка",
+  "plugin_sys_restart_wox": "Перезапустить Wox",
+  "plugin_sys_restart_wox_failed": "Не удалось перезапустить Wox: %s",
+  "ui_software_rendering": "Программный рендеринг (ЦП)",
+  "ui_software_rendering_tips": "Отрисовка интерфейса на ЦП для обхода проблем с графическим драйвером. Может увеличить нагрузку на ЦП. После изменения перезапустите Wox. Настройка действует только на этом устройстве.",
   "plugin_screenshot_capture_clipboard_success": "Снимок скопирован в буфер обмена",
   "plugin_screenshot_capture_history_save_failed": "Снимок скопирован в буфер обмена, но сохранить его в историю не удалось",
   "plugin_converter_rates_offline_fallback": "Автономный режим включён; используются резервные курсы валют",

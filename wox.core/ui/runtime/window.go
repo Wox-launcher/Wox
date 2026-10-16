@@ -4,6 +4,10 @@ import (
 	window "wox/ui/runtime/internal/window"
 )
 
+// ConfigureSoftwareRendering selects the platform software backend before any windows open.
+// Changes require restarting the application. macOS already uses CPU rasterization.
+func ConfigureSoftwareRendering(enabled bool) { window.ConfigureSoftwareRendering(enabled) }
+
 // ReleaseIdleTextMetricsCache drops all cached MeasureText results while every
 // window is hidden. The hot set is re-measured lazily on the first frame after
 // show, which costs far less than keeping the strings resident while idle.

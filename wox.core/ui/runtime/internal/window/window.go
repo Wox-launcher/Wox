@@ -17,6 +17,15 @@ const (
 	defaultWindowTitle  = "Wox Go UI"
 )
 
+var softwareRenderingEnabled atomic.Bool
+
+// ConfigureSoftwareRendering selects the platform rendering backend before opening any windows.
+// Callers apply persisted preferences once at startup; settings edits take effect after restart.
+func ConfigureSoftwareRendering(enabled bool) {
+	softwareRenderingEnabled.Store(enabled)
+	platformConfigureSoftwareRendering(enabled)
+}
+
 var errWindowClosed = errors.New("woxui: window is closed")
 
 // windowLifecycle tracks the portable Close/OnClosed state machine for Window.

@@ -296,6 +296,7 @@ func run() {
 	supervisor.GetManager().RecordRunStart(ctx, supervisor.GetManager().IsChildArg(os.Args))
 
 	util.GetLogger().Info(ctx, "no existing instance found, proceeding with full startup")
+	util.LogPlatformDiagnostics(ctx)
 
 	if err := database.Init(ctx); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
@@ -341,6 +342,8 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to restore private mode settings: %s", err.Error()))
 		return
 	}
+	// Apply the persisted backend before the first native renderer is created.
+	woxui.ConfigureSoftwareRendering(woxSetting.UseSoftwareRendering.Get())
 	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
 
 	network.Default.SetOffline(woxSetting.EnableOfflineMode.Get())

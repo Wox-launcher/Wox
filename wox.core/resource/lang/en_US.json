@@ -1,4 +1,9 @@
 {
+  "ui_rendering": "Rendering",
+  "plugin_sys_restart_wox": "Restart Wox",
+  "plugin_sys_restart_wox_failed": "Failed to restart Wox: %s",
+  "ui_software_rendering": "Use software rendering (CPU)",
+  "ui_software_rendering_tips": "Render the interface using the CPU to work around graphics driver issues. May increase CPU usage. Restart Wox after changing this setting. Applies only to this device.",
   "plugin_converter_rates_offline_fallback": "Offline mode is enabled; using fallback exchange rates",
   "ui_plugin_offline_paused": "Paused by offline mode",
   "ui_offline_open_settings": "Go to settings",

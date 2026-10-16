@@ -38,6 +38,7 @@ type settingsSearchResult struct {
 }
 
 var builtInSettingSearchAliases = map[string][]string{
+	"UseSoftwareRendering":      {"CPU", "GPU", "WARP", "software rendering"},
 	"MainHotkey":                {"shortcut", "main hotkey"},
 	"ActionPanelHotkey":         {"action hotkey", "more actions", "action panel"},
 	"UsePinYin":                 {"pinyin"},

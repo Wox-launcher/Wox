@@ -3385,6 +3385,13 @@ static gboolean start_linux_runtime(gpointer data) {
   return G_SOURCE_REMOVE;
 }
 
+// Mesa selects a software rasterizer when the first GL context is created.
+int32_t wox_linux_enable_software_rendering(void) {
+  return g_setenv("LIBGL_ALWAYS_SOFTWARE", "true", TRUE) &&
+         g_setenv("GALLIUM_DRIVER", "llvmpipe", TRUE) &&
+         g_setenv("__GLX_VENDOR_LIBRARY_NAME", "mesa", TRUE);
+}
+
 int32_t wox_linux_run(uintptr_t context) {
   if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) != 0) {
     return -1;

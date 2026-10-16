@@ -23,13 +23,11 @@ func TestRecoverableRendererErrors(t *testing.T) {
 
 func TestWindowsRendererDiagnosticEnvironment(t *testing.T) {
 	t.Setenv(windowsRenderTraceEnvironment, "1")
-	t.Setenv(windowsForceWARPEnvironment, "1")
-	if !windowsRenderTraceEnabled() || !windowsForceWARPEnabled() {
+	if !windowsRenderTraceEnabled() {
 		t.Fatal("Windows renderer diagnostic environment was not enabled")
 	}
 	t.Setenv(windowsRenderTraceEnvironment, "true")
-	t.Setenv(windowsForceWARPEnvironment, "true")
-	if windowsRenderTraceEnabled() || windowsForceWARPEnabled() {
+	if windowsRenderTraceEnabled() {
 		t.Fatal("Windows renderer diagnostic environment should require value 1")
 	}
 }

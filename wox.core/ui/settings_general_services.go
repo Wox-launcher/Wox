@@ -44,6 +44,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		FullscreenDetectionSupported:       window.SupportsActiveWindowFullscreen(),
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
 		LogLevel:                           util.NormalizeLogLevel(woxSetting.LogLevel.Get()),
+		UseSoftwareRendering:               woxSetting.UseSoftwareRendering.Get(),
 		UsePinYin:                          woxSetting.UsePinYin.Get(),
 		SwitchInputMethodABC:               woxSetting.SwitchInputMethodABC.Get(),
 		HideOnStart:                        woxSetting.HideOnStart.Get(),
@@ -214,6 +215,10 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 	case "LogLevel":
 		updatedValue = util.NormalizeLogLevel(value)
 		if err := woxSetting.LogLevel.Set(updatedValue); err != nil {
+			return err
+		}
+	case "UseSoftwareRendering":
+		if err := woxSetting.UseSoftwareRendering.Set(boolValue); err != nil {
 			return err
 		}
 	case "UsePinYin":

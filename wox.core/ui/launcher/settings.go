@@ -57,6 +57,7 @@ type settingsData struct {
 	QueryAliases                       []queryAliasSetting
 	TrayQueries                        json.RawMessage
 	IsLinuxWaylandSession              bool
+	UseSoftwareRendering               bool
 	UsePinYin                          bool
 	SwitchInputMethodABC               bool
 	HideOnStart                        bool
@@ -649,6 +650,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		QueryAliases:                       queryAliases,
 		TrayQueries:                        trayQueries,
 		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
+		UseSoftwareRendering:               loaded.UseSoftwareRendering,
 		UsePinYin:                          loaded.UsePinYin,
 		SwitchInputMethodABC:               loaded.SwitchInputMethodABC,
 		HideOnStart:                        loaded.HideOnStart,
@@ -1486,7 +1488,9 @@ func settingItemsForSnapshot(snapshot settingsSnapshot) []settingItem {
 		font := systemFontSettingItem(snapshot)
 		insertAt := appearanceFontInsertIndex(items)
 		items = append(items[:insertAt], append([]settingItem{font}, items[insertAt:]...)...)
-		items = append(items, primaryGlanceSettingItem(snapshot))
+		// Keep the compatibility option last, after the dynamic Glance control.
+		insertAt = len(items) - 1
+		items = append(items[:insertAt], append([]settingItem{primaryGlanceSettingItem(snapshot)}, items[insertAt:]...)...)
 	}
 	return items
 }
@@ -1570,6 +1574,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "MaxResultCount", title: "Maximum results", description: "Number of result rows visible before scrolling", value: fmt.Sprintf("%d", data.MaxResultCount), choices: resultChoices},
 			{key: "EnableGlance", title: "Glance", description: "Show glance content beside the query", value: boolValue(data.EnableGlance), choices: boolChoices},
 			{key: "HideGlanceIcon", title: "Hide glance icon", description: "Keep the query box visually minimal", value: boolValue(data.HideGlanceIcon), choices: boolChoices},
+			{key: "UseSoftwareRendering", title: "i18n:ui_software_rendering", description: "i18n:ui_software_rendering_tips", value: boolValue(data.UseSoftwareRendering), choices: boolChoices},
 		}
 	case "hotkey":
 		var items []settingItem
@@ -1617,6 +1622,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "HttpProxyEnabled", title: "HTTP proxy", value: boolValue(data.HttpProxyEnabled), choices: boolChoices},
 			{key: "HttpProxyUrl", title: "Proxy URL", value: data.HttpProxyURL, text: true, controlWidth: 300, disabled: !data.HttpProxyEnabled},
 		}
+
 		return items
 	}
 }

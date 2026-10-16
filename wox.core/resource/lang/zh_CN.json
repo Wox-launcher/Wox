@@ -1,4 +1,9 @@
 {
+  "ui_rendering": "渲染",
+  "plugin_sys_restart_wox": "重启 Wox",
+  "plugin_sys_restart_wox_failed": "重启 Wox 失败：%s",
+  "ui_software_rendering": "使用软件渲染（CPU）",
+  "ui_software_rendering_tips": "使用 CPU 渲染界面，可用于解决显卡驱动兼容问题，但可能增加 CPU 占用。更改后需重启 Wox，仅对当前设备生效。",
   "plugin_converter_rates_offline_fallback": "离线模式已开启，正在使用兜底汇率",
   "ui_plugin_offline_paused": "因离线模式暂停",
   "ui_offline_open_settings": "前往设置",

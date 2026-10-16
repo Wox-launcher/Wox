@@ -1245,7 +1245,7 @@ static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, 
 }
 
 // blur_floating_material_backdrop replaces the pixels inside the rounded surface with a
-// blurred copy of what the frame has drawn there so far. Everything is done on the GPU:
+// blurred copy of what the frame has drawn there so far. Direct2D runs on the selected device:
 // copy the region (plus margin) out of the back buffer, run it through the blur graph, and
 // draw it back inside the rounded shape while the corners keep their sharp pixels. Every
 // step that can fail runs before the target is touched, so a failure leaves it as it was.
@@ -1371,11 +1371,10 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
 // wox_renderer_floating_material realises DisplayList.FloatingMaterial on Windows: blur the
 // main surface under the rounded rectangle in place, then paint the theme tint and hairline
 // edge over it. It must run after the content beneath the surface and before the surface
-// content, which is the order the display list records. The blur is skipped on WARP, where
-// it would be a CPU convolution every repaint, and on the overlay surface, which holds
-// nothing beneath the panel to sample (WebView pixels live in a sibling visual). Overlay
-// tints drop transparency so the card does not wash out over the page; WARP still uses
-// the authored alpha over the unblurred Go pixels that are already in the buffer.
+// content, which is the order the display list records. WARP must use the same blur and
+// tone graph: tint alone leaves sharp background text showing through floating controls.
+// The overlay surface has nothing beneath the panel to sample (WebView pixels live in a
+// sibling visual), so its tint remains opaque instead.
 extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->target_bitmap == nullptr) {
     return E_UNEXPECTED;
@@ -1383,7 +1382,7 @@ extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x
   if (width <= 0.0f || height <= 0.0f) {
     return E_INVALIDARG;
   }
-  if (!renderer->uses_warp && !renderer->overlay_active && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
+  if (!renderer->overlay_active && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
     const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
     // A lost device must surface through the normal recovery path; any other failure only
     // costs the blur, and the tint below still reads as a panel.
@@ -1781,8 +1780,8 @@ extern "C" int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float p
  return result;
 }
 
-// Exercise the production Direct2D mask on a WARP bitmap without opening a window.
-extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+// Exercise production effects on a WARP bitmap without opening a window.
+static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, float top, float bottom, bool material) {
   WoxRenderer renderer;
   IDXGIDevice *dxgi = nullptr;
   ID2D1Bitmap1 *target = nullptr, *readback = nullptr;
@@ -1792,27 +1791,38 @@ extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, fl
   if (SUCCEEDED(result)) result = renderer.d2d_factory->CreateDevice(dxgi, &renderer.d2d_device);
   if (SUCCEEDED(result)) result = renderer.d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &renderer.d2d_context);
   D2D1_BITMAP_PROPERTIES1 properties = {};
-  properties.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-  properties.dpiX = properties.dpiY = 96 * scale;
+  properties.pixelFormat = D2D1::PixelFormat(material ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+  properties.dpiX = properties.dpiY = material ? 96 : 96 * scale;
   properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
   if (SUCCEEDED(result)) result = renderer.d2d_context->CreateBitmap(D2D1::SizeU(size, size), nullptr, 0, &properties, &target);
   if (SUCCEEDED(result)) {
     renderer.d2d_context->SetTarget(target);
-    renderer.d2d_context->SetDpi(96 * scale, 96 * scale);
+    renderer.d2d_context->SetDpi(properties.dpiX, properties.dpiY);
+    if (material) renderer.d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
     result = renderer.d2d_context->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &renderer.brush);
   }
   if (SUCCEEDED(result)) {
     renderer.frame_open = true;
     renderer.d2d_context->BeginDraw();
-    const auto glass = D2D1::ColorF(0, 0, 1, 0.5f);
-    renderer.d2d_context->Clear(&glass);
-    result = wox_renderer_begin_edge_fade(&renderer, 0, 8, 96, 80, top, bottom);
-    if (SUCCEEDED(result)) {
-      wox_renderer_set_clip_rect(&renderer, 0, 8, 96, 80);
-      wox_renderer_fill_rounded_rect(&renderer, 0, 8, 96, 80, 0, 255, 255, 255, 255);
-      result = wox_renderer_end_edge_fade(&renderer);
+    renderer.uses_warp = true;
+    renderer.scale = scale;
+    renderer.target_bitmap = target;
+    if (material) {
+      const auto black = D2D1::ColorF(0, 0, 0, 1);
+      renderer.d2d_context->Clear(&black);
+      wox_renderer_fill_rounded_rect(&renderer, 48, 0, 48, 96, 0, 255, 255, 255, 255);
+      result = wox_renderer_floating_material(&renderer, 16, 16, 64, 64, 6, 4, 12, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0);
+    } else {
+      const auto glass = D2D1::ColorF(0, 0, 1, 0.5f);
+      renderer.d2d_context->Clear(&glass);
+      result = wox_renderer_begin_edge_fade(&renderer, 0, 8, 96, 80, top, bottom);
+      if (SUCCEEDED(result)) {
+        wox_renderer_set_clip_rect(&renderer, 0, 8, 96, 80);
+        wox_renderer_fill_rounded_rect(&renderer, 0, 8, 96, 80, 0, 255, 255, 255, 255);
+        result = wox_renderer_end_edge_fade(&renderer);
+      }
+      wox_renderer_fill_rounded_rect(&renderer, 0, 90, 96, 6, 0, 255, 0, 0, 255);
     }
-    wox_renderer_fill_rounded_rect(&renderer, 0, 90, 96, 6, 0, 255, 0, 0, 255);
     HRESULT draw_result = renderer.d2d_context->EndDraw();
     if (SUCCEEDED(result)) result = draw_result;
     renderer.frame_open = false;
@@ -1826,6 +1836,7 @@ extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, fl
     for (int row = 0; row < size; row++) memcpy(pixels + row * size * 4, mapped.bits + row * mapped.pitch, size * 4);
     readback->Unmap();
   }
+  release_material_resources(&renderer);
   if (readback != nullptr) readback->Release();
   if (target != nullptr) target->Release();
   if (renderer.brush != nullptr) renderer.brush->Release();
@@ -1835,4 +1846,12 @@ extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, fl
   if (dxgi != nullptr) dxgi->Release();
   if (renderer.device != nullptr) renderer.device->Release();
   return result;
+}
+
+extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+  return test_warp_bitmap(pixels, size, scale, top, bottom, false);
+}
+
+extern "C" int32_t wox_renderer_test_floating_material(uint8_t *pixels, int32_t size, float scale) {
+  return test_warp_bitmap(pixels, size, scale, 0, 0, true);
 }

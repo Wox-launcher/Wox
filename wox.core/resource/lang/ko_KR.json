@@ -1,4 +1,9 @@
 {
+  "ui_rendering": "렌더링",
+  "plugin_sys_restart_wox": "Wox 다시 시작",
+  "plugin_sys_restart_wox_failed": "Wox를 다시 시작하지 못했습니다: %s",
+  "ui_software_rendering": "소프트웨어 렌더링(CPU) 사용",
+  "ui_software_rendering_tips": "CPU로 화면을 렌더링하여 그래픽 드라이버 문제를 우회합니다. CPU 사용량이 늘어날 수 있습니다. 변경 후 Wox를 다시 시작해야 합니다. 이 기기에만 적용됩니다.",
   "plugin_converter_rates_offline_fallback": "오프라인 모드가 켜져 있어 기본 환율을 사용 중입니다",
   "ui_plugin_offline_paused": "오프라인 모드로 일시 중지",
   "ui_offline_open_settings": "설정으로 이동",

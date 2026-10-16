@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct WoxRenderer WoxRenderer;
+int32_t wox_renderer_test_floating_material(uint8_t *pixels, int32_t size, float scale);
 int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);
 int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float physical_radius);
 

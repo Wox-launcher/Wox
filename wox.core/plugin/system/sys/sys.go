@@ -18,6 +18,7 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
+	"wox/supervisor"
 	"wox/ui"
 	"wox/updater"
 	"wox/util"
@@ -160,6 +161,26 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			SupportedOS: []string{util.PlatformWindows, util.PlatformMacOS, util.PlatformLinux},
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				r.runSystemAction(ctx, "empty_trash", runEmptyTrashCommand)
+			},
+		},
+		{
+			ID:                     "restart_wox",
+			Title:                  "i18n:plugin_sys_restart_wox",
+			Icon:                   icons.Get(icons.ControlRefresh),
+			Aliases:                []string{"restart wox", "relaunch wox", "重启 Wox", "重新启动 Wox"},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				// Preserve troubleshooting mode without replaying startup files or deep links.
+				args := []string{supervisor.ArgChild}
+				if util.IsThirdPartyPluginsDisabled() {
+					args = append(args, util.ArgNoThirdPartyPlugins)
+				}
+				if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, args...); err != nil {
+					util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
+					r.api.Notify(ctx, fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_sys_restart_wox_failed"), err.Error()))
+					return
+				}
+				ui.GetUIManager().ExitApp(ctx)
 			},
 		},
 		{

@@ -1566,3 +1566,6 @@ func testDarwinEdgeFade(scale, top, bottom float32) ([]byte, int) {
 	status := C.wox_darwin_test_edge_fade((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(top), C.float(bottom))
 	return pixels, int(status)
 }
+
+// macOS already rasterizes IOSurfaces through CPU bitmap contexts.
+func platformConfigureSoftwareRendering(bool) {}
