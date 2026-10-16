@@ -4,9 +4,55 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type boundedIndexRetriever struct {
+	Retriever
+	active atomic.Int32
+	peak   atomic.Int32
+	calls  atomic.Int32
+}
+
+// ParseAppInfo holds a worker briefly to expose unbounded indexing fan-out.
+func (r *boundedIndexRetriever) ParseAppInfo(context.Context, string) (appInfo, error) {
+	active := r.active.Add(1)
+	defer r.active.Add(-1)
+	for peak := r.peak.Load(); active > peak; peak = r.peak.Load() {
+		if r.peak.CompareAndSwap(peak, active) {
+			break
+		}
+	}
+	r.calls.Add(1)
+	time.Sleep(2 * time.Millisecond)
+	return appInfo{}, errSkipAppIndexing
+}
+
+// TestAppIndexBoundsNativeWork keeps all paths and progress while bounding
+// simultaneous blocking filesystem/COM parsing work.
+func TestAppIndexBoundsNativeWork(t *testing.T) {
+	root := t.TempDir()
+	paths := make([]string, 200)
+	for index := range paths {
+		paths[index] = filepath.Join(root, strconv.Itoa(index)+".exe")
+		if err := os.WriteFile(paths[index], nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	retriever := &boundedIndexRetriever{Retriever: appRetriever}
+	app := &ApplicationPlugin{api: emptyAPIImpl{}, retriever: retriever}
+	var progress atomic.Int32
+	app.indexAppsByPaths(context.Background(), paths, func() { progress.Add(1) })
+	if retriever.calls.Load() != 200 || progress.Load() != 200 {
+		t.Fatalf("lost indexing work: calls=%d progress=%d", retriever.calls.Load(), progress.Load())
+	}
+	if retriever.peak.Load() > 4 {
+		t.Fatalf("concurrent parsers = %d", retriever.peak.Load())
+	}
+}
 
 type parallelIndexRetriever struct {
 	Retriever

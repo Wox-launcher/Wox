@@ -8,6 +8,20 @@ import (
 	"unsafe"
 )
 
+// TestResidentFreeHeapBytes excludes nonresident committed blocks and preserves
+// live bytes that share a resident page with smaller freed allocations.
+func TestResidentFreeHeapBytes(t *testing.T) {
+	ranges := []processMemoryAddressRange{{start: 0x1000, end: 0x1800}, {start: 0x1c00, end: 0x2400}, {start: 0x10000, end: 0x90000}}
+	for _, test := range []struct {
+		address uintptr
+		want    uint64
+	}{{0, 0}, {0x1000, 0xc00}, {0x2000, 0x400}, {0x3000, 0}, {0x10000, 0x1000}, {0x90000, 0}} {
+		if got := residentFreeHeapBytes(test.address, 0x1000, ranges); got != test.want {
+			t.Errorf("page %#x: free bytes = %#x, want %#x", test.address, got, test.want)
+		}
+	}
+}
+
 func TestTaskManagerPrivateWorkingSet(t *testing.T) {
 	handle, err := openProcessForMemory(os.Getpid())
 	if err != nil {

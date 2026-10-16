@@ -27,9 +27,9 @@ type PrivateWorkingSetBreakdown struct {
 	ThreadStackBytes uint64
 	NativeHeapBytes  uint64
 	NativeAnonBytes  uint64
-	// NativeHeapFreeBytes is the committed but unused part of NativeHeapBytes. It is a subset,
-	// not an extra bucket, and is capped at NativeHeapBytes so a virtual heap walk cannot
-	// outrun resident pages.
+	// NativeHeapFreeBytes counts unused heap-block bytes intersecting resident
+	// private heap pages. Committed free blocks outside the working set are excluded.
+	// It is a subset of NativeHeapBytes, not an extra bucket.
 	NativeHeapFreeBytes uint64
 	// GraphicsUploadBytes is the WRITECOMBINE subset of NativeAnonBytes: CPU-side GPU upload
 	// and staging buffers. It is a subset, not an extra bucket.

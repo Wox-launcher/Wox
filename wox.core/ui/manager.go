@@ -43,6 +43,7 @@ import (
 	"wox/util/keyboard"
 	"wox/util/osvariant"
 	"wox/util/overlay/confettioverlay"
+	"wox/util/processmemory"
 	"wox/util/screen"
 	"wox/util/selection"
 	"wox/util/shell"
@@ -1288,6 +1289,20 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		fuzzymatch.ReleaseIdleCaches()
 		fuzzymatch.ReleasePinyinDictionary()
 		debug.FreeOSMemory()
+
+		// Native windows release their renderers on an independent 30-second
+		// timer. Let that cleanup finish before asking Windows to decommit LFH
+		// caches; Go's scavenger cannot return these native heap pages.
+		time.Sleep(5 * time.Second)
+		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
+			return
+		}
+		// Background indexing and screenshot persistence can refill SQLite after
+		// the first trim. Return those idle pages before decommitting native heaps.
+		sqlitememory.ReleaseIdleMemory(ctx)
+		if err := processmemory.ReleaseIdleNativeHeap(); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("release idle native heap: %v", err))
+		}
 	})
 }
 

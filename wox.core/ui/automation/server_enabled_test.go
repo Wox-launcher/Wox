@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -157,6 +159,29 @@ func TestHandlerReportsProcessMemory(t *testing.T) {
 	}
 	if decoded.Result.ProcessMemoryBytes == 0 {
 		t.Fatal("process memory was empty")
+	}
+}
+
+// TestMemorySnapshotWithoutController keeps profiling independent of window visibility.
+func TestMemorySnapshotWithoutController(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "heap.prof")
+	params, err := json.Marshal(map[string]string{"profilePath": path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, rpcErr := dispatch(context.Background(), nil, "perf.memory_snapshot", params)
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	if result.(map[string]any)["pid"] != os.Getpid() {
+		t.Fatal("snapshot did not identify the current process")
+	}
+	profile, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profile) < 2 || profile[0] != 0x1f || profile[1] != 0x8b {
+		t.Fatal("snapshot did not write a compressed heap profile")
 	}
 }
 

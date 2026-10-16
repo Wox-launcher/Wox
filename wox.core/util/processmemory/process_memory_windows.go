@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"syscall"
 	"unsafe"
 
@@ -175,11 +176,11 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 	attributePrivate := pid == os.Getpid()
 
 	var heapBases map[uintptr]struct{}
-	var heapFreeBytes uint64
+	var heapFreeRanges []processMemoryAddressRange
 	if attributePrivate {
 		heapWalk := nativeHeapAllocationBases()
 		heapBases = heapWalk.bases
-		heapFreeBytes = heapWalk.freeBytes
+		heapFreeRanges = heapWalk.freeRanges
 	}
 
 	pageSize := uint64(os.Getpagesize())
@@ -215,6 +216,7 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 				breakdown.ThreadStackBytes += pageSize
 			case privateOwnerNativeHeap:
 				breakdown.NativeHeapBytes += pageSize
+				breakdown.NativeHeapFreeBytes += residentFreeHeapBytes(address, uintptr(pageSize), heapFreeRanges)
 			default:
 				breakdown.NativeAnonBytes += pageSize
 			}
@@ -227,17 +229,25 @@ func getPrivateWorkingSetBreakdown(pid int) (PrivateWorkingSetBreakdown, error) 
 			breakdown.ImageBytes += pageSize
 		}
 	}
-	if heapFreeBytes > breakdown.NativeHeapBytes {
-		heapFreeBytes = breakdown.NativeHeapBytes
-	}
-	breakdown.NativeHeapFreeBytes = heapFreeBytes
 	return breakdown, nil
+}
+
+// residentFreeHeapBytes intersects one resident page with sorted, disjoint free
+// blocks. Committed free blocks outside the working set cannot explain residency.
+func residentFreeHeapBytes(address, pageSize uintptr, ranges []processMemoryAddressRange) uint64 {
+	end := address + pageSize
+	index := sort.Search(len(ranges), func(index int) bool { return ranges[index].end > address })
+	var bytes uint64
+	for ; index < len(ranges) && ranges[index].start < end; index++ {
+		bytes += uint64(min(end, ranges[index].end) - max(address, ranges[index].start))
+	}
+	return bytes
 }
 
 // nativeHeapWalk is the local heap census used to attribute private pages.
 type nativeHeapWalk struct {
-	bases     map[uintptr]struct{}
-	freeBytes uint64
+	bases      map[uintptr]struct{}
+	freeRanges []processMemoryAddressRange
 }
 
 // nativeHeapAllocationBases collects the virtual allocations backing every Win32 heap of this
@@ -275,7 +285,7 @@ func nativeHeapAllocationBases() nativeHeapWalk {
 	// The pseudo handle for the current process avoids a real handle just to query our own maps.
 	const currentProcess = ^uintptr(0)
 	bases := map[uintptr]struct{}{}
-	var freeBytes uint64
+	var freeRanges []processMemoryAddressRange
 	var walkedRegions []processMemoryAddressRange
 	var info processMemoryBasicInformation
 	for _, heap := range handles[:found] {
@@ -288,7 +298,9 @@ func nativeHeapAllocationBases() nativeHeapWalk {
 			if entry.flags&processMemoryHeapEntryBusy == 0 &&
 				entry.flags&processMemoryHeapRegion == 0 &&
 				entry.flags&processMemoryHeapUncommitted == 0 {
-				freeBytes += uint64(entry.dataSize)
+				if entry.data != 0 && entry.dataSize != 0 {
+					freeRanges = append(freeRanges, processMemoryAddressRange{start: entry.data, end: entry.data + uintptr(entry.dataSize)})
+				}
 			}
 			if entry.data == 0 {
 				continue
@@ -315,7 +327,18 @@ func nativeHeapAllocationBases() nativeHeapWalk {
 			processMemoryHeapUnlock.Call(heap)
 		}
 	}
-	return nativeHeapWalk{bases: bases, freeBytes: freeBytes}
+	// Heap walks are ordered within each heap, not across all heaps. Merge any
+	// overlapping ranges so a resident byte can never be counted twice.
+	sort.Slice(freeRanges, func(i, j int) bool { return freeRanges[i].start < freeRanges[j].start })
+	merged := freeRanges[:0]
+	for _, region := range freeRanges {
+		if len(merged) > 0 && region.start <= merged[len(merged)-1].end {
+			merged[len(merged)-1].end = max(merged[len(merged)-1].end, region.end)
+		} else {
+			merged = append(merged, region)
+		}
+	}
+	return nativeHeapWalk{bases: bases, freeRanges: merged}
 }
 
 // classifyPrivateAllocation labels one private allocation by scanning its sub-regions once.

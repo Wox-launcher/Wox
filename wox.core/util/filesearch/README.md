@@ -56,6 +56,12 @@ stale publications, and bound delta growth. Defaults are a 64 MiB journal
 or `min(100000, max(10000, base entries / 10))` changed entries before compaction.
 Partial enumeration and access denial never imply an empty directory.
 
+Compaction returns its temporary Go heap pages after its build frame exits, on
+success or failure. A large background compaction can finish after the launcher
+has already performed its last hidden-state cleanup; relying on another hide
+would leave the builder's released arrays resident until later GC/scavenging.
+The published mapped columns and durable overlay remain owned by the store.
+
 Every interned name has a 64-bit rejection mask. Non-ASCII masks include
 normalized literal characters and every pinyin reading, prepared once before
 publication and regenerated during compaction. The filter does not choose a

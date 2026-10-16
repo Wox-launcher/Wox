@@ -2032,10 +2032,19 @@ func (a *ApplicationPlugin) indexAppsByPaths(ctx context.Context, appPaths []str
 	var lock sync.Mutex
 	var cacheHits int64
 	var parsedCount int64
+	// File and COM calls block native threads even for cached entries. Bound
+	// indexing fan-out so large app collections do not leave an oversized Go
+	// thread pool (and every loaded DLL's per-thread storage) resident afterward.
+	groupSlots := make(chan struct{}, 4)
 	waitGroup.Add(len(appPathGroups))
 	for groupIndex := range appPathGroups {
 		var appPathGroup = appPathGroups[groupIndex]
+		groupSlots <- struct{}{}
 		util.Go(ctx, fmt.Sprintf("index app group: %d", groupIndex), func() {
+			defer func() {
+				<-groupSlots
+				waitGroup.Done()
+			}()
 			for _, appPath := range appPathGroup {
 				func() {
 					started := time.Now()
@@ -2083,9 +2092,6 @@ func (a *ApplicationPlugin) indexAppsByPaths(ctx context.Context, appPaths []str
 					lock.Unlock()
 				}()
 			}
-			waitGroup.Done()
-		}, func() {
-			waitGroup.Done()
 		})
 	}
 

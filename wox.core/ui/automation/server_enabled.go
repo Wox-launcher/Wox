@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/processmemory"
+	"wox/util/sqlitememory"
 )
 
 const (
@@ -153,6 +155,65 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			Retained: stats.Sys - stats.HeapReleased, StackInuse: stats.StackInuse, MemProfileRate: runtime.MemProfileRate,
 			ProcessMemoryBytes: processBytes,
 		}, nil)
+	case "perf.thread_snapshot":
+		var params struct {
+			Path string `json:"path"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		file, err := os.Create(params.Path)
+		if err != nil {
+			return resultOrError(nil, err)
+		}
+		defer file.Close()
+		// Goroutine stacks distinguish parked Go workers from native library threads.
+		if err := pprof.Lookup("goroutine").WriteTo(file, 2); err != nil {
+			return resultOrError(nil, err)
+		}
+		if err := pprof.Lookup("threadcreate").WriteTo(file, 1); err != nil {
+			return resultOrError(nil, err)
+		}
+		return resultOrError(map[string]any{"pid": os.Getpid(), "sqliteBytes": sqlitememory.UsedBytes(), "databases": sqlitememory.DatabaseStats()}, nil)
+	case "perf.sqlite_release":
+		before := sqlitememory.UsedBytes()
+		sqlitememory.ReleaseIdleMemory(ctx)
+		return resultOrError(map[string]any{"before": before, "after": sqlitememory.UsedBytes()}, nil)
+	case "perf.native_heap_optimize":
+		return resultOrError(nil, processmemory.ReleaseIdleNativeHeap())
+	case "perf.memory_snapshot":
+		var params struct {
+			ProfilePath string `json:"profilePath"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		// Capture the hidden process without showing a diagnostic query, which
+		// would recreate the renderer and obscure native resource retention.
+		if params.ProfilePath != "" && runtime.MemProfileRate == 0 {
+			return resultOrError(nil, errors.New("heap sampling is disabled; restart with GODEBUG=memprofilerate=524288"))
+		}
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		pages, err := processmemory.GetPrivateWorkingSetBreakdown(os.Getpid())
+		if err != nil {
+			return resultOrError(nil, err)
+		}
+		if params.ProfilePath != "" {
+			file, err := os.Create(params.ProfilePath)
+			if err != nil {
+				return resultOrError(nil, err)
+			}
+			err = pprof.WriteHeapProfile(file)
+			closeErr := file.Close()
+			if err != nil {
+				return resultOrError(nil, err)
+			}
+			if closeErr != nil {
+				return resultOrError(nil, closeErr)
+			}
+		}
+		return resultOrError(map[string]any{"pid": os.Getpid(), "go": stats, "pages": pages, "goroutines": runtime.NumGoroutine()}, nil)
 	case "render.metrics":
 		return resultOrError(controller.AutomationFrameMetrics())
 	case "render.metrics.reset":

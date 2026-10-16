@@ -84,6 +84,17 @@ For later comparisons, stop every other Wox instance and sample the same release
 
 ## Windows hidden memory lifecycle
 
+For memory measurements under Delve, set `_NO_DEBUG_HEAP=1` before starting the
+debugger. Windows' debug heap changes allocation and fragmentation behavior;
+its growth must not be attributed to release builds. Keep compilation settings,
+heap sampling, workload and debugger mode identical across comparisons.
+Automation builds expose `perf.memory_snapshot` to read Go statistics and native
+resident-page ownership without showing the launcher. Its optional `profilePath`
+writes a heap profile without forcing GC; use the existing hidden cleanup and
+wait at least 45 seconds before collecting comparable checkpoints. The native
+free-heap counter intersects free blocks with resident pages, so nonresident
+committed free space is not subtracted from the resident heap.
+
 The September 2026 Windows investigation (Intel integrated GPU, release-style build, private working set as the metric) measured a hidden idle footprint of 63-70 MB. Roughly 29 MB of that was the NT process heap, of which only about 12 MB was still allocated: a show/hide cycle allocates and frees around 25 MB of Direct2D, DirectWrite, and user-mode driver blocks, and the freed pages stay committed and resident because roughly 30,000 small long-lived blocks fragment them. `HeapCompact` does not return them. Hiding runs two staged releases in [`manager.go`](manager.go) and [`window_windows.go`](runtime/internal/window/window_windows.go): `debug.FreeOSMemory` plus cache drops after 10 seconds, and `IDXGIDevice3::Trim` after 30 seconds. Both lower committed memory, so the Task Manager number they produce is real.
 
 Do not add `SetProcessWorkingSetSize(-1, -1)` / `EmptyWorkingSet` to this sequence. It was tried and drops the private working set to a few MB, but commit charge does not move: the pages only migrate to the standby list and fault back in on the next show, or turn into page-file hard faults under memory pressure. It changes the reported number without reducing memory use, so it is not an acceptable optimization for Wox.
@@ -96,6 +107,25 @@ mapped pages can leave them in the OS file cache, and the next query pays for
 faulting them back. Include first-after-idle latency in comparisons.
 
 Forcing WARP (`WOX_WINDOWS_FORCE_WARP=1`) was 10 MB lower when hidden and about 40 MB lower while visible because the hardware user-mode driver keeps heap and anonymous allocations the trim cannot reach; it is not used by default because it moves rendering to the CPU.
+
+On Windows, a final hidden check at 35 seconds requests `HeapOptimizeResources`
+after the independently scheduled renderer teardown. This asks the heap manager
+to decommit unused LFH caches without invalidating live allocations or evicting
+the process working set. It cannot reclaim pages still shared with live blocks.
+Before this request, SQLite is trimmed again because background indexing and
+screenshot persistence can refill its page caches after the 10-second trim.
+The automation-only `perf.native_heap_optimize` method allows a before/after
+measurement independent of the hidden lifecycle.
+
+Native thread pressure also survives hiding: spare Go OS threads retain stacks
+and loaded DLLs' thread-local storage. Application indexing limits concurrent
+path groups, and Windows emoji rendering queues before acquiring an OS thread.
+Emoji COM initialization, rendering, object release, and apartment teardown stay
+on that thread. Do not terminate runtime, plugin pipe, input method, or window
+threads as an idle-memory trim; their owners must control their lifetime.
+The automation-only `perf.thread_snapshot` writes goroutine and thread creation
+profiles and returns SQLite allocation/pool statistics. `perf.sqlite_release`
+measures the effect of the existing SQLite cache trim without closing pools.
 
 ### Hidden-state ownership rules (September 22, 2026)
 

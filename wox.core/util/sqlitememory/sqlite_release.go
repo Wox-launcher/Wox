@@ -68,6 +68,17 @@ type registeredDB struct {
 	name string
 }
 
+// DatabaseStats snapshots pool ownership without acquiring or opening connections.
+func DatabaseStats() map[string]sql.DBStats {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	stats := make(map[string]sql.DBStats, len(registry))
+	for db, name := range registry {
+		stats[name] = db.Stats()
+	}
+	return stats
+}
+
 // shrinkDatabase walks every pooled connection so PRAGMA shrink_memory is not
 // applied to only the first idle handle database/sql happens to hand out.
 func shrinkDatabase(ctx context.Context, db *sql.DB) error {

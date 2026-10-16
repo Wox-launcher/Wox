@@ -23,9 +23,24 @@ func TestReleaseIdleMemoryShrinksRegisteredConnections(t *testing.T) {
 	if _, err := db.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)`); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
+	if _, err := db.Exec(`INSERT INTO items (name) VALUES ('retained')`); err != nil {
+		t.Fatal(err)
+	}
 
 	Register(db, "test")
 	defer Unregister(db)
 
-	ReleaseIdleMemory(context.Background())
+	// The late hidden stage may trim a connection again after background writes.
+	// It must preserve both the database and per-connection configuration.
+	for range 2 {
+		ReleaseIdleMemory(context.Background())
+		var name string
+		if err := db.QueryRow(`SELECT name FROM items WHERE id = 1`).Scan(&name); err != nil || name != "retained" {
+			t.Fatalf("data after trim: name=%q err=%v", name, err)
+		}
+		var cacheSize int
+		if err := db.QueryRow(`PRAGMA cache_size`).Scan(&cacheSize); err != nil || cacheSize != -1000 {
+			t.Fatalf("connection configuration after trim: cache_size=%d err=%v", cacheSize, err)
+		}
+	}
 }

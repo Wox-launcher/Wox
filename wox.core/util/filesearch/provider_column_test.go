@@ -2,8 +2,10 @@ package filesearch
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"wox/util/filesearch/column"
@@ -84,6 +86,70 @@ func TestColumnShortQueriesAndPinyin(t *testing.T) {
 			t.Fatalf("%q missing %q: %+v %v", raw, name, results, err)
 		}
 	}
+}
+
+// TestColumnRecycleBinRanksBelowOrdinaryFiles keeps short $I names from filling
+// the top K ahead of ordinary extension matches, without dropping them entirely.
+func TestColumnRecycleBinRanksBelowOrdinaryFiles(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("recycle bin ranking follows the Windows drive-root layout")
+	}
+	view := recycleBinColumnFixture(t, true)
+	limited, err := searchColumnView(context.Background(), view, SearchQuery{Raw: ".wox", DisablePinyin: true}, 1)
+	if err != nil || len(limited) != 1 || limited[0].Name != "Wox.Plugin.Spotify.wox" {
+		t.Fatalf("ordinary file lost the only slot: %+v %v", limited, err)
+	}
+	ranked, err := searchColumnView(context.Background(), view, SearchQuery{Raw: ".wox", DisablePinyin: true}, 8)
+	if err != nil || len(ranked) != 8 || ranked[0].Name != "Wox.Plugin.Spotify.wox" {
+		t.Fatalf("ordinary file should lead: %+v %v", ranked, err)
+	}
+	for _, result := range ranked[1:] {
+		if !pathInWindowsRecycleBin(result.Path) || result.Score >= ranked[0].Score {
+			t.Fatalf("recycle bin result out of order: %+v", ranked)
+		}
+	}
+	exact, err := searchColumnView(context.Background(), view, SearchQuery{Raw: "$I00", DisablePinyin: true}, 5)
+	if err != nil || len(exact) != 1 || exact[0].Name != "$I00.wox" {
+		t.Fatalf("recycle bin file should remain searchable: %+v %v", exact, err)
+	}
+
+	nested := recycleBinColumnFixture(t, false)
+	nestedRanked, err := searchColumnView(context.Background(), nested, SearchQuery{Raw: ".wox", DisablePinyin: true}, 1)
+	if err != nil || len(nestedRanked) != 1 || nestedRanked[0].Name != "Wox.Plugin.Nested.wox" || pathInWindowsRecycleBin(nestedRanked[0].Path) {
+		t.Fatalf("same-named folder outside the drive root should keep its score: %+v %v", nestedRanked, err)
+	}
+}
+
+func recycleBinColumnFixture(t *testing.T, includePlugin bool) column.View {
+	t.Helper()
+	builder := column.NewBuilder(`C:\`, 1)
+	add := func(record column.Record) {
+		t.Helper()
+		if err := builder.Add(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(column.Record{ID: 2, ParentID: 1, Name: "$Recycle.Bin", Flags: column.Directory})
+	add(column.Record{ID: 3, ParentID: 2, Name: "S-1-5-21", Flags: column.Directory})
+	for i := 0; i < 30; i++ {
+		add(column.Record{ID: uint64(10 + i), ParentID: 3, Name: fmt.Sprintf("$I%02d.wox", i)})
+	}
+	if includePlugin {
+		add(column.Record{ID: 4, ParentID: 1, Name: "dev", Flags: column.Directory})
+		add(column.Record{ID: 5, ParentID: 4, Name: "Wox.Plugin.Spotify.wox"})
+	} else {
+		add(column.Record{ID: 4, ParentID: 1, Name: "projects", Flags: column.Directory})
+		add(column.Record{ID: 5, ParentID: 4, Name: "$Recycle.Bin", Flags: column.Directory})
+		add(column.Record{ID: 6, ParentID: 5, Name: "Wox.Plugin.Nested.wox"})
+	}
+	base, err := builder.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareColumnNames(base); err != nil {
+		t.Fatal(err)
+	}
+	return column.View{Base: base}
 }
 
 func TestColumnQueryHonorsDirectoryOverlay(t *testing.T) {

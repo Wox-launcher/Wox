@@ -44,6 +44,8 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 			return
 		}
 		isDir := record.Flags&column.Directory != 0
+		// An unpenalized miss cannot become competitive after the recycle-bin
+		// penalty, so path resolution stays limited to names that can still win.
 		if !results.competitive(score, isDir, record.Name) {
 			return
 		}
@@ -51,6 +53,12 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 			var ok bool
 			path, ok = resolve(record)
 			if !ok {
+				return
+			}
+		}
+		if pathInWindowsRecycleBin(path) {
+			score -= recycleBinRankPenalty
+			if !results.competitive(score, isDir, record.Name) {
 				return
 			}
 		}
@@ -232,10 +240,20 @@ func (h *columnResultHeap) add(result SearchResult) {
 }
 
 type columnNameHit struct {
-	id        uint32
-	name      string
-	score     int64
-	directory bool
+	id          uint32
+	name        string
+	score       int64
+	directory   bool
+	recycleOnly bool
+}
+
+// rankScore drops recycle-only names below every ordinary match. The raw score
+// stays intact so result emission can penalize individual paths once.
+func (h columnNameHit) rankScore() int64 {
+	if h.recycleOnly {
+		return h.score - recycleBinRankPenalty
+	}
+	return h.score
 }
 
 // columnNameHeap prunes whole posting lists by their final score/name order.
@@ -246,7 +264,7 @@ type columnNameHeap struct {
 }
 
 func compareColumnNames(a, b columnNameHit) int {
-	return compareSearchResults(SearchResult{Score: a.score, IsDir: a.directory, Name: a.name}, SearchResult{Score: b.score, IsDir: b.directory, Name: b.name})
+	return compareSearchResults(SearchResult{Score: a.rankScore(), IsDir: a.directory, Name: a.name}, SearchResult{Score: b.rankScore(), IsDir: b.directory, Name: b.name})
 }
 
 func (h columnNameHeap) Len() int           { return len(h.items) }
@@ -279,6 +297,7 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 	mask, requiresNonASCII := columnNameFilter(query)
 	groups := &columnNameHeap{limit: limit}
 	reachableParents := make(map[uint64]bool)
+	recycleParents := make(map[uint64]bool)
 	words := (base.Names() + 63) / 64
 	var columns [91][]uint64
 	count := 0
@@ -329,7 +348,9 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 			}
 			minimum := minimumScore
 			if limit > 0 && groups.Len() >= limit {
-				floor := groups.items[0].score
+				// Use the penalized score. A heap full of short recycle-bin names
+				// must not raise the floor enough to skip ordinary filenames.
+				floor := groups.items[0].rankScore()
 				if query.wildcard == nil {
 					floor -= 1000000
 				}
@@ -355,8 +376,17 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 				// Early development snapshots did not record kind summaries.
 				kinds = column.NameHasDirectory | column.NameHasFile
 			}
+			// A name that loses at its full score cannot win from a recycle-bin row.
+			// Rows are still scanned when a normal copy of that name may exist.
+			fileCandidate := kinds&column.NameHasFile != 0 && groups.competitive(columnNameHit{name: name, score: score})
+			dirCandidate := kinds&column.NameHasDirectory != 0 && groups.competitive(columnNameHit{name: name, score: score, directory: true})
+			if !fileCandidate && !dirCandidate {
+				continue
+			}
+			fileSeen, dirSeen := false, false
+			fileNormal, dirNormal := false, false
 			for _, row := range base.NameRows[base.NameStarts[nameID]:base.NameStarts[nameID+1]] {
-				if kinds == 0 {
+				if (!fileCandidate || fileNormal) && (!dirCandidate || dirNormal) {
 					break
 				}
 				if _, changed := view.Delta[base.IDs[row]]; changed {
@@ -366,20 +396,20 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 				if record.Flags&column.Structural != 0 {
 					continue
 				}
-				kind := byte(column.NameHasFile)
-				if record.Flags&column.Directory != 0 {
-					kind = column.NameHasDirectory
-				}
-				if kinds&kind == 0 {
+				directory := record.Flags&column.Directory != 0
+				if directory {
+					if !dirCandidate || dirNormal {
+						continue
+					}
+				} else if !fileCandidate || fileNormal {
 					continue
 				}
 				if !columnExtensionEligible(query, record) {
-					kinds &^= kind
-					continue
-				}
-				hit := columnNameHit{id: uint32(nameID), name: name, score: score, directory: kind == column.NameHasDirectory}
-				if !groups.competitive(hit) {
-					kinds &^= kind
+					if directory {
+						dirCandidate = false
+					} else {
+						fileCandidate = false
+					}
 					continue
 				}
 				reachable, checked := reachableParents[record.ParentID]
@@ -387,15 +417,111 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 					reachable = view.Reachable(record.ParentID)
 					reachableParents[record.ParentID] = reachable
 				}
-				if reachable {
-					groups.add(hit)
-					kinds &^= kind
+				if !reachable {
+					continue
 				}
-				if kinds == 0 {
-					break
+				recycled := recordInWindowsRecycleBin(view, record, recycleParents)
+				if directory {
+					dirSeen = true
+					dirNormal = dirNormal || !recycled
+				} else {
+					fileSeen = true
+					fileNormal = fileNormal || !recycled
+				}
+			}
+			if fileSeen {
+				hit := columnNameHit{id: uint32(nameID), name: name, score: score, recycleOnly: !fileNormal}
+				if groups.competitive(hit) {
+					groups.add(hit)
+				}
+			}
+			if dirSeen {
+				hit := columnNameHit{id: uint32(nameID), name: name, score: score, directory: true, recycleOnly: !dirNormal}
+				if groups.competitive(hit) {
+					groups.add(hit)
 				}
 			}
 		}
 	}
 	return groups
+}
+
+// recycleBinRankPenalty sits above the filename score band (1_000_000 plus up to
+// 999_999) so every ordinary match outranks a Recycle Bin path. The same gap
+// also covers wildcard and explicit path scores, which are much smaller.
+const recycleBinRankPenalty int64 = 2_000_000
+
+// pathInWindowsRecycleBin reports paths whose first segment under a drive root
+// is $Recycle.Bin. A same-named folder anywhere else stays a normal directory.
+func pathInWindowsRecycleBin(path string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	clean := filepath.Clean(path)
+	volume := filepath.VolumeName(clean)
+	if volume == "" {
+		return false
+	}
+	relative := strings.TrimPrefix(clean, volume)
+	relative = strings.TrimPrefix(relative, string(filepath.Separator))
+	if relative == "" {
+		return false
+	}
+	first, _, _ := strings.Cut(relative, string(filepath.Separator))
+	return strings.EqualFold(first, "$Recycle.Bin")
+}
+
+// recordInWindowsRecycleBin is the posting-list form of pathInWindowsRecycleBin.
+// Name ranking decides the top K before paths are built, so ancestry is checked
+// from parent ids and remembered for the many files that share one SID folder.
+func recordInWindowsRecycleBin(view column.View, record column.Record, cache map[uint64]bool) bool {
+	if runtime.GOOS != "windows" || view.Base == nil {
+		return false
+	}
+	if strings.EqualFold(record.Name, "$Recycle.Bin") && record.ParentID == view.Base.IDs[0] {
+		return true
+	}
+	return directoryInWindowsRecycleBin(view, record.ParentID, cache)
+}
+
+// directoryInWindowsRecycleBin walks parent ids until the drive root. The cache
+// stores the answer for every directory visited on the way.
+func directoryInWindowsRecycleBin(view column.View, id uint64, cache map[uint64]bool) bool {
+	if view.Base == nil {
+		return false
+	}
+	var chain []uint64
+	for steps := 0; ; steps++ {
+		if steps > view.Base.Len()+len(view.Delta) {
+			return false
+		}
+		if id == view.Base.IDs[0] {
+			inside := pathInWindowsRecycleBin(view.Base.Root)
+			for _, cached := range chain {
+				cache[cached] = inside
+			}
+			return inside
+		}
+		if known, ok := cache[id]; ok {
+			for _, cached := range chain {
+				cache[cached] = known
+			}
+			return known
+		}
+		chain = append(chain, id)
+		record, ok := view.Lookup(id)
+		if !ok {
+			for _, cached := range chain {
+				cache[cached] = false
+			}
+			return false
+		}
+		if record.ParentID == view.Base.IDs[0] && strings.EqualFold(record.Name, "$Recycle.Bin") {
+			for _, cached := range chain {
+				cache[cached] = true
+			}
+			return true
+		}
+		id = record.ParentID
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 )
@@ -529,8 +530,18 @@ func (v View) Reachable(id uint64) bool {
 	return true
 }
 
-// Compact builds from one coherent read view; publication retries are owned by the scheduler.
+// Compact returns the build's temporary heap after publication, including failed
+// builds. Background compaction can finish after the launcher's last idle GC.
 func (s *Store) Compact(ctx context.Context) error {
+	err := s.compact(ctx)
+	// Keep reclamation outside the build frame so its arrays and intern maps are
+	// no longer stack roots. The published store already borrows its mapped columns.
+	debug.FreeOSMemory()
+	return err
+}
+
+// compact builds from one coherent read view; publication retries belong to the scheduler.
+func (s *Store) compact(ctx context.Context) error {
 	var builder *Builder
 	var cursor, policy string
 	var revision uint64

@@ -4,13 +4,19 @@ package emojiimage
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
 
 var (
+	// Each blocked native render needs an OS thread and DLL thread-local storage.
+	// Queue before locking a thread so a result page cannot expand the idle pool.
+	renderSlots = make(chan struct{}, 4)
+
 	d2d1     = syscall.NewLazyDLL("d2d1.dll")
 	dwrite   = syscall.NewLazyDLL("dwrite.dll")
 	ole32    = syscall.NewLazyDLL("ole32.dll")
@@ -58,9 +64,17 @@ func Render(emoji string, size int) (image.Image, error) {
 		size = 256
 	}
 
-	// Initialize COM
-	coInitializeEx.Call(0, coinitApartmentThreaded)
-	defer coUninitialize.Call()
+	renderSlots <- struct{}{}
+	defer func() { <-renderSlots }()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	// COM objects and apartment teardown must stay on their initializing thread.
+	initHR, _, _ := coInitializeEx.Call(0, coinitApartmentThreaded)
+	if int32(initHR) >= 0 {
+		defer coUninitialize.Call()
+	} else if uint32(initHR) != 0x80010106 { // RPC_E_CHANGED_MODE: reuse the existing apartment.
+		return nil, fmt.Errorf("initialize emoji COM: HRESULT 0x%08X", uint32(initHR))
+	}
 
 	// Create D2D1 Factory
 	var d2dFactory uintptr
