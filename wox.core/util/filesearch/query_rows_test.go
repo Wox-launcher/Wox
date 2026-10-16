@@ -44,7 +44,15 @@ func TestColumnPathOrderingAndOverlay(t *testing.T) {
 				if !okA || !okB {
 					continue
 				}
-				if got, want := compareColumnPaths(v, uint32(i), uint32(j)), strings.Compare(a, bb); got != want {
+				want := strings.Compare(a, bb)
+				if len(a) != len(bb) {
+					if len(a) < len(bb) {
+						want = -1
+					} else {
+						want = 1
+					}
+				}
+				if got := compareColumnPaths(v, uint32(i), uint32(j)); got != want {
 					t.Fatalf("%q vs %q: %d != %d", a, bb, got, want)
 				}
 			}

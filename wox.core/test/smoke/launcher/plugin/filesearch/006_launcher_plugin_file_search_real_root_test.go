@@ -54,12 +54,12 @@ func runRealFileSearchSmoke(t *testing.T, content bool) {
 		field := fileSearchRootsFieldID
 		if content {
 			smoke.OpenInstalledPluginSettings(t, ctx, client, fileSearchPluginID)
-			field = fileSearchSettingFieldID(7)
+			field = fileSearchContentRootsFieldID
 			snapshot, err := client.Snapshot(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
-			checkbox, found := automationdriver.Find(snapshot, fileSearchSettingFieldID(6))
+			checkbox, found := automationdriver.Find(snapshot, fileSearchContentEnabledFieldID)
 			if !found {
 				t.Fatal("content checkbox missing")
 			}
@@ -68,9 +68,9 @@ func runRealFileSearchSmoke(t *testing.T, content bool) {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), fileSearchInitialIndexTimeout)
 				defer cancel()
 				smoke.OpenInstalledPluginSettings(t, cleanupCtx, client, fileSearchPluginID)
-				setFileSearchContentEnabled(t, cleanupCtx, client, fileSearchSettingFieldID(6), original)
+				setFileSearchContentEnabled(t, cleanupCtx, client, fileSearchContentEnabledFieldID, original)
 			})
-			setFileSearchContentEnabled(t, ctx, client, fileSearchSettingFieldID(6), true)
+			setFileSearchContentEnabled(t, ctx, client, fileSearchContentEnabledFieldID, true)
 		}
 		row := addFileSearchRootField(t, ctx, client, root, field)
 		t.Cleanup(func() { removeFileSearchRootField(t, client, root, row, field) })

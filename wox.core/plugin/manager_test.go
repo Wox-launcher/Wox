@@ -782,6 +782,64 @@ func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing
 	}
 }
 
+func TestBuildQueryResultsSnapshotPrefersShorterTitleAndSubtitleOnEqualScore(t *testing.T) {
+	query := Query{Id: "query-tie", SessionId: "session-tie", Type: QueryTypeInput, Search: "qqyy"}
+	manager := &Manager{
+		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+	}
+	resultSet := newQueryResultSet(query)
+	resultSet.Results.Store("lyric", &QueryResultCache{
+		Result: QueryResult{
+			Id:       "lyric",
+			Title:    "陈慧娴 - 千千阕歌 - 301 - 永远是你的朋友_qm.qrc",
+			SubTitle: `C:\Users\qianl\AppData\Roaming\Tencent\QQMusic\QQMusicCache\QQMusicLyricNew\陈慧娴 - 千千阕歌 - 301 - 永远是你的朋友_qm.qrc`,
+			Score:    200,
+			Group:    "Files",
+		},
+	})
+	resultSet.Results.Store("folder", &QueryResultCache{
+		Result: QueryResult{
+			Id:       "folder",
+			Title:    "QQ音乐",
+			SubTitle: `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\腾讯软件\QQ音乐`,
+			Score:    200,
+			Group:    "Files",
+		},
+	})
+	resultSet.Results.Store("png-deep", &QueryResultCache{
+		Result: QueryResult{
+			Id:       "png-deep",
+			Title:    "QQ音乐.png",
+			SubTitle: `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\腾讯软件\QQ音乐.png`,
+			Score:    200,
+			Group:    "Files",
+		},
+	})
+	resultSet.Results.Store("png-short", &QueryResultCache{
+		Result: QueryResult{
+			Id:       "png-short",
+			Title:    "QQ音乐.png",
+			SubTitle: `C:\Users\qianl\.sofast\icons\QQ音乐.png`,
+			Score:    200,
+			Group:    "Files",
+		},
+	})
+	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
+	sessionQueries.Store(query.Id, resultSet)
+	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
+
+	results := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
+	if len(results) != 5 {
+		t.Fatalf("snapshot length = %d, want 5", len(results))
+	}
+	wantIDs := []string{"folder", "png-short", "png-deep", "lyric"}
+	for i, wantID := range wantIDs {
+		if results[i+1].Id != wantID {
+			t.Fatalf("results[%d].Id = %q, want %q (results=%#v)", i+1, results[i+1].Id, wantID, results)
+		}
+	}
+}
+
 func TestTrimHiddenSessionQueryCacheKeepsNewest(t *testing.T) {
 	initPluginImageTestLocation(t)
 	manager := &Manager{

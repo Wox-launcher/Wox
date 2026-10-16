@@ -1529,6 +1529,8 @@
   "plugin_file_setting_skip_hidden_files_tooltip": "Skip files and folders whose names start with a dot, such as .git, .cache, and .DS_Store.",
   "plugin_file_setting_show_preview_label": "Show Preview",
   "plugin_file_setting_show_preview_tooltip": "Show the file preview panel when selecting File Search results. Turn this off if preview loading slows down result navigation.",
+  "plugin_file_setting_global_result_limit_label": "Global Search Result Limit",
+  "plugin_file_setting_global_result_limit_tooltip": "Maximum number of file results shown when searching without a trigger keyword. Enter a whole number from 1 to 100. The default is 10. File Search opened with f uses its own result window.",
   "plugin_file_setting_ignore_patterns_title": "Ignore Patterns",
   "plugin_file_setting_ignore_patterns_tooltip": "Exclude matching files and folders from the file search index. Wox also respects .gitignore files automatically. Supports names such as node_modules, globs such as *.tmp and **/cache/**, and absolute folder paths.",
   "plugin_file_setting_ignore_pattern": "Pattern",

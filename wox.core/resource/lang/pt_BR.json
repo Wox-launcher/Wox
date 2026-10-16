@@ -1458,6 +1458,8 @@
   "plugin_file_setting_skip_hidden_files_tooltip": "Ignora arquivos e pastas cujos nomes começam com ponto, como .git, .cache e .DS_Store.",
   "plugin_file_setting_show_preview_label": "Mostrar pré-visualização",
   "plugin_file_setting_show_preview_tooltip": "Mostra o painel de pré-visualização ao selecionar resultados da Busca de Arquivos. Desative esta opção se o carregamento da pré-visualização deixar a navegação mais lenta.",
+  "plugin_file_setting_global_result_limit_label": "Limite de resultados na busca global",
+  "plugin_file_setting_global_result_limit_tooltip": "Número máximo de resultados de arquivos exibidos na busca sem palavra-chave. Informe um número inteiro de 1 a 100. O padrão é 10. A Busca de Arquivos aberta com f usa a própria janela de resultados.",
   "plugin_file_setting_ignore_patterns_title": "Regras de exclusão",
   "plugin_file_setting_ignore_patterns_tooltip": "Exclui arquivos e pastas correspondentes do índice de busca de arquivos. O Wox também respeita arquivos .gitignore automaticamente. Aceita nomes como node_modules, globs como *.tmp e **/cache/**, e caminhos absolutos de pasta.",
   "plugin_file_setting_ignore_pattern": "Regra",

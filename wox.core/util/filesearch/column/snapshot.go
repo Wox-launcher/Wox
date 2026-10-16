@@ -287,15 +287,25 @@ func (s *Snapshot) PrepareSearchHints() {
 }
 
 // comparePaths orders postings by their joined byte paths without allocating
-// strings. Unreachable entries sort last and remain excluded by query readers.
+// strings. Shorter paths sort first; unreachable entries sort last and remain
+// excluded by query readers.
 func (s *Snapshot) comparePaths(left, right uint32) int {
 	var a, b [64]uint32
 	x, y := a[:0], b[:0]
+	var lenX, lenY int
 	for left != 0 && left != NoRow {
+		if len(x) > 0 {
+			lenX++
+		}
+		lenX += len(s.Name(s.NameIDs[left]))
 		x = append(x, left)
 		left = s.Parents[left]
 	}
 	for right != 0 && right != NoRow {
+		if len(y) > 0 {
+			lenY++
+		}
+		lenY += len(s.Name(s.NameIDs[right]))
 		y = append(y, right)
 		right = s.Parents[right]
 	}
@@ -307,6 +317,12 @@ func (s *Snapshot) comparePaths(left, right uint32) int {
 	}
 	if right == NoRow {
 		return -1
+	}
+	if lenX != lenY {
+		if lenX < lenY {
+			return -1
+		}
+		return 1
 	}
 	for i, j := len(x)-1, len(y)-1; i >= 0 && j >= 0; i, j = i-1, j-1 {
 		u, v := s.Name(s.NameIDs[x[i]]), s.Name(s.NameIDs[y[j]])

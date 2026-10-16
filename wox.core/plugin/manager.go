@@ -3088,8 +3088,20 @@ func compareQueryResultCachesForDisplay(a *QueryResultCache, b *QueryResultCache
 		return 1
 	}
 
+	if len(a.Result.Title) != len(b.Result.Title) {
+		if len(a.Result.Title) < len(b.Result.Title) {
+			return -1
+		}
+		return 1
+	}
 	if diff := strings.Compare(a.Result.Title, b.Result.Title); diff != 0 {
 		return diff
+	}
+	if len(a.Result.SubTitle) != len(b.Result.SubTitle) {
+		if len(a.Result.SubTitle) < len(b.Result.SubTitle) {
+			return -1
+		}
+		return 1
 	}
 	if diff := strings.Compare(a.Result.SubTitle, b.Result.SubTitle); diff != 0 {
 		return diff

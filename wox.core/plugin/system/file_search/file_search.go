@@ -54,6 +54,7 @@ const contentRootsSettingKey = "contentRoots"
 const fileIgnorePatternsSettingKey = "ignorePatterns"
 const fileSkipHiddenFilesSettingKey = "skipHiddenFiles"
 const fileShowPreviewSettingKey = "showPreview"
+const fileGlobalResultLimitSettingKey = "globalResultLimit"
 const fileSearchToolbarMsgID = "file-search-status"
 const fileSearchStatusCommand = "status"
 
@@ -74,6 +75,7 @@ const (
 	toolbarActivityPathMaxChars            = 42
 	toolbarErrorReasonMaxChars             = 28
 	fileSearchResultLimit                  = 100
+	fileSearchGlobalResultLimit            = 10
 	fileSearchContentResultLimit           = 20
 	fileSearchRecentResultLimit            = 50
 	fileSearchRecentCandidateLimit         = 80
@@ -221,6 +223,27 @@ func (c *FileSearchPlugin) GetMetadata() plugin.Metadata {
 					Label:        "i18n:plugin_file_setting_show_preview_label",
 					Tooltip:      "i18n:plugin_file_setting_show_preview_tooltip",
 					DefaultValue: "true",
+				},
+			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          fileGlobalResultLimitSettingKey,
+					Label:        "i18n:plugin_file_setting_global_result_limit_label",
+					Tooltip:      "i18n:plugin_file_setting_global_result_limit_tooltip",
+					DefaultValue: strconv.Itoa(fileSearchGlobalResultLimit),
+					Validators: []validator.PluginSettingValidator{
+						{
+							Type:  validator.PluginSettingValidatorTypeNotEmpty,
+							Value: &validator.PluginSettingValidatorNotEmpty{},
+						},
+						{
+							Type: validator.PluginSettingValidatorTypeIsNumber,
+							Value: &validator.PluginSettingValidatorIsNumber{
+								IsInteger: true,
+							},
+						},
+					},
 				},
 			},
 			{
@@ -968,7 +991,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 
 	searchStartedAt := util.GetSystemTimestamp()
 	selectedType := selectedFileSearchType(query)
-	results, err := c.searchFileQuery(ctx, query.Search, selectedType)
+	results, err := c.searchFileQuery(ctx, query, selectedType)
 	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	if err != nil {
 		c.logQueryDiagnostics(ctx, query.Search, diagnostics, 0, util.GetSystemTimestamp()-queryStartedAt)
@@ -976,7 +999,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		c.api.Notify(ctx, err.Error())
 		return plugin.QueryResponse{}
 	}
-	results = refineFileSearchResults(results, selectedType, fileSearchResultLimitFor(selectedType))
+	results = refineFileSearchResults(results, selectedType, c.fileSearchResultLimitFor(ctx, query, selectedType))
 	queryResults := c.materializeFileSearchResults(ctx, query, results, false, &diagnostics)
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
@@ -1089,24 +1112,29 @@ func fileSearchResultGroup(query plugin.Query) (string, int64) {
 }
 
 // searchFileQuery recalls name and content candidates for the selected type filter.
-func (c *FileSearchPlugin) searchFileQuery(ctx context.Context, queryText string, selectedType string) ([]filesearch.SearchResult, error) {
+func (c *FileSearchPlugin) searchFileQuery(ctx context.Context, query plugin.Query, selectedType string) ([]filesearch.SearchResult, error) {
+	queryText := query.Search
+	candidateLimit := c.fileSearchCandidateLimit(ctx, query, selectedType)
 	if selectedType == fileSearchTypeRefinementContent {
 		// Query the content index directly so name-matching files that also hit
 		// content stay visible, instead of only the extras appended after names.
-		return c.queryContentSearchResults(ctx, queryText, fileSearchCandidateLimit(selectedType)), nil
+		return c.queryContentSearchResults(ctx, queryText, candidateLimit), nil
 	}
 
-	results, err := c.search(ctx, queryText, fileSearchCandidateLimit(selectedType))
+	results, err := c.search(ctx, queryText, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
 	if selectedType != fileSearchTypeRefinementFolder {
-		results = c.appendContentSearchResults(ctx, queryText, results, fileSearchResultLimit+fileSearchContentResultLimit)
+		results = c.appendContentSearchResults(ctx, queryText, results, c.fileSearchResultLimitFor(ctx, query, selectedType))
 	}
 	return results, nil
 }
 
-func fileSearchCandidateLimit(selectedType string) int {
+func (c *FileSearchPlugin) fileSearchCandidateLimit(ctx context.Context, query plugin.Query, selectedType string) int {
+	if query.IsGlobalQuery() {
+		return c.getConfiguredGlobalResultLimit(ctx)
+	}
 	if selectedType != fileSearchTypeRefinementAll {
 		// Type filters need a wider candidate window before plugin-side filtering.
 		// Keep the default query window small to preserve its latency and memory use.
@@ -1115,11 +1143,34 @@ func fileSearchCandidateLimit(selectedType string) int {
 	return fileSearchResultLimit
 }
 
-func fileSearchResultLimitFor(selectedType string) int {
+func (c *FileSearchPlugin) fileSearchResultLimitFor(ctx context.Context, query plugin.Query, selectedType string) int {
+	if query.IsGlobalQuery() {
+		return c.getConfiguredGlobalResultLimit(ctx)
+	}
 	if selectedType != fileSearchTypeRefinementFolder && selectedType != fileSearchTypeRefinementContent {
 		return fileSearchResultLimit + fileSearchContentResultLimit
 	}
 	return fileSearchResultLimit
+}
+
+// getConfiguredGlobalResultLimit reads the global-search cap. Empty, invalid, or non-positive values stay at the default.
+func (c *FileSearchPlugin) getConfiguredGlobalResultLimit(ctx context.Context) int {
+	if c == nil || c.api == nil {
+		return fileSearchGlobalResultLimit
+	}
+	raw := strings.TrimSpace(c.api.GetSetting(ctx, fileGlobalResultLimitSettingKey))
+	if raw == "" {
+		return fileSearchGlobalResultLimit
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit <= 0 {
+		c.api.Log(ctx, plugin.LogLevelWarning, "Failed to parse file search global result limit, using default: "+raw)
+		return fileSearchGlobalResultLimit
+	}
+	if limit > fileSearchResultLimit {
+		return fileSearchResultLimit
+	}
+	return limit
 }
 
 // queryContentSearchResults converts current content-index hits into result rows.

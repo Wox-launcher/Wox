@@ -1529,6 +1529,8 @@
   "plugin_file_setting_skip_hidden_files_tooltip": ".git、.cache、.DS_Store など、名前がドットで始まるファイルとフォルダーをスキップします。",
   "plugin_file_setting_show_preview_label": "プレビューを表示",
   "plugin_file_setting_show_preview_tooltip": "ファイル検索結果を選択したときにファイルプレビューパネルを表示します。プレビュー読み込みで結果ナビゲーションが遅くなる場合はオフにしてください。",
+  "plugin_file_setting_global_result_limit_label": "グローバル検索の結果数",
+  "plugin_file_setting_global_result_limit_tooltip": "トリガーキーワードなしで検索したときに表示するファイル結果の上限です。1から100の整数を入力します。既定値は10です。fで開くファイル検索は専用の結果枠を使います。",
   "plugin_file_setting_ignore_patterns_title": "除外パターン",
   "plugin_file_setting_ignore_patterns_tooltip": "一致するファイルとフォルダーをファイル検索インデックスから除外します。Wox は .gitignore ファイルも自動的に尊重します。node_modules などの名前、*.tmp や**/cache/** などのグロブ、絶対フォルダーパスをサポートします。",
   "plugin_file_setting_ignore_pattern": "パターン",

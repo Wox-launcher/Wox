@@ -216,6 +216,9 @@ func (h *columnResultHeap) competitive(score int64, directory bool, name string)
 	if directory != worst.IsDir {
 		return directory
 	}
+	if len(name) != len(worst.Name) {
+		return len(name) < len(worst.Name)
+	}
 	return name <= worst.Name
 }
 

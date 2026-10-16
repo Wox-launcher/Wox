@@ -118,13 +118,20 @@ func columnPathParts(view column.View, row uint32, parts []string) ([]string, bo
 	return parts, true
 }
 
-// compareColumnPaths compares the bytes of the joined paths without joining.
-// A component prefix is followed by a separator, whose ordering differs from
-// an end-of-string (for example a/b versus a-b on Unix).
+// compareColumnPaths orders shorter joined paths first, then compares their
+// bytes without joining. A component prefix is followed by a separator, whose
+// ordering differs from an end-of-string (for example a/b versus a-b on Unix).
 func compareColumnPaths(view column.View, left, right uint32) int {
 	var leftLocal, rightLocal [32]string
 	a, _ := columnPathParts(view, left, leftLocal[:0])
 	b, _ := columnPathParts(view, right, rightLocal[:0])
+	lenA, lenB := columnPathBytesLen(a), columnPathBytesLen(b)
+	if lenA != lenB {
+		if lenA < lenB {
+			return -1
+		}
+		return 1
+	}
 	for i, j := len(a)-1, len(b)-1; i >= 0 && j >= 0; i, j = i-1, j-1 {
 		x, y := a[i], b[j]
 		n := min(len(x), len(y))
@@ -161,6 +168,17 @@ func compareColumnPaths(view column.View, left, right uint32) int {
 		return 1
 	}
 	return 0
+}
+
+func columnPathBytesLen(parts []string) int {
+	if len(parts) == 0 {
+		return 0
+	}
+	total := len(parts) - 1
+	for _, part := range parts {
+		total += len(part)
+	}
+	return total
 }
 
 // columnParentState memoizes whether a base path's ancestry survived unchanged.

@@ -135,9 +135,17 @@ func compareSearchResults(a SearchResult, b SearchResult) int {
 		return -1
 	case !a.IsDir && b.IsDir:
 		return 1
+	case len(a.Name) < len(b.Name):
+		return -1
+	case len(a.Name) > len(b.Name):
+		return 1
 	case a.Name < b.Name:
 		return -1
 	case a.Name > b.Name:
+		return 1
+	case len(a.Path) < len(b.Path):
+		return -1
+	case len(a.Path) > len(b.Path):
 		return 1
 	case a.Path < b.Path:
 		return -1

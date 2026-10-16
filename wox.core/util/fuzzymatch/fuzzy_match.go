@@ -911,16 +911,18 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 	clear(generation)
 	var currentGen uint32
 
-	for _, seg := range segments {
+	for segIdx, seg := range segments {
 		nextStates = nextStates[:0]
 		currentGen++
 
 		for _, state := range states {
 			// Early graduation: if pattern is fully matched, record score and don't continue searching
 			if state.patternIdx == len(patternRunes) && state.matchedSyllables > 0 {
-				finalScore := state.score
+				finalScore := state.score + calculateMatchRatioBonus(state.matchedSyllables, len(segments))
 				if state.matchedSyllables == len(segments) && !state.lastMatchWasPartial {
 					finalScore += bonusExactMatch
+				} else if state.matchedSyllables == segIdx && !state.lastMatchWasPartial {
+					finalScore += bonusPrefixMatch
 				}
 				if !matched || finalScore > bestScore {
 					bestScore = finalScore
@@ -932,6 +934,13 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 			// Branch 1: Skip this segment (syllable)
 			if state.matchedSyllables == 0 || state.consecutiveSkipped < maxConsecutiveSkippedSyllables {
 				newScore := state.score
+				if state.matchedSyllables > 0 {
+					if state.consecutiveSkipped == 0 {
+						newScore += scoreGapStart
+					} else {
+						newScore += scoreGapExtension
+					}
+				}
 				newSkips := state.consecutiveSkipped + 1
 				effectiveSkips := newSkips
 				if effectiveSkips > maxConsecutiveSkippedSyllables {
@@ -1168,7 +1177,7 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 	// Find best finished state
 	for _, state := range states {
 		if state.patternIdx == len(patternRunes) && state.matchedSyllables > 0 {
-			finalScore := state.score
+			finalScore := state.score + calculateMatchRatioBonus(state.matchedSyllables, len(segments))
 			if state.matchedSyllables == len(segments) && !state.lastMatchWasPartial {
 				finalScore += bonusExactMatch
 			}

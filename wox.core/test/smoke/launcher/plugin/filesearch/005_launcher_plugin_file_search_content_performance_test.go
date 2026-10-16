@@ -38,7 +38,7 @@ func Test005LauncherPluginFileSearchContentPerformance(t *testing.T) {
 		defer func() { t.Log(report.Line()) }()
 		reportFileSearchMemory(ctx, client, &report, "before content indexing")
 		smoke.OpenInstalledPluginSettings(t, ctx, client, fileSearchPluginID)
-		fieldID := fileSearchSettingFieldID(6)
+		fieldID := fileSearchContentEnabledFieldID
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, found := automationdriver.Find(snapshot, fieldID)
 			return found
@@ -59,7 +59,7 @@ func Test005LauncherPluginFileSearchContentPerformance(t *testing.T) {
 		})
 		started := time.Now()
 		setFileSearchContentEnabled(t, ctx, client, fieldID, true)
-		rootField := fileSearchSettingFieldID(7)
+		rootField := fileSearchContentRootsFieldID
 		row := addFileSearchRootField(t, ctx, client, root, rootField)
 		t.Cleanup(func() { removeFileSearchRootField(t, client, root, row, rootField) })
 		waitForFileSearchContentReady(t, ctx, root, len(paths))

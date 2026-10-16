@@ -1458,6 +1458,8 @@
   "plugin_file_setting_skip_hidden_files_tooltip": "Пропускать файлы и папки, имена которых начинаются с точки, например .git, .cache и .DS_Store.",
   "plugin_file_setting_show_preview_label": "Показывать предпросмотр",
   "plugin_file_setting_show_preview_tooltip": "Показывать панель предпросмотра при выборе результатов поиска файлов. Отключите этот параметр, если загрузка предпросмотра замедляет навигацию по результатам.",
+  "plugin_file_setting_global_result_limit_label": "Лимит результатов глобального поиска",
+  "plugin_file_setting_global_result_limit_tooltip": "Максимальное число файловых результатов при поиске без ключевого слова. Введите целое число от 1 до 100. Значение по умолчанию — 10. Поиск файлов, открытый через f, использует собственное окно результатов.",
   "plugin_file_setting_ignore_patterns_title": "Правила исключения",
   "plugin_file_setting_ignore_patterns_tooltip": "Исключает подходящие файлы и папки из индекса поиска файлов. Wox также автоматически учитывает .gitignore. Поддерживаются имена вроде node_modules, шаблоны вроде *.tmp и **/cache/**, а также абсолютные пути к папкам.",
   "plugin_file_setting_ignore_pattern": "Правило",

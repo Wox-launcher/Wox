@@ -34,7 +34,9 @@ const (
 
 var (
 	fileSearchRootsFieldID          = fileSearchSettingFieldID(1)
-	fileSearchIgnorePatternsFieldID = fileSearchSettingFieldID(4)
+	fileSearchIgnorePatternsFieldID = fileSearchSettingFieldID(5)
+	fileSearchContentEnabledFieldID = fileSearchSettingFieldID(7)
+	fileSearchContentRootsFieldID   = fileSearchSettingFieldID(8)
 )
 
 // fileSearchSettingFieldID accounts for the Windows-only file-index-service row.

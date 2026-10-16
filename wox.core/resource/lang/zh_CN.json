@@ -1529,6 +1529,8 @@
   "plugin_file_setting_skip_hidden_files_tooltip": "跳过名称以点号开头的文件和文件夹，例如 .git、.cache 和 .DS_Store。",
   "plugin_file_setting_show_preview_label": "显示预览",
   "plugin_file_setting_show_preview_tooltip": "选择文件搜索结果时显示文件预览面板。如果预览加载影响结果切换速度，可以关闭此项。",
+  "plugin_file_setting_global_result_limit_label": "全局搜索结果数量",
+  "plugin_file_setting_global_result_limit_tooltip": "未使用触发词搜索时，文件结果的显示数量上限。请填写 1 到 100 的整数，默认 10。使用 f 打开文件搜索时沿用文件搜索自己的结果窗口。",
   "plugin_file_setting_ignore_patterns_title": "忽略规则",
   "plugin_file_setting_ignore_patterns_tooltip": "从文件搜索索引中排除匹配的文件和文件夹。Wox 也会自动遵守各目录中的 .gitignore。支持 node_modules、*.tmp、**/cache/** 这类名称/通配规则，也支持绝对路径。",
   "plugin_file_setting_ignore_pattern": "规则",
