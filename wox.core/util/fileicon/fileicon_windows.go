@@ -24,13 +24,20 @@ import (
 // and converting it to PNG, cached on disk by extension.
 
 var (
-	shell32             = syscall.NewLazyDLL("shell32.dll")
-	user32              = syscall.NewLazyDLL("user32.dll")
-	shGetFileInfo       = shell32.NewProc("SHGetFileInfoW")
-	extractIconEx       = shell32.NewProc("ExtractIconExW")
-	privateExtractIcons = user32.NewProc("PrivateExtractIconsW")
-	shellIconMu         sync.Mutex
+	shell32       = syscall.NewLazyDLL("shell32.dll")
+	user32        = syscall.NewLazyDLL("user32.dll")
+	shGetFileInfo = shell32.NewProc("SHGetFileInfoW")
+	extractIconEx = shell32.NewProc("ExtractIconExW")
+	shellIconMu   sync.Mutex
+
+	privateExtractIcons iconExtractionProcedure = user32.NewProc("PrivateExtractIconsW")
 )
+
+// iconExtractionProcedure keeps the native return-value and handle-ownership contract testable.
+type iconExtractionProcedure interface {
+	Find() error
+	Call(...uintptr) (uintptr, uintptr, error)
+}
 
 type shFileInfo struct {
 	HIcon         win.HICON
@@ -216,18 +223,19 @@ func getIconUsingExtractIconEx(ctx context.Context, filePath string) (image.Imag
 	}
 
 	var largeIcon win.HICON
-	var smallIcon win.HICON
 	ret, _, _ := extractIconEx.Call(
 		uintptr(unsafe.Pointer(lpIconPath)),
 		0,
 		uintptr(unsafe.Pointer(&largeIcon)),
-		uintptr(unsafe.Pointer(&smallIcon)),
+		0, // Do not allocate an unused small icon.
 		1,
 	)
-	if ret == 0 || largeIcon == 0 {
+	if largeIcon != 0 {
+		defer win.DestroyIcon(largeIcon)
+	}
+	if ret == 0 || ret == 0xFFFFFFFF || largeIcon == 0 {
 		return nil, errors.New("no icons found in file")
 	}
-	defer win.DestroyIcon(largeIcon)
 
 	return convertIconToImage(ctx, largeIcon)
 }
@@ -253,7 +261,7 @@ func getHighResIcon(ctx context.Context, filePath string) (img image.Image, err 
 	sizes := []int{256, 128, 64, 48}
 	for _, size := range sizes {
 		var hIcon win.HICON
-		ret, _, callErr := privateExtractIcons.Call(
+		ret, _, _ := privateExtractIcons.Call(
 			uintptr(unsafe.Pointer(lpIconPath)),
 			0,
 			uintptr(size),
@@ -263,14 +271,12 @@ func getHighResIcon(ctx context.Context, filePath string) (img image.Image, err 
 			1,
 			0,
 		)
-		if callErr != nil &&
-			callErr.Error() != "The operation completed successfully." &&
-			callErr.Error() != "User stopped resource enumeration." {
-			continue
+		// Last-error can be stale or localized even on success; own every returned handle.
+		if hIcon != 0 {
+			defer win.DestroyIcon(hIcon)
 		}
 
-		if ret > 0 && hIcon != 0 {
-			defer win.DestroyIcon(hIcon)
+		if ret > 0 && ret != 0xFFFFFFFF && hIcon != 0 {
 			util.GetLogger().Info(ctx, "Successfully extracted high-res icon using PrivateExtractIconsW")
 			return convertIconToImage(ctx, hIcon)
 		}
@@ -299,7 +305,7 @@ func getHighResDefaultIcon(ctx context.Context) (image.Image, error) {
 	sizes := []int{256, 128, 64, 48}
 	for _, size := range sizes {
 		var hIcon win.HICON
-		ret, _, callErr := privateExtractIcons.Call(
+		ret, _, _ := privateExtractIcons.Call(
 			uintptr(unsafe.Pointer(shell32Path)),
 			2,
 			uintptr(size),
@@ -309,13 +315,11 @@ func getHighResDefaultIcon(ctx context.Context) (image.Image, error) {
 			1,
 			0,
 		)
-		if callErr != nil &&
-			callErr.Error() != "The operation completed successfully." &&
-			callErr.Error() != "User stopped resource enumeration." {
-			continue
-		}
-		if ret > 0 && hIcon != 0 {
+		// Last-error can be stale or localized even on success; own every returned handle.
+		if hIcon != 0 {
 			defer win.DestroyIcon(hIcon)
+		}
+		if ret > 0 && ret != 0xFFFFFFFF && hIcon != 0 {
 			util.GetLogger().Info(ctx, "Successfully extracted default icon from shell32.dll")
 			return convertIconToImage(ctx, hIcon)
 		}
