@@ -229,18 +229,11 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	if query == nil {
 		query = LauncherQueryBoundary(props.Query)
 	}
-	children := []woxwidget.Widget{woxwidget.Expanded{Child: woxwidget.Align{
-		Width: props.QueryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
-		Child: query,
-	}}}
-	if props.Refinement != nil {
-		children = append(children, woxwidget.Align{
-			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
-		})
-	}
+	children := make([]woxwidget.Widget, 0, 6)
 	if props.StatusLabel != "" {
 		theme := props.Theme.Controls
 		theme.DensityScale = props.DensityScale
+		// The session tag leads the query box so filters, glance, icons, and loading cannot move it.
 		children = append(children, woxwidget.Align{
 			Width: props.StatusWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
 			Child: woxwidget.Semantics{
@@ -248,6 +241,15 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 				Label: props.StatusLabel, Description: props.StatusDescription,
 				Child: woxcomponent.WoxWarningTag(props.StatusLabel, props.StatusWidth, theme),
 			},
+		})
+	}
+	children = append(children, woxwidget.Expanded{Child: woxwidget.Align{
+		Width: props.QueryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
+		Child: query,
+	}})
+	if props.Refinement != nil {
+		children = append(children, woxwidget.Align{
+			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
 		})
 	}
 	if props.Attention != nil {

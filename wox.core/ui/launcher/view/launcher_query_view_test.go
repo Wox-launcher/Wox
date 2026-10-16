@@ -422,11 +422,37 @@ func TestLauncherHeaderKeepsPluginModeVisibleWhileLoading(t *testing.T) {
 			Loading: loading, LoadingWidth: 30, LoadingSize: 20,
 		}).(woxwidget.Container)
 		row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-		status := row.Children[1].(woxwidget.Align)
+		status := row.Children[0].(woxwidget.Align)
 		semantics := status.Child.(woxwidget.Semantics)
 		if status.Vertical != 0.5 || status.Width != 140 || semantics.AutomationID != "launcher.plugin-mode" || semantics.Label != "第三方插件已禁用" || semantics.Description == "" {
 			t.Fatalf("loading=%t: plugin mode indicator lost placement or accessible text: %+v", loading, status)
 		}
+		if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
+			t.Fatalf("loading=%t: query slot = %T, want Expanded after the plugin mode tag", loading, row.Children[1])
+		}
+	}
+}
+
+func TestLauncherHeaderKeepsPluginModeLeftOfAccessories(t *testing.T) {
+	header := LauncherHeaderView(LauncherHeaderProps{
+		Width: 700, Height: 60, QueryBoxHeight: 50, QueryWidth: 200,
+		StatusLabel: "Third-party plugins disabled", StatusDescription: "Quit and reopen Wox to restore plugins.", StatusWidth: 180,
+		Refinement: woxwidget.Container{Width: 40, Height: 34}, RefinementWidth: 40,
+		Attention: woxwidget.Container{Width: 30, Height: 30}, AttentionWidth: 30,
+		Glance: woxwidget.Container{Width: 40, Height: 30}, GlanceWidth: 40,
+		Icon:    &woxui.Image{},
+		Loading: true, LoadingWidth: 30, LoadingSize: 20,
+	}).(woxwidget.Container)
+	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	status, ok := row.Children[0].(woxwidget.Align)
+	if !ok || status.Child.(woxwidget.Semantics).AutomationID != "launcher.plugin-mode" {
+		t.Fatalf("leading child = %#v, want the plugin mode tag", row.Children[0])
+	}
+	if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
+		t.Fatalf("query slot = %T, want Expanded immediately after the plugin mode tag", row.Children[1])
+	}
+	if _, ok := row.Children[2].(woxwidget.Align); !ok || row.Children[2].(woxwidget.Align).Width != 40 {
+		t.Fatalf("filters slot = %#v, want the refinement after the query", row.Children[2])
 	}
 }
 
