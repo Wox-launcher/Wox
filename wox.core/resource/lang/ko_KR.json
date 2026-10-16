@@ -1,4 +1,6 @@
 {
+  "ui_restart_wox": "Wox 다시 시작",
+  "ui_restart_wox_failed": "Wox를 다시 시작하지 못했습니다: %s",
   "ui_rendering": "렌더링",
   "plugin_sys_restart_wox": "Wox 다시 시작",
   "plugin_sys_restart_wox_failed": "Wox를 다시 시작하지 못했습니다: %s",

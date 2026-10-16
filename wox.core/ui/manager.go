@@ -1991,6 +1991,20 @@ func clampInt(v int, min int, max int) int {
 	return v
 }
 
+// RestartApp starts a supervisor that waits for this process to exit before relaunching.
+// Preserve troubleshooting mode without replaying startup files or deep links.
+func (m *Manager) RestartApp(ctx context.Context) error {
+	args := []string{supervisor.ArgChild}
+	if util.IsThirdPartyPluginsDisabled() {
+		args = append(args, util.ArgNoThirdPartyPlugins)
+	}
+	if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, args...); err != nil {
+		return err
+	}
+	m.ExitApp(ctx)
+	return nil
+}
+
 func (m *Manager) ExitApp(ctx context.Context) {
 	m.exitOnce.Do(func() {
 		util.GetLogger().Info(ctx, "start quitting")

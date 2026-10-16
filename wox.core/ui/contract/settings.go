@@ -145,6 +145,7 @@ type GeneralSettings struct {
 	IgnoredHotkeyApps                  []setting.IgnoredHotkeyApp
 	LogLevel                           string
 	UseSoftwareRendering               bool
+	SoftwareRenderingRestartRequired   bool
 	UsePinYin                          bool
 	SwitchInputMethodABC               bool
 	HideOnStart                        bool
@@ -199,6 +200,7 @@ type GeneralSettings struct {
 
 // GeneralSettingsServices exposes the shared settings snapshot and language catalog.
 type GeneralSettingsServices interface {
+	RestartWox(ctx context.Context, sessionID string) error
 	GeneralSettings(ctx context.Context, sessionID string) (GeneralSettings, error)
 	AvailableLanguages(ctx context.Context, sessionID string) ([]i18n.Lang, error)
 	// LanguageBundle returns the parsed translation table for langCode. The map is shared

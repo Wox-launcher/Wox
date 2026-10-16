@@ -1,6 +1,7 @@
 package view
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -151,5 +152,25 @@ func TestSettingsScrollbarUsesRightGutter(t *testing.T) {
 		if content.Width != width-80 || scroll.Width-content.Width != 32 || page.Padding.Left+scroll.Width != width-8 {
 			t.Fatalf("width %v: content %v, scroll %v, padding %+v", width, content.Width, scroll.Width, page.Padding)
 		}
+	}
+}
+
+// TestSettingRestartActionAlignsWithSwitch covers long labels and mixed display scaling.
+func TestSettingRestartActionAlignsWithSwitch(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2.5} {
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			return SettingRow(SettingRowProps{
+				ID: "rendering", Title: "Software rendering", Width: 520, Kind: "bool", OnTap: func() {},
+				ControlAction: woxwidget.Keyed{Key: "restart", Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{Label: "Перезапустить Wox", OnTap: func() {}})},
+			})
+		})
+		host.AttachServices(actionSearchHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 520, Height: 200}, PixelSize: woxui.PixelSize{Width: int(520 * scale), Height: int(200 * scale)}, Scale: scale})
+		button, ok := host.BoundsForKey("restart")
+		toggle, toggleOK := host.BoundsForKey("setting-switch-rendering")
+		if !ok || !toggleOK || button.X+button.Width > toggle.X || toggle.X+toggle.Width > 520 || math.Abs(float64(button.Y+button.Height/2-toggle.Y-toggle.Height/2)) > 1 {
+			t.Fatalf("scale=%v: restart=%+v switch=%+v", scale, button, toggle)
+		}
+		host.Dispose()
 	}
 }

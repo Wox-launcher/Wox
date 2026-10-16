@@ -26,6 +26,9 @@ func ConfigureSoftwareRendering(enabled bool) {
 	platformConfigureSoftwareRendering(enabled)
 }
 
+// SoftwareRenderingEnabled reports the preference applied at process startup.
+func SoftwareRenderingEnabled() bool { return softwareRenderingEnabled.Load() }
+
 var errWindowClosed = errors.New("woxui: window is closed")
 
 // windowLifecycle tracks the portable Close/OnClosed state machine for Window.

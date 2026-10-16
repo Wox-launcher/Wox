@@ -8,6 +8,9 @@ import (
 // Changes require restarting the application. macOS already uses CPU rasterization.
 func ConfigureSoftwareRendering(enabled bool) { window.ConfigureSoftwareRendering(enabled) }
 
+// SoftwareRenderingEnabled reports the preference applied at process startup.
+func SoftwareRenderingEnabled() bool { return window.SoftwareRenderingEnabled() }
+
 // ReleaseIdleTextMetricsCache drops all cached MeasureText results while every
 // window is hidden. The hot set is re-measured lazily on the first frame after
 // show, which costs far less than keeping the strings resident while idle.

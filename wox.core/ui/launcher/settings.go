@@ -58,6 +58,7 @@ type settingsData struct {
 	TrayQueries                        json.RawMessage
 	IsLinuxWaylandSession              bool
 	UseSoftwareRendering               bool
+	SoftwareRenderingRestartRequired   bool
 	UsePinYin                          bool
 	SwitchInputMethodABC               bool
 	HideOnStart                        bool
@@ -150,29 +151,31 @@ type settingItem struct {
 }
 
 type settingsSnapshot struct {
-	isDev       bool
-	tab         string
-	row         int
-	saving      bool
-	highlight   string
-	tooltip     *settingsInlineTooltipSnapshot
-	search      settingsSearchSnapshot
-	update      updateSettingsSnapshot
-	palette     woxcomponent.ControlTheme
-	plugins     pluginSettingsSnapshot
-	hotkey      hotkeySettingsSnapshot
-	appearance  appearanceSettingsSnapshot
-	theme       themeSettingsSnapshot
-	ai          aiSettingsSnapshot
-	tableEditor *formTableEditorSnapshot
-	usage       usageSettingsSnapshot
-	about       aboutSettingsSnapshot
-	privacy     privacySettingsSnapshot
-	dataState   dataSettingsSnapshot
-	network     networkSettingsSnapshot
-	runtime     runtimeSettingsSnapshot
-	cloud       cloudSettingsSnapshot
-	general     generalSettingsSnapshot
+	isDev        bool
+	tab          string
+	row          int
+	saving       bool
+	restarting   bool
+	restartError string
+	highlight    string
+	tooltip      *settingsInlineTooltipSnapshot
+	search       settingsSearchSnapshot
+	update       updateSettingsSnapshot
+	palette      woxcomponent.ControlTheme
+	plugins      pluginSettingsSnapshot
+	hotkey       hotkeySettingsSnapshot
+	appearance   appearanceSettingsSnapshot
+	theme        themeSettingsSnapshot
+	ai           aiSettingsSnapshot
+	tableEditor  *formTableEditorSnapshot
+	usage        usageSettingsSnapshot
+	about        aboutSettingsSnapshot
+	privacy      privacySettingsSnapshot
+	dataState    dataSettingsSnapshot
+	network      networkSettingsSnapshot
+	runtime      runtimeSettingsSnapshot
+	cloud        cloudSettingsSnapshot
+	general      generalSettingsSnapshot
 }
 
 type settingTab struct {
@@ -651,6 +654,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		TrayQueries:                        trayQueries,
 		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
 		UseSoftwareRendering:               loaded.UseSoftwareRendering,
+		SoftwareRenderingRestartRequired:   loaded.SoftwareRenderingRestartRequired,
 		UsePinYin:                          loaded.UsePinYin,
 		SwitchInputMethodABC:               loaded.SwitchInputMethodABC,
 		HideOnStart:                        loaded.HideOnStart,
@@ -827,29 +831,31 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 		tableEditor = snapshotFormTableEditorLocked(a.settingsTableEditor)
 	}
 	return settingsSnapshot{
-		isDev:       a.isDev,
-		tab:         a.settingTab,
-		row:         a.settingRow,
-		saving:      a.settingSaving,
-		highlight:   a.settingFlash,
-		tooltip:     tooltip,
-		search:      search,
-		update:      update,
-		palette:     settingsPalette(),
-		plugins:     plugins,
-		hotkey:      hotkey,
-		appearance:  appearance,
-		theme:       theme,
-		ai:          ai,
-		tableEditor: tableEditor,
-		usage:       usage,
-		about:       about,
-		privacy:     privacy,
-		dataState:   dataState,
-		network:     network,
-		runtime:     runtime,
-		cloud:       cloud,
-		general:     general,
+		isDev:        a.isDev,
+		tab:          a.settingTab,
+		row:          a.settingRow,
+		saving:       a.settingSaving,
+		restarting:   a.settingRestarting,
+		restartError: a.settingRestartError,
+		highlight:    a.settingFlash,
+		tooltip:      tooltip,
+		search:       search,
+		update:       update,
+		palette:      settingsPalette(),
+		plugins:      plugins,
+		hotkey:       hotkey,
+		appearance:   appearance,
+		theme:        theme,
+		ai:           ai,
+		tableEditor:  tableEditor,
+		usage:        usage,
+		about:        about,
+		privacy:      privacy,
+		dataState:    dataState,
+		network:      network,
+		runtime:      runtime,
+		cloud:        cloud,
+		general:      general,
 	}
 }
 
@@ -1660,4 +1666,27 @@ func settingValueLabel(item settingItem) string {
 		}
 	}
 	return item.value
+}
+
+// restartFromSettings keeps repeated clicks from launching multiple replacement processes.
+func (a *App) restartFromSettings() {
+	if a.settingRestarting || a.settingSaving {
+		return
+	}
+	a.settingRestarting = true
+	a.settingRestartError = ""
+	a.invalidateSettingsWindow()
+	util.Go(a.lifecycleCtx, "restart Wox from settings", func() {
+		err := a.services.RestartWox(context.Background(), a.sessionID)
+		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("restart Wox from settings: %v", err))
+		}
+		_ = a.runOnUI("restart Wox result", func() {
+			a.settingRestarting = false
+			if err != nil {
+				a.settingRestartError = fmt.Sprintf(a.translate("i18n:ui_restart_wox_failed"), err.Error())
+			}
+			a.invalidateSettingsWindow()
+		})
+	})
 }

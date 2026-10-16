@@ -566,8 +566,20 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 			valueLeading = a.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale))
 		}
 	}
+	var controlAction woxwidget.Widget
+	if item.key == "UseSoftwareRendering" && snapshot.general.Data.SoftwareRenderingRestartRequired {
+		controlAction = woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "settings-restart-wox", Label: a.translate("i18n:ui_restart_wox"),
+			Variant: woxcomponent.ButtonSecondary, Disabled: snapshot.saving || snapshot.restarting,
+			OnTap: a.restartFromSettings, Theme: snapshot.palette,
+		})
+		if snapshot.restartError != "" {
+			item.description += "\n" + snapshot.restartError
+		}
+		item.disabled = item.disabled || snapshot.saving || snapshot.restarting
+	}
 	return launcherview.SettingRow(launcherview.SettingRowProps{
-		ID: item.key, Title: item.title, Description: item.description, Value: value, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
+		ID: item.key, Title: item.title, Description: item.description, Value: value, ControlAction: controlAction, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
 		Width: width, Background: background, Disabled: item.disabled, PreserveLabelColor: offlinePaused,
 		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette,
 		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },

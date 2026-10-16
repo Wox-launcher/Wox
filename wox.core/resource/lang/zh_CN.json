@@ -1,4 +1,6 @@
 {
+  "ui_restart_wox": "重启 Wox",
+  "ui_restart_wox_failed": "重启 Wox 失败：%s",
   "ui_rendering": "渲染",
   "plugin_sys_restart_wox": "重启 Wox",
   "plugin_sys_restart_wox_failed": "重启 Wox 失败：%s",

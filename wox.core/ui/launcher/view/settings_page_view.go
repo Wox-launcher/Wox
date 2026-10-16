@@ -90,6 +90,8 @@ type SettingRowProps struct {
 	OnChanged func(string)
 	OnKey     func(woxui.KeyEvent) bool
 	OnBrowse  func()
+	// ControlAction is an optional action immediately before a switch.
+	ControlAction woxwidget.Widget
 }
 
 func SettingChoiceAnchorKey(id string) woxwidget.Key {
@@ -112,6 +114,9 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 		if props.ControlWidth > 0 {
 			valueWidth = props.ControlWidth
 		}
+	}
+	if props.ControlAction != nil {
+		valueWidth = max(valueWidth, float32(280))
 	}
 	labelWidth := max(float32(180), props.Width-valueWidth-32)
 	var valueField woxwidget.Widget
@@ -142,14 +147,18 @@ func SettingRow(props SettingRowProps) woxwidget.Widget {
 			})}}
 		}
 	case "bool":
-		valueField = woxwidget.Align{Width: valueWidth, Height: woxcomponent.SettingsControlHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
+		valueField = woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: "setting-switch-" + props.ID, Label: props.Title, Value: props.Value == "true", Disabled: props.Disabled, Theme: props.Theme,
 			OnChange: func(bool) {
 				if props.OnTap != nil {
 					props.OnTap()
 				}
 			},
-		})}
+		})
+		if props.ControlAction != nil {
+			valueField = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{props.ControlAction, valueField}}
+		}
+		valueField = woxwidget.Align{Width: valueWidth, Height: woxcomponent.SettingsControlHeight, Horizontal: 1, Vertical: 0.5, Child: valueField}
 	case "button":
 		onTap := props.OnTap
 		if props.Disabled {

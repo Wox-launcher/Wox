@@ -7,9 +7,12 @@ import (
 
 // TestSoftwareRenderingSettingVisibility verifies the persisted value reaches the control at the end of Interface settings.
 func TestSoftwareRenderingSettingVisibility(t *testing.T) {
-	data, err := settingsDataFromContract(contract.GeneralSettings{UseSoftwareRendering: true})
+	data, err := settingsDataFromContract(contract.GeneralSettings{UseSoftwareRendering: true, SoftwareRenderingRestartRequired: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !data.SoftwareRenderingRestartRequired {
+		t.Fatal("restart requirement was lost in the settings snapshot")
 	}
 	found := false
 	for _, item := range settingItems("appearance", data) {

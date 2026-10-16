@@ -1,4 +1,6 @@
 {
+  "ui_restart_wox": "Перезапустить Wox",
+  "ui_restart_wox_failed": "Не удалось перезапустить Wox: %s",
   "ui_rendering": "Отрисовка",
   "plugin_sys_restart_wox": "Перезапустить Wox",
   "plugin_sys_restart_wox_failed": "Не удалось перезапустить Wox: %s",

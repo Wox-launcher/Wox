@@ -1,4 +1,6 @@
 {
+  "ui_restart_wox": "Reiniciar o Wox",
+  "ui_restart_wox_failed": "Falha ao reiniciar o Wox: %s",
   "ui_rendering": "Renderização",
   "plugin_sys_restart_wox": "Reiniciar o Wox",
   "plugin_sys_restart_wox_failed": "Falha ao reiniciar o Wox: %s",

@@ -202,6 +202,8 @@ type App struct {
 	settingTab              string
 	settingRow              int
 	settingSaving           bool
+	settingRestarting       bool
+	settingRestartError     string
 	// pendingBuiltInText is a text value whose field already lost focus. It is held
 	// until the pointer click that caused the blur either saves another setting or releases.
 	pendingBuiltInText            *pendingBuiltInText

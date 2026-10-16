@@ -18,6 +18,7 @@ import (
 	"wox/setting"
 	"wox/telemetry"
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/font"
 	"wox/util/keyboard"
@@ -45,6 +46,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
 		LogLevel:                           util.NormalizeLogLevel(woxSetting.LogLevel.Get()),
 		UseSoftwareRendering:               woxSetting.UseSoftwareRendering.Get(),
+		SoftwareRenderingRestartRequired:   woxSetting.UseSoftwareRendering.Get() != woxui.SoftwareRenderingEnabled(),
 		UsePinYin:                          woxSetting.UsePinYin.Get(),
 		SwitchInputMethodABC:               woxSetting.SwitchInputMethodABC.Get(),
 		HideOnStart:                        woxSetting.HideOnStart.Get(),
@@ -442,4 +444,9 @@ func normalizeHiddenPluginStores(stores []string) []string {
 	}
 	sort.Strings(next)
 	return next
+}
+
+// RestartWox uses the same orderly handoff as the system command.
+func (s *CoreServices) RestartWox(ctx context.Context, sessionID string) error {
+	return GetUIManager().RestartApp(uiServiceContext(ctx, sessionID))
 }
