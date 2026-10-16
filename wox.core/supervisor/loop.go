@@ -124,7 +124,9 @@ func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 			return 1
 		}
 
+		stopWatch := m.watchUI(ctx, cmd.Process.Pid)
 		waitErr := cmd.Wait()
+		stopWatch()
 		duration := m.recordChildExit(ctx, cmd.Process.Pid, waitErr, startedAt)
 		if m.hasPendingTask() {
 			m.logf("child exited with a pending task")

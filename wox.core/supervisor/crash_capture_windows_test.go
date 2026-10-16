@@ -54,6 +54,7 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 
 	dataDirectory := t.TempDir()
 	previousDumpFolder, hadPreviousDumpFolder := readCrashHandlerDumpFolder()
+	defer restoreCaptureLogSetting(t)()
 	handlerDirectory := filepath.Join(dataDirectory, "diagnostics", "crash-handler")
 	defer cleanupWindowsCrashIntegrationRegistry(handlerDirectory, previousDumpFolder, hadPreviousDumpFolder)
 	command := exec.Command(os.Args[0], "-test.run=^TestWindowsCrashHandlerIntegration$")
@@ -61,10 +62,11 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 		"WOX_SUPERVISOR_DATA_DIR="+dataDirectory,
 		windowsCrashIntegrationChildEnv+"=1",
 	)
-	err := command.Run()
-	if err == nil {
-		t.Fatal("crash integration child exited successfully")
+	output, err := command.CombinedOutput()
+	if command.ProcessState == nil || uint32(command.ProcessState.ExitCode()) != 0xc0000602 {
+		t.Fatalf("expected STATUS_FAIL_FAST_EXCEPTION, got %v; output=%s", err, output)
 	}
+	t.Logf("crash child: %v output=%s", err, output)
 
 	dumpDirectory := filepath.Join(dataDirectory, "diagnostics", "crashes", "dumps")
 	deadline := time.Now().Add(10 * time.Second)
@@ -86,13 +88,43 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 						t.Fatalf("captured file is not a valid minidump: %s", dumpPath)
 					}
 					t.Logf("captured dump %s (%d bytes)", dumpPath, info.Size())
+					captureLog, err := os.ReadFile(filepath.Join(dataDirectory, "log", "supervisor.log"))
+					if err != nil || !strings.Contains(string(captureLog), "stage=dump_completed") {
+						t.Fatalf("missing WER completion log: %s error=%v", captureLog, err)
+					}
 					return
 				}
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("WER crash handler did not create a dump in %s", dumpDirectory)
+	captureLog, _ := os.ReadFile(filepath.Join(dataDirectory, "log", "supervisor.log"))
+	t.Fatalf("WER crash handler did not create a dump in %s; capture log: %s", dumpDirectory, captureLog)
+}
+
+// restoreCaptureLogSetting preserves the extra WER logging setting used by native tests.
+func restoreCaptureLogSetting(t *testing.T) func() {
+	t.Helper()
+	var previous string
+	hadPrevious := false
+	if key, err := registry.OpenKey(registry.CURRENT_USER, windowsCrashHandlerKey, registry.QUERY_VALUE); err == nil {
+		value, _, err := key.GetStringValue("CaptureLog")
+		previous, hadPrevious = value, err == nil
+		key.Close()
+	}
+	return func() {
+		key, _, err := registry.CreateKey(registry.CURRENT_USER, windowsCrashHandlerKey, registry.SET_VALUE)
+		if err != nil {
+			t.Errorf("restore capture log setting: %v", err)
+			return
+		}
+		defer key.Close()
+		if hadPrevious {
+			_ = key.SetStringValue("CaptureLog", previous)
+		} else {
+			_ = key.DeleteValue("CaptureLog")
+		}
+	}
 }
 
 // runWindowsCrashIntegrationChild registers the module before terminating this subprocess.
@@ -114,11 +146,50 @@ func runWindowsCrashIntegrationChild(t *testing.T) {
 	if err := manager.configureWindowsCrashHandlerRegistry(handlerPath); err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("WOX_CRASH_TEST_FAIL_DUMP") == "1" {
+		key, err := registry.OpenKey(registry.CURRENT_USER, windowsCrashHandlerKey, registry.SET_VALUE)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = key.SetStringValue("DumpFolder", filepath.Join(manager.CrashDumpsDirectory(), "missing-directory"))
+		key.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := registerWindowsCrashHandler(handlerPath); err != nil {
 		t.Fatal(err)
 	}
 	windows.NewLazySystemDLL("kernel32.dll").NewProc("RaiseFailFastException").Call(0, 0, 0)
 	os.Exit(2)
+}
+
+// TestWindowsCrashHandlerFailureIntegration forces CreateFile to fail and checks
+// that the external WER callback records the failing stage and Windows error.
+func TestWindowsCrashHandlerFailureIntegration(t *testing.T) {
+	if os.Getenv(windowsCrashIntegrationEnv) != "1" {
+		t.Skip("set WOX_CRASH_CAPTURE_INTEGRATION=1 to run the real WER crash test")
+	}
+	directory := t.TempDir()
+	previous, existed := readCrashHandlerDumpFolder()
+	defer restoreCaptureLogSetting(t)()
+	defer cleanupWindowsCrashIntegrationRegistry(filepath.Join(directory, "diagnostics", "crash-handler"), previous, existed)
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWindowsCrashHandlerIntegration$")
+	cmd.Env = append(os.Environ(), "WOX_SUPERVISOR_DATA_DIR="+directory, windowsCrashIntegrationChildEnv+"=1", "WOX_CRASH_TEST_FAIL_DUMP=1")
+	output, err := cmd.CombinedOutput()
+	if cmd.ProcessState == nil || uint32(cmd.ProcessState.ExitCode()) != 0xc0000602 {
+		t.Fatalf("expected STATUS_FAIL_FAST_EXCEPTION, got %v; output=%s", err, output)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	var data []byte
+	for time.Now().Before(deadline) {
+		data, _ = os.ReadFile(filepath.Join(directory, "log", "supervisor.log"))
+		if strings.Contains(string(data), "stage=create_dump_failed win32Error=3") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("missing dump failure stage and ERROR_PATH_NOT_FOUND: %s", data)
 }
 
 // readCrashHandlerDumpFolder snapshots the user setting changed by the integration test.

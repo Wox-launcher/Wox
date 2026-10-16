@@ -29,3 +29,38 @@ The supervisor confirms the task, Wox exits, and the supervisor runs the registe
 ## Log
 
 The supervisor writes its own log to `~/.wox/log/supervisor.log`.
+
+On Windows, the out-of-process WER helper appends capture stages and Windows
+error codes to that same log. Registration success does not imply that WER ran:
+look for `fatal_callback_entered`, then `dump_completed` or a failing stage.
+After an abnormal exit the supervisor waits up to 10 seconds for a dump and
+explicitly logs when none was collected. A late WER dump remains in the dump
+directory but is not retroactively added to an already exported report.
+
+## Windows UI hangs
+
+While a child is alive, the supervisor probes its top-level windows (including
+hidden windows) every 5 seconds with a bounded `WM_NULL` request. At least 30
+seconds of consecutive unresponsiveness triggers a live minidump and diagnostic
+ZIP. A single stall produces one capture attempt until responsiveness returns;
+long sampling gaps, such as sleep, do not count toward a new timeout. Capture
+errors include the failing API stage in the supervisor log. The probe does not
+change rendering, free memory, terminate the child, or request a restart.
+
+This detects blocked window message loops, not every application-level hang:
+a thread that continues dispatching messages may still have a stalled workflow.
+No window means there is nothing to probe yet. Non-Windows platforms retain
+their existing crash handling without this native window watchdog.
+
+`go test ./supervisor` exercises a hidden blocked window in a test subprocess,
+live dump generation and report inclusion. Set `WOX_CRASH_CAPTURE_INTEGRATION=1`
+to additionally exercise real WER crashes, including a deliberately unwritable
+dump destination. These tests restore the WER settings they change.
+
+Run the WER integration tests from a normal Windows terminal with access to the
+host user's registry. A registry-isolated execution environment can return
+success from both registration and registry readback while the host WerFault
+process cannot see the module allowlist. In that case the callback never runs;
+neither a direct DLL callback test nor registration success validates the full
+WER path. The integration tests require the expected fail-fast exit, a valid
+minidump and completion log, or the expected dump failure stage.

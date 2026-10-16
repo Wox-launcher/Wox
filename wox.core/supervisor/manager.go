@@ -460,17 +460,18 @@ func (m *Manager) addMacOSCrashReports(zipWriter *zip.Writer) {
 	}
 }
 
-func addExistingFile(zipWriter *zip.Writer, src string, name string) {
+func addExistingFile(zipWriter *zip.Writer, src string, name string) error {
 	file, err := os.Open(src)
 	if err != nil {
-		return
+		return err
 	}
 	defer file.Close()
 	writer, err := zipWriter.Create(name)
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = io.Copy(writer, file)
+	_, err = io.Copy(writer, file)
+	return err
 }
 
 func hasArg(args []string, arg string) bool {

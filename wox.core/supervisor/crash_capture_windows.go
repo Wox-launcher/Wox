@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	windowsCrashArtifactWait = 2 * time.Second
+	windowsCrashArtifactWait = 10 * time.Second
 	windowsWERTempWindow     = 10 * time.Second
 	windowsCrashHandlerKey   = `Software\Wox\CrashHandler`
 	windowsWERModuleKey      = `Software\Microsoft\Windows\Windows Error Reporting\RuntimeExceptionHelperModules`
@@ -109,7 +109,11 @@ func (m *Manager) configureWindowsCrashHandlerRegistry(handlerPath string) error
 		configKey.Close()
 		return err
 	}
+	err = configKey.SetStringValue("CaptureLog", m.SupervisorLogPath())
 	configKey.Close()
+	if err != nil {
+		return err
+	}
 
 	moduleKey, _, err := registry.CreateKey(registry.CURRENT_USER, windowsWERModuleKey, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err != nil {
@@ -157,7 +161,9 @@ func (m *Manager) addWindowsCrashDumps(zipWriter *zip.Writer) {
 		if statErr != nil || info.ModTime().Before(startedAt) {
 			continue
 		}
-		addExistingFile(zipWriter, filepath.Join(m.CrashDumpsDirectory(), entry.Name()), filepath.Join("windows-dumps", entry.Name()))
+		if err := addExistingFile(zipWriter, filepath.Join(m.CrashDumpsDirectory(), entry.Name()), filepath.Join("windows-dumps", entry.Name())); err != nil {
+			m.logf("add dump to report failed: file=%s error=%v", entry.Name(), err)
+		}
 	}
 }
 
@@ -166,11 +172,22 @@ func (m *Manager) waitForCrashArtifacts(pid int, runStartedAt time.Time) string 
 	// short bounded window so the first generated report contains the dump.
 	crashDetectedAt := time.Now()
 	deadline := crashDetectedAt.Add(windowsCrashArtifactWait)
+	reportedFailures := make(map[string]string)
+	m.logf("waiting for crash dump: pid=%d timeout=%s directory=%s", pid, windowsCrashArtifactWait, m.CrashDumpsDirectory())
 	for time.Now().Before(deadline) {
 		for _, dumpPath := range m.findWindowsCrashDumps(pid, runStartedAt, crashDetectedAt) {
+			// A prior live hang snapshot is included in the report, but must not
+			// end the wait for a new fatal-exception dump from WER.
+			if strings.Contains(filepath.Base(dumpPath), "-hang-") {
+				continue
+			}
 			if !strings.EqualFold(filepath.Dir(dumpPath), m.CrashDumpsDirectory()) {
 				preservedPath, err := m.copyWindowsCrashDump(dumpPath)
 				if err != nil {
+					if reportedFailures[dumpPath] != err.Error() {
+						m.logf("preserve crash dump failed: pid=%d source=%s error=%v", pid, dumpPath, err)
+						reportedFailures[dumpPath] = err.Error()
+					}
 					continue
 				}
 				return preservedPath
@@ -179,6 +196,7 @@ func (m *Manager) waitForCrashArtifacts(pid int, runStartedAt time.Time) string 
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	m.logf("crash dump unavailable: pid=%d waited=%s; no usable dump collected; WER callback may not have run or dump creation may have failed; inspect capture stage logs", pid, windowsCrashArtifactWait)
 	return ""
 }
 
