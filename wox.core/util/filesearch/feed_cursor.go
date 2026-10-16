@@ -52,3 +52,16 @@ func feedCursorFresh(cursor FeedCursor, now time.Time, safeWindow time.Duration)
 	}
 	return now.Sub(time.UnixMilli(cursor.UpdatedAt)) <= safeWindow
 }
+
+// newerFSEventsCursor prevents replayed events from moving an acknowledgement backwards.
+func newerFSEventsCursor(current, candidate string) string {
+	next, ok := decodeFeedCursor(candidate, RootFeedTypeFSEvents)
+	if !ok {
+		return current
+	}
+	previous, ok := decodeFeedCursor(current, RootFeedTypeFSEvents)
+	if !ok || next.FSEventID > previous.FSEventID {
+		return candidate
+	}
+	return current
+}

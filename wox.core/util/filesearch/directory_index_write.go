@@ -68,7 +68,7 @@ func (d *directoryIndex) writeScope(ctx context.Context, rootID string, scope st
 	return d.writeScopes(ctx, rootID, []string{scope}, directFiles, stream)
 }
 
-// writeScopes publishes all disjoint scopes in one root generation. Validating
+// writeScopes publishes all disjoint scopes in one atomic update. Validating
 // and building them together prevents a later failed batch exposing a partial run.
 func (d *directoryIndex) writeScopes(ctx context.Context, rootID string, scopes []string, directFiles bool, stream func(func(SubtreeSnapshotBatch) error) error) error {
 	d.mu.RLock()
@@ -119,68 +119,9 @@ func (d *directoryIndex) writeScopes(ctx context.Context, rootID string, scopes 
 			return nil
 		})
 	}
-	revision := shard.store.Revision()
+	// Stage only the observed scope. A failed stream must leave both the live
+	// overlay and its journal untouched.
 	builder := column.NewBuilder(shard.root.Path, directoryEntryID(shard.root.Path))
-	cursor := ""
-	err := shard.store.Read(func(view column.View) error {
-		cursor = view.Cursor
-		if directFiles || !owns(shard.root.Path) {
-			if err := builder.Add(view.Base.Record(0)); err != nil {
-				return err
-			}
-		}
-		// Scope membership is shared by all files in one directory. Avoid a full
-		// path allocation for every unaffected file while copying immutable rows.
-		parents := make(map[uint64]bool)
-		copyRecord := func(record column.Record) error {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			// Tombstoned parents hide descendants. Copying those descendants into
-			// a new generation could resurrect them when the same path is reused.
-			if !view.Reachable(record.ID) {
-				return nil
-			}
-			var owned bool
-			if record.Flags&column.Directory != 0 {
-				if !directFiles {
-					path, reachable := view.Path(record.ID)
-					owned = reachable && owns(path)
-				}
-			} else {
-				var checked bool
-				owned, checked = parents[record.ParentID]
-				if !checked {
-					parent, reachable := view.Path(record.ParentID)
-					owned = reachable && owns(parent)
-					parents[record.ParentID] = owned
-				}
-			}
-			if owned {
-				return nil
-			}
-			return builder.Add(record)
-		}
-		for row := 1; row < view.Base.Len(); row++ {
-			if _, changed := view.Delta[view.Base.IDs[row]]; changed {
-				continue
-			}
-			if err := copyRecord(view.Base.Record(uint32(row))); err != nil {
-				return err
-			}
-		}
-		for _, change := range view.Delta {
-			if !change.Deleted && change.ID != view.Base.IDs[0] {
-				if err := copyRecord(change.Record); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil && !errors.Is(err, column.ErrNotReady) {
-		return err
-	}
 	var unreadable []string
 	if err := stream(func(batch SubtreeSnapshotBatch) error {
 		if err := ctx.Err(); err != nil {
@@ -194,17 +135,114 @@ func (d *directoryIndex) writeScopes(ctx context.Context, rootID string, scopes 
 	}); err != nil {
 		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	// An explicit whole-root replacement owns every row, including the root
+	// descriptor (which journal mutations intentionally cannot replace).
+	if !directFiles && owns(shard.root.Path) {
+		if err := preserveUnreadable(ctx, shard.store, builder, unreadable); err != nil {
+			return err
+		}
+		base, err := builder.Finish()
+		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		cursor := ""
+		if err := shard.store.Read(func(view column.View) error { cursor = view.Cursor; return nil }); err != nil && !errors.Is(err, column.ErrNotReady) {
+			return err
+		}
+		return shard.store.Publish(base, cursor, "configured-root-v1", shard.store.Revision())
 	}
-	if err := preserveUnreadable(ctx, shard.store, builder, unreadable); err != nil {
-		return err
-	}
-	base, err := builder.Finish()
+	observed, err := builder.Finish()
 	if err != nil {
 		return err
 	}
-	return shard.store.Publish(base, cursor, "configured-root-v1", revision)
+	var changes []column.Change
+	cursor := ""
+	err = shard.store.Read(func(view column.View) error {
+		cursor = view.Cursor
+		protected := directoryScopeProtection(view, unreadable)
+		// Resolve each parent once; walking ancestry for every unchanged file
+		// made even a tiny directory refresh proportional to files times depth.
+		type parentState struct{ owned, reachable bool }
+		parents := make(map[uint64]parentState)
+		check := func(record column.Record) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			var owned, reachable bool
+			if record.Flags&column.Directory != 0 {
+				path, ok := view.Path(record.ID)
+				reachable = ok
+				owned = !directFiles && ok && owns(path)
+			} else {
+				state, ok := parents[record.ParentID]
+				if !ok {
+					path, exists := view.Path(record.ParentID)
+					state = parentState{owned: exists && owns(path), reachable: exists}
+					parents[record.ParentID] = state
+				}
+				owned, reachable = state.owned, state.reachable
+			}
+			if reachable && !owned {
+				return nil
+			}
+			if reachable && protected(record) {
+				return nil
+			}
+			// Remove unreachable descendants too, so reusing a deleted path ID
+			// cannot resurrect old children after a later directory create.
+			if _, exists := observed.Row(record.ID); !exists {
+				changes = append(changes, column.Change{Record: column.Record{ID: record.ID}, Deleted: true})
+			}
+			return nil
+		}
+		for row := 1; row < view.Base.Len(); row++ {
+			if _, changed := view.Delta[view.Base.IDs[row]]; changed {
+				continue
+			}
+			if err := check(view.Base.Record(uint32(row))); err != nil {
+				return err
+			}
+		}
+		for _, change := range view.Delta {
+			if !change.Deleted {
+				if err := check(change.Record); err != nil {
+					return err
+				}
+			}
+		}
+		for row := 1; row < observed.Len(); row++ {
+			record := observed.Record(uint32(row))
+			old, exists := view.Lookup(record.ID)
+			// Synthetic ancestry must not replace an observed directory's flags
+			// or metadata, including directories outside this scan's ownership.
+			if exists && view.Reachable(record.ID) && (record.Flags&column.Structural != 0 || old == record) {
+				continue
+			}
+			changes = append(changes, column.Change{Record: record})
+		}
+		return nil
+	})
+	if errors.Is(err, column.ErrNotReady) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return shard.store.Publish(observed, "", "configured-root-v1", shard.store.Revision())
+	}
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	// One synced journal frame publishes the entire diff atomically. The
+	// scanner's threshold-based maintenance owns full generation compaction.
+	return shard.store.Apply(changes, cursor)
 }
 
 // preserveUnreadable copies only still-reachable prior facts. An inaccessible
@@ -215,23 +253,22 @@ func preserveUnreadable(ctx context.Context, store *column.Store, builder *colum
 		return nil
 	}
 	err := store.Read(func(view column.View) error {
+		protected := directoryScopeProtection(view, scopes)
 		copyRecord := func(record column.Record) error {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if !protected(record) {
+				return nil
 			}
 			path, reachable := view.Path(record.ID)
 			if !reachable {
 				return nil
 			}
-			for _, scope := range scopes {
-				if pathWithinScope(scope, path) {
-					if err := addDirectoryParents(builder, view.Base.Root, path); err != nil {
-						return err
-					}
-					return builder.Add(record)
-				}
+			if err := addDirectoryParents(builder, view.Base.Root, path); err != nil {
+				return err
 			}
-			return nil
+			return builder.Add(record)
 		}
 		for row := 0; row < view.Base.Len(); row++ {
 			if _, changed := view.Delta[view.Base.IDs[row]]; !changed {
@@ -312,4 +349,42 @@ func addDirectoryParents(builder *column.Builder, root, path string) error {
 		}
 	}
 	return nil
+}
+
+// directoryScopeProtection matches unreadable scopes by stable path IDs. Memoizing
+// directory ancestry avoids comparing every old file against every failed path;
+// whole-volume scans can report thousands of inaccessible system directories.
+func directoryScopeProtection(view column.View, scopes []string) func(column.Record) bool {
+	if len(scopes) == 0 {
+		return func(column.Record) bool { return false }
+	}
+	protectedIDs := make(map[uint64]bool, len(scopes))
+	for _, scope := range scopes {
+		protectedIDs[directoryEntryID(scope)] = true
+	}
+	memo := make(map[uint64]bool)
+	var parentProtected func(uint64) bool
+	parentProtected = func(id uint64) bool {
+		if protectedIDs[id] {
+			return true
+		}
+		if value, known := memo[id]; known {
+			return value
+		}
+		// Seed before following parents so corrupt ancestry cannot recurse forever.
+		memo[id] = false
+		if id == view.Base.IDs[0] {
+			return false
+		}
+		record, found := view.Lookup(id)
+		if !found {
+			return false
+		}
+		value := parentProtected(record.ParentID)
+		memo[id] = value
+		return value
+	}
+	return func(record column.Record) bool {
+		return protectedIDs[record.ID] || parentProtected(record.ParentID)
+	}
 }

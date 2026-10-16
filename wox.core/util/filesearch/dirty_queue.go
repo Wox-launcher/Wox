@@ -88,7 +88,11 @@ func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts m
 		signals := q.pending[rootID]
 		q.untrackSignalsLocked(signals)
 		delete(q.pending, rootID)
-		batches = append(batches, buildReconcileBatch(rootID, signals, rootDirectoryCounts[rootID], q.config))
+		batch := buildReconcileBatch(rootID, signals, rootDirectoryCounts[rootID], q.config)
+		for _, signal := range signals {
+			batch.Cursor = newerFSEventsCursor(batch.Cursor, signal.Cursor)
+		}
+		batches = append(batches, batch)
 	}
 
 	return batches

@@ -85,7 +85,7 @@ func TestTranslateFSEventEmitsDirectoryDirtyPathAndCursor(t *testing.T) {
 	}
 }
 
-func TestTranslateFSEventReplaysDroppedWatchRoot(t *testing.T) {
+func TestTranslateFSEventReconcilesDroppedWatchRoot(t *testing.T) {
 	root := RootRecord{
 		ID:       "root-dropped",
 		Path:     "/tmp/root-dropped",
@@ -96,8 +96,8 @@ func TestTranslateFSEventReplaysDroppedWatchRoot(t *testing.T) {
 	if len(signals) != 1 {
 		t.Fatalf("expected one signal, got %d", len(signals))
 	}
-	if signals[0].Kind != ChangeSignalKindReplayFeed || signals[0].Path != root.Path {
-		t.Fatalf("expected watch-root history replay, got %#v", signals[0])
+	if signals[0].Kind != ChangeSignalKindRequiresRootReconcile || signals[0].Path != root.Path {
+		t.Fatalf("expected watch-root history recovery, got %#v", signals[0])
 	}
 }
 
@@ -303,6 +303,15 @@ func TestFSEventsChangeFeedRefreshGenerationAndCloseLifecycle(t *testing.T) {
 		t.Fatalf("expected first refresh to start generation 1, got generation=%d active=%t", firstGeneration, firstStreamActive)
 	}
 
+	firstRoot.FeedCursor = mustEncodeFeedCursorForTest(t, FeedCursor{FeedType: RootFeedTypeFSEvents, FSEventID: 123, UpdatedAt: time.Now().UnixMilli()})
+	if err := feed.Refresh(t.Context(), []RootRecord{firstRoot}); err != nil {
+		t.Fatal(err)
+	}
+	cachedRoots, _ := feed.copyRootSnapshot()
+	if cachedRoots[0].FeedCursor != firstRoot.FeedCursor || feed.streamGeneration != firstGeneration {
+		t.Fatal("same-root refresh must update the cursor without restarting")
+	}
+
 	if err := feed.Refresh(t.Context(), []RootRecord{secondRoot}); err != nil {
 		t.Fatalf("refresh second fsevents root: %v", err)
 	}
@@ -352,4 +361,59 @@ func newStableFSEventsRoot(t *testing.T, prefix string) string {
 	})
 
 	return rootPath
+}
+
+// TestFSEventsAcknowledgementSkipsDurableHistory covers shared-stream replay
+// where another root has an older cursor, including repeated loss markers.
+func TestFSEventsAcknowledgementSkipsDurableHistory(t *testing.T) {
+	feed := NewFSEventsChangeFeed()
+	defer feed.Close()
+	cursor := func(id uint64) string {
+		return mustEncodeFeedCursorForTest(t, FeedCursor{FeedType: RootFeedTypeFSEvents, UpdatedAt: time.Now().UnixMilli(), FSEventID: id})
+	}
+	root := RootRecord{ID: "ack", Path: "/tmp/ack", FeedCursor: cursor(10)}
+	feed.roots = []RootRecord{root}
+	root.FeedCursor = cursor(20)
+	feed.AcknowledgeRoot(root)
+	roots, _ := feed.copyRootSnapshot()
+	got, _ := decodeFeedCursor(roots[0].FeedCursor, RootFeedTypeFSEvents)
+	if got.FSEventID != 20 {
+		t.Fatalf("cursor regressed: %v", got)
+	}
+	for _, flags := range []uint64{fseventFlagItemIsFile | fseventFlagItemModified, fseventFlagMustScanSubDirs | fseventFlagKernelDropped} {
+		if signals := translateFSEvent(roots[0], root.Path, flags, 20, time.Now()); len(signals) != 0 {
+			t.Fatalf("requeued durable history: %v", signals)
+		}
+	}
+	if signals := translateFSEvent(roots[0], root.Path+"/new.txt", fseventFlagItemIsFile|fseventFlagItemCreated, 21, time.Now()); len(signals) != 1 {
+		t.Fatalf("lost new event: %v", signals)
+	}
+	if signals := translateFSEvent(roots[0], root.Path, fseventFlagEventIDsWrapped, 1, time.Now()); len(signals) != 1 {
+		t.Fatalf("lost event-id reset: %v", signals)
+	}
+}
+
+// TestFSEventsOverflowRetainsRecovery covers a quiet filesystem after the last
+// event was dropped: recovery must not depend on another native callback.
+func TestFSEventsOverflowRetainsRecovery(t *testing.T) {
+	feed := NewFSEventsChangeFeed()
+	defer feed.Close()
+	feed.signals = make(chan ChangeSignal, 1)
+	signal := ChangeSignal{Kind: ChangeSignalKindDirtyPath, RootID: "overflow", Path: "/tmp/overflow/file", Cursor: "before"}
+	feed.emit(signal)
+	signal.Cursor = "lost"
+	feed.emit(signal)
+	signal.Cursor = "later"
+	feed.emit(signal)
+	if first := <-feed.signals; first.Cursor != "before" {
+		t.Fatalf("first signal: %v", first)
+	}
+	select {
+	case recovered := <-feed.signals:
+		if recovered.Kind != ChangeSignalKindRequiresRootReconcile || recovered.Cursor != "" {
+			t.Fatalf("unsafe recovery: %v", recovered)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("lost overflow recovery")
+	}
 }

@@ -98,6 +98,7 @@ const (
 )
 
 type DirtySignal struct {
+	Cursor        string
 	Kind          DirtySignalKind
 	SemanticKind  ChangeSemanticKind
 	RootID        string
@@ -120,6 +121,8 @@ const (
 )
 
 type ReconcileBatch struct {
+	// Cursor covers only events consumed by this sealed batch.
+	Cursor         string
 	RootID         string
 	TraceID        string
 	Mode           ReconcileMode

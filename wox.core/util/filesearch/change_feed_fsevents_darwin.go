@@ -28,8 +28,7 @@ import (
 )
 
 const (
-	fseventsLatency        = time.Second
-	fseventsReplayCooldown = time.Minute
+	fseventsLatency = time.Second
 	// FSEvents can replay thousands of changes after startup, wake, or a large
 	// directory edit. Keep the callback non-blocking, but give normal bursts
 	// enough room so user-visible file edits are not dropped under load.
@@ -65,14 +64,18 @@ type FSEventsChangeFeed struct {
 	channelFullDroppedSignalCount int
 	lastDroppedSignalLog          time.Time
 
-	replayMu        sync.Mutex
-	replayInFlight  bool
-	replayStartedAt time.Time
+	// Overflow recovery is bounded to one pending notification per root. Later
+	// signals cannot acknowledge a cursor beyond a lost event before recovery.
+	overflowMu    sync.Mutex
+	overflowRoots map[string]bool
+	done          chan struct{}
 }
 
 func NewFSEventsChangeFeed() *FSEventsChangeFeed {
 	feed := &FSEventsChangeFeed{
-		signals: make(chan ChangeSignal, fseventsSignalBufferSize),
+		signals:       make(chan ChangeSignal, fseventsSignalBufferSize),
+		overflowRoots: make(map[string]bool),
+		done:          make(chan struct{}),
 	}
 	feed.handle = cgo.NewHandle(feed)
 	feed.handlePtr = (*C.uintptr_t)(C.malloc(C.size_t(unsafe.Sizeof(C.uintptr_t(0)))))
@@ -89,66 +92,28 @@ func (f *FSEventsChangeFeed) Signals() <-chan ChangeSignal {
 }
 
 func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
-	return f.refresh(ctx, roots, false)
-}
-
-// Replay restarts the stream from the cursor stored on the watched roots.
-// A coalesced watch-root event still has its per-directory history in the
-// FSEvents log; restarting from that cursor applies those directories instead
-// of walking the configured root.
-func (f *FSEventsChangeFeed) Replay(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	f.replayMu.Lock()
-	if f.replayInFlight && time.Since(f.replayStartedAt) < fseventsReplayCooldown {
-		f.replayMu.Unlock()
-		util.GetLogger().Info(ctx, "filesearch fsevents replay already in progress")
-		return nil
-	}
-	f.replayInFlight = true
-	f.replayStartedAt = time.Now()
-	f.replayMu.Unlock()
-	util.GetLogger().Info(ctx, "filesearch fsevents replaying history from the last cursor")
-	return f.refresh(ctx, nil, true)
-}
-
-func (f *FSEventsChangeFeed) noteHistoryDone() {
-	f.replayMu.Lock()
-	f.replayInFlight = false
-	f.replayMu.Unlock()
-}
-
-func (f *FSEventsChangeFeed) refresh(ctx context.Context, roots []RootRecord, force bool) error {
 	_ = ctx
-	if roots == nil {
-		f.mu.RLock()
-		roots = append([]RootRecord(nil), f.roots...)
-		f.mu.RUnlock()
-	}
 	prepared := prepareFSEventsRefresh(roots, time.Now(), defaultFeedCursorSafeWindow)
-	if !force {
-		f.mu.Lock()
-		keepCurrentStream := !f.closed && f.stream != nil && sameFSEventsWatchRoots(f.roots, prepared.watchRoots)
-		f.mu.Unlock()
-		if keepCurrentStream {
-			// Bug fix: full-scan completion and the later maintenance-index callback
-			// both refresh the feed. Stopping a live stream for the same root set
-			// dropped file creates that arrived during that restart window, so
-			// incremental tests and desktop edits never became searchable.
-			return nil
-		}
+	f.mu.Lock()
+	keepCurrentStream := !f.closed && f.stream != nil && sameFSEventsWatchRoots(f.roots, prepared.watchRoots)
+	if keepCurrentStream {
+		f.roots = append([]RootRecord(nil), prepared.watchRoots...)
+		f.rootMatcher = newRootPathMatcher(prepared.watchRoots)
+	}
+	f.mu.Unlock()
+	if keepCurrentStream {
+		// Bug fix: full-scan completion and the later maintenance-index callback
+		// both refresh the feed. Stopping a live stream for the same root set
+		// dropped file creates that arrived during that restart window, so
+		// incremental tests and desktop edits never became searchable.
+		return nil
 	}
 
 	for _, signal := range prepared.signals {
 		f.emit(signal)
 	}
 
-	stopReason := "refresh"
-	if force {
-		stopReason = "replay"
-	}
-	f.stopCurrentStream(stopReason)
+	f.stopCurrentStream("refresh")
 
 	f.mu.Lock()
 	if f.closed {
@@ -234,6 +199,7 @@ func (f *FSEventsChangeFeed) Close() error {
 		return nil
 	}
 	f.closed = true
+	close(f.done)
 	f.mu.Unlock()
 
 	f.stopCurrentStream("close")
@@ -357,6 +323,11 @@ func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
 		return
 	}
 
+	f.overflowMu.Lock()
+	defer f.overflowMu.Unlock()
+	if f.overflowRoots[signal.RootID] {
+		return
+	}
 	select {
 	case f.signals <- signal:
 		if fileSearchDiagnosticLoggingEnabled {
@@ -367,6 +338,22 @@ func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
 			f.logSignalSummary(signal, true)
 		}
 		f.logDroppedSignal(signal)
+		f.overflowRoots[signal.RootID] = true
+		// The native callback must never block on the scanner. A bounded worker
+		// retains the loss marker even when no more filesystem events arrive.
+		go func() {
+			recovery := signal
+			recovery.Kind = ChangeSignalKindRequiresRootReconcile
+			recovery.Cursor = ""
+			recovery.Reason = "fsevents signal queue overflow"
+			select {
+			case f.signals <- recovery:
+			case <-f.done:
+			}
+			f.overflowMu.Lock()
+			delete(f.overflowRoots, signal.RootID)
+			f.overflowMu.Unlock()
+		}()
 	}
 }
 
@@ -509,9 +496,6 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 		if diagnosticLoggingEnabled && ids[index] > lastEventID {
 			lastEventID = ids[index]
 		}
-		if flags[index]&fseventFlagHistoryDone != 0 {
-			f.noteHistoryDone()
-		}
 		matchedRoots := make([]RootRecord, 0, len(roots))
 		if root, ok := matcher.findClean(eventPath); ok {
 			pathIsDir := flags[index]&fseventFlagItemIsDir != 0
@@ -591,4 +575,18 @@ func woxFSEventsCallback(handle C.uintptr_t, numEvents C.size_t, eventPaths **C.
 	}
 
 	feed.onEvents(paths, flags, ids)
+}
+
+// AcknowledgeRoot replaces the cached durable cursor without restarting the stream.
+func (f *FSEventsChangeFeed) AcknowledgeRoot(root RootRecord) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.roots {
+		if f.roots[i].ID == root.ID {
+			// Finalization is serialized by the scanner. Accept an explicit
+			// root recovery boundary even after native event IDs have wrapped.
+			f.roots[i].FeedCursor = root.FeedCursor
+		}
+	}
+	f.rootMatcher = newRootPathMatcher(f.roots)
 }

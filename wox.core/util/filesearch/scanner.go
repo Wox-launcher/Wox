@@ -383,6 +383,28 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 
 func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason string, roots []RootRecord, batches []ReconcileBatch) error {
 	totalStartedAt := util.GetSystemTimestamp()
+	stopHeartbeat := s.startRunHeartbeat(ctx, totalStartedAt)
+	defer stopHeartbeat()
+	roots = append([]RootRecord(nil), roots...)
+	for i := range roots {
+		if kind == RunKindFull {
+			// Capture before traversal: events arriving during the scan must
+			// remain replayable even if they have not reached the dirty queue.
+			roots[i] = s.captureRootFeedSnapshot(ctx, roots[i])
+		} else {
+			for _, batch := range batches {
+				if batch.RootID != roots[i].ID {
+					continue
+				}
+				if batch.Mode == ReconcileModeRoot {
+					roots[i] = s.captureRootFeedSnapshot(ctx, roots[i])
+				} else if roots[i].FeedState == RootFeedStateReady {
+					// A partial repair cannot acknowledge a previous history gap.
+					roots[i].FeedCursor = newerFSEventsCursor(roots[i].FeedCursor, batch.Cursor)
+				}
+			}
+		}
+	}
 	allRoots := roots
 	if s != nil && s.db != nil {
 		var err error
@@ -691,12 +713,15 @@ func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root Ro
 		if kind == RunKindFull {
 			root.LastFullScanAt = now
 		}
-		root.FeedState = nextFeedStateAfterSuccessfulReconcile(root)
+		// Scoped success does not close a known FSEvents history gap. A root
+		// reconcile captures a fresh boundary and marks readiness before planning.
+		if kind != RunKindIncremental || root.FeedType != RootFeedTypeFSEvents || root.FeedState != RootFeedStateDegraded {
+			root.FeedState = nextFeedStateAfterSuccessfulReconcile(root)
+		}
 		root.LastError = nil
 		root.ProgressCurrent = RootProgressScale
 		root.ProgressTotal = RootProgressScale
 		root.Status = RootStatusIdle
-		root = s.captureRootFeedSnapshot(ctx, root)
 		root.UpdatedAt = util.GetSystemTimestamp()
 		if err := s.db.FinalizeRootRun(ctx, root); err != nil {
 			return err
@@ -706,6 +731,9 @@ func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root Ro
 		// complete root cache here so the next watcher signal does not fall back to
 		// SQLite after every successful incremental dirty flush.
 		s.upsertRootCache(root)
+		if feed, ok := s.changeFeed.(RootFeedAcknowledger); ok {
+			feed.AcknowledgeRoot(root)
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported run job kind %q", job.Kind)
@@ -1574,7 +1602,7 @@ func (s *Scanner) emitStateChange(ctx context.Context) {
 }
 
 func (s *Scanner) shouldProcessChange(root RootRecord, signal ChangeSignal) bool {
-	if signal.Kind == ChangeSignalKindRequiresRootReconcile || signal.Kind == ChangeSignalKindReplayFeed || signal.Kind == ChangeSignalKindFeedUnavailable {
+	if signal.Kind == ChangeSignalKindRequiresRootReconcile || signal.Kind == ChangeSignalKindFeedUnavailable {
 		return true
 	}
 	if s.policy != nil && !s.policy.shouldProcessChange(root, signal) {
@@ -1808,11 +1836,6 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 	}
 
 	switch signal.Kind {
-	case ChangeSignalKindReplayFeed:
-		// The watch root was coalesced or dropped. Replaying the FSEvents log
-		// recovers the directories that changed without walking the root.
-		s.replayChangeFeed(ctx)
-		return
 	case ChangeSignalKindDirtyRoot:
 		s.enqueueDirtyWithContext(ctx, DirtySignal{
 			Kind:          DirtySignalKindRoot,
@@ -1821,6 +1844,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			PathIsDir:     true,
 			PathTypeKnown: true,
 			At:            signal.At,
+			Cursor:        signal.Cursor,
 		})
 	case ChangeSignalKindDirtyPath:
 		// Bug fix: unknown-semantics file events on a degraded FSEvents root used to
@@ -1855,6 +1879,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 				PathIsDir:     signal.PathIsDir,
 				PathTypeKnown: signal.PathTypeKnown,
 				At:            signal.At,
+				Cursor:        signal.Cursor,
 			})
 			return
 		}
@@ -1871,6 +1896,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			PathIsDir:     true,
 			PathTypeKnown: true,
 			At:            signal.At,
+			Cursor:        signal.Cursor,
 		})
 	case ChangeSignalKindRequiresRootReconcile:
 		// FSEvents flags history loss per event, so one burst used to queue one
@@ -1894,6 +1920,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 				PathIsDir:     true,
 				PathTypeKnown: true,
 				At:            signal.At,
+				Cursor:        signal.Cursor,
 			})
 		}
 	case ChangeSignalKindFeedUnavailable:
@@ -1912,6 +1939,7 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			PathIsDir:     true,
 			PathTypeKnown: true,
 			At:            signal.At,
+			Cursor:        signal.Cursor,
 		})
 	}
 }
@@ -1925,17 +1953,6 @@ func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-// replayChangeFeed restarts a history-backed feed from its last cursor.
-func (s *Scanner) replayChangeFeed(ctx context.Context) {
-	replayer, ok := s.changeFeed.(ChangeFeedReplayer)
-	if !ok || replayer == nil {
-		return
-	}
-	if err := replayer.Replay(ctx); err != nil {
-		util.GetLogger().Warn(ctx, "filesearch fsevents replay failed: "+err.Error())
 	}
 }
 
@@ -2945,4 +2962,46 @@ func isWoxFileSearchStoragePath(fullPath string) bool {
 	// Treat that subtree as an engine-level internal path so full scans and change
 	// feeds both skip the storage before it can enqueue work against itself.
 	return pathWithinScope(cleanStoragePath, cleanPath)
+}
+
+// startRunHeartbeat keeps elapsed status live while a scan, diff, or journal
+// commit has no new file-count progress. Its lifetime is bounded by the run.
+func (s *Scanner) startRunHeartbeat(ctx context.Context, startedAt int64) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if s.refreshRunElapsed(util.GetSystemTimestamp() - startedAt) {
+					s.emitStateChange(ctx)
+				}
+			}
+		}
+	}()
+	return func() { cancel(); <-done }
+}
+
+// refreshRunElapsed changes only the clock under the same lock as progress
+// snapshots, so a heartbeat cannot restore stale counts or completed state.
+func (s *Scanner) refreshRunElapsed(elapsedMs int64) bool {
+	s.transientRunMu.Lock()
+	defer s.transientRunMu.Unlock()
+	state := s.transientRunState
+	if state == nil {
+		return false
+	}
+	switch state.ActiveRunStatus {
+	case RunStatusPlanning, RunStatusExecuting, RunStatusFinalizing:
+		if elapsedMs > state.ActiveRunElapsedMs {
+			state.ActiveRunElapsedMs = elapsedMs
+			return true
+		}
+	}
+	return false
 }

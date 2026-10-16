@@ -11,7 +11,6 @@ const (
 	ChangeSignalKindDirtyRoot             ChangeSignalKind = "dirty_root"
 	ChangeSignalKindDirtyPath             ChangeSignalKind = "dirty_path"
 	ChangeSignalKindRequiresRootReconcile ChangeSignalKind = "requires_root_reconcile"
-	ChangeSignalKindReplayFeed            ChangeSignalKind = "replay_feed"
 	ChangeSignalKindFeedUnavailable       ChangeSignalKind = "feed_unavailable"
 )
 
@@ -48,13 +47,6 @@ type ChangeFeed interface {
 	Close() error
 }
 
-// ChangeFeedReplayer restarts a history-backed feed from its last cursor.
-// FSEvents uses this when a watch-root event was coalesced or dropped, so the
-// event log is replayed instead of walking the configured root.
-type ChangeFeedReplayer interface {
-	Replay(ctx context.Context) error
-}
-
 func NewChangeFeed() ChangeFeed {
 	// Feature change: non-file-search consumers need the same platform change
 	// source without depending on Scanner internals. Returning the existing
@@ -71,4 +63,9 @@ type RootFeedSnapshot struct {
 
 type RootFeedSnapshotter interface {
 	SnapshotRootFeed(ctx context.Context, root RootRecord) (RootFeedSnapshot, error)
+}
+
+// RootFeedAcknowledger updates replay boundaries only after durable indexing.
+type RootFeedAcknowledger interface {
+	AcknowledgeRoot(root RootRecord)
 }

@@ -76,6 +76,13 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 		eventPath = rootPath
 	}
 
+	// A shared stream starts at the oldest root cursor. Other roots must not
+	// requeue history they have already durably applied. Identity changes are
+	// still handled even when event numbering has reset.
+	if cursor, ok := decodeFeedCursor(root.FeedCursor, RootFeedTypeFSEvents); ok && eventID > 0 && eventID <= cursor.FSEventID && !fseventHistoryUnusable(flags) {
+		return nil
+	}
+
 	cursorText := ""
 	if eventID > 0 {
 		cursor, err := encodeFeedCursor(FeedCursor{
@@ -96,12 +103,11 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 	}
 
 	eventIsRoot := eventPath == rootPath
-	// A coalesced or dropped event for the watch root used to schedule a
-	// recursive reconcile of the configured root. With the root set to "/",
-	// that walked the whole volume. The persistent event log still has the
-	// per-directory history, so replay it from the last cursor instead.
-	if eventIsRoot && fseventShouldReplayRoot(flags) {
-		return []ChangeSignal{newFSEventsReplaySignal(root, cursorText, at)}
+	// MustScanSubDirs means detailed history is unavailable. Replaying the
+	// same cursor can return the same loss marker forever; reconcile once
+	// through the scanner's coalescing/cooldown gate instead.
+	if eventIsRoot && fseventRootHistoryLost(flags) {
+		return []ChangeSignal{newFSEventsRecoverySignal(root, "fsevents root history lost", at)}
 	}
 	// Mount identity and wrapped event ids cannot be recovered by replaying
 	// the previous cursor. Keep a root reconcile only when the event names
@@ -137,9 +143,8 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 	}}
 }
 
-// fseventShouldReplayRoot reports events whose path is the watch root and
-// whose lost detail is still available from the FSEvents history log.
-func fseventShouldReplayRoot(flags uint64) bool {
+// fseventRootHistoryLost identifies loss markers requiring a root reconcile.
+func fseventRootHistoryLost(flags uint64) bool {
 	if flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped) == 0 {
 		return false
 	}
@@ -152,21 +157,6 @@ func fseventHistoryUnusable(flags uint64) bool {
 
 func fseventNeedsDirectoryRescan(flags uint64) bool {
 	return flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped|fseventFlagEventIDsWrapped|fseventFlagRootChanged|fseventFlagMount|fseventFlagUnmount) != 0
-}
-
-func newFSEventsReplaySignal(root RootRecord, cursorText string, at time.Time) ChangeSignal {
-	return ChangeSignal{
-		Kind:          ChangeSignalKindReplayFeed,
-		SemanticKind:  ChangeSemanticKindUnknown,
-		RootID:        root.ID,
-		FeedType:      RootFeedTypeFSEvents,
-		Path:          root.Path,
-		PathIsDir:     true,
-		PathTypeKnown: true,
-		Reason:        "fsevents watch root needs history replay",
-		Cursor:        cursorText,
-		At:            at,
-	}
 }
 
 func newFSEventsDirectorySignal(root RootRecord, path string, cursorText string, at time.Time) ChangeSignal {

@@ -96,6 +96,33 @@ stable shard/entry cursors, so compaction can reorder rows between pages.
 Dynamic-root promotion publishes the destination before committing ownership;
 startup completes any missing parent tombstone from committed root metadata.
 
+## Directory deltas and FSEvents acknowledgement
+
+Unreadable-scope protection uses stable path IDs and memoized parent ancestry.
+It must not compare every indexed row with every unreadable path: system-volume
+scans can contain thousands of access-denied scopes. A run-owned one-second
+heartbeat advances elapsed status even while diffing or committing produces no
+file-count events, and stops before the next run begins.
+
+A scoped directory reconcile stages only the newly observed scope, compares it
+with the live columns, and commits inserts, updates and tombstones in one synced
+journal frame. Unchanged records and structural ancestors retain their existing
+metadata. Failed scans publish nothing; unreadable scopes retain their prior
+facts. Reconciliation still sweeps scalar rows to identify deletions, with parent
+paths cached per directory, but does not copy the root or build/write a new full
+snapshot. Exact file events retain their direct-delta path. Only full builds, explicit whole-root replacements and threshold-triggered
+maintenance publish complete generations.
+
+FSEvents cursors travel with sealed dirty batches and advance only after durable
+root finalization. Full/root reconciles capture the boundary before traversal,
+never the live system event head at completion. The feed updates its cached
+acknowledgements without restarting an unchanged watch set and filters history
+already committed by each root. A partial reconcile cannot acknowledge a known
+history gap. Must-scan/drop markers require a scoped recovery scan (a root scan
+only for root markers), not repeated replay of the same incomplete history.
+Signal-channel overflow retains one recovery notification per affected root and
+suppresses subsequent signals for that root until the notification is queued.
+
 ## Full-build temporary memory
 
 The builder retains distinct name strings only in its intern map during
