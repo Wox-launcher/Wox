@@ -58,10 +58,11 @@ const (
 	quickJumpDialogHintCloseDelay    = 250 * time.Millisecond
 	quickJumpDialogPathCacheDuration = 30 * time.Second
 
-	// Current-folder hits keep a higher tier than global indexed scores
-	// (typically a few thousand). Type-to-search still searches beyond the
-	// active folder, but files the user is already looking at should rank first.
-	currentDirectoryScoreBoost int64 = 100000
+	// File search scores an ordinary filename hit in [1_000_000, 1_999_999].
+	// A current-folder name that misses that result window is backfilled with
+	// only its raw fuzzy score, so this boost has to clear the whole band.
+	// The file the user is looking at then stays above unrelated global hits.
+	currentDirectoryScoreBoost int64 = 2_000_000
 )
 
 func init() {
@@ -1019,12 +1020,12 @@ func mergeCurrentDirectoryResults(indexedResults []plugin.QueryResult, localResu
 			if item.Score > localItem.Score {
 				localItem.Score = item.Score
 			}
-			localItem.Score += currentDirectoryScoreBoost
+			localItem.Score = boostCurrentDirectoryScore(localItem.Score)
 			results = append(results, markCurrentDirectoryResult(localItem))
 			continue
 		}
 
-		item.Score += currentDirectoryScoreBoost
+		item.Score = boostCurrentDirectoryScore(item.Score)
 		results = append(results, markCurrentDirectoryResult(item))
 	}
 
@@ -1033,10 +1034,20 @@ func mergeCurrentDirectoryResults(indexedResults []plugin.QueryResult, localResu
 		if seen[pathKey] {
 			continue
 		}
-		item.Score += currentDirectoryScoreBoost
+		item.Score = boostCurrentDirectoryScore(item.Score)
 		results = append(results, markCurrentDirectoryResult(item))
 	}
 	return results
+}
+
+// boostCurrentDirectoryScore lifts a current-folder hit above every global
+// filename match. A weak or negative fuzzy score must not fall back into the
+// [1_000_000, 1_999_999] filename band.
+func boostCurrentDirectoryScore(score int64) int64 {
+	if score < 0 {
+		score = 0
+	}
+	return score + currentDirectoryScoreBoost
 }
 
 // markCurrentDirectoryResult labels current-folder hits so they stay visually

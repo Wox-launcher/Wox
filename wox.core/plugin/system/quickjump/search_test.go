@@ -79,6 +79,53 @@ func TestMergeCurrentDirectoryResultsBoostsAndBackfills(t *testing.T) {
 	assertCurrentDirectoryTail(t, byPath[nestedFile], false)
 }
 
+// A current-folder name missing from the file-search window is backfilled with
+// a raw fuzzy score. That score has to beat the filename band or the folder the
+// user is looking at sinks under unrelated global hits.
+func TestMergeCurrentDirectoryResultsOutranksFilenameBand(t *testing.T) {
+	quickJumpPlugin := &QuickJumpPlugin{}
+	root := t.TempDir()
+	localOnly := filepath.Join(root, "fonts")
+	elsewhere := filepath.Join(filepath.Dir(root), "Windows", "Fonts")
+	const filenameBandCeiling int64 = 1_999_999
+
+	indexed := []plugin.QueryResult{
+		{Title: "Fonts", SubTitle: elsewhere, Score: filenameBandCeiling},
+	}
+	local := []plugin.QueryResult{
+		{Title: "fonts", SubTitle: localOnly, Score: 180},
+	}
+
+	merged := mergeCurrentDirectoryResults(indexed, local, root, quickJumpPlugin.normalizePathKey)
+	byPath := map[string]plugin.QueryResult{}
+	for _, item := range merged {
+		byPath[item.SubTitle] = item
+	}
+	if byPath[localOnly].Score != 180+currentDirectoryScoreBoost {
+		t.Fatalf("backfilled score = %d, want %d", byPath[localOnly].Score, 180+currentDirectoryScoreBoost)
+	}
+	if byPath[localOnly].Score <= byPath[elsewhere].Score {
+		t.Fatalf("current-folder score %d should outrank global filename score %d", byPath[localOnly].Score, byPath[elsewhere].Score)
+	}
+
+	weak := mergeCurrentDirectoryResults(indexed, []plugin.QueryResult{
+		{Title: "fonts", SubTitle: localOnly, Score: -5000},
+	}, root, quickJumpPlugin.normalizePathKey)
+	foundWeak := false
+	for _, item := range weak {
+		if item.SubTitle != localOnly {
+			continue
+		}
+		foundWeak = true
+		if item.Score != currentDirectoryScoreBoost || item.Score <= filenameBandCeiling {
+			t.Fatalf("negative fuzzy score = %d, want %d above %d", item.Score, currentDirectoryScoreBoost, filenameBandCeiling)
+		}
+	}
+	if !foundWeak {
+		t.Fatal("negative current-folder match was dropped")
+	}
+}
+
 func TestMergeCurrentDirectoryResultsLeavesIndexedUntouchedWithoutCurrentDir(t *testing.T) {
 	quickJumpPlugin := &QuickJumpPlugin{}
 	indexed := []plugin.QueryResult{
