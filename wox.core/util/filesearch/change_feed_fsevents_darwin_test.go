@@ -85,7 +85,7 @@ func TestTranslateFSEventEmitsDirectoryDirtyPathAndCursor(t *testing.T) {
 	}
 }
 
-func TestTranslateFSEventEscalatesDroppedHistoryToRequiresRootReconcile(t *testing.T) {
+func TestTranslateFSEventReplaysDroppedWatchRoot(t *testing.T) {
 	root := RootRecord{
 		ID:       "root-dropped",
 		Path:     "/tmp/root-dropped",
@@ -96,12 +96,54 @@ func TestTranslateFSEventEscalatesDroppedHistoryToRequiresRootReconcile(t *testi
 	if len(signals) != 1 {
 		t.Fatalf("expected one signal, got %d", len(signals))
 	}
-	if signals[0].Kind != ChangeSignalKindRequiresRootReconcile {
-		t.Fatalf("expected requires root reconcile signal, got %q", signals[0].Kind)
+	if signals[0].Kind != ChangeSignalKindReplayFeed || signals[0].Path != root.Path {
+		t.Fatalf("expected watch-root history replay, got %#v", signals[0])
 	}
 }
 
-func TestFSEventsChangeFeedKeepsUnmatchedReconcileFallback(t *testing.T) {
+func TestTranslateFSEventRescansDroppedDirectoryOnly(t *testing.T) {
+	root := RootRecord{
+		ID:       "root-dropped",
+		Path:     "/tmp/root-dropped",
+		FeedType: RootFeedTypeFSEvents,
+	}
+
+	signals := translateFSEvent(root, "/tmp/root-dropped/project", fseventFlagMustScanSubDirs|fseventFlagUserDropped, 55, time.Unix(100, 0))
+	if len(signals) != 1 {
+		t.Fatalf("expected one signal, got %d", len(signals))
+	}
+	if signals[0].Kind != ChangeSignalKindDirtyPath || signals[0].Path != "/tmp/root-dropped/project" || !signals[0].PathIsDir {
+		t.Fatalf("expected scoped directory rescan, got %#v", signals[0])
+	}
+}
+
+func TestTranslateFSEventIgnoresPlainWatchRootEvent(t *testing.T) {
+	root := RootRecord{
+		ID:       "root-plain",
+		Path:     "/tmp/root-plain",
+		FeedType: RootFeedTypeFSEvents,
+	}
+
+	signals := translateFSEvent(root, root.Path, fseventFlagItemIsDir|fseventFlagItemModified, 9, time.Unix(100, 0))
+	if len(signals) != 0 {
+		t.Fatalf("expected plain watch-root event to stay out of the dirty queue, got %#v", signals)
+	}
+}
+
+func TestTranslateFSEventRootChangedStillReconcilesRoot(t *testing.T) {
+	root := RootRecord{
+		ID:       "root-changed",
+		Path:     "/tmp/root-changed",
+		FeedType: RootFeedTypeFSEvents,
+	}
+
+	signals := translateFSEvent(root, root.Path, fseventFlagRootChanged, 9, time.Unix(100, 0))
+	if len(signals) != 1 || signals[0].Kind != ChangeSignalKindRequiresRootReconcile {
+		t.Fatalf("expected root reconcile after an unusable root history, got %#v", signals)
+	}
+}
+
+func TestFSEventsChangeFeedIgnoresUnmatchedMustScan(t *testing.T) {
 	roots := []RootRecord{
 		{ID: "root-one", Path: filepath.Join(t.TempDir(), "one"), FeedType: RootFeedTypeFSEvents},
 		{ID: "root-two", Path: filepath.Join(t.TempDir(), "two"), FeedType: RootFeedTypeFSEvents},
@@ -119,18 +161,10 @@ func TestFSEventsChangeFeedKeepsUnmatchedReconcileFallback(t *testing.T) {
 		[]uint64{123},
 	)
 
-	seen := map[string]bool{}
-	for range roots {
-		signal := mustReadChangeSignal(t, feed.Signals())
-		if signal.Kind != ChangeSignalKindRequiresRootReconcile {
-			t.Fatalf("expected unmatched reconcile fallback signal, got %#v", signal)
-		}
-		seen[signal.RootID] = true
-	}
-	for _, root := range roots {
-		if !seen[root.ID] {
-			t.Fatalf("expected unmatched reconcile fallback to emit for %q, got %#v", root.ID, seen)
-		}
+	select {
+	case signal := <-feed.Signals():
+		t.Fatalf("expected an event outside every root to be ignored, got %#v", signal)
+	default:
 	}
 }
 

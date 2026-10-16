@@ -13,6 +13,7 @@ const (
 	fseventFlagUserDropped             = 0x00000002
 	fseventFlagKernelDropped           = 0x00000004
 	fseventFlagEventIDsWrapped         = 0x00000008
+	fseventFlagHistoryDone             = 0x00000010
 	fseventFlagRootChanged             = 0x00000020
 	fseventFlagMount                   = 0x00000040
 	fseventFlagUnmount                 = 0x00000080
@@ -70,8 +71,9 @@ func prepareFSEventsRefresh(roots []RootRecord, now time.Time, safeWindow time.D
 
 func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID uint64, at time.Time) []ChangeSignal {
 	eventPath = filepath.Clean(eventPath)
+	rootPath := filepath.Clean(root.Path)
 	if eventPath == "" {
-		eventPath = root.Path
+		eventPath = rootPath
 	}
 
 	cursorText := ""
@@ -86,34 +88,45 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 		}
 	}
 
-	if fseventRequiresRootReconcile(flags) {
-		return []ChangeSignal{{
-			Kind:          ChangeSignalKindRequiresRootReconcile,
-			SemanticKind:  ChangeSemanticKindRequiresRootReconcile,
-			RootID:        root.ID,
-			FeedType:      RootFeedTypeFSEvents,
-			Path:          root.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			Reason:        "fsevents flagged history loss or root change",
-			Cursor:        cursorText,
-			At:            at,
-		}}
+	// HistoryDone only marks the end of a replay. Item flags on the same event
+	// still describe a real change.
+	flags &^= fseventFlagHistoryDone
+	if flags == 0 {
+		return nil
+	}
+
+	eventIsRoot := eventPath == rootPath
+	// A coalesced or dropped event for the watch root used to schedule a
+	// recursive reconcile of the configured root. With the root set to "/",
+	// that walked the whole volume. The persistent event log still has the
+	// per-directory history, so replay it from the last cursor instead.
+	if eventIsRoot && fseventShouldReplayRoot(flags) {
+		return []ChangeSignal{newFSEventsReplaySignal(root, cursorText, at)}
+	}
+	// Mount identity and wrapped event ids cannot be recovered by replaying
+	// the previous cursor. Keep a root reconcile only when the event names
+	// the configured root itself.
+	if eventIsRoot && fseventHistoryUnusable(flags) {
+		return []ChangeSignal{newFSEventsRecoverySignal(root, "fsevents root history is unusable", at)}
+	}
+	// Must-scan and drop flags name one directory. Rescan that directory,
+	// not every configured root.
+	if !eventIsRoot && fseventNeedsDirectoryRescan(flags) {
+		return []ChangeSignal{newFSEventsDirectorySignal(root, eventPath, cursorText, at)}
+	}
+	// File-level events already report children of the watch root. A plain
+	// event whose path is the root is the directory inode itself; queuing it
+	// as a dirty parent would collapse every other path in the batch into a
+	// whole-root walk.
+	if eventIsRoot {
+		return nil
 	}
 
 	pathIsDir := flags&fseventFlagItemIsDir != 0
 	pathTypeKnown := pathIsDir || flags&fseventFlagItemIsFile != 0
-	kind := ChangeSignalKindDirtyPath
-	semanticKind := translateFSEventSemanticKind(flags)
-	if eventPath == filepath.Clean(root.Path) {
-		kind = ChangeSignalKindDirtyRoot
-		pathIsDir = true
-		pathTypeKnown = true
-	}
-
 	return []ChangeSignal{{
-		Kind:          kind,
-		SemanticKind:  semanticKind,
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  translateFSEventSemanticKind(flags),
 		RootID:        root.ID,
 		FeedType:      RootFeedTypeFSEvents,
 		Path:          eventPath,
@@ -122,6 +135,53 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 		Cursor:        cursorText,
 		At:            at,
 	}}
+}
+
+// fseventShouldReplayRoot reports events whose path is the watch root and
+// whose lost detail is still available from the FSEvents history log.
+func fseventShouldReplayRoot(flags uint64) bool {
+	if flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped) == 0 {
+		return false
+	}
+	return !fseventHistoryUnusable(flags)
+}
+
+func fseventHistoryUnusable(flags uint64) bool {
+	return flags&(fseventFlagEventIDsWrapped|fseventFlagRootChanged|fseventFlagMount|fseventFlagUnmount) != 0
+}
+
+func fseventNeedsDirectoryRescan(flags uint64) bool {
+	return flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped|fseventFlagEventIDsWrapped|fseventFlagRootChanged|fseventFlagMount|fseventFlagUnmount) != 0
+}
+
+func newFSEventsReplaySignal(root RootRecord, cursorText string, at time.Time) ChangeSignal {
+	return ChangeSignal{
+		Kind:          ChangeSignalKindReplayFeed,
+		SemanticKind:  ChangeSemanticKindUnknown,
+		RootID:        root.ID,
+		FeedType:      RootFeedTypeFSEvents,
+		Path:          root.Path,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+		Reason:        "fsevents watch root needs history replay",
+		Cursor:        cursorText,
+		At:            at,
+	}
+}
+
+func newFSEventsDirectorySignal(root RootRecord, path string, cursorText string, at time.Time) ChangeSignal {
+	return ChangeSignal{
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  ChangeSemanticKindUnknown,
+		RootID:        root.ID,
+		FeedType:      RootFeedTypeFSEvents,
+		Path:          path,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+		Reason:        "fsevents directory needs a scoped rescan",
+		Cursor:        cursorText,
+		At:            at,
+	}
 }
 
 func translateFSEventSemanticKind(flags uint64) ChangeSemanticKind {
@@ -139,10 +199,6 @@ func translateFSEventSemanticKind(flags uint64) ChangeSemanticKind {
 	default:
 		return ChangeSemanticKindUnknown
 	}
-}
-
-func fseventRequiresRootReconcile(flags uint64) bool {
-	return flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped|fseventFlagEventIDsWrapped|fseventFlagRootChanged|fseventFlagMount|fseventFlagUnmount) != 0
 }
 
 func sameFSEventsWatchRoots(left []RootRecord, right []RootRecord) bool {

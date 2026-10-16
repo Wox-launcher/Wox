@@ -11,6 +11,7 @@ const (
 	ChangeSignalKindDirtyRoot             ChangeSignalKind = "dirty_root"
 	ChangeSignalKindDirtyPath             ChangeSignalKind = "dirty_path"
 	ChangeSignalKindRequiresRootReconcile ChangeSignalKind = "requires_root_reconcile"
+	ChangeSignalKindReplayFeed            ChangeSignalKind = "replay_feed"
 	ChangeSignalKindFeedUnavailable       ChangeSignalKind = "feed_unavailable"
 )
 
@@ -45,6 +46,13 @@ type ChangeFeed interface {
 	Signals() <-chan ChangeSignal
 	Refresh(ctx context.Context, roots []RootRecord) error
 	Close() error
+}
+
+// ChangeFeedReplayer restarts a history-backed feed from its last cursor.
+// FSEvents uses this when a watch-root event was coalesced or dropped, so the
+// event log is replayed instead of walking the configured root.
+type ChangeFeedReplayer interface {
+	Replay(ctx context.Context) error
 }
 
 func NewChangeFeed() ChangeFeed {

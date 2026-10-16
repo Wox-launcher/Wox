@@ -1574,7 +1574,7 @@ func (s *Scanner) emitStateChange(ctx context.Context) {
 }
 
 func (s *Scanner) shouldProcessChange(root RootRecord, signal ChangeSignal) bool {
-	if signal.Kind == ChangeSignalKindRequiresRootReconcile || signal.Kind == ChangeSignalKindFeedUnavailable {
+	if signal.Kind == ChangeSignalKindRequiresRootReconcile || signal.Kind == ChangeSignalKindReplayFeed || signal.Kind == ChangeSignalKindFeedUnavailable {
 		return true
 	}
 	if s.policy != nil && !s.policy.shouldProcessChange(root, signal) {
@@ -1808,6 +1808,11 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 	}
 
 	switch signal.Kind {
+	case ChangeSignalKindReplayFeed:
+		// The watch root was coalesced or dropped. Replaying the FSEvents log
+		// recovers the directories that changed without walking the root.
+		s.replayChangeFeed(ctx)
+		return
 	case ChangeSignalKindDirtyRoot:
 		s.enqueueDirtyWithContext(ctx, DirtySignal{
 			Kind:          DirtySignalKindRoot,
@@ -1920,6 +1925,17 @@ func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// replayChangeFeed restarts a history-backed feed from its last cursor.
+func (s *Scanner) replayChangeFeed(ctx context.Context) {
+	replayer, ok := s.changeFeed.(ChangeFeedReplayer)
+	if !ok || replayer == nil {
+		return
+	}
+	if err := replayer.Replay(ctx); err != nil {
+		util.GetLogger().Warn(ctx, "filesearch fsevents replay failed: "+err.Error())
 	}
 }
 

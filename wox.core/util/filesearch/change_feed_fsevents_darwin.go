@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	fseventsLatency = time.Second
+	fseventsLatency        = time.Second
+	fseventsReplayCooldown = time.Minute
 	// FSEvents can replay thousands of changes after startup, wake, or a large
 	// directory edit. Keep the callback non-blocking, but give normal bursts
 	// enough room so user-visible file edits are not dropped under load.
@@ -63,6 +64,10 @@ type FSEventsChangeFeed struct {
 	channelFullDroppedSignalMu    sync.Mutex
 	channelFullDroppedSignalCount int
 	lastDroppedSignalLog          time.Time
+
+	replayMu        sync.Mutex
+	replayInFlight  bool
+	replayStartedAt time.Time
 }
 
 func NewFSEventsChangeFeed() *FSEventsChangeFeed {
@@ -84,24 +89,66 @@ func (f *FSEventsChangeFeed) Signals() <-chan ChangeSignal {
 }
 
 func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
-	_ = ctx
-	prepared := prepareFSEventsRefresh(roots, time.Now(), defaultFeedCursorSafeWindow)
-	f.mu.Lock()
-	keepCurrentStream := !f.closed && f.stream != nil && sameFSEventsWatchRoots(f.roots, prepared.watchRoots)
-	f.mu.Unlock()
-	if keepCurrentStream {
-		// Bug fix: full-scan completion and the later maintenance-index callback
-		// both refresh the feed. Stopping a live stream for the same root set
-		// dropped file creates that arrived during that restart window, so
-		// incremental tests and desktop edits never became searchable.
+	return f.refresh(ctx, roots, false)
+}
+
+// Replay restarts the stream from the cursor stored on the watched roots.
+// A coalesced watch-root event still has its per-directory history in the
+// FSEvents log; restarting from that cursor applies those directories instead
+// of walking the configured root.
+func (f *FSEventsChangeFeed) Replay(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	f.replayMu.Lock()
+	if f.replayInFlight && time.Since(f.replayStartedAt) < fseventsReplayCooldown {
+		f.replayMu.Unlock()
+		util.GetLogger().Info(ctx, "filesearch fsevents replay already in progress")
 		return nil
+	}
+	f.replayInFlight = true
+	f.replayStartedAt = time.Now()
+	f.replayMu.Unlock()
+	util.GetLogger().Info(ctx, "filesearch fsevents replaying history from the last cursor")
+	return f.refresh(ctx, nil, true)
+}
+
+func (f *FSEventsChangeFeed) noteHistoryDone() {
+	f.replayMu.Lock()
+	f.replayInFlight = false
+	f.replayMu.Unlock()
+}
+
+func (f *FSEventsChangeFeed) refresh(ctx context.Context, roots []RootRecord, force bool) error {
+	_ = ctx
+	if roots == nil {
+		f.mu.RLock()
+		roots = append([]RootRecord(nil), f.roots...)
+		f.mu.RUnlock()
+	}
+	prepared := prepareFSEventsRefresh(roots, time.Now(), defaultFeedCursorSafeWindow)
+	if !force {
+		f.mu.Lock()
+		keepCurrentStream := !f.closed && f.stream != nil && sameFSEventsWatchRoots(f.roots, prepared.watchRoots)
+		f.mu.Unlock()
+		if keepCurrentStream {
+			// Bug fix: full-scan completion and the later maintenance-index callback
+			// both refresh the feed. Stopping a live stream for the same root set
+			// dropped file creates that arrived during that restart window, so
+			// incremental tests and desktop edits never became searchable.
+			return nil
+		}
 	}
 
 	for _, signal := range prepared.signals {
 		f.emit(signal)
 	}
 
-	f.stopCurrentStream("refresh")
+	stopReason := "refresh"
+	if force {
+		stopReason = "replay"
+	}
+	f.stopCurrentStream(stopReason)
 
 	f.mu.Lock()
 	if f.closed {
@@ -462,6 +509,9 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 		if diagnosticLoggingEnabled && ids[index] > lastEventID {
 			lastEventID = ids[index]
 		}
+		if flags[index]&fseventFlagHistoryDone != 0 {
+			f.noteHistoryDone()
+		}
 		matchedRoots := make([]RootRecord, 0, len(roots))
 		if root, ok := matcher.findClean(eventPath); ok {
 			pathIsDir := flags[index]&fseventFlagItemIsDir != 0
@@ -472,9 +522,6 @@ func (f *FSEventsChangeFeed) onEvents(paths []string, flags []uint64, ids []uint
 			// only to the longest matching root so a promoted dynamic root does not
 			// also wake its parent and lose the intended narrow reconcile boundary.
 			matchedRoots = append(matchedRoots, root)
-		}
-		if len(matchedRoots) == 0 && fseventRequiresRootReconcile(flags[index]) {
-			matchedRoots = roots
 		}
 		if diagnosticLoggingEnabled && len(matchedRoots) == 0 {
 			unmatchedEventCount++
