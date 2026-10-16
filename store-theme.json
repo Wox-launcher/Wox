@@ -112,5 +112,28 @@
         "theme_description": "ブルーグレーとクリーム色のニット枠で、落ち着いた作業空間に。"
       }
     }
+  },
+  {
+    "Id": "42da2201-34e9-41b1-933d-ff6517896c57",
+    "Name": "Dracula",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Description": "A dark theme inspired by the Dracula palette: near-black background, soft-white text, purple selection and cyan accents. Unofficial, not affiliated with Dracula Theme.",
+    "ImageTheme": false,
+    "IconColors": {
+      "Background": "#282A36FF",
+      "Query": "#44475A99",
+      "Selected": "#44475AFF",
+      "Outline": "#6272A459",
+      "OutlineWidth": 1
+    },
+    "Website": "https://gist.github.com/dragonish/c6118868fc93e7519ef1d11b2a5b0248",
+    "DownloadUrl": "https://gist.githubusercontent.com/dragonish/c6118868fc93e7519ef1d11b2a5b0248/raw/Wox.Theme.Dracula.json",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/85518183-361d-4310-b677-c7fe44bfea41"
+    ],
+    "DateCreated": "2026-10-16 23:20:41",
+    "DateUpdated": "2026-10-16 23:20:41"
   }
 ]
