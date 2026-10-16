@@ -15,6 +15,18 @@ func TestAccessibilityTreeContentHashIgnoresGeneration(t *testing.T) {
 	}
 }
 
+func TestAccessibilityTreeContentHashIgnoresCaretOnlyFields(t *testing.T) {
+	tree := AccessibilityTree{Nodes: []AccessibilityNode{{ID: 1, HasTextSelection: true, SelectionStart: 1, SelectionEnd: 1}}}
+	changed := cloneAccessibilityTree(tree)
+	changed.Nodes[0].CursorRect = Rect{X: 4, Y: 8, Width: 1, Height: 16}
+	changed.Nodes[0].SelectionStart = 4
+	changed.Nodes[0].SelectionEnd = 6
+	changed.Nodes[0].HasTextSelection = false
+	if accessibilityTreeContentHash(tree) != accessibilityTreeContentHash(changed) {
+		t.Fatal("caret and selection changes should not republish native accessibility")
+	}
+}
+
 func TestAccessibilityTreeContentHashCoversEveryNodeField(t *testing.T) {
 	base := AccessibilityTree{Nodes: []AccessibilityNode{{}}}
 	cases := []struct {

@@ -53,11 +53,13 @@ int32_t wox_linux_window_stop_animation_frames(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_text_input_state(WoxLinuxWindow *window, int32_t enabled, float x, float y, float width, float height);
 int32_t wox_linux_window_set_pointer_cursor(WoxLinuxWindow *window, uint8_t cursor);
 int32_t wox_linux_accessibility_enabled(void);
-int32_t wox_linux_window_is_rendering(WoxLinuxWindow *window);
 int32_t wox_linux_accessibility_schedule(WoxLinuxWindow *window);
 int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation);
 int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region);
-int32_t wox_linux_accessibility_end(WoxLinuxWindow *window);
+// wox_linux_accessibility_end finishes one mirror update. commit is 0 when node
+// publication stopped early: widgets already written stay, and the next successful
+// update drops anything that generation did not visit.
+int32_t wox_linux_accessibility_end(WoxLinuxWindow *window, int32_t commit);
 int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline);
 int32_t wox_linux_window_close(WoxLinuxWindow *window);
 

@@ -226,17 +226,9 @@ func accessibilityTreeContentHash(tree AccessibilityTree) uint64 {
 		} else {
 			hash = accessibilityHashByte(hash, 0)
 		}
-		if node.HasTextSelection {
-			hash = accessibilityHashByte(hash, 1)
-			hash = accessibilityHashUint64(hash, uint64(node.SelectionStart))
-			hash = accessibilityHashUint64(hash, uint64(node.SelectionEnd))
-		} else {
-			hash = accessibilityHashByte(hash, 0)
-		}
-		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.X)))
-		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Y)))
-		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Width)))
-		hash = accessibilityHashUint64(hash, uint64(math.Float32bits(node.CursorRect.Height)))
+		// Caret geometry and selection offsets stay on the stored tree for Wox's own
+		// selection reader. Native bridges do not receive them, so folding them into
+		// this hash republishes the whole mirror on every arrow key.
 		hash = accessibilityHashUint64(hash, uint64(len(node.TextLines)))
 		for _, line := range node.TextLines {
 			hash = accessibilityHashString(hash, line.Text)

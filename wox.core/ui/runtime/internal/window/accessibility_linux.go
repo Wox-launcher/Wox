@@ -17,8 +17,9 @@ import (
 	"unsafe"
 )
 
-// linuxAccessibilityDeferred keeps the latest mirror tree until the GL render
-// signal returns. Publishing it inside that signal stalls ATK on the main loop.
+// linuxAccessibilityDeferred keeps the latest mirror tree until the GTK loop is idle.
+// Input and scroll run at a higher priority, and a later frame replaces a tree that
+// has not been applied yet, so a drag does not publish once per pixel.
 var linuxAccessibilityDeferred = struct {
 	sync.Mutex
 	pending map[*platformWindow]AccessibilityTree
@@ -28,6 +29,8 @@ func init() {
 	updateNativeAccessibility = updateLinuxAccessibility
 }
 
+// updateLinuxAccessibility queues the latest mirror. Applying it on the current
+// frame blocks the GTK thread inside ATK for the whole settings tree.
 func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
 	if C.wox_linux_accessibility_enabled() == 0 {
 		return nil
@@ -36,19 +39,20 @@ func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) er
 	if err != nil {
 		return err
 	}
-	if C.wox_linux_window_is_rendering(native) != 0 {
+	linuxAccessibilityDeferred.Lock()
+	linuxAccessibilityDeferred.pending[window] = tree
+	linuxAccessibilityDeferred.Unlock()
+	if C.wox_linux_accessibility_schedule(native) != 0 {
 		linuxAccessibilityDeferred.Lock()
-		linuxAccessibilityDeferred.pending[window] = tree
+		delete(linuxAccessibilityDeferred.pending, window)
 		linuxAccessibilityDeferred.Unlock()
-		if C.wox_linux_accessibility_schedule(native) != 0 {
-			return errors.New("woxui: failed to schedule Linux accessibility update")
-		}
-		return nil
+		return errors.New("woxui: failed to schedule Linux accessibility update")
 	}
-	return applyLinuxAccessibility(window, tree)
+	return nil
 }
 
-// applyLinuxAccessibility rebuilds the GTK accessibility mirror outside the GL render signal.
+// applyLinuxAccessibility updates the GTK mirror in place. Call it from the idle
+// flush, not from the frame that produced the tree.
 func applyLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
 	native, err := window.openNative()
 	if err != nil {
@@ -58,7 +62,11 @@ func applyLinuxAccessibility(window *platformWindow, tree AccessibilityTree) err
 		return errors.New("woxui: failed to begin Linux accessibility update")
 	}
 	// Always finish the update so native leave/enter suppression cannot stick after a failed node add.
-	defer C.wox_linux_accessibility_end(native)
+	// A failed walk must not drop nodes that this generation did not reach.
+	committed := C.int32_t(0)
+	defer func() {
+		C.wox_linux_accessibility_end(native, committed)
+	}()
 	for _, node := range tree.Nodes {
 		children := make([]C.uint64_t, len(node.Children))
 		for index := range node.Children {
@@ -107,10 +115,11 @@ func applyLinuxAccessibility(window *platformWindow, tree AccessibilityTree) err
 			return errors.New("woxui: failed to add Linux accessibility node")
 		}
 	}
+	committed = 1
 	return nil
 }
 
-// woxGoLinuxAccessibilityFlush publishes the accessibility mirror deferred during render.
+// woxGoLinuxAccessibilityFlush publishes the newest mirror once the GTK loop is idle.
 //
 //export woxGoLinuxAccessibilityFlush
 func woxGoLinuxAccessibilityFlush(context C.uintptr_t) {

@@ -291,9 +291,9 @@ struct WoxLinuxWindow {
   // resize_cursor_active keeps the edge cursor from being overwritten by Go hover.
   bool resize_cursor_active;
   int resize_edge;
-  // updating_accessibility swallows leave/enter from destroying GTK a11y
-  // mirrors. Query keystrokes rebuild those widgets under the pointer and
-  // would otherwise flicker the host cursor between text and default.
+  // updating_accessibility swallows leave/enter while the mirror is reconciled.
+  // Structural replacements still destroy widgets under the pointer and would
+  // otherwise flicker the host cursor between text and default.
   bool updating_accessibility;
   char *web_view_cursor_name;
   char *action_hotkey_js;
@@ -308,6 +308,12 @@ struct WoxLinuxWindow {
   bool overlay_frame_pending;
   guint overlay_present_idle;
   guint accessibility_idle;
+  // accessibility_nodes keeps one GTK widget per accessibility id so scroll and
+  // typing update the mirror in place instead of destroying it.
+  GHashTable *accessibility_nodes;
+  uint64_t accessibility_generation;
+  bool accessibility_structure_changed;
+  bool accessibility_cursor_refresh;
   bool closed;
   GdkRectangle input_cursor_rect;
   WoxRendererResourceStats frame_resource_stats;
@@ -3347,6 +3353,10 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
   window->im_context = NULL;
   g_hash_table_destroy(window->pressed_keys);
   window->pressed_keys = NULL;
+  if (window->accessibility_nodes != NULL) {
+    g_hash_table_destroy(window->accessibility_nodes);
+    window->accessibility_nodes = NULL;
+  }
   if (context != 0) {
     if (g_atomic_int_get(&wox_linux_window_count) > 0) {
       g_atomic_int_add(&wox_linux_window_count, -1);
@@ -3513,6 +3523,15 @@ static void apply_window_geometry_hints(WoxLinuxWindow *window) {
   }
 }
 
+static guint accessibility_id_hash(gconstpointer key) {
+  uint64_t id = *(const uint64_t *)key;
+  return (guint)(id ^ (id >> 32));
+}
+
+static gboolean accessibility_id_equal(gconstpointer a, gconstpointer b) {
+  return *(const uint64_t *)a == *(const uint64_t *)b;
+}
+
 WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
@@ -3534,7 +3553,8 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
   window->web_view_signatures = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   window->web_view_content_keys = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-  if (window->im_context == NULL || window->pressed_keys == NULL || window->web_view_cache == NULL || window->web_view_signatures == NULL || window->web_view_content_keys == NULL) {
+  window->accessibility_nodes = g_hash_table_new_full(accessibility_id_hash, accessibility_id_equal, g_free, NULL);
+  if (window->im_context == NULL || window->pressed_keys == NULL || window->web_view_cache == NULL || window->web_view_signatures == NULL || window->web_view_content_keys == NULL || window->accessibility_nodes == NULL) {
     if (window->im_context != NULL) {
       g_object_unref(window->im_context);
     }
@@ -3549,6 +3569,9 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
     }
     if (window->web_view_content_keys != NULL) {
       g_hash_table_destroy(window->web_view_content_keys);
+    }
+    if (window->accessibility_nodes != NULL) {
+      g_hash_table_destroy(window->accessibility_nodes);
     }
     free(window);
     return NULL;
@@ -4987,12 +5010,6 @@ static gboolean linux_accessibility_idle(gpointer data) {
   return G_SOURCE_REMOVE;
 }
 
-// wox_linux_window_is_rendering reports the GtkGLArea render signal. Rebuilding the
-// accessibility mirror there blocks the main loop inside ATK, so snapshots never return.
-int32_t wox_linux_window_is_rendering(WoxLinuxWindow *window) {
-  return window != NULL && window->rendering ? 1 : 0;
-}
-
 int32_t wox_linux_accessibility_schedule(WoxLinuxWindow *window) {
   if (window == NULL || window->closed || window->context == 0) {
     return -1;
@@ -5003,47 +5020,172 @@ int32_t wox_linux_accessibility_schedule(WoxLinuxWindow *window) {
   return 0;
 }
 
-int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation) {
-  (void)generation;
-  if (window == NULL || window->closed || window->accessibility_layer == NULL) {
-    return -1;
-  }
-  window->updating_accessibility = true;
-  wox_linux_note_stage("a11y-rebuild");
-  GList *children = gtk_container_get_children(GTK_CONTAINER(window->accessibility_layer));
-  for (GList *item = children; item != NULL; item = item->next) {
-    gtk_widget_destroy(GTK_WIDGET(item->data));
-  }
-  g_list_free(children);
-  return 0;
+// The mirror remembers the fields that would otherwise force AT-SPI work on every
+// scroll tick. Kind is a static string from accessibility_widget_kind.
+typedef struct {
+  uint64_t generation;
+  uint32_t state_flags;
+  int x;
+  int y;
+  int width;
+  int height;
+  const char *kind;
+  char *role;
+  char *automation_id;
+  char *name;
+  char *description;
+} WoxAccessibilityMirror;
+
+static const char accessibility_mirror_key[] = "wox-accessibility-mirror";
+
+static void accessibility_mirror_free(gpointer data) {
+  WoxAccessibilityMirror *mirror = data;
+  g_free(mirror->role);
+  g_free(mirror->automation_id);
+  g_free(mirror->name);
+  g_free(mirror->description);
+  g_free(mirror);
 }
 
-int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region) {
-  (void)parent_id;
-  (void)children;
-  (void)child_count;
-  (void)live_region;
-  if (window == NULL || window->closed || window->accessibility_layer == NULL || id == 0) {
-    return -1;
-  }
-  GtkWidget *widget = accessibility_widget(role, value, state_flags, action_flags);
-  if (widget == NULL) {
-    return -1;
-  }
-  gtk_widget_set_name(widget, automation_id != NULL ? automation_id : "wox-accessibility-node");
-  gtk_widget_set_can_focus(widget, (state_flags & WOX_ACCESSIBILITY_STATE_FOCUSABLE) != 0);
-  gtk_widget_set_sensitive(widget, (state_flags & WOX_ACCESSIBILITY_STATE_ENABLED) != 0);
-  gtk_widget_set_size_request(widget, MAX(1, (int)ceilf(width)), MAX(1, (int)ceilf(height)));
-  gtk_fixed_put(GTK_FIXED(window->accessibility_layer), widget, (int)floorf(x), (int)floorf(y));
-  AtkObject *accessible = gtk_widget_get_accessible(widget);
-  atk_object_set_role(accessible, accessibility_atk_role(role));
-  atk_object_set_name(accessible, label != NULL && label[0] != '\0' ? label : value);
-  atk_object_set_description(accessible, description != NULL ? description : "");
-  atk_object_notify_state_change(accessible, ATK_STATE_FOCUSED, (state_flags & WOX_ACCESSIBILITY_STATE_FOCUSED) != 0);
-  atk_object_notify_state_change(accessible, ATK_STATE_SELECTED, (state_flags & WOX_ACCESSIBILITY_STATE_SELECTED) != 0);
-  atk_object_notify_state_change(accessible, ATK_STATE_CHECKED, (state_flags & WOX_ACCESSIBILITY_STATE_CHECKED) != 0);
-  atk_object_notify_state_change(accessible, ATK_STATE_EXPANDED, (state_flags & WOX_ACCESSIBILITY_STATE_EXPANDED) != 0);
+// accessibility_widget_kind matches the widget constructor order. A kind change
+// replaces the widget; a role change inside the same kind only updates ATK.
+static const char *accessibility_widget_kind(const char *role, uint32_t action_flags) {
+  if (g_strcmp0(role, "text_field") == 0) return "entry";
+  if (g_strcmp0(role, "checkbox") == 0) return "check";
+  if (g_strcmp0(role, "radio_button") == 0) return "radio";
+  if ((action_flags & (WOX_ACCESSIBILITY_ACTION_ACTIVATE | WOX_ACCESSIBILITY_ACTION_TOGGLE)) != 0) return "button";
+  if (g_strcmp0(role, "progress_bar") == 0) return "progress";
+  return "box";
+}
 
+static bool accessibility_replace_string(char **slot, const char *value) {
+  const char *next = value != NULL ? value : "";
+  if (g_strcmp0(*slot, next) == 0) {
+    return false;
+  }
+  g_free(*slot);
+  *slot = g_strdup(next);
+  return true;
+}
+
+static void accessibility_notify_state(AtkObject *accessible, uint32_t previous, uint32_t next, uint32_t bit, AtkStateType state) {
+  bool was = (previous & bit) != 0;
+  bool now = (next & bit) != 0;
+  if (was != now) {
+    atk_object_notify_state_change(accessible, state, now);
+  }
+}
+
+// accessibility_configure_widget writes the fields that differ. Geometry and text
+// stay on the existing widget so a settings scroll does not rebuild the mirror.
+static void accessibility_configure_widget(WoxLinuxWindow *window, GtkWidget *widget, WoxAccessibilityMirror *mirror, bool initial, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags) {
+  WoxAccessibilityBinding *binding = g_object_get_data(G_OBJECT(widget), "wox-accessibility-binding");
+  if (binding != NULL) {
+    binding->action_flags = action_flags;
+  }
+  int ix = (int)floorf(x);
+  int iy = (int)floorf(y);
+  int iw = MAX(1, (int)ceilf(width));
+  int ih = MAX(1, (int)ceilf(height));
+  if (initial) {
+    gtk_widget_set_size_request(widget, iw, ih);
+    gtk_fixed_put(GTK_FIXED(window->accessibility_layer), widget, ix, iy);
+  } else {
+    if (mirror->width != iw || mirror->height != ih) {
+      gtk_widget_set_size_request(widget, iw, ih);
+    }
+    if (mirror->x != ix || mirror->y != iy) {
+      gtk_fixed_move(GTK_FIXED(window->accessibility_layer), widget, ix, iy);
+    }
+  }
+  mirror->x = ix;
+  mirror->y = iy;
+  mirror->width = iw;
+  mirror->height = ih;
+
+  const char *widget_name = automation_id != NULL ? automation_id : "wox-accessibility-node";
+  if (accessibility_replace_string(&mirror->automation_id, widget_name)) {
+    gtk_widget_set_name(widget, mirror->automation_id);
+  }
+  uint32_t previous_state = initial ? 0 : mirror->state_flags;
+  if (initial || ((previous_state ^ state_flags) & WOX_ACCESSIBILITY_STATE_FOCUSABLE) != 0) {
+    gtk_widget_set_can_focus(widget, (state_flags & WOX_ACCESSIBILITY_STATE_FOCUSABLE) != 0);
+  }
+  if (initial || ((previous_state ^ state_flags) & WOX_ACCESSIBILITY_STATE_ENABLED) != 0) {
+    gtk_widget_set_sensitive(widget, (state_flags & WOX_ACCESSIBILITY_STATE_ENABLED) != 0);
+  }
+  if (GTK_IS_ENTRY(widget)) {
+    if (initial || ((previous_state ^ state_flags) & (WOX_ACCESSIBILITY_STATE_PROTECTED | WOX_ACCESSIBILITY_STATE_READ_ONLY)) != 0) {
+      gtk_entry_set_visibility(GTK_ENTRY(widget), (state_flags & WOX_ACCESSIBILITY_STATE_PROTECTED) == 0);
+      gtk_editable_set_editable(GTK_EDITABLE(widget), (state_flags & WOX_ACCESSIBILITY_STATE_READ_ONLY) == 0);
+    }
+    const char *next = value != NULL ? value : "";
+    if (g_strcmp0(gtk_entry_get_text(GTK_ENTRY(widget)), next) != 0) {
+      if (binding != NULL) {
+        g_signal_handlers_block_by_func(widget, G_CALLBACK(on_accessibility_changed), binding);
+      }
+      gtk_entry_set_text(GTK_ENTRY(widget), next);
+      if (binding != NULL) {
+        g_signal_handlers_unblock_by_func(widget, G_CALLBACK(on_accessibility_changed), binding);
+      }
+    }
+  }
+  if (GTK_IS_TOGGLE_BUTTON(widget)) {
+    gboolean active = (state_flags & WOX_ACCESSIBILITY_STATE_CHECKED) != 0;
+    if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)) != active) {
+      if (binding != NULL) {
+        g_signal_handlers_block_by_func(widget, G_CALLBACK(on_accessibility_clicked), binding);
+      }
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), active);
+      if (binding != NULL) {
+        g_signal_handlers_unblock_by_func(widget, G_CALLBACK(on_accessibility_clicked), binding);
+      }
+    }
+  }
+
+  // A settings scroll only moves widgets. Skip ATK unless a published property changed.
+  bool role_changed = accessibility_replace_string(&mirror->role, role);
+  const char *accessible_name = (label != NULL && label[0] != '\0') ? label : (value != NULL ? value : "");
+  bool name_changed = accessibility_replace_string(&mirror->name, accessible_name);
+  bool description_changed = accessibility_replace_string(&mirror->description, description);
+  uint32_t watched_states = WOX_ACCESSIBILITY_STATE_FOCUSED | WOX_ACCESSIBILITY_STATE_SELECTED | WOX_ACCESSIBILITY_STATE_CHECKED | WOX_ACCESSIBILITY_STATE_EXPANDED;
+  bool state_changed = ((previous_state ^ state_flags) & watched_states) != 0;
+  if (role_changed || name_changed || description_changed || state_changed) {
+    AtkObject *accessible = gtk_widget_get_accessible(widget);
+    if (role_changed) {
+      atk_object_set_role(accessible, accessibility_atk_role(role));
+      window->accessibility_structure_changed = true;
+    }
+    if (name_changed) {
+      atk_object_set_name(accessible, mirror->name);
+    }
+    if (description_changed) {
+      atk_object_set_description(accessible, mirror->description);
+    }
+    accessibility_notify_state(accessible, previous_state, state_flags, WOX_ACCESSIBILITY_STATE_FOCUSED, ATK_STATE_FOCUSED);
+    accessibility_notify_state(accessible, previous_state, state_flags, WOX_ACCESSIBILITY_STATE_SELECTED, ATK_STATE_SELECTED);
+    accessibility_notify_state(accessible, previous_state, state_flags, WOX_ACCESSIBILITY_STATE_CHECKED, ATK_STATE_CHECKED);
+    accessibility_notify_state(accessible, previous_state, state_flags, WOX_ACCESSIBILITY_STATE_EXPANDED, ATK_STATE_EXPANDED);
+  }
+
+  bool hidden = (state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) != 0;
+  bool was_visible = gtk_widget_get_visible(widget);
+  gtk_widget_set_no_show_all(widget, hidden);
+  if (hidden) {
+    if (was_visible) {
+      gtk_widget_hide(widget);
+      window->accessibility_structure_changed = true;
+    }
+  } else if (!was_visible) {
+    gtk_widget_show(widget);
+    window->accessibility_cursor_refresh = true;
+    window->accessibility_structure_changed = true;
+  }
+  mirror->state_flags = state_flags;
+  mirror->generation = window->accessibility_generation;
+}
+
+static void accessibility_bind_widget(WoxLinuxWindow *window, GtkWidget *widget, uint64_t id, uint32_t action_flags) {
   WoxAccessibilityBinding *binding = g_new0(WoxAccessibilityBinding, 1);
   binding->window = window;
   binding->node_id = id;
@@ -5056,34 +5198,99 @@ int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, ui
     g_signal_connect(widget, "clicked", G_CALLBACK(on_accessibility_clicked), binding);
   }
   g_signal_connect(widget, "focus-in-event", G_CALLBACK(on_accessibility_focus), binding);
-  gtk_widget_set_no_show_all(widget, (state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) != 0);
-  if ((state_flags & WOX_ACCESSIBILITY_STATE_HIDDEN) == 0) {
-    gtk_widget_show(widget);
-    apply_linux_pointer_cursor(window);
-  }
   // Native accessibility widgets mirror the GPU tree but must not consume visual pointer input.
   // Forward press/motion/scroll before GTK button defaults run. Leave/enter stay on the
-  // top-level window: rebuilding these mirrors on each query keystroke would otherwise
-  // report a window leave and let GtkEntry's I-beam fight the query drag-area cursor.
+  // top-level window so a structural replacement cannot report a window leave and let
+  // GtkEntry's I-beam fight the query drag-area cursor.
   gtk_widget_add_events(widget, GDK_POINTER_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
   g_signal_connect(widget, "motion-notify-event", G_CALLBACK(on_pointer_motion), window);
   g_signal_connect(widget, "button-press-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(widget, "button-release-event", G_CALLBACK(on_pointer_button), window);
   g_signal_connect(widget, "scroll-event", G_CALLBACK(on_pointer_scroll), window);
+}
+
+static gboolean accessibility_drop_stale_node(gpointer key, gpointer value, gpointer user_data) {
+  (void)key;
+  WoxLinuxWindow *window = user_data;
+  GtkWidget *widget = value;
+  WoxAccessibilityMirror *mirror = g_object_get_data(G_OBJECT(widget), accessibility_mirror_key);
+  if (mirror != NULL && mirror->generation == window->accessibility_generation) {
+    return FALSE;
+  }
+  window->accessibility_structure_changed = true;
+  gtk_widget_destroy(widget);
+  return TRUE;
+}
+
+int32_t wox_linux_accessibility_begin(WoxLinuxWindow *window, uint64_t generation) {
+  (void)generation;
+  if (window == NULL || window->closed || window->accessibility_layer == NULL || window->accessibility_nodes == NULL) {
+    return -1;
+  }
+  window->updating_accessibility = true;
+  window->accessibility_structure_changed = false;
+  window->accessibility_cursor_refresh = false;
+  window->accessibility_generation++;
+  wox_linux_note_stage("a11y-rebuild");
   return 0;
 }
 
-int32_t wox_linux_accessibility_end(WoxLinuxWindow *window) {
+int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region) {
+  (void)parent_id;
+  (void)children;
+  (void)child_count;
+  (void)live_region;
+  if (window == NULL || window->closed || window->accessibility_layer == NULL || window->accessibility_nodes == NULL || id == 0) {
+    return -1;
+  }
+  const char *kind = accessibility_widget_kind(role, action_flags);
+  GtkWidget *widget = g_hash_table_lookup(window->accessibility_nodes, &id);
+  WoxAccessibilityMirror *mirror = widget != NULL ? g_object_get_data(G_OBJECT(widget), accessibility_mirror_key) : NULL;
+  if (widget != NULL && mirror != NULL && mirror->kind == kind) {
+    accessibility_configure_widget(window, widget, mirror, false, automation_id, role, label, description, value, x, y, width, height, state_flags, action_flags);
+    return 0;
+  }
+  if (widget != NULL) {
+    g_hash_table_remove(window->accessibility_nodes, &id);
+    gtk_widget_destroy(widget);
+  }
+  widget = accessibility_widget(role, value, state_flags, action_flags);
+  if (widget == NULL) {
+    return -1;
+  }
+  accessibility_bind_widget(window, widget, id, action_flags);
+  mirror = g_new0(WoxAccessibilityMirror, 1);
+  mirror->kind = kind;
+  g_object_set_data_full(G_OBJECT(widget), accessibility_mirror_key, mirror, accessibility_mirror_free);
+  accessibility_configure_widget(window, widget, mirror, true, automation_id, role, label, description, value, x, y, width, height, state_flags, action_flags);
+  uint64_t *key = g_new(uint64_t, 1);
+  *key = id;
+  g_hash_table_insert(window->accessibility_nodes, key, widget);
+  window->accessibility_structure_changed = true;
+  return 0;
+}
+
+int32_t wox_linux_accessibility_end(WoxLinuxWindow *window, int32_t commit) {
   if (window == NULL) {
     return -1;
   }
-  apply_linux_pointer_cursor(window);
+  if (commit && window->accessibility_nodes != NULL) {
+    g_hash_table_foreach_remove(window->accessibility_nodes, accessibility_drop_stale_node, window);
+  }
+  // New GtkEntry mirrors keep the I-beam until the host cursor is copied onto them.
+  // Geometry-only updates leave the cursor where the previous show put it.
+  if (window->accessibility_cursor_refresh) {
+    apply_linux_pointer_cursor(window);
+    window->accessibility_cursor_refresh = false;
+  }
   window->updating_accessibility = false;
   wox_linux_note_stage("a11y-rebuild-done");
   if (window->closed || window->accessibility_layer == NULL) {
     return -1;
   }
-  g_signal_emit_by_name(gtk_widget_get_accessible(window->accessibility_layer), "visible-data-changed");
+  if (commit && window->accessibility_structure_changed) {
+    g_signal_emit_by_name(gtk_widget_get_accessible(window->accessibility_layer), "visible-data-changed");
+  }
   return 0;
 }
 
