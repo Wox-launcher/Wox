@@ -3,6 +3,7 @@ package column
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"os"
 	"path/filepath"
@@ -10,6 +11,64 @@ import (
 	"testing"
 	"unsafe"
 )
+
+// encodeQueryColumns retains the original contiguous encoder as an independent
+// format oracle for the segmented production writer.
+func (s *Snapshot) encodeQueryColumns() []byte {
+	parts := [][]byte{bytesOf(s.NameScoreHints), bytesOf(s.NameSecondScoreHints), bytesOf(s.NameBitmaps), bytesOf(s.NameRepeatBitmaps), bytesOf(s.NonASCIINameBitmap), bytesOf(s.FrequentNameIDs)}
+	size := 8
+	for _, part := range parts {
+		size += (len(part) + 7) &^ 7
+	}
+	data := make([]byte, size)
+	binary.LittleEndian.PutUint64(data, uint64(len(s.FrequentNameIDs)))
+	offset := 8
+	for _, part := range parts {
+		copy(data[offset:], part)
+		offset += (len(part) + 7) &^ 7
+	}
+	return data
+}
+
+// TestSegmentedQuerySectionMatchesEncoding covers internal padding when the
+// frequent-name column has an odd element count, as well as empty columns.
+func TestSegmentedQuerySectionMatchesEncoding(t *testing.T) {
+	for _, frequentNames := range []int{0, 1, 2, 3} {
+		t.Run(fmt.Sprint(frequentNames), func(t *testing.T) {
+			b := NewBuilder(t.TempDir(), 1)
+			for i := 0; i < frequentNames*16; i++ {
+				if err := b.Add(Record{ID: uint64(i + 2), ParentID: 1, Name: fmt.Sprintf("name-%d", i/16)}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s, err := b.Finish()
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "index.columns")
+			if err := Write(path, s); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := data[32+15*24:]
+			start, length := binary.LittleEndian.Uint64(descriptor), binary.LittleEndian.Uint64(descriptor[8:])
+			if !bytes.Equal(data[start:start+length], s.encodeQueryColumns()) {
+				t.Fatal("segmented write changed query section bytes")
+			}
+			mapped, err := Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer mapped.Close()
+			if len(mapped.FrequentNameIDs) != frequentNames {
+				t.Fatalf("frequent names: %d", len(mapped.FrequentNameIDs))
+			}
+		})
+	}
+}
 
 // TestQueryColumnsMappedAndTrimmed checks both ownership and post-eviction reads.
 func TestQueryColumnsMappedAndTrimmed(t *testing.T) {

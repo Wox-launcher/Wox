@@ -96,6 +96,232 @@ stable shard/entry cursors, so compaction can reorder rows between pages.
 Dynamic-root promotion publishes the destination before committing ownership;
 startup completes any missing parent tombstone from committed root metadata.
 
+## Full-build temporary memory
+
+The builder retains distinct name strings only in its intern map during
+ingestion. It records their final offsets, then allocates the packed name bytes
+once at finalization. This avoids both a second live dictionary and repeated
+growth of that byte slice. Names no longer referenced after a rename or deletion
+retain their dictionary IDs, so finalization does not change postings or ranking.
+
+Finalization drops the name map and tombstones after packing names, then drops
+the parent-ID array and ID-to-row table after resolving parents, before allocating
+postings. Posting offsets temporarily serve as scatter cursors and are restored
+in place. Snapshot writes checksum and write borrowed query-column segments,
+including their alignment padding, instead of allocating a serialized copy.
+No forced GC or process-wide GC policy changes are used by these optimizations.
+
+The builder's ID lookup stores only `row+1` in a power-of-two scalar table and
+compares keys against the existing ID column. Zero denotes an empty slot, so
+zero and all other 64-bit IDs remain valid keys. Linear probing uses a mixed
+64-bit hash and a maximum 75% load; growth rehashes rows, while deletion packing
+rebuilds the table only after every retained ID has reached its new row. Deleted
+records still use source-version tombstones until finalization, preserving stale
+event and resurrection handling. This table is private to the unpublished build;
+query lookup and the persisted ID permutation are unchanged.
+
+The opt-in Windows `TestNativeBuildMemoryDiagnostic` exercises the production
+NTFS source, builder, pinyin preparation, durable write, validation and atomic
+publication against an isolated temporary store. `WOX_BUILD_DIAGNOSTIC` names
+a recording directory, `WOX_BUILD_VOLUME` selects the volume, and
+`WOX_BUILD_OUTPUT` names the JSON report. Set `WOX_BUILD_CAPTURE=1` once to
+record enumeration and catch-up frames; subsequent invocations replay those
+bounded frames. `WOX_BUILD_LIVE=1` instead reads the installed fact service
+directly without recording. Production indexes are never opened or changed.
+
+Use `GOGC=50`, `GOMAXPROCS=8` and `GODEBUG=memprofilerate=0` to match the default
+production runtime configuration on this host. Compile once with
+`go test -c -tags sqlite_fts5,filesearch_diagnostic ./util/filesearch`, then run
+the binary with `-test.run=^TestNativeBuildMemoryDiagnostic$`. Alternate separate
+before/after processes serially with no concurrent builds or test suites.
+Memory is sampled every 10 ms during the build; report heap, working set and
+private commit separately. The diagnostic also samples a separate immediate-query
+phase and records per-query latency. Full snapshot hashing runs only afterward,
+so it cannot prewarm the mapping before those queries. The first two comparisons
+below used the earlier build-only sampler and hashed before checking queries.
+Replay comparisons verify every snapshot byte and ordered path/score fingerprints
+for twelve query families. Live inputs can change between runs, so their hashes
+need not match.
+
+These diagnostics measure full filename-index construction in an isolated
+backend process. They exclude UI, plugin hosts, the service process's own memory,
+and content indexing. Replay timing includes local fact-file reads rather than
+live MFT enumeration, and warm OS caches are not cold-disk measurements.
+
+### Windows comparison (2026-10-16)
+
+Baseline source is `0ec489ed2651e7b4c11e933fc7e42de4dc1fa45f`, with the same
+diagnostic harness compiled into both arms. Go 1.27.2 windows/amd64, optimized
+builds, `sqlite_fts5,filesearch_diagnostic`, and the runtime settings above were
+used. Each scenario ran before/after/after/before/before/after in fresh processes,
+without concurrent compilation or test suites. Each value below is the median
+of three builds' elapsed times or sampled memory peaks, not a post-GC sample.
+
+| Scenario / metric | Before | After |
+| --- | ---: | ---: |
+| Frozen facts: elapsed | 6.73 s | 6.29 s |
+| Frozen facts: Go heap peak | 367.9 MiB | 313.4 MiB |
+| Frozen facts: working-set peak | 542.5 MiB | 499.1 MiB |
+| Frozen facts: private-commit peak | 447.2 MiB | 396.8 MiB |
+| Live NTFS: elapsed | 16.05 s | 15.43 s |
+| Live NTFS: Go heap peak | 363.8 MiB | 320.6 MiB |
+| Live NTFS: working-set peak | 548.4 MiB | 500.8 MiB |
+| Live NTFS: private-commit peak | 445.7 MiB | 397.9 MiB |
+
+Frozen input contains 2,369,391 rows and 697,739 distinct names. All six snapshots
+have SHA-256 `b8a090c67d69cb1d901b3c6b4e53e0055beb293705b21af36ea3f9add0905c77`;
+all twelve ordered path/score query fingerprints match, including literal
+Chinese, pinyin, multi-term, explicit path and no-hit queries. Live builds contain
+2,365,682–2,365,822 rows as the volume changes; their inputs are not identical.
+
+Live elapsed ranges were 15.20–16.13 s before and 12.61–15.90 s after. Working-set
+peaks ranged 534.4–557.7 MiB before and 419.5–501.0 MiB after; private-commit peaks
+were 431.8–454.5 MiB and 397.7–398.0 MiB. The memory reduction is consistent across
+these samples; three runs do not establish a reliable speedup, and total elapsed
+time is sensitive to disk/cache and scheduler variation. The isolated process's
+absolute peaks should not be equated to the full Wox application's working set.
+
+Column, filename engine, file-search plugin and fuzzy matcher tests pass, as does
+the column race suite. Four existing symlink-fixture tests are excluded because
+this Windows account lacks symlink creation privilege. Added cases cover deleted
+name groups, late/missing parents, an empty index and query-section padding.
+No new compatibility layer, migration, global GC tuning or forced collection is
+part of the runtime change.
+
+Raw results, frozen fact frames, baseline source overlay, binaries and the serial
+runner are in `artifacts/filesearch-comparison/build-memory/`. Only
+`final-replay-*.json` and `final-live-*.json` feed `summary.json`; earlier exploratory
+or interrupted runs in that folder are excluded. `run-comparison.ps1` repeats
+the final runs and `summarize.py` verifies snapshot/query equality and computes
+the summary. Regression output is in `tests-final.txt` and `race-final.txt`.
+
+### Compact build ID lookup (second round, 2026-10-16)
+
+Separate diagnostic builds injected heap snapshots at phase boundaries using a
+Go source overlay. These attribution runs enable heap sampling and force GC at
+each boundary; their timings and peaks are excluded from performance comparisons.
+The first-round implementation retained 221.9 MiB of live heap after ingestion.
+Sampled allocation attribution identified about 72.5 MiB in the ID-to-row map,
+27.8 MiB in the name map and 40.7 MiB in decoded, interned name strings. Remaining
+allocations primarily belong to the scalar columns. Parent resolution reduced
+live heap to 107.5 MiB, and completed query columns brought it to 146.6 MiB.
+After writing, the heap snapshot can become unreachable, but without immediate
+collection its memory overlaps the new mapped generation's resident pages.
+
+The compact ID table occupies exactly 16 MiB for the recorded input's 2,369,446
+pre-pruning rows. The same phase profile now retains 165.8 MiB after ingestion,
+56.1 MiB less than before; later live-heap sizes remain 107.5/146.6 MiB. This
+change removes duplicate ID storage and hash-map overhead without moving build
+storage into another process or adding forced collection to production code.
+
+The first-round implementation was remeasured as the baseline, with the same
+optimized Go 1.27.2 runtime settings and serial alternating order as above.
+These are independent three-run medians; compare within this table, rather than
+using the earlier run's absolute timings with this run's candidates.
+
+| Scenario / metric | First-round baseline | Compact ID table |
+| --- | ---: | ---: |
+| Frozen facts: elapsed | 4.56 s | 4.46 s |
+| Frozen facts: Go heap peak | 313.4 MiB | 258.7 MiB |
+| Frozen facts: working-set peak | 500.3 MiB | 435.4 MiB |
+| Frozen facts: private-commit peak | 398.4 MiB | 333.4 MiB |
+| Live NTFS: elapsed | 12.89 s | 12.68 s |
+| Live NTFS: Go heap peak | 324.4 MiB | 247.5 MiB |
+| Live NTFS: working-set peak | 499.0 MiB | 419.0 MiB |
+| Live NTFS: private-commit peak | 395.4 MiB | 315.4 MiB |
+
+Frozen ingestion alone increased from 1.25 to 1.34 s, while total build time
+remained within the observed variation (4.45–4.58 s before, 4.41–4.54 s after).
+Live total times ranged 12.37–16.50 s before and 12.36–12.69 s after; working-set
+peaks ranged 486.7–511.0 MiB and 418.0–440.2 MiB, respectively. The result is a
+repeatable memory reduction without an observed material total-time regression,
+not a claim of statistically established throughput improvement. Live row counts
+ranged 2,367,049–2,367,055. Each scenario still uses a fresh isolated index and
+excludes the UI and service-process memory.
+
+All frozen snapshots retain the SHA-256 above and identical ordered path/score
+fingerprints for all twelve queries. The affected package suites and column race
+checks pass with the same four environment-blocked symlink cases excluded. New
+tests exercise wrapped collision chains, growth, zero/maximal/high-bit IDs,
+packing after deletion, stale updates, resurrection and replacement. No snapshot
+format or query algorithm changes are involved.
+
+Artifacts are in `artifacts/filesearch-comparison/build-memory-round2/`, including
+`summary.json`, `run-comparison.ps1`, `summarize.py`, baseline source/binaries,
+`before-overlay.json`, diagnostic overlays and phase profiles. Only
+`final-replay-*.json` and `final-live-*.json` feed the performance summary;
+`profile-result.json`, `candidate-probe.json` and `after-profile/` are diagnostic
+or exploratory results. The frozen fact stream is shared with the first round.
+
+### Publication residency (third round, 2026-10-16)
+
+Publication previously called the ordinary `Open` path after writing. Its checksum
+and structural scans faulted the entire new mapping into the working set while
+the now-unreachable build heap could still be resident. The new `writeAndOpen`
+path retains the writer's 512-byte header, derived from structurally validated
+heap columns, and requires the reopened header and every section checksum to
+match that output. The file cannot supply its own trusted checksum authority.
+Per-entry columns are verified through a reusable 64 KiB read buffer without
+walking their mapped rows again. The name dictionary, posting offsets and query
+filter columns are checksummed through the mapping to keep them warm for the
+first filename query. Mapping bounds and query-column validation remain enabled.
+Normal startup `Open` still performs full structural validation of existing files.
+
+This reduces, rather than eliminates, heap/mapping residency overlap. It does not
+force GC, trim the process heap, skip file verification or change the immutable
+format. Stale-publication rejection, read leases, durable sync and manifest
+replacement retain their existing behavior. A fully demand-paged experiment
+reduced the build peak further, but increased the first `readme` query from about
+6 to 22 ms in an exploratory pair; the selected implementation keeps name-side
+columns warm as a compromise.
+
+The baseline is the second-round implementation, rebuilt with the same enhanced
+diagnostic harness as the candidate. Go 1.27.2, runtime settings and serial
+before/after/after/before/before/after order are unchanged. Each metric is a
+three-run median; earlier rounds' absolute timings are not paired controls.
+
+| Scenario / metric | Second-round baseline | Selective publication verification |
+| --- | ---: | ---: |
+| Frozen facts: build elapsed | 5.31 s | 5.09 s |
+| Frozen facts: build working-set peak | 406.3 MiB | 324.9 MiB |
+| Frozen facts: build Go heap peak | 249.5 MiB | 249.6 MiB |
+| Frozen facts: build private-commit peak | 333.2 MiB | 337.2 MiB |
+| Frozen facts: build + immediate queries working-set peak | 407.7 MiB | 366.0 MiB |
+| Frozen facts: first `readme` query | 8.73 ms | 15.38 ms |
+| Live NTFS: build elapsed | 15.73 s | 14.20 s |
+| Live NTFS: build working-set peak | 449.4 MiB | 344.8 MiB |
+| Live NTFS: build Go heap peak | 283.3 MiB | 247.4 MiB |
+| Live NTFS: build private-commit peak | 346.1 MiB | 329.7 MiB |
+| Live NTFS: build + immediate queries working-set peak | 462.1 MiB | 386.2 MiB |
+| Live NTFS: first `readme` query | 10.55 ms | 13.11 ms |
+
+The controlled frozen-input comparison shows the intended residency reduction,
+not a reduction in live column size or private committed allocation. The OS may
+retain the verified file data in its cache; process working set is not unique
+machine-wide physical RAM. Later queries still fault in needed per-entry pages.
+Including all twelve immediate queries preserves a lower observed combined peak,
+but the first query has a measured small latency cost. This is not a cold-disk
+measurement or a guarantee about arbitrary workloads and long-running UI sessions.
+
+Frozen build times ranged 5.10–5.75 s before and 4.98–5.16 s after; combined
+working-set peaks ranged 399.4–462.5 MiB and 362.4–373.4 MiB. Live times ranged
+14.94–20.00 s and 13.49–14.34 s; combined peaks ranged 456.6–463.9 MiB and
+372.7–408.1 MiB. Live row counts ranged 2,369,392–2,369,406. All six frozen outputs
+retain the same snapshot SHA-256 and ordered query fingerprints as earlier rounds.
+
+Column, filename engine, plugin and fuzzy matcher suites pass, as do column race
+checks, with the same four symlink-privilege cases excluded. New publication tests
+cover every corrupted section, forged/rechecksummed headers, invalid heap rows,
+invalid query IDs, and byte-identical normal reopen. Runtime changes are confined
+to common column storage/publication; no platform mapping APIs were changed.
+
+Artifacts are in `artifacts/filesearch-comparison/build-memory-round3/`.
+`summary.json` includes build, immediate-query and combined peaks plus all query
+latencies; `run-comparison.ps1` and `summarize.py` reproduce and check the results.
+The source overlay and `before.exe` preserve the second-round control. Only
+`final-replay-*.json` and `final-live-*.json` feed the summary; `probe-*.json` records
+exploratory runs. The isolated processes do not include Wox UI or service memory.
+
 ## Transport
 
 `filesearchservice/protocol` is independent of the index and native APIs. Version

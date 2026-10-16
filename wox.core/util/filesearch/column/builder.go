@@ -10,7 +10,7 @@ import (
 type Builder struct {
 	base     Snapshot
 	parents  []uint64
-	rows     map[uint64]uint32
+	rows     []uint32 // Open-addressed row+1 slots; keys remain in base.IDs.
 	names    map[string]uint32
 	deleted  map[uint64]uint64
 	metadata bool
@@ -20,14 +20,16 @@ type Builder struct {
 }
 
 func NewBuilder(root string, rootID uint64) *Builder {
-	return &Builder{
+	b := &Builder{
 		base:    Snapshot{Root: root, IDs: []uint64{rootID}, NameIDs: []uint32{0}, Flags: []byte{Directory | Structural}, NameOffsets: []uint32{0, 0}, NameMasks: []uint64{0}, NameFlags: []byte{0}},
-		parents: []uint64{rootID}, rows: map[uint64]uint32{rootID: 0}, names: map[string]uint32{"": 0},
+		parents: []uint64{rootID}, names: map[string]uint32{"": 0},
 	}
+	b.addRow(0)
+	return b
 }
 
 func (b *Builder) Contains(id uint64) bool {
-	_, found := b.rows[id]
+	_, found := b.lookupRow(id)
 	return found
 }
 
@@ -61,7 +63,7 @@ func (b *Builder) Add(record Record) error {
 		}
 		delete(b.deleted, record.ID)
 	}
-	row, exists := b.rows[record.ID]
+	row, exists := b.lookupRow(record.ID)
 	if exists && len(b.base.Versions) != 0 && record.Version < b.base.Versions[row] {
 		return nil
 	}
@@ -71,13 +73,15 @@ func (b *Builder) Add(record Record) error {
 	}
 	name, known := b.names[record.Name]
 	if !known {
-		if uint64(len(b.base.NameBytes))+uint64(len(record.Name)) > math.MaxUint32 || len(b.base.NameMasks) >= math.MaxUint32 {
+		nameEnd := uint64(b.base.NameOffsets[len(b.base.NameOffsets)-1]) + uint64(len(record.Name))
+		if nameEnd > math.MaxUint32 || len(b.base.NameMasks) >= math.MaxUint32 {
 			return fmt.Errorf("column dictionary exceeds 32-bit capacity")
 		}
 		name = uint32(len(b.base.NameMasks))
 		b.names[record.Name] = name
-		b.base.NameBytes = append(b.base.NameBytes, record.Name...)
-		b.base.NameOffsets = append(b.base.NameOffsets, uint32(len(b.base.NameBytes)))
+		// The intern map already owns each distinct name. Materialize packed bytes
+		// once at Finish instead of retaining and repeatedly growing a second copy.
+		b.base.NameOffsets = append(b.base.NameOffsets, uint32(nameEnd))
 		mask, nonASCII := CharacterMask(record.Name)
 		b.base.NameMasks = append(b.base.NameMasks, mask)
 		flag := byte(0)
@@ -100,8 +104,8 @@ func (b *Builder) Add(record Record) error {
 			return fmt.Errorf("column shard exceeds 32-bit capacity")
 		}
 		row = uint32(b.base.Len())
-		b.rows[record.ID] = row
 		b.base.IDs = append(b.base.IDs, record.ID)
+		b.addRow(row)
 		b.parents = append(b.parents, record.ParentID)
 		b.base.NameIDs = append(b.base.NameIDs, name)
 		b.base.Flags = append(b.base.Flags, record.Flags)
@@ -137,14 +141,14 @@ func (b *Builder) Remove(id, version uint64) error {
 	if id == b.base.IDs[0] {
 		return fmt.Errorf("cannot delete the column root")
 	}
-	if row, exists := b.rows[id]; exists && len(b.base.Versions) != 0 && version < b.base.Versions[row] {
+	if row, exists := b.lookupRow(id); exists && len(b.base.Versions) != 0 && version < b.base.Versions[row] {
 		return nil
 	}
 	if b.deleted == nil {
 		b.deleted = make(map[uint64]uint64)
 	}
 	if _, deleted := b.deleted[id]; !deleted {
-		if row, exists := b.rows[id]; exists {
+		if row, exists := b.lookupRow(id); exists {
 			b.adjustCounts(b.base.Flags[row], -1)
 		}
 	}
@@ -164,12 +168,10 @@ func (b *Builder) pruneDeleted() {
 	count := 0
 	for row, id := range s.IDs {
 		if _, deleted := b.deleted[id]; deleted {
-			delete(b.rows, id)
 			continue
 		}
 		s.IDs[count], s.NameIDs[count], s.Flags[count] = id, s.NameIDs[row], s.Flags[row]
 		b.parents[count] = b.parents[row]
-		b.rows[id] = uint32(count)
 		if len(s.Sizes) != 0 {
 			s.Sizes[count], s.Modified[count] = s.Sizes[row], s.Modified[row]
 		}
@@ -186,6 +188,12 @@ func (b *Builder) pruneDeleted() {
 	if len(s.Versions) != 0 {
 		s.Versions = s.Versions[:count]
 	}
+	// Packing changes the rows used as hash keys. Rebuild only after all IDs
+	// reach their final positions, so overwritten rows cannot corrupt lookups.
+	clear(b.rows)
+	for row := range s.IDs {
+		b.placeRow(uint32(row))
+	}
 }
 
 // Finish resolves late parents and builds compact identifier and name postings.
@@ -195,9 +203,26 @@ func (b *Builder) Finish() (*Snapshot, error) {
 		return nil, fmt.Errorf("builder already finished")
 	}
 	b.pruneDeleted()
+	b.base.NameBytes = make([]byte, int(b.base.NameOffsets[len(b.base.NameOffsets)-1]))
+	for name, id := range b.names {
+		copy(b.base.NameBytes[b.base.NameOffsets[id]:b.base.NameOffsets[id+1]], name)
+	}
+	// Ingestion is complete. Release interned string keys and tombstones before
+	// allocating final columns; neither is needed to resolve parent rows.
+	b.names, b.deleted = nil, nil
 	s := b.base
 	s.Parents = make([]uint32, s.Len())
 	s.Parents[0] = NoRow
+	for row := 1; row < s.Len(); row++ {
+		parent, ok := b.lookupRow(b.parents[row])
+		if !ok {
+			parent = NoRow
+		}
+		s.Parents[row] = parent
+	}
+	// Parent IDs and the ID-to-row table have served their last purpose. Keeping
+	// them until after postings/sort construction overlaps whole-volume buffers.
+	*b = Builder{}
 	s.NameStarts = make([]uint32, s.Names()+1)
 	s.IDRows = make([]uint32, s.Len())
 	for row := range s.Len() {
@@ -205,11 +230,6 @@ func (b *Builder) Finish() (*Snapshot, error) {
 		if row == 0 {
 			continue
 		}
-		parent, ok := b.rows[b.parents[row]]
-		if !ok {
-			parent = NoRow
-		}
-		s.Parents[row] = parent
 		s.NameStarts[s.NameIDs[row]+1]++
 		if s.Flags[row]&Directory != 0 {
 			s.NameFlags[s.NameIDs[row]] |= NameHasDirectory
@@ -221,14 +241,16 @@ func (b *Builder) Finish() (*Snapshot, error) {
 		s.NameStarts[id] += s.NameStarts[id-1]
 	}
 	s.NameRows = make([]uint32, s.Len()-1)
-	cursors := append([]uint32(nil), s.NameStarts...)
+	// Scatter advances starts to group ends. Shifting those ends restores the
+	// original offsets without a second dictionary-sized cursor array.
 	for row := 1; row < s.Len(); row++ {
 		id := s.NameIDs[row]
-		s.NameRows[cursors[id]] = uint32(row)
-		cursors[id]++
+		s.NameRows[s.NameStarts[id]] = uint32(row)
+		s.NameStarts[id]++
 	}
+	copy(s.NameStarts[1:], s.NameStarts[:len(s.NameStarts)-1])
+	s.NameStarts[0] = 0
 	sort.Slice(s.IDRows, func(i, j int) bool { return s.IDs[s.IDRows[i]] < s.IDs[s.IDRows[j]] })
-	*b = Builder{}
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}

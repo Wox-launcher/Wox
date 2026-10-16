@@ -7,22 +7,16 @@ import (
 	"path/filepath"
 )
 
-// encodeQueryColumns uses fixed-width, aligned arrays inside the reserved section.
-// These derived columns live in the same immutable generation as their names.
-func (s *Snapshot) encodeQueryColumns() []byte {
-	parts := [][]byte{bytesOf(s.NameScoreHints), bytesOf(s.NameSecondScoreHints), bytesOf(s.NameBitmaps), bytesOf(s.NameRepeatBitmaps), bytesOf(s.NonASCIINameBitmap), bytesOf(s.FrequentNameIDs)}
-	size := 8
-	for _, part := range parts {
-		size += (len(part) + 7) &^ 7
+// queryColumnParts borrows aligned columns for checksumming and writing. Keeping
+// the section segmented avoids a complete serialized copy of the query index.
+func (s *Snapshot) queryColumnParts() [][]byte {
+	var header, padding [8]byte
+	binary.LittleEndian.PutUint64(header[:], uint64(len(s.FrequentNameIDs)))
+	parts := [][]byte{header[:]}
+	for _, column := range [][]byte{bytesOf(s.NameScoreHints), bytesOf(s.NameSecondScoreHints), bytesOf(s.NameBitmaps), bytesOf(s.NameRepeatBitmaps), bytesOf(s.NonASCIINameBitmap), bytesOf(s.FrequentNameIDs)} {
+		parts = append(parts, column, padding[:(-len(column))&7])
 	}
-	data := make([]byte, size)
-	binary.LittleEndian.PutUint64(data, uint64(len(s.FrequentNameIDs)))
-	offset := 8
-	for _, part := range parts {
-		copy(data[offset:], part)
-		offset += (len(part) + 7) &^ 7
-	}
-	return data
+	return parts
 }
 
 // mapQueryColumns validates all lengths before exposing zero-copy scalar views.

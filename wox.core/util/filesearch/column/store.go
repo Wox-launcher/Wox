@@ -301,10 +301,7 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 			_ = os.Remove(manifestPath)
 		}
 	}()
-	if err := Write(columnPath, base); err != nil {
-		return err
-	}
-	mapped, err := Open(columnPath)
+	mapped, err := writeAndOpen(columnPath, base)
 	if err != nil {
 		return err
 	}
