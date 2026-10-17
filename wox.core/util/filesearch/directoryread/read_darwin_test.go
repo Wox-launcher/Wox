@@ -42,7 +42,16 @@ func TestNativeBulkMatchesLstat(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Size() != want.Size() || got.Mode() != want.Mode() || !got.ModTime().Equal(want.ModTime()) || got.IsDir() != want.IsDir() {
+		// Directory st_size is not part of the bulk contract; the decoded entry
+		// must still be complete so the scanner does not Lstat every directory.
+		wantSize := want.Size()
+		if want.IsDir() {
+			wantSize = 0
+			if _, ok := got.(bulkInfo); !ok {
+				t.Fatalf("%s: directory metadata fell back to Lstat", entry.Name())
+			}
+		}
+		if got.Size() != wantSize || got.Mode() != want.Mode() || !got.ModTime().Equal(want.ModTime()) || got.IsDir() != want.IsDir() {
 			t.Fatalf("%s: got %+v, want %+v", entry.Name(), got, want)
 		}
 	}

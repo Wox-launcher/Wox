@@ -9,14 +9,11 @@ import (
 )
 
 type DirtyQueueConfig struct {
-	DebounceWindow               time.Duration
-	MaxPendingWaitWindow         time.Duration
-	MaxDebounceWindow            time.Duration
-	BackpressurePathThreshold    int
-	BackpressureRootThreshold    int
-	SiblingMergeThreshold        int
-	RootEscalationPathThreshold  int
-	RootEscalationDirectoryRatio float64
+	DebounceWindow            time.Duration
+	MaxPendingWaitWindow      time.Duration
+	MaxDebounceWindow         time.Duration
+	BackpressurePathThreshold int
+	BackpressureRootThreshold int
 }
 
 type DirtyQueue struct {
@@ -63,11 +60,11 @@ func (q *DirtyQueue) Push(signal DirtySignal) {
 	q.trackSignalPathLocked(normalized)
 }
 
-func (q *DirtyQueue) FlushReady(now time.Time, rootDirectoryCounts map[string]int) []ReconcileBatch {
-	return q.FlushReadyWithDebounce(now, rootDirectoryCounts, q.debounceWindow())
+func (q *DirtyQueue) FlushReady(now time.Time) []ReconcileBatch {
+	return q.FlushReadyWithDebounce(now, q.debounceWindow())
 }
 
-func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts map[string]int, debounceWindow time.Duration) []ReconcileBatch {
+func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, debounceWindow time.Duration) []ReconcileBatch {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -88,7 +85,7 @@ func (q *DirtyQueue) FlushReadyWithDebounce(now time.Time, rootDirectoryCounts m
 		signals := q.pending[rootID]
 		q.untrackSignalsLocked(signals)
 		delete(q.pending, rootID)
-		batch := buildReconcileBatch(rootID, signals, rootDirectoryCounts[rootID], q.config)
+		batch := buildReconcileBatch(rootID, signals)
 		for _, signal := range signals {
 			batch.Cursor = newerFSEventsCursor(batch.Cursor, signal.Cursor)
 		}
@@ -191,7 +188,7 @@ func (q *DirtyQueue) untrackSignalsLocked(signals []DirtySignal) {
 	}
 }
 
-func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount int, config DirtyQueueConfig) ReconcileBatch {
+func buildReconcileBatch(rootID string, signals []DirtySignal) ReconcileBatch {
 	if len(signals) == 0 {
 		return ReconcileBatch{RootID: rootID}
 	}
@@ -209,20 +206,22 @@ func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount in
 		}
 	}
 
-	directDeltas, subtreeSignals := splitDirtySignals(signals)
-	dirtyPaths := uniqueDirtyPaths(subtreeSignals)
-	paths := coalesceDirtyPaths(dirtyPaths, config.SiblingMergeThreshold)
-	if shouldEscalateRoot(len(paths), directoryCount, config) {
-		return ReconcileBatch{
-			RootID:         rootID,
-			TraceID:        latestSignal.TraceID,
-			Mode:           ReconcileModeRoot,
-			DirtyPathCount: len(signals),
+	directDeltas, directorySignals, subtreeSignals := splitDirtySignals(signals)
+	tree := newDirtyPathTree()
+	for _, dirtyPath := range uniqueDirtyPaths(subtreeSignals) {
+		tree.add(dirtyPath)
+	}
+	paths := tree.reduce()
+	// A recursive rescan already relists every directory beneath it.
+	directoryPaths := make([]string, 0, len(directorySignals))
+	for _, dirtyPath := range uniqueDirtyPaths(directorySignals) {
+		if !tree.covers(dirtyPath) {
+			directoryPaths = append(directoryPaths, dirtyPath)
 		}
 	}
 
 	mode := ReconcileModeSubtree
-	if len(paths) == 0 && len(directDeltas) > 0 {
+	if len(paths) == 0 && len(directoryPaths) == 0 && len(directDeltas) > 0 {
 		mode = ReconcileModeDirectDelta
 	}
 	return ReconcileBatch{
@@ -230,17 +229,25 @@ func buildReconcileBatch(rootID string, signals []DirtySignal, directoryCount in
 		TraceID:        latestSignal.TraceID,
 		Mode:           mode,
 		Paths:          paths,
+		DirectoryPaths: directoryPaths,
 		DirectDeltas:   directDeltas,
 		DirtyPathCount: len(signals),
 	}
 }
 
-func splitDirtySignals(signals []DirtySignal) ([]PathDelta, []DirtySignal) {
+// splitDirtySignals sorts signals into exact file deltas, one-level directory
+// relists, and recursive subtree rescans.
+func splitDirtySignals(signals []DirtySignal) ([]PathDelta, []DirtySignal, []DirtySignal) {
 	deltaByPath := map[string]PathDelta{}
 	deltaOrder := make([]string, 0, len(signals))
+	directorySignals := make([]DirtySignal, 0)
 	subtreeSignals := make([]DirtySignal, 0, len(signals))
 
 	for _, signal := range signals {
+		if shouldRelistDirectory(signal) {
+			directorySignals = append(directorySignals, signal)
+			continue
+		}
 		if shouldUseDirectDelta(signal) {
 			path := cleanDirtyQueuePath(signal.Path)
 			if path == "" {
@@ -269,14 +276,35 @@ func splitDirtySignals(signals []DirtySignal) ([]PathDelta, []DirtySignal) {
 	for _, path := range deltaOrder {
 		deltas = append(deltas, deltaByPath[path])
 	}
-	return deltas, subtreeSignals
+	return deltas, directorySignals, subtreeSignals
+}
+
+// shouldRelistDirectory selects directory events that describe the directory
+// itself (attributes, ownership, xattrs, mtime). Every feed reports a child's
+// creation, removal and rename as that child's own event, so relisting one
+// level is enough; this is how fsearch handles a folder event. Creates,
+// removes, renames and unknown changes stay recursive: a tree moved into place
+// emits no events for its descendants.
+func shouldRelistDirectory(signal DirtySignal) bool {
+	if signal.Kind != DirtySignalKindPath || !signal.PathTypeKnown || !signal.PathIsDir {
+		return false
+	}
+	return signal.SemanticKind == ChangeSemanticKindModify || signal.SemanticKind == ChangeSemanticKindMetadata
 }
 
 func shouldUseDirectDelta(signal DirtySignal) bool {
 	if signal.Kind != DirtySignalKindPath {
 		return false
 	}
-	if !signal.PathTypeKnown || signal.PathIsDir {
+	if !signal.PathTypeKnown {
+		// A path that vanished before its type could be read is deleted by path.
+		// The column delete drops a file row or a directory row alike, and
+		// applyEntries also deletes a directory's stored descendants. Scanning
+		// the parent instead could not prune a vanished child of the root, which
+		// used to force a whole-root reconcile.
+		return signal.SemanticKind == ChangeSemanticKindRemove || signal.SemanticKind == ChangeSemanticKindRename
+	}
+	if signal.PathIsDir {
 		return false
 	}
 	switch signal.SemanticKind {
@@ -285,33 +313,6 @@ func shouldUseDirectDelta(signal DirtySignal) bool {
 	default:
 		return false
 	}
-}
-
-func coalesceDirtyPaths(dirtyPaths []string, siblingMergeThreshold int) []string {
-	if len(dirtyPaths) == 0 {
-		return nil
-	}
-
-	if siblingMergeThreshold < 2 {
-		siblingMergeThreshold = 2
-	}
-
-	tree := newDirtyPathTree()
-	for _, dirtyPath := range dirtyPaths {
-		tree.add(dirtyPath)
-	}
-
-	return tree.reduce(siblingMergeThreshold)
-}
-
-func shouldEscalateRoot(pathCount int, directoryCount int, config DirtyQueueConfig) bool {
-	if config.RootEscalationPathThreshold > 0 && pathCount >= config.RootEscalationPathThreshold {
-		return true
-	}
-	if config.RootEscalationDirectoryRatio <= 0 || directoryCount <= 0 {
-		return false
-	}
-	return float64(pathCount) > float64(directoryCount)*config.RootEscalationDirectoryRatio
 }
 
 func normalizeDirtySignal(signal DirtySignal) (DirtySignal, bool) {
@@ -391,6 +392,10 @@ func scopePathForDirtySignal(path string, pathIsDir bool, pathTypeKnown bool) (s
 	return parent, true
 }
 
+// dirtyPathTree drops dirty scopes already covered by a dirty ancestor. Sibling
+// scopes are never merged into their parent: fsearch never widens a refresh,
+// and merging eight dirty folders used to rescan every other child of the
+// parent as well.
 type dirtyPathTree struct {
 	root *dirtyPathNode
 }
@@ -454,14 +459,27 @@ func (t *dirtyPathTree) add(path string) {
 	node.dirty = true
 }
 
-func (t *dirtyPathTree) reduce(threshold int) []string {
-	if threshold < 2 {
-		threshold = 2
-	}
-	return reduceDirtyPathNode(t.root, threshold)
+func (t *dirtyPathTree) reduce() []string {
+	return reduceDirtyPathNode(t.root)
 }
 
-func reduceDirtyPathNode(node *dirtyPathNode, threshold int) []string {
+// covers reports whether path equals or lies beneath a dirty scope.
+func (t *dirtyPathTree) covers(path string) bool {
+	rootPath, segments := splitDirtyPath(path)
+	node := t.root
+	if rootPath != "" {
+		node = node.children[rootPath]
+	}
+	for _, segment := range segments {
+		if node == nil || node.dirty {
+			break
+		}
+		node = node.children[segment]
+	}
+	return node != nil && node.dirty
+}
+
+func reduceDirtyPathNode(node *dirtyPathNode) []string {
 	if node == nil {
 		return nil
 	}
@@ -480,13 +498,8 @@ func reduceDirtyPathNode(node *dirtyPathNode, threshold int) []string {
 
 	paths := make([]string, 0, len(node.children))
 	for _, key := range childKeys {
-		paths = append(paths, reduceDirtyPathNode(node.children[key], threshold)...)
+		paths = append(paths, reduceDirtyPathNode(node.children[key])...)
 	}
-
-	if len(paths) >= threshold {
-		return []string{collapseDirtyPath(node)}
-	}
-
 	return paths
 }
 
@@ -577,19 +590,4 @@ func joinDirtyPath(parent, segment string) string {
 		return segment
 	}
 	return filepath.Join(parent, segment)
-}
-
-func collapseDirtyPath(node *dirtyPathNode) string {
-	if node == nil {
-		return ""
-	}
-	if node.path != "" {
-		return node.path
-	}
-	if len(node.children) == 1 {
-		for _, child := range node.children {
-			return child.path
-		}
-	}
-	return string(filepath.Separator)
 }

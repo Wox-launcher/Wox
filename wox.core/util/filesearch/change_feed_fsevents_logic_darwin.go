@@ -3,27 +3,31 @@
 package filesearch
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 )
 
 const (
-	fseventSinceNow             uint64 = ^uint64(0)
-	fseventFlagMustScanSubDirs         = 0x00000001
-	fseventFlagUserDropped             = 0x00000002
-	fseventFlagKernelDropped           = 0x00000004
-	fseventFlagEventIDsWrapped         = 0x00000008
-	fseventFlagHistoryDone             = 0x00000010
-	fseventFlagRootChanged             = 0x00000020
-	fseventFlagMount                   = 0x00000040
-	fseventFlagUnmount                 = 0x00000080
-	fseventFlagItemCreated             = 0x00000100
-	fseventFlagItemRemoved             = 0x00000200
-	fseventFlagItemInodeMetaMod        = 0x00000400
-	fseventFlagItemRenamed             = 0x00000800
-	fseventFlagItemModified            = 0x00001000
-	fseventFlagItemIsFile              = 0x00010000
-	fseventFlagItemIsDir               = 0x00020000
+	fseventSinceNow              uint64 = ^uint64(0)
+	fseventFlagMustScanSubDirs          = 0x00000001
+	fseventFlagUserDropped              = 0x00000002
+	fseventFlagKernelDropped            = 0x00000004
+	fseventFlagEventIDsWrapped          = 0x00000008
+	fseventFlagHistoryDone              = 0x00000010
+	fseventFlagRootChanged              = 0x00000020
+	fseventFlagMount                    = 0x00000040
+	fseventFlagUnmount                  = 0x00000080
+	fseventFlagItemCreated              = 0x00000100
+	fseventFlagItemRemoved              = 0x00000200
+	fseventFlagItemInodeMetaMod         = 0x00000400
+	fseventFlagItemRenamed              = 0x00000800
+	fseventFlagItemModified             = 0x00001000
+	fseventFlagItemFinderInfoMod        = 0x00002000
+	fseventFlagItemChangeOwner          = 0x00004000
+	fseventFlagItemXattrMod             = 0x00008000
+	fseventFlagItemIsFile               = 0x00010000
+	fseventFlagItemIsDir                = 0x00020000
 )
 
 type preparedFSEventsRefresh struct {
@@ -104,13 +108,13 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 
 	eventIsRoot := eventPath == rootPath
 	// MustScanSubDirs means detailed history is unavailable. Replaying the
-	// same cursor can return the same loss marker forever; reconcile once
-	// through the scanner's coalescing/cooldown gate instead.
+	// same cursor can return the same loss marker forever; let the scanner's
+	// coalesced directory relist recover once instead.
 	if eventIsRoot && fseventRootHistoryLost(flags) {
-		return []ChangeSignal{newFSEventsRecoverySignal(root, "fsevents root history lost", at)}
+		return []ChangeSignal{newFSEventsRecoverySignal(root, fmt.Sprintf("fsevents root history lost (flags=%#x)", flags), at)}
 	}
 	// Mount identity and wrapped event ids cannot be recovered by replaying
-	// the previous cursor. Keep a root reconcile only when the event names
+	// the previous cursor. Report root history loss only when the event names
 	// the configured root itself.
 	if eventIsRoot && fseventHistoryUnusable(flags) {
 		return []ChangeSignal{newFSEventsRecoverySignal(root, "fsevents root history is unusable", at)}
@@ -143,7 +147,7 @@ func translateFSEvent(root RootRecord, eventPath string, flags uint64, eventID u
 	}}
 }
 
-// fseventRootHistoryLost identifies loss markers requiring a root reconcile.
+// fseventRootHistoryLost identifies loss markers that require a root history recovery.
 func fseventRootHistoryLost(flags uint64) bool {
 	if flags&(fseventFlagMustScanSubDirs|fseventFlagUserDropped|fseventFlagKernelDropped) == 0 {
 		return false
@@ -184,7 +188,9 @@ func translateFSEventSemanticKind(flags uint64) ChangeSemanticKind {
 		return ChangeSemanticKindCreate
 	case flags&fseventFlagItemModified != 0:
 		return ChangeSemanticKindModify
-	case flags&fseventFlagItemInodeMetaMod != 0:
+	case flags&(fseventFlagItemInodeMetaMod|fseventFlagItemFinderInfoMod|fseventFlagItemChangeOwner|fseventFlagItemXattrMod) != 0:
+		// Ownership, permission and xattr changes describe the item itself. As
+		// "unknown" they made a directory's event rescan its whole subtree.
 		return ChangeSemanticKindMetadata
 	default:
 		return ChangeSemanticKindUnknown
@@ -214,8 +220,8 @@ func sameFSEventsWatchRoots(left []RootRecord, right []RootRecord) bool {
 
 func newFSEventsRecoverySignal(root RootRecord, reason string, at time.Time) ChangeSignal {
 	return ChangeSignal{
-		Kind:          ChangeSignalKindRequiresRootReconcile,
-		SemanticKind:  ChangeSemanticKindRequiresRootReconcile,
+		Kind:          ChangeSignalKindHistoryLost,
+		SemanticKind:  ChangeSemanticKindHistoryLost,
 		RootID:        root.ID,
 		FeedType:      RootFeedTypeFSEvents,
 		Path:          root.Path,

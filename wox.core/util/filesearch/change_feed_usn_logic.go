@@ -90,10 +90,23 @@ func prepareUSNVolumeRefresh(roots []RootRecord, journal usnJournalState, now ti
 	return prepared
 }
 
-func translateUSNDelta(root RootRecord, journal usnJournalState, path string, pathIsDir bool, pathTypeKnown bool, usn int64, reason uint32, at time.Time) ChangeSignal {
+// translateUSNDelta maps one resolved journal record to a path signal. It
+// reports false for records that need no index work.
+func translateUSNDelta(root RootRecord, journal usnJournalState, path string, pathIsDir bool, pathTypeKnown bool, usn int64, reason uint32, at time.Time) (ChangeSignal, bool) {
 	cleanPath := filepath.Clean(path)
 	if cleanPath == "." || cleanPath == "" {
 		cleanPath = filepath.Clean(root.Path)
+	}
+
+	semanticKind := classifyUSNSemanticKind(reason)
+	if strings.EqualFold(cleanPath, filepath.Clean(root.Path)) {
+		// A record on the root directory itself used to queue a whole-root
+		// reconcile. Children report their own records, so only a removed or
+		// renamed root leaves history the index cannot follow.
+		if semanticKind == ChangeSemanticKindRemove || semanticKind == ChangeSemanticKindRename {
+			return newUSNRecoverySignal(root, "usn root directory moved or removed", at), true
+		}
+		return ChangeSignal{}, false
 	}
 
 	cursorText := ""
@@ -110,16 +123,9 @@ func translateUSNDelta(root RootRecord, journal usnJournalState, path string, pa
 		}
 	}
 
-	kind := ChangeSignalKindDirtyPath
-	if cleanPath == filepath.Clean(root.Path) {
-		kind = ChangeSignalKindDirtyRoot
-		pathIsDir = true
-		pathTypeKnown = true
-	}
-
 	return ChangeSignal{
-		Kind:          kind,
-		SemanticKind:  classifyUSNSemanticKind(reason),
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  semanticKind,
 		RootID:        root.ID,
 		FeedType:      RootFeedTypeUSN,
 		Path:          cleanPath,
@@ -127,7 +133,7 @@ func translateUSNDelta(root RootRecord, journal usnJournalState, path string, pa
 		PathTypeKnown: pathTypeKnown,
 		Cursor:        cursorText,
 		At:            at,
-	}
+	}, true
 }
 
 func classifyUSNSemanticKind(reason uint32) ChangeSemanticKind {
@@ -153,7 +159,8 @@ func classifyUSNSemanticKind(reason uint32) ChangeSemanticKind {
 
 func newUSNRecoverySignal(root RootRecord, reason string, at time.Time) ChangeSignal {
 	return ChangeSignal{
-		Kind:          ChangeSignalKindRequiresRootReconcile,
+		Kind:          ChangeSignalKindHistoryLost,
+		SemanticKind:  ChangeSemanticKindHistoryLost,
 		RootID:        root.ID,
 		FeedType:      RootFeedTypeUSN,
 		Path:          root.Path,

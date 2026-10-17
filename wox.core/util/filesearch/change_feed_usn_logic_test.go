@@ -78,13 +78,13 @@ func TestPrepareUSNVolumeRefreshUsesEarliestFreshCursorAndSchedulesRecovery(t *t
 		byRoot[signal.RootID] = signal
 	}
 
-	if signal, ok := byRoot["root-expired"]; !ok || signal.Kind != ChangeSignalKindRequiresRootReconcile {
+	if signal, ok := byRoot["root-expired"]; !ok || signal.Kind != ChangeSignalKindHistoryLost {
 		t.Fatalf("expected expired root to require root reconcile, got %#v ok=%t", signal, ok)
 	}
-	if signal, ok := byRoot["root-truncated"]; !ok || signal.Kind != ChangeSignalKindRequiresRootReconcile {
+	if signal, ok := byRoot["root-truncated"]; !ok || signal.Kind != ChangeSignalKindHistoryLost {
 		t.Fatalf("expected truncated root to require root reconcile, got %#v ok=%t", signal, ok)
 	}
-	if signal, ok := byRoot["root-recovered"]; !ok || signal.Kind != ChangeSignalKindRequiresRootReconcile {
+	if signal, ok := byRoot["root-recovered"]; !ok || signal.Kind != ChangeSignalKindHistoryLost {
 		t.Fatalf("expected recovered root to require root reconcile, got %#v ok=%t", signal, ok)
 	}
 }
@@ -102,8 +102,8 @@ func TestTranslateUSNDeltaEmitsDirtyPathAndCursor(t *testing.T) {
 		FeedType: RootFeedTypeUSN,
 	}
 
-	signal := translateUSNDelta(root, journal, `C:\root\dir\child.txt`, false, true, 555, usnReasonFileCreate, time.Unix(100, 0))
-	if signal.Kind != ChangeSignalKindDirtyPath {
+	signal, ok := translateUSNDelta(root, journal, `C:\root\dir\child.txt`, false, true, 555, usnReasonFileCreate, time.Unix(100, 0))
+	if !ok || signal.Kind != ChangeSignalKindDirtyPath {
 		t.Fatalf("expected dirty path signal, got %q", signal.Kind)
 	}
 	if signal.RootID != root.ID || signal.Path != `C:\root\dir\child.txt` {
@@ -119,5 +119,15 @@ func TestTranslateUSNDeltaEmitsDirtyPathAndCursor(t *testing.T) {
 	}
 	if cursor.JournalID != journal.JournalID || cursor.USN != 555 || cursor.Volume != journal.Volume {
 		t.Fatalf("unexpected usn cursor payload: %#v", cursor)
+	}
+
+	// Metadata churn on the root directory itself must not schedule a
+	// whole-root reconcile; only a moved or removed root loses history.
+	if signal, ok := translateUSNDelta(root, journal, root.Path, true, true, 556, usnReasonBasicInfoChange, time.Unix(100, 0)); ok {
+		t.Fatalf("expected root metadata change to be ignored, got %#v", signal)
+	}
+	signal, ok = translateUSNDelta(root, journal, root.Path, true, true, 557, usnReasonRenameOldName, time.Unix(100, 0))
+	if !ok || signal.Kind != ChangeSignalKindHistoryLost {
+		t.Fatalf("expected root rename to report history loss, got ok=%v %#v", ok, signal)
 	}
 }

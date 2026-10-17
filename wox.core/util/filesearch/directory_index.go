@@ -130,49 +130,6 @@ func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit in
 	return sortAndLimitResults(results.items, limit), nil
 }
 
-// replaceRoot streams scanner batches into compact columns and publishes only a
-// complete build. The old generation stays available if traversal is interrupted.
-func (d *directoryIndex) replaceRoot(ctx context.Context, root RootRecord, stream func(func(SubtreeSnapshotBatch) error) error) error {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	shard := d.shards[root.ID]
-	if d.closed || shard == nil {
-		return errors.New("directory shard is not attached")
-	}
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	revision := shard.store.Revision()
-	builder := column.NewBuilder(root.Path, directoryEntryID(root.Path))
-	if err := stream(func(batch SubtreeSnapshotBatch) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if batch.RootID != root.ID || !pathWithinScope(root.Path, batch.ScopePath) {
-			return errors.New("snapshot batch belongs to another root")
-		}
-		for _, entry := range batch.Entries {
-			record, err := directoryEntryRecord(root, entry)
-			if err != nil {
-				return err
-			}
-			if err := builder.Add(record); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	base, err := builder.Finish()
-	if err != nil {
-		return err
-	}
-	return shard.store.Publish(base, root.FeedCursor, "configured-root-v1", revision)
-}
-
 // applyEntries updates exact known paths; directory changes belong to subtree
 // reconciliation so deleting a directory cannot accidentally preserve its children.
 func (d *directoryIndex) applyEntries(ctx context.Context, rootID string, entries []EntryRecord, deleted []string, cursor string) error {
@@ -198,6 +155,8 @@ func (d *directoryIndex) applyEntries(ctx context.Context, rootID string, entrie
 	changes := make([]column.Change, 0, len(entries)+len(deleted))
 	// File events can precede the first parent scan. Supply only the ancestry
 	// proven by each existing file, without recursively scanning its siblings.
+	// A deleted path writes only its own tombstone, which hides any stored
+	// descendants; reviving a dead directory here tombstones its stale children.
 	err := shard.store.Read(func(view column.View) error {
 		added := map[uint64]bool{}
 		for _, entry := range entries {
@@ -219,28 +178,30 @@ func (d *directoryIndex) applyEntries(ctx context.Context, rootID string, entrie
 				changes = append(changes, column.Change{Record: column.Record{ID: id, ParentID: directoryEntryID(filepath.Dir(parent)), Name: filepath.Base(parent), Flags: column.Directory | column.Structural}})
 			}
 		}
+		for _, entry := range entries {
+			record, err := directoryEntryRecord(shard.root, entry)
+			if err != nil {
+				return err
+			}
+			changes = append(changes, column.Change{Record: record})
+		}
+		for _, path := range deleted {
+			if !pathWithinScope(shard.root.Path, path) || normalizePath(shard.root.Path) == normalizePath(path) {
+				return fmt.Errorf("invalid deleted path %q", path)
+			}
+			changes = append(changes, column.Change{Record: column.Record{ID: directoryEntryID(path)}, Deleted: true})
+		}
+		changes = appendRevivalDeletes(view, newScopeWalker(view), changes)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		record, err := directoryEntryRecord(shard.root, entry)
-		if err != nil {
-			return err
-		}
-		changes = append(changes, column.Change{Record: record})
-	}
-	for _, path := range deleted {
-		if !pathWithinScope(shard.root.Path, path) || normalizePath(shard.root.Path) == normalizePath(path) {
-			return fmt.Errorf("invalid deleted path %q", path)
-		}
-		changes = append(changes, column.Change{Record: column.Record{ID: directoryEntryID(path)}, Deleted: true})
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return shard.store.Apply(changes, cursor)
+	// Durable once finishBuild syncs the run, before the feed cursor advances.
+	return shard.store.ApplyUnsynced(changes, cursor)
 }
 
 // visit yields the common live directory view for content candidate enumeration,
@@ -329,11 +290,26 @@ func directoryEntryRecord(root RootRecord, entry EntryRecord) (column.Record, er
 	if entry.RootID != root.ID || !pathWithinScope(root.Path, entry.Path) {
 		return column.Record{}, fmt.Errorf("entry %q is outside root %q", entry.Path, root.Path)
 	}
+	return observedRecord(directoryEntryID(entry.Path), directoryEntryID(filepath.Dir(entry.Path)), filepath.Base(entry.Path), entry.IsDir, entry.Size, entry.Mtime), nil
+}
+
+// observedRecord is the single conversion from filesystem facts to a column
+// row, shared by path-based entries and the scan streams' pre-resolved rows.
+func observedRecord(id, parentID uint64, name string, isDir bool, size, modified int64) column.Record {
 	flags := byte(column.SizeKnown | column.ModifiedKnown)
-	if entry.IsDir {
+	if isDir {
 		flags |= column.Directory
+		// Directory st_size is filesystem bookkeeping, and bulk enumeration does
+		// not report it. Storing zero keeps bulk-listed children and Lstat-ed
+		// scope roots identical so reconciles do not rewrite unchanged folders.
+		size = 0
 	}
-	return column.Record{ID: directoryEntryID(entry.Path), ParentID: directoryEntryID(filepath.Dir(entry.Path)), Name: filepath.Base(entry.Path), Flags: flags, Size: entry.Size, Modified: entry.Mtime}, nil
+	return column.Record{ID: id, ParentID: parentID, Name: name, Flags: flags, Size: size, Modified: modified}
+}
+
+// observedInfoRecord converts a listed child whose parent ID is already known.
+func observedInfoRecord(id, parentID uint64, name string, info os.FileInfo) column.Record {
+	return observedRecord(id, parentID, name, info.IsDir(), info.Size(), info.ModTime().UnixMilli())
 }
 
 // shardDirectory isolates root storage from source-supplied path components.

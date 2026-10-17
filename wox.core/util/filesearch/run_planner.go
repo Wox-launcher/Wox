@@ -17,17 +17,12 @@ import (
 // in one loop. The current planner only seals ownership boundaries; streaming
 // execution owns the real recursive walk and live file counts.
 type RunPlanner struct {
-	policy         *policyState
-	budget         splitBudget
-	onProgress     func(RunPlannerProgress)
-	rootExclusions map[string][]string
+	policy     *policyState
+	budget     splitBudget
+	onProgress func(RunPlannerProgress)
 	// Full planning skips unreadable roots instead of aborting the whole run.
 	// Scanner owns the durable status update after the sealed plan is available.
 	skippedRoots []runPlannerSkippedRoot
-	// Tests use this hook to assert when subtree scans actually hit the
-	// filesystem, so planner optimizations can prove they removed redundant
-	// rescans without changing the sealed plan shape.
-	onSubtreeScan func(scopePath string)
 
 	// planningRootBuffers are intentionally released after sealing so the planner
 	// does not retain a second copy of a giant scope tree through execution.
@@ -73,9 +68,8 @@ func NewRunPlanner(policy *policyState) *RunPlanner {
 		policy = newPolicyState(Policy{})
 	}
 	return &RunPlanner{
-		policy:         policy,
-		budget:         defaultSplitBudget(),
-		rootExclusions: map[string][]string{},
+		policy: policy,
+		budget: defaultSplitBudget(),
 	}
 }
 
@@ -93,13 +87,6 @@ func (p *RunPlanner) SkippedRoots() []runPlannerSkippedRoot {
 	skipped := make([]runPlannerSkippedRoot, len(p.skippedRoots))
 	copy(skipped, p.skippedRoots)
 	return skipped
-}
-
-func (p *RunPlanner) SetRootExclusions(exclusions map[string][]string) {
-	if p == nil {
-		return
-	}
-	p.rootExclusions = copyRootExclusions(exclusions)
 }
 
 func (p *RunPlanner) PlanFullRun(ctx context.Context, roots []RootRecord) (RunPlan, error) {
@@ -281,7 +268,7 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 			rootOrder = append(rootOrder, root.ID)
 		}
 
-		if batch.Mode == ReconcileModeRoot || len(batch.Paths) == 0 {
+		if batch.Mode == ReconcileModeRoot || (len(batch.Paths) == 0 && len(batch.DirectoryPaths) == 0) {
 			if batch.Mode == ReconcileModeDirectDelta && len(batch.DirectDeltas) > 0 {
 				if draft.rootScope != nil {
 					// A previously planned root repair already contains this file.
@@ -359,6 +346,20 @@ func (p *RunPlanner) planIncrementalRoots(ctx context.Context, roots []RootRecor
 			draft.children = append(draft.children, &runPlannerScopeBuffer{
 				scopePath:       cleanScope,
 				scopeKind:       scopeKind,
+				parentScopePath: filepath.Clean(root.Path),
+			})
+		}
+		for _, scopePath := range batch.DirectoryPaths {
+			cleanScope := filepath.Clean(scopePath)
+			if !pathWithinScope(root.Path, cleanScope) {
+				return nil, &runRootError{
+					RootID: root.ID,
+					Err:    fmt.Errorf("incremental directory path %q is outside root path %q", cleanScope, root.Path),
+				}
+			}
+			draft.children = append(draft.children, &runPlannerScopeBuffer{
+				scopePath:       cleanScope,
+				scopeKind:       ScopeKindDirectory,
 				parentScopePath: filepath.Clean(root.Path),
 			})
 		}
@@ -476,9 +477,6 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 		if !isDir {
 			continue
 		}
-		if p.isExcludedPath(root.ID, childPath) {
-			continue
-		}
 		// Optimization: the launcher's default ~/ root should not behave like
 		// find(1) over protected app databases. The root-aware system path policy
 		// prunes noisy home directories here, while explicit custom roots under the
@@ -496,18 +494,6 @@ func (p *RunPlanner) planRootTopLevelScopes(ctx context.Context, root RootRecord
 		})
 	}
 	return children, nil
-}
-
-func (p *RunPlanner) isExcludedPath(rootID string, path string) bool {
-	if p == nil || len(p.rootExclusions) == 0 {
-		return false
-	}
-	for _, excludedPath := range p.rootExclusions[rootID] {
-		if pathWithinScope(excludedPath, path) {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *RunPlanner) buildDraftPlan(kind RunKind, planID string, runID string) (RunPlan, error) {
@@ -755,27 +741,12 @@ func mergePlanTotals(left PlanTotals, right PlanTotals) PlanTotals {
 	return left
 }
 
-func normalizeSplitBudget(budget splitBudget) splitBudget {
-	defaults := defaultSplitBudget()
-	if budget.LeafEntryBudget <= 0 {
-		budget.LeafEntryBudget = defaults.LeafEntryBudget
-	}
-	if budget.LeafWriteBudget <= 0 {
-		budget.LeafWriteBudget = defaults.LeafWriteBudget
-	}
-	if budget.LeafMemoryBudget <= 0 {
-		budget.LeafMemoryBudget = defaults.LeafMemoryBudget
-	}
-	if budget.DirectFileBatchSize <= 0 {
-		budget.DirectFileBatchSize = defaults.DirectFileBatchSize
-	}
-	return budget
-}
-
 func jobKindForScope(scopeKind ScopeKind) JobKind {
 	switch scopeKind {
 	case ScopeKindDirectFiles:
 		return JobKindDirectFiles
+	case ScopeKindDirectory:
+		return JobKindDirectory
 	default:
 		return JobKindSubtree
 	}

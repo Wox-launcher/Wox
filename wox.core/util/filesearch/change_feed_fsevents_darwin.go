@@ -44,7 +44,7 @@ type FSEventsChangeFeed struct {
 	streamGeneration uint64
 	roots            []RootRecord
 	rootMatcher      rootPathMatcher
-	signals          chan ChangeSignal
+	signalQueue      *changeSignalQueue
 	handle           cgo.Handle
 	handlePtr        *C.uintptr_t
 	closed           bool
@@ -63,19 +63,11 @@ type FSEventsChangeFeed struct {
 	channelFullDroppedSignalMu    sync.Mutex
 	channelFullDroppedSignalCount int
 	lastDroppedSignalLog          time.Time
-
-	// Overflow recovery is bounded to one pending notification per root. Later
-	// signals cannot acknowledge a cursor beyond a lost event before recovery.
-	overflowMu    sync.Mutex
-	overflowRoots map[string]bool
-	done          chan struct{}
 }
 
 func NewFSEventsChangeFeed() *FSEventsChangeFeed {
 	feed := &FSEventsChangeFeed{
-		signals:       make(chan ChangeSignal, fseventsSignalBufferSize),
-		overflowRoots: make(map[string]bool),
-		done:          make(chan struct{}),
+		signalQueue: newChangeSignalQueue(fseventsSignalBufferSize),
 	}
 	feed.handle = cgo.NewHandle(feed)
 	feed.handlePtr = (*C.uintptr_t)(C.malloc(C.size_t(unsafe.Sizeof(C.uintptr_t(0)))))
@@ -88,7 +80,7 @@ func (f *FSEventsChangeFeed) Mode() string {
 }
 
 func (f *FSEventsChangeFeed) Signals() <-chan ChangeSignal {
-	return f.signals
+	return f.signalQueue.Signals()
 }
 
 func (f *FSEventsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {
@@ -199,7 +191,7 @@ func (f *FSEventsChangeFeed) Close() error {
 		return nil
 	}
 	f.closed = true
-	close(f.done)
+	f.signalQueue.close()
 	f.mu.Unlock()
 
 	f.stopCurrentStream("close")
@@ -323,37 +315,12 @@ func (f *FSEventsChangeFeed) emit(signal ChangeSignal) {
 		return
 	}
 
-	f.overflowMu.Lock()
-	defer f.overflowMu.Unlock()
-	if f.overflowRoots[signal.RootID] {
-		return
+	delivered := f.signalQueue.offer(signal)
+	if fileSearchDiagnosticLoggingEnabled {
+		f.logSignalSummary(signal, !delivered)
 	}
-	select {
-	case f.signals <- signal:
-		if fileSearchDiagnosticLoggingEnabled {
-			f.logSignalSummary(signal, false)
-		}
-	default:
-		if fileSearchDiagnosticLoggingEnabled {
-			f.logSignalSummary(signal, true)
-		}
+	if !delivered {
 		f.logDroppedSignal(signal)
-		f.overflowRoots[signal.RootID] = true
-		// The native callback must never block on the scanner. A bounded worker
-		// retains the loss marker even when no more filesystem events arrive.
-		go func() {
-			recovery := signal
-			recovery.Kind = ChangeSignalKindRequiresRootReconcile
-			recovery.Cursor = ""
-			recovery.Reason = "fsevents signal queue overflow"
-			select {
-			case f.signals <- recovery:
-			case <-f.done:
-			}
-			f.overflowMu.Lock()
-			delete(f.overflowRoots, signal.RootID)
-			f.overflowMu.Unlock()
-		}()
 	}
 }
 
@@ -367,9 +334,9 @@ func (f *FSEventsChangeFeed) logDroppedSignal(signal ChangeSignal) {
 		return
 	}
 
-	// Diagnostic logging: a full signal channel means the watcher has lost a
-	// concrete file event. Aggregate the warning so a filesystem burst still
-	// points at the failure boundary without flooding the log.
+	// Diagnostic logging: a full signal channel means the root now waits for a
+	// history recovery. Aggregate the warning so a filesystem burst still points
+	// at the failure boundary without flooding the log.
 	dropped := f.channelFullDroppedSignalCount
 	f.channelFullDroppedSignalCount = 0
 	f.lastDroppedSignalLog = now
@@ -470,8 +437,8 @@ func (f *FSEventsChangeFeed) logSignalSummary(signal ChangeSignal, dropped bool)
 		"filesearch fsevents emit summary: emitted=%d dropped=%d channel_len=%d channel_cap=%d kind=%s semantic=%s root=%s path=%s",
 		emitted,
 		droppedCount,
-		len(f.signals),
-		cap(f.signals),
+		len(f.signalQueue.signals),
+		cap(f.signalQueue.signals),
 		signal.Kind,
 		signal.SemanticKind,
 		signal.RootID,

@@ -43,7 +43,7 @@ func runTrailingSpaceFallbackHelper(t *testing.T) {
 	}
 
 	policy := New()
-	context := policy.NewTraversalContext(rootPath, rootPath, rootPath)
+	context := policy.NewTraversalContext(rootPath, rootPath)
 	if context == nil {
 		t.Fatalf("expected traversal context")
 	}
@@ -139,7 +139,7 @@ func TestConfiguredIgnoreMatchesAbsoluteFolderPaths(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			policy := New()
 			policy.SetIgnorePatterns([]string{test.pattern})
-			context := policy.NewTraversalContext(test.rootPath, test.rootPath, test.rootPath)
+			context := policy.NewTraversalContext(test.rootPath, test.rootPath)
 			if context == nil {
 				t.Fatal("expected traversal context")
 			}
@@ -156,7 +156,7 @@ func TestConfiguredIgnoreMatchesAbsoluteFolderPaths(t *testing.T) {
 func TestConfiguredIgnoreWindowsAbsolutePathIsCaseInsensitive(t *testing.T) {
 	policy := New()
 	policy.SetIgnorePatterns([]string{`d:\game\cache`})
-	context := policy.NewTraversalContext(`D:/Game`, `D:/Game`, `D:/Game`)
+	context := policy.NewTraversalContext(`D:/Game`, `D:/Game`)
 	if context == nil {
 		t.Fatal("expected traversal context")
 	}
@@ -169,7 +169,7 @@ func TestConfiguredIgnoreSegmentRuleDoesNotUseAbsoluteAncestors(t *testing.T) {
 	rootPath := `C:/Users/demo/AppData/Local/Temp/MyProject`
 	policy := New()
 	policy.SetIgnorePatterns([]string{"temp", "**/temp/**"})
-	context := policy.NewTraversalContext(rootPath, rootPath, rootPath)
+	context := policy.NewTraversalContext(rootPath, rootPath)
 	if context == nil {
 		t.Fatal("expected traversal context")
 	}

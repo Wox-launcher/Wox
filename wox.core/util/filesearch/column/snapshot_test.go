@@ -3,6 +3,8 @@ package column
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -125,5 +127,47 @@ func TestVersionReplacement(t *testing.T) {
 	}
 	if err := b.Add(Record{}); err == nil {
 		t.Fatal("finished builder accepted write")
+	}
+}
+
+// TestChildIndexListsDirectChildren covers persisted and legacy-rebuilt child
+// indexes, which subtree reconciles rely on to find every deletion candidate.
+func TestChildIndexListsDirectChildren(t *testing.T) {
+	s := fixture(t)
+	path := filepath.Join(t.TempDir(), "index.columns")
+	if err := Write(path, s); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(t.TempDir(), "legacy.columns")
+	if err := os.WriteFile(legacyPath, dropChildRowsSection(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	childIDs := func(snapshot *Snapshot, id uint64) []uint64 {
+		row, ok := snapshot.Row(id)
+		if !ok {
+			t.Fatalf("missing row %d", id)
+		}
+		var ids []uint64
+		for _, child := range snapshot.Children(row) {
+			ids = append(ids, snapshot.IDs[child])
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		return ids
+	}
+	for _, current := range []string{path, legacyPath} {
+		mapped, err := Open(current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for id, want := range map[uint64][]uint64{5: {10, 11}, 10: {12}, 11: {13}, 12: nil} {
+			if got := childIDs(mapped, id); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s children of %d = %v, want %v", filepath.Base(current), id, got, want)
+			}
+		}
+		mapped.Close()
 	}
 }

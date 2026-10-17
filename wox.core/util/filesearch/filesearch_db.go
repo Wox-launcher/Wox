@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -26,8 +25,7 @@ type FileSearchDB struct {
 
 const rootRecordSelectColumns = `
 	id, path, kind, status, feed_type, feed_cursor, feed_state, last_reconcile_at, last_full_scan_at,
-	progress_current, progress_total, last_error, dynamic_parent_root_id, policy_root_path, promoted_at,
-	last_hot_at, created_at, updated_at
+	progress_current, progress_total, last_error, created_at, updated_at
 `
 
 func NewFileSearchDB(ctx context.Context) (*FileSearchDB, error) {
@@ -107,10 +105,9 @@ func execRootUpsert(ctx context.Context, exec rootExecContext, root RootRecord) 
 	query := `
 	INSERT INTO roots (
 		id, path, kind, status, feed_type, feed_cursor, feed_state, last_reconcile_at, last_full_scan_at,
-		progress_current, progress_total, last_error, dynamic_parent_root_id, policy_root_path, promoted_at,
-		last_hot_at, created_at, updated_at
+		progress_current, progress_total, last_error, created_at, updated_at
 	)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(path) DO UPDATE SET
 		kind = excluded.kind,
 		status = excluded.status,
@@ -122,17 +119,9 @@ func execRootUpsert(ctx context.Context, exec rootExecContext, root RootRecord) 
 		progress_current = excluded.progress_current,
 		progress_total = excluded.progress_total,
 		last_error = excluded.last_error,
-		dynamic_parent_root_id = excluded.dynamic_parent_root_id,
-		policy_root_path = excluded.policy_root_path,
-		promoted_at = excluded.promoted_at,
-		last_hot_at = excluded.last_hot_at,
 		updated_at = excluded.updated_at
 	`
 
-	// Dynamic metadata is updated through the root upsert path because promotion
-	// can collide with an existing path row. Keeping the hidden ownership fields
-	// in the same conflict clause lets a user-added root cleanly take over a
-	// former dynamic root without carrying stale parent policy state.
 	_, err := exec.ExecContext(
 		ctx,
 		query,
@@ -148,10 +137,6 @@ func execRootUpsert(ctx context.Context, exec rootExecContext, root RootRecord) 
 		root.ProgressCurrent,
 		root.ProgressTotal,
 		root.LastError,
-		root.DynamicParentRootID,
-		root.PolicyRootPath,
-		root.PromotedAt,
-		root.LastHotAt,
 		root.CreatedAt,
 		root.UpdatedAt,
 	)
@@ -162,15 +147,10 @@ func (d *FileSearchDB) UpdateRootState(ctx context.Context, root RootRecord) err
 	query := `
 	UPDATE roots
 	SET status = ?, feed_type = ?, feed_cursor = ?, feed_state = ?, last_reconcile_at = ?, last_full_scan_at = ?,
-	    progress_current = ?, progress_total = ?, last_error = ?, dynamic_parent_root_id = ?, policy_root_path = ?,
-	    promoted_at = ?, last_hot_at = ?, updated_at = ?
+	    progress_current = ?, progress_total = ?, last_error = ?, updated_at = ?
 	WHERE id = ?
 	`
 
-	// LastHotAt changes after successful dirty flushes, while the rest of the
-	// state update path is already serialized by the scanner loop. Persisting the
-	// dynamic fields here avoids a separate lifecycle-only UPDATE and keeps root
-	// state writes in one place.
 	_, err := d.db.ExecContext(
 		ctx,
 		query,
@@ -183,10 +163,6 @@ func (d *FileSearchDB) UpdateRootState(ctx context.Context, root RootRecord) err
 		root.ProgressCurrent,
 		root.ProgressTotal,
 		root.LastError,
-		root.DynamicParentRootID,
-		root.PolicyRootPath,
-		root.PromotedAt,
-		root.LastHotAt,
 		root.UpdatedAt,
 		root.ID,
 	)
@@ -216,50 +192,11 @@ func (d *FileSearchDB) ListRoots(ctx context.Context) ([]RootRecord, error) {
 	return roots, rows.Err()
 }
 
-// DeleteRoot retires dynamic descendants with their owner while preserving
-// independently configured roots, even when their paths overlap.
 func (d *FileSearchDB) DeleteRoot(ctx context.Context, rootID string) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
+	if _, err := d.db.ExecContext(ctx, `DELETE FROM roots WHERE id = ?`, rootID); err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE retired(id) AS (
- SELECT ? UNION SELECT r.id FROM roots r JOIN retired p ON r.dynamic_parent_root_id = p.id WHERE r.kind = ?
- ) SELECT id FROM retired`, rootID, RootKindDynamic)
-	if err != nil {
-		return err
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM directories WHERE root_id = ?`, id); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE id = ?`, id); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	var detachErr error
-	for _, id := range ids {
-		detachErr = errors.Join(detachErr, d.directory.detach(id))
-	}
-	return detachErr
+	return d.directory.detach(rootID)
 }
 
 func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
@@ -274,12 +211,9 @@ func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
 	defer tx.Rollback()
 
 	// Feature addition: manual "Index Files" must start from a clean search
-	// index, not just enqueue another full scan. Keep user roots because they
-	// are configuration, but drop all indexed facts and hidden dynamic roots so
-	// the next preparation run rebuilds ownership and search artifacts from scratch.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM directories`); err != nil {
-		return fmt.Errorf("reset directories: %w", err)
-	}
+	// index, not just enqueue another full scan. Keep roots because they are
+	// configuration, but drop every column shard so the next preparation run
+	// rebuilds search artifacts from scratch.
 	roots, err := d.ListRoots(ctx)
 	if err != nil {
 		return err
@@ -288,14 +222,9 @@ func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
 		if err := d.directory.detach(root.ID); err != nil {
 			return err
 		}
-		if root.Kind != RootKindDynamic {
-			if err := d.directory.attach(root); err != nil {
-				return err
-			}
+		if err := d.directory.attach(root); err != nil {
+			return err
 		}
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE kind = ?`, RootKindDynamic); err != nil {
-		return fmt.Errorf("reset dynamic roots: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM meta WHERE key = ? OR key GLOB ?`, lastFullIndexElapsedMsKey, nativeFullIndexElapsedMsPrefix+"*"); err != nil {
 		return fmt.Errorf("reset last full index duration: %w", err)
@@ -312,104 +241,11 @@ func (d *FileSearchDB) ResetIndex(ctx context.Context) error {
 		    progress_total = 0,
 		    last_error = NULL,
 		    updated_at = ?
-		WHERE kind <> ?
-	`, RootStatusPreparing, now, RootKindDynamic); err != nil {
-		return fmt.Errorf("reset user roots: %w", err)
+	`, RootStatusPreparing, now); err != nil {
+		return fmt.Errorf("reset roots: %w", err)
 	}
 
 	return tx.Commit()
-}
-
-func (d *FileSearchDB) MoveScopedRowsToRoot(ctx context.Context, fromRootID string, toRootID string, scopePath string) error {
-	from, err := d.FindRootByID(ctx, fromRootID)
-	if err != nil {
-		return err
-	}
-	to, err := d.FindRootByID(ctx, toRootID)
-	if err != nil {
-		return err
-	}
-	if from == nil || to == nil {
-		return fmt.Errorf("ownership root missing")
-	}
-	if err := d.copyColumnScope(ctx, *from, *to, scopePath); err != nil {
-		return err
-	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := moveScopedRowsToRootTx(ctx, tx, "directories", fromRootID, toRootID, scopePath); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	if normalizePath(scopePath) == normalizePath(from.Path) {
-		return nil
-	}
-	return d.directory.applyEntries(ctx, from.ID, nil, []string{scopePath}, from.FeedCursor)
-}
-
-func (d *FileSearchDB) PromoteDynamicRoot(ctx context.Context, parentRoot RootRecord, dynamicRoot RootRecord) error {
-	if dynamicRoot.Kind != RootKindDynamic {
-		return fmt.Errorf("invalid dynamic root kind")
-	}
-	if err := d.copyColumnScope(ctx, parentRoot, dynamicRoot, dynamicRoot.Path); err != nil {
-		return err
-	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := execRootUpsert(ctx, tx, dynamicRoot); err != nil {
-		return err
-	}
-	if err := moveScopedRowsToRootTx(ctx, tx, "directories", parentRoot.ID, dynamicRoot.ID, dynamicRoot.Path); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return d.directory.applyEntries(ctx, parentRoot.ID, nil, []string{dynamicRoot.Path}, parentRoot.FeedCursor)
-}
-
-func (d *FileSearchDB) DemoteDynamicRoot(ctx context.Context, parentRoot RootRecord, dynamicRoot RootRecord) error {
-	if dynamicRoot.Kind != RootKindDynamic {
-		return fmt.Errorf("invalid dynamic root kind")
-	}
-	if err := d.copyColumnScope(ctx, dynamicRoot, parentRoot, dynamicRoot.Path); err != nil {
-		return err
-	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := moveScopedRowsToRootTx(ctx, tx, "directories", dynamicRoot.ID, parentRoot.ID, dynamicRoot.Path); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM roots WHERE id = ?`, dynamicRoot.ID); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return d.directory.detach(dynamicRoot.ID)
-}
-
-func moveScopedRowsToRootTx(ctx context.Context, tx *sql.Tx, table string, fromRootID string, toRootID string, scopePath string) error {
-	scopeClause, scopeArgs := buildScopedPathQuery(scopePath, "path")
-	args := append([]any{toRootID, fromRootID}, scopeArgs...)
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		UPDATE %s
-		SET root_id = ?
-		WHERE root_id = ?
-		  AND %s
-	`, table, scopeClause), args...)
-	return err
 }
 
 func (d *FileSearchDB) FindRootByPath(ctx context.Context, rootPath string) (*RootRecord, error) {
@@ -465,12 +301,10 @@ func (d *FileSearchDB) ApplyDirectFilesJob(ctx context.Context, job Job, batch S
 	return d.writeColumnScope(ctx, batch.RootID, batch.ScopePath, true, func(yield func(SubtreeSnapshotBatch) error) error { return yield(batch) })
 }
 
-func (d *FileSearchDB) ApplyDirectFilesJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
-	return d.applyColumnJob(ctx, root, job, snapshot, onProgress, true)
-}
-
-func (d *FileSearchDB) ApplySubtreeJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
-	return d.applyColumnJob(ctx, root, job, snapshot, onProgress, false)
+// ApplyJobStream streams one direct-files, subtree, or directory job into
+// the column store.
+func (d *FileSearchDB) ApplyJobStream(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
+	return d.applyColumnJob(ctx, root, job, snapshot, onProgress)
 }
 
 func (d *FileSearchDB) ApplySubtreeJob(ctx context.Context, job Job, batch SubtreeSnapshotBatch) error {
@@ -504,18 +338,7 @@ func (d *FileSearchDB) FinalizeRootRun(ctx context.Context, root RootRecord) err
 	if err := d.directory.finishBuild(ctx, root); err != nil {
 		return err
 	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM directories WHERE root_id = ? AND "exists" = 0`, root.ID); err != nil {
-		return err
-	}
-	if err := d.finalizeRootRunTx(ctx, tx, root); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	if err := d.persistFinalizedRoot(ctx, root); err != nil {
 		return err
 	}
 	if err := d.compactColumns(ctx); err != nil {
@@ -553,93 +376,6 @@ func (d *FileSearchDB) ReplaceSubtreeSnapshots(ctx context.Context, batches []Su
 	})
 }
 
-func prepareDirectoryUpsertStmtTx(ctx context.Context, tx *sql.Tx) (*sql.Stmt, error) {
-	return tx.PrepareContext(ctx, `
-		INSERT INTO directories (path, root_id, parent_path, last_scan_time, "exists")
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
-			root_id = excluded.root_id,
-			parent_path = excluded.parent_path,
-			last_scan_time = excluded.last_scan_time,
-			"exists" = excluded."exists"
-	`)
-}
-
-func upsertDirectoryRecordsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord) error {
-	for start := 0; start < len(directories); {
-		chunkSize := sqliteBatchRows(len(directories)-start, directoryColumnCount)
-		end := start + chunkSize
-		if err := writeDirectoryRecordRowsBatchTx(ctx, tx, directories[start:end], false); err != nil {
-			return err
-		}
-		start = end
-	}
-	return nil
-}
-
-// insertDirectoryRecordsBatchTx skips conflict handling for fresh full-index
-// roots, where the sealed plan owns non-overlapping directory paths.
-func insertDirectoryRecordsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord) error {
-	for start := 0; start < len(directories); {
-		chunkSize := sqliteBatchRows(len(directories)-start, directoryColumnCount)
-		end := start + chunkSize
-		if err := writeDirectoryRecordRowsBatchTx(ctx, tx, directories[start:end], true); err != nil {
-			return err
-		}
-		start = end
-	}
-	return nil
-}
-
-// writeDirectoryRecordRowsBatchTx writes one chunk of directory facts and can
-// optionally omit ON CONFLICT for fresh bulk-loads.
-func writeDirectoryRecordRowsBatchTx(ctx context.Context, tx *sql.Tx, directories []DirectoryRecord, plainInsert bool) error {
-	if len(directories) == 0 {
-		return nil
-	}
-
-	var builder strings.Builder
-	builder.WriteString(`
-		INSERT INTO directories (path, root_id, parent_path, last_scan_time, "exists")
-		VALUES `)
-
-	args := make([]any, 0, len(directories)*directoryColumnCount)
-	for index, directory := range directories {
-		if index > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("(?, ?, ?, ?, ?)")
-		args = append(args,
-			directory.Path,
-			directory.RootID,
-			directory.ParentPath,
-			directory.LastScanTime,
-			boolToInt(directory.Exists),
-		)
-	}
-
-	if !plainInsert {
-		// Optimization: fresh full-index streams can contain thousands of directories.
-		// Writing them in chunks keeps the same path-conflict behavior while removing
-		// one sqlite3_step round trip per directory.
-		builder.WriteString(`
-			ON CONFLICT(path) DO UPDATE SET
-				root_id = excluded.root_id,
-				parent_path = excluded.parent_path,
-				last_scan_time = excluded.last_scan_time,
-				"exists" = excluded."exists"
-		`)
-	}
-	if _, err := tx.ExecContext(ctx, builder.String(), args...); err != nil {
-		operation := "upsert"
-		if plainInsert {
-			operation = "insert"
-		}
-		return fmt.Errorf("batch %s %d directories: %w", operation, len(directories), err)
-	}
-	return nil
-}
-
 func validateJobSnapshotBatch(job Job, batch SubtreeSnapshotBatch) error {
 	if err := validateSubtreeSnapshotBatch(batch); err != nil {
 		return err
@@ -654,51 +390,6 @@ func validateJobSnapshotBatch(job Job, batch SubtreeSnapshotBatch) error {
 		return fmt.Errorf("job scope path %q does not match batch scope path %q", job.ScopePath, batch.ScopePath)
 	}
 	return nil
-}
-
-func subtreeBatchScanTime(batch SubtreeSnapshotBatch) int64 {
-	scanTime := int64(0)
-	for _, directory := range batch.Directories {
-		if directory.LastScanTime > scanTime {
-			scanTime = directory.LastScanTime
-		}
-	}
-	return scanTime
-}
-
-func tombstoneScopedDirectories(tx *sql.Tx, ctx context.Context, rootID string, scopePath string, scanTime int64) error {
-	scopeClause, scopeArgs := buildScopedPathQuery(scopePath, "path")
-	// Full rescans were paying root-wide readback and one UPDATE per directory
-	// before any subtree rows were restored. Reusing the same scoped path
-	// predicate inside SQLite keeps the exact ownership boundary while removing
-	// the high fixed cost of filtering and replaying tombstones in Go.
-	args := append([]any{scanTime, rootID}, scopeArgs...)
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		UPDATE directories
-		SET "exists" = 0, last_scan_time = ?
-		WHERE root_id = ?
-		  AND "exists" = 1
-		  AND %s
-	`, scopeClause), args...)
-	return err
-}
-
-func (d *FileSearchDB) DeleteDirectoryTombstones(ctx context.Context, rootID string) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM directories
-		WHERE root_id = ?
-		  AND "exists" = 0
-	`, rootID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
 }
 
 func validateSubtreeSnapshotBatch(batch SubtreeSnapshotBatch) error {
@@ -756,68 +447,6 @@ func (d *FileSearchDB) FindRootByID(ctx context.Context, rootID string) (*RootRe
 	return &root, nil
 }
 
-func lockRootForSubtreeSnapshot(ctx context.Context, tx *sql.Tx, rootID string) (*RootRecord, error) {
-	result, err := tx.ExecContext(ctx, `
-		UPDATE roots
-		SET updated_at = updated_at
-		WHERE id = ?
-	`, rootID)
-	if err != nil {
-		return nil, err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if rowsAffected == 0 {
-		return nil, fmt.Errorf("root %q not found", rootID)
-	}
-
-	row := tx.QueryRowContext(ctx, `
-		SELECT `+rootRecordSelectColumns+`
-		FROM roots
-		WHERE id = ?
-	`, rootID)
-
-	root, err := scanRootRecord(row)
-	if err != nil {
-		return nil, err
-	}
-
-	return &root, nil
-}
-
-func deleteScopedRows(tx *sql.Tx, ctx context.Context, table string, rootID string, scopePath string) error {
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`SELECT path FROM %s WHERE root_id = ?`, table), rootID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var paths []string
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
-			return err
-		}
-		if pathWithinScope(scopePath, path) {
-			paths = append(paths, path)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	for _, path := range paths {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE root_id = ? AND path = ?`, table), rootID, path); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func pathWithinScope(scopePath, candidatePath string) bool {
 	cleanScope := filepath.Clean(scopePath)
 	cleanCandidate := filepath.Clean(candidatePath)
@@ -839,66 +468,12 @@ func pathWithinScope(scopePath, candidatePath string) bool {
 	return true
 }
 
-func (d *FileSearchDB) ListDirectoriesByRoot(ctx context.Context, rootID string) ([]DirectoryRecord, error) {
-	rows, err := d.db.QueryContext(ctx, `
-		SELECT path, root_id, parent_path, last_scan_time, "exists"
-		FROM directories
-		WHERE root_id = ?
-		ORDER BY path ASC
-	`, rootID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var directories []DirectoryRecord
-	for rows.Next() {
-		var directory DirectoryRecord
-		var exists int
-		if err := rows.Scan(
-			&directory.Path,
-			&directory.RootID,
-			&directory.ParentPath,
-			&directory.LastScanTime,
-			&exists,
-		); err != nil {
-			return nil, err
-		}
-		directory.Exists = exists == 1
-		directories = append(directories, directory)
-	}
-
-	return directories, rows.Err()
-}
-
-func (d *FileSearchDB) CountDirectoriesByRoot(ctx context.Context, rootID string) (int, error) {
-	row := d.db.QueryRowContext(ctx, `
-		SELECT count(*)
-		FROM directories
-		WHERE root_id = ? AND "exists" = 1
-	`, rootID)
-
-	var count int
-	if err := row.Scan(&count); err != nil {
-		return 0, err
-	}
-
-	return count, nil
-}
-
 func (d *FileSearchDB) ListEntries(ctx context.Context) ([]EntryRecord, error) {
 	return d.columnEntries(ctx, "")
 }
 
 func (d *FileSearchDB) ListEntriesByRoot(ctx context.Context, rootID string) ([]EntryRecord, error) {
 	return d.columnEntries(ctx, rootID)
-}
-
-func boolToInt(value bool) int {
-	if value {
-		return 1
-	}
-	return 0
 }
 
 type rootScanner interface {
@@ -924,10 +499,6 @@ func scanRootRecord(scanner rootScanner) (RootRecord, error) {
 		&root.ProgressCurrent,
 		&root.ProgressTotal,
 		&root.LastError,
-		&root.DynamicParentRootID,
-		&root.PolicyRootPath,
-		&root.PromotedAt,
-		&root.LastHotAt,
 		&root.CreatedAt,
 		&root.UpdatedAt,
 	); err != nil {

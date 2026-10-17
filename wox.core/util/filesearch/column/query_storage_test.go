@@ -118,6 +118,7 @@ func TestDiscardedDevelopmentSortColumnsRemainReadable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data = dropChildRowsSection(data)
 	descriptor := data[32+15*24:]
 	start, length := binary.LittleEndian.Uint64(descriptor), binary.LittleEndian.Uint64(descriptor[8:])
 	extra := 2 * ((s.Len()*4 + 7) &^ 7)
@@ -199,6 +200,7 @@ func TestUpgradeQueryColumnsPreservesFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data = dropChildRowsSection(data)
 	descriptor := data[32+15*24:]
 	size := binary.LittleEndian.Uint64(descriptor)
 	binary.LittleEndian.PutUint64(descriptor[8:], 0)
@@ -233,4 +235,17 @@ func TestUpgradeQueryColumnsPreservesFacts(t *testing.T) {
 		}
 		upgraded.Close()
 	}
+}
+
+// dropChildRowsSection turns a current snapshot into the 16-section layout
+// written before the persisted child index existed.
+func dropChildRowsSection(data []byte) []byte {
+	descriptor := data[32+childRowsSection*24:]
+	start := binary.LittleEndian.Uint64(descriptor)
+	clear(descriptor[:24])
+	data = data[:start]
+	binary.LittleEndian.PutUint32(data[12:], legacySectionCount)
+	binary.LittleEndian.PutUint64(data[16:], uint64(len(data)))
+	binary.LittleEndian.PutUint32(data[24:], crc32.ChecksumIEEE(data[32:headerSize]))
+	return data
 }

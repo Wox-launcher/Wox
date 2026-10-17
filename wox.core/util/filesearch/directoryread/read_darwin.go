@@ -24,10 +24,20 @@ import (
 	"errors"
 	"os"
 	"sort"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
+
+// bulkBufferPool reuses getattrlistbulk buffers across directory reads. A full
+// scan reads every directory once, so a fresh 256 KiB allocation per call was a
+// large share of scan-time GC work. Decoded entries own their names, so a buffer
+// can be returned as soon as decoding finishes.
+var bulkBufferPool = sync.Pool{New: func() any {
+	buffer := make([]byte, 256<<10)
+	return &buffer
+}}
 
 // ReadDir gathers names and metadata in bounded native batches. Filesystems
 // without bulk attributes use a fresh ordinary directory read; IO/permission
@@ -41,7 +51,9 @@ func ReadDir(ctx context.Context, path string) ([]os.DirEntry, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: err}
 	}
 	defer unix.Close(fd)
-	buffer := make([]byte, 256<<10)
+	pooled := bulkBufferPool.Get().(*[]byte)
+	defer bulkBufferPool.Put(pooled)
+	buffer := *pooled
 	var entries []os.DirEntry
 	for {
 		if err := ctx.Err(); err != nil {

@@ -25,7 +25,6 @@ type fileSearchIndexPolicy struct {
 type fileSearchChangePolicyContextKey struct {
 	rootID          string
 	rootPath        string
-	policyRootPath  string
 	scopePath       string
 	skipHiddenFiles bool
 }
@@ -52,7 +51,7 @@ func (p *fileSearchIndexPolicy) newTraversalContext(root filesearch.RootRecord, 
 	if p == nil || p.inner == nil {
 		return nil
 	}
-	context := p.inner.NewTraversalContext(root.Path, root.PolicyRootPath, scopePath)
+	context := p.inner.NewTraversalContext(root.Path, scopePath)
 	if context == nil {
 		return nil
 	}
@@ -70,7 +69,6 @@ func (p *fileSearchIndexPolicy) changeTraversalContext(root filesearch.RootRecor
 	key := fileSearchChangePolicyContextKey{
 		rootID:          root.ID,
 		rootPath:        root.Path,
-		policyRootPath:  root.PolicyRootPath,
 		scopePath:       scopePath,
 		skipHiddenFiles: skipHiddenFiles,
 	}
@@ -82,7 +80,7 @@ func (p *fileSearchIndexPolicy) changeTraversalContext(root filesearch.RootRecor
 	}
 	p.changeContextCacheMu.RUnlock()
 
-	context := p.inner.NewTraversalContext(root.Path, root.PolicyRootPath, scopePath)
+	context := p.inner.NewTraversalContext(root.Path, scopePath)
 	if context == nil {
 		return nil
 	}
@@ -187,11 +185,7 @@ func (p *fileSearchIndexPolicy) shouldProcessChange(root filesearch.RootRecord, 
 	if cleanPath == "" || cleanPath == "." {
 		return true
 	}
-	if cleanPath == filepath.Clean(root.Path) && root.Kind != filesearch.RootKindDynamic {
-		// Bug fix: persisted dynamic roots inherit their parent policy, so their
-		// own root path must still pass the configured ignore matcher. Returning
-		// early here let an old ~/.wox/filesearch dynamic root keep accepting its
-		// SQLite DB events even after that path became a mandatory ignore rule.
+	if cleanPath == filepath.Clean(root.Path) {
 		return true
 	}
 	if filepath.Base(cleanPath) == ".gitignore" {

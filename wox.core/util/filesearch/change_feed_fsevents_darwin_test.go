@@ -57,7 +57,7 @@ func TestPrepareFSEventsRefreshUsesEarliestFreshCursorAndReconcilesExpiredRoots(
 	if len(prepared.signals) != 1 {
 		t.Fatalf("expected one recovery signal for expired cursor, got %d", len(prepared.signals))
 	}
-	if prepared.signals[0].Kind != ChangeSignalKindRequiresRootReconcile || prepared.signals[0].RootID != "root-expired" {
+	if prepared.signals[0].Kind != ChangeSignalKindHistoryLost || prepared.signals[0].RootID != "root-expired" {
 		t.Fatalf("unexpected recovery signal: %#v", prepared.signals[0])
 	}
 }
@@ -96,7 +96,7 @@ func TestTranslateFSEventReconcilesDroppedWatchRoot(t *testing.T) {
 	if len(signals) != 1 {
 		t.Fatalf("expected one signal, got %d", len(signals))
 	}
-	if signals[0].Kind != ChangeSignalKindRequiresRootReconcile || signals[0].Path != root.Path {
+	if signals[0].Kind != ChangeSignalKindHistoryLost || signals[0].Path != root.Path {
 		t.Fatalf("expected watch-root history recovery, got %#v", signals[0])
 	}
 }
@@ -138,7 +138,7 @@ func TestTranslateFSEventRootChangedStillReconcilesRoot(t *testing.T) {
 	}
 
 	signals := translateFSEvent(root, root.Path, fseventFlagRootChanged, 9, time.Unix(100, 0))
-	if len(signals) != 1 || signals[0].Kind != ChangeSignalKindRequiresRootReconcile {
+	if len(signals) != 1 || signals[0].Kind != ChangeSignalKindHistoryLost {
 		t.Fatalf("expected root reconcile after an unusable root history, got %#v", signals)
 	}
 }
@@ -228,9 +228,6 @@ func TestFSEventsChangeFeedEmitsSignalForCreatedFile(t *testing.T) {
 			if signal.Kind == ChangeSignalKindDirtyPath && filepath.Clean(signal.Path) == filepath.Clean(filePath) {
 				return
 			}
-			if signal.Kind == ChangeSignalKindDirtyRoot && filepath.Clean(signal.Path) == filepath.Clean(rootPath) {
-				return
-			}
 		}
 	}
 }
@@ -268,9 +265,6 @@ func TestFSEventsChangeFeedContextCancelDoesNotStopActiveStream(t *testing.T) {
 				continue
 			}
 			if signal.Kind == ChangeSignalKindDirtyPath && filepath.Clean(signal.Path) == filepath.Clean(filePath) {
-				return
-			}
-			if signal.Kind == ChangeSignalKindDirtyRoot && filepath.Clean(signal.Path) == filepath.Clean(rootPath) {
 				return
 			}
 		}
@@ -390,30 +384,5 @@ func TestFSEventsAcknowledgementSkipsDurableHistory(t *testing.T) {
 	}
 	if signals := translateFSEvent(roots[0], root.Path, fseventFlagEventIDsWrapped, 1, time.Now()); len(signals) != 1 {
 		t.Fatalf("lost event-id reset: %v", signals)
-	}
-}
-
-// TestFSEventsOverflowRetainsRecovery covers a quiet filesystem after the last
-// event was dropped: recovery must not depend on another native callback.
-func TestFSEventsOverflowRetainsRecovery(t *testing.T) {
-	feed := NewFSEventsChangeFeed()
-	defer feed.Close()
-	feed.signals = make(chan ChangeSignal, 1)
-	signal := ChangeSignal{Kind: ChangeSignalKindDirtyPath, RootID: "overflow", Path: "/tmp/overflow/file", Cursor: "before"}
-	feed.emit(signal)
-	signal.Cursor = "lost"
-	feed.emit(signal)
-	signal.Cursor = "later"
-	feed.emit(signal)
-	if first := <-feed.signals; first.Cursor != "before" {
-		t.Fatalf("first signal: %v", first)
-	}
-	select {
-	case recovered := <-feed.signals:
-		if recovered.Kind != ChangeSignalKindRequiresRootReconcile || recovered.Cursor != "" {
-			t.Fatalf("unsafe recovery: %v", recovered)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("lost overflow recovery")
 	}
 }

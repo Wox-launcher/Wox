@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 	"wox/util"
-	"wox/util/filesearch/directoryread"
 )
 
 const (
@@ -54,21 +53,22 @@ type Scanner struct {
 	stopOnce      sync.Once
 	wg            sync.WaitGroup
 	stopCh        chan struct{}
-	requestCh     chan scanRequest
-	dirtyCh       chan struct{}
-	runningMu     sync.Mutex
-	scanRunning   bool
+	// stopCtx is cancelled together with stopCh so in-flight scan-loop work
+	// (root reconciles, history recoveries) aborts instead of making
+	// StopAndWait block until it finishes on its own.
+	stopCtx     context.Context
+	stopCancel  context.CancelFunc
+	requestCh   chan scanRequest
+	dirtyCh     chan struct{}
+	runningMu   sync.Mutex
+	scanRunning bool
 	// pendingRescan remembers RequestRescan calls that arrived while requestCh
 	// already held a request or a scan was running. The channel is size 1 and
 	// used to drop extras, which left newly added roots stuck in Preparing.
-	pendingRescan          atomic.Bool
-	changeFeed             ChangeFeed
-	dirtyQueue             *DirtyQueue
-	dirtyQueueConfig       DirtyQueueConfig
-	dynamicRootConfig      DynamicRootConfig
-	dynamicHeat            *dynamicRootHeatTracker
-	dynamicFlushGeneration int
-	reconciler             *Reconciler
+	pendingRescan    atomic.Bool
+	changeFeed       ChangeFeed
+	dirtyQueue       *DirtyQueue
+	dirtyQueueConfig DirtyQueueConfig
 	// Optimization: watcher signals resolve root state through this Scanner-local
 	// cache once refreshChangeFeedWithRoots has installed a complete snapshot,
 	// avoiding SQLite lookups in the high-frequency change-signal path.
@@ -77,18 +77,15 @@ type Scanner struct {
 	rootCacheLoaded     bool
 	transientRunMu      sync.RWMutex
 	transientRunState   *StatusSnapshot
-	transientRootMu     sync.RWMutex
-	transientRootState  *TransientRootState
 	transientSyncMu     sync.RWMutex
 	transientSyncState  *TransientSyncState
 	dirtyBackpressureMu sync.Mutex
 	lastDirtyRunElapsed time.Duration
-	// Collapses repeated degraded-root reconcile requests into one per cooldown
-	// window (FSEvents flags history loss per event). Suppressed requests are
-	// retained and re-fire once the cooldown expires instead of being dropped.
-	// Bounded by root count.
-	rootReconcileGateMu sync.Mutex
-	rootReconcileGate   map[string]rootReconcileGateState
+	// historyRecovery schedules at most one directory relist per root and
+	// cooldown window after a change feed reports lost history. Bounded by root
+	// count.
+	historyRecoveryMu sync.Mutex
+	historyRecovery   map[string]historyRecoveryState
 	// Content index hook receives incremental file change notifications after
 	// the name index has been updated, so the content FTS index stays in sync
 	// without waiting for the next full crawl.
@@ -126,28 +123,42 @@ func newScannerWithPolicyState(db *FileSearchDB, policy *policyState) *Scanner {
 		MaxDebounceWindow:         defaultMaxDirtyDebounceWindow,
 		BackpressurePathThreshold: defaultDirtyBackpressurePathCount,
 		BackpressureRootThreshold: defaultDirtyBackpressureRootCount,
-		SiblingMergeThreshold:     8,
-		// Dirty bursts used to promote to a configured-root reconcile after a
-		// fixed count/ratio. With scoped planning in place that made noisy but
-		// localized changes under large roots scan far more than they touched, so
-		// default escalation is disabled and only explicit root signals stay broad.
-		RootEscalationPathThreshold:  0,
-		RootEscalationDirectoryRatio: 0,
 	}
 
-	return &Scanner{
-		db:                db,
-		policy:            policy,
-		stopCh:            make(chan struct{}),
-		requestCh:         make(chan scanRequest, 1),
-		dirtyCh:           make(chan struct{}, 1),
-		changeFeed:        newPlatformChangeFeed(),
-		dirtyQueueConfig:  dirtyQueueConfig,
-		dirtyQueue:        NewDirtyQueue(dirtyQueueConfig),
-		dynamicRootConfig: defaultDynamicRootConfig(),
-		dynamicHeat:       newDynamicRootHeatTracker(),
-		reconciler:        NewReconciler(db, policy),
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+	scanner := &Scanner{
+		db:               db,
+		policy:           policy,
+		stopCh:           make(chan struct{}),
+		stopCtx:          stopCtx,
+		stopCancel:       stopCancel,
+		requestCh:        make(chan scanRequest, 1),
+		dirtyCh:          make(chan struct{}, 1),
+		changeFeed:       newPlatformChangeFeed(),
+		dirtyQueueConfig: dirtyQueueConfig,
+		dirtyQueue:       NewDirtyQueue(dirtyQueueConfig),
 	}
+	if setter, ok := scanner.changeFeed.(DirectoryWatchFilterSetter); ok {
+		setter.SetDirectoryWatchFilter(scanner.shouldWatchDirectory)
+	}
+	return scanner
+}
+
+// shouldWatchDirectory keeps per-directory watch budgets for indexed trees.
+// It uses the change-event policy because it is built for hot-path calls,
+// unlike traversal contexts that may load ignore files for each directory.
+func (s *Scanner) shouldWatchDirectory(root RootRecord, directory string) bool {
+	if shouldSkipSystemPathForRoot(root, directory, true) {
+		return false
+	}
+	return s.shouldProcessChange(root, ChangeSignal{
+		Kind:          ChangeSignalKindDirtyPath,
+		SemanticKind:  ChangeSemanticKindCreate,
+		RootID:        root.ID,
+		Path:          directory,
+		PathIsDir:     true,
+		PathTypeKnown: true,
+	})
 }
 
 func (s *Scanner) SetStateChangeHandler(handler func(ctx context.Context)) {
@@ -179,7 +190,9 @@ func (s *Scanner) Start(ctx context.Context) {
 	util.Go(ctx, "filesearch scan loop", func() {
 		defer s.wg.Done()
 		util.GetLogger().Info(ctx, "filesearch scanner started")
-		s.startupRestore(ctx)
+		restoreCtx, cancelRestore := s.stopAwareContext(ctx)
+		s.startupRestore(restoreCtx)
+		cancelRestore()
 
 		columnMaintenanceTimer := time.NewTimer(defaultColumnMaintenanceInterval)
 		defer columnMaintenanceTimer.Stop()
@@ -195,13 +208,14 @@ func (s *Scanner) Start(ctx context.Context) {
 			case <-columnMaintenanceTimer.C:
 				// Maintenance runs on the existing scanner worker. Small overlays
 				// are left alone; no helper or competing build goroutine is needed.
-				optimizeCtx := util.NewTraceContext()
+				optimizeCtx, cancelOptimize := s.stopAwareContext(util.NewTraceContext())
 				if err := s.db.compactColumns(optimizeCtx); err != nil {
 					util.GetLogger().Warn(optimizeCtx, "filesearch column compaction failed: "+err.Error())
 				}
+				cancelOptimize()
 				columnMaintenanceTimer.Reset(defaultColumnMaintenanceInterval)
 			case request := <-s.requestCh:
-				rescanCtx := contextWithTraceID(util.NewTraceContext(), request.TraceID)
+				rescanCtx, cancelRescan := s.stopAwareContext(contextWithTraceID(util.NewTraceContext(), request.TraceID))
 				util.GetLogger().Info(rescanCtx, fmt.Sprintf("filesearch full rescan triggered: reason=%s", request.Reason))
 				s.resetDirtyQueueWithReason(rescanCtx, "full_rescan")
 				if request.ResetIndex {
@@ -212,19 +226,24 @@ func (s *Scanner) Start(ctx context.Context) {
 					if err := s.db.ResetIndex(rescanCtx); err != nil {
 						request.completeReset(err)
 						util.GetLogger().Warn(rescanCtx, "filesearch failed to reset index: "+err.Error())
+						cancelRescan()
 						continue
 					}
 					request.completeReset(nil)
 				}
 				s.scanAllRootsWithReason(rescanCtx, request.Reason)
 				s.flushPendingRescan(rescanCtx)
+				cancelRescan()
 			case <-s.dirtyCh:
 				s.resetDirtyTimer(dirtyTimer)
 			case <-dirtyTimer.C:
-				if err := s.processDirtyQueue(util.NewTraceContext(), time.Now()); err != nil {
+				dirtyCtx, cancelDirty := s.stopAwareContext(util.NewTraceContext())
+				err := s.processDirtyQueue(dirtyCtx, time.Now())
+				cancelDirty()
+				if err != nil {
 					util.GetLogger().Warn(ctx, "filesearch failed to process dirty queue: "+err.Error())
 				}
-				if pendingRootCount, pendingPathCount := s.pendingDirtyCounts(); pendingRootCount > 0 || pendingPathCount > 0 || !s.nextRootReconcileReleaseAt().IsZero() {
+				if pendingRootCount, pendingPathCount := s.pendingDirtyCounts(); pendingRootCount > 0 || pendingPathCount > 0 || !s.nextHistoryRecoveryAt().IsZero() {
 					s.resetDirtyTimer(dirtyTimer)
 				}
 			case <-s.stopCh:
@@ -245,7 +264,21 @@ func (request scanRequest) completeReset(err error) {
 func (s *Scanner) Stop() {
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
+		s.stopCancel()
 	})
+}
+
+// stopAwareContext derives a scan-loop work context that is cancelled when the
+// scanner stops. The loop only observes stopCh between work items, and a single
+// item on a large root (a "/" reconcile) could run for many minutes, leaving manual "Index Files" stuck
+// at "0 files" while RebuildIndex waited in StopAndWait.
+func (s *Scanner) stopAwareContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	workCtx, cancel := context.WithCancel(ctx)
+	stopWatch := context.AfterFunc(s.stopCtx, cancel)
+	return workCtx, func() {
+		stopWatch()
+		cancel()
+	}
 }
 
 func (s *Scanner) StopAndWait() {
@@ -325,10 +358,6 @@ func (s *Scanner) RequestResetRescan(ctx context.Context) error {
 	}
 }
 
-func (s *Scanner) scanAllRoots(ctx context.Context) {
-	s.scanAllRootsWithReason(ctx, "unspecified")
-}
-
 func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 	s.runningMu.Lock()
 	if s.scanRunning {
@@ -346,7 +375,7 @@ func (s *Scanner) scanAllRootsWithReason(ctx context.Context, reason string) {
 		s.runningMu.Unlock()
 	}()
 
-	roots, err := s.listPolicyAllowedRoots(ctx)
+	roots, err := s.listRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch failed to load roots: "+err.Error())
 		return
@@ -405,21 +434,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 			}
 		}
 	}
-	allRoots := roots
-	if s != nil && s.db != nil {
-		var err error
-		allRoots, err = s.listPolicyAllowedRoots(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	// Dynamic roots are hidden but still own entries under their promoted path.
-	// The production path must inject the same per-parent exclusions into both
-	// run preparation and snapshot execution; otherwise a parent reconcile can generate
-	// a batch that SQLite upserts back over the dynamic root's path ownership.
-	rootExclusions := buildDynamicRootExclusions(allRoots)
 	planner := NewRunPlanner(s.policy)
-	planner.SetRootExclusions(rootExclusions)
 	if s != nil && s.plannerBudgetOverride != nil {
 		planner.budget = *s.plannerBudgetOverride
 	}
@@ -457,7 +472,6 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 	logFilesearchRunPreparation(ctx, kind, util.GetSystemTimestamp()-preparationStartedAt, len(plan.RootPlans), len(plan.Jobs), plan.TotalWorkUnits)
 
 	snapshotBuilder := NewSnapshotBuilder(s.policy)
-	snapshotBuilder.SetRootExclusions(rootExclusions)
 	if s.plannerBudgetOverride != nil && s.plannerBudgetOverride.DirectFileBatchSize > 0 {
 		// Tests and local tuning already override the direct-files batch budget.
 		// Run preparation now keeps one direct-files job per directory, so this value
@@ -465,12 +479,7 @@ func (s *Scanner) executePlannedRun(ctx context.Context, kind RunKind, reason st
 		snapshotBuilder.SetDirectFileBatchSize(s.plannerBudgetOverride.DirectFileBatchSize)
 	}
 	executor := NewJobExecutor(snapshotBuilder)
-	executor.SetDirectFilesStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
-		return s.db.ApplyDirectFilesJobStream(runCtx, root, job, snapshot, onProgress)
-	})
-	executor.SetSubtreeStreamFunc(func(runCtx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
-		return s.db.ApplySubtreeJobStream(runCtx, root, job, snapshot, onProgress)
-	})
+	executor.SetJobStreamFunc(s.db.ApplyJobStream)
 	if kind == RunKindFull {
 		// Full runs are the only place where we deliberately coalesce multiple
 		// small subtree snapshots into one SQLite transaction. Incremental work
@@ -685,6 +694,15 @@ func (s *Scanner) emitCompletedFullRunSummary(ctx context.Context, plan RunPlan,
 	s.clearTransientRunState()
 }
 
+// nextFeedStateAfterSuccessfulReconcile keeps an unavailable feed unavailable;
+// any other root is caught up once its run is finalized.
+func nextFeedStateAfterSuccessfulReconcile(root RootRecord) RootFeedState {
+	if root.FeedState == RootFeedStateUnavailable {
+		return RootFeedStateUnavailable
+	}
+	return RootFeedStateReady
+}
+
 func (s *Scanner) applyRunJob(ctx context.Context, kind RunKind, root RootRecord, job Job, batch *SubtreeSnapshotBatch) error {
 	if err := s.applyRunJobInternal(ctx, kind, root, job, batch); err != nil {
 		return err
@@ -713,9 +731,9 @@ func (s *Scanner) applyRunJobInternal(ctx context.Context, kind RunKind, root Ro
 		if kind == RunKindFull {
 			root.LastFullScanAt = now
 		}
-		// Scoped success does not close a known FSEvents history gap. A root
-		// reconcile captures a fresh boundary and marks readiness before planning.
-		if kind != RunKindIncremental || root.FeedType != RootFeedTypeFSEvents || root.FeedState != RootFeedStateDegraded {
+		// Scoped success does not close a known history gap. The root stays
+		// degraded until its history recovery relist has been applied.
+		if kind != RunKindIncremental || root.FeedState != RootFeedStateDegraded || !s.historyRecoveryOutstanding(root.ID) {
 			root.FeedState = nextFeedStateAfterSuccessfulReconcile(root)
 		}
 		root.LastError = nil
@@ -957,7 +975,7 @@ func (s *Scanner) refreshChangeFeed(ctx context.Context) {
 func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRecord) {
 	if roots == nil {
 		var err error
-		roots, err = s.listPolicyAllowedRoots(ctx)
+		roots, err = s.listRoots(ctx)
 		if err != nil {
 			util.GetLogger().Warn(ctx, "filesearch failed to refresh change feed roots: "+err.Error())
 			return
@@ -965,8 +983,8 @@ func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRe
 	}
 
 	// Optimization: refresh is the one boundary where the scanner has a complete
-	// policy-pruned root snapshot. Replace the hot-path cache here rather than in
-	// listPolicyAllowedRoots, which is also used by planner/query paths.
+	// root snapshot. Replace the hot-path cache here rather than in listRoots,
+	// which is also used by planner/query paths.
 	s.replaceRootCache(roots)
 	if s.changeFeed == nil {
 		return
@@ -980,71 +998,11 @@ func (s *Scanner) refreshChangeFeedWithRoots(ctx context.Context, roots []RootRe
 	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch change feed refreshed: roots=%d mode=%s", len(roots), s.changeFeed.Mode()))
 }
 
-func (s *Scanner) listPolicyAllowedRoots(ctx context.Context) ([]RootRecord, error) {
+func (s *Scanner) listRoots(ctx context.Context) ([]RootRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
-	roots, err := s.db.ListRoots(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return s.prunePolicyRejectedDynamicRoots(ctx, roots)
-}
-
-func (s *Scanner) prunePolicyRejectedDynamicRoots(ctx context.Context, roots []RootRecord) ([]RootRecord, error) {
-	if len(roots) == 0 {
-		return roots, nil
-	}
-
-	rootsByID := make(map[string]RootRecord, len(roots))
-	for _, root := range roots {
-		rootsByID[root.ID] = root
-	}
-
-	kept := make([]RootRecord, 0, len(roots))
-	prunedPaths := make([]string, 0)
-	for _, root := range roots {
-		if root.Kind != RootKindDynamic {
-			kept = append(kept, root)
-			continue
-		}
-		parentRoot, ok := rootsByID[root.DynamicParentRootID]
-		if !ok {
-			kept = append(kept, root)
-			continue
-		}
-		allowedByPolicy := !shouldSkipSystemPathForRoot(parentRoot, root.Path, true)
-		if allowedByPolicy {
-			allowedByPolicy = s.shouldProcessChange(parentRoot, ChangeSignal{
-				Kind:          ChangeSignalKindDirtyPath,
-				RootID:        parentRoot.ID,
-				Path:          root.Path,
-				PathIsDir:     true,
-				PathTypeKnown: true,
-			})
-		}
-		if allowedByPolicy {
-			kept = append(kept, root)
-			continue
-		}
-
-		// Bug fix: system pruning and ignore-rule changes must also retire dynamic
-		// roots persisted before the policy existed. Deleting the dynamic root drops
-		// its indexed rows instead of moving them back to a parent that now excludes it.
-		if err := s.db.DeleteRoot(ctx, root.ID); err != nil {
-			return nil, err
-		}
-		prunedPaths = append(prunedPaths, root.Path)
-	}
-
-	if len(prunedPaths) > 0 {
-		util.GetLogger().Info(ctx, fmt.Sprintf(
-			"filesearch pruned policy-rejected dynamic roots: count=%d paths=%s",
-			len(prunedPaths),
-			summarizeLogPaths(prunedPaths),
-		))
-	}
-	return kept, nil
+	return s.db.ListRoots(ctx)
 }
 
 func (s *Scanner) changeFeedLoop(ctx context.Context) {
@@ -1072,16 +1030,6 @@ func (s *Scanner) closeChangeFeed() {
 	if err := s.changeFeed.Close(); err != nil {
 		util.GetLogger().Warn(context.Background(), "filesearch failed to close change feed: "+err.Error())
 	}
-}
-
-func (s *Scanner) GetTransientRootState() (TransientRootState, bool) {
-	s.transientRootMu.RLock()
-	defer s.transientRootMu.RUnlock()
-	if s.transientRootState == nil {
-		return TransientRootState{}, false
-	}
-
-	return *s.transientRootState, true
 }
 
 func (s *Scanner) GetTransientRunState() (StatusSnapshot, bool) {
@@ -1117,482 +1065,10 @@ func (s *Scanner) clearTransientRunState() {
 	s.transientRunMu.Unlock()
 }
 
-func (s *Scanner) setTransientRootState(state TransientRootState) {
-	stateCopy := state
-	s.transientRootMu.Lock()
-	s.transientRootState = &stateCopy
-	s.transientRootMu.Unlock()
-}
-
-func (s *Scanner) clearTransientRootState(rootID string) {
-	s.transientRootMu.Lock()
-	defer s.transientRootMu.Unlock()
-	if s.transientRootState == nil {
-		return
-	}
-	if rootID == "" || s.transientRootState.Root.ID == rootID {
-		s.transientRootState = nil
-	}
-}
-
-func (s *Scanner) setTransientSyncState(state TransientSyncState) {
-	stateCopy := state
+func (s *Scanner) clearTransientSyncState() {
 	s.transientSyncMu.Lock()
-	s.transientSyncState = &stateCopy
+	s.transientSyncState = nil
 	s.transientSyncMu.Unlock()
-}
-
-func (s *Scanner) updateTransientSyncProgress(rootID string, progress ReconcileProgress) bool {
-	s.transientSyncMu.Lock()
-	defer s.transientSyncMu.Unlock()
-
-	if s.transientSyncState == nil || s.transientSyncState.Root.ID != rootID {
-		return false
-	}
-
-	// Reconcile used to leave the active root in "syncing" until the whole batch
-	// finished, even after SQLite had started the expensive write phase. Mirror
-	// the DB progress into the transient root state so toolbar/status consumers can
-	// show actual write progress instead of a misleading pending-roots counter.
-	switch progress.Stage {
-	case ReplaceEntriesStageWriting:
-		s.transientSyncState.Root.Status = RootStatusWriting
-		s.transientSyncState.Root.ProgressCurrent = progress.Current
-		s.transientSyncState.Root.ProgressTotal = progress.Total
-	case ReplaceEntriesStageFinalizing:
-		s.transientSyncState.Root.Status = RootStatusFinalizing
-		s.transientSyncState.Root.ProgressCurrent = progress.Current
-		s.transientSyncState.Root.ProgressTotal = progress.Total
-	default:
-		s.transientSyncState.Root.Status = RootStatusSyncing
-		if progress.Total > 0 {
-			s.transientSyncState.Root.ProgressTotal = progress.Total
-		}
-	}
-	s.transientSyncState.Root.UpdatedAt = util.GetSystemTimestamp()
-	return true
-}
-
-func (s *Scanner) clearTransientSyncState(rootID string) {
-	s.transientSyncMu.Lock()
-	defer s.transientSyncMu.Unlock()
-	if s.transientSyncState == nil {
-		return
-	}
-	if rootID == "" || s.transientSyncState.Root.ID == rootID {
-		s.transientSyncState = nil
-	}
-}
-
-func (s *Scanner) scanRoot(ctx context.Context, root RootRecord, rootIndex int, rootTotal int) {
-	startTime := util.GetSystemTimestamp()
-	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch scanning root: index=%d/%d path=%s kind=%s feed_type=%s feed_state=%s",
-		rootIndex,
-		rootTotal,
-		root.Path,
-		root.Kind,
-		root.FeedType,
-		root.FeedState,
-	))
-	s.clearTransientRootState(root.ID)
-	if root.FeedType == "" {
-		root.FeedType = RootFeedTypeFallback
-	}
-	if root.FeedState == "" {
-		root.FeedState = RootFeedStateReady
-	}
-	root.Status = RootStatusPreparing
-	root.ProgressCurrent = 0
-	root.ProgressTotal = 0
-	root.LastError = nil
-	root.UpdatedAt = util.GetSystemTimestamp()
-	_ = s.db.UpdateRootState(ctx, root)
-	s.setTransientRootState(TransientRootState{
-		Root:            root,
-		RootIndex:       rootIndex,
-		RootTotal:       rootTotal,
-		DiscoveredCount: 1,
-		DirectoryIndex:  0,
-		DirectoryTotal:  1,
-		ItemCurrent:     0,
-		ItemTotal:       0,
-	})
-	s.emitStateChange(ctx)
-
-	plan, err := s.buildScanPlan(ctx, root, rootIndex, rootTotal)
-	if err != nil {
-		root.Status = RootStatusError
-		errMessage := err.Error()
-		root.LastError = &errMessage
-		root.UpdatedAt = util.GetSystemTimestamp()
-		_ = s.db.UpdateRootState(ctx, root)
-		s.emitStateChange(ctx)
-		util.GetLogger().Warn(ctx, "filesearch failed to scan root "+root.Path+": "+err.Error())
-		return
-	}
-
-	root.Status = RootStatusScanning
-	root.ProgressCurrent = 0
-	root.ProgressTotal = plan.TotalItems
-	root.UpdatedAt = util.GetSystemTimestamp()
-	_ = s.db.UpdateRootState(ctx, root)
-	s.setTransientRootState(TransientRootState{
-		Root:            root,
-		RootIndex:       rootIndex,
-		RootTotal:       rootTotal,
-		DiscoveredCount: 1,
-		DirectoryIndex:  0,
-		DirectoryTotal:  plan.DirectoryTotal,
-		ItemCurrent:     0,
-		ItemTotal:       plan.TotalItems,
-	})
-	s.emitStateChange(ctx)
-
-	entries, err := s.collectEntries(ctx, root, plan, rootIndex, rootTotal)
-	if err != nil {
-		root.Status = RootStatusError
-		errMessage := err.Error()
-		root.LastError = &errMessage
-		root.UpdatedAt = util.GetSystemTimestamp()
-		_ = s.db.UpdateRootState(ctx, root)
-		s.clearTransientRootState(root.ID)
-		s.emitStateChange(ctx)
-		util.GetLogger().Warn(ctx, "filesearch failed to collect entries for root "+root.Path+": "+err.Error())
-		return
-	}
-
-	s.setTransientRootState(TransientRootState{
-		Root: RootRecord{
-			ID:              root.ID,
-			Path:            root.Path,
-			Kind:            root.Kind,
-			Status:          RootStatusFinalizing,
-			FeedType:        root.FeedType,
-			FeedCursor:      root.FeedCursor,
-			FeedState:       root.FeedState,
-			LastReconcileAt: root.LastReconcileAt,
-			LastFullScanAt:  root.LastFullScanAt,
-			ProgressCurrent: 0,
-			ProgressTotal:   0,
-			LastError:       nil,
-			CreatedAt:       root.CreatedAt,
-			UpdatedAt:       util.GetSystemTimestamp(),
-		},
-		RootIndex:       rootIndex,
-		RootTotal:       rootTotal,
-		DiscoveredCount: int64(len(entries)),
-		DirectoryIndex:  plan.DirectoryTotal,
-		DirectoryTotal:  plan.DirectoryTotal,
-		ItemCurrent:     plan.TotalItems,
-		ItemTotal:       plan.TotalItems,
-	})
-	s.emitStateChange(ctx)
-
-	scanTimestamp := util.GetSystemTimestamp()
-	directories := buildDirectorySnapshotRecords(root, plan, scanTimestamp)
-	if err := s.db.ReplaceRootSnapshot(ctx, root, directories, entries, func(progress ReplaceEntriesProgress) {
-		nextRoot := RootRecord{
-			ID:              root.ID,
-			Path:            root.Path,
-			Kind:            root.Kind,
-			Status:          RootStatusFinalizing,
-			FeedType:        root.FeedType,
-			FeedCursor:      root.FeedCursor,
-			FeedState:       root.FeedState,
-			LastReconcileAt: root.LastReconcileAt,
-			LastFullScanAt:  root.LastFullScanAt,
-			ProgressCurrent: 0,
-			ProgressTotal:   0,
-			LastError:       nil,
-			CreatedAt:       root.CreatedAt,
-			UpdatedAt:       util.GetSystemTimestamp(),
-		}
-
-		if progress.Stage == ReplaceEntriesStageWriting {
-			nextRoot.Status = RootStatusWriting
-			nextRoot.ProgressCurrent = progress.Current
-			nextRoot.ProgressTotal = progress.Total
-		}
-
-		s.setTransientRootState(TransientRootState{
-			Root:            nextRoot,
-			RootIndex:       rootIndex,
-			RootTotal:       rootTotal,
-			DiscoveredCount: int64(len(entries)),
-			DirectoryIndex:  plan.DirectoryTotal,
-			DirectoryTotal:  plan.DirectoryTotal,
-			ItemCurrent:     plan.TotalItems,
-			ItemTotal:       plan.TotalItems,
-		})
-		s.emitStateChange(ctx)
-	}); err != nil {
-		root.Status = RootStatusError
-		errMessage := err.Error()
-		root.LastError = &errMessage
-		root.UpdatedAt = util.GetSystemTimestamp()
-		_ = s.db.UpdateRootState(ctx, root)
-		s.clearTransientRootState(root.ID)
-		s.emitStateChange(ctx)
-		util.GetLogger().Warn(ctx, "filesearch failed to replace entries for root "+root.Path+": "+err.Error())
-		return
-	}
-
-	root.LastReconcileAt = scanTimestamp
-	root.LastFullScanAt = scanTimestamp
-	root.Status = RootStatusFinalizing
-	root.ProgressCurrent = RootProgressScale
-	root.ProgressTotal = RootProgressScale
-	root.LastError = nil
-	root.FeedState = RootFeedStateReady
-	root = s.captureRootFeedSnapshot(ctx, root)
-	root.UpdatedAt = util.GetSystemTimestamp()
-	_ = s.db.UpdateRootState(ctx, root)
-	s.refreshChangeFeed(ctx)
-	root.Status = RootStatusIdle
-	root.UpdatedAt = util.GetSystemTimestamp()
-	_ = s.db.UpdateRootState(ctx, root)
-	s.clearTransientRootState(root.ID)
-	s.emitStateChange(ctx)
-	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch scanned root: index=%d/%d path=%s entries=%d cost=%dms",
-		rootIndex,
-		rootTotal,
-		root.Path,
-		len(entries),
-		util.GetSystemTimestamp()-startTime,
-	))
-}
-
-func (s *Scanner) buildScanPlan(ctx context.Context, root RootRecord, rootIndex int, rootTotal int) (scanPlan, error) {
-	rootPath := filepath.Clean(root.Path)
-	if _, err := os.Stat(rootPath); err != nil {
-		return scanPlan{}, err
-	}
-
-	queue := []scanState{{
-		path:   rootPath,
-		policy: s.policy.newTraversalContext(root, rootPath),
-	}}
-	plannedDirectories := make([]plannedDirectory, 0, 64)
-	discoveredDirectories := 1
-	processedDirectories := 0
-	totalItems := int64(1)
-	lastProgressUpdateAt := time.Now()
-
-	for len(queue) > 0 {
-		select {
-		case <-ctx.Done():
-			return scanPlan{}, ctx.Err()
-		default:
-		}
-
-		state := queue[0]
-		queue = queue[1:]
-
-		dirEntries, readErr := directoryread.ReadDir(ctx, state.path)
-		if readErr != nil {
-			processedDirectories++
-			s.updatePlanningProgress(ctx, root, rootIndex, rootTotal, processedDirectories, discoveredDirectories)
-			if state.path == rootPath {
-				return scanPlan{}, fmt.Errorf("failed to read root directory %s: %w", state.path, readErr)
-			}
-			util.GetLogger().Warn(ctx, "filesearch skipped unreadable directory "+state.path+": "+readErr.Error())
-			continue
-		}
-
-		plannedDirectories = append(plannedDirectories, plannedDirectory{
-			path:       state.path,
-			childCount: len(dirEntries),
-			policy:     state.policy,
-		})
-		totalItems += int64(len(dirEntries))
-		processedDirectories++
-
-		for _, dirEntry := range dirEntries {
-			fullPath := filepath.Join(state.path, dirEntry.Name())
-			isDir := dirEntry.IsDir()
-			if shouldSkipSystemPathForRoot(root, fullPath, isDir) {
-				continue
-			}
-			if !state.policy.ShouldIndexPath(fullPath, isDir) {
-				continue
-			}
-
-			if isDir {
-				// Optimization: the legacy scanner path now carries traversal policy
-				// state like the run planner. The older per-path policy callback kept
-				// this fallback path on the expensive ancestor-rebuild matcher.
-				queue = append(queue, scanState{
-					path:   fullPath,
-					policy: state.policy.Descend(fullPath),
-				})
-				discoveredDirectories++
-			}
-		}
-
-		if processedDirectories%progressBatchSize == 0 || time.Since(lastProgressUpdateAt) >= progressUpdateGap {
-			s.updatePlanningProgress(ctx, root, rootIndex, rootTotal, processedDirectories, discoveredDirectories)
-			lastProgressUpdateAt = time.Now()
-		}
-	}
-
-	s.updatePlanningProgress(ctx, root, rootIndex, rootTotal, processedDirectories, discoveredDirectories)
-
-	return scanPlan{
-		directories:    plannedDirectories,
-		DirectoryTotal: len(plannedDirectories),
-		TotalItems:     totalItems,
-	}, nil
-}
-
-func (s *Scanner) collectEntries(ctx context.Context, root RootRecord, plan scanPlan, rootIndex int, rootTotal int) ([]EntryRecord, error) {
-	rootPath := filepath.Clean(root.Path)
-	rootInfo, err := os.Stat(rootPath)
-	if err != nil {
-		return nil, err
-	}
-
-	entries := []EntryRecord{newEntryRecord(root, rootPath, rootInfo)}
-	processedItems := int64(1)
-	lastReportedItems := int64(0)
-	lastProgressUpdateAt := time.Now()
-
-	if len(plan.directories) == 0 {
-		s.updateScanProgress(ctx, root, rootIndex, rootTotal, 0, 0, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, true)
-		return entries, nil
-	}
-
-	for directoryIndex, plannedDirectory := range plan.directories {
-		select {
-		case <-ctx.Done():
-			return entries, ctx.Err()
-		default:
-		}
-
-		dirEntries, readErr := directoryread.ReadDir(ctx, plannedDirectory.path)
-		if readErr != nil {
-			processedItems += int64(plannedDirectory.childCount)
-			s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, true)
-			if plannedDirectory.path == rootPath {
-				return nil, fmt.Errorf("failed to read root directory %s: %w", plannedDirectory.path, readErr)
-			}
-			util.GetLogger().Warn(ctx, "filesearch skipped unreadable directory "+plannedDirectory.path+": "+readErr.Error())
-			continue
-		}
-
-		count := 0
-		for _, dirEntry := range dirEntries {
-			fullPath := filepath.Join(plannedDirectory.path, dirEntry.Name())
-			info, infoErr := dirEntry.Info()
-			if infoErr != nil {
-				processedItems++
-				count++
-				if count%progressBatchSize == 0 || time.Since(lastProgressUpdateAt) >= progressUpdateGap {
-					s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, false)
-					lastProgressUpdateAt = time.Now()
-				}
-				continue
-			}
-
-			isDir := info.IsDir()
-			if shouldSkipSystemPathForRoot(root, fullPath, isDir) {
-				processedItems++
-				count++
-				if count%progressBatchSize == 0 || time.Since(lastProgressUpdateAt) >= progressUpdateGap {
-					s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, false)
-					lastProgressUpdateAt = time.Now()
-				}
-				continue
-			}
-			if !plannedDirectory.policy.ShouldIndexPath(fullPath, isDir) {
-				processedItems++
-				count++
-				if count%progressBatchSize == 0 || time.Since(lastProgressUpdateAt) >= progressUpdateGap {
-					s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, false)
-					lastProgressUpdateAt = time.Now()
-				}
-				continue
-			}
-
-			entries = append(entries, newEntryRecord(root, fullPath, info))
-			count++
-			processedItems++
-			if count%progressBatchSize == 0 || time.Since(lastProgressUpdateAt) >= progressUpdateGap {
-				s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, false)
-				lastProgressUpdateAt = time.Now()
-				time.Sleep(2 * time.Millisecond)
-			}
-		}
-
-		s.updateScanProgress(ctx, root, rootIndex, rootTotal, directoryIndex+1, plan.DirectoryTotal, int64(len(entries)), processedItems, plan.TotalItems, &lastReportedItems, true)
-	}
-
-	return entries, nil
-}
-
-func (s *Scanner) updatePlanningProgress(
-	ctx context.Context,
-	root RootRecord,
-	rootIndex int,
-	rootTotal int,
-	processedDirectories int,
-	discoveredDirectories int,
-) {
-	s.setTransientRootState(TransientRootState{
-		Root:            root,
-		RootIndex:       rootIndex,
-		RootTotal:       rootTotal,
-		DiscoveredCount: int64(discoveredDirectories),
-		DirectoryIndex:  processedDirectories,
-		DirectoryTotal:  discoveredDirectories,
-		ItemCurrent:     0,
-		ItemTotal:       0,
-	})
-	s.emitStateChange(ctx)
-}
-
-func (s *Scanner) updateScanProgress(
-	ctx context.Context,
-	root RootRecord,
-	rootIndex int,
-	rootTotal int,
-	directoryIndex int,
-	directoryTotal int,
-	discoveredCount int64,
-	currentItems int64,
-	totalItems int64,
-	lastReportedProgress *int64,
-	force bool,
-) {
-	if totalItems <= 0 {
-		totalItems = 1
-	}
-	if currentItems < 0 {
-		currentItems = 0
-	}
-	if currentItems > totalItems {
-		currentItems = totalItems
-	}
-	if !force && currentItems <= *lastReportedProgress {
-		return
-	}
-
-	*lastReportedProgress = currentItems
-	root.ProgressCurrent = currentItems
-	root.ProgressTotal = totalItems
-	root.UpdatedAt = util.GetSystemTimestamp()
-	s.setTransientRootState(TransientRootState{
-		Root:            root,
-		RootIndex:       rootIndex,
-		RootTotal:       rootTotal,
-		DiscoveredCount: discoveredCount,
-		DirectoryIndex:  directoryIndex,
-		DirectoryTotal:  directoryTotal,
-		ItemCurrent:     currentItems,
-		ItemTotal:       totalItems,
-	})
-	s.emitStateChange(ctx)
 }
 
 func (s *Scanner) emitStateChange(ctx context.Context) {
@@ -1602,7 +1078,7 @@ func (s *Scanner) emitStateChange(ctx context.Context) {
 }
 
 func (s *Scanner) shouldProcessChange(root RootRecord, signal ChangeSignal) bool {
-	if signal.Kind == ChangeSignalKindRequiresRootReconcile || signal.Kind == ChangeSignalKindFeedUnavailable {
+	if signal.Kind == ChangeSignalKindHistoryLost || signal.Kind == ChangeSignalKindFeedUnavailable {
 		return true
 	}
 	if s.policy != nil && !s.policy.shouldProcessChange(root, signal) {
@@ -1620,10 +1096,6 @@ func (s *Scanner) shouldProcessChange(root RootRecord, signal ChangeSignal) bool
 		return true
 	}
 	return true
-}
-
-func (s *Scanner) enqueueDirty(signal DirtySignal) {
-	s.enqueueDirtyWithContext(context.Background(), signal)
 }
 
 func (s *Scanner) enqueueDirtyWithContext(ctx context.Context, signal DirtySignal) {
@@ -1657,99 +1129,26 @@ func (s *Scanner) enqueueDirtyWithContext(ctx context.Context, signal DirtySigna
 	}
 }
 
-func (s *Scanner) enqueueAllRootsDirty(ctx context.Context) {
-	s.enqueueAllRootsDirtyWithReason(ctx, "unspecified")
-}
-
-func (s *Scanner) enqueueAllRootsDirtyWithReason(ctx context.Context, reason string) {
-	roots, err := s.listPolicyAllowedRoots(ctx)
-	if err != nil {
-		util.GetLogger().Warn(ctx, "filesearch failed to enqueue dirty roots: "+err.Error())
-		return
-	}
-
-	rootPaths := make([]string, 0, len(roots))
-	for _, root := range roots {
-		rootPaths = append(rootPaths, root.Path)
-	}
-	util.GetLogger().Info(ctx, fmt.Sprintf(
-		"filesearch queued full root reconcile: reason=%s roots=%d",
-		reason,
-		len(roots),
-	))
-	if len(rootPaths) > 0 {
-		util.GetLogger().Debug(ctx, fmt.Sprintf(
-			"filesearch queued full root reconcile roots: reason=%s paths=%s",
-			reason,
-			summarizeLogPaths(rootPaths),
-		))
-	}
-
-	for _, root := range roots {
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        root.ID,
-			Path:          root.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-		})
-	}
-}
-
-func (s *Scanner) enqueueDirtyForPath(ctx context.Context, path string) bool {
-	root, ok := s.findRootForPath(ctx, path)
-	if !ok {
-		return false
-	}
-
-	cleanPath := filepath.Clean(path)
-	cleanRootPath := filepath.Clean(root.Path)
-	// Bug fix: manual dirty routing must not be the one path that follows a
-	// symlink-to-directory into a subtree scan. Use the same Lstat-first type
-	// helper as watcher feeds so symlink entries stay direct file-like deltas.
-	pathIsDir, pathTypeKnown := statPathType(cleanPath)
-
-	kind := DirtySignalKindPath
-	if cleanPath == cleanRootPath {
-		kind = DirtySignalKindRoot
-	} else if filepath.Dir(cleanPath) == cleanRootPath && !pathTypeKnown {
-		// Manual dirty-path routing has no create/remove semantic attached. If a
-		// missing direct child might have been a deleted directory, root scope is
-		// the smallest safe boundary that can prune unknown recursive rows.
-		kind = DirtySignalKindRoot
-	}
-
-	s.enqueueDirtyWithContext(ctx, DirtySignal{
-		Kind:          kind,
-		SemanticKind:  ChangeSemanticKindUnknown,
-		RootID:        root.ID,
-		Path:          cleanPath,
-		PathIsDir:     pathIsDir,
-		PathTypeKnown: pathTypeKnown,
-	})
-	return true
-}
-
 func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 	if s.dirtyQueue == nil {
 		return nil
 	}
 
-	rootDirectoryCounts, rootsByID, _, err := s.loadDirtyQueueContext(ctx)
+	rootsByID, err := s.loadRootsByID(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Release retained root reconciles whose cooldown expired. Their signals
-	// are enqueued just before the flush, so the debounce below defers them to
-	// the next timer tick instead of scanning inside this call.
-	s.releaseDueRootReconciles(ctx, now)
+	// Due history recoveries relist changed directories and queue their repair
+	// signals before the flush, so lost history is repaired by the same scoped
+	// incremental machinery as live events.
+	s.runDueHistoryRecoveries(ctx, now)
 
 	queuedRootCount, queuedPathCount := 0, 0
 	if fileSearchDiagnosticLoggingEnabled {
 		queuedRootCount, queuedPathCount = s.pendingDirtyCounts()
 	}
-	batches := s.dirtyQueue.FlushReadyWithDebounce(now, rootDirectoryCounts, s.currentDirtyDebounceWindow())
+	batches := s.dirtyQueue.FlushReadyWithDebounce(now, s.currentDirtyDebounceWindow())
 	if len(batches) == 0 {
 		return nil
 	}
@@ -1795,17 +1194,11 @@ func (s *Scanner) processDirtyQueue(ctx context.Context, now time.Time) error {
 		return err
 	}
 	s.recordDirtyRunElapsed(time.Since(runStartedAt))
+	s.completeHistoryRecoveries(ctx, runRoots)
 
 	s.logRootReloadIndexSnapshot(ctx)
-	if err := s.handleSuccessfulDirtyFlush(ctx, runBatches, now); err != nil {
-		// Dynamic-root lifecycle work is opportunistic after the real reconcile
-		// has succeeded. A promotion/demotion failure should not turn an already
-		// applied dirty batch into a user-visible indexing failure or force a broad
-		// retry; the next hot flush can try the lifecycle step again.
-		util.GetLogger().Warn(ctx, "filesearch dynamic root lifecycle failed: "+err.Error())
-	}
 
-	s.clearTransientSyncState("")
+	s.clearTransientSyncState()
 	s.refreshTransientSyncPendingCounts()
 	s.emitStateChange(ctx)
 	return nil
@@ -1831,99 +1224,42 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 		return
 	}
 	s.updateRootFeedMetadata(ctx, root, rootFound, signal.FeedType, signal.Cursor)
-	if rootFound {
-		s.recordDynamicRootHeat(root, signal)
-	}
 
 	switch signal.Kind {
-	case ChangeSignalKindDirtyRoot:
+	case ChangeSignalKindDirtyPath:
+		// Path events always stay scoped, including on degraded roots. Degraded
+		// roots used to escalate directory events to whole-root reconciles, so a
+		// single lost event turned every later burst into a full re-crawl; lost
+		// history is now repaired separately by the history recovery relist.
 		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
+			Kind:          DirtySignalKindPath,
+			SemanticKind:  signal.SemanticKind,
 			RootID:        signal.RootID,
-			Path:          cleanDirtyQueuePath(signal.Path),
-			PathIsDir:     true,
-			PathTypeKnown: true,
+			Path:          signal.Path,
+			PathIsDir:     signal.PathIsDir,
+			PathTypeKnown: signal.PathTypeKnown,
 			At:            signal.At,
 			Cursor:        signal.Cursor,
 		})
-	case ChangeSignalKindDirtyPath:
-		// Bug fix: unknown-semantics file events on a degraded FSEvents root used to
-		// escalate per event (a ~2000-file pnpm store write queued ~2000 full scans);
-		// a known file path is still an exact single-file mutation, so it stays
-		// scoped. The log guard must mirror the scoped condition below.
-		if fileSearchDiagnosticLoggingEnabled && rootFound && root.FeedType == RootFeedTypeFSEvents && root.FeedState != RootFeedStateReady && signal.PathTypeKnown && !signal.PathIsDir && !shouldKeepKnownFileDeltaScoped(signal) {
-			util.GetLogger().Info(ctx, fmt.Sprintf(
-				"filesearch degraded root kept unknown file delta scoped: root=%s path=%s semantic=%s feed_state=%s",
-				signal.RootID,
-				summarizeLogPath(signal.Path),
-				signal.SemanticKind,
-				root.FeedState,
-			))
-		}
-		if !rootFound || root.FeedState == RootFeedStateReady || root.FeedType == RootFeedTypeFallback || root.FeedType == "" || shouldKeepKnownFileDeltaScoped(signal) || (root.FeedType == RootFeedTypeFSEvents && signal.PathTypeKnown && !signal.PathIsDir) {
-			// Fallback feeds cannot replay a journal, so degraded state only tells us
-			// a previous reconcile failed. Keeping later concrete dirty paths scoped
-			// avoids converting one transient temp-directory miss into repeated full
-			// root reconciles while explicit root-reconcile signals still stay broad.
-			//
-			// Bug fix: known file-level watcher events remain useful even when the
-			// root is degraded because they describe one exact file mutation. Keeping
-			// create/modify/metadata/rename/remove scoped lets visible desktop edits
-			// update immediately while the separate degraded root reconcile can still
-			// repair any missed history in the background.
-			s.enqueueDirtyWithContext(ctx, DirtySignal{
-				Kind:          DirtySignalKindPath,
-				SemanticKind:  signal.SemanticKind,
-				RootID:        signal.RootID,
-				Path:          signal.Path,
-				PathIsDir:     signal.PathIsDir,
-				PathTypeKnown: signal.PathTypeKnown,
-				At:            signal.At,
-				Cursor:        signal.Cursor,
-			})
+	case ChangeSignalKindHistoryLost:
+		if !rootFound {
 			return
 		}
 		util.GetLogger().Info(ctx, fmt.Sprintf(
-			"filesearch dirty path escalated to root reconcile: root=%s path=%s feed_state=%s",
+			"filesearch change feed lost history: root=%s path=%s feed_type=%s reason=%q",
 			signal.RootID,
 			summarizeLogPath(signal.Path),
-			root.FeedState,
+			signal.FeedType,
+			strings.TrimSpace(signal.Reason),
 		))
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        signal.RootID,
-			Path:          root.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			At:            signal.At,
-			Cursor:        signal.Cursor,
-		})
-	case ChangeSignalKindRequiresRootReconcile:
-		// FSEvents flags history loss per event, so one burst used to queue one
-		// root reconcile per event. Gate repeats to one per cooldown window, but
-		// suppressed requests are retained: the first suppression schedules a
-		// re-fire at cooldown expiry, so correctness only waits, never skips
-		// (processDirtyQueue releases it even without any further event).
-		if pass := s.gateRootReconcile(ctx, signal.RootID, signal.At); pass {
-			util.GetLogger().Info(ctx, fmt.Sprintf(
-				"filesearch change feed requested root reconcile: root=%s path=%s feed_type=%s reason=%q",
-				signal.RootID,
-				summarizeLogPath(signal.Path),
-				signal.FeedType,
-				strings.TrimSpace(signal.Reason),
-			))
+		if root.FeedState != RootFeedStateUnavailable {
 			s.updateRootFeedState(ctx, signal.RootID, RootFeedStateDegraded)
-			s.enqueueDirtyWithContext(ctx, DirtySignal{
-				Kind:          DirtySignalKindRoot,
-				RootID:        signal.RootID,
-				Path:          signal.Path,
-				PathIsDir:     true,
-				PathTypeKnown: true,
-				At:            signal.At,
-				Cursor:        signal.Cursor,
-			})
 		}
+		s.requestHistoryRecovery(ctx, signal.RootID, signal.Reason, signal.At)
 	case ChangeSignalKindFeedUnavailable:
+		if !rootFound {
+			return
+		}
 		util.GetLogger().Info(ctx, fmt.Sprintf(
 			"filesearch change feed unavailable: root=%s path=%s feed_type=%s reason=%q",
 			signal.RootID,
@@ -1932,232 +1268,29 @@ func (s *Scanner) handleChangeSignal(ctx context.Context, signal ChangeSignal) {
 			strings.TrimSpace(signal.Reason),
 		))
 		s.updateRootFeedState(ctx, signal.RootID, RootFeedStateUnavailable)
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        signal.RootID,
-			Path:          signal.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			At:            signal.At,
-			Cursor:        signal.Cursor,
-		})
+		s.requestHistoryRecovery(ctx, signal.RootID, signal.Reason, signal.At)
 	}
-}
-
-func shouldKeepKnownFileDeltaScoped(signal ChangeSignal) bool {
-	if signal.Kind != ChangeSignalKindDirtyPath || !signal.PathTypeKnown || signal.PathIsDir {
-		return false
-	}
-	switch signal.SemanticKind {
-	case ChangeSemanticKindCreate, ChangeSemanticKindModify, ChangeSemanticKindMetadata, ChangeSemanticKindRemove, ChangeSemanticKindRename:
-		return true
-	default:
-		return false
-	}
-}
-
-// rootReconcileCooldown bounds how often a degraded root re-queues a full
-// reconcile from repeated RequiresRootReconcile signals.
-const rootReconcileCooldown = time.Minute
-
-// rootReconcileGateState tracks the last admitted reconcile per root plus a
-// retained request suppressed by the cooldown window.
-type rootReconcileGateState struct {
-	LastFireAt time.Time
-	// PendingReconcileAt is zero when nothing is retained. Suppressed requests
-	// are delayed, never skipped: the first suppression schedules exactly one
-	// follow-up reconcile at cooldown expiry.
-	PendingReconcileAt time.Time
-}
-
-// gateRootReconcile suppresses repeats inside the cooldown window; the first
-// request and any request after the window pass. Suppression logs are capped
-// at one per window: a 2000-event storm must not emit 2000 Info lines.
-func (s *Scanner) gateRootReconcile(ctx context.Context, rootID string, at time.Time) bool {
-	if at.IsZero() {
-		at = time.Now()
-	}
-	s.rootReconcileGateMu.Lock()
-	defer s.rootReconcileGateMu.Unlock()
-	if s.rootReconcileGate == nil {
-		s.rootReconcileGate = make(map[string]rootReconcileGateState)
-	}
-	state := s.rootReconcileGate[rootID]
-	if !state.LastFireAt.IsZero() && at.Sub(state.LastFireAt) < rootReconcileCooldown {
-		if state.PendingReconcileAt.IsZero() {
-			// Retain the suppressed request so a history-loss event arriving
-			// after the last scan still triggers a follow-up scan at cooldown
-			// expiry, even if no further event ever arrives. Nudge the scan
-			// loop so it schedules a wake-up for the release time.
-			state.PendingReconcileAt = state.LastFireAt.Add(rootReconcileCooldown)
-			s.rootReconcileGate[rootID] = state
-			util.GetLogger().Info(ctx, fmt.Sprintf(
-				"filesearch suppressed repeated root reconcile, retained until cooldown expires: root=%s since_last=%s cooldown=%s release_at=%s",
-				rootID,
-				at.Sub(state.LastFireAt).Round(time.Second),
-				rootReconcileCooldown,
-				state.PendingReconcileAt.Format(time.RFC3339),
-			))
-			select {
-			case s.dirtyCh <- struct{}{}:
-			default:
-			}
-		}
-		return false
-	}
-	s.rootReconcileGate[rootID] = rootReconcileGateState{LastFireAt: at}
-	return true
-}
-
-// releaseDueRootReconciles re-enqueues retained root reconciles whose cooldown
-// expired. Called from the scan loop's dirty-flush path so a suppressed
-// request fires even without any further watcher event. Returns whether
-// anything was released.
-func (s *Scanner) releaseDueRootReconciles(ctx context.Context, now time.Time) bool {
-	s.rootReconcileGateMu.Lock()
-	dueRootIDs := make([]string, 0, len(s.rootReconcileGate))
-	dueAt := make(map[string]time.Time, len(s.rootReconcileGate))
-	for rootID, state := range s.rootReconcileGate {
-		if state.PendingReconcileAt.IsZero() || state.PendingReconcileAt.After(now) {
-			continue
-		}
-		state.PendingReconcileAt = time.Time{}
-		s.rootReconcileGate[rootID] = state
-		dueRootIDs = append(dueRootIDs, rootID)
-		dueAt[rootID] = state.LastFireAt.Add(rootReconcileCooldown)
-	}
-	s.rootReconcileGateMu.Unlock()
-	for _, rootID := range dueRootIDs {
-		util.GetLogger().Info(ctx, "filesearch released retained root reconcile after cooldown: root="+rootID)
-		// Reuse the scheduled release time as the signal timestamp so the
-		// debounce window sees an already-expired signal and flushes it in the
-		// same processDirtyQueue call.
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        rootID,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			At:            dueAt[rootID],
-		})
-	}
-	return len(dueRootIDs) > 0
-}
-
-// nextRootReconcileReleaseAt returns the earliest scheduled release time of a
-// retained suppressed reconcile, or zero when none is pending. The scan loop
-// uses it to schedule a wake-up.
-func (s *Scanner) nextRootReconcileReleaseAt() time.Time {
-	s.rootReconcileGateMu.Lock()
-	defer s.rootReconcileGateMu.Unlock()
-	var next time.Time
-	for _, state := range s.rootReconcileGate {
-		if state.PendingReconcileAt.IsZero() {
-			continue
-		}
-		if next.IsZero() || state.PendingReconcileAt.Before(next) {
-			next = state.PendingReconcileAt
-		}
-	}
-	return next
-}
-
-func (s *Scanner) handleDirtyQueueFailure(ctx context.Context, root RootRecord, batch ReconcileBatch, remaining []ReconcileBatch, cause error) {
-	util.GetLogger().Warn(ctx, fmt.Sprintf(
-		"filesearch reconcile batch failed: root=%s path=%s mode=%s dirty_paths=%d scopes=%d remaining_batches=%d err=%s",
-		batch.RootID,
-		root.Path,
-		batch.Mode,
-		batch.DirtyPathCount,
-		len(batch.Paths),
-		len(remaining),
-		cause.Error(),
-	))
-	if len(batch.Paths) > 0 {
-		util.GetLogger().Debug(ctx, fmt.Sprintf(
-			"filesearch reconcile batch failed scopes: root=%s paths=%s",
-			batch.RootID,
-			summarizeLogPaths(batch.Paths),
-		))
-	}
-	if isIncrementalMissingPathFailure(cause) {
-		// Missing-path failures are normal churn for temp/build directories. The
-		// old recovery path marked the configured root degraded, which surfaced a
-		// "needs attention" banner even though there is no user action to take.
-		s.clearRootTransientIncrementalFailure(ctx, root.ID, cause)
-		s.requeueDirtyBatches(ctx, remaining)
-		s.refreshTransientSyncPendingCounts()
-		s.emitStateChange(ctx)
-		return
-	}
-	s.updateRootFeedState(ctx, root.ID, RootFeedStateDegraded)
-	if shouldRetryIncrementalRootFailure(cause) && !s.enqueueDirtyRetryForFailedBatch(ctx, root, batch, time.Now()) {
-		util.GetLogger().Warn(ctx, fmt.Sprintf(
-			"filesearch reconcile batch stopped retrying failed scope: root=%s mode=%s paths=%s err=%s",
-			root.ID,
-			batch.Mode,
-			summarizeLogPaths(batch.Paths),
-			cause.Error(),
-		))
-	}
-	s.requeueDirtyBatches(ctx, remaining)
-	s.refreshTransientSyncPendingCounts()
-	s.emitStateChange(ctx)
 }
 
 func (s *Scanner) enqueueDirtyRetryForFailedBatch(ctx context.Context, root RootRecord, batch ReconcileBatch, at time.Time) bool {
-	switch batch.Mode {
-	case ReconcileModeDirectDelta:
+	if batch.Mode != ReconcileModeRoot {
+		// Retry the exact scopes and file paths that failed. Widening them to the
+		// configured root made one bad child under a large home directory
+		// trigger another full recursive crawl.
 		requeued := false
-		for _, delta := range batch.DirectDeltas {
-			cleanPath := cleanDirtyQueuePath(delta.Path)
-			if cleanPath == "" || !pathWithinScope(root.Path, cleanPath) {
+		for _, signal := range dirtySignalsForBatch(batch, at) {
+			if signal.Path == "" || !pathWithinScope(root.Path, signal.Path) {
 				continue
 			}
-			// Feature addition: direct-delta failures retry the same exact file
-			// paths. Widening them to the parent directory would reintroduce the
-			// slow incremental behavior this path is designed to avoid.
-			s.enqueueDirtyWithContext(ctx, DirtySignal{
-				Kind:          DirtySignalKindPath,
-				SemanticKind:  delta.SemanticKind,
-				RootID:        batch.RootID,
-				Path:          cleanPath,
-				PathIsDir:     delta.PathIsDir,
-				PathTypeKnown: delta.PathTypeKnown,
-				At:            at,
-			})
+			s.enqueueDirtyWithContext(ctx, signal)
 			requeued = true
 		}
 		if requeued {
 			return true
 		}
-	case ReconcileModeSubtree:
-		requeued := false
-		for _, path := range batch.Paths {
-			cleanPath := cleanDirtyQueuePath(path)
-			if cleanPath == "" || !pathWithinScope(root.Path, cleanPath) {
-				continue
-			}
-			// Retry the exact subtree scope that failed. The previous recovery path
-			// always enqueued the configured root, which made one bad child under a
-			// large home directory trigger another full recursive count.
-			s.enqueueDirtyWithContext(ctx, DirtySignal{
-				Kind:          DirtySignalKindPath,
-				RootID:        batch.RootID,
-				Path:          cleanPath,
-				PathIsDir:     true,
-				PathTypeKnown: true,
-				At:            at,
-			})
-			requeued = true
+		if len(batch.Paths) > 0 || len(batch.DirectoryPaths) > 0 {
+			return false
 		}
-		if requeued {
-			return true
-		}
-	case ReconcileModeRoot:
-	}
-
-	if batch.Mode != ReconcileModeRoot && len(batch.Paths) > 0 {
-		return false
 	}
 	s.enqueueDirtyWithContext(ctx, DirtySignal{
 		Kind:          DirtySignalKindRoot,
@@ -2421,28 +1554,6 @@ func (s *Scanner) captureRootFeedSnapshot(ctx context.Context, root RootRecord) 
 	return root
 }
 
-func (s *Scanner) refreshRootFeedSnapshot(ctx context.Context, rootID string) {
-	root, ok := s.findRootByID(ctx, rootID)
-	if !ok {
-		return
-	}
-
-	root = s.captureRootFeedSnapshot(ctx, root)
-	root.UpdatedAt = util.GetSystemTimestamp()
-	if err := s.updateRootStateAndCache(ctx, root); err != nil {
-		util.GetLogger().Warn(ctx, "filesearch failed to persist refreshed root feed snapshot: "+err.Error())
-		return
-	}
-	util.GetLogger().Debug(ctx, fmt.Sprintf(
-		"filesearch root feed snapshot refreshed: root=%s path=%s feed_type=%s feed_state=%s",
-		root.ID,
-		root.Path,
-		root.FeedType,
-		root.FeedState,
-	))
-	s.emitStateChange(ctx)
-}
-
 func (s *Scanner) resetDirtyTimer(timer *time.Timer) {
 	if timer == nil {
 		return
@@ -2458,9 +1569,9 @@ func (s *Scanner) resetDirtyTimer(timer *time.Timer) {
 	if window <= 0 {
 		window = defaultDirtyDebounceWindow
 	}
-	// Wake up at the earliest retained root-reconcile release time so a
-	// suppressed request fires on schedule without any further watcher event.
-	if releaseAt := s.nextRootReconcileReleaseAt(); !releaseAt.IsZero() {
+	// Wake up at the earliest scheduled history recovery so a cooled-down
+	// request runs on schedule without any further watcher event.
+	if releaseAt := s.nextHistoryRecoveryAt(); !releaseAt.IsZero() {
 		releaseRemaining := time.Until(releaseAt)
 		if releaseRemaining < 0 {
 			releaseRemaining = 0
@@ -2598,10 +1709,6 @@ func minDuration(left time.Duration, right time.Duration) time.Duration {
 	return right
 }
 
-func (s *Scanner) resetDirtyQueue() {
-	s.resetDirtyQueueWithReason(context.Background(), "unspecified")
-}
-
 func (s *Scanner) resetDirtyQueueWithReason(ctx context.Context, reason string) {
 	pendingRootCount, pendingPathCount := s.pendingDirtyCounts()
 	util.GetLogger().Info(ctx, fmt.Sprintf(
@@ -2610,33 +1717,22 @@ func (s *Scanner) resetDirtyQueueWithReason(ctx context.Context, reason string) 
 		pendingRootCount,
 		pendingPathCount,
 	))
-	s.clearTransientSyncState("")
+	s.clearTransientSyncState()
 	s.dirtyQueue = NewDirtyQueue(s.dirtyQueueConfig)
 	s.refreshTransientSyncPendingCounts()
 	s.emitStateChange(ctx)
 }
 
-func (s *Scanner) loadDirtyQueueContext(ctx context.Context) (map[string]int, map[string]RootRecord, map[string]int, error) {
+func (s *Scanner) loadRootsByID(ctx context.Context) (map[string]RootRecord, error) {
 	roots, err := s.db.ListRoots(ctx)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
-
-	rootDirectoryCounts := make(map[string]int, len(roots))
 	rootsByID := make(map[string]RootRecord, len(roots))
-	rootIndexByID := make(map[string]int, len(roots))
-	for index, root := range roots {
+	for _, root := range roots {
 		rootsByID[root.ID] = root
-		rootIndexByID[root.ID] = index + 1
-
-		directoryCount, err := s.db.CountDirectoriesByRoot(ctx, root.ID)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		rootDirectoryCounts[root.ID] = directoryCount
 	}
-
-	return rootDirectoryCounts, rootsByID, rootIndexByID, nil
+	return rootsByID, nil
 }
 
 func (s *Scanner) logRootReloadIndexSnapshot(ctx context.Context) {
@@ -2713,20 +1809,6 @@ func (s *Scanner) updateRootFeedState(ctx context.Context, rootID string, state 
 	s.emitStateChange(ctx)
 }
 
-func forceReconcileBatchForFeedState(root RootRecord, batch ReconcileBatch) ReconcileBatch {
-	if batch.Mode == ReconcileModeRoot {
-		return batch
-	}
-	if root.FeedState != RootFeedStateDegraded && root.FeedState != RootFeedStateUnavailable {
-		return batch
-	}
-
-	batch.Mode = ReconcileModeRoot
-	batch.Paths = nil
-	batch.DirectDeltas = nil
-	return batch
-}
-
 func (s *Scanner) pendingDirtyCounts() (int, int) {
 	if s.dirtyQueue == nil {
 		return 0, 0
@@ -2789,10 +1871,8 @@ func (s *Scanner) updateTransientSyncPendingCounts(pendingRootCount int, pending
 	}
 	isPending := pendingRootCount > 0 || pendingPathCount > 0
 
-	if pendingRootCount == 0 && pendingPathCount == 0 {
-		if s.transientSyncState == nil || s.transientSyncState.Root.ID == "" {
-			s.transientSyncState = nil
-		}
+	if !isPending {
+		s.transientSyncState = nil
 		return false
 	}
 
@@ -2819,103 +1899,36 @@ func (s *Scanner) requeueDirtyBatches(ctx context.Context, batches []ReconcileBa
 			summarizeLogPaths(batch.Paths),
 			len(batch.DirectDeltas),
 		))
-		switch batch.Mode {
-		case ReconcileModeRoot:
-			s.enqueueDirtyWithContext(batchCtx, DirtySignal{
-				Kind:          DirtySignalKindRoot,
-				RootID:        batch.RootID,
-				PathIsDir:     true,
-				PathTypeKnown: true,
-				At:            requeuedAt,
-			})
-		case ReconcileModeSubtree:
-			for _, path := range batch.Paths {
-				s.enqueueDirtyWithContext(batchCtx, DirtySignal{
-					Kind:          DirtySignalKindPath,
-					RootID:        batch.RootID,
-					Path:          path,
-					PathIsDir:     true,
-					PathTypeKnown: true,
-					At:            requeuedAt,
-				})
-			}
-		case ReconcileModeDirectDelta:
-			for _, delta := range batch.DirectDeltas {
-				s.enqueueDirtyWithContext(batchCtx, DirtySignal{
-					Kind:          DirtySignalKindPath,
-					SemanticKind:  delta.SemanticKind,
-					RootID:        batch.RootID,
-					Path:          delta.Path,
-					PathIsDir:     delta.PathIsDir,
-					PathTypeKnown: delta.PathTypeKnown,
-					At:            requeuedAt,
-				})
-			}
+		for _, signal := range dirtySignalsForBatch(batch, requeuedAt) {
+			s.enqueueDirtyWithContext(batchCtx, signal)
 		}
 	}
 }
 
-func (s *Scanner) findRootForPath(ctx context.Context, path string) (RootRecord, bool) {
-	roots, err := s.db.ListRoots(ctx)
-	if err != nil {
-		util.GetLogger().Warn(ctx, "filesearch failed to resolve dirty root: "+err.Error())
-		return RootRecord{}, false
+// dirtySignalsForBatch turns a sealed batch back into the signals that
+// reproduce it: recursive scopes, one-level directory relists, and exact file
+// deltas. Subtree batches used to requeue only their recursive scopes, which
+// silently dropped file deltas sealed in the same batch.
+func dirtySignalsForBatch(batch ReconcileBatch, at time.Time) []DirtySignal {
+	if batch.Mode == ReconcileModeRoot {
+		return []DirtySignal{{Kind: DirtySignalKindRoot, RootID: batch.RootID, PathIsDir: true, PathTypeKnown: true, At: at}}
 	}
-
-	return findRootForPathInRoots(roots, path)
-}
-
-func newTransientSyncState(root RootRecord, rootIndex int, rootTotal int, batch ReconcileBatch, pendingRootCount int, pendingPathCount int) TransientSyncState {
-	progressTotal := int64(batch.DirtyPathCount)
-	if progressTotal <= 0 {
-		progressTotal = int64(len(batch.Paths))
+	signals := make([]DirtySignal, 0, len(batch.Paths)+len(batch.DirectoryPaths)+len(batch.DirectDeltas))
+	for _, path := range batch.Paths {
+		signals = append(signals, DirtySignal{Kind: DirtySignalKindPath, RootID: batch.RootID, Path: cleanDirtyQueuePath(path), PathIsDir: true, PathTypeKnown: true, At: at})
 	}
-	if progressTotal <= 0 {
-		progressTotal = 1
+	for _, path := range batch.DirectoryPaths {
+		signals = append(signals, DirtySignal{Kind: DirtySignalKindPath, SemanticKind: ChangeSemanticKindMetadata, RootID: batch.RootID, Path: cleanDirtyQueuePath(path), PathIsDir: true, PathTypeKnown: true, At: at})
 	}
-
-	root.Status = RootStatusSyncing
-	root.ProgressCurrent = 0
-	root.ProgressTotal = progressTotal
-	root.LastError = nil
-	root.UpdatedAt = util.GetSystemTimestamp()
-
-	return TransientSyncState{
-		Root:             root,
-		RootIndex:        rootIndex,
-		RootTotal:        rootTotal,
-		Mode:             batch.Mode,
-		ScopeCount:       len(batch.Paths),
-		DirtyPathCount:   batch.DirtyPathCount,
-		PendingRootCount: pendingRootCount,
-		PendingPathCount: pendingPathCount,
+	for _, delta := range batch.DirectDeltas {
+		signals = append(signals, DirtySignal{Kind: DirtySignalKindPath, SemanticKind: delta.SemanticKind, RootID: batch.RootID, Path: cleanDirtyQueuePath(delta.Path), PathIsDir: delta.PathIsDir, PathTypeKnown: delta.PathTypeKnown, At: at})
 	}
+	return signals
 }
 
-type scanState struct {
-	path   string
-	policy TraversalPolicyContext
-}
-
-type plannedDirectory struct {
-	path       string
-	childCount int
-	policy     TraversalPolicyContext
-}
-
-type scanPlan struct {
-	directories    []plannedDirectory
-	DirectoryTotal int
-	TotalItems     int64
-}
-
+// newEntryRecord records filesystem facts only; name accelerators belong to the
+// interned dictionary rather than every scan observation.
 func newEntryRecord(root RootRecord, fullPath string, info os.FileInfo) EntryRecord {
-	return newEntryRecordWithUpdatedAt(root, fullPath, info, util.GetSystemTimestamp())
-}
-
-// newEntryRecordWithUpdatedAt records filesystem facts only; name accelerators
-// belong to the interned dictionary rather than every scan observation.
-func newEntryRecordWithUpdatedAt(root RootRecord, fullPath string, info os.FileInfo, updatedAt int64) EntryRecord {
 	return EntryRecord{
 		Path:       fullPath,
 		RootID:     root.ID,
@@ -2924,22 +1937,8 @@ func newEntryRecordWithUpdatedAt(root RootRecord, fullPath string, info os.FileI
 		IsDir:      info.IsDir(),
 		Mtime:      info.ModTime().UnixMilli(),
 		Size:       info.Size(),
-		UpdatedAt:  updatedAt,
+		UpdatedAt:  util.GetSystemTimestamp(),
 	}
-}
-
-func buildDirectorySnapshotRecords(root RootRecord, plan scanPlan, scanTimestamp int64) []DirectoryRecord {
-	directories := make([]DirectoryRecord, 0, len(plan.directories))
-	for _, plannedDirectory := range plan.directories {
-		directories = append(directories, DirectoryRecord{
-			Path:         plannedDirectory.path,
-			RootID:       root.ID,
-			ParentPath:   filepath.Dir(plannedDirectory.path),
-			LastScanTime: scanTimestamp,
-			Exists:       true,
-		})
-	}
-	return directories
 }
 
 func shouldSkipSystemPath(fullPath string, isDir bool) bool {

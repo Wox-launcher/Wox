@@ -118,6 +118,108 @@ func TestDirectoryIndexDeletedParentDoesNotResurrectChildren(t *testing.T) {
 	}
 }
 
+// TestDirectoryIndexLargeTreeDeleteIsOneTombstone verifies that removing a
+// large tree journals only its topmost row (no republish) while hiding every
+// descendant, and that every way of recreating the directory exposes only the
+// newly observed children.
+func TestDirectoryIndexLargeTreeDeleteIsOneTombstone(t *testing.T) {
+	ctx := context.Background()
+	index := newDirectoryIndex(filepath.Join(t.TempDir(), "index"))
+	defer index.close()
+	root := RootRecord{ID: "root", Path: t.TempDir()}
+	if err := index.attach(root); err != nil {
+		t.Fatal(err)
+	}
+	scope := filepath.Join(root.Path, "scope")
+	big := filepath.Join(scope, "big")
+	nested := filepath.Join(big, "nested")
+	scopeEntry := EntryRecord{RootID: root.ID, Path: scope, ParentPath: root.Path, IsDir: true}
+	keep := EntryRecord{RootID: root.ID, Path: filepath.Join(scope, "keep.txt"), ParentPath: scope}
+	entries := []EntryRecord{scopeEntry, keep, {RootID: root.ID, Path: big, ParentPath: scope, IsDir: true}, {RootID: root.ID, Path: nested, ParentPath: big, IsDir: true}}
+	// Enough descendants that per-row deletes would exceed one journal frame.
+	for i := 0; i < 60000; i++ {
+		parent := big
+		if i%2 == 1 {
+			parent = nested
+		}
+		entries = append(entries, EntryRecord{RootID: root.ID, Path: filepath.Join(parent, fmt.Sprintf("stale-file-with-a-long-name-%d.txt", i)), ParentPath: parent})
+	}
+	if err := index.replaceRoot(ctx, root, func(yield func(SubtreeSnapshotBatch) error) error {
+		return yield(SubtreeSnapshotBatch{RootID: root.ID, ScopePath: root.Path, Entries: entries})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(index.shardDirectory(root.ID), "current.json")
+	before, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStale := func(step string, delta int) {
+		t.Helper()
+		results, err := index.search(ctx, SearchQuery{Raw: "stale-file"}, 10)
+		if err != nil || len(results) != 0 {
+			t.Fatalf("%s: resurrected %d results: %v", step, len(results), err)
+		}
+		files, _, err := index.shards[root.ID].store.Counts(ctx)
+		if err != nil || files > 2 {
+			t.Fatalf("%s: counted %d files: %v", step, files, err)
+		}
+		if delta == 0 {
+			return
+		}
+		if after, _ := os.ReadFile(manifest); string(after) != string(before) {
+			t.Fatalf("%s: republished the generation", step)
+		}
+		if err := index.shards[root.ID].store.Read(func(view column.View) error {
+			if len(view.Delta) != delta {
+				t.Fatalf("%s: delta has %d changes, want %d", step, len(view.Delta), delta)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := index.writeScope(ctx, root.ID, scope, false, func(yield func(SubtreeSnapshotBatch) error) error {
+		return yield(SubtreeSnapshotBatch{RootID: root.ID, ScopePath: scope, Entries: []EntryRecord{scopeEntry, keep}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertStale("subtree delete", 1)
+
+	// A rescan of the parent must not re-delete the hidden descendants.
+	if err := index.writeScope(ctx, root.ID, scope, false, func(yield func(SubtreeSnapshotBatch) error) error {
+		return yield(SubtreeSnapshotBatch{RootID: root.ID, ScopePath: scope, Entries: []EntryRecord{scopeEntry, keep}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertStale("repeated rescan", 1)
+
+	// A file event under the recreated directory revives both directories as
+	// structural ancestry; their stale children must stay hidden. The delta
+	// argument 0 skips journal checks, since revival tombstones each stale child.
+	fresh := EntryRecord{RootID: root.ID, Path: filepath.Join(nested, "fresh.txt"), ParentPath: nested}
+	if err := index.applyEntries(ctx, root.ID, []EntryRecord{fresh}, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	assertStale("exact-path revival", 0)
+	results, err := index.search(ctx, SearchQuery{Raw: "fresh"}, 10)
+	if err != nil || len(results) != 1 {
+		t.Fatalf("fresh file missing: %+v %v", results, err)
+	}
+
+	// A directory replaced by a file hides its children through the file row;
+	// turning the path back into a directory must not expose them again.
+	for _, isDir := range []bool{false, true} {
+		if err := index.applyEntries(ctx, root.ID, []EntryRecord{{RootID: root.ID, Path: big, ParentPath: scope, IsDir: isDir}}, nil, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if results, err := index.search(ctx, SearchQuery{Raw: "fresh"}, 10); err != nil || len(results) != 0 {
+		t.Fatalf("file-to-directory flip resurrected: %+v %v", results, err)
+	}
+}
+
 // TestDirectoryIndexUnreadableScopePreservesFacts covers temporary access loss
 // during incremental and full scans, followed by a confirmed empty directory.
 func TestDirectoryIndexUnreadableScopePreservesFacts(t *testing.T) {

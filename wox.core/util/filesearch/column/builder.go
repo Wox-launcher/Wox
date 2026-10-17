@@ -251,6 +251,7 @@ func (b *Builder) Finish() (*Snapshot, error) {
 	copy(s.NameStarts[1:], s.NameStarts[:len(s.NameStarts)-1])
 	s.NameStarts[0] = 0
 	sort.Slice(s.IDRows, func(i, j int) bool { return s.IDs[s.IDRows[i]] < s.IDs[s.IDRows[j]] })
+	s.prepareChildRows()
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}

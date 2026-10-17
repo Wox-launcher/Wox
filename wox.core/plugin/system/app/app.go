@@ -1442,30 +1442,7 @@ func (a *ApplicationPlugin) appChangeTaskKey(change appPendingChange) string {
 
 func (a *ApplicationPlugin) getActionableAppChange(signal filesearch.ChangeSignal, appExtensions []string, rootPaths map[string]string) (appPendingChange, bool) {
 	if signal.Kind != filesearch.ChangeSignalKindDirtyPath {
-		if signal.Kind == filesearch.ChangeSignalKindDirtyRoot && signal.SemanticKind == filesearch.ChangeSemanticKindRemove && strings.TrimSpace(signal.Path) != "" {
-			changePath := filepath.Clean(signal.Path)
-			if rootPath := rootPaths[signal.RootID]; rootPath != "" && a.pathCacheKey(filepath.Clean(rootPath)) == a.pathCacheKey(changePath) {
-				// Bug fix: fallback feeds may mark a whole root dirty when precision is
-				// insufficient. Updating every cached app under that root would be a
-				// hidden full reconcile, so only path-level remove signals are allowed.
-				a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: dirty root remove points at root path=%s", changePath))
-				return appPendingChange{}, false
-			}
-
-			// Bug fix: Windows fallback notifications report deletes as dirty_root with
-			// pathTypeKnown=false, but still carry the changed path. Treat that as a
-			// local remove only for concrete app files or a cached subdirectory, avoiding
-			// the expensive full indexApps fallback while keeping uninstall cleanup live.
-			if a.isAppPathExtensionMatch(changePath, appExtensions) {
-				return appPendingChange{Path: changePath, SemanticKind: signal.SemanticKind}, true
-			}
-			if a.hasIndexedAppsUnderDirectory(changePath) {
-				return appPendingChange{Path: changePath, SemanticKind: signal.SemanticKind, PathIsDir: true}, true
-			}
-			a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: dirty root remove did not match cached app path=%s", changePath))
-			return appPendingChange{}, false
-		}
-		if signal.Kind == filesearch.ChangeSignalKindRequiresRootReconcile || signal.Kind == filesearch.ChangeSignalKindFeedUnavailable {
+		if signal.Kind == filesearch.ChangeSignalKindHistoryLost || signal.Kind == filesearch.ChangeSignalKindFeedUnavailable {
 			// Diagnostic logging only: app indexing intentionally avoids fallback full
 			// rebuilding the index because broad app scans are expensive. Keep the skip visible
 			// while testing install/uninstall flows so we can tell whether filesearch
@@ -1479,6 +1456,27 @@ func (a *ApplicationPlugin) getActionableAppChange(signal filesearch.ChangeSigna
 		return appPendingChange{}, false
 	}
 	changePath := filepath.Clean(signal.Path)
+	if !signal.PathTypeKnown && (signal.SemanticKind == filesearch.ChangeSemanticKindRemove || signal.SemanticKind == filesearch.ChangeSemanticKindRename) {
+		if rootPath := rootPaths[signal.RootID]; rootPath != "" && a.pathCacheKey(filepath.Clean(rootPath)) == a.pathCacheKey(changePath) {
+			// Updating every cached app under a removed root would be a hidden full
+			// reconcile, so only removals below the root are handled here.
+			a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: removed path is the root path=%s", changePath))
+			return appPendingChange{}, false
+		}
+
+		// Bug fix: fallback notifications report deletes without a path type
+		// because the path is already gone. Treat that as a local remove only for
+		// concrete app files or a cached subdirectory, avoiding the expensive full
+		// indexApps fallback while keeping uninstall cleanup live.
+		if a.isAppPathExtensionMatch(changePath, appExtensions) {
+			return appPendingChange{Path: changePath, SemanticKind: filesearch.ChangeSemanticKindRemove}, true
+		}
+		if a.hasIndexedAppsUnderDirectory(changePath) {
+			return appPendingChange{Path: changePath, SemanticKind: filesearch.ChangeSemanticKindRemove, PathIsDir: true}, true
+		}
+		a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: removed path did not match cached app path=%s", changePath))
+		return appPendingChange{}, false
+	}
 	if signal.PathIsDir {
 		switch signal.SemanticKind {
 		case filesearch.ChangeSemanticKindCreate,

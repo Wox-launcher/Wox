@@ -75,7 +75,7 @@ const (
 	toolbarActivityPathMaxChars            = 42
 	toolbarErrorReasonMaxChars             = 28
 	fileSearchResultLimit                  = 100
-	fileSearchGlobalResultLimit            = 10
+	fileSearchGlobalResultLimit            = 5
 	fileSearchContentResultLimit           = 20
 	fileSearchRecentResultLimit            = 50
 	fileSearchRecentCandidateLimit         = 80

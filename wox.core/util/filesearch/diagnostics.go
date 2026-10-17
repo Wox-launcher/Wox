@@ -22,40 +22,34 @@ type DiagnosticSnapshot struct {
 
 	Status StatusSnapshot
 
-	RootCount            int
-	UserVisibleRootCount int
-	DefaultRootCount     int
-	UserRootCount        int
-	DynamicRootCount     int
-	RootKindCounts       map[RootKind]int
-	RootStatusCounts     map[RootStatus]int
-	RootFeedTypeCounts   map[RootFeedType]int
-	RootFeedStateCounts  map[RootFeedState]int
-	Roots                []RootDiagnostic
+	RootCount           int
+	DefaultRootCount    int
+	UserRootCount       int
+	RootKindCounts      map[RootKind]int
+	RootStatusCounts    map[RootStatus]int
+	RootFeedTypeCounts  map[RootFeedType]int
+	RootFeedStateCounts map[RootFeedState]int
+	Roots               []RootDiagnostic
 
 	DirtyQueue DirtyQueueDiagnostics
 	Index      IndexDiagnosticSnapshot
 }
 
 type RootDiagnostic struct {
-	ID                  string
-	Path                string
-	Kind                RootKind
-	Status              RootStatus
-	FeedType            RootFeedType
-	FeedState           RootFeedState
-	FeedCursor          string
-	LastReconcileAt     int64
-	LastFullScanAt      int64
-	ProgressCurrent     int64
-	ProgressTotal       int64
-	LastError           string
-	DynamicParentRootID string
-	PolicyRootPath      string
-	PromotedAt          int64
-	LastHotAt           int64
-	CreatedAt           int64
-	UpdatedAt           int64
+	ID              string
+	Path            string
+	Kind            RootKind
+	Status          RootStatus
+	FeedType        RootFeedType
+	FeedState       RootFeedState
+	FeedCursor      string
+	LastReconcileAt int64
+	LastFullScanAt  int64
+	ProgressCurrent int64
+	ProgressTotal   int64
+	LastError       string
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 type DirtyQueueDiagnostics struct {
@@ -131,7 +125,6 @@ func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error)
 	// scanner/database inspection here avoids future UI commands reaching into
 	// private indexing internals when another incremental issue needs triage.
 	diagnostics.RootCount = len(roots)
-	diagnostics.UserVisibleRootCount = len(userVisibleRoots(roots))
 	for _, root := range roots {
 		diagnostics.RootKindCounts[root.Kind]++
 		diagnostics.RootStatusCounts[root.Status]++
@@ -142,8 +135,6 @@ func (e *Engine) GetDiagnostics(ctx context.Context) (DiagnosticSnapshot, error)
 			diagnostics.DefaultRootCount++
 		case RootKindUser:
 			diagnostics.UserRootCount++
-		case RootKindDynamic:
-			diagnostics.DynamicRootCount++
 		}
 		diagnostics.Roots = append(diagnostics.Roots, rootDiagnosticFromRecord(root))
 	}
@@ -189,7 +180,7 @@ func nativeIndexDiagnostics(ctx context.Context, index nativeNameIndex) (Diagnos
 	}
 	diagnostics := DiagnosticSnapshot{
 		CapturedAt: time.Now(), Status: status,
-		RootCount: status.RootCount, UserVisibleRootCount: status.RootCount,
+		RootCount:           status.RootCount,
 		DefaultRootCount:    status.RootCount,
 		RootKindCounts:      map[RootKind]int{RootKindDefault: status.RootCount},
 		RootStatusCounts:    map[RootStatus]int{},
@@ -245,24 +236,20 @@ func rootDiagnosticFromRecord(root RootRecord) RootDiagnostic {
 		lastError = strings.TrimSpace(*root.LastError)
 	}
 	return RootDiagnostic{
-		ID:                  root.ID,
-		Path:                root.Path,
-		Kind:                root.Kind,
-		Status:              root.Status,
-		FeedType:            root.FeedType,
-		FeedState:           root.FeedState,
-		FeedCursor:          root.FeedCursor,
-		LastReconcileAt:     root.LastReconcileAt,
-		LastFullScanAt:      root.LastFullScanAt,
-		ProgressCurrent:     root.ProgressCurrent,
-		ProgressTotal:       root.ProgressTotal,
-		LastError:           lastError,
-		DynamicParentRootID: root.DynamicParentRootID,
-		PolicyRootPath:      root.PolicyRootPath,
-		PromotedAt:          root.PromotedAt,
-		LastHotAt:           root.LastHotAt,
-		CreatedAt:           root.CreatedAt,
-		UpdatedAt:           root.UpdatedAt,
+		ID:              root.ID,
+		Path:            root.Path,
+		Kind:            root.Kind,
+		Status:          root.Status,
+		FeedType:        root.FeedType,
+		FeedState:       root.FeedState,
+		FeedCursor:      root.FeedCursor,
+		LastReconcileAt: root.LastReconcileAt,
+		LastFullScanAt:  root.LastFullScanAt,
+		ProgressCurrent: root.ProgressCurrent,
+		ProgressTotal:   root.ProgressTotal,
+		LastError:       lastError,
+		CreatedAt:       root.CreatedAt,
+		UpdatedAt:       root.UpdatedAt,
 	}
 }
 

@@ -110,9 +110,8 @@ func fileSearchStatusSubtitle(diagnostics filesearch.DiagnosticSnapshot) string 
 	// database from a live-progress display problem without opening the preview.
 	indexSummary := formatFileSearchIndexCountSummary(diagnostics.Index)
 	return fmt.Sprintf(
-		"roots: %d (%d dynamic), indexed: %s, pending: %d roots / %d paths, indexing: %t",
+		"roots: %d, indexed: %s, pending: %d roots / %d paths, indexing: %t",
 		diagnostics.RootCount,
-		diagnostics.DynamicRootCount,
 		indexSummary,
 		diagnostics.DirtyQueue.PendingRootCount,
 		diagnostics.DirtyQueue.PendingPathCount,
@@ -124,7 +123,7 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot, c
 	var builder strings.Builder
 	builder.WriteString("# File Search Status\n\n")
 	builder.WriteString(fmt.Sprintf("- captured_at: `%s`\n", diagnostics.CapturedAt.Format(time.RFC3339)))
-	builder.WriteString(fmt.Sprintf("- roots: total=%d visible=%d default=%d user=%d dynamic=%d\n", diagnostics.RootCount, diagnostics.UserVisibleRootCount, diagnostics.DefaultRootCount, diagnostics.UserRootCount, diagnostics.DynamicRootCount))
+	builder.WriteString(fmt.Sprintf("- roots: total=%d default=%d user=%d\n", diagnostics.RootCount, diagnostics.DefaultRootCount, diagnostics.UserRootCount))
 	// Feature addition: mirror the subtitle's persisted count in the copied
 	// markdown summary so the first lines carry the current index volume.
 	builder.WriteString(fmt.Sprintf("- index: %s\n", formatFileSearchIndexCountSummary(diagnostics.Index)))
@@ -146,13 +145,12 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot, c
 	builder.WriteString(fmt.Sprintf("- current_debounce: `%s`\n", formatFileSearchStatusDuration(diagnostics.DirtyQueue.CurrentDebounceWindow)))
 	builder.WriteString(fmt.Sprintf("- next_flush_in: `%s`\n", formatFileSearchStatusDuration(diagnostics.DirtyQueue.NextFlushIn)))
 	builder.WriteString(fmt.Sprintf("- last_dirty_run: `%s`\n", formatFileSearchStatusDuration(diagnostics.DirtyQueue.LastDirtyRunElapsed)))
-	builder.WriteString(fmt.Sprintf("- config: debounce=`%s`, max_pending_wait=`%s`, max_debounce=`%s`, path_threshold=%d, root_threshold=%d, sibling_merge=%d\n",
+	builder.WriteString(fmt.Sprintf("- config: debounce=`%s`, max_pending_wait=`%s`, max_debounce=`%s`, path_threshold=%d, root_threshold=%d\n",
 		formatFileSearchStatusDuration(diagnostics.DirtyQueue.Config.DebounceWindow),
 		formatFileSearchStatusDuration(diagnostics.DirtyQueue.Config.MaxPendingWaitWindow),
 		formatFileSearchStatusDuration(diagnostics.DirtyQueue.Config.MaxDebounceWindow),
 		diagnostics.DirtyQueue.Config.BackpressurePathThreshold,
 		diagnostics.DirtyQueue.Config.BackpressureRootThreshold,
-		diagnostics.DirtyQueue.Config.SiblingMergeThreshold,
 	))
 	builder.WriteString("\n")
 
@@ -202,8 +200,8 @@ func formatFileSearchStatusMarkdown(diagnostics filesearch.DiagnosticSnapshot, c
 }
 
 func writeFileSearchRootTable(builder *strings.Builder, roots []filesearch.RootDiagnostic) {
-	builder.WriteString("| kind | status | feed | state | progress | cursor | last_reconcile | last_full | dynamic_parent | path | last_error |\n")
-	builder.WriteString("| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- |\n")
+	builder.WriteString("| kind | status | feed | state | progress | cursor | last_reconcile | last_full | path | last_error |\n")
+	builder.WriteString("| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |\n")
 	limit := len(roots)
 	if limit > maxFileSearchStatusRootRows {
 		limit = maxFileSearchStatusRootRows
@@ -214,7 +212,7 @@ func writeFileSearchRootTable(builder *strings.Builder, roots []filesearch.RootD
 			progress = fmt.Sprintf("%d/%d", root.ProgressCurrent, root.ProgressTotal)
 		}
 		builder.WriteString(fmt.Sprintf(
-			"| `%s` | `%s` | `%s` | `%s` | %s | `%s` | `%s` | `%s` | `%s` | `%s` | `%s` |\n",
+			"| `%s` | `%s` | `%s` | `%s` | %s | `%s` | `%s` | `%s` | `%s` | `%s` |\n",
 			root.Kind,
 			root.Status,
 			root.FeedType,
@@ -223,7 +221,6 @@ func writeFileSearchRootTable(builder *strings.Builder, roots []filesearch.RootD
 			statusMarkdownCell(root.FeedCursor),
 			formatUnixMillis(root.LastReconcileAt),
 			formatUnixMillis(root.LastFullScanAt),
-			statusMarkdownCell(root.DynamicParentRootID),
 			statusMarkdownCell(root.Path),
 			statusMarkdownCell(root.LastError),
 		))
@@ -258,7 +255,7 @@ func formatFileSearchIndexVolume(index filesearch.IndexDiagnosticSnapshot) strin
 }
 
 func formatRootKindCounts(counts map[filesearch.RootKind]int) string {
-	return formatStatusCountMap([]string{string(filesearch.RootKindDefault), string(filesearch.RootKindUser), string(filesearch.RootKindDynamic)}, func(key string) int {
+	return formatStatusCountMap([]string{string(filesearch.RootKindDefault), string(filesearch.RootKindUser)}, func(key string) int {
 		return counts[filesearch.RootKind(key)]
 	})
 }

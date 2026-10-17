@@ -30,7 +30,7 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 		persistedFileCount,
 	))
 
-	roots, err := s.listPolicyAllowedRoots(ctx)
+	roots, err := s.listRoots(ctx)
 	if err != nil {
 		util.GetLogger().Warn(ctx, "filesearch startup restore failed to load roots: "+err.Error())
 		s.refreshChangeFeed(ctx)
@@ -71,19 +71,27 @@ func (s *Scanner) startupRestore(ctx context.Context) {
 		return
 	}
 
+	now := time.Now()
+	recoveryCount := 0
 	for _, root := range reconcileRoots {
-		s.enqueueDirtyWithContext(ctx, DirtySignal{
-			Kind:          DirtySignalKindRoot,
-			RootID:        root.ID,
-			Path:          root.Path,
-			PathIsDir:     true,
-			PathTypeKnown: true,
-			At:            time.Now(),
-		})
+		if root.LastFullScanAt > 0 || root.LastReconcileAt > 0 {
+			// An indexed root with stale or broken history used to get a whole-root
+			// reconcile on every launch. Directory mtimes still record what changed
+			// while Wox was offline, so a relist of changed directories repairs it.
+			s.requestHistoryRecovery(ctx, root.ID, "startup restore", now)
+			recoveryCount++
+			continue
+		}
+		s.enqueueRootReconcile(ctx, root)
 	}
 
-	util.GetLogger().Info(ctx, fmt.Sprintf("filesearch startup restore queued selective reconcile: roots=%d", len(reconcileRoots)))
-	if err := s.processDirtyQueue(ctx, time.Now().Add(2*s.dirtyDebounceWindow())); err != nil {
+	util.GetLogger().Info(ctx, fmt.Sprintf(
+		"filesearch startup restore queued selective repair: roots=%d history_recoveries=%d root_reconciles=%d",
+		len(reconcileRoots),
+		recoveryCount,
+		len(reconcileRoots)-recoveryCount,
+	))
+	if err := s.processDirtyQueue(ctx, now.Add(2*s.dirtyDebounceWindow())); err != nil {
 		util.GetLogger().Warn(ctx, "filesearch startup restore failed to process selective reconcile: "+err.Error())
 	}
 	if shouldCollectFileSearchDiagnosticSnapshot() {
@@ -158,10 +166,15 @@ func rootNeedsStartupReconcile(root RootRecord, now time.Time) bool {
 		return true
 	}
 
-	if root.FeedType == RootFeedTypeFallback || root.FeedType == "" {
-		// Fallback degraded can be left behind by a transient dirty subtree that
-		// disappeared during reconcile. Use the freshness window for fallback
-		// roots so every debug restart does not immediately rescan the whole tree.
+	if root.FeedType == RootFeedTypeFallback {
+		// The fallback feed reports history loss itself once its watches are
+		// registered, which covers offline changes without a startup pass.
+		return false
+	}
+
+	if root.FeedType == "" {
+		// Roots without a recorded feed type have no cursor to trust. Use the
+		// freshness window so every debug restart does not relist them again.
 		return fallbackRootNeedsStartupReconcile(root, now)
 	}
 

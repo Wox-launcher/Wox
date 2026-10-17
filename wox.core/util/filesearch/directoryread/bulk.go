@@ -144,8 +144,12 @@ func decodeBulkEntries(parent string, buffer []byte, count int) ([]os.DirEntry, 
 		if hasFileLength {
 			entry.size = int64(binary.LittleEndian.Uint64(record[bulkCommonBytes : bulkCommonBytes+bulkFileBytes]))
 		}
+		// Darwin never returns ATTR_FILE_DATALENGTH for directories, so requiring
+		// it sent every directory through an extra Lstat during full scans.
+		// Directory sizes are not indexed; only non-directories need the slot.
 		required := uint32(bulkObjectType | bulkModified | bulkAccess)
-		entry.metadataKnown = common&required == required && hasFileLength && nanos >= 0 && nanos < 1e9 && entry.size >= 0
+		sizeKnown := hasFileLength || entry.mode.IsDir()
+		entry.metadataKnown = common&required == required && sizeKnown && nanos >= 0 && nanos < 1e9 && entry.size >= 0
 		entries = append(entries, entry)
 	}
 	return entries, nil

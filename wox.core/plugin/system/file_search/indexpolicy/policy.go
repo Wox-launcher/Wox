@@ -28,7 +28,6 @@ type Policy struct {
 type TraversalContext struct {
 	policy                    *Policy
 	rootPath                  string
-	policyRootPath            string
 	matchRootPath             string
 	dirPath                   string
 	dirRelSlash               string
@@ -281,23 +280,19 @@ func New() *Policy {
 	}
 }
 
-func (p *Policy) NewTraversalContext(rootPath string, policyRootPath string, scopePath string) *TraversalContext {
+func (p *Policy) NewTraversalContext(rootPath string, scopePath string) *TraversalContext {
 	if p == nil {
 		return nil
 	}
 
 	rootPath = cleanTraversalPath(rootPath)
-	if policyRootPath == "" {
-		policyRootPath = rootPath
-	}
-	policyRootPath = cleanTraversalPath(policyRootPath)
 	scopePath = cleanTraversalPath(scopePath)
 	if scopePath == "" || scopePath == "." {
 		scopePath = rootPath
 	}
 
 	rules := p.ignoreRulesSnapshot()
-	dirRelSlash, hasDirRel := relativePathForGitIgnoreMatch(policyRootPath, scopePath)
+	dirRelSlash, hasDirRel := relativePathForGitIgnoreMatch(rootPath, scopePath)
 	if dirRelSlash == "." {
 		dirRelSlash = ""
 	}
@@ -309,21 +304,20 @@ func (p *Policy) NewTraversalContext(rootPath string, policyRootPath string, sco
 	// policy root. A scope inside an ignored configured path must keep the old
 	// behavior where every descendant is ignored, but normal children only need
 	// to test their own basename because accepted ancestors were already checked.
-	configuredAncestorIgnored := configuredPatternMatchesPath(rules, policyRootPath, scopePath)
+	configuredAncestorIgnored := configuredPatternMatchesPath(rules, rootPath, scopePath)
 
 	diagnostics := p.diagnosticsRef()
 	return &TraversalContext{
 		policy:                    p,
 		rootPath:                  rootPath,
-		policyRootPath:            policyRootPath,
-		matchRootPath:             policyRootPath,
+		matchRootPath:             rootPath,
 		dirPath:                   scopePath,
 		dirRelSlash:               dirRelSlash,
 		hasDirRel:                 hasDirRel,
 		dirSegmentsLower:          dirSegmentsLower,
 		ignoreRules:               rules,
 		configuredAncestorIgnored: configuredAncestorIgnored,
-		gitIgnoreFrames:           p.gitIgnoreFramesForDirectory(policyRootPath, scopePath, diagnostics),
+		gitIgnoreFrames:           p.gitIgnoreFramesForDirectory(rootPath, scopePath, diagnostics),
 		diagnostics:               diagnostics,
 	}
 }
@@ -367,7 +361,7 @@ func (c *TraversalContext) ShouldIndexPath(path string, isDir bool) bool {
 		// contexts are scoped to direct children, so unexpected callers are
 		// re-rooted at the path's parent and still evaluated through the same
 		// incremental matcher used by full indexing.
-		context := c.policy.NewTraversalContext(c.rootPath, c.policyRootPath, filepath.Dir(cleanPath))
+		context := c.policy.NewTraversalContext(c.rootPath, filepath.Dir(cleanPath))
 		if context == nil {
 			return true
 		}
@@ -427,7 +421,6 @@ func (c *TraversalContext) Descend(directoryPath string) *TraversalContext {
 	child := &TraversalContext{
 		policy:                    c.policy,
 		rootPath:                  c.rootPath,
-		policyRootPath:            c.policyRootPath,
 		matchRootPath:             c.matchRootPath,
 		dirPath:                   cleanPath,
 		dirRelSlash:               childRelSlash,
@@ -455,7 +448,7 @@ func (c *TraversalContext) WithDirectoryEntries(directoryPath string, entries []
 		return c
 	}
 	if cleanPath != c.dirPath {
-		context := c.policy.NewTraversalContext(c.rootPath, c.policyRootPath, cleanPath)
+		context := c.policy.NewTraversalContext(c.rootPath, cleanPath)
 		if context == nil {
 			return c
 		}

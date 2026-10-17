@@ -11,7 +11,8 @@ Windows' privileged service only enumerates NTFS MFT records and reads USN
 changes over a bounded binary named-pipe stream. It does not own the filename
 index or execute searches. Windows service mode retains fixed-NTFS-volume scope;
 other modes retain configured roots. macOS uses bulk directory reads and
-FSEvents. Linux retains its watcher/reconcile strategy. Platform adapters must
+FSEvents. Windows configured roots use the USN journal. Linux and Windows
+volumes without a journal use recursive fsnotify watches. Platform adapters must
 not depend on query policy or plugin implementations.
 
 Filename indexing prioritizes bounded memory, fast enumeration and low-latency
@@ -31,11 +32,11 @@ Content extraction and its SQLite/FTS database remain independent. Its configure
 roots can differ from filename roots. Candidate enumeration and stale-content
 reconciliation use the common directory view, not a second SQL filename index.
 
-Deleting a configured root also deletes its dynamic descendants, directory
-metadata, and mapped filename shards. Independently configured roots are retained
-even when their paths overlap. Migration `20261016_filesearch_orphan_roots`
-removes legacy dynamic roots with no surviving configured ancestor before scanner
-startup, including their derived shards; it leaves the content index untouched.
+Roots are only the configured default and user roots; there are no derived
+dynamic roots or exclusion ranges. Deleting a root removes its metadata row and
+its mapped filename shard. Independently configured roots are retained even when
+their paths overlap: each one indexes its whole tree, and change signals route to
+the longest matching root.
 
 ## Columns and durability
 
@@ -44,9 +45,14 @@ postings, optional metadata, and source versions in pointer-free arrays. Full
 paths are materialized only when required. A versioned, checksummed snapshot is
 mapped read-only; callers hold a store read lease while borrowing mapped names.
 
-The append-only journal commits changes and their source cursor together before
-exposing them in the overlay. Recovery ignores an incomplete final frame but
-rejects complete corrupt frames. Compaction writes another immutable generation
+The append-only journal writes changes and their source cursor in one
+checksummed frame before exposing them in the overlay. Scoped job writes skip
+their own fsync (`ApplyUnsynced`); the synced cursor frame that `finishBuild`
+writes before the feed cursor advances commits the whole run, so an incremental
+run pays one fsync (`F_FULLFSYNC` on macOS) however many jobs it has. Recovery
+stops at the first frame that does not decode: a crash can leave unsynced
+frames as partial or zeroed pages, and those were never acknowledged, so their
+events replay. Compaction writes another immutable generation
 and atomically publishes a small manifest. Stale builders cannot discard newer
 mutations. A failed directory sync after a successful rename must retain the
 generation referenced by the manifest.
@@ -89,6 +95,11 @@ and an interrupted migration can safely retry. Orphan generations are not migrat
 Transient development format 4 snapshots are also readable without retaining
 their discarded metadata-sort permutations. New publications retain format 3.
 
+Snapshots also persist a child index: every parented row ordered by parent row,
+so each directory's children are one contiguous range (4 bytes per row, demand
+paged). Files written before this section existed still open; their index is
+rebuilt on the heap until the next compaction or full build rewrites them.
+
 The existing hidden-launcher lifecycle releases pinyin memoization after ten
 seconds. At thirty seconds it clears memoization again, drops prepared text and
 the shared pinyin dictionary, and asks filename stores to release clean mapped
@@ -107,11 +118,27 @@ all sections at startup also incurs real I/O, even though only borrowed arrays
 remain afterward. Pinyin dictionary reconstruction after idle remains a latency
 cost. Numeric performance results are diagnostic and do not fail smoke tests.
 
-`metadata.db` stores configured-root and traversal lifecycle metadata only.
-Filename facts no longer have SQL entries/FTS tables. Content candidates use
-stable shard/entry cursors, so compaction can reorder rows between pages.
-Dynamic-root promotion publishes the destination before committing ownership;
-startup completes any missing parent tombstone from committed root metadata.
+`metadata.db` stores the `roots` table (status, progress and feed cursors) and
+small `meta` values only. Filename and directory facts have no SQL tables:
+traversed directories become structural column rows, so empty directories keep
+their place in the hierarchy and history recovery lists them from the columns.
+Content candidates use stable shard/entry cursors, so compaction can reorder rows
+between pages.
+
+The dirty queue promotes a batch to a root reconcile only for explicit root
+signals (a change to the root path itself, a never-indexed root, or a failed
+scoped reconcile retried at root scope). It does not count indexed
+directories per flush or escalate large path bursts to whole-root scans; those
+remain scoped reconciles.
+
+As in fsearch, a metadata event on an existing directory relists only that
+directory (a `directory` job). FSEvents file-level events, USN and fsnotify
+already report each child's own change, so the relist trusts known child
+directories, walks only children new to the index, and prunes only children
+that vanished or became files. A directory that was created, renamed or
+removed, or whose type is unknown, is still rescanned as a subtree. Siblings are
+never merged into a recursive parent rescan: eight touched folders under `~`
+used to rescan the whole home directory.
 
 ## Directory deltas and FSEvents acknowledgement
 
@@ -122,12 +149,26 @@ heartbeat advances elapsed status even while diffing or committing produces no
 file-count events, and stops before the next run begins.
 
 A scoped directory reconcile stages only the newly observed scope, compares it
-with the live columns, and commits inserts, updates and tombstones in one synced
+with the live columns, and commits inserts, updates and tombstones in one
 journal frame. Unchanged records and structural ancestors retain their existing
 metadata. Failed scans publish nothing; unreadable scopes retain their prior
-facts. Reconciliation still sweeps scalar rows to identify deletions, with parent
-paths cached per directory, but does not copy the root or build/write a new full
-snapshot. Exact file events retain their direct-delta path. Only full builds, explicit whole-root replacements and threshold-triggered
+facts. Deletion candidates come only from the scope's own stored subtree: the
+writer walks the persisted child index plus overlay rows added since the base,
+so a refresh costs time proportional to that subtree. The previous whole-shard
+sweep materialized paths for every row and cost about 4.7 s per dirty scope on a
+3.6M-row index; the subtree walk takes 1.5 ms for `~/Library/Logs` and about
+250 ms for all of `~/Library`.
+
+Deleting a directory writes only its own tombstone, like fsearch's dead range:
+path resolution, search, counts and compaction already treat every row beneath
+a dead (or now-file) directory as gone. Writing one tombstone per descendant
+used to push large deletes past the journal frame and into a full republish.
+Scoped walks do not descend through dead rows, so a later rescan does not
+re-delete them. Whenever a change set revives a dead directory (exact-path
+event, structural ancestry, or rescan), its stored children that were not
+re-observed are tombstoned in the same frame, so recreating the path cannot
+resurrect stale children. A diff larger than one 1 MiB journal frame is published as a new generation with
+the changes applied, instead of failing every retry. Exact file events retain their direct-delta path. Only full builds, explicit whole-root replacements and threshold-triggered
 maintenance publish complete generations.
 
 FSEvents cursors travel with sealed dirty batches and advance only after durable
@@ -135,10 +176,57 @@ root finalization. Full/root reconciles capture the boundary before traversal,
 never the live system event head at completion. The feed updates its cached
 acknowledgements without restarting an unchanged watch set and filters history
 already committed by each root. A partial reconcile cannot acknowledge a known
-history gap. Must-scan/drop markers require a scoped recovery scan (a root scan
-only for root markers), not repeated replay of the same incomplete history.
-Signal-channel overflow retains one recovery notification per affected root and
-suppresses subsequent signals for that root until the notification is queued.
+history gap. Subdirectory must-scan markers require a scoped recovery scan, not
+repeated replay of the same incomplete history.
+
+## Change feeds and history recovery
+
+Every feed (FSEvents, USN, fallback) emits three kinds of signals: dirty paths,
+`history_lost`, and `feed_unavailable`. A feed reports `history_lost` when it can
+no longer say which paths changed. Causes include a kernel drop, an expired or
+mismatched cursor, a watcher error or queue overflow, a moved root, and the
+fallback feed's initial watch registration.
+
+All feeds deliver through `changeSignalQueue`. Native callbacks never block. A
+full channel turns into one `history_lost` marker per root. A helper goroutine
+delivers that marker even if no other event arrives. Later signals for the same
+root are dropped while its marker is pending, because the recovery relists after
+those changes.
+
+The scanner marks the root degraded and schedules a history recovery. A root
+gets at most one recovery per minute; later requests are delayed, not dropped.
+Recovery never re-crawls the whole root:
+
+1. It lstats every indexed directory in parallel.
+2. It relists the root plus every directory whose mtime differs from the index,
+   or whose mtime is unknown.
+3. Each of those directories is queued as a one-level `directory` relist (see
+   above): new child directories are walked, vanished entries are pruned, and
+   new or changed files are upserted.
+4. The root returns to ready after the flush that applies those relists succeeds.
+
+Creating, deleting or renaming an entry updates the parent's mtime on APFS,
+NTFS, ext4 and btrfs. An in-place file edit that loses its event stays stale
+until the file changes again. Only a missing root or an unpublished shard falls
+back to a root reconcile. Startup restore requests the same recovery for indexed
+roots whose cursor is stale.
+
+Removals usually arrive after the path is gone, so their type is unknown. They
+are applied as delete-by-path deltas. Deleting a directory row hides all of its
+descendants, so the whole-root reconcile previously used for this case is gone.
+
+There is no per-folder relist pacing like fsearch's `Pace`. Wox receives
+per-file events, so a hot folder costs cheap `lstat` deltas rather than
+repeated listings, and the dirty queue's 2 s quiet window, 5 s maximum wait and
+backpressure tiers already bound how often any scope is processed.
+
+The fallback feed registers one fsnotify watch per directory. Registration is
+breadth first, on a dedicated worker, within a platform budget: half of
+`max_user_watches` on Linux and 512 directories on Windows. Each Windows watch
+uses a 16 KB buffer. Directories excluded by policy are never watched.
+Directories created later are registered and rescanned. A root that exceeds the
+budget, or hits `ENOSPC`/`EMFILE`, is marked partial and reports `history_lost`
+every 10 minutes, so the relist covers the unwatched part.
 
 ## Full-build temporary memory
 
@@ -400,11 +488,28 @@ state only, so they do not recount mapped entries or walk disk files. Published
 index statistics remain separate. Serial volume builds share one run clock and
 keep completed volumes' live counts while the next volume is being ingested.
 
+## Configured-root scan streams
+
+Subtree and direct-files scans list directories in parallel workers and emit
+pre-resolved column records. Each queued directory carries its own and its
+parent's entry IDs, so a child's `ParentID` comes from the listing that produced
+it and every path is hashed exactly once, in a worker. The single writer checks
+scope ownership once per batch, adds synthetic ancestry for the scope only, and
+inserts the records. It does not re-validate, re-hash or walk ancestry per path.
+Path-based `Entries` remain for reconciler snapshots and direct deltas.
+
+On a 430,622-entry `~/Library` tree, serial writer time fell from 2.13 s with
+path entries to 104 ms with records, while the parallel walk took 24.4 s.
+
 ## macOS enumeration
 
 `directoryread` requests names, types, modification times, permissions and file
-lengths through `getattrlistbulk` in 256 KiB buffers. Returned attribute bitmaps
-determine metadata validity; absent fields fall back to `Lstat`. Unsupported
+lengths through `getattrlistbulk` in pooled 256 KiB buffers. Returned attribute
+bitmaps determine metadata validity; absent fields fall back to `Lstat`. Darwin
+never returns file lengths for directories, so a directory is complete without
+one: it would otherwise cost an extra `Lstat` per directory during full scans.
+The index stores zero as every directory's size on all platforms, so bulk-listed
+children and `Lstat`-ed scope roots produce identical rows. Unsupported
 filesystems use ordinary directory reads. Link attributes describe the link
 itself, preserving cycle avoidance. The decoder follows Apple's
 [packed attribute contract](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/man/man2/getattrlistbulk.2)

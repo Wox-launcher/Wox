@@ -65,7 +65,11 @@ type Snapshot struct {
 	Sizes                []int64
 	Modified             []int64
 	Versions             []uint64
-	mapping              *fileMapping
+	// ChildRows lists every row that has a parent, ordered by parent row, so a
+	// directory's children are one contiguous range. Scoped reconciles walk only
+	// their own subtree with it instead of sweeping every row of the shard.
+	ChildRows []uint32
+	mapping   *fileMapping
 }
 
 func (s *Snapshot) Len() int   { return len(s.IDs) }
@@ -104,6 +108,43 @@ func (s *Snapshot) Path(row uint32) (string, bool) {
 		parts[left], parts[right] = parts[right], parts[left]
 	}
 	return filepath.Join(s.Root, strings.Join(parts, string(filepath.Separator))), true
+}
+
+// Children returns the rows whose parent is row, borrowed from the snapshot.
+func (s *Snapshot) Children(row uint32) []uint32 {
+	start := sort.Search(len(s.ChildRows), func(i int) bool { return s.Parents[s.ChildRows[i]] >= row })
+	end := start
+	for end < len(s.ChildRows) && s.Parents[s.ChildRows[end]] == row {
+		end++
+	}
+	return s.ChildRows[start:end]
+}
+
+// prepareChildRows builds the parent-ordered child index with a counting sort.
+// Rows keep their relative order inside each parent group.
+func (s *Snapshot) prepareChildRows() {
+	if len(s.ChildRows) != 0 || len(s.Parents) != s.Len() {
+		return
+	}
+	starts := make([]uint32, s.Len()+1)
+	total := 0
+	for row := 1; row < s.Len(); row++ {
+		if parent := s.Parents[row]; parent != NoRow && uint64(parent) < uint64(s.Len()) {
+			starts[parent+1]++
+			total++
+		}
+	}
+	for row := 1; row < len(starts); row++ {
+		starts[row] += starts[row-1]
+	}
+	children := make([]uint32, total)
+	for row := 1; row < s.Len(); row++ {
+		if parent := s.Parents[row]; parent != NoRow && uint64(parent) < uint64(s.Len()) {
+			children[starts[parent]] = uint32(row)
+			starts[parent]++
+		}
+	}
+	s.ChildRows = children
 }
 
 // Record returns a borrowed view of one row, including optional metadata.
@@ -203,9 +244,13 @@ func (s *Snapshot) Validate() error {
 			seen[row/64] |= bit
 		}
 	}
+	parented := 0
 	for row := range n {
 		if uint64(s.NameIDs[row]) >= uint64(names) || uint64(s.IDRows[row]) >= uint64(n) {
 			return fmt.Errorf("invalid row reference")
+		}
+		if row > 0 && s.Parents[row] != NoRow {
+			parented++
 		}
 		if row > 0 && s.IDs[s.IDRows[row-1]] >= s.IDs[s.IDRows[row]] {
 			return fmt.Errorf("unordered entry identifiers")
@@ -223,6 +268,25 @@ func (s *Snapshot) Validate() error {
 				return fmt.Errorf("missing metadata column")
 			}
 		}
+	}
+	// Subtree reconciles trust ChildRows to find deletions, so it must list every
+	// parented row exactly once and in parent order.
+	if len(s.ChildRows) != parented {
+		return fmt.Errorf("invalid child index length")
+	}
+	childSeen := make([]uint64, (n+63)/64)
+	for i, row := range s.ChildRows {
+		if row == 0 || uint64(row) >= uint64(n) || s.Parents[row] == NoRow {
+			return fmt.Errorf("invalid child index row")
+		}
+		if i > 0 && s.Parents[s.ChildRows[i-1]] > s.Parents[row] {
+			return fmt.Errorf("unordered child index")
+		}
+		bit := uint64(1) << (row % 64)
+		if childSeen[row/64]&bit != 0 {
+			return fmt.Errorf("duplicate child index row")
+		}
+		childSeen[row/64] |= bit
 	}
 	// Three states detect cycles in linear time even when MFT children arrive before parents.
 	state := make([]byte, n)

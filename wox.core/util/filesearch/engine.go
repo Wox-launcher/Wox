@@ -353,15 +353,8 @@ func (e *Engine) AddRoot(ctx context.Context, rootPath string) error {
 	now := util.GetSystemTimestamp()
 	if existing != nil {
 		existing.Kind = RootKindUser
-		existing.DynamicParentRootID = ""
-		existing.PolicyRootPath = ""
-		existing.PromotedAt = 0
-		existing.LastHotAt = 0
 		existing.UpdatedAt = now
 		existing.Status = RootStatusPreparing
-		// A user-added path can collide with a hidden dynamic root. Clearing the
-		// lifecycle fields here makes that path a real user root instead of
-		// leaving stale parent-policy metadata attached to the reused row.
 		if err := e.db.UpsertRoot(ctx, *existing); err != nil {
 			return err
 		}
@@ -436,7 +429,7 @@ func (e *Engine) ListRoots(ctx context.Context) ([]RootRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	return userVisibleRoots(roots), nil
+	return roots, nil
 }
 
 func (e *Engine) GetStatus(ctx context.Context) (StatusSnapshot, error) {
@@ -481,33 +474,15 @@ func (e *Engine) getLocalStatus(ctx context.Context) (StatusSnapshot, error) {
 		return StatusSnapshot{}, fmt.Errorf("filesearch engine closed")
 	}
 
-	allRoots, err := e.statusRoots(ctx)
+	roots, err := e.statusRoots(ctx)
 	if err != nil {
 		return StatusSnapshot{}, err
 	}
-	// Dynamic roots are internal scan ownership boundaries. Status counters keep
-	// reporting the user-configured root set while the scanner still uses all
-	// roots for execution and diagnostics.
-	roots := userVisibleRoots(allRoots)
 
-	var transientScanState TransientRootState
-	hasTransientScanState := false
 	var transientSyncState TransientSyncState
 	hasTransientSyncState := false
-
 	if e.scanner != nil {
-		if activeState, ok := e.scanner.GetTransientRootState(); ok {
-			transientScanState = activeState
-			hasTransientScanState = true
-			mergeTransientRootState(roots, activeState.Root)
-		}
-		if activeState, ok := e.scanner.GetTransientSyncState(); ok {
-			transientSyncState = activeState
-			hasTransientSyncState = true
-			if activeState.Root.ID != "" {
-				mergeTransientRootState(roots, activeState.Root)
-			}
-		}
+		transientSyncState, hasTransientSyncState = e.scanner.GetTransientSyncState()
 	}
 
 	status := StatusSnapshot{
@@ -548,24 +523,6 @@ func (e *Engine) getLocalStatus(ctx context.Context) (StatusSnapshot, error) {
 			status.ActiveRootStatus = root.Status
 			status.ActiveProgressCurrent = root.ProgressCurrent
 			status.ActiveProgressTotal = root.ProgressTotal
-			switch {
-			case hasTransientSyncState && transientSyncState.Root.ID == root.ID:
-				status.ActiveRootIndex = transientSyncState.RootIndex
-				status.ActiveRootTotal = transientSyncState.RootTotal
-				status.ActiveDiscoveredCount = 0
-				status.ActiveDirectoryIndex = transientSyncState.ScopeCount
-				status.ActiveDirectoryTotal = transientSyncState.ScopeCount
-				status.ActiveItemCurrent = 0
-				status.ActiveItemTotal = int64(transientSyncState.DirtyPathCount)
-			case hasTransientScanState && transientScanState.Root.ID == root.ID:
-				status.ActiveRootIndex = transientScanState.RootIndex
-				status.ActiveRootTotal = transientScanState.RootTotal
-				status.ActiveDiscoveredCount = transientScanState.DiscoveredCount
-				status.ActiveDirectoryIndex = transientScanState.DirectoryIndex
-				status.ActiveDirectoryTotal = transientScanState.DirectoryTotal
-				status.ActiveItemCurrent = transientScanState.ItemCurrent
-				status.ActiveItemTotal = transientScanState.ItemTotal
-			}
 		}
 	}
 
@@ -648,26 +605,6 @@ func mergeTransientRunStatus(status *StatusSnapshot, activeRun StatusSnapshot) {
 	if strings.TrimSpace(activeRun.LastError) != "" {
 		status.LastError = activeRun.LastError
 	}
-}
-
-func mergeTransientRootState(roots []RootRecord, transientRoot RootRecord) {
-	for index := range roots {
-		if roots[index].ID == transientRoot.ID {
-			roots[index] = transientRoot
-			return
-		}
-	}
-}
-
-func userVisibleRoots(roots []RootRecord) []RootRecord {
-	visible := make([]RootRecord, 0, len(roots))
-	for _, root := range roots {
-		if root.Kind == RootKindDynamic {
-			continue
-		}
-		visible = append(visible, root)
-	}
-	return visible
 }
 
 func (e *Engine) OnStatusChanged(callback func(StatusSnapshot)) func() {

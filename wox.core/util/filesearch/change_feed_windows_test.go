@@ -9,7 +9,7 @@ import (
 
 func TestUSNResolvedRecordsEmitOnlyLongestMatchingRoot(t *testing.T) {
 	parent := RootRecord{ID: "root-usn-parent", Path: `C:\Users\qian`}
-	dynamic := RootRecord{ID: "root-usn-dynamic", Path: `C:\Users\qian\dev\Wox`, Kind: RootKindDynamic, DynamicParentRootID: parent.ID, PolicyRootPath: parent.Path}
+	nested := RootRecord{ID: "root-usn-nested", Path: `C:\Users\qian\dev\Wox`, Kind: RootKindUser}
 	var emitted []ChangeSignal
 	watcher := &usnWatcherSet{
 		emit: func(signal ChangeSignal) {
@@ -17,7 +17,7 @@ func TestUSNResolvedRecordsEmitOnlyLongestMatchingRoot(t *testing.T) {
 		},
 	}
 
-	roots := []RootRecord{parent, dynamic}
+	roots := []RootRecord{parent, nested}
 	watcher.emitResolvedRecords(roots, newRootPathMatcher(roots), usnJournalState{Volume: `C:\`, JournalID: 1}, []usnResolvedRecord{
 		{Path: `C:\Users\qian\dev\Wox\main.go`, PathKnown: true, PathIsDir: false, USN: 10},
 	})
@@ -25,10 +25,10 @@ func TestUSNResolvedRecordsEmitOnlyLongestMatchingRoot(t *testing.T) {
 	if len(emitted) != 1 {
 		t.Fatalf("expected one usn signal for longest matching root, got %#v", emitted)
 	}
-	if emitted[0].RootID != dynamic.ID {
-		t.Fatalf("expected dynamic root signal, got %#v", emitted[0])
+	if emitted[0].RootID != nested.ID {
+		t.Fatalf("expected nested root signal, got %#v", emitted[0])
 	}
 	if emitted[0].Kind != ChangeSignalKindDirtyPath || emitted[0].At.IsZero() || emitted[0].At.After(time.Now().Add(time.Second)) {
-		t.Fatalf("unexpected dynamic usn signal: %#v", emitted[0])
+		t.Fatalf("unexpected nested usn signal: %#v", emitted[0])
 	}
 }

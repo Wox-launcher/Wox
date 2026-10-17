@@ -32,64 +32,43 @@ func (d *FileSearchDB) restoreDirectory(ctx context.Context) error {
 			return err
 		}
 	}
-	return d.hideDynamicScopes(ctx, roots)
+	return nil
 }
 
-// writeColumnScope persists searchable data before directory bookkeeping. If a
-// metadata commit fails, the unchanged root cursor causes safe replay.
+// writeColumnScope publishes one scope. Feed cursors only advance in
+// FinalizeRootRun, so a crash after this write replays safely.
 func (d *FileSearchDB) writeColumnScope(ctx context.Context, rootID, scope string, direct bool, stream func(func(SubtreeSnapshotBatch) error) error) error {
 	return d.writeColumnScopes(ctx, rootID, []string{scope}, direct, stream)
 }
 
-// writeColumnScopes shares one metadata transaction and one column publication
-// across the scanner's coalesced subtree batches.
+// writeColumnScopes shares one column publication across the scanner's
+// coalesced subtree batches. Directory facts live only in the column store;
+// SQLite keeps root lifecycle state.
 func (d *FileSearchDB) writeColumnScopes(ctx context.Context, rootID string, scopes []string, direct bool, stream func(func(SubtreeSnapshotBatch) error) error) error {
-	tx, err := d.db.BeginTx(ctx, nil)
+	root, err := d.FindRootByID(ctx, rootID)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	root, err := lockRootForSubtreeSnapshot(ctx, tx, rootID)
-	if err != nil {
-		return err
+	if root == nil {
+		return fmt.Errorf("root %q not found", rootID)
 	}
 	for _, scope := range scopes {
 		if !pathWithinScope(root.Path, scope) {
 			return fmt.Errorf("scope %q outside root %q", scope, root.Path)
 		}
-		if !direct {
-			if err := tombstoneScopedDirectories(tx, ctx, rootID, scope, 0); err != nil {
-				return err
-			}
-		}
 	}
-	err = d.directory.writeScopes(ctx, rootID, scopes, direct, func(yield func(SubtreeSnapshotBatch) error) error {
-		return stream(func(batch SubtreeSnapshotBatch) error {
-			if err := yield(batch); err != nil {
-				return err
-			}
-			return upsertDirectoryRecordsBatchTx(ctx, tx, batch.Directories)
-		})
-	})
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
+	return d.directory.writeScopes(ctx, rootID, scopes, direct, stream)
 }
 
 // applyColumnJob streams traversal batches directly into the root builder. No
 // full-path filename staging table or second filename index is created.
-func (d *FileSearchDB) applyColumnJob(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats), direct bool) (JobApplyStats, error) {
-	want := JobKindSubtree
-	if direct {
-		want = JobKindDirectFiles
-	}
-	if job.Kind != want || snapshot == nil {
-		return JobApplyStats{}, fmt.Errorf("invalid %s scan job", want)
+func (d *FileSearchDB) applyColumnJob(ctx context.Context, root RootRecord, job Job, snapshot *SnapshotBuilder, onProgress func(JobApplyStats)) (JobApplyStats, error) {
+	if snapshot == nil {
+		return JobApplyStats{}, fmt.Errorf("invalid %s scan job", job.Kind)
 	}
 	stats := JobApplyStats{}
-	err := d.writeColumnScope(ctx, root.ID, job.ScopePath, direct, func(yield func(SubtreeSnapshotBatch) error) error {
-		consume := func(batch SubtreeSnapshotBatch) error {
+	counted := func(yield func(SubtreeSnapshotBatch) error) func(SubtreeSnapshotBatch) error {
+		return func(batch SubtreeSnapshotBatch) error {
 			if err := validateJobSnapshotBatch(job, batch); err != nil {
 				return err
 			}
@@ -102,11 +81,24 @@ func (d *FileSearchDB) applyColumnJob(ctx context.Context, root RootRecord, job 
 			}
 			return nil
 		}
-		if direct {
-			return snapshot.StreamDirectFilesJobBatches(ctx, root, job, consume)
-		}
-		return snapshot.StreamSubtreeJobBatches(ctx, root, job, consume)
-	})
+	}
+	var err error
+	switch job.Kind {
+	case JobKindDirectFiles:
+		err = d.writeColumnScope(ctx, root.ID, job.ScopePath, true, func(yield func(SubtreeSnapshotBatch) error) error {
+			return snapshot.StreamDirectFilesJobBatches(ctx, root, job, counted(yield))
+		})
+	case JobKindSubtree:
+		err = d.writeColumnScope(ctx, root.ID, job.ScopePath, false, func(yield func(SubtreeSnapshotBatch) error) error {
+			return snapshot.StreamSubtreeJobBatches(ctx, root, job, counted(yield))
+		})
+	case JobKindDirectory:
+		err = d.directory.writeDirectory(ctx, root.ID, job.ScopePath, func(knownDirectory func(uint64) bool, yield func(SubtreeSnapshotBatch) error) error {
+			return snapshot.StreamDirectoryJobBatches(ctx, root, job, knownDirectory, counted(yield))
+		})
+	default:
+		return JobApplyStats{}, fmt.Errorf("invalid %s scan job", job.Kind)
+	}
 	return stats, err
 }
 
@@ -158,77 +150,6 @@ func (d *FileSearchDB) applyColumnDelta(ctx context.Context, root RootRecord, jo
 	}
 	// Only FinalizeRootRun acknowledges feed progress after every job succeeds.
 	return d.directory.applyEntries(ctx, root.ID, entries, deleted, root.FeedCursor)
-}
-
-// copyColumnScope publishes a destination before its ownership metadata changes.
-// The caller commits root ownership next, then hides the old parent subtree.
-// Startup repeats that final hide from root metadata after an interrupted move.
-func (d *FileSearchDB) copyColumnScope(ctx context.Context, from, to RootRecord, scope string) error {
-	if !pathWithinScope(from.Path, scope) || !pathWithinScope(to.Path, scope) {
-		return fmt.Errorf("invalid ownership transfer for %q", scope)
-	}
-	if err := d.directory.attach(to); err != nil {
-		return err
-	}
-	builder := column.NewBuilder(scope, directoryEntryID(scope))
-	err := d.directory.visit(ctx, from.ID, func(entry EntryRecord) error {
-		if !pathWithinScope(scope, entry.Path) {
-			return nil
-		}
-		record, err := directoryEntryRecord(from, entry)
-		if err != nil {
-			return err
-		}
-		return builder.Add(record)
-	})
-	if err != nil {
-		return err
-	}
-	base, err := builder.Finish()
-	if err != nil {
-		return err
-	}
-	return d.directory.writeScope(ctx, to.ID, scope, false, func(yield func(SubtreeSnapshotBatch) error) error {
-		batch := SubtreeSnapshotBatch{RootID: to.ID, ScopePath: scope}
-		view := column.View{Base: base}
-		for row := 0; row < base.Len(); row++ {
-			record := base.Record(uint32(row))
-			path, ok := view.Path(record.ID)
-			if !ok {
-				continue
-			}
-			batch.Entries = append(batch.Entries, EntryRecord{RootID: to.ID, Path: path, ParentPath: filepath.Dir(path), IsDir: record.Flags&column.Directory != 0, Size: record.Size, Mtime: record.Modified})
-			if len(batch.Entries) == 2048 {
-				if err := yield(batch); err != nil {
-					return err
-				}
-				batch.Entries = batch.Entries[:0]
-			}
-		}
-		if len(batch.Entries) > 0 {
-			return yield(batch)
-		}
-		return nil
-	})
-}
-
-// hideDynamicScopes restores the ownership boundary without scanning full paths.
-// Parent rows may remain in an immutable generation until its next compaction.
-func (d *FileSearchDB) hideDynamicScopes(ctx context.Context, roots []RootRecord) error {
-	for parentID, scopes := range buildDynamicRootExclusions(roots) {
-		var cursor string
-		for _, root := range roots {
-			if root.ID == parentID {
-				cursor = root.FeedCursor
-				break
-			}
-		}
-		err := d.directory.applyEntries(ctx, parentID, nil, scopes, cursor)
-		if err != nil && !errors.Is(err, column.ErrNotReady) {
-			return err
-		}
-	}
-	return nil
 }
 
 // columnEntries exposes owned paths only for callers that explicitly request a
