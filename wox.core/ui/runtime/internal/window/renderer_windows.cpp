@@ -172,7 +172,9 @@ static void release_shared_d3d_device(ID3D11Device **device) {
   if (shared_d3d_device_users > 0) {
     shared_d3d_device_users--;
   }
-  if (shared_d3d_device_users == 0 && shared_d3d_device != nullptr) {
+  // Keep the final WARP reference across hidden-window trims: destroying the software device
+  // can block the UI thread in FreeLibrary/LdrUnloadDll (issue #4637). Reuse it on the next show.
+  if (shared_d3d_device_users == 0 && shared_d3d_device != nullptr && !shared_d3d_uses_warp) {
     shared_d3d_device->Release();
     shared_d3d_device = nullptr;
   }
