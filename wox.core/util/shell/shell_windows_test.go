@@ -54,6 +54,11 @@ func TestShellExecuteMaskUsesContextMenuForNamespaceObjects(t *testing.T) {
 	if fileMask&seeMaskInvokeIDList != 0 {
 		t.Fatal("expected filesystem path to preserve direct Shell execution")
 	}
+
+	panelMask := shellExecuteMask(`::{26EE0668-A00A-44D7-9371-BEB064C98683}\0\{F82DF8F7-8B9F-442E-A48C-818EA735FF9B}`)
+	if panelMask&seeMaskInvokeIDList == 0 {
+		t.Fatal("expected Control Panel parsing name to use SEE_MASK_INVOKEIDLIST")
+	}
 }
 
 func TestCreateShellItemIDListHandlesSpecialPathCharacters(t *testing.T) {

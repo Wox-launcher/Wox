@@ -1749,6 +1749,7 @@
   "plugin_app_cpu": "CPU",
   "plugin_app_memory": "内存",
   "plugin_app_windows_settings_subtitle": "Windows 设置",
+  "plugin_app_windows_control_panel_subtitle": "控制面板",
   "plugin_app_windows_settings_system": "系统",
   "plugin_app_windows_settings_bluetooth": "蓝牙和设备",
   "plugin_app_windows_settings_network": "网络和 Internet",

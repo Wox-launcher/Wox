@@ -1748,6 +1748,7 @@
   "plugin_app_cpu": "CPU",
   "plugin_app_memory": "メモリ",
   "plugin_app_windows_settings_subtitle": "Windows 設定",
+  "plugin_app_windows_control_panel_subtitle": "コントロール パネル",
   "plugin_app_windows_settings_system": "システム",
   "plugin_app_windows_settings_bluetooth": "Bluetooth とデバイス",
   "plugin_app_windows_settings_network": "ネットワークとインターネット",

@@ -2335,6 +2335,17 @@ func (a *ApplicationPlugin) getQueryEntriesSnapshot() ([]appQueryEntry, uint64) 
 	return entries, generation
 }
 
+// appDisplayPath shows a localized catalog name for virtual Windows and macOS settings.
+func (a *ApplicationPlugin) appDisplayPath(ctx context.Context, info appInfo) string {
+	if key := windowsResultSubtitleKey(info); key != "" {
+		return a.api.GetTranslation(ctx, key)
+	}
+	if isMacSystemSettingsPath(info.Path) {
+		return a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
+	}
+	return info.GetDisplayPath()
+}
+
 func (a *ApplicationPlugin) resolveQueryEntryDisplay(ctx context.Context, entry appQueryEntry) (displayName string, displayPath string, searchCandidates []*fuzzymatch.PreparedText) {
 	displayName = entry.info.Name
 	if strings.HasPrefix(displayName, "i18n:") {
@@ -2348,12 +2359,7 @@ func (a *ApplicationPlugin) resolveQueryEntryDisplay(ctx context.Context, entry 
 		searchCandidates = entry.preparedSearchCandidates
 	}
 
-	displayPath = entry.info.GetDisplayPath()
-	if entry.info.Type == AppTypeWindowsSetting {
-		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
-	} else if isMacSystemSettingsPath(entry.info.Path) {
-		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
-	}
+	displayPath = a.appDisplayPath(ctx, entry.info)
 
 	return displayName, displayPath, searchCandidates
 }
@@ -2676,12 +2682,7 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 		displayName = a.api.GetTranslation(ctx, displayName)
 	}
 
-	displayPath := appInfo.GetDisplayPath()
-	if appInfo.Type == AppTypeWindowsSetting {
-		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_windows_settings_subtitle")
-	} else if isMacSystemSettingsPath(appInfo.Path) {
-		displayPath = a.api.GetTranslation(ctx, "i18n:plugin_app_macos_system_settings_subtitle")
-	}
+	displayPath := a.appDisplayPath(ctx, *appInfo)
 	result := &plugin.QueryResult{
 		Id:          uuid.NewString(),
 		Title:       displayName,

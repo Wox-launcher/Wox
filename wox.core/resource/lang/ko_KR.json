@@ -1748,6 +1748,7 @@
   "plugin_app_cpu": "CPU",
   "plugin_app_memory": "메모리",
   "plugin_app_windows_settings_subtitle": "Windows 설정",
+  "plugin_app_windows_control_panel_subtitle": "제어판",
   "plugin_app_windows_settings_system": "시스템",
   "plugin_app_windows_settings_bluetooth": "Bluetooth 및 장치",
   "plugin_app_windows_settings_network": "네트워크 및 인터넷",
