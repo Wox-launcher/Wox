@@ -169,7 +169,8 @@ func (r *nativeRenderer) recreate() error {
 }
 
 // trim releases the hidden renderer and its shared Direct3D device reference. When no renderer
-// users remain, the native reference count also destroys the device. Keeping that device warm
+// users remain, the native reference count also destroys a hardware device. WARP devices stay
+// alive across trims to avoid blocking the UI thread during DLL unloading. see #4637. Keeping a hardware device warm
 // retained about 55 MiB in measurements; releasing it reduced the hidden process by roughly
 // 60 MiB. Recreation adds about 225 ms to the next show, so callers delay this until the window
 // has remained hidden long enough to favor memory over latency.
