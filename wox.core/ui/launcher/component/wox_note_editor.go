@@ -213,8 +213,10 @@ func noteEditorTextCaretRange(props NoteEditorProps, segment NoteDocumentSegment
 		caret = props.Controller.State().Selection.Focus
 	}
 	innerWidth := max(float32(0), props.Width-padding.Left-padding.Right)
-	line := TextFieldVisualLineIndex(value, caret, props.Window, props.Style, innerWidth, NoteFieldRuns(runs))
-	top := start + padding.Top + float32(line)*props.LineHeight
+	fieldRuns := NoteFieldRuns(runs)
+	lines := textFieldVisualLines(value, props.Window, props.Style, innerWidth, fieldRuns)
+	line := textFieldLineIndex(lines, caret)
+	top := start + padding.Top + textFieldLayoutLines(lines, props.LineHeight).top(line)
 	return &woxwidget.ScrollRange{Start: top, End: top + props.LineHeight}
 }
 

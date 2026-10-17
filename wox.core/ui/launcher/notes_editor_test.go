@@ -130,20 +130,19 @@ func TestNotesActiveFormatsInTableIgnoreOutsideBullet(t *testing.T) {
 }
 
 func TestNotesLinkLooksClickableAndOpensFromText(t *testing.T) {
-	linkColor := woxui.Color{R: 19, G: 121, B: 210, A: 255}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 		{ID: "task", Type: common.NoteBlockTask, Text: "sadf more", Spans: []common.NoteSpan{{Start: 0, End: 4, Link: "https://wox.one"}}},
 	}}
-	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{Focus: linkColor})
+	_, runs, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{Focus: woxui.Color{R: 250, G: 250, B: 250, A: 255}})
 	found := false
 	for _, run := range runs {
-		if run.Start == ranges[0].TextStart && run.End == ranges[0].TextStart+4 && run.Underline && run.Color == linkColor {
+		if run.Start == ranges[0].TextStart && run.End == ranges[0].TextStart+4 && run.Underline && run.Color == woxcomponent.DocumentListMarkerColor {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("link run = %#v, want underlined Cursor color on sadf", runs)
+		t.Fatalf("link run = %#v, want the list accent on sadf", runs)
 	}
 	if got := noteLinkAtOffset(document, ranges, ranges[0].TextStart); got != "https://wox.one" {
 		t.Fatalf("link at label = %q", got)

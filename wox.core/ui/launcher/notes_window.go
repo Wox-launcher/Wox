@@ -58,6 +58,9 @@ const (
 	notesEditorPaddingRight  = float32(40)
 	notesEditorPaddingTop    = float32(12)
 	notesEditorPaddingBottom = float32(24)
+	// notesEditorLineHeight is the body line box for the 14-unit note font.
+	// 20 keeps wrapped lines from sitting in a loose 24-unit box; paragraph breaks add their own gap.
+	notesEditorLineHeight = float32(20)
 	// notesToolbarActionsWidth is the five 32-wide title-bar buttons plus gaps
 	// and the 6px inset used to place that cluster. Equal macOS title insets
 	// used to be 220, which left only 20px at the 460 default width.
@@ -619,7 +622,7 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 	padding := notesEditorPadding()
 	// Source and preview share the UI font so toggling views does not change typeface.
 	style := c.editorStyle()
-	lineHeight := 24 * c.zoom
+	lineHeight := notesEditorLineHeight * c.zoom
 	fieldHeight := max(height, woxcomponent.TextFieldVisualHeight(c.editor.Text(), c.managed.Window(), style, width, lineHeight, padding, nil))
 	return woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		EdgeFade: 24,
@@ -1011,7 +1014,7 @@ func (c *notesWindowController) resizeForDocument() {
 	for _, block := range c.document.Blocks {
 		lineCount += max(1, (utf8.RuneCountInString(block.Text)+35)/36)
 	}
-	height := max(notesMinimumHeight, min(notesMaximumHeight, float32(98+lineCount*24)))
+	height := max(notesMinimumHeight, min(notesMaximumHeight, 98+float32(lineCount)*notesEditorLineHeight))
 	bounds, err := c.managed.Window().Bounds()
 	if err != nil {
 		return
@@ -1098,7 +1101,7 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 			EdgeFade: 24,
 			ID:       "notes.editor", Label: a.translate("i18n:notes_editor"), Document: c.document,
 			Width: frame.Size.Width, Height: editorHeight, Padding: notesEditorPadding(),
-			Style: c.editorStyle(), LineHeight: 24 * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
+			Style: c.editorStyle(), LineHeight: notesEditorLineHeight * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
 			RevealCaret:        c.consumeEditorCaretReveal(),

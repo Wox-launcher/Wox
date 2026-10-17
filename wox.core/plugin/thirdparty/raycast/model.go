@@ -1,6 +1,10 @@
 package raycast
 
-import "time"
+import (
+	"time"
+
+	"wox/common"
+)
 
 const (
 	statusExists      = "imported"
@@ -16,6 +20,7 @@ type mappedExport struct {
 	general    []mappedSetting
 	quicklinks []mappedQuicklink
 	snippets   []mappedSnippet
+	notes      []mappedNote
 	clipboard  []mappedClipboard
 	summary    clipboardSummary
 }
@@ -92,6 +97,17 @@ type mappedQuicklink struct {
 	favorite   bool
 	detailKey  string
 	detail     string
+	selectable bool
+	status     string
+}
+
+type mappedNote struct {
+	id         string
+	sourceID   string
+	title      string
+	body       string
+	detail     string
+	document   common.NoteDocument
 	selectable bool
 	status     string
 }

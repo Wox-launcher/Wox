@@ -13,12 +13,13 @@ func TestCatalogPlacesShortcutsAfterQuicklinksAndGeneralNearTheTop(t *testing.T)
 		quicklinks: []mappedQuicklink{{id: "quicklink:0", title: "wox", selectable: true}},
 		shortcuts:  []mappedShortcut{{id: "setting:result_binding:0", title: "百度网盘", selectable: true}},
 		snippets:   []mappedSnippet{{id: "snippet:0", title: "note", selectable: true}},
+		notes:      []mappedNote{{id: "note:0", title: "Plan", selectable: true}},
 	})
 	got := make([]string, 0, len(catalog))
 	for _, category := range catalog {
 		got = append(got, category.ID)
 	}
-	want := []string{migrate.CategoryHotkeys, migrate.CategoryGeneral, migrate.CategoryQuicklinks, migrate.CategoryShortcuts, migrate.CategorySnippets}
+	want := []string{migrate.CategoryHotkeys, migrate.CategoryGeneral, migrate.CategoryQuicklinks, migrate.CategoryShortcuts, migrate.CategorySnippets, migrate.CategoryNotes}
 	if len(got) != len(want) {
 		t.Fatalf("order = %v", got)
 	}

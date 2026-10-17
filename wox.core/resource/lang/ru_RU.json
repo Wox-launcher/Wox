@@ -2813,6 +2813,7 @@
   "onboarding_migrate_category_quicklinks": "Быстрые ссылки",
   "onboarding_migrate_category_shortcuts": "Команды",
   "onboarding_migrate_category_snippets": "Фрагменты",
+  "onboarding_migrate_category_notes": "Заметки",
   "onboarding_migrate_category_clipboard": "Буфер обмена",
   "onboarding_migrate_category_prepare": "Перед импортом",
   "onboarding_migrate_item_close_launcher": "Закрыть {name}",

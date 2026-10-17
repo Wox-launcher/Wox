@@ -3014,6 +3014,7 @@
   "onboarding_migrate_category_quicklinks": "快速链接",
   "onboarding_migrate_category_shortcuts": "快捷方式",
   "onboarding_migrate_category_snippets": "片段",
+  "onboarding_migrate_category_notes": "笔记",
   "onboarding_migrate_category_clipboard": "剪贴板",
   "onboarding_migrate_category_prepare": "导入前",
   "onboarding_migrate_item_close_launcher": "关闭 {name}",

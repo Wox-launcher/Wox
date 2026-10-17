@@ -23,6 +23,10 @@ type textFieldLine struct {
 	end    int
 	text   string
 	indent float32
+	// gapAfter is space below this visual line. Soft-wrapped lines stay at 0.
+	gapAfter float32
+	// box replaces the field line height when set. Zero keeps the normal line box.
+	box float32
 }
 
 type textFieldContextAction uint8
@@ -63,6 +67,11 @@ type TextFieldRichRun struct {
 	PaintLineGutter func(displayList *woxui.DisplayList, bounds woxui.Rect)
 	// HangingIndent keeps later soft-wrapped lines aligned with the first glyph after this run.
 	HangingIndent bool
+	// BlockGap adds space after the visual line that ends at End.
+	// Lines wrapped inside the run keep the normal line box.
+	BlockGap float32
+	// LineBox replaces the field line height for an empty line covered by this run.
+	LineBox float32
 }
 
 // textFieldMenuEnablement is the Cut/Copy/Paste/Select All snapshot shown in the context menu.
@@ -226,7 +235,7 @@ func TextFieldVisualContentSize(value string, window *woxui.Window, style woxui.
 	for _, line := range lines {
 		maxWidth = max(maxWidth, line.indent+textFieldMeasureRangeOrEstimate(window, runes, line.start, line.end, style, richRuns))
 	}
-	return woxui.Size{Width: maxWidth, Height: float32(len(lines)) * lineHeight}
+	return woxui.Size{Width: maxWidth, Height: textFieldLayoutLines(lines, lineHeight).total}
 }
 
 // TextFieldVisualLineIndex returns the wrapped line that contains caret.
@@ -371,11 +380,12 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	s.innerHeight = innerHeight
 	softWrap := s.maxLines > 1
 	lines := textFieldRichLines(displayState.Text, props.Window, style, innerWidth, softWrap, props.RichRuns)
+	layout := textFieldLayoutLines(lines, s.lineHeight)
 	caretLine := textFieldLineIndex(lines, displayState.Selection.Focus)
-	maximumVerticalOffset := max(float32(0), float32(len(lines))*s.lineHeight-innerHeight)
+	maximumVerticalOffset := max(float32(0), layout.total-innerHeight)
 	s.verticalOffset = min(s.verticalOffset, maximumVerticalOffset)
 	if !s.hasLastFocus || s.lastFocus != displayState.Selection.Focus {
-		caretTop := float32(caretLine) * s.lineHeight
+		caretTop := layout.top(caretLine)
 		if caretTop < s.verticalOffset {
 			s.verticalOffset = caretTop
 		} else if caretTop+s.lineHeight > s.verticalOffset+innerHeight {
@@ -1242,7 +1252,7 @@ func buildWoxTextField(props TextFieldProps, realState woxui.TextEditingState, c
 		}
 		if !props.ReadOnly && maxLines > 1 && props.OnTapBelowText != nil {
 			lines := textFieldRichLines(state.Text, props.Window, style, innerWidth, softWrap, props.RichRuns)
-			if contentPoint(position).Y+props.verticalOffset >= float32(len(lines))*props.LineHeight && props.OnTapBelowText() {
+			if contentPoint(position).Y+props.verticalOffset >= textFieldLayoutLines(lines, props.LineHeight).total && props.OnTapBelowText() {
 				return
 			}
 		}
@@ -1479,7 +1489,7 @@ func textFieldTrailingHandleBounds(state woxui.TextEditingState, window textFiel
 		return woxui.Rect{}, false
 	}
 	x := -leadingPad + max(float32(0), (leadingPad-size)*0.5)
-	y := float32(lineIndex)*lineHeight + max(float32(0), (lineHeight-size)*0.5) - verticalOffset
+	y := textFieldLayoutLines(lines, lineHeight).top(lineIndex) + max(float32(0), (lineHeight-size)*0.5) - verticalOffset
 	if y+size <= 0 || y >= innerHeight {
 		return woxui.Rect{}, false
 	}
@@ -1498,11 +1508,13 @@ func drawTextFieldTrailingHandleHighlight(displayList *woxui.DisplayList, bounds
 	} else {
 		wash.A = min(wash.A, 48)
 	}
-	for index, line := range textFieldRichLines(state.Text, props.Window, style, bounds.Width, softWrap, props.RichRuns) {
+	lines := textFieldRichLines(state.Text, props.Window, style, bounds.Width, softWrap, props.RichRuns)
+	layout := textFieldLayoutLines(lines, props.LineHeight)
+	for index, line := range lines {
 		if line.end < spec.Start || line.start > spec.End {
 			continue
 		}
-		y := bounds.Y + float32(index)*props.LineHeight - props.verticalOffset
+		y := bounds.Y + layout.top(index) - props.verticalOffset
 		if y+props.LineHeight <= bounds.Y || y >= bounds.Y+bounds.Height {
 			continue
 		}
@@ -1678,7 +1690,7 @@ func textFieldLines(value string, window textFieldMeasurer, style woxui.TextStyl
 
 func textFieldRichLines(value string, window textFieldMeasurer, style woxui.TextStyle, width float32, softWrap bool, richRuns []TextFieldRichRun) []textFieldLine {
 	if len(richRuns) == 0 || !softWrap || window == nil || width <= 0 {
-		return textFieldLines(value, window, style, width, softWrap)
+		return applyTextFieldBlockGaps(textFieldLines(value, window, style, width, softWrap), richRuns)
 	}
 	runes := []rune(value)
 	spans := woxui.GraphemeSpans(value)
@@ -1721,7 +1733,144 @@ func textFieldRichLines(value string, window textFieldMeasurer, style woxui.Text
 			paragraphStart = index + 1
 		}
 	}
+	return applyTextFieldBlockGaps(lines, richRuns)
+}
+
+// applyTextFieldBlockGaps keeps paragraph spacing out of the backing newlines.
+// Only the visual line that finishes a BlockGap run grows; wrapped lines do not.
+func applyTextFieldBlockGaps(lines []textFieldLine, runs []TextFieldRichRun) []textFieldLine {
+	if len(lines) == 0 || (!textFieldRunsHaveBlockGap(runs) && !textFieldRunsHaveLineBox(runs)) {
+		return lines
+	}
+	for index := range lines {
+		lines[index].gapAfter = textFieldBlockGapAfter(lines[index], runs)
+		lines[index].box = textFieldLineBox(lines[index], runs)
+	}
 	return lines
+}
+
+func textFieldRunsHaveLineBox(runs []TextFieldRichRun) bool {
+	for _, run := range runs {
+		if run.LineBox > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// textFieldLineBox is the shortened box of an empty separator line.
+func textFieldLineBox(line textFieldLine, runs []TextFieldRichRun) float32 {
+	if line.start != line.end {
+		return 0
+	}
+	for _, run := range runs {
+		if run.LineBox > 0 && line.start == run.Start && line.end == run.End {
+			return run.LineBox
+		}
+	}
+	return 0
+}
+
+func textFieldRunsHaveBlockGap(runs []TextFieldRichRun) bool {
+	for _, run := range runs {
+		if run.BlockGap > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func textFieldBlockGapAfter(line textFieldLine, runs []TextFieldRichRun) float32 {
+	gap := float32(0)
+	for _, run := range runs {
+		if run.BlockGap > gap && line.end == run.End && line.start <= run.End {
+			gap = run.BlockGap
+		}
+	}
+	return gap
+}
+
+// textFieldLineLayout is the vertical placement of visual lines, including paragraph gaps.
+type textFieldLineLayout struct {
+	spaced     bool
+	tops       []float32
+	boxes      []float32
+	total      float32
+	count      int
+	lineHeight float32
+}
+
+func textFieldLayoutLines(lines []textFieldLine, lineHeight float32) textFieldLineLayout {
+	layout := textFieldLineLayout{count: len(lines), lineHeight: lineHeight, total: float32(len(lines)) * lineHeight}
+	for _, line := range lines {
+		if line.gapAfter > 0 || line.box > 0 {
+			layout.spaced = true
+			break
+		}
+	}
+	if !layout.spaced {
+		return layout
+	}
+	layout.tops = make([]float32, len(lines))
+	layout.boxes = make([]float32, len(lines))
+	y := float32(0)
+	for index, line := range lines {
+		height := lineHeight
+		if line.box > 0 {
+			height = line.box
+		}
+		layout.tops[index] = y
+		layout.boxes[index] = height
+		y += height + line.gapAfter
+	}
+	layout.total = y
+	return layout
+}
+
+// box is the vertical size of one visual line, without the gap that follows it.
+func (layout textFieldLineLayout) box(index int) float32 {
+	if index < 0 || index >= layout.count || len(layout.boxes) == 0 {
+		return layout.lineHeight
+	}
+	return layout.boxes[index]
+}
+
+func (layout textFieldLineLayout) top(index int) float32 {
+	if index <= 0 {
+		return 0
+	}
+	if !layout.spaced {
+		return float32(index) * layout.lineHeight
+	}
+	if index >= len(layout.tops) {
+		return layout.total
+	}
+	return layout.tops[index]
+}
+
+// lineIndexAt maps a content Y onto a visual line. Space between paragraphs belongs
+// to whichever line box is closer, with a tie staying on the paragraph above.
+func (layout textFieldLineLayout) lineIndexAt(y float32) int {
+	if layout.lineHeight <= 0 || layout.count <= 0 || y <= 0 {
+		return 0
+	}
+	if !layout.spaced {
+		return min(layout.count-1, int(y/layout.lineHeight))
+	}
+	for index := 0; index < len(layout.tops); index++ {
+		bottom := layout.tops[index] + layout.box(index)
+		next := bottom
+		if index+1 < len(layout.tops) {
+			next = layout.tops[index+1]
+		}
+		if y < next || index == len(layout.tops)-1 {
+			if y >= bottom && index+1 < len(layout.tops) && y-bottom > next-y {
+				return index + 1
+			}
+			return index
+		}
+	}
+	return layout.count - 1
 }
 
 func fittingRichGraphemePrefix(window textFieldMeasurer, runes []rune, spans []woxui.GraphemeSpan, style woxui.TextStyle, richRuns []TextFieldRichRun, width float32) int {
@@ -1865,13 +2014,16 @@ func TextFieldVisualHeight(value string, window *woxui.Window, style woxui.TextS
 		lineHeight = textFieldLineHeight
 	}
 	innerWidth := max(float32(0), width-padding.Left-padding.Right)
-	lines := 1
-	if window != nil && innerWidth > 0 {
-		lines = max(1, len(textFieldRichLines(value, window, style, innerWidth, true, runs)))
-	} else if value != "" {
-		lines = 1 + strings.Count(value, "\n")
+	var measurer textFieldMeasurer
+	if window != nil {
+		measurer = window
 	}
-	return max(lineHeight, float32(lines)*lineHeight+padding.Top+padding.Bottom)
+	lines := textFieldRichLines(value, measurer, style, innerWidth, window != nil && innerWidth > 0, runs)
+	total := lineHeight
+	if len(lines) > 0 {
+		total = textFieldLayoutLines(lines, lineHeight).total
+	}
+	return max(lineHeight, total+padding.Top+padding.Bottom)
 }
 
 func textFieldAccessibilityLines(state woxui.TextEditingState, style woxui.TextStyle, width float32, maxLines int, props TextFieldProps) []woxui.AccessibilityTextLine {
@@ -1921,7 +2073,7 @@ func TextFieldCaretLayoutAt(value string, offset int, window *woxui.Window, styl
 	index := textFieldLineIndex(lines, offset)
 	line := lines[index]
 	x := textFieldCaretX(line, offset, window, style)
-	y := float32(index)*lineHeight + lineHeight*0.5
+	y := textFieldLayoutLines(lines, lineHeight).top(index) + lineHeight*0.5
 	lineWidth := x
 	if window != nil {
 		lineWidth = line.indent + textFieldMeasureRange(window, []rune(value), line.start, line.end, style, runs)
@@ -1947,8 +2099,9 @@ func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer,
 	if len(lines) == 0 {
 		return 0, false
 	}
+	layout := textFieldLayoutLines(lines, lineHeight)
 	y := point.Y + verticalOffset
-	if y < 0 || y >= float32(len(lines))*lineHeight {
+	if y < 0 || y >= layout.total {
 		return 0, false
 	}
 	if maxLines == 1 {
@@ -1957,7 +2110,12 @@ func textFieldGlyphHitAt(state woxui.TextEditingState, window textFieldMeasurer,
 	if point.X < 0 {
 		return 0, false
 	}
-	line := lines[min(len(lines)-1, int(y/lineHeight))]
+	index := layout.lineIndexAt(y)
+	lineTop := layout.top(index)
+	if y < lineTop || y >= lineTop+layout.box(index) {
+		return 0, false
+	}
+	line := lines[index]
 	if point.X < line.indent {
 		return line.start, false
 	}
@@ -1973,7 +2131,7 @@ func textFieldOffsetOnLines(state woxui.TextEditingState, window textFieldMeasur
 	if len(lines) == 0 {
 		return 0
 	}
-	lineIndex := min(len(lines)-1, max(0, int((point.Y+verticalOffset)/lineHeight)))
+	lineIndex := textFieldLayoutLines(lines, lineHeight).lineIndexAt(point.Y + verticalOffset)
 	line := lines[lineIndex]
 	if maxLines == 1 {
 		point.X += textFieldHorizontalOffset(focused, []rune(state.Text), state.Selection.Focus, style, width, window)
@@ -2030,32 +2188,38 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	richRuns = textFieldCompositionRichRuns(state, richRuns)
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldRichLines(string(displayRunes), window, style, bounds.Width, softWrap, richRuns)
+	layout := textFieldLayoutLines(lines, lineHeight)
 	caretLine := textFieldLineIndex(lines, focus)
 	visibleLines := max(1, min(maxLines, int(bounds.Height/lineHeight)))
-	firstLine := max(0, int(verticalOffset/lineHeight))
-	lineOffset := verticalOffset - float32(firstLine)*lineHeight
-	lastLine := min(len(lines), firstLine+visibleLines+1)
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
 		horizontalOffset = textFieldHorizontalOffset(focused, displayRunes, focus, style, bounds.Width, window)
 	}
-	for lineIndex := firstLine; lineIndex < lastLine; lineIndex++ {
+	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
 		line := lines[lineIndex]
-		y := bounds.Y + float32(lineIndex-firstLine)*lineHeight - lineOffset
+		top := layout.top(lineIndex)
+		lineBox := layout.box(lineIndex)
+		if top+lineBox <= verticalOffset {
+			continue
+		}
+		if top >= verticalOffset+bounds.Height {
+			break
+		}
+		y := bounds.Y + top - verticalOffset
 		lineX := textFieldLineOriginX(bounds.X-horizontalOffset, line)
 		selectionStart := max(start, line.start)
 		selectionEnd := min(end, line.end)
 		if (focused || paintSelection) && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
 			selectedWidth := textFieldMeasureRange(window, displayRunes, selectionStart, selectionEnd, style, richRuns)
-			displayList.FillRoundedRect(woxui.Rect{X: lineX + prefixWidth, Y: y, Width: selectedWidth, Height: lineHeight}, 3, theme.TextSelectionBackground)
+			displayList.FillRoundedRect(woxui.Rect{X: lineX + prefixWidth, Y: y, Width: selectedWidth, Height: lineBox}, 3, theme.TextSelectionBackground)
 		}
 		if gutter, ok := textFieldLineGutter(line, richRuns); ok && gutter.PaintLineGutter != nil {
 			width := gutter.LineGutterWidth
 			if width <= 0 {
 				width = documentQuoteWidth(gutter.Style.Size)
 			}
-			gutter.PaintLineGutter(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: width, Height: lineHeight})
+			gutter.PaintLineGutter(displayList, woxui.Rect{X: bounds.X - horizontalOffset, Y: y, Width: width, Height: lineBox})
 		}
 		if (focused || paintSelection) && selectionStart < selectionEnd {
 			prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, selectionStart, style, richRuns)
@@ -2066,9 +2230,9 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 			// Repainting a selected substring over the original text shifts mixed-script
 			// baselines and doubles antialiased edges, especially on transparent fields.
 			for index, clip := range []woxui.Rect{
-				{X: bounds.X, Y: y, Width: left - bounds.X, Height: lineHeight},
-				{X: left, Y: y, Width: right - left, Height: lineHeight},
-				{X: right, Y: y, Width: bounds.X + bounds.Width - right, Height: lineHeight},
+				{X: bounds.X, Y: y, Width: left - bounds.X, Height: lineBox},
+				{X: left, Y: y, Width: right - left, Height: lineBox},
+				{X: right, Y: y, Width: bounds.X + bounds.Width - right, Height: lineBox},
 			} {
 				if clip.Width <= 0 {
 					continue
@@ -2078,11 +2242,11 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 					color = theme.TextSelectionText
 				}
 				displayList.PushClipRect(clip)
-				drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, color, index != 1, textAlignmentY)
+				drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineBox, style, richRuns, color, index != 1, textAlignmentY)
 				displayList.PopClipRect()
 			}
 		} else {
-			drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineHeight, style, richRuns, textColor, true, textAlignmentY)
+			drawTextFieldRichRange(displayList, window, displayRunes, line.start, line.end, lineX, bounds.X+bounds.Width, y, lineBox, style, richRuns, textColor, true, textAlignmentY)
 		}
 	}
 	if !focused {
@@ -2091,14 +2255,15 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	line := lines[caretLine]
 	lineX := textFieldLineOriginX(bounds.X-horizontalOffset, line)
 	cursorX := lineX + textFieldMeasureRange(window, displayRunes, line.start, focus, style, richRuns)
-	cursorY := bounds.Y + float32(caretLine-firstLine)*lineHeight - lineOffset
+	cursorY := bounds.Y + layout.top(caretLine) - verticalOffset
+	caretBox := layout.box(caretLine)
 	if compositionStart >= line.start && compositionEnd <= line.end {
 		prefixWidth := textFieldMeasureRange(window, displayRunes, line.start, compositionStart, style, nil)
 		compositionWidth := textFieldMeasureRange(window, displayRunes, compositionStart, compositionEnd, style, nil)
-		displayList.FillRect(woxui.Rect{X: lineX + prefixWidth, Y: cursorY + lineHeight - 2, Width: compositionWidth, Height: 1}, theme.Focus)
+		displayList.FillRect(woxui.Rect{X: lineX + prefixWidth, Y: cursorY + caretBox - 2, Width: compositionWidth, Height: 1}, theme.Focus)
 	}
 	if start == end {
-		displayList.DrawCaret(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: lineHeight}, theme.Focus, caretVisible)
+		displayList.DrawCaret(woxui.Rect{X: cursorX, Y: cursorY, Width: textFieldCursorWidth, Height: caretBox}, theme.Focus, caretVisible)
 	}
 }
 
@@ -2106,10 +2271,9 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ri
 	richRuns = textFieldCompositionRichRuns(state, richRuns)
 	displayRunes, _, _, focus, _, _ := textFieldDisplayState(state)
 	lines := textFieldRichLines(string(displayRunes), window, style, bounds.Width, softWrap, richRuns)
+	layout := textFieldLayoutLines(lines, lineHeight)
 	caretLine := textFieldLineIndex(lines, focus)
 	visibleLines := max(1, min(maxLines, int(bounds.Height/lineHeight)))
-	firstLine := max(0, int(verticalOffset/lineHeight))
-	lineOffset := verticalOffset - float32(firstLine)*lineHeight
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
 		horizontalOffset = textFieldHorizontalOffset(true, displayRunes, focus, style, bounds.Width, window)
@@ -2117,8 +2281,8 @@ func textFieldCursorRect(state woxui.TextEditingState, style woxui.TextStyle, ri
 	line := lines[caretLine]
 	return woxui.Rect{
 		X:     textFieldLineOriginX(bounds.X-horizontalOffset, line) + textFieldMeasureRange(window, displayRunes, line.start, focus, style, richRuns),
-		Y:     bounds.Y + float32(caretLine-firstLine)*lineHeight - lineOffset,
-		Width: textFieldCursorWidth, Height: lineHeight,
+		Y:     bounds.Y + layout.top(caretLine) - verticalOffset,
+		Width: textFieldCursorWidth, Height: layout.box(caretLine),
 	}
 }
 
@@ -2251,8 +2415,9 @@ func textFieldDismissibleHit(state woxui.TextEditingState, window textFieldMeasu
 	if len(lines) == 0 {
 		return 0, 0, tokenChipActionNone, false
 	}
+	layout := textFieldLayoutLines(lines, lineHeight)
 	y := point.Y + verticalOffset
-	if y < 0 || y >= float32(len(lines))*lineHeight {
+	if y < 0 || y >= layout.total {
 		return 0, 0, tokenChipActionNone, false
 	}
 	if maxLines == 1 {
@@ -2261,7 +2426,12 @@ func textFieldDismissibleHit(state woxui.TextEditingState, window textFieldMeasu
 	if point.X < 0 {
 		return 0, 0, tokenChipActionNone, false
 	}
-	line := lines[min(len(lines)-1, int(y/lineHeight))]
+	index := layout.lineIndexAt(y)
+	lineTop := layout.top(index)
+	if y < lineTop || y >= lineTop+layout.box(index) {
+		return 0, 0, tokenChipActionNone, false
+	}
+	line := lines[index]
 	x := line.indent
 	runes := []rune(state.Text)
 	for _, segment := range textFieldRichSegments(line.start, line.end, style, richRuns) {

@@ -20,6 +20,9 @@ type Payload struct {
 	ClipboardHistory struct {
 		Entries []ClipboardEntry `json:"clipboardEntries"`
 	} `json:"clipboardHistory"`
+	Notes struct {
+		Notes []Note `json:"notes"`
+	} `json:"notes"`
 }
 
 // Command is one Raycast command binding. Hotkeys may use more than one field name.
@@ -64,6 +67,14 @@ type OpenWithPlatform struct {
 	Linux   string `json:"linux"`
 }
 
+// Note is one exported Raycast note. Text is a short preview; RawContent is the document.
+type Note struct {
+	ID         string          `json:"id"`
+	Title      string          `json:"title"`
+	Text       string          `json:"text"`
+	RawContent json.RawMessage `json:"rawContent"`
+}
+
 // ClipboardEntry is one history row. Representations are nested under items.
 type ClipboardEntry struct {
 	CreatedAt string          `json:"createdAt"`
@@ -86,7 +97,7 @@ func ParsePayload(raw []byte, limits Limits) (Payload, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return Payload{}, exportErr(codeCorrupt)
 	}
-	entries := len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries)
+	entries := len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries) + len(payload.Notes.Notes)
 	if limits.MaxEntries > 0 && entries > limits.MaxEntries {
 		return Payload{}, exportErr(codeLimit)
 	}

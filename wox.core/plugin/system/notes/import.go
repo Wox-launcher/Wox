@@ -3,6 +3,7 @@ package notes
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -21,13 +22,15 @@ const (
 	ImportStatusFailed = "failed"
 )
 
-// ImportedNote is one plain-text note created from a migrated snippet.
+// ImportedNote is one note created from a migrated snippet or Raycast note.
+// Document keeps the source structure. An empty document is stored as Title and Body.
 type ImportedNote struct {
 	Source      string
 	SourceID    string
 	Fingerprint string
 	Title       string
 	Body        string
+	Document    common.NoteDocument
 }
 
 // ImportedNoteResult is the outcome for one ImportedNote.
@@ -82,8 +85,17 @@ func (r *Repository) ImportPlain(items []ImportedNote) []ImportedNoteResult {
 }
 
 func (r *Repository) importOnePlain(item ImportedNote, records []common.NoteRecord, titles map[string]struct{}) ImportedNoteResult {
+	document := item.Document
 	title := strings.TrimSpace(item.Title)
 	body := strings.ReplaceAll(item.Body, "\r\n", "\n")
+	if len(document.Blocks) > 0 {
+		if title == "" {
+			title = CustomNoteTitle(document)
+		}
+		if body == "" {
+			body = noteBody(document)
+		}
+	}
 	if title == "" {
 		return ImportedNoteResult{Status: ImportStatusFailed, ErrorCode: "failed"}
 	}
@@ -106,11 +118,16 @@ func (r *Repository) importOnePlain(item ImportedNote, records []common.NoteReco
 		}
 	}
 	storedTitle := uniqueNoteTitle(title, titles)
+	if len(document.Blocks) == 0 {
+		document = plainImportDocument(storedTitle, body)
+	} else if storedTitle != title {
+		document = retitleImportedNote(document, title, storedTitle)
+	}
 	now := util.GetSystemTimestamp()
 	record := common.NoteRecord{
 		SchemaVersion:     noteSchemaVersion,
 		ID:                uuid.NewString(),
-		Document:          plainImportDocument(storedTitle, body),
+		Document:          document,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 		Revision:          uuid.NewString(),
@@ -123,6 +140,41 @@ func (r *Repository) importOnePlain(item ImportedNote, records []common.NoteReco
 	titles[storedTitle] = struct{}{}
 	go r.notify(record.ID)
 	return ImportedNoteResult{Status: ImportStatusImported}
+}
+
+// retitleImportedNote renames the first visible line when another note already uses that title.
+func retitleImportedNote(document common.NoteDocument, from, to string) common.NoteDocument {
+	if from == "" || from == to {
+		return document
+	}
+	for index, block := range document.Blocks {
+		line, rest, hasRest := strings.Cut(block.Text, "\n")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if strings.TrimSpace(line) != from {
+			return document
+		}
+		previous := utf8.RuneCountInString(line)
+		if hasRest {
+			block.Text = to + "\n" + rest
+		} else {
+			block.Text = to
+		}
+		delta := utf8.RuneCountInString(to) - previous
+		if delta != 0 {
+			for spanIndex, span := range block.Spans {
+				if span.Start >= previous {
+					span.Start += delta
+					span.End += delta
+					block.Spans[spanIndex] = span
+				}
+			}
+		}
+		document.Blocks[index] = block
+		return document
+	}
+	return document
 }
 
 func plainImportDocument(title, body string) common.NoteDocument {

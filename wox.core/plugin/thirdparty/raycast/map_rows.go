@@ -93,6 +93,7 @@ func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped.hotkeys = mapHotkeyRows(payload, current, claimed)
 	mapped.queries = mapQueryRows(payload, current, claimed)
 	mapped.snippets = mapSnippetRows(payload, current)
+	mapped.notes = mapNoteRows(payload, current)
 	mapped.clipboard, mapped.summary = mapClipboardRows(payload, current)
 	return mapped
 }

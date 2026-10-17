@@ -750,7 +750,7 @@ func TestNotesMarkdownEditorUsesSharedScrollbar(t *testing.T) {
 	if !ok || text.Height <= 80 {
 		t.Fatalf("markdown field height = %#v, want content taller than the viewport", field.Widget)
 	}
-	if text.Style != controller.editorStyle() || text.LineHeight != 24 {
+	if text.Style != controller.editorStyle() || text.LineHeight != notesEditorLineHeight {
 		t.Fatalf("markdown type = %#v line=%v, want the same UI font as preview", text.Style, text.LineHeight)
 	}
 }

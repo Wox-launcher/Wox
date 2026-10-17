@@ -3013,6 +3013,7 @@
   "onboarding_migrate_category_quicklinks": "퀵링크",
   "onboarding_migrate_category_shortcuts": "바로 가기",
   "onboarding_migrate_category_snippets": "스니펫",
+  "onboarding_migrate_category_notes": "메모",
   "onboarding_migrate_category_clipboard": "클립보드",
   "onboarding_migrate_category_prepare": "가져오기 전",
   "onboarding_migrate_item_close_launcher": "{name} 종료",

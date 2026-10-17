@@ -34,6 +34,7 @@ const (
 	CategoryQuicklinks = "quicklinks"
 	CategoryShortcuts  = "shortcuts"
 	CategorySnippets   = "snippets"
+	CategoryNotes      = "notes"
 	CategoryClipboard  = "clipboard"
 	// CategoryPrepare is the locked first group. It quits the source launcher before hotkeys are registered.
 	CategoryPrepare = "prepare"
@@ -233,13 +234,15 @@ type FavoriteWrite struct {
 	Path   string
 }
 
-// NoteWrite is one note mapped from a Raycast snippet.
+// NoteWrite is one note mapped from a Raycast snippet or note.
+// Document is set for a Raycast note. Snippets leave it empty and use Title and Body.
 type NoteWrite struct {
 	ItemID      string
 	SourceID    string
 	Fingerprint string
 	Title       string
 	Body        string
+	Document    common.NoteDocument
 }
 
 // ClipboardWrite is mapped clipboard content. The clipboard package copies images and commits records.

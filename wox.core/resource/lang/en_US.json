@@ -3014,6 +3014,7 @@
   "onboarding_migrate_category_quicklinks": "Quicklinks",
   "onboarding_migrate_category_shortcuts": "Shortcuts",
   "onboarding_migrate_category_snippets": "Snippets",
+  "onboarding_migrate_category_notes": "Notes",
   "onboarding_migrate_category_clipboard": "Clipboard",
   "onboarding_migrate_category_prepare": "Before import",
   "onboarding_migrate_item_close_launcher": "Quit {name}",

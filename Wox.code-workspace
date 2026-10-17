@@ -40,7 +40,7 @@
 				"source.organizeImports": "explicit"
 			},
 		},
-		"editor.formatOnSave": true,
+		"editor.formatOnSave": false,
 		"go.lintOnSave": "off"
 	},
 	"extensions": {

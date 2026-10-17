@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"time"
+
+	"wox/common"
 )
 
 // MigratedQuicklink is one web search row produced by launcher migration.
@@ -21,7 +23,8 @@ type MigratedFavorite struct {
 	Path   string
 }
 
-// MigratedNote is one plain note produced by launcher migration.
+// MigratedNote is one note produced by launcher migration.
+// Document is set when the source note has structure. An empty document uses Title and Body.
 type MigratedNote struct {
 	ItemID      string
 	Source      string
@@ -29,6 +32,7 @@ type MigratedNote struct {
 	Fingerprint string
 	Title       string
 	Body        string
+	Document    common.NoteDocument
 }
 
 // MigratedClipboard is clipboard content produced by launcher migration.

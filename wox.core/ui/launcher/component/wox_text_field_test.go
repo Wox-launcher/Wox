@@ -324,6 +324,32 @@ func TestTextFieldGlyphHitIgnoresEmptySpaceAroundText(t *testing.T) {
 	}
 }
 
+func TestTextFieldParagraphGapSeparatesBlocksButNotWrappedLines(t *testing.T) {
+	style := woxui.TextStyle{Size: 14}
+	value := "abcdefghij\nnext"
+	runs := []TextFieldRichRun{{Start: 0, End: 10, BlockGap: 12}}
+	lines := textFieldRichLines(value, &fakeTextMeasurer{charWidth: 10}, style, 50, true, runs)
+	if len(lines) != 3 {
+		t.Fatalf("lines = %#v, want two wrapped lines plus the next paragraph", lines)
+	}
+	if lines[0].gapAfter != 0 || lines[1].gapAfter != 12 || lines[2].gapAfter != 0 {
+		t.Fatalf("gaps = %v %v %v, want the gap only after the paragraph", lines[0].gapAfter, lines[1].gapAfter, lines[2].gapAfter)
+	}
+	layout := textFieldLayoutLines(lines, 24)
+	if layout.top(1) != 24 || layout.top(2) != 60 || layout.total != 84 {
+		t.Fatalf("tops = %v %v total %v, want wrapped lines tight and the next paragraph 12 units lower", layout.top(1), layout.top(2), layout.total)
+	}
+	if layout.lineIndexAt(50) != 1 || layout.lineIndexAt(56) != 2 {
+		t.Fatalf("gap hit = %d/%d, want the closer paragraph", layout.lineIndexAt(50), layout.lineIndexAt(56))
+	}
+	padding := woxwidget.Insets{Top: 12}
+	plain := TextFieldVisualHeight("first\nsecond", nil, style, 200, 24, padding, nil)
+	height := TextFieldVisualHeight("first\nsecond", nil, style, 200, 24, padding, []TextFieldRichRun{{Start: 0, End: 5, BlockGap: 12}})
+	if height != plain+12 {
+		t.Fatalf("spaced height %v, plain %v, want one paragraph gap", height, plain)
+	}
+}
+
 func TestTextFieldVisualLineCountUsesHardBreaksWithoutWindow(t *testing.T) {
 	if got := TextFieldVisualLineCount("", nil, woxui.TextStyle{Size: 13}, 200, nil); got != 1 {
 		t.Fatalf("empty line count = %d, want 1", got)

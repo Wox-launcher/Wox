@@ -1051,7 +1051,8 @@ func migrationNotes(items []migrate.NoteWrite) []contract.MigratedNote {
 	rows := make([]contract.MigratedNote, len(items))
 	for index, item := range items {
 		rows[index] = contract.MigratedNote{
-			ItemID: item.ItemID, Source: "raycast", SourceID: item.SourceID, Fingerprint: item.Fingerprint, Title: item.Title, Body: item.Body,
+			ItemID: item.ItemID, Source: "raycast", SourceID: item.SourceID, Fingerprint: item.Fingerprint,
+			Title: item.Title, Body: item.Body, Document: item.Document,
 		}
 	}
 	return rows

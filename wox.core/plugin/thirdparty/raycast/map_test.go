@@ -138,6 +138,64 @@ func TestMapSnippetBodies(t *testing.T) {
 	}
 }
 
+func TestMapNotesKeepsStructureAndSkipsEmpty(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type":"doc",
+		"content":[
+			{"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"Plan"}]},
+			{"type":"paragraph","content":[
+				{"type":"text","text":"See "},
+				{"type":"text","text":"docs","marks":[{"type":"bold"},{"type":"link","attrs":{"href":"https://example.com"}}]}
+			]},
+			{"type":"list","attrs":{"kind":"bullet"},"content":[{"type":"paragraph","content":[{"type":"text","text":"one"}]}]},
+			{"type":"list","attrs":{"kind":"task","checked":true},"content":[{"type":"paragraph","content":[{"type":"text","text":"done"}]}]},
+			{"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"quoted"}]}]},
+			{"type":"horizontalRule"},
+			{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Next"}]}
+		]
+	}`)
+	payload := Payload{}
+	payload.Notes.Notes = []Note{
+		{ID: "empty"},
+		{ID: "rich", Title: "Plan", Text: "Plan", RawContent: raw},
+		{ID: "preview", Title: "", Text: "only a preview"},
+	}
+	mapped := buildMapped(payload, defaultSnapshot())
+	if len(mapped.notes) != 2 {
+		t.Fatalf("notes = %+v", mapped.notes)
+	}
+	rich := mapped.notes[0]
+	if rich.id != "note:1" || rich.title != "Plan" || !rich.selectable || rich.sourceID != "rich" {
+		t.Fatalf("rich = %+v", rich)
+	}
+	blocks := rich.document.Blocks
+	if len(blocks) != 7 || blocks[0].Type != common.NoteBlockHeading1 || blocks[0].Text != "Plan" {
+		t.Fatalf("blocks = %+v", blocks)
+	}
+	if blocks[1].Text != "See docs" || len(blocks[1].Spans) != 1 || !blocks[1].Spans[0].Bold || blocks[1].Spans[0].Link != "https://example.com" || blocks[1].Spans[0].Start != 4 {
+		t.Fatalf("inline = %+v", blocks[1])
+	}
+	if blocks[2].Type != common.NoteBlockBullet || blocks[3].Type != common.NoteBlockTask || !blocks[3].Checked || blocks[4].Type != common.NoteBlockQuote || blocks[5].Type != common.NoteBlockDivider || blocks[6].Type != common.NoteBlockHeading2 {
+		t.Fatalf("structure = %+v", blocks)
+	}
+	if rich.body != "See docs\n• one\n☑ done\n> quoted\n────────\nNext" {
+		t.Fatalf("body = %q", rich.body)
+	}
+	if mapped.notes[1].title != "only a preview" || mapped.notes[1].document.Blocks[0].Type != common.NoteBlockParagraph {
+		t.Fatalf("preview = %+v", mapped.notes[1])
+	}
+	again := buildMapped(payload, woxSnapshot{Notes: []noteRow{{
+		Fingerprint: noteFingerprint(rich.sourceID, rich.title, rich.body), Body: rich.body,
+	}}})
+	if again.notes[0].selectable || again.notes[0].status != statusExists {
+		t.Fatalf("repeat = %+v", again.notes[0])
+	}
+	imported := importSelected(mapped, []string{rich.id})
+	if len(imported.Notes) != 1 || imported.Notes[0].Document.Blocks[2].Text != "one" {
+		t.Fatalf("import = %+v", imported.Notes)
+	}
+}
+
 func TestMapClipboardTextWinsAndPinnedFlag(t *testing.T) {
 	entry := ClipboardEntry{
 		CreatedAt: "2024-01-02T03:04:05.5Z",

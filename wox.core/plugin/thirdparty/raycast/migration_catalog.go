@@ -26,6 +26,9 @@ func catalogFrom(mapped mappedExport) []migrate.Category {
 	if items := snippetItems(mapped.snippets); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategorySnippets, Items: items})
 	}
+	if items := noteItems(mapped.notes); len(items) > 0 {
+		categories = append(categories, migrate.Category{ID: migrate.CategoryNotes, Items: items})
+	}
 	if items := clipboardItems(mapped.clipboard, mapped.summary); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryClipboard, Items: items})
 	}
@@ -121,6 +124,20 @@ func snippetItems(rows []mappedSnippet) []migrate.Item {
 			item.OptionOn = row.keepKeyword
 		}
 		items = append(items, item)
+	}
+	return items
+}
+
+func noteItems(rows []mappedNote) []migrate.Item {
+	items := make([]migrate.Item, 0, len(rows))
+	for _, row := range rows {
+		if !row.selectable {
+			continue
+		}
+		items = append(items, migrate.Item{
+			ID: row.id, Kind: migrate.ItemKindNote, Title: row.title,
+			Detail: row.detail, Selectable: row.selectable, Status: row.status,
+		})
 	}
 	return items
 }

@@ -128,15 +128,7 @@ func readNotesSnapshot(snap *woxSnapshot) {
 }
 
 func snapshotNoteText(record common.NoteRecord) (title, body string) {
-	for _, block := range record.Document.Blocks {
-		line := strings.TrimSpace(strings.SplitN(block.Text, "\n", 2)[0])
-		if line == "" {
-			continue
-		}
-		plain := strings.ReplaceAll(block.Text, "\r\n", "\n")
-		return line, strings.Trim(strings.TrimPrefix(plain, line), "\n")
-	}
-	return "", ""
+	return noteSnapshotText(record.Document)
 }
 
 func readClipboardSnapshot(snap *woxSnapshot) {

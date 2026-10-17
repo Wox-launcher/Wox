@@ -176,7 +176,7 @@ func (i *installation) Import(_ context.Context, itemIDs []string) (migrate.Impo
 }
 
 func mappedCount(mapped mappedExport) int {
-	return len(mapped.hotkeys) + len(mapped.shortcuts) + len(mapped.queries) + len(mapped.general) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.clipboard)
+	return len(mapped.hotkeys) + len(mapped.shortcuts) + len(mapped.queries) + len(mapped.general) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.notes) + len(mapped.clipboard)
 }
 
 func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult {
@@ -273,6 +273,16 @@ func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult 
 			ItemID: row.id, SourceID: row.sourceID,
 			Fingerprint: snippetFingerprint(row.sourceID, row.title, row.text, row.keyword, row.keepKeyword),
 			Title:       row.title, Body: snippetBody(row.text, row.keyword, row.keepKeyword),
+		})
+	}
+	for _, row := range mapped.notes {
+		if _, ok := selected[row.id]; !ok || !row.selectable {
+			continue
+		}
+		result.Notes = append(result.Notes, migrate.NoteWrite{
+			ItemID: row.id, SourceID: row.sourceID,
+			Fingerprint: noteFingerprint(row.sourceID, row.title, row.body),
+			Title:       row.title, Body: row.body, Document: row.document,
 		})
 	}
 	_, summarySelected := selected[migrate.ClipboardSummaryID]

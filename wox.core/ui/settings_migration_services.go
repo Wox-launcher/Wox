@@ -50,7 +50,8 @@ func (s *CoreServices) ImportMigratedNotes(ctx context.Context, _ string, items 
 	incoming := make([]notes.ImportedNote, len(items))
 	for index, item := range items {
 		incoming[index] = notes.ImportedNote{
-			Source: item.Source, SourceID: item.SourceID, Fingerprint: item.Fingerprint, Title: item.Title, Body: item.Body,
+			Source: item.Source, SourceID: item.SourceID, Fingerprint: item.Fingerprint,
+			Title: item.Title, Body: item.Body, Document: item.Document,
 		}
 	}
 	for index, result := range target.ImportPlainNotes(incoming) {
