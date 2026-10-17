@@ -4,4 +4,5 @@ package thirdparty
 
 import (
 	_ "wox/plugin/thirdparty/flow"
+	_ "wox/plugin/thirdparty/raycast"
 )

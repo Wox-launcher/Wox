@@ -134,6 +134,12 @@ func run(caseSelector string) (int, error) {
 		retainSuiteDirectory = true
 		return 1, fmt.Errorf("create flow import fixture directory: %w", err)
 	}
+	raycastInstallDirectory := filepath.Join(suiteDirectory, "raycast-install")
+	if err := os.MkdirAll(raycastInstallDirectory, 0o755); err != nil {
+		retainSuiteDirectory = true
+		return 1, fmt.Errorf("create raycast install fixture directory: %w", err)
+	}
+	raycastExportFile := filepath.Join(suiteDirectory, "settings.rayconfig")
 	launchOptions := automationdriver.LaunchOptions{
 		Environment: []string{
 			"WOX_TEST_DATA_DIR=" + woxDataDirectory,
@@ -142,6 +148,8 @@ func run(caseSelector string) (int, error) {
 			"WOX_TEST_DISABLE_TELEMETRY=true",
 			"WOX_TEST_SKIP_ONBOARDING=true",
 			util.TestFlowUserDataEnv + "=" + flowUserDataDirectory,
+			util.TestRaycastInstallEnv + "=" + raycastInstallDirectory,
+			util.TestRaycastFileEnv + "=" + raycastExportFile,
 			"WOX_DEBUG_REPAINT=verify",
 		},
 		StartupTimeout: 45 * time.Second,
@@ -199,6 +207,8 @@ func run(caseSelector string) (int, error) {
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedDataDirectoryEnvironment, woxDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedUserDataDirectoryEnvironment, userDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, util.TestFlowUserDataEnv, flowUserDataDirectory)
+	testEnvironment = replaceEnvironment(testEnvironment, util.TestRaycastInstallEnv, raycastInstallDirectory)
+	testEnvironment = replaceEnvironment(testEnvironment, util.TestRaycastFileEnv, raycastExportFile)
 	if caseSelector == "" {
 		testEnvironment = replaceEnvironment(testEnvironment, smokeperf.CollectedEnvironment, "1")
 	}

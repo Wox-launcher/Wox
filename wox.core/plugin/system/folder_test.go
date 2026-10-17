@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -36,10 +37,23 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 		folderToggleHiddenFilesActionID,
 	})
 
-	favoriteActions := folderPlugin.buildFavoriteActions("favorite", "folder", 0)
+	favoriteActions := folderPlugin.buildFavoriteActions("favorite", "folder", true, 0)
 	assertFolderActionIDs(t, favoriteActions, []string{
 		folderOpenActionID,
 		folderEnterActionID,
+		folderCopyPathActionID,
+		folderCopyNameActionID,
+		folderExecuteCommandHereActionID,
+		"edit_folder_favorite",
+		"delete_folder_favorite",
+		folderToggleHiddenFilesActionID,
+	})
+
+	fileFavoriteActions := folderPlugin.buildFavoriteActions("main", "main.go", false, 0)
+	assertFolderActionIDs(t, fileFavoriteActions, []string{
+		folderOpenActionID,
+		folderBrowseContainingFolderActionID,
+		folderOpenContainingFolderActionID,
 		folderCopyPathActionID,
 		folderCopyNameActionID,
 		folderExecuteCommandHereActionID,
@@ -74,7 +88,8 @@ func TestFolderShiftEnterNavigation(t *testing.T) {
 	}{
 		{"folder", p.buildPathActions(root, true, nil), root + string(os.PathSeparator)},
 		{"file", p.buildPathActions(filepath.Join(root, "report.txt"), false, nil), root + string(os.PathSeparator)},
-		{"favorite", p.buildFavoriteActions("Projects", root, 0), root + string(os.PathSeparator)},
+		{"favorite", p.buildFavoriteActions("Projects", root, true, 0), root + string(os.PathSeparator)},
+		{"file favorite", p.buildFavoriteActions("main", filepath.Join(root, "main.go"), false, 0), root + string(os.PathSeparator)},
 		{"volume root", p.buildPathActions(volumeRoot, true, nil), volumeRoot},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -335,6 +350,115 @@ func TestFolderQueryFuzzyMatchesChildName(t *testing.T) {
 
 	if len(response.Results) != 1 || response.Results[0].SubTitle != woxVideoPath {
 		t.Fatalf("results = %#v, want wox.video at %q", response.Results, woxVideoPath)
+	}
+}
+
+type folderFavoriteSettingsAPI struct {
+	plugin.API
+	settings map[string]string
+	logs     []string
+}
+
+func (a *folderFavoriteSettingsAPI) GetSetting(_ context.Context, key string) string {
+	return a.settings[key]
+}
+
+func (a *folderFavoriteSettingsAPI) Log(_ context.Context, _ plugin.LogLevel, message string) {
+	a.logs = append(a.logs, message)
+}
+
+func (a *folderFavoriteSettingsAPI) SaveSetting(_ context.Context, key string, value string, _ bool) {
+	if a.settings == nil {
+		a.settings = map[string]string{}
+	}
+	a.settings[key] = value
+}
+
+func TestFolderQueryFindsFileAndFolderFavorites(t *testing.T) {
+	root := t.TempDir()
+	filePath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(filePath, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	folderPath := filepath.Join(root, "src")
+	if err := os.Mkdir(folderPath, 0o755); err != nil {
+		t.Fatalf("create folder: %v", err)
+	}
+	raw, err := json.Marshal([]folderFavorite{
+		{Name: "qlfqlf", Path: filePath},
+		{Name: "source", Path: folderPath},
+		{Name: "gone", Path: filepath.Join(root, "missing.go")},
+	})
+	if err != nil {
+		t.Fatalf("marshal favorites: %v", err)
+	}
+	api := &folderFavoriteSettingsAPI{settings: map[string]string{
+		folderFavoritesSettingKey: string(raw),
+	}}
+	folderPlugin := &FolderPlugin{api: api}
+
+	fileResult := folderPlugin.Query(t.Context(), plugin.Query{Type: plugin.QueryTypeInput, Search: "qlfqlf"})
+	if len(fileResult.Results) != 1 || fileResult.Results[0].Title != "qlfqlf" || fileResult.Results[0].SubTitle != filePath {
+		t.Fatalf("file favorite = %#v logs=%v", fileResult.Results, api.logs)
+	}
+	if fileResult.Results[0].Icon.ImageType != common.WoxImageTypeFileIcon {
+		t.Fatalf("file favorite icon = %s", fileResult.Results[0].Icon.ImageType)
+	}
+	assertFolderActionIDs(t, fileResult.Results[0].Actions, []string{
+		folderOpenActionID,
+		folderBrowseContainingFolderActionID,
+		folderOpenContainingFolderActionID,
+		folderCopyPathActionID,
+		folderCopyNameActionID,
+		folderExecuteCommandHereActionID,
+		"edit_folder_favorite",
+		"delete_folder_favorite",
+		folderToggleHiddenFilesActionID,
+	})
+
+	folderResult := folderPlugin.Query(t.Context(), plugin.Query{Type: plugin.QueryTypeInput, Search: "source"})
+	if len(folderResult.Results) != 1 || folderResult.Results[0].Title != "source" || folderResult.Results[0].SubTitle != folderPath {
+		t.Fatalf("folder favorite = %#v", folderResult.Results)
+	}
+	if folderResult.Results[0].Actions[1].Id != folderEnterActionID {
+		t.Fatalf("folder favorite browse action = %s", folderResult.Results[0].Actions[1].Id)
+	}
+
+	if missing := folderPlugin.Query(t.Context(), plugin.Query{Type: plugin.QueryTypeInput, Search: "gone"}); len(missing.Results) != 0 {
+		t.Fatalf("missing favorite = %#v", missing.Results)
+	}
+}
+
+func TestImportFavoritesAppendsFilesAndFolders(t *testing.T) {
+	root := t.TempDir()
+	filePath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(filePath, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	folderPath := filepath.Join(root, "src")
+	if err := os.Mkdir(folderPath, 0o755); err != nil {
+		t.Fatalf("create folder: %v", err)
+	}
+	api := &folderFavoriteSettingsAPI{settings: map[string]string{}}
+	folderPlugin := &FolderPlugin{api: api}
+	results := folderPlugin.ImportFavorites(t.Context(), []ImportedFavorite{
+		{Name: "qlfqlf", Path: filePath},
+		{Name: "source", Path: folderPath},
+		{Name: "gone", Path: filepath.Join(root, "missing.go")},
+	})
+	if results[0].Status != favoriteImportImported || results[1].Status != favoriteImportImported || results[2].Status != favoriteImportFailed {
+		t.Fatalf("import = %+v logs=%v", results, api.logs)
+	}
+	again := folderPlugin.ImportFavorites(t.Context(), []ImportedFavorite{
+		{Name: "qlfqlf", Path: filePath},
+		{Name: "QLFQLF", Path: folderPath},
+	})
+	if again[0].Status != favoriteImportExists || again[1].Status != favoriteImportConflict {
+		t.Fatalf("repeat = %+v", again)
+	}
+	stored := folderPlugin.loadFavorites(t.Context())
+	if len(stored) != 2 || stored[0].Name != "qlfqlf" || stored[0].Path != filePath || stored[1].Path != folderPath {
+		t.Fatalf("stored = %+v", stored)
 	}
 }
 

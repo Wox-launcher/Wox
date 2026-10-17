@@ -88,6 +88,9 @@ type NoteRecord struct {
 	PinnedAt      int64        `json:"pinnedAt,omitempty"`
 	DeletedAt     int64        `json:"deletedAt,omitempty"`
 	Revision      string       `json:"revision"`
+	// ImportSource and ImportFingerprint remember one migrated snippet so a later import finds the same note.
+	ImportSource      string `json:"importSource,omitempty"`
+	ImportFingerprint string `json:"importFingerprint,omitempty"`
 }
 
 // NoteSummary carries list/search data without duplicating the complete document.

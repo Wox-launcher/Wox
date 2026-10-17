@@ -65,17 +65,19 @@ type OnboardingMigrationCategory struct {
 
 // OnboardingMigrationItem is one setting or plugin the user can include.
 type OnboardingMigrationItem struct {
-	ID         string
-	Title      string
-	Detail     string
-	Status     string
-	Error      string
-	Icon       *woxui.Image
-	Selected   bool
-	Selectable bool
-	ShowIcon   bool
-	Active     bool
-	Succeeded  bool
+	ID          string
+	Title       string
+	Detail      string
+	Status      string
+	Error       string
+	Icon        *woxui.Image
+	Selected    bool
+	Selectable  bool
+	ShowIcon    bool
+	Active      bool
+	Succeeded   bool
+	OptionLabel string
+	OptionOn    bool
 }
 
 // OnboardingTheme describes one installed system theme and its resolved preview palettes.
@@ -91,58 +93,64 @@ type OnboardingTheme struct {
 
 // OnboardingProps contains the prepared first-run state and actions.
 type OnboardingProps struct {
-	Width                float32
-	Height               float32
-	AppIcon              *woxui.Image
-	Wallpaper            *woxui.Image
-	WallpaperBlurred     *woxui.Image
-	Steps                []OnboardingStep
-	ActiveStep           int
-	Labels               map[string]string
-	Language             string
-	GlanceEnabled        bool
-	GlanceLabel          string
-	GlanceValue          string
-	GlanceIcon           *woxui.Image
-	MainHotkeyLabels     []string
-	SelectHotkeyLabels   []string
-	HotkeyStatus         string
-	HotkeyError          bool
-	HotkeyRecording      bool
-	QueryHotkeyLabels    []string
-	QueryHotkeyStatus    string
-	QueryHotkeyError     bool
-	QueryHotkeyRecording bool
-	QueryHotkeyReady     bool
-	QueryHotkeySelected  bool
-	QueryHotkeyBusy      bool
-	Plugins              []OnboardingPlugin
-	PluginsLoading       bool
-	PluginsError         string
-	Themes               []OnboardingTheme
-	ThemesLoading        bool
-	ThemesApplying       bool
-	ThemesError          string
-	MigrationChoosing    bool
-	MigrationSources     []OnboardingMigrationSource
-	MigrationCategories  []OnboardingMigrationCategory
-	MigrationLoading     bool
-	MigrationImporting   bool
-	MigrationDone        bool
-	MigrationActiveID    string
-	MigrationError       string
-	ThemePreviewTitle    string
-	ThemePreviewTexts    []string
-	ThemePreviewSubs     []string
-	ThemePreviewOpen     string
-	Permissions          []OnboardingPermission
-	PermissionLoading    bool
-	ChoiceKind           string
-	ChoiceValue          string
-	ChoiceAnchor         woxui.Rect
-	Choices              []OnboardingChoice
-	Window               *woxui.Window
-	Theme                woxcomponent.ControlTheme
+	Width                   float32
+	Height                  float32
+	AppIcon                 *woxui.Image
+	Wallpaper               *woxui.Image
+	WallpaperBlurred        *woxui.Image
+	Steps                   []OnboardingStep
+	ActiveStep              int
+	Labels                  map[string]string
+	Language                string
+	GlanceEnabled           bool
+	GlanceLabel             string
+	GlanceValue             string
+	GlanceIcon              *woxui.Image
+	MainHotkeyLabels        []string
+	SelectHotkeyLabels      []string
+	HotkeyStatus            string
+	HotkeyError             bool
+	HotkeyRecording         bool
+	QueryHotkeyLabels       []string
+	QueryHotkeyStatus       string
+	QueryHotkeyError        bool
+	QueryHotkeyRecording    bool
+	QueryHotkeyReady        bool
+	QueryHotkeySelected     bool
+	QueryHotkeyBusy         bool
+	Plugins                 []OnboardingPlugin
+	PluginsLoading          bool
+	PluginsError            string
+	Themes                  []OnboardingTheme
+	ThemesLoading           bool
+	ThemesApplying          bool
+	ThemesError             string
+	MigrationChoosing       bool
+	MigrationSources        []OnboardingMigrationSource
+	MigrationCategories     []OnboardingMigrationCategory
+	MigrationLoading        bool
+	MigrationImporting      bool
+	MigrationDone           bool
+	MigrationActiveID       string
+	MigrationError          string
+	MigrationUnlock         bool
+	MigrationExportPath     string
+	MigrationPassphrase     *woxwidget.TextEditingController
+	OnPickMigrationFile     func()
+	OnUnlockMigration       func()
+	OnToggleMigrationOption func(string, bool)
+	ThemePreviewTitle       string
+	ThemePreviewTexts       []string
+	ThemePreviewSubs        []string
+	ThemePreviewOpen        string
+	Permissions             []OnboardingPermission
+	PermissionLoading       bool
+	ChoiceKind              string
+	ChoiceValue             string
+	ChoiceAnchor            woxui.Rect
+	Choices                 []OnboardingChoice
+	Window                  *woxui.Window
+	Theme                   woxcomponent.ControlTheme
 	// PreviewTheme belongs only to illustrative launcher content.
 	PreviewTheme          woxcomponent.Theme
 	NextDisabled          bool
@@ -970,6 +978,28 @@ func onboardingGlanceVisual(props OnboardingProps, width float32) woxwidget.Widg
 	}}
 }
 
+// migrationSourceVersion shows a detected launcher version such as v2.8.2.0.
+func migrationSourceVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(version), "v") {
+		return "v" + version[1:]
+	}
+	return "v" + version
+}
+
+func migrationSourceTitle(name, version string, props OnboardingProps) []woxwidget.Widget {
+	lines := []woxwidget.Widget{
+		woxwidget.Text{Value: name, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
+	}
+	if version != "" {
+		lines = append(lines, woxwidget.TextBlock{Value: version, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary})
+	}
+	return lines
+}
+
 // onboardingMigrationVisual lists installed launchers, or the grouped settings of the one in use.
 func onboardingMigrationVisual(props OnboardingProps, width, height float32) woxwidget.Widget {
 	if props.MigrationChoosing && len(props.MigrationSources) > 1 {
@@ -990,13 +1020,7 @@ func onboardingMigrationChooser(props OnboardingProps, width float32) woxwidget.
 		if source.Icon != nil {
 			icon = woxwidget.Image{Source: source.Icon, Width: 28, Height: 28}
 		}
-		subtitle := source.Location
-		if source.Version != "" {
-			subtitle = source.Version
-			if source.Location != "" {
-				subtitle += "  " + source.Location
-			}
-		}
+		version := migrationSourceVersion(source.Version)
 		choose := func() {
 			if props.OnChooseMigration != nil {
 				props.OnChooseMigration(source.ID)
@@ -1017,10 +1041,11 @@ func onboardingMigrationChooser(props OnboardingProps, width float32) woxwidget.
 				BottomBorderColor: settingsColorAlpha(props.Theme.Border, 48), BottomBorderWidth: bottomBorder,
 				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 					woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
-					woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
-						woxwidget.Text{Value: source.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
-						woxwidget.TextBlock{Value: subtitle, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
-					}}},
+					woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: migrationSourceTitle(source.Name, version, props)}},
+					woxcomponent.WoxButton(woxcomponent.ButtonProps{
+						ID: "onboarding-migrate-import-" + source.ID, Label: props.Labels["migrate.import"],
+						Variant: woxcomponent.ButtonSecondary, Theme: props.Theme, OnTap: choose,
+					}),
 				}},
 			}},
 		})
@@ -1032,6 +1057,9 @@ func onboardingMigrationChooser(props OnboardingProps, width float32) woxwidget.
 }
 
 func onboardingMigrationCatalog(props OnboardingProps, width, height float32) woxwidget.Widget {
+	if props.MigrationUnlock {
+		return onboardingMigrationUnlock(props, width)
+	}
 	if props.MigrationLoading && len(props.MigrationCategories) == 0 {
 		return woxwidget.Align{Width: width, Height: 180, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxcomponent.HourglassGlyph(20, props.Theme.TextSecondary),
@@ -1089,10 +1117,51 @@ func onboardingMigrationContentHeight(categories []OnboardingMigrationCategory) 
 }
 
 func onboardingMigrationItemHeight(item OnboardingMigrationItem) float32 {
-	if item.Error != "" {
-		return 104
+	height := float32(64)
+	if item.OptionLabel != "" {
+		height = 96
 	}
-	return 64
+	if item.Error != "" {
+		height += 40
+	}
+	return height
+}
+
+func onboardingMigrationUnlock(props OnboardingProps, width float32) woxwidget.Widget {
+	header := onboardingMigrationSourceHeader(props, selectedMigrationSource(props), width)
+	path := props.MigrationExportPath
+	if path == "" {
+		path = props.Labels["migrate.file"]
+	}
+	continueLabel := props.Labels["migrate.continue"]
+	var fieldBackground woxui.Color
+	var fieldText woxui.Color
+	if props.MigrationLoading {
+		continueLabel = props.Labels["migrate.unlocking"]
+		fieldBackground = settingsColorAlpha(props.Theme.TextSecondary, 72)
+		fieldText = settingsColorAlpha(props.Theme.TextSecondary, 180)
+	}
+	children := []woxwidget.Widget{
+		header,
+		woxwidget.TextBlock{Value: props.Labels["migrate.help"], Width: width, MaxLines: 6, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary},
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "onboarding-migrate-file", Label: path, Width: width, Variant: woxcomponent.ButtonSecondary, Theme: props.Theme,
+			Disabled: props.MigrationLoading, OnTap: props.OnPickMigrationFile,
+		}),
+		woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
+			ID: "onboarding-migrate-passphrase", Width: width, Height: 40, Protected: true, Autofocus: !props.MigrationLoading,
+			Disabled: props.MigrationLoading, Background: fieldBackground, TextColor: fieldText,
+			Controller: props.MigrationPassphrase, Hint: props.Labels["migrate.passphrase"], Window: props.Window, Theme: props.Theme,
+		}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{
+			ID: "onboarding-migrate-unlock", Label: continueLabel, Width: width, Variant: woxcomponent.ButtonPrimary, Theme: props.Theme,
+			Disabled: props.MigrationLoading, OnTap: props.OnUnlockMigration,
+		}),
+	}
+	if props.MigrationError != "" {
+		children = append(children, woxwidget.TextBlock{Value: props.MigrationError, Width: width, MaxLines: 3, Centered: true, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}
 }
 
 func onboardingMigrationRowKey(id string) woxwidget.Key {
@@ -1119,20 +1188,11 @@ func onboardingMigrationSourceHeader(props OnboardingProps, source OnboardingMig
 	if source.Icon != nil {
 		icon = woxwidget.Image{Source: source.Icon, Width: 28, Height: 28}
 	}
-	subtitle := source.Location
-	if source.Version != "" && source.Location != "" {
-		subtitle = source.Version + "  " + source.Location
-	} else if source.Version != "" {
-		subtitle = source.Version
-	}
 	return woxwidget.Container{
 		Width: width, Height: 56, Padding: woxwidget.Insets{Left: 16, Right: 16},
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: 40, Height: 40, Radius: 8, Color: settingsColorAlpha(props.Theme.Text, 14), Child: woxwidget.Align{Width: 40, Height: 40, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
-			woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: source.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
-				woxwidget.TextBlock{Value: subtitle, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
-			}}},
+			woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: migrationSourceTitle(source.Name, migrationSourceVersion(source.Version), props)}},
 		}},
 	}
 }
@@ -1193,6 +1253,18 @@ func onboardingMigrationItemRow(props OnboardingProps, item OnboardingMigrationI
 	lines := []woxwidget.Widget{
 		woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
 		woxwidget.TextBlock{Value: item.Detail, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
+	}
+	if item.OptionLabel != "" {
+		itemID := item.ID
+		lines = append(lines, woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
+			ID: "onboarding-migrate-option-" + item.ID, Label: item.OptionLabel, Value: item.OptionOn,
+			Disabled: props.MigrationImporting || props.MigrationDone, Theme: props.Theme,
+			OnChange: func(selected bool) {
+				if props.OnToggleMigrationOption != nil {
+					props.OnToggleMigrationOption(itemID, selected)
+				}
+			},
+		}))
 	}
 	if item.Error != "" {
 		lines = append(lines, woxwidget.TextBlock{Value: item.Error, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})

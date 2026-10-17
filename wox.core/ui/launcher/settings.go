@@ -291,6 +291,9 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	var onboardingView *woxui.ManagedWindow
 	if err := a.runOnUI("leave onboarding for settings", func() {
 		wasOnboarding = a.onboardingOpen
+		if wasOnboarding {
+			a.releaseOnboardingMigrationSession()
+		}
 		a.onboardingOpen = false
 		a.onboardingChoice = ""
 		a.onboardingChoiceAnchor = woxui.Rect{}

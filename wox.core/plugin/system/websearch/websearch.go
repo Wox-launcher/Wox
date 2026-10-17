@@ -8,17 +8,22 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
-	"wox/plugin/system"
+	"wox/plugin/system/migrateapply"
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
 	"wox/util/browser"
 	"wox/util/selection"
+	"wox/util/websiteicon"
 )
+
+// fetchEmbeddedWebsiteIcon is the settings "fetch from URL" path. Tests replace it to stay offline.
+var fetchEmbeddedWebsiteIcon = websiteicon.FetchEmbedded
 
 const (
 	webSearchDefaultBrowserSettingKey = "defaultBrowser"
@@ -48,6 +53,7 @@ var defaultWebSearchAddedKey = "defaultWebSearchAdded"
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WebSearchPlugin{})
+	migrateapply.ImportQuicklinks = importMigratedQuicklinks
 }
 
 type webSearch struct {
@@ -91,6 +97,7 @@ func (s *webSearch) UnmarshalJSON(data []byte) error {
 
 type WebSearchPlugin struct {
 	api                plugin.API
+	mu                 sync.Mutex
 	webSearches        []webSearch
 	registeredKeywords []string
 }
@@ -268,14 +275,12 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 
 func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	r.api = initParams.API
-	r.webSearches = r.loadWebSearches(ctx)
-	r.registerTriggerKeywords(ctx)
+	r.reloadWebSearches(ctx)
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("loaded %d web searches", len(r.webSearches)))
 
 	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
 		if key == webSearchesSettingKey {
-			r.webSearches = r.loadWebSearches(callbackCtx)
-			r.registerTriggerKeywords(callbackCtx)
+			r.reloadWebSearches(callbackCtx)
 			r.indexIcons(callbackCtx)
 		}
 	})
@@ -286,7 +291,52 @@ func (r *WebSearchPlugin) Init(ctx context.Context, initParams plugin.InitParams
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
 
+// reloadWebSearches loads stored rows and registers their keywords before a query can see them.
+// Unmarshaling clears triggerRegistered, so a keyword that core still routes would otherwise return nothing.
+func (r *WebSearchPlugin) reloadWebSearches(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.webSearches = r.loadWebSearches(ctx)
+	r.registerTriggerKeywords(ctx)
+}
+
+// ensureTriggerRegisteredLocked repairs a keyword that core still routes after a reload cleared the flag.
+// Callers hold r.mu. A keyword that failed registration stays unregistered and still produces no result.
+func (r *WebSearchPlugin) ensureTriggerRegisteredLocked(ctx context.Context, keyword string) {
+	if keyword == "" {
+		return
+	}
+	matched := false
+	for i := range r.webSearches {
+		if r.webSearches[i].Disabled || r.webSearches[i].Keyword != keyword {
+			continue
+		}
+		matched = true
+		if r.webSearches[i].triggerRegistered {
+			return
+		}
+	}
+	if matched {
+		r.registerTriggerKeywords(ctx)
+	}
+}
+
+func (r *WebSearchPlugin) cloneSearches() []webSearch {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.webSearches)
+}
+
+// searchesForKeyword returns a stable copy, restoring registration when a reload cleared it.
+func (r *WebSearchPlugin) searchesForKeyword(ctx context.Context, keyword string) []webSearch {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ensureTriggerRegisteredLocked(ctx, keyword)
+	return slices.Clone(r.webSearches)
+}
+
 // registerTriggerKeywords makes enabled searches participate in core scoped routing.
+// Callers that share the plugin with queries hold r.mu; the method itself does not lock.
 func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 	var keywords []string
 	parameterSets := make(map[string][]string)
@@ -330,19 +380,41 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 }
 
 func (r *WebSearchPlugin) indexIcons(ctx context.Context) {
+	r.mu.Lock()
+	pending := slices.Clone(r.webSearches)
+	r.mu.Unlock()
+
 	hasAnyIconIndexed := false
-	for i, search := range r.webSearches {
-		if search.Icon.IsEmpty() {
-			r.webSearches[i].Icon = r.indexWebSearchIcon(ctx, search)
+	for i, search := range pending {
+		// Imported quicklinks keep the generic globe until this fetch stores the site icon.
+		if search.Icon.IsEmpty() || isGenericWebSearchIcon(search.Icon) {
+			pending[i].Icon = r.indexWebSearchIcon(ctx, search)
 			hasAnyIconIndexed = true
 		}
 	}
+	if !hasAnyIconIndexed {
+		return
+	}
 
-	if hasAnyIconIndexed {
-		marshal, err := json.Marshal(r.webSearches)
-		if err == nil {
-			r.api.SaveSetting(ctx, webSearchesSettingKey, string(marshal), false)
+	r.mu.Lock()
+	wrote := false
+	if len(r.webSearches) == len(pending) {
+		for i := range r.webSearches {
+			if !webSearchIconNeedsFetch(r.webSearches[i].Icon) || r.webSearches[i].Keyword != pending[i].Keyword || sameWebSearchIcon(r.webSearches[i].Icon, pending[i].Icon) {
+				continue
+			}
+			r.webSearches[i].Icon = pending[i].Icon
+			wrote = true
 		}
+	}
+	var raw []byte
+	var err error
+	if wrote {
+		raw, err = json.Marshal(r.webSearches)
+	}
+	r.mu.Unlock()
+	if wrote && err == nil {
+		r.api.SaveSetting(ctx, webSearchesSettingKey, string(raw), false)
 	}
 }
 
@@ -359,13 +431,28 @@ func (r *WebSearchPlugin) indexWebSearchIcon(ctx context.Context, search webSear
 	urls := slices.Clone(search.Urls)
 	slices.Sort(urls)
 
-	img, err := system.GetWebsiteIconWithCache(ctx, urls[0])
-	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get icon for %s: %s", search.Urls[0], err.Error()))
+	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	img, err := fetchEmbeddedWebsiteIcon(fetchCtx, urls[0])
+	if err != nil || img.IsEmpty() {
+		if r.api != nil {
+			r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to get icon for %s: %v", search.Urls[0], err))
+		}
 		return webSearchIcon
 	}
-
 	return img
+}
+
+func webSearchIconNeedsFetch(icon common.WoxImage) bool {
+	return icon.IsEmpty() || isGenericWebSearchIcon(icon)
+}
+
+func isGenericWebSearchIcon(icon common.WoxImage) bool {
+	return sameWebSearchIcon(icon, webSearchIcon)
+}
+
+func sameWebSearchIcon(left, right common.WoxImage) bool {
+	return left.ImageType == right.ImageType && left.ImageData == right.ImageData
 }
 
 func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []webSearch) {
@@ -407,7 +494,7 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		return plugin.NewQueryResponse(r.querySelection(ctx, query))
 	}
 	var results []plugin.QueryResult
-	for _, search := range r.webSearches {
+	for _, search := range r.searchesForKeyword(ctx, query.TriggerKeyword) {
 		if search.Disabled || !search.triggerRegistered || query.TriggerKeyword != search.Keyword {
 			continue
 		}
@@ -458,7 +545,7 @@ func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query
 // singleParameterResults applies the same eligibility rule to fallback and text selection.
 func (r *WebSearchPlugin) singleParameterResults(ctx context.Context, text string, environment map[string]string, selectedText *string) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	for _, search := range r.webSearches {
+	for _, search := range r.cloneSearches() {
 		if search.Disabled || !search.IsFallback {
 			continue
 		}
@@ -659,17 +746,19 @@ func (r *WebSearchPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 		return nil, fmt.Errorf("empty web search values in context data")
 	}
 
-	var found *webSearch
-	for i := range r.webSearches {
-		if r.webSearches[i].Keyword == keyword && !r.webSearches[i].Disabled {
-			found = &r.webSearches[i]
+	var found webSearch
+	matched := false
+	for _, search := range r.cloneSearches() {
+		if search.Keyword == keyword && !search.Disabled {
+			found = search
+			matched = true
 			break
 		}
 	}
-	if found == nil {
+	if !matched {
 		return nil, fmt.Errorf("web search no longer exists: %s", keyword)
 	}
-	result := r.searchResult(ctx, *found, values, nil, nil)
+	result := r.searchResult(ctx, found, values, nil, nil)
 	if result.Title == "i18n:plugin_websearch_missing_context" {
 		return nil, fmt.Errorf("web search is missing required context: %s", keyword)
 	}

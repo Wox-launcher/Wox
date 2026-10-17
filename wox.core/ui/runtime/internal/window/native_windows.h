@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, char **path);
+int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, const wchar_t *filter, char **path);
 int32_t wox_windows_save_file(uintptr_t owner, const char *title, const char *default_name, const char *extension, char **path);
 int32_t wox_windows_start_file_drag(uintptr_t owner, const char *const *paths, int32_t path_count);
 int32_t wox_windows_accessibility_begin(uintptr_t owner, uint64_t generation);

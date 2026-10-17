@@ -126,6 +126,9 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 				}
 				return a.onOnboardingWindowKey(event)
 			},
+			OnTextInput: func(event woxui.TextInputEvent) {
+				host.TextInput(event)
+			},
 			// First-run setup must complete through its finish action.
 			OnCloseRequested: func() {},
 			OnClosed: func() {
@@ -502,6 +505,7 @@ func (a *App) onSettingsWindowClosed() {
 func (a *App) onOnboardingWindowClosed() {
 	wasOpen := a.onboardingOpen
 	wasRecording := a.hotkeyRecordingUsesOnboardingWindow()
+	a.releaseOnboardingMigrationSession()
 	a.onboardingOpen = false
 	a.onboardingChoice = ""
 	a.onboardingChoiceAnchor = woxui.Rect{}

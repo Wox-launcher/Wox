@@ -149,7 +149,7 @@ extern "C" int32_t wox_windows_navigate_file_dialog(uintptr_t window, const wcha
   return result;
 }
 
-extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, char **path) {
+extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, const wchar_t *filter, char **path) {
   if (owner == 0 || path == nullptr) {
     return E_INVALIDARG;
   }
@@ -169,6 +169,14 @@ extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, cha
       options |= FOS_PICKFOLDERS;
     }
     result = dialog->SetOptions(options);
+  }
+  if (SUCCEEDED(result) && directory == 0 && filter != nullptr && filter[0] != L'\0') {
+    COMDLG_FILTERSPEC specs[2] = {};
+    specs[0].pszName = L"Raycast export";
+    specs[0].pszSpec = filter;
+    specs[1].pszName = L"All files";
+    specs[1].pszSpec = L"*.*";
+    result = dialog->SetFileTypes(2, specs);
   }
   if (SUCCEEDED(result)) {
     result = show_file_dialog(dialog, reinterpret_cast<HWND>(owner));

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -379,6 +380,164 @@ func (s onboardingMigrationStub) Import(context.Context, []string) (migrate.Impo
 	return migrate.ImportResult{}, nil
 }
 
+type exportInstallStub struct {
+	onboardingMigrationStub
+	resets     int
+	generation uint64
+}
+
+func (s *exportInstallStub) Recognize(string) (bool, string) { return true, "" }
+func (s *exportInstallStub) Unlock(context.Context, string, string) error {
+	s.generation++
+	return nil
+}
+func (s *exportInstallStub) Reset() {
+	s.resets++
+	s.generation++
+}
+func (s *exportInstallStub) Generation() uint64               { return s.generation }
+func (s *exportInstallStub) SetKeepKeyword(string, bool) bool { return false }
+
+func TestLeavingMigrationReleasesTheExport(t *testing.T) {
+	source := &exportInstallStub{onboardingMigrationStub: onboardingMigrationStub{id: "raycast", name: "Raycast"}}
+	app := &App{
+		onboardingMigration: newOnboardingMigrationState([]migrate.Installation{source}),
+		hotkeySettings:      newHotkeySettingsController(CommonDeps{}),
+	}
+	migrateIndex := -1
+	for index, step := range app.onboardingSteps() {
+		if step.ID == "migrate" {
+			migrateIndex = index
+		}
+	}
+	if migrateIndex < 0 {
+		t.Fatal("migration step missing")
+	}
+	app.onboardingStep = migrateIndex
+	app.selectOnboardingStep(migrateIndex + 1)
+	if source.resets != 1 || app.onboardingMigration.unlocked {
+		t.Fatalf("resets=%d unlocked=%v", source.resets, app.onboardingMigration.unlocked)
+	}
+	app.releaseOnboardingMigrationSession()
+	if source.resets != 2 {
+		t.Fatalf("second release resets=%d", source.resets)
+	}
+}
+
+type orderedImportInstall struct {
+	onboardingMigrationStub
+}
+
+func (orderedImportInstall) Import(_ context.Context, ids []string) (migrate.ImportResult, error) {
+	result := migrate.ImportResult{}
+	for _, id := range ids {
+		switch id {
+		case "quicklink:1":
+			result.Quicklinks = append(result.Quicklinks, migrate.QuicklinkWrite{ItemID: id, Title: "wox", Keyword: "wox", URL: "https://example.com"})
+		case migrate.ClipboardSummaryID:
+			result.Clipboard = append(result.Clipboard, migrate.ClipboardWrite{ItemID: id, Text: "copied"})
+		case "setting:autostart":
+			result.Settings = append(result.Settings, migrate.SettingWrite{ItemIDs: []string{id}, Key: "EnableAutostart", Value: "true"})
+		}
+	}
+	return result, nil
+}
+
+type orderedImportServices struct {
+	contract.Services
+	active func() string
+	seen   []string
+}
+
+func (s *orderedImportServices) note(id string) {
+	s.seen = append(s.seen, s.active()+"="+id)
+}
+
+func (s *orderedImportServices) ImportMigratedQuicklinks(_ context.Context, _ string, items []contract.MigratedQuicklink) []contract.MigratedItemResult {
+	if len(items) == 0 {
+		return nil
+	}
+	s.note(items[0].ItemID)
+	return []contract.MigratedItemResult{{ID: items[0].ItemID, Status: "imported"}}
+}
+
+func (s *orderedImportServices) ImportMigratedFavorites(context.Context, string, []contract.MigratedFavorite) []contract.MigratedItemResult {
+	return nil
+}
+
+func (s *orderedImportServices) ImportMigratedNotes(context.Context, string, []contract.MigratedNote) []contract.MigratedItemResult {
+	return nil
+}
+
+func (s *orderedImportServices) ImportMigratedClipboard(_ context.Context, _ string, items []contract.MigratedClipboard) []contract.MigratedItemResult {
+	if len(items) == 0 {
+		return nil
+	}
+	s.note(items[0].ItemID)
+	return []contract.MigratedItemResult{{ID: items[0].ItemID, Status: "imported"}}
+}
+
+func (s *orderedImportServices) UpdateGeneralSetting(context.Context, string, string, string) error {
+	s.note("setting:autostart")
+	return nil
+}
+
+func TestImportShowsEachRowBeforeWritingIt(t *testing.T) {
+	install := orderedImportInstall{onboardingMigrationStub: onboardingMigrationStub{id: "raycast", name: "Raycast"}}
+	services := &orderedImportServices{}
+	app := &App{
+		lifecycleCtx:        context.Background(),
+		services:            services,
+		onboardingMigration: newOnboardingMigrationState([]migrate.Installation{install}),
+		hotkeySettings:      newHotkeySettingsController(CommonDeps{}),
+	}
+	app.onboardingMigration.categories = []onboardingMigrationCategory{
+		{id: "quicklinks", items: []onboardingMigrationItem{{item: migrate.Item{ID: "quicklink:1", Kind: migrate.ItemKindQuicklink, Selectable: true}, selected: true}}},
+		{id: "clipboard", items: []onboardingMigrationItem{{item: migrate.Item{ID: migrate.ClipboardSummaryID, Kind: migrate.ItemKindClipboard, Selectable: true}, selected: true}}},
+		{id: "general", items: []onboardingMigrationItem{{item: migrate.Item{ID: "setting:autostart", Kind: migrate.ItemKindSetting, Selectable: true}, selected: true}}},
+	}
+	services.active = func() string { return app.onboardingMigration.activeID }
+	done := make(chan struct{})
+	var once sync.Once
+	app.uiCall = func(fn func()) error {
+		fn()
+		if app.onboardingMigration.done {
+			once.Do(func() { close(done) })
+		}
+		return nil
+	}
+	app.importOnboardingMigration()
+	if app.onboardingMigration.activeID != "quicklink:1" || !app.onboardingMigration.importing {
+		t.Fatalf("click did not mark the first row active: %+v", app.onboardingMigration.activeID)
+	}
+	select {
+	case <-done:
+	case <-time.After(4 * time.Second):
+		t.Fatal("import did not finish")
+	}
+	want := []string{"quicklink:1=quicklink:1", migrate.ClipboardSummaryID + "=" + migrate.ClipboardSummaryID, "setting:autostart=setting:autostart"}
+	if strings.Join(services.seen, ",") != strings.Join(want, ",") {
+		t.Fatalf("write order = %#v", services.seen)
+	}
+	for _, category := range app.onboardingMigration.categories {
+		for _, item := range category.items {
+			if !item.copied {
+				t.Fatalf("row %s was not marked imported", item.item.ID)
+			}
+		}
+	}
+}
+
+func TestMigrationDisplayWaitStopsWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	waitOnboardingMigrationDisplay(ctx, started)
+	if time.Since(started) > 50*time.Millisecond {
+		t.Fatal("cancelled display wait blocked")
+	}
+}
+
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {
 	steps := (&App{}).onboardingSteps()
 	want := []string{"welcome", "mainHotkey"}
@@ -498,4 +657,21 @@ func TestOnboardingCanContinueWhileThemeApplies(t *testing.T) {
 		return
 	}
 	t.Fatal("theme onboarding step not found")
+}
+
+func TestClipboardSummaryOutcomeCollapsesEntryResults(t *testing.T) {
+	ok := clipboardSummaryOutcome([]contract.MigratedItemResult{
+		{ID: "clipboard:1", Status: "imported"},
+		{ID: "clipboard:2", Status: "exists"},
+		{ID: "clipboard:3", Status: "failed", ErrorCode: "write"},
+	})
+	if ok.ID != migrate.ClipboardSummaryID || ok.Status != "imported" || ok.ErrorCode != "" {
+		t.Fatalf("partial success = %+v", ok)
+	}
+	failed := clipboardSummaryOutcome([]contract.MigratedItemResult{
+		{ID: "clipboard:1", Status: "failed", ErrorCode: "write"},
+	})
+	if failed.Status != "failed" || failed.ErrorCode != "write" {
+		t.Fatalf("failure = %+v", failed)
+	}
 }

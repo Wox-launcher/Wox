@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"wox/common"
 	"wox/util"
@@ -25,11 +26,30 @@ const (
 
 	// CategoryHotkeys, CategoryQueries, CategoryGeneral, CategoryThemes, and CategoryPlugins
 	// are the stable group ids onboarding translates. A launcher omits a group that has no items.
-	CategoryHotkeys = "hotkeys"
-	CategoryQueries = "queries"
-	CategoryGeneral = "general"
-	CategoryThemes  = "themes"
-	CategoryPlugins = "plugins"
+	CategoryHotkeys    = "hotkeys"
+	CategoryQueries    = "queries"
+	CategoryGeneral    = "general"
+	CategoryThemes     = "themes"
+	CategoryPlugins    = "plugins"
+	CategoryQuicklinks = "quicklinks"
+	CategorySnippets   = "snippets"
+	CategoryClipboard  = "clipboard"
+
+	ItemKindSetting   = "setting"
+	ItemKindPlugin    = "plugin"
+	ItemKindQuicklink = "quicklink"
+	ItemKindFavorite  = "favorite"
+	ItemKindNote      = "note"
+	ItemKindClipboard = "clipboard"
+
+	// ClipboardSummaryID is the single catalog row for a clipboard history import.
+	ClipboardSummaryID = "clipboard:summary"
+
+	// StatusConflict means the same identity already points at different Wox content.
+	StatusConflict = "conflict"
+
+	// CodeExportRequired means Catalog was called before an encrypted export was unlocked.
+	CodeExportRequired = "export_required"
 
 	// ValueOn and the other value ids are stable labels for a setting's current choice.
 	ValueOn             = "on"
@@ -66,6 +86,21 @@ type Installation interface {
 	Import(ctx context.Context, itemIDs []string) (ImportResult, error)
 }
 
+// ExportSource is an installation whose rows stay hidden until the user unlocks an export file.
+type ExportSource interface {
+	Installation
+	// Recognize checks the signature without decrypting the file.
+	Recognize(path string) (ok bool, detail string)
+	// Unlock retains mapped data for Catalog and Import until Reset.
+	Unlock(ctx context.Context, path, passphrase string) error
+	// Reset cancels session work and releases retained export data. It is safe to call more than once.
+	Reset()
+	// Generation changes on every Unlock and Reset so a late result can be dropped.
+	Generation() uint64
+	// SetKeepKeyword changes one snippet's body option inside the unlocked session.
+	SetKeepKeyword(itemID string, keep bool) bool
+}
+
 // Category is one group of migration choices, such as hotkeys or plugins.
 type Category struct {
 	ID    string
@@ -84,6 +119,11 @@ type Item struct {
 	Icon       common.WoxImage
 	Selectable bool
 	Status     string
+	// Kind selects how onboarding applies the row. Empty keeps the older setting-prefix rule.
+	Kind string
+	// OptionKey is an extra checkbox, such as keeping a snippet keyword in the note body.
+	OptionKey string
+	OptionOn  bool
 }
 
 // Plugin is one candidate shown before import.
@@ -103,9 +143,14 @@ type Plugin struct {
 // One SettingWrite can cover several items when Wox stores them as a single list.
 // Themes are new Wox themes mapped from the source. The caller installs each one and selects it.
 type ImportResult struct {
-	Plugins  []PluginResult
-	Settings []SettingWrite
-	Themes   []ThemeWrite
+	Plugins    []PluginResult
+	Settings   []SettingWrite
+	Themes     []ThemeWrite
+	Quicklinks []QuicklinkWrite
+	Favorites  []FavoriteWrite
+	Notes      []NoteWrite
+	Clipboard  []ClipboardWrite
+	Results    []ItemResult
 }
 
 // ThemeWrite is one Wox theme produced by mapping a source launcher theme.
@@ -128,6 +173,47 @@ type SettingWrite struct {
 type PluginResult struct {
 	ID    string
 	Error string
+}
+
+// QuicklinkWrite is one Web Search row mapped from a link quicklink.
+type QuicklinkWrite struct {
+	ItemID  string
+	Title   string
+	Keyword string
+	URL     string
+	Browser string
+}
+
+// FavoriteWrite is one file or folder quicklink mapped onto a Folder favorite.
+type FavoriteWrite struct {
+	ItemID string
+	Name   string
+	Path   string
+}
+
+// NoteWrite is one note mapped from a Raycast snippet.
+type NoteWrite struct {
+	ItemID      string
+	SourceID    string
+	Fingerprint string
+	Title       string
+	Body        string
+}
+
+// ClipboardWrite is mapped clipboard content. The clipboard package copies images and commits records.
+type ClipboardWrite struct {
+	ItemID    string
+	Text      string
+	ImagePath string
+	CreatedAt time.Time
+	Pinned    bool
+}
+
+// ItemResult is one non-plugin import outcome.
+type ItemResult struct {
+	ID        string
+	Status    string
+	ErrorCode string
 }
 
 var (
