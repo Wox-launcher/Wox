@@ -10,27 +10,41 @@ import (
 
 // woxSnapshot is the Wox state used to mark rows that already exist or conflict.
 type woxSnapshot struct {
-	MainHotkey       string
-	QueryHotkeys     []queryRow
-	QueryAliases     []queryRow
-	AutostartKnown   bool
-	Autostart        bool
-	ShowTrayKnown    bool
-	ShowTray         bool
-	WebSearches      []webSearchRow
-	Favorites        []favoriteRow
-	OccupiedKeywords map[string]struct{}
-	Notes            []noteRow
-	ClipboardTexts   map[string]clipboardHit
-	ClipboardImages  map[string]clipboardHit
-	ResultAliases    []setting.ResultBinding
-	ClipboardTrigger string
-	EmojiTrigger     string
-	TextDays         int
-	ImageDays        int
-	HistoryCount     int
-	MaxHistory       int
-	Now              time.Time
+	MainHotkey                string
+	QueryHotkeys              []queryRow
+	QueryAliases              []queryRow
+	AutostartKnown            bool
+	Autostart                 bool
+	ShowTrayKnown             bool
+	ShowTray                  bool
+	FileRoots                 []string
+	FileRootsKnown            bool
+	FileIgnorePatterns        []string
+	FileIgnoreKnown           bool
+	ContentRoots              []string
+	ContentRootsKnown         bool
+	SkipHidden                bool
+	SkipHiddenKnown           bool
+	ShowPreview               bool
+	ShowPreviewKnown          bool
+	ContentSearch             bool
+	ContentSearchKnown        bool
+	WebSearches               []webSearchRow
+	Favorites                 []favoriteRow
+	OccupiedKeywords          map[string]struct{}
+	Notes                     []noteRow
+	ClipboardTexts            map[string]clipboardHit
+	ClipboardImages           map[string]clipboardHit
+	ResultAliases             []setting.ResultBinding
+	ClipboardTrigger          string
+	EmojiTrigger              string
+	TextDays                  int
+	ImageTextRecognition      bool
+	ImageTextRecognitionKnown bool
+	ImageDays                 int
+	HistoryCount              int
+	MaxHistory                int
+	Now                       time.Time
 }
 
 type queryRow struct {
@@ -87,6 +101,7 @@ func (s woxSnapshot) emojiTrigger() string {
 func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped := mappedExport{}
 	mapped.general = generalSettings(payload.Settings.General, current)
+	mapped.fileSearch, mapped.fileRoots, mapped.fileIgnore, mapped.contentRoots = mapFileSearchRows(payload, current)
 	mapped.quicklinks = mapQuicklinkRows(payload, current)
 	mapped.shortcuts = mapShortcutRows(payload, mapped.quicklinks)
 	claimed := shortcutIndexes(mapped.shortcuts)
@@ -95,6 +110,7 @@ func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped.snippets = mapSnippetRows(payload, current)
 	mapped.notes = mapNoteRows(payload, current)
 	mapped.clipboard, mapped.summary = mapClipboardRows(payload, current)
+	mapped.clipboardSettings = mapClipboardSettings(payload, current)
 	return mapped
 }
 

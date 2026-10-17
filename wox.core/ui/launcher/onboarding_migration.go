@@ -629,6 +629,12 @@ func (a *App) applyOnboardingMigrationSetting(ctx context.Context, write migrate
 	if err != nil || skip {
 		return err
 	}
+	if write.PluginID != "" {
+		if a.services != nil {
+			return a.services.UpdatePluginSettings(ctx, a.sessionID, write.PluginID, map[string]string{write.Key: value})
+		}
+		return nil
+	}
 	if a.services != nil {
 		if err := a.services.UpdateGeneralSetting(ctx, a.sessionID, write.Key, value); err != nil {
 			return err

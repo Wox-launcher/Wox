@@ -29,6 +29,7 @@ const (
 	CategoryHotkeys    = "hotkeys"
 	CategoryQueries    = "queries"
 	CategoryGeneral    = "general"
+	CategoryFileSearch = "file_search"
 	CategoryThemes     = "themes"
 	CategoryPlugins    = "plugins"
 	CategoryQuicklinks = "quicklinks"
@@ -206,10 +207,12 @@ type ThemeWrite struct {
 // SettingWrite is one Wox setting value produced by the selected items.
 // QueryHotkeys and QueryAliases contain only the selected rows. Callers add those
 // rows to the stored table and leave existing rows in place. Other keys replace the current value.
+// PluginID selects a plugin setting store. Empty writes a Wox general setting.
 type SettingWrite struct {
-	ItemIDs []string
-	Key     string
-	Value   string
+	ItemIDs  []string
+	Key      string
+	Value    string
+	PluginID string
 }
 
 // PluginResult records whether one requested plugin was copied.

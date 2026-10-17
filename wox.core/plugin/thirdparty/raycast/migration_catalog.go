@@ -14,6 +14,9 @@ func catalogFrom(mapped mappedExport) []migrate.Category {
 	if items := settingItems(mapped.general); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryGeneral, Items: items})
 	}
+	if items := settingItems(mapped.fileSearch); len(items) > 0 {
+		categories = append(categories, migrate.Category{ID: migrate.CategoryFileSearch, Items: items})
+	}
 	if items := queryItems(mapped.queries); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryQueries, Items: items})
 	}
@@ -29,7 +32,7 @@ func catalogFrom(mapped mappedExport) []migrate.Category {
 	if items := noteItems(mapped.notes); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryNotes, Items: items})
 	}
-	if items := clipboardItems(mapped.clipboard, mapped.summary); len(items) > 0 {
+	if items := clipboardItems(mapped.clipboard, mapped.summary, mapped.clipboardSettings); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryClipboard, Items: items})
 	}
 	return categories
@@ -84,8 +87,8 @@ func settingItems(rows []mappedSetting) []migrate.Item {
 			continue
 		}
 		items = append(items, migrate.Item{
-			ID: row.id, Kind: migrate.ItemKindSetting, TitleKey: row.titleKey,
-			DetailKey: row.detailKey, Selectable: row.selectable, Status: row.status,
+			ID: row.id, Kind: migrate.ItemKindSetting, TitleKey: row.titleKey, Title: row.title,
+			DetailKey: row.detailKey, Detail: row.detail, Selectable: row.selectable, Status: row.status,
 		})
 	}
 	return items
@@ -142,13 +145,14 @@ func noteItems(rows []mappedNote) []migrate.Item {
 	return items
 }
 
-func clipboardItems(rows []mappedClipboard, summary clipboardSummary) []migrate.Item {
+func clipboardItems(rows []mappedClipboard, summary clipboardSummary, settings []mappedSetting) []migrate.Item {
+	items := settingItems(settings)
 	if len(rows) == 0 && summary == (clipboardSummary{}) {
-		return nil
+		return items
 	}
-	return []migrate.Item{{
+	return append(items, migrate.Item{
 		ID: migrate.ClipboardSummaryID, Kind: migrate.ItemKindClipboard, TitleKey: "clipboard_summary",
 		Detail:    strconv.Itoa(summary.importable) + "|" + strconv.Itoa(summary.duplicate) + "|" + strconv.Itoa(summary.expired) + "|" + strconv.Itoa(summary.capacity) + "|" + strconv.Itoa(summary.missing),
 		DetailKey: "raycast_clipboard_summary", Selectable: summary.importable > 0,
-	}}
+	})
 }

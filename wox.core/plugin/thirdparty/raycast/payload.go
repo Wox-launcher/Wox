@@ -7,8 +7,9 @@ import (
 // Payload is the decrypted Raycast 2.x document. Unknown fields are ignored.
 type Payload struct {
 	Settings struct {
-		General  map[string]json.RawMessage `json:"general"`
-		Commands []Command                  `json:"commands"`
+		General            map[string]json.RawMessage `json:"general"`
+		Commands           []Command                  `json:"commands"`
+		InternalExtensions []InternalExtension        `json:"internalExtensions"`
 	} `json:"settings"`
 	Snippets struct {
 		Snippets []Snippet `json:"snippets"`
@@ -23,6 +24,12 @@ type Payload struct {
 	Notes struct {
 		Notes []Note `json:"notes"`
 	} `json:"notes"`
+}
+
+// InternalExtension is one built-in Raycast extension and the preferences stored in its meta object.
+type InternalExtension struct {
+	ID   string          `json:"id"`
+	Meta json.RawMessage `json:"meta"`
 }
 
 // Command is one Raycast command binding. Hotkeys may use more than one field name.

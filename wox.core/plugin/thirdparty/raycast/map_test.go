@@ -10,6 +10,7 @@ import (
 
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system/file_search/indexpolicy"
 	"wox/plugin/thirdparty/migrate"
 )
 
@@ -501,4 +502,223 @@ func TestMapGeneralSettings(t *testing.T) {
 	if mapped.general[1].key != "ShowTray" || mapped.general[1].value != "false" {
 		t.Fatalf("tray = %+v", mapped.general[1])
 	}
+}
+
+func TestMapFileSearchKeepsExistingValuesAndMergesTheRest(t *testing.T) {
+	home := t.TempDir()
+	extra := filepath.Join(home, "extra")
+	docs := filepath.Join(home, "docs")
+	payload := Payload{}
+	payload.Settings.InternalExtensions = []InternalExtension{{
+		ID: raycastFileSearchExtensionID,
+		Meta: json.RawMessage(`{
+			"include": ["` + jsonPath(home) + `", "` + jsonPath(extra) + `", "` + jsonPath(home) + `"],
+			"ignore": ["*.tmp", "**/AppData/**", "**/AppData/**"],
+			"contentSearch": true,
+			"includeHiddenFiles": true,
+			"viewState": {"showDetails": false},
+			"semanticIndexingPaths": ["` + jsonPath(docs) + `"],
+			"semanticIndexingUseFileSearchScope": true,
+			"searchEngine": "minidex",
+			"useNtfsScanner": false,
+			"walkThreads": 2
+		}`),
+	}}
+	current := woxSnapshot{
+		FileRootsKnown: true, FileRoots: []string{home},
+		FileIgnoreKnown: true, FileIgnorePatterns: []string{"*.tmp", indexpolicy.WoxFileSearchStorageIgnorePattern},
+		ContentRootsKnown: true, ContentRoots: []string{home},
+		SkipHiddenKnown: true, SkipHidden: true,
+		ShowPreviewKnown: true, ShowPreview: true,
+		ContentSearchKnown: true, ContentSearch: false,
+	}
+	mapped := buildMapped(payload, current)
+	ids := map[string]mappedSetting{}
+	for _, row := range mapped.fileSearch {
+		ids[row.id] = row
+	}
+	if _, ok := ids["setting:file_root:0"]; ok {
+		t.Fatal("existing directory was offered again")
+	}
+	root := ids["setting:file_root:1"]
+	if !root.selectable || root.detail != extra || root.merge != "roots" {
+		t.Fatalf("root = %+v", root)
+	}
+	if _, ok := ids["setting:file_ignore:0"]; ok {
+		t.Fatal("existing ignore pattern was offered again")
+	}
+	ignore := ids["setting:file_ignore:1"]
+	if !ignore.selectable || ignore.value != "**/AppData/**" || ids["setting:file_ignore:2"].id != "" {
+		t.Fatalf("ignore = %+v duplicate = %+v", ignore, ids["setting:file_ignore:2"])
+	}
+	if ids["setting:file_skip_hidden"].value != "false" || ids["setting:file_preview"].value != "false" || ids["setting:file_content_search"].value != "true" {
+		t.Fatalf("bools = %+v", mapped.fileSearch)
+	}
+	if ids["setting:file_content_root:0"].detail != docs {
+		t.Fatalf("content = %+v", ids["setting:file_content_root:0"])
+	}
+	catalog := catalogFrom(mapped)
+	fileSearch := categoryByID(t, catalog, migrate.CategoryFileSearch)
+	if fileSearch.Items[0].Detail != extra || fileSearch.Items[0].TitleKey != "file_directory" {
+		t.Fatalf("catalog = %+v", fileSearch.Items)
+	}
+
+	imported := importSelected(mapped, []string{"setting:file_root:1", "setting:file_ignore:1", "setting:file_content_search"})
+	writes := map[string]migrate.SettingWrite{}
+	for _, write := range imported.Settings {
+		writes[write.Key] = write
+		if write.PluginID != common.FileSearchPluginID {
+			t.Fatalf("plugin = %s", write.PluginID)
+		}
+	}
+	if _, ok := writes["contentRoots"]; ok {
+		t.Fatal("unselected content directory was written")
+	}
+	var roots []struct{ Path string }
+	if err := json.Unmarshal([]byte(writes["roots"].Value), &roots); err != nil || len(roots) != 2 || roots[0].Path != home || roots[1].Path != extra {
+		t.Fatalf("roots = %s", writes["roots"].Value)
+	}
+	var patterns []struct{ Pattern string }
+	if err := json.Unmarshal([]byte(writes["ignorePatterns"].Value), &patterns); err != nil || len(patterns) != 3 {
+		t.Fatalf("ignore = %s", writes["ignorePatterns"].Value)
+	}
+	if patterns[0].Pattern != "*.tmp" || patterns[1].Pattern != indexpolicy.WoxFileSearchStorageIgnorePattern || patterns[2].Pattern != "**/AppData/**" {
+		t.Fatalf("ignore = %+v", patterns)
+	}
+	if writes["contentSearchEnabled"].Value != "true" {
+		t.Fatalf("content search = %+v", writes["contentSearchEnabled"])
+	}
+}
+
+func TestMapFileSearchHidesValuesThatAlreadyMatch(t *testing.T) {
+	home := t.TempDir()
+	payload := Payload{}
+	payload.Settings.InternalExtensions = []InternalExtension{{
+		ID: raycastFileSearchExtensionID,
+		Meta: json.RawMessage(`{
+			"include": ["` + jsonPath(home) + `"],
+			"ignore": ["*.tmp"],
+			"contentSearch": false,
+			"includeHiddenFiles": false,
+			"viewState": {"showDetails": true},
+			"semanticIndexingUseFileSearchScope": true
+		}`),
+	}}
+	current := woxSnapshot{
+		FileRootsKnown: true, FileRoots: []string{home},
+		FileIgnoreKnown: true, FileIgnorePatterns: []string{"*.tmp"},
+		ContentRootsKnown: true, ContentRoots: []string{home},
+		SkipHiddenKnown: true, SkipHidden: true,
+		ShowPreviewKnown: true, ShowPreview: true,
+		ContentSearchKnown: true, ContentSearch: false,
+	}
+	mapped := buildMapped(payload, current)
+	for _, row := range mapped.fileSearch {
+		if row.selectable {
+			t.Fatalf("selectable = %+v", row)
+		}
+	}
+	if len(catalogFrom(mapped)) != 0 {
+		t.Fatal("matching file search settings stayed in the catalog")
+	}
+}
+
+func TestMapFileSearchCopiesDirectoriesIntoContentRootsWhenContentSearchUsesThatScope(t *testing.T) {
+	home := t.TempDir()
+	extra := filepath.Join(home, "extra")
+	payload := Payload{}
+	payload.Settings.InternalExtensions = []InternalExtension{{
+		ID: raycastFileSearchExtensionID,
+		Meta: json.RawMessage(`{
+			"include": ["` + jsonPath(extra) + `"],
+			"contentSearch": true,
+			"semanticIndexingUseFileSearchScope": true
+		}`),
+	}}
+	current := woxSnapshot{FileRootsKnown: true, ContentRootsKnown: true, ContentSearchKnown: true}
+	mapped := buildMapped(payload, current)
+	var roots, contents int
+	for _, row := range mapped.fileSearch {
+		if row.merge == "roots" && row.value == extra {
+			roots++
+		}
+		if row.merge == "content_roots" && row.value == extra {
+			contents++
+		}
+	}
+	if roots != 1 || contents != 1 {
+		t.Fatalf("rows = %+v", mapped.fileSearch)
+	}
+}
+
+func TestMapClipboardHistoryDurationBecomesTextDays(t *testing.T) {
+	if days, ok := raycastHistoryDays("P1W"); !ok || days != 7 {
+		t.Fatalf("week = %d %v", days, ok)
+	}
+	if days, ok := raycastHistoryDays("P1M"); !ok || days != 30 {
+		t.Fatalf("month = %d %v", days, ok)
+	}
+	if days, ok := raycastHistoryDays("P3M"); !ok || days != 90 {
+		t.Fatalf("quarter = %d %v", days, ok)
+	}
+	if days, ok := raycastHistoryDays("P1Y"); !ok || days != 365 {
+		t.Fatalf("year = %d %v", days, ok)
+	}
+	if _, ok := raycastHistoryDays("forever"); ok {
+		t.Fatal("accepted an open-ended duration")
+	}
+
+	payload := Payload{}
+	payload.Settings.InternalExtensions = []InternalExtension{{
+		ID:   raycastClipboardExtensionID,
+		Meta: json.RawMessage(`{"historyDuration":"P1W","textRecognitionEnabled":false,"captureUniversalClipboard":true}`),
+	}}
+	mapped := buildMapped(payload, defaultSnapshot())
+	if len(mapped.clipboardSettings) != 2 {
+		t.Fatalf("settings = %+v", mapped.clipboardSettings)
+	}
+	days := mapped.clipboardSettings[0]
+	if days.key != "text_history_days" || days.value != "7" || days.detail != "7" || days.pluginID != common.ClipboardPluginID || !days.selectable {
+		t.Fatalf("days = %+v", days)
+	}
+	recognition := mapped.clipboardSettings[1]
+	if recognition.key != "image_text_recognition_enabled" || recognition.value != "false" || recognition.pluginID != common.ClipboardPluginID {
+		t.Fatalf("recognition = %+v", recognition)
+	}
+	catalog := catalogFrom(mapped)
+	clipboard := categoryByID(t, catalog, migrate.CategoryClipboard)
+	if len(clipboard.Items) != 2 || clipboard.Items[0].ID != "setting:clipboard_text_days" || clipboard.Items[1].TitleKey != "clipboard_text_recognition" {
+		t.Fatalf("catalog = %+v", clipboard.Items)
+	}
+
+	imported := importSelected(mapped, []string{"setting:clipboard_text_days"})
+	if len(imported.Settings) != 1 || imported.Settings[0].Key != "text_history_days" || imported.Settings[0].Value != "7" || imported.Settings[0].PluginID != common.ClipboardPluginID {
+		t.Fatalf("import = %+v", imported.Settings)
+	}
+
+	same := buildMapped(payload, woxSnapshot{TextDays: 7, ImageTextRecognition: false, ImageTextRecognitionKnown: true})
+	for _, row := range same.clipboardSettings {
+		if row.selectable {
+			t.Fatalf("matching setting stayed selectable: %+v", row)
+		}
+	}
+	if len(catalogFrom(same)) != 0 {
+		t.Fatal("matching clipboard settings stayed in the catalog")
+	}
+}
+
+func jsonPath(path string) string {
+	raw, _ := json.Marshal(path)
+	return string(raw[1 : len(raw)-1])
+}
+
+func categoryByID(t *testing.T, categories []migrate.Category, id string) migrate.Category {
+	t.Helper()
+	for _, category := range categories {
+		if category.ID == id {
+			return category
+		}
+	}
+	t.Fatalf("missing category %s in %+v", id, categories)
+	return migrate.Category{}
 }

@@ -10,6 +10,7 @@ func TestCatalogPlacesShortcutsAfterQuicklinksAndGeneralNearTheTop(t *testing.T)
 	catalog := catalogFrom(mappedExport{
 		hotkeys:    []mappedHotkey{{id: "setting:main_hotkey", title: "Main", selectable: true}},
 		general:    []mappedSetting{{id: "setting:general:0", titleKey: "autostart", selectable: true}},
+		fileSearch: []mappedSetting{{id: "setting:file_root:0", titleKey: "file_directory", detail: "D:\\Work", selectable: true}},
 		quicklinks: []mappedQuicklink{{id: "quicklink:0", title: "wox", selectable: true}},
 		shortcuts:  []mappedShortcut{{id: "setting:result_binding:0", title: "百度网盘", selectable: true}},
 		snippets:   []mappedSnippet{{id: "snippet:0", title: "note", selectable: true}},
@@ -19,7 +20,7 @@ func TestCatalogPlacesShortcutsAfterQuicklinksAndGeneralNearTheTop(t *testing.T)
 	for _, category := range catalog {
 		got = append(got, category.ID)
 	}
-	want := []string{migrate.CategoryHotkeys, migrate.CategoryGeneral, migrate.CategoryQuicklinks, migrate.CategoryShortcuts, migrate.CategorySnippets, migrate.CategoryNotes}
+	want := []string{migrate.CategoryHotkeys, migrate.CategoryGeneral, migrate.CategoryFileSearch, migrate.CategoryQuicklinks, migrate.CategoryShortcuts, migrate.CategorySnippets, migrate.CategoryNotes}
 	if len(got) != len(want) {
 		t.Fatalf("order = %v", got)
 	}

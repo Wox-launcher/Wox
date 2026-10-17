@@ -30,7 +30,10 @@ func currentSnapshot() woxSnapshot {
 }
 
 func defaultSnapshot() woxSnapshot {
-	return woxSnapshot{ClipboardTrigger: "cb", EmojiTrigger: "emoji", TextDays: 90, ImageDays: 3, MaxHistory: 5000}
+	return woxSnapshot{
+		ClipboardTrigger: "cb", EmojiTrigger: "emoji", TextDays: 90, ImageDays: 3, MaxHistory: 5000,
+		ImageTextRecognition: true, ImageTextRecognitionKnown: true,
+	}
 }
 
 func utilIsTestMode() bool {
@@ -39,6 +42,7 @@ func utilIsTestMode() bool {
 
 func readLiveSnapshot() woxSnapshot {
 	snap := defaultSnapshot()
+	applyFileSearchDefaults(&snap)
 	woxSetting := setting.GetSettingManager().GetWoxSetting(context.Background())
 	if woxSetting == nil || woxSetting.MainHotkey == nil {
 		return snap
@@ -58,10 +62,66 @@ func readLiveSnapshot() woxSnapshot {
 		return snap
 	}
 	readWebSearchSnapshot(&snap)
+	readFileSearchSnapshot(&snap)
 	readFavoriteSnapshot(&snap)
 	readNotesSnapshot(&snap)
 	readClipboardSnapshot(&snap)
 	return snap
+}
+
+// readFileSearchSnapshot overlays saved file-search settings onto the default baseline.
+func readFileSearchSnapshot(snap *woxSnapshot) {
+	store := setting.NewPluginSettingStore(database.GetDB(), common.FileSearchPluginID)
+	if raw, ok := pluginSettingString(store, "roots"); ok {
+		if paths, err := parseImportedPathTable(raw); err == nil {
+			snap.FileRoots = paths
+			snap.ContentRoots = append([]string(nil), paths...)
+		}
+	}
+	if raw, ok := pluginSettingString(store, "ignorePatterns"); ok {
+		if patterns, err := parseImportedPatternTable(raw); err == nil {
+			snap.FileIgnorePatterns = withMandatoryIgnore(patterns)
+		}
+	}
+	if raw, ok := pluginSettingString(store, "contentRoots"); ok {
+		if paths, err := parseImportedPathTable(raw); err == nil {
+			snap.ContentRoots = paths
+		}
+	}
+	if value, ok := pluginSettingBool(store, "skipHiddenFiles"); ok {
+		snap.SkipHidden = value
+	}
+	if value, ok := pluginSettingBool(store, "showPreview"); ok {
+		snap.ShowPreview = value
+	}
+	if value, ok := pluginSettingBool(store, "contentSearchEnabled"); ok {
+		snap.ContentSearch = value
+	}
+}
+
+func pluginSettingString(store *setting.PluginSettingStore, key string) (string, bool) {
+	var raw string
+	platformKey := key + "@" + util.GetCurrentPlatform()
+	if err := store.Get(platformKey, &raw); err == nil && strings.TrimSpace(raw) != "" {
+		return raw, true
+	}
+	raw = ""
+	if err := store.Get(key, &raw); err != nil || strings.TrimSpace(raw) == "" {
+		return "", false
+	}
+	return raw, true
+}
+
+func pluginSettingBool(store *setting.PluginSettingStore, key string) (bool, bool) {
+	raw, ok := pluginSettingString(store, key)
+	if !ok {
+		return false, false
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, false
+	}
+	return value, true
 }
 
 func readWebSearchSnapshot(snap *woxSnapshot) {
@@ -144,6 +204,13 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 			snap.ImageDays = parsed
 		}
 	}
+	var recognition string
+	if err := store.Get("image_text_recognition_enabled", &recognition); err == nil && recognition != "" {
+		if parsed, err := strconv.ParseBool(recognition); err == nil {
+			snap.ImageTextRecognition = parsed
+		}
+	}
+	snap.ImageTextRecognitionKnown = true
 	if snap.ClipboardTexts == nil {
 		snap.ClipboardTexts = map[string]clipboardHit{}
 	}

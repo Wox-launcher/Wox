@@ -14,15 +14,20 @@ const (
 
 // mappedExport is the session data kept after the raw JSON is released.
 type mappedExport struct {
-	hotkeys    []mappedHotkey
-	shortcuts  []mappedShortcut
-	queries    []mappedQuery
-	general    []mappedSetting
-	quicklinks []mappedQuicklink
-	snippets   []mappedSnippet
-	notes      []mappedNote
-	clipboard  []mappedClipboard
-	summary    clipboardSummary
+	hotkeys           []mappedHotkey
+	shortcuts         []mappedShortcut
+	queries           []mappedQuery
+	general           []mappedSetting
+	fileSearch        []mappedSetting
+	fileRoots         []string
+	fileIgnore        []string
+	contentRoots      []string
+	quicklinks        []mappedQuicklink
+	snippets          []mappedSnippet
+	notes             []mappedNote
+	clipboard         []mappedClipboard
+	clipboardSettings []mappedSetting
+	summary           clipboardSummary
 }
 
 type mappedHotkey struct {
@@ -79,9 +84,13 @@ type mappedQuery struct {
 type mappedSetting struct {
 	id         string
 	titleKey   string
+	title      string
 	key        string
 	value      string
 	detailKey  string
+	detail     string
+	pluginID   string
+	merge      string
 	selectable bool
 	status     string
 }

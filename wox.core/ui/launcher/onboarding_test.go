@@ -116,6 +116,38 @@ func (s *migrationSettingWriter) UpdateGeneralSetting(_ context.Context, _, key,
 	return nil
 }
 
+type pluginSettingMigrationWriter struct {
+	contract.Services
+	pluginID string
+	values   map[string]string
+	general  string
+}
+
+func (s *pluginSettingMigrationWriter) UpdatePluginSettings(_ context.Context, _, pluginID string, values map[string]string) error {
+	s.pluginID = pluginID
+	s.values = values
+	return nil
+}
+
+func (s *pluginSettingMigrationWriter) UpdateGeneralSetting(_ context.Context, _, key, value string) error {
+	s.general = key + "=" + value
+	return nil
+}
+
+func TestMigrationPluginSettingUsesThePluginStore(t *testing.T) {
+	services := &pluginSettingMigrationWriter{}
+	app := &App{services: services, sessionID: "session"}
+	err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{
+		Key: "ignorePatterns", Value: `[{"Pattern":"**/AppData/**"}]`, PluginID: common.FileSearchPluginID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if services.pluginID != common.FileSearchPluginID || services.values["ignorePatterns"] != `[{"Pattern":"**/AppData/**"}]` || services.general != "" {
+		t.Fatalf("plugin=%s values=%v general=%q", services.pluginID, services.values, services.general)
+	}
+}
+
 type migrationThemeInstaller struct {
 	contract.Services
 	theme common.Theme
