@@ -7,11 +7,12 @@ import (
 )
 
 type JobExecutor struct {
-	snapshot           *SnapshotBuilder
-	apply              func(context.Context, RootRecord, Job, *SubtreeSnapshotBatch) error
-	applySubtreeBatch  func(context.Context, RootRecord, []SubtreeSnapshotBatch) error
-	streamDirectFiles  func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)
-	streamSubtree      func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)
+	snapshot          *SnapshotBuilder
+	apply             func(context.Context, RootRecord, Job, *SubtreeSnapshotBatch) error
+	applySubtreeBatch func(context.Context, RootRecord, []SubtreeSnapshotBatch) error
+	// streamJob applies direct-files, subtree and directory jobs while their
+	// traversal runs, instead of materializing a snapshot first.
+	streamJob          func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)
 	subtreeBatchConfig subtreeApplyBatchConfig
 }
 
@@ -95,18 +96,11 @@ func (e *JobExecutor) SetSubtreeBatchConfig(config subtreeApplyBatchConfig) {
 	e.subtreeBatchConfig = normalizeSubtreeApplyBatchConfig(config)
 }
 
-func (e *JobExecutor) SetDirectFilesStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)) {
+func (e *JobExecutor) SetJobStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)) {
 	if e == nil {
 		return
 	}
-	e.streamDirectFiles = stream
-}
-
-func (e *JobExecutor) SetSubtreeStreamFunc(stream func(context.Context, RootRecord, Job, *SnapshotBuilder, func(JobApplyStats)) (JobApplyStats, error)) {
-	if e == nil {
-		return
-	}
-	e.streamSubtree = stream
+	e.streamJob = stream
 }
 
 func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []RootRecord, onSnapshot func(StatusSnapshot, Job)) (Run, []Job, error) {
@@ -308,35 +302,13 @@ func (e *JobExecutor) ExecuteRun(ctx context.Context, plan RunPlan, roots []Root
 			logFilesearchJobPhase(ctx, root, *job, "apply_direct_delta", util.GetSystemTimestamp()-applyStartedAt)
 			run.CompletedEntryCount += int64(len(job.DirectDeltas))
 			run.CompletedFileCount += int64(len(job.DirectDeltas))
-		} else if job.Kind == JobKindDirectFiles && e.streamDirectFiles != nil {
-			// Direct-files jobs keep delete ownership at directory scope. Streaming
-			// them directly avoids rebuilding the earlier whole-directory memory
-			// spike while preserving that single authoritative prune boundary.
-			// Root-level totals were not enough to explain where long runs stalled,
-			// so each job now records its own apply duration to separate snapshot
-			// building cost from SQLite write cost when one scope becomes hot.
+		} else if e.streamJob != nil && (job.Kind == JobKindDirectFiles || job.Kind == JobKindSubtree || job.Kind == JobKindDirectory) {
+			// Streaming applies traversal batches as they are produced, so a large
+			// scope never materializes one whole snapshot in memory while keeping
+			// the job's single authoritative delete boundary. Each job records its
+			// own apply duration so one hot scope stands out in long runs.
 			streamStartedAt := util.GetSystemTimestamp()
-			stats, err := e.streamDirectFiles(ctx, root, *job, e.snapshot, func(currentStats JobApplyStats) {
-				emitStreamingStats(*job, currentStats)
-			})
-			if err != nil {
-				logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
-				err = &runRootError{RootID: job.RootID, Err: err}
-				job.Status = JobStatusFailed
-				run.Status = RunStatusFailed
-				run.LastError = err.Error()
-				emitJobExecutorSnapshot(run, plan, rootOrder, *job, onSnapshot)
-				return run, jobs, err
-			}
-			addJobApplyStatsToRun(&run, stats)
-			logFilesearchJobPhase(ctx, root, *job, "stream_apply", util.GetSystemTimestamp()-streamStartedAt)
-		} else if job.Kind == JobKindSubtree && e.streamSubtree != nil {
-			// Full-run subtree jobs can now own a large root without an exact
-			// recursive count. Streaming the recursive snapshot directly into SQLite keeps
-			// the old scoped replace semantics while removing the planner's duplicate
-			// filesystem traversal.
-			streamStartedAt := util.GetSystemTimestamp()
-			stats, err := e.streamSubtree(ctx, root, *job, e.snapshot, func(currentStats JobApplyStats) {
+			stats, err := e.streamJob(ctx, root, *job, e.snapshot, func(currentStats JobApplyStats) {
 				emitStreamingStats(*job, currentStats)
 			})
 			if err != nil {
@@ -464,6 +436,8 @@ func (e *JobExecutor) buildJobSnapshot(ctx context.Context, root RootRecord, job
 		return &batch, nil
 	case JobKindFinalizeRoot:
 		return nil, nil
+	case JobKindDirectory:
+		return nil, fmt.Errorf("directory job %q requires a stream function", job.JobID)
 	default:
 		return nil, fmt.Errorf("unsupported job kind %q", job.Kind)
 	}

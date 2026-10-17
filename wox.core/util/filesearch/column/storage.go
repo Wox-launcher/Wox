@@ -12,8 +12,16 @@ import (
 )
 
 const headerSize = 512
-const sectionCount = 16
 const magic = "WOXCOL02"
+
+const (
+	// legacySectionCount files predate the persisted child index; Open rebuilds
+	// that index on the heap until the next publication rewrites the generation.
+	legacySectionCount = 16
+	sectionCount       = 17
+	queryColumnSection = 15
+	childRowsSection   = 16
+)
 
 // bytesOf exposes pointer-free scalar columns for sequential snapshot writes.
 // Supported Wox targets are little-endian; Open rejects incompatible files.
@@ -43,6 +51,7 @@ func writeAndOpen(path string, s *Snapshot) (*Snapshot, error) {
 
 // writeSnapshot returns its exact header only after a successful durable write.
 func writeSnapshot(path string, s *Snapshot) (header []byte, err error) {
+	s.prepareChildRows()
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
@@ -54,7 +63,8 @@ func writeSnapshot(path string, s *Snapshot) (header []byte, err error) {
 	for i, data := range columns {
 		sections[i] = [][]byte{data}
 	}
-	sections[sectionCount-1] = s.queryColumnParts()
+	sections[queryColumnSection] = s.queryColumnParts()
+	sections[childRowsSection] = [][]byte{bytesOf(s.ChildRows)}
 	header = make([]byte, headerSize)
 	copy(header, magic)
 	binary.LittleEndian.PutUint32(header[8:], 3)
@@ -140,7 +150,8 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 		return nil, fmt.Errorf("written column header changed")
 	}
 	version := binary.LittleEndian.Uint32(header[8:])
-	if string(header[:8]) != magic || version < 1 || version > 4 || binary.LittleEndian.Uint32(header[12:]) != sectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
+	fileSections := int(binary.LittleEndian.Uint32(header[12:]))
+	if string(header[:8]) != magic || version < 1 || version > 4 || fileSections != sectionCount && fileSections != legacySectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
 		return nil, fmt.Errorf("invalid column header")
 	}
 	mapping, err := mapFile(file, int(stat.Size()))
@@ -157,7 +168,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 	if writtenHeader != nil {
 		verifyBuffer = make([]byte, 64*1024)
 	}
-	sections := make([][]byte, sectionCount)
+	sections := make([][]byte, fileSections)
 	offset := uint64(headerSize)
 	for i := range sections {
 		descriptor := header[32+i*24:]
@@ -170,7 +181,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 		// Keep the name dictionary, posting offsets and query filters warm for
 		// the first filename query. Per-entry columns stay demand-paged: their
 		// structural validation already ran on the writer's heap snapshot.
-		nameColumns := i >= 5 && i <= 9 || i == sectionCount-1
+		nameColumns := i >= 5 && i <= 9 || i == queryColumnSection
 		if writtenHeader != nil && !nameColumns {
 			hash := crc32.NewIEEE()
 			n, err := io.CopyBuffer(hash, io.NewSectionReader(file, int64(start), int64(length)), verifyBuffer)
@@ -192,20 +203,25 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 	if offset != uint64(stat.Size()) {
 		return nil, fmt.Errorf("invalid column trailing data")
 	}
-	widths := []int{1, 8, 4, 4, 1, 4, 1, 8, 1, 4, 4, 4, 8, 8, 8, 8}
+	widths := []int{1, 8, 4, 4, 1, 4, 1, 8, 1, 4, 4, 4, 8, 8, 8, 8, 4}
 	for i, data := range sections {
 		if len(data)%widths[i] != 0 {
 			return nil, fmt.Errorf("misaligned column length")
 		}
 	}
 	s := &Snapshot{Root: string(sections[0]), IDs: view[uint64](sections[1]), Parents: view[uint32](sections[2]), NameIDs: view[uint32](sections[3]), Flags: sections[4], NameOffsets: view[uint32](sections[5]), NameBytes: sections[6], NameMasks: view[uint64](sections[7]), NameFlags: sections[8], NameStarts: view[uint32](sections[9]), NameRows: view[uint32](sections[10]), IDRows: view[uint32](sections[11]), Sizes: view[int64](sections[12]), Modified: view[int64](sections[13]), Versions: view[uint64](sections[14]), NameRowsPathSorted: binary.LittleEndian.Uint32(header[8:]) >= 2, mapping: mapping}
+	if fileSections > childRowsSection {
+		s.ChildRows = view[uint32](sections[childRowsSection])
+	} else {
+		s.prepareChildRows()
+	}
 	if writtenHeader == nil {
 		if err := s.Validate(); err != nil {
 			return nil, err
 		}
 	}
 	if version >= 3 {
-		if err := s.mapQueryColumns(sections[15], version); err != nil {
+		if err := s.mapQueryColumns(sections[queryColumnSection], version); err != nil {
 			return nil, err
 		}
 	} else {

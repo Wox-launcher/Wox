@@ -4,47 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	"wox/util/filesearch/column"
 )
-
-func TestSnapshotBuilderExcludesDynamicChildEntriesAndTraversal(t *testing.T) {
-	rootPath := filepath.Join(t.TempDir(), "root-snapshot-exclusion")
-	regularPath := filepath.Join(rootPath, "regular")
-	dynamicPath := filepath.Join(rootPath, "workspace", "target")
-	dynamicFilePath := filepath.Join(dynamicPath, "owned.txt")
-	regularFilePath := filepath.Join(regularPath, "kept.txt")
-
-	mustWriteTestFile(t, dynamicFilePath, "owned")
-	mustWriteTestFile(t, regularFilePath, "kept")
-
-	root := RootRecord{ID: "root-snapshot-parent", Path: rootPath, Kind: RootKindUser}
-	builder := NewSnapshotBuilder(nil)
-	builder.SetRootExclusions(map[string][]string{
-		root.ID: []string{dynamicPath},
-	})
-
-	batch, err := builder.BuildSubtreeSnapshot(context.Background(), root, rootPath)
-	if err != nil {
-		t.Fatalf("build excluded subtree snapshot: %v", err)
-	}
-
-	seenEntries := map[string]bool{}
-	for _, entry := range batch.Entries {
-		seenEntries[entry.Path] = true
-	}
-	if !seenEntries[rootPath] || !seenEntries[regularPath] || !seenEntries[regularFilePath] {
-		t.Fatalf("expected non-excluded paths to remain indexed, got %#v", seenEntries)
-	}
-	if seenEntries[dynamicPath] || seenEntries[dynamicFilePath] {
-		t.Fatalf("expected dynamic child directory and descendants to be excluded, got %#v", seenEntries)
-	}
-
-	for _, directory := range batch.Directories {
-		if directory.Path == dynamicPath {
-			t.Fatalf("expected dynamic child directory row to be excluded")
-		}
-	}
-}
 
 func TestSnapshotBuilderDoesNotDescendIntoSymlinkDirectoryCycle(t *testing.T) {
 	rootPath := filepath.Join(t.TempDir(), "root-symlink-cycle")
@@ -109,39 +73,57 @@ func TestSnapshotBuilderTreatsSymlinkScopeAsLinkEntry(t *testing.T) {
 	}
 }
 
-func TestSnapshotBuilderExcludesDynamicChildFromDirectFiles(t *testing.T) {
-	rootPath := filepath.Join(t.TempDir(), "root-direct-exclusion")
-	dynamicPath := filepath.Join(rootPath, "target")
-	dynamicFilePath := filepath.Join(dynamicPath, "owned.txt")
-	directFilePath := filepath.Join(rootPath, "kept.txt")
+// TestSnapshotStreamRecordsMatchPathEntries pins the pre-resolved stream rows to
+// the path-based conversion, so listing-derived parent IDs, names and metadata
+// cannot drift from what incremental path entries write for the same tree.
+func TestSnapshotStreamRecordsMatchPathEntries(t *testing.T) {
+	rootPath := filepath.Join(t.TempDir(), "root-stream-records")
+	mustWriteTestFile(t, filepath.Join(rootPath, "top.txt"), "top")
+	mustWriteTestFile(t, filepath.Join(rootPath, "docs", "a.md"), "a")
+	mustWriteTestFile(t, filepath.Join(rootPath, "docs", "deep", "b.md"), "bb")
+	mustMkdirAll(t, filepath.Join(rootPath, "empty"))
+	if err := os.Symlink(filepath.Join(rootPath, "docs"), filepath.Join(rootPath, "docs-link")); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
 
-	mustWriteTestFile(t, dynamicFilePath, "owned")
-	mustWriteTestFile(t, directFilePath, "kept")
-
-	root := RootRecord{ID: "root-direct-parent", Path: rootPath, Kind: RootKindUser}
+	root := RootRecord{ID: "root-stream-records", Path: rootPath, Kind: RootKindUser}
 	builder := NewSnapshotBuilder(nil)
-	builder.SetRootExclusions(map[string][]string{
-		root.ID: []string{dynamicPath},
-	})
+	builder.SetDirectFileBatchSize(2)
 
-	batch, err := builder.BuildDirectFilesJobSnapshot(context.Background(), root, Job{
-		RootID:    root.ID,
-		RootPath:  root.Path,
-		ScopePath: root.Path,
-		Kind:      JobKindDirectFiles,
-	})
-	if err != nil {
-		t.Fatalf("build direct-files snapshot: %v", err)
-	}
+	// Root: itself, top.txt, docs, a.md, deep, b.md, empty, docs-link.
+	expectedCounts := map[string]int{rootPath: 8, filepath.Join(rootPath, "docs"): 4}
+	for scope, expectedCount := range expectedCounts {
+		want := map[uint64]column.Record{}
+		batch, err := builder.BuildSubtreeSnapshot(context.Background(), root, scope)
+		if err != nil {
+			t.Fatalf("build path snapshot for %s: %v", scope, err)
+		}
+		for _, entry := range batch.Entries {
+			record, err := directoryEntryRecord(root, entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want[record.ID] = record
+		}
 
-	seenEntries := map[string]bool{}
-	for _, entry := range batch.Entries {
-		seenEntries[entry.Path] = true
-	}
-	if !seenEntries[rootPath] || !seenEntries[directFilePath] {
-		t.Fatalf("expected direct file scope and file, got %#v", seenEntries)
-	}
-	if seenEntries[dynamicPath] || seenEntries[dynamicFilePath] {
-		t.Fatalf("expected dynamic child to be excluded from direct files snapshot, got %#v", seenEntries)
+		got := map[uint64]column.Record{}
+		err = builder.StreamSubtreeJobBatches(context.Background(), root, Job{RootID: root.ID, Kind: JobKindSubtree, ScopePath: scope}, func(batch SubtreeSnapshotBatch) error {
+			if len(batch.Entries) != 0 || len(batch.Directories) != 0 {
+				t.Fatalf("stream batch should only carry resolved records")
+			}
+			for _, record := range batch.Records {
+				got[record.ID] = record
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("stream %s: %v", scope, err)
+		}
+		if len(got) != expectedCount {
+			t.Fatalf("scope %s: expected %d stream records, got %d", scope, expectedCount, len(got))
+		}
+		if !reflect.DeepEqual(want, got) {
+			t.Fatalf("scope %s: stream records differ\nwant: %#v\ngot:  %#v", scope, want, got)
+		}
 	}
 }

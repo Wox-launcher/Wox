@@ -9,12 +9,12 @@ import (
 
 func TestRootPathMatcherWindowsCaseInsensitiveLongestRoot(t *testing.T) {
 	parent := RootRecord{ID: "root-parent", Path: `C:\Users\Qian`}
-	dynamic := RootRecord{ID: "root-dynamic", Path: `C:\Users\Qian\Dev\Wox`, Kind: RootKindDynamic, DynamicParentRootID: parent.ID}
-	matcher := newRootPathMatcher([]RootRecord{parent, dynamic})
+	nested := RootRecord{ID: "root-nested", Path: `C:\Users\Qian\Dev\Wox`, Kind: RootKindUser}
+	matcher := newRootPathMatcher([]RootRecord{parent, nested})
 
 	matched, ok := matcher.findClean(filepath.Clean(`c:\users\qian\dev\wox\main.go`))
-	if !ok || matched.ID != dynamic.ID {
-		t.Fatalf("expected case-insensitive dynamic root match, got %#v ok=%t", matched, ok)
+	if !ok || matched.ID != nested.ID {
+		t.Fatalf("expected case-insensitive nested root match, got %#v ok=%t", matched, ok)
 	}
 }
 

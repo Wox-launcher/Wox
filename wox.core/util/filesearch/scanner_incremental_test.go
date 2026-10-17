@@ -53,17 +53,14 @@ func TestScannerProcessDirtyQueueUpdatesSQLiteAfterReconcile(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 	engine := &Engine{
 		db:      db,
 		scanner: scanner,
 	}
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	results := searchColumnsForTest(t, db, "initial", 10)
 	if len(results) != 1 || results[0].Path != initialFilePath {
@@ -133,13 +130,10 @@ func TestScannerProcessDirtyQueueHandlesFileRenameSignals(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	results := searchColumnsForTest(t, db, "rename-old-report", 10)
 	if len(results) != 1 || results[0].Path != oldFilePath {
@@ -202,10 +196,7 @@ func TestScannerQueuesKnownFileRenameDeltaWhenRootIsDegraded(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 
@@ -221,11 +212,7 @@ func TestScannerQueuesKnownFileRenameDeltaWhenRootIsDegraded(t *testing.T) {
 		At:            signalAt,
 	})
 
-	rootDirectoryCounts, _, _, err := scanner.loadDirtyQueueContext(ctx)
-	if err != nil {
-		t.Fatalf("load dirty queue context: %v", err)
-	}
-	batches := scanner.dirtyQueue.FlushReadyWithDebounce(time.Now(), rootDirectoryCounts, scanner.currentDirtyDebounceWindow())
+	batches := scanner.dirtyQueue.FlushReadyWithDebounce(time.Now(), scanner.currentDirtyDebounceWindow())
 	if len(batches) != 1 {
 		t.Fatalf("expected one dirty batch, got %#v", batches)
 	}
@@ -240,9 +227,8 @@ func TestScannerQueuesKnownFileRenameDeltaWhenRootIsDegraded(t *testing.T) {
 func TestScannerDirtyDebounceWindowIsCappedByMaxPendingWait(t *testing.T) {
 	scanner := NewScanner(nil)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:        2 * time.Minute,
-		MaxPendingWaitWindow:  5 * time.Second,
-		SiblingMergeThreshold: 8,
+		DebounceWindow:       2 * time.Minute,
+		MaxPendingWaitWindow: 5 * time.Second,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 
@@ -344,17 +330,14 @@ func TestScannerProcessDirtyQueueReloadsDirectChildUnderRoot(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 	engine := &Engine{
 		db:      db,
 		scanner: scanner,
 	}
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	if err := os.Remove(initialFilePath); err != nil {
 		t.Fatalf("remove initial file %q: %v", initialFilePath, err)
@@ -420,17 +403,14 @@ func TestScannerProcessDirtyQueueRequeuesRemainingBatchesAfterFailure(t *testing
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 	engine := &Engine{
 		db:      db,
 		scanner: scanner,
 	}
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	mustWriteTestFile(t, rootANewFilePath, "new-a")
 	mustWriteTestFile(t, rootBNewFilePath, "new-b")
@@ -528,7 +508,7 @@ func TestScannerProcessDirtyQueueCapturesFreshCursorAfterRootReconcile(t *testin
 			FeedState:  RootFeedStateReady,
 		}, nil
 	})
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	if err := os.Remove(initialFilePath); err != nil {
 		t.Fatalf("remove initial file: %v", err)
@@ -604,7 +584,7 @@ func TestScannerQueuesDirtySignalsForNextRunDuringExecution(t *testing.T) {
 		DirectFileBatchSize: 1,
 	}
 	engine := &Engine{db: db, scanner: scanner}
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	mustWriteTestFile(t, firstFilePath, "first")
 	if ok := scanner.enqueueDirtyForPath(ctx, firstFilePath); !ok {
@@ -693,14 +673,11 @@ func TestScannerIncrementalRunFailsFastAndKeepsQueue(t *testing.T) {
 
 	scanner := NewScanner(db)
 	scanner.dirtyQueueConfig = DirtyQueueConfig{
-		DebounceWindow:               defaultDirtyDebounceWindow,
-		SiblingMergeThreshold:        8,
-		RootEscalationPathThreshold:  512,
-		RootEscalationDirectoryRatio: 0,
+		DebounceWindow: defaultDirtyDebounceWindow,
 	}
 	scanner.dirtyQueue = NewDirtyQueue(scanner.dirtyQueueConfig)
 	engine := &Engine{db: db, scanner: scanner}
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	mustWriteTestFile(t, rootBNewFilePath, "new-b")
 	outOfScopePath := filepath.Join(t.TempDir(), "outside-root-a-fast-fail", "broken.txt")

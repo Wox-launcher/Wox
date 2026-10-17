@@ -38,24 +38,12 @@ func TestRootPathMatcherRejectsSiblingPrefix(t *testing.T) {
 func TestRootPathMatcherChoosesLongestRoot(t *testing.T) {
 	base := t.TempDir()
 	parent := RootRecord{ID: "root-parent", Path: filepath.Join(base, "workspace")}
-	dynamic := RootRecord{ID: "root-dynamic", Path: filepath.Join(base, "workspace", "src"), Kind: RootKindDynamic, DynamicParentRootID: parent.ID}
-	matcher := newRootPathMatcher([]RootRecord{parent, dynamic})
+	nested := RootRecord{ID: "root-nested", Path: filepath.Join(base, "workspace", "src"), Kind: RootKindUser}
+	matcher := newRootPathMatcher([]RootRecord{parent, nested})
 
-	matched, ok := matcher.findClean(filepath.Clean(filepath.Join(dynamic.Path, "main.go")))
-	if !ok || matched.ID != dynamic.ID {
-		t.Fatalf("expected longest dynamic root, got %#v ok=%t", matched, ok)
-	}
-}
-
-func TestCleanPathsOverlapUsesPathBoundaries(t *testing.T) {
-	base := t.TempDir()
-	root := filepath.Join(base, "root")
-
-	if !cleanPathsOverlap(root, filepath.Join(root, "nested", "file.txt")) {
-		t.Fatalf("expected child path to overlap root")
-	}
-	if cleanPathsOverlap(root, filepath.Join(base, "root-sibling", "file.txt")) {
-		t.Fatalf("expected sibling prefix not to overlap root")
+	matched, ok := matcher.findClean(filepath.Clean(filepath.Join(nested.Path, "main.go")))
+	if !ok || matched.ID != nested.ID {
+		t.Fatalf("expected longest nested root, got %#v ok=%t", matched, ok)
 	}
 }
 
@@ -65,16 +53,15 @@ func BenchmarkRootPathMatcherFind(b *testing.B) {
 	roots = append(roots, RootRecord{ID: "root-user", Path: filepath.Join(base, "user")})
 	for index := 0; index < 16; index++ {
 		roots = append(roots, RootRecord{
-			ID:                  "root-dynamic",
-			Path:                filepath.Join(base, "user", "project", "module", "dynamic", string(rune('a'+index))),
-			Kind:                RootKindDynamic,
-			DynamicParentRootID: "root-user",
+			ID:   "root-nested",
+			Path: filepath.Join(base, "user", "project", "module", "nested", string(rune('a'+index))),
+			Kind: RootKindUser,
 		})
 	}
 	matcher := newRootPathMatcher(roots)
 	paths := []string{
-		filepath.Clean(filepath.Join(base, "user", "project", "module", "dynamic", "a", "main.go")),
-		filepath.Clean(filepath.Join(base, "user", "project", "module", "dynamic", "h", "cache.db")),
+		filepath.Clean(filepath.Join(base, "user", "project", "module", "nested", "a", "main.go")),
+		filepath.Clean(filepath.Join(base, "user", "project", "module", "nested", "h", "cache.db")),
 		filepath.Clean(filepath.Join(base, "user", "Downloads", "note.txt")),
 		filepath.Clean(filepath.Join(base, "outside", "event.txt")),
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -81,6 +82,52 @@ func TestJournalRecovery(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestUnsyncedFramesAndGarbageTail verifies unsynced frames are visible at
+// once and replayed after Close, and that a zeroed tail (unsynced pages lost
+// in a crash) ends the committed log instead of failing to open the store.
+func TestUnsyncedFramesAndGarbageTail(t *testing.T) {
+	s, dir := fixtureStore(t)
+	if err := s.ApplyUnsynced([]Change{{Record: Record{ID: 10, ParentID: 5, Name: "renamed", Flags: Directory, Version: 10}}}, "scan:10"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Read(func(v View) error {
+		if v.Cursor != "scan:10" {
+			t.Fatalf("unsynced frame not exposed: %s", v.Cursor)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	logPath := s.log.Name()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(make([]byte, 4096)); err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	restored, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	if err := restored.Read(func(v View) error {
+		if v.Cursor != "scan:10" {
+			t.Fatalf("restored cursor: %s", v.Cursor)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(logPath); err != nil || info.Size() >= 4096 {
+		t.Fatalf("garbage tail was not truncated: %v %v", info, err)
 	}
 }
 
@@ -194,4 +241,53 @@ func FuzzJournalDecoder(f *testing.F) {
 			t.Fatal(err)
 		}
 	})
+}
+
+// TestApplyOversizedChangesPublishesGeneration covers subtree diffs larger than
+// one journal frame: they must commit atomically instead of failing each retry.
+func TestApplyOversizedChangesPublishesGeneration(t *testing.T) {
+	s, dir := fixtureStore(t)
+	const fileCount = 30000
+	changes := []Change{{Record: Record{ID: 11}, Deleted: true}}
+	for i := range fileCount {
+		changes = append(changes, Change{Record: Record{ID: uint64(1000 + i), ParentID: 10, Name: fmt.Sprintf("bulk-%05d.txt", i)}})
+	}
+	if _, err := encodeBatch(changes, "scan:big"); !errors.Is(err, errJournalBatchTooLarge) {
+		t.Fatalf("fixture must exceed one journal frame: %v", err)
+	}
+	if err := s.Apply(changes, "scan:big"); err != nil {
+		t.Fatal(err)
+	}
+	check := func(store *Store) {
+		t.Helper()
+		if err := store.Read(func(v View) error {
+			if v.Cursor != "scan:big" {
+				t.Fatalf("cursor = %q", v.Cursor)
+			}
+			if _, ok := v.Lookup(11); ok {
+				t.Fatal("deleted directory survived")
+			}
+			// The child of the deleted directory is unreachable and is dropped.
+			if _, ok := v.Lookup(13); ok {
+				t.Fatal("descendant of deleted directory survived")
+			}
+			row, ok := v.Base.Row(10)
+			if !ok || len(v.Base.Children(row)) != fileCount+1 {
+				t.Fatalf("expected %d children under the kept directory", fileCount+1)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check(s)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	check(reopened)
 }

@@ -95,8 +95,10 @@ func TestBulkDirectoryNameOmitsFileLength(t *testing.T) {
 	if entries[0].Name() != "a" || !entries[0].IsDir() {
 		t.Fatalf("entry=%s dir=%v", entries[0].Name(), entries[0].IsDir())
 	}
-	if _, err := entries[0].Info(); !os.IsNotExist(err) {
-		t.Fatalf("directory without file length was treated as complete metadata: %v", err)
+	// The fixture parent is empty, so falling back to Lstat would fail.
+	info, err := entries[0].Info()
+	if err != nil || !info.IsDir() || info.Size() != 0 || info.ModTime().Unix() != 12345 || info.Mode().Perm() != 0750 {
+		t.Fatalf("directory metadata should come from the bulk record: info=%+v err=%v", info, err)
 	}
 }
 

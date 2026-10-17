@@ -38,7 +38,7 @@ func TestScannerProcessDirtyQueueDropsStaleBatchesForDeletedRoot(t *testing.T) {
 	mustInsertRoot(t, ctx, db, liveRoot)
 
 	scanner := NewScanner(db)
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	if err := db.DeleteRoot(ctx, deletedRoot.ID); err != nil {
 		t.Fatalf("delete root: %v", err)

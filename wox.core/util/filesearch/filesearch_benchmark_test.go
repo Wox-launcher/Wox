@@ -53,11 +53,9 @@ func benchmarkBatch(rootID, scopePath string, dirCount, fileCount int) SubtreeSn
 	for i := 0; i < dirCount; i++ {
 		dirPath := filepath.Join(scopePath, fmt.Sprintf("dir-%04d", i))
 		directories = append(directories, DirectoryRecord{
-			Path:         dirPath,
-			RootID:       rootID,
-			ParentPath:   scopePath,
-			LastScanTime: int64(i + 1),
-			Exists:       true,
+			Path:       dirPath,
+			RootID:     rootID,
+			ParentPath: scopePath,
 		})
 	}
 

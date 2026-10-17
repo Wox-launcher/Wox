@@ -17,7 +17,7 @@ func TestEngineDiagnosticsReportsRootsIndexAndDirtyQueue(t *testing.T) {
 
 	now := time.Now()
 	userRootPath := filepath.Join(t.TempDir(), "user")
-	dynamicRootPath := filepath.Join(userRootPath, "hot")
+	nestedRootPath := filepath.Join(userRootPath, "hot")
 	mustInsertRoot(t, ctx, db, RootRecord{
 		ID:        "root-user",
 		Path:      userRootPath,
@@ -29,15 +29,14 @@ func TestEngineDiagnosticsReportsRootsIndexAndDirtyQueue(t *testing.T) {
 		UpdatedAt: now.UnixMilli(),
 	})
 	mustInsertRoot(t, ctx, db, RootRecord{
-		ID:                  "root-dynamic",
-		Path:                dynamicRootPath,
-		Kind:                RootKindDynamic,
-		Status:              RootStatusSyncing,
-		FeedType:            RootFeedTypeFSEvents,
-		FeedState:           RootFeedStateDegraded,
-		DynamicParentRootID: "root-user",
-		CreatedAt:           now.UnixMilli(),
-		UpdatedAt:           now.UnixMilli(),
+		ID:        "root-nested",
+		Path:      nestedRootPath,
+		Kind:      RootKindUser,
+		Status:    RootStatusSyncing,
+		FeedType:  RootFeedTypeFSEvents,
+		FeedState: RootFeedStateDegraded,
+		CreatedAt: now.UnixMilli(),
+		UpdatedAt: now.UnixMilli(),
 	})
 	mustInsertEntrySnapshots(t, ctx, db, EntryRecord{
 		Path:       filepath.Join(userRootPath, "alpha.txt"),
@@ -62,7 +61,7 @@ func TestEngineDiagnosticsReportsRootsIndexAndDirtyQueue(t *testing.T) {
 		t.Fatalf("get diagnostics: %v", err)
 	}
 
-	if diagnostics.RootCount != 2 || diagnostics.DynamicRootCount != 1 || diagnostics.UserVisibleRootCount != 1 {
+	if diagnostics.RootCount != 2 || diagnostics.UserRootCount != 2 {
 		t.Fatalf("unexpected root counts: %#v", diagnostics)
 	}
 	if diagnostics.DirtyQueue.PendingRootCount != 1 || diagnostics.DirtyQueue.PendingPathCount != 1 {
@@ -71,7 +70,7 @@ func TestEngineDiagnosticsReportsRootsIndexAndDirtyQueue(t *testing.T) {
 	if diagnostics.Index.EntryCount != 1 || diagnostics.Index.FileCount != 1 {
 		t.Fatalf("expected index snapshot counts, got %#v", diagnostics.Index)
 	}
-	if got := diagnostics.RootKindCounts[RootKindDynamic]; got != 1 {
-		t.Fatalf("expected dynamic root count by kind, got %d", got)
+	if got := diagnostics.RootKindCounts[RootKindUser]; got != 2 {
+		t.Fatalf("expected user root count by kind, got %d", got)
 	}
 }

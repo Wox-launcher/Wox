@@ -328,10 +328,6 @@ func normalizeIndexText(value string) string {
 	return strings.ToLower(filepath.ToSlash(value))
 }
 
-func normalizeEntryPathKey(entry EntryRecord) string {
-	return normalizeIndexText(entry.NormalizedPath)
-}
-
 func normalizeExactPhrases(phrases []string) []string {
 	normalized := make([]string, 0, len(phrases))
 	for _, phrase := range phrases {
@@ -360,44 +356,10 @@ func normalizeExactPathPhrases(phrases []string) []string {
 	return normalized
 }
 
-func shouldDropRedundantPinyinPayload(normalizedName string, pinyinFull string, pinyinInitials string) bool {
-	if normalizedName == "" || pinyinFull == "" || pinyinInitials == "" {
-		return false
-	}
-	if keepLettersAndDigits(normalizedName) != normalizedName {
-		return false
-	}
-	return pinyinFull == normalizedName && pinyinInitials == normalizedName
-}
-
 func normalizeExtension(ext string) string {
 	ext = strings.TrimSpace(strings.ToLower(ext))
 	ext = strings.TrimPrefix(ext, ".")
 	return ext
-}
-
-func uniqueNgrams(value string, size int) []string {
-	value = strings.TrimSpace(value)
-	if value == "" || size <= 0 {
-		return nil
-	}
-
-	runes := []rune(value)
-	if len(runes) < size {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	grams := make([]string, 0, len(runes)-size+1)
-	for i := 0; i+size <= len(runes); i++ {
-		gram := string(runes[i : i+size])
-		if _, ok := seen[gram]; ok {
-			continue
-		}
-		seen[gram] = struct{}{}
-		grams = append(grams, gram)
-	}
-	return grams
 }
 
 func splitDirectorySegments(path string) []string {

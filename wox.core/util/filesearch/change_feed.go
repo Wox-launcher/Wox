@@ -8,23 +8,27 @@ import (
 type ChangeSignalKind string
 
 const (
-	ChangeSignalKindDirtyRoot             ChangeSignalKind = "dirty_root"
-	ChangeSignalKindDirtyPath             ChangeSignalKind = "dirty_path"
-	ChangeSignalKindRequiresRootReconcile ChangeSignalKind = "requires_root_reconcile"
-	ChangeSignalKindFeedUnavailable       ChangeSignalKind = "feed_unavailable"
+	ChangeSignalKindDirtyPath ChangeSignalKind = "dirty_path"
+	// ChangeSignalKindHistoryLost means the feed can no longer prove it reported
+	// every change under the root since its last acknowledged cursor: a full signal
+	// queue, a kernel queue overflow, an expired or reset journal, or a feed that
+	// just recovered. Every platform reports loss with this one kind, and the
+	// scanner repairs it with a directory mtime relist instead of re-crawling.
+	ChangeSignalKindHistoryLost     ChangeSignalKind = "history_lost"
+	ChangeSignalKindFeedUnavailable ChangeSignalKind = "feed_unavailable"
 )
 
 type ChangeSemanticKind string
 
 const (
-	ChangeSemanticKindUnknown               ChangeSemanticKind = "unknown"
-	ChangeSemanticKindCreate                ChangeSemanticKind = "create"
-	ChangeSemanticKindRemove                ChangeSemanticKind = "remove"
-	ChangeSemanticKindRename                ChangeSemanticKind = "rename"
-	ChangeSemanticKindModify                ChangeSemanticKind = "modify"
-	ChangeSemanticKindMetadata              ChangeSemanticKind = "metadata"
-	ChangeSemanticKindRequiresRootReconcile ChangeSemanticKind = "requires_root_reconcile"
-	ChangeSemanticKindFeedUnavailable       ChangeSemanticKind = "feed_unavailable"
+	ChangeSemanticKindUnknown         ChangeSemanticKind = "unknown"
+	ChangeSemanticKindCreate          ChangeSemanticKind = "create"
+	ChangeSemanticKindRemove          ChangeSemanticKind = "remove"
+	ChangeSemanticKindRename          ChangeSemanticKind = "rename"
+	ChangeSemanticKindModify          ChangeSemanticKind = "modify"
+	ChangeSemanticKindMetadata        ChangeSemanticKind = "metadata"
+	ChangeSemanticKindHistoryLost     ChangeSemanticKind = "history_lost"
+	ChangeSemanticKindFeedUnavailable ChangeSemanticKind = "feed_unavailable"
 )
 
 type ChangeSignal struct {
@@ -68,4 +72,15 @@ type RootFeedSnapshotter interface {
 // RootFeedAcknowledger updates replay boundaries only after durable indexing.
 type RootFeedAcknowledger interface {
 	AcknowledgeRoot(root RootRecord)
+}
+
+// DirectoryWatchFilter reports whether a feed should register a native watch
+// for directory under root.
+type DirectoryWatchFilter func(root RootRecord, directory string) bool
+
+// DirectoryWatchFilterSetter is implemented by feeds that must register one
+// native watch per directory (fsnotify). The scanner installs its ignore policy
+// so excluded trees such as node_modules do not consume the watch budget.
+type DirectoryWatchFilterSetter interface {
+	SetDirectoryWatchFilter(filter DirectoryWatchFilter)
 }

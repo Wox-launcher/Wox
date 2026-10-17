@@ -208,12 +208,16 @@ const (
 	RootPlanStrategySegmented RootPlanStrategy = "segmented"
 )
 
-// ScopeKind identifies whether a planned scope is recursive or only direct files.
+// ScopeKind identifies whether a planned scope is recursive, only direct
+// files, or a one-level directory relist.
 type ScopeKind string
 
 const (
 	ScopeKindDirectFiles ScopeKind = "direct_files"
 	ScopeKindSubtree     ScopeKind = "subtree"
+	// ScopeKindDirectory owns a directory and its immediate children; only
+	// child directories new to the index are walked recursively.
+	ScopeKindDirectory ScopeKind = "directory"
 )
 
 // JobKind identifies the bounded work unit being executed.
@@ -223,6 +227,7 @@ const (
 	JobKindDirectFiles  JobKind = "direct_files"
 	JobKindDirectDelta  JobKind = "direct_delta"
 	JobKindSubtree      JobKind = "subtree"
+	JobKindDirectory    JobKind = "directory"
 	JobKindFinalizeRoot JobKind = "finalize_root"
 )
 

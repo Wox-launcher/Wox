@@ -1,6 +1,10 @@
 package filesearch
 
-import "time"
+import (
+	"time"
+
+	"wox/util/filesearch/column"
+)
 
 type SearchQuery struct {
 	Raw string
@@ -122,11 +126,14 @@ const (
 
 type ReconcileBatch struct {
 	// Cursor covers only events consumed by this sealed batch.
-	Cursor         string
-	RootID         string
-	TraceID        string
-	Mode           ReconcileMode
+	Cursor  string
+	RootID  string
+	TraceID string
+	Mode    ReconcileMode
+	// Paths are rescanned recursively. DirectoryPaths are relisted one level:
+	// their children already report their own changes.
 	Paths          []string
+	DirectoryPaths []string
 	DirectDeltas   []PathDelta
 	DirtyPathCount int
 }
@@ -159,10 +166,6 @@ type RootKind string
 const (
 	RootKindDefault RootKind = "default"
 	RootKindUser    RootKind = "user"
-	// RootKindDynamic is an internal ownership boundary promoted from a hot
-	// subdirectory. It stays hidden from user settings but lets the scanner
-	// reconcile that subtree without rewriting the parent root's entries.
-	RootKindDynamic RootKind = "dynamic"
 )
 
 type RootStatus string
@@ -191,47 +194,27 @@ type ReplaceEntriesProgress struct {
 	Total   int64
 }
 
-type TransientRootState struct {
-	Root            RootRecord
-	RootIndex       int
-	RootTotal       int
-	DiscoveredCount int64
-	DirectoryIndex  int
-	DirectoryTotal  int
-	ItemCurrent     int64
-	ItemTotal       int64
-}
-
+// TransientSyncState reports dirty work queued but not yet planned into a run.
 type TransientSyncState struct {
-	Root             RootRecord
-	RootIndex        int
-	RootTotal        int
-	Mode             ReconcileMode
-	ScopeCount       int
-	DirtyPathCount   int
 	PendingRootCount int
 	PendingPathCount int
 }
 
 type RootRecord struct {
-	ID                  string
-	Path                string
-	Kind                RootKind
-	Status              RootStatus
-	FeedType            RootFeedType
-	FeedCursor          string
-	FeedState           RootFeedState
-	LastReconcileAt     int64
-	LastFullScanAt      int64
-	ProgressCurrent     int64
-	ProgressTotal       int64
-	LastError           *string
-	DynamicParentRootID string
-	PolicyRootPath      string
-	PromotedAt          int64
-	LastHotAt           int64
-	CreatedAt           int64
-	UpdatedAt           int64
+	ID              string
+	Path            string
+	Kind            RootKind
+	Status          RootStatus
+	FeedType        RootFeedType
+	FeedCursor      string
+	FeedState       RootFeedState
+	LastReconcileAt int64
+	LastFullScanAt  int64
+	ProgressCurrent int64
+	ProgressTotal   int64
+	LastError       *string
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 const RootProgressScale int64 = 1000
@@ -266,12 +249,13 @@ type EntryDeltaBatch struct {
 	ForceRebuild  bool
 }
 
+// DirectoryRecord is a traversed directory carried by a snapshot batch. It
+// becomes a structural column row, so empty directories keep their place in
+// the parent hierarchy even without filename entries.
 type DirectoryRecord struct {
-	Path         string
-	RootID       string
-	ParentPath   string
-	LastScanTime int64
-	Exists       bool
+	Path       string
+	RootID     string
+	ParentPath string
 }
 
 type SubtreeSnapshotBatch struct {
@@ -279,6 +263,12 @@ type SubtreeSnapshotBatch struct {
 	ScopePath   string
 	Directories []DirectoryRecord
 	Entries     []EntryRecord
+	// Records are column rows already resolved by the traversal workers, which
+	// derive every child's ParentID from the directory listing that produced it.
+	// The single writer only inserts them, instead of re-validating, hashing and
+	// walking ancestry for every path string. Only this package's scan streams
+	// produce them, and every record lies within ScopePath by construction.
+	Records []column.Record
 	// UnreadableScopes retain prior facts when enumeration or stat fails.
 	UnreadableScopes []string
 }
@@ -292,9 +282,14 @@ type JobApplyStats struct {
 }
 
 func jobApplyStatsFromBatch(batch SubtreeSnapshotBatch) JobApplyStats {
-	stats := JobApplyStats{EntryCount: int64(len(batch.Entries))}
+	stats := JobApplyStats{EntryCount: int64(len(batch.Entries) + len(batch.Records))}
 	for _, entry := range batch.Entries {
 		if !entry.IsDir {
+			stats.FileCount++
+		}
+	}
+	for _, record := range batch.Records {
+		if record.Flags&column.Directory == 0 {
 			stats.FileCount++
 		}
 	}

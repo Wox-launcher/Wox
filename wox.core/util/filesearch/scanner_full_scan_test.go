@@ -31,7 +31,7 @@ func TestScannerScanAllRootsPersistsDirectorySnapshotsAndFullScanTimestamp(t *te
 	mustInsertRoot(t, ctx, db, root)
 
 	scanner := NewScanner(db)
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	rootAfter, err := db.FindRootByID(ctx, root.ID)
 	if err != nil {
@@ -44,26 +44,7 @@ func TestScannerScanAllRootsPersistsDirectorySnapshotsAndFullScanTimestamp(t *te
 		t.Fatalf("expected full scan timestamp to be recorded, got %d", rootAfter.LastFullScanAt)
 	}
 
-	directoryCount, err := db.CountDirectoriesByRoot(ctx, root.ID)
-	if err != nil {
-		t.Fatalf("count directory snapshots by root: %v", err)
-	}
-	if directoryCount != 3 {
-		t.Fatalf("expected 3 live directory snapshots after full scan, got %d", directoryCount)
-	}
-
-	directories, err := db.ListDirectoriesByRoot(ctx, root.ID)
-	if err != nil {
-		t.Fatalf("list directory snapshots after full scan: %v", err)
-	}
-
-	seen := map[string]bool{}
-	for _, directory := range directories {
-		if !directory.Exists {
-			t.Fatalf("expected full scan directory snapshot %q to be live", directory.Path)
-		}
-		seen[directory.Path] = true
-	}
+	seen := columnDirectoriesForTest(t, db, root.ID)
 
 	expectedPaths := []string{rootPath, levelOnePath, levelTwoPath}
 	for _, expectedPath := range expectedPaths {
@@ -112,7 +93,7 @@ func TestScannerScanAllRootsCapturesFreshRootFeedSnapshot(t *testing.T) {
 			FeedState:  RootFeedStateReady,
 		}, nil
 	})
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	rootAfter, err := db.FindRootByID(ctx, "root-full-scan-snapshot")
 	if err != nil {
@@ -129,23 +110,6 @@ func TestScannerScanAllRootsCapturesFreshRootFeedSnapshot(t *testing.T) {
 	}
 	if rootAfter.FeedState != RootFeedStateReady {
 		t.Fatalf("expected full scan to recover root feed state to ready, got %q", rootAfter.FeedState)
-	}
-}
-
-func TestNewScannerUsesSpecDirtyQueueDefaults(t *testing.T) {
-	db, ctx := openTestFileSearchDB(t)
-	_ = ctx
-
-	scanner := NewScanner(db)
-
-	if scanner.dirtyQueueConfig.SiblingMergeThreshold != 8 {
-		t.Fatalf("expected sibling merge threshold 8, got %d", scanner.dirtyQueueConfig.SiblingMergeThreshold)
-	}
-	if scanner.dirtyQueueConfig.RootEscalationPathThreshold != 0 {
-		t.Fatalf("expected root escalation path threshold 0, got %d", scanner.dirtyQueueConfig.RootEscalationPathThreshold)
-	}
-	if scanner.dirtyQueueConfig.RootEscalationDirectoryRatio != 0 {
-		t.Fatalf("expected root escalation directory ratio 0, got %f", scanner.dirtyQueueConfig.RootEscalationDirectoryRatio)
 	}
 }
 
@@ -166,7 +130,7 @@ func TestScannerScanAllRootsLeavesExistingSearchResultsAvailableDuringVerificati
 	})
 
 	scanner := NewScanner(db)
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	results := searchColumnsForTest(t, db, "existing", 10)
 	if len(results) == 0 || results[0].Path != filePath {
@@ -261,7 +225,7 @@ func TestScannerFullScanUsesGlobalRunProgress(t *testing.T) {
 		statusesMu.Unlock()
 	})
 
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	statusesMu.Lock()
 	defer statusesMu.Unlock()
@@ -334,7 +298,7 @@ func TestScannerFullScanReportsStreamingRunStages(t *testing.T) {
 		}
 	})
 
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	for _, stage := range []RunStage{RunStagePlanning, RunStageExecuting, RunStageFinalizing} {
 		if !stageSeen[stage] {
@@ -382,7 +346,7 @@ func TestScannerFullScanStreamsLargeRootWithoutChangingRootIdentity(t *testing.T
 		scopeSet[filepath.Clean(status.ActiveScopePath)] = struct{}{}
 	})
 
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	rootsAfter, err := db.ListRoots(ctx)
 	if err != nil {
@@ -428,13 +392,13 @@ func TestScannerFullScanWideDirectFilesPrunesRemovedFiles(t *testing.T) {
 		DirectFileBatchSize: 1,
 	}
 
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	if err := os.Remove(betaPath); err != nil {
 		t.Fatalf("remove beta file: %v", err)
 	}
 
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	entries, err := db.ListEntriesByRoot(ctx, root.ID)
 	if err != nil {
@@ -468,7 +432,7 @@ func TestScannerFullScanPolicyRejectedTopLevelDirPrunesIndexedFiles(t *testing.T
 	mustInsertRoot(t, ctx, db, root)
 
 	scanner := NewScanner(db)
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 	assertTestEntryPresence(t, ctx, db, root.ID, ignoredPath, true)
 	assertTestEntryPresence(t, ctx, db, root.ID, keptPath, true)
 
@@ -477,7 +441,7 @@ func TestScannerFullScanPolicyRejectedTopLevelDirPrunesIndexedFiles(t *testing.T
 			return denyPathPrefixPolicyContext{prefix: ignoredDir}
 		},
 	})
-	scanner.scanAllRoots(ctx)
+	scanner.scanAllRootsWithReason(ctx, "test")
 
 	assertTestEntryPresence(t, ctx, db, root.ID, ignoredPath, false)
 	assertTestEntryPresence(t, ctx, db, root.ID, keptPath, true)
@@ -531,7 +495,10 @@ func fileSearchTestPathsEqual(left, right string) bool {
 	return left == right
 }
 
-func TestScannerStartupRestoreReconcilesFallbackRoots(t *testing.T) {
+// Fallback roots are no longer re-crawled by startup restore. The fallback feed
+// reports history loss after registering its watches, and the relist that
+// follows repairs offline changes.
+func TestScannerStartupRestoreRepairsFallbackRootsThroughHistoryRecovery(t *testing.T) {
 	db, ctx := openTestFileSearchDB(t)
 	now := time.Now()
 	rootPath := filepath.Join(t.TempDir(), "root-startup-restore-fallback")
@@ -564,14 +531,30 @@ func TestScannerStartupRestoreReconcilesFallbackRoots(t *testing.T) {
 	scanner.changeFeed = newTestSnapshotChangeFeed(nil)
 
 	scanner.startupRestore(ctx)
+	if results := searchColumnsForTest(t, db, "stale", 10); len(results) != 1 {
+		t.Fatalf("expected startup restore to leave the fallback root to its feed, got %#v", results)
+	}
+
+	scanner.handleChangeSignal(ctx, ChangeSignal{
+		Kind:         ChangeSignalKindHistoryLost,
+		SemanticKind: ChangeSemanticKindHistoryLost,
+		RootID:       root.ID,
+		FeedType:     RootFeedTypeFallback,
+		Path:         rootPath,
+		Reason:       "fallback watches registered",
+		At:           time.Now(),
+	})
+	if err := scanner.processDirtyQueue(ctx, time.Now().Add(2*defaultDirtyDebounceWindow)); err != nil {
+		t.Fatalf("process fallback history recovery: %v", err)
+	}
 
 	results := searchColumnsForTest(t, db, "actual", 10)
 	if len(results) != 1 || results[0].Path != actualFilePath {
-		t.Fatalf("expected startup restore to reconcile fallback root to %q, got %#v", actualFilePath, results)
+		t.Fatalf("expected history recovery to index %q, got %#v", actualFilePath, results)
 	}
 
 	results = searchColumnsForTest(t, db, "stale", 10)
 	if len(results) != 0 {
-		t.Fatalf("expected stale fallback entry %q to be removed after startup reconcile, got %#v", staleFilePath, results)
+		t.Fatalf("expected stale fallback entry %q to be removed after history recovery, got %#v", staleFilePath, results)
 	}
 }

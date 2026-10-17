@@ -61,18 +61,6 @@ func summarizeLogPaths(paths []string) string {
 	return fmt.Sprintf("[%s, ... +%d more]", strings.Join(visible, ", "), len(paths)-limit)
 }
 
-func summarizeDirtySignal(signal DirtySignal) string {
-	return fmt.Sprintf(
-		"kind=%s root=%s trace=%s path=%s path_is_dir=%t path_type_known=%t",
-		signal.Kind,
-		signal.RootID,
-		strings.TrimSpace(signal.TraceID),
-		summarizeLogPath(signal.Path),
-		signal.PathIsDir,
-		signal.PathTypeKnown,
-	)
-}
-
 func contextWithTraceID(ctx context.Context, traceID string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -216,25 +204,6 @@ func logFilesearchJobPhase(ctx context.Context, root RootRecord, job Job, phase 
 	)
 	if elapsedMs >= slowFilesearchJobPhaseThresholdMs {
 		util.GetLogger().Info(ctx, "filesearch slow job phase: "+msg)
-		return
-	}
-	util.GetLogger().Debug(ctx, msg)
-}
-
-func logFilesearchSQLiteMaintenance(ctx context.Context, operation string, scope string, elapsedMs int64, workCount int) {
-	if !fileSearchDiagnosticLoggingEnabled {
-		return
-	}
-
-	msg := fmt.Sprintf(
-		"filesearch sqlite maintenance: operation=%s scope=%s elapsed=%dms work_count=%d",
-		strings.TrimSpace(operation),
-		summarizeLogPath(scope),
-		elapsedMs,
-		workCount,
-	)
-	if elapsedMs >= slowFilesearchSQLiteMaintenanceMs {
-		util.GetLogger().Info(ctx, "filesearch slow sqlite maintenance: "+msg)
 		return
 	}
 	util.GetLogger().Debug(ctx, msg)

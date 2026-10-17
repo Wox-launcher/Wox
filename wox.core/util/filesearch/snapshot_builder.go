@@ -20,7 +20,6 @@ type SnapshotBuilder struct {
 	policy                      *policyState
 	directFileBatchSize         int
 	subtreeTraversalWorkerCount int
-	rootExclusions              map[string][]string
 }
 
 // Diagnostic addition: the real-index artifact needs the dominant streaming
@@ -124,7 +123,6 @@ func NewSnapshotBuilder(policy *policyState) *SnapshotBuilder {
 		policy:                      policy,
 		directFileBatchSize:         defaultSplitBudget().DirectFileBatchSize,
 		subtreeTraversalWorkerCount: defaultSubtreeTraversalWorkerCount(),
-		rootExclusions:              map[string][]string{},
 	}
 }
 
@@ -141,13 +139,6 @@ func (b *SnapshotBuilder) SetDirectFileBatchSize(size int) {
 		return
 	}
 	b.directFileBatchSize = size
-}
-
-func (b *SnapshotBuilder) SetRootExclusions(exclusions map[string][]string) {
-	if b == nil {
-		return
-	}
-	b.rootExclusions = copyRootExclusions(exclusions)
 }
 
 func (b *SnapshotBuilder) BuildRootEntries(ctx context.Context, root RootRecord) ([]EntryRecord, error) {
@@ -209,12 +200,6 @@ func (b *SnapshotBuilder) BuildDirectFilesJobSnapshot(ctx context.Context, root 
 		if infoErr != nil {
 			return batch, infoErr
 		}
-		if isDir && b.isExcludedPath(root.ID, childPath) {
-			// Dynamic child roots own their directory entry as well as descendants.
-			// Direct-files scopes therefore skip the directory itself, not only the
-			// recursive scan that a subtree builder would otherwise queue later.
-			continue
-		}
 		if shouldSkipSystemPathForRoot(root, childPath, isDir) {
 			continue
 		}
@@ -241,13 +226,10 @@ func (b *SnapshotBuilder) BuildDirectFilesJobSnapshot(ctx context.Context, root 
 		return directFiles[left].Path < directFiles[right].Path
 	})
 
-	scanTimestamp := time.Now().UnixMilli()
 	batch.Directories = append(batch.Directories, DirectoryRecord{
-		Path:         scopePath,
-		RootID:       root.ID,
-		ParentPath:   filepath.Dir(scopePath),
-		LastScanTime: scanTimestamp,
-		Exists:       true,
+		Path:       scopePath,
+		RootID:     root.ID,
+		ParentPath: filepath.Dir(scopePath),
 	})
 	batch.Entries = append(batch.Entries, newEntryRecord(root, scopePath, info))
 	batch.Entries = append(batch.Entries, directFiles...)
@@ -285,30 +267,22 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 		return fmt.Errorf("failed to read direct-files scope %s: %w", scopePath, err)
 	}
 
-	scanTimestamp := time.Now().UnixMilli()
+	scopeID := directoryEntryID(scopePath)
 	newBatch := func(includeScope bool) SubtreeSnapshotBatch {
 		batch := SubtreeSnapshotBatch{
 			RootID:    root.ID,
 			ScopePath: scopePath,
 		}
-		if !includeScope {
-			return batch
+		if includeScope {
+			batch.Records = append(batch.Records, observedInfoRecord(scopeID, directoryEntryID(filepath.Dir(scopePath)), filepath.Base(scopePath), info))
 		}
-		batch.Directories = append(batch.Directories, DirectoryRecord{
-			Path:         scopePath,
-			RootID:       root.ID,
-			ParentPath:   filepath.Dir(scopePath),
-			LastScanTime: scanTimestamp,
-			Exists:       true,
-		})
-		batch.Entries = append(batch.Entries, newEntryRecord(root, scopePath, info))
 		return batch
 	}
 	flushBatch := func(batch *SubtreeSnapshotBatch) error {
 		if batch == nil {
 			return nil
 		}
-		if len(batch.Directories) == 0 && len(batch.Entries) == 0 && len(batch.UnreadableScopes) == 0 {
+		if len(batch.Records) == 0 && len(batch.UnreadableScopes) == 0 {
 			return nil
 		}
 		return onBatch(*batch)
@@ -316,13 +290,7 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 
 	batch := newBatch(true)
 	filesInBatch := 0
-	maxFilesPerBatch := b.directFileBatchSize
-	if maxFilesPerBatch <= 0 {
-		maxFilesPerBatch = defaultSplitBudget().DirectFileBatchSize
-	}
-	if maxFilesPerBatch <= 0 {
-		maxFilesPerBatch = 1024
-	}
+	maxFilesPerBatch := b.maxRecordsPerBatch()
 
 	policyContext := b.policy.newTraversalContext(root, scopePath)
 	for _, dirEntry := range dirEntries {
@@ -336,12 +304,6 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 		isDir, childInfo, infoErr := strictDirEntryType(scopePath, dirEntry)
 		if infoErr != nil {
 			return infoErr
-		}
-		if isDir && b.isExcludedPath(root.ID, childPath) {
-			// Streaming direct-files batches share the same ownership contract as
-			// materialized snapshots: a parent root must not stage the dynamic
-			// child's directory row because that would steal the path-owned entry.
-			continue
 		}
 		if shouldSkipSystemPathForRoot(root, childPath, isDir) {
 			continue
@@ -362,7 +324,7 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 			}
 		}
 
-		batch.Entries = append(batch.Entries, newEntryRecord(root, childPath, childInfo))
+		batch.Records = append(batch.Records, observedInfoRecord(directoryEntryID(childPath), scopeID, dirEntry.Name(), childInfo))
 		filesInBatch++
 		if filesInBatch < maxFilesPerBatch {
 			continue
@@ -375,6 +337,107 @@ func (b *SnapshotBuilder) StreamDirectFilesJobBatches(ctx context.Context, root 
 	}
 
 	return flushBatch(&batch)
+}
+
+func (b *SnapshotBuilder) maxRecordsPerBatch() int {
+	if b.directFileBatchSize > 0 {
+		return b.directFileBatchSize
+	}
+	if size := defaultSplitBudget().DirectFileBatchSize; size > 0 {
+		return size
+	}
+	return 1024
+}
+
+// StreamDirectoryJobBatches relists one directory: its own record and every
+// immediate child. Child directories the index already holds (knownDirectory)
+// are emitted as rows but not descended into, since their contents report
+// their own changes. Child directories new to the index are walked fully,
+// because a tree moved or created in place may never report its descendants.
+func (b *SnapshotBuilder) StreamDirectoryJobBatches(ctx context.Context, root RootRecord, job Job, knownDirectory func(id uint64) bool, onBatch func(SubtreeSnapshotBatch) error) error {
+	if job.Kind != JobKindDirectory {
+		return fmt.Errorf("stream directory requires kind %q, got %q", JobKindDirectory, job.Kind)
+	}
+	scopePath := filepath.Clean(job.ScopePath)
+	scopeID := directoryEntryID(scopePath)
+	batch := SubtreeSnapshotBatch{RootID: root.ID, ScopePath: scopePath}
+
+	info, err := b.validateScopePath(root, scopePath)
+	if err != nil {
+		return err
+	}
+	if info == nil || !info.IsDir() {
+		// The writer deletes whatever this observation no longer contains: the
+		// whole stored tree for a vanished or ignored path, or only the stored
+		// descendants when a file replaced the directory.
+		if info != nil {
+			batch.Records = append(batch.Records, observedInfoRecord(scopeID, directoryEntryID(filepath.Dir(scopePath)), filepath.Base(scopePath), info))
+		}
+		return onBatch(batch)
+	}
+
+	dirEntries, err := directoryread.ReadDir(ctx, scopePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return onBatch(batch)
+		}
+		return fmt.Errorf("failed to read directory scope %s: %w", scopePath, err)
+	}
+
+	maxRecordsPerBatch := b.maxRecordsPerBatch()
+	policyContext := traversalPolicyWithDirectoryEntries(b.policy.newTraversalContext(root, scopePath), scopePath, dirEntries)
+	batch.Records = append(batch.Records, observedInfoRecord(scopeID, directoryEntryID(filepath.Dir(scopePath)), filepath.Base(scopePath), info))
+	var newDirectories []subtreeStreamQueueItem
+	for _, dirEntry := range dirEntries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		childPath := filepath.Join(scopePath, dirEntry.Name())
+		isDir, childInfo, infoErr := strictDirEntryType(scopePath, dirEntry)
+		if infoErr == nil {
+			if shouldSkipSystemPathForRoot(root, childPath, isDir) || !policyContext.ShouldIndexPath(childPath, isDir) {
+				continue
+			}
+			if childInfo == nil {
+				childInfo, infoErr = strictDirEntryInfo(scopePath, dirEntry)
+			}
+		}
+		if infoErr != nil {
+			if !errors.Is(infoErr, os.ErrNotExist) {
+				batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
+			}
+			continue
+		}
+
+		childID := directoryEntryID(childPath)
+		if isDir && !knownDirectory(childID) {
+			newDirectories = append(newDirectories, subtreeStreamQueueItem{
+				path:     childPath,
+				name:     dirEntry.Name(),
+				id:       childID,
+				parentID: scopeID,
+				info:     childInfo,
+				policy:   policyContext.Descend(childPath),
+			})
+			continue
+		}
+		batch.Records = append(batch.Records, observedInfoRecord(childID, scopeID, dirEntry.Name(), childInfo))
+		if len(batch.Records)+len(batch.UnreadableScopes) >= maxRecordsPerBatch {
+			if err := onBatch(batch); err != nil {
+				return err
+			}
+			batch = SubtreeSnapshotBatch{RootID: root.ID, ScopePath: scopePath}
+		}
+	}
+	if len(batch.Records) > 0 || len(batch.UnreadableScopes) > 0 {
+		if err := onBatch(batch); err != nil {
+			return err
+		}
+	}
+	if len(newDirectories) == 0 {
+		return nil
+	}
+	return b.streamDirectoryTrees(ctx, root, scopePath, newDirectories, onBatch)
 }
 
 // BuildSubtreeJobSnapshot materializes only the subtree owned by one planned
@@ -416,7 +479,6 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 		info:   info,
 		policy: b.policy.newTraversalContext(root, scopePath),
 	}}
-	scanTimestamp := time.Now().UnixMilli()
 
 	for len(queue) > 0 {
 		select {
@@ -427,13 +489,6 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 
 		current := queue[0]
 		queue = queue[1:]
-		if current.path != scopePath && b.isExcludedPath(root.ID, current.path) {
-			// Exclusions are a correctness boundary, not just a traversal shortcut.
-			// If this directory reached the queue from an older plan, dropping it
-			// before writing either the directory row or entry keeps ownership with
-			// the dynamic root.
-			continue
-		}
 
 		dirEntries, readErr := directoryread.ReadDir(ctx, current.path)
 		if readErr != nil {
@@ -448,11 +503,9 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 				continue
 			}
 			batch.Directories = append(batch.Directories, DirectoryRecord{
-				Path:         current.path,
-				RootID:       root.ID,
-				ParentPath:   filepath.Dir(current.path),
-				LastScanTime: scanTimestamp,
-				Exists:       true,
+				Path:       current.path,
+				RootID:     root.ID,
+				ParentPath: filepath.Dir(current.path),
 			})
 			batch.Entries = append(batch.Entries, newEntryRecord(root, current.path, current.info))
 			if current.path == scopePath {
@@ -464,11 +517,9 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 		}
 		currentPolicy := traversalPolicyWithDirectoryEntries(current.policy, current.path, dirEntries)
 		batch.Directories = append(batch.Directories, DirectoryRecord{
-			Path:         current.path,
-			RootID:       root.ID,
-			ParentPath:   filepath.Dir(current.path),
-			LastScanTime: scanTimestamp,
-			Exists:       true,
+			Path:       current.path,
+			RootID:     root.ID,
+			ParentPath: filepath.Dir(current.path),
 		})
 		batch.Entries = append(batch.Entries, newEntryRecord(root, current.path, current.info))
 
@@ -479,12 +530,6 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 				if !errors.Is(infoErr, os.ErrNotExist) {
 					batch.UnreadableScopes = append(batch.UnreadableScopes, childPath)
 				}
-				continue
-			}
-			if isDir && b.isExcludedPath(root.ID, childPath) {
-				// The dynamic child directory itself is excluded before entry
-				// materialization and before BFS enqueueing. Otherwise SQLite's
-				// path-unique upsert would silently move that path back to the parent.
 				continue
 			}
 
@@ -527,10 +572,16 @@ func (b *SnapshotBuilder) BuildSubtreeSnapshot(ctx context.Context, root RootRec
 	return batch, nil
 }
 
+// subtreeStreamQueueItem is one directory waiting to be listed. Its own and its
+// parent's column IDs travel with it, so each directory ID is hashed once by
+// whoever listed it and children inherit it as their ParentID.
 type subtreeStreamQueueItem struct {
-	path   string
-	info   os.FileInfo
-	policy TraversalPolicyContext
+	path     string
+	name     string
+	id       uint64
+	parentID uint64
+	info     os.FileInfo
+	policy   TraversalPolicyContext
 }
 
 type subtreeStreamQueue struct {
@@ -541,9 +592,9 @@ type subtreeStreamQueue struct {
 	err    error
 }
 
-func newSubtreeStreamQueue(initial subtreeStreamQueueItem) *subtreeStreamQueue {
+func newSubtreeStreamQueue(initial []subtreeStreamQueueItem) *subtreeStreamQueue {
 	queue := &subtreeStreamQueue{
-		items: []subtreeStreamQueueItem{initial},
+		items: initial,
 	}
 	queue.cond = sync.NewCond(&queue.mu)
 	return queue
@@ -634,30 +685,30 @@ func (b *SnapshotBuilder) StreamSubtreeJobBatches(ctx context.Context, root Root
 		})
 	}
 
+	return b.streamDirectoryTrees(ctx, root, scopePath, []subtreeStreamQueueItem{{
+		path:     scopePath,
+		name:     filepath.Base(scopePath),
+		id:       directoryEntryID(scopePath),
+		parentID: directoryEntryID(filepath.Dir(scopePath)),
+		info:     info,
+		policy:   b.policy.newTraversalContext(root, scopePath),
+	}}, onBatch)
+}
+
+// streamDirectoryTrees walks every seed directory recursively with the bounded
+// worker pool and emits batches owned by scopePath. Only a failure to read
+// scopePath itself is fatal; other unreadable directories are reported as
+// unreadable scopes so their prior facts are preserved.
+func (b *SnapshotBuilder) streamDirectoryTrees(ctx context.Context, root RootRecord, scopePath string, seeds []subtreeStreamQueueItem, onBatch func(SubtreeSnapshotBatch) error) error {
 	diagnostics := &subtreeStreamDiagnostics{}
 	defer diagnostics.log(ctx, scopePath)
 
-	scanTimestamp := time.Now().UnixMilli()
-	// Optimization: a streaming full-run scope can create tens of thousands of
-	// entries. Reusing one update timestamp per scope removes a hot per-entry
-	// clock call while preserving the existing "this scan wrote this row" marker.
-	entryUpdatedAt := scanTimestamp
-	maxRecordsPerBatch := b.directFileBatchSize
-	if maxRecordsPerBatch <= 0 {
-		maxRecordsPerBatch = defaultSplitBudget().DirectFileBatchSize
-	}
-	if maxRecordsPerBatch <= 0 {
-		maxRecordsPerBatch = 1024
-	}
+	maxRecordsPerBatch := b.maxRecordsPerBatch()
 
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stopCancelWatcher := make(chan struct{})
-	workQueue := newSubtreeStreamQueue(subtreeStreamQueueItem{
-		path:   scopePath,
-		info:   info,
-		policy: b.policy.newTraversalContext(root, scopePath),
-	})
+	workQueue := newSubtreeStreamQueue(seeds)
 	go func() {
 		select {
 		case <-streamCtx.Done():
@@ -677,7 +728,7 @@ func (b *SnapshotBuilder) StreamSubtreeJobBatches(ctx context.Context, root Root
 	for index := 0; index < workerCount; index++ {
 		go func() {
 			defer workers.Done()
-			if err := b.streamSubtreeWorker(streamCtx, root, scopePath, scanTimestamp, entryUpdatedAt, maxRecordsPerBatch, workQueue, batchCh, diagnostics); err != nil {
+			if err := b.streamSubtreeWorker(streamCtx, root, scopePath, maxRecordsPerBatch, workQueue, batchCh, diagnostics); err != nil {
 				workQueue.fail(err)
 				cancel()
 			}
@@ -688,9 +739,9 @@ func (b *SnapshotBuilder) StreamSubtreeJobBatches(ctx context.Context, root Root
 		close(batchCh)
 	}()
 
-	// Optimization: traversal and stat work now run in bounded workers, but this
-	// goroutine remains the only caller of onBatch. SQLite therefore keeps its
-	// existing single-writer transaction semantics instead of competing on locks.
+	// Traversal, stat and record resolution run in bounded workers, while this
+	// goroutine remains the only caller of onBatch, so the column builder keeps
+	// a single writer and only inserts already-resolved rows.
 	var callbackErr error
 	for batch := range batchCh {
 		if callbackErr != nil {
@@ -714,7 +765,7 @@ func (b *SnapshotBuilder) StreamSubtreeJobBatches(ctx context.Context, root Root
 	return nil
 }
 
-func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootRecord, scopePath string, scanTimestamp int64, entryUpdatedAt int64, maxRecordsPerBatch int, workQueue *subtreeStreamQueue, batchCh chan<- SubtreeSnapshotBatch, diagnostics *subtreeStreamDiagnostics) error {
+func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootRecord, scopePath string, maxRecordsPerBatch int, workQueue *subtreeStreamQueue, batchCh chan<- SubtreeSnapshotBatch, diagnostics *subtreeStreamDiagnostics) error {
 	newBatch := func() SubtreeSnapshotBatch {
 		return SubtreeSnapshotBatch{
 			RootID:    root.ID,
@@ -722,13 +773,13 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 		}
 	}
 	shouldFlush := func(batch SubtreeSnapshotBatch) bool {
-		return len(batch.Directories)+len(batch.Entries)+len(batch.UnreadableScopes) >= maxRecordsPerBatch
+		return len(batch.Records)+len(batch.UnreadableScopes) >= maxRecordsPerBatch
 	}
 	flushBatch := func(batch *SubtreeSnapshotBatch) error {
 		if batch == nil {
 			return nil
 		}
-		if len(batch.Directories) == 0 && len(batch.Entries) == 0 && len(batch.UnreadableScopes) == 0 {
+		if len(batch.Records) == 0 && len(batch.UnreadableScopes) == 0 {
 			return nil
 		}
 		select {
@@ -754,9 +805,6 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 		}
 		if err := func() error {
 			defer workQueue.done()
-			if current.path != scopePath && b.isExcludedPath(root.ID, current.path) {
-				return nil
-			}
 
 			readStartedAt := time.Now()
 			dirEntries, readErr := directoryread.ReadDir(ctx, current.path)
@@ -770,14 +818,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 				}
 				diagnostics.recordUnreadable(current.path, readErr)
 				batch.UnreadableScopes = append(batch.UnreadableScopes, current.path)
-				batch.Directories = append(batch.Directories, DirectoryRecord{
-					Path:         current.path,
-					RootID:       root.ID,
-					ParentPath:   filepath.Dir(current.path),
-					LastScanTime: scanTimestamp,
-					Exists:       true,
-				})
-				batch.Entries = append(batch.Entries, newEntryRecordWithUpdatedAt(root, current.path, current.info, entryUpdatedAt))
+				batch.Records = append(batch.Records, observedInfoRecord(current.id, current.parentID, current.name, current.info))
 				if shouldFlush(batch) {
 					return flushBatch(&batch)
 				}
@@ -785,14 +826,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 			}
 			currentPolicy := traversalPolicyWithDirectoryEntries(current.policy, current.path, dirEntries)
 
-			batch.Directories = append(batch.Directories, DirectoryRecord{
-				Path:         current.path,
-				RootID:       root.ID,
-				ParentPath:   filepath.Dir(current.path),
-				LastScanTime: scanTimestamp,
-				Exists:       true,
-			})
-			batch.Entries = append(batch.Entries, newEntryRecordWithUpdatedAt(root, current.path, current.info, entryUpdatedAt))
+			batch.Records = append(batch.Records, observedInfoRecord(current.id, current.parentID, current.name, current.info))
 			if shouldFlush(batch) {
 				if err := flushBatch(&batch); err != nil {
 					return err
@@ -817,9 +851,6 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					}
 					continue
 				}
-				if isDir && b.isExcludedPath(root.ID, childPath) {
-					continue
-				}
 				if shouldSkipSystemPathForRoot(root, childPath, isDir) {
 					continue
 				}
@@ -841,11 +872,15 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 						continue
 					}
 				}
+				childID := directoryEntryID(childPath)
 				if isDir {
 					if !workQueue.push(subtreeStreamQueueItem{
-						path:   childPath,
-						info:   childInfo,
-						policy: currentPolicy.Descend(childPath),
+						path:     childPath,
+						name:     dirEntry.Name(),
+						id:       childID,
+						parentID: current.id,
+						info:     childInfo,
+						policy:   currentPolicy.Descend(childPath),
 					}) {
 						if err := workQueue.currentErr(); err != nil {
 							return err
@@ -855,7 +890,7 @@ func (b *SnapshotBuilder) streamSubtreeWorker(ctx context.Context, root RootReco
 					continue
 				}
 
-				batch.Entries = append(batch.Entries, newEntryRecordWithUpdatedAt(root, childPath, childInfo, entryUpdatedAt))
+				batch.Records = append(batch.Records, observedInfoRecord(childID, current.id, dirEntry.Name(), childInfo))
 				if shouldFlush(batch) {
 					if err := flushBatch(&batch); err != nil {
 						return err
@@ -882,13 +917,6 @@ func (b *SnapshotBuilder) validateScopePath(root RootRecord, scopePath string) (
 	if !pathWithinScope(root.Path, scopePath) {
 		return nil, fmt.Errorf("scope path %q is outside root path %q", scopePath, root.Path)
 	}
-	if scopePath != filepath.Clean(root.Path) && b.isExcludedPath(root.ID, scopePath) {
-		// A stale parent-root dirty batch can still point at a path that has since
-		// been promoted. Returning an empty owned snapshot lets the DB prune only
-		// the parent-owned rows at that scope while leaving the dynamic root's rows
-		// untouched.
-		return nil, nil
-	}
 
 	var info os.FileInfo
 	var err error
@@ -913,18 +941,6 @@ func (b *SnapshotBuilder) validateScopePath(root RootRecord, scopePath string) (
 	}
 
 	return info, nil
-}
-
-func (b *SnapshotBuilder) isExcludedPath(rootID string, path string) bool {
-	if b == nil || len(b.rootExclusions) == 0 {
-		return false
-	}
-	for _, excludedPath := range b.rootExclusions[rootID] {
-		if pathWithinScope(excludedPath, path) {
-			return true
-		}
-	}
-	return false
 }
 
 func (b *SnapshotBuilder) shouldIndexScopePath(root RootRecord, path string, isDir bool) bool {

@@ -268,7 +268,7 @@ func TestRunPlannerSplitsLargeRootIntoTopLevelStreamingJobs(t *testing.T) {
 	}
 }
 
-func TestRunPlannerFullRunDoesNotRecursivelyCountSubtrees(t *testing.T) {
+func TestRunPlannerFullRunSegmentsTopLevelSubtrees(t *testing.T) {
 	rootPath := filepath.Join(t.TempDir(), "planner-root")
 	mustWriteTestFile(t, filepath.Join(rootPath, "child-a", "a.txt"), "a")
 	mustWriteTestFile(t, filepath.Join(rootPath, "child-b", "nested", "b.txt"), "b")
@@ -284,26 +284,9 @@ func TestRunPlannerFullRunDoesNotRecursivelyCountSubtrees(t *testing.T) {
 		},
 	}
 
-	scanCounts := map[string]int{}
-	planner.onSubtreeScan = func(scopePath string) {
-		scanCounts[scopePath]++
-	}
-
 	plan, err := planner.PlanFullRun(context.Background(), []RootRecord{testRunPlannerRootRecord("root-rescan", rootPath)})
 	if err != nil {
 		t.Fatalf("plan full run: %v", err)
-	}
-
-	if got, want := scanCounts[rootPath], 0; got != want {
-		t.Fatalf("expected full run planner to avoid recursive subtree counting, got %d scans", got)
-	}
-	childAPath := filepath.Join(rootPath, "child-a")
-	childBPath := filepath.Join(rootPath, "child-b")
-	if got := scanCounts[childAPath]; got != 0 {
-		t.Fatalf("expected leaf child subtree %q to reuse parent totals, got %d rescans", childAPath, got)
-	}
-	if got := scanCounts[childBPath]; got != 0 {
-		t.Fatalf("expected leaf child subtree %q to reuse parent totals, got %d rescans", childBPath, got)
 	}
 
 	rootPlan := plan.RootPlans[0]

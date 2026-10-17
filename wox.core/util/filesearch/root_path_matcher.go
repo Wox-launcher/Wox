@@ -40,10 +40,6 @@ func newRootPathMatcher(roots []RootRecord) rootPathMatcher {
 	return rootPathMatcher{entries: entries}
 }
 
-func (m rootPathMatcher) empty() bool {
-	return len(m.entries) == 0
-}
-
 func (m rootPathMatcher) findClean(cleanPath string) (RootRecord, bool) {
 	matchPath := normalizeRootMatcherPath(cleanPath)
 	for _, entry := range m.entries {
@@ -77,18 +73,4 @@ func normalizeRootMatcherPath(path string) string {
 	// fallback events. Normalizing once per candidate keeps matching cheap while
 	// retaining Windows' case-insensitive ownership semantics.
 	return strings.ToLower(path)
-}
-
-func cleanPathsOverlap(leftPath string, rightPath string) bool {
-	leftMatchPath := normalizeRootMatcherPath(leftPath)
-	rightMatchPath := normalizeRootMatcherPath(rightPath)
-	left := rootPathMatchEntry{
-		matchPath:   leftMatchPath,
-		matchPrefix: rootMatcherPrefix(leftMatchPath),
-	}
-	right := rootPathMatchEntry{
-		matchPath:   rightMatchPath,
-		matchPrefix: rootMatcherPrefix(rightMatchPath),
-	}
-	return pathWithinCleanRootEntry(left, right.matchPath) || pathWithinCleanRootEntry(right, left.matchPath)
 }

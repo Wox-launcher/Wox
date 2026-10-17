@@ -2,6 +2,7 @@ package column
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -15,12 +16,14 @@ type Change struct {
 	Deleted bool
 }
 
+var errJournalBatchTooLarge = errors.New("column journal batch too large")
+
 // encodeBatch keeps a source cursor in the same checksummed record as its mutations.
 func encodeBatch(changes []Change, cursor string) ([]byte, error) {
 	size := 8 + len(cursor)
 	for _, change := range changes {
 		if len(change.Name) > maxJournalBatch-recordHeaderSize || size > maxJournalBatch-recordHeaderSize-len(change.Name) {
-			return nil, fmt.Errorf("column journal batch too large")
+			return nil, errJournalBatchTooLarge
 		}
 		size += recordHeaderSize + len(change.Name)
 	}

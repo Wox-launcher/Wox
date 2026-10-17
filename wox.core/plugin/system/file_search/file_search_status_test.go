@@ -25,7 +25,7 @@ func TestFileSearchStatusMarkdownIncludesDiagnosticFields(t *testing.T) {
 	markdown := formatFileSearchStatusMarkdown(diagnostics, nil)
 	for _, expected := range []string{
 		"File Search Status",
-		"dynamic=1",
+		"user=2",
 		"pending roots=1 paths=1",
 		"direct_delta",
 		"qianlifeng8.png",
@@ -94,13 +94,11 @@ func TestFileSearchStatusMarkdownWithContentStats(t *testing.T) {
 func testFileSearchDiagnosticSnapshot() filesearch.DiagnosticSnapshot {
 	now := time.UnixMilli(1760000000000)
 	return filesearch.DiagnosticSnapshot{
-		CapturedAt:           now,
-		RootCount:            2,
-		UserVisibleRootCount: 1,
-		DynamicRootCount:     1,
+		CapturedAt:    now,
+		RootCount:     2,
+		UserRootCount: 2,
 		RootKindCounts: map[filesearch.RootKind]int{
-			filesearch.RootKindUser:    1,
-			filesearch.RootKindDynamic: 1,
+			filesearch.RootKindUser: 2,
 		},
 		RootStatusCounts: map[filesearch.RootStatus]int{
 			filesearch.RootStatusIdle:    1,

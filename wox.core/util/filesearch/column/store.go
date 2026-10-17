@@ -38,6 +38,7 @@ type Store struct {
 	revision                 uint64
 	closed                   bool
 	writeErr                 error
+	unsynced                 bool // log holds ApplyUnsynced frames not yet fsynced
 	prepareSnapshot          func(*Snapshot) error
 	countsMu                 sync.Mutex
 	countsValid              bool
@@ -217,13 +218,12 @@ func OpenStore(dir string, preparers ...func(*Snapshot) error) (*Store, error) {
 	s.cursor = s.manifest.Cursor
 	var validBytes int64
 	for {
+		// The first frame that does not decode ends the committed log. Besides a
+		// short write, a crash can leave unsynced frames as zeroed or partial
+		// pages; those were never acknowledged, so their owner replays them.
 		changes, cursor, size, readErr := readBatch(s.log)
-		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
-			break
-		}
 		if readErr != nil {
-			s.Close()
-			return nil, readErr
+			break
 		}
 		if err := s.validateChanges(changes); err != nil {
 			s.Close()
@@ -364,6 +364,7 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	}
 	s.base, s.log, s.manifest, s.cursor = mapped, logFile, next, cursor
 	s.delta = make(map[uint64]Change)
+	s.unsynced = false
 	s.revision++
 	// A directory fsync can fail after rename succeeded. Keep the published files
 	// and in-memory generation aligned instead of deleting the now-referenced data.
@@ -377,7 +378,32 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 }
 
 // Apply makes mutations durable before exposing them or advancing the recoverable cursor.
+// Its sync also commits every earlier ApplyUnsynced frame.
+// A change set larger than one journal frame is published as a new generation
+// instead, so a large subtree diff stays atomic rather than failing every retry.
 func (s *Store) Apply(changes []Change, cursor string) error {
+	return s.apply(changes, cursor, true)
+}
+
+// ApplyUnsynced exposes mutations immediately but leaves their frame in the OS
+// cache until the next Apply, Publish or Close. A run of many small scoped
+// writes then pays one fsync (F_FULLFSYNC on macOS costs milliseconds) at its
+// commit point instead of one per write. A crash only loses a suffix of
+// unacknowledged frames, which the caller must be able to replay.
+func (s *Store) ApplyUnsynced(changes []Change, cursor string) error {
+	return s.apply(changes, cursor, false)
+}
+
+func (s *Store) apply(changes []Change, cursor string, sync bool) error {
+	err := s.applyJournal(changes, cursor, sync)
+	if errors.Is(err, errJournalBatchTooLarge) {
+		return s.publishWithChanges(context.Background(), changes, cursor)
+	}
+	return err
+}
+
+// applyJournal appends one frame and then exposes it in the overlay.
+func (s *Store) applyJournal(changes []Change, cursor string, sync bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -400,10 +426,13 @@ func (s *Store) Apply(changes []Change, cursor string) error {
 		s.writeErr = err
 		return err
 	}
-	if err := s.log.Sync(); err != nil {
-		s.writeErr = err
-		return err
+	if sync {
+		if err := s.log.Sync(); err != nil {
+			s.writeErr = err
+			return err
+		}
 	}
+	s.unsynced = !sync
 	s.applyMemory(changes, cursor)
 	return nil
 }
@@ -587,6 +616,105 @@ func (s *Store) compact(ctx context.Context) error {
 	return s.Publish(base, cursor, policy, revision)
 }
 
+// publishWithChanges compacts the current view with changes layered on top and
+// publishes the result. Rows made unreachable by deleted directories are
+// dropped exactly as ordinary compaction drops them.
+func (s *Store) publishWithChanges(ctx context.Context, changes []Change, cursor string) error {
+	var builder *Builder
+	var policy string
+	var revision uint64
+	err := s.Read(func(v View) error {
+		if err := s.validateChanges(changes); err != nil {
+			return err
+		}
+		policy, revision = v.Policy, v.Revision
+		// Mirror applyMemory: an older versioned observation never replaces a newer one.
+		pending := make(map[uint64]Change, len(changes))
+		for _, change := range changes {
+			if change.Version != 0 {
+				if current, ok := pending[change.ID]; ok && current.Version > change.Version {
+					continue
+				}
+				if current, ok := v.Delta[change.ID]; ok && current.Version > change.Version {
+					continue
+				}
+				if row, ok := v.Base.Row(change.ID); ok && len(v.Base.Versions) != 0 && v.Base.Versions[row] > change.Version {
+					continue
+				}
+			}
+			pending[change.ID] = change
+		}
+		lookup := func(id uint64) (Record, bool) {
+			if change, ok := pending[id]; ok {
+				return change.Record, !change.Deleted
+			}
+			return v.Lookup(id)
+		}
+		reachable := func(id uint64) bool {
+			for steps := 0; id != v.Base.IDs[0]; steps++ {
+				if steps > v.Base.Len()+len(v.Delta)+len(pending) {
+					return false
+				}
+				record, ok := lookup(id)
+				if !ok || steps > 0 && record.Flags&Directory == 0 {
+					return false
+				}
+				id = record.ParentID
+			}
+			return true
+		}
+		builder = NewBuilder(v.Base.Root, v.Base.IDs[0])
+		add := func(record Record) error {
+			if !reachable(record.ID) {
+				return nil
+			}
+			return builder.Add(record)
+		}
+		for row := 0; row < v.Base.Len(); row++ {
+			if row%4096 == 0 {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+			}
+			record := v.Base.Record(uint32(row))
+			if _, changed := v.Delta[record.ID]; changed {
+				continue
+			}
+			if _, changed := pending[record.ID]; changed {
+				continue
+			}
+			if err := add(record); err != nil {
+				return err
+			}
+		}
+		for id, change := range v.Delta {
+			if _, changed := pending[id]; changed || change.Deleted {
+				continue
+			}
+			if err := add(change.Record); err != nil {
+				return err
+			}
+		}
+		for _, change := range pending {
+			if change.Deleted {
+				continue
+			}
+			if err := add(change.Record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	base, err := builder.Finish()
+	if err != nil {
+		return err
+	}
+	return s.Publish(base, cursor, policy, revision)
+}
+
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -599,6 +727,9 @@ func (s *Store) Close() error {
 		err = s.base.Close()
 	}
 	if s.log != nil {
+		if s.unsynced {
+			err = errors.Join(err, s.log.Sync())
+		}
 		err = errors.Join(err, s.log.Close())
 	}
 	s.delta = nil
