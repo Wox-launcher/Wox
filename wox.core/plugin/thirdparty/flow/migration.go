@@ -19,6 +19,7 @@ import (
 	"wox/plugin/thirdparty/migrate"
 	"wox/setting"
 	"wox/util"
+	"wox/util/shell"
 )
 
 const flowMigrationID = "flow"
@@ -60,6 +61,11 @@ func (f flowInstallation) Version() string       { return f.version }
 func (f flowInstallation) Location() string      { return f.root }
 func (f flowInstallation) Icon() common.WoxImage { return brand.Image() }
 func (f flowInstallation) Hotkey() string        { return strings.TrimSpace(f.settings.Hotkey) }
+
+// CloseRunning quits Flow Launcher so the global shortcuts being imported can be registered.
+func (f flowInstallation) CloseRunning(ctx context.Context) error {
+	return shell.CloseNamedProcesses(ctx, "Flow.Launcher.exe")
+}
 
 func (f flowInstallation) Plugins(ctx context.Context) ([]migrate.Plugin, error) {
 	entries, err := os.ReadDir(filepath.Join(f.root, "Plugins"))

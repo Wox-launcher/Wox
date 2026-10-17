@@ -13,6 +13,7 @@ import (
 	"wox/plugin/thirdparty/raycast/brand"
 	"wox/setting"
 	"wox/util"
+	"wox/util/shell"
 )
 
 func init() {
@@ -157,6 +158,12 @@ func (i *installation) Catalog(context.Context) ([]migrate.Category, error) {
 		return nil, &ExportError{Code: "export_required"}
 	}
 	return catalogFrom(*i.data), nil
+}
+
+// CloseRunning quits Raycast so the global shortcuts being imported can be registered.
+// Raycast.UIAccess.exe is the elevated helper that can own those shortcuts.
+func (i *installation) CloseRunning(ctx context.Context) error {
+	return shell.CloseNamedProcesses(ctx, "Raycast.exe", "Raycast.UIAccess.exe", "Raycast")
 }
 
 func (i *installation) Import(_ context.Context, itemIDs []string) (migrate.ImportResult, error) {

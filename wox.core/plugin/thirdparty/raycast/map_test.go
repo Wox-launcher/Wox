@@ -313,6 +313,12 @@ func TestMapShortcutTargets(t *testing.T) {
 }
 
 func TestMapExportedCommandIDs(t *testing.T) {
+	const magnifier = `::{26EE0668-A00A-44D7-9371-BEB064C98683}\0\::{ED7BA470-8E54-465E-825C-99712043E01C}\{3D8638E3-EC96-4CE8-8279-36B0065B5F2C}`
+	settingsAppsForTest = func() []plugin.DesktopApp {
+		return []plugin.DesktopApp{{Name: "使用放大镜放大部分屏幕", Path: magnifier}}
+	}
+	t.Cleanup(func() { settingsAppsForTest = nil })
+
 	payload := Payload{}
 	payload.Quicklinks.Quicklinks = []Quicklink{{
 		ID: "01M1VBS91J2HW3SRPW8Y46WGFN", Name: "wox", Link: "https://github.com/Wox-launcher/Wox",
@@ -323,7 +329,8 @@ func TestMapExportedCommandIDs(t *testing.T) {
 		{ExtensionID: "e:r:quicklinks", ID: "c:r:quicklinks::*::quicklink::=::01M1VBS91J2HW3SRPW8Y46WGFN", Alias: "www", WindowsHotkey: json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":24}}},"locality":"Global"}`)},
 		{ExtensionID: "e:r:system", ID: "c:r:system::-::turnVolumeUp", WindowsHotkey: json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":57416}}},"locality":"Global"}`)},
 		{ExtensionID: "e:r:system", ID: "c:r:system::-::playPause", Alias: "pp"},
-		{ExtensionID: "e:r:preferences", ID: `c:r:preferences::*::preference::=::/ControlPanel/{3D8638E3-EC96-4CE8-8279-36B0065B5F2C}`, Alias: "fdj"},
+		{ExtensionID: "e:r:preferences", ID: `c:r:preferences::*::preference::=::/ControlPanel/::{26EE0668-A00A-44D7-9371-BEB064C98683}\0\::{ED7BA470-8E54-465E-825C-99712043E01C}\{3D8638E3-EC96-4CE8-8279-36B0065B5F2C}`, Alias: "fdj", WindowsHotkey: json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":23}}},"locality":"Global"}`)},
+		{ExtensionID: "e:r:preferences", ID: `c:r:preferences::*::preference::=::/ControlPanel/{00000000-0000-0000-0000-000000000001}`, Alias: "missing"},
 		{ExtensionID: "e:r:screen-awareness", ID: "c:r:screen-awareness::-::sendFocusedWindow", WindowsHotkey: json.RawMessage(`{"kind":{"type":"DoubleTap","shortcut":{"modifier":{"modifier":"Ctrl","directionality":"right"}}},"locality":"Global"}`)},
 	}
 	mapped := buildMapped(payload, defaultSnapshot())
@@ -346,15 +353,22 @@ func TestMapExportedCommandIDs(t *testing.T) {
 	if pause.alias != "pp" || pause.pluginID != common.MediaPlayerPluginID || pause.identityKey != common.MediaPlayerToggleIdentity || pause.search != "playpause" {
 		t.Fatalf("play pause = %+v", pause)
 	}
-	want := 3
+	magnifierRow := byTitle["使用放大镜放大部分屏幕"]
+	if magnifierRow.alias != "fdj" || magnifierRow.pluginID != common.AppPluginID || magnifierRow.path != magnifier || magnifierRow.identityKey != magnifier || magnifierRow.search != "使用放大镜放大部分屏幕" {
+		t.Fatalf("control panel = %+v", magnifierRow)
+	}
+	want := 4
 	if runtime.GOOS == "windows" {
-		want = 4
+		want = 5
 		volume := byTitle["Turn Volume Up"]
 		if volume.command != "volume-up" || volume.hotkey != "ctrl+shift+up" {
 			t.Fatalf("volume = %+v", volume)
 		}
+		if magnifierRow.hotkey != "ctrl+shift+i" {
+			t.Fatalf("control panel hotkey = %s", magnifierRow.hotkey)
+		}
 	}
-	for _, title := range []string{"wp"} {
+	for _, title := range []string{"wp", "e:r:preferences"} {
 		if _, ok := byTitle[title]; ok {
 			t.Fatalf("%s was mapped", title)
 		}

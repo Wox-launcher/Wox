@@ -9,6 +9,7 @@ import (
 )
 
 var _ plugin.DesktopAppCatalog = (*ApplicationPlugin)(nil)
+var _ plugin.SettingsAppCatalog = (*ApplicationPlugin)(nil)
 
 // DesktopApps lists indexed desktop applications so an importer can match them
 // by the executable a shortcut actually launches.
@@ -40,6 +41,31 @@ func (a *ApplicationPlugin) DesktopApps() []plugin.DesktopApp {
 		rows = append(rows, plugin.DesktopApp{
 			Name: name, Path: path, Executable: executable, Arguments: args,
 		})
+	}
+	return rows
+}
+
+// SettingsApps lists indexed Control Panel applets and tasks.
+// An importer matches a Raycast preference by the shell GUID embedded in Path.
+func (a *ApplicationPlugin) SettingsApps() []plugin.DesktopApp {
+	if a == nil {
+		return nil
+	}
+	a.appIndexMu.Lock()
+	apps := append([]appInfo(nil), a.apps...)
+	a.appIndexMu.Unlock()
+
+	rows := make([]plugin.DesktopApp, 0)
+	for _, info := range apps {
+		if info.Type != AppTypeWindowsSetting || !isControlPanelAppPath(info.Path) {
+			continue
+		}
+		name := strings.TrimSpace(info.Name)
+		path := strings.TrimSpace(info.Path)
+		if name == "" || path == "" {
+			continue
+		}
+		rows = append(rows, plugin.DesktopApp{Name: name, Path: path})
 	}
 	return rows
 }

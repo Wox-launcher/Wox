@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -131,14 +132,17 @@ func (a *App) loadOnboardingMigrationCatalog() {
 				state.categories = nil
 			} else {
 				state.error = ""
-				state.categories = onboardingMigrationCategories(catalog)
+				state.categories = onboardingMigrationCategories(installation, catalog)
 			}
 			a.invalidateOnboardingWindow()
 		})
 	})
 }
 
-func onboardingMigrationCategories(catalog []migrate.Category) []onboardingMigrationCategory {
+func onboardingMigrationCategories(installation migrate.Installation, catalog []migrate.Category) []onboardingMigrationCategory {
+	if _, ok := installation.(migrate.RunningLauncher); ok {
+		catalog = append([]migrate.Category{migrate.CloseLauncherCategory(installation.Name())}, catalog...)
+	}
 	categories := make([]onboardingMigrationCategory, 0, len(catalog))
 	for _, category := range catalog {
 		if len(category.Items) == 0 {
@@ -146,11 +150,16 @@ func onboardingMigrationCategories(catalog []migrate.Category) []onboardingMigra
 		}
 		items := make([]onboardingMigrationItem, len(category.Items))
 		for index, item := range category.Items {
-			items[index] = onboardingMigrationItem{item: item, selected: item.Selectable}
+			items[index] = onboardingMigrationItem{item: item, selected: item.Selectable || item.Required}
 		}
 		categories = append(categories, onboardingMigrationCategory{id: category.ID, items: items})
 	}
 	return categories
+}
+
+// migrationItemChosen reports a row the import will apply. A required row stays included.
+func migrationItemChosen(item onboardingMigrationItem) bool {
+	return item.selected && !item.copied && (item.item.Selectable || item.item.Required)
 }
 
 func (a *App) chooseOnboardingMigration(id string) {
@@ -183,7 +192,7 @@ func (a *App) toggleOnboardingMigrationItem(id string, selected bool) {
 		items := a.onboardingMigration.categories[categoryIndex].items
 		for index := range items {
 			item := &items[index]
-			if item.item.ID == id && item.item.Selectable {
+			if item.item.ID == id && item.item.Selectable && !item.item.Required {
 				item.selected = selected
 			}
 		}
@@ -215,7 +224,7 @@ func (a *App) onboardingMigrationCanImport() bool {
 	}
 	for _, category := range state.categories {
 		for _, item := range category.items {
-			if item.selected && item.item.Selectable && !item.copied {
+			if migrationItemChosen(item) {
 				return true
 			}
 		}
@@ -234,7 +243,7 @@ func (a *App) importOnboardingMigration() {
 	var itemIDs []string
 	for _, category := range a.onboardingMigration.categories {
 		for _, item := range category.items {
-			if item.selected && item.item.Selectable && !item.copied {
+			if migrationItemChosen(item) {
 				itemIDs = append(itemIDs, item.item.ID)
 			}
 		}
@@ -254,8 +263,10 @@ func (a *App) importOnboardingMigration() {
 		dataCtx, dataCancel := context.WithTimeout(session, 2*time.Minute)
 		defer dataCancel()
 		groups, failures := a.prepareOnboardingMigrationSettings(dataCtx, installation, itemIDs)
+		// A launcher that is still running keeps the global shortcuts, so the later rows are skipped.
+		closed := true
 		for _, id := range itemIDs {
-			if session.Err() != nil {
+			if session.Err() != nil || !closed {
 				a.finishOnboardingMigrationItem(id, "", "cancelled")
 				continue
 			}
@@ -264,6 +275,9 @@ func (a *App) importOnboardingMigration() {
 			itemErr, status := a.importVisibleOnboardingMigrationItem(dataCtx, installation, id, kinds[id], groups, failures)
 			waitOnboardingMigrationDisplay(session, started)
 			a.finishOnboardingMigrationItem(id, itemErr, status)
+			if kinds[id] == migrate.ItemKindCloseLauncher && itemErr != "" {
+				closed = false
+			}
 		}
 		_ = a.runOnUI("finish onboarding migration", func() {
 			state := &a.onboardingMigration
@@ -339,6 +353,8 @@ func (a *App) importVisibleOnboardingMigrationItem(ctx context.Context, installa
 	switch kind {
 	case migrate.ItemKindPlugin:
 		return a.importOnboardingMigrationPlugin(ctx, installation, id), ""
+	case migrate.ItemKindCloseLauncher:
+		return a.closeOnboardingMigrationLauncher(ctx, installation)
 	case migrate.ItemKindQuicklink, migrate.ItemKindFavorite, migrate.ItemKindNote, migrate.ItemKindClipboard, migrate.ItemKindResultBinding:
 		outcome, ok := a.applyOnboardingMigrationDomain(ctx, installation, []string{id})[id]
 		if !ok {
@@ -429,6 +445,20 @@ func (a *App) applyMigratedTheme(ctx context.Context, theme common.Theme) error 
 		a.onboardingMigration.themeImported = true
 	})
 	return nil
+}
+
+// closeOnboardingMigrationLauncher quits the source launcher before later rows register its hotkeys.
+func (a *App) closeOnboardingMigrationLauncher(ctx context.Context, installation migrate.Installation) (string, string) {
+	closer, ok := installation.(migrate.RunningLauncher)
+	if !ok {
+		return "close_launcher", "failed"
+	}
+	util.GetLogger().Info(ctx, fmt.Sprintf("migration: closing %s so imported hotkeys can be registered", installation.Name()))
+	if err := closer.CloseRunning(ctx); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("migration: close %s: %s", installation.Name(), err.Error()))
+		return "close_launcher", "failed"
+	}
+	return "", "imported"
 }
 
 func (a *App) importOnboardingMigrationPlugin(ctx context.Context, installation migrate.Installation, id string) string {
@@ -834,18 +864,24 @@ func (a *App) onboardingMigrationView(imageScale float32, background woxui.Color
 func (a *App) onboardingMigrationItemView(item onboardingMigrationItem, categoryID string, imageScale float32, background woxui.Color, labels map[string]string, activeID string) launcherview.OnboardingMigrationItem {
 	title := item.item.Title
 	if item.item.TitleKey != "" {
-		title = a.translate("i18n:onboarding_migrate_item_" + item.item.TitleKey)
+		title = migrationNamedText(a.translate("i18n:onboarding_migrate_item_"+item.item.TitleKey), item.item.Detail)
 	}
 	detail := item.item.Detail
+	detailLines := 1
 	if item.item.DetailKey == "raycast_clipboard_summary" {
 		detail = a.migrationClipboardSummary(item.item.Detail)
 	} else if item.item.DetailKey != "" {
 		translated := a.translate("i18n:onboarding_migrate_value_" + item.item.DetailKey)
-		if item.item.Detail != "" {
+		if strings.Contains(translated, "{name}") {
+			detail = migrationNamedText(translated, item.item.Detail)
+		} else if item.item.Detail != "" {
 			detail = translated + "  " + item.item.Detail
 		} else {
 			detail = translated
 		}
+	}
+	if item.item.Kind == migrate.ItemKindCloseLauncher {
+		detailLines = 2
 	}
 	if item.item.DetailCode == migrate.DetailPythonMissing {
 		if detail != "" {
@@ -879,11 +915,18 @@ func (a *App) onboardingMigrationItemView(item onboardingMigrationItem, category
 		option = a.translate("i18n:onboarding_migrate_option_" + item.item.OptionKey)
 	}
 	return launcherview.OnboardingMigrationItem{
-		ID: item.item.ID, Title: title, Detail: detail, Status: status, Error: reason, Icon: icon,
-		Selected: item.selected, Selectable: item.item.Selectable, ShowIcon: categoryID == migrate.CategoryPlugins,
+		ID: item.item.ID, Title: title, Detail: detail, DetailLines: detailLines, Status: status, Error: reason, Icon: icon,
+		Selected: item.selected, Selectable: item.item.Selectable, Required: item.item.Required, ShowIcon: categoryID == migrate.CategoryPlugins,
 		Active: activeID != "" && activeID == item.item.ID && item.err == "" && !item.copied, Succeeded: item.copied,
 		OptionLabel: option, OptionOn: item.item.OptionOn,
 	}
+}
+
+func migrationNamedText(text, name string) string {
+	if !strings.Contains(text, "{name}") {
+		return text
+	}
+	return strings.ReplaceAll(text, "{name}", name)
 }
 
 func (a *App) migrationClipboardSummary(raw string) string {
@@ -1254,6 +1297,8 @@ func (a *App) migrationExportMessage(code string) string {
 		return a.translate("i18n:onboarding_migrate_status_cancelled")
 	case "unavailable", "failed":
 		return a.translate("i18n:onboarding_migrate_status_failed")
+	case "close_launcher":
+		return a.translate("i18n:onboarding_migrate_close_launcher_failed")
 	default:
 		if strings.HasPrefix(code, "i18n:") {
 			return a.translate(code)

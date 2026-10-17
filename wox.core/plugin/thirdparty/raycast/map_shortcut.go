@@ -2,27 +2,58 @@ package raycast
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/google/uuid"
 
 	"wox/common"
 	"wox/database"
 	"wox/plugin"
 	"wox/setting"
+	"wox/util"
 )
+
+// logRaycastImport writes import diagnostics only after user data is initialized.
+// Unit tests have no data directory, so they stay silent and do not create a log folder.
+func logRaycastImport(format string, args ...any) {
+	if util.GetLocation().GetWoxDataDirectory() == "" {
+		return
+	}
+	util.GetLogger().Info(context.Background(), fmt.Sprintf(format, args...))
+}
 
 // mapShortcutRows turns Raycast shortcut commands into one result binding each.
 // Clipboard history and emoji stay query hotkeys.
 func mapShortcutRows(payload Payload, quicklinks []mappedQuicklink) []mappedShortcut {
 	apps := raycastAppIndex()
+	settings := settingsApplications()
+	logRaycastImport(
+		"raycast import: commands=%d indexedAppShortcuts=%d controlPanelApps=%d pluginsQueryable=%v",
+		len(payload.Settings.Commands), len(apps), len(settings), pluginsQueryable(),
+	)
 	var rows []mappedShortcut
 	for index, command := range payload.Settings.Commands {
-		row, ok := shortcutForCommand(index, command, quicklinks, apps)
+		if controlPanelPreferenceGUID(command) != "" || strings.Contains(strings.ToLower(command.ExtensionID), "preference") {
+			alias, hotkey, bound := shortcutBinding(command)
+			logRaycastImport(
+				"raycast import: preference command index=%d extension=%q id=%q alias=%q hotkey=%q bound=%v guid=%q",
+				index, command.ExtensionID, command.ID, alias, hotkey, bound, controlPanelPreferenceGUID(command),
+			)
+		}
+		row, ok := shortcutForCommand(index, command, quicklinks, apps, settings)
 		if !ok {
 			continue
 		}
 		resolveShortcut(&row)
+		if controlPanelPreferenceGUID(command) != "" {
+			logRaycastImport(
+				"raycast import: preference row title=%q selectable=%v status=%q search=%q path=%q",
+				row.title, row.selectable, row.status, row.search, row.path,
+			)
+		}
 		rows = append(rows, row)
 	}
 	return rows
@@ -36,7 +67,7 @@ func shortcutIndexes(rows []mappedShortcut) map[int]struct{} {
 	return claimed
 }
 
-func shortcutForCommand(index int, command Command, quicklinks []mappedQuicklink, apps map[string]plugin.DesktopApp) (mappedShortcut, bool) {
+func shortcutForCommand(index int, command Command, quicklinks []mappedQuicklink, apps map[string]plugin.DesktopApp, settings []plugin.DesktopApp) (mappedShortcut, bool) {
 	alias, hotkey, ok := shortcutBinding(command)
 	if !ok {
 		return mappedShortcut{}, false
@@ -97,6 +128,23 @@ func shortcutForCommand(index int, command Command, quicklinks []mappedQuicklink
 		if !namedCommand(command) {
 			row.title = splitCamel(commandToken(command.ID))
 		}
+	case isControlPanelPreference(command):
+		guid := controlPanelPreferenceGUID(command)
+		app, found := matchSettingsAppByGUID(guid, settings)
+		logRaycastImport(
+			"raycast import: match control panel guid=%q settingsApps=%d found=%v name=%q",
+			guid, len(settings), found, app.Name,
+		)
+		if !found {
+			return mappedShortcut{}, false
+		}
+		if !namedCommand(command) {
+			row.title = app.Name
+		}
+		row.pluginID = common.AppPluginID
+		row.search = app.Name
+		row.path = app.Path
+		row.identityKey = app.Path
 	case windowsSettingsURI(command) != "" || (isWindowsSettingsExtension(command.ExtensionID) && pluginsQueryable()):
 		uri := windowsSettingsURI(command)
 		row.pluginID = common.AppPluginID
@@ -235,6 +283,71 @@ func isWindowsSettingsExtension(id string) bool {
 	return strings.Contains(id, "windows") && (strings.Contains(id, "setting") || strings.HasPrefix(id, "e:r:"))
 }
 
+// isControlPanelPreference reports a Raycast Windows Settings row stored as a Control Panel preference.
+func isControlPanelPreference(command Command) bool {
+	extension := strings.ToLower(strings.TrimSpace(command.ExtensionID))
+	if !strings.Contains(extension, "preference") {
+		return false
+	}
+	return controlPanelPreferenceGUID(command) != ""
+}
+
+// controlPanelPreferenceGUID reads the shell item GUID from a preference id.
+// Raycast stores the full shell path after /ControlPanel/, for example
+// /ControlPanel/::{26EE0668-...}\0\::{ED7BA470-...}\{TASK-GUID}. The item identity is the last GUID.
+// A short /ControlPanel/{GUID} id uses that only GUID.
+func controlPanelPreferenceGUID(command Command) string {
+	for _, value := range []string{command.ID, command.Path, command.Link, command.Deeplink} {
+		if guid := controlPanelGUID(value); guid != "" {
+			return guid
+		}
+	}
+	return ""
+}
+
+func controlPanelGUID(value string) string {
+	const marker = "/controlpanel/"
+	lower := strings.ToLower(value)
+	index := strings.Index(lower, marker)
+	if index < 0 {
+		return ""
+	}
+	rest := value[index+len(marker):]
+	var found string
+	for {
+		start := strings.IndexByte(rest, '{')
+		if start < 0 {
+			break
+		}
+		rest = rest[start+1:]
+		end := strings.IndexByte(rest, '}')
+		if end < 0 {
+			break
+		}
+		parsed, err := uuid.Parse(rest[:end])
+		if err == nil {
+			found = parsed.String()
+		}
+		rest = rest[end+1:]
+	}
+	return found
+}
+
+// matchSettingsAppByGUID finds the indexed Control Panel item whose path contains the preference GUID.
+func matchSettingsAppByGUID(guid string, apps []plugin.DesktopApp) (plugin.DesktopApp, bool) {
+	guid = strings.ToLower(strings.TrimSpace(guid))
+	if guid == "" {
+		return plugin.DesktopApp{}, false
+	}
+	needle := "{" + guid + "}"
+	for _, app := range apps {
+		if strings.Contains(strings.ToLower(app.Path), needle) {
+			return app, true
+		}
+	}
+	return plugin.DesktopApp{}, false
+}
+
 // isMediaToggleCommand maps Raycast Play/Pause onto the media plugin's toggle result.
 func isMediaToggleCommand(command Command) bool {
 	if !isSystemExtension(command.ExtensionID) {
@@ -358,6 +471,9 @@ func resolveShortcut(row *mappedShortcut) {
 	query := plugin.ResultBindingQuery{Search: row.search, Command: row.command, TriggerKeyword: row.trigger}.PluginQuery()
 	results, err := manager.QueryPlugin(context.Background(), row.pluginID, query)
 	if err != nil {
+		logRaycastImport(
+			"raycast import: query failed plugin=%s search=%q err=%v", row.pluginID, row.search, err,
+		)
 		if row.prerequisiteID == "" {
 			row.selectable = false
 			row.status = statusUnsupported
@@ -373,13 +489,23 @@ func resolveShortcut(row *mappedShortcut) {
 		ok = true
 	}
 	if !ok {
+		logRaycastImport(
+			"raycast import: query missed plugin=%s search=%q results=%d identity=%q path=%q",
+			row.pluginID, row.search, len(results), row.identityKey, row.path,
+		)
 		if row.prerequisiteID == "" {
 			row.selectable = false
 			row.status = statusUnsupported
 		}
 		return
 	}
-	status, _ := manager.PreviewResultBinding(context.Background(), row.pluginID, query, picked, row.alias, row.hotkey)
+	status, previewErr := manager.PreviewResultBinding(context.Background(), row.pluginID, query, picked, row.alias, row.hotkey)
+	if status != "ready" {
+		logRaycastImport(
+			"raycast import: preview plugin=%s title=%q status=%s err=%v alias=%q hotkey=%q",
+			row.pluginID, picked.Title, status, previewErr, row.alias, row.hotkey,
+		)
+	}
 	switch status {
 	case "exists":
 		row.selectable = false

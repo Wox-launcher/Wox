@@ -35,6 +35,8 @@ const (
 	CategoryShortcuts  = "shortcuts"
 	CategorySnippets   = "snippets"
 	CategoryClipboard  = "clipboard"
+	// CategoryPrepare is the locked first group. It quits the source launcher before hotkeys are registered.
+	CategoryPrepare = "prepare"
 
 	ItemKindSetting       = "setting"
 	ItemKindPlugin        = "plugin"
@@ -43,9 +45,13 @@ const (
 	ItemKindNote          = "note"
 	ItemKindClipboard     = "clipboard"
 	ItemKindResultBinding = "result_binding"
+	// ItemKindCloseLauncher quits the source launcher before the rest of the import.
+	ItemKindCloseLauncher = "close_launcher"
 
 	// ClipboardSummaryID is the single catalog row for a clipboard history import.
 	ClipboardSummaryID = "clipboard:summary"
+	// CloseLauncherItemID is the locked row that quits the source launcher.
+	CloseLauncherItemID = "prepare:close_launcher"
 
 	// StatusConflict means the same identity already points at different Wox content.
 	StatusConflict = "conflict"
@@ -88,6 +94,13 @@ type Installation interface {
 	Import(ctx context.Context, itemIDs []string) (ImportResult, error)
 }
 
+// RunningLauncher can release the global hotkeys it still owns by exiting.
+// Onboarding quits it before registering the imported shortcuts.
+type RunningLauncher interface {
+	// CloseRunning stops the launcher process. A nil error means it is no longer running.
+	CloseRunning(ctx context.Context) error
+}
+
 // ExportSource is an installation whose rows stay hidden until the user unlocks an export file.
 type ExportSource interface {
 	Installation
@@ -109,6 +122,14 @@ type Category struct {
 	Items []Item
 }
 
+// CloseLauncherCategory is the locked first group. Detail carries the launcher name for {name}.
+func CloseLauncherCategory(name string) Category {
+	return Category{ID: CategoryPrepare, Items: []Item{{
+		ID: CloseLauncherItemID, Kind: ItemKindCloseLauncher, TitleKey: "close_launcher",
+		DetailKey: "close_launcher", Detail: name, Required: true,
+	}}}
+}
+
 // Item is one setting or plugin the user can include or leave behind.
 // TitleKey and DetailKey are stable translation ids. Title and Detail are used when the text comes from the source launcher.
 type Item struct {
@@ -123,6 +144,8 @@ type Item struct {
 	Status     string
 	// Kind selects how onboarding applies the row. Empty keeps the older setting-prefix rule.
 	Kind string
+	// Required stays selected. The user cannot clear it, because the import depends on it.
+	Required bool
 	// OptionKey is an extra checkbox, such as keeping a snippet keyword in the note body.
 	OptionKey string
 	OptionOn  bool

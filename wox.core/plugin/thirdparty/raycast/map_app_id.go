@@ -15,6 +15,9 @@ var raycastAppNamespace = uuid.MustParse("e972d3fc-244a-4623-8e22-ec5fd0188c32")
 // desktopAppsForTest replaces the live app index. Tests have no settings database.
 var desktopAppsForTest func() []plugin.DesktopApp
 
+// settingsAppsForTest replaces the live Control Panel index.
+var settingsAppsForTest func() []plugin.DesktopApp
+
 // raycastShortcutID is the id Raycast stores for a desktop shortcut.
 // A shortcut with arguments is "shortcut:" plus the lowercased "executable|arguments".
 func raycastShortcutID(executable, args string) string {
@@ -83,6 +86,31 @@ func desktopApplications() []plugin.DesktopApp {
 		return nil
 	}
 	return catalog.DesktopApps()
+}
+
+// settingsApplications lists indexed Control Panel items from the running app plugin.
+func settingsApplications() []plugin.DesktopApp {
+	if settingsAppsForTest != nil {
+		return settingsAppsForTest()
+	}
+	if !pluginsQueryable() {
+		return nil
+	}
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return nil
+	}
+	instance := manager.GetPluginInstanceById(common.AppPluginID)
+	if instance == nil || instance.Plugin == nil {
+		logRaycastImport("raycast import: app plugin instance is not loaded")
+		return nil
+	}
+	catalog, ok := instance.Plugin.(plugin.SettingsAppCatalog)
+	if !ok {
+		logRaycastImport("raycast import: app plugin does not expose control panel apps")
+		return nil
+	}
+	return catalog.SettingsApps()
 }
 
 func matchIndexedRaycastApp(path string, index map[string]plugin.DesktopApp) (plugin.DesktopApp, bool) {

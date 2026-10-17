@@ -12,3 +12,8 @@ type DesktopApp struct {
 type DesktopAppCatalog interface {
 	DesktopApps() []DesktopApp
 }
+
+// SettingsAppCatalog lists indexed Control Panel items a launcher import can bind to.
+type SettingsAppCatalog interface {
+	SettingsApps() []DesktopApp
+}

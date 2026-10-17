@@ -679,3 +679,45 @@ func TestClipboardSummaryOutcomeCollapsesEntryResults(t *testing.T) {
 		t.Fatalf("failure = %+v", failed)
 	}
 }
+
+type closeLauncherStub struct{ name string }
+
+func (c closeLauncherStub) ID() string            { return "raycast" }
+func (c closeLauncherStub) Name() string          { return c.name }
+func (c closeLauncherStub) Version() string       { return "" }
+func (c closeLauncherStub) Location() string      { return "" }
+func (c closeLauncherStub) Icon() common.WoxImage { return common.WoxImage{} }
+func (c closeLauncherStub) Hotkey() string        { return "" }
+func (c closeLauncherStub) Plugins(context.Context) ([]migrate.Plugin, error) {
+	return nil, nil
+}
+func (c closeLauncherStub) Catalog(context.Context) ([]migrate.Category, error) {
+	return nil, nil
+}
+func (c closeLauncherStub) Import(context.Context, []string) (migrate.ImportResult, error) {
+	return migrate.ImportResult{}, nil
+}
+func (c closeLauncherStub) CloseRunning(context.Context) error { return nil }
+
+func TestMigrationCatalogStartsByClosingTheLauncher(t *testing.T) {
+	catalog := onboardingMigrationCategories(closeLauncherStub{name: "Raycast"}, []migrate.Category{{
+		ID:    migrate.CategoryHotkeys,
+		Items: []migrate.Item{{ID: "setting:main_hotkey", TitleKey: "main_hotkey", Selectable: true}},
+	}})
+	if len(catalog) != 2 || catalog[0].id != migrate.CategoryPrepare || catalog[1].id != migrate.CategoryHotkeys {
+		t.Fatalf("categories = %+v", catalog)
+	}
+	row := catalog[0].items[0]
+	if !row.selected || !row.item.Required || row.item.Detail != "Raycast" || row.item.Kind != migrate.ItemKindCloseLauncher {
+		t.Fatalf("close row = %+v", row)
+	}
+	if !migrationItemChosen(row) {
+		t.Fatal("close row is not imported")
+	}
+	plain := catalog[1].items[0]
+	plain.item.Selectable = false
+	plain.selected = false
+	if migrationItemChosen(plain) {
+		t.Fatal("unselected row was imported")
+	}
+}

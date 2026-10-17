@@ -73,6 +73,8 @@ type OnboardingMigrationItem struct {
 	Icon        *woxui.Image
 	Selected    bool
 	Selectable  bool
+	Required    bool
+	DetailLines int
 	ShowIcon    bool
 	Active      bool
 	Succeeded   bool
@@ -1118,6 +1120,9 @@ func onboardingMigrationContentHeight(categories []OnboardingMigrationCategory) 
 
 func onboardingMigrationItemHeight(item OnboardingMigrationItem) float32 {
 	height := float32(64)
+	if item.DetailLines > 1 {
+		height += float32(24 * (item.DetailLines - 1))
+	}
 	if item.OptionLabel != "" {
 		height = 96
 	}
@@ -1125,6 +1130,13 @@ func onboardingMigrationItemHeight(item OnboardingMigrationItem) float32 {
 		height += 40
 	}
 	return height
+}
+
+func onboardingMigrationDetailLines(item OnboardingMigrationItem) int {
+	if item.DetailLines > 1 {
+		return item.DetailLines
+	}
+	return 1
 }
 
 func onboardingMigrationUnlock(props OnboardingProps, width float32) woxwidget.Widget {
@@ -1228,11 +1240,11 @@ func onboardingMigrationItemRow(props OnboardingProps, item OnboardingMigrationI
 		leading = woxcomponent.ErrorGlyph(18, props.Theme.Error)
 	case item.Active:
 		leading = woxcomponent.HourglassGlyph(18, props.Theme.TextSecondary)
-	case item.Selectable && item.Status == "":
+	case (item.Selectable || item.Required) && item.Status == "":
 		itemID := item.ID
 		leading = woxcomponent.WoxCheckbox(woxcomponent.CheckboxProps{
 			ID: "onboarding-migrate-item-" + item.ID, Label: item.Title, Value: item.Selected,
-			Disabled: props.MigrationImporting || props.MigrationDone, Theme: props.Theme,
+			Disabled: item.Required || props.MigrationImporting || props.MigrationDone, Theme: props.Theme,
 			OnChange: func(selected bool) {
 				if props.OnToggleMigrationItem != nil {
 					props.OnToggleMigrationItem(itemID, selected)
@@ -1252,7 +1264,7 @@ func onboardingMigrationItemRow(props OnboardingProps, item OnboardingMigrationI
 	}
 	lines := []woxwidget.Widget{
 		woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
-		woxwidget.TextBlock{Value: item.Detail, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
+		woxwidget.TextBlock{Value: item.Detail, MaxLines: onboardingMigrationDetailLines(item), Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
 	}
 	if item.OptionLabel != "" {
 		itemID := item.ID

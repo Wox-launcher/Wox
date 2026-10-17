@@ -1228,6 +1228,36 @@ func TestOnboardingMigrationItemRowUsesCheckboxUntilImported(t *testing.T) {
 	}
 }
 
+func TestOnboardingMigrationCloseLauncherStaysChecked(t *testing.T) {
+	toggled := false
+	rows := onboardingMigrationRows(OnboardingProps{
+		MigrationCategories: []OnboardingMigrationCategory{{
+			ID: "prepare", Title: "Before import",
+			Items: []OnboardingMigrationItem{{
+				ID: "prepare:close_launcher", Title: "Quit Raycast",
+				Detail:      "Raycast is holding the global shortcuts in this import.",
+				DetailLines: 2, Selected: true, Required: true,
+			}},
+		}},
+		Theme: woxcomponent.ControlTheme{}, OnToggleMigrationItem: func(string, bool) { toggled = true },
+	}, 640)
+	row := rows[1].(woxwidget.Keyed).Child.(woxwidget.Container)
+	if row.Height != 88 {
+		t.Fatalf("height = %v", row.Height)
+	}
+	checkbox := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if !checkbox.Checked || !checkbox.Disabled || len(checkbox.Actions) != 0 {
+		t.Fatalf("checkbox = %#v", checkbox)
+	}
+	if err := checkbox.OnAction(woxui.AccessibilityActionToggle, ""); err != nil || toggled {
+		t.Fatalf("toggle = %v err=%v", toggled, err)
+	}
+	detail := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[1].(woxwidget.TextBlock)
+	if detail.MaxLines != 2 {
+		t.Fatalf("lines = %d", detail.MaxLines)
+	}
+}
+
 func TestOnboardingMigrationFailureShowsTheReason(t *testing.T) {
 	rows := onboardingMigrationRows(OnboardingProps{
 		MigrationCategories: []OnboardingMigrationCategory{{

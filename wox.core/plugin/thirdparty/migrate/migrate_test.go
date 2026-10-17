@@ -65,3 +65,14 @@ func TestDetectSkipsAbsentAndFailingSources(t *testing.T) {
 		t.Fatalf("found %#v", found)
 	}
 }
+
+func TestCloseLauncherCategoryIsLocked(t *testing.T) {
+	category := CloseLauncherCategory("Raycast")
+	if category.ID != CategoryPrepare || len(category.Items) != 1 {
+		t.Fatalf("category = %+v", category)
+	}
+	item := category.Items[0]
+	if item.ID != CloseLauncherItemID || item.Kind != ItemKindCloseLauncher || !item.Required || item.Selectable || item.Detail != "Raycast" {
+		t.Fatalf("item = %+v", item)
+	}
+}
