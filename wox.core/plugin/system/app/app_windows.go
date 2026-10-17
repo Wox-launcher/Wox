@@ -451,11 +451,12 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 	if len(settingsApps) > 0 {
 		util.GetLogger().Info(ctx, fmt.Sprintf("Loaded %d Windows Settings items", len(settingsApps)))
 	}
+	controlPanelApps := a.getControlPanelApps(ctx)
 
 	appsFolderApps := a.GetAppsFolderApps(ctx)
 	util.GetLogger().Info(ctx, fmt.Sprintf("Found %d AppsFolder apps", len(appsFolderApps)))
 
-	return append(settingsApps, appsFolderApps...), nil
+	return append(append(settingsApps, controlPanelApps...), appsFolderApps...), nil
 }
 
 // getPrivateWorkingSet calculates the private (non-shared) working set size for a process
@@ -831,6 +832,8 @@ func (a *WindowsRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo)
 			}
 		}
 	}
+
+	a.attachControlPanelIcons(ctx, apps)
 
 	// save icon cache
 	cacheMap := make(map[string]string)

@@ -117,6 +117,10 @@ func executeShellVerb(path string, verb string) error {
 
 // shellExecute invokes ShellExecuteExW and optionally returns a wait callback.
 func shellExecute(req shellExecuteRequest) (WaitFunc, error) {
+	if isControlPanelTaskParsingName(req.File) {
+		return nil, executeControlPanelTask(req)
+	}
+
 	operationPtr, err := windows.UTF16PtrFromString(req.Verb)
 	if err != nil {
 		return nil, fmt.Errorf("encode ShellExecute verb: %w", err)
@@ -203,9 +207,10 @@ func utf16PtrOrNil(value string) (*uint16, error) {
 }
 
 // shellExecuteMask routes namespace objects through their context-menu handlers so registered verbs are available.
+// Control Panel parsing names start with ::{CLSID} and need the same ID-list invoke path as shell: URLs.
 func shellExecuteMask(path string) uint32 {
 	mask := uint32(seeMaskAsyncOK)
-	if strings.HasPrefix(strings.ToLower(path), "shell:") {
+	if strings.HasPrefix(strings.ToLower(path), "shell:") || strings.HasPrefix(path, "::") {
 		mask |= seeMaskInvokeIDList
 	}
 	return mask

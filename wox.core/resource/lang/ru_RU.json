@@ -1641,6 +1641,7 @@
   "plugin_app_cpu": "ЦП",
   "plugin_app_memory": "Память",
   "plugin_app_windows_settings_subtitle": "Параметры Windows",
+  "plugin_app_windows_control_panel_subtitle": "Панель управления",
   "plugin_app_windows_settings_system": "Система",
   "plugin_app_windows_settings_bluetooth": "Bluetooth и устройства",
   "plugin_app_windows_settings_network": "Сеть и Интернет",

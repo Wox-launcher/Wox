@@ -1748,6 +1748,7 @@
   "plugin_app_cpu": "CPU",
   "plugin_app_memory": "Mem",
   "plugin_app_windows_settings_subtitle": "Windows Settings",
+  "plugin_app_windows_control_panel_subtitle": "Control Panel",
   "plugin_app_windows_settings_system": "System",
   "plugin_app_windows_settings_bluetooth": "Bluetooth & devices",
   "plugin_app_windows_settings_network": "Network & internet",

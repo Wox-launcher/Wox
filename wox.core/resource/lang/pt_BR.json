@@ -1641,6 +1641,7 @@
   "plugin_app_cpu": "CPU",
   "plugin_app_memory": "Mem",
   "plugin_app_windows_settings_subtitle": "Configurações do Windows",
+  "plugin_app_windows_control_panel_subtitle": "Painel de Controle",
   "plugin_app_windows_settings_system": "Sistema",
   "plugin_app_windows_settings_bluetooth": "Bluetooth e dispositivos",
   "plugin_app_windows_settings_network": "Rede e Internet",
