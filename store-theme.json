@@ -135,5 +135,38 @@
     ],
     "DateCreated": "2026-10-16 23:20:41",
     "DateUpdated": "2026-10-16 23:20:41"
+  },
+  {
+    "Id": "be0403fc-0fd7-443d-a257-962b769bf771",
+    "Name": "i18n:theme_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Description": "i18n:theme_description",
+    "ImageTheme": false,
+    "IconColors": {
+      "Background": "#F2EDE0FF",
+      "Query": "#F2EDE0FF",
+      "Selected": "#E9E1CEFF",
+      "Outline": "#B8B0A080",
+      "OutlineWidth": 1
+    },
+    "Website": "https://gist.github.com/dragonish/2cf9d018af5fd48991be9de497128d81",
+    "DownloadUrl": "https://gist.githubusercontent.com/dragonish/2cf9d018af5fd48991be9de497128d81/raw/Wox.Theme.FiveShadesOfInk.json",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/9d65a6ec-aaee-4343-905b-acc382179837"
+    ],
+    "DateCreated": "2026-10-17 16:58:21",
+    "DateUpdated": "2026-10-17 16:58:21",
+    "I18n": {
+      "en_US": {
+        "theme_name": "Five Shades of Ink",
+        "theme_description": "Rice-paper background with five grades of ink — scorched, dense, heavy, pale and clear — and a cinnabar seal accent."
+      },
+      "zh_CN": {
+        "theme_name": "墨分五色",
+        "theme_description": "宣纸背景，配以五种墨色——焦墨、浓墨、重墨、淡墨和清墨——并以一枚朱砂印章作为点缀。"
+      }
+    }
   }
 ]
