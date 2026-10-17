@@ -3010,6 +3010,7 @@
   "onboarding_migrate_category_themes": "테마",
   "onboarding_migrate_category_plugins": "플러그인",
   "onboarding_migrate_category_quicklinks": "퀵링크",
+  "onboarding_migrate_category_shortcuts": "바로 가기",
   "onboarding_migrate_category_snippets": "스니펫",
   "onboarding_migrate_category_clipboard": "클립보드",
   "onboarding_migrate_status_conflict": "충돌이 있어 Wox 값을 유지했습니다",

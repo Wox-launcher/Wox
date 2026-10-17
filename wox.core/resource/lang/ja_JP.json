@@ -3011,6 +3011,7 @@
   "onboarding_migrate_category_themes": "テーマ",
   "onboarding_migrate_category_plugins": "プラグイン",
   "onboarding_migrate_category_quicklinks": "クイックリンク",
+  "onboarding_migrate_category_shortcuts": "ショートカット",
   "onboarding_migrate_category_snippets": "スニペット",
   "onboarding_migrate_category_clipboard": "クリップボード",
   "onboarding_migrate_status_conflict": "競合のため、Wox の値を保持しました",

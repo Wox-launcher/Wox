@@ -469,6 +469,10 @@ func (s *orderedImportServices) ImportMigratedNotes(context.Context, string, []c
 	return nil
 }
 
+func (s *orderedImportServices) ImportMigratedResultBindings(context.Context, string, []contract.MigratedResultBinding) []contract.MigratedItemResult {
+	return nil
+}
+
 func (s *orderedImportServices) ImportMigratedClipboard(_ context.Context, _ string, items []contract.MigratedClipboard) []contract.MigratedItemResult {
 	if len(items) == 0 {
 		return nil

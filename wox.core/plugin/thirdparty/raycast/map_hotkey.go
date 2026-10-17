@@ -91,6 +91,10 @@ func mapHotkey(raw json.RawMessage) (value, detailKey, rawText string, ok bool) 
 // macOS exports use Carbon virtual key codes, where 49 is Space.
 func layoutIndependentKey(code int) (string, bool) {
 	if runtime.GOOS == "windows" {
+		// Extended set-1 codes keep the 0xE0 prefix, so Up arrives as 0xE048 rather than 72.
+		if code&0xFF00 == 0xE000 {
+			code &= 0xFF
+		}
 		name, ok := windowsScanKeyNames[code]
 		return name, ok
 	}

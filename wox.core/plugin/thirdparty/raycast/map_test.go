@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
+	"wox/plugin"
 	"wox/plugin/thirdparty/migrate"
 )
 
@@ -20,6 +22,13 @@ func TestMapGlobalHotkey(t *testing.T) {
 	unknown := json.RawMessage(`{"kind":{"shortcut":{"key":{"type":"LayoutIndependent","code":49},"modifiers":[{"modifier":"Function"}]}}}`)
 	if _, detailKey, _, ok = mapHotkey(unknown); ok || detailKey != "raycast_unknown_modifier" {
 		t.Fatalf("unknown modifier ok=%v key=%s", ok, detailKey)
+	}
+	if runtime.GOOS == "windows" {
+		extended := json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":57416}}},"locality":"Global"}`)
+		value, detailKey, _, ok = mapHotkey(extended)
+		if !ok || value != "ctrl+shift+up" || detailKey != "" {
+			t.Fatalf("extended = %s %s %v", value, detailKey, ok)
+		}
 	}
 }
 
@@ -62,8 +71,8 @@ func TestMapApplicationAlias(t *testing.T) {
 		MacOSHotkey: json.RawMessage(`{"kind":{"shortcut":{"key":{"type":"LayoutIndependent","code":49},"modifiers":[{"modifier":"Alt"}]}}}`),
 	}}
 	mapped := buildMapped(payload, defaultSnapshot())
-	if len(mapped.queries) != 1 || !mapped.queries[0].selectable || mapped.queries[0].alias != "nt" || mapped.queries[0].query != "app Notes" {
-		t.Fatalf("alias = %+v", mapped.queries)
+	if len(mapped.queries) != 0 || len(mapped.shortcuts) != 1 || !mapped.shortcuts[0].selectable || mapped.shortcuts[0].alias != "nt" || mapped.shortcuts[0].path != app || mapped.shortcuts[0].pluginID != common.AppPluginID {
+		t.Fatalf("shortcut = %+v queries=%+v", mapped.shortcuts, mapped.queries)
 	}
 	missing := payload
 	missing.Settings.Commands[0].ID = "open::=::" + filepath.Join(dir, "gone.exe")
@@ -214,6 +223,196 @@ func TestMapQuicklinkFilesAndFoldersBecomeFavorites(t *testing.T) {
 		if row.title == "vicinaeqianlifeng" && !row.selectable {
 			t.Fatalf("unrelated folder hidden = %+v", row)
 		}
+	}
+}
+
+func TestMapShortcutTargets(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload := Payload{}
+	payload.Quicklinks.Quicklinks = []Quicklink{
+		{Name: "wox", Link: "https://github.com/Wox-launcher/Wox"},
+		{Name: "notes", Link: filePath},
+	}
+	payload.Settings.Commands = []Command{
+		{ExtensionID: "e:r:raycast", ID: "settings", Name: "Settings", Alias: "hw"},
+		{ExtensionID: "e:r:raycast", ID: "send-focused-window", Name: "Send Focused Window to AI", Alias: "ai"},
+		{ExtensionID: "e:r:system", ID: "volume-up", Name: "Turn Volume Up", Alias: "vu"},
+		{ExtensionID: "e:r:system", ID: "play-pause", Name: "Play / Pause", Alias: "pp"},
+		{ExtensionID: "e:r:windows-settings", ID: "ms-settings:display", Name: "Display", Alias: "fdj"},
+		{ExtensionID: "e:r:windows-settings", ID: "ms-settings:easeofaccess-magnifier", Name: "使用放大镜放大大部分屏幕", Alias: "mag"},
+		{ExtensionID: "e:r:quicklinks", ID: "wox", Name: "wox", Alias: "www"},
+		{ExtensionID: "e:r:quicklinks", ID: "notes", Name: "notes", Alias: "nt"},
+		{ExtensionID: "e:r:clipboard-history", ID: "clipboard", Name: "Clipboard History", MacOSHotkey: json.RawMessage(`{"kind":{"shortcut":{"key":{"type":"LayoutIndependent","code":` + spaceKeyCode() + `},"modifiers":[{"modifier":"Alt"}]}}}`)},
+	}
+	mapped := buildMapped(payload, defaultSnapshot())
+	byTitle := map[string]mappedShortcut{}
+	for _, row := range mapped.shortcuts {
+		if !row.selectable {
+			t.Fatalf("hidden shortcut listed = %+v", row)
+		}
+		byTitle[row.title] = row
+	}
+	settings := byTitle["Settings"]
+	if settings.pluginID != common.SysPluginID || settings.command != "open_wox_settings" || settings.alias != "hw" {
+		t.Fatalf("settings = %+v", settings)
+	}
+	volume := byTitle["Turn Volume Up"]
+	if volume.command != "volume-up" || volume.alias != "vu" {
+		t.Fatalf("volume = %+v", volume)
+	}
+	display := byTitle["Display"]
+	if display.pluginID != common.AppPluginID || display.path != "ms-settings:display" {
+		t.Fatalf("display = %+v", display)
+	}
+	link := byTitle["wox"]
+	if link.pluginID != common.WebSearchPluginID || link.trigger != "wox" || link.alias != "www" || link.prerequisiteID == "" {
+		t.Fatalf("link = %+v", link)
+	}
+	file := byTitle["notes"]
+	if file.pluginID != common.FolderPluginID || file.path != filePath || !file.prerequisiteFavorite {
+		t.Fatalf("file = %+v", file)
+	}
+	pause := byTitle["Play / Pause"]
+	if pause.pluginID != common.MediaPlayerPluginID || pause.search != "playpause" || pause.identityKey != common.MediaPlayerToggleIdentity || pause.alias != "pp" {
+		t.Fatalf("play pause = %+v", pause)
+	}
+	for _, title := range []string{"Send Focused Window to AI", "使用放大镜放大大部分屏幕", "Clipboard History"} {
+		if _, ok := byTitle[title]; ok {
+			t.Fatalf("%s was mapped", title)
+		}
+	}
+	for _, row := range mapped.queries {
+		if row.selectable {
+			t.Fatalf("query alias = %+v", row)
+		}
+	}
+	var clipboardHotkey bool
+	for _, row := range mapped.hotkeys {
+		if row.kind == "query" && row.selectable && row.title == "Clipboard History" {
+			clipboardHotkey = true
+		}
+	}
+	if !clipboardHotkey {
+		t.Fatalf("clipboard hotkey = %+v", mapped.hotkeys)
+	}
+	imported := importSelected(mapped, []string{link.id, file.id})
+	if len(imported.Quicklinks) != 1 || imported.Quicklinks[0].Keyword != "wox" || len(imported.Favorites) != 1 || imported.Favorites[0].Path != filePath {
+		t.Fatalf("prerequisites = %+v %+v", imported.Quicklinks, imported.Favorites)
+	}
+	if len(imported.ResultBindings) != 2 || imported.ResultBindings[0].Alias != "www" || imported.ResultBindings[1].Alias != "nt" {
+		t.Fatalf("bindings = %+v", imported.ResultBindings)
+	}
+	both := importSelected(mapped, []string{link.prerequisiteID, link.id})
+	if len(both.Quicklinks) != 1 || len(both.ResultBindings) != 1 {
+		t.Fatalf("dedup = %+v %+v", both.Quicklinks, both.ResultBindings)
+	}
+}
+
+func TestMapExportedCommandIDs(t *testing.T) {
+	payload := Payload{}
+	payload.Quicklinks.Quicklinks = []Quicklink{{
+		ID: "01M1VBS91J2HW3SRPW8Y46WGFN", Name: "wox", Link: "https://github.com/Wox-launcher/Wox",
+	}}
+	payload.Settings.Commands = []Command{
+		{ExtensionID: "e:r:applications", ID: "c:r:applications::*::application::=::/Applications/94f60fda-9dce-5346-8267-287b6affb1c0", Alias: "wp"},
+		{ExtensionID: "e:r:raycast-core", ID: "c:r:raycast-core::-::openSettings", Alias: "hw"},
+		{ExtensionID: "e:r:quicklinks", ID: "c:r:quicklinks::*::quicklink::=::01M1VBS91J2HW3SRPW8Y46WGFN", Alias: "www", WindowsHotkey: json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":24}}},"locality":"Global"}`)},
+		{ExtensionID: "e:r:system", ID: "c:r:system::-::turnVolumeUp", WindowsHotkey: json.RawMessage(`{"kind":{"type":"SingleStep","shortcut":{"modifiers":[{"modifier":"Ctrl"},{"modifier":"Shift"}],"key":{"type":"LayoutIndependent","code":57416}}},"locality":"Global"}`)},
+		{ExtensionID: "e:r:system", ID: "c:r:system::-::playPause", Alias: "pp"},
+		{ExtensionID: "e:r:preferences", ID: `c:r:preferences::*::preference::=::/ControlPanel/{3D8638E3-EC96-4CE8-8279-36B0065B5F2C}`, Alias: "fdj"},
+		{ExtensionID: "e:r:screen-awareness", ID: "c:r:screen-awareness::-::sendFocusedWindow", WindowsHotkey: json.RawMessage(`{"kind":{"type":"DoubleTap","shortcut":{"modifier":{"modifier":"Ctrl","directionality":"right"}}},"locality":"Global"}`)},
+	}
+	mapped := buildMapped(payload, defaultSnapshot())
+	byTitle := map[string]mappedShortcut{}
+	for _, row := range mapped.shortcuts {
+		byTitle[row.title] = row
+	}
+	settings := byTitle["Settings"]
+	if settings.command != "open_wox_settings" || settings.alias != "hw" || settings.pluginID != common.SysPluginID {
+		t.Fatalf("settings = %+v", settings)
+	}
+	link := byTitle["wox"]
+	if link.alias != "www" || link.trigger != "wox" || link.pluginID != common.WebSearchPluginID {
+		t.Fatalf("link = %+v", link)
+	}
+	if runtime.GOOS == "windows" && link.hotkey != "ctrl+shift+o" {
+		t.Fatalf("link hotkey = %s", link.hotkey)
+	}
+	pause := byTitle["Play / Pause"]
+	if pause.alias != "pp" || pause.pluginID != common.MediaPlayerPluginID || pause.identityKey != common.MediaPlayerToggleIdentity || pause.search != "playpause" {
+		t.Fatalf("play pause = %+v", pause)
+	}
+	want := 3
+	if runtime.GOOS == "windows" {
+		want = 4
+		volume := byTitle["Turn Volume Up"]
+		if volume.command != "volume-up" || volume.hotkey != "ctrl+shift+up" {
+			t.Fatalf("volume = %+v", volume)
+		}
+	}
+	for _, title := range []string{"wp"} {
+		if _, ok := byTitle[title]; ok {
+			t.Fatalf("%s was mapped", title)
+		}
+	}
+	if len(byTitle) != want {
+		t.Fatalf("shortcuts = %+v", mapped.shortcuts)
+	}
+}
+
+func TestRaycastShortcutIDMatchesIndexedExecutable(t *testing.T) {
+	const executable = `C:\Users\qianl\AppData\Roaming\baidu\BaiduNetdisk\BaiduNetdisk.exe`
+	if got := raycastShortcutID(executable, ""); got != "94f60fda-9dce-5346-8267-287b6affb1c0" {
+		t.Fatalf("id = %s", got)
+	}
+	if raycastShortcutID(executable, "-extra") == raycastShortcutID(executable, "") {
+		t.Fatal("arguments left the id unchanged")
+	}
+	id, ok := raycastAppUUID("/Applications/94f60fda-9dce-5346-8267-287b6affb1c0")
+	if !ok || id != "94f60fda-9dce-5346-8267-287b6affb1c0" {
+		t.Fatalf("uuid = %s %v", id, ok)
+	}
+	if _, ok = raycastAppUUID(`/Applications/Notes.app`); ok {
+		t.Fatal("bundle path parsed as a uuid")
+	}
+}
+
+func TestMapApplicationUUID(t *testing.T) {
+	const executable = `C:\Users\qianl\AppData\Roaming\baidu\BaiduNetdisk\BaiduNetdisk.exe`
+	lnk := `C:\Users\qianl\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\百度网盘\百度网盘.lnk`
+	desktopAppsForTest = func() []plugin.DesktopApp {
+		return []plugin.DesktopApp{{
+			Name: "百度网盘", Path: lnk, Executable: executable,
+		}, {
+			Name: "Other", Path: `C:\Other\Other.lnk`, Executable: `C:\Other\Other.exe`, Arguments: "-x",
+		}}
+	}
+	t.Cleanup(func() { desktopAppsForTest = nil })
+
+	payload := Payload{}
+	payload.Settings.Commands = []Command{{
+		ExtensionID: "e:r:applications",
+		ID:          "c:r:applications::*::application::=::/Applications/94f60fda-9dce-5346-8267-287b6affb1c0",
+		Alias:       "wp",
+	}, {
+		ExtensionID: "e:r:applications",
+		ID:          "c:r:applications::*::application::=::/Applications/00000000-0000-4000-8000-000000000001",
+		Alias:       "missing",
+	}}
+	mapped := buildMapped(payload, defaultSnapshot())
+	if len(mapped.shortcuts) != 1 {
+		t.Fatalf("shortcuts = %+v", mapped.shortcuts)
+	}
+	row := mapped.shortcuts[0]
+	if !row.selectable || row.title != "百度网盘" || row.alias != "wp" || row.path != lnk || row.pluginID != common.AppPluginID || row.search != "百度网盘" {
+		t.Fatalf("row = %+v", row)
+	}
+	if len(mapped.queries) != 1 || mapped.queries[0].selectable || mapped.queries[0].alias != "missing" {
+		t.Fatalf("queries = %+v", mapped.queries)
 	}
 }
 

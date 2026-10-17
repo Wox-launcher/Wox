@@ -29,6 +29,9 @@ type Command struct {
 	Name          string          `json:"name"`
 	Title         string          `json:"title"`
 	Alias         string          `json:"alias"`
+	Link          string          `json:"link"`
+	Path          string          `json:"path"`
+	Deeplink      string          `json:"deeplink"`
 	MacOSHotkey   json.RawMessage `json:"macosHotkey"`
 	Hotkey        json.RawMessage `json:"hotkey"`
 	WindowsHotkey json.RawMessage `json:"windowsHotkey"`

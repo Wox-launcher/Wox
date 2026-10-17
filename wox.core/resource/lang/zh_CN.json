@@ -3011,6 +3011,7 @@
   "onboarding_migrate_category_themes": "主题",
   "onboarding_migrate_category_plugins": "插件",
   "onboarding_migrate_category_quicklinks": "快速链接",
+  "onboarding_migrate_category_shortcuts": "快捷方式",
   "onboarding_migrate_category_snippets": "片段",
   "onboarding_migrate_category_clipboard": "剪贴板",
   "onboarding_migrate_status_conflict": "冲突，已保留 Wox 原值",

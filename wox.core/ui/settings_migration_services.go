@@ -74,6 +74,44 @@ func (s *CoreServices) ImportMigratedClipboard(ctx context.Context, _ string, it
 	return results
 }
 
+func (s *CoreServices) ImportMigratedResultBindings(ctx context.Context, _ string, items []contract.MigratedResultBinding) []contract.MigratedItemResult {
+	results := make([]contract.MigratedItemResult, len(items))
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return migrationUnavailable(results, migrationIDs(len(items), func(index int) string { return items[index].ItemID }))
+	}
+	for index, item := range items {
+		query := plugin.ResultBindingQuery{Search: item.Search, Command: item.Command, TriggerKeyword: item.TriggerKeyword}.PluginQuery()
+		found, err := manager.QueryPlugin(ctx, item.PluginID, query)
+		picked, ok := plugin.SelectQueryResult(found, plugin.ResultBindingSelector{
+			IdentityKey: item.IdentityKey, Path: item.Path, Title: item.Title, Keyword: item.Keyword,
+			RequireSettingsPath: item.RequireSettingsPath,
+		})
+		if !ok && item.TriggerKeyword != "" && len(found) > 0 {
+			picked = found[0]
+			ok = true
+		}
+		if err != nil || !ok {
+			results[index] = contract.MigratedItemResult{ID: item.ItemID, Status: "failed", ErrorCode: "missing"}
+			continue
+		}
+		status, _ := manager.UpsertResultBinding(ctx, item.PluginID, query, picked, item.Alias, item.Hotkey)
+		switch status {
+		case "imported", "exists":
+			results[index] = contract.MigratedItemResult{ID: item.ItemID, Status: status}
+		case "conflict":
+			results[index] = contract.MigratedItemResult{ID: item.ItemID, Status: status, ErrorCode: "conflict"}
+		default:
+			code := status
+			if code == "" || code == "ready" {
+				code = "failed"
+			}
+			results[index] = contract.MigratedItemResult{ID: item.ItemID, Status: "failed", ErrorCode: code}
+		}
+	}
+	return results
+}
+
 func systemPlugin(id string) any {
 	manager := plugin.GetPluginManager()
 	if manager == nil {

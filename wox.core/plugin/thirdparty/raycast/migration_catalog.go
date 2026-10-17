@@ -11,20 +11,23 @@ func catalogFrom(mapped mappedExport) []migrate.Category {
 	if items := hotkeyItems(mapped.hotkeys); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryHotkeys, Items: items})
 	}
+	if items := settingItems(mapped.general); len(items) > 0 {
+		categories = append(categories, migrate.Category{ID: migrate.CategoryGeneral, Items: items})
+	}
 	if items := queryItems(mapped.queries); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryQueries, Items: items})
 	}
 	if items := quicklinkItems(mapped.quicklinks); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryQuicklinks, Items: items})
 	}
+	if items := shortcutItems(mapped.shortcuts); len(items) > 0 {
+		categories = append(categories, migrate.Category{ID: migrate.CategoryShortcuts, Items: items})
+	}
 	if items := snippetItems(mapped.snippets); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategorySnippets, Items: items})
 	}
 	if items := clipboardItems(mapped.clipboard, mapped.summary); len(items) > 0 {
 		categories = append(categories, migrate.Category{ID: migrate.CategoryClipboard, Items: items})
-	}
-	if items := settingItems(mapped.general); len(items) > 0 {
-		categories = append(categories, migrate.Category{ID: migrate.CategoryGeneral, Items: items})
 	}
 	return categories
 }
@@ -38,6 +41,20 @@ func hotkeyItems(rows []mappedHotkey) []migrate.Item {
 		items = append(items, migrate.Item{
 			ID: row.id, Kind: migrate.ItemKindSetting, TitleKey: row.titleKey, Title: row.title,
 			DetailKey: row.detailKey, Detail: row.detail, Selectable: row.selectable, Status: row.status,
+		})
+	}
+	return items
+}
+
+func shortcutItems(rows []mappedShortcut) []migrate.Item {
+	items := make([]migrate.Item, 0, len(rows))
+	for _, row := range rows {
+		if !row.selectable {
+			continue
+		}
+		items = append(items, migrate.Item{
+			ID: row.id, Kind: migrate.ItemKindResultBinding, Title: row.title,
+			Detail: row.detail, Selectable: row.selectable, Status: row.status,
 		})
 	}
 	return items

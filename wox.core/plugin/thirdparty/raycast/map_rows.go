@@ -86,16 +86,18 @@ func (s woxSnapshot) emojiTrigger() string {
 
 func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped := mappedExport{}
-	mapped.hotkeys = mapHotkeyRows(payload, current)
-	mapped.queries = mapQueryRows(payload, current)
 	mapped.general = generalSettings(payload.Settings.General, current)
 	mapped.quicklinks = mapQuicklinkRows(payload, current)
+	mapped.shortcuts = mapShortcutRows(payload, mapped.quicklinks)
+	claimed := shortcutIndexes(mapped.shortcuts)
+	mapped.hotkeys = mapHotkeyRows(payload, current, claimed)
+	mapped.queries = mapQueryRows(payload, current, claimed)
 	mapped.snippets = mapSnippetRows(payload, current)
 	mapped.clipboard, mapped.summary = mapClipboardRows(payload, current)
 	return mapped
 }
 
-func mapHotkeyRows(payload Payload, current woxSnapshot) []mappedHotkey {
+func mapHotkeyRows(payload Payload, current woxSnapshot, claimed map[int]struct{}) []mappedHotkey {
 	var rows []mappedHotkey
 	if raw, ok := payload.Settings.General["globalHotkey"]; ok {
 		if row, ok := oneHotkey("setting:main_hotkey", "main_hotkey", "", raw, current); ok {
@@ -104,6 +106,9 @@ func mapHotkeyRows(payload Payload, current woxSnapshot) []mappedHotkey {
 		}
 	}
 	for index, command := range payload.Settings.Commands {
+		if _, skip := claimed[index]; skip {
+			continue
+		}
 		raw := commandHotkey(command)
 		if len(raw) == 0 {
 			continue
@@ -187,9 +192,12 @@ func hotkeyMatch(rows []queryRow, value string) (queryRow, bool) {
 	return queryRow{}, false
 }
 
-func mapQueryRows(payload Payload, current woxSnapshot) []mappedQuery {
+func mapQueryRows(payload Payload, current woxSnapshot, claimed map[int]struct{}) []mappedQuery {
 	var rows []mappedQuery
 	for index, command := range payload.Settings.Commands {
+		if _, skip := claimed[index]; skip {
+			continue
+		}
 		alias := firstAliasWord(command.Alias)
 		if alias == "" {
 			continue

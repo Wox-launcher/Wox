@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"wox/common"
 	"wox/plugin/thirdparty/migrate"
 	"wox/util"
 )
@@ -71,11 +72,11 @@ func TestUnlockCatalogAndReset(t *testing.T) {
 	}
 	var aliasID string
 	for _, category := range catalog {
-		if category.ID != migrate.CategoryQueries {
+		if category.ID != migrate.CategoryShortcuts {
 			continue
 		}
-		if len(category.Items) != 1 || category.Items[0].ID != "setting:query_alias:0" || !category.Items[0].Selectable {
-			t.Fatalf("queries = %+v", category.Items)
+		if len(category.Items) != 1 || category.Items[0].ID != "setting:result_binding:0" || category.Items[0].Kind != migrate.ItemKindResultBinding || !category.Items[0].Selectable {
+			t.Fatalf("shortcuts = %+v", category.Items)
 		}
 		aliasID = category.Items[0].ID
 	}
@@ -83,11 +84,8 @@ func TestUnlockCatalogAndReset(t *testing.T) {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	result, err := item.Import(context.Background(), []string{aliasID, "not-selected"})
-	if err != nil || len(result.Settings) != 1 || result.Settings[0].Key != "QueryAliases" {
+	if err != nil || len(result.Settings) != 0 || len(result.ResultBindings) != 1 || result.ResultBindings[0].Alias != "nt" || result.ResultBindings[0].PluginID != common.AppPluginID {
 		t.Fatalf("import = %+v %v", result, err)
-	}
-	if !jsonContains(result.Settings[0].Value, `"Shortcut":"nt"`) {
-		t.Fatalf("alias json = %s", result.Settings[0].Value)
 	}
 	generation := item.Generation()
 	item.Reset()

@@ -2810,6 +2810,7 @@
   "onboarding_migrate_category_themes": "Темы",
   "onboarding_migrate_category_plugins": "Плагины",
   "onboarding_migrate_category_quicklinks": "Быстрые ссылки",
+  "onboarding_migrate_category_shortcuts": "Команды",
   "onboarding_migrate_category_snippets": "Фрагменты",
   "onboarding_migrate_category_clipboard": "Буфер обмена",
   "onboarding_migrate_status_conflict": "Конфликт, сохранено значение Wox",

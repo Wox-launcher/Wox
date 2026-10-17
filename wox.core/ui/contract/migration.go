@@ -40,6 +40,22 @@ type MigratedClipboard struct {
 	Pinned    bool
 }
 
+// MigratedResultBinding is an alias and hotkey for one result found by a plugin query.
+type MigratedResultBinding struct {
+	ItemID              string
+	PluginID            string
+	Search              string
+	Command             string
+	TriggerKeyword      string
+	IdentityKey         string
+	Path                string
+	Title               string
+	Keyword             string
+	RequireSettingsPath bool
+	Alias               string
+	Hotkey              string
+}
+
 // MigratedItemResult is one migration write outcome. Status and ErrorCode are stable codes.
 type MigratedItemResult struct {
 	ID        string
@@ -53,4 +69,5 @@ type MigrationImportServices interface {
 	ImportMigratedFavorites(ctx context.Context, sessionID string, items []MigratedFavorite) []MigratedItemResult
 	ImportMigratedNotes(ctx context.Context, sessionID string, items []MigratedNote) []MigratedItemResult
 	ImportMigratedClipboard(ctx context.Context, sessionID string, items []MigratedClipboard) []MigratedItemResult
+	ImportMigratedResultBindings(ctx context.Context, sessionID string, items []MigratedResultBinding) []MigratedItemResult
 }

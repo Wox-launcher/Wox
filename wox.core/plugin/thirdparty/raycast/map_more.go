@@ -17,7 +17,7 @@ func mapQuicklinkRows(payload Payload, current woxSnapshot) []mappedQuicklink {
 	usedFavorites := map[string]mappedQuicklink{}
 	var rows []mappedQuicklink
 	for index, link := range payload.Quicklinks.Quicklinks {
-		row := mappedQuicklink{id: "quicklink:" + strconv.Itoa(index), title: strings.TrimSpace(link.Name)}
+		row := mappedQuicklink{id: "quicklink:" + strconv.Itoa(index), sourceID: strings.TrimSpace(link.ID), title: strings.TrimSpace(link.Name)}
 		if row.title == "" {
 			continue
 		}

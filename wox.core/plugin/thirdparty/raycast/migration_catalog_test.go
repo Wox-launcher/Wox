@@ -6,6 +6,29 @@ import (
 	"wox/plugin/thirdparty/migrate"
 )
 
+func TestCatalogPlacesShortcutsAfterQuicklinksAndGeneralNearTheTop(t *testing.T) {
+	catalog := catalogFrom(mappedExport{
+		hotkeys:    []mappedHotkey{{id: "setting:main_hotkey", title: "Main", selectable: true}},
+		general:    []mappedSetting{{id: "setting:general:0", titleKey: "autostart", selectable: true}},
+		quicklinks: []mappedQuicklink{{id: "quicklink:0", title: "wox", selectable: true}},
+		shortcuts:  []mappedShortcut{{id: "setting:result_binding:0", title: "百度网盘", selectable: true}},
+		snippets:   []mappedSnippet{{id: "snippet:0", title: "note", selectable: true}},
+	})
+	got := make([]string, 0, len(catalog))
+	for _, category := range catalog {
+		got = append(got, category.ID)
+	}
+	want := []string{migrate.CategoryHotkeys, migrate.CategoryGeneral, migrate.CategoryQuicklinks, migrate.CategoryShortcuts, migrate.CategorySnippets}
+	if len(got) != len(want) {
+		t.Fatalf("order = %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v", got)
+		}
+	}
+}
+
 func TestCatalogHidesUnimportableRowsAndClipboardEntries(t *testing.T) {
 	catalog := catalogFrom(mappedExport{
 		hotkeys: []mappedHotkey{

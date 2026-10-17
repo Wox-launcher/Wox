@@ -339,7 +339,7 @@ func (a *App) importVisibleOnboardingMigrationItem(ctx context.Context, installa
 	switch kind {
 	case migrate.ItemKindPlugin:
 		return a.importOnboardingMigrationPlugin(ctx, installation, id), ""
-	case migrate.ItemKindQuicklink, migrate.ItemKindFavorite, migrate.ItemKindNote, migrate.ItemKindClipboard:
+	case migrate.ItemKindQuicklink, migrate.ItemKindFavorite, migrate.ItemKindNote, migrate.ItemKindClipboard, migrate.ItemKindResultBinding:
 		outcome, ok := a.applyOnboardingMigrationDomain(ctx, installation, []string{id})[id]
 		if !ok {
 			return "failed", "failed"
@@ -957,6 +957,9 @@ func (a *App) applyOnboardingMigrationDomain(ctx context.Context, installation m
 	for _, item := range a.services.ImportMigratedNotes(ctx, a.sessionID, migrationNotes(result.Notes)) {
 		outcomes[item.ID] = item
 	}
+	for _, item := range a.services.ImportMigratedResultBindings(ctx, a.sessionID, migrationResultBindings(result.ResultBindings)) {
+		outcomes[item.ID] = item
+	}
 	clipboardResults := a.services.ImportMigratedClipboard(ctx, a.sessionID, migrationClipboard(result.Clipboard))
 	if migrationIDSelected(itemIDs, migrate.ClipboardSummaryID) {
 		outcomes[migrate.ClipboardSummaryID] = clipboardSummaryOutcome(clipboardResults)
@@ -977,6 +980,18 @@ func migrationQuicklinks(items []migrate.QuicklinkWrite) []contract.MigratedQuic
 	rows := make([]contract.MigratedQuicklink, len(items))
 	for index, item := range items {
 		rows[index] = contract.MigratedQuicklink{ItemID: item.ItemID, Title: item.Title, Keyword: item.Keyword, URL: item.URL, Browser: item.Browser}
+	}
+	return rows
+}
+
+func migrationResultBindings(items []migrate.ResultBindingWrite) []contract.MigratedResultBinding {
+	rows := make([]contract.MigratedResultBinding, len(items))
+	for index, item := range items {
+		rows[index] = contract.MigratedResultBinding{
+			ItemID: item.ItemID, PluginID: item.PluginID, Search: item.Search, Command: item.Command,
+			TriggerKeyword: item.TriggerKeyword, IdentityKey: item.IdentityKey, Path: item.Path, Title: item.Title,
+			Keyword: item.Keyword, RequireSettingsPath: item.RequireSettingsPath, Alias: item.Alias, Hotkey: item.Hotkey,
+		}
 	}
 	return rows
 }

@@ -2809,6 +2809,7 @@
   "onboarding_migrate_category_themes": "Temas",
   "onboarding_migrate_category_plugins": "Plugins",
   "onboarding_migrate_category_quicklinks": "Links rápidos",
+  "onboarding_migrate_category_shortcuts": "Atalhos de resultado",
   "onboarding_migrate_category_snippets": "Trechos",
   "onboarding_migrate_category_clipboard": "Área de transferência",
   "onboarding_migrate_status_conflict": "Conflito, o valor do Wox foi mantido",

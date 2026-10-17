@@ -11,6 +11,7 @@ const (
 // mappedExport is the session data kept after the raw JSON is released.
 type mappedExport struct {
 	hotkeys    []mappedHotkey
+	shortcuts  []mappedShortcut
 	queries    []mappedQuery
 	general    []mappedSetting
 	quicklinks []mappedQuicklink
@@ -30,6 +31,33 @@ type mappedHotkey struct {
 	selectable bool
 	status     string
 	kind       string
+}
+
+type mappedShortcut struct {
+	id                   string
+	commandIndex         int
+	title                string
+	detail               string
+	alias                string
+	hotkey               string
+	pluginID             string
+	search               string
+	command              string
+	trigger              string
+	identityKey          string
+	path                 string
+	matchTitle           string
+	keyword              string
+	requireSettings      bool
+	selectable           bool
+	status               string
+	prerequisiteID       string
+	prerequisiteFavorite bool
+	prerequisiteName     string
+	prerequisitePath     string
+	prerequisiteKeyword  string
+	prerequisiteURL      string
+	prerequisiteBrowser  string
 }
 
 type mappedQuery struct {
@@ -55,6 +83,7 @@ type mappedSetting struct {
 
 type mappedQuicklink struct {
 	id         string
+	sourceID   string
 	title      string
 	keyword    string
 	url        string

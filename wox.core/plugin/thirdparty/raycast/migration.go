@@ -169,7 +169,7 @@ func (i *installation) Import(_ context.Context, itemIDs []string) (migrate.Impo
 }
 
 func mappedCount(mapped mappedExport) int {
-	return len(mapped.hotkeys) + len(mapped.queries) + len(mapped.general) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.clipboard)
+	return len(mapped.hotkeys) + len(mapped.shortcuts) + len(mapped.queries) + len(mapped.general) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.clipboard)
 }
 
 func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult {
@@ -218,16 +218,44 @@ func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult 
 		}
 		result.Settings = append(result.Settings, migrate.SettingWrite{ItemIDs: []string{row.id}, Key: row.key, Value: row.value})
 	}
+	seenFavorites := map[string]struct{}{}
+	seenQuicklinks := map[string]struct{}{}
 	for _, row := range mapped.quicklinks {
 		if _, ok := selected[row.id]; !ok || !row.selectable {
 			continue
 		}
 		if row.favorite {
+			seenFavorites[row.id] = struct{}{}
 			result.Favorites = append(result.Favorites, migrate.FavoriteWrite{ItemID: row.id, Name: row.title, Path: row.path})
 			continue
 		}
+		seenQuicklinks[row.id] = struct{}{}
 		result.Quicklinks = append(result.Quicklinks, migrate.QuicklinkWrite{
 			ItemID: row.id, Title: row.title, Keyword: row.keyword, URL: row.url, Browser: row.browser,
+		})
+	}
+	for _, row := range mapped.shortcuts {
+		if _, ok := selected[row.id]; !ok || !row.selectable {
+			continue
+		}
+		if row.prerequisiteID != "" && row.prerequisiteFavorite {
+			if _, ok := seenFavorites[row.prerequisiteID]; !ok {
+				seenFavorites[row.prerequisiteID] = struct{}{}
+				result.Favorites = append(result.Favorites, migrate.FavoriteWrite{ItemID: row.prerequisiteID, Name: row.prerequisiteName, Path: row.prerequisitePath})
+			}
+		}
+		if row.prerequisiteID != "" && !row.prerequisiteFavorite {
+			if _, ok := seenQuicklinks[row.prerequisiteID]; !ok {
+				seenQuicklinks[row.prerequisiteID] = struct{}{}
+				result.Quicklinks = append(result.Quicklinks, migrate.QuicklinkWrite{
+					ItemID: row.prerequisiteID, Title: row.prerequisiteName, Keyword: row.prerequisiteKeyword, URL: row.prerequisiteURL, Browser: row.prerequisiteBrowser,
+				})
+			}
+		}
+		result.ResultBindings = append(result.ResultBindings, migrate.ResultBindingWrite{
+			ItemID: row.id, PluginID: row.pluginID, Search: row.search, Command: row.command, TriggerKeyword: row.trigger,
+			IdentityKey: row.identityKey, Path: row.path, Title: row.matchTitle, Keyword: row.keyword,
+			RequireSettingsPath: row.requireSettings, Alias: row.alias, Hotkey: row.hotkey,
 		})
 	}
 	for _, row := range mapped.snippets {

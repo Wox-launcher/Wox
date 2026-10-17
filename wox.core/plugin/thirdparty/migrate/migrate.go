@@ -32,15 +32,17 @@ const (
 	CategoryThemes     = "themes"
 	CategoryPlugins    = "plugins"
 	CategoryQuicklinks = "quicklinks"
+	CategoryShortcuts  = "shortcuts"
 	CategorySnippets   = "snippets"
 	CategoryClipboard  = "clipboard"
 
-	ItemKindSetting   = "setting"
-	ItemKindPlugin    = "plugin"
-	ItemKindQuicklink = "quicklink"
-	ItemKindFavorite  = "favorite"
-	ItemKindNote      = "note"
-	ItemKindClipboard = "clipboard"
+	ItemKindSetting       = "setting"
+	ItemKindPlugin        = "plugin"
+	ItemKindQuicklink     = "quicklink"
+	ItemKindFavorite      = "favorite"
+	ItemKindNote          = "note"
+	ItemKindClipboard     = "clipboard"
+	ItemKindResultBinding = "result_binding"
 
 	// ClipboardSummaryID is the single catalog row for a clipboard history import.
 	ClipboardSummaryID = "clipboard:summary"
@@ -143,14 +145,31 @@ type Plugin struct {
 // One SettingWrite can cover several items when Wox stores them as a single list.
 // Themes are new Wox themes mapped from the source. The caller installs each one and selects it.
 type ImportResult struct {
-	Plugins    []PluginResult
-	Settings   []SettingWrite
-	Themes     []ThemeWrite
-	Quicklinks []QuicklinkWrite
-	Favorites  []FavoriteWrite
-	Notes      []NoteWrite
-	Clipboard  []ClipboardWrite
-	Results    []ItemResult
+	Plugins        []PluginResult
+	Settings       []SettingWrite
+	Themes         []ThemeWrite
+	Quicklinks     []QuicklinkWrite
+	Favorites      []FavoriteWrite
+	Notes          []NoteWrite
+	Clipboard      []ClipboardWrite
+	ResultBindings []ResultBindingWrite
+	Results        []ItemResult
+}
+
+// ResultBindingWrite hangs an alias and hotkey on one result found by a plugin query.
+type ResultBindingWrite struct {
+	ItemID              string
+	PluginID            string
+	Search              string
+	Command             string
+	TriggerKeyword      string
+	IdentityKey         string
+	Path                string
+	Title               string
+	Keyword             string
+	RequireSettingsPath bool
+	Alias               string
+	Hotkey              string
 }
 
 // ThemeWrite is one Wox theme produced by mapping a source launcher theme.

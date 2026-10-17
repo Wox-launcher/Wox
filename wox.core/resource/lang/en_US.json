@@ -3011,6 +3011,7 @@
   "onboarding_migrate_category_themes": "Themes",
   "onboarding_migrate_category_plugins": "Plugins",
   "onboarding_migrate_category_quicklinks": "Quicklinks",
+  "onboarding_migrate_category_shortcuts": "Shortcuts",
   "onboarding_migrate_category_snippets": "Snippets",
   "onboarding_migrate_category_clipboard": "Clipboard",
   "onboarding_migrate_status_conflict": "Conflict, kept the Wox value",

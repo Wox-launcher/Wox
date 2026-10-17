@@ -255,9 +255,19 @@ func (m *MediaPlayerPlugin) queryGlobalControls(ctx context.Context, query plugi
 		return nil
 	}
 
+	// Play/pause is a command, not one track. Keep it available when nothing is playing
+	// so an alias or hotkey can still toggle the active session later.
+	var results []plugin.QueryResult
+	if exactMediaToggle(query.RawQuery) {
+		results = append(results, m.buildToggleCommandResult())
+	}
+	if m.retriever == nil {
+		return results
+	}
+
 	mediaInfo, err := m.retriever.GetCurrentMedia(ctx)
 	if err != nil || mediaInfo == nil {
-		return nil
+		return results
 	}
 
 	// When the user types a specific command (e.g. "next"/"prev"), the result's
@@ -265,7 +275,29 @@ func (m *MediaPlayerPlugin) queryGlobalControls(ctx context.Context, query plugi
 	preferredDefault := resolvePreferredDefaultCommand(query.RawQuery, actions)
 	result := m.buildMediaResult(mediaInfo, true, preferredDefault)
 	result.Score = mediaControlGlobalResultScore
-	return []plugin.QueryResult{result}
+	return append(results, result)
+}
+
+// exactMediaToggle reports a search that means play/pause rather than a track prefix.
+func exactMediaToggle(search string) bool {
+	switch strings.ToLower(strings.TrimSpace(search)) {
+	case mediaControlToggle, "playpause", "play/pause":
+		return true
+	}
+	return false
+}
+
+// buildToggleCommandResult is the durable play/pause row. Its identity stays the same
+// when the current track changes, and restore does not require media to be active.
+func (m *MediaPlayerPlugin) buildToggleCommandResult() plugin.QueryResult {
+	action := m.buildMediaCommandAction(mediaControlToggle, "i18n:plugin_mediaplayer_toggle", true)
+	action.ContextData = common.ContextData{"command": mediaControlToggle}
+	return plugin.QueryResult{
+		Title:       "i18n:plugin_mediaplayer_toggle",
+		Icon:        mediaIcon,
+		IdentityKey: common.MediaPlayerToggleIdentity,
+		Actions:     []plugin.QueryResultAction{action},
+	}
 }
 
 // resolvePreferredDefaultCommand picks the most specific matched command so a
@@ -328,14 +360,14 @@ func (m *MediaPlayerPlugin) buildMediaResult(mediaInfo *MediaInfo, showOpenMedia
 	}
 
 	result := plugin.QueryResult{
-		Id:       uuid.NewString(),
-		Title:    mediaInfo.Title,
-		SubTitle: m.formatSubTitle(mediaInfo),
-		Icon:     m.formatIcon(mediaInfo),
+		Id:          uuid.NewString(),
+		Title:       mediaInfo.Title,
+		SubTitle:    m.formatSubTitle(mediaInfo),
+		Icon:        m.formatIcon(mediaInfo),
 		IdentityKey: mediaMRUIdentityKey(mediaInfo),
-		Preview:  m.formatPreview(mediaInfo),
-		Tails:    plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
-		Actions:  attachMediaMRUContext(actions, mediaInfo),
+		Preview:     m.formatPreview(mediaInfo),
+		Tails:       plugin.NewQueryResultTailTexts(m.formatProgress(mediaInfo)),
+		Actions:     attachMediaMRUContext(actions, mediaInfo),
 	}
 	m.trackMediaResult(result.Id, mediaTrackedResult{
 		playbackState:          mediaInfo.State,
@@ -718,6 +750,10 @@ func attachMediaMRUContext(actions []plugin.QueryResultAction, mediaInfo *MediaI
 
 // handleMRURestore rebuilds the now-playing result only when the same track is still active.
 func (m *MediaPlayerPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	if strings.TrimSpace(mruData.ContextData["command"]) == mediaControlToggle {
+		result := m.buildToggleCommandResult()
+		return &result, nil
+	}
 	title := strings.TrimSpace(mruData.ContextData["title"])
 	if title == "" {
 		return nil, fmt.Errorf("empty media title in context data")
