@@ -168,5 +168,38 @@
         "theme_description": "宣纸背景，配以五种墨色——焦墨、浓墨、重墨、淡墨和清墨——并以一枚朱砂印章作为点缀。"
       }
     }
+  },
+  {
+    "Id": "8ccbac74-e56d-406e-8030-ed08c1dfd3cc",
+    "Name": "i18n:theme_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Description": "i18n:theme_description",
+    "ImageTheme": false,
+    "IconColors": {
+      "Background": "#222B38FF",
+      "Query": "#2A3542FF",
+      "Selected": "#354253FF",
+      "Outline": "#3A475A80",
+      "OutlineWidth": 1
+    },
+    "Website": "https://gist.github.com/dragonish/9278791e2a2e09ee4281f97a45545730",
+    "DownloadUrl": "https://gist.githubusercontent.com/dragonish/9278791e2a2e09ee4281f97a45545730/raw/Wox.Theme.Dai.json",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/accd3487-91ea-47f0-b34f-90a1062adf56"
+    ],
+    "DateCreated": "2026-10-18 21:43:48",
+    "DateUpdated": "2026-10-18 21:43:48",
+    "I18n": {
+      "en_US": {
+        "theme_name": "Dai",
+        "theme_description": "Deep blue-black Dai ink, moon-white text, mineral blue-green accents, and a cinnabar seal stroke."
+      },
+      "zh_CN": {
+        "theme_name": "黛",
+        "theme_description": "深邃的蓝黑色黛底，月白色的文字，矿物淡石青的点缀，以及一道朱砂印章笔触。"
+      }
+    }
   }
 ]
