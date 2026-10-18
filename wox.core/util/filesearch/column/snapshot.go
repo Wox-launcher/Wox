@@ -57,19 +57,34 @@ type Snapshot struct {
 	queryColumnsReady    bool
 	NameBitmaps          []uint64
 	NameRepeatBitmaps    []uint64
-	NonASCIINameBitmap   []uint64
-	NameFlags            []byte
-	NameStarts           []uint32
-	NameRows             []uint32
-	IDRows               []uint32
-	Sizes                []int64
-	Modified             []int64
-	Versions             []uint64
+	// Ordered pairs reject impossible ASCII subsequences before fuzzy scoring.
+	// Unicode names include normalization and every pinyin reading.
+	NamePairBitmaps    []uint64
+	NonASCIINameBitmap []uint64
+	NameFlags          []byte
+	NameStarts         []uint32
+	NameRows           []uint32
+	IDRows             []uint32
+	Sizes              []int64
+	Modified           []int64
+	Versions           []uint64
 	// ChildRows lists every row that has a parent, ordered by parent row, so a
 	// directory's children are one contiguous range. Scoped reconciles walk only
 	// their own subtree with it instead of sweeping every row of the shard.
 	ChildRows []uint32
-	mapping   *fileMapping
+	// Directory paths and filters trade immutable disk space for allocation-free
+	// query traversal. Ordinals are ordered by path byte length, then row.
+	DirectoryRows        []uint32
+	RowDirectory         []uint32
+	DirectoryStarts      []uint32
+	DirectoryOffsets     []uint32
+	DirectoryBytes       []byte
+	DirectoryKeyOffsets  []uint32
+	DirectoryKeys        []byte
+	DirectoryBitmaps     []uint64
+	DirectoryRuneCounts  []uint32
+	DirectoryPairBitmaps []uint64
+	mapping              *fileMapping
 }
 
 func (s *Snapshot) Len() int   { return len(s.IDs) }
@@ -112,6 +127,10 @@ func (s *Snapshot) Path(row uint32) (string, bool) {
 
 // Children returns the rows whose parent is row, borrowed from the snapshot.
 func (s *Snapshot) Children(row uint32) []uint32 {
+	if len(s.RowDirectory) != 0 && s.RowDirectory[row] != NoRow {
+		id := s.RowDirectory[row]
+		return s.ChildRows[s.DirectoryStarts[id*2]:s.DirectoryStarts[id*2+1]]
+	}
 	start := sort.Search(len(s.ChildRows), func(i int) bool { return s.Parents[s.ChildRows[i]] >= row })
 	end := start
 	for end < len(s.ChildRows) && s.Parents[s.ChildRows[end]] == row {

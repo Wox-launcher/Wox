@@ -103,7 +103,7 @@ func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit in
 					errs[i] = err
 					continue
 				}
-				errs[i] = shards[i].store.Read(func(view column.View) error {
+				errs[i] = shards[i].store.ReadQuery(func(view column.View) error {
 					var err error
 					matches[i], err = searchColumnView(ctx, view, query, limit)
 					return err

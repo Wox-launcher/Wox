@@ -21,6 +21,7 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	if query.plan == nil || view.Base == nil {
 		return nil, nil
 	}
+	view = view.PrepareQueryView()
 	base := view.Base
 	results := &columnResultHeap{limit: limit}
 	if query.plan.pathLike {
@@ -33,7 +34,12 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 		parent, found := parents[record.ParentID]
 		if !found {
 			var ok bool
-			parent, ok = view.Path(record.ParentID)
+			if row, exists := base.Row(record.ParentID); exists && view.DirectoryUnchanged(row) {
+				parent = base.DirectoryPath(base.RowDirectory[row])
+				ok = parent != ""
+			} else {
+				parent, ok = view.Path(record.ParentID)
+			}
 			if !ok {
 				return "", false
 			}
@@ -105,15 +111,28 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	}
 
 	mask, requiresNonASCII := columnNameFilter(query)
-	for _, change := range view.Delta {
+	for _, live := range view.Query.Names {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if change.Deleted || change.ID == base.IDs[0] || !columnExtensionEligible(query, change.Record) {
+		if requiresNonASCII && !live.NonASCII || live.Mask&mask != mask {
 			continue
 		}
-		nameMask, nonASCII := column.CharacterMask(change.Name)
-		if !nonASCII && (requiresNonASCII || nameMask&mask != mask) {
+		if live.BaseName != column.NoRow && len(base.NamePairBitmaps) != 0 {
+			words := (base.Names() + 63) / 64
+			eligible := true
+			for _, pair := range query.plan.namePairs {
+				if base.NamePairBitmaps[pair*words+int(live.BaseName)/64]&(1<<(live.BaseName%64)) == 0 {
+					eligible = false
+					break
+				}
+			}
+			if !eligible {
+				continue
+			}
+		}
+		change := view.Delta[live.ID]
+		if !columnExtensionEligible(query, change.Record) {
 			continue
 		}
 		minimum := int64(0)
@@ -123,7 +142,7 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 				minimum -= 1000000
 			}
 		}
-		if matched, score := scoreColumnName(query, change.Name, !nonASCII, minimum, nil); matched {
+		if matched, score := scoreColumnName(query, change.Name, !live.NonASCII, minimum, nil); matched {
 			if query.wildcard == nil {
 				score = 1000000 + min(max(score, 0), 999999)
 			}
@@ -144,6 +163,7 @@ func addColumnPathResult(results *columnResultHeap, record column.Record, score 
 	if !results.competitive(score, isDir, record.Name) {
 		return
 	}
+	path = strings.Clone(path)
 	result := SearchResult{Path: path, Name: strings.Clone(record.Name), ParentPath: filepath.Dir(path), IsDir: isDir, Score: score}
 	if record.Flags&column.SizeKnown != 0 {
 		result.Size = record.Size
@@ -211,7 +231,8 @@ func (h *columnResultHeap) competitive(score int64, directory bool, name string)
 
 func (h *columnResultHeap) add(result SearchResult) {
 	if h.limit <= 0 || h.Len() < h.limit {
-		heap.Push(h, result)
+		h.items = appendColumnHeap(h.items, result, h.limit)
+		heap.Fix(h, len(h.items)-1)
 	} else if compareSearchResults(result, h.items[0]) < 0 {
 		h.items[0] = result
 		heap.Fix(h, 0)
@@ -262,11 +283,28 @@ func (h *columnNameHeap) competitive(hit columnNameHit) bool {
 
 func (h *columnNameHeap) add(hit columnNameHit) {
 	if h.limit <= 0 || h.Len() < h.limit {
-		heap.Push(h, hit)
+		h.items = appendColumnHeap(h.items, hit, h.limit)
+		heap.Fix(h, len(h.items)-1)
 	} else if compareColumnNames(hit, h.items[0]) < 0 {
 		h.items[0] = hit
 		heap.Fix(h, 0)
 	}
+}
+
+// appendColumnHeap keeps sparse worker heaps small, then reserves a bounded
+// top-K buffer once a query proves broad enough to need it. This avoids both
+// repeated growth copies and allocating K entries for a worker with one hit.
+func appendColumnHeap[T any](items []T, value T, limit int) []T {
+	if len(items) == cap(items) && limit > 0 {
+		capacity := min(limit, 8)
+		if len(items) > 0 {
+			capacity = min(limit, max(cap(items)*2, 128))
+		}
+		grown := make([]T, len(items), capacity)
+		copy(grown, items)
+		items = grown
+	}
+	return append(items, value)
 }
 
 // scanColumnNames scores disjoint name ranges with private top-K heaps. A local
@@ -303,6 +341,14 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 			candidates &= bitmap[word]
 			if candidates == 0 {
 				break
+			}
+		}
+		if candidates != 0 && len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
+			for _, pair := range query.plan.namePairs {
+				candidates &= base.NamePairBitmaps[pair*words+word]
+				if candidates == 0 {
+					break
+				}
 			}
 		}
 		if word == start/64 {
@@ -391,7 +437,12 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 					}
 					continue
 				}
+				parentRow := base.Parents[row]
+				stable := view.DirectoryUnchanged(parentRow)
 				reachable, checked := reachableParents[record.ParentID]
+				if stable {
+					reachable, checked = base.DirectoryPath(base.RowDirectory[parentRow]) != "", true
+				}
 				if !checked {
 					reachable = view.Reachable(record.ParentID)
 					reachableParents[record.ParentID] = reachable
@@ -399,7 +450,12 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 				if !reachable {
 					continue
 				}
-				recycled := recordInWindowsRecycleBin(view, record, recycleParents)
+				recycled := false
+				if stable {
+					recycled = pathInWindowsRecycleBin(base.DirectoryPath(base.RowDirectory[parentRow])) || parentRow == 0 && strings.EqualFold(record.Name, "$Recycle.Bin") && runtime.GOOS == "windows"
+				} else {
+					recycled = recordInWindowsRecycleBin(view, record, recycleParents)
+				}
 				if directory {
 					dirSeen = true
 					dirNormal = dirNormal || !recycled

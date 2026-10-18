@@ -39,6 +39,8 @@ type Store struct {
 	closed                   bool
 	writeErr                 error
 	unsynced                 bool // log holds ApplyUnsynced frames not yet fsynced
+	query                    *QueryOverlay
+	queryMu                  sync.Mutex // serializes lazy preparation within concurrent read leases
 	prepareSnapshot          func(*Snapshot) error
 	countsMu                 sync.Mutex
 	countsValid              bool
@@ -178,6 +180,7 @@ type View struct {
 	Cursor   string
 	Revision uint64
 	Policy   string
+	Query    *QueryOverlay
 }
 
 // OpenStore restores the last published generation and only complete journal batches.
@@ -254,6 +257,22 @@ func (s *Store) Read(callback func(View) error) error {
 		return ErrNotReady
 	}
 	return callback(View{Base: s.base, Delta: s.delta, Cursor: s.cursor, Revision: s.revision, Policy: s.manifest.Policy})
+}
+
+// ReadQuery prepares one shared overlay only when a search needs it. Ordinary
+// source/status reads must not rebuild query data while the launcher is hidden.
+func (s *Store) ReadQuery(callback func(View) error) error {
+	return s.Read(func(view View) error {
+		// The read lease pins the mapping and delta while queryMu prevents two
+		// searches from preparing duplicate overlays for the same state.
+		s.queryMu.Lock()
+		if s.query == nil {
+			s.query = buildQueryOverlay(view)
+		}
+		view.Query = s.query
+		s.queryMu.Unlock()
+		return callback(view)
+	})
 }
 
 func (s *Store) Revision() uint64 {
@@ -364,6 +383,7 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	}
 	s.base, s.log, s.manifest, s.cursor = mapped, logFile, next, cursor
 	s.delta = make(map[uint64]Change)
+	s.query = nil
 	s.unsynced = false
 	s.revision++
 	// A directory fsync can fail after rename succeeded. Keep the published files
@@ -490,7 +510,7 @@ func (s *Store) validateChanges(changes []Change) error {
 func (s *Store) applyMemory(changes []Change, cursor string) {
 	for _, change := range changes {
 		if old, ok := s.delta[change.ID]; ok {
-			if change.Version != 0 && old.Version > change.Version {
+			if change.Version != 0 && old.Version > change.Version || old == change {
 				continue
 			}
 		} else if row, ok := s.base.Row(change.ID); ok && len(s.base.Versions) != 0 && change.Version != 0 && s.base.Versions[row] > change.Version {
@@ -498,6 +518,9 @@ func (s *Store) applyMemory(changes []Change, cursor string) {
 		}
 		change.Name = strings.Clone(change.Name)
 		s.delta[change.ID] = change
+		// Cursor-only commits still advance durability and revision, but do not
+		// change search data. Release stale query data without rebuilding it.
+		s.query = nil
 	}
 	s.cursor = cursor
 	s.revision++
@@ -733,5 +756,6 @@ func (s *Store) Close() error {
 		err = errors.Join(err, s.log.Close())
 	}
 	s.delta = nil
+	s.query = nil
 	return err
 }

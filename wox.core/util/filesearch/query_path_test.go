@@ -52,12 +52,15 @@ func TestColumnPathQueryLiveTree(t *testing.T) {
 				12: {Record: column.Record{ID: 12, ParentID: 2, Name: "new", Flags: column.Directory}},
 				13: {Record: column.Record{ID: 13, ParentID: 12, Name: "new.txt"}},
 				14: {Record: column.Record{ID: 14, ParentID: 999, Name: "orphan.txt"}},
+				20: {Record: column.Record{ID: 20, ParentID: 3, Name: "ca", Flags: column.Directory | column.ModifiedKnown, Modified: 123}},
+				23: {Record: column.Record{ID: 23, ParentID: 22, Name: "promoted", Flags: column.Directory}},
+				27: {Record: column.Record{ID: 27, ParentID: 23, Name: "child.txt"}},
 			}
 		}
 		for _, raw := range []string{
 			"ab/cafe", "a/b/cafe", "a/b/café", "a/b/café .txt", "a/b/café report", "ab/cafe missing", "ab/qae",
 			"目标/moved", "目标/moved/cafe report", "目标/old", "a/new", "a/new/ .txt", "a/new/*",
-			"white/", "white/ .txt", "*/report.txt", `"café/report"`, `"café/" .txt`, "/", `\`, "a/", "a/b/", "a/b/cafe/",
+			"white/", "white/ .txt", "*/report.txt", `"café/report"`, `"café/" .txt`, "/", `\`, "a/", "a/b/", "a/b/cafe/", "cafe/promoted", "moved/ca/", `moved/ "child"`,
 			base.Root, filepath.VolumeName(base.Root) + string(filepath.Separator),
 			filepath.Join(base.Root, "a", "b", "café"),
 		} {

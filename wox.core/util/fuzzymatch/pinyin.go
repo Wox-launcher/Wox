@@ -13,43 +13,36 @@ var (
 	pinyinCacheSize atomic.Int32
 	pinyinCacheMu   sync.Mutex
 
-	// pinyinDict is the shared character table. It is built on the first Chinese
-	// lookup and dropped after a long hide so the map buckets do not stay resident.
+	// pinyinDict is a compact shared character table. It is built on the first
+	// Chinese lookup and dropped after a long hide with its decoded backing text.
 	pinyinDictMu sync.Mutex
-	pinyinDict   atomic.Pointer[map[int][]string]
+	pinyinDict   atomic.Pointer[pinyinDictionary]
 )
 
 const (
 	maxPinyinCacheSize = 4096 // Maximum cache entries
 )
 
-// getCharPinyin returns pre-processed pinyin variants for a single rune
-// If the rune is a Chinese character, returns its pinyin list (no tones)
-// Otherwise, returns the character itself within a slice
-func getCharPinyin(r rune) []string {
-	if pinyins, ok := LookupCharPinyin(r); ok {
-		return pinyins
-	}
-	// Non-Chinese character: return as-is
-	return []string{string(r)}
-}
-
 // LookupCharPinyin returns the tone-stripped syllables for one Han character.
 // The table is loaded on first use.
 func LookupCharPinyin(r rune) ([]string, bool) {
+	syllables, _, ok := lookupPinyinReading(r)
+	return syllables, ok
+}
+
+// lookupPinyinReading lends syllables and their precomputed initials together.
+func lookupPinyinReading(r rune) ([]string, []rune, bool) {
 	dict := pinyinDict.Load()
 	if dict == nil {
 		pinyinDictMu.Lock()
 		dict = pinyinDict.Load()
 		if dict == nil {
-			loaded := loadPinyinDict()
-			dict = &loaded
+			dict = loadPinyinDict()
 			pinyinDict.Store(dict)
 		}
 		pinyinDictMu.Unlock()
 	}
-	pinyins, ok := (*dict)[int(r)]
-	return pinyins, ok
+	return dict.lookup(r)
 }
 
 // ReleasePinyinDictionary drops the shared pinyin table after the launcher has
@@ -117,15 +110,10 @@ func getPinYin(term string) []PinyinSegment {
 		if unicode.Is(unicode.Han, r) {
 			flushASCII()
 
-			// Handle Chinese char
-			pinyins := getCharPinyin(r)
-
-			// Compute first letters
-			firstLetters := make([]rune, len(pinyins))
-			for i, p := range pinyins {
-				if len(p) > 0 {
-					firstLetters[i] = toLowerASCII(rune(p[0]))
-				}
+			pinyins, firstLetters, known := lookupPinyinReading(r)
+			if !known {
+				pinyins = []string{string(r)}
+				firstLetters = []rune{toLowerASCII(rune(pinyins[0][0]))}
 			}
 
 			segments = append(segments, PinyinSegment{

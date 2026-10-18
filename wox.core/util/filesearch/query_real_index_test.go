@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 	"runtime/pprof"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -77,6 +78,22 @@ func TestReadOnlyNativeQueryDiagnostic(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(folder, "current.json"), data, 0600); err != nil {
 			t.Fatal(err)
 		}
+		if os.Getenv("WOX_QUERY_DIAGNOSTIC_REWRITE") == "1" {
+			path := filepath.Join(folder, manifest.Generation+".columns")
+			before, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			started := time.Now()
+			if err := rewriteDiagnosticSnapshot(path); err != nil {
+				t.Fatal(err)
+			}
+			after, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("rewrite bytes=%d->%d elapsed=%s", before.Size(), after.Size(), time.Since(started))
+		}
 		store, err := column.OpenStore(folder, prepareColumnNames)
 		if err != nil {
 			t.Fatal(err)
@@ -84,7 +101,7 @@ func TestReadOnlyNativeQueryDiagnostic(t *testing.T) {
 		defer store.Close()
 		stores = append(stores, store)
 		store.Read(func(v column.View) error {
-			t.Logf("rows=%d names=%d delta=%d", v.Base.Len(), v.Base.Names(), len(v.Delta))
+			t.Logf("rows=%d names=%d delta=%d directories=%d", v.Base.Len(), v.Base.Names(), len(v.Delta), len(v.Base.DirectoryRows))
 			return nil
 		})
 	}
@@ -100,6 +117,13 @@ func TestReadOnlyNativeQueryDiagnostic(t *testing.T) {
 		Allocated uint64
 	}
 	var samples []sample
+	limit := 100
+	if raw := os.Getenv("WOX_QUERY_DIAGNOSTIC_LIMIT"); raw != "" {
+		limit, err = strconv.Atoi(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	queries := []string{"qqyy", "qqyy", "qqyy", "woxzzzzmissing"}
 	if raw := os.Getenv("WOX_QUERY_DIAGNOSTIC_QUERIES"); raw != "" {
 		queries = strings.Split(raw, "|")
@@ -129,7 +153,7 @@ func TestReadOnlyNativeQueryDiagnostic(t *testing.T) {
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
 		started := time.Now()
-		results, err := index.search(context.Background(), SearchQuery{Raw: q}, 100)
+		results, err := index.search(context.Background(), SearchQuery{Raw: q}, limit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,4 +180,25 @@ func TestReadOnlyNativeQueryDiagnostic(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// rewriteDiagnosticSnapshot prepares a copied fixture in the current format.
+// Production compatibility reads never rewrite their source snapshots.
+func rewriteDiagnosticSnapshot(path string) error {
+	snapshot, err := column.Open(path)
+	if err != nil {
+		return err
+	}
+	defer snapshot.Close()
+	prepared := path + ".prepared"
+	if err := column.Write(prepared, snapshot); err != nil {
+		return err
+	}
+	if err := snapshot.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	return os.Rename(prepared, path)
 }
