@@ -44,10 +44,12 @@ type SettingsChoiceProps struct {
 	SearchIcon   *woxui.Image
 	InfoIcon     *woxui.Image
 	CurrentValue string
-	Choices      []SettingsChoice
-	OnChoose     func(int)
-	OnCancel     func()
-	OnTooltip    func(bool, string, woxui.Rect)
+	// When nil, selection comes from CurrentValue.
+	SelectedValues []string
+	Choices        []SettingsChoice
+	OnChoose       func(int)
+	OnCancel       func()
+	OnTooltip      func(bool, string, woxui.Rect)
 }
 
 // SettingsChoiceView builds a field-anchored dropdown matching the former Flutter settings control.
@@ -314,6 +316,15 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			continue
 		}
 		selected := choice.Value == props.CurrentValue
+		if props.SelectedValues != nil {
+			selected = false
+			for _, value := range props.SelectedValues {
+				if value == choice.Value {
+					selected = true
+					break
+				}
+			}
+		}
 		// The floating menu owns the translucent fill; repainting it here darkens only the rows.
 		background := woxui.Color{}
 		foreground := props.Theme.Text

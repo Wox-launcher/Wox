@@ -155,6 +155,24 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		fallthrough
 	case "select":
 		selectedLabel := fields.values[value.Key]
+		if definition.Type == "select" && value.IsMulti && callbacks.idPrefix == "plugin-settings" {
+			labels := []string{}
+			for _, selected := range strings.Split(selectedLabel, ",") {
+				selected = strings.TrimSpace(selected)
+				if selected == "" {
+					continue
+				}
+				label := selected
+				for _, option := range value.Options {
+					if option.Value == selected {
+						label = a.translate(option.Label)
+						break
+					}
+				}
+				labels = append(labels, label)
+			}
+			return a.buildFormChoice(fields, callbacks, palette, index, definition, width, height, false, strings.Join(labels, ", "))
+		}
 		for _, option := range value.Options {
 			if option.Value == selectedLabel {
 				selectedLabel = a.translate(option.Label)

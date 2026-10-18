@@ -1474,6 +1474,11 @@ func (a *App) changePluginFormChoice(index, delta int) {
 	if state == nil || !state.active {
 		return
 	}
+	if index >= 0 && index < len(state.definitions) && state.definitions[index].Type == "select" && state.definitions[index].Value.IsMulti {
+		// Left/right must not replace the selected set with a single option.
+		a.openFocusedPluginFormChoice(index)
+		return
+	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
 	clearPluginFormFieldError(state, index)
@@ -1531,6 +1536,7 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	}
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
 		item: item, anchor: anchor,
+		multi:    definition.Value.IsMulti,
 		onChoose: func(choice settingChoice) { a.setPluginFormChoice(index, choice.value) },
 	})
 	state.status = ""
@@ -1766,6 +1772,26 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	}
 	if !found {
 		return
+	}
+	if definition.Type == "select" && definition.Value.IsMulti {
+		// Plugin settings store multiple values as a comma-separated string.
+		values := []string{}
+		selected := false
+		for _, existing := range strings.Split(state.values[definition.Value.Key], ",") {
+			existing = strings.TrimSpace(existing)
+			if existing == value {
+				selected = true
+			} else if existing != "" {
+				values = append(values, existing)
+			}
+		}
+		if !selected {
+			values = append(values, value)
+		}
+		value = strings.Join(values, ",")
+		if picker := a.generalSettings.ChoicePicker(); picker != nil && picker.multi {
+			picker.item.value = value
+		}
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.values[definition.Value.Key] = value
