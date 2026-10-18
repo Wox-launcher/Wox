@@ -49,7 +49,7 @@ func columnQueryFixture(t *testing.T) column.View {
 
 func TestColumnQueryMatchesExhaustiveScoring(t *testing.T) {
 	view := columnQueryFixture(t)
-	for _, raw := range []string{"*", "a a", "ss", "aa", "é", "e", "amiga", "amiga png", "png amiga", "amiga .png", `"amiga" .png`, `"amiga"`, "Amiga/", "Amiga/ png", "amiga*.png", "*.txt", ".txt", "rpt", "rp", "xiangmu", "xm", "项目", "chongqing", "zhongqing", "cq", "woxcs2026", "café", "cafe", "uber", "desktop", "absent"} {
+	for _, raw := range []string{"*", "a a", "ss", "aa", "é", "e", "amiga", "amiga png", "png amiga", "amiga .png", `"amiga" .png`, `"amiga"`, "Amiga/", "Amiga/ png", `Amiga\`, "Amiga/ .png", "Amiga/ missing", "Amiga/*.png", `"Amiga/"`, `"Amiga/" .png`, "/", `\`, "*/report.txt", "amiga*.png", "*.txt", ".txt", "rpt", "rp", "xiangmu", "xm", "项目", "chongqing", "zhongqing", "cq", "woxcs2026", "café", "cafe", "uber", "desktop", "absent"} {
 		for _, disabled := range []bool{false, true} {
 			for _, limit := range []int{1, 3, 50} {
 				query := normalizeSearchQuery(SearchQuery{Raw: raw, DisablePinyin: disabled})

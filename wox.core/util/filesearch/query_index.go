@@ -41,6 +41,10 @@ type docRecord struct {
 	IsDir          bool
 	PinyinFull     string
 	PinyinInitials string
+	// Column path queries borrow a basename and a shared directory until a
+	// full path is actually needed for a result, wildcard, or quoted phrase.
+	nameText  string
+	directory *queryDirectory
 }
 
 const (
@@ -167,12 +171,13 @@ func scoreDocMatch(query SearchQuery, record docRecord, nameOnly bool) (bool, in
 	}
 	if nameOnly {
 		record.Path = record.name()
+		record.nameText, record.directory = "", nil
 	}
 	if !recordMatchesExactPhrases(plan, record) {
 		return false, 0
 	}
 	if query.wildcard != nil {
-		return query.wildcard.match(record.name(), record.Path)
+		return query.wildcard.match(record.name(), record.fullPath())
 	}
 	if len(plan.andTerms) > 0 {
 		var total int64
@@ -214,18 +219,9 @@ func scoreDocMatch(query SearchQuery, record docRecord, nameOnly bool) (bool, in
 	nameScore := maybeScoreFuzzy(record.name(), plan.raw, plan.usePinyin)
 	updateBest(nameScore.matched, nameScore.score+4000)
 
-	pathTarget := record.Path
-	if !record.IsDir {
-		pathTarget = record.parentPath()
-	}
-	pathQuery := plan.raw
-	if plan.pathLike {
-		pathTarget = record.directoryPath()
-		pathQuery = plan.pathQuery
-	}
 	if !nameOnly {
-		pathMatched, pathScore := scorePathMatch(pathTarget, pathQuery)
-		updateBest(pathMatched, pathScore+1500)
+		pathMatch := record.pathMatch(plan)
+		updateBest(pathMatch.matched, pathMatch.score+1500)
 	}
 
 	if plan.usePinyin && !plan.pathLike && plan.rawLettersDigits != "" {
@@ -309,15 +305,44 @@ func (record docRecord) directoryPath() string {
 }
 
 func (record docRecord) name() string {
+	if record.directory != nil {
+		return record.nameText
+	}
 	return filepath.Base(record.Path)
 }
 
 func (record docRecord) parentPath() string {
+	if record.directory != nil {
+		return record.directory.path
+	}
 	return filepath.Dir(record.Path)
 }
 
 func (record docRecord) pathKey() string {
-	return normalizeIndexText(normalizePath(record.Path))
+	return normalizeIndexText(normalizePath(record.fullPath()))
+}
+
+func (record docRecord) fullPath() string {
+	if record.directory != nil {
+		return filepath.Join(record.directory.path, record.nameText)
+	}
+	return record.Path
+}
+
+// pathMatch reuses a directory's score across its children and AND clauses.
+func (record docRecord) pathMatch(plan *queryPlan) fuzzyScore {
+	if record.directory != nil {
+		return record.directory.match(plan)
+	}
+	target, query := record.Path, plan.raw
+	if !record.IsDir {
+		target = record.parentPath()
+	}
+	if plan.pathLike {
+		target, query = record.directoryPath(), plan.pathQuery
+	}
+	matched, score := scorePathMatch(target, query)
+	return fuzzyScore{matched: matched, score: score}
 }
 
 func normalizeIndexText(value string) string {

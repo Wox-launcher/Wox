@@ -225,6 +225,30 @@ func PreparePattern(pattern string) *PreparedPattern {
 	return prepared
 }
 
+// AdvanceSubsequence carries a necessary path-match condition across text
+// components without joining or retaining them. It does not compute a score.
+func (p *PreparedPattern) AdvanceSubsequence(text string, matched int) int {
+	for _, r := range text {
+		if matched == len(p.normalizedRunes) {
+			break
+		}
+		if r < 128 {
+			if r >= 'A' && r <= 'Z' {
+				r += 'a' - 'A'
+			}
+		} else {
+			r = unicode.ToLower(r)
+			if normalized, ok := diacriticsMap[r]; ok {
+				r = normalized
+			}
+		}
+		if r == p.normalizedRunes[matched] {
+			matched++
+		}
+	}
+	return matched
+}
+
 // FuzzyMatchPrepared matches precomputed text and pattern data with FuzzyMatch semantics.
 func FuzzyMatchPrepared(text *PreparedText, pattern *PreparedPattern, usePinYin bool) FuzzyMatchResult {
 	if pattern.raw == "" {

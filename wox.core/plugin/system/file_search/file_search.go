@@ -27,6 +27,7 @@ import (
 	"wox/util/filesearch"
 	"wox/util/filesearchservice"
 	"wox/util/nativecontextmenu"
+	"wox/util/pathquery"
 	"wox/util/permission"
 	"wox/util/recentfiles"
 	"wox/util/shell"
@@ -964,6 +965,11 @@ func (c *FileSearchPlugin) searchTool(ctx context.Context, option plugin.InvokeP
 }
 
 func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	// Folder handles existing paths and child-name completion inside existing directories.
+	if query.IsGlobalQuery() && pathquery.IsBrowseQuery(query.Search) {
+		return plugin.QueryResponse{}
+	}
+
 	queryStartedAt := util.GetSystemTimestamp()
 	diagnostics := fileSearchQueryDiagnostics{}
 

@@ -79,8 +79,22 @@ explicitly opts into path matching. Fewer than the requested number of filename
 hits never triggers an implicit parent-path scan. The filename executor compiles
 predicates once, filters distinct names with transposed character/repetition
 bitmaps, applies conservative score bounds, and retains bounded ranked groups.
-It resolves paths only for competitive rows. Explicit path matching has a
-separate execution path and is not covered by filename-only latency claims.
+It resolves paths only for competitive rows. Explicit path matching uses the
+same persisted name bitmaps and postings to find candidate directory subtrees.
+A mandatory path clause supplies a conservative subsequence filter; the final
+scorer still owns fuzzy matching, AND clauses, quotes, wildcards and ranking.
+Candidates may match across directory components, so a typed path is not silently
+reinterpreted as an exact directory-prefix restriction.
+
+Path workers keep fixed-size ancestry match-state tables, never a map of every
+directory's full path. Nonoverlapping candidate subtrees are visited through the
+child index with live overlay edges for creates, renames, moves and deletions.
+Sibling files share directory scores and construct full paths only for competitive
+results or matching rules that need them. Broad candidate sets fall back to a
+depth-bounded tree walk; simple ASCII path clauses also use conservative subtree
+score bounds after the top K is established. Queries that cannot supply a safe
+path anchor, including quoted-only and wildcard queries, retain that tree walk.
+These cases are not covered by filename-only latency claims.
 
 Snapshot format 3 persists the two scalar scoring-hint columns, character and
 repetition bitmaps, non-ASCII bitmap, frequent-name IDs, and path-ordered postings.
@@ -802,3 +816,34 @@ skipped. Numeric timings remain informational. Four unrelated existing Windows
 symlink-fixture tests are excluded because this host lacks the required privilege.
 The column package cross-compiles for Linux amd64 and macOS arm64; their idle
 page-release behavior still requires native testing on those operating systems.
+
+## Path-query execution comparison (2026-10-18)
+
+The frozen two-volume fixture contains 2,636,569 base records and 14,974 overlay
+records. The before/after comparison uses Windows, optimized test builds with
+`sqlite_fts5,filesearch_diagnostic`, `GOMAXPROCS=8`, and a five-result limit matching
+the global-search setting on this machine. A Go build overlay selects the previous
+executor without changing production data. Snapshots are copied before opening;
+the OS file cache is warm. Before figures are one observation per query; after
+figures are medians of three sequential rounds in one process.
+
+| Query | Before (ms) | After (ms) | Before allocated (MiB) | After allocated (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Rooted directory path containing spaces | 5,521.43 | 54.34 | 2,062.55 | 13.11 |
+| Rooted missing-file path containing spaces | 5,507.81 | 54.57 | 2,048.52 | 13.10 |
+| `Desktop/test` | 5,258.99 | 51.16 | 2,009.67 | 13.23 |
+| `dev/wox` | 5,169.85 | 24.48 | 2,003.93 | 8.00 |
+| `C:\` | 4,708.58 | 1.07 | 1,997.57 | 1.26 |
+
+Allocation is the cumulative Go allocation during one backend query, not retained
+heap or whole-process working set. These are backend timings, not UI latency,
+Delve timings, or cold-disk measurements. Larger result limits and unanchored
+quoted/wildcard queries are not covered by this table. Result-set/score fingerprints
+match in every round; exhaustive-scoring tests separately verify ordering, entry
+kinds, metadata, Unicode, cross-component matching and live overlay changes.
+
+Raw inputs, build overlays, individual observations and `path-comparison.json`
+are under `artifacts/memory-20261018-1623/`. The related package tests pass with
+five Windows symlink-privilege cases and one fallback-watcher event-order case
+excluded. The unfiltered run encountered those host/event-order failures; no
+symlink or watcher implementation changed. The core production build passes.
