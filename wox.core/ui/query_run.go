@@ -17,7 +17,7 @@ import (
 const resultDebounceIntervalMs = 32
 
 // Slow plugins must not hold an empty global query past this fallback deadline.
-const fallbackMaxWait = 50 * time.Millisecond
+const fallbackMaxWait = 200 * time.Millisecond
 
 // queryRun owns the per-query execution state. Keeping this state together makes it clear that result
 // batching, fallback, and final response delivery are scoped by query id, not by
