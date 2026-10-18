@@ -633,7 +633,7 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	exportPath := screenshotSaveAsExportPath(options.ExportFilePath)
 	reservedExport := exportPath == ""
 	if reservedExport {
-		exportPath, err = reserveScreenshotExportFilePath()
+		exportPath, err = reserveScreenshotExportFilePath(options.ExportDirectory)
 		if err != nil {
 			return ScreenshotResult{}, err
 		}

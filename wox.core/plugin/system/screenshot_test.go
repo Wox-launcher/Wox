@@ -147,7 +147,7 @@ func TestScreenshotSceneSaveRunsInBackgroundAndFinishesBeforeUnload(t *testing.T
 	defer cancel()
 	returned := make(chan struct{})
 	go func() {
-		p.saveScreenshotSceneInBackground("capture.jpg", func() error { close(started); <-release; return nil })
+		p.saveScreenshotSceneInBackground("capture.jpg", func() error { close(started); <-release; return nil }, nil)
 		close(returned)
 	}()
 	select {
@@ -182,7 +182,7 @@ func TestScreenshotSceneBackgroundCompletionRefreshesOrReportsFailure(t *testing
 				return errors.New("disk full")
 			}
 			return nil
-		})
+		}, nil)
 		p.backgroundWG.Wait()
 		if fail {
 			select {

@@ -256,6 +256,8 @@ type ScreenshotRect struct {
 // We keep the request explicit instead of inferring defaults in UI so both layers stay aligned
 // when tests trigger the flow directly through the UI bridge.
 type CaptureScreenshotRequest struct {
+	// ExportDirectory is an in-process history destination supplied by Wox-owned callers.
+	ExportDirectory string `json:"-"`
 	// OnClipboardReady runs on the capture worker after successful publication, before history or scene work.
 	// This in-process callback lets Wox-owned callers notify immediately without changing file-based API completion.
 	OnClipboardReady func() `json:"-"`

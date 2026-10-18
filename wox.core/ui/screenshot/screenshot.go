@@ -18,6 +18,7 @@ type ScreenshotOptions struct {
 	SaveEditableScene     bool
 	EditScreenshotPath    string
 	ExportFilePath        string
+	ExportDirectory       string
 	CopyToClipboard       bool
 	HideAnnotationToolbar bool
 	AutoConfirm           bool

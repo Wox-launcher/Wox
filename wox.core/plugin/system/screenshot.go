@@ -58,6 +58,9 @@ type ScreenshotPlugin struct {
 	backgroundCtx      context.Context
 	backgroundCancel   context.CancelFunc
 	backgroundStopping bool
+	storageM           sync.Mutex
+	storage            screenshotStorageState
+	storageJobs        *sync.WaitGroup
 }
 
 func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
@@ -87,6 +90,10 @@ func (p *ScreenshotPlugin) GetMetadata() plugin.Metadata {
 			"Linux",
 		},
 		SettingDefinitions: []definition.PluginSettingDefinitionItem{
+			{
+				Type:  definition.PluginSettingDefinitionTypeDynamic,
+				Value: &definition.PluginSettingValueDynamic{Key: screenshotSaveDirectorySettingKey},
+			},
 			{
 				Type: definition.PluginSettingDefinitionTypeCheckBox,
 				Value: &definition.PluginSettingValueCheckBox{
@@ -150,7 +157,11 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	p.backgroundWG = sync.WaitGroup{}
 	p.backgroundStopping = false
 	p.backgroundM.Unlock()
+	p.initScreenshotStorage(ctx)
 	p.api.OnGetDynamicSetting(ctx, func(ctx context.Context, key string) definition.PluginSettingDefinitionItem {
+		if key == screenshotSaveDirectorySettingKey {
+			return p.screenshotDirectorySetting()
+		}
 		if key != screenshotOCRModelSettingKey || !p.isScreenshotOCREnabled(ctx) {
 			return definition.PluginSettingDefinitionItem{}
 		}
@@ -165,11 +176,13 @@ func (p *ScreenshotPlugin) Init(ctx context.Context, initParams plugin.InitParam
 
 	// Remove expired captures before warming thumbnails so startup never generates caches for files
 	// that the retention policy is about to delete.
-	p.runScreenshotBackgroundTask("initialize screenshot history", func(runtimeCtx context.Context) {
+	_, jobs := p.beginScreenshotStorageUse()
+	p.runScreenshotStorageTask(jobs, "initialize screenshot history", func(runtimeCtx context.Context) {
 		p.cleanupExpiredScreenshots(runtimeCtx)
 		p.indexScreenshotScenes(runtimeCtx)
 		p.warmScreenshotHistoryThumbnails(runtimeCtx)
 	})
+	jobs.Done()
 	// Screenshot retention uses one scheduled owner instead of tying deletion to capture or query
 	// flows. Keeping cleanup periodic avoids surprising file removal during user-driven actions.
 	p.runScreenshotBackgroundTask("cleanup screenshot history", func(runtimeCtx context.Context) {
@@ -187,11 +200,11 @@ func (p *ScreenshotPlugin) syncPaddleWorkflowConsumer(ctx context.Context) {
 }
 
 // runScreenshotBackgroundTask starts work only while the current plugin lifecycle accepts new tasks.
-func (p *ScreenshotPlugin) runScreenshotBackgroundTask(message string, job func(context.Context)) {
+func (p *ScreenshotPlugin) runScreenshotBackgroundTask(message string, job func(context.Context)) bool {
 	p.backgroundM.Lock()
 	if p.backgroundStopping || p.backgroundCtx == nil || p.backgroundCtx.Err() != nil {
 		p.backgroundM.Unlock()
-		return
+		return false
 	}
 	runtimeCtx := p.backgroundCtx
 	p.backgroundWG.Add(1)
@@ -201,6 +214,7 @@ func (p *ScreenshotPlugin) runScreenshotBackgroundTask(message string, job func(
 		defer p.backgroundWG.Done()
 		job(runtimeCtx)
 	})
+	return true
 }
 
 // stopScreenshotBackgroundTasks prevents new work and waits for active file operations before unload completes.
@@ -322,7 +336,20 @@ func screenshotHistoryItemMatchesSearch(ctx context.Context, item screenshotHist
 }
 
 func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, error) {
-	screenshotDirectory := p.getScreenshotDirectory()
+	var items []screenshotHistoryItem
+	for _, directory := range p.screenshotHistoryDirectories() {
+		directoryItems, err := p.listScreenshotHistoryDirectory(directory)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, directoryItems...)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].timestamp > items[j].timestamp })
+	return items, nil
+}
+
+// listScreenshotHistoryDirectory also serves the pending source while files move in the background.
+func (p *ScreenshotPlugin) listScreenshotHistoryDirectory(screenshotDirectory string) ([]screenshotHistoryItem, error) {
 	entries, err := os.ReadDir(screenshotDirectory)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -333,7 +360,7 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 
 	items := make([]screenshotHistoryItem, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !isScreenshotHistoryImage(entry.Name()) {
+		if entry.IsDir() || !isScreenshotStorageImage(screenshotDirectory, entry.Name()) {
 			continue
 		}
 
@@ -364,15 +391,13 @@ func (p *ScreenshotPlugin) listScreenshotHistory() ([]screenshotHistoryItem, err
 		})
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].timestamp > items[j].timestamp
-	})
-
 	return items, nil
 }
 
 func (p *ScreenshotPlugin) getScreenshotDirectory() string {
-	return util.GetLocation().GetScreenshotDirectory()
+	p.storageM.Lock()
+	defer p.storageM.Unlock()
+	return p.screenshotDirectoryLocked()
 }
 
 // isScreenshotAIToolbarEnabled follows the checkbox default of off when the value is missing.
@@ -453,9 +478,17 @@ func (p *ScreenshotPlugin) startScreenshotCleanupRoutine(ctx context.Context) {
 }
 
 func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
+	// Keep cleanup out of a transfer so it cannot remove half of an image/sidecar bundle.
+	p.storageM.Lock()
+	if p.storage.Source != "" {
+		p.storageM.Unlock()
+		return
+	}
+	screenshotDirectory, jobs := p.beginScreenshotStorageUseLocked()
+	p.storageM.Unlock()
+	defer jobs.Done()
 	retentionDays := p.getScreenshotRetentionDays(ctx)
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
-	screenshotDirectory := p.getScreenshotDirectory()
 
 	entries, err := os.ReadDir(screenshotDirectory)
 	if err != nil {
@@ -471,7 +504,7 @@ func (p *ScreenshotPlugin) cleanupExpiredScreenshots(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if entry.IsDir() || !isScreenshotHistoryImage(entry.Name()) {
+		if entry.IsDir() || !isScreenshotStorageImage(screenshotDirectory, entry.Name()) {
 			continue
 		}
 
@@ -700,11 +733,11 @@ func (p *ScreenshotPlugin) removeScreenshotOCRSidecar(ctx context.Context, scree
 	}
 }
 
-func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string) {
+func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string, jobs *sync.WaitGroup) {
 	// OCR runs after the screenshot file is already durable. The old history path had no text index,
 	// but blocking screenshot completion on platform OCR would make capture feel unreliable on
 	// machines where Windows/macOS OCR models are missing or still warming up.
-	p.runScreenshotBackgroundTask("recognize screenshot text", func(runtimeCtx context.Context) {
+	p.runScreenshotStorageTask(jobs, "recognize screenshot text", func(runtimeCtx context.Context) {
 		if !p.isScreenshotOCREnabled(runtimeCtx) {
 			return
 		}
@@ -963,6 +996,9 @@ func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 
 // runScreenshotRequest notifies as soon as pixels become pasteable; the capture worker then finishes history and scene preparation.
 func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath string, request common.CaptureScreenshotRequest, ui common.UI) {
+	directory, jobs := p.beginScreenshotStorageUse()
+	defer jobs.Done()
+	request.ExportDirectory = directory
 	clipboardNotified := false
 	request.OnClipboardReady = func() {
 		if !clipboardNotified {
@@ -995,7 +1031,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
-		defer p.saveScreenshotSceneInBackground(result.ScreenshotPath, result.SaveEditableScene)
+		defer p.saveScreenshotSceneInBackground(result.ScreenshotPath, result.SaveEditableScene, jobs)
 		if result.EditableSceneWarning != "" {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+result.EditableSceneWarning)
 			defer p.api.Notify(ctx, "i18n:plugin_screenshot_edit_save_failed")
@@ -1018,12 +1054,12 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 			return
 		}
 		screenshotPath := result.ScreenshotPath
-		p.runScreenshotBackgroundTask("generate screenshot history thumbnails", func(runtimeCtx context.Context) {
+		p.runScreenshotStorageTask(jobs, "generate screenshot history thumbnails", func(runtimeCtx context.Context) {
 			if err := p.ensureScreenshotHistoryThumbnailsForPath(runtimeCtx, screenshotPath); err != nil {
 				p.api.Log(runtimeCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", screenshotPath, err.Error()))
 			}
 		})
-		p.scheduleScreenshotOCR(result.ScreenshotPath)
+		p.scheduleScreenshotOCR(result.ScreenshotPath, jobs)
 		if result.ExtraActionID == screenshotAIExtraActionID {
 			plugin.InvokePluginToolAndNotify(ctx, p.api, plugin.InvokePluginToolOption{
 				PluginId:  common.AIChatPluginID,
