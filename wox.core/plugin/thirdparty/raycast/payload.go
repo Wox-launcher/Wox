@@ -24,6 +24,27 @@ type Payload struct {
 	Notes struct {
 		Notes []Note `json:"notes"`
 	} `json:"notes"`
+	Emoji struct {
+		Emojis []EmojiEntry `json:"emojis"`
+	} `json:"emoji"`
+	MCPServers struct {
+		Servers []MCPServer `json:"servers"`
+	} `json:"mcpServers"`
+}
+
+// EmojiEntry is one symbol the user has used. CustomKeywords are extra search words.
+type EmojiEntry struct {
+	Symbol         string   `json:"symbol"`
+	CustomKeywords []string `json:"customKeywords"`
+}
+
+// MCPServer is one exported stdio or HTTP MCP server.
+type MCPServer struct {
+	Title     string   `json:"title"`
+	Type      string   `json:"type"`
+	Command   string   `json:"command"`
+	Arguments []string `json:"arguments"`
+	URL       string   `json:"url"`
 }
 
 // InternalExtension is one built-in Raycast extension and the preferences stored in its meta object.

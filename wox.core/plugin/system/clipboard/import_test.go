@@ -95,3 +95,19 @@ func TestClipboardImageCommitRemovesTheNewFile(t *testing.T) {
 		t.Fatalf("new image remained: %v", statErr)
 	}
 }
+
+func TestImportClipboardFilesAndImageOCR(t *testing.T) {
+	db := &clipboardImportDB{}
+	target := &ClipboardPlugin{api: &clipboardImportAPI{settings: map[string]string{}}, db: db, maxHistoryCount: 10}
+	now := time.Now()
+	results := target.ImportClipboard(context.Background(), []ImportedClipboard{
+		{FilePaths: []string{`C:\notes.txt`}, OCRText: "hello", CreatedAt: now},
+		{FilePaths: []string{`C:\notes.txt`}, CreatedAt: now},
+	})
+	if results[0].Status != clipboardImportImported || results[1].Status != clipboardImportExists {
+		t.Fatalf("results = %+v", results)
+	}
+	if len(db.records) != 1 || db.records[0].Type != string(clipboardutil.ClipboardTypeFile) || db.records[0].OCRText == nil || *db.records[0].OCRText != "hello" {
+		t.Fatalf("record = %+v", db.records)
+	}
+}

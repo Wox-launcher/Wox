@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"wox/common"
 
 	"wox/setting"
 )
@@ -35,6 +36,30 @@ type woxSnapshot struct {
 	Notes                     []noteRow
 	ClipboardTexts            map[string]clipboardHit
 	ClipboardImages           map[string]clipboardHit
+	ClipboardFiles            map[string]clipboardHit
+	ThemeID                   string
+	ThemeKnown                bool
+	ShowPosition              string
+	ShowPositionKnown         bool
+	UIDensity                 string
+	UIDensityKnown            bool
+	MCPServers                []common.AIChatMCPServerConfig
+	AppDirectories            []string
+	DictationSound            bool
+	DictationSoundKnown       bool
+	DictationPhrases          []string
+	EmojiAction               string
+	EmojiActionKnown          bool
+	EmojiUsed                 []string
+	EmojiKeywords             map[string][]string
+	ScreenshotOCR             bool
+	ScreenshotOCRKnown        bool
+	ScreenshotDays            int
+	ScreenshotDaysKnown       bool
+	IgnoredClipboardApps      []ignoredClipboardApp
+	Skills                    []common.Skill
+	DictationDuck             bool
+	DictationDuckKnown        bool
 	ResultAliases             []setting.ResultBinding
 	ClipboardTrigger          string
 	EmojiTrigger              string
@@ -100,7 +125,7 @@ func (s woxSnapshot) emojiTrigger() string {
 
 func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped := mappedExport{}
-	mapped.general = generalSettings(payload.Settings.General, current)
+	mapped.general = append(generalSettings(payload.Settings.General, current), mapOverlapSettings(payload, current)...)
 	mapped.fileSearch, mapped.fileRoots, mapped.fileIgnore, mapped.contentRoots = mapFileSearchRows(payload, current)
 	mapped.quicklinks = mapQuicklinkRows(payload, current)
 	mapped.shortcuts = mapShortcutRows(payload, mapped.quicklinks)
@@ -110,7 +135,7 @@ func buildMapped(payload Payload, current woxSnapshot) mappedExport {
 	mapped.snippets = mapSnippetRows(payload, current)
 	mapped.notes = mapNoteRows(payload, current)
 	mapped.clipboard, mapped.summary = mapClipboardRows(payload, current)
-	mapped.clipboardSettings = mapClipboardSettings(payload, current)
+	mapped.clipboardSettings = append(mapClipboardSettings(payload, current), mapIgnoredClipboardApps(payload, desktopApplications(), current)...)
 	return mapped
 }
 

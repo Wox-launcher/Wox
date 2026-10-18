@@ -3,6 +3,7 @@ package raycast
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,6 +11,89 @@ import (
 
 	"wox/util/clipboard"
 )
+
+// clipboardParts reads one history entry. A file list wins over plain text because
+// Wox stores copied files separately. One existing image file stays an image.
+func clipboardParts(entry ClipboardEntry) (text, imagePath string, files []string, ocr string, imageMissing bool) {
+	var image string
+	var sawImage bool
+	for _, item := range entry.Items {
+		for _, representation := range item.Representations {
+			mime := strings.ToLower(representation.MimeType)
+			if text == "" && strings.HasPrefix(mime, "text/plain") && representation.Content != "" {
+				text = representation.Content
+			}
+			if ocr == "" && mime == "application/vnd.raycast.ocr" && strings.TrimSpace(representation.Content) != "" {
+				ocr = strings.TrimSpace(representation.Content)
+			}
+			if !sawImage && strings.HasPrefix(mime, "image/") && representation.ContentType == "url" && representation.Content != "" {
+				image = representation.Content
+				sawImage = true
+			}
+			if mime == "text/uri-list" {
+				files = append(files, clipboardURIList(representation.Content)...)
+			}
+		}
+	}
+	parsedFiles := files
+	files = existingClipboardFiles(parsedFiles)
+	if len(parsedFiles) > 0 && len(files) == 0 {
+		return "", parsedFiles[0], nil, ocr, true
+	}
+	if len(files) == 1 && clipboardImageExt(files[0]) && regularLocalFile(files[0]) {
+		return "", files[0], nil, ocr, false
+	}
+	if len(files) > 0 {
+		return "", "", files, ocr, false
+	}
+	if text != "" {
+		return text, "", nil, ocr, false
+	}
+	if image == "" {
+		return "", "", nil, ocr, false
+	}
+	if !regularLocalFile(image) {
+		return "", image, nil, ocr, true
+	}
+	return "", image, nil, ocr, false
+}
+
+func clipboardURIList(raw string) []string {
+	var paths []string
+	seen := map[string]struct{}{}
+	for _, line := range strings.FieldsFunc(raw, func(char rune) bool { return char == '\n' || char == '\r' }) {
+		path, ok := quicklinkLocalPath(strings.TrimSpace(line))
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(path)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		paths = append(paths, path)
+	}
+	return paths
+}
+
+func existingClipboardFiles(paths []string) []string {
+	var existing []string
+	for _, path := range paths {
+		if regularLocalFile(path) {
+			existing = append(existing, path)
+		}
+	}
+	return existing
+}
+
+func clipboardImageExt(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".ico":
+		return true
+	default:
+		return false
+	}
+}
 
 func clipboardTextAndImage(entry ClipboardEntry) (text, imagePath string, imageMissing bool) {
 	var image string

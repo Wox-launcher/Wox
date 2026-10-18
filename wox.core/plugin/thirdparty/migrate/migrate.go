@@ -253,6 +253,8 @@ type ClipboardWrite struct {
 	ItemID    string
 	Text      string
 	ImagePath string
+	FilePaths []string
+	OCRText   string
 	CreatedAt time.Time
 	Pinned    bool
 }

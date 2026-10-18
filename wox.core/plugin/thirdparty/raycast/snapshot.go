@@ -33,6 +33,14 @@ func defaultSnapshot() woxSnapshot {
 	return woxSnapshot{
 		ClipboardTrigger: "cb", EmojiTrigger: "emoji", TextDays: 90, ImageDays: 3, MaxHistory: 5000,
 		ImageTextRecognition: true, ImageTextRecognitionKnown: true,
+		ThemeID: setting.DefaultThemeId, ThemeKnown: true,
+		ShowPosition: string(setting.PositionTypeMouseScreen), ShowPositionKnown: true,
+		UIDensity: string(setting.UiDensityNormal), UIDensityKnown: true,
+		DictationSound: true, DictationSoundKnown: true,
+		DictationDuck: false, DictationDuckKnown: true,
+		EmojiAction: "paste", EmojiActionKnown: true,
+		ScreenshotOCR: true, ScreenshotOCRKnown: true,
+		ScreenshotDays: 15, ScreenshotDaysKnown: true,
 	}
 }
 
@@ -52,6 +60,24 @@ func readLiveSnapshot() woxSnapshot {
 	snap.Autostart = woxSetting.EnableAutostart.Get()
 	snap.ShowTrayKnown = true
 	snap.ShowTray = woxSetting.ShowTray.Get()
+	if woxSetting.ThemeId != nil {
+		snap.ThemeID = woxSetting.ThemeId.Get()
+		snap.ThemeKnown = true
+	}
+	if woxSetting.ShowPosition != nil {
+		snap.ShowPosition = string(woxSetting.ShowPosition.Get())
+		snap.ShowPositionKnown = true
+	}
+	if woxSetting.UiDensity != nil {
+		snap.UIDensity = string(woxSetting.UiDensity.Get())
+		snap.UIDensityKnown = true
+	}
+	if woxSetting.AIMCPServers != nil {
+		snap.MCPServers = append([]common.AIChatMCPServerConfig(nil), woxSetting.AIMCPServers.Get()...)
+	}
+	if woxSetting.AISkills != nil {
+		snap.Skills = append([]common.Skill(nil), woxSetting.AISkills.Get()...)
+	}
 	for _, row := range woxSetting.QueryHotkeys.Get() {
 		snap.QueryHotkeys = append(snap.QueryHotkeys, queryRow{Hotkey: row.Hotkey, Query: row.Query})
 	}
@@ -66,6 +92,7 @@ func readLiveSnapshot() woxSnapshot {
 	readFavoriteSnapshot(&snap)
 	readNotesSnapshot(&snap)
 	readClipboardSnapshot(&snap)
+	readOverlapSnapshot(&snap)
 	return snap
 }
 
@@ -217,12 +244,16 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 	if snap.ClipboardImages == nil {
 		snap.ClipboardImages = map[string]clipboardHit{}
 	}
+	if snap.ClipboardFiles == nil {
+		snap.ClipboardFiles = map[string]clipboardHit{}
+	}
 	var favorites string
 	if err := store.Get("favorites", &favorites); err == nil && favorites != "" {
 		var items []struct {
 			Type      string
 			Content   string
 			ImageHash *string
+			FilePaths []string `json:"filePaths"`
 		}
 		if json.Unmarshal([]byte(favorites), &items) == nil {
 			for _, item := range items {
@@ -231,6 +262,9 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 				}
 				if item.ImageHash != nil && *item.ImageHash != "" {
 					snap.ClipboardImages[*item.ImageHash] = clipboardHit{Favorite: true}
+				}
+				if key := clipboardFileKey(item.FilePaths); key != "" {
+					snap.ClipboardFiles[key] = clipboardHit{Favorite: true}
 				}
 			}
 		}
@@ -244,7 +278,13 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 		return
 	}
 	defer db.Close()
-	rows, err := db.QueryContext(context.Background(), `SELECT type, content, image_hash FROM clipboard_history WHERE is_favorite = 0`)
+	query := `SELECT type, content, image_hash, file_paths FROM clipboard_history WHERE is_favorite = 0`
+	rows, err := db.QueryContext(context.Background(), query)
+	withFiles := true
+	if err != nil {
+		withFiles = false
+		rows, err = db.QueryContext(context.Background(), `SELECT type, content, image_hash FROM clipboard_history WHERE is_favorite = 0`)
+	}
 	if err != nil {
 		return
 	}
@@ -252,7 +292,14 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 	for rows.Next() {
 		var kind, content string
 		var hash sql.NullString
-		if rows.Scan(&kind, &content, &hash) != nil {
+		var filePaths sql.NullString
+		var scanErr error
+		if withFiles {
+			scanErr = rows.Scan(&kind, &content, &hash, &filePaths)
+		} else {
+			scanErr = rows.Scan(&kind, &content, &hash)
+		}
+		if scanErr != nil {
 			continue
 		}
 		snap.HistoryCount++
@@ -264,6 +311,91 @@ func readClipboardSnapshot(snap *woxSnapshot) {
 		if hash.Valid && hash.String != "" {
 			if _, exists := snap.ClipboardImages[hash.String]; !exists {
 				snap.ClipboardImages[hash.String] = clipboardHit{}
+			}
+		}
+		if filePaths.Valid {
+			var paths []string
+			if json.Unmarshal([]byte(filePaths.String), &paths) == nil {
+				if key := clipboardFileKey(paths); key != "" {
+					if _, exists := snap.ClipboardFiles[key]; !exists {
+						snap.ClipboardFiles[key] = clipboardHit{}
+					}
+				}
+			}
+		}
+	}
+}
+
+func readOverlapSnapshot(snap *woxSnapshot) {
+	if raw, ok := pluginSettingString(setting.NewPluginSettingStore(database.GetDB(), common.AppPluginID), "AppDirectories"); ok {
+		if paths, err := parseImportedPathTable(raw); err == nil {
+			snap.AppDirectories = paths
+		}
+	}
+	dictation := setting.NewPluginSettingStore(database.GetDB(), common.DictationPluginID)
+	if value, ok := pluginSettingBool(dictation, "playSound"); ok {
+		snap.DictationSound = value
+		snap.DictationSoundKnown = true
+	}
+	if value, ok := pluginSettingBool(dictation, "duckVolume"); ok {
+		snap.DictationDuck = value
+		snap.DictationDuckKnown = true
+	}
+	if raw, ok := pluginSettingString(dictation, "dictionary"); ok {
+		var entries []struct {
+			Phrase string `json:"phrase"`
+		}
+		if json.Unmarshal([]byte(raw), &entries) == nil {
+			for _, entry := range entries {
+				if phrase := strings.TrimSpace(entry.Phrase); phrase != "" {
+					snap.DictationPhrases = append(snap.DictationPhrases, phrase)
+				}
+			}
+		}
+	}
+	emoji := setting.NewPluginSettingStore(database.GetDB(), common.EmojiPluginID)
+	if raw, ok := pluginSettingString(emoji, "primary_action"); ok {
+		snap.EmojiAction = strings.ToLower(strings.TrimSpace(raw))
+		snap.EmojiActionKnown = snap.EmojiAction == "copy" || snap.EmojiAction == "paste"
+	}
+	if raw, ok := pluginSettingString(emoji, "frequentlyUsed"); ok {
+		var usages []struct {
+			Emoji string `json:"emoji"`
+		}
+		if json.Unmarshal([]byte(raw), &usages) == nil {
+			for _, usage := range usages {
+				if emoji := strings.TrimSpace(usage.Emoji); emoji != "" {
+					snap.EmojiUsed = append(snap.EmojiUsed, emoji)
+				}
+			}
+		}
+	}
+	if raw, ok := pluginSettingString(emoji, "customDescriptions"); ok {
+		var descriptions map[string][]string
+		if json.Unmarshal([]byte(raw), &descriptions) == nil {
+			snap.EmojiKeywords = descriptions
+		}
+	}
+	screenshots := setting.NewPluginSettingStore(database.GetDB(), common.ScreenshotPluginID)
+	if value, ok := pluginSettingBool(screenshots, "ocr_enabled"); ok {
+		snap.ScreenshotOCR = value
+		snap.ScreenshotOCRKnown = true
+	}
+	if raw, ok := pluginSettingString(screenshots, "retention_days"); ok {
+		if days, err := parseDays(raw); err == nil && days > 0 {
+			snap.ScreenshotDays = days
+			snap.ScreenshotDaysKnown = true
+		}
+	}
+	if raw, ok := pluginSettingString(setting.NewPluginSettingStore(database.GetDB(), common.ClipboardPluginID), "ignored_applications"); ok {
+		var rows []struct {
+			App ignoredClipboardApp `json:"App"`
+		}
+		if json.Unmarshal([]byte(raw), &rows) == nil {
+			for _, row := range rows {
+				if strings.TrimSpace(row.App.Identity) != "" {
+					snap.IgnoredClipboardApps = append(snap.IgnoredClipboardApps, row.App)
+				}
 			}
 		}
 	}

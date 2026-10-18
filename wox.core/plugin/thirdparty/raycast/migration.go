@@ -223,7 +223,7 @@ func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult 
 		if _, ok := selected[row.id]; !ok || !row.selectable {
 			continue
 		}
-		result.Settings = append(result.Settings, migrate.SettingWrite{ItemIDs: []string{row.id}, Key: row.key, Value: row.value})
+		result.Settings = append(result.Settings, migrate.SettingWrite{ItemIDs: []string{row.id}, Key: row.key, Value: row.value, PluginID: row.pluginID})
 	}
 	result.Settings = append(result.Settings, fileSearchSettingWrites(mapped, selected)...)
 	seenFavorites := map[string]struct{}{}
@@ -303,7 +303,8 @@ func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult 
 			continue
 		}
 		result.Clipboard = append(result.Clipboard, migrate.ClipboardWrite{
-			ItemID: row.id, Text: row.text, ImagePath: row.imagePath, CreatedAt: row.createdAt, Pinned: row.pinned,
+			ItemID: row.id, Text: row.text, ImagePath: row.imagePath, FilePaths: append([]string(nil), row.filePaths...),
+			OCRText: row.ocrText, CreatedAt: row.createdAt, Pinned: row.pinned,
 		})
 	}
 	return result

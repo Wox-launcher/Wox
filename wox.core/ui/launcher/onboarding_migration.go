@@ -816,6 +816,10 @@ func (a *App) rememberOnboardingMigrationSetting(key, value string) {
 					data.EnableAutoUpdate, _ = strconv.ParseBool(value)
 				case "ThemeId":
 					data.ThemeID = value
+				case "UiDensity":
+					data.UIDensity = value
+				case "AIMCPServers":
+					data.AIMCPServers = json.RawMessage(value)
 				}
 			})
 		}
@@ -1102,7 +1106,7 @@ func clipboardSummaryOutcome(results []contract.MigratedItemResult) contract.Mig
 func migrationClipboard(items []migrate.ClipboardWrite) []contract.MigratedClipboard {
 	rows := make([]contract.MigratedClipboard, len(items))
 	for index, item := range items {
-		rows[index] = contract.MigratedClipboard{ItemID: item.ItemID, Text: item.Text, ImagePath: item.ImagePath, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
+		rows[index] = contract.MigratedClipboard{ItemID: item.ItemID, Text: item.Text, ImagePath: item.ImagePath, FilePaths: append([]string(nil), item.FilePaths...), OCRText: item.OCRText, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
 	}
 	return rows
 }

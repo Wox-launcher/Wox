@@ -8,6 +8,19 @@ import (
 	"wox/util/hotkey"
 )
 
+func stringSetting(general map[string]json.RawMessage, key string) (string, bool) {
+	raw, ok := general[key]
+	if !ok || len(raw) == 0 {
+		return "", false
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	return value, value != ""
+}
+
 func boolSetting(general map[string]json.RawMessage, key string) (bool, bool) {
 	raw, ok := general[key]
 	if !ok || len(raw) == 0 {

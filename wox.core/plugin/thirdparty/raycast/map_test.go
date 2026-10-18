@@ -685,6 +685,11 @@ func TestMapClipboardHistoryDurationBecomesTextDays(t *testing.T) {
 	if recognition.key != "image_text_recognition_enabled" || recognition.value != "false" || recognition.pluginID != common.ClipboardPluginID {
 		t.Fatalf("recognition = %+v", recognition)
 	}
+	for _, row := range mapped.clipboardSettings {
+		if row.key == "image_history_days" || row.key == "is_keep_image_history" {
+			t.Fatalf("image retention was imported: %+v", row)
+		}
+	}
 	catalog := catalogFrom(mapped)
 	clipboard := categoryByID(t, catalog, migrate.CategoryClipboard)
 	if len(clipboard.Items) != 2 || clipboard.Items[0].ID != "setting:clipboard_text_days" || clipboard.Items[1].TitleKey != "clipboard_text_recognition" {

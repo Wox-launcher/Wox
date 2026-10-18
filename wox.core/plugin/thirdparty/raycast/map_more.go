@@ -242,14 +242,14 @@ func mapClipboardRows(payload Payload, current woxSnapshot) ([]mappedClipboard, 
 	}
 	var fresh []mappedClipboard
 	for index, entry := range payload.ClipboardHistory.Entries {
-		text, imagePath, missing := clipboardTextAndImage(entry)
-		if text == "" && imagePath == "" && !missing {
+		text, imagePath, files, ocr, missing := clipboardParts(entry)
+		if text == "" && imagePath == "" && len(files) == 0 && !missing {
 			continue
 		}
 		created, _ := parseRaycastTime(entry.CreatedAt)
 		pinned := clipboardPinned(entry.Pinned)
 		row := mappedClipboard{
-			id: "clipboard:" + strconv.Itoa(index), text: text, imagePath: imagePath,
+			id: "clipboard:" + strconv.Itoa(index), text: text, imagePath: imagePath, filePaths: files, ocrText: ocr,
 			createdAt: created, pinned: pinned,
 		}
 		if text == "" && imagePath != "" && !missing {
@@ -263,7 +263,7 @@ func mapClipboardRows(payload Payload, current woxSnapshot) ([]mappedClipboard, 
 			rows = append(rows, row)
 			continue
 		}
-		if text != "" && len(text) > 0 && currentTextTooLarge(text) {
+		if row.text != "" && currentTextTooLarge(row.text) {
 			row.status = statusUnsupported
 			row.detailKey = "raycast_limit_item"
 			rows = append(rows, row)
@@ -301,9 +301,17 @@ func mapClipboardRows(payload Payload, current woxSnapshot) ([]mappedClipboard, 
 			continue
 		}
 		row.selectable = true
-		if row.text != "" {
+		switch {
+		case row.text != "":
 			row.detail = trimPreview(row.text)
-		} else {
+		case len(row.filePaths) > 0:
+			names := make([]string, 0, len(row.filePaths))
+			for _, path := range row.filePaths {
+				names = append(names, filepath.Base(path))
+			}
+			row.detail = strings.Join(names, ", ")
+			row.detailKey = "raycast_clipboard_file"
+		default:
 			row.detail = filepath.Base(row.imagePath)
 			row.detailKey = "raycast_clipboard_image"
 		}
@@ -325,7 +333,7 @@ func expiredClipboard(row mappedClipboard, current woxSnapshot) bool {
 		return false
 	}
 	days := current.TextDays
-	if row.text == "" {
+	if row.text == "" && len(row.filePaths) == 0 {
 		days = current.ImageDays
 	}
 	if days <= 0 {
@@ -338,6 +346,10 @@ func expiredClipboard(row mappedClipboard, current woxSnapshot) bool {
 }
 
 func clipboardExisting(row mappedClipboard, current woxSnapshot) (clipboardHit, bool) {
+	if key := clipboardFileKey(row.filePaths); key != "" {
+		hit, ok := current.ClipboardFiles[key]
+		return hit, ok
+	}
 	if row.text != "" {
 		hit, ok := current.ClipboardTexts[row.text]
 		return hit, ok
@@ -369,4 +381,22 @@ func trimPreview(value string) string {
 		return value[:80]
 	}
 	return value
+}
+
+func clipboardFileKey(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.Clean(strings.TrimSpace(path))
+		if path == "" {
+			continue
+		}
+		if runtime.GOOS == "windows" {
+			path = strings.ToLower(path)
+		}
+		parts = append(parts, path)
+	}
+	return strings.Join(parts, "\n")
 }

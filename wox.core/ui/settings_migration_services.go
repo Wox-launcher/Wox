@@ -67,7 +67,7 @@ func (s *CoreServices) ImportMigratedClipboard(ctx context.Context, _ string, it
 	}
 	incoming := make([]migrateapply.ClipboardItem, len(items))
 	for index, item := range items {
-		incoming[index] = migrateapply.ClipboardItem{Text: item.Text, ImagePath: item.ImagePath, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
+		incoming[index] = migrateapply.ClipboardItem{Text: item.Text, ImagePath: item.ImagePath, FilePaths: item.FilePaths, OCRText: item.OCRText, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
 	}
 	for index, result := range migrateapply.ImportClipboardItems(ctx, incoming) {
 		results[index] = contract.MigratedItemResult{ID: items[index].ItemID, Status: result.Status, ErrorCode: result.ErrorCode}

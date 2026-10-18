@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins themes plugin-health help dev sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update chocolatey-update appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins themes plugin-health help dev run sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update chocolatey-update appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -69,6 +69,10 @@ else
     endif
 endif
 
+# Same output name as the VS Code Run Wox launch config. A stable macOS binary
+# path lets AppKit reuse tray positions, and Windows LocalDumps is registered
+# for __debug_bin_wox.exe.
+DEBUG_BIN_NAME := __debug_bin_wox$(if $(filter windows,$(PLATFORM)),.exe,)
 RELEASE_DIR := release
 # Keep package version in sync with the embedded updater constant used by release binaries.
 VERSION := $(shell sed -n 's/^const CURRENT_VERSION = "\(.*\)"/\1/p' $(REPO_ROOT)/wox.core/updater/version.go)
@@ -113,6 +117,7 @@ help:
 	@echo "Targets:"
 	@echo "  help       Show this help message"
 	@echo "  dev        Setup development environment"
+	@echo "  run        Build and run the VS Code Run Wox debug binary"
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
 	@echo "  smoke      Run all native smoke cases, one package with CASE=perf, or one case with: make smoke launcher/plugin/calculator/001"
@@ -170,6 +175,16 @@ dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.core window-hook-build
 	$(MAKE) host
+
+# Mirrors Wox.code-workspace "Run Wox": automation-enabled debug build, stable
+# binary name, automation info file, and the Windows crash-dump preLaunchTask.
+# Optimizations stay disabled so crash stacks match a delve debug launch.
+run: ensure-resources
+ifeq ($(PLATFORM),windows)
+	powershell.exe -NoProfile -Command '$$dumpDir = Join-Path $$env:USERPROFILE ".wox\diagnostics\dumps"; $$key = "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\__debug_bin_wox.exe"; New-Item -ItemType Directory -Force -Path $$dumpDir | Out-Null; New-Item -Path $$key -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpFolder -PropertyType ExpandString -Value $$dumpDir -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpCount -PropertyType DWord -Value 5 -Force | Out-Null; Write-Host "Wox crash dumps: $$dumpDir"'
+endif
+	cd wox.core && CGO_ENABLED=1 go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -gcflags="all=-N -l" -o "$(DEBUG_BIN_NAME)" .
+	cd wox.core && WOX_AUTOMATION_INFO_FILE="$(REPO_ROOT)/wox.core/.wox-automation.json" ./"$(DEBUG_BIN_NAME)"
 
 host:
 	$(MAKE) -C wox.plugin.host.nodejs build

@@ -4,6 +4,9 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +36,8 @@ const (
 type ImportedClipboard struct {
 	Text      string
 	ImagePath string
+	FilePaths []string
+	OCRText   string
 	CreatedAt time.Time
 	Pinned    bool
 }
@@ -46,6 +51,7 @@ type ImportedClipboardResult struct {
 type clipboardImportState struct {
 	texts    map[string]bool
 	images   map[string]bool
+	files    map[string]bool
 	history  int
 	max      int
 	now      time.Time
@@ -80,7 +86,7 @@ func (c *ClipboardPlugin) ImportClipboard(ctx context.Context, items []ImportedC
 
 func (c *ClipboardPlugin) clipboardImportState(ctx context.Context) clipboardImportState {
 	state := clipboardImportState{
-		texts: map[string]bool{}, images: map[string]bool{},
+		texts: map[string]bool{}, images: map[string]bool{}, files: map[string]bool{},
 		max: c.maxHistoryCount, now: time.Now(),
 		textDay: c.getTextHistoryDays(ctx), imageDay: c.getImageHistoryDays(ctx),
 	}
@@ -96,6 +102,9 @@ func (c *ClipboardPlugin) clipboardImportState(ctx context.Context) clipboardImp
 			if record.ImageHash != nil && *record.ImageHash != "" {
 				state.images[*record.ImageHash] = record.IsFavorite
 			}
+			if key := clipboardImportFileKey(record.FilePaths); key != "" {
+				state.files[key] = record.IsFavorite
+			}
 		}
 	}
 	if favorites, err := c.getFavoriteItems(ctx); err == nil {
@@ -105,6 +114,9 @@ func (c *ClipboardPlugin) clipboardImportState(ctx context.Context) clipboardImp
 			}
 			if item.ImageHash != nil && *item.ImageHash != "" {
 				state.images[*item.ImageHash] = true
+			}
+			if key := clipboardImportFileKey(item.FilePaths); key != "" {
+				state.files[key] = true
 			}
 		}
 	}
@@ -133,11 +145,74 @@ func clipboardImportOrder(items []ImportedClipboard) []int {
 }
 
 func (c *ClipboardPlugin) importOneClipboard(ctx context.Context, item ImportedClipboard, state *clipboardImportState) ImportedClipboardResult {
+	if len(item.FilePaths) > 0 {
+		return c.importClipboardFiles(ctx, item, state)
+	}
 	text := item.Text
 	if text != "" {
 		return c.importClipboardText(ctx, text, item, state)
 	}
 	return c.importClipboardImage(ctx, item, state)
+}
+
+func (c *ClipboardPlugin) importClipboardFiles(ctx context.Context, item ImportedClipboard, state *clipboardImportState) ImportedClipboardResult {
+	key := clipboardImportFileKey(item.FilePaths)
+	if key == "" {
+		return ImportedClipboardResult{Status: clipboardImportMissing, ErrorCode: "missing"}
+	}
+	if _, exists := state.files[key]; exists {
+		return ImportedClipboardResult{Status: clipboardImportExists, ErrorCode: "duplicate"}
+	}
+	if !item.Pinned && clipboardExpired(item.CreatedAt, state.now, state.textDay) {
+		return ImportedClipboardResult{Status: clipboardImportExpired, ErrorCode: "expired"}
+	}
+	if !item.Pinned && state.history >= state.max {
+		return ImportedClipboardResult{Status: clipboardImportCapacity, ErrorCode: "capacity"}
+	}
+	record := ClipboardRecord{
+		ID: uuid.NewString(), Type: string(clipboard.ClipboardTypeFile),
+		Content: clipboardImportFileTitle(item.FilePaths), FilePath: item.FilePaths[0],
+		FilePaths: append([]string(nil), item.FilePaths...),
+		Timestamp: clipboardTimestamp(item.CreatedAt), IsFavorite: item.Pinned, CreatedAt: clipboardCreated(item.CreatedAt),
+	}
+	if ocr := strings.TrimSpace(item.OCRText); ocr != "" {
+		record.OCRText = &ocr
+	}
+	if err := c.commitClipboardRecord(ctx, record, ""); err != nil {
+		return ImportedClipboardResult{Status: clipboardImportFailed, ErrorCode: "failed"}
+	}
+	state.files[key] = item.Pinned
+	if !item.Pinned {
+		state.history++
+	}
+	return ImportedClipboardResult{Status: clipboardImportImported}
+}
+
+func clipboardImportFileTitle(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	name := filepath.Base(paths[0])
+	if len(paths) == 1 {
+		return name
+	}
+	return name + " (+" + strconv.Itoa(len(paths)-1) + ")"
+}
+
+func clipboardImportFileKey(paths []string) string {
+	parts := make([]string, 0, len(paths))
+	for _, filePath := range paths {
+		filePath = strings.TrimSpace(filePath)
+		if filePath == "" {
+			continue
+		}
+		filePath = filepath.Clean(filePath)
+		if runtime.GOOS == "windows" {
+			filePath = strings.ToLower(filePath)
+		}
+		parts = append(parts, filePath)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (c *ClipboardPlugin) importClipboardText(ctx context.Context, text string, item ImportedClipboard, state *clipboardImportState) ImportedClipboardResult {
@@ -223,6 +298,9 @@ func (c *ClipboardPlugin) importClipboardImage(ctx context.Context, item Importe
 		ID: uuid.NewString(), Type: string(clipboard.ClipboardTypeImage), FilePath: file, ImageHash: &hash,
 		Width: &width, Height: &height, FileSize: &size,
 		Timestamp: clipboardTimestamp(item.CreatedAt), IsFavorite: item.Pinned, CreatedAt: clipboardCreated(item.CreatedAt),
+	}
+	if ocr := strings.TrimSpace(item.OCRText); ocr != "" {
+		record.OCRText = &ocr
 	}
 	if err := c.commitClipboardRecord(ctx, record, file); err != nil {
 		return ImportedClipboardResult{Status: clipboardImportFailed, ErrorCode: "failed"}
@@ -344,7 +422,7 @@ func importMigratedClipboard(ctx context.Context, items []migrateapply.Clipboard
 	}
 	incoming := make([]ImportedClipboard, len(items))
 	for index, item := range items {
-		incoming[index] = ImportedClipboard{Text: item.Text, ImagePath: item.ImagePath, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
+		incoming[index] = ImportedClipboard{Text: item.Text, ImagePath: item.ImagePath, FilePaths: item.FilePaths, OCRText: item.OCRText, CreatedAt: item.CreatedAt, Pinned: item.Pinned}
 	}
 	for index, result := range target.ImportClipboard(ctx, incoming) {
 		results[index] = migrateapply.Result{Status: result.Status, ErrorCode: result.ErrorCode}

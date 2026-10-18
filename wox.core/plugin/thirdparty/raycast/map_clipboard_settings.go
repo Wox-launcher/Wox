@@ -19,7 +19,7 @@ type clipboardSettingsMeta struct {
 }
 
 // mapClipboardSettings maps clipboard preferences onto the Wox clipboard plugin.
-// Keep history for becomes the text retention day count. Image retention stays unchanged.
+// Keep history for becomes the text retention day count. Image retention stays at Wox's default.
 func mapClipboardSettings(payload Payload, current woxSnapshot) []mappedSetting {
 	meta, ok := clipboardSettingsFrom(payload)
 	if !ok {

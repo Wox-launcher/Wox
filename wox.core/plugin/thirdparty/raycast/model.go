@@ -138,6 +138,8 @@ type mappedClipboard struct {
 	id         string
 	text       string
 	imagePath  string
+	filePaths  []string
+	ocrText    string
 	imageHash  string
 	createdAt  time.Time
 	pinned     bool
