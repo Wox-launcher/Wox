@@ -21,9 +21,12 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	if query.plan == nil || view.Base == nil {
 		return nil, nil
 	}
+	view = view.PrepareQueryView()
 	base := view.Base
 	results := &columnResultHeap{limit: limit}
-	namePriority := !query.plan.pathLike
+	if query.plan.pathLike {
+		return searchColumnPaths(ctx, view, query, limit)
+	}
 	// A query-local directory cache avoids allocating each repeated parent path.
 	// It is not retained by the index or shared with subsequent queries.
 	parents := make(map[uint64]string)
@@ -31,7 +34,12 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 		parent, found := parents[record.ParentID]
 		if !found {
 			var ok bool
-			parent, ok = view.Path(record.ParentID)
+			if row, exists := base.Row(record.ParentID); exists && view.DirectoryUnchanged(row) {
+				parent = base.DirectoryPath(base.RowDirectory[row])
+				ok = parent != ""
+			} else {
+				parent, ok = view.Path(record.ParentID)
+			}
 			if !ok {
 				return "", false
 			}
@@ -56,20 +64,7 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 				return
 			}
 		}
-		if pathInWindowsRecycleBin(path) {
-			score -= recycleBinRankPenalty
-			if !results.competitive(score, isDir, record.Name) {
-				return
-			}
-		}
-		result := SearchResult{Path: path, Name: strings.Clone(record.Name), ParentPath: filepath.Dir(path), IsDir: isDir, Score: score}
-		if record.Flags&column.SizeKnown != 0 {
-			result.Size = record.Size
-		}
-		if record.Flags&column.ModifiedKnown != 0 {
-			result.Mtime = record.Modified
-		}
-		results.add(result)
+		addColumnPathResult(results, record, score, path)
 	}
 	root := base.Record(0)
 	if root.Flags&column.Structural == 0 && columnExtensionEligible(query, root) {
@@ -78,101 +73,105 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 			add(root, score, base.Root)
 		}
 	}
-	if namePriority {
-		groups := &columnNameHeap{limit: limit}
-		minimumScore := exactColumnNameThreshold(ctx, view, query, limit)
-		workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
-		partitions := make([]*columnNameHeap, workers)
-		var wait sync.WaitGroup
-		for worker := 0; worker < workers; worker++ {
-			wait.Add(1)
-			go func(worker int) {
-				defer wait.Done()
-				partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, minimumScore)
-			}(worker)
+	groups := &columnNameHeap{limit: limit}
+	minimumScore := exactColumnNameThreshold(ctx, view, query, limit)
+	workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
+	partitions := make([]*columnNameHeap, workers)
+	var wait sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wait.Add(1)
+		go func(worker int) {
+			defer wait.Done()
+			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, minimumScore)
+		}(worker)
+	}
+	wait.Wait()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	for _, partition := range partitions {
+		for _, hit := range partition.items {
+			groups.add(hit)
 		}
-		wait.Wait()
+	}
+	// Each retained group is known to contain a live row. The best K groups
+	// therefore contain the global best K base rows, without a recall cutoff.
+	sort.Slice(groups.items, func(i, j int) bool { return compareColumnNames(groups.items[i], groups.items[j]) < 0 })
+	for _, hit := range groups.items {
+		rows, err := selectColumnRows(ctx, view, hit, limit)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			add(base.Record(row), hit.score, "")
+		}
+		if limit > 0 && results.Len() >= limit {
+			break
+		}
+	}
+
+	mask, requiresNonASCII := columnNameFilter(query)
+	for _, live := range view.Query.Names {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		for _, partition := range partitions {
-			for _, hit := range partition.items {
-				groups.add(hit)
-			}
+		if requiresNonASCII && !live.NonASCII || live.Mask&mask != mask {
+			continue
 		}
-		// Each retained group is known to contain a live row. The best K groups
-		// therefore contain the global best K base rows, without a recall cutoff.
-		sort.Slice(groups.items, func(i, j int) bool { return compareColumnNames(groups.items[i], groups.items[j]) < 0 })
-		for _, hit := range groups.items {
-			rows, err := selectColumnRows(ctx, view, hit, limit)
-			if err != nil {
-				return nil, err
-			}
-			for _, row := range rows {
-				add(base.Record(row), hit.score, "")
-			}
-			if limit > 0 && results.Len() >= limit {
-				break
-			}
-		}
-
-		mask, requiresNonASCII := columnNameFilter(query)
-		for _, change := range view.Delta {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			if change.Deleted || change.ID == base.IDs[0] || !columnExtensionEligible(query, change.Record) {
-				continue
-			}
-			nameMask, nonASCII := column.CharacterMask(change.Name)
-			if !nonASCII && (requiresNonASCII || nameMask&mask != mask) {
-				continue
-			}
-			minimum := int64(0)
-			if limit > 0 && results.Len() >= limit {
-				minimum = results.items[0].Score
-				if query.wildcard == nil {
-					minimum -= 1000000
+		if live.BaseName != column.NoRow && len(base.NamePairBitmaps) != 0 {
+			words := (base.Names() + 63) / 64
+			eligible := true
+			for _, pair := range query.plan.namePairs {
+				if base.NamePairBitmaps[pair*words+int(live.BaseName)/64]&(1<<(live.BaseName%64)) == 0 {
+					eligible = false
+					break
 				}
 			}
-			if matched, score := scoreColumnName(query, change.Name, !nonASCII, minimum, nil); matched {
-				if query.wildcard == nil {
-					score = 1000000 + min(max(score, 0), 999999)
-				}
-				add(change.Record, score, "")
+			if !eligible {
+				continue
 			}
 		}
+		change := view.Delta[live.ID]
+		if !columnExtensionEligible(query, change.Record) {
+			continue
+		}
+		minimum := int64(0)
+		if limit > 0 && results.Len() >= limit {
+			minimum = results.items[0].Score
+			if query.wildcard == nil {
+				minimum -= 1000000
+			}
+		}
+		if matched, score := scoreColumnName(query, change.Name, !live.NonASCII, minimum, nil); matched {
+			if query.wildcard == nil {
+				score = 1000000 + min(max(score, 0), 999999)
+			}
+			add(change.Record, score, "")
+		}
+	}
 
-		return sortAndLimitResults(results.items, limit), ctx.Err()
-	}
-	// Only explicit path queries materialize paths for matching. Default name
-	// queries return their actual hit count regardless of the requested limit.
-	visit := func(record column.Record) {
-		if !columnExtensionEligible(query, record) {
-			return
-		}
-		path, ok := resolve(record)
-		if !ok {
-			return
-		}
-		if matched, score := scoreDocAgainstQuery(query, docRecord{Path: path, IsDir: record.Flags&column.Directory != 0}); matched {
-			add(record, score, path)
-		}
-	}
-	for row := 1; row < base.Len(); row++ {
-		if row%256 == 0 && ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		if _, changed := view.Delta[base.IDs[row]]; !changed {
-			visit(base.Record(uint32(row)))
-		}
-	}
-	for _, change := range view.Delta {
-		if !change.Deleted && change.ID != base.IDs[0] {
-			visit(change.Record)
-		}
-	}
 	return sortAndLimitResults(results.items, limit), ctx.Err()
+}
+
+// addColumnPathResult materializes only a competitive result and applies the
+// same recycle-bin penalty regardless of the candidate retrieval strategy.
+func addColumnPathResult(results *columnResultHeap, record column.Record, score int64, path string) {
+	isDir := record.Flags&column.Directory != 0
+	if pathInWindowsRecycleBin(path) {
+		score -= recycleBinRankPenalty
+	}
+	if !results.competitive(score, isDir, record.Name) {
+		return
+	}
+	path = strings.Clone(path)
+	result := SearchResult{Path: path, Name: strings.Clone(record.Name), ParentPath: filepath.Dir(path), IsDir: isDir, Score: score}
+	if record.Flags&column.SizeKnown != 0 {
+		result.Size = record.Size
+	}
+	if record.Flags&column.ModifiedKnown != 0 {
+		result.Mtime = record.Modified
+	}
+	results.add(result)
 }
 
 // columnExtensionEligible makes an extension-only clause a filter, including in
@@ -232,7 +231,8 @@ func (h *columnResultHeap) competitive(score int64, directory bool, name string)
 
 func (h *columnResultHeap) add(result SearchResult) {
 	if h.limit <= 0 || h.Len() < h.limit {
-		heap.Push(h, result)
+		h.items = appendColumnHeap(h.items, result, h.limit)
+		heap.Fix(h, len(h.items)-1)
 	} else if compareSearchResults(result, h.items[0]) < 0 {
 		h.items[0] = result
 		heap.Fix(h, 0)
@@ -283,11 +283,28 @@ func (h *columnNameHeap) competitive(hit columnNameHit) bool {
 
 func (h *columnNameHeap) add(hit columnNameHit) {
 	if h.limit <= 0 || h.Len() < h.limit {
-		heap.Push(h, hit)
+		h.items = appendColumnHeap(h.items, hit, h.limit)
+		heap.Fix(h, len(h.items)-1)
 	} else if compareColumnNames(hit, h.items[0]) < 0 {
 		h.items[0] = hit
 		heap.Fix(h, 0)
 	}
+}
+
+// appendColumnHeap keeps sparse worker heaps small, then reserves a bounded
+// top-K buffer once a query proves broad enough to need it. This avoids both
+// repeated growth copies and allocating K entries for a worker with one hit.
+func appendColumnHeap[T any](items []T, value T, limit int) []T {
+	if len(items) == cap(items) && limit > 0 {
+		capacity := min(limit, 8)
+		if len(items) > 0 {
+			capacity = min(limit, max(cap(items)*2, 128))
+		}
+		grown := make([]T, len(items), capacity)
+		copy(grown, items)
+		items = grown
+	}
+	return append(items, value)
 }
 
 // scanColumnNames scores disjoint name ranges with private top-K heaps. A local
@@ -324,6 +341,14 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 			candidates &= bitmap[word]
 			if candidates == 0 {
 				break
+			}
+		}
+		if candidates != 0 && len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
+			for _, pair := range query.plan.namePairs {
+				candidates &= base.NamePairBitmaps[pair*words+word]
+				if candidates == 0 {
+					break
+				}
 			}
 		}
 		if word == start/64 {
@@ -412,7 +437,12 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 					}
 					continue
 				}
+				parentRow := base.Parents[row]
+				stable := view.DirectoryUnchanged(parentRow)
 				reachable, checked := reachableParents[record.ParentID]
+				if stable {
+					reachable, checked = base.DirectoryPath(base.RowDirectory[parentRow]) != "", true
+				}
 				if !checked {
 					reachable = view.Reachable(record.ParentID)
 					reachableParents[record.ParentID] = reachable
@@ -420,7 +450,12 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 				if !reachable {
 					continue
 				}
-				recycled := recordInWindowsRecycleBin(view, record, recycleParents)
+				recycled := false
+				if stable {
+					recycled = pathInWindowsRecycleBin(base.DirectoryPath(base.RowDirectory[parentRow])) || parentRow == 0 && strings.EqualFold(record.Name, "$Recycle.Bin") && runtime.GOOS == "windows"
+				} else {
+					recycled = recordInWindowsRecycleBin(view, record, recycleParents)
+				}
 				if directory {
 					dirSeen = true
 					dirNormal = dirNormal || !recycled

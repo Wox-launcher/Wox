@@ -1474,6 +1474,11 @@ func (a *App) changePluginFormChoice(index, delta int) {
 	if state == nil || !state.active {
 		return
 	}
+	if index >= 0 && index < len(state.definitions) && state.definitions[index].Type == "select" && state.definitions[index].Value.IsMulti {
+		// Left/right must not replace the selected set with a single option.
+		a.openFocusedPluginFormChoice(index)
+		return
+	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
 	clearPluginFormFieldError(state, index)
@@ -1531,6 +1536,7 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	}
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
 		item: item, anchor: anchor,
+		multi:    definition.Value.IsMulti,
 		onChoose: func(choice settingChoice) { a.setPluginFormChoice(index, choice.value) },
 	})
 	state.status = ""
@@ -1750,6 +1756,49 @@ func (a *App) finishPluginAIModelEdit(index int, name string) {
 	}
 }
 
+// togglePluginMultiChoice adds or removes one option in a comma-separated setting.
+// Selecting an IsSelectAll option stores only that value. Any other choice removes select-all values,
+// so a stored "all" does not keep every option selected after the user picks one.
+func togglePluginMultiChoice(options []formOption, current, value string) string {
+	selectAll := false
+	selectAllValues := map[string]struct{}{}
+	for _, option := range options {
+		if !option.IsSelectAll {
+			continue
+		}
+		selectAllValues[option.Value] = struct{}{}
+		if option.Value == value {
+			selectAll = true
+		}
+	}
+	selected := false
+	values := make([]string, 0)
+	for _, existing := range strings.Split(current, ",") {
+		existing = strings.TrimSpace(existing)
+		if existing == "" {
+			continue
+		}
+		if existing == value {
+			selected = true
+			continue
+		}
+		if selectAll {
+			continue
+		}
+		if _, drop := selectAllValues[existing]; drop {
+			continue
+		}
+		values = append(values, existing)
+	}
+	if selectAll && !selected {
+		return value
+	}
+	if !selected {
+		values = append(values, value)
+	}
+	return strings.Join(values, ",")
+}
+
 // setPluginFormChoice stages one exact dropdown value without depending on option ordering.
 func (a *App) setPluginFormChoice(index int, value string) {
 	state := a.pluginSettings.Form()
@@ -1766,6 +1815,12 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	}
 	if !found {
 		return
+	}
+	if definition.Type == "select" && definition.Value.IsMulti {
+		value = togglePluginMultiChoice(definition.Value.Options, state.values[definition.Value.Key], value)
+		if picker := a.generalSettings.ChoicePicker(); picker != nil && picker.multi {
+			picker.item.value = value
+		}
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.values[definition.Value.Key] = value

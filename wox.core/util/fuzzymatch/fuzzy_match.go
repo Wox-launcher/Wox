@@ -140,7 +140,7 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 	textRunes := *textBufPtr
 	originalRunes := *originalBufPtr
 
-	return fuzzyMatchRunes(text, pattern, originalRunes, textRunes, patternRunes, hasChineseChar, nil, nil, usePinYin)
+	return fuzzyMatchRunes(text, pattern, originalRunes, textRunes, patternRunes, hasChineseChar, nil, nil, usePinYin, true)
 }
 
 // FuzzyMatchPattern reuses query normalization without retaining per-candidate text.
@@ -159,7 +159,7 @@ func FuzzyMatchPattern(text string, pattern *PreparedPattern, asciiText bool, us
 	defer putRuneBuffer(textBuffer)
 	defer putRuneBuffer(originalBuffer)
 	hasChinese := processText(text, originalBuffer, textBuffer)
-	return fuzzyMatchRunes(text, pattern.raw, *originalBuffer, *textBuffer, pattern.normalizedRunes, hasChinese, nil, nil, usePinyin)
+	return fuzzyMatchRunes(text, pattern.raw, *originalBuffer, *textBuffer, pattern.normalizedRunes, hasChinese, nil, nil, usePinyin, false)
 }
 
 // FuzzyMatchPatternAtLeast prunes ASCII candidates below a proven score bound.
@@ -225,6 +225,47 @@ func PreparePattern(pattern string) *PreparedPattern {
 	return prepared
 }
 
+// AdvanceSubsequence carries a necessary path-match condition across text
+// components without joining or retaining them. It does not compute a score.
+func (p *PreparedPattern) AdvanceSubsequence(text string, matched int) int {
+	for _, r := range text {
+		if matched == len(p.normalizedRunes) {
+			break
+		}
+		if r < 128 {
+			if r >= 'A' && r <= 'Z' {
+				r += 'a' - 'A'
+			}
+		} else {
+			r = unicode.ToLower(r)
+			if normalized, ok := diacriticsMap[r]; ok {
+				r = normalized
+			}
+		}
+		if r == p.normalizedRunes[matched] {
+			matched++
+		}
+	}
+	return matched
+}
+
+// MatchesNormalizedASCII uses byte searches for a lowercase ASCII target. The
+// persisted directory index guarantees this precondition; Unicode targets keep
+// AdvanceSubsequence so diacritic normalization cannot lose a match.
+func (p *PreparedPattern) MatchesNormalizedASCII(text string) bool {
+	for _, r := range p.normalizedRunes {
+		if r >= 128 {
+			return false
+		}
+		index := strings.IndexByte(text, byte(r))
+		if index < 0 {
+			return false
+		}
+		text = text[index+1:]
+	}
+	return true
+}
+
 // FuzzyMatchPrepared matches precomputed text and pattern data with FuzzyMatch semantics.
 func FuzzyMatchPrepared(text *PreparedText, pattern *PreparedPattern, usePinYin bool) FuzzyMatchResult {
 	if pattern.raw == "" {
@@ -247,11 +288,12 @@ func FuzzyMatchPrepared(text *PreparedText, pattern *PreparedPattern, usePinYin 
 		text.pinyinSegments,
 		&text.pinyinLetterUpperBounds,
 		usePinYin,
+		false,
 	)
 }
 
 // fuzzyMatchRunes applies the shared scoring pipeline to normalized text and pattern data.
-func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRunes []rune, patternRunes []rune, hasChineseChar bool, pinyinSegments []PinyinSegment, pinyinLetterUpperBounds *[26]int, usePinYin bool) FuzzyMatchResult {
+func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRunes []rune, patternRunes []rune, hasChineseChar bool, pinyinSegments []PinyinSegment, pinyinLetterUpperBounds *[26]int, usePinYin, cachePinyin bool) FuzzyMatchResult {
 	// Try exact match first (highest priority)
 	if equalRunes(textRunes, patternRunes) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusExactMatch + int64(len(pattern)*scoreMatch)}
@@ -273,10 +315,17 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 	// Try pinyin matching for Chinese text
 	if usePinYin && hasChineseChar {
 		if pinyinLetterUpperBounds == nil || canPossiblyMatchPinyin(patternRunes, *pinyinLetterUpperBounds) {
-			if pinyinSegments == nil {
-				pinyinSegments = getPinYin(text)
+			var pinyinResult FuzzyMatchResult
+			// General string matching still memoizes repeated titles. Compiled
+			// index scans borrow scratch for their many distinct candidate names.
+			if pinyinSegments == nil && !cachePinyin {
+				pinyinResult = matchPinyinText(text, patternRunes)
+			} else {
+				if pinyinSegments == nil {
+					pinyinSegments = getPinYin(text)
+				}
+				pinyinResult = matchPinyinStrict(pinyinSegments, patternRunes)
 			}
-			pinyinResult := matchPinyinStrict(pinyinSegments, patternRunes)
 			if pinyinResult.IsMatch {
 				return pinyinResult
 			}
@@ -847,7 +896,6 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 
 	// Active states
 	statesPtr := getSearchStateBuffer()
-	defer putSearchStateBuffer(statesPtr)
 	states := *statesPtr
 	if cap(states) < 1 {
 		states = make([]pinyinSearchState, 1)
@@ -859,7 +907,6 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 
 	// Pre-allocate next states buffer
 	nextStatesPtr := getSearchStateBuffer()
-	defer putSearchStateBuffer(nextStatesPtr)
 	nextStates := *nextStatesPtr
 	if cap(nextStates) < 32 {
 		nextStates = make([]pinyinSearchState, 0, 32)
@@ -867,11 +914,20 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 		nextStates = nextStates[:0]
 	}
 	*nextStatesPtr = nextStates
+	defer func() {
+		// Appends and swaps can replace either backing array. Return the final
+		// buffers so a later match does not repeat the same growth allocation.
+		*statesPtr, *nextStatesPtr = states[:0], nextStates[:0]
+		putSearchStateBuffer(statesPtr)
+		putSearchStateBuffer(nextStatesPtr)
+	}()
 
 	// Optimization: Use flat slices instead of map for deduplication
 	// Key space: (PatternIdx+1) * (MaxMatched+1) * 3 (Modes) * (MaxSkips+1)
 	rows := len(patternRunes) + 1
-	cols1 := len(segments) + 1
+	// Every matched segment consumes at least one pattern rune. Long filenames
+	// therefore need no states for more matches than the pattern can contain.
+	cols1 := min(len(segments), len(patternRunes)) + 1
 	cols2 := 3 * (maxConsecutiveSkippedSyllables + 1)
 	size := rows * cols1 * cols2
 

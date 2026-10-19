@@ -450,7 +450,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 	result, err := woxscreenshot.CaptureScreenshot(woxscreenshot.ScreenshotOptions{
 		OnClipboardReady:  request.OnClipboardReady,
 		SaveEditableScene: request.SaveEditableScene, EditScreenshotPath: request.EditScreenshotPath,
-		ExportFilePath: request.ExportFilePath, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
+		ExportFilePath: request.ExportFilePath, ExportDirectory: request.ExportDirectory, CopyToClipboard: request.Output == "" || strings.EqualFold(request.Output, "clipboard"),
 		HideAnnotationToolbar: request.HideAnnotationToolbar, AutoConfirm: request.AutoConfirm, AllowVideoRecording: request.AllowVideoRecording,
 		ExtraActions:      request.ExtraActions,
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 60, ShowPointer: true}, WindowManager: a.windows,

@@ -177,4 +177,6 @@ Use `preview.ChatConversation` for launcher, dedicated-window, and business-spec
 
 Supply conversation data, model/catalog entries, the native host window, theme, localized labels, and request callbacks through `ChatConversationProps`. Optional header, history, tool questions, and a business footer are extension points. `PrepareMessages` allows AI Chat to reuse its cached rich-message/tool-round preparation at the size chosen by the component. Simple hosts can supply message data directly. Use `ChatScrollState`, `ChatCatalogKey`, and `ChatComposerKey` for retained scroll and keyboard handling, including host-level keyboard dispatch outside the text field.
 
+Message preparation and text-layout caches must use the presenting host window, including Markdown, reasoning, quoted attachments, and tool details. The hidden launcher can release its Windows renderer while Chat or Settings remains open, so measuring through the launcher can fail even though the conversation's own window can still draw.
+
 Provider requests, persistence, skill context, and applying generated theme patches stay in their business controllers. These intentionally differ; the shared component does not send requests or save drafts by itself.

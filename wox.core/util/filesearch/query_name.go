@@ -142,7 +142,15 @@ func exactColumnNameThreshold(ctx context.Context, view column.View, query Searc
 				if _, changed := view.Delta[base.IDs[row]]; changed {
 					continue
 				}
-				if base.Flags[row]&column.Structural != 0 || !view.Reachable(base.IDs[row]) {
+				if base.Flags[row]&column.Structural != 0 {
+					continue
+				}
+				parent := base.Parents[row]
+				if view.DirectoryUnchanged(parent) {
+					if base.DirectoryPath(base.RowDirectory[parent]) == "" {
+						continue
+					}
+				} else if !view.Reachable(base.IDs[row]) {
 					continue
 				}
 				count++

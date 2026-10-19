@@ -1,6 +1,9 @@
 package supervisor
 
 import (
+	"archive/zip"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -95,4 +98,61 @@ func TestRetainNewestCrashFiles(t *testing.T) {
 			t.Fatalf("old report %s was not removed", removed)
 		}
 	}
+}
+
+// TestDebugSessionRestart drops launch payloads while retaining diagnostic mode across crashes.
+func TestDebugSessionRestart(t *testing.T) {
+	args := []string{"wox", ArgSupervisor, ArgDebugMode, "wox://query?q=test"}
+	got := supervisedChildArgs(args, false)
+	if !reflect.DeepEqual(got, []string{ArgChild, ArgDebugMode}) {
+		t.Fatalf("lost debug session or replayed query: %v", got)
+	}
+}
+
+// TestDebugReportMetadataAndRetention checks completed packages and bounds repeated live reports.
+func TestDebugReportMetadataAndRetention(t *testing.T) {
+	setupSupervisorTest(t)
+	previous := os.Args
+	os.Args = append(append([]string{}, previous...), ArgDebugMode)
+	t.Cleanup(func() { os.Args = previous })
+	m := GetManager()
+	var path string
+	for i := 0; i < retainedCrashArtifacts+2; i++ {
+		var err error
+		path, err = m.ExportCrash(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	files, err := filepath.Glob(filepath.Join(m.CrashReportsDirectory(), "*.zip"))
+	if err != nil || len(files) != retainedCrashArtifacts {
+		t.Fatalf("retained reports=%v error=%v", files, err)
+	}
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+	for _, file := range archive.File {
+		if file.Name != "diagnostics/metadata.json" {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
+		var metadata struct {
+			DebugMode bool
+			Build     any
+		}
+		if err := json.NewDecoder(reader).Decode(&metadata); err != nil {
+			t.Fatal(err)
+		}
+		if !metadata.DebugMode || metadata.Build == nil {
+			t.Fatalf("missing diagnostic metadata: %+v", metadata)
+		}
+		return
+	}
+	t.Fatal("missing metadata entry")
 }

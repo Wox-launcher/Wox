@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,7 +142,8 @@ func (l *Log) SetLevel(level string) string {
 	return normalizedLevel
 }
 
-func (l *Log) ClearHistory() error {
+// ClearHistory preserves additional active files owned by independent log writers.
+func (l *Log) ClearHistory(preservedLogNames ...string) error {
 	l.clearLogMux.Lock()
 	defer l.clearLogMux.Unlock()
 
@@ -148,7 +151,7 @@ func (l *Log) ClearHistory() error {
 		return err
 	}
 
-	logFileName := path.Base(l.fileWriter.CurrentFilename())
+	logFileName := filepath.Base(l.fileWriter.CurrentFilename())
 	entries, err := os.ReadDir(l.logFolder)
 	if err != nil {
 		return err
@@ -160,7 +163,7 @@ func (l *Log) ClearHistory() error {
 		}
 
 		name := entry.Name()
-		if name == logFileName || name == "crash.log" {
+		if name == logFileName || name == "crash.log" || slices.Contains(preservedLogNames, name) {
 			continue
 		}
 

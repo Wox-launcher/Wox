@@ -48,6 +48,31 @@ func openNativeNameIndex(ctx context.Context, dir string, callbacks nativeIndexC
 	if !filesearchservice.IsRunning() {
 		return nil, nil
 	}
+	// Reuse the old/new path resolution already needed by content indexing.
+	// Subscribers receive changes even when content extraction is disabled.
+	content, wants := callbacks.content, callbacks.wantsContent
+	callbacks.availability = sharedNativeChanges.setAvailable
+	callbacks.wantsContent = func() bool {
+		sharedNativeChanges.mu.Lock()
+		subscribed := len(sharedNativeChanges.feeds) != 0
+		sharedNativeChanges.mu.Unlock()
+		return subscribed || content != nil && (wants == nil || wants())
+	}
+	callbacks.content = func(ctx context.Context, notifications []ContentHookNotification) {
+		if content != nil && (wants == nil || wants()) {
+			content(ctx, notifications)
+		}
+		for _, notification := range notifications {
+			signal := ChangeSignal{Kind: ChangeSignalKindDirtyPath, FeedType: RootFeedTypeUSN, Path: notification.Path, PathTypeKnown: true, SemanticKind: ChangeSemanticKindModify, At: time.Now()}
+			switch notification.Kind {
+			case ContentHookKindDelete:
+				signal.SemanticKind = ChangeSemanticKindRemove
+			case ContentHookKindScopeReplaced:
+				signal.Path, signal.PathIsDir = notification.ScopePath, true
+			}
+			sharedNativeChanges.publish(signal)
+		}
+	}
 	return newNTFSNameIndex(ctx, dir, filesearchservice.IndexedVolumeRoots(), filesearchservice.StreamFacts, callbacks)
 }
 
@@ -95,10 +120,19 @@ func newNTFSNameIndex(ctx context.Context, dir string, roots []string, stream fa
 // Missing or expired journals require a fresh build through the same work slot.
 func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSource) {
 	defer i.workers.Done()
+	setAvailable := func(available bool) {
+		if i.callbacks.availability != nil {
+			i.callbacks.availability(source.root, available)
+		}
+	}
+	defer setAvailable(false)
 	needsBuild := errors.Is(source.store.Read(func(column.View) error { return nil }), column.ErrNotReady)
 	for ctx.Err() == nil {
 		var err error
 		if needsBuild || source.store.NeedsCompaction() {
+			if needsBuild {
+				setAvailable(false)
+			}
 			select {
 			case i.work <- struct{}{}:
 			case <-ctx.Done():
@@ -123,9 +157,11 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 			return
 		}
 		if err == nil {
+			setAvailable(true)
 			i.clearError(id)
 			continue
 		}
+		setAvailable(false)
 		if errors.Is(err, filesearchservice.ErrFactsReset) || errors.Is(err, column.ErrNotReady) {
 			needsBuild = true
 		}

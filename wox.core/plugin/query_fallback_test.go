@@ -3,10 +3,13 @@ package plugin
 import (
 	"context"
 	"testing"
+
+	"wox/common"
 )
 
 type recordingFallbackPlugin struct {
-	calls int
+	calls   int
+	results []QueryResult
 }
 
 func (p *recordingFallbackPlugin) Init(context.Context, InitParams) {}
@@ -17,7 +20,30 @@ func (p *recordingFallbackPlugin) Query(context.Context, Query) QueryResponse {
 
 func (p *recordingFallbackPlugin) QueryFallback(context.Context, Query) []QueryResult {
 	p.calls++
-	return nil
+	return p.results
+}
+
+// TestQueryFallbackRanksBelowLateResults checks the cached snapshot used by later UI batches.
+func TestQueryFallbackRanksBelowLateResults(t *testing.T) {
+	initPluginManagerLoadTest(t)
+	ctx := context.Background()
+	query := Query{Id: "fallback-ranking", SessionId: "session", Type: QueryTypeInput, RawQuery: "unmatched"}
+	manager, instance := newTestManagerWithCachedResult(query, QueryResult{Id: "ordinary", Title: "ordinary"})
+	instance.Plugin = &recordingFallbackPlugin{results: []QueryResult{{
+		Id: "fallback", Title: "fallback", Score: 100, RankAboveUsage: true,
+		Icon: common.NewWoxImageEmoji("🔍"),
+	}}}
+	if !manager.appendPluginInstance(instance) {
+		t.Fatal("failed to register fallback plugin")
+	}
+	response := manager.QueryFallback(ctx, query, nil)
+	if len(response.Results) != 1 || response.Results[0].Score >= 0 {
+		t.Fatalf("fallback response = %+v, want one negative-score result", response.Results)
+	}
+	snapshot := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
+	if len(snapshot) != 2 || snapshot[0].Id != "ordinary" || snapshot[1].Id != "fallback" || snapshot[1].Score != response.Results[0].Score {
+		t.Fatalf("snapshot = %+v, want ordinary result before fallback with matching scores", snapshot)
+	}
 }
 
 type panickingFallbackPlugin struct{}

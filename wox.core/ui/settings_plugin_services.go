@@ -159,6 +159,18 @@ func (s *CoreServices) UpdatePluginSettings(ctx context.Context, sessionID strin
 			}
 			instance.Setting.TriggerKeywords.Set(keywords)
 		default:
+			// System plugins can own settings whose persistence includes a coordinated workflow.
+			if handler, ok := instance.Plugin.(interface {
+				HandleSettingUpdate(context.Context, string, string) (bool, error)
+			}); ok {
+				handled, err := handler.HandleSettingUpdate(ctx, key, value)
+				if err != nil {
+					return err
+				}
+				if handled {
+					continue
+				}
+			}
 			isPlatformSpecific := false
 			for _, settingDefinition := range instance.Metadata.SettingDefinitions {
 				if settingDefinition.Value != nil && settingDefinition.Value.GetKey() == key {

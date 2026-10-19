@@ -18,7 +18,7 @@ import (
 
 const (
 	usnPollInterval              = time.Second
-	usnSignalBufferSize          = 8192
+	usnSignalBufferSize          = 256
 	usnReadBufferSize            = 1 << 20
 	fsctlQueryUSNJournal  uint32 = 0x000900f4
 	fsctlReadUSNJournal   uint32 = 0x000900bb
@@ -30,7 +30,7 @@ const (
 var procOpenFileByID = windows.NewLazySystemDLL("kernel32.dll").NewProc("OpenFileById")
 
 type WindowsChangeFeed struct {
-	fallback  *FallbackChangeFeed
+	fallback  *windowsTreeChangeFeed
 	usn       *usnWatcherSet
 	queue     *changeSignalQueue
 	done      chan struct{}
@@ -107,7 +107,7 @@ type usnResolvedRecord struct {
 
 func NewWindowsChangeFeed() *WindowsChangeFeed {
 	feed := &WindowsChangeFeed{
-		fallback: NewFallbackChangeFeed(),
+		fallback: newWindowsTreeChangeFeed(),
 		queue:    newChangeSignalQueue(usnSignalBufferSize),
 		done:     make(chan struct{}),
 	}
@@ -124,12 +124,6 @@ func (f *WindowsChangeFeed) Mode() string {
 
 func (f *WindowsChangeFeed) Signals() <-chan ChangeSignal {
 	return f.queue.Signals()
-}
-
-// SetDirectoryWatchFilter forwards the scanner policy to the fsnotify fallback
-// used for volumes without a USN journal.
-func (f *WindowsChangeFeed) SetDirectoryWatchFilter(filter DirectoryWatchFilter) {
-	f.fallback.SetDirectoryWatchFilter(filter)
 }
 
 func (f *WindowsChangeFeed) Refresh(ctx context.Context, roots []RootRecord) error {

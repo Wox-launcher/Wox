@@ -19,6 +19,10 @@ From the editor you can crop, add numbered markers, inspect colors, type a pixel
 
 OCR is optional. Enable it in **Settings -> Plugins -> Screenshot** to search captures by text in the image. You can use the system OCR engine or a downloadable offline PaddleOCR model.
 
+Choose a **Screenshot folder** in the same settings page to save captures to a local folder, including a synced OneDrive folder. New captures use the new folder immediately, while existing screenshots, OCR data, and editable scenes move in the background. History remains searchable during the move. Wait for the transfer to finish before changing the folder again. Interrupted transfers resume when Wox restarts, and temporary failures are retried automatically. This folder setting is local to each device; the screenshot retention period still applies.
+
+In a custom folder, history, retention, and later folder moves only include Wox screenshot filenames. Other images in that folder are left alone.
+
 ## Common actions
 
 | Action | Use |

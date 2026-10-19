@@ -10,8 +10,10 @@ import (
 )
 
 // reserveScreenshotExportFilePath allocates a collision-safe PNG only after image confirmation.
-func reserveScreenshotExportFilePath() (string, error) {
-	directory := util.GetLocation().GetScreenshotDirectory()
+func reserveScreenshotExportFilePath(directory string) (string, error) {
+	if directory == "" {
+		directory = util.GetLocation().GetScreenshotDirectory()
+	}
 	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
 		return "", fmt.Errorf("ensure screenshot directory: %w", err)
 	}

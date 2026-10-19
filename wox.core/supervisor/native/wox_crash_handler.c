@@ -144,31 +144,43 @@ static BOOL write_minidump(const WER_RUNTIME_EXCEPTION_INFORMATION *exception_in
         MiniDumpIgnoreInaccessibleMemory
     );
 
-    written = MiniDumpWriteDump(
-        exception_information->hProcess,
-        GetProcessId(exception_information->hProcess),
-        dump_file,
-        dump_type,
-        &minidump_exception,
-        NULL,
-        NULL
-    );
-    if (!written) {
-        log_capture(pid, "extended_dump_failed_retrying_normal", GetLastError());
-        SetFilePointer(dump_file, 0, NULL, FILE_BEGIN);
-        SetEndOfFile(dump_file);
-        written = MiniDumpWriteDump(
-            exception_information->hProcess,
-            GetProcessId(exception_information->hProcess),
-            dump_file,
-            MiniDumpNormal,
-            &minidump_exception,
-            NULL,
-            NULL
-        );
+    DWORD debug_mode = 0;
+    DWORD debug_mode_size = sizeof(debug_mode);
+    RegGetValueW(HKEY_CURRENT_USER, WOX_CRASH_CONFIG_KEY, L"DebugMode", RRF_RT_REG_DWORD,
+                 NULL, &debug_mode, &debug_mode_size);
+    // Keep a smaller fallback, but explicitly record when full memory was unavailable.
+    MINIDUMP_TYPE types[4];
+    int count = 0;
+    if (debug_mode == 1) {
+        types[count++] = (MINIDUMP_TYPE)(dump_type | MiniDumpWithFullMemory | MiniDumpWithHandleData);
+        // WER may provide a process handle without PROCESS_DUP_HANDLE rights.
+        // Preserve the heap even when handle enumeration cannot be collected.
+        types[count++] = (MINIDUMP_TYPE)(dump_type | MiniDumpWithFullMemory);
     }
-
-    if (!written) log_capture(pid, "normal_dump_failed", GetLastError());
+    types[count++] = dump_type;
+    types[count++] = MiniDumpNormal;
+    written = FALSE;
+    for (int index = 0; index < count; index++) {
+        const BOOL full = (types[index] & MiniDumpWithFullMemory) != 0;
+        const BOOL handles = (types[index] & MiniDumpWithHandleData) != 0;
+        const BOOL normal = types[index] == MiniDumpNormal;
+        log_capture(pid, full ? (handles ? "full_dump_started" : "full_memory_only_started") : normal ? "normal_dump_started" : "extended_dump_started", ERROR_SUCCESS);
+        written = MiniDumpWriteDump(exception_information->hProcess, pid, dump_file, types[index],
+                                    &minidump_exception, NULL, NULL);
+        if (written) {
+            log_capture(pid, full ? (handles ? "full_dump_written" : "full_memory_only_written") : normal ? "normal_dump_written" : "extended_dump_written", ERROR_SUCCESS);
+            break;
+        }
+        log_capture(pid, full ? "full_dump_failed" : normal ? "normal_dump_failed" : "extended_dump_failed", GetLastError());
+        if (index + 1 < count) {
+            log_capture(pid, "retrying_smaller_dump", ERROR_SUCCESS);
+            LARGE_INTEGER start = {0};
+            if (!SetFilePointerEx(dump_file, start, NULL, FILE_BEGIN) || !SetEndOfFile(dump_file)) {
+                log_capture(pid, "reset_dump_failed", GetLastError());
+                break;
+            }
+        }
+    }
 
     if (written) {
         written = FlushFileBuffers(dump_file);

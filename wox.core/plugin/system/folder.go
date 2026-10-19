@@ -20,6 +20,7 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/pathquery"
 	"wox/util/shell"
 )
 
@@ -173,7 +174,7 @@ func (p *FolderPlugin) browsePathTool(ctx context.Context, option plugin.InvokeP
 
 	p.api.ChangeQuery(ctx, common.PlainQuery{
 		QueryType: plugin.QueryTypeInput,
-		QueryText: ensureFolderQueryTrailingSeparator(browsePath),
+		QueryText: pathquery.EnsureTrailingSeparator(browsePath),
 	})
 	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
@@ -201,7 +202,7 @@ func resolveFolderBrowsePath(path string) (string, error) {
 		return "", errors.New("path is required")
 	}
 
-	expandedPath, expandErr := expandFolderQueryPath(path)
+	expandedPath, expandErr := pathquery.Expand(path)
 	if expandErr != nil {
 		return "", expandErr
 	}
@@ -226,7 +227,7 @@ func (p *FolderPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 		return plugin.QueryResponse{}
 	}
 
-	folderPath, shouldListChildren, ok := parseFolderQueryPath(query.Search)
+	folderPath, shouldListChildren, ok := pathquery.Parse(query.Search)
 	if !ok {
 		return plugin.NewQueryResponse(p.queryFavorites(ctx, query.Search))
 	}
@@ -396,7 +397,7 @@ func (p *FolderPlugin) buildParentDirectoryActions(parentPath string, favoriteMa
 				if p.api != nil {
 					p.api.ChangeQuery(ctx, common.PlainQuery{
 						QueryType: plugin.QueryTypeInput,
-						QueryText: ensureFolderQueryTrailingSeparator(parentPath),
+						QueryText: pathquery.EnsureTrailingSeparator(parentPath),
 					})
 				}
 			},
@@ -568,7 +569,7 @@ func (p *FolderPlugin) buildBrowseAction(path string, isDir bool) plugin.QueryRe
 			if p.api != nil {
 				p.api.ChangeQuery(ctx, common.PlainQuery{
 					QueryType: plugin.QueryTypeInput,
-					QueryText: ensureFolderQueryTrailingSeparator(path),
+					QueryText: pathquery.EnsureTrailingSeparator(path),
 				})
 			}
 		},
@@ -929,7 +930,7 @@ func normalizeFolderFavoritePath(path string) (string, error) {
 		return "", errors.New("path is empty")
 	}
 
-	expandedPath, expandErr := expandFolderQueryPath(path)
+	expandedPath, expandErr := pathquery.Expand(path)
 	if expandErr != nil {
 		return "", expandErr
 	}
@@ -1034,150 +1035,4 @@ func getFolderPluginPathIcon(path string, isDir bool) common.WoxImage {
 func isHiddenFolderEntry(entry os.DirEntry) bool {
 	name := entry.Name()
 	return strings.HasPrefix(name, ".") && name != "." && name != ".."
-}
-
-// parseFolderQueryPath converts a typed folder path into the filesystem path to inspect.
-func parseFolderQueryPath(input string) (path string, shouldListChildren bool, ok bool) {
-	trimmedInput := strings.TrimSpace(input)
-	if trimmedInput == "" || !isFolderQueryPathLike(trimmedInput) {
-		return "", false, false
-	}
-
-	shouldListChildren = hasFolderQueryTrailingSeparator(trimmedInput)
-	lookupPath := trimFolderQueryTrailingSeparators(trimmedInput)
-	expandedPath, expandErr := expandFolderQueryPath(lookupPath)
-	if expandErr != nil {
-		return "", false, false
-	}
-
-	return filepath.Clean(expandedPath), shouldListChildren, true
-}
-
-// isFolderQueryPathLike filters global queries before any filesystem stat.
-func isFolderQueryPathLike(input string) bool {
-	if input == "~" || strings.HasPrefix(input, "~/") || strings.HasPrefix(input, `~\`) {
-		return true
-	}
-	if _, rest, ok := splitWindowsEnvPrefix(input); ok {
-		return rest == "" || strings.HasPrefix(rest, `\`) || strings.HasPrefix(rest, "/")
-	}
-	return filepath.IsAbs(input)
-}
-
-// hasFolderQueryTrailingSeparator detects the browsing mode requested by the user.
-func hasFolderQueryTrailingSeparator(input string) bool {
-	return strings.HasSuffix(input, "/") || strings.HasSuffix(input, `\`)
-}
-
-// trimFolderQueryTrailingSeparators removes browsing separators without breaking roots.
-func trimFolderQueryTrailingSeparators(input string) string {
-	for hasFolderQueryTrailingSeparator(input) {
-		next := input[:len(input)-1]
-		if next == "" || isWindowsVolumeRoot(next) {
-			break
-		}
-		input = next
-	}
-	return input
-}
-
-// isWindowsVolumeRoot keeps inputs like C:\ from becoming C: during trimming.
-func isWindowsVolumeRoot(path string) bool {
-	volumeName := filepath.VolumeName(path)
-	return volumeName != "" && strings.EqualFold(volumeName, path)
-}
-
-// expandFolderQueryPath resolves Windows %VAR% values and ~ before filesystem checks.
-func expandFolderQueryPath(path string) (string, error) {
-	expandedEnv, expandErr := expandFolderQueryEnvVars(path)
-	if expandErr != nil {
-		return "", expandErr
-	}
-	return expandFolderQueryHome(expandedEnv)
-}
-
-// expandFolderQueryEnvVars expands %LOCALAPPDATA% and other Windows-style env vars.
-func expandFolderQueryEnvVars(path string) (string, error) {
-	if !strings.Contains(path, "%") {
-		return path, nil
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(path))
-	for i := 0; i < len(path); {
-		name, _, ok := splitWindowsEnvPrefix(path[i:])
-		if !ok {
-			builder.WriteByte(path[i])
-			i++
-			continue
-		}
-
-		value, found := os.LookupEnv(name)
-		if !found || strings.TrimSpace(value) == "" {
-			return "", fmt.Errorf("environment variable %%%s%% is not set", name)
-		}
-		builder.WriteString(value)
-		i += len(name) + 2
-	}
-	return builder.String(), nil
-}
-
-// splitWindowsEnvPrefix reports a leading %VAR% token used by Windows path input.
-func splitWindowsEnvPrefix(input string) (name string, rest string, ok bool) {
-	if !strings.HasPrefix(input, "%") {
-		return "", "", false
-	}
-
-	end := strings.IndexByte(input[1:], '%')
-	if end <= 0 {
-		return "", "", false
-	}
-
-	name = input[1 : 1+end]
-	if !isFolderEnvVarName(name) {
-		return "", "", false
-	}
-	return name, input[end+2:], true
-}
-
-// isFolderEnvVarName accepts Windows env names such as LOCALAPPDATA and ProgramFiles(x86).
-func isFolderEnvVarName(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for _, r := range name {
-		switch {
-		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '(', r == ')':
-			continue
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// expandFolderQueryHome resolves ~ paths before filesystem checks.
-func expandFolderQueryHome(path string) (string, error) {
-	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, `~\`) {
-		return path, nil
-	}
-
-	homeDir, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		return "", homeErr
-	}
-	if path == "~" {
-		return homeDir, nil
-	}
-
-	return filepath.Join(homeDir, path[2:]), nil
-}
-
-// ensureFolderQueryTrailingSeparator builds the follow-up query for entering a folder.
-func ensureFolderQueryTrailingSeparator(path string) string {
-	if hasFolderQueryTrailingSeparator(path) {
-		return path
-	}
-	return path + string(os.PathSeparator)
 }

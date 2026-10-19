@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -255,7 +256,11 @@ func (m *Manager) ExportCrash(ctx context.Context) (string, error) {
 		}
 		exportPath = filepath.Join(m.CrashReportsDirectory(), fmt.Sprintf("wox-crash-%s-%d.zip", time.Now().Format("20060102-150405.000"), suffix))
 	}
-	return m.exportLocked(ctx, exportPath)
+	path, err := m.exportLocked(ctx, exportPath)
+	if err == nil {
+		m.retainNewestCrashFiles(m.CrashReportsDirectory(), ".zip", retainedCrashArtifacts)
+	}
+	return path, err
 }
 
 func (m *Manager) exportLocked(ctx context.Context, exportPath string) (string, error) {
@@ -266,7 +271,6 @@ func (m *Manager) exportLocked(ctx context.Context, exportPath string) (string, 
 	defer file.Close()
 
 	zipWriter := zip.NewWriter(file)
-	defer zipWriter.Close()
 
 	m.addLogFiles(zipWriter)
 	addExistingFile(zipWriter, m.StatePath(), "diagnostics/state.json")
@@ -274,6 +278,14 @@ func (m *Manager) exportLocked(ctx context.Context, exportPath string) (string, 
 	m.addMetadata(zipWriter)
 	m.addMacOSCrashReports(zipWriter)
 	m.addWindowsCrashDumps(zipWriter)
+	// Full dumps can exhaust disk space during compression or finalization.
+	// Do not report success or retain a corrupt ZIP when those writes fail.
+	zipErr := zipWriter.Close()
+	closeErr := file.Close()
+	if zipErr != nil || closeErr != nil {
+		_ = os.Remove(exportPath)
+		return "", fmt.Errorf("finalize diagnostics package: zip=%v file=%v", zipErr, closeErr)
+	}
 
 	state := m.LoadState()
 	state.LastExportPath = exportPath
@@ -409,10 +421,14 @@ func (m *Manager) addLogFiles(zipWriter *zip.Writer) {
 func (m *Manager) addMetadata(zipWriter *zip.Writer) {
 	state := m.LoadState()
 	metadata := map[string]any{
-		"version": currentVersion(),
-		"os":      runtime.GOOS,
-		"arch":    runtime.GOARCH,
-		"state":   state,
+		"version":   currentVersion(),
+		"debugMode": DebugModeEnabled(),
+		"os":        runtime.GOOS,
+		"arch":      runtime.GOARCH,
+		"state":     state,
+	}
+	if build, ok := debug.ReadBuildInfo(); ok {
+		metadata["build"] = build
 	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {

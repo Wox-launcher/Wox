@@ -66,8 +66,13 @@ type FSEventsChangeFeed struct {
 }
 
 func NewFSEventsChangeFeed() *FSEventsChangeFeed {
+	return newFSEventsChangeFeed(fseventsSignalBufferSize)
+}
+
+// newFSEventsChangeFeed sizes the shared queue per stream, never per directory.
+func newFSEventsChangeFeed(bufferSize int) *FSEventsChangeFeed {
 	feed := &FSEventsChangeFeed{
-		signalQueue: newChangeSignalQueue(fseventsSignalBufferSize),
+		signalQueue: newChangeSignalQueue(bufferSize),
 	}
 	feed.handle = cgo.NewHandle(feed)
 	feed.handlePtr = (*C.uintptr_t)(C.malloc(C.size_t(unsafe.Sizeof(C.uintptr_t(0)))))

@@ -29,9 +29,16 @@ func (m *Manager) watchUI(ctx context.Context, pid int) func() {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(5 * time.Second)
+		debugMode := DebugModeEnabled()
+		interval := 5 * time.Second
+		if debugMode {
+			interval = time.Second
+		}
+		m.logf("UI watchdog started: pid=%d debugMode=%t interval=%s", pid, debugMode, interval)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		var observation hangObservation
+		captureAttempts := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -44,10 +51,15 @@ func (m *Manager) watchUI(ctx context.Context, pid int) func() {
 				observation = hangObservation{}
 				continue
 			}
-			if !observation.observe(time.Now(), hwnd != 0) || ctx.Err() != nil {
+			if !observation.observe(time.Now(), hwnd != 0, debugMode) || ctx.Err() != nil {
 				continue
 			}
-			m.logf("UI unresponsive for at least 30s: pid=%d hwnd=%#x; capturing live dump", pid, hwnd)
+			// Full snapshots are expensive. Bound attempts across all stalls in this child.
+			if debugMode && captureAttempts >= 2 {
+				continue
+			}
+			captureAttempts++
+			m.logf("UI unresponsive: pid=%d hwnd=%#x stalledFor=%s debugMode=%t attempt=%d; capturing live dump", pid, hwnd, time.Since(observation.firstFailure), debugMode, captureAttempts)
 			path, err := m.captureHangDump(pid)
 			if err != nil {
 				m.logf("UI hang dump failed: pid=%d hwnd=%#x error=%v", pid, hwnd, err)
@@ -61,6 +73,7 @@ func (m *Manager) watchUI(ctx context.Context, pid int) func() {
 			} else {
 				m.logf("UI hang report exported: pid=%d path=%s", pid, report)
 			}
+			observation.lastCapture = time.Now()
 		}
 	}()
 	return func() { cancel(); <-done }
@@ -83,7 +96,17 @@ func (m *Manager) captureHangDump(pid int) (string, error) {
 	if err := m.EnsureDirectories(); err != nil {
 		return "", fmt.Errorf("prepare dump directory: %w", err)
 	}
-	process, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, false, uint32(pid))
+	debugMode := DebugModeEnabled()
+	access := uint32(windows.PROCESS_QUERY_INFORMATION | windows.PROCESS_VM_READ)
+	if debugMode {
+		access |= windows.PROCESS_DUP_HANDLE
+	}
+	process, err := windows.OpenProcess(access, false, uint32(pid))
+	if err != nil && debugMode {
+		m.logf("full hang dump access failed, retrying without handle data: pid=%d error=%v", pid, err)
+		access &^= windows.PROCESS_DUP_HANDLE
+		process, err = windows.OpenProcess(access, false, uint32(pid))
+	}
 	if err != nil {
 		return "", fmt.Errorf("open process: %w", err)
 	}
@@ -94,11 +117,41 @@ func (m *Manager) captureHangDump(pid int) (string, error) {
 		return "", fmt.Errorf("create dump: %w", err)
 	}
 	defer os.Remove(path + ".tmp")
-	// Thread, unloaded-module and memory-region information without a full heap.
-	ok, _, dumpErr := hangMiniDump.Call(uintptr(process), uintptr(pid), file.Fd(), 0x1820, 0, 0, 0)
-	if ok == 0 {
-		file.Close()
-		return "", fmt.Errorf("MiniDumpWriteDump: %w", dumpErr)
+	// FullMemoryInfo describes regions; FullMemory is needed for actual heap/loader data.
+	dumpTypes := []uintptr{0x1820}
+	if debugMode {
+		full := uintptr(0x1820 | 0x2 | 0x100 | 0x20000)
+		dumpTypes = append([]uintptr{full}, dumpTypes...)
+		if access&windows.PROCESS_DUP_HANDLE != 0 {
+			// Handle enumeration can fail independently of reading the heap.
+			dumpTypes = append([]uintptr{full | 0x4}, dumpTypes...)
+		}
+	}
+	started := time.Now()
+	for index, dumpType := range dumpTypes {
+		m.logf("writing UI hang dump: pid=%d flags=%#x debugMode=%t", pid, dumpType, debugMode)
+		ok, _, dumpErr := hangMiniDump.Call(uintptr(process), uintptr(pid), file.Fd(), dumpType, 0, 0, 0)
+		if ok != 0 {
+			info, _ := file.Stat()
+			if info != nil {
+				m.logf("UI hang dump written: pid=%d flags=%#x bytes=%d duration=%s", pid, dumpType, info.Size(), time.Since(started))
+			}
+			break
+		}
+		m.logf("MiniDumpWriteDump failed: pid=%d flags=%#x error=%v", pid, dumpType, dumpErr)
+		if index == len(dumpTypes)-1 {
+			file.Close()
+			return "", fmt.Errorf("MiniDumpWriteDump: %w", dumpErr)
+		}
+		m.logf("retrying UI hang dump: pid=%d nextFlags=%#x", pid, dumpTypes[index+1])
+		if err := file.Truncate(0); err != nil {
+			file.Close()
+			return "", fmt.Errorf("truncate failed dump: %w", err)
+		}
+		if _, err := file.Seek(0, 0); err != nil {
+			file.Close()
+			return "", fmt.Errorf("rewind failed dump: %w", err)
+		}
 	}
 	syncErr := file.Sync()
 	closeErr := file.Close()

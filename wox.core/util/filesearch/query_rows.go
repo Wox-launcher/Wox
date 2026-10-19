@@ -32,7 +32,8 @@ func (h *columnRowHeap) Pop() any {
 func selectColumnRows(ctx context.Context, view column.View, hit columnNameHit, limit int) ([]uint32, error) {
 	h := columnRowHeap{view: view}
 	base := view.Base
-	ordered := base.NameRowsPathSorted && len(view.Delta) == 0
+	// File edits and directory metadata updates do not disturb base path order.
+	ordered := base.NameRowsPathSorted && (len(view.Delta) == 0 || view.Query != nil && len(view.Query.StaleDirectories) == 0)
 	stableCount := 0
 	parentStates := make(map[uint32]byte)
 	var scratch [32]string
@@ -48,7 +49,10 @@ func selectColumnRows(ctx context.Context, view column.View, hit columnNameHit, 
 		}
 		stable := ordered
 		if !ordered && base.NameRowsPathSorted {
-			state := columnParentState(view, base.Parents[row], parentStates)
+			state := byte(1)
+			if !view.DirectoryUnchanged(base.Parents[row]) {
+				state = columnParentState(view, base.Parents[row], parentStates)
+			}
 			if state == 3 {
 				continue
 			}
@@ -57,7 +61,11 @@ func selectColumnRows(ctx context.Context, view column.View, hit columnNameHit, 
 				continue
 			}
 		}
-		if _, ok := columnPathParts(view, row, scratch[:0]); !ok {
+		if stable && view.DirectoryUnchanged(base.Parents[row]) {
+			if base.DirectoryPath(base.RowDirectory[base.Parents[row]]) == "" {
+				continue
+			}
+		} else if _, ok := columnPathParts(view, row, scratch[:0]); !ok {
 			continue
 		}
 		if stable {
@@ -71,7 +79,8 @@ func selectColumnRows(ctx context.Context, view column.View, hit columnNameHit, 
 			continue
 		}
 		if limit <= 0 || h.Len() < limit {
-			heap.Push(&h, row)
+			h.rows = append(h.rows, row)
+			heap.Fix(&h, len(h.rows)-1)
 		} else if compareColumnPaths(view, row, h.rows[0]) < 0 {
 			h.rows[0] = row
 			heap.Fix(&h, 0)

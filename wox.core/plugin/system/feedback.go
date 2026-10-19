@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"wox/common"
@@ -89,6 +90,7 @@ func (p *FeedbackPlugin) buildDefaultResults() []plugin.QueryResult {
 	if !util.IsDev() {
 		results = append(results, p.buildRestartResult())
 	}
+	results = append(results, p.buildDebugResult())
 	return results
 }
 
@@ -96,17 +98,16 @@ func (p *FeedbackPlugin) buildDefaultResults() []plugin.QueryResult {
 func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 	title := "i18n:plugin_feedback_restart_without_plugins_title"
 	subtitle := "i18n:plugin_feedback_restart_without_plugins_subtitle"
-	childArg := util.ArgNoThirdPartyPlugins
 	if util.IsThirdPartyPluginsDisabled() {
 		title = "i18n:plugin_feedback_restart_title"
 		subtitle = "i18n:plugin_feedback_restart_subtitle"
-		// An explicit child argument avoids forwarding the current troubleshooting flag.
-		childArg = supervisor.ArgChild
 	}
 	return plugin.QueryResult{
 		Title:       title,
 		SubTitle:    subtitle,
 		IdentityKey: "feedback:restart",
+		Group:       "i18n:plugin_feedback_group_debugging",
+		GroupScore:  100,
 		Icon:        icons.Get(icons.ControlRefresh),
 		Score:       50,
 		Actions: []plugin.QueryResultAction{
@@ -116,17 +117,55 @@ func (p *FeedbackPlugin) buildRestartResult() plugin.QueryResult {
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					// A fresh launch must not replay the file or deeplink that originally opened Wox.
-					if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, childArg); err != nil {
-						util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
-						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error()))
-						return
-					}
-					ui.GetUIManager().ExitApp(ctx)
+					p.restart(ctx, supervisor.DebugModeEnabled(), !util.IsThirdPartyPluginsDisabled())
 				},
 			},
 		},
 	}
+}
+
+// buildDebugResult starts or ends a diagnostic session without persisting user settings.
+func (p *FeedbackPlugin) buildDebugResult() plugin.QueryResult {
+	title := "i18n:plugin_feedback_debug_enable_title"
+	subtitle := "i18n:plugin_feedback_debug_enable_subtitle"
+	if supervisor.DebugModeEnabled() {
+		title = "i18n:plugin_feedback_debug_disable_title"
+		subtitle = "i18n:plugin_feedback_debug_disable_subtitle"
+	}
+	return plugin.QueryResult{
+		Title: title, SubTitle: subtitle, IdentityKey: "feedback:debug-mode",
+		Group: "i18n:plugin_feedback_group_debugging", GroupScore: 100,
+		Icon: icons.Get(icons.ActionDebug), Score: 40,
+		Actions: []plugin.QueryResultAction{{
+			Name: title, Icon: icons.Get(icons.ActionExecute), IsDefault: true, PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				p.restart(ctx, !supervisor.DebugModeEnabled(), util.IsThirdPartyPluginsDisabled())
+			},
+		}},
+	}
+}
+
+// feedbackRestartArgs preserves independent diagnostic modes without replaying startup files or deep links.
+func feedbackRestartArgs(debugMode, disablePlugins bool) []string {
+	args := []string{supervisor.ArgChild}
+	if debugMode {
+		args = append(args, supervisor.ArgDebugMode)
+	}
+	if disablePlugins {
+		args = append(args, util.ArgNoThirdPartyPlugins)
+	}
+	return args
+}
+
+// restart leaves the current session running if the replacement supervisor cannot start.
+func (p *FeedbackPlugin) restart(ctx context.Context, debugMode, disablePlugins bool) {
+	util.GetLogger().Info(ctx, fmt.Sprintf("restarting diagnostic session: debugMode=%t thirdPartyPluginsDisabled=%t", debugMode, disablePlugins))
+	if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, feedbackRestartArgs(debugMode, disablePlugins)...); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
+		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error()))
+		return
+	}
+	ui.GetUIManager().ExitApp(ctx)
 }
 
 // buildCrashResults lists retained crash events under the explicit crash command.
@@ -148,6 +187,8 @@ func (p *FeedbackPlugin) buildBugResult() plugin.QueryResult {
 		Title:       "i18n:plugin_feedback_bug_title",
 		SubTitle:    "i18n:plugin_feedback_bug_subtitle",
 		IdentityKey: "feedback:bug",
+		Group:       "i18n:plugin_feedback_group_feedback",
+		GroupScore:  200,
 		Icon:        icons.Get(icons.PluginFeedback),
 		Score:       300,
 		Actions: []plugin.QueryResultAction{
@@ -168,6 +209,8 @@ func (p *FeedbackPlugin) buildFeatureResult() plugin.QueryResult {
 		Title:       "i18n:plugin_feedback_feature_title",
 		SubTitle:    "i18n:plugin_feedback_feature_subtitle",
 		IdentityKey: "feedback:feature",
+		Group:       "i18n:plugin_feedback_group_feedback",
+		GroupScore:  200,
 		Icon:        icons.Get(icons.PluginNotes),
 		Score:       200,
 		Actions: []plugin.QueryResultAction{
@@ -187,6 +230,8 @@ func (p *FeedbackPlugin) buildClearLogsResult() plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:       "i18n:plugin_feedback_clear_logs_title",
 		IdentityKey: "feedback:clear-logs",
+		Group:       "i18n:plugin_feedback_group_debugging",
+		GroupScore:  100,
 		SubTitle:    "i18n:plugin_feedback_clear_logs_subtitle",
 		Icon:        icons.Get(icons.ActionDelete),
 		Score:       100,
@@ -396,7 +441,9 @@ func (p *FeedbackPlugin) openFeatureRequest(ctx context.Context) {
 }
 
 func (p *FeedbackPlugin) clearLogs(ctx context.Context) {
-	if err := util.GetLogger().ClearHistory(); err != nil {
+	// The supervisor retains this handle for child output; deleting it also
+	// disconnects that output from diagnostic exports on platforms that allow unlink.
+	if err := util.GetLogger().ClearHistory(filepath.Base(supervisor.GetManager().SupervisorLogPath())); err != nil {
 		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_clear_failed"), err.Error()))
 		return
 	}

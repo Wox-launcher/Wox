@@ -3593,6 +3593,11 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 
 	devScoreTailStart := util.GetSystemTimestamp()
 	devScoreTailTimingStart := time.Now()
+	if result.isFallback {
+		// Apply after usage and navigation boosts so late ordinary results sort ahead
+		// of provisional fallback rows in both the UI response and cached snapshots.
+		result.Score = -1
+	}
 	result.Tails = m.appendDevScoreTail(ctx, result.Tails, result.Score)
 	sourceHash = resolveResultSourceHash(pluginInstance, query, result, sourceHash)
 	m.applyResultBindingTitleTags(ctx, pluginInstance, query, &result, sourceHash)
@@ -4531,6 +4536,7 @@ func (m *Manager) QueryFallback(ctx context.Context, query Query, queryPlugin *I
 			if v, ok := pluginInstance.Plugin.(FallbackSearcher); ok {
 				fallbackResults := v.QueryFallback(ctx, query)
 				for _, fallbackResult := range fallbackResults {
+					fallbackResult.isFallback = true
 					polishedFallbackResult := m.PolishResult(ctx, pluginInstance, query, QueryLayout{}, fallbackResult)
 					queryResults = append(queryResults, polishedFallbackResult)
 				}

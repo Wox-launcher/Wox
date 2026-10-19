@@ -21,6 +21,7 @@ var keyboardActionIcon = newActionIcon(`<rect x="3" y="5" width="18" height="14"
 var defaultActionIcons = map[string]common.WoxImage{
 	ActionHotkey:               keyboardActionIcon,
 	ActionFeedback:             newActionIcon(`<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 9h10M7 13h7"/>`),
+	ActionDebug:                newActionIcon(`<path d="m8 3 2 2m6-2-2 2M9 8V7a3 3 0 0 1 6 0v1M6 12H2m16 0h4M6 17H3l-1 3m16-3h3l1 3M7 9H4L2 6m15 3h3l2-3M12 12v9"/><rect x="6" y="8" width="12" height="13" rx="6"/>`),
 	ActionInstall:              newActionIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
 	ActionPin:                  newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6"/>`),
 	ActionUnpin:                newActionIcon(`<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v6M5 5l14 14"/>`),

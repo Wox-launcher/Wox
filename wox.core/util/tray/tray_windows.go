@@ -24,10 +24,13 @@ extern void runMessageLoop();  // 声明 C 函数
 */
 import "C"
 import (
+	"context"
+	"fmt"
 	"os"
 	"runtime"
 	"sync"
 	"unsafe"
+	"wox/util"
 )
 
 // menuCallbacks maps menu item IDs to their callbacks.
@@ -80,6 +83,11 @@ func reportQueryClick(iconId C.UINT_PTR, x C.int, y C.int, width C.int, height C
 
 // initializes the system tray icon and menu.
 func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
+	iconPath, err := writeTrayIcon(appIcon, "wox-tray-*.ico")
+	if err != nil {
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("create tray icon: %v", err))
+		return
+	}
 	trayMu.Lock()
 	leftClickCallback = onClick
 	menuCallbacks = make(map[uint32]func(), len(items))
@@ -89,11 +97,6 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 		mainIconTempPath = ""
 	}
 	trayMu.Unlock()
-
-	temp, _ := os.CreateTemp("", "app.ico")
-	temp.Write(appIcon)
-	temp.Close()
-	iconPath := temp.Name()
 
 	trayMu.Lock()
 	mainIconTempPath = iconPath
@@ -131,6 +134,22 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 	<-ready
 }
 
+// writeTrayIcon publishes a usable path only after all writes succeed. An
+// unwritable temporary directory must not panic and abort launcher startup.
+func writeTrayIcon(icon []byte, pattern string) (string, error) {
+	file, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", fmt.Errorf("create temporary icon: %w", err)
+	}
+	_, writeErr := file.Write(icon)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		_ = os.Remove(file.Name())
+		return "", fmt.Errorf("save temporary icon: write=%v close=%v", writeErr, closeErr)
+	}
+	return file.Name(), nil
+}
+
 // RemoveTray removes the system tray icon.
 func RemoveTray() {
 	clearQueryIconsInternal()
@@ -165,15 +184,14 @@ func SetQueryIcons(items []QueryIconItem) {
 			continue
 		}
 
-		temp, err := os.CreateTemp("", "wox-query-tray-*.ico")
+		iconPath, err := writeTrayIcon(item.Icon, "wox-query-tray-*.ico")
 		if err != nil {
+			util.GetLogger().Error(context.Background(), fmt.Sprintf("create query tray icon: %v", err))
 			continue
 		}
-		_, _ = temp.Write(item.Icon)
-		_ = temp.Close()
 
 		trayMu.Lock()
-		queryIconTempPaths = append(queryIconTempPaths, temp.Name())
+		queryIconTempPaths = append(queryIconTempPaths, iconPath)
 		trayMu.Unlock()
 
 		var menuID uint32
@@ -186,7 +204,7 @@ func SetQueryIcons(items []QueryIconItem) {
 			trayMu.Unlock()
 		}
 
-		iconPathC := C.CString(temp.Name())
+		iconPathC := C.CString(iconPath)
 		tooltipC := C.CString(item.Tooltip)
 		menuTitleC := C.CString(item.ContextMenuTitle)
 		C.addQueryTrayIcon(C.uint(nextQueryIconID), iconPathC, tooltipC, C.uint(menuID), menuTitleC)

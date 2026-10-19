@@ -2632,6 +2632,8 @@ type formOption struct {
 	Label string   `json:"Label"`
 	Value string   `json:"Value"`
 	Icon  woxImage `json:"Icon"`
+	// IsSelectAll stores only this option and clears every other selection.
+	IsSelectAll bool `json:"IsSelectAll,omitempty"`
 	// Group is a translated or i18n section label shown above this option.
 	Group            string `json:"Group,omitempty"`
 	GroupTooltip     string `json:"GroupTooltip,omitempty"`

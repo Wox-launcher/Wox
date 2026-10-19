@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"wox/common/icons"
@@ -15,11 +16,11 @@ import (
 
 // saveScreenshotSceneInBackground lets the image reach history and clipboard before encoding the full desktop.
 // Plugin unload already waits for these tasks, so a normal shutdown does not abandon an active archive write.
-func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save func() error) {
+func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save func() error, jobs *sync.WaitGroup) {
 	if save == nil {
 		return
 	}
-	p.runScreenshotBackgroundTask("save screenshot scene", func(ctx context.Context) {
+	p.runScreenshotStorageTask(jobs, "save screenshot scene", func(ctx context.Context) {
 		started := time.Now()
 		if err := save(); err != nil {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+err.Error())
@@ -38,7 +39,14 @@ func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save fun
 
 // indexScreenshotScenes rebuilds clipboard associations without decoding historical desktop images.
 func (p *ScreenshotPlugin) indexScreenshotScenes(ctx context.Context) {
-	entries, err := os.ReadDir(p.getScreenshotDirectory())
+	for _, directory := range p.screenshotHistoryDirectories() {
+		p.indexScreenshotScenesDirectory(ctx, directory)
+	}
+}
+
+// indexScreenshotScenesDirectory keeps clipboard edit actions available in both folders during a transfer.
+func (p *ScreenshotPlugin) indexScreenshotScenesDirectory(ctx context.Context, directory string) {
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			util.GetLogger().Warn(ctx, "failed to index screenshot scenes: "+err.Error())
@@ -52,7 +60,10 @@ func (p *ScreenshotPlugin) indexScreenshotScenes(ctx context.Context) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), screenshotedit.Suffix) {
 			continue
 		}
-		path := filepath.Join(p.getScreenshotDirectory(), strings.TrimSuffix(entry.Name(), screenshotedit.Suffix))
+		if !isScreenshotStorageImage(directory, strings.TrimSuffix(entry.Name(), screenshotedit.Suffix)) {
+			continue
+		}
+		path := filepath.Join(directory, strings.TrimSuffix(entry.Name(), screenshotedit.Suffix))
 		if !screenshotedit.Available(path) {
 			continue
 		}

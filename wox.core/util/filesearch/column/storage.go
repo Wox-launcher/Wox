@@ -17,10 +17,12 @@ const magic = "WOXCOL02"
 const (
 	// legacySectionCount files predate the persisted child index; Open rebuilds
 	// that index on the heap until the next publication rewrites the generation.
-	legacySectionCount = 16
-	sectionCount       = 17
-	queryColumnSection = 15
-	childRowsSection   = 16
+	legacySectionCount     = 16
+	sectionCount           = 19
+	queryColumnSection     = 15
+	childRowsSection       = 16
+	directoryColumnSection = 17
+	namePairSection        = 18
 )
 
 // bytesOf exposes pointer-free scalar columns for sequential snapshot writes.
@@ -56,6 +58,8 @@ func writeSnapshot(path string, s *Snapshot) (header []byte, err error) {
 		return nil, err
 	}
 	s.PrepareSearchHints()
+	s.prepareDirectoryColumns()
+	s.prepareNamePairs()
 	columns := [][]byte{[]byte(s.Root), bytesOf(s.IDs), bytesOf(s.Parents), bytesOf(s.NameIDs), s.Flags,
 		bytesOf(s.NameOffsets), s.NameBytes, bytesOf(s.NameMasks), s.NameFlags, bytesOf(s.NameStarts),
 		bytesOf(s.NameRows), bytesOf(s.IDRows), bytesOf(s.Sizes), bytesOf(s.Modified), bytesOf(s.Versions)}
@@ -65,6 +69,8 @@ func writeSnapshot(path string, s *Snapshot) (header []byte, err error) {
 	}
 	sections[queryColumnSection] = s.queryColumnParts()
 	sections[childRowsSection] = [][]byte{bytesOf(s.ChildRows)}
+	sections[directoryColumnSection] = s.directoryColumnParts()
+	sections[namePairSection] = [][]byte{bytesOf(s.NamePairBitmaps)}
 	header = make([]byte, headerSize)
 	copy(header, magic)
 	binary.LittleEndian.PutUint32(header[8:], 3)
@@ -151,7 +157,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 	}
 	version := binary.LittleEndian.Uint32(header[8:])
 	fileSections := int(binary.LittleEndian.Uint32(header[12:]))
-	if string(header[:8]) != magic || version < 1 || version > 4 || fileSections != sectionCount && fileSections != legacySectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
+	if string(header[:8]) != magic || version < 1 || version > 4 || fileSections < legacySectionCount || fileSections > sectionCount || binary.LittleEndian.Uint64(header[16:]) != uint64(stat.Size()) || binary.LittleEndian.Uint32(header[24:]) != crc32.ChecksumIEEE(header[32:]) {
 		return nil, fmt.Errorf("invalid column header")
 	}
 	mapping, err := mapFile(file, int(stat.Size()))
@@ -203,7 +209,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 	if offset != uint64(stat.Size()) {
 		return nil, fmt.Errorf("invalid column trailing data")
 	}
-	widths := []int{1, 8, 4, 4, 1, 4, 1, 8, 1, 4, 4, 4, 8, 8, 8, 8, 4}
+	widths := []int{1, 8, 4, 4, 1, 4, 1, 8, 1, 4, 4, 4, 8, 8, 8, 8, 4, 8, 8}
 	for i, data := range sections {
 		if len(data)%widths[i] != 0 {
 			return nil, fmt.Errorf("misaligned column length")
@@ -228,6 +234,19 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 		// Compatibility reads remain write-free. The ordered migration upgrades
 		// old generations before normal engine startup.
 		s.PrepareSearchHints()
+	}
+	if fileSections > directoryColumnSection {
+		if err := s.mapDirectoryColumns(sections[directoryColumnSection]); err != nil {
+			return nil, err
+		}
+	} else {
+		s.prepareDirectoryColumns()
+	}
+	if fileSections > namePairSection {
+		if len(sections[namePairSection]) != 27*27*((s.Names()+63)/64)*8 {
+			return nil, fmt.Errorf("invalid name-pair column length")
+		}
+		s.NamePairBitmaps = view[uint64](sections[namePairSection])
 	}
 	valid = true
 	return s, nil

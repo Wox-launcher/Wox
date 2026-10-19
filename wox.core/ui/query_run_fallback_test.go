@@ -24,7 +24,8 @@ func TestQueryRunFallbackDeadline(t *testing.T) {
 	}{
 		{name: "pending plugins"},
 		{name: "includes dispatch time", elapsed: 30 * time.Millisecond},
-		{name: "overdue", elapsed: 80 * time.Millisecond},
+		{name: "past previous deadline", elapsed: 80 * time.Millisecond},
+		{name: "overdue", elapsed: 250 * time.Millisecond},
 		{name: "queued result wins", queuedResult: true},
 		{name: "plugin scope", pluginScoped: true},
 		{name: "early completion", earlyReady: true},

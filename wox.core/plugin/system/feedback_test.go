@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"wox/plugin"
@@ -106,14 +107,15 @@ func TestQueryShowsCommonOperationsByDefault(t *testing.T) {
 	pluginInstance := &FeedbackPlugin{api: feedbackTestAPI{}}
 
 	response := pluginInstance.Query(context.Background(), plugin.Query{})
-	if len(response.Results) != 3 {
-		t.Fatalf("default feedback query should show 3 operations, got %d", len(response.Results))
+	if len(response.Results) != 4 {
+		t.Fatalf("default feedback query should show 4 operations, got %d", len(response.Results))
 	}
 
 	wantTitles := []string{
 		"i18n:plugin_feedback_bug_title",
 		"i18n:plugin_feedback_feature_title",
 		"i18n:plugin_feedback_clear_logs_title",
+		"i18n:plugin_feedback_debug_enable_title",
 	}
 	for i, want := range wantTitles {
 		if response.Results[i].Title != want {
@@ -135,12 +137,21 @@ func TestFeedbackRestartOnlyShownInProduction(t *testing.T) {
 			util.ProdEnv = "true"
 		}
 		results := p.Query(context.Background(), plugin.Query{}).Results
-		want := 3
+		want := 4
 		if production {
-			want = 4
+			want = 5
 		}
 		if len(results) != want {
 			t.Fatalf("production=%t: got %d results, want %d", production, len(results), want)
+		}
+		for i, result := range results {
+			group, groupScore := "i18n:plugin_feedback_group_debugging", int64(100)
+			if i < 2 {
+				group, groupScore = "i18n:plugin_feedback_group_feedback", 200
+			}
+			if result.Group != group || result.GroupScore != groupScore {
+				t.Fatalf("production=%t: result %q group=%q score=%d, want %q score=%d", production, result.IdentityKey, result.Group, result.GroupScore, group, groupScore)
+			}
 		}
 		if production {
 			result := results[3]
@@ -210,5 +221,33 @@ func TestBuildCrashIncidentResultPreservesNewestFirstOrdering(t *testing.T) {
 
 	if newer.Score <= older.Score {
 		t.Fatalf("newer crash should have a higher result score, newer=%d older=%d", newer.Score, older.Score)
+	}
+}
+
+// TestFeedbackDiagnosticModes verifies that changing one session mode preserves the other.
+func TestFeedbackDiagnosticModes(t *testing.T) {
+	previous := os.Args
+	t.Cleanup(func() { os.Args = previous })
+	p := &FeedbackPlugin{api: feedbackTestAPI{}}
+	for _, debugMode := range []bool{false, true} {
+		for _, pluginsDisabled := range []bool{false, true} {
+			os.Args = append([]string{"wox"}, feedbackRestartArgs(debugMode, pluginsDisabled)...)
+			result := p.buildDebugResult()
+			want := "i18n:plugin_feedback_debug_enable_title"
+			if debugMode {
+				want = "i18n:plugin_feedback_debug_disable_title"
+			}
+			if result.Title != want || result.Actions[0].Action == nil || !result.Actions[0].PreventHideAfterAction {
+				t.Fatalf("invalid debug action: %+v", result)
+			}
+			args := feedbackRestartArgs(!debugMode, pluginsDisabled)
+			if slices.Contains(args, supervisor.ArgDebugMode) != !debugMode || slices.Contains(args, util.ArgNoThirdPartyPlugins) != pluginsDisabled {
+				t.Fatalf("debug toggle changed plugin mode: %v", args)
+			}
+			args = feedbackRestartArgs(debugMode, !pluginsDisabled)
+			if slices.Contains(args, supervisor.ArgDebugMode) != debugMode || slices.Contains(args, util.ArgNoThirdPartyPlugins) != !pluginsDisabled {
+				t.Fatalf("plugin toggle changed debug mode: %v", args)
+			}
+		}
 	}
 }

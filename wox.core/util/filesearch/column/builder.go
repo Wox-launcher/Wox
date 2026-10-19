@@ -256,5 +256,6 @@ func (b *Builder) Finish() (*Snapshot, error) {
 		return nil, err
 	}
 	s.PrepareSearchHints()
+	s.prepareDirectoryColumns()
 	return &s, nil
 }

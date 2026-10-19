@@ -160,6 +160,14 @@ type LauncherQueryLine struct {
 	TextWidth     float32
 }
 
+// LauncherStatusTag carries a measured session indicator in logical layout units.
+type LauncherStatusTag struct {
+	ID          string
+	Label       string
+	Description string
+	Width       float32
+}
+
 // LauncherHeaderProps contains the query box and its optional accessories.
 type LauncherHeaderProps struct {
 	Width             float32
@@ -177,9 +185,7 @@ type LauncherHeaderProps struct {
 	RefinementWidth   float32
 	Attention         woxwidget.Widget
 	AttentionWidth    float32
-	StatusLabel       string
-	StatusDescription string
-	StatusWidth       float32
+	StatusTags        []LauncherStatusTag
 	Glance            woxwidget.Widget
 	GlanceWidth       float32
 	Icon              *woxui.Image
@@ -230,19 +236,6 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 		query = LauncherQueryBoundary(props.Query)
 	}
 	children := make([]woxwidget.Widget, 0, 6)
-	if props.StatusLabel != "" {
-		theme := props.Theme.Controls
-		theme.DensityScale = props.DensityScale
-		// The session tag leads the query box so filters, glance, icons, and loading cannot move it.
-		children = append(children, woxwidget.Align{
-			Width: props.StatusWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
-			Child: woxwidget.Semantics{
-				Key: "launcher-plugin-mode-tag", AutomationID: "launcher.plugin-mode", Role: woxui.AccessibilityRoleText,
-				Label: props.StatusLabel, Description: props.StatusDescription,
-				Child: woxcomponent.WoxWarningTag(props.StatusLabel, props.StatusWidth, theme),
-			},
-		})
-	}
 	children = append(children, woxwidget.Expanded{Child: woxwidget.Align{
 		Width: props.QueryWidth, Height: props.QueryBoxHeight, Vertical: 0.5,
 		Child: query,
@@ -250,6 +243,19 @@ func LauncherHeaderView(props LauncherHeaderProps) woxwidget.Widget {
 	if props.Refinement != nil {
 		children = append(children, woxwidget.Align{
 			Width: props.RefinementWidth, Height: props.QueryBoxHeight, Vertical: 0.5, Child: props.Refinement,
+		})
+	}
+	for _, tag := range props.StatusTags {
+		theme := props.Theme.Controls
+		theme.DensityScale = props.DensityScale
+		// Keep session indicators in the trailing accessory area beside glance.
+		children = append(children, woxwidget.Align{
+			Width: tag.Width, Height: props.QueryBoxHeight, Vertical: 0.5,
+			Child: woxwidget.Semantics{
+				Key: woxwidget.Key(tag.ID + "-tag"), AutomationID: tag.ID, Role: woxui.AccessibilityRoleText,
+				Label: tag.Label, Description: tag.Description,
+				Child: woxcomponent.WoxWarningTag(tag.Label, tag.Width, theme),
+			},
 		})
 	}
 	if props.Attention != nil {

@@ -27,7 +27,7 @@ const (
 )
 
 // FallbackChangeFeed watches roots with fsnotify. It is the primary feed on
-// Linux and covers Windows volumes without a USN journal.
+// Linux. Windows production feeds use native subtree watches instead.
 //
 // fsnotify watches are not recursive. The previous feed only watched each root
 // directory, so changes below the first level were never reported and the index
@@ -38,7 +38,7 @@ const (
 // report.
 type FallbackChangeFeed struct {
 	mu          sync.Mutex
-	watcher     *fsnotify.Watcher
+	watcher     fallbackNativeWatcher
 	roots       []RootRecord
 	rootMatcher rootPathMatcher
 	filter      DirectoryWatchFilter
@@ -76,13 +76,18 @@ type fallbackWatchTask struct {
 }
 
 func NewFallbackChangeFeed() *FallbackChangeFeed {
+	return newFallbackChangeFeed(fallbackSignalBufferSize)
+}
+
+// newFallbackChangeFeed sizes the bounded delivery queue for its consumer.
+func newFallbackChangeFeed(bufferSize int) *FallbackChangeFeed {
 	return &FallbackChangeFeed{
 		watched:      map[string]struct{}{},
 		budget:       fallbackWatchBudget(),
 		partialRoots: map[string]bool{},
 		wake:         make(chan struct{}, 1),
 		done:         make(chan struct{}),
-		queue:        newChangeSignalQueue(fallbackSignalBufferSize),
+		queue:        newChangeSignalQueue(bufferSize),
 	}
 }
 
@@ -107,7 +112,7 @@ func (f *FallbackChangeFeed) Refresh(_ context.Context, roots []RootRecord) erro
 		return nil
 	}
 	if f.watcher == nil {
-		watcher, err := fsnotify.NewWatcher()
+		watcher, err := newFallbackNativeWatcher()
 		if err != nil {
 			f.mu.Unlock()
 			for _, root := range roots {
@@ -174,7 +179,7 @@ func (f *FallbackChangeFeed) Refresh(_ context.Context, roots []RootRecord) erro
 		f.mu.Unlock()
 		rootWatchAdded := false
 		if !alreadyWatched {
-			if err := watcher.AddWith(rootPath, fsnotify.WithBufferSize(fallbackWatchBufferBytes)); err != nil {
+			if err := watcher.Add(rootPath); err != nil {
 				f.emitFeedUnavailable(root, err.Error())
 				continue
 			}
@@ -225,15 +230,15 @@ func (f *FallbackChangeFeed) SnapshotRootFeed(ctx context.Context, root RootReco
 	}, nil
 }
 
-func (f *FallbackChangeFeed) dispatch(watcher *fsnotify.Watcher) {
+func (f *FallbackChangeFeed) dispatch(watcher fallbackNativeWatcher) {
 	for {
 		select {
-		case event, ok := <-watcher.Events:
+		case event, ok := <-watcher.Events():
 			if !ok {
 				return
 			}
 			f.handleEvent(event)
-		case err, ok := <-watcher.Errors:
+		case err, ok := <-watcher.Errors():
 			if !ok {
 				return
 			}
@@ -265,6 +270,7 @@ func (f *FallbackChangeFeed) handleEvent(event fsnotify.Event) {
 		return
 	}
 	_, wasWatched := f.watched[cleanPath]
+	filter := f.filter
 	var forgotten []string
 	if wasWatched && removedOrRenamed {
 		forgotten = f.forgetWatchedTreeLocked(cleanPath)
@@ -295,7 +301,7 @@ func (f *FallbackChangeFeed) handleEvent(event fsnotify.Event) {
 		return
 	}
 
-	if pathTypeKnown && pathIsDir && event.Op&fsnotify.Create != 0 {
+	if pathTypeKnown && pathIsDir && event.Op&fsnotify.Create != 0 && (filter == nil || filter(root, cleanPath)) {
 		f.enqueueTask(fallbackWatchTask{registerPath: cleanPath, notifyRootID: root.ID})
 	}
 
@@ -333,6 +339,17 @@ func (f *FallbackChangeFeed) enqueueTask(task fallbackWatchTask) {
 		f.mu.Unlock()
 		return
 	}
+	// Bound pending discoveries as well as installed watches. Native removals
+	// must still drain; their paths are bounded by the existing watch budget.
+	if task.registerPath != "" && len(f.maintenance) >= 1024 {
+		root, ok := f.rootMatcher.findClean(task.registerPath)
+		f.mu.Unlock()
+		if ok {
+			f.markPartialRoot(root, "watch maintenance queue full")
+			f.emitHistoryLost(root, "watch maintenance queue overflow")
+		}
+		return
+	}
 	f.maintenance = append(f.maintenance, task)
 	f.mu.Unlock()
 	select {
@@ -358,7 +375,11 @@ func (f *FallbackChangeFeed) maintainWatches() {
 				break
 			}
 			task := f.maintenance[0]
+			f.maintenance[0] = fallbackWatchTask{}
 			f.maintenance = f.maintenance[1:]
+			if len(f.maintenance) == 0 {
+				f.maintenance = nil
+			}
 			watcher := f.watcher
 			f.mu.Unlock()
 			if watcher == nil {
@@ -378,7 +399,7 @@ func (f *FallbackChangeFeed) maintainWatches() {
 
 // registerTree adds watches breadth first, so shallow user-visible directories
 // win when the budget runs out.
-func (f *FallbackChangeFeed) registerTree(watcher *fsnotify.Watcher, task fallbackWatchTask) {
+func (f *FallbackChangeFeed) registerTree(watcher fallbackNativeWatcher, task fallbackWatchTask) {
 	added := 0
 	budgetExhausted := false
 	queue := []string{task.registerPath}
@@ -414,7 +435,7 @@ func (f *FallbackChangeFeed) registerTree(watcher *fsnotify.Watcher, task fallba
 				f.markPartialRoot(root, "watch budget reached")
 				break
 			}
-			if err := watcher.AddWith(directory, fsnotify.WithBufferSize(fallbackWatchBufferBytes)); err != nil {
+			if err := watcher.Add(directory); err != nil {
 				if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EMFILE) {
 					// The kernel limit is lower than the configured budget (for
 					// example, other applications hold inotify watches).
@@ -434,21 +455,34 @@ func (f *FallbackChangeFeed) registerTree(watcher *fsnotify.Watcher, task fallba
 			added++
 		}
 
-		entries, err := os.ReadDir(directory)
+		// Filter before queueing, and read in chunks so a wide excluded tree
+		// cannot allocate an unbounded directory listing or traversal queue.
+		dir, err := os.Open(directory)
 		if err != nil {
 			continue
 		}
-		for _, entry := range entries {
-			// DirEntry.IsDir is false for symlinks, so linked trees are never followed.
-			if !entry.IsDir() {
-				continue
+		for !budgetExhausted {
+			entries, readErr := dir.ReadDir(256)
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				child := filepath.Join(directory, entry.Name())
+				if shouldSkipSystemPathForRoot(root, child, true) || filter != nil && !filter(root, child) {
+					continue
+				}
+				if len(queue) >= f.budget {
+					budgetExhausted = true
+					f.markPartialRoot(root, "watch traversal budget reached")
+					break
+				}
+				queue = append(queue, child)
 			}
-			child := filepath.Join(directory, entry.Name())
-			if shouldSkipSystemPathForRoot(root, child, true) {
-				continue
+			if readErr != nil {
+				break
 			}
-			queue = append(queue, child)
 		}
+		_ = dir.Close()
 	}
 
 	f.mu.Lock()

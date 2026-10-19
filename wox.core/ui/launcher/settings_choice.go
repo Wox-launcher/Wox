@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"strings"
 	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
@@ -11,12 +12,14 @@ import (
 )
 
 type settingChoicePickerState struct {
+	multi    bool
 	item     settingItem
 	anchor   woxui.Rect
 	onChoose func(settingChoice)
 }
 
 type settingChoicePickerSnapshot struct {
+	multi  bool
 	item   settingItem
 	anchor woxui.Rect
 }
@@ -39,8 +42,19 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 		}
 	}
 	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
+	var selectedValues []string
+	if snapshot.multi {
+		// A non-nil slice selects multi-select mode even when nothing is chosen.
+		selectedValues = make([]string, 0)
+		for _, part := range strings.Split(snapshot.item.value, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				selectedValues = append(selectedValues, part)
+			}
+		}
+	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsNativeWindow(), Title: snapshot.item.title,
+		SelectedValues: selectedValues,
+		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsNativeWindow(), Title: snapshot.item.title,
 		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }
@@ -51,7 +65,7 @@ func snapshotSettingChoicePickerLocked(state *settingChoicePickerState) *setting
 	}
 	item := state.item
 	item.choices = append([]settingChoice(nil), state.item.choices...)
-	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor}
+	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor, multi: state.multi}
 }
 
 func (a *App) openOrActivateSetting() {
@@ -119,7 +133,9 @@ func (a *App) chooseSettingChoice(index int) {
 	}
 	item := state.item
 	choice := state.item.choices[index]
-	a.generalSettings.SetChoicePicker(nil)
+	if !state.multi {
+		a.generalSettings.SetChoicePicker(nil)
+	}
 	if state.onChoose != nil {
 		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 		a.updateSettingsTextInput(false)

@@ -11,8 +11,8 @@ Windows' privileged service only enumerates NTFS MFT records and reads USN
 changes over a bounded binary named-pipe stream. It does not own the filename
 index or execute searches. Windows service mode retains fixed-NTFS-volume scope;
 other modes retain configured roots. macOS uses bulk directory reads and
-FSEvents. Windows configured roots use the USN journal. Linux and Windows
-volumes without a journal use recursive fsnotify watches. Platform adapters must
+FSEvents. Windows configured roots use the USN journal. Linux uses recursive fsnotify watches. Windows volumes without a journal use
+ReadDirectoryChangesW subtree watches. Platform adapters must
 not depend on query policy or plugin implementations.
 
 Filename indexing prioritizes bounded memory, fast enumeration and low-latency
@@ -41,8 +41,8 @@ the longest matching root.
 ## Columns and durability
 
 `column` stores entry identifiers, parent rows, interned names, name-to-row
-postings, optional metadata, and source versions in pointer-free arrays. Full
-paths are materialized only when required. A versioned, checksummed snapshot is
+postings, optional metadata, and source versions in pointer-free arrays. File
+paths are materialized only when required; directory paths have mapped query columns. A versioned, checksummed snapshot is
 mapped read-only; callers hold a store read lease while borrowing mapped names.
 
 The append-only journal writes changes and their source cursor in one
@@ -79,8 +79,31 @@ explicitly opts into path matching. Fewer than the requested number of filename
 hits never triggers an implicit parent-path scan. The filename executor compiles
 predicates once, filters distinct names with transposed character/repetition
 bitmaps, applies conservative score bounds, and retains bounded ranked groups.
-It resolves paths only for competitive rows. Explicit path matching has a
-separate execution path and is not covered by filename-only latency claims.
+It resolves paths only for competitive rows. Explicit path matching intersects persisted directory character and ordered-pair
+bitmaps, checks a conservative subsequence condition, then shares the directory
+score across its direct files. Ordered pairs require relative order, never
+adjacency: fuzzy paths can still span multiple components. Only competitive
+results materialize owned strings. ASCII keys use byte searches; Unicode keys
+keep normalization-aware matching. Wildcards and quoted-only paths without a
+mandatory directory clause retain exhaustive tree traversal.
+
+Directory display paths, normalized keys, rune counts, row ordinals, direct-child
+bounds and filter bitmaps are mapped with the immutable generation. Filename
+queries borrow these paths for reachability and recycle-bin checks too. A
+revision-owned overlay supplies child edges and invalidates old paths only for
+ancestry/name/type changes. Metadata updates preserve them. At most 4,096 affected
+or newly created directories retain prepared live paths; larger moved subtrees
+use uncached traversal, bounding retained overlay memory. Final scoring, AND
+clauses, quotes, wildcard rules and ordering remain shared with exhaustive search.
+
+`Store.ReadQuery` prepares the shared overlay on the first search after a change.
+Background writes invalidate it without rebuilding it, so multiple file-change
+batches while hidden collapse into one preparation when search resumes. Ordinary
+`Store.Read` leases for replay, content hooks and status never prepare query data.
+Cursor-only commits retain the prepared overlay while still journaling, syncing
+and advancing the revision. Read leases pin its borrowed mapped names; concurrent
+searches share one preparation, and mutation, publication or close releases the
+previous overlay. No additional entry cache or pending-change queue is retained.
 
 Snapshot format 3 persists the two scalar scoring-hint columns, character and
 repetition bitmaps, non-ASCII bitmap, frequent-name IDs, and path-ordered postings.
@@ -97,8 +120,11 @@ their discarded metadata-sort permutations. New publications retain format 3.
 
 Snapshots also persist a child index: every parented row ordered by parent row,
 so each directory's children are one contiguous range (4 bytes per row, demand
-paged). Files written before this section existed still open; their index is
-rebuilt on the heap until the next compaction or full build rewrites them.
+paged). Format 3 now has an optional eighteenth section for directory query
+columns. Older 16/17-section generations still open without writes and prepare
+missing columns on the heap. New builds and compactions persist all columns;
+this unreleased format change registers no migration. Manifests, journals, source cursors,
+content databases and unrelated files remain untouched.
 
 The existing hidden-launcher lifecycle releases pinyin memoization after ten
 seconds. At thirty seconds it clears memoization again, drops prepared text and
@@ -220,13 +246,50 @@ per-file events, so a hot folder costs cheap `lstat` deltas rather than
 repeated listings, and the dirty queue's 2 s quiet window, 5 s maximum wait and
 backpressure tiers already bound how often any scope is processed.
 
-The fallback feed registers one fsnotify watch per directory. Registration is
-breadth first, on a dedicated worker, within a platform budget: half of
-`max_user_watches` on Linux and 512 directories on Windows. Each Windows watch
-uses a 16 KB buffer. Directories excluded by policy are never watched.
-Directories created later are registered and rescanned. A root that exceeds the
-budget, or hits `ENOSPC`/`EMFILE`, is marked partial and reports `history_lost`
-every 10 minutes, so the relist covers the unwatched part.
+Apps subscribes to the existing Windows filename index's resolved service
+changes through a bounded in-process broker. There is no second fact stream or
+filename index. Only caught-up volumes count as covered; a transport failure,
+rebuild or source shutdown activates local subtree watches. Recovery releases
+those watches and reports history loss to reconcile the transition gap. File
+renames deliver the old and new paths, and directory moves invalidate both scopes.
+Apps repairs history-loss signals through debounced directory reconciliation;
+its periodic fallback reconciliation checks current coverage rather than the
+startup snapshot.
+
+Windows fallback uses one overlapped ReadDirectoryChangesW subtree read and one
+64 KiB buffer per root, including newly created descendants. It does not enumerate
+or register descendant directories, so large trees no longer exhaust the old
+512-directory budget. Overflow reports history loss, missing roots are retried,
+and removed watches cancel and join pending reads before releasing their buffers.
+The original root identity is checked while idle because subtree notifications
+do not report the watched root's own rename. Ignore policy still applies to
+consumed changes; it cannot exclude subtrees from the kernel's recursive buffer.
+
+macOS Apps uses FSEvents for default and user-added directories. Default app
+roots no longer use root-only kqueue watches. Events inside a `.app` bundle
+refresh that application; they never trigger a crawl inside the bundle. Event
+admission and scoped repairs retain the configured depth, exclusions and ignore
+rules, including the union of overlapping user and default roots.
+
+Linux Apps and filename feeds share one reference-counted inotify instance.
+Repeated paths consume one native watch; detaching a feed releases only its
+references. The pool bounds unique directories to half of `max_user_watches`,
+capped at 32,768 (4,096 if the kernel limit cannot be read). Other processes can
+still exhaust the shared system quota. Recursive registration filters against
+Apps scan depth and exclusions before enqueueing children, reads directories in
+256-entry chunks, and bounds queued discoveries. Roots that exceed a budget or
+hit `ENOSPC`/`EMFILE` report history loss and retain periodic reconciliation.
+Apps checks fallback roots every 30 seconds; the filename feed reports partial
+roots every 10 minutes. These are eventual recovery paths, not real-time coverage
+of directories beyond the budget.
+
+Neither Linux nor FSEvents allocates a Windows-style read buffer per directory.
+Linux has one fsnotify read buffer per native instance, plus kernel watch records;
+FSEvents owns a system-managed stream. Apps reserves 256 change signals per feed
+on each platform, while bulk filename feeds retain their larger bounded replay
+queue. Linux's shared pool has one 256-event delivery queue and one error slot
+per subscribing feed, never per directory. Overflow is delivered separately from
+that full event queue and triggers recovery even if no further event arrives.
 
 ## Full-build temporary memory
 
@@ -802,3 +865,255 @@ skipped. Numeric timings remain informational. Four unrelated existing Windows
 symlink-fixture tests are excluded because this host lacks the required privilege.
 The column package cross-compiles for Linux amd64 and macOS arm64; their idle
 page-release behavior still requires native testing on those operating systems.
+
+## Path-query execution comparison (2026-10-18)
+
+The frozen two-volume fixture contains 2,636,569 base records and 14,974 overlay
+records. The before/after comparison uses Windows, optimized test builds with
+`sqlite_fts5,filesearch_diagnostic`, `GOMAXPROCS=8`, and a five-result limit matching
+the global-search setting on this machine. A Go build overlay selects the previous
+executor without changing production data. Snapshots are copied before opening;
+the OS file cache is warm. Before figures are one observation per query; after
+figures are medians of three sequential rounds in one process.
+
+| Query | Before (ms) | After (ms) | Before allocated (MiB) | After allocated (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| Rooted directory path containing spaces | 5,521.43 | 54.34 | 2,062.55 | 13.11 |
+| Rooted missing-file path containing spaces | 5,507.81 | 54.57 | 2,048.52 | 13.10 |
+| `Desktop/test` | 5,258.99 | 51.16 | 2,009.67 | 13.23 |
+| `dev/wox` | 5,169.85 | 24.48 | 2,003.93 | 8.00 |
+| `C:\` | 4,708.58 | 1.07 | 1,997.57 | 1.26 |
+
+Allocation is the cumulative Go allocation during one backend query, not retained
+heap or whole-process working set. These are backend timings, not UI latency,
+Delve timings, or cold-disk measurements. Larger result limits and unanchored
+quoted/wildcard queries are not covered by this table. Result-set/score fingerprints
+match in every round; exhaustive-scoring tests separately verify ordering, entry
+kinds, metadata, Unicode, cross-component matching and live overlay changes.
+
+Raw inputs, build overlays, individual observations and `path-comparison.json`
+are under `artifacts/memory-20261018-1623/`. The related package tests pass with
+five Windows symlink-privilege cases and one fallback-watcher event-order case
+excluded. The unfiltered run encountered those host/event-order failures; no
+symlink or watcher implementation changed. The core production build passes.
+
+## Directory query columns comparison (2026-10-18)
+
+Windows amd64, Go 1.27.2, optimized diagnostic binaries, `GOMAXPROCS=8`,
+100-result limit. The frozen two-volume fixture contains 2,636,569 base rows,
+568,834 directories and 14,974 overlay records. Sequential before/after/after/before
+runs each replay fourteen query families for 26 rounds. The first round in each
+process is excluded below, leaving 50 warm observations per family per arm.
+Snapshot copying, upgrades and open/replay are outside query timing. Copies warm
+the OS file cache; these are backend measurements, not UI or cold-disk timings.
+
+| Query | Before p50/p95 (ms) | After p50/p95 (ms) | Before median allocation (KiB) | After median allocation (KiB) |
+| --- | ---: | ---: | ---: | ---: |
+| `qqyy` | 3.52 / 5.71 | 2.51 / 4.23 | 1529.5 | 55.9 |
+| `readme` | 7.01 / 10.44 | 4.00 / 5.85 | 1527.4 | 258.7 |
+| `test go` | 10.13 / 14.44 | 6.78 / 9.06 | 1061.7 | 272.7 |
+| `a` | 6.52 / 7.54 | 4.98 / 5.79 | 924.6 | 584.9 |
+| `ss` | 7.73 / 10.30 | 5.04 / 6.39 | 1018.1 | 524.4 |
+| `*.txt` | 4.51 / 6.47 | 2.52 / 5.80 | 1121.5 | 295.7 |
+| `readme .md` | 12.80 / 17.01 | 6.50 / 8.22 | 1828.3 | 255.2 |
+| `项目` | 3.00 / 4.04 | 2.50 / 4.17 | 489.5 | 497.5 |
+| `xiangmu` | 3.29 / 4.02 | 2.64 / 4.03 | 848.8 | 162.5 |
+| `Desktop/test` | 46.55 / 54.59 | 4.98 / 7.52 | 11283.6 | 73.9 |
+| `dev/wox` | 23.05 / 31.10 | 3.52 / 5.09 | 8491.7 | 308.0 |
+| `C:\Users\qianl\Desktop\test - folder\` | 55.16 / 60.96 | 6.64 / 7.61 | 13420.7 | 36.2 |
+| `C:\Users\qianl\Desktop\test - folder\sadf.txt` | 53.13 / 65.82 | 6.49 / 8.87 | 13414.3 | 31.5 |
+| `C:\` | 300.24 / 318.44 | 3.53 / 4.83 | 148231.0 | 412.1 |
+
+All result-path/score fingerprints match across all 1,456 observations. Exhaustive
+retrieval tests separately compare complete ordering, kinds and metadata, Unicode,
+cross-component matching, live renames, metadata updates, file-to-directory
+promotion, orphan ancestry and large moves beyond the live-path cache cap.
+
+Every sampled warm query family has p95 below 10 ms; this is not an all-query
+latency guarantee. 3 of the 700 warm after samples exceed 10 ms (maximum
+14.99 ms). Process-first `qqyy` takes 9.25 and 9.23 ms in the after runs. A separate
+mapped-page/pinyin-release experiment measures first resumed queries at 10.58 ms
+(`qqyy`), 10.24 ms (`readme`), 10.65 ms (`test go`), 11.51 ms (`Desktop/test`) and
+5.74 ms (`dev/wox`). The resumed `qqyy` allocates 8.61 MiB while reconstructing
+pinyin state. These numbers precede the pinyin follow-up below, which reduces
+that reconstruction cost. Unanchored quoted/wildcard path scans and content
+search are outside the sub-10-ms figures.
+
+Frozen snapshot files grow from 135.36 to 347.69 MiB. The input predates persisted
+query columns and child postings, so this delta also includes those existing
+arrays; it is not exclusively directory path storage. Rewriting diagnostic copies takes roughly
+3.1 seconds combined in one observed run. This is fixture preparation, not a
+registered application migration. New publications map the prepared arrays;
+legacy reads remain write-free but must prepare missing arrays on the heap.
+Build peak memory and whole-process resident memory were not measured.
+The larger mapping is not a claim of equally large resident/private memory.
+
+The core production build and affected column, filename, fuzzy matcher, plugin,
+and focused file-search migration tests pass. Focused race tests cover shared
+query state and idle release. Five symlink cases cannot run on this host without
+Windows symlink privilege; one fallback watcher event-order failure reproduces
+with the preserved baseline binary. The complete migration suite also encounters
+an unrelated dictation-test log-file cleanup failure; focused file-search
+migrations pass. Column tests cross-compile for Linux amd64 and macOS arm64;
+native performance and idle-page behavior there remain unmeasured.
+
+Raw samples, CPU/allocation profiles, preserved binaries and `summary.json` are
+under `artifacts/filesearch-query-20261018/`. Set `WOX_QUERY_DIAGNOSTIC_REWRITE=1`
+to rewrite only diagnostic copies, and `WOX_QUERY_DIAGNOSTIC_LIMIT` to select a
+result cap; neither setting changes the production index.
+
+## Pinyin reconstruction follow-up (2026-10-18)
+
+The directory format is unreleased, so its new migration and production upgrade
+entry point have been removed. Existing unrelated migrations are unchanged.
+Diagnostic fixture rewriting is test-only; compatibility reads never modify
+stored snapshots. New builds and compactions write the prepared directory columns.
+
+A repeated-release allocation profile attributes most of the former cold-search
+cost to per-name `getPinYin` graphs, growing segment slices, literal builders and
+cache insertion, rather than solely to the character dictionary. Compiled filename
+matching now borrows bounded pooled scratch, shares dictionary syllables/initials
+and source substrings, and clears pointer-bearing slots before returning scratch.
+It creates no per-name memoization entries. General repeated-title matching keeps
+its existing bounded cache; prepared text still owns its prepared graph.
+
+The character dictionary uses sparse 256-rune pages and flat reading/initial arrays
+instead of thousands of map values and slices. Immutable strings borrow the owned
+resource read, including in compressed-asset builds. Idle release still unpublishes
+the dictionary. All 8,105 characters, 8,458 readings and their order retain the
+existing semantic fingerprint. Tests also retain borrowed readings through forced
+GC/release and exercise supplementary Han, invalid runes/UTF-8, large scratch growth,
+polyphonic names and concurrent cleanup.
+
+Matcher deduplication uses at most `min(segment count, pattern rune count)` matched
+segments because each match consumes at least one pattern rune. Final grown/swapped
+state buffers return to the pool instead of repeatedly discarding their capacity.
+
+Cold diagnostics use the same Windows/Go configuration, frozen two-volume data,
+100-result limit and sequential before/after/after/before order as above. Each
+process performs 20 cycles of mapped-page release, pinyin cache/dictionary release,
+`debug.FreeOSMemory`, then `qqyy`: 40 measured cold queries per plain arm. Setup and
+rewriting the copied snapshots are outside timing. The OS file cache is warm.
+
+| Build | Samples | p50 / p95 (ms) | Median Go allocation |
+| --- | ---: | ---: | ---: |
+| Before pinyin change | 40 | 10.93 / 12.68 | 9458.1 KiB |
+| After, plain assets | 40 | 7.32 / 10.43 | 475.1 KiB |
+| After, compressed assets | 20 | 7.78 / 9.35 | 628.7 KiB |
+
+Plain cold-query allocation falls about 95%, from 9.24 MiB to 475 KiB. The packed
+arm is a separate 20-cycle confirmation, not a packed before/after comparison.
+Cold tails still cross 10 ms (plain maximum 11.43 ms; packed maximum 10.38 ms).
+These backend allocation counters are cumulative allocation, not retained heap or
+whole-process resident memory, and these runs are not cold-disk measurements.
+
+Separate warm mixed runs retain 50 observations per family per arm. Every tested
+result-path/score fingerprint matches, including all cold and packed observations.
+Pinyin-sensitive warm allocation changes include:
+
+| Query | Before median allocation (KiB) | After median allocation (KiB) | Before / after p50 (ms) |
+| --- | ---: | ---: | ---: |
+| `qqyy` | 55.9 | 58.4 | 2.85 / 3.30 |
+| `a` | 586.4 | 216.6 | 5.14 / 5.79 |
+| `ss` | 529.0 | 312.4 | 5.60 / 5.95 |
+| `项目` | 501.0 | 9.7 | 2.70 / 3.12 |
+| `xiangmu` | 269.3 | 38.7 | 3.14 / 3.41 |
+
+Warm mixed-run p50s rise about 0.1-0.65 ms in this run, including path queries whose
+executor did not change; this does not establish a warm speedup. All sampled warm
+families still have p95 below 10 ms. Repeated-title microbenchmarks stay around
+2.3 microseconds/op with 0 B/op before and after. The compiled transient-name
+microbenchmark is around 0.59 microseconds/op with 0 B/op. Dictionary loading drops
+from approximately 938,851 B and 8,142 allocations to 362,128 B and 8 allocations;
+its measured load time is about 0.49 versus 0.29 ms. No dictionary or scratch buffer
+is kept solely to evade idle release.
+
+Affected filename/index/plugin suites, fuzzy-matching tests, focused and full
+fuzzy-matcher race checks, compressed-resource tests and the production build pass.
+The existing five symlink privilege cases and baseline watcher-order failure remain
+excluded from the native filename suite as documented above. Runtime changes in
+this follow-up do not add filename-index columns or enlarge the index files.
+
+Samples, profiles, benchmark logs and plain/packed binaries are preserved under
+`artifacts/filesearch-query-20261018/pinyin-*`. The summaries are
+`pinyin-cold-summary.json` and `pinyin-warm-summary.json`.
+
+### Actual `maibn.go` latency follow-up (2026-10-18)
+
+The reported 26 ms was real plugin work: the live log records 25 ms in search
+and 1 ms building 53 results. The running VS Code/Delve binary uses
+`-gcflags=all=-N -l`, whereas the earlier backend measurements used normal Go
+compiler optimizations. Compiler mode alone does not remove the search hotspot.
+
+CPU profiles of this exact query identified large numbers of impossible ASCII
+subsequences reaching fuzzy scoring. The existing character bitmaps encode
+membership, not order. New snapshots add a nineteenth section with transposed
+ordered-pair bitmaps over letters and dots. Pairs express relative order across
+arbitrary gaps; they are not bigram or substring restrictions. Normalized Unicode
+text and every pinyin pronunciation contribute conservative alternatives. Query
+phrases, wildcard literals and AND clauses preserve their independent ordering.
+Final matching, scores and tie ordering remain scorer-owned.
+
+The remaining increment scan recalculated character masks for approximately
+15,000 records on every query. Revision-owned scalar metadata now stores live
+change IDs, masks, ASCII flags and unchanged base-name IDs. Queries borrow the
+base pair filters for unchanged names, reject before map lookup, and score only
+eligible live records. This adds at most about 351 KiB of scalar metadata for
+the frozen fixture's 14,974 overlay records, released with the revision. No
+query-result cache or filename string copy is retained for this optimization.
+
+On that fixture, the pair section grows the two snapshots from 347.69 MiB to
+416.77 MiB (69.08 MiB, about 20%). It is mapped read-only, not copied into the Go
+heap when opened. Builds/compaction prepare it before publication. Older
+snapshots remain readable without constructing the pair index on the heap or
+rewriting files. They receive the increment optimization but require a normal
+index rebuild/compaction for the pair-filter benefit. There is no new migration.
+
+Sequential before/after/after/before optimized backend runs replay nineteen
+query families for 21 rounds per process. The first round is excluded, leaving
+40 warm observations per family per arm, on the same two-volume fixture and
+100-result cap. Copying, opening and preparing snapshots are outside timing;
+OS file caches are warm. All result-path/score fingerprints match.
+
+| Query | Before p50 / p95 (ms) | After p50 / p95 (ms) | Before / after median Go allocation (KiB) |
+| --- | ---: | ---: | ---: |
+| `maibn.go` | 6.98 / 8.66 | 3.00 / 3.85 | 125.4 / 120.1 |
+| `maibn.gos` | 6.04 / 7.68 | 2.01 / 3.04 | 29.1 / 29.2 |
+| `maibn.g` | 7.68 / 9.04 | 3.05 / 4.07 | 165.6 / 165.9 |
+| `maibn` | 11.39 / 13.57 | 7.92 / 9.63 | 266.3 / 268.8 |
+| `main.go` | 6.41 / 8.00 | 2.53 / 4.07 | 242.0 / 234.2 |
+| `qqyy` | 4.53 / 6.07 | 1.77 / 2.53 | 63.8 / 59.3 |
+| `readme` | 6.91 / 8.09 | 4.04 / 5.05 | 262.0 / 260.4 |
+| `test go` | 10.07 / 12.73 | 6.43 / 7.56 | 287.7 / 282.1 |
+
+A separate final 40-round diagnostic in the same unoptimized compiler mode as
+Delve records `maibn.go` backend p50/p95 of 5.49/7.68 ms; the optimized arm in
+that run records 1.60/3.02 ms. These isolated backend numbers must not be presented
+as complete UI latency. `readme .md` still has an 11.80 ms p95 in the mixed run;
+the long absolute-path families still cross 10 ms. Allocation is largely
+unchanged in this follow-up; the primary improvement is avoiding unnecessary CPU.
+
+The actual Wox UI was also tested in an isolated data directory with fresh
+settings, the copied full-size index and a diagnostic-only native adapter that
+opens the copies without attaching to the live NTFS service. Neither the user's
+running debug app nor its persisted index was restarted/replaced. Both ordinary
+plugin result processing and the native UI are exercised; the adapter is supplied
+through a Go build overlay under artifacts and is absent from the normal build.
+
+For 25 final matching `maibn.go` queries in the optimized production-mode UI,
+plugin logs record search p50/p95 4/5 ms, result construction 2/3 ms and total
+Plugin.Query 6/8 ms, maximum 9 ms, with 53 results. The automation driver observing
+completed UI state has p50/p95 34.84/53.85 ms when alternating `f maibn.g` and
+`f maibn.go` without clearing between inputs. Repeated empty-to-results queries
+also resize the window and measure about 70 ms. UI response processing and native
+presentation remain additional costs; this work does not establish a sub-10-ms
+complete visible frame or solve those UI costs. Automation samples include RPC
+and 5-ms polling overhead, so they are not precise native presentation timestamps.
+
+Mapped-filter recall is checked against exhaustive scoring, including the
+reported typo, gaps, wildcard/AND forms, normalization and polyphonic pinyin.
+Affected search/index/plugin suites and focused race tests pass, retaining the
+previously documented Windows symlink/watcher exclusions. The normal optimized
+production binary builds without the diagnostic adapter. Evidence lives under
+`artifacts/filesearch-query-20261018/maibn-*`; `maibn-summary.json` contains the
+mixed comparison and `maibn-ui-release-stage-summary.json` contains plugin stages.

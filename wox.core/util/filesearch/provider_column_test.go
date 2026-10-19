@@ -32,6 +32,9 @@ func columnQueryFixture(t *testing.T) column.View {
 		{ID: 14, ParentID: 3, Name: "e"},
 		{ID: 15, ParentID: 3, Name: " a "},
 		{ID: 16, ParentID: 3, Name: "s_S.txt"},
+		{ID: 17, ParentID: 3, Name: "maibn.go"},
+		{ID: 18, ParentID: 3, Name: "main.go"},
+		{ID: 19, ParentID: 3, Name: "m-a-i-b-n.go"},
 	} {
 		if err := builder.Add(record); err != nil {
 			t.Fatal(err)
@@ -44,12 +47,21 @@ func columnQueryFixture(t *testing.T) column.View {
 	if err := prepareColumnNames(base); err != nil {
 		t.Fatal(err)
 	}
-	return column.View{Base: base}
+	path := filepath.Join(t.TempDir(), "query.columns")
+	if err := column.Write(path, base); err != nil {
+		t.Fatal(err)
+	}
+	mapped, err := column.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { mapped.Close() })
+	return column.View{Base: mapped}
 }
 
 func TestColumnQueryMatchesExhaustiveScoring(t *testing.T) {
 	view := columnQueryFixture(t)
-	for _, raw := range []string{"*", "a a", "ss", "aa", "é", "e", "amiga", "amiga png", "png amiga", "amiga .png", `"amiga" .png`, `"amiga"`, "Amiga/", "Amiga/ png", "amiga*.png", "*.txt", ".txt", "rpt", "rp", "xiangmu", "xm", "项目", "chongqing", "zhongqing", "cq", "woxcs2026", "café", "cafe", "uber", "desktop", "absent"} {
+	for _, raw := range []string{"maibn.go", "main.go", "maibn .go", "maibn*.go", "CQ .md", "cafe .txt", "*", "a a", "ss", "aa", "é", "e", "amiga", "amiga png", "png amiga", "amiga .png", `"amiga" .png`, `"amiga"`, "Amiga/", "Amiga/ png", `Amiga\`, "Amiga/ .png", "Amiga/ missing", "Amiga/*.png", `"Amiga/"`, `"Amiga/" .png`, "/", `\`, "*/report.txt", "amiga*.png", "*.txt", ".txt", "rpt", "rp", "xiangmu", "xm", "项目", "chongqing", "zhongqing", "cq", "woxcs2026", "café", "cafe", "uber", "desktop", "absent"} {
 		for _, disabled := range []bool{false, true} {
 			for _, limit := range []int{1, 3, 50} {
 				query := normalizeSearchQuery(SearchQuery{Raw: raw, DisablePinyin: disabled})

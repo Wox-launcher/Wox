@@ -16,6 +16,84 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestPluginMultiChoiceRetainsSelections covers toggling multiple values and replacing a single value.
+func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = nil
+	for _, multi := range []bool{true, false} {
+		field := formDefinition{Type: "select", Value: formDefinitionValue{Key: "providers", IsMulti: multi, Options: []formOption{{Value: "a"}, {Value: "b"}}}}
+		// Suppress async saves; this test checks selection state.
+		form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"providers": "a"}, true)}
+		a.pluginSettings.SetForm(form)
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(1)
+		want := "b"
+		if multi {
+			want = "a,b"
+		}
+		if got := form.values["providers"]; got != want {
+			t.Fatalf("multi=%v: got %q, want %q", multi, got, want)
+		}
+		if !multi {
+			continue
+		}
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(0)
+		if got := form.values["providers"]; got != "b" {
+			t.Fatalf("deselect: %q", got)
+		}
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(1)
+		if got := form.values["providers"]; got != "" {
+			t.Fatalf("clear: %q", got)
+		}
+	}
+}
+
+// TestPluginMultiChoiceSelectAllIsExclusive keeps a select-all sentinel from sticking to individual choices.
+func TestPluginMultiChoiceSelectAllIsExclusive(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = nil
+	var item definition.PluginSettingDefinitionItem
+	raw := `{"Type":"select","Value":{"Key":"browsers","IsMulti":true,"Options":[{"Label":"All","Value":"everything","IsSelectAll":true},{"Label":"Chrome","Value":"chrome"},{"Label":"Edge","Value":"edge"}]}}`
+	if err := json.Unmarshal([]byte(raw), &item); err != nil {
+		t.Fatal(err)
+	}
+	field, ok := fromCoreFormDefinition(item)
+	if !ok || !field.Value.Options[0].IsSelectAll || field.Value.Options[1].IsSelectAll {
+		t.Fatalf("IsSelectAll was dropped: %#v", field.Value.Options)
+	}
+	form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"browsers": "everything"}, true)}
+	a.pluginSettings.SetForm(form)
+	choose := func(index int) {
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(index)
+	}
+	choose(1)
+	if got := form.values["browsers"]; got != "chrome" {
+		t.Fatalf("narrow: %q", got)
+	}
+	choose(2)
+	if got := form.values["browsers"]; got != "chrome,edge" {
+		t.Fatalf("add: %q", got)
+	}
+	choose(0)
+	if got := form.values["browsers"]; got != "everything" {
+		t.Fatalf("select all: %q", got)
+	}
+	choose(0)
+	if got := form.values["browsers"]; got != "" {
+		t.Fatalf("clear select all: %q", got)
+	}
+	form.values["browsers"] = "everything,chrome"
+	choose(2)
+	if got := form.values["browsers"]; got != "chrome,edge" {
+		t.Fatalf("legacy mix: %q", got)
+	}
+}
+
 // TestPluginChoiceSearch checks that dropdown search is opt-in for any list size.
 func TestPluginChoiceSearch(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
