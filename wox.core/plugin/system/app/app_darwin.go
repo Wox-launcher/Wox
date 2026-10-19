@@ -77,16 +77,16 @@ func (a *MacRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
 	userHomeApps, _ := homedir.Expand("~/Applications")
 	return []appDirectory{
 		{
-			Path: userHomeApps, Recursive: false,
+			Path: userHomeApps, Recursive: false, trackChanges: true,
 		},
 		{
-			Path: "/Applications", Recursive: true, RecursiveDepth: 2,
+			Path: "/Applications", Recursive: true, RecursiveDepth: 2, trackChanges: true,
 		},
 		{
-			Path: "/System/Applications", Recursive: true, RecursiveDepth: 2,
+			Path: "/System/Applications", Recursive: true, RecursiveDepth: 2, trackChanges: true,
 		},
 		{
-			Path: "/System/Library/CoreServices/Applications", Recursive: false,
+			Path: "/System/Library/CoreServices/Applications", Recursive: false, trackChanges: true,
 		},
 	}
 }

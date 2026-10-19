@@ -11,8 +11,8 @@ Windows' privileged service only enumerates NTFS MFT records and reads USN
 changes over a bounded binary named-pipe stream. It does not own the filename
 index or execute searches. Windows service mode retains fixed-NTFS-volume scope;
 other modes retain configured roots. macOS uses bulk directory reads and
-FSEvents. Windows configured roots use the USN journal. Linux and Windows
-volumes without a journal use recursive fsnotify watches. Platform adapters must
+FSEvents. Windows configured roots use the USN journal. Linux uses recursive fsnotify watches. Windows volumes without a journal use
+ReadDirectoryChangesW subtree watches. Platform adapters must
 not depend on query policy or plugin implementations.
 
 Filename indexing prioritizes bounded memory, fast enumeration and low-latency
@@ -246,13 +246,50 @@ per-file events, so a hot folder costs cheap `lstat` deltas rather than
 repeated listings, and the dirty queue's 2 s quiet window, 5 s maximum wait and
 backpressure tiers already bound how often any scope is processed.
 
-The fallback feed registers one fsnotify watch per directory. Registration is
-breadth first, on a dedicated worker, within a platform budget: half of
-`max_user_watches` on Linux and 512 directories on Windows. Each Windows watch
-uses a 16 KB buffer. Directories excluded by policy are never watched.
-Directories created later are registered and rescanned. A root that exceeds the
-budget, or hits `ENOSPC`/`EMFILE`, is marked partial and reports `history_lost`
-every 10 minutes, so the relist covers the unwatched part.
+Apps subscribes to the existing Windows filename index's resolved service
+changes through a bounded in-process broker. There is no second fact stream or
+filename index. Only caught-up volumes count as covered; a transport failure,
+rebuild or source shutdown activates local subtree watches. Recovery releases
+those watches and reports history loss to reconcile the transition gap. File
+renames deliver the old and new paths, and directory moves invalidate both scopes.
+Apps repairs history-loss signals through debounced directory reconciliation;
+its periodic fallback reconciliation checks current coverage rather than the
+startup snapshot.
+
+Windows fallback uses one overlapped ReadDirectoryChangesW subtree read and one
+64 KiB buffer per root, including newly created descendants. It does not enumerate
+or register descendant directories, so large trees no longer exhaust the old
+512-directory budget. Overflow reports history loss, missing roots are retried,
+and removed watches cancel and join pending reads before releasing their buffers.
+The original root identity is checked while idle because subtree notifications
+do not report the watched root's own rename. Ignore policy still applies to
+consumed changes; it cannot exclude subtrees from the kernel's recursive buffer.
+
+macOS Apps uses FSEvents for default and user-added directories. Default app
+roots no longer use root-only kqueue watches. Events inside a `.app` bundle
+refresh that application; they never trigger a crawl inside the bundle. Event
+admission and scoped repairs retain the configured depth, exclusions and ignore
+rules, including the union of overlapping user and default roots.
+
+Linux Apps and filename feeds share one reference-counted inotify instance.
+Repeated paths consume one native watch; detaching a feed releases only its
+references. The pool bounds unique directories to half of `max_user_watches`,
+capped at 32,768 (4,096 if the kernel limit cannot be read). Other processes can
+still exhaust the shared system quota. Recursive registration filters against
+Apps scan depth and exclusions before enqueueing children, reads directories in
+256-entry chunks, and bounds queued discoveries. Roots that exceed a budget or
+hit `ENOSPC`/`EMFILE` report history loss and retain periodic reconciliation.
+Apps checks fallback roots every 30 seconds; the filename feed reports partial
+roots every 10 minutes. These are eventual recovery paths, not real-time coverage
+of directories beyond the budget.
+
+Neither Linux nor FSEvents allocates a Windows-style read buffer per directory.
+Linux has one fsnotify read buffer per native instance, plus kernel watch records;
+FSEvents owns a system-managed stream. Apps reserves 256 change signals per feed
+on each platform, while bulk filename feeds retain their larger bounded replay
+queue. Linux's shared pool has one 256-event delivery queue and one error slot
+per subscribing feed, never per directory. Overflow is delivered separately from
+that full event queue and triggers recovery even if no further event arrives.
 
 ## Full-build temporary memory
 

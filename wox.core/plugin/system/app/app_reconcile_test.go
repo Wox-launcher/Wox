@@ -9,6 +9,19 @@ import (
 	"wox/util/filesearch"
 )
 
+// Loss markers may contain the last dropped file path, but recovery must cover
+// the subscribed root to repair every event discarded by the bounded queue.
+func TestAppChangeHistoryLossRepairsSubscribedRoot(t *testing.T) {
+	plugin := &ApplicationPlugin{api: emptyAPIImpl{}}
+	root := t.TempDir()
+	change, ok := plugin.getActionableAppChange(filesearch.ChangeSignal{
+		Kind: filesearch.ChangeSignalKindHistoryLost, RootID: "apps", Path: filepath.Join(root, "last.lnk"),
+	}, []string{".lnk"}, map[string]string{"apps": root})
+	if !ok || change.Path != root || !change.PathIsDir || change.SemanticKind != filesearch.ChangeSemanticKindModify {
+		t.Fatalf("missing root repair: %+v accepted=%t", change, ok)
+	}
+}
+
 // A shortcut whose target disappeared must keep reusing its cache entry; otherwise the
 // fallback reconciliation reparses it every cycle and rebuilds the whole query index.
 func TestReuseAppFromCacheKeepsEntryWhileIconSourceStaysMissing(t *testing.T) {

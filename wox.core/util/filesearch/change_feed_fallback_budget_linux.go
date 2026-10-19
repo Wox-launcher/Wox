@@ -10,11 +10,12 @@ import (
 
 const (
 	// inotify watches are cheap (about 1 KB of kernel memory each) but the
-	// per-user limit is shared with editors, IDEs and sync clients. Wox claims
-	// half of it so those applications keep working.
+	// per-user limit is shared with editors, IDEs and sync clients. The shared fallback pool
+	// uses at most half; other processes can still exhaust the remaining quota.
 	fallbackWatchBudgetShare   = 2
 	fallbackWatchBudgetDefault = 8192
-	fallbackWatchBudgetMax     = 1 << 20
+	// Bound Wox bookkeeping even on hosts with very large kernel limits.
+	fallbackWatchBudgetMax = 32768
 )
 
 // fallbackWatchBudget derives the inotify watch budget from the kernel limit.

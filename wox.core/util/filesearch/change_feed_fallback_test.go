@@ -83,7 +83,11 @@ func TestFallbackChangeFeedWatchesNestedDirectories(t *testing.T) {
 
 	waitForFallbackWatch(t, feed, nestedPath)
 	signal := mustReadChangeSignal(t, feed.Signals())
-	if signal.Kind != ChangeSignalKindHistoryLost || signal.RootID != root.ID {
+	// Native metadata events can arrive while descendant watches are registered.
+	for signal.Kind != ChangeSignalKindHistoryLost {
+		signal = mustReadChangeSignal(t, feed.Signals())
+	}
+	if signal.RootID != root.ID {
 		t.Fatalf("expected history loss after initial registration, got %#v", signal)
 	}
 
@@ -235,6 +239,41 @@ func waitForFallbackWatch(t *testing.T, feed *FallbackChangeFeed, directory stri
 			t.Fatalf("timed out waiting for watch on %q", directory)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestFallbackDirectoryFilterBoundsInitialAndNewWatches verifies that the
+// registration worker never expands past the consumer's scan boundary.
+func TestFallbackDirectoryFilterBoundsInitialAndNewWatches(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "child")
+	mustMkdirAll(t, filepath.Join(child, "too-deep"))
+	feed := newFallbackChangeFeed(256)
+	defer feed.Close()
+	feed.SetDirectoryWatchFilter(func(_ RootRecord, path string) bool { return filepath.Dir(path) == root })
+	if err := feed.Refresh(context.Background(), []RootRecord{{ID: "scope", Path: root}}); err != nil {
+		t.Fatal(err)
+	}
+	for signal := mustReadChangeSignal(t, feed.Signals()); signal.Kind != ChangeSignalKindHistoryLost; signal = mustReadChangeSignal(t, feed.Signals()) {
+	}
+	feed.mu.Lock()
+	count := len(feed.watched)
+	feed.mu.Unlock()
+	if count != 2 {
+		t.Fatalf("watch count=%d, want root and direct child only", count)
+	}
+	created := filepath.Join(root, "new")
+	mustMkdirAll(t, filepath.Join(created, "too-deep"))
+	waitForFallbackWatch(t, feed, created)
+	file := filepath.Join(created, "app.desktop")
+	mustWriteTestFile(t, file, "app")
+	mustReadChangeSignalForPath(t, feed.Signals(), file)
+	feed.mu.Lock()
+	defer feed.mu.Unlock()
+	for path := range feed.watched {
+		if path != root && filepath.Dir(path) != root {
+			t.Fatalf("watched out of scope: %s", path)
+		}
 	}
 }
 

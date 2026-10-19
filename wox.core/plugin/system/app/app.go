@@ -1202,20 +1202,19 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 
 	feed := filesearch.NewChangeFeed()
 	defer feed.Close()
+	if filtered, ok := feed.(filesearch.DirectoryWatchFilterSetter); ok {
+		filtered.SetDirectoryWatchFilter(func(_ filesearch.RootRecord, path string) bool {
+			return a.appWatchDirectoryAllowed(path, directories, appExtensions)
+		})
+	}
 	if refreshErr := feed.Refresh(ctx, roots); refreshErr != nil {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to start app change feed: %s", refreshErr.Error()))
 		return
 	}
 	a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("app change feed started: roots=%d mode=%s", len(roots), feed.Mode()))
-	fallbackDirectories := a.getFallbackReconcileDirectories(ctx, feed, roots, directories)
-	var fallbackTicker *time.Ticker
-	var fallbackTickerC <-chan time.Time
-	if len(fallbackDirectories) > 0 {
-		fallbackTicker = time.NewTicker(appFallbackReconcileInterval)
-		fallbackTickerC = fallbackTicker.C
-		defer fallbackTicker.Stop()
-		util.GetLogger().Info(ctx, fmt.Sprintf("app fallback reconciliation started: roots=%d interval=%s", len(fallbackDirectories), appFallbackReconcileInterval))
-	}
+	// Coverage can change after startup when the service disconnects or catches up.
+	fallbackTicker := time.NewTicker(appFallbackReconcileInterval)
+	defer fallbackTicker.Stop()
 	rootPaths := map[string]string{}
 	for _, root := range roots {
 		rootPaths[root.ID] = root.Path
@@ -1286,17 +1285,36 @@ func (a *ApplicationPlugin) watchAppChanges(ctx context.Context) {
 			stopTimer()
 		case <-extraTickerC:
 			a.reconcileExtraApps(ctx)
-		case <-fallbackTickerC:
-			a.reconcileFallbackAppDirectories(ctx, fallbackDirectories)
+		case <-fallbackTicker.C:
+			a.reconcileFallbackAppDirectories(ctx, a.getFallbackReconcileDirectories(ctx, feed, roots, directories))
 		case signal, ok := <-feed.Signals():
 			if !ok {
 				stopTimer()
 				return
 			}
 
+			signal, inScope := a.scopedAppSignal(signal, directories, appExtensions)
+			if !inScope {
+				continue
+			}
 			a.logAppChangeFeedSignal(ctx, signal, rootPaths)
 			change, ok := a.getActionableAppChange(signal, appExtensions, rootPaths)
 			if !ok {
+				continue
+			}
+			// A queued directory repair reads current disk state. Keep stale child
+			// events from undoing that repair in the map's arbitrary flush order.
+			covered := false
+			for key, queued := range pending {
+				if queued.PathIsDir && queued.SemanticKind != filesearch.ChangeSemanticKindRemove && a.isPathAtOrUnderDirectory(change.Path, queued.Path) {
+					covered = true
+					break
+				}
+				if change.PathIsDir && change.SemanticKind != filesearch.ChangeSemanticKindRemove && a.isPathAtOrUnderDirectory(queued.Path, change.Path) {
+					delete(pending, key)
+				}
+			}
+			if covered {
 				continue
 			}
 			pending[a.appChangeTaskKey(change)] = change
@@ -1405,12 +1423,18 @@ func (a *ApplicationPlugin) watchRootOnlyAppChanges(ctx context.Context, appDire
 func (a *ApplicationPlugin) getAppChangeRoots(ctx context.Context) []filesearch.RootRecord {
 	directories := a.getAppDirectories(ctx)
 	roots := make([]filesearch.RootRecord, 0, len(directories))
+	seen := make(map[string]bool)
 	now := util.GetSystemTimestamp()
 	for _, directory := range directories {
 		if !directory.trackChanges || strings.TrimSpace(directory.Path) == "" {
 			continue
 		}
 		cleanPath := filepath.Clean(directory.Path)
+		key := a.pathCacheKey(cleanPath)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		info, statErr := os.Stat(cleanPath)
 		if statErr != nil {
 			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("skip app change root %s: %s", cleanPath, statErr.Error()))
@@ -1442,12 +1466,12 @@ func (a *ApplicationPlugin) appChangeTaskKey(change appPendingChange) string {
 
 func (a *ApplicationPlugin) getActionableAppChange(signal filesearch.ChangeSignal, appExtensions []string, rootPaths map[string]string) (appPendingChange, bool) {
 	if signal.Kind != filesearch.ChangeSignalKindDirtyPath {
-		if signal.Kind == filesearch.ChangeSignalKindHistoryLost || signal.Kind == filesearch.ChangeSignalKindFeedUnavailable {
-			// Diagnostic logging only: app indexing intentionally avoids fallback full
-			// rebuilding the index because broad app scans are expensive. Keep the skip visible
-			// while testing install/uninstall flows so we can tell whether filesearch
-			// produced a precise path or only a root-level reconciliation request.
-			a.api.Log(context.Background(), plugin.LogLevelInfo, fmt.Sprintf("app change feed skipped: kind=%s reason=%s path=%s", signal.Kind, signal.Reason, signal.Path))
+		// Queue overflow and source switches lose precise paths. Repair only the
+		// affected app root through the existing debounced directory reconciliation.
+		if signal.Kind == filesearch.ChangeSignalKindHistoryLost {
+			if rootPath := rootPaths[signal.RootID]; rootPath != "" {
+				return appPendingChange{Path: rootPath, PathIsDir: true, SemanticKind: filesearch.ChangeSemanticKindModify}, true
+			}
 		}
 		return appPendingChange{}, false
 	}
@@ -1595,7 +1619,11 @@ func (a *ApplicationPlugin) removeIndexedAppsUnderDirectory(ctx context.Context,
 }
 
 func (a *ApplicationPlugin) reconcileIndexedAppsInDirectory(ctx context.Context, directoryPath string) bool {
-	return a.reconcileIndexedAppsInAppDirectory(ctx, a.getLocalAppDirectoryForChange(ctx, directoryPath))
+	changed := false
+	for _, directory := range a.getLocalAppDirectoriesForChange(directoryPath, a.getAppDirectories(ctx)) {
+		changed = a.reconcileIndexedAppsInAppDirectory(ctx, directory) || changed
+	}
+	return changed
 }
 
 // reconcileIndexedAppsInAppDirectory compares one bounded scan scope with the current app cache.
@@ -1664,8 +1692,15 @@ func (a *ApplicationPlugin) isAppPathInDirectoryScope(appPath string, directory 
 	if depth > 0 && (!directory.Recursive || depth > directory.RecursiveDepth) {
 		return false
 	}
+	// Recursive exclusions prune traversed parents; an app bundle itself is
+	// a leaf match, just as in scanAppPaths.
 	for _, exclude := range directory.RecursiveExcludes {
-		if a.isPathAtOrUnderDirectory(appPath, filepath.Join(directory.Path, exclude)) {
+		if a.isPathAtOrUnderDirectory(filepath.Dir(appPath), filepath.Join(directory.Path, exclude)) {
+			return false
+		}
+	}
+	for _, exclude := range directory.excludeAbsPaths {
+		if a.isPathAtOrUnderDirectory(filepath.Dir(appPath), exclude) {
 			return false
 		}
 	}
@@ -1685,35 +1720,6 @@ func (a *ApplicationPlugin) reconcileFallbackAppDirectories(ctx context.Context,
 	a.rebuildHotkeyAppCandidates(ctx)
 	a.rebuildQueryEntries(ctx)
 	a.saveAppToCache(ctx)
-}
-
-func (a *ApplicationPlugin) getLocalAppDirectoryForChange(ctx context.Context, directoryPath string) appDirectory {
-	cleanDirectory := filepath.Clean(directoryPath)
-	for _, root := range a.getAppDirectories(ctx) {
-		if !root.trackChanges || strings.TrimSpace(root.Path) == "" {
-			continue
-		}
-		cleanRoot := filepath.Clean(root.Path)
-		if !a.isPathAtOrUnderDirectory(cleanDirectory, cleanRoot) {
-			continue
-		}
-
-		remainingDepth := root.RecursiveDepth
-		if rel, relErr := filepath.Rel(cleanRoot, cleanDirectory); relErr == nil && rel != "." {
-			remainingDepth -= len(strings.Split(rel, string(os.PathSeparator)))
-			if remainingDepth < 0 {
-				remainingDepth = 0
-			}
-		}
-		return appDirectory{
-			Path:              cleanDirectory,
-			Recursive:         root.Recursive && remainingDepth > 0,
-			RecursiveDepth:    remainingDepth,
-			RecursiveExcludes: root.RecursiveExcludes,
-		}
-	}
-
-	return appDirectory{Path: cleanDirectory, Recursive: true, RecursiveDepth: 1}
 }
 
 func (a *ApplicationPlugin) upsertIndexedAppByPath(ctx context.Context, appPath string) bool {
@@ -2480,7 +2486,7 @@ func (a *ApplicationPlugin) scanAppPaths(ctx context.Context, appDirectories []a
 			for _, exclude := range dir.RecursiveExcludes {
 				excludeAbsPath := filepath.Join(dir.Path, exclude)
 				cleanExcludePath := filepath.Clean(excludeAbsPath)
-				dir.excludeAbsPaths = append(dir.excludeAbsPaths, strings.ToLower(cleanExcludePath))
+				dir.excludeAbsPaths = append(dir.excludeAbsPaths, a.pathCacheKey(cleanExcludePath))
 			}
 		}
 
@@ -2534,10 +2540,10 @@ func (a *ApplicationPlugin) scanAppPaths(ctx context.Context, appDirectories []a
 
 			// Check if this directory should be excluded
 			if len(dir.excludeAbsPaths) > 0 {
-				cleanSubDir := strings.ToLower(filepath.Clean(subDir))
+				cleanSubDir := a.pathCacheKey(filepath.Clean(subDir))
 				isExcluded := lo.ContainsBy(dir.excludeAbsPaths, func(excludePath string) bool {
-					// Check if subDir starts with the exclude path (case-insensitive)
-					return strings.HasPrefix(cleanSubDir, excludePath)
+					// Match a whole directory, not similarly prefixed siblings.
+					return a.isPathAtOrUnderDirectory(cleanSubDir, excludePath)
 				})
 				if isExcluded {
 					a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("skipping excluded directory: %s", subDir))

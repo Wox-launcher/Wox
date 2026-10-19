@@ -18,6 +18,7 @@ type nativeNameIndex interface {
 }
 
 type nativeIndexCallbacks struct {
+	availability func(string, bool)
 	status       func()
 	content      func(context.Context, []ContentHookNotification)
 	wantsContent func() bool

@@ -26,6 +26,56 @@ func emitNativeIndexFixture(emit filesearchservice.FactSink, root, name string) 
 	return emit(protocol.End, boundary)
 }
 
+// TestNativeIndexReportsServiceCoverage verifies that consumers leave the service
+// on transport failure, rejoin after replay, and leave again during shutdown.
+func TestNativeIndexReportsServiceCoverage(t *testing.T) {
+	states := make(chan bool, 8)
+	var reads atomic.Int32
+	stream := func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
+		if kind == protocol.Enumerate {
+			return emitNativeIndexFixture(emit, boundary.Volume, "app.lnk")
+		}
+		switch reads.Add(1) {
+		case 1:
+			return errors.New("service disconnected")
+		case 2:
+			payload, _ := protocol.EncodeBoundary(boundary)
+			return emit(protocol.Checkpoint, payload)
+		default:
+			<-ctx.Done()
+			return ctx.Err()
+		}
+	}
+	index, err := newNTFSNameIndex(context.Background(), t.TempDir(), []string{`C:\`}, stream, nativeIndexCallbacks{
+		availability: func(_ string, available bool) { states <- available },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+	for _, want := range []bool{false, true, false, true} {
+		select {
+		case got := <-states:
+			if got != want {
+				t.Fatalf("coverage=%t, want %t", got, want)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("missing coverage transition to %t", want)
+		}
+	}
+	if err := index.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case available := <-states:
+		if available {
+			t.Fatal("source remained available after close")
+		}
+	default:
+		t.Fatal("close did not withdraw coverage")
+	}
+}
+
 // awaitNativeMatches waits for an observable publication, not a worker sleep.
 func awaitNativeMatches(t *testing.T, index *ntfsNameIndex, query string, count int) {
 	t.Helper()
