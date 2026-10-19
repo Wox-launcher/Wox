@@ -16,6 +16,41 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestPluginMultiChoiceRetainsSelections covers toggling multiple values and replacing a single value.
+func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.uiCall = nil
+	for _, multi := range []bool{true, false} {
+		field := formDefinition{Type: "select", Value: formDefinitionValue{Key: "providers", IsMulti: multi, Options: []formOption{{Value: "a"}, {Value: "b"}}}}
+		// Suppress async saves; this test checks selection state.
+		form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"providers": "a"}, true)}
+		a.pluginSettings.SetForm(form)
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(1)
+		want := "b"
+		if multi {
+			want = "a,b"
+		}
+		if got := form.values["providers"]; got != want {
+			t.Fatalf("multi=%v: got %q, want %q", multi, got, want)
+		}
+		if !multi {
+			continue
+		}
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(0)
+		if got := form.values["providers"]; got != "b" {
+			t.Fatalf("deselect: %q", got)
+		}
+		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.chooseSettingChoice(1)
+		if got := form.values["providers"]; got != "" {
+			t.Fatalf("clear: %q", got)
+		}
+	}
+}
+
 // TestPluginChoiceSearch checks that dropdown search is opt-in for any list size.
 func TestPluginChoiceSearch(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
