@@ -69,7 +69,7 @@ func (a *App) dictationModelCompareProps(state *dictationModelCompareState, scro
 		results = append(results, previewview.DictationModelCompareResult{
 			ID: model.ID, Name: model.Name, Status: model.Status, Error: model.Error,
 			Text: text, Duration: formatDictationCompareDuration(model.Elapsed),
-			Layout: a.previewTextLayout(scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
+			Layout: a.previewTextLayout(a.window, scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
 		})
 	}
 	return results

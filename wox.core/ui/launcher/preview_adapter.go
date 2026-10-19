@@ -380,8 +380,8 @@ func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHisto
 	refinedWidth := max(float32(0), innerWidth-scaled(16))
 	refinedStyle := woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}
 	originalStyle := woxui.TextStyle{Size: scaled(14)}
-	refinedLayout := a.previewTextLayout(scrollKey+"|dictation-refined", data.RefinedText, refinedStyle, refinedWidth, scaled(28))
-	originalLayout := a.previewTextLayout(scrollKey+"|dictation-original", data.OriginalText, originalStyle, innerWidth, scaled(22))
+	refinedLayout := a.previewTextLayout(a.window, scrollKey+"|dictation-refined", data.RefinedText, refinedStyle, refinedWidth, scaled(28))
+	originalLayout := a.previewTextLayout(a.window, scrollKey+"|dictation-original", data.OriginalText, originalStyle, innerWidth, scaled(22))
 	statusWidth := float32(0)
 	if status := strings.TrimSpace(data.StatusLabel); status != "" {
 		metrics, _ := a.window.MeasureText(status, woxui.TextStyle{Size: scaled(11)})
@@ -441,7 +441,7 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 	})
 }
 
-func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
+func (a *App) previewTextLayout(window *woxui.Window, scrollKey, value string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
 	// Cache by semantic source, so changing reasoning replaces its previous version.
 	const maxSourceBytes = 2 << 20
 	cached := a.previewLayouts[scrollKey]
@@ -466,7 +466,7 @@ func (a *App) previewTextLayout(scrollKey, value string, style woxui.TextStyle, 
 	if a.generalSettings != nil {
 		font = a.generalSettings.Data().AppFontFamily
 	}
-	return cached.measure(value, textLayoutKey{session: scrollKey, font: font, window: a.window, width: width, lineHeight: lineHeight, style: style})
+	return cached.measure(value, textLayoutKey{session: scrollKey, font: font, window: window, width: width, lineHeight: lineHeight, style: style})
 }
 
 // releasePinnedPreviewImage drops the full-bleed preview pin when another preview is shown.

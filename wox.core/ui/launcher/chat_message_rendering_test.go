@@ -3,8 +3,31 @@ package launcher
 import (
 	"testing"
 	"wox/ui/launcher/view/preview"
+	woxui "wox/ui/runtime"
 	"wox/ui/widget"
 )
+
+// TestChatMessageLayoutsUseHostWindow covers both pop-out chat and Settings AI assistance.
+func TestChatMessageLayoutsUseHostWindow(t *testing.T) {
+	app := &App{window: &woxui.Window{}, previewLayouts: map[string]*textLayoutCache{}}
+	for _, host := range []*woxui.Window{app.window, {}, {}} {
+		for _, role := range []string{"user", "assistant"} {
+			props := preview.ChatMessageProps{Key: role, Role: role, Text: "Message", Reasoning: "Reasoning"}
+			message := app.prepareChatMessage(props, host, 400, 1)
+			if message.Window != host || (message.Markdown != nil && message.Markdown.Window != host) {
+				t.Fatal("message rendering retained another window")
+			}
+			for _, key := range []string{"chat-text-" + role, "chat-reasoning-" + role} {
+				if role == "assistant" && key == "chat-text-assistant" {
+					continue
+				}
+				if cached := app.previewLayouts[key]; cached == nil || cached.key.window != host {
+					t.Fatalf("%s layout did not follow its host window", key)
+				}
+			}
+		}
+	}
+}
 
 func TestChatMessageRenderingSharesMarkdownAcrossHosts(t *testing.T) {
 	app := &App{previewLayouts: map[string]*textLayoutCache{}}

@@ -67,7 +67,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 	}
 	return previewview.ChatConversation(previewview.ChatConversationProps{
 		PrepareMessages: func(width, height float32) previewview.ChatMessagesProps {
-			return a.chatMessagesProps(snapshot, palette, width, height, imageScale)
+			return a.chatMessagesProps(window, snapshot, palette, width, height, imageScale)
 		},
 		PrepareCatalog: func(width, available float32) *previewview.ChatCatalogProps {
 			if panel != "models" && panel != "skills" && panel != chatCommandPanel && panel != chatMentionPanel {
@@ -570,7 +570,7 @@ func formatChatRoundDuration(start, end int64) string {
 }
 
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
-func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32) previewview.ChatMessagesProps {
+func (a *App) chatMessagesProps(window *woxui.Window, snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32) previewview.ChatMessagesProps {
 	// LazyList needs every row's height, but unchanged historical Markdown must not
 	// rebuild a widget tree just to supply that height on each streamed frame.
 	if a.chatMarkdown.chatID != snapshot.chat.ID {
@@ -587,7 +587,7 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 	}
 	scale := a.chatDensityScale()
 	emptySize := previewview.ChatScaledSize(scale, 28)
-	emptyMetrics, _ := a.window.MeasureText(emptyMessage, woxui.TextStyle{Size: emptySize, Weight: woxui.FontWeightSemibold})
+	emptyMetrics, _ := window.MeasureText(emptyMessage, woxui.TextStyle{Size: emptySize, Weight: woxui.FontWeightSemibold})
 	props := previewview.ChatMessagesProps{
 		Width: width, Height: height, DensityScale: scale, Key: snapshot.key, EmptyMessage: emptyMessage,
 		EmptyTextStyle: woxui.TextStyle{Size: emptySize, Weight: woxui.FontWeightSemibold}, EmptyLineHeight: previewview.ChatScaledSize(scale, 36),
@@ -606,10 +606,10 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 			continue
 		}
 		if item.kind == "tool-activity" {
-			props.Messages = append(props.Messages, a.chatToolActivityProps(item, snapshot.expandedRounds, palette, innerWidth))
+			props.Messages = append(props.Messages, a.chatToolActivityProps(window, item, snapshot.expandedRounds, palette, innerWidth))
 			continue
 		}
-		props.Messages = append(props.Messages, a.chatMessageProps(snapshot.key, index, item.conversation, palette, width, item.showMeta, item.hideReasoning, imageScale))
+		props.Messages = append(props.Messages, a.chatMessageProps(window, snapshot.key, index, item.conversation, palette, width, item.showMeta, item.hideReasoning, imageScale))
 	}
 	props.ContentHeight, props.ExtentRevision = previewview.ChatMessagesScrollMetrics(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)
@@ -618,7 +618,7 @@ func (a *App) chatMessagesProps(snapshot *chatPreviewSnapshot, palette uiPalette
 }
 
 // chatToolActivityProps prepares Flutter's grouped tool summary and nested detail rows.
-func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatMessageProps {
+func (a *App) chatToolActivityProps(window *woxui.Window, item chatRenderItem, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatMessageProps {
 	status := chatToolActivityStatus(item.tools)
 	statusColor := chatToolStatusColor(status, palette.componentTheme())
 	actions := make([]string, 0, len(item.tools))
@@ -651,7 +651,7 @@ func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]boo
 	summary := strings.Join([]string{a.chatToolActivityStatusLabel(status), strings.Join(actions, separator), count}, " · ")
 	scale := a.chatDensityScale()
 	summaryWidth := float32(0)
-	if metrics, err := a.window.MeasureText(summary, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
+	if metrics, err := window.MeasureText(summary, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
 		summaryWidth = metrics.Size.Width
 	}
 	activityID := item.roundID
@@ -667,13 +667,13 @@ func (a *App) chatToolActivityProps(item chatRenderItem, expanded map[string]boo
 	}
 	props.Tools = make([]previewview.ChatToolCallProps, 0, len(item.tools))
 	for index, conversation := range item.tools {
-		props.Tools = append(props.Tools, a.chatToolCallProps(activityID, index, conversation, expanded, palette, width-24))
+		props.Tools = append(props.Tools, a.chatToolCallProps(window, activityID, index, conversation, expanded, palette, width-24))
 	}
 	return props
 }
 
 // chatToolCallProps measures one tool badge and its expandable details.
-func (a *App) chatToolCallProps(activityID string, index int, conversation chatConversation, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatToolCallProps {
+func (a *App) chatToolCallProps(window *woxui.Window, activityID string, index int, conversation chatConversation, expanded map[string]bool, palette uiPalette, width float32) previewview.ChatToolCallProps {
 	tool := conversation.ToolCallInfo
 	status := tool.Status
 	if status == "" {
@@ -692,7 +692,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 	duration := fmt.Sprintf("%dms", max(int64(0), end-start))
 	scale := a.chatDensityScale()
 	durationWidth := float32(0)
-	if metrics, err := a.window.MeasureText(duration, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
+	if metrics, err := window.MeasureText(duration, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
 		durationWidth = metrics.Size.Width
 	}
 	name := chatToolOriginLabel(tool)
@@ -700,7 +700,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 		name = a.translate("i18n:ui_ai_chat_tools")
 	}
 	nameWidth := float32(0)
-	if metrics, err := a.window.MeasureText(name, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
+	if metrics, err := window.MeasureText(name, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11), Weight: woxui.FontWeightSemibold}); err == nil {
 		nameWidth = metrics.Size.Width
 	}
 	callID := conversation.ID
@@ -741,7 +741,7 @@ func (a *App) chatToolCallProps(activityID string, index int, conversation chatC
 	props.Details = make([]previewview.ChatToolDetailProps, 0, len(details))
 	props.DetailsHeight = 16
 	for detailIndex, detail := range details {
-		layout := a.previewTextLayout(fmt.Sprintf("chat-tool-detail\x00%s\x00%d", callID, detailIndex), detail[1], woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, detailTextWidth, previewview.ChatScaledSize(scale, 16))
+		layout := a.previewTextLayout(window, fmt.Sprintf("chat-tool-detail\x00%s\x00%d", callID, detailIndex), detail[1], woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, detailTextWidth, previewview.ChatScaledSize(scale, 16))
 		props.Details = append(props.Details, previewview.ChatToolDetailProps{Label: detail[0], Value: detail[1], Layout: layout})
 		props.DetailsHeight += layout.Size.Height + 40
 	}
@@ -832,7 +832,7 @@ func (a *App) chatToolActivityStatusLabel(status string) string {
 }
 
 // chatMessageProps resolves text layouts, images, and controller actions for one conversation.
-func (a *App) chatMessageProps(key string, index int, conversation chatConversation, palette uiPalette, width float32, showMeta, hideReasoning bool, imageScale float32) previewview.ChatMessageProps {
+func (a *App) chatMessageProps(window *woxui.Window, key string, index int, conversation chatConversation, palette uiPalette, width float32, showMeta, hideReasoning bool, imageScale float32) previewview.ChatMessageProps {
 	scale := a.chatDensityScale()
 	innerWidth := previewview.ChatMessageTextWidth(width, conversation.Role)
 	props := previewview.ChatMessageProps{
@@ -843,13 +843,13 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 	}
 	if conversation.Timestamp > 0 {
 		props.Timestamp = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
-		if metrics, err := a.window.MeasureText(props.Timestamp, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
+		if metrics, err := window.MeasureText(props.Timestamp, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}); err == nil {
 			props.TimestampWidth = metrics.Size.Width
 		}
 	}
 	if conversation.Role == "tool" || conversation.ToolCallInfo.Name != "" {
 		props.ToolText = formatChatToolCall(conversation)
-		props.ToolLayout = a.previewTextLayout(fmt.Sprintf("chat-tool\x00%s\x00%d", key, index), props.ToolText, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, innerWidth, previewview.ChatScaledSize(scale, 17))
+		props.ToolLayout = a.previewTextLayout(window, fmt.Sprintf("chat-tool\x00%s\x00%d", key, index), props.ToolText, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, 11)}, innerWidth, previewview.ChatScaledSize(scale, 17))
 	} else {
 		if reasoning := strings.TrimSpace(conversation.Reasoning); reasoning != "" && !hideReasoning {
 			props.Reasoning = reasoning
@@ -857,7 +857,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		props.Text = strings.TrimSpace(conversation.Text)
 	}
 	if conversation.Role == "user" && props.Text != "" {
-		props.RichRuns, _ = chatTokenChipDecorations(props.Text, a.chatMentionCatalog(), a.window, chatMessageChipTheme(props.Theme, conversation.Role), func(mention chatMention) *woxui.Image {
+		props.RichRuns, _ = chatTokenChipDecorations(props.Text, a.chatMentionCatalog(), window, chatMessageChipTheme(props.Theme, conversation.Role), func(mention chatMention) *woxui.Image {
 			return a.imageForSurface(mention.Icon, 256, palette.background)
 		})
 	}
@@ -881,7 +881,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 		if attachment.Kind != common.AIChatAttachmentQuote {
 			continue
 		}
-		attachment.Layout = a.previewTextLayout(fmt.Sprintf("chat-attachment\x00%s\x00%d\x00%d", key, index, i), attachment.Text, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, woxcomponent.SettingsHelpFontSize)}, max(float32(0), innerWidth-32), previewview.ChatScaledSize(scale, 18))
+		attachment.Layout = a.previewTextLayout(window, fmt.Sprintf("chat-attachment\x00%s\x00%d\x00%d", key, index, i), attachment.Text, woxui.TextStyle{Size: previewview.ChatScaledSize(scale, woxcomponent.SettingsHelpFontSize)}, max(float32(0), innerWidth-32), previewview.ChatScaledSize(scale, 18))
 	}
 	if len(conversation.Images) > 0 {
 		props.Images = make([]*woxui.Image, 0, min(3, len(conversation.Images)))
@@ -901,7 +901,7 @@ func (a *App) chatMessageProps(key string, index int, conversation chatConversat
 			props.OnRetry = func() { a.regenerateChatConversation(conversationID) }
 		}
 	}
-	return a.prepareChatMessage(props, a.window, width, imageScale)
+	return a.prepareChatMessage(props, window, width, imageScale)
 }
 
 // chatConversationClipboardText keeps platform clipboard behavior independent from chat rendering.
@@ -1160,5 +1160,9 @@ func (a *App) prepareChatMessage(props previewview.ChatMessageProps, window *wox
 		}, markdown)
 		props.Markdown = &markdown
 	}
-	return previewview.MeasureChatMessage(props, window, width, a.previewTextLayout)
+	// Bind cached layouts to the presenting host; the hidden launcher may have
+	// already released its native text measurer while another window stays open.
+	return previewview.MeasureChatMessage(props, window, width, func(key, text string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
+		return a.previewTextLayout(window, key, text, style, width, lineHeight)
+	})
 }

@@ -470,7 +470,7 @@ func TestChatMessagePropsRendersPluginMentionAsChip(t *testing.T) {
 		imageErrors:    map[string]string{},
 		previewLayouts: map[string]*textLayoutCache{},
 	}
-	props := app.chatMessageProps("chat", 0, chatConversation{
+	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "{plugin:notes} 现在有几个笔记?",
 		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
 	}, defaultPalette(), 400, false, false, 1)
@@ -488,7 +488,7 @@ func TestChatMessagePropsRendersPluginMentionAsChip(t *testing.T) {
 
 func TestChatMessagePropsRendersSkillTagAsChip(t *testing.T) {
 	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
-	props := app.chatMessageProps("chat", 0, chatConversation{
+	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "{skill:review} please",
 		SkillRefs: []chatSkillRef{{ID: "review", Name: "review"}},
 	}, defaultPalette(), 400, false, false, 1)
@@ -502,7 +502,7 @@ func TestChatMessagePropsRendersSkillTagAsChip(t *testing.T) {
 
 func TestChatMessagePropsKeepsSkillsFooterWithoutInlineTags(t *testing.T) {
 	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
-	props := app.chatMessageProps("chat", 0, chatConversation{
+	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "hello",
 		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
 	}, defaultPalette(), 400, false, false, 1)
