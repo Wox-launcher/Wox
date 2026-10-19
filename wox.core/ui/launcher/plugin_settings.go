@@ -1756,6 +1756,49 @@ func (a *App) finishPluginAIModelEdit(index int, name string) {
 	}
 }
 
+// togglePluginMultiChoice adds or removes one option in a comma-separated setting.
+// Selecting an IsSelectAll option stores only that value. Any other choice removes select-all values,
+// so a stored "all" does not keep every option selected after the user picks one.
+func togglePluginMultiChoice(options []formOption, current, value string) string {
+	selectAll := false
+	selectAllValues := map[string]struct{}{}
+	for _, option := range options {
+		if !option.IsSelectAll {
+			continue
+		}
+		selectAllValues[option.Value] = struct{}{}
+		if option.Value == value {
+			selectAll = true
+		}
+	}
+	selected := false
+	values := make([]string, 0)
+	for _, existing := range strings.Split(current, ",") {
+		existing = strings.TrimSpace(existing)
+		if existing == "" {
+			continue
+		}
+		if existing == value {
+			selected = true
+			continue
+		}
+		if selectAll {
+			continue
+		}
+		if _, drop := selectAllValues[existing]; drop {
+			continue
+		}
+		values = append(values, existing)
+	}
+	if selectAll && !selected {
+		return value
+	}
+	if !selected {
+		values = append(values, value)
+	}
+	return strings.Join(values, ",")
+}
+
 // setPluginFormChoice stages one exact dropdown value without depending on option ordering.
 func (a *App) setPluginFormChoice(index int, value string) {
 	state := a.pluginSettings.Form()
@@ -1774,21 +1817,7 @@ func (a *App) setPluginFormChoice(index int, value string) {
 		return
 	}
 	if definition.Type == "select" && definition.Value.IsMulti {
-		// Plugin settings store multiple values as a comma-separated string.
-		values := []string{}
-		selected := false
-		for _, existing := range strings.Split(state.values[definition.Value.Key], ",") {
-			existing = strings.TrimSpace(existing)
-			if existing == value {
-				selected = true
-			} else if existing != "" {
-				values = append(values, existing)
-			}
-		}
-		if !selected {
-			values = append(values, value)
-		}
-		value = strings.Join(values, ",")
+		value = togglePluginMultiChoice(definition.Value.Options, state.values[definition.Value.Key], value)
 		if picker := a.generalSettings.ChoicePicker(); picker != nil && picker.multi {
 			picker.item.value = value
 		}

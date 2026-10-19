@@ -44,9 +44,12 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
 	var selectedValues []string
 	if snapshot.multi {
-		selectedValues = strings.Split(snapshot.item.value, ",")
-		for i := range selectedValues {
-			selectedValues[i] = strings.TrimSpace(selectedValues[i])
+		// A non-nil slice selects multi-select mode even when nothing is chosen.
+		selectedValues = make([]string, 0)
+		for _, part := range strings.Split(snapshot.item.value, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				selectedValues = append(selectedValues, part)
+			}
 		}
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{

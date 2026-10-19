@@ -80,7 +80,7 @@ func (s *settingsChoiceState) InitState(_ woxwidget.StateContext, widget any) {
 	s.queryController = woxwidget.NewTextEditingController("")
 	s.queryFocusNode = woxwidget.NewFocusNode()
 	visible := filteredSettingsChoices(props.Choices, "")
-	s.selected = settingsChoiceVisibleIndex(visible, props.CurrentValue)
+	s.selected = settingsChoiceAnchorIndex(visible, props.CurrentValue, props.SelectedValues)
 	s.hovered = -1
 	offset := settingsChoiceOffset(visible, s.selected)
 	s.scrollController = woxwidget.NewScrollController(max(float32(0), offset-4*settingsChoiceRowHeight))
@@ -90,6 +90,10 @@ func (s *settingsChoiceState) InitState(_ woxwidget.StateContext, widget any) {
 func (s *settingsChoiceState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
 	oldProps := oldWidget.(SettingsChoiceProps)
 	props := newWidget.(SettingsChoiceProps)
+	// The joined multi-select value matches no row. Keep the highlight on the toggled option.
+	if props.SelectedValues != nil {
+		return
+	}
 	if oldProps.CurrentValue != props.CurrentValue {
 		visible := filteredSettingsChoices(props.Choices, s.queryController.Text())
 		s.selected = settingsChoiceVisibleIndex(visible, props.CurrentValue)
@@ -159,12 +163,33 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 
 // settingsChoiceVisibleIndex finds the committed value in the rendered list, skipping group headers.
 func settingsChoiceVisibleIndex(visible []visibleSettingsChoice, value string) int {
+	if index := settingsChoiceExactIndex(visible, value); index >= 0 {
+		return index
+	}
+	return settingsChoiceFirstSelectable(visible)
+}
+
+// settingsChoiceAnchorIndex prefers an exact value, then the first selected multi-select row.
+func settingsChoiceAnchorIndex(visible []visibleSettingsChoice, current string, selected []string) int {
+	if index := settingsChoiceExactIndex(visible, current); index >= 0 {
+		return index
+	}
+	for _, value := range selected {
+		if index := settingsChoiceExactIndex(visible, value); index >= 0 {
+			return index
+		}
+	}
+	return settingsChoiceFirstSelectable(visible)
+}
+
+// settingsChoiceExactIndex returns the option row for value, or -1 when it is not visible.
+func settingsChoiceExactIndex(visible []visibleSettingsChoice, value string) int {
 	for index, item := range visible {
 		if !item.header && item.choice.Value == value {
 			return index
 		}
 	}
-	return settingsChoiceFirstSelectable(visible)
+	return -1
 }
 
 // settingsChoiceFirstSelectable returns the first option row, or -1 when the list is empty.
@@ -289,7 +314,8 @@ func settingsChoiceEstimateTextWidth(text string, size float32) float32 {
 }
 
 func settingsChoiceMenuTop(props SettingsChoiceProps, anchor woxui.Rect, menuHeight, listHeight float32) float32 {
-	if props.Filterable {
+	// Multi-select has several current rows, so keep the menu on the field instead of recentering on the joined value.
+	if props.Filterable || props.SelectedValues != nil {
 		top := anchor.Y + anchor.Height
 		if top+menuHeight > props.Height-settingsChoiceMenuMargin {
 			top = anchor.Y - menuHeight

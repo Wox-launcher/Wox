@@ -382,7 +382,7 @@ func fromCoreSelectOptions(options []definition.PluginSettingValueSelectOption) 
 	converted := make([]formOption, len(options))
 	for index, option := range options {
 		converted[index] = formOption{
-			Label: option.Label, Value: option.Value,
+			Label: option.Label, Value: option.Value, IsSelectAll: option.IsSelectAll,
 			Icon: woxImage{ImageType: option.Icon.ImageType, ImageData: option.Icon.ImageData},
 		}
 	}

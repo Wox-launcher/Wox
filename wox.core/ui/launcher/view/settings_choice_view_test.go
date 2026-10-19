@@ -422,3 +422,59 @@ func settingsChoiceRowTrailing(row woxwidget.Stack) woxwidget.Text {
 	}
 	return woxwidget.Text{}
 }
+
+func TestMultiSettingsChoiceKeepsHighlight(t *testing.T) {
+	choices := []SettingsChoice{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}, {Value: "c", Label: "C"}}
+	visible := filteredSettingsChoices(choices, "")
+	props := SettingsChoiceProps{CurrentValue: "b", SelectedValues: []string{"b"}, Choices: choices}
+	state := &settingsChoiceState{}
+	state.InitState(woxwidget.StateContext{}, props)
+	if state.selected != settingsChoiceExactIndex(visible, "b") {
+		t.Fatalf("initial highlight = %d", state.selected)
+	}
+	next := props
+	next.CurrentValue = "b,c"
+	next.SelectedValues = []string{"b", "c"}
+	state.DidUpdateWidget(woxwidget.StateContext{}, props, next)
+	if state.selected != settingsChoiceExactIndex(visible, "b") {
+		t.Fatalf("multi highlight moved to %d", state.selected)
+	}
+
+	joined := SettingsChoiceProps{CurrentValue: "b,c", SelectedValues: []string{"b", "c"}, Choices: choices}
+	opened := &settingsChoiceState{}
+	opened.InitState(woxwidget.StateContext{}, joined)
+	if opened.selected != settingsChoiceExactIndex(visible, "b") {
+		t.Fatalf("joined value highlighted %d, want b", opened.selected)
+	}
+
+	single := SettingsChoiceProps{CurrentValue: "b", Choices: choices}
+	singleState := &settingsChoiceState{}
+	singleState.InitState(woxwidget.StateContext{}, single)
+	updated := single
+	updated.CurrentValue = "c"
+	singleState.DidUpdateWidget(woxwidget.StateContext{}, single, updated)
+	if singleState.selected != settingsChoiceExactIndex(visible, "c") {
+		t.Fatalf("single highlight = %d, want c", singleState.selected)
+	}
+}
+
+func TestMultiSettingsChoiceMenuStaysAnchored(t *testing.T) {
+	choices := []SettingsChoice{{Value: "a", Label: "A"}, {Value: "b", Label: "B"}}
+	anchor := woxui.Rect{X: 40, Y: 300, Width: 220, Height: 36}
+	visible := filteredSettingsChoices(choices, "")
+	listHeight := settingsChoiceContentHeight(visible)
+	menuHeight := settingsChoiceMenuPadding*2 + listHeight
+	props := SettingsChoiceProps{Width: 800, Height: 800, Anchor: anchor, Choices: choices, CurrentValue: "a", SelectedValues: []string{"a"}}
+	top := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight)
+	props.CurrentValue = "a,b"
+	props.SelectedValues = []string{"a", "b"}
+	if got := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight); got != top {
+		t.Fatalf("multi menu moved from %.0f to %.0f", top, got)
+	}
+	single := SettingsChoiceProps{Width: 800, Height: 800, Anchor: anchor, Choices: choices, CurrentValue: "a"}
+	first := settingsChoiceMenuTop(single, anchor, menuHeight, listHeight)
+	single.CurrentValue = "b"
+	if settingsChoiceMenuTop(single, anchor, menuHeight, listHeight) == first {
+		t.Fatal("single-select menu should follow the selected row")
+	}
+}
