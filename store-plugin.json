@@ -1815,7 +1815,7 @@
     "Id": "8488b592-7a9f-40d9-b7d4-5cb4cd998c37",
     "Name": "CareJobs.Now",
     "Author": "CareJobs.Now",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "MinWoxVersion": "2.4.2",
     "Runtime": "python",
     "Description": "Search US healthcare jobs with the pay employers post (nurses, CNAs, techs, therapists)",
@@ -1828,6 +1828,6 @@
       "Linux"
     ],
     "DateCreated": "2026-10-19 18:33:45",
-    "DateUpdated": "2026-10-19 18:33:45"
+    "DateUpdated": "2026-10-19 19:14:55"
   }
 ]
