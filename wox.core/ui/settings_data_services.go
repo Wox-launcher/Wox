@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"wox/common"
 	"wox/common/icons"
@@ -110,7 +111,7 @@ func (s *CoreServices) ChangeDataLocation(ctx context.Context, sessionID string,
 // ClearLogs removes historical logs and preserves the existing user notification behavior.
 func (s *CoreServices) ClearLogs(ctx context.Context, sessionID string) error {
 	ctx = uiServiceContext(ctx, sessionID)
-	if err := util.GetLogger().ClearHistory(); err != nil {
+	if err := util.GetLogger().ClearHistory(filepath.Base(supervisor.GetManager().SupervisorLogPath())); err != nil {
 		GetUIManager().GetUI(ctx).Notify(ctx, common.NotifyMsg{
 			Icon:           icons.Get(icons.BrandWox).String(),
 			Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_log_clear_notify_failed"), err.Error()),

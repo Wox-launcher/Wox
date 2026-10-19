@@ -166,10 +166,12 @@ func main() {
 	if util.IsProd() && !strings.Contains(os.Getenv("GODEBUG"), "memprofilerate") {
 		runtime.MemProfileRate = 0
 	}
-	if util.IsProd() && util.IsWindows() {
+	if (util.IsProd() || supervisor.DebugModeEnabled()) && util.IsWindows() {
 		// Let Windows Error Reporting observe fatal Go runtime failures so the
 		// registered out-of-process crash module can preserve a minidump.
 		debug.SetTraceback("wer")
+	} else if supervisor.DebugModeEnabled() {
+		debug.SetTraceback("system")
 	}
 	mainthread.SetDispatcher(func(fn func()) {
 		if err := woxui.Call(fn); err != nil {
@@ -208,12 +210,16 @@ func run() {
 	supervisor.SetDataDirectory(util.GetLocation().GetWoxDataDirectory())
 
 	defer util.GoRecover(context.Background(), "main panic", func(err error) {
-		util.GetLogger().Error(context.Background(), fmt.Sprintf("main panic: %s", err.Error()))
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("main panic: %s\n%s", err.Error(), debug.Stack()))
 	})
 
 	ctx := util.NewTraceContext()
+	if supervisor.DebugModeEnabled() {
+		util.GetLogger().SetLevel("debug")
+	}
 	util.GetLogger().Info(ctx, "------------------------------")
 	util.GetLogger().Info(ctx, fmt.Sprintf("Wox starting: %s", updater.CURRENT_VERSION))
+	util.GetLogger().Info(ctx, fmt.Sprintf("diagnostic debug mode: enabled=%t", supervisor.DebugModeEnabled()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("golang version: %s", strings.ReplaceAll(runtime.Version(), "go", "")))
 	util.GetLogger().Info(ctx, fmt.Sprintf("wox data location: %s", util.GetLocation().GetWoxDataDirectory()))
 	util.GetLogger().Info(ctx, fmt.Sprintf("user data location: %s", util.GetLocation().GetUserDataDirectory()))
@@ -265,14 +271,14 @@ func run() {
 		os.Exit(0)
 	}
 
-	if util.IsProd() {
+	if util.IsProd() || supervisor.DebugModeEnabled() {
 		if captureErr := supervisor.GetManager().ConfigureCrashCapture(ctx, crashCaptureAssets()); captureErr != nil {
 			util.GetLogger().Warn(ctx, fmt.Sprintf("failed to configure crash capture: %s", captureErr.Error()))
 		}
 	}
-	// Production launches run under a small external supervisor so native crashes
+	// Production and diagnostic launches run under an external supervisor so native crashes
 	// can still be recorded after the Go process is no longer able to write logs.
-	if util.IsProd() && !supervisor.GetManager().IsChildArg(os.Args) {
+	if (util.IsProd() || supervisor.DebugModeEnabled()) && !supervisor.GetManager().IsChildArg(os.Args) {
 		if supervisorErr := supervisor.GetManager().StartSupervisorDetached(ctx, true); supervisorErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to start crash supervisor; continuing without supervision: %s", supervisorErr.Error()))
 		} else {
@@ -344,7 +350,9 @@ func run() {
 	}
 	// Apply the persisted backend before the first native renderer is created.
 	woxui.ConfigureSoftwareRendering(woxSetting.UseSoftwareRendering.Get())
-	util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
+	if !supervisor.DebugModeEnabled() {
+		util.GetLogger().SetLevel(woxSetting.LogLevel.Get())
+	}
 
 	network.Default.SetOffline(woxSetting.EnableOfflineMode.Get())
 

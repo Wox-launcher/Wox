@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "Enable debug mode and restart",
+  "plugin_feedback_debug_enable_subtitle": "Restart with detailed logs and enhanced crash capture to help troubleshoot issues.",
+  "plugin_feedback_debug_disable_title": "Disable debug mode and restart",
+  "plugin_feedback_debug_disable_subtitle": "Restart with normal diagnostics. Quitting and launching Wox normally also ends this debug session.",
+  "plugin_feedback_debug_tag": "Debug mode",
   "ui_restart_wox": "Restart Wox",
   "ui_restart_wox_failed": "Failed to restart Wox: %s",
   "ui_rendering": "Rendering",
@@ -1314,6 +1319,8 @@
   "plugin_doctor_plugin_name": "Wox Doctor",
   "plugin_doctor_plugin_description": "Check your system and Wox settings",
   "plugin_feedback_plugin_name": "Feedback",
+  "plugin_feedback_group_feedback": "Feedback",
+  "plugin_feedback_group_debugging": "Debugging",
   "plugin_feedback_plugin_description": "Collect diagnostics and send feedback about Wox",
   "plugin_feedback_no_crashes_title": "No crash records",
   "plugin_feedback_no_crashes_description": "No crash events have been recorded yet",

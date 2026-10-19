@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "开启调试模式并重启",
+  "plugin_feedback_debug_enable_subtitle": "重启后启用详细日志和增强崩溃采集，帮助排查问题。",
+  "plugin_feedback_debug_disable_title": "关闭调试模式并重启",
+  "plugin_feedback_debug_disable_subtitle": "重启后恢复常规诊断。退出 Wox 后正常启动也会结束此次调试会话。",
+  "plugin_feedback_debug_tag": "调试模式",
   "ui_restart_wox": "重启 Wox",
   "ui_restart_wox_failed": "重启 Wox 失败：%s",
   "ui_rendering": "渲染",
@@ -1314,6 +1319,8 @@
   "plugin_doctor_plugin_name": "Wox 诊断",
   "plugin_doctor_plugin_description": "检查系统和 Wox 设置",
   "plugin_feedback_plugin_name": "反馈",
+  "plugin_feedback_group_feedback": "反馈",
+  "plugin_feedback_group_debugging": "调试",
   "plugin_feedback_plugin_description": "收集诊断信息并反馈 Wox 问题",
   "plugin_feedback_no_crashes_title": "暂无崩溃记录",
   "plugin_feedback_no_crashes_description": "尚未记录任何崩溃事件",

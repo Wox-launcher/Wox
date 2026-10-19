@@ -3,11 +3,13 @@
 package supervisor
 
 import (
-	"io"
+	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,65 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
+
+// TestFindWindowsCrashDumpsRejectsOtherProcesses prevents a previous incident or
+// another application's anonymous WER dump from ending the current crash wait.
+func TestFindWindowsCrashDumpsRejectsOtherProcesses(t *testing.T) {
+	directory := setupSupervisorTest(t)
+	t.Setenv("LOCALAPPDATA", filepath.Join(directory, "local"))
+	t.Setenv("ProgramData", filepath.Join(directory, "program"))
+	m := GetManager()
+	if err := m.EnsureDirectories(); err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	standard := filepath.Join(os.Getenv("LOCALAPPDATA"), "CrashDumps")
+	temporary := filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "WER", "Temp")
+	for _, folder := range []string{standard, temporary} {
+		if err := os.MkdirAll(folder, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, fixture := range []struct {
+		path string
+		pid  uint32
+	}{
+		{filepath.Join(m.CrashDumpsDirectory(), "wox-1234-current.dmp"), 1234},
+		{filepath.Join(m.CrashDumpsDirectory(), "wox-4321-previous.dmp"), 4321},
+		{filepath.Join(standard, filepath.Base(executable)+".1234.dmp"), 1234},
+		{filepath.Join(standard, filepath.Base(executable)+".4321.dmp"), 4321},
+		{filepath.Join(temporary, "WER-unrelated.mdmp"), 4321},
+		{filepath.Join(temporary, "WER-current.mdmp"), 1234},
+	} {
+		data := make([]byte, 68)
+		copy(data, "MDMP")
+		binary.LittleEndian.PutUint32(data[8:], 1)
+		binary.LittleEndian.PutUint32(data[12:], 32)
+		binary.LittleEndian.PutUint32(data[32:], 15)
+		binary.LittleEndian.PutUint32(data[36:], 24)
+		binary.LittleEndian.PutUint32(data[40:], 44)
+		binary.LittleEndian.PutUint32(data[44:], 24)
+		binary.LittleEndian.PutUint32(data[48:], 1)
+		binary.LittleEndian.PutUint32(data[52:], fixture.pid)
+		if err := os.WriteFile(fixture.path, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(temporary, "WER-incomplete.mdmp"), []byte("MDMP"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	want := []string{filepath.Join(m.CrashDumpsDirectory(), "wox-1234-current.dmp"), filepath.Join(standard, filepath.Base(executable)+".1234.dmp"), filepath.Join(temporary, "WER-current.mdmp")}
+	got := m.findWindowsCrashDumps(1234, now, now)
+	sort.Strings(got)
+	sort.Strings(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("collected unrelated or incomplete dump: got=%v want=%v", got, want)
+	}
+}
 
 const (
 	windowsCrashIntegrationEnv      = "WOX_CRASH_CAPTURE_INTEGRATION"
@@ -77,16 +138,7 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 				info, statErr := entry.Info()
 				if statErr == nil && info.Size() > 0 {
 					dumpPath := filepath.Join(dumpDirectory, entry.Name())
-					dumpFile, openErr := os.Open(dumpPath)
-					if openErr != nil {
-						t.Fatalf("failed to open captured dump %s: %v", dumpPath, openErr)
-					}
-					header := make([]byte, 4)
-					_, readErr := io.ReadFull(dumpFile, header)
-					dumpFile.Close()
-					if readErr != nil || string(header) != "MDMP" {
-						t.Fatalf("captured file is not a valid minidump: %s", dumpPath)
-					}
+					assertDumpMemory(t, dumpPath, os.Getenv("WOX_CRASH_TEST_DEBUG") == "1")
 					t.Logf("captured dump %s (%d bytes)", dumpPath, info.Size())
 					captureLog, err := os.ReadFile(filepath.Join(dataDirectory, "log", "supervisor.log"))
 					if err != nil || !strings.Contains(string(captureLog), "stage=dump_completed") {
@@ -102,14 +154,24 @@ func TestWindowsCrashHandlerIntegration(t *testing.T) {
 	t.Fatalf("WER crash handler did not create a dump in %s; capture log: %s", dumpDirectory, captureLog)
 }
 
-// restoreCaptureLogSetting preserves the extra WER logging setting used by native tests.
+// TestWindowsDebugCrashHandlerIntegration verifies full memory through the real WER path.
+func TestWindowsDebugCrashHandlerIntegration(t *testing.T) {
+	t.Setenv("WOX_CRASH_TEST_DEBUG", "1")
+	TestWindowsCrashHandlerIntegration(t)
+}
+
+// restoreCaptureLogSetting preserves the WER logging and debug settings used by native tests.
 func restoreCaptureLogSetting(t *testing.T) func() {
 	t.Helper()
 	var previous string
+	var previousDebug uint64
+	hadDebug := false
 	hadPrevious := false
 	if key, err := registry.OpenKey(registry.CURRENT_USER, windowsCrashHandlerKey, registry.QUERY_VALUE); err == nil {
 		value, _, err := key.GetStringValue("CaptureLog")
 		previous, hadPrevious = value, err == nil
+		previousDebug, _, err = key.GetIntegerValue("DebugMode")
+		hadDebug = err == nil
 		key.Close()
 	}
 	return func() {
@@ -119,6 +181,11 @@ func restoreCaptureLogSetting(t *testing.T) func() {
 			return
 		}
 		defer key.Close()
+		if hadDebug {
+			_ = key.SetDWordValue("DebugMode", uint32(previousDebug))
+		} else {
+			_ = key.DeleteValue("DebugMode")
+		}
 		if hadPrevious {
 			_ = key.SetStringValue("CaptureLog", previous)
 		} else {
@@ -130,6 +197,9 @@ func restoreCaptureLogSetting(t *testing.T) func() {
 // runWindowsCrashIntegrationChild registers the module before terminating this subprocess.
 func runWindowsCrashIntegrationChild(t *testing.T) {
 	debug.SetTraceback("wer")
+	if os.Getenv("WOX_CRASH_TEST_DEBUG") == "1" {
+		os.Args = append(os.Args, ArgDebugMode)
+	}
 	SetDataDirectory(os.Getenv("WOX_SUPERVISOR_DATA_DIR"))
 	manager := GetManager()
 	if err := manager.EnsureDirectories(); err != nil {

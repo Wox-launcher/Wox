@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "Ativar modo de depuração e reiniciar",
+  "plugin_feedback_debug_enable_subtitle": "Reinicia com logs detalhados e captura ampliada de falhas para ajudar a diagnosticar problemas.",
+  "plugin_feedback_debug_disable_title": "Desativar modo de depuração e reiniciar",
+  "plugin_feedback_debug_disable_subtitle": "Reinicia com o diagnóstico normal. Sair e abrir o Wox normalmente também encerra esta sessão de depuração.",
+  "plugin_feedback_debug_tag": "Modo de depuração",
   "ui_restart_wox": "Reiniciar o Wox",
   "ui_restart_wox_failed": "Falha ao reiniciar o Wox: %s",
   "ui_rendering": "Renderização",
@@ -1218,6 +1223,8 @@
   "plugin_browser_bookmark_plugin_name": "Favoritos do navegador",
   "plugin_browser_bookmark_plugin_description": "Pesquisar favoritos do navegador",
   "plugin_feedback_plugin_name": "Feedback",
+  "plugin_feedback_group_feedback": "Feedback",
+  "plugin_feedback_group_debugging": "Depuração",
   "plugin_feedback_plugin_description": "Coletar diagnósticos e enviar feedback sobre o Wox",
   "plugin_feedback_no_crashes_title": "Nenhum registro de falha",
   "plugin_feedback_no_crashes_description": "Nenhum evento de falha foi registrado ainda",

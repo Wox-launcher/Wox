@@ -2,17 +2,22 @@ package supervisor
 
 import "time"
 
-// hangObservation requires sustained failures and captures once until recovery.
-// A long sampling gap (for example system sleep) starts a fresh observation.
+// hangObservation requires sustained failures, ignoring long gaps such as system sleep.
+// Debug sessions take two spaced snapshots to distinguish a wait from slow progress.
 type hangObservation struct {
 	firstFailure time.Time
 	lastSample   time.Time
-	captured     bool
+	lastCapture  time.Time
+	captures     int
 }
 
-// observe returns true once a continuous stall reaches the capture threshold.
-func (h *hangObservation) observe(now time.Time, unresponsive bool) bool {
-	if !unresponsive || (!h.captured && !h.lastSample.IsZero() && now.Sub(h.lastSample) > 15*time.Second) {
+// observe returns whether a continuous stall warrants another capture attempt.
+func (h *hangObservation) observe(now time.Time, unresponsive, debugMode bool) bool {
+	threshold, sampleGap, limit := 30*time.Second, 15*time.Second, 1
+	if debugMode {
+		threshold, sampleGap, limit = 5*time.Second, 5*time.Second, 2
+	}
+	if !unresponsive || (h.captures == 0 && !h.lastSample.IsZero() && now.Sub(h.lastSample) > sampleGap) {
 		*h = hangObservation{}
 	}
 	h.lastSample = now
@@ -22,9 +27,10 @@ func (h *hangObservation) observe(now time.Time, unresponsive bool) bool {
 	if h.firstFailure.IsZero() {
 		h.firstFailure = now
 	}
-	if h.captured || now.Sub(h.firstFailure) < 30*time.Second {
+	if h.captures >= limit || now.Sub(h.firstFailure) < threshold || (!h.lastCapture.IsZero() && now.Sub(h.lastCapture) < 10*time.Second) {
 		return false
 	}
-	h.captured = true
+	h.captures++
+	h.lastCapture = now
 	return true
 }

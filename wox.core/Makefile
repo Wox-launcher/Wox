@@ -93,7 +93,7 @@ ifeq ($(PLATFORM),windows)
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
 	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)

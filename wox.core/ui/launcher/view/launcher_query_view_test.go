@@ -418,25 +418,25 @@ func TestLauncherHeaderKeepsPluginModeVisibleWhileLoading(t *testing.T) {
 	for _, loading := range []bool{false, true} {
 		header := LauncherHeaderView(LauncherHeaderProps{
 			Width: 400, Height: 60, QueryBoxHeight: 50, QueryWidth: 180,
-			StatusLabel: "第三方插件已禁用", StatusDescription: "Quit and reopen Wox to restore plugins.", StatusWidth: 140,
-			Loading: loading, LoadingWidth: 30, LoadingSize: 20,
+			StatusTags: []LauncherStatusTag{{ID: "launcher.plugin-mode", Label: "第三方插件已禁用", Description: "Quit and reopen Wox to restore plugins.", Width: 140}},
+			Loading:    loading, LoadingWidth: 30, LoadingSize: 20,
 		}).(woxwidget.Container)
 		row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-		status := row.Children[0].(woxwidget.Align)
+		status := row.Children[1].(woxwidget.Align)
 		semantics := status.Child.(woxwidget.Semantics)
 		if status.Vertical != 0.5 || status.Width != 140 || semantics.AutomationID != "launcher.plugin-mode" || semantics.Label != "第三方插件已禁用" || semantics.Description == "" {
 			t.Fatalf("loading=%t: plugin mode indicator lost placement or accessible text: %+v", loading, status)
 		}
-		if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
-			t.Fatalf("loading=%t: query slot = %T, want Expanded after the plugin mode tag", loading, row.Children[1])
+		if _, ok := row.Children[0].(woxwidget.Expanded); !ok {
+			t.Fatalf("loading=%t: query slot = %T, want Expanded before the plugin mode tag", loading, row.Children[0])
 		}
 	}
 }
 
-func TestLauncherHeaderKeepsPluginModeLeftOfAccessories(t *testing.T) {
+func TestLauncherHeaderKeepsPluginModeAfterQueryAndBeforeGlance(t *testing.T) {
 	header := LauncherHeaderView(LauncherHeaderProps{
 		Width: 700, Height: 60, QueryBoxHeight: 50, QueryWidth: 200,
-		StatusLabel: "Third-party plugins disabled", StatusDescription: "Quit and reopen Wox to restore plugins.", StatusWidth: 180,
+		StatusTags: []LauncherStatusTag{{ID: "launcher.plugin-mode", Label: "Third-party plugins disabled", Description: "Quit and reopen Wox to restore plugins.", Width: 180}},
 		Refinement: woxwidget.Container{Width: 40, Height: 34}, RefinementWidth: 40,
 		Attention: woxwidget.Container{Width: 30, Height: 30}, AttentionWidth: 30,
 		Glance: woxwidget.Container{Width: 40, Height: 30}, GlanceWidth: 40,
@@ -444,15 +444,19 @@ func TestLauncherHeaderKeepsPluginModeLeftOfAccessories(t *testing.T) {
 		Loading: true, LoadingWidth: 30, LoadingSize: 20,
 	}).(woxwidget.Container)
 	row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	status, ok := row.Children[0].(woxwidget.Align)
+	status, ok := row.Children[2].(woxwidget.Align)
 	if !ok || status.Child.(woxwidget.Semantics).AutomationID != "launcher.plugin-mode" {
-		t.Fatalf("leading child = %#v, want the plugin mode tag", row.Children[0])
+		t.Fatalf("trailing accessory = %#v, want the plugin mode tag after refinement", row.Children[2])
 	}
-	if _, ok := row.Children[1].(woxwidget.Expanded); !ok {
-		t.Fatalf("query slot = %T, want Expanded immediately after the plugin mode tag", row.Children[1])
+	if _, ok := row.Children[0].(woxwidget.Expanded); !ok {
+		t.Fatalf("query slot = %T, want Expanded before the plugin mode tag", row.Children[0])
 	}
-	if _, ok := row.Children[2].(woxwidget.Align); !ok || row.Children[2].(woxwidget.Align).Width != 40 {
-		t.Fatalf("filters slot = %#v, want the refinement after the query", row.Children[2])
+	if _, ok := row.Children[1].(woxwidget.Align); !ok || row.Children[1].(woxwidget.Align).Width != 40 {
+		t.Fatalf("filters slot = %#v, want the refinement after the query", row.Children[1])
+	}
+	accessories := row.Children[3].(woxwidget.Flex)
+	if glance := accessories.Children[1].(woxwidget.Align); glance.Width != 40 {
+		t.Fatalf("glance slot = %#v, want glance to the right of the plugin mode tag", glance)
 	}
 }
 
@@ -691,5 +695,36 @@ func TestInlineQueryUnderlineStopsAtNeighborsAndEdges(t *testing.T) {
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatal("parameter decoration exceeded editor edges or overlapped its neighbor")
+	}
+}
+
+// TestLauncherHeaderDiagnosticTagsCoexist keeps both modes visible during loading at each density.
+func TestLauncherHeaderDiagnosticTagsCoexist(t *testing.T) {
+	for _, density := range []float32{1, 1.5, 2} {
+		for _, loading := range []bool{false, true} {
+			tags := []LauncherStatusTag{
+				{ID: "launcher.plugin-mode", Label: "Plugins disabled", Description: "Plugin session", Width: 110 * density},
+				{ID: "launcher.debug-mode", Label: "Debug mode", Description: "Debug session", Width: 85 * density},
+			}
+			header := LauncherHeaderView(LauncherHeaderProps{
+				Width: 700 * density, Height: 60 * density, QueryBoxHeight: 50 * density, QueryWidth: 200 * density,
+				DensityScale: density, StatusTags: tags, Glance: woxwidget.Container{Width: 40 * density}, GlanceWidth: 40 * density,
+				Loading: loading, LoadingWidth: 30 * density, LoadingSize: 20 * density,
+			}).(woxwidget.Container)
+			row := header.Child.(woxwidget.Constrained).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+			for i, tag := range tags {
+				aligned := row.Children[i+1].(woxwidget.Align)
+				semantics := aligned.Child.(woxwidget.Semantics)
+				if aligned.Width != tag.Width || aligned.Vertical != 0.5 || semantics.AutomationID != tag.ID || semantics.Label != tag.Label {
+					t.Fatalf("density=%v loading=%t: invalid tag %+v", density, loading, aligned)
+				}
+			}
+			if _, ok := row.Children[0].(woxwidget.Expanded); !ok {
+				t.Fatal("query must expand before diagnostic tags to keep them on the right")
+			}
+			if glance := row.Children[3].(woxwidget.Align); glance.Width != 40*density {
+				t.Fatalf("density=%v loading=%t: glance must follow diagnostic tags", density, loading)
+			}
+		}
 	}
 }

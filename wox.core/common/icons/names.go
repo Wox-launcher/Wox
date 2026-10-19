@@ -41,6 +41,7 @@ const (
 
 	// Actions and verbs.
 	ActionFeedback             = "action.feedback"
+	ActionDebug                = "action.debug"
 	ActionInstall              = "action.install"
 	ActionPin                  = "action.pin"
 	ActionUnpin                = "action.unpin"

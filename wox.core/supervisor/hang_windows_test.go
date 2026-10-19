@@ -34,6 +34,20 @@ func TestHiddenWindowHangCapture(t *testing.T) {
 		time.Sleep(2 * time.Minute)
 		return
 	}
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%t", full), func(t *testing.T) {
+			previousArgs := os.Args
+			if full {
+				os.Args = append(append([]string{}, os.Args...), ArgDebugMode)
+			}
+			t.Cleanup(func() { os.Args = previousArgs })
+			testHiddenWindowHangCapture(t, full)
+		})
+	}
+}
+
+// testHiddenWindowHangCapture isolates the target and artifacts for each capture policy.
+func testHiddenWindowHangCapture(t *testing.T, full bool) {
 	setupSupervisorTest(t)
 	cmd := exec.Command(os.Args[0], "-test.run=^TestHiddenWindowHangCapture$")
 	cmd.Env = append(os.Environ(), "WOX_TEST_HIDDEN_HANG=1")
@@ -63,7 +77,11 @@ func TestHiddenWindowHangCapture(t *testing.T) {
 	stopWatch := m.watchUI(context.Background(), cmd.Process.Pid)
 	defer stopWatch()
 	var path string
-	deadline := time.Now().Add(55 * time.Second)
+	timeout := 55 * time.Second
+	if full {
+		timeout = 20 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		matches, _ := filepath.Glob(filepath.Join(m.CrashDumpsDirectory(), "*-hang-*.dmp"))
 		if len(matches) > 0 {
@@ -76,10 +94,7 @@ func TestHiddenWindowHangCapture(t *testing.T) {
 		t.Fatal("watchdog did not automatically capture the blocked child")
 	}
 	stopWatch()
-	data, err := os.ReadFile(path)
-	if err != nil || len(data) < 4 || string(data[:4]) != "MDMP" {
-		t.Fatalf("invalid dump: %v", err)
-	}
+	assertDumpMemory(t, path, full)
 	report, err := m.ExportCrash(context.Background())
 	if err != nil {
 		t.Fatal(err)

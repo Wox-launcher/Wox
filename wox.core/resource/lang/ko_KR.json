@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "디버그 모드 활성화 및 다시 시작",
+  "plugin_feedback_debug_enable_subtitle": "문제 진단을 위해 자세한 로그와 강화된 충돌 정보 수집을 활성화하여 다시 시작합니다.",
+  "plugin_feedback_debug_disable_title": "디버그 모드 비활성화 및 다시 시작",
+  "plugin_feedback_debug_disable_subtitle": "일반 진단으로 다시 시작합니다. Wox를 종료한 후 일반적으로 실행해도 이 디버그 세션이 종료됩니다.",
+  "plugin_feedback_debug_tag": "디버그 모드",
   "ui_restart_wox": "Wox 다시 시작",
   "ui_restart_wox_failed": "Wox를 다시 시작하지 못했습니다: %s",
   "ui_rendering": "렌더링",
@@ -1314,6 +1319,8 @@
   "plugin_doctor_plugin_name": "Wox 진단",
   "plugin_doctor_plugin_description": "시스템과 Wox 설정을 확인합니다",
   "plugin_feedback_plugin_name": "피드백",
+  "plugin_feedback_group_feedback": "피드백",
+  "plugin_feedback_group_debugging": "디버깅",
   "plugin_feedback_plugin_description": "진단 정보를 수집하고 Wox에 대한 피드백을 보냅니다",
   "plugin_feedback_no_crashes_title": "충돌 기록 없음",
   "plugin_feedback_no_crashes_description": "아직 기록된 충돌 이벤트가 없습니다",

@@ -12,7 +12,7 @@ const (
 	maxConsecutiveCrashRestarts = 2
 )
 
-var preserveRestartArgs []string
+var preserveRestartArgs = []string{ArgDebugMode}
 
 // PreserveArgOnRestart keeps a launch flag across crash restarts without
 // replaying deeplinks or opened files. Callers register Wox-specific flags.

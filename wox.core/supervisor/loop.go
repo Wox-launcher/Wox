@@ -26,6 +26,7 @@ func (m *Manager) logStartup(args []string) {
 	m.logf("supervisor starting: %s", currentVersion())
 	m.logf("golang version: %s", strings.TrimPrefix(runtime.Version(), "go"))
 	m.logf("data location: %s", dataDirectory())
+	m.logf("diagnostic debug mode: enabled=%t", DebugModeEnabled())
 	m.logf("startup pid: %d, executable: %s, args: %v", os.Getpid(), executable, args)
 }
 
@@ -136,7 +137,10 @@ func (m *Manager) RunSupervisor(ctx context.Context, args []string) int {
 			return 0
 		}
 
-		consecutiveCrashes, restart := nextCrashRestart(duration, consecutiveCrashes)
+		// Update the budget across iterations instead of shadowing it and
+		// repeatedly replacing the first crash's evidence with new reports.
+		var restart bool
+		consecutiveCrashes, restart = nextCrashRestart(duration, consecutiveCrashes)
 		if !restart {
 			m.logf("crash restart limit reached; supervisor will stop")
 			m.AppendBreadcrumb(ctx, "crash_restart_limit_reached", map[string]any{"consecutiveCrashes": consecutiveCrashes})

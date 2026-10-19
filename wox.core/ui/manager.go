@@ -1471,7 +1471,9 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			logger.Error(ctx, fmt.Sprintf("failed to update selection hotkey: %s", err.Error()))
 		}
 	case "LogLevel":
-		util.GetLogger().SetLevel(vs)
+		if !supervisor.DebugModeEnabled() {
+			util.GetLogger().SetLevel(vs)
+		}
 	case "HttpProxyEnabled", "HttpProxyUrl":
 		setting.GetSettingManager().GetWoxSetting(ctx).ApplyHTTPProxy(ctx)
 	case "QueryHotkeys":
@@ -1995,6 +1997,9 @@ func clampInt(v int, min int, max int) int {
 // Preserve troubleshooting mode without replaying startup files or deep links.
 func (m *Manager) RestartApp(ctx context.Context) error {
 	args := []string{supervisor.ArgChild}
+	if supervisor.DebugModeEnabled() {
+		args = append(args, supervisor.ArgDebugMode)
+	}
 	if util.IsThirdPartyPluginsDisabled() {
 		args = append(args, util.ArgNoThirdPartyPlugins)
 	}

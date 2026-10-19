@@ -22,6 +22,22 @@ const (
 func TestMain(m *testing.M) {
 	mode := os.Getenv(supervisorTestModeEnv)
 	if mode != "" && GetManager().IsChildArg(os.Args) {
+		if mode == "crash-loop" {
+			attemptPath := filepath.Join(os.Getenv(supervisorTestDirEnv), "launch-attempts")
+			attempts, err := os.ReadFile(attemptPath)
+			if err != nil && !os.IsNotExist(err) {
+				os.Exit(8)
+			}
+			attempts = append(attempts, 'x')
+			if err := os.WriteFile(attemptPath, attempts, 0644); err != nil {
+				os.Exit(9)
+			}
+			// Exit cleanly after one extra launch so a broken restart budget
+			// fails the test without leaving an unbounded supervisor behind.
+			if len(attempts) <= maxConsecutiveCrashRestarts+1 {
+				os.Exit(7)
+			}
+		}
 		if mode == "crash-with-task" {
 			directory := os.Getenv(supervisorTestDirEnv)
 			SetDataDirectory(directory)
@@ -46,6 +62,25 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+// TestSupervisorBoundsConsecutiveCrashes covers the process loop, where a
+// shadowed counter previously bypassed the separately tested restart policy.
+func TestSupervisorBoundsConsecutiveCrashes(t *testing.T) {
+	directory := setupSupervisorTest(t)
+	t.Setenv(supervisorTestModeEnv, "crash-loop")
+	t.Setenv(supervisorTestDirEnv, directory)
+	m := GetManager()
+	if code := m.RunSupervisor(context.Background(), []string{os.Args[0], ArgSupervisor}); code != 1 {
+		t.Fatalf("crash loop returned code %d, want restart limit failure", code)
+	}
+	attempts, err := os.ReadFile(filepath.Join(directory, "launch-attempts"))
+	if err != nil || len(attempts) != maxConsecutiveCrashRestarts+1 {
+		t.Fatalf("child launches=%d error=%v, want %d", len(attempts), err, maxConsecutiveCrashRestarts+1)
+	}
+	if incidents := m.ListCrashIncidents(); len(incidents) != maxConsecutiveCrashRestarts+1 {
+		t.Fatalf("retained %d crash incidents, want %d", len(incidents), maxConsecutiveCrashRestarts+1)
+	}
 }
 
 func TestWaitForParentExitRejectsLiveParent(t *testing.T) {

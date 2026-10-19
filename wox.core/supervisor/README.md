@@ -52,6 +52,44 @@ a thread that continues dispatching messages may still have a stalled workflow.
 No window means there is nothing to probe yet. Non-Windows platforms retain
 their existing crash handling without this native window watchdog.
 
+## Debug sessions
+
+The `feedback` results offer **Enable debug mode and restart** and its
+disable counterpart. `--debug-mode` is a session flag, not a database or cloud
+setting. It survives crash recovery and in-app restarts, and is independent of
+the third-party-plugin troubleshooting flag. A normal launch after quitting
+ends the session. The launcher shows both active mode tags when applicable.
+
+All platforms enable DEBUG logging for the session without changing the saved
+log level; non-Windows Go failures include system goroutines in their traceback.
+Windows keeps Go's `wer` traceback policy. The independent supervisor and report
+metadata also record whether debug mode was enabled.
+
+On Windows, debug sessions probe every second and capture after at least 5
+seconds of continuous unresponsiveness. A stalled child gets at most two
+attempts, with at least 10 seconds between the end of a capture/report and the
+next attempt. This budget applies across all stalls in that child. The normal
+30-second, once-per-stall policy is unchanged. Debug live dumps and WER crash
+dumps request full accessible process memory, thread information and handles.
+Full-dump failures explicitly log degradation to a smaller dump. Crash artifact
+collection waits up to 60 seconds in debug mode instead of 10 seconds.
+
+Handle enumeration failures retry full memory without handle data before
+falling back to a smaller live dump. Crash collection matches Wox and standard
+dump filenames to the exited PID; anonymous WER temporary files are matched
+through their minidump process information so a previous or unrelated dump
+cannot end the current capture wait.
+
+Windows release builds retain Go symbols and DWARF data. Keep the exact shipped
+executable with the corresponding dump for address and source-level analysis;
+enabling debug mode at runtime cannot restore symbols stripped during linking.
+
+Dump/report retention remains bounded to the latest five artifacts per kind.
+Full dumps can be large and contain private application data. They stay local;
+the feedback action prepares a package for manual upload. Full memory improves
+postmortem inspection but does not record execution history or guarantee capture
+after forced termination, system failure, or before the first window exists.
+
 `go test ./supervisor` exercises a hidden blocked window in a test subprocess,
 live dump generation and report inclusion. Set `WOX_CRASH_CAPTURE_INTEGRATION=1`
 to additionally exercise real WER crashes, including a deliberately unwritable
@@ -64,3 +102,15 @@ process cannot see the module allowlist. In that case the callback never runs;
 neither a direct DLL callback test nor registration success validates the full
 WER path. The integration tests require the expected fail-fast exit, a valid
 minidump and completion log, or the expected dump failure stage.
+
+To validate debug-mode full memory through the actual WER callback from a normal
+PowerShell in `wox.core`:
+
+```powershell
+[Environment]::SetEnvironmentVariable('WOX_CRASH_CAPTURE_INTEGRATION', '1', 'Process')
+go test ./supervisor -run '^TestWindowsDebugCrashHandlerIntegration$' -v -count=1 -timeout=90s
+```
+
+This intentionally crashes only a test subprocess and restores the temporary
+WER registration. A pass requires full memory, handle and thread streams with
+backing memory bytes, as well as the callback completion log.

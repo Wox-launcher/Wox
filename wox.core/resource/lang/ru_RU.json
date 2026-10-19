@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "Включить режим отладки и перезапустить",
+  "plugin_feedback_debug_enable_subtitle": "Перезапуск с подробными журналами и расширенным сбором данных о сбоях для диагностики проблем.",
+  "plugin_feedback_debug_disable_title": "Выключить режим отладки и перезапустить",
+  "plugin_feedback_debug_disable_subtitle": "Перезапуск с обычной диагностикой. Выход и обычный запуск Wox также завершают сеанс отладки.",
+  "plugin_feedback_debug_tag": "Режим отладки",
   "ui_restart_wox": "Перезапустить Wox",
   "ui_restart_wox_failed": "Не удалось перезапустить Wox: %s",
   "ui_rendering": "Отрисовка",
@@ -1218,6 +1223,8 @@
   "plugin_browser_bookmark_plugin_name": "Закладки браузера",
   "plugin_browser_bookmark_plugin_description": "Поиск закладок браузера",
   "plugin_feedback_plugin_name": "Обратная связь",
+  "plugin_feedback_group_feedback": "Обратная связь",
+  "plugin_feedback_group_debugging": "Отладка",
   "plugin_feedback_plugin_description": "Сбор диагностики и отправка отзывов о Wox",
   "plugin_feedback_no_crashes_title": "Нет записей о сбоях",
   "plugin_feedback_no_crashes_description": "События сбоев еще не записывались",

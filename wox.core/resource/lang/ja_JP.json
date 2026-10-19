@@ -1,4 +1,9 @@
 {
+  "plugin_feedback_debug_enable_title": "デバッグモードを有効にして再起動",
+  "plugin_feedback_debug_enable_subtitle": "問題の調査に役立つ詳細ログと強化されたクラッシュ情報の収集を有効にして再起動します。",
+  "plugin_feedback_debug_disable_title": "デバッグモードを無効にして再起動",
+  "plugin_feedback_debug_disable_subtitle": "通常の診断で再起動します。Wox を終了して通常起動しても、このデバッグセッションは終了します。",
+  "plugin_feedback_debug_tag": "デバッグモード",
   "ui_restart_wox": "Wox を再起動",
   "ui_restart_wox_failed": "Wox の再起動に失敗しました：%s",
   "ui_rendering": "レンダリング",
@@ -1314,6 +1319,8 @@
   "plugin_doctor_plugin_name": "Wox Doctor",
   "plugin_doctor_plugin_description": "システムと Wox の設定をチェック",
   "plugin_feedback_plugin_name": "フィードバック",
+  "plugin_feedback_group_feedback": "フィードバック",
+  "plugin_feedback_group_debugging": "デバッグ",
   "plugin_feedback_plugin_description": "Wox の診断情報を収集してフィードバックする",
   "plugin_feedback_no_crashes_title": "クラッシュ記録なし",
   "plugin_feedback_no_crashes_description": "クラッシュイベントはまだ記録されていません",
