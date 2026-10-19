@@ -214,6 +214,15 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 			return err
 		}
 		n.Value = &v
+	case "dynamic":
+		// Third-party plugins declare a dynamic placeholder here; Wox replaces it
+		// with the definition returned by the plugin's OnGetDynamicSetting callback.
+		n.Type = PluginSettingDefinitionTypeDynamic
+		var v PluginSettingValueDynamic
+		if err := json.Unmarshal([]byte(contentResult.String()), &v); err != nil {
+			return err
+		}
+		n.Value = &v
 	default:
 		return errors.New("unknown setting type: " + value.String())
 	}
