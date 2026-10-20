@@ -21,6 +21,7 @@ type runtimeMessage struct {
 	Method   string                `json:"method"`
 	Params   json.RawMessage       `json:"params"`
 	Response *plugin.QueryResponse `json:"response"`
+	Loading  bool                  `json:"loading"`
 	Error    string                `json:"error"`
 	Text     string                `json:"text"`
 	Level    string                `json:"level"`
@@ -29,24 +30,31 @@ type runtimeMessage struct {
 // commandSession is an isolated process for one command in one launcher window.
 // It retains a query snapshot, not a UI tree. Contexts keep the window identity after a query is canceled.
 type commandSession struct {
-	mu        sync.Mutex
-	writeMu   sync.Mutex
-	command   Command
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	done      chan struct{}
-	closed    bool
-	nextID    int
-	pending   map[string]chan runtimeMessage
-	ctx       context.Context
-	logCtx    context.Context
-	query     plugin.Query
-	response  plugin.QueryResponse
-	published []byte
-	errorText string
-	timer     *time.Timer
-	prefix    string
-	owner     *extensionPlugin
+	mu      sync.Mutex
+	writeMu sync.Mutex
+	// Serialize async row publication with confirmation display/restoration.
+	displayMu           sync.Mutex
+	command             Command
+	cmd                 *exec.Cmd
+	stdin               io.WriteCloser
+	done                chan struct{}
+	closed              bool
+	nextID              int
+	pending             map[string]chan runtimeMessage
+	ctx                 context.Context
+	logCtx              context.Context
+	query               plugin.Query
+	response            plugin.QueryResponse
+	loading             bool
+	changed             chan struct{}
+	published           []byte
+	errorText           string
+	timer               *time.Timer
+	prefix              string
+	owner               *extensionPlugin
+	actionResultID      string
+	confirmation        *resultConfirmation
+	confirmationChanged chan struct{}
 }
 
 // startSession keeps the process lifetime independent of any single search request.
@@ -70,7 +78,7 @@ func (p *extensionPlugin) startSession(ctx context.Context, query plugin.Query, 
 		stdout.Close()
 		return nil, err
 	}
-	s := &commandSession{command: command, cmd: cmd, stdin: stdin, done: make(chan struct{}), pending: map[string]chan runtimeMessage{},
+	s := &commandSession{command: command, cmd: cmd, stdin: stdin, done: make(chan struct{}), changed: make(chan struct{}, 1), confirmationChanged: make(chan struct{}, 1), pending: map[string]chan runtimeMessage{},
 		ctx: context.WithoutCancel(ctx), logCtx: context.WithoutCancel(ctx), query: query, owner: p, prefix: util.GetContextTraceId(util.NewTraceContext()) + ":"}
 	if err := cmd.Start(); err != nil {
 		stdin.Close()
@@ -117,6 +125,10 @@ func (s *commandSession) read(reader io.Reader) {
 			s.mu.Unlock()
 			return
 		}
+		// Apply snapshots in wire order; a query reply must not overwrite a newer async render.
+		if message.Response != nil && (message.Type == "reply" || message.Type == "render") {
+			s.response, s.loading = *message.Response, message.Loading
+		}
 		switch message.Type {
 		case "reply":
 			if wait := s.pending[message.ID]; wait != nil {
@@ -127,7 +139,6 @@ func (s *commandSession) read(reader io.Reader) {
 			}
 		case "render":
 			if message.Response != nil {
-				s.response = *message.Response
 				s.scheduleLocked()
 			}
 		case "error":
@@ -138,11 +149,45 @@ func (s *commandSession) read(reader io.Reader) {
 		case "api":
 			go s.answerAPI(message)
 		}
+		select {
+		case s.changed <- struct{}{}:
+		default:
+		}
 		s.mu.Unlock()
 	}
 	if err := scanner.Err(); err != nil {
 		util.GetLogger().Warn(s.logCtx, fmt.Sprintf("Raycast protocol read: %v", err))
 		s.close()
+	}
+}
+
+// waitForResults leaves an empty, loading view pending so Wox owns the loading animation.
+// Waiting in Go keeps Node's request queue available when a newer search cancels this query.
+func (s *commandSession) waitForResults(ctx context.Context) error {
+	requestCtx := ctx
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		s.mu.Lock()
+		closed := s.closed
+		waiting := s.loading && len(s.response.Results) == 0 && s.errorText == ""
+		s.mu.Unlock()
+		if closed {
+			return fmt.Errorf("Raycast session is closed")
+		}
+		if !waiting {
+			return nil
+		}
+		select {
+		case <-s.changed:
+		case <-s.done:
+			return fmt.Errorf("Raycast command exited")
+		case <-ctx.Done():
+			if requestCtx.Err() == nil {
+				s.close()
+			}
+			return ctx.Err()
+		}
 	}
 }
 
@@ -158,9 +203,8 @@ func (s *commandSession) scheduleLocked() {
 
 // call correlates replies while asynchronous React commits and host API calls continue flowing.
 func (s *commandSession) call(ctx context.Context, method string, params any) (runtimeMessage, error) {
-	requestCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -175,20 +219,36 @@ func (s *commandSession) call(ctx context.Context, method string, params any) (r
 	if err := s.write(map[string]any{"id": id, "method": method, "params": params}); err != nil {
 		return runtimeMessage{}, err
 	}
-	select {
-	case reply := <-wait:
-		if reply.Error != "" {
-			return reply, fmt.Errorf("%s", reply.Error)
-		}
-		return reply, nil
-	case <-ctx.Done():
-		if requestCtx.Err() == nil {
-			// A canceled search is normal; an unresponsive command must not keep consuming resources.
+	for {
+		select {
+		case reply := <-wait:
+			if reply.Error != "" {
+				return reply, fmt.Errorf("%s", reply.Error)
+			}
+			return reply, nil
+		case <-ctx.Done():
+			return runtimeMessage{}, ctx.Err()
+		case <-s.confirmationChanged:
+			s.mu.Lock()
+			waiting := s.confirmation != nil
+			s.mu.Unlock()
+			if method == "action" && waiting {
+				timer.Stop()
+			} else {
+				timer.Reset(30 * time.Second)
+			}
+		case <-timer.C:
+			s.mu.Lock()
+			waiting := method == "action" && s.confirmation != nil
+			s.mu.Unlock()
+			if waiting {
+				continue
+			}
 			s.close()
+			return runtimeMessage{}, context.DeadlineExceeded
+		case <-s.done:
+			return runtimeMessage{}, fmt.Errorf("Raycast command exited")
 		}
-		return runtimeMessage{}, ctx.Err()
-	case <-s.done:
-		return runtimeMessage{}, fmt.Errorf("Raycast command exited")
 	}
 }
 
@@ -206,6 +266,14 @@ func (s *commandSession) close() {
 		return
 	}
 	s.closed = true
+	if s.confirmation != nil {
+		s.confirmation.answer <- false
+		s.confirmation = nil
+	}
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
 	if s.timer != nil {
 		s.timer.Stop()
 	}

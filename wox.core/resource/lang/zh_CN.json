@@ -6,7 +6,7 @@
   "plugin_raycast_submit": "提交",
   "plugin_raycast_unsupported_action": "暂不支持此操作",
   "plugin_raycast_run": "运行命令",
-  "plugin_raycast_loading": "加载中…",
+  "plugin_raycast_confirm": "确认",
   "plugin_raycast_empty": "没有结果",
   "plugin_raycast_failed": "Raycast 命令运行失败",
   "plugin_raycast_back": "返回",

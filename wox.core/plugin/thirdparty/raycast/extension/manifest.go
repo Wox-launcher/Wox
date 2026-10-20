@@ -173,7 +173,10 @@ func Parse(path string) (Descriptor, error) {
 		d.Metadata.SettingDefinitions = append(d.Metadata.SettingDefinitions, item)
 	}
 	for _, command := range d.Commands {
-		d.Metadata.Commands = append(d.Metadata.Commands, plugin.MetadataCommand{Command: command.Name, Description: common.I18nString(command.Title)})
+		// A sole command consumes the entire search, including words matching its internal name.
+		if len(d.Commands) > 1 {
+			d.Metadata.Commands = append(d.Metadata.Commands, plugin.MetadataCommand{Command: command.Name, Description: common.I18nString(command.Title)})
+		}
 		for _, pref := range command.Preferences {
 			item, err := preferenceDefinition(pref, "command:"+command.Name+":"+pref.Name)
 			if err != nil {

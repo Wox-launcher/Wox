@@ -90,6 +90,16 @@ func (p *extensionPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	if ctx.Err() != nil {
 		return plugin.QueryResponse{}
 	}
+	p.mu.Lock()
+	previous := p.sessions[query.SessionId]
+	p.mu.Unlock()
+	if previous != nil {
+		p.cancelConfirmation(previous)
+	}
+	// Resolve the implicit command only inside this plugin's query, leaving search untouched.
+	if len(p.descriptor.Commands) == 1 && query.Command == "" && query.TriggerKeyword != "" && query.TriggerKeyword != "*" {
+		query.Command = p.descriptor.Commands[0].Name
+	}
 	commandName := query.Command
 	var command *Command
 	for index := range p.descriptor.Commands {
@@ -137,7 +147,6 @@ func (p *extensionPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	s.query, s.ctx = query, context.WithoutCancel(ctx)
 	s.mu.Unlock()
 	p.mu.Unlock()
-	var reply runtimeMessage
 	var err error
 	if fresh {
 		params, configErr := p.launchConfig(ctx, query, *command)
@@ -145,9 +154,12 @@ func (p *extensionPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			s.close()
 			return p.failure(configErr)
 		}
-		reply, err = s.call(ctx, "launch", params)
+		_, err = s.call(ctx, "launch", params)
 	} else {
-		reply, err = s.call(ctx, "query", map[string]any{"search": query.Search, "refinements": query.Refinements})
+		_, err = s.call(ctx, "query", map[string]any{"search": query.Search, "refinements": query.Refinements})
+	}
+	if err == nil {
+		err = s.waitForResults(ctx)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -159,9 +171,6 @@ func (p *extensionPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 		return p.failure(err)
 	}
 	s.mu.Lock()
-	if reply.Response != nil {
-		s.response = *reply.Response
-	}
 	response := s.response
 	s.published, _ = json.Marshal(response)
 	errorText := s.errorText
@@ -176,7 +185,7 @@ func (p *extensionPlugin) failure(err error) plugin.QueryResponse {
 	return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "i18n:plugin_raycast_failed", SubTitle: err.Error(), Icon: p.descriptor.Metadata.GetIconOrDefault(p.descriptor.Metadata.Directory, icons.Get(icons.PluginInstaller))}})
 }
 
-// commandQuery keeps the trigger and command visible so deleting them returns to ordinary discovery.
+// commandQuery omits a sole command while retaining explicit command routing for multi-command plugins.
 func (p *extensionPlugin) commandQuery(query plugin.Query, command string) string {
 	keyword := query.TriggerKeyword
 	if keyword == "" || keyword == "*" {
@@ -185,10 +194,13 @@ func (p *extensionPlugin) commandQuery(query plugin.Query, command string) strin
 			keyword = instance.PrimaryTriggerKeyword()
 		}
 	}
+	if len(p.descriptor.Commands) == 1 {
+		return keyword + " "
+	}
 	return strings.TrimSpace(keyword+" "+command) + " "
 }
 
-// commands creates ordinary searchable results; activation uses triggerkeyword + command + search.
+// commands creates discovery or execution results using the plugin's query prefix.
 func (p *extensionPlugin) commands(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	var results []plugin.QueryResult
 	for _, command := range p.descriptor.Commands {
@@ -328,12 +340,17 @@ func (p *extensionPlugin) bind(s *commandSession, source plugin.QueryResponse) p
 		row := &response.Results[i]
 		row.Id = s.prefix + row.Id
 		row.Icon = mappedIcon(row.Icon, false)
+		for j := range row.Tails {
+			if row.Tails[j].Type == plugin.QueryResultTailTypeImage {
+				row.Tails[j].Image = mappedIcon(row.Tails[j].Image, false)
+			}
+		}
 		for j := range row.Actions {
 			action := &row.Actions[j]
 			id := action.Id
 			action.Icon = mappedIcon(action.Icon, true)
-			action.Action = func(ctx context.Context, _ plugin.ActionContext) { p.dispatch(ctx, s, id, nil) }
-			action.OnSubmit = func(ctx context.Context, ac plugin.FormActionContext) { p.dispatch(ctx, s, id, ac.Values) }
+			action.Action = func(ctx context.Context, _ plugin.ActionContext) { p.dispatch(ctx, s, row.Id, id, nil) }
+			action.OnSubmit = func(ctx context.Context, ac plugin.FormActionContext) { p.dispatch(ctx, s, row.Id, id, ac.Values) }
 		}
 	}
 	for i := range response.Refinements {
@@ -362,7 +379,20 @@ func mappedIcon(image common.WoxImage, action bool) common.WoxImage {
 	return icons.Get(icons.PluginInstaller)
 }
 
-func (p *extensionPlugin) dispatch(ctx context.Context, s *commandSession, id string, values map[string]string) {
+func (p *extensionPlugin) dispatch(ctx context.Context, s *commandSession, resultID, id string, values map[string]string) {
+	s.mu.Lock()
+	if s.closed || s.actionResultID != "" {
+		s.mu.Unlock()
+		return
+	}
+	s.actionResultID = resultID
+	s.mu.Unlock()
+	defer func() {
+		p.cancelConfirmation(s)
+		s.mu.Lock()
+		s.actionResultID = ""
+		s.mu.Unlock()
+	}()
 	if _, err := s.call(ctx, "action", map[string]any{"id": id, "values": values}); err != nil {
 		p.api.Notify(ctx, err.Error())
 	}
@@ -370,9 +400,11 @@ func (p *extensionPlugin) dispatch(ctx context.Context, s *commandSession, id st
 
 // publish uses UpdateResult for stable rows and RefreshQuery when membership, order or controls change.
 func (p *extensionPlugin) publish(s *commandSession) {
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
 	p.mu.Lock()
 	s.mu.Lock()
-	if s.closed || p.sessions[s.query.SessionId] != s || len(s.published) == 0 {
+	if s.closed || s.confirmation != nil || p.sessions[s.query.SessionId] != s || len(s.published) == 0 || (s.loading && len(s.response.Results) == 0 && s.errorText == "") {
 		s.mu.Unlock()
 		p.mu.Unlock()
 		return

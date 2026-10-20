@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,7 +30,7 @@ func (Layer) Hosts() []plugin.Host  { return []plugin.Host{&Host{}} }
 
 // Import stages a complete copy before replacing an installed extension.
 // Dependencies must already be built: importing never runs package scripts or a compiler.
-func Import(ctx context.Context, source string) error {
+func Import(ctx context.Context, source string, preferences map[string]json.RawMessage) error {
 	installationMu.Lock()
 	defer installationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -37,6 +38,9 @@ func Import(ctx context.Context, source string) error {
 	}
 	d, err := Parse(source)
 	if err != nil {
+		return err
+	}
+	if _, err := importedPreferences(d, preferences); err != nil {
 		return err
 	}
 	if !plugin.IsAnySupportedInCurrentOS(d.Metadata.SupportedOS) && len(d.Metadata.SupportedOS) != 0 {
@@ -89,7 +93,21 @@ func Import(ctx context.Context, source string) error {
 		if err != nil {
 			return err
 		}
-		return plugin.GetPluginManager().LoadRuntimePlugin(ctx, installed.Metadata)
+		values, err := importedPreferences(installed, preferences)
+		if err != nil {
+			return err
+		}
+		manager := plugin.GetPluginManager()
+		if err := manager.LoadRuntimePlugin(ctx, installed.Metadata); err != nil {
+			return err
+		}
+		if err := saveImportedPreferences(ctx, installed.Metadata.Id, values); err != nil {
+			if instance := manager.GetPluginInstanceById(installed.Metadata.Id); instance != nil {
+				manager.UnloadPlugin(ctx, instance)
+			}
+			return err
+		}
+		return nil
 	}, func() error {
 		if existing != nil {
 			return plugin.GetPluginManager().LoadRuntimePlugin(ctx, existing.Metadata)

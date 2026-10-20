@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,8 +65,22 @@ func TestExtensionWizardImport(t *testing.T) {
 	if backup == "" {
 		root = t.TempDir()
 		ref := writeLocalExtension(t, root, "11111111-1111-4111-8111-111111111111", "example")
+		directory := filepath.Join(root, ref.UUID)
+		manifest := `{"name":"example","title":"Local Example","author":"author",
+			"preferences":[{"name":"label","type":"textfield"},{"name":"checked","type":"checkbox"},{"name":"secret","type":"password"},{"name":"choice","type":"dropdown","data":[{"title":"One","value":"one"}]}],
+			"commands":[{"name":"list","title":"List","mode":"view","preferences":[{"name":"limit","type":"textfield"}]}]}`
+		if err := os.WriteFile(filepath.Join(directory, "package.json"), []byte(manifest), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(directory, "list.js"), []byte(`const R=require('react');const {List,getPreferenceValues}=require('@raycast/api');exports.default=()=>R.createElement(List,null,R.createElement(List.Item,{title:'Local result',subtitle:JSON.stringify(getPreferenceValues())}));`), 0600); err != nil {
+			t.Fatal(err)
+		}
 		var payload Payload
 		payload.NodeExtensions.Extensions = []ExportExtension{ref}
+		payload.Settings.NodeExtensions = []ExtensionSettings{{ID: "e:n:" + ref.UUID, Meta: map[string]json.RawMessage{
+			"label": json.RawMessage(`""`), "checked": json.RawMessage(`false`), "secret": json.RawMessage(`"fixture-secret"`), "choice": json.RawMessage(`"one"`), "TriggerKeywords": json.RawMessage(`"untrusted"`),
+		}}}
+		payload.Settings.Commands = []Command{{ID: "c:n:" + ref.UUID + "::-::list", ExtensionID: "e:n:" + ref.UUID, Meta: map[string]json.RawMessage{"limit": json.RawMessage(`"20"`), "ranAt": json.RawMessage(`123`)}}}
 		raw, _ := json.Marshal(payload)
 		password = "fixture-password"
 		blob, err := Seal(raw, password)
@@ -125,15 +141,52 @@ func TestExtensionWizardImport(t *testing.T) {
 		if err := instance.WaitInit(ctx); err != nil {
 			t.Fatal(err)
 		}
+		descriptor, err := extension.Parse(instance.PluginDirectory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restored := 0
+		for _, ref := range i.data.extensions {
+			if !strings.EqualFold(ref.Name, descriptor.Manifest.Name) || !strings.EqualFold(ref.Author, descriptor.Manifest.Author) {
+				continue
+			}
+			for _, definition := range instance.Metadata.SettingDefinitions {
+				key := definition.Value.GetKey()
+				raw, exists := ref.Preferences[key]
+				if !exists || string(raw) == "null" {
+					continue
+				}
+				var expected string
+				if err := json.Unmarshal(raw, &expected); err != nil {
+					var checked bool
+					if err := json.Unmarshal(raw, &checked); err != nil {
+						t.Fatalf("unexpected preference type for %s", key)
+					}
+					expected = strconv.FormatBool(checked)
+				}
+				if actual, exists := instance.Setting.Get(key); !exists || actual != expected {
+					t.Fatalf("imported preference %s was not restored for %s", key, descriptor.Manifest.Name)
+				}
+				restored++
+			}
+		}
 		keywords := instance.GetTriggerKeywords()
 		if len(keywords) != 1 || keywords[0] == "*" || keywords[0] == "" {
 			t.Fatalf("imported %s keywords = %v, want one explicit keyword", instance.Metadata.Name, keywords)
 		}
-		rows := instance.Plugin.Query(ctx, plugin.Query{TriggerKeyword: keywords[0], Search: "", SessionId: "wizard-test"})
-		if len(rows.Results) == 0 {
+		if len(descriptor.Commands) == 0 {
 			t.Fatalf("no commands for %s", instance.Metadata.Name)
 		}
-		t.Logf("installed %s commands=%d", instance.Metadata.Name, len(rows.Results))
+		// Single-command views now launch immediately; keep bulk import verification free of plugin side effects.
+		if len(descriptor.Commands) > 1 {
+			rows := instance.Plugin.Query(ctx, plugin.Query{TriggerKeyword: keywords[0], Search: "", SessionId: "wizard-test"})
+			if len(rows.Results) != len(descriptor.Commands) {
+				t.Fatalf("command discovery mismatch for %s", instance.Metadata.Name)
+			}
+		} else if len(instance.Metadata.Commands) != 0 {
+			t.Fatalf("single-command plugin exposes a command hint: %s", instance.Metadata.Name)
+		}
+		t.Logf("installed %s commands=%d restored_preferences=%d", instance.Metadata.Name, len(descriptor.Commands), restored)
 	}
 	plugins, err := i.Plugins(ctx)
 	if err != nil {
@@ -163,6 +216,25 @@ func TestExtensionWizardImport(t *testing.T) {
 		response := instance.Plugin.Query(ctx, plugin.Query{Id: "query", SessionId: "wizard-test", Command: "list"})
 		if len(response.Results) != 1 || response.Results[0].Title != "Local result" {
 			t.Fatalf("runtime: %+v", response)
+		}
+		var preferences map[string]any
+		if err := json.Unmarshal([]byte(response.Results[0].SubTitle), &preferences); err != nil {
+			t.Fatal(err)
+		}
+		if preferences["label"] != "" || preferences["checked"] != false || preferences["secret"] != "fixture-secret" || preferences["choice"] != "one" || preferences["limit"] != "20" {
+			t.Fatal("runtime did not receive imported extension and command preferences")
+		}
+		if _, exists := instance.Setting.Get("preference:TriggerKeywords"); exists {
+			t.Fatal("undeclared preference was imported")
+		}
+		if err := instance.Setting.Set("preference:label", "edited in Wox"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := i.Import(ctx, selected); err != nil {
+			t.Fatal(err)
+		}
+		if value, _ := instance.Setting.Get("preference:label"); value != "edited in Wox" {
+			t.Fatal("repeated import overwrote a Wox setting")
 		}
 	}
 	t.Logf("verified %d local imports; original plugin directories and backup were read-only", len(selected))

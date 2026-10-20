@@ -2,6 +2,7 @@ package raycast
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +19,40 @@ import (
 // localExtension retains a verified source path separately from the wizard's display model.
 type localExtension struct {
 	migrate.Plugin
-	directory string
+	directory   string
+	preferences map[string]json.RawMessage
+}
+
+// mapExtensionPreferences joins explicit values by export identity; the installer filters them against the local manifest.
+func mapExtensionPreferences(payload Payload) []ExportExtension {
+	refs := append([]ExportExtension(nil), payload.NodeExtensions.Extensions...)
+	values := map[string]map[string]json.RawMessage{}
+	for _, ref := range refs {
+		values["e:n:"+strings.ToLower(ref.UUID)] = map[string]json.RawMessage{}
+	}
+	for _, settings := range payload.Settings.NodeExtensions {
+		if target := values[strings.ToLower(settings.ID)]; target != nil {
+			for key, value := range settings.Meta {
+				target["preference:"+key] = value
+			}
+		}
+	}
+	for _, command := range payload.Settings.Commands {
+		id := strings.ToLower(command.ExtensionID)
+		target := values[id]
+		prefix := "c:n:" + strings.TrimPrefix(id, "e:n:") + "::-::"
+		if target == nil || !strings.HasPrefix(command.ID, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(command.ID, prefix)
+		for key, value := range command.Meta {
+			target["command:"+name+":"+key] = value
+		}
+	}
+	for index := range refs {
+		refs[index].Preferences = values["e:n:"+strings.ToLower(refs[index].UUID)]
+	}
+	return refs
 }
 
 // localExtensions joins export identities with local code, without downloading or executing anything.
@@ -70,6 +104,7 @@ func (i *installation) localExtensions(ctx context.Context, refs []ExportExtensi
 					candidate.Detail = "raycast_extension_mismatch"
 				} else if supported {
 					candidate.directory = directory
+					candidate.preferences = ref.Preferences
 					candidate.Description = d.Metadata.GetDescription(ctx)
 					candidate.Keywords = d.Metadata.TriggerKeywords
 					candidate.Status, candidate.Selectable, candidate.Detail = migrate.PluginReady, true, "raycast_extension_local"
@@ -120,7 +155,7 @@ func (i *installation) importExtensions(ctx context.Context, refs []ExportExtens
 		case !found || !candidate.Selectable:
 			outcome.Error = "Raycast plugin cannot be imported from its local installation"
 		default:
-			if err := extension.Import(ctx, candidate.directory); err != nil {
+			if err := extension.Import(ctx, candidate.directory, candidate.preferences); err != nil {
 				outcome.Error = err.Error()
 			}
 		}

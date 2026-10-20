@@ -85,6 +85,18 @@ test('initial search and persisted refinement reach React after mounting', async
   assert.equal(first.response.Results[0].Title, 'initial-one');
 });
 
+test('loading is protocol state, not a synthetic result or empty view', async t => {
+  const r = runtime(t, `const R=require('react');const {List}=require('@raycast/api');const h=R.createElement;
+    exports.default=()=>{const [text,setText]=R.useState('');return h(List,{isLoading:text!=='done',onSearchTextChange:setText},
+      h(List.EmptyView,{title:'No processes'}));};`);
+  const first = await r.launch();
+  assert.equal(first.loading, true);
+  assert.deepEqual(first.response.Results, []);
+  const next = await r.call('query', { search:'done' });
+  assert.equal(next.loading, false);
+  assert.equal(next.response.Results[0].Title, 'No processes');
+});
+
 test('stopping unmounts React and runs effect cleanup', async t => {
   const r = runtime(t, `const R=require('react');const fs=require('node:fs');const path=require('node:path');const {List,environment}=require('@raycast/api');
     exports.default=function(){R.useEffect(()=>()=>fs.writeFileSync(path.join(environment.supportPath,'cleaned'),'yes'),[]);return R.createElement(List,null,R.createElement(List.Item,{title:'Ready'}));};`);
@@ -118,6 +130,46 @@ test('Grid uses Wox layout and local filtering preserves stable item ids', async
   assert.equal(first.response.Layout.GridLayout.Columns, 3);
   const next = await r.call('query', {search:'beta'});
   assert.deepEqual(next.response.Results.map(row => row.Id), ['Beta']);
+});
+
+test('file icons and emoji reuse Wox image types without reclassifying asset paths', async t => {
+  const file = path.join(os.tmpdir(), 'Application with spaces', 'chrome.exe');
+  const values = [
+    { fileIcon: file }, { source: { fileIcon: file } },
+    '🖥️', '⚙️', '👩🏽‍💻', '🇨🇳', '1️⃣', { source: '🖥️' },
+    { source: { light: '☀️', dark: '🌙' } },
+    '🖥️.png', 'folder/⚙️.png', '1.png', { fileIcon: '' }
+  ];
+  const r = runtime(t, `const R=require('react');const {List}=require('@raycast/api');
+    exports.default=()=>R.createElement(List,null,...${JSON.stringify(values)}.map((icon,i)=>R.createElement(List.Item,{key:i,id:String(i),title:String(i),icon})));`);
+  const first = await r.launch({ dark: true });
+  assert.equal(first.error, undefined);
+  const images = first.response.Results.map(row => row.Icon);
+  assert.deepEqual(images.slice(0, 2), Array(2).fill({ ImageType: 'fileicon', ImageData: file }));
+  assert.deepEqual(images.slice(2, 9), ['🖥️', '⚙️', '👩🏽‍💻', '🇨🇳', '1️⃣', '🖥️', '🌙'].map(value => ({ ImageType: 'emoji', ImageData: value })));
+  assert.deepEqual(images.slice(9, 12), ['🖥️.png', 'folder/⚙️.png', '1.png'].map(value => ({ ImageType: 'absolute', ImageData: path.join(r.dir, value) })));
+  assert.deepEqual(images[12], {});
+});
+
+test('accessories preserve icon/value ordering, tooltips and updates as Wox tails', async t => {
+  const r = runtime(t, `const R=require('react');const {List,Icon,Action,ActionPanel}=require('@raycast/api');const h=R.createElement;
+    exports.default=()=>{const [cpu,setCPU]=R.useState('0%');return h(List,null,h(List.Item,{id:'process',title:'Process',
+      accessories:[{icon:{source:'cpu.svg'},text:cpu,tooltip:'CPU usage'},{icon:{source:'memorychip.svg'},text:'2GiB',tooltip:'Memory usage'},
+        {icon:Icon.Clipboard,tooltip:'Icon only'},{text:'Text only'},{tag:{value:0}},{icon:'🖥️'},{}],
+      actions:h(ActionPanel,null,h(Action,{title:'Update',onAction:()=>setCPU('5%')}))}));};`);
+  const first = await r.launch();
+  assert.equal(first.error, undefined);
+  const tails = first.response.Results[0].Tails;
+  assert.deepEqual(tails.map(tail => tail.Type), ['image','text','image','text','image','text','text','image']);
+  assert.deepEqual(tails.slice(0, 4).map(tail => tail.Tooltip), ['CPU usage','CPU usage','Memory usage','Memory usage']);
+  assert.equal(tails[0].Image.ImageData, path.join(r.dir, 'cpu.svg'));
+  assert.equal(tails[2].Image.ImageData, path.join(r.dir, 'memorychip.svg'));
+  assert.equal(tails[4].Image.ImageType, 'raycast');
+  assert.equal(tails[6].Text, '0');
+  assert.equal(tails[7].Image.ImageType, 'emoji');
+  const next = await r.call('action', { id: first.response.Results[0].Actions[0].Id });
+  assert.equal(next.response.Results[0].Tails[1].Text, '5%');
+  assert.deepEqual(next.response.Results[0].Tails.map(tail => tail.Id), tails.map(tail => tail.Id));
 });
 
 test('Form submit uses Wox definitions and typed checkbox values', async t => {

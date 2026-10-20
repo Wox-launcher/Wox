@@ -25,7 +25,8 @@ process.stdout.write = (data, encoding, callback) => {
 function hostCall(method, params) {
   const id = String(++nextCall);
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Wox API ${method} timed out`)); }, 30000);
+    // User confirmation has no response deadline; Go cancels it when the owning query/session leaves.
+    const timer = method === 'confirmAlert' ? null : setTimeout(() => { pending.delete(id); reject(new Error(`Wox API ${method} timed out`)); }, 30000);
     pending.set(id, { resolve, reject, timer });
     send({ type: 'api', id, method, params });
   });
@@ -38,7 +39,11 @@ function report(error) {
 
 function publish() {
   if (!mapper || !container || failure) return;
-  try { snapshot = mapper.map(container); send({ type: 'render', response: snapshot }); }
+  try {
+    const { Loading, ...response } = mapper.map(container);
+    snapshot = { response, loading: !!Loading };
+    send({ type: 'render', ...snapshot });
+  }
   catch (error) { report(error); }
 }
 
@@ -88,7 +93,7 @@ async function launch(params) {
   // including refinements restored by Wox before this command was mounted.
   await mapper.input(config.search || '', config.refinements || {});
   await settle();
-  return { response: snapshot, error: failure };
+  return { ...snapshot, error: failure };
 }
 
 async function settle() {
@@ -104,11 +109,11 @@ async function request(message) {
     case 'query':
       await mapper.input(message.params.search || '', message.params.refinements || {});
       await settle();
-      return { response: snapshot, error: failure };
+      return { ...snapshot, error: failure };
     case 'action':
       await mapper.dispatch(message.params.id, message.params.values || {});
       await settle();
-      return { response: snapshot, error: failure };
+      return { ...snapshot, error: failure };
     case 'stop':
       renderer?.unmount();
       setTimeout(() => process.exit(0), 30).unref();

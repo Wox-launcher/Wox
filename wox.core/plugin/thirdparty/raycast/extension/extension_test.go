@@ -40,7 +40,7 @@ func TestManifestAndLocalCopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Metadata.Id != "raycast.wox.example" || d.Metadata.Runtime != string(Runtime) || d.Metadata.Commands[0].Command != "list" {
+	if d.Metadata.Id != "raycast.wox.example" || d.Metadata.Runtime != string(Runtime) || len(d.Metadata.Commands) != 0 || d.Commands[0].Name != "list" {
 		t.Fatalf("unexpected metadata: %+v", d.Metadata)
 	}
 	if keywords := d.Metadata.TriggerKeywords; len(keywords) != 1 || keywords[0] != "example" {
@@ -117,12 +117,12 @@ func TestLocalToothpickCommandDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Manifest.Name != "toothpick" || len(d.Commands) != 1 || len(d.Metadata.Commands) != 1 || d.Metadata.Commands[0].Command != "manage-bluetooth-connections" {
+	if d.Manifest.Name != "toothpick" || len(d.Commands) != 1 || len(d.Metadata.Commands) != 0 || d.Commands[0].Name != "manage-bluetooth-connections" {
 		t.Fatalf("Toothpick enabled commands: %+v", d.Metadata.Commands)
 	}
 	a := &recordingAPI{changed: make(chan common.PlainQuery, 1)}
 	p := &extensionPlugin{descriptor: d, api: a}
-	response := p.Query(context.Background(), plugin.Query{TriggerKeyword: "toothpick"})
+	response := p.commands(context.Background(), plugin.Query{TriggerKeyword: "toothpick"})
 	if len(response.Results) != 1 || response.Results[0].Title != "Manage Bluetooth Connections" {
 		t.Fatalf("Toothpick discovery: %+v", response.Results)
 	}
@@ -134,7 +134,7 @@ func TestLocalToothpickCommandDiscovery(t *testing.T) {
 		t.Fatalf("Toothpick icon = %s, want %s", got, want)
 	}
 	response.Results[0].Actions[0].Action(context.Background(), plugin.ActionContext{})
-	if query := <-a.changed; query.QueryText != "toothpick manage-bluetooth-connections " || !query.QueryScope.IsEmpty() {
+	if query := <-a.changed; query.QueryText != "toothpick " || !query.QueryScope.IsEmpty() {
 		t.Fatalf("Toothpick launch query: %+v", query)
 	}
 	t.Logf("verified local Toothpick: %d manifest commands, one visible entry with the plugin icon and ordinary command activation", len(d.Manifest.Commands))
@@ -383,8 +383,36 @@ func TestStructuralUpdatesRefreshAndReuseReactState(t *testing.T) {
 	}
 }
 
+// TestAccessoryUpdates keeps image tails normalized when existing rows refresh through UpdateResult.
+func TestAccessoryUpdates(t *testing.T) {
+	p, api := testPlugin(t, `const R=require('react');const {List,Icon,Action,ActionPanel}=require('@raycast/api');const h=R.createElement;
+	exports.default=()=>{const [value,setValue]=R.useState('0%');return h(List,null,h(List.Item,{id:'process',title:'Process',
+	accessories:[{icon:Icon.Clipboard,text:value,tooltip:'Usage'}],
+	actions:h(ActionPanel,null,h(Action,{title:'Update',onAction:()=>setValue('5%')}))}));};`)
+	ctx := queryContext("tails-window", "tails-query")
+	response := p.Query(ctx, plugin.Query{Id: "tails-query", SessionId: "tails-window", TriggerKeyword: "example"})
+	if len(response.Results) != 1 || len(response.Results[0].Tails) != 2 {
+		t.Fatalf("missing icon/value tails: %+v", response)
+	}
+	image := response.Results[0].Tails[0].Image
+	if image.ImageType != common.WoxImageTypeSvg {
+		t.Fatalf("built-in accessory icon was not mapped to Wox: %+v", image)
+	}
+	response.Results[0].Actions[0].Action(ctx, plugin.ActionContext{})
+	select {
+	case update := <-api.updates:
+		if update.Tails == nil || len(*update.Tails) != 2 || (*update.Tails)[0].Image != image || (*update.Tails)[1].Text != "5%" ||
+			(*update.Tails)[0].Tooltip != "Usage" || (*update.Tails)[1].Tooltip != "Usage" {
+			t.Fatalf("accessory update lost its image, text or tooltip: %+v", update.Tails)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("accessory change did not use UpdateResult")
+	}
+}
+
 func TestCommandActivationAndPreferenceMapping(t *testing.T) {
 	p, api := testPlugin(t, "exports.default=()=>null")
+	p.descriptor.Commands = append(p.descriptor.Commands, Command{Name: "other", Title: "Other", Mode: "view"})
 	response := p.Query(context.Background(), plugin.Query{Search: "list", Type: plugin.QueryTypeInput})
 	response.Results[0].Actions[0].Action(context.Background(), plugin.ActionContext{})
 	query := <-api.changed
@@ -430,6 +458,7 @@ func TestCacheSubscriptionUsesWoxRefresh(t *testing.T) {
 	return h(List,null,...rows.map((title,i)=>h(List.Item,{id:String(i),key:i,title,actions:h(ActionPanel,null,
 	h(Action,{title:'Rename',onAction:()=>writer.set('rows',JSON.stringify(['Renamed']))}),
 	h(Action,{title:'Add',onAction:()=>writer.set('rows',JSON.stringify(['Renamed','Second']))}))})));};`)
+	p.descriptor.Commands = append(p.descriptor.Commands, Command{Name: "other", Title: "Other", Mode: "view"})
 	ctx := queryContext("cache-window", "cache-query")
 	query := plugin.Query{Id: "cache-query", SessionId: "cache-window", TriggerKeyword: "example", Command: "list"}
 	response := p.Query(ctx, query)
@@ -460,7 +489,7 @@ func TestCacheSubscriptionUsesWoxRefresh(t *testing.T) {
 	p.mu.Unlock()
 	query.Command, query.Search = "", ""
 	response = p.Query(ctx, query)
-	if len(response.Results) != 1 || response.Results[0].Id != "command:list" {
+	if len(response.Results) != 2 || response.Results[0].Id != "command:list" {
 		t.Fatalf("deleting command did not return to discovery: %+v", response)
 	}
 	select {
@@ -475,22 +504,13 @@ func TestCacheSubscriptionUsesWoxRefresh(t *testing.T) {
 
 // TestOptionalSearchArgumentUsesQueryInput covers activation, direct input and subsequent edits in one React session.
 func TestOptionalSearchArgumentUsesQueryInput(t *testing.T) {
-	p, api := testPlugin(t, `const R=require('react');const {List}=require('@raycast/api');const h=R.createElement;
+	p, _ := testPlugin(t, `const R=require('react');const {List}=require('@raycast/api');const h=R.createElement;
 	exports.default=props=>{const [text,setText]=R.useState(props.arguments.query);return h(List,{filtering:false,onSearchTextChange:setText},h(List.Item,{id:'search',title:'Search: '+text,subtitle:'Initial: '+props.arguments.query}));};`)
 	required := false
 	p.descriptor.Commands[0].Arguments = []Preference{{Name: "query", Type: "text", Required: &required}}
 	ctx := queryContext("search-window", "q1")
-	response := p.Query(ctx, plugin.Query{TriggerKeyword: "custom"})
-	action := response.Results[0].Actions[0]
-	if action.Type == plugin.QueryResultActionTypeForm || action.Action == nil {
-		t.Fatal("optional search argument opened a form")
-	}
-	action.Action(ctx, plugin.ActionContext{})
-	if query := <-api.changed; query.QueryText != "custom list " || !query.QueryScope.IsEmpty() {
-		t.Fatalf("activation: %+v", query)
-	}
-	query := plugin.Query{Id: "q1", SessionId: "search-window", TriggerKeyword: "custom", Command: "list", Search: "first search"}
-	response = p.Query(ctx, query)
+	query := plugin.Query{Id: "q1", SessionId: "search-window", TriggerKeyword: "custom", Search: "first search"}
+	response := p.Query(ctx, query)
 	if len(response.Results) != 1 || response.Results[0].Title != "Search: first search" || response.Results[0].SubTitle != "Initial: first search" {
 		t.Fatalf("initial input was not passed as an argument: %+v", response.Results)
 	}
@@ -510,7 +530,7 @@ func TestRequiredSearchArgumentWaitsForInput(t *testing.T) {
 	exports.default=props=>h(List,{filtering:false},h(List.Item,{title:props.arguments.query}));`)
 	required := true
 	p.descriptor.Commands[0].Arguments = []Preference{{Name: "query", Type: "text", Required: &required}}
-	query := plugin.Query{Id: "required", SessionId: "required-window", TriggerKeyword: "example", Command: "list"}
+	query := plugin.Query{Id: "required", SessionId: "required-window", TriggerKeyword: "example"}
 	ctx := queryContext(query.SessionId, query.Id)
 	for _, search := range []string{"", "  "} {
 		query.Search = search
@@ -519,7 +539,7 @@ func TestRequiredSearchArgumentWaitsForInput(t *testing.T) {
 			t.Fatalf("empty required text must wait in query input: %+v", response)
 		}
 		response.Results[0].Actions[0].Action(ctx, plugin.ActionContext{})
-		if completed := <-api.changed; completed.QueryText != "example list " {
+		if completed := <-api.changed; completed.QueryText != "example " {
 			t.Fatalf("completion: %+v", completed)
 		}
 	}
@@ -551,10 +571,10 @@ func TestHeadlessCommandCompletesBeforeExecution(t *testing.T) {
 	query := plugin.Query{Id: "headless", SessionId: "headless-window", TriggerKeyword: "example"}
 	response := p.Query(ctx, query)
 	response.Results[0].Actions[0].Action(ctx, plugin.ActionContext{})
-	if completed := <-api.changed; completed.QueryText != "example list " {
+	if completed := <-api.changed; completed.QueryText != "example " {
 		t.Fatalf("headless completion: %+v", completed)
 	}
-	query.Command, query.Search = "list", "text with spaces"
+	query.Search = "text with spaces"
 	response = p.Query(ctx, query)
 	select {
 	case <-api.copied:
@@ -583,7 +603,7 @@ func TestStructuredCommandArgumentsKeepForms(t *testing.T) {
 		{{Name: "secret", Type: "password", Required: &optional}},
 	} {
 		api := &recordingAPI{changed: make(chan common.PlainQuery, 1)}
-		p := &extensionPlugin{api: api, descriptor: Descriptor{Commands: []Command{{Name: "list", Mode: "view", Arguments: arguments}}}}
+		p := &extensionPlugin{api: api, descriptor: Descriptor{Commands: []Command{{Name: "list", Mode: "view", Arguments: arguments}, {Name: "other", Mode: "view"}}}}
 		discovery := p.Query(context.Background(), plugin.Query{TriggerKeyword: "example"})
 		action := discovery.Results[0].Actions[0]
 		if action.Type == plugin.QueryResultActionTypeForm {
@@ -596,6 +616,11 @@ func TestStructuredCommandArgumentsKeepForms(t *testing.T) {
 		response := p.Query(context.Background(), plugin.Query{Command: "list"})
 		if len(response.Results) != 1 || response.Results[0].Actions[0].Type != plugin.QueryResultActionTypeForm {
 			t.Fatalf("arguments %+v lost their form: %+v", arguments, response.Results)
+		}
+		p.descriptor.Commands = p.descriptor.Commands[:1]
+		response = p.Query(context.Background(), plugin.Query{TriggerKeyword: "example"})
+		if len(response.Results) != 1 || response.Results[0].Actions[0].Type != plugin.QueryResultActionTypeForm {
+			t.Fatalf("single command arguments %+v lost their form: %+v", arguments, response.Results)
 		}
 	}
 }
@@ -706,13 +731,39 @@ func TestLocalInstallRunAndUninstall(t *testing.T) {
 		plugin.ResolveNodePath, plugin.AllHosts = oldResolver, oldHosts
 	})
 	source := fixture(t, `const R=require('react');const {List}=require('@raycast/api');exports.default=()=>R.createElement(List,null,R.createElement(List.Item,{title:'Installed and running'}));`)
+	manifest := `{"name":"example","title":"Example","author":"wox","preferences":[{"name":"first","type":"textfield"},{"name":"second","type":"password"}],"commands":[{"name":"list","title":"List","mode":"view"}]}`
+	if err := os.WriteFile(filepath.Join(source, "package.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
 	store := plugin.GetStoreManager()
 	descriptor, err := Parse(source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	metadata := descriptor.Metadata
-	if err := Import(ctx, source); err != nil {
+	preferences := map[string]json.RawMessage{"preference:first": json.RawMessage(`"first"`), "preference:second": json.RawMessage(`"fixture-secret"`)}
+	if err := database.GetDB().Exec(`CREATE TRIGGER reject_imported_preference BEFORE INSERT ON oplogs WHEN NEW.key = 'preference:second' BEGIN SELECT RAISE(ABORT, 'rejected'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := Import(ctx, source, preferences); err == nil {
+		t.Fatal("import succeeded despite a settings transaction failure")
+	}
+	if plugin.GetPluginManager().GetPluginInstanceById(metadata.Id) != nil {
+		t.Fatal("failed import left the plugin loaded")
+	}
+	if _, err := os.Stat(filepath.Join(CollectionDirectory(), metadata.Id)); !os.IsNotExist(err) {
+		t.Fatal("failed import left installed files")
+	}
+	for _, model := range []any{&database.PluginSetting{}, &database.Oplog{}} {
+		var count int64
+		if err := database.GetDB().Model(model).Where("key IN ?", []string{"preference:first", "preference:second"}).Count(&count).Error; err != nil || count != 0 {
+			t.Fatal("failed import left partial preferences or sync records")
+		}
+	}
+	if err := database.GetDB().Exec("DROP TRIGGER reject_imported_preference").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := Import(ctx, source, preferences); err != nil {
 		t.Fatal(err)
 	}
 	manager := plugin.GetPluginManager()
@@ -728,6 +779,9 @@ func TestLocalInstallRunAndUninstall(t *testing.T) {
 	if err := instance.WaitInit(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if value, exists := instance.Setting.Get("preference:second"); !exists || value != "fixture-secret" {
+		t.Fatal("successful import did not persist preferences")
+	}
 	if instance.PluginDirectory == source {
 		t.Fatal("installation still references source")
 	}
@@ -741,7 +795,8 @@ func TestLocalInstallRunAndUninstall(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "list.js"), []byte(`const R=require('react');const {List}=require('@raycast/api');exports.default=()=>R.createElement(List,null,R.createElement(List.Item,{title:'Reimported'}));`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Import(ctx, source); err != nil {
+	preferences["preference:first"] = json.RawMessage(`"replacement"`)
+	if err := Import(ctx, source, preferences); err != nil {
 		t.Fatalf("replace a running extension: %v", err)
 	}
 	instance = manager.GetPluginInstanceById(metadata.Id)
@@ -751,6 +806,9 @@ func TestLocalInstallRunAndUninstall(t *testing.T) {
 	response = instance.Plugin.Query(ctx, plugin.Query{Id: "installed-query", SessionId: "installed-window", Command: "list"})
 	if len(response.Results) != 1 || response.Results[0].Title != "Reimported" || instance.API.GetSetting(ctx, "test-kept") != "kept" {
 		t.Fatalf("replacement did not preserve settings and reload code: %+v", response)
+	}
+	if value, _ := instance.Setting.Get("preference:first"); value != "first" {
+		t.Fatal("replacement overwrote an existing preference")
 	}
 	if err := store.UninstallLocal(ctx, instance, false); err != nil {
 		t.Fatal(err)

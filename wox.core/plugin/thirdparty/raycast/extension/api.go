@@ -20,7 +20,13 @@ func (s *commandSession) answerAPI(message runtimeMessage) {
 	if closed {
 		return
 	}
-	result, err := s.owner.invokeAPI(ctx, query, message.Method, message.Params)
+	var result any
+	var err error
+	if message.Method == "confirmAlert" {
+		result, err = s.owner.confirmAlert(ctx, s, message.Params)
+	} else {
+		result, err = s.owner.invokeAPI(ctx, query, message.Method, message.Params)
+	}
 	reply := map[string]any{"type": "apiReply", "id": message.ID, "result": result}
 	if err != nil {
 		reply["error"] = err.Error()

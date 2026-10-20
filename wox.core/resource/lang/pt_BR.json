@@ -6,7 +6,7 @@
   "plugin_raycast_submit": "Enviar",
   "plugin_raycast_unsupported_action": "Ação não suportada",
   "plugin_raycast_run": "Executar comando",
-  "plugin_raycast_loading": "Carregando…",
+  "plugin_raycast_confirm": "Confirmar",
   "plugin_raycast_empty": "Nenhum resultado",
   "plugin_raycast_failed": "Falha no comando Raycast",
   "plugin_raycast_back": "Voltar",

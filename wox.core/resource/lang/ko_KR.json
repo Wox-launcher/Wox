@@ -6,7 +6,7 @@
   "plugin_raycast_submit": "제출",
   "plugin_raycast_unsupported_action": "지원하지 않는 작업",
   "plugin_raycast_run": "명령 실행",
-  "plugin_raycast_loading": "불러오는 중…",
+  "plugin_raycast_confirm": "확인",
   "plugin_raycast_empty": "결과 없음",
   "plugin_raycast_failed": "Raycast 명령 실행 실패",
   "plugin_raycast_back": "뒤로",

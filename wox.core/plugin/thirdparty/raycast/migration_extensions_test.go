@@ -105,3 +105,24 @@ func TestExtensionReferencesCountTowardExportLimit(t *testing.T) {
 		t.Fatalf("unbounded extension records: %v", err)
 	}
 }
+
+// TestExtensionPreferencesJoinByIdentity isolates settings from other extensions and from mismatched command IDs.
+func TestExtensionPreferencesJoinByIdentity(t *testing.T) {
+	var payload Payload
+	raw := `{"nodeExtensions":{"extensions":[{"uuid":"11111111-1111-4111-8111-111111111111","name":"example"}]},
+	"settings":{"nodeExtensions":[{"id":"e:n:11111111-1111-4111-8111-111111111111","meta":{"enabled":false}}],
+	"commands":[
+		{"extensionId":"e:n:11111111-1111-4111-8111-111111111111","id":"c:n:11111111-1111-4111-8111-111111111111::-::list","meta":{"limit":"20"}},
+		{"extensionId":"e:n:11111111-1111-4111-8111-111111111111","id":"c:n:22222222-2222-4222-8222-222222222222::-::list","meta":{"limit":"wrong"}}
+	]}}`
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatal(err)
+	}
+	refs := buildMapped(payload, defaultSnapshot()).extensions
+	if len(refs) != 1 || len(refs[0].Preferences) != 2 || string(refs[0].Preferences["preference:enabled"]) != "false" || string(refs[0].Preferences["command:list:limit"]) != `"20"` {
+		t.Fatal("preferences were not joined by extension and command identity")
+	}
+	if _, err := ParsePayload([]byte(`{"settings":{"nodeExtensions":[{},{}]}}`), Limits{MaxEntries: 1}); ExportCode(err) != codeLimit {
+		t.Fatalf("unbounded extension settings: %v", err)
+	}
+}

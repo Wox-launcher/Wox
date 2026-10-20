@@ -6,7 +6,7 @@
   "plugin_raycast_submit": "送信",
   "plugin_raycast_unsupported_action": "未対応のアクション",
   "plugin_raycast_run": "コマンドを実行",
-  "plugin_raycast_loading": "読み込み中…",
+  "plugin_raycast_confirm": "確認",
   "plugin_raycast_empty": "結果がありません",
   "plugin_raycast_failed": "Raycast コマンドの実行に失敗しました",
   "plugin_raycast_back": "戻る",

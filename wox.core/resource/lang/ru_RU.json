@@ -6,7 +6,7 @@
   "plugin_raycast_submit": "Отправить",
   "plugin_raycast_unsupported_action": "Неподдерживаемое действие",
   "plugin_raycast_run": "Выполнить команду",
-  "plugin_raycast_loading": "Загрузка…",
+  "plugin_raycast_confirm": "Подтвердить",
   "plugin_raycast_empty": "Нет результатов",
   "plugin_raycast_failed": "Ошибка команды Raycast",
   "plugin_raycast_back": "Назад",

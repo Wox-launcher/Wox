@@ -13,6 +13,7 @@ type Payload struct {
 		General            map[string]json.RawMessage `json:"general"`
 		Commands           []Command                  `json:"commands"`
 		InternalExtensions []InternalExtension        `json:"internalExtensions"`
+		NodeExtensions     []ExtensionSettings        `json:"nodeExtensions"`
 	} `json:"settings"`
 	Snippets struct {
 		Snippets []Snippet `json:"snippets"`
@@ -37,11 +38,18 @@ type Payload struct {
 
 // ExportExtension identifies code installed locally; the export itself contains no executable files.
 type ExportExtension struct {
-	UUID    string `json:"uuid"`
-	Name    string `json:"name"`
-	Author  string `json:"author"`
-	Owner   string `json:"owner"`
-	Version string `json:"version"`
+	UUID        string                     `json:"uuid"`
+	Name        string                     `json:"name"`
+	Author      string                     `json:"author"`
+	Owner       string                     `json:"owner"`
+	Version     string                     `json:"version"`
+	Preferences map[string]json.RawMessage `json:"-"`
+}
+
+// ExtensionSettings holds explicit preference values, separate from type descriptions and runtime storage.
+type ExtensionSettings struct {
+	ID   string                     `json:"id"`
+	Meta map[string]json.RawMessage `json:"meta"`
 }
 
 // EmojiEntry is one symbol the user has used. CustomKeywords are extra search words.
@@ -67,17 +75,18 @@ type InternalExtension struct {
 
 // Command is one Raycast command binding. Hotkeys may use more than one field name.
 type Command struct {
-	ExtensionID   string          `json:"extensionId"`
-	ID            string          `json:"id"`
-	Name          string          `json:"name"`
-	Title         string          `json:"title"`
-	Alias         string          `json:"alias"`
-	Link          string          `json:"link"`
-	Path          string          `json:"path"`
-	Deeplink      string          `json:"deeplink"`
-	MacOSHotkey   json.RawMessage `json:"macosHotkey"`
-	Hotkey        json.RawMessage `json:"hotkey"`
-	WindowsHotkey json.RawMessage `json:"windowsHotkey"`
+	Meta          map[string]json.RawMessage `json:"meta"`
+	ExtensionID   string                     `json:"extensionId"`
+	ID            string                     `json:"id"`
+	Name          string                     `json:"name"`
+	Title         string                     `json:"title"`
+	Alias         string                     `json:"alias"`
+	Link          string                     `json:"link"`
+	Path          string                     `json:"path"`
+	Deeplink      string                     `json:"deeplink"`
+	MacOSHotkey   json.RawMessage            `json:"macosHotkey"`
+	Hotkey        json.RawMessage            `json:"hotkey"`
+	WindowsHotkey json.RawMessage            `json:"windowsHotkey"`
 }
 
 // Snippet is one exported text snippet.
@@ -137,7 +146,7 @@ func ParsePayload(raw []byte, limits Limits) (Payload, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return Payload{}, exportErr(codeCorrupt)
 	}
-	entries := len(payload.NodeExtensions.Extensions) + len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries) + len(payload.Notes.Notes)
+	entries := len(payload.NodeExtensions.Extensions) + len(payload.Settings.NodeExtensions) + len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries) + len(payload.Notes.Notes)
 	if limits.MaxEntries > 0 && entries > limits.MaxEntries {
 		return Payload{}, exportErr(codeLimit)
 	}

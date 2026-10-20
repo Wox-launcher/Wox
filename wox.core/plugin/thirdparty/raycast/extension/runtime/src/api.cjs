@@ -68,6 +68,16 @@ function createAPI(config, hostCall, navigation) {
     return toast;
   };
   api.Toast = { Style: { Animated: 'animated', Success: 'success', Failure: 'failure' } };
+  api.Alert = { ActionStyle: { Default: 'default', Cancel: 'cancel', Destructive: 'destructive' } };
+  api.confirmAlert = async options => {
+    const confirmed = await hostCall('confirmAlert', {
+      title: options.title, message: options.message,
+      primaryTitle: options.primaryAction?.title, dismissTitle: options.dismissAction?.title
+    });
+    if (confirmed) await options.primaryAction?.onAction?.();
+    else await options.dismissAction?.onAction?.();
+    return confirmed;
+  };
   api.popToRoot = async () => navigation.root();
   api.clearSearchBar = () => hostCall('clearSearch', {});
   api.getSelectedText = () => hostCall('selectedText', {});

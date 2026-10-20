@@ -3,6 +3,8 @@ const { unsupported } = require('./api.cjs');
 
 const slot = (node, name) => node.children.find(child => child.type === 'slot' && child.props.name === name)?.children || [];
 const descendants = nodes => nodes.flatMap(node => [node, ...descendants(node.children || [])]);
+// Match the whole value so filenames containing emoji still resolve as image assets.
+const emojiPattern = /^(?:\p{Extended_Pictographic}[\uFE0E\uFE0F]?\p{Emoji_Modifier}?(?:\u200D\p{Extended_Pictographic}[\uFE0E\uFE0F]?\p{Emoji_Modifier}?)*(?:[\u{E0020}-\u{E007E}]+\u{E007F})?|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)$/u;
 
 // Map React host instances to Wox's existing result/layout/form DTOs; never send a React tree to Go.
 function createMapper(config, navigation) {
@@ -14,11 +16,15 @@ function createMapper(config, navigation) {
   const image = value => {
     if (!value) return {};
     if (typeof value === 'object') value = value.source || value;
+    if (typeof value === 'object' && typeof value.fileIcon === 'string') {
+      return value.fileIcon ? { ImageType: 'fileicon', ImageData: value.fileIcon } : {};
+    }
     if (typeof value === 'object') value = config.dark ? value.dark : value.light;
     if (typeof value !== 'string') return {};
     if (value.startsWith('wox-icon:')) return { ImageType: 'raycast', ImageData: value.slice(9) };
     if (/^https?:/.test(value)) return { ImageType: 'url', ImageData: value };
     if (/^data:/.test(value)) return { ImageType: 'base64', ImageData: value };
+    if (emojiPattern.test(value)) return { ImageType: 'emoji', ImageData: value };
     return { ImageType: 'absolute', ImageData: path.isAbsolute(value) ? value : path.join(config.assetsPath, value) };
   };
   const shortcut = value => {
@@ -83,7 +89,7 @@ function createMapper(config, navigation) {
       if (!['List', 'Grid', 'Detail', 'Form'].includes(root.type)) unsupported(`root component ${root.type}`);
       if (root.props.onSelectionChange) unsupported('onSelectionChange');
       if (root.props.pagination) unsupported('pagination');
-      const response = { Results: [], Refinements: [], Layout: {} };
+      const response = { Results: [], Refinements: [], Layout: {}, Loading: !!root.props.isLoading };
       controls.search = root.props.onSearchTextChange;
       const dropdown = slot(root, 'searchBarAccessory').find(node => node.type === 'Dropdown');
       if (dropdown) {
@@ -111,15 +117,24 @@ function createMapper(config, navigation) {
             response.Results.push({ Id: String(p.id ?? node.id), Title: p.title || '', SubTitle: p.subtitle || '', Icon: image(p.content || p.icon),
               Group: group, GroupScore: groupScore, Score: -response.Results.length,
               Preview: preview(slot(node, 'detail')[0]),
-              Tails: (p.accessories || []).map(item => ({ Type: 'text', Text: String(item.text ?? item.tag?.value ?? ''), Tooltip: item.tooltip || '' })),
+              // Wox already supports ordered image and text tails; keep each accessory's icon before its value.
+              Tails: (p.accessories || []).flatMap((item, index) => {
+                const tails = [];
+                const icon = image(item.icon);
+                const tooltip = item.tooltip || '';
+                if (icon.ImageData) tails.push({ Id: `accessory:${index}:icon`, Type: 'image', Image: icon, Tooltip: tooltip });
+                const text = item.text ?? item.tag?.value;
+                if (text !== undefined && text !== null) tails.push({ Id: `accessory:${index}:text`, Type: 'text', Text: String(text), Tooltip: tooltip });
+                return tails;
+              }),
               Actions: actions([...slot(node, 'actions'), ...rootActions]) });
           }
         };
         collect(root.children);
         if (root.props.isShowingDetail) response.Layout.ResultPreviewWidthRatio = 0.4;
-        if (!response.Results.length) {
+        if (!response.Results.length && !response.Loading) {
           const empty = root.children.find(node => node.type.endsWith('.EmptyView'));
-          response.Results.push({ Id: 'empty', Title: empty?.props.title || (root.props.isLoading ? 'i18n:plugin_raycast_loading' : 'i18n:plugin_raycast_empty'), SubTitle: empty?.props.description || '', Actions: actions(rootActions) });
+          response.Results.push({ Id: 'empty', Title: empty?.props.title || 'i18n:plugin_raycast_empty', SubTitle: empty?.props.description || '', Actions: actions(rootActions) });
         }
       }
       return response;
