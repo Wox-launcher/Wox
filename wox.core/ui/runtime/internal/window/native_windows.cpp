@@ -1950,3 +1950,35 @@ extern "C" void wox_windows_webview_destroy(WoxWindowsWebView *webview) {
     webview->release();
   }
 }
+
+// One-shot evaluation owns only its callback handle, never a window/session pointer.
+extern "C" void woxGoWebViewScriptResult(uint64_t, char *, char *);
+class WoxEvaluateHandler final : public IUnknown {
+public:
+  explicit WoxEvaluateHandler(uint64_t callback) : callback_(callback) {}
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override {
+    static const GUID callback_iid = {0x49511172,0xcc67,0x4bca,{0x99,0x23,0x13,0x71,0x12,0xf4,0xc4,0xcc}};
+    return callback_query_interface(this, iid, callback_iid, object);
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+  ULONG STDMETHODCALLTYPE Release() override { auto remaining = --refs_; if (!remaining) delete this; return remaining; }
+  virtual HRESULT STDMETHODCALLTYPE Invoke(HRESULT error, const wchar_t *result) {
+    std::string value = wide_to_utf8(result);
+    char failure[] = "WebView2 script evaluation failed";
+    woxGoWebViewScriptResult(callback_, value.data(), FAILED(error) ? failure : nullptr);
+    return S_OK;
+  }
+private:
+  std::atomic<ULONG> refs_{1};
+  uint64_t callback_;
+};
+
+int32_t wox_windows_webview_evaluate(WoxWindowsWebView *target, const char *script, uint64_t callback) {
+  if (target == nullptr || target->active == nullptr || target->active->core == nullptr) return 1;
+  auto *handler = new WoxEvaluateHandler(callback);
+  std::wstring source = utf8_to_wide(script);
+  using Execute = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, const wchar_t *, IUnknown *);
+  HRESULT result = webview_method<Execute>(target->active->core, 29)(target->active->core, source.c_str(), handler);
+  handler->Release();
+  return FAILED(result) ? -1 : 0;
+}

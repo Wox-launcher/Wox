@@ -4779,3 +4779,16 @@ CGFloat wox_darwin_desktop_top(void) {
 CGImageRef wox_darwin_copy_display_image(CGDirectDisplayID display_id) {
   return capture_display_image(display_id);
 }
+
+extern void woxGoWebViewScriptResult(uint64_t, char *, char *);
+
+// The completion block owns no window pointer and remains safe after teardown.
+int32_t wox_darwin_webview_evaluate(WoxDarwinWindow *target, const char *script, uint64_t callback) {
+  if (target == NULL || target->closed || target->active_web_view == nil) return 1;
+  NSString *source = [NSString stringWithUTF8String:script];
+  [target->active_web_view evaluateJavaScript:source completionHandler:^(id value, NSError *error) {
+    NSString *text = [value isKindOfClass:[NSString class]] ? value : @"";
+    woxGoWebViewScriptResult(callback, (char *)[text UTF8String], error ? (char *)[[error localizedDescription] UTF8String] : NULL);
+  }];
+  return 0;
+}

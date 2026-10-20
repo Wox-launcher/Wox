@@ -212,3 +212,46 @@ to the plugin metadata's `Features` array. Explicit Query Hints remain available
 Set `icon_show_container=True` on a result to show its icon inside a rounded background
 and border that adapt to the theme and selection state. The default is `false`;
 the image keeps its aspect ratio.
+
+### Updating an inline HTML preview without navigation
+
+`UpdateResult` also accepts a one-shot WebView instruction:
+`{"updateMode":"script","script":"window.updateProgress({count: 1})"}`.
+The method signature and preview type are unchanged. Do not combine this instruction
+with `html` or `url`, or return it from `query()`. It can target only the current
+result's plugin-owned inline HTML document; URL previews and noncurrent results
+return `false`. Scope the call with the query context that produced the result.
+
+`true` means accepted, not successfully executed. Wox queues accepted instructions
+in order until that document is ready. Switching results, replacing the document,
+or destroying the preview discards its pending instructions. JavaScript exceptions
+are logged without replacing the page. Wox does not return script values or await
+Promises. Instructions are neither cached nor replayed by redraws; other fields in
+the same update, such as Actions, retain their normal behavior.
+
+Return complete HTML from each query, using the latest task state. Define an updater
+in that HTML and change existing DOM nodes inside it so scrolling, selection, and
+animation survive. Serialize state as JSON rather than concatenating raw output into
+JavaScript. When embedding initial JSON in a `<script>` element, also escape `<`
+as `\u003c` to prevent a literal `</script>` from ending the element.
+
+This capability requires a Wox host containing script-mode preview updates; older
+hosts do not support it. No SDK publication is required to transport these JSON keys.
+
+```python
+from wox_plugin import UpdatableResult
+
+# query() returns HTML defining window.updateProgress, initialized with current state.
+# Later, update only the current document. Keep ctx from that query.
+state = {"count": 1, "message": "Scanning…"}
+accepted = await api.update_result(ctx, UpdatableResult(
+    id=result_id,
+    preview=WoxPreview(
+        preview_type=WoxPreviewType.WEBVIEW,
+        preview_data=json.dumps({
+            "updateMode": "script",
+            "script": "window.updateProgress(" + json.dumps(state) + ");",
+        }),
+    ),
+))
+```

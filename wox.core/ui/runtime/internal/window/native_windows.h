@@ -17,6 +17,7 @@ uintptr_t wox_windows_accessibility_get_object(uintptr_t owner, uintptr_t wparam
 void wox_windows_accessibility_remove(uintptr_t owner);
 
 typedef struct WoxWindowsWebView WoxWindowsWebView;
+int32_t wox_windows_webview_evaluate(WoxWindowsWebView *target, const char *script, uint64_t callback);
 typedef struct WoxRenderer WoxRenderer;
 int32_t wox_windows_webview_create(uintptr_t owner, WoxRenderer *renderer, WoxWindowsWebView **webview);
 int32_t wox_windows_webview_show(WoxWindowsWebView *webview, const char *url, const char *html, const char *inject_css, const char *user_agent, int32_t cache_disabled, const char *cache_key, int32_t x, int32_t y, int32_t width, int32_t height, float corner_radius);

@@ -7,6 +7,7 @@
 #include "native_renderer_stats.h"
 
 typedef struct WoxDarwinWindow WoxDarwinWindow;
+int32_t wox_darwin_webview_evaluate(WoxDarwinWindow *target, const char *script, uint64_t callback);
 
 enum {
   WOX_DARWIN_FRAME_SKIPPED = 1,

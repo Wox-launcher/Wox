@@ -11,6 +11,7 @@ import "C"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -604,4 +605,20 @@ func woxGoWindowsWebViewCursorChanged(owner, cursor C.uintptr_t) {
 	if window.webViewPointerOver {
 		win.SetCursor(window.webViewCursor)
 	}
+}
+
+// Evaluate runs a script on the native owner thread and reports completion asynchronously.
+func (d *windowsWebViewDriver) Evaluate(script string, done func(string, error)) error {
+
+	source := C.CString(script)
+	defer C.free(unsafe.Pointer(source))
+	id := registerScriptCallback(done)
+	status := C.wox_windows_webview_evaluate(d.handle, source, C.uint64_t(id))
+	if status == 1 {
+		finishScriptCallback(id, "pending", nil)
+	}
+	if status < 0 {
+		finishScriptCallback(id, "", errors.New("native WebView evaluation failed"))
+	}
+	return nil
 }

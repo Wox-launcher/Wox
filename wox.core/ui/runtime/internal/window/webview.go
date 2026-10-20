@@ -13,6 +13,7 @@ var ErrWebViewUnavailable = webviewruntime.ErrUnavailable
 // WebViewContent describes one embedded browser document while Rect is controlled separately by layout.
 // HTML ignores cache options and uses one temporary instance, released after 10 seconds out of view.
 type WebViewContent struct {
+	DocumentKey   string
 	URL           string
 	HTML          string
 	InjectCSS     string
@@ -64,14 +65,14 @@ func toWebViewRect(rect Rect) webviewruntime.Rect {
 
 func toWebViewContent(content WebViewContent) webviewruntime.Content {
 	return webviewruntime.Content{
-		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
+		DocumentKey: content.DocumentKey, URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
 		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey, CornerRadius: content.CornerRadius,
 	}
 }
 
 func fromWebViewContent(content webviewruntime.Content) WebViewContent {
 	return WebViewContent{
-		URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
+		DocumentKey: content.DocumentKey, URL: content.URL, HTML: content.HTML, InjectCSS: content.InjectCSS, UserAgent: content.UserAgent,
 		CacheDisabled: content.CacheDisabled, CacheKey: content.CacheKey, CornerRadius: content.CornerRadius,
 	}
 }
@@ -173,4 +174,19 @@ func (w *Window) SetWebViewActionHotkey(hotkey string) error {
 		return errors.New("window is not initialized")
 	}
 	return w.native.setWebViewActionHotkey(hotkey)
+}
+
+// UpdateWebViewScript queues a one-shot command for the current inline document.
+func (w *Window) UpdateWebViewScript(key, script string) bool {
+	if w == nil || w.native == nil || network.IsOffline() {
+		return false
+	}
+	return w.native.webView.UpdateScript(key, script)
+}
+
+// RetainWebViewScriptTarget aligns queued work with the launcher's current selection.
+func (w *Window) RetainWebViewScriptTarget(key, html string) {
+	if w != nil && w.native != nil {
+		w.native.webView.RetainScriptTarget(key, html)
+	}
 }

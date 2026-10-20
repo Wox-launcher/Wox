@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strconv"
 	"time"
+
+	"wox/util/ffmpeg"
 )
 
 const (
@@ -120,6 +122,7 @@ func extractRecordingPreviewFrame(path string, width, height int) (*image.RGBA, 
 		"-vf", "scale="+strconv.Itoa(width)+":"+strconv.Itoa(height),
 		"-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1",
 	)
+	ffmpeg.Prepare(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("decode recording poster: %w", err)
@@ -141,6 +144,7 @@ func startRecordingPreviewDecode(ctx context.Context, path string, width, height
 		"-vf", "scale="+strconv.Itoa(width)+":"+strconv.Itoa(height),
 		"-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1",
 	)
+	ffmpeg.Prepare(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, nil, err

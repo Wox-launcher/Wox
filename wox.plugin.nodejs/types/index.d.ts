@@ -1965,6 +1965,11 @@ export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "l
  * HTML ignores cache options and reuses a window-local instance, released after 10 seconds unused.
  */
 export interface WoxPreviewWebviewData {
+  /** UpdateResult only: execute once in the current inline HTML document. Never combine with html/url. */
+  updateMode?: "script"
+  /** JavaScript source for script mode. Serialize embedded state with JSON.stringify. */
+  script?: string
+
   url?: string
   html?: string
   injectCss?: string

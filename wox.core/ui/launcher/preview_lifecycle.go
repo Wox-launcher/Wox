@@ -15,6 +15,11 @@ func (a *App) reconcileSelectedPreview() {
 func (a *App) reconcileSelectedPreviewOnUI() {
 	a.reconcilePreviewVisibility()
 	result, preview, visible := a.selectedPreviewForLifecycle()
+	if a.window != nil {
+		key, html := a.inlineWebViewScriptTarget(preview, visible)
+		a.window.RetainWebViewScriptTarget(key, html)
+	}
+
 	if !visible {
 		a.releasePinnedPreviewImage()
 		a.cancelScheduledFilePreview()
@@ -172,4 +177,20 @@ func (a *App) keepChatPreview(keep string) bool {
 		return true
 	}
 	return keep == "remote" && (a.layout.ChatMode || a.chatFullscreen)
+}
+
+// inlineWebViewScriptTarget resolves core's remote preview envelope before checking
+// document identity. Treating that envelope as a different page reloads the initial
+// HTML on every ordinary result update and discards accepted scripts.
+func (a *App) inlineWebViewScriptTarget(preview queryPreview, visible bool) (string, string) {
+	if !visible || a.resultsQueryID != a.query.QueryID {
+		return "", ""
+	}
+	preview = a.resolvePreview(preview)
+	if preview.PreviewType == "webview" {
+		if data, err := decodeWebViewPreview(preview.PreviewData); err == nil && data.URL == "" && data.HTML != "" {
+			return a.webViewDocumentKey(), data.HTML
+		}
+	}
+	return "", ""
 }

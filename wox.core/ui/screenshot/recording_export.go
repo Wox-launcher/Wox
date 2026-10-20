@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"wox/util/ffmpeg"
 )
 
 type recordingExportFormat uint8
@@ -44,7 +46,7 @@ func recordingExportPath(path string, format recordingExportFormat) string {
 
 // convertRecording encodes looping animations from the finalized preview without touching its MP4.
 func convertRecording(ctx context.Context, source, target string, format recordingExportFormat) error {
-	ffmpeg, err := recordingFFmpegPath()
+	ffmpegPath, err := recordingFFmpegPath()
 	if err != nil {
 		return err
 	}
@@ -58,9 +60,11 @@ func convertRecording(ctx context.Context, source, target string, format recordi
 	default:
 		return fmt.Errorf("unsupported recording conversion format: %d", format)
 	}
-	output, err := exec.CommandContext(ctx, ffmpeg, append(args, target)...).CombinedOutput()
+	command := exec.CommandContext(ctx, ffmpegPath, append(args, target)...)
+	ffmpeg.Prepare(command)
+	output, err := command.CombinedOutput()
 	if err != nil && format == recordingExportWebP && strings.Contains(string(output), "Unknown encoder") && ctx.Err() == nil {
-		return convertRecordingWebPFallback(ctx, ffmpeg, source, target)
+		return convertRecordingWebPFallback(ctx, ffmpegPath, source, target)
 	}
 	if err != nil {
 		return fmt.Errorf("export %s recording: %w: %s", format.extension(), err, strings.TrimSpace(string(output)))
@@ -86,8 +90,8 @@ func recordingWebPEncoderPath(ffmpeg string) (string, error) {
 
 // convertRecordingWebPFallback supports minimal FFmpeg builds using libwebp's standalone encoder.
 // Frames are spooled to disk so decoded images do not accumulate in Wox's memory.
-func convertRecordingWebPFallback(ctx context.Context, ffmpeg, source, target string) error {
-	encoder, err := recordingWebPEncoderPath(ffmpeg)
+func convertRecordingWebPFallback(ctx context.Context, ffmpegPath, source, target string) error {
+	encoder, err := recordingWebPEncoderPath(ffmpegPath)
 	if err != nil {
 		return err
 	}
@@ -96,8 +100,10 @@ func convertRecordingWebPFallback(ctx context.Context, ffmpeg, source, target st
 		return err
 	}
 	defer os.RemoveAll(dir)
-	output, err := exec.CommandContext(ctx, ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", source,
-		"-an", "-vf", "fps=30", filepath.Join(dir, "frame-%08d.png")).CombinedOutput()
+	command := exec.CommandContext(ctx, ffmpegPath, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", source,
+		"-an", "-vf", "fps=30", filepath.Join(dir, "frame-%08d.png"))
+	ffmpeg.Prepare(command)
+	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("decode WebP export frames: %w: %s", err, strings.TrimSpace(string(output)))
 	}
@@ -118,6 +124,7 @@ func convertRecordingWebPFallback(ctx context.Context, ffmpeg, source, target st
 		return err
 	}
 	cmd := exec.CommandContext(ctx, encoder, argumentPath)
+	ffmpeg.Prepare(cmd)
 	cmd.Dir = dir
 	output, err = cmd.CombinedOutput()
 	if err != nil {

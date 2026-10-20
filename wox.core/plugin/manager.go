@@ -4000,7 +4000,8 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 	}
 
 	// Translate preview properties if present
-	if result.Preview != nil {
+	_, scriptUpdate, _ := WebViewScriptUpdate(result.Preview)
+	if result.Preview != nil && !scriptUpdate {
 		preview := *result.Preview
 		if shouldHidePreviewForGlobalQuery(resultCache.Query, preview) {
 			preview = WoxPreview{}

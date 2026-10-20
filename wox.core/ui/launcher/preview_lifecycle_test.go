@@ -213,3 +213,36 @@ func TestPreviewPinFollowsSelectedSurface(t *testing.T) {
 		})
 	}
 }
+
+func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
+	const page = `{"html":"<p>initial state</p>"}`
+	for _, kind := range []string{"webview", "remote", "unresolved", "url", "hidden", "stale"} {
+		t.Run(kind, func(t *testing.T) {
+			preview := queryPreview{PreviewType: "webview", PreviewData: page}
+			app := &App{sessionID: "session", query: plainQuery{QueryID: "query"}, resultsQueryID: "query", selected: 0, results: []queryResult{{ID: "row"}}}
+			if kind == "remote" || kind == "unresolved" {
+				preview = queryPreview{PreviewType: "remote", PreviewData: "/preview?id=row"}
+				if kind == "remote" {
+					app.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: page}}
+				}
+			}
+			if kind == "url" {
+				preview.PreviewData = `{"url":"https://example.com"}`
+			}
+			if kind == "stale" {
+				app.query.QueryID = "next"
+			}
+			for revision := 0; revision < 3; revision++ {
+				app.results[0].Revision++
+				key, html := app.inlineWebViewScriptTarget(preview, kind != "hidden")
+				if kind == "webview" || kind == "remote" {
+					if key != app.webViewDocumentKey() || html != "<p>initial state</p>" {
+						t.Fatalf("lost target: %q %q", key, html)
+					}
+				} else if key != "" || html != "" {
+					t.Fatalf("retained invalid target: %q", key)
+				}
+			}
+		})
+	}
+}

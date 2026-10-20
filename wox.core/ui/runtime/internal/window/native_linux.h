@@ -7,6 +7,7 @@
 #include "native_renderer_stats.h"
 
 typedef struct WoxLinuxWindow WoxLinuxWindow;
+int32_t wox_linux_webview_evaluate(WoxLinuxWindow *target, const char *script, uint64_t callback);
 uintptr_t wox_linux_window_display(WoxLinuxWindow *window);
 uintptr_t wox_linux_window_handle(WoxLinuxWindow *window);
 

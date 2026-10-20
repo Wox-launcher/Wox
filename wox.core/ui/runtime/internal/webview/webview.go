@@ -20,6 +20,7 @@ var ErrUnavailable = errors.New("woxui: system WebView is unavailable")
 
 // Content describes one embedded browser document while Rect is controlled separately by layout.
 type Content struct {
+	DocumentKey   string
 	URL           string
 	HTML          string
 	InjectCSS     string
@@ -82,6 +83,7 @@ type Driver interface {
 
 // Controller owns the portable lifecycle around one platform WebView driver.
 type Controller struct {
+	scripts  scriptState
 	driver   Driver
 	dispatch func(func()) error
 	visible  atomic.Bool
@@ -164,7 +166,9 @@ func (c *Controller) Show(content Content, bounds Rect, scale float32) error {
 		} else if !normalized.CacheDisabled && normalized.CacheKey != "" {
 			c.backgroundSessions = true
 		}
+		normalized = c.prepareDocument(normalized)
 		if err := c.driver.Show(normalized, bounds, scale); err != nil {
+			c.invalidateScripts()
 			if !c.htmlVisible {
 				c.scheduleHTMLExpiry()
 			}
@@ -190,6 +194,7 @@ func (c *Controller) Hide() error {
 		if c.driver == nil {
 			return nil
 		}
+		c.invalidateScripts()
 		if err := c.driver.Hide(); err != nil {
 			return err
 		}
@@ -243,6 +248,7 @@ func (c *Controller) Reset() error {
 		if c.driver == nil {
 			return nil
 		}
+		c.invalidateScripts()
 		if err := c.driver.Reset(); err != nil {
 			return err
 		}
@@ -281,6 +287,7 @@ func (c *Controller) Reload() error {
 	if c == nil || c.driver == nil {
 		return ErrUnavailable
 	}
+	c.invalidateScripts()
 	return c.driver.Reload()
 }
 
@@ -334,6 +341,7 @@ func (c *Controller) Close() {
 	if err := c.call(func() error {
 		c.cancelHTMLExpiry()
 		if c.driver != nil {
+			c.invalidateScripts()
 			c.driver.Close()
 			c.driver = nil
 		}

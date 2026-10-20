@@ -182,3 +182,52 @@ func TestPublishedRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestResolveShimTarget prefers the executable named by an adjacent Scoop shim.
+func TestResolveShimTarget(t *testing.T) {
+	root := t.TempDir()
+	shimExe := filepath.Join(root, "ffmpeg.exe")
+	target := filepath.Join(root, "real", "ffmpeg.exe")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shimExe, []byte("shim"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(strings.TrimSuffix(shimExe, ".exe")+".shim", []byte("path = \""+target+"\"\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path, err := resolve("", "windows", "amd64", func(candidate string) (string, error) {
+		if candidate == "ffmpeg.exe" {
+			return shimExe, nil
+		}
+		return "", os.ErrNotExist
+	})
+	if err != nil || path != target {
+		t.Fatalf("shim target: %q %v", path, err)
+	}
+}
+
+// TestResolveKeepsShimWhenTargetIsMissing leaves discovery unchanged for a broken shim.
+func TestResolveKeepsShimWhenTargetIsMissing(t *testing.T) {
+	root := t.TempDir()
+	shimExe := filepath.Join(root, "ffmpeg.exe")
+	if err := os.WriteFile(shimExe, []byte("shim"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(strings.TrimSuffix(shimExe, ".exe")+".shim", []byte("path = \""+filepath.Join(root, "missing.exe")+"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path, err := resolve("", "windows", "amd64", func(candidate string) (string, error) {
+		if candidate == "ffmpeg.exe" {
+			return shimExe, nil
+		}
+		return "", os.ErrNotExist
+	})
+	if err != nil || path != shimExe {
+		t.Fatalf("missing shim target: %q %v", path, err)
+	}
+}

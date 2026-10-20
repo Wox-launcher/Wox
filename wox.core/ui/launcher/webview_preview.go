@@ -47,6 +47,13 @@ func decodeWebViewPreview(previewData string) (webViewPreviewData, error) {
 		if err := json.Unmarshal([]byte(trimmed), &data); err != nil {
 			return webViewPreviewData{}, err
 		}
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal([]byte(trimmed), &fields)
+		_, hasMode := fields["updateMode"]
+		_, hasScript := fields["script"]
+		if hasMode || hasScript {
+			return webViewPreviewData{}, errors.New("script updates are only valid in UpdateResult")
+		}
 		if strings.TrimSpace(data.URL) == "" && data.HTML == "" {
 			return webViewPreviewData{}, errors.New("preview requires a URL or HTML")
 		}
@@ -84,9 +91,10 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 		return webViewPreviewSemantics("loading", previewview.WebViewPreviewLoading(theme, width, height))
 	}
 	content := data.content()
+	content.DocumentKey = a.webViewDocumentKey()
 	content.CornerRadius = previewview.WebViewPreviewCornerRadius
 	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
-		if network.IsOffline() || a.webViewPreviewData != previewData || a.webViewPreviewError != "" {
+		if network.IsOffline() || a.webViewPreviewData != previewData || a.webViewPreviewError != "" || content.DocumentKey != a.webViewDocumentKey() {
 			return
 		}
 		a.syncWebViewActionHotkey()
@@ -504,4 +512,13 @@ func isWebViewPreviewURL(rawURL string) bool {
 		return false
 	}
 	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
+}
+
+// webViewDocumentKey scopes native inline documents to one query result.
+func (a *App) webViewDocumentKey() string {
+	if a.selected < 0 || a.selected >= len(a.results) {
+		return ""
+	}
+	key, _ := json.Marshal([]string{a.sessionID, a.resultsQueryID, a.results[a.selected].ID})
+	return string(key)
 }

@@ -450,6 +450,8 @@ typedef struct {
   WoxWebKitJavascriptResultGetJSValue javascript_result_get_js_value;
   WoxJSCValueToString jsc_value_to_string;
   WoxWebKitViewRunJavaScript run_javascript;
+ gpointer (*run_javascript_finish)(gpointer, gpointer, GError **);
+ void (*javascript_result_unref)(gpointer);
   bool initialized;
   bool available;
 } WoxWebKitRuntime;
@@ -491,6 +493,8 @@ static bool ensure_webkit(void) {
   wox_webkit.javascript_result_get_js_value = (WoxWebKitJavascriptResultGetJSValue)load_webkit_symbol("webkit_javascript_result_get_js_value");
   wox_webkit.jsc_value_to_string = (WoxJSCValueToString)load_webkit_symbol("jsc_value_to_string");
   wox_webkit.run_javascript = (WoxWebKitViewRunJavaScript)load_webkit_symbol("webkit_web_view_run_javascript");
+  wox_webkit.run_javascript_finish = (gpointer (*)(gpointer, gpointer, GError **))load_webkit_symbol("webkit_web_view_run_javascript_finish");
+  wox_webkit.javascript_result_unref = (void (*)(gpointer))load_webkit_symbol("webkit_javascript_result_unref");
   wox_webkit.available = wox_webkit.view_new != NULL && wox_webkit.load_uri != NULL && wox_webkit.load_html != NULL &&
                          wox_webkit.get_settings != NULL && wox_webkit.set_user_agent != NULL;
   if (!wox_webkit.available) {
@@ -6559,4 +6563,28 @@ int32_t wox_linux_test_edge_fade(uint8_t *pixels, int32_t size, float scale, flo
   glDeleteVertexArrays(1, &renderer.vertex_array);
   gtk_widget_destroy(host);
   return result;
+}
+
+extern void woxGoWebViewScriptResult(uint64_t, char *, char *);
+
+// Complete on the GTK thread without retaining the owning window.
+static void wox_script_finished(GObject *source, GAsyncResult *result, gpointer user_data) {
+  uint64_t callback = *(uint64_t *)user_data;
+  g_free(user_data);
+  GError *error = NULL;
+  gpointer value = wox_webkit.run_javascript_finish(source, result, &error);
+  gchar *text = value ? wox_webkit.jsc_value_to_string(wox_webkit.javascript_result_get_js_value(value)) : NULL;
+  woxGoWebViewScriptResult(callback, text, error ? error->message : NULL);
+  g_free(text);
+  if (value) wox_webkit.javascript_result_unref(value);
+  if (error) g_error_free(error);
+}
+
+int32_t wox_linux_webview_evaluate(WoxLinuxWindow *target, const char *script, uint64_t callback) {
+  if (!target || !target->active_web_view) return 1;
+  if (!wox_webkit.run_javascript || !wox_webkit.run_javascript_finish || !wox_webkit.javascript_result_unref || !wox_webkit.javascript_result_get_js_value || !wox_webkit.jsc_value_to_string) return -1;
+  uint64_t *handle = g_new(uint64_t, 1);
+  *handle = callback;
+  wox_webkit.run_javascript(target->active_web_view, script, NULL, (gpointer)wox_script_finished, handle);
+  return 0;
 }
