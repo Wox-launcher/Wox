@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wox Blog"
+  short_description: "Write bilingual Wox blog articles with illustrated covers"
+  default_prompt: "Use $wox-blog to write a practical Wox article in English and Chinese with a matching illustrated cover."

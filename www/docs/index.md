@@ -23,31 +23,9 @@ description: "A native, open-source Raycast / Alfred alternative for Windows, ma
     </figure>
   </section>
 
-  <section class="wox-section wox-section-compact">
-    <div class="wox-section-heading">
-      <h2>One place for the things you do every day.</h2>
-    </div>
-    <div class="wox-feature-grid">
-      <article class="wox-feature-card">
-        <h3>Find and open</h3>
-        <p>Type a name to open an app, a file, or a recent project.</p>
-      </article>
-      <article class="wox-feature-card">
-        <h3>Keep your hands on the keyboard</h3>
-        <p>Copy a result, reveal a file, or choose another command from the action panel.</p>
-      </article>
-      <article class="wox-feature-card">
-        <h3>Add the tools you need</h3>
-        <p>Install community plugins, or ask an AI agent to create one.</p>
-      </article>
-    </div>
-  </section>
-
   <SystemPluginCarousel />
 
   <ThemeShowcase />
-
-  <HomeQuotes />
 
   <section class="wox-section wox-split-section">
     <div>
@@ -60,6 +38,8 @@ description: "A native, open-source Raycast / Alfred alternative for Windows, ma
       <img src="/images/plugin_setting.png" alt="Plugin settings in Wox" loading="lazy" />
     </figure>
   </section>
+
+  <HomeQuotes />
 
   <section class="wox-section wox-closing">
     <h2>Try Wox on your desktop.</h2>

@@ -269,12 +269,6 @@ ${body}`;
 
 function renderEnglishIndex(releases) {
   const latest = releases[0];
-  const items = releases
-    .map(
-      (release) =>
-        `- [v${release.version}](./${release.version}) — ${release.dateLongEn} — ${release.highlight}`,
-    )
-    .join("\n");
   return `---
 title: "Changelog"
 description: ${JSON.stringify(`Wox release notes. Latest ${latest.tag} (${latest.dateShortEn}).`)}
@@ -285,21 +279,12 @@ lastUpdated: ${latest.date}
 
 # Changelog
 
-${items}
+${renderReleaseFeed(releases, false)}
 `;
 }
 
 function renderChineseIndex(releases, chineseByVersion) {
   const latest = releases[0];
-  const items = releases
-    .map((release) => {
-      const chineseRelease = chineseByVersion.get(release.version);
-      if (chineseRelease) {
-        return `- [v${release.version}](./${release.version}) — ${release.dateLongZh} — ${chineseRelease.highlight}`;
-      }
-      return `- [v${release.version}](/changelog/${release.version}) — ${release.dateLongZh} — ${release.highlight}`;
-    })
-    .join("\n");
   return `---
 title: "更新日志"
 description: ${JSON.stringify(`Wox 正式版更新记录。最新 ${latest.tag}（${latest.dateMonthZh}）。`)}
@@ -310,8 +295,62 @@ lastUpdated: ${latest.date}
 
 # 更新日志
 
-${items}
+${renderReleaseFeed(releases, true, chineseByVersion)}
 `;
+}
+
+/** Keep release content in Markdown so VitePress renders it into searchable static HTML. */
+function renderReleaseFeed(releases, chinese, chineseByVersion = new Map()) {
+  const cards = releases.map((release, index) => {
+    const translated = chineseByVersion.get(release.version);
+    const content = chinese ? translated || release : release;
+    const page = chinese && !translated ? `/changelog/${release.version}` : `./${release.version}`;
+    const id = `release-v${release.version.replaceAll(".", "-")}`;
+    const latest = index === 0 ? `<span class="release-badge">${chinese ? "最新版本" : "Latest"}</span>` : "";
+    const fallback = chinese && !translated ? "\n\n> 此版本暂无中文说明，以下为英文原文。" : "";
+    return `<section class="release-card" id="${id}" tabindex="-1" aria-labelledby="${id}-title">
+<header class="release-header">
+<div class="release-title-row">
+<h2 id="${id}-title"><a href="${page}">Wox ${release.tag}</a></h2>
+${latest}
+</div>
+<div class="release-meta">
+<time datetime="${release.date}">${chinese ? release.dateLongZh : release.dateLongEn}</time>
+<a href="https://github.com/Wox-launcher/Wox/releases/tag/${release.tag}">GitHub Release ↗</a>
+</div>
+</header>
+${fallback}
+
+${renderFeedMedia(`${content.highlight}\n\n${content.body}`, chinese)}
+
+</section>`;
+  });
+  return `<script setup>
+import ChangelogIndex from "../${chinese ? "../" : ""}.vitepress/theme/components/ChangelogIndex.vue";
+</script>
+
+<ChangelogIndex :versions='${JSON.stringify(releases.map((release) => release.version))}' :chinese="${chinese}">
+
+${cards.join("\n\n")}
+
+</ChangelogIndex>`;
+}
+
+/** Release feeds defer large media and render Markdown-linked MP4 files as playable videos. */
+function renderFeedMedia(markdown, chinese) {
+  return markdown.replace(/^([ \t]*)!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)[ \t]*$/gm, (_, indent, alt, url) => {
+    const escapedUrl = escapeHtmlAttribute(url);
+    const escapedAlt = escapeHtmlAttribute(alt);
+    if (/\.mp4(?:\?|$)/i.test(url)) {
+      const label = escapedAlt || (chinese ? "版本功能演示" : "Release feature demonstration");
+      return `${indent}<video src="${escapedUrl}" aria-label="${label}" controls playsinline preload="none"></video>`;
+    }
+    return `${indent}<img src="${escapedUrl}" alt="${escapedAlt}" loading="lazy" decoding="async" />`;
+  });
+}
+
+function escapeHtmlAttribute(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function writeIfChanged(filePath, content) {

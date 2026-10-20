@@ -62,3 +62,4 @@ manifests/
 # Generated compressed resource overlay
 wox.core/.build/assets/
 wox.core/.build/diagnostics/
+.build

@@ -57,6 +57,22 @@ html {
   display: none;
 }
 
+/* The full navigation no longer fits at VitePress's default tablet breakpoint. */
+@media (min-width: 768px) and (max-width: 959px) {
+  .VPNavBar .VPNavBarMenu,
+  .VPNavBar .VPNavBarExtra {
+    display: none;
+  }
+
+  .VPNavBar .VPNavBarHamburger {
+    display: flex;
+  }
+
+  .VPNav .VPNavScreen {
+    display: block;
+  }
+}
+
 @media (min-width: 960px) {
   body .VPSidebar.VPSidebar {
     top: var(--vp-nav-height);
@@ -300,15 +316,6 @@ html {
   margin-top: 100px;
 }
 
-.wox-section-compact {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 64px;
-  margin-top: 56px;
-  padding-top: 56px;
-  border-top: 1px solid var(--wox-home-border);
-}
-
 .wox-section h2 {
   margin: 0;
   padding: 0;
@@ -327,24 +334,6 @@ html {
   color: var(--wox-home-text-soft);
   font-size: 16px;
   line-height: 1.7;
-}
-
-.wox-feature-grid {
-  display: grid;
-  gap: 28px;
-  padding-left: 40px;
-  border-left: 1px solid var(--wox-home-border);
-}
-
-.wox-feature-card h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.wox-feature-card p {
-  margin: 8px 0 0;
 }
 
 .wox-home-label {
@@ -465,19 +454,9 @@ html {
     margin-top: 64px;
   }
 
-  .wox-section-compact,
   .wox-split-section {
     grid-template-columns: 1fr;
     gap: 28px;
-  }
-
-  .wox-section-compact {
-    padding-top: 32px;
-  }
-
-  .wox-feature-grid {
-    padding-left: 0;
-    border-left: 0;
   }
 
   .wox-quotes-grid {

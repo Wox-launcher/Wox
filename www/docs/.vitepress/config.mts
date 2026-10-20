@@ -22,6 +22,7 @@ export default defineConfig({
   },
   sitemap: {
     hostname: "https://www.woxlauncher.com",
+    transformItems: (items) => items.filter((item) => !/^(?:zh\/)?compare\/(?:index\.html)?$/.test(item.url)),
   },
   transformPageData(pageData) {
     applySeo(pageData);
@@ -54,7 +55,6 @@ export default defineConfig({
         ],
         sidebar: {
           "/guide/": englishGuideSidebar(),
-          "/compare/": englishGuideSidebar(),
           "/features/": englishGuideSidebar(),
         },
         footer: {
@@ -81,7 +81,6 @@ export default defineConfig({
         ],
         sidebar: {
           "/zh/guide/": chineseGuideSidebar(),
-          "/zh/compare/": chineseGuideSidebar(),
           "/zh/features/": chineseGuideSidebar(),
         },
         footer: {
@@ -118,9 +117,6 @@ export default defineConfig({
   themeConfig: {
     logo: "/logo.png",
     socialLinks: [{ icon: "github", link: "https://github.com/Wox-launcher/Wox" }],
-    search: {
-      provider: "local",
-    },
   },
 });
 
@@ -132,7 +128,7 @@ function englishGuideSidebar() {
         { text: "Introduction", link: "/guide/introduction" },
         { text: "Installation", link: "/guide/installation" },
         { text: "FAQ", link: "/guide/faq" },
-        { text: "Compare", link: "/compare/" },
+        { text: "Rediscover Wox v2", link: "/blog/rediscover-wox-v2" },
       ],
     },
     {
@@ -206,7 +202,7 @@ function chineseGuideSidebar() {
         { text: "简介", link: "/zh/guide/introduction" },
         { text: "安装", link: "/zh/guide/installation" },
         { text: "常见问题", link: "/zh/guide/faq" },
-        { text: "对比", link: "/zh/compare/" },
+        { text: "重新认识 Wox v2", link: "/zh/blog/rediscover-wox-v2" },
       ],
     },
     {
@@ -274,5 +270,5 @@ function chineseGuideSidebar() {
 
 function keepsGuideChrome(relativePath: string): boolean {
   const pagePath = relativePath.startsWith("zh/") ? relativePath.slice(3) : relativePath;
-  return pagePath.startsWith("guide/") || pagePath.startsWith("compare/") || pagePath.startsWith("features/");
+  return pagePath.startsWith("guide/") || pagePath.startsWith("features/");
 }

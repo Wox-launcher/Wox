@@ -1,25 +1,36 @@
 ---
-title: "Did You Know: Wox Can Bring Back a Launchpad-Style App Grid"
-description: Use the App plugin's Launchpad command to browse installed apps in a familiar icon grid, especially on macOS Tahoe.
+title: Browse Your Apps in a Launchpad-Style Grid
+description: Use app launchpad to browse installed apps and open them by their familiar icons.
 date: 2026-05-16
+category: workspace
+cover: /images/blog/app-launchpad.webp
+coverAlt: A tidy grid of flat app icons
 ---
 
-# Did You Know: Wox Can Bring Back a Launchpad-Style App Grid
+# Browse Your Apps in a Launchpad-Style Grid
 
-macOS Tahoe changes the old Launchpad habit. If you still prefer a visual app grid over a search-first app list, Wox can give you a similar flow through the built-in App plugin.
+Sometimes you remember an app's icon but cannot recall its name. It might be an image tool you only use occasionally: you know you installed it, but you are not sure what to type. Browsing familiar icons can be more useful than guessing names.
 
-Open Wox and run:
+Wox's built-in App plugin includes a Launchpad-style grid. Open Wox and enter:
 
 ```text
 app launchpad
 ```
 
-The App plugin switches to a grid layout for this command, so installed applications appear as large icons with names underneath. It feels closer to the classic macOS Launchpad pattern: scan the grid, recognize the app by its icon, then open it.
+Apps appear as large icons with their names underneath. Find the icon you recognize, select the app, and open it.
 
 ![Wox App Launchpad grid](/images/did-you-know-wox-app-launchpad.png)
 
-This is useful when you know what an app looks like but do not want to type its name. It also works well after a fresh setup, when you are still rediscovering which tools are installed.
+Use this view when you want to browse what is available. When you already know which app you need, typing its name into Wox is usually more direct than opening the grid first.
 
-The normal Wox app search is still there for fast typed launches. `app launchpad` is intentionally separate: the regular app query stays dense and search-oriented, while Launchpad mode gives you a calmer visual grid for browsing.
+## Open the grid with a shortcut
 
-For a faster shortcut, bind a Query Hotkey to `app launchpad`. Then one keyboard shortcut opens the app grid directly, giving macOS Tahoe users a familiar Launchpad-like entry point without leaving Wox.
+If you often find apps by their icons, save the query as a shortcut:
+
+1. Open **Settings → General → Query Hotkeys** and add an entry.
+2. Choose the **Normal Query** preset and set the query to `app launchpad`.
+3. Record an unused shortcut and save.
+
+Pressing it now opens Wox directly in the app grid. Normal Query is the appropriate preset here because you still need to browse and choose an app.
+
+The grid shows entries indexed by the App plugin that are suitable for this view, rather than a complete inventory of installed software. Entries without a usable icon, for example, may be absent. If an app is missing from the grid, return to the regular query and try searching by name.
