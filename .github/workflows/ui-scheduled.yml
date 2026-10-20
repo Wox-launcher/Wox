@@ -87,7 +87,7 @@ jobs:
           go-version-file: wox.core/go.mod
           cache: false
       # Host binaries are gitignored and embedded into the smoke build, so CI
-      # must produce python-host.pyz and node-host.js before make smoke.
+      # must produce python-host.pyz and node-host.cjs before make smoke.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:

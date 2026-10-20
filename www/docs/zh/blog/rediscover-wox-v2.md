@@ -9,7 +9,7 @@ coverAlt: 绿色手写 Wox v1 图标通过箭头过渡到白底黑色 W 的 Wox 
 
 # 重新认识 Wox v2
 
-十三年前，我在 V2EX 发了一个帖子，介绍自己做的小工具 [WinAlfred](https://v2ex.com/t/93922)。当时只是想在 Windows 上用到类似 Alfred 的启动器：按一个快捷键，输入几个字母，就能打开应用，不用再翻开始菜单。
+十三年前，我（[qianlifeng](https://github.com/qianlifeng)）在 V2EX 发了一个帖子，介绍自己做的小工具 [WinAlfred](https://v2ex.com/t/93922)。当时只是想在 Windows 上用到类似 Alfred 的启动器：按一个快捷键，输入几个字母，就能打开应用，不用再翻开始菜单。
 
 后来，这个工具有了一个新名字：Wox。
 

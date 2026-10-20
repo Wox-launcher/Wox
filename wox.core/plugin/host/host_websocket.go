@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -25,7 +26,7 @@ type WebsocketHost struct {
 	ws             *util.WebsocketClient
 	host           plugin.Host
 	requestMap     *util.HashMap[string, chan JsonRpcResponse]
-	hostProcess    *os.Process
+	hostProcess    *hostProcess
 	statusLock     sync.RWMutex
 	lifecycle      sync.Mutex
 	offlineRelease func()
@@ -104,7 +105,8 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	args = append(args, executableArgs...)
 	args = append(args, entry, fmt.Sprintf("%d", port), util.GetLocation().GetLogHostsDirectory(), fmt.Sprintf("%d", os.Getpid()))
 
-	cmd, err := shell.RunWithEnvLifetimeBound(ctx, executablePath, envs, args...)
+	stderr := &hostStderr{}
+	cmd, err := shell.RunWithEnvLifetimeBoundOutput(ctx, executablePath, envs, util.GetLogger().GetWriter(), io.MultiWriter(util.GetLogger().GetWriter(), stderr), args...)
 	if err != nil {
 		startErr := fmt.Errorf("failed to start host process with %s: %w", executablePath, err)
 		w.setStartState(executablePath, startErr.Error())
@@ -118,20 +120,31 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	}()
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> host pid: %d", w.getHostName(ctx), cmd.Process.Pid))
 
-	time.Sleep(time.Second) // wait for host to start
-	if ctx.Err() != nil {
-		w.terminateHostProcess(ctx, cmd.Process)
-		return network.ErrOffline
-	}
-	if connectErr := w.startWebsocketServer(ctx, port); connectErr != nil {
-		w.terminateHostProcess(ctx, cmd.Process)
+	// Keep this context alive with the host: WebsocketClient uses it for the connected transport too.
+	hostCtx, cancelHost := context.WithCancelCause(ctx)
+	process := watchHostProcess(cmd, stderr, cancelHost)
+	if connectErr := w.startWebsocketServer(hostCtx, port); connectErr != nil {
+		// Snapshot the cause before terminating an otherwise live host on connection timeout.
 		startErr := fmt.Errorf("host process started but websocket connection failed: %w", connectErr)
+		select {
+		case <-process.done:
+			startErr = process.exitError()
+		default:
+			if detail := stderr.detail(); detail != "" {
+				startErr = fmt.Errorf("%w: %s", startErr, detail)
+			}
+		}
+		cancelHost(startErr)
+		if client := w.websocketClient(); client != nil {
+			client.Close(ctx)
+		}
+		w.terminateHostProcess(ctx, process)
 		w.setStartState(executablePath, startErr.Error())
 		return startErr
 	}
 
 	w.statusLock.Lock()
-	w.hostProcess = cmd.Process
+	w.hostProcess = process
 	started = true
 	w.offlineRelease = func() { stopOffline(); release() }
 	w.statusLock.Unlock()
@@ -169,24 +182,27 @@ func (w *WebsocketHost) ProcessID() int {
 	if w.hostProcess == nil {
 		return 0
 	}
-	return w.hostProcess.Pid
+	return w.hostProcess.cmd.Process.Pid
 }
 
 // terminateHostProcess kills a host and waits for Windows to release its file handles.
-func (w *WebsocketHost) terminateHostProcess(ctx context.Context, process *os.Process) {
+func (w *WebsocketHost) terminateHostProcess(ctx context.Context, process *hostProcess) {
 	if process == nil {
 		return
 	}
 
-	pid := process.Pid
+	select {
+	case <-process.done:
+		return
+	default:
+	}
+	pid := process.cmd.Process.Pid
 	// Kill the host tree, not only the host. A Python plugin that shells out to uv leaves
 	// uv.exe behind if we only TerminateProcess the interpreter.
 	shell.TerminateProcessTree(pid)
 	util.GetLogger().Info(ctx, fmt.Sprintf("<%s> killed host process tree(%d)", w.getHostName(ctx), pid))
 
-	if _, waitErr := process.Wait(); waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
-		util.GetLogger().Error(ctx, fmt.Sprintf("<%s> failed waiting for host process(%d) to exit: %s", w.getHostName(ctx), pid, waitErr))
-	}
+	<-process.done
 }
 
 func (w *WebsocketHost) IsHostStarted(ctx context.Context) bool {

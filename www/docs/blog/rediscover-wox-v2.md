@@ -9,7 +9,7 @@ coverAlt: The green handwritten Wox v1 icon transitioning to the white and black
 
 # Rediscover Wox v2
 
-Thirteen years ago, I posted a small tool called [WinAlfred on V2EX](https://v2ex.com/t/93922). I wanted something like Alfred on Windows: press a shortcut, type a few letters, and open an app without searching through the Start menu.
+Thirteen years ago, I ([qianlifeng](https://github.com/qianlifeng)) posted a small tool called [WinAlfred on V2EX](https://v2ex.com/t/93922). I wanted something like Alfred on Windows: press a shortcut, type a few letters, and open an app without searching through the Start menu.
 
 That tool eventually became Wox.
 

@@ -39,5 +39,7 @@ install: sdk clean
 build: install
 	$(PNPM) run build
 	mkdir -p $(HOSTS_DIR)
-	cp dist/index.js $(HOSTS_DIR)/node-host.js
+	# Explicit CommonJS prevents an ancestor package.json from changing the host's module type.
+	rm -f $(HOSTS_DIR)/node-host.js
+	cp dist/index.js $(HOSTS_DIR)/node-host.cjs
 	rm -rf dist/

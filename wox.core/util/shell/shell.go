@@ -3,6 +3,7 @@ package shell
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,15 +38,21 @@ func BuildCommandContext(ctx context.Context, name string, envs []string, arg ..
 // RunWithEnvLifetimeBound starts a command the same way RunWithEnv does, then binds its process
 // tree to Wox's lifetime so helpers it later spawns cannot outlive the app.
 func RunWithEnvLifetimeBound(ctx context.Context, name string, envs []string, arg ...string) (*exec.Cmd, error) {
+	return RunWithEnvLifetimeBoundOutput(ctx, name, envs, util.GetLogger().GetWriter(), util.GetLogger().GetWriter(), arg...)
+}
+
+// RunWithEnvLifetimeBoundOutput lets callers capture diagnostics while preserving process lifetime binding.
+func RunWithEnvLifetimeBoundOutput(ctx context.Context, name string, envs []string, stdout, stderr io.Writer, arg ...string) (*exec.Cmd, error) {
 	cmd := BuildCommand(name, envs, arg...)
-	cmd.Stdout = util.GetLogger().GetWriter()
-	cmd.Stderr = util.GetLogger().GetWriter()
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	cmd.Dir = getWorkingDirectory(name)
 	PrepareLifetimeBoundCmd(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 	if err := AdoptLifetimeBoundCmd(ctx, cmd); err != nil {
+		_ = cmd.Wait()
 		return nil, err
 	}
 	return cmd, nil
