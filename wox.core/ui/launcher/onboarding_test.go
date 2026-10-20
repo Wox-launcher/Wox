@@ -664,6 +664,79 @@ func TestOnboardingSystemThemesUsesBundledOrder(t *testing.T) {
 	}
 }
 
+// TestOnboardingThemeSelectionFollowsCurrentSetting covers a catalog cached before
+// migration and navigation without clicking a card, including returning to the page.
+func TestOnboardingThemeSelectionFollowsCurrentSetting(t *testing.T) {
+	catalog := []themeSettingsTheme{
+		{ID: onboardingGlassID, Name: "Wox Glass"},
+		{ID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03", Name: "Wox Dark"},
+		{ID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", Name: "Wox Light"},
+		{ID: "532238bc-6eda-4011-a080-c365b67486fc", Name: "Wox Auto", IsAuto: true,
+			LightThemeID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", DarkThemeID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03"},
+	}
+	for _, theme := range append(catalog, themeSettingsTheme{ID: "custom", Name: "Custom"}) {
+		for _, imported := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/imported=%t", theme.Name, imported), func(t *testing.T) {
+				services := &migrationSettingWriter{}
+				app := &App{
+					services:        services,
+					generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+					themeSettings:   newThemeSettingsController(CommonDeps{}),
+					hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+				}
+				app.generalSettings.Update(func(data *settingsData) { data.ThemeID = onboardingGlassID })
+				app.themeSettings.SetThemes(catalog)
+				app.loadOnboardingThemes()
+				if imported {
+					// Raycast appearance is imported as a general ThemeId setting.
+					if err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{Key: "ThemeId", Value: theme.ID}); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					app.generalSettings.Update(func(data *settingsData) { data.ThemeID = theme.ID })
+				}
+				assertSelection := func() {
+					t.Helper()
+					items := onboardingThemeItems(app.themeSettings.Snapshot().Themes, app.generalSettings.Snapshot().Data.ThemeID)
+					var selected []string
+					for _, item := range items {
+						if item.Selected {
+							selected = append(selected, item.ID)
+						}
+					}
+					var want []string
+					if theme.ID != "custom" {
+						want = []string{theme.ID}
+					}
+					if !reflect.DeepEqual(selected, want) || app.currentThemeID() != theme.ID {
+						t.Fatalf("selected = %v, active = %s; want %v, %s", selected, app.currentThemeID(), want, theme.ID)
+					}
+				}
+				for index, step := range app.onboardingSteps() {
+					if step.ID != "themeInstall" {
+						continue
+					}
+					app.onboardingStep = index
+					app.selectOnboardingStep(index)
+					assertSelection()
+					app.selectOnboardingStep(index + 1)
+					if app.onboardingStep != index+1 {
+						t.Fatal("Continue did not advance from the theme page")
+					}
+					assertSelection()
+					app.selectOnboardingStep(index)
+					assertSelection()
+					if imported && services.values["ThemeId"] != theme.ID {
+						t.Fatalf("persisted theme = %s, want %s", services.values["ThemeId"], theme.ID)
+					}
+					return
+				}
+				t.Fatal("theme onboarding step not found")
+			})
+		}
+	}
+}
+
 func TestOnboardingUsesBundledGlassPalette(t *testing.T) {
 	data, err := resource.ThemeFS.ReadFile("themes/glass.json")
 	if err != nil {

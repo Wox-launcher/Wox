@@ -9,15 +9,17 @@ import (
 	"time"
 
 	"wox/common"
+	"wox/plugin"
 	"wox/plugin/thirdparty/migrate"
 	"wox/plugin/thirdparty/raycast/brand"
+	"wox/plugin/thirdparty/raycast/extension"
 	"wox/setting"
 	"wox/util"
 	"wox/util/shell"
 )
 
 func init() {
-	// Registration only. The Raycast extension host is a later phase and is not registered here.
+	plugin.RegisterThirdParty(extension.Layer{})
 	migrate.Register(migrationSource{})
 }
 
@@ -42,6 +44,9 @@ type installation struct {
 	cancel     context.CancelFunc
 	data       *mappedExport
 	limits     Limits
+	// extensionRoot is normally resolved from the user's home; tests supply an isolated installation.
+	extensionRoot string
+	sessionCtx    context.Context
 }
 
 func (i *installation) ID() string   { return "raycast" }
@@ -65,8 +70,18 @@ func (i *installation) Hotkey() string {
 	return ""
 }
 
-func (i *installation) Plugins(context.Context) ([]migrate.Plugin, error) {
-	return nil, nil
+func (i *installation) Plugins(ctx context.Context) ([]migrate.Plugin, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.data == nil {
+		return nil, &ExportError{Code: "export_required"}
+	}
+	candidates, err := i.localExtensions(ctx, i.data.extensions)
+	var plugins []migrate.Plugin
+	for _, candidate := range candidates {
+		plugins = append(plugins, candidate.Plugin)
+	}
+	return plugins, err
 }
 
 func (i *installation) Generation() uint64 {
@@ -89,6 +104,7 @@ func (i *installation) Unlock(ctx context.Context, path, passphrase string) erro
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	i.cancel = cancel
+	i.sessionCtx = ctx
 	i.data = nil
 	limits := i.limits
 	i.mu.Unlock()
@@ -151,13 +167,27 @@ func (i *installation) SetKeepKeyword(itemID string, keep bool) bool {
 	return false
 }
 
-func (i *installation) Catalog(context.Context) ([]migrate.Category, error) {
+func (i *installation) Catalog(ctx context.Context) ([]migrate.Category, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.data == nil {
 		return nil, &ExportError{Code: "export_required"}
 	}
-	return catalogFrom(*i.data), nil
+	candidates, err := i.localExtensions(ctx, i.data.extensions)
+	if err != nil {
+		return nil, err
+	}
+	categories := catalogFrom(*i.data)
+	if len(candidates) > 0 {
+		items := make([]migrate.Item, 0, len(candidates))
+		for _, candidate := range candidates {
+			items = append(items, migrate.Item{ID: "plugin:" + candidate.ID, Kind: migrate.ItemKindPlugin,
+				Title: candidate.Name, Icon: candidate.Icon, DetailKey: candidate.Detail,
+				Selectable: candidate.Selectable, Status: candidate.Status})
+		}
+		categories = append(categories, migrate.Category{ID: migrate.CategoryPlugins, Items: items})
+	}
+	return categories, nil
 }
 
 // CloseRunning quits Raycast so the global shortcuts being imported can be registered.
@@ -166,17 +196,33 @@ func (i *installation) CloseRunning(ctx context.Context) error {
 	return shell.CloseNamedProcesses(ctx, "Raycast.exe", "Raycast.UIAccess.exe", "Raycast")
 }
 
-func (i *installation) Import(_ context.Context, itemIDs []string) (migrate.ImportResult, error) {
+func (i *installation) Import(ctx context.Context, itemIDs []string) (migrate.ImportResult, error) {
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.data == nil {
+		i.mu.Unlock()
 		return migrate.ImportResult{}, &ExportError{Code: "export_required"}
 	}
-	return importSelected(*i.data, itemIDs), nil
+	result := importSelected(*i.data, itemIDs)
+	refs := append([]ExportExtension(nil), i.data.extensions...)
+	sessionCtx := i.sessionCtx
+	i.mu.Unlock()
+	// Disk copies must not hold the session lock: Reset needs to cancel an in-flight import.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if sessionCtx != nil {
+		stop := context.AfterFunc(sessionCtx, cancel)
+		defer stop()
+		if sessionCtx.Err() != nil {
+			cancel()
+		}
+	}
+	results, err := i.importExtensions(ctx, refs, itemIDs)
+	result.Plugins = results
+	return result, err
 }
 
 func mappedCount(mapped mappedExport) int {
-	return len(mapped.hotkeys) + len(mapped.shortcuts) + len(mapped.queries) + len(mapped.general) + len(mapped.fileSearch) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.notes) + len(mapped.clipboard) + len(mapped.clipboardSettings)
+	return len(mapped.hotkeys) + len(mapped.shortcuts) + len(mapped.queries) + len(mapped.general) + len(mapped.fileSearch) + len(mapped.quicklinks) + len(mapped.snippets) + len(mapped.notes) + len(mapped.clipboard) + len(mapped.clipboardSettings) + len(mapped.extensions)
 }
 
 func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult {

@@ -1,0 +1,12 @@
+{
+  "name": "wox-example",
+  "title": "Raycast Example",
+  "description": "Local compatibility example using existing Wox capabilities",
+  "author": "wox",
+  "commands": [
+    { "name": "list", "title": "Raycast Example List", "mode": "view" },
+    { "name": "grid", "title": "Raycast Example Grid", "mode": "view" },
+    { "name": "form", "title": "Raycast Example Form", "mode": "view" },
+    { "name": "copy", "title": "Raycast Example Copy", "mode": "no-view" }
+  ]
+}

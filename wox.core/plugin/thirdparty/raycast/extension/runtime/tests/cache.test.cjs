@@ -1,0 +1,34 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { createCache } = require('../src/cache.cjs');
+
+test('cache subscribers share namespace snapshots, unsubscribe and observe persisted mutations', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'wox-cache-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const Cache = createCache(directory);
+  const reader = new Cache(), writer = new Cache(), isolated = new Cache({ namespace: 'other' });
+  const events = [];
+  const subscribe = reader.subscribe;
+  const unsubscribe = subscribe((key, value) => events.push([key, value, reader.get(key)]));
+  writer.set('ports', 'one');
+  isolated.set('ports', 'separate');
+  assert.deepEqual(events, [['ports', 'one', 'one']]);
+  assert.equal(writer.remove('missing'), false);
+  assert.equal(writer.remove('ports'), true);
+  assert.deepEqual(events.at(-1), ['ports', undefined, undefined]);
+  writer.set('ports', 'two');
+  writer.clear({ notifySubscribers: false });
+  assert.equal(events.length, 3);
+  assert.equal(reader.isEmpty, true);
+  writer.clear();
+  assert.deepEqual(events.at(-1), [undefined, undefined, undefined]);
+  unsubscribe();
+  unsubscribe();
+  writer.set('ports', 'saved');
+  assert.equal(events.length, 4);
+  assert.equal(new (createCache(directory))().get('ports'), 'saved');
+  assert.equal(isolated.get('ports'), 'separate');
+});

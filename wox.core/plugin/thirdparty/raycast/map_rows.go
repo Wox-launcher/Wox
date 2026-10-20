@@ -124,7 +124,7 @@ func (s woxSnapshot) emojiTrigger() string {
 }
 
 func buildMapped(payload Payload, current woxSnapshot) mappedExport {
-	mapped := mappedExport{}
+	mapped := mappedExport{extensions: payload.NodeExtensions.Extensions}
 	mapped.general = append(generalSettings(payload.Settings.General, current), mapOverlapSettings(payload, current)...)
 	mapped.fileSearch, mapped.fileRoots, mapped.fileIgnore, mapped.contentRoots = mapFileSearchRows(payload, current)
 	mapped.quicklinks = mapQuicklinkRows(payload, current)

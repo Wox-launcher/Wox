@@ -6,6 +6,9 @@ import (
 
 // Payload is the decrypted Raycast 2.x document. Unknown fields are ignored.
 type Payload struct {
+	NodeExtensions struct {
+		Extensions []ExportExtension `json:"extensions"`
+	} `json:"nodeExtensions"`
 	Settings struct {
 		General            map[string]json.RawMessage `json:"general"`
 		Commands           []Command                  `json:"commands"`
@@ -30,6 +33,15 @@ type Payload struct {
 	MCPServers struct {
 		Servers []MCPServer `json:"servers"`
 	} `json:"mcpServers"`
+}
+
+// ExportExtension identifies code installed locally; the export itself contains no executable files.
+type ExportExtension struct {
+	UUID    string `json:"uuid"`
+	Name    string `json:"name"`
+	Author  string `json:"author"`
+	Owner   string `json:"owner"`
+	Version string `json:"version"`
 }
 
 // EmojiEntry is one symbol the user has used. CustomKeywords are extra search words.
@@ -125,7 +137,7 @@ func ParsePayload(raw []byte, limits Limits) (Payload, error) {
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return Payload{}, exportErr(codeCorrupt)
 	}
-	entries := len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries) + len(payload.Notes.Notes)
+	entries := len(payload.NodeExtensions.Extensions) + len(payload.Settings.Commands) + len(payload.Snippets.Snippets) + len(payload.Quicklinks.Quicklinks) + len(payload.ClipboardHistory.Entries) + len(payload.Notes.Notes)
 	if limits.MaxEntries > 0 && entries > limits.MaxEntries {
 		return Payload{}, exportErr(codeLimit)
 	}

@@ -59,14 +59,13 @@ func mapAppearance(general map[string]json.RawMessage, current woxSnapshot) []ma
 	return []mappedSetting{row}
 }
 
+// appearanceTheme imports explicit colors only; automatic appearance leaves the Wox theme unchanged.
 func appearanceTheme(raw string) (themeID, detailKey string, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "dark":
-		return setting.DefaultDarkThemeId, "theme_dark", true
+		return setting.DefaultThemeId, "theme_dark", true
 	case "light":
 		return setting.DefaultLightThemeId, "theme_light", true
-	case "auto", "system":
-		return setting.DefaultAutoThemeId, "theme_auto", true
 	default:
 		return "", "", false
 	}

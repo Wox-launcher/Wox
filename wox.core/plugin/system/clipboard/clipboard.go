@@ -206,7 +206,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		Icon:          clipboardIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"cb",
+			"cb", "clipboard",
 		},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDisableAutoCommandHint},

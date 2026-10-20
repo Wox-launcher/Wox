@@ -34,14 +34,16 @@ func TestMapOverlapSettingsFromExport(t *testing.T) {
 	}
 	payload.Emoji.Emojis = []EmojiEntry{{Symbol: "😀", CustomKeywords: []string{"grin"}}}
 	payload.MCPServers.Servers = []MCPServer{{Title: "ddg", Type: "stdio", Command: "uvx", Arguments: []string{"duckduckgo-mcp-server"}}}
-	mapped := buildMapped(payload, defaultSnapshot())
+	current := defaultSnapshot()
+	current.ThemeID = setting.DefaultLightThemeId
+	mapped := buildMapped(payload, current)
 	got := map[string]mappedSetting{}
 	for _, row := range append(append([]mappedSetting{}, mapped.general...), mapped.clipboardSettings...) {
 		if row.selectable {
 			got[row.id] = row
 		}
 	}
-	if row := got["setting:theme"]; !row.selectable || row.value != setting.DefaultDarkThemeId || row.detailKey != "theme_dark" {
+	if row := got["setting:theme"]; !row.selectable || row.value != setting.DefaultThemeId || row.detailKey != "theme_dark" {
 		t.Fatalf("theme = %+v", row)
 	}
 	if row := got["setting:ui_density"]; !row.selectable || row.value != string(setting.UiDensityCompact) {
@@ -90,6 +92,43 @@ func TestMapOverlapSettingsFromExport(t *testing.T) {
 				t.Fatalf("catalog = %+v", item)
 			}
 		}
+	}
+}
+
+// TestAppearanceImport verifies the written theme and skips an already active target.
+func TestAppearanceImport(t *testing.T) {
+	for _, tc := range []struct {
+		appearance string
+		themeID    string
+	}{
+		{"dark", setting.DefaultThemeId},
+		{"light", setting.DefaultLightThemeId},
+		{"auto", ""},
+		{"system", ""},
+		{"unknown", ""},
+	} {
+		t.Run(tc.appearance, func(t *testing.T) {
+			raw, _ := json.Marshal(tc.appearance)
+			payload := Payload{}
+			payload.Settings.General = map[string]json.RawMessage{"appearance": raw}
+			current := defaultSnapshot()
+			current.ThemeID = setting.DefaultDarkThemeId
+			result := importSelected(buildMapped(payload, current), []string{"setting:theme"})
+			if tc.themeID == "" {
+				if len(result.Settings) != 0 {
+					t.Fatalf("unexpected theme override: %+v", result.Settings)
+				}
+				return
+			}
+			if len(result.Settings) != 1 || result.Settings[0].Key != "ThemeId" || result.Settings[0].Value != tc.themeID {
+				t.Fatalf("writes = %+v, want ThemeId=%s", result.Settings, tc.themeID)
+			}
+			current.ThemeID = tc.themeID
+			result = importSelected(buildMapped(payload, current), []string{"setting:theme"})
+			if len(result.Settings) != 0 {
+				t.Fatalf("active theme was imported again: %+v", result.Settings)
+			}
+		})
 	}
 }
 

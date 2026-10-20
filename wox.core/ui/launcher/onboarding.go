@@ -70,10 +70,9 @@ type onboardingPluginState struct {
 
 // onboardingThemeState tracks the theme being applied from the onboarding catalog.
 type onboardingThemeState struct {
-	selectedID string
-	loading    bool
-	applying   bool
-	error      string
+	loading  bool
+	applying bool
+	error    string
 }
 
 // openOnboarding presents the first-run guide in its dedicated window.
@@ -94,7 +93,7 @@ func (a *App) openOnboarding() error {
 		a.onboardingError = ""
 		a.onboardingQueryHotkey = nil
 		a.onboardingPlugins = onboardingPluginState{}
-		a.onboardingTheme = onboardingThemeState{selectedID: onboardingGlassID}
+		a.onboardingTheme = onboardingThemeState{}
 		a.onboardingMigration = newOnboardingMigrationState(installations)
 		a.stopHotkeyRecording()
 		settingsView = a.settingsView
@@ -187,7 +186,6 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
 	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
 	steps := a.onboardingSteps()
-	systemThemes := onboardingSystemThemes(snapshot.theme.Themes)
 	for index := range steps {
 		steps[index].Accent = onboardingAccentColor
 	}
@@ -317,20 +315,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			Disabled:   a.onboardingPlugins.operationID != "",
 		}
 	}
-	themes := make([]launcherview.OnboardingTheme, len(systemThemes))
-	for index, theme := range systemThemes {
-		preview := paletteForTheme(theme.previewTheme).componentTheme()
-		lightPreview := preview
-		darkPreview := preview
-		if theme.IsAuto {
-			lightPreview = themeVariantPreview(snapshot.theme.Themes, theme.LightThemeID, true)
-			darkPreview = themeVariantPreview(snapshot.theme.Themes, theme.DarkThemeID, false)
-		}
-		themes[index] = launcherview.OnboardingTheme{
-			ID: theme.ID, Name: theme.Name, Selected: theme.ID == a.onboardingTheme.selectedID, IsAuto: theme.IsAuto,
-			PreviewTheme: preview, LightPreviewTheme: lightPreview, DarkPreviewTheme: darkPreview,
-		}
-	}
+	themes := onboardingThemeItems(snapshot.theme.Themes, snapshot.general.Data.ThemeID)
 	previewTexts := []string{a.translate("i18n:ui_theme_preview_text_1"), a.translate("i18n:ui_theme_preview_text_2")}
 	previewSubtitles := []string{
 		strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", "1"),
@@ -900,6 +885,27 @@ func onboardingSystemThemes(themes []themeSettingsTheme) []themeSettingsTheme {
 	return result
 }
 
+// onboardingThemeItems derives the checked card from the active setting so imports
+// and failed theme changes cannot leave a separate onboarding selection stale.
+func onboardingThemeItems(catalog []themeSettingsTheme, currentID string) []launcherview.OnboardingTheme {
+	systemThemes := onboardingSystemThemes(catalog)
+	themes := make([]launcherview.OnboardingTheme, len(systemThemes))
+	for index, theme := range systemThemes {
+		preview := paletteForTheme(theme.previewTheme).componentTheme()
+		lightPreview := preview
+		darkPreview := preview
+		if theme.IsAuto {
+			lightPreview = themeVariantPreview(catalog, theme.LightThemeID, true)
+			darkPreview = themeVariantPreview(catalog, theme.DarkThemeID, false)
+		}
+		themes[index] = launcherview.OnboardingTheme{
+			ID: theme.ID, Name: theme.Name, Selected: theme.ID == currentID, IsAuto: theme.IsAuto,
+			PreviewTheme: preview, LightPreviewTheme: lightPreview, DarkPreviewTheme: darkPreview,
+		}
+	}
+	return themes
+}
+
 // loadOnboardingThemes loads installed system themes through the shared theme catalog.
 func (a *App) loadOnboardingThemes() {
 	if a.onboardingTheme.loading || len(onboardingSystemThemes(a.themeSettings.Themes())) == 4 {
@@ -907,24 +913,17 @@ func (a *App) loadOnboardingThemes() {
 	}
 	a.onboardingTheme.loading = true
 	a.onboardingTheme.error = ""
+	themeID := a.currentThemeID()
 	a.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding themes", func() {
 		util.GetLogger().Info(a.lifecycleCtx, "loading onboarding system themes")
-		err := a.reloadThemes("installed", onboardingGlassID)
+		err := a.reloadThemes("installed", themeID)
 		if applyErr := a.runOnUI("apply onboarding themes", func() {
 			a.onboardingTheme.loading = false
 			if err != nil {
 				a.onboardingTheme.error = err.Error()
 			} else {
 				a.onboardingTheme.error = ""
-				themes := onboardingSystemThemes(a.themeSettings.Themes())
-				found := false
-				for _, theme := range themes {
-					found = found || theme.ID == a.onboardingTheme.selectedID
-				}
-				if !found && len(themes) > 0 {
-					a.onboardingTheme.selectedID = themes[0].ID
-				}
 			}
 			util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf("onboarding system themes loaded: count=%d error=%v", len(onboardingSystemThemes(a.themeSettings.Themes())), err))
 			a.invalidateOnboardingWindow()
@@ -939,19 +938,6 @@ func (a *App) selectOnboardingTheme(themeID string) {
 	if a.onboardingTheme.loading || a.onboardingTheme.applying {
 		return
 	}
-	for _, theme := range onboardingSystemThemes(a.themeSettings.Themes()) {
-		if theme.ID == themeID {
-			a.onboardingTheme.selectedID = themeID
-			a.onboardingTheme.error = ""
-			a.applyOnboardingTheme()
-			return
-		}
-	}
-}
-
-// applyOnboardingTheme applies the selected bundled theme immediately.
-func (a *App) applyOnboardingTheme() {
-	themeID := a.onboardingTheme.selectedID
 	found := false
 	for _, theme := range onboardingSystemThemes(a.themeSettings.Themes()) {
 		if theme.ID == themeID {
@@ -962,6 +948,7 @@ func (a *App) applyOnboardingTheme() {
 	if !found {
 		return
 	}
+	a.onboardingTheme.error = ""
 	if a.currentThemeID() == themeID {
 		a.invalidateOnboardingWindow()
 		return

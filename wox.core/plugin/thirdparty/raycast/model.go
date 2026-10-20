@@ -14,6 +14,7 @@ const (
 
 // mappedExport is the session data kept after the raw JSON is released.
 type mappedExport struct {
+	extensions        []ExportExtension
 	hotkeys           []mappedHotkey
 	shortcuts         []mappedShortcut
 	queries           []mappedQuery

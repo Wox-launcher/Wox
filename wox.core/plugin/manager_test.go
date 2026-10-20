@@ -44,6 +44,39 @@ func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
 	assert.Equal(t, "other-plugin", instances[1].Metadata.Id)
 }
 
+func TestClearSessionStateLeavesOnlyDestroyedWindow(t *testing.T) {
+	logger = util.GetLogger()
+	manager := &Manager{
+		sessionPluginQueries:    util.NewHashMap[string, *sessionPluginQueryState](),
+		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+		lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
+		pluginToolbarMsgIds:     util.NewHashMap[string, string](),
+	}
+	left := make(chan context.Context, 2)
+	instance := &Instance{Metadata: Metadata{Id: "session-owner", Name: "Session Owner"},
+		LeavePluginQueryCallbacks: []func(context.Context){func(ctx context.Context) { left <- ctx }}}
+	manager.appendPluginInstance(instance)
+	for _, session := range []string{"first", "second"} {
+		manager.sessionPluginQueries.Store(session, &sessionPluginQueryState{PluginId: instance.Metadata.Id, QueryId: "query-" + session})
+	}
+	manager.ClearSessionState(context.Background(), "first")
+	select {
+	case ctx := <-left:
+		assert.Equal(t, "first", util.GetContextSessionId(ctx))
+		assert.Equal(t, "query-first", util.GetContextQueryId(ctx))
+	case <-time.After(time.Second):
+		t.Fatal("destroyed window did not leave the active plugin query")
+	}
+	assert.False(t, manager.isPluginActiveInSession("first", instance.Metadata.Id))
+	assert.True(t, manager.isPluginActiveInSession("second", instance.Metadata.Id))
+	manager.ClearSessionState(context.Background(), "first")
+	select {
+	case <-left:
+		t.Fatal("duplicate leave callback")
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
 func TestTroubleshootingModeBlocksThirdPartyLoading(t *testing.T) {
 	initPluginManagerLoadTest(t)
 	previousArgs := os.Args

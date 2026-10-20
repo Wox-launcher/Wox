@@ -2510,6 +2510,9 @@ func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
 	if sessionId == "" {
 		return
 	}
+	// Closing a launcher also leaves its plugin query. Hosts use the existing
+	// leave callbacks to release command processes owned by this window.
+	m.HandleQueryLifecycle(ctx, Query{SessionId: sessionId}, nil)
 	m.sessionQueryResultCache.Delete(sessionId)
 	m.sessionPluginQueries.Delete(sessionId)
 	m.clearLazyResultIconsForSessionExcept(sessionId, "")

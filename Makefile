@@ -188,6 +188,7 @@ endif
 
 host:
 	$(MAKE) -C wox.plugin.host.nodejs build
+	$(MAKE) -C wox.core/plugin/thirdparty/raycast/extension/runtime build
 	$(MAKE) -C wox.plugin.host.python build
 ifeq ($(PLATFORM),windows)
 	$(MAKE) -C wox.core/plugin/thirdparty/flow/dotnet/hostapp build
