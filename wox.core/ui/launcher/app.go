@@ -597,6 +597,7 @@ func (a *App) showWindow(params showAppParams) error {
 	var launcher *woxui.ManagedWindow
 	queryEmpty := false
 	preserveQuery := false
+	refreshInlinePreview := false
 	wasVisible := false
 	if err := a.runOnUI("prepare launcher show", func() {
 		if params.WindowWidth <= 0 {
@@ -622,6 +623,7 @@ func (a *App) showWindow(params showAppParams) error {
 			a.beginQueryTransitionLocked(false)
 		}
 		preserveQuery = a.applyLaunchModeOnShowLocked()
+		refreshInlinePreview = !wasVisible && a.hasInlinePreviewToRestore()
 		a.canRecallHistory = a.query.QueryType == "input"
 		if params.LaunchMode == "continue" {
 			// The newest history is the current continued query, so the first Up recalls the entry before it.
@@ -669,6 +671,12 @@ func (a *App) showWindow(params showAppParams) error {
 	}
 	if err := a.notifyShown(); err != nil {
 		return err
+	}
+	if refreshInlinePreview {
+		util.GetLogger().Info(a.lifecycleCtx, "refresh inline WebView state after launcher restore")
+		if err := a.RefreshQuery(a.lifecycleCtx, common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
+			return err
+		}
 	}
 	if queryEmpty && params.StartPage == "mru" && !preserveQuery {
 		if err := a.requestMRU(); err != nil {

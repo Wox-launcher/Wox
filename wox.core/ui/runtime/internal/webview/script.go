@@ -29,6 +29,9 @@ var documentSequence atomic.Uint64
 
 // invalidateScripts drops queued commands whenever their visible target changes.
 func (c *Controller) invalidateScripts() {
+	if len(c.scripts.queue) > 0 {
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("WebView discard script queue: generation=%d queued=%d", c.scripts.generation, len(c.scripts.queue)))
+	}
 	c.scripts.generation++
 	c.scripts.queue = nil
 	c.scripts.busy = false
@@ -46,6 +49,7 @@ func (c *Controller) prepareDocument(content Content) Content {
 		c.invalidateScripts()
 		c.scripts.source = source
 		c.scripts.token = fmt.Sprintf("wox-%d", documentSequence.Add(1))
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("WebView prepare document: generation=%d htmlBytes=%d", c.scripts.generation, len(source.HTML)))
 	}
 	if content.HTML != "" && content.DocumentKey != "" {
 		token, _ := json.Marshal(c.scripts.token)
@@ -69,6 +73,9 @@ func (c *Controller) UpdateScript(key, script string) bool {
 			return nil
 		}
 		c.scripts.queue = append(c.scripts.queue, script)
+		if len(c.scripts.queue) == 10 || len(c.scripts.queue)%100 == 0 {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("WebView script backlog: generation=%d queued=%d ready=%t", c.scripts.generation, len(c.scripts.queue), c.scripts.documentSeen))
+		}
 		accepted = true
 		c.pumpScripts()
 		return nil

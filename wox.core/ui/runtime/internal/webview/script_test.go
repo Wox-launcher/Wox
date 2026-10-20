@@ -1,11 +1,13 @@
 package webview
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
+	"wox/util"
 )
 
 type scriptDriver struct {
@@ -20,6 +22,8 @@ func (d *scriptDriver) Evaluate(script string, done func(string, error)) error {
 	return nil
 }
 func TestScriptQueueLoadingOrderingAndRedraw(t *testing.T) {
+	// Logger workers belong to the process, not the synthetic timer bubble.
+	util.GetLogger().Debug(context.Background(), "initialize WebView test logging")
 	synctest.Test(t, func(t *testing.T) {
 		d := &scriptDriver{}
 		c := New(d, immediateDispatch)

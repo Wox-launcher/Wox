@@ -194,3 +194,14 @@ func (a *App) inlineWebViewScriptTarget(preview queryPreview, visible bool) (str
 	}
 	return "", ""
 }
+
+// hasInlinePreviewToRestore asks plugins for a fresh snapshot after reopening.
+// Script updates deliberately do not replace the cached HTML, and the task may
+// have finished while hidden, so no later heartbeat is guaranteed to repair it.
+func (a *App) hasInlinePreviewToRestore() bool {
+	if a.selected < 0 || a.selected >= len(a.results) {
+		return false
+	}
+	key, _ := a.inlineWebViewScriptTarget(a.results[a.selected].Preview, true)
+	return key != ""
+}

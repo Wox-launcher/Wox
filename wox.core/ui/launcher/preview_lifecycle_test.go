@@ -246,3 +246,20 @@ func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreInlinePreviewRequiresFreshSnapshot(t *testing.T) {
+	app := &App{query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
+		results:        []queryResult{{ID: "row", Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview"}}},
+		remotePreviews: map[string]queryPreview{"/preview": {PreviewType: "webview", PreviewData: `{"html":"<p>old progress</p>"}`}}}
+	if !app.hasInlinePreviewToRestore() {
+		t.Fatal("hidden inline document must refresh even if task stopped publishing")
+	}
+	app.remotePreviews["/preview"] = queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com"}`}
+	if app.hasInlinePreviewToRestore() {
+		t.Fatal("retained URL page must not refresh the query")
+	}
+	app.selected = -1
+	if app.hasInlinePreviewToRestore() {
+		t.Fatal("missing selection must not refresh")
+	}
+}
