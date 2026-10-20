@@ -2,10 +2,14 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 	"wox/common"
+	"wox/util"
 	"wox/util/filesearch"
 )
 
@@ -19,6 +23,50 @@ func TestAppChangeHistoryLossRepairsSubscribedRoot(t *testing.T) {
 	}, []string{".lnk"}, map[string]string{"apps": root})
 	if !ok || change.Path != root || !change.PathIsDir || change.SemanticKind != filesearch.ChangeSemanticKindModify {
 		t.Fatalf("missing root repair: %+v accepted=%t", change, ok)
+	}
+}
+
+type skipParseRetriever struct {
+	Retriever
+	calls atomic.Int32
+}
+
+// ParseAppInfo reports a permanent indexing skip and counts how often reconciliation asks.
+func (r *skipParseRetriever) ParseAppInfo(context.Context, string) (appInfo, error) {
+	r.calls.Add(1)
+	return appInfo{}, fmt.Errorf("%w: launcher is hidden", errSkipAppIndexing)
+}
+
+// TestUpsertSkipsPermanentParseFailureWithoutRetrySleep keeps hidden launchers from
+// blocking the change feed. Each retry used to sleep for six seconds.
+func TestUpsertSkipsPermanentParseFailureWithoutRetrySleep(t *testing.T) {
+	appPath := filepath.Join(t.TempDir(), "hidden.desktop")
+	if err := os.WriteFile(appPath, []byte("[Desktop Entry]\nNoDisplay=true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	retriever := &skipParseRetriever{Retriever: appRetriever}
+	plugin := &ApplicationPlugin{
+		api:            emptyAPIImpl{},
+		retriever:      retriever,
+		unparsableApps: util.NewHashMap[string, int64](),
+	}
+
+	started := time.Now()
+	if plugin.upsertIndexedAppByPath(context.Background(), appPath) {
+		t.Fatal("hidden launcher was indexed")
+	}
+	if elapsed := time.Since(started); elapsed >= 500*time.Millisecond {
+		t.Fatalf("permanent skip slept for %s", elapsed)
+	}
+	if calls := retriever.calls.Load(); calls != 1 {
+		t.Fatalf("parse calls = %d, want 1", calls)
+	}
+
+	if plugin.upsertIndexedAppByPath(context.Background(), appPath) {
+		t.Fatal("unchanged hidden launcher was indexed on the next reconcile")
+	}
+	if calls := retriever.calls.Load(); calls != 1 {
+		t.Fatalf("parse calls after remembering the skip = %d, want 1", calls)
 	}
 }
 

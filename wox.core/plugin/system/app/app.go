@@ -1737,9 +1737,13 @@ func (a *ApplicationPlugin) upsertIndexedAppByPath(ctx context.Context, appPath 
 
 	var info appInfo
 	var getErr error
+	// Hidden, NoDisplay, and missing-TryExec launchers return errSkipAppIndexing.
+	// That result is stable until the file mtime changes, so the installer retry
+	// below must not apply. Sleeping on each one blocks the single change-feed
+	// goroutine; a few hundred such desktop files stalled new apps for many minutes.
 	for i := 0; i < 3; i++ {
 		info, getErr = a.retriever.ParseAppInfo(ctx, appPath)
-		if getErr == nil {
+		if getErr == nil || errors.Is(getErr, errSkipAppIndexing) {
 			break
 		}
 		time.Sleep(time.Second * time.Duration(i+1))
