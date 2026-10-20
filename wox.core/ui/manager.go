@@ -612,13 +612,20 @@ func (m *Manager) showPluginPackageInstaller(ctx context.Context, rawPath string
 	// Hide-on-blur would close the installer when Explorer/Finder refocuses
 	// after a double-click, before the user can confirm the install.
 	m.RefreshActiveWindowSnapshot(ctx)
-	m.openSecondaryInstance(ctx, string(common.ShowSourceSelection), common.PlainQuery{
-		QueryType: plugin.QueryTypeSelection,
-		QuerySelection: selection.Selection{
-			Type:      selection.SelectionTypeFile,
-			FilePaths: []string{filePath},
+	// File-open deeplinks belong to the primary launcher, even though their
+	// payload uses a selection query to offer install/reinstall actions.
+	m.ui.OpenWoxInstance(ctx, common.OpenWoxInstanceRequest{
+		Role: common.WoxInstanceRolePrimary,
+		Query: common.PlainQuery{
+			QueryId:   uuid.NewString(),
+			QueryType: plugin.QueryTypeSelection,
+			QuerySelection: selection.Selection{
+				Type:      selection.SelectionTypeFile,
+				FilePaths: []string{filePath},
+			},
 		},
-	}, pluginPackageInstallShowContext())
+		ShowApp: pluginPackageInstallShowContext(),
+	})
 }
 
 func pluginPackageInstallShowContext() common.ShowContext {
@@ -2229,6 +2236,7 @@ func (m *Manager) isUIWindow(activeWindowPid int) bool {
 }
 
 func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
+	ctx = util.WithCoreSessionContext(ctx)
 	logger.Info(ctx, fmt.Sprintf("start processing deeplink: %s", deeplink))
 
 	parts := strings.SplitN(deeplink, "?", 2)
@@ -2276,10 +2284,6 @@ func (m *Manager) ProcessDeeplink(ctx context.Context, deeplink string) {
 	// installing silently so the user can confirm install/upgrade/reinstall.
 	if command == "install" {
 		m.showPluginPackageInstaller(ctx, arguments["path"])
-	}
-
-	if command == "select" {
-		m.QuerySelection(ctx)
 	}
 
 	if command == "toggle" {

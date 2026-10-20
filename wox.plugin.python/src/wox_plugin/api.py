@@ -505,7 +505,7 @@ class PublicAPI(Protocol):
                     Receives: (context, arguments_dict)
 
         Example:
-            # Deep link URL: wox://myplugin?action=open&id=123
+            # Deep link URL: wox://plugin/<plugin-id>?action=open&id=123
             async def _on_deep_link(ctx: Context, args: Dict[str, str]):
                 action = args.get("action")
                 item_id = args.get("id")
