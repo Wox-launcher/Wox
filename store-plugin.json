@@ -1725,7 +1725,7 @@
     "Id": "1ed04e7b-5a94-481e-ac27-74c11e34ec63",
     "Name": "PowerToys",
     "Author": "dragonish",
-    "Version": "1.0.1",
+    "Version": "1.1.0",
     "MinWoxVersion": "2.0.0",
     "Runtime": "python",
     "Description": "i18n:plugin_desc",
@@ -1739,7 +1739,7 @@
       "Windows"
     ],
     "DateCreated": "2026-10-13 23:35:27",
-    "DateUpdated": "2026-10-14 15:06:52",
+    "DateUpdated": "2026-10-21 15:05:56",
     "I18n": {
       "en_US": {
         "plugin_desc": "Allows the user to launch some PowerToys from Wox."
