@@ -1810,5 +1810,39 @@
         "plugin_description": "检查端口占用 / 生成随机可用端口。"
       }
     }
+  },
+  {
+    "Id": "242ec423-0ac0-47d9-8c93-e72c4d509eb2",
+    "Name": "i18n:plugin_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.7",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.ASCIIArtGenerator/main/images/app.svg",
+    "Website": "https://github.com/dragonish/Wox.Plugin.ASCIIArtGenerator",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.ASCIIArtGenerator/releases/latest/download/wox.plugin.asciiartgenerator.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.ASCIIArtGenerator/main/assets/render.jpg",
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.ASCIIArtGenerator/main/assets/fonts.jpg",
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.ASCIIArtGenerator/main/assets/3d.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-21 19:59:21",
+    "DateUpdated": "2026-10-21 19:59:21",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "ASCII Art Generator",
+        "plugin_description": "Generate ASCII art strings."
+      },
+      "zh_CN": {
+        "plugin_name": "ASCII 艺术字生成器",
+        "plugin_description": "生成 ASCII 艺术字符串。"
+      }
+    }
   }
 ]
