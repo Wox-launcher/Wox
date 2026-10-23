@@ -1844,5 +1844,41 @@
         "plugin_description": "生成 ASCII 艺术字符串。"
       }
     }
+  },
+  {
+    "Id": "9f479da0-2c9f-412c-80f1-02f2bdc10263",
+    "Name": "i18n:plugin_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_desc",
+    "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Kaomoji/main/images/app.svg",
+    "Website": "https://github.com/dragonish/Wox.Plugin.Kaomoji",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.Kaomoji/releases/latest/download/wox.plugin.kaomoji.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Kaomoji/main/assets/screenshot.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-22 21:03:56",
+    "DateUpdated": "2026-10-22 21:03:56",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Kaomoji",
+        "plugin_desc": "Search and copy kaomoji."
+      },
+      "ja_JP": {
+        "plugin_name": "顔文字",
+        "plugin_desc": "顔文字を検索してコピーします。"
+      },
+      "zh_CN": {
+        "plugin_name": "颜文字",
+        "plugin_desc": "搜索并复制颜文字。"
+      }
+    }
   }
 ]
