@@ -1815,7 +1815,7 @@
     "Id": "242ec423-0ac0-47d9-8c93-e72c4d509eb2",
     "Name": "i18n:plugin_name",
     "Author": "dragonish",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "MinWoxVersion": "2.4.7",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -1833,7 +1833,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-21 19:59:21",
-    "DateUpdated": "2026-10-21 19:59:21",
+    "DateUpdated": "2026-10-23 00:14:04",
     "I18n": {
       "en_US": {
         "plugin_name": "ASCII Art Generator",
