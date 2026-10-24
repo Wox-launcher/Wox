@@ -9,7 +9,7 @@ and provides access to UI control, settings, logging, and more.
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
-from .models.ai import AIModel, ChatStreamCallback, Conversation
+from .models.ai import AIModel, ChatOptions, ChatStreamCallback, Conversation
 from .models.attention import PushAttentionRequest
 from .models.context import Context
 from .models.log import LogLevel
@@ -621,19 +621,23 @@ class PublicAPI(Protocol):
         model: AIModel,
         conversations: List[Conversation],
         callback: ChatStreamCallback,
+        options: Optional[ChatOptions] = None,
     ) -> None:
         """
         Start an AI chat stream.
 
         Sends a conversation history to an AI model and receives
-        streaming responses via the callback.
+        streaming responses via the callback. The model is required.
+        Requires the plugin ``ai`` feature.
 
         Args:
             ctx: Context
             model: AI model to use (provider and name)
             conversations: Conversation history
-            callback: Stream callback function
-                     Receives ChatStreamData with status and content
+            callback: Stream callback function.
+                     Receives ChatStreamData with status and content.
+                     Start failures arrive as status ``error``.
+            options: Optional thinking mode and loop policy. Omit for a normal chat.
 
         Example:
             def on_stream_data(stream_data: ChatStreamData):

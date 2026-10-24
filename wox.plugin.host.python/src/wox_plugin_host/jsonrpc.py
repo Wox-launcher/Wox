@@ -865,6 +865,10 @@ async def on_llm_stream(ctx: Context, request: Dict[str, Any]) -> None:
         await logger.error(ctx.get_trace_id(), f"LLM stream callback not found: {callback_id}")
         raise Exception(f"LLM stream callback not found: {callback_id}")
 
+    # Release before invoking plugin code so a throwing terminal callback cannot leak.
+    if stream_type in ("finished", "error"):
+        api.llm_stream_callbacks.pop(callback_id, None)
+
     # Create ChatStreamData and call the callback
     stream_data = ChatStreamData(
         status=ChatStreamDataType(stream_type),

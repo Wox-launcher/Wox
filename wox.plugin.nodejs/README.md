@@ -263,12 +263,13 @@ spacing and control widths so plugin settings remain visually consistent.
 Stream responses from AI models:
 
 ```typescript
+const model: AI.AIModel = { Provider: "deepseek", Name: "deepseek-chat" }
 const conversations: AI.Conversation[] = [
   { Role: "system", Text: "You are a helpful assistant.", Timestamp: Date.now() },
   { Role: "user", Text: "Hello!", Timestamp: Date.now() }
 ]
 
-await api.LLMStream(ctx, conversations, (data: AI.ChatStreamData) => {
+await api.AIChatStream(ctx, model, conversations, {}, (data: AI.ChatStreamData) => {
   if (data.Status === "streaming") {
     console.log("Chunk:", data.Data)
   } else if (data.Status === "finished") {
@@ -276,6 +277,8 @@ await api.LLMStream(ctx, conversations, (data: AI.ChatStreamData) => {
   }
 })
 ```
+
+The plugin must declare the `ai` feature. `model` is required; a `selectAIModel` setting stores the same JSON. Pass `{}` when no thinking mode or loop policy is needed.
 
 ## Plugin Metadata
 

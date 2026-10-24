@@ -132,7 +132,7 @@ Runtime-registered callable operations. Requires Wox >= 2.4.5. See `references/p
 
 ### AI
 
-- `ai_chat_stream(ctx, model, convs, options, callback)`: Stream LLM response.
+- `ai_chat_stream(ctx, model, conversations, callback, options=None)`: Stream LLM response. `model` is required. `options` is an optional `ChatOptions`.
 
 ### Internationalization (i18n)
 

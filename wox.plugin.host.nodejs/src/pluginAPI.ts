@@ -44,6 +44,56 @@ import { MRUData } from "@wox-launcher/wox-plugin"
 import { PluginJsonRpcTypeRequest, pluginInstances } from "./jsonrpc"
 import { PluginJsonRpcRequest } from "./types"
 
+// Core stores conversation images as WoxImage. The SDK accepts raw PNG bytes.
+function aiConversationPayload(conversation: AI.Conversation): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    Role: conversation.Role,
+    Text: conversation.Text,
+    Timestamp: conversation.Timestamp
+  }
+  if (conversation.Reasoning) {
+    payload.Reasoning = conversation.Reasoning
+  }
+  if (conversation.ToolCallInfo) {
+    payload.ToolCallInfo = conversation.ToolCallInfo
+  }
+  if (conversation.Images && conversation.Images.length > 0) {
+    payload.Images = conversation.Images.map(image => ({
+      ImageType: "base64",
+      ImageData: `data:image/png;base64,${Buffer.from(image).toString("base64")}`
+    }))
+  }
+  return payload
+}
+
+// TimeoutMs is the plugin-facing unit. Core stores LoopPolicy.Timeout as nanoseconds.
+function aiChatOptionsPayload(options: AI.ChatOptions | undefined): Record<string, unknown> {
+  if (!options) {
+    return {}
+  }
+  const payload: Record<string, unknown> = {}
+  if (options.ThinkingMode) {
+    payload.ThinkingMode = options.ThinkingMode
+  }
+  if (options.LoopPolicy) {
+    const policy: Record<string, unknown> = {}
+    if (options.LoopPolicy.MaxIterations !== undefined) {
+      policy.MaxIterations = options.LoopPolicy.MaxIterations
+    }
+    if (options.LoopPolicy.RetryOnFailure !== undefined) {
+      policy.RetryOnFailure = options.LoopPolicy.RetryOnFailure
+    }
+    if (options.LoopPolicy.MaxRetries !== undefined) {
+      policy.MaxRetries = options.LoopPolicy.MaxRetries
+    }
+    if (options.LoopPolicy.TimeoutMs !== undefined) {
+      policy.Timeout = Math.trunc(options.LoopPolicy.TimeoutMs * 1_000_000)
+    }
+    payload.LoopPolicy = policy
+  }
+  return payload
+}
+
 export class PluginAPI implements PublicAPI {
   pluginId: string
   pluginName: string
@@ -302,10 +352,31 @@ export class PluginAPI implements PublicAPI {
     await Promise.allSettled(Array.from(this.pluginToolCalls))
   }
 
-  async LLMStream(ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc): Promise<void> {
+  async AIChatStream(ctx: Context, model: AI.AIModel, conversations: AI.Conversation[], options: AI.ChatOptions, callback: AI.ChatStreamFunc): Promise<void> {
+    if (model == null || !model.Provider || !model.Name) {
+      throw new Error("AIChatStream requires a model with Provider and Name")
+    }
+    if (typeof callback !== "function") {
+      throw new Error("AIChatStream(ctx, model, conversations, options, callback) requires options and a callback. Pass {} when no chat options are needed.")
+    }
     const callbackId = crypto.randomUUID()
     this.llmStreamCallbacks.set(callbackId, callback)
-    await this.invokeMethod(ctx, "LLMStream", { callbackId, conversations: JSON.stringify(conversations) })
+    try {
+      await this.invokeMethod(ctx, "AIChatStream", {
+        callbackId,
+        model: JSON.stringify({
+          Name: model.Name,
+          Provider: model.Provider,
+          ProviderAlias: model.ProviderAlias ?? ""
+        }),
+        conversations: JSON.stringify((conversations ?? []).map(aiConversationPayload)),
+        options: JSON.stringify(aiChatOptionsPayload(options))
+      })
+    } catch (error) {
+      // A failed request may never receive a terminal stream event.
+      this.llmStreamCallbacks.delete(callbackId)
+      throw error
+    }
   }
 
   async OnMRURestore(ctx: Context, callback: (ctx: Context, mruData: MRUData) => Promise<Result | null>): Promise<void> {

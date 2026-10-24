@@ -1688,9 +1688,20 @@ export interface PublicAPI {
   InvokePluginTool: (ctx: Context, option: InvokePluginToolOption) => Promise<InvokePluginToolResult>
 
   /**
-   * Chat using LLM
+   * Stream a chat from a Wox AI model.
+   *
+   * Requires the plugin `ai` feature. `model` is the JSON stored by a
+   * `selectAIModel` setting, or an explicit provider and name. Pass `{}`
+   * when no thinking mode or loop policy is needed. Chunks arrive through
+   * `callback`, including `Status: "error"` when the stream cannot start.
    */
-  LLMStream: (ctx: Context, conversations: AI.Conversation[], callback: AI.ChatStreamFunc) => Promise<void>
+  AIChatStream: (
+    ctx: Context,
+    model: AI.AIModel,
+    conversations: AI.Conversation[],
+    options: AI.ChatOptions,
+    callback: AI.ChatStreamFunc
+  ) => Promise<void>
 
   /**
    * Register MRU restore callback

@@ -164,7 +164,7 @@ Runtime-registered callable operations. Requires Wox >= 2.4.5. See `references/p
 
 ### AI & LLM
 
-- `AIChatStream(ctx, model, conversations, options, callback)`: Stream responses from AI providers.
+- `AIChatStream(ctx, model, conversations, options, callback)`: Stream responses from AI providers. `model` is required. Pass `{}` when no thinking mode or loop policy is needed.
 
 ### Internationalization (i18n)
 

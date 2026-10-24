@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from websockets.asyncio.server import ServerConnection
 from wox_plugin import (
     AIModel,
+    ChatOptions,
     PushAttentionRequest,
     ChangeQueryParam,
     ChatStreamCallback,
@@ -338,18 +339,32 @@ class PluginAPI(PublicAPI):
         model: AIModel,
         conversations: list[Conversation],
         callback: ChatStreamCallback,
+        options: ChatOptions | None = None,
     ) -> None:
-        """Chat using LLM"""
+        """Stream a chat from a Wox AI model. The model is required."""
+        if model is None or not model.provider or not model.name:
+            raise ValueError("ai_chat_stream requires a model with provider and name")
         callback_id = str(uuid.uuid4())
         self.llm_stream_callbacks[callback_id] = callback
-        await self.invoke_method(
-            ctx,
-            "LLMStream",
-            {
-                "callbackId": callback_id,
-                "conversations": json.dumps([conv.__dict__ for conv in conversations]),
-            },
-        )
+        try:
+            await self.invoke_method(
+                ctx,
+                "AIChatStream",
+                {
+                    "callbackId": callback_id,
+                    "model": {
+                        "Name": model.name,
+                        "Provider": model.provider,
+                        "ProviderAlias": model.provider_alias,
+                    },
+                    "conversations": [conversation.to_core_dict() for conversation in conversations],
+                    "options": options.to_core_dict() if options is not None else {},
+                },
+            )
+        except (Exception, asyncio.CancelledError):
+            # Failed or cancelled requests may never receive a terminal stream event.
+            self.llm_stream_callbacks.pop(callback_id, None)
+            raise
 
     async def on_mru_restore(
         self,
