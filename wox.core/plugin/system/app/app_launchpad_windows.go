@@ -31,6 +31,16 @@ func populateLaunchpadIconMetadata(ctx context.Context, info *appInfo) {
 	if info.IsDefaultIcon || info.Icon.IsEmpty() {
 		return
 	}
+	if info.ResolvedIconPath != "" {
+		// Classify the same pixels shown in the grid. A resource DLL's first icon
+		// need not match the indexed shortcut artwork, and can even be generic.
+		dedicated, err := fileicon.HasDedicatedImageIcon(ctx, info.ResolvedIconPath)
+		info.HasDedicatedIcon = dedicated && err == nil
+		if err != nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("launchpad resolved icon classification failed: path=%s err=%v", info.Path, err))
+		}
+		return
+	}
 	source := strings.TrimSpace(info.IconSourcePath)
 	if source == "" && strings.EqualFold(filepath.Ext(info.Path), ".exe") {
 		source = info.Path

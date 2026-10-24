@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"image"
-	"image/color"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,29 +56,17 @@ const (
 	FILE_ATTRIBUTE_RECALL_ON_OPEN        = 0x00040000
 )
 
-// expandEnvVars expands Windows environment variables in a string
-func expandEnvVars(s string) string {
-	s = strings.ReplaceAll(s, "%SystemRoot%", os.Getenv("SystemRoot"))
-	s = strings.ReplaceAll(s, "%ProgramFiles%", os.Getenv("ProgramFiles"))
-	s = strings.ReplaceAll(s, "%ProgramFiles(x86)%", os.Getenv("ProgramFiles(x86)"))
-	return s
-}
-
 // parseIconLocation parses icon location string like "C:\path\to\file.dll,-123"
 func parseIconLocation(location string) (path string, index int) {
-	parts := strings.Split(location, ",")
-	if len(parts) == 0 {
-		return "", 0
+	// Only the final comma separates an optional resource index from the path.
+	path = strings.TrimSpace(location)
+	if comma := strings.LastIndex(path, ","); comma >= 0 {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(path[comma+1:])); err == nil {
+			index = parsed
+			path = path[:comma]
+		}
 	}
-
-	path = expandEnvVars(strings.TrimSpace(parts[0]))
-
-	if len(parts) > 1 {
-		indexStr := strings.TrimSpace(parts[1])
-		index, _ = strconv.Atoi(indexStr)
-	}
-
-	return path, index
+	return expandIconEnvironment(path), index
 }
 
 // getIconFromRegistry tries to get icon from registry DefaultIcon key
@@ -188,18 +175,18 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 
 	// Check if the file is an offline file (e.g. OneDrive, Phone Link)
 	// If it is, avoid reading its contents to extract high res icons, to prevent triggering an automatic file download.
-	if sys, ok := fi.Sys().(*syscall.Win32FileAttributeData); ok {
-		if (sys.FileAttributes&FILE_ATTRIBUTE_OFFLINE != 0) ||
-			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS != 0) ||
-			(sys.FileAttributes&FILE_ATTRIBUTE_RECALL_ON_OPEN != 0) {
-			util.GetLogger().Debug(ctx, "File is offline, falling back to extension icon to avoid download: "+filePath)
-			return getFileTypeIconImpl(ctx, filepath.Ext(filePath), size)
-		}
+	if isOfflineIconSource(fi) {
+		util.GetLogger().Debug(ctx, "File is offline, falling back to extension icon to avoid download: "+filePath)
+		return getFileTypeIconImpl(ctx, filepath.Ext(filePath), size)
 	}
 
 	img, err := getHighResIcon(ctx, filePath)
 	if err != nil {
 		img, err = getIconUsingExtractIconEx(ctx, filePath)
+	}
+	// Ask the Shell for per-item artwork before collapsing to a file-type icon.
+	if err != nil {
+		img, err = getShellFileIcon(ctx, filePath, size)
 	}
 	if err != nil {
 		util.GetLogger().Debug(ctx, "No embedded file icon found, fallback to associated file type icon: "+filePath)
@@ -214,6 +201,12 @@ func getFileIconImpl(ctx context.Context, filePath string, size int) (string, er
 	}
 
 	return cachePath, nil
+}
+
+// isOfflineIconSource prevents native extraction from hydrating cloud placeholders.
+func isOfflineIconSource(info os.FileInfo) bool {
+	data, ok := info.Sys().(*syscall.Win32FileAttributeData)
+	return ok && data.FileAttributes&(FILE_ATTRIBUTE_OFFLINE|FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS|FILE_ATTRIBUTE_RECALL_ON_OPEN) != 0
 }
 
 func getIconUsingExtractIconEx(ctx context.Context, filePath string) (image.Image, error) {
@@ -278,7 +271,10 @@ func getHighResIcon(ctx context.Context, filePath string) (img image.Image, err 
 
 		if ret > 0 && ret != 0xFFFFFFFF && hIcon != 0 {
 			util.GetLogger().Info(ctx, "Successfully extracted high-res icon using PrivateExtractIconsW")
-			return convertIconToImage(ctx, hIcon)
+			if converted, convertErr := convertIconToImage(ctx, hIcon); convertErr == nil {
+				return converted, nil
+			}
+			// A broken large representation must not hide a usable smaller icon.
 		}
 	}
 
@@ -321,7 +317,10 @@ func getHighResDefaultIcon(ctx context.Context) (image.Image, error) {
 		}
 		if ret > 0 && ret != 0xFFFFFFFF && hIcon != 0 {
 			util.GetLogger().Info(ctx, "Successfully extracted default icon from shell32.dll")
-			return convertIconToImage(ctx, hIcon)
+			if converted, convertErr := convertIconToImage(ctx, hIcon); convertErr == nil {
+				return converted, nil
+			}
+			// A broken large representation must not hide a usable smaller icon.
 		}
 	}
 
@@ -398,66 +397,9 @@ func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, err
 	return cachePath, nil
 }
 
+// convertIconToImage preserves Windows alpha and legacy mask semantics.
 func convertIconToImage(ctx context.Context, hIcon win.HICON) (image.Image, error) {
-	var iconInfo win.ICONINFO
-	if !win.GetIconInfo(hIcon, &iconInfo) {
-		return nil, errors.New("failed to get icon info")
-	}
-	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmColor))
-	defer win.DeleteObject(win.HGDIOBJ(iconInfo.HbmMask))
-
-	hdc := win.GetDC(0)
-	defer win.ReleaseDC(0, hdc)
-
-	var bitmap win.BITMAP
-	if win.GetObject(win.HGDIOBJ(iconInfo.HbmColor), uintptr(unsafe.Sizeof(bitmap)), unsafe.Pointer(&bitmap)) == 0 {
-		return nil, errors.New("failed to get bitmap object")
-	}
-
-	width := int(bitmap.BmWidth)
-	height := int(bitmap.BmHeight)
-
-	var bmpInfo win.BITMAPINFO
-	bmpInfo.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmpInfo.BmiHeader))
-	bmpInfo.BmiHeader.BiWidth = int32(width)
-	bmpInfo.BmiHeader.BiHeight = -int32(height)
-	bmpInfo.BmiHeader.BiPlanes = 1
-	bmpInfo.BmiHeader.BiBitCount = 32
-	bmpInfo.BmiHeader.BiCompression = win.BI_RGB
-
-	bits := make([]byte, width*height*4)
-	if win.GetDIBits(hdc, win.HBITMAP(iconInfo.HbmColor), 0, uint32(height), &bits[0], &bmpInfo, win.DIB_RGB_COLORS) == 0 {
-		return nil, errors.New("failed to get DIB bits")
-	}
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			base := y*width*4 + x*4
-			b := bits[base+0]
-			g := bits[base+1]
-			r := bits[base+2]
-			a := bits[base+3]
-			img.SetRGBA(x, y, color.RGBA{R: r, G: g, B: b, A: a})
-		}
-	}
-
-	hasContent := false
-	bounds := img.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y && !hasContent; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X && !hasContent; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			if a > 0 && (r > 0 || g > 0 || b > 0) {
-				hasContent = true
-			}
-		}
-	}
-
-	if !hasContent {
-		return nil, errors.New("extracted icon is empty or fully transparent")
-	}
-
-	return img, nil
+	return convertWindowsIcon(hIcon)
 }
 
 // HasDedicatedExecutableIcon reports whether an executable icon differs from the generic Windows .exe icon.
@@ -479,12 +421,27 @@ func HasDedicatedFileIcon(ctx context.Context, filePath string) (bool, error) {
 		}
 	}
 
+	return isDedicatedWindowsIcon(ctx, fileIcon)
+}
+
+// HasDedicatedImageIcon classifies already resolved artwork without reopening
+// the executable or DLL and losing the resource selection made by the Shell.
+func HasDedicatedImageIcon(ctx context.Context, iconPath string) (bool, error) {
+	icon, err := imaging.Open(iconPath)
+	if err != nil {
+		return false, err
+	}
+	return isDedicatedWindowsIcon(ctx, icon)
+}
+
+// isDedicatedWindowsIcon excludes generic executable artwork from visual app grids.
+func isDedicatedWindowsIcon(ctx context.Context, icon image.Image) (bool, error) {
 	defaultIcon, err := getWindowsDefaultIcon(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	return !iconsEqual(fileIcon, defaultIcon), nil
+	return !iconsEqual(icon, defaultIcon), nil
 }
 
 func iconsEqual(left image.Image, right image.Image) bool {
@@ -501,8 +458,14 @@ func iconsEqual(left image.Image, right image.Image) bool {
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			if leftIcon.At(x, y) != rightIcon.At(x, y) {
-				return false
+			// PNG stores straight alpha, so caching premultiplied Windows pixels
+			// can round their channels. Compare visible values within one 8-bit step.
+			lr, lg, lb, la := leftIcon.At(x, y).RGBA()
+			rr, rg, rb, ra := rightIcon.At(x, y).RGBA()
+			for _, channel := range [4][2]uint32{{lr, rr}, {lg, rg}, {lb, rb}, {la, ra}} {
+				if max(channel[0], channel[1])-min(channel[0], channel[1]) > 257 {
+					return false
+				}
 			}
 		}
 	}

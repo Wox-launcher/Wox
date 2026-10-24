@@ -6,6 +6,7 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 )
@@ -66,6 +67,10 @@ func TestIconResourceLifetime(t *testing.T) {
 					continue
 				}
 				t.Run(extraction.name, func(t *testing.T) {
+					// Keep lazy per-thread USER initialization in the warm-up instead of
+					// counting new Go worker threads as leaked extraction resources.
+					runtime.LockOSThread()
+					defer runtime.UnlockOSThread()
 					// Warm up lazy Windows initialization before measuring retained resources.
 					_, _ = extraction.run()
 					beforeGDI, _, _ := resources.Call(^uintptr(0), 0)

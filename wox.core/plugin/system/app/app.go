@@ -60,6 +60,9 @@ type appInfo struct {
 	Identity        string          `json:"identity,omitempty"`
 	Path            string          `json:"path"`
 	Icon            common.WoxImage `json:"icon"`
+	// ResolvedIconPath preserves full-size Shell artwork before list preprocessing.
+	// Reopening its resource file would lose the shortcut's resource index or Shell customization.
+	ResolvedIconPath string `json:"resolved_icon_path,omitempty"`
 	// IconSourcePath records the real file used to render Icon. Windows shortcuts
 	// can keep their own mtime while the target executable changes, so cache reuse
 	// must compare this source in addition to the indexed shortcut path.
@@ -96,6 +99,7 @@ func (info appInfo) equals(other appInfo) bool {
 		info.Identity == other.Identity &&
 		info.Path == other.Path &&
 		info.Icon == other.Icon &&
+		info.ResolvedIconPath == other.ResolvedIconPath &&
 		info.IconSourcePath == other.IconSourcePath &&
 		info.IconSourceModifiedUnix == other.IconSourceModifiedUnix &&
 		info.Type == other.Type &&
@@ -111,7 +115,8 @@ type appCacheFile struct {
 }
 
 // Bump this when cached appInfo fields or preprocessed icon semantics change.
-const appCacheVersion = 16
+// Reindex persisted fallback icons after the Windows icon resolver upgrade.
+const appCacheVersion = 17
 
 const (
 	appCommandLaunchpad = "launchpad"
@@ -527,6 +532,11 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 
 	if !a.isCachedIconSourceFresh(ctx, cached) {
 		return appInfo{}, false
+	}
+	if cached.ResolvedIconPath != "" {
+		if _, err := os.Stat(cached.ResolvedIconPath); err != nil {
+			return appInfo{}, false
+		}
 	}
 
 	if cached.Icon.ImageType == common.WoxImageTypeAbsolutePath && cached.Icon.ImageData != "" {
@@ -1084,6 +1094,9 @@ func (a *ApplicationPlugin) getQueryResultIcon(info appInfo, isLaunchpadQuery bo
 	}
 
 	if util.IsWindows() {
+		if info.ResolvedIconPath != "" {
+			return common.NewWoxImageAbsolutePath(info.ResolvedIconPath)
+		}
 		// Launch paths can be shortcuts or shell:AppsFolder IDs, not icon sources.
 		// Reuse the retriever's resolved executable/resource for full-size extraction;
 		// packaged apps and generated settings icons already have dedicated artwork.

@@ -223,7 +223,14 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 
 	icon := appIcon
 	iconSourcePath := appPath
-	if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
+	resolvedIconPath := ""
+	// Resolve the shortcut artwork first; its icon may differ from the launch target.
+	iconLocation, _ := readShortcutPropertyUncached(ctx, appPath, "IconLocation")
+	if shortcutIcon, source, iconErr := fileicon.GetShortcutIcon(ctx, appPath, targetPath, iconLocation); iconErr == nil {
+		icon = common.NewWoxImageAbsolutePath(shortcutIcon)
+		iconSourcePath = source
+		resolvedIconPath = shortcutIcon
+	} else if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
 		iconSourcePath = targetPath
 		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
@@ -239,9 +246,10 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name: displayName,
-		Path: filepath.Clean(appPath),
-		Icon: icon,
+		Name:             displayName,
+		Path:             filepath.Clean(appPath),
+		Icon:             icon,
+		ResolvedIconPath: resolvedIconPath,
 		// Bug fix: .lnk files often keep the same timestamp when an updater
 		// replaces the target executable. Store the actual icon source so app
 		// cache reuse can notice target icon changes without a full index rebuild.

@@ -98,7 +98,7 @@ func GetShellFolderIcons(ctx context.Context, parent string) (map[string]string,
 }
 
 func shellNamespaceCachePath(parsingName string) string {
-	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), "shellns_"+util.Md5([]byte(strings.ToLower(parsingName)))+".png")
+	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), "shellns_"+fileIconCacheVersion+"_"+util.Md5([]byte(strings.ToLower(parsingName)))+".png")
 }
 
 func shellIconFromPIDLValue(pidl uintptr) (image.Image, error) {
