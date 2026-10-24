@@ -19,7 +19,7 @@ func (a *ApplicationPlugin) buildNewWindowAction(info appInfo, displayName strin
 		Name:        "i18n:plugin_app_open_new_window",
 		Icon:        icons.Get(icons.ActionNewWindow),
 		ContextData: contextData,
-		Hotkey:      "ctrl+enter",
+		Hotkey:      util.PrimaryHotkey("enter"),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			util.GetLogger().Debug(ctx, fmt.Sprintf("app_new_window stage=start path=%q", info.Path))
 			// Keep the action discoverable for every app; resolve support only when invoked.

@@ -24,7 +24,7 @@ Open the [Action Panel](../../usage/action-panel.md) on an app result for second
 | Action | Use |
 | --- | --- |
 | Open | Launch or activate the app |
-| Open New Window | Request a new window with `Ctrl+Enter`; always shown |
+| Open New Window | Request a new window with `Cmd+Enter` on macOS or `Ctrl+Enter` on Windows/Linux; always shown |
 | Open containing folder | Reveal the app file in the system file manager |
 | Copy path | Copy the executable or bundle path |
 | Uninstall | On Windows, start the same ARP/`UninstallString` or Store package removal used by Settings. On macOS, move a user-installed app to the Trash |

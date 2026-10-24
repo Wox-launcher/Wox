@@ -24,7 +24,7 @@ app launchpad
 | 动作 | 用途 |
 | --- | --- |
 | 打开 | 启动或激活应用 |
-| 打开新窗口 | 始终显示，按 `Ctrl+Enter` 请求新建窗口 |
+| 打开新窗口 | 始终显示，macOS 按 `Cmd+Enter`，Windows/Linux 按 `Ctrl+Enter` 请求新建窗口 |
 | 打开所在目录 | 在系统文件管理器中显示应用文件 |
 | 复制路径 | 复制可执行文件或 bundle 路径 |
 | 卸载 | 在 Windows 上走和设置里相同的 ARP/`UninstallString` 或商店包卸载；在 macOS 上把用户安装的应用移到废纸篓 |

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 	"wox/plugin"
+	"wox/util"
 )
 
 func TestNewWindowPolicies(t *testing.T) {
@@ -60,7 +61,7 @@ func TestNewWindowActionPreservesDefaultOpen(t *testing.T) {
 		for _, action := range actions {
 			if action.Name == "i18n:plugin_app_open_new_window" {
 				count++
-				if action.Hotkey != "ctrl+enter" {
+				if action.Hotkey != util.PrimaryHotkey("enter") {
 					t.Fatalf("new window shortcut = %q", action.Hotkey)
 				}
 			}
