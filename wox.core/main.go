@@ -122,6 +122,11 @@ func crashCaptureAssets() supervisor.CrashCaptureAssets {
 }
 
 func main() {
+	// VS Code's debugger can pass its Node-mode flag to Wox. Wox is not an
+	// Electron CLI host: inheriting this flag makes launched Electron apps exit
+	// without opening their UI. Clear it once, before spawning any child processes,
+	// rather than changing the process environment around concurrent Shell launches.
+	_ = os.Unsetenv("ELECTRON_RUN_AS_NODE")
 	configureSupervisor()
 	if privacy.IsCleanupProcess(os.Args) {
 		os.Exit(privacy.RunCleanupProcess(os.Args))

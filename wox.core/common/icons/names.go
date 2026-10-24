@@ -55,6 +55,7 @@ const (
 	ActionAirdrop              = "action.airdrop"
 	ActionCopy                 = "action.copy"
 	ActionOpen                 = "action.open"
+	ActionNewWindow            = "action.new-window"
 	ActionOpenInSystemTerminal = "action.open-in-system-terminal"
 	ActionTerminate            = "action.terminate"
 	ActionText                 = "action.text"

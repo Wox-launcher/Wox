@@ -1743,6 +1743,7 @@
   "plugin_wpm_plugin_name": "Wox 플러그인 관리자",
   "plugin_wpm_plugin_description": "Wox용 플러그인 관리자",
   "plugin_app_open": "열기",
+  "plugin_app_open_new_window": "새 창 열기",
   "plugin_app_open_as_administrator": "관리자로 실행",
   "plugin_app_open_containing_folder": "상위 폴더 열기",
   "plugin_app_copy_path": "경로 복사",

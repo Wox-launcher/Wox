@@ -19,6 +19,7 @@ func newActionIcon(paths string) common.WoxImage {
 var keyboardActionIcon = newActionIcon(`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 13h.01M9 13h.01M12 13h6M8 16h8"/>`)
 
 var defaultActionIcons = map[string]common.WoxImage{
+	ActionNewWindow:            newActionIcon(`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M12 12v5M9.5 14.5h5"/>`),
 	ActionHotkey:               keyboardActionIcon,
 	ActionFeedback:             newActionIcon(`<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M7 9h10M7 13h7"/>`),
 	ActionDebug:                newActionIcon(`<path d="m8 3 2 2m6-2-2 2M9 8V7a3 3 0 0 1 6 0v1M6 12H2m16 0h4M6 17H3l-1 3m16-3h3l1 3M7 9H4L2 6m15 3h3l2-3M12 12v9"/><rect x="6" y="8" width="12" height="13" rx="6"/>`),

@@ -902,6 +902,8 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		},
 	}
 
+	actions = append(actions, a.buildNewWindowAction(info, displayName, contextData, actions[0]))
+
 	if util.IsWindows() {
 		extension := strings.ToLower(filepath.Ext(info.Path))
 		canRunAsAdministrator := info.Type == AppTypeDesktop && (extension == ".exe" || extension == ".lnk")

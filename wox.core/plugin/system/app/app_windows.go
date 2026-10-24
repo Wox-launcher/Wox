@@ -1094,6 +1094,14 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 		}
 	}
 
+	// Scoop's current junction differs from the versioned path returned by
+	// GetModuleFileNameExW. Compare file identity per lookup so upgrades do not
+	// leave a stale cached path, while separate installations remain distinct.
+	var appFile os.FileInfo
+	if app.Type == AppTypeDesktop {
+		appFile, _ = os.Stat(appPathLower)
+	}
+
 	// For desktop apps, match by path; for UWP apps, match by package family name
 	for _, proc := range processes {
 		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
@@ -1108,6 +1116,11 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 		} else if app.Type == AppTypeDesktop {
 			if procPathLower == appPathLower {
 				return proc.Pid
+			}
+			if appFile != nil && filepath.Base(procPathLower) == filepath.Base(appPathLower) {
+				if procFile, err := os.Stat(proc.Path); err == nil && os.SameFile(appFile, procFile) {
+					return proc.Pid
+				}
 			}
 		}
 	}
