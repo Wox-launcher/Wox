@@ -223,7 +223,14 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 
 	icon := appIcon
 	iconSourcePath := appPath
-	if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
+	resolvedIconPath := ""
+	// Resolve the shortcut artwork first; its icon may differ from the launch target.
+	iconLocation, _ := readShortcutPropertyUncached(ctx, appPath, "IconLocation")
+	if shortcutIcon, source, iconErr := fileicon.GetShortcutIcon(ctx, appPath, targetPath, iconLocation); iconErr == nil {
+		icon = common.NewWoxImageAbsolutePath(shortcutIcon)
+		iconSourcePath = source
+		resolvedIconPath = shortcutIcon
+	} else if targetPath != "" && strings.HasSuffix(strings.ToLower(targetPath), ".exe") {
 		iconSourcePath = targetPath
 		if iconPath, iconErr := fileicon.GetFileIconByPath(ctx, targetPath); iconErr != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Error getting icon for %s, use default icon: %s", targetPath, iconErr.Error()))
@@ -239,9 +246,10 @@ func (a *WindowsRetriever) parseShortcut(ctx context.Context, appPath string) (a
 	displayName := strings.TrimSuffix(filepath.Base(appPath), filepath.Ext(appPath))
 
 	return appInfo{
-		Name: displayName,
-		Path: filepath.Clean(appPath),
-		Icon: icon,
+		Name:             displayName,
+		Path:             filepath.Clean(appPath),
+		Icon:             icon,
+		ResolvedIconPath: resolvedIconPath,
 		// Bug fix: .lnk files often keep the same timestamp when an updater
 		// replaces the target executable. Store the actual icon source so app
 		// cache reuse can notice target icon changes without a full index rebuild.
@@ -1094,6 +1102,14 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 		}
 	}
 
+	// Scoop's current junction differs from the versioned path returned by
+	// GetModuleFileNameExW. Compare file identity per lookup so upgrades do not
+	// leave a stale cached path, while separate installations remain distinct.
+	var appFile os.FileInfo
+	if app.Type == AppTypeDesktop {
+		appFile, _ = os.Stat(appPathLower)
+	}
+
 	// For desktop apps, match by path; for UWP apps, match by package family name
 	for _, proc := range processes {
 		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
@@ -1108,6 +1124,11 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 		} else if app.Type == AppTypeDesktop {
 			if procPathLower == appPathLower {
 				return proc.Pid
+			}
+			if appFile != nil && filepath.Base(procPathLower) == filepath.Base(appPathLower) {
+				if procFile, err := os.Stat(proc.Path); err == nil && os.SameFile(appFile, procFile) {
+					return proc.Pid
+				}
 			}
 		}
 	}

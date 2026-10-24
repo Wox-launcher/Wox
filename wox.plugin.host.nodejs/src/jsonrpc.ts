@@ -367,6 +367,10 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`llm stream callback not found: ${callbackId}`)
   }
 
+  // Release before invoking plugin code so a throwing terminal callback cannot leak.
+  if (streamType === "finished" || streamType === "error") {
+    plugin.API.llmStreamCallbacks.delete(callbackId)
+  }
   callbackFunc({
     Status: streamType,
     Data: data,

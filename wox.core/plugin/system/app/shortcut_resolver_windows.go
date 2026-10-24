@@ -78,6 +78,19 @@ func (r *shortcutTargetResolver) resolve(ctx context.Context, shortcutPath strin
 
 // resolveShortcutTargetUncached resolves a Windows shortcut using in-process COM APIs.
 func resolveShortcutTargetUncached(ctx context.Context, shortcutPath string) (string, error) {
+	target, err := readShortcutPropertyUncached(ctx, shortcutPath, "TargetPath")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(target) == "" {
+		return "", fmt.Errorf("shortcut target is empty")
+	}
+	recordShortcutResolution(ctx, "native", shortcutPath)
+	return filepath.Clean(target), nil
+}
+
+// readShortcutPropertyUncached reads metadata without launching or saving the shortcut.
+func readShortcutPropertyUncached(ctx context.Context, shortcutPath, property string) (string, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -130,22 +143,13 @@ func resolveShortcutTargetUncached(ctx context.Context, shortcutPath string) (st
 		// Some shortcuts may not implement Resolve; treat as non-fatal.
 	}
 
-	targetVariant, err := oleutil.GetProperty(shortcutDispatch, "TargetPath")
+	targetVariant, err := oleutil.GetProperty(shortcutDispatch, property)
 	if err != nil {
-		return "", fmt.Errorf("read TargetPath property failed: %w", err)
+		return "", fmt.Errorf("read %s property failed: %w", property, err)
 	}
 	defer targetVariant.Clear()
 
-	targetPath := strings.TrimSpace(targetVariant.ToString())
-	if targetPath == "" {
-		return "", fmt.Errorf("shortcut target is empty")
-	}
-
-	cleanPath := filepath.Clean(targetPath)
-	recordShortcutResolution(ctx, "native", shortcutPath)
-
-	// Normalize path separators for downstream consumers.
-	return cleanPath, nil
+	return strings.TrimSpace(targetVariant.ToString()), nil
 }
 
 func recordShortcutResolution(ctx context.Context, mode string, shortcutPath string) {

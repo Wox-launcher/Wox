@@ -815,6 +815,7 @@ func (encoder *ffmpegRecordingEncoder) Start(path string, width, height, fps int
 		"-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path,
 	}
 	cmd := exec.Command(ffmpegPath, arguments...)
+	ffmpeg.Prepare(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("open H.264 encoder input: %w", err)

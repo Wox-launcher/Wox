@@ -18,7 +18,10 @@ export function canonicalUrl(relativePath: string): string {
 
 /** Add canonical, Open Graph, and paired hreflang tags for a docs page. */
 export function applySeo(pageData: PageData): void {
-  const canonical = canonicalUrl(pageData.relativePath);
+  // Static hosting has no server redirect rules; retain old pages as noindex
+  // redirects whose canonical URL points at the new article.
+  const redirect = pageData.frontmatter.redirect;
+  const canonical = redirect ? new URL(redirect, SITE).href : canonicalUrl(pageData.relativePath);
   const isHome = pageData.relativePath === "index.md" || pageData.relativePath === "zh/index.md";
   const title = isHome || pageData.frontmatter.titleTemplate === false ? pageData.title : `${pageData.title} | Wox`;
   const description = String(pageData.description || pageData.frontmatter.description || "");
@@ -26,6 +29,11 @@ export function applySeo(pageData: PageData): void {
   pageData.frontmatter.head ??= [];
   const head = pageData.frontmatter.head as Array<[string, Record<string, string>]>;
   head.push(["link", { rel: "canonical", href: canonical }]);
+  if (redirect) {
+    head.push(["meta", { name: "robots", content: "noindex, follow" }]);
+    head.push(["meta", { "http-equiv": "refresh", content: `0; url=${redirect}` }]);
+    return;
+  }
   head.push(["meta", { property: "og:title", content: title }]);
   head.push(["meta", { property: "og:url", content: canonical }]);
   if (description) {

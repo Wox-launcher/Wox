@@ -16,7 +16,8 @@
  * ]
  *
  * // Stream the response
- * await api.LLMStream(ctx, conversations, (streamData) => {
+ * const model: AI.AIModel = { Provider: "openai", Name: "gpt-4" }
+ * await api.AIChatStream(ctx, model, conversations, {}, (streamData) => {
  *   if (streamData.Status === "streaming") {
  *     console.log("Chunk:", streamData.Data)
  *   } else if (streamData.Status === "finished") {
@@ -222,7 +223,7 @@ export namespace AI {
    *
    * @example
    * ```typescript
-   * await api.LLMStream(ctx, conversations, (data: AI.ChatStreamData) => {
+   * await api.AIChatStream(ctx, { Provider: "openai", Name: "gpt-4" }, conversations, {}, (data: AI.ChatStreamData) => {
    *   switch (data.Status) {
    *     case "streaming":
    *       // Still receiving content
@@ -310,7 +311,7 @@ export namespace AI {
   /**
    * Callback function type for receiving streaming chat data.
    *
-   * Passed to `PublicAPI.LLMStream()` and called repeatedly as
+   * Passed to `PublicAPI.AIChatStream()` and called repeatedly as
    * the AI generates its response.
    *
    * @param streamData - The current streaming data chunk
@@ -324,10 +325,44 @@ export namespace AI {
    *   }
    * }
    *
-   * await api.LLMStream(ctx, conversations, callback)
+   * await api.AIChatStream(ctx, { Provider: "openai", Name: "gpt-4" }, conversations, {}, callback)
    * ```
    */
   export type ChatStreamFunc = (streamData: ChatStreamData) => void
+
+  /**
+   * Thinking behavior requested for one chat.
+   *
+   * - `provider_default`: leave the choice to the provider
+   * - `thinking`: request reasoning when the model supports it
+   * - `non_thinking`: request a direct answer
+   */
+  export type ChatThinkingMode = "provider_default" | "thinking" | "non_thinking"
+
+  /**
+   * Limits for the tool loop inside one AIChatStream call.
+   *
+   * Zero for `MaxIterations` or `MaxRetries` keeps Wox's default (25 and 3).
+   * `MaxIterations: -1` means unlimited. `TimeoutMs` is the whole loop budget;
+   * zero or omitted means no timeout.
+   */
+  export interface ChatLoopPolicy {
+    MaxIterations?: number
+    RetryOnFailure?: boolean
+    MaxRetries?: number
+    TimeoutMs?: number
+  }
+
+  /**
+   * Options for `AIChatStream`.
+   *
+   * Pass `{}` for a normal chat. Plugin tools are registered separately and
+   * are not sent through this call.
+   */
+  export interface ChatOptions {
+    ThinkingMode?: ChatThinkingMode
+    LoopPolicy?: ChatLoopPolicy
+  }
 
   /**
    * Definition of an AI model (provider and model name).

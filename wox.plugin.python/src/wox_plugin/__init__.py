@@ -236,8 +236,11 @@ from .api import (
 )
 from .models.ai import (
     AIModel,
+    ChatLoopPolicy,
+    ChatOptions,
     ChatStreamData,
     ChatStreamDataType,
+    ChatThinkingMode,
     Conversation,
     ConversationRole,
     ToolCallInfo,
@@ -409,7 +412,10 @@ __all__: List[str] = [
     "PluginSettingValueStyle",
     # AI
     "AIModel",
+    "ChatLoopPolicy",
+    "ChatOptions",
     "ChatStreamData",
+    "ChatThinkingMode",
     "Conversation",
     "ConversationRole",
     "ChatStreamDataType",

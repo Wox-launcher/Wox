@@ -132,7 +132,7 @@ Runtime-registered callable operations. Requires Wox >= 2.4.5. See `references/p
 
 ### AI
 
-- `ai_chat_stream(ctx, model, convs, options, callback)`: Stream LLM response.
+- `ai_chat_stream(ctx, model, conversations, callback, options=None)`: Stream LLM response. `model` is required. `options` is an optional `ChatOptions`.
 
 ### Internationalization (i18n)
 
@@ -278,6 +278,8 @@ preview = WoxPreview(
 ```
 
 Set either `html` or `url`. Optional JSON fields are `injectCss`, `userAgent`, `cacheDisabled`, and `cacheKey` (defaults to the URL or HTML). Inline HTML has no plugin-relative base URL: embed CSS/images or use absolute resource URLs. This is browser content, not sanitized Markdown; use `html.escape` for untrusted text before interpolation.
+
+For dynamic updates to an existing inline HTML page, prefer script-mode updates through the existing result-update API. See [HTML preview updates](html_preview_updates.md) for examples and lifecycle rules. Keep returning complete current HTML from `query()`; do not replace the document for each progress update. This does not change the preview-selection guidance in `SKILL.md`.
 
 ## Structured query arguments and blocks
 

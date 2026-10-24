@@ -252,3 +252,22 @@ func woxGoDarwinWebViewNavigationChanged(context C.uintptr_t, url *C.char, canGo
 	}
 	window.options.OnWebViewNavigationChanged(state)
 }
+
+// Evaluate runs a script on the native owner thread and reports completion asynchronously.
+func (d *darwinWebViewDriver) Evaluate(script string, done func(string, error)) error {
+	native, err := d.window.openNative()
+	if err != nil {
+		return err
+	}
+	source := C.CString(script)
+	defer C.free(unsafe.Pointer(source))
+	id := registerScriptCallback(done)
+	status := C.wox_darwin_webview_evaluate(native, source, C.uint64_t(id))
+	if status == 1 {
+		finishScriptCallback(id, "pending", nil)
+	}
+	if status < 0 {
+		finishScriptCallback(id, "", errors.New("native WebView evaluation failed"))
+	}
+	return nil
+}

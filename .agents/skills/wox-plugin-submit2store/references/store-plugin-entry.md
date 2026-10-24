@@ -55,7 +55,7 @@ Prefer a public GitHub gist. Example: https://gist.github.com/qianlifeng/04a9609
 
 - `Website`: gist HTML URL, `https://gist.github.com/<user>/<gist-id>`
 - `DownloadUrl`: gist raw URL **including the filename**, `https://gist.githubusercontent.com/<user>/<gist-id>/raw/Wox.Plugin.<Name>.js` (or `.py`). The path must end with `.js` or `.py`.
-- `IconUrl` and `ScreenshotUrls`: GitHub user-attachment URLs after uploading the images, `https://gist.github.com/user-attachments/assets/<id>` (for example `https://gist.github.com/user-attachments/assets/7502acdc-1ea5-4ef6-a3fb-31875353dabe`)
+- `IconUrl` and `ScreenshotUrls`: GitHub user-attachment URLs after uploading the images, `https://gist.github.com/user-attachments/assets/<id>` (for example `https://gist.github.com/user-attachments/assets/7502acdc-1ea5-4ef6-a3fb-31875353dabe`). `ScreenshotUrls` is required and must contain at least one image of the plugin running in Wox.
 - Keep exactly one gist file, named `Wox.Plugin.<Name>.js` or `.py`. Do not use a `.wox` package.
 
 ### Packaged SDK (GitHub repo)
@@ -63,12 +63,13 @@ Prefer a public GitHub gist. Example: https://gist.github.com/qianlifeng/04a9609
 - `IconUrl`: public raw image in the plugin repository.
 - `Website`: canonical GitHub repository URL, not the raw URL.
 - `DownloadUrl`: the installable `.wox` release asset, typically `releases/latest/download/<asset>.wox`.
-- `ScreenshotUrls`: omit the property only when the plugin truly has no screenshot to publish.
+- `ScreenshotUrls`: required for every plugin. Include at least one public URL that shows the plugin running in Wox. Do not omit the field or leave it empty. Use a cropped Wox launcher screenshot that shows the query and the plugin's real results, like https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.ColorPicker/main/images/screenshot1.png. Do not submit an icon, a README image, source code, or a full-desktop capture.
 
 ## Validation Checklist
 
 - Verify that `Id` is absent from the current upstream `store-plugin.json` before adding the object.
 - Verify that every URL is public and stable.
+- Verify that `ScreenshotUrls` contains at least one public image URL. Do not submit the entry without it.
 - For single-file plugins, verify that `DownloadUrl` path ends with `.js` or `.py` and that the gist file name matches.
 - For packaged plugins, verify that the download asset name matches the published `.wox` file.
 - Verify that the entry matches the existing JSON formatting in the cloned Wox repository.

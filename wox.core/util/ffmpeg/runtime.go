@@ -52,11 +52,15 @@ func resolve(dataRoot, goos, goarch string, lookPath func(string) (string, error
 			filepath.Join(dataRoot, "others", "recording", goos+"-"+goarch, name),
 		} {
 			if path, err := lookPath(candidate); err == nil {
-				return path, nil
+				return unwrapExecutableShim(path), nil
 			}
 		}
 	}
-	return lookPath(name)
+	path, err := lookPath(name)
+	if err != nil {
+		return "", err
+	}
+	return unwrapExecutableShim(path), nil
 }
 
 // DownloadSize reports the compressed executable size without contacting the server.
@@ -213,7 +217,9 @@ func unpackExecutable(archive, destination string) error {
 func validate(ctx context.Context, path string) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, path, "-hide_banner", "-encoders").CombinedOutput()
+	cmd := exec.CommandContext(ctx, path, "-hide_banner", "-encoders")
+	Prepare(cmd)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("validate FFmpeg runtime: %w: %s", err, strings.TrimSpace(string(output)))
 	}

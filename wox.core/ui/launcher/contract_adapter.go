@@ -397,6 +397,15 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 				break
 			}
 		}
+		if script, command, scriptErr := plugin.WebViewScriptUpdate(result.Preview); command {
+			if scriptErr != nil || a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].ID != result.Id {
+				return
+			}
+			if !a.window.UpdateWebViewScript(a.webViewDocumentKey(), script) {
+				return
+			}
+			result.Preview = nil
+		}
 		updated = a.applyTypedResultUpdate(result)
 	})
 	if err == nil && updated && previewBecameVisible {

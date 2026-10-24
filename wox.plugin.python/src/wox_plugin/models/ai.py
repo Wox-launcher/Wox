@@ -12,6 +12,7 @@ from enum import Enum
 from typing import List, Callable, Optional, Any, Dict
 import time
 from dataclasses import dataclass, field
+import base64
 import json
 
 
@@ -469,6 +470,62 @@ class AIModel:
         )
 
 
+class ChatThinkingMode(str, Enum):
+    """Thinking behavior requested for one chat."""
+
+    PROVIDER_DEFAULT = "provider_default"
+    THINKING = "thinking"
+    NON_THINKING = "non_thinking"
+
+
+@dataclass
+class ChatLoopPolicy:
+    """Limits for the tool loop inside one ai_chat_stream call.
+
+    Zero max_iterations or max_retries keeps Wox's default (25 and 3).
+    max_iterations=-1 means unlimited. timeout_ms is the whole loop budget;
+    zero means no timeout.
+    """
+
+    max_iterations: int = 0
+    retry_on_failure: bool = False
+    max_retries: int = 0
+    timeout_ms: int = 0
+
+    def to_core_dict(self) -> Dict[str, Any]:
+        """Serialize with core field names. Timeout is nanoseconds."""
+        data: Dict[str, Any] = {}
+        if self.max_iterations:
+            data["MaxIterations"] = self.max_iterations
+        if self.retry_on_failure:
+            data["RetryOnFailure"] = True
+        if self.max_retries:
+            data["MaxRetries"] = self.max_retries
+        if self.timeout_ms:
+            data["Timeout"] = self.timeout_ms * 1_000_000
+        return data
+
+
+@dataclass
+class ChatOptions:
+    """Options for ai_chat_stream. Omit it for a normal chat.
+
+    Plugin tools are registered separately and are not sent through this call.
+    """
+
+    thinking_mode: str = ""
+    loop_policy: Optional[ChatLoopPolicy] = None
+
+    def to_core_dict(self) -> Dict[str, Any]:
+        """Serialize with the field names core's AIChatStream expects."""
+        data: Dict[str, Any] = {}
+        if self.thinking_mode:
+            data["ThinkingMode"] = self.thinking_mode
+        if self.loop_policy is not None:
+            data["LoopPolicy"] = self.loop_policy.to_core_dict()
+        return data
+
+
 @dataclass
 class Conversation:
     """
@@ -595,6 +652,21 @@ class Conversation:
             }
 
         return json.dumps(data)
+
+    def to_core_dict(self) -> Dict[str, Any]:
+        """Serialize this message with the field names core's AIChatStream expects."""
+        payload = json.loads(self.to_json())
+        if self.images:
+            payload["Images"] = [
+                {
+                    "ImageType": "base64",
+                    "ImageData": "data:image/png;base64," + base64.b64encode(image).decode("ascii"),
+                }
+                for image in self.images
+            ]
+        else:
+            payload.pop("Images", None)
+        return payload
 
     @classmethod
     def from_json(cls, json_str: str) -> "Conversation":

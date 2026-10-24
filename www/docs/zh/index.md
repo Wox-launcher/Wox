@@ -23,31 +23,9 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
     </figure>
   </section>
 
-  <section class="wox-section wox-section-compact">
-    <div class="wox-section-heading">
-      <h2>日常操作，一个入口。</h2>
-    </div>
-    <div class="wox-feature-grid">
-      <article class="wox-feature-card">
-        <h3>快速找到并打开</h3>
-        <p>输入名称，打开应用、文件或最近的项目。</p>
-      </article>
-      <article class="wox-feature-card">
-        <h3>用键盘完成下一步</h3>
-        <p>复制结果、打开所在文件夹，或从操作面板执行更多命令。</p>
-      </article>
-      <article class="wox-feature-card">
-        <h3>安装插件，扩展功能</h3>
-        <p>使用社区插件，或让 AI agent 按官方 skill 创建插件。</p>
-      </article>
-    </div>
-  </section>
-
   <SystemPluginCarousel />
 
   <ThemeShowcase />
-
-  <HomeQuotes />
 
   <section class="wox-section wox-split-section">
     <div>
@@ -60,6 +38,8 @@ description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
       <img src="/images/plugin_setting.png" alt="Wox 插件设置" loading="lazy" />
     </figure>
   </section>
+
+  <HomeQuotes />
 
   <section class="wox-section wox-closing">
     <h2>开始使用 Wox。</h2>

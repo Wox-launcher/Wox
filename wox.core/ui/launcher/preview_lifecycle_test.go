@@ -213,3 +213,53 @@ func TestPreviewPinFollowsSelectedSurface(t *testing.T) {
 		})
 	}
 }
+
+func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
+	const page = `{"html":"<p>initial state</p>"}`
+	for _, kind := range []string{"webview", "remote", "unresolved", "url", "hidden", "stale"} {
+		t.Run(kind, func(t *testing.T) {
+			preview := queryPreview{PreviewType: "webview", PreviewData: page}
+			app := &App{sessionID: "session", query: plainQuery{QueryID: "query"}, resultsQueryID: "query", selected: 0, results: []queryResult{{ID: "row"}}}
+			if kind == "remote" || kind == "unresolved" {
+				preview = queryPreview{PreviewType: "remote", PreviewData: "/preview?id=row"}
+				if kind == "remote" {
+					app.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: page}}
+				}
+			}
+			if kind == "url" {
+				preview.PreviewData = `{"url":"https://example.com"}`
+			}
+			if kind == "stale" {
+				app.query.QueryID = "next"
+			}
+			for revision := 0; revision < 3; revision++ {
+				app.results[0].Revision++
+				key, html := app.inlineWebViewScriptTarget(preview, kind != "hidden")
+				if kind == "webview" || kind == "remote" {
+					if key != app.webViewDocumentKey() || html != "<p>initial state</p>" {
+						t.Fatalf("lost target: %q %q", key, html)
+					}
+				} else if key != "" || html != "" {
+					t.Fatalf("retained invalid target: %q", key)
+				}
+			}
+		})
+	}
+}
+
+func TestRestoreInlinePreviewRequiresFreshSnapshot(t *testing.T) {
+	app := &App{query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
+		results:        []queryResult{{ID: "row", Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview"}}},
+		remotePreviews: map[string]queryPreview{"/preview": {PreviewType: "webview", PreviewData: `{"html":"<p>old progress</p>"}`}}}
+	if !app.hasInlinePreviewToRestore() {
+		t.Fatal("hidden inline document must refresh even if task stopped publishing")
+	}
+	app.remotePreviews["/preview"] = queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com"}`}
+	if app.hasInlinePreviewToRestore() {
+		t.Fatal("retained URL page must not refresh the query")
+	}
+	app.selected = -1
+	if app.hasInlinePreviewToRestore() {
+		t.Fatal("missing selection must not refresh")
+	}
+}

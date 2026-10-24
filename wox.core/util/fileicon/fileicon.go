@@ -9,7 +9,10 @@ import (
 	"wox/util"
 )
 
-const fileIconPathCachePrefix = "fileicon_v5_"
+// All native icon caches share a version so conversion fixes also invalidate
+// file-type and Shell fallbacks, not just icons extracted from individual files.
+const fileIconCacheVersion = "v6"
+const fileIconPathCachePrefix = "fileicon_" + fileIconCacheVersion + "_"
 
 // GetFileIconByPath returns the default list-size cached OS icon path for the given path.
 // It first tries to resolve the application/file icon, then falls back to the file-type icon.
@@ -98,7 +101,7 @@ func buildCachePath(ext string, size int) string {
 	if safe == "" {
 		safe = "__unknown"
 	}
-	file := "filetype_" + safe + "_" + intToString(size) + ".png"
+	file := "filetype_" + fileIconCacheVersion + "_" + safe + "_" + intToString(size) + ".png"
 	return filepath.Join(util.GetLocation().GetImageCacheDirectory(), file)
 }
 

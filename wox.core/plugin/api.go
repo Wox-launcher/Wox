@@ -1097,6 +1097,12 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 			return false
 		}
 	}
+	if _, command, err := WebViewScriptUpdate(result.Preview); command {
+		cache, found := GetPluginManager().findResultCacheByIdWithContext(ctx, result.Id)
+		if err != nil || !found || cache.PluginInstance != a.pluginInstance || !IsInlineWebViewPreview(cache.Result.Preview) {
+			return false
+		}
+	}
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
 	return success

@@ -15,6 +15,13 @@ class WebViewPreviewTest(unittest.TestCase):
         self.assertEqual(decoded.preview_data, "content")
         self.assertFalse(WoxPreview.from_json('{"PreviewData":"legacy"}').default_hidden)
 
+    def test_script_instruction_round_trip(self):
+        state = {"text": '</script> 中文 " \\'}
+        data = {"updateMode": "script", "script": "window.update(" + json.dumps(state) + ");"}
+        preview = WoxPreview(preview_type=WoxPreviewType.WEBVIEW, preview_data=json.dumps(data))
+        decoded = WoxPreview.from_json(preview.to_json())
+        self.assertEqual(json.loads(decoded.preview_data), data)
+
     def test_html_preview_round_trip(self):
         """HTML and its Unicode content survive SDK serialization and parsing."""
         html = '<!doctype html><html><body><h1 title="preview">你好 Wox</h1></body></html>'

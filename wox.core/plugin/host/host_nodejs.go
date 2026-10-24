@@ -49,7 +49,7 @@ func (n *NodejsHost) Start(ctx context.Context) error {
 		return nodeErr
 	}
 
-	return n.websocketHost.StartHost(ctx, nodePath, path.Join(util.GetLocation().GetHostDirectory(), "node-host.js"), nil)
+	return n.websocketHost.StartHost(ctx, nodePath, path.Join(util.GetLocation().GetHostDirectory(), "node-host.cjs"), nil)
 }
 
 // FindNodejsPath finds the best available Node.js interpreter path

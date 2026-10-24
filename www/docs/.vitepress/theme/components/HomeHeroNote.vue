@@ -12,9 +12,9 @@ const summary = computed(() =>
     : `Latest ${latest.tag} · ${latest.monthNameEn} ${latest.year} · Windows · macOS · Linux`,
 );
 
-const compareHref = computed(() => withBase(isZh.value ? "/zh/compare/" : "/compare/"));
-const compareLabel = computed(() =>
-  isZh.value ? "对比 Flow、Raycast 和 PowerToys" : "Wox vs Flow, Raycast, and PowerToys",
+const storyHref = computed(() => withBase(isZh.value ? "/zh/blog/rediscover-wox-v2" : "/blog/rediscover-wox-v2"));
+const storyLabel = computed(() =>
+  isZh.value ? "博客：重新认识 Wox v2" : "Blog: Rediscover Wox v2",
 );
 </script>
 
@@ -22,6 +22,6 @@ const compareLabel = computed(() =>
   <p class="wox-hero-note">
     {{ summary }}
     <br />
-    <a :href="compareHref">{{ compareLabel }}</a>
+    <a :href="storyHref">{{ storyLabel }}</a>
   </p>
 </template>

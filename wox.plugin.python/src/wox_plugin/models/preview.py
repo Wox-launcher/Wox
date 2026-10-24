@@ -97,6 +97,11 @@ class WoxPreviewType(str, Enum):
     Embedded browser content. Set either url or html in a JSON string.
     Inline HTML has no plugin-relative base URL; use inline CSS and absolute resource URLs.
     Optional keys: injectCss, userAgent, cacheDisabled, cacheKey.
+    In update_result only, {"updateMode": "script", "script": "..."} executes once
+    in the current plugin-owned inline document, without navigation. Do not mix
+    with html/url. True means accepted; exceptions are logged, values/Promises
+    are not returned/awaited. Return complete current HTML on every query.
+
     HTML ignores cache options and reuses a window-local instance, released after 10 seconds unused.
 
     Example:

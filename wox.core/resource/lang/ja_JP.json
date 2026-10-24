@@ -1758,6 +1758,7 @@
   "plugin_wpm_plugin_name": "Woxプラグインマネージャー",
   "plugin_wpm_plugin_description": "Wox 用プラグインマネージャー",
   "plugin_app_open": "開く",
+  "plugin_app_open_new_window": "新しいウィンドウを開く",
   "plugin_app_open_as_administrator": "管理者として実行",
   "plugin_app_open_containing_folder": "含むフォルダーを開く",
   "plugin_app_copy_path": "パスをコピー",

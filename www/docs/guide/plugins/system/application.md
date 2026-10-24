@@ -24,11 +24,16 @@ Open the [Action Panel](../../usage/action-panel.md) on an app result for second
 | Action | Use |
 | --- | --- |
 | Open | Launch or activate the app |
+| Open New Window | Request a new window with `Cmd+Enter` on macOS or `Ctrl+Enter` on Windows/Linux; always shown |
 | Open containing folder | Reveal the app file in the system file manager |
 | Copy path | Copy the executable or bundle path |
 | Uninstall | On Windows, start the same ARP/`UninstallString` or Store package removal used by Settings. On macOS, move a user-installed app to the Trash |
 | Show context menu | Open the system context menu when supported |
 | Terminate app | Stop a running app when Wox can identify the process |
+
+**Open New Window** keeps the default `Enter` behavior unchanged. On macOS, it uses the system's new-instance launch option, with explicit new-window arguments for known apps. On Linux, it prefers the app's declared desktop action. Windows and Linux also support known new-window arguments for Firefox, Chrome/Chromium, Edge, Brave, Vivaldi, and VS Code. Windows Terminal executable entries use its new-window option.
+
+On Windows, supported shortcuts retain their profile arguments, working directory, and elevation settings. The action is always visible. If no compatible new-window method is available, it behaves exactly like Open: launch the app or activate its existing window. The application must support multiple windows; an app can reject a system request to start another instance.
 
 ## App Sources
 

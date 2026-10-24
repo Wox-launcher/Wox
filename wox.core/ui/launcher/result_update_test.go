@@ -55,3 +55,23 @@ func TestUpdateResultRejectsObsoleteQueryScope(t *testing.T) {
 		})
 	}
 }
+
+func TestScriptUpdateRejectsMissingCurrentDocument(t *testing.T) {
+	for _, selected := range []int{-1, 0, 1} {
+		app := &App{sessionID: "session", query: plainQuery{QueryID: "query"}, resultsQueryID: "query", results: []queryResult{{ID: "row", Title: "before"}, {ID: "other"}}, selected: selected}
+		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "session"), "query")
+		command := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeWebView, PreviewData: `{"updateMode":"script","script":"tick()"}`}
+		title := "after"
+		accepted, err := app.UpdateResult(ctx, plugin.UpdatableResult{Id: "row", Title: &title, Preview: &command})
+		if err != nil || accepted || app.results[0].Title != "before" {
+			t.Fatal("script without current document was applied")
+		}
+	}
+}
+func TestQueryPreviewRejectsScriptInstructions(t *testing.T) {
+	for _, data := range []string{`{"updateMode":"script","script":"tick()"}`, `{"html":"<p>hi</p>","updateMode":"script","script":"tick()"}`, `{"html":"<p>hi</p>","script":""}`} {
+		if _, err := decodeWebViewPreview(data); err == nil {
+			t.Fatal("query accepted script instruction")
+		}
+	}
+}
