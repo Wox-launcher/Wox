@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 
 [[package]]
@@ -617,7 +617,7 @@ wheels = [
 
 [[package]]
 name = "wox-plugin"
-version = "0.0.89"
+version = "0.0.92"
 source = { editable = "." }
 
 [package.optional-dependencies]
