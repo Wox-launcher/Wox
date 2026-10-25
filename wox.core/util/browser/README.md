@@ -6,8 +6,11 @@ Existing `OpenURL` and `OpenURLInPrivate` contracts remain unchanged.
 
 `OpenExternalURL` accepts HTTP, HTTPS, and mail drafts, preserving the original
 string through publication so long checkout URLs and fragments are not
-re-encoded. Windows prefers direct browser arguments when the default browser
-is known and uses `shell.OpenWithOwner` for fallback. macOS uses Launch Services;
+re-encoded. Windows uses `shell.OpenWithOwner` for ordinary links so the effective
+system association takes precedence over potentially stale browser registry values.
+HTTP(S) links longer than 2048 bytes retain direct browser arguments when the default
+browser is known, avoiding truncation of long checkout URLs; unknown browsers and
+failed launches fall back to `shell.OpenWithOwner`. macOS uses Launch Services;
 Linux uses GTK owner-aware URI dispatch, preserving desktop activation and portal
 context rather than replacing it with a subprocess in the native UI path.
 

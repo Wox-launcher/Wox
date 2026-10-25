@@ -8,27 +8,38 @@ import (
 	"testing"
 )
 
-// TestExternalURLLaunchPreservesRawLink covers checkout fragments, mail routing, and owner-aware fallback without launching an app.
+// TestExternalURLLaunchPreservesRawLink covers system routing, long checkout fragments, and owner-aware fallback without launching an app.
 func TestExternalURLLaunchPreservesRawLink(t *testing.T) {
 	checkout := "https://checkout.stripe.com/c/pay/cs_live_" + strings.Repeat("abc", 2048) + "#fidk+Unmodified%2Fpart"
 	mail := "mailto:billing@woxlauncher.com?subject=Billing+help"
+	webPrefix := "https://example.com/"
 	for _, test := range []struct {
 		name       string
 		url        string
 		browserID  string
 		browserErr error
+		wantDetect bool
 		wantShell  bool
 	}{
-		{name: "checkout", url: checkout, browserID: BrowserIDChrome},
-		{name: "unknown browser", url: checkout, wantShell: true},
-		{name: "failed browser", url: checkout, browserID: BrowserIDChrome, browserErr: errors.New("launch failed"), wantShell: true},
+		{name: "https ignores stale browser", url: "https://github.com/Wox-launcher/Wox", browserID: BrowserIDChrome, wantShell: true},
+		{name: "http ignores stale browser", url: "http://www.wox.one", browserID: BrowserIDChrome, wantShell: true},
+		{name: "short checkout", url: "https://checkout.stripe.com/c/pay/cs_live_abc#fidk+Unmodified%2Fpart", browserID: BrowserIDChrome, wantShell: true},
+		{name: "shell length boundary", url: webPrefix + strings.Repeat("a", 2048-len(webPrefix)), browserID: BrowserIDChrome, wantShell: true},
+		{name: "above shell length boundary", url: webPrefix + strings.Repeat("a", 2049-len(webPrefix)), browserID: BrowserIDChrome, wantDetect: true},
+		{name: "checkout", url: checkout, browserID: BrowserIDChrome, wantDetect: true},
+		{name: "unknown browser", url: checkout, wantDetect: true, wantShell: true},
+		{name: "failed browser", url: checkout, browserID: BrowserIDChrome, browserErr: errors.New("launch failed"), wantDetect: true, wantShell: true},
 		{name: "mail", url: mail, browserID: BrowserIDChrome, wantShell: true},
+		{name: "long mail", url: mail + strings.Repeat("a", 2048), browserID: BrowserIDChrome, wantShell: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			browserCalls, shellCalls := 0, 0
+			detectCalls, browserCalls, shellCalls := 0, 0, 0
 			const owner = uintptr(0x1234)
 			shellErr := errors.New("shell failed")
-			err := launchExternalURL(test.url, owner, func() string { return test.browserID }, func(gotURL, gotID string) error {
+			err := launchExternalURL(test.url, owner, func() string {
+				detectCalls++
+				return test.browserID
+			}, func(gotURL, gotID string) error {
 				browserCalls++
 				if gotURL != test.url || gotID != test.browserID {
 					t.Fatalf("browser arguments changed: %q %q", gotURL, gotID)
@@ -48,8 +59,15 @@ func TestExternalURLLaunchPreservesRawLink(t *testing.T) {
 			} else if shellCalls != 0 || err != nil {
 				t.Fatalf("successful browser launch fell back: calls=%d error=%v", shellCalls, err)
 			}
-			if test.url == mail && browserCalls != 0 {
-				t.Fatal("mail draft was sent to a web browser")
+			wantDetectCalls, wantBrowserCalls := 0, 0
+			if test.wantDetect {
+				wantDetectCalls = 1
+				if test.browserID != "" {
+					wantBrowserCalls = 1
+				}
+			}
+			if detectCalls != wantDetectCalls || browserCalls != wantBrowserCalls {
+				t.Fatalf("detect calls=%d browser calls=%d, want %d and %d", detectCalls, browserCalls, wantDetectCalls, wantBrowserCalls)
 			}
 		})
 	}
