@@ -1,6 +1,7 @@
 # Plugin result processing
 
-The manager retains plugin lifecycle, query scheduling and session cache ownership.
+The manager retains plugin lifecycle and query scheduling. Its internal
+`queryResultStore` owns session/query result maps and deferred image tokens.
 Result presentation is organized within the same package:
 
 - `result_polish.go` owns initial result processing, ranking, remote preview
@@ -11,6 +12,25 @@ Result presentation is organized within the same package:
   defaults, action icon and tail-icon conversion, default action selection,
   platform hotkeys, action/form translation, tail translation and query-pin tails.
   It also owns action proxies and drag-payload normalization.
+- `query_result_store.go` owns result storage, scoped and legacy lookups, retention
+  and cached diagnostic fields. The per-session limit remains 32 queries.
+- `query_result_icons.go` owns lazy-token registration, expiry and hydration,
+  including the existing plugin-image lock through publication.
+- `query_result_access.go` keeps the public Manager methods and plugin lifecycle
+  callbacks separate from store operations. `result_icon.go` chooses image sizing
+  and delegates deferred ownership to the store.
+
+Explicit session/query lookups never fall back to another query's result. Calls
+without that scope retain the legacy lookup behavior. Starting a query preserves
+other retained result sets so responses can finish out of order; storing a result
+does not recreate an evicted set. Hiding keeps the newest set and its tokens.
+Destroying a session invokes the existing plugin-leave flow before releasing the
+results and tokens. Temporary result-hotkey sessions also release both together.
+
+The store intentionally retains the existing shared result pointers, map locks
+and alias-precedence lock. This extraction does not introduce immutable snapshots,
+new scheduling/cancellation rules, or synchronization around incremental fields.
+Sorting and UI snapshot construction remain presentation responsibilities.
 
 The two entry points deliberately keep separate orchestration. An omitted patch
 field retains its cached value; supplied empty strings or collections still pass
@@ -25,7 +45,9 @@ Incremental polish uses the same action image converter for both `Icon` and
 `TailIcon`, including plugin-relative paths. Normalization does not add deadlines,
 change published plugin API types, rerank incremental results, or write settings.
 
-Existing coverage lives in `query_polish_test.go`, `manager_test.go`,
+Existing cache lifecycle and scope tests live in `query_result_store_test.go`;
+lazy-image tests also remain in `image_cache_test.go` and `manager_test.go`.
+Other result coverage lives in `query_polish_test.go`, `manager_test.go`,
 `result_binding_test.go`, `query_fallback_test.go` and `webview_update_test.go`.
 Run `go test ./plugin` from `wox.core`, then the repository's core, Go UI unit and
 native smoke suites for end-to-end validation.

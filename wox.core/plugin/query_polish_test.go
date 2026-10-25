@@ -15,7 +15,7 @@ func TestResultIconBatchCacheKeepsLazyOwnership(t *testing.T) {
 	initPluginManagerLoadTest(t)
 	query := Query{Id: "icons", SessionId: "session", Type: QueryTypeInput, TriggerKeyword: "f", Env: QueryEnv{IsMRU: true}}
 	manager, instance := newTestManagerWithCachedResult(query, QueryResult{Id: "initial"})
-	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	cache := make(map[common.WoxImage]common.WoxImage)
 	icon := common.NewWoxImageEmoji("📄")
 	first, _ := manager.polishResult(context.Background(), instance, query, QueryLayout{}, QueryResult{Id: "one", Icon: icon}, false, nil, cache, "", aliasMatchNone)

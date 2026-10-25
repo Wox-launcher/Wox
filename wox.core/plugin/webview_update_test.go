@@ -29,7 +29,7 @@ func TestScriptUpdatePreservesCachedHTMLAndUpdatesActions(t *testing.T) {
 	if result.Preview.PreviewData != command.PreviewData {
 		t.Fatal("command was lost")
 	}
-	cached, found := manager.findResultCacheById("row")
+	cached, found := manager.resultStore.findByID("row")
 	if !found || cached.Result.Preview.PreviewData != original.PreviewData {
 		t.Fatal("command replaced cached HTML")
 	}
@@ -57,7 +57,7 @@ func TestScriptUpdateRejectsForeignOwnerAndMissingQuery(t *testing.T) {
 	if ownerAPI.UpdateResult(old, update) {
 		t.Fatal("old query accepted")
 	}
-	cached, _ := manager.findResultCacheById("row")
+	cached, _ := manager.resultStore.findByID("row")
 	cached.Result.Preview = WoxPreview{PreviewType: WoxPreviewTypeWebView, PreviewData: `{"url":"https://example.com"}`}
 	if ownerAPI.UpdateResult(ctx, update) {
 		t.Fatal("URL page accepted")

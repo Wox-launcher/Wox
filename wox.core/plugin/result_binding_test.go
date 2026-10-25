@@ -221,13 +221,13 @@ func TestResultBindingHashMatchesTranslatedMRU(t *testing.T) {
 	if hash != mruIdentityHash(instance.Metadata, query, translated) {
 		t.Fatal("form and execution use different identities")
 	}
-	manager.storeQueryResult(ctx, instance, query, QueryLayout{}, translated, hash, aliasMatchExact)
-	cache, _ := manager.findResultCacheInSession(query.SessionId, query.Id, original.Id)
+	manager.resultStore.storeResult(ctx, instance, query, QueryLayout{}, translated, hash, aliasMatchExact)
+	cache, _ := manager.resultStore.findInSession(query.SessionId, query.Id, original.Id)
 	if cache.SourceMRUHash != hash || cache.AliasMatchKind != aliasMatchExact {
 		t.Fatal("source identity was not published with the cache")
 	}
-	manager.storeQueryResult(ctx, instance, query, QueryLayout{}, translated, "ordinary", aliasMatchNone)
-	cache, _ = manager.findResultCacheInSession(query.SessionId, query.Id, original.Id)
+	manager.resultStore.storeResult(ctx, instance, query, QueryLayout{}, translated, "ordinary", aliasMatchNone)
+	cache, _ = manager.resultStore.findInSession(query.SessionId, query.Id, original.Id)
 	if cache.SourceMRUHash != hash || cache.AliasMatchKind != aliasMatchExact {
 		t.Fatal("late ordinary row erased alias priority")
 	}

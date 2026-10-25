@@ -47,7 +47,6 @@ var logger *util.Log
 
 const (
 	previewDataMaxSize          = 1024
-	maxCachedQueriesPerSession  = 32
 	globalQueryPluginScoreLimit = 200
 	// rankAboveUsageScore sits above action history. Query pins are a separate display tier.
 	rankAboveUsageScore int64 = 50000
@@ -57,22 +56,6 @@ const (
 type debounceTimer struct {
 	timer  *time.Timer
 	onStop func()
-}
-
-type lazyResultIconEntry struct {
-	SessionId       string
-	QueryId         string
-	ResultId        string
-	OriginalIcon    common.WoxImage
-	PluginDirectory string
-	PluginInstance  *Instance
-	CacheScope      string
-	TargetSize      int
-	CreatedAt       int64
-
-	mu       sync.Mutex
-	resolved bool
-	icon     common.WoxImage
 }
 
 // queryPluginJob is the scheduler's normalized decision for one plugin.
@@ -145,23 +128,6 @@ type queryTracker struct {
 	done              chan bool
 }
 
-type QueryResultSet struct {
-	// storeMu makes alias precedence atomic when plugin responses arrive concurrently.
-	storeMu   sync.Mutex
-	Query     Query
-	StartedAt int64
-	Results   *util.HashMap[string, *QueryResultCache]
-}
-
-func newQueryResultSet(query Query) *QueryResultSet {
-	set := &QueryResultSet{
-		Query:     query,
-		StartedAt: util.GetSystemTimestamp(),
-		Results:   util.NewHashMap[string, *QueryResultCache](),
-	}
-	return set
-}
-
 type Manager struct {
 	// resultBindingRestores bounds callbacks that outlive their query cancellation.
 	resultBindingRestores        sync.Map
@@ -174,10 +140,7 @@ type Manager struct {
 	systemPluginsReady chan struct{}
 	ui                 common.UI
 
-	// Query pipelines are concurrent in core even though UI displays only
-	// one active query. Key by session and query id so a late pipeline cannot
-	// overwrite the result snapshot needed by another query's final response.
-	sessionQueryResultCache *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
+	resultStore *queryResultStore
 
 	debounceQueryTimer *util.HashMap[string, *debounceTimer]
 	autoQueryHistory   *autoQueryHistoryRecorder
@@ -204,12 +167,6 @@ type Manager struct {
 
 	// sessionPluginQueries tracks which plugin query is currently active for each UI session (sessionId -> state)
 	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
-
-	// lazyResultIcons keeps core-owned tokens for result icons deferred because
-	// they require remote I/O or expensive raster work.
-	// Plugins still return ordinary WoxImage values; manager creates these tokens
-	// only after result IDs, query IDs, and surface sizes are known.
-	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
 
 	// hostRestartMu serializes shared runtime host restarts (settings/uninstall
 	// and the host watchdog) so a dead host can never be restarted concurrently.
@@ -248,9 +205,9 @@ const (
 func GetPluginManager() *Manager {
 	managerOnce.Do(func() {
 		managerInstance = &Manager{
-			systemPluginsReady:      make(chan struct{}),
-			sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
-			debounceQueryTimer:      util.NewHashMap[string, *debounceTimer](),
+			systemPluginsReady: make(chan struct{}),
+			resultStore:        newQueryResultStore(),
+			debounceQueryTimer: util.NewHashMap[string, *debounceTimer](),
 			autoQueryHistory: newAutoQueryHistoryRecorder(autoRecordQueryHistoryDelay, func(ctx context.Context, query common.PlainQuery) {
 				setting.GetSettingManager().AddQueryHistory(ctx, query)
 			}),
@@ -263,7 +220,6 @@ func GetPluginManager() *Manager {
 			pluginToolbarMsgIds:         util.NewHashMap[string, string](),
 			glanceActions:               util.NewHashMap[string, GlanceAction](),
 			sessionPluginQueries:        util.NewHashMap[string, *sessionPluginQueryState](),
-			lazyResultIcons:             util.NewHashMap[string, *lazyResultIconEntry](),
 			hostWatchdogStates:          map[string]*hostWatchdogState{},
 			hostWatchdogStop:            make(chan struct{}),
 			hostWatchdogDone:            make(chan struct{}),
@@ -2379,140 +2335,6 @@ func actionedRankingScoreTail(score int64) string {
 	return fmt.Sprintf("+%d", score)
 }
 
-func (m *Manager) startSessionQueryCache(query Query) {
-	if query.Id == "" {
-		return
-	}
-
-	sessionQueries, _ := m.sessionQueryResultCache.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
-
-	// A UI session can have multiple backend query pipelines in flight because UI
-	// requests and plugin responses are handled concurrently.
-	// Store every query under its own query id so a late old query cannot erase
-	// the result cache required to send the newer query's final response.
-	sessionQueries.Store(query.Id, newQueryResultSet(query))
-	m.clearLazyResultIconsForSessionExcept(query.SessionId, query.Id)
-	m.pruneSessionQueryCache(sessionQueries, query.Id)
-}
-
-// pruneSessionQueryCache ensures the number of cached queries for a session does not exceed the defined maximum.·
-func (m *Manager) pruneSessionQueryCache(sessionQueries *util.HashMap[string, *QueryResultSet], keepQueryId string) {
-	if sessionQueries.Len() <= maxCachedQueriesPerSession {
-		return
-	}
-
-	type cachedQueryEntry struct {
-		queryId   string
-		startedAt int64
-	}
-	var entries []cachedQueryEntry
-	sessionQueries.Range(func(queryId string, set *QueryResultSet) bool {
-		if queryId != keepQueryId {
-			entries = append(entries, cachedQueryEntry{queryId: queryId, startedAt: set.StartedAt})
-		}
-		return true
-	})
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].startedAt < entries[j].startedAt
-	})
-
-	// Query caches are now keyed by query id, so without a small cap every typed
-	// character would leave a completed result set behind. Keep the newest sets
-	// plus the query that was just started; old non-current responses are still
-	// safe to drop because UI ignores them by query id.
-	for sessionQueries.Len() > maxCachedQueriesPerSession && len(entries) > 0 {
-		if entries[0].queryId == keepQueryId {
-			entries = entries[1:]
-			continue
-		}
-		sessionQueries.Delete(entries[0].queryId)
-		entries = entries[1:]
-	}
-}
-
-func (m *Manager) getQueryResultSet(sessionId string, queryId string) (*QueryResultSet, bool) {
-	if queryId == "" {
-		return nil, false
-	}
-	sessionQueries, ok := m.sessionQueryResultCache.Load(sessionId)
-	if !ok {
-		return nil, false
-	}
-	return sessionQueries.Load(queryId)
-}
-
-func (m *Manager) getQueryResultSetForQuery(query Query) (*QueryResultSet, bool) {
-	return m.getQueryResultSet(query.SessionId, query.Id)
-}
-
-func (m *Manager) storeQueryResult(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultOriginal QueryResult, sourceHash string, match aliasMatchKind) {
-	if query.Id == "" {
-		logger.Warn(ctx, "query id is empty, skip result cache")
-		return
-	}
-	if query.SessionId == "" {
-		logger.Warn(ctx, "query session id is empty, skip result cache")
-		return
-	}
-
-	set, ok := m.getQueryResultSetForQuery(query)
-	if !ok {
-		return
-	}
-
-	set.storeMu.Lock()
-	defer set.storeMu.Unlock()
-	// A plugin can return the same stable result ID after its alias restore.
-	// Keep the restored row and its priority regardless of completion order.
-	if existing, found := set.Results.Load(resultOriginal.Id); found && existing != nil && existing.AliasMatchKind != aliasMatchNone && match == aliasMatchNone {
-		return
-	}
-	cache := &QueryResultCache{
-		Result:         resultOriginal,
-		PluginInstance: pluginInstance,
-		Query:          query,
-		Layout:         layout,
-	}
-	cache.SourceMRUHash = sourceHash
-	cache.AliasMatchKind = match
-	set.Results.Store(resultOriginal.Id, cache)
-
-}
-
-func (m *Manager) clearLazyResultIconsForSessionExcept(sessionId string, keepQueryId string) {
-	if sessionId == "" {
-		return
-	}
-
-	// Lazy image tokens are scoped to the polished query result that created them.
-	// When the same launcher session starts a newer query, old tokens should stop
-	// resolving so a late UI image request cannot hydrate an icon for stale UI.
-	var tokensToDelete []string
-	m.lazyResultIcons.Range(func(token string, entry *lazyResultIconEntry) bool {
-		if entry != nil && entry.SessionId == sessionId && entry.QueryId != keepQueryId {
-			tokensToDelete = append(tokensToDelete, token)
-		}
-		return true
-	})
-	for _, token := range tokensToDelete {
-		m.lazyResultIcons.Delete(token)
-	}
-}
-
-// ClearSessionState drops query-owned caches after an independent UI session is destroyed.
-func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
-	if sessionId == "" {
-		return
-	}
-	// Closing a launcher also leaves its plugin query. Hosts use the existing
-	// leave callbacks to release command processes owned by this window.
-	m.HandleQueryLifecycle(ctx, Query{SessionId: sessionId}, nil)
-	m.sessionQueryResultCache.Delete(sessionId)
-	m.sessionPluginQueries.Delete(sessionId)
-	m.clearLazyResultIconsForSessionExcept(sessionId, "")
-	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
-}
-
 // ReleasePreparedSearchText drops precomputed app, command, and plugin-name match text.
 // Plugins rebuild it on the next query.
 func (m *Manager) ReleasePreparedSearchText() {
@@ -2528,229 +2350,12 @@ func (m *Manager) ReleasePreparedSearchText() {
 	}
 }
 
-// TrimHiddenSessionQueryCache keeps only the newest query result set after hide.
-// Each typed character starts a new query id, so a 32-entry cap would otherwise
-// retain many complete result snapshots (including action closures and icon
-// strings) until the next query starts.
-func (m *Manager) TrimHiddenSessionQueryCache(ctx context.Context, sessionId string) {
-	sessionQueries, ok := m.sessionQueryResultCache.Load(sessionId)
-	if !ok || sessionQueries.Len() <= 1 {
-		return
-	}
-
-	keepQueryId := newestCachedQueryID(sessionQueries)
-	if keepQueryId == "" {
-		return
-	}
-
-	var dropped []string
-	sessionQueries.Range(func(queryId string, _ *QueryResultSet) bool {
-		if queryId != keepQueryId {
-			dropped = append(dropped, queryId)
-		}
-		return true
-	})
-	for _, queryId := range dropped {
-		sessionQueries.Delete(queryId)
-	}
-	m.clearLazyResultIconsForSessionExcept(sessionId, keepQueryId)
-	if len(dropped) > 0 {
-		util.GetLogger().Info(ctx, fmt.Sprintf("trimmed hidden session query cache: session=%s kept=%s dropped=%d", sessionId, keepQueryId, len(dropped)))
-	}
-}
-
-// newestCachedQueryID returns the query id with the latest StartedAt in a session.
-func newestCachedQueryID(sessionQueries *util.HashMap[string, *QueryResultSet]) string {
-	var newestID string
-	var newestAt int64
-	sessionQueries.Range(func(queryId string, set *QueryResultSet) bool {
-		if set == nil {
-			return true
-		}
-		if newestID == "" || set.StartedAt >= newestAt {
-			newestID = queryId
-			newestAt = set.StartedAt
-		}
-		return true
-	})
-	return newestID
-}
-
-func (m *Manager) convertResultIcon(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage) common.WoxImage {
-	return m.convertResultIconWithRecorder(ctx, pluginInstance, query, layout, resultId, resultTitle, icon, nil)
-}
-
-// convertResultIconWithRecorder lets the finalize hot path aggregate icon conversion diagnostics instead of logging inside each conversion.
-func (m *Manager) convertResultIconWithRecorder(ctx context.Context, pluginInstance *Instance, query Query, layout QueryLayout, resultId string, resultTitle string, icon common.WoxImage, recorder func(timetracking.IconConversionDiagnostics, timetracking.IconConversionTimingSummary)) common.WoxImage {
-	resultIconSize := m.getResultIconSizeForQuery(pluginInstance, query, layout)
-	pluginDirectory := ""
-	if pluginInstance != nil {
-		pluginDirectory = pluginInstance.PluginDirectory
-	}
-
-	diagnostics := timetracking.IconConversionDiagnostics{}
-	if recorder != nil {
-		diagnostics = timetracking.IconConversionDiagnostics{
-			Purpose:     "result_icon",
-			QueryId:     query.Id,
-			Plugin:      queryDiagnosticPluginLabel(pluginInstance),
-			ResultId:    resultId,
-			ResultTitle: resultTitle,
-			Recorder:    recorder,
-		}
-	}
-	convertedIcon := pluginInstance.convertIcon(ctx, icon, common.IconConversion{Size: resultIconSize, AllowLazy: true, Diagnostics: diagnostics})
-	if convertedIcon.ImageType != common.WoxImageTypeLazyLoad {
-		return convertedIcon
-	}
-
-	// Lazy load markers keep large plugin icons out of every result payload. They
-	// contain the original source plus a token used to retrieve the converted
-	// thumbnail later. If parsing fails, return the marker so UI still receives an icon.
-	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(convertedIcon)
-	if payloadErr != nil || payload.Source == nil || payload.Source.IsEmpty() {
-		return convertedIcon
-	}
-
-	targetSize := payload.TargetSize
-	if targetSize <= 0 {
-		targetSize = resultIconSize
-	}
-	// Result icon conversion is the only place that has both plugin path context
-	// and stable result/query IDs. Common returns only a source-bearing lazy marker;
-	// manager owns token registration because it also owns the result cache.
-	registeredIcon := m.registerLazyResultIcon(ctx, pluginInstance, query, resultId, *payload.Source, pluginDirectory, targetSize, payload.CacheScope)
-	if !registeredIcon.IsEmpty() {
-		return registeredIcon
-	}
-
-	// If a result cannot be tokenized, keep old behavior instead of leaking an
-	// unregistered lazy marker to UI.
-	if recorder != nil {
-		diagnostics.Purpose = "result_icon_lazy_fallback"
-		return pluginInstance.convertIcon(ctx, *payload.Source, common.IconConversion{Size: targetSize, CacheScope: payload.CacheScope, Diagnostics: diagnostics})
-	}
-	return pluginInstance.convertIcon(ctx, *payload.Source, common.IconConversion{Size: targetSize, CacheScope: payload.CacheScope})
-}
-
-func (m *Manager) registerLazyResultIcon(ctx context.Context, pluginInstance *Instance, query Query, resultId string, normalized common.WoxImage, pluginDirectory string, size int, cacheScope string) common.WoxImage {
-	if query.SessionId == "" || query.Id == "" || resultId == "" {
-		return common.WoxImage{}
-	}
-
-	// Store the original normalized image, not a pre-decoded bitmap. The expensive
-	// decode/crop/resize work is intentionally deferred until UI asks for this
-	// token from a visible result image widget.
-	token := uuid.NewString()
-	m.lazyResultIcons.Store(token, &lazyResultIconEntry{
-		SessionId:       query.SessionId,
-		QueryId:         query.Id,
-		ResultId:        resultId,
-		OriginalIcon:    normalized,
-		PluginDirectory: pluginDirectory,
-		PluginInstance:  pluginInstance,
-		CacheScope:      cacheScope,
-		TargetSize:      size,
-		CreatedAt:       util.GetSystemTimestamp(),
-	})
-
-	pluginName := "<unknown>"
-	if pluginInstance != nil {
-		pluginName = pluginInstance.GetName(ctx)
-	}
-	logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) icon deferred as lazyloadimage, size: %d", pluginName, resultId, size))
-	// The authorization token is query-scoped, while the source hash is stable
-	// across queries so UI can reuse an already decoded icon.
-	cacheKey := fmt.Sprintf("%s-%s-%d", util.Md5([]byte(cacheScope)), normalized.Hash(), size)
-	if normalized.ImageType == common.WoxImageTypeFileIcon {
-		// Deferred file icons have not acquired the OS cache's versioned path yet.
-		// Match its source-mtime invalidation so an app update cannot reuse old UI pixels.
-		if info, err := os.Stat(normalized.ImageData); err == nil {
-			cacheKey += fmt.Sprintf("-%d", info.ModTime().UnixNano())
-		}
-	}
-	return common.NewWoxImageLazyLoad(token, cacheKey, icons.Get(icons.StatusImagePlaceholder), size)
-}
-
-func (m *Manager) LoadLazyResultIcon(ctx context.Context, token string) (common.WoxImage, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token is empty")
-	}
-
-	entry, found := m.lazyResultIcons.Load(token)
-	if !found || entry == nil {
-		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token not found")
-	}
-
-	// Hold the instance read lock through publication, not just conversion.
-	if entry.PluginInstance != nil {
-		entry.PluginInstance.imageMu.RLock()
-		defer entry.PluginInstance.imageMu.RUnlock()
-		if entry.PluginInstance.imageCacheClosed {
-			return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("plugin is unloaded")
-		}
-	}
-	resultCache, cacheFound := m.findResultCacheInSession(entry.SessionId, entry.QueryId, entry.ResultId)
-	if !cacheFound {
-		m.lazyResultIcons.Delete(token)
-		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image result is no longer cached")
-	}
-
-	if resultCache.Result.Icon.ImageType != common.WoxImageTypeLazyLoad {
-		m.lazyResultIcons.Delete(token)
-		if !resultCache.Result.Icon.IsEmpty() {
-			return resultCache.Result.Icon, nil
-		}
-		return icons.Get(icons.StatusImagePlaceholder), nil
-	}
-	payload, payloadErr := common.ParseWoxLazyLoadImagePayload(resultCache.Result.Icon)
-	if payloadErr != nil || payload.Token != token {
-		m.lazyResultIcons.Delete(token)
-		return icons.Get(icons.StatusImagePlaceholder), fmt.Errorf("lazy image token is stale")
-	}
-
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	if entry.resolved {
-		return entry.icon, nil
-	}
-
-	startedAt := util.GetSystemTimestamp()
-	// Lazy load requests intentionally use the original synchronous converter
-	// because this path runs after UI has built an image widget for the
-	// result. That keeps the query response fast while still reusing the existing
-	// crop/resize/cache behavior for the actual thumbnail artifact.
-	pluginID := ""
-	if entry.PluginInstance != nil {
-		pluginID = entry.PluginInstance.Metadata.Id
-	}
-	converted, err := common.ConvertPluginIcon(ctx, entry.OriginalIcon, pluginID, entry.PluginDirectory, common.IconConversion{Size: entry.TargetSize, CacheScope: entry.CacheScope})
-	if err != nil {
-		return icons.Get(icons.StatusImagePlaceholder), err
-	}
-	// URL GIFs used to stay typed as url because conversion skipped resize.
-	// UI cannot decode that type, so they collapsed to the placeholder. The
-	// converter now downloads the file first; a remaining url means the fetch failed.
-	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad || converted.ImageType == common.WoxImageTypeUrl {
-		converted = icons.Get(icons.StatusImagePlaceholder)
-	}
-
-	entry.icon = converted
-	entry.resolved = true
-	resultCache.Result.Icon = converted
-	if logger != nil {
-		logger.Debug(ctx, fmt.Sprintf("lazy result icon hydrated, result: %s, elapsed: %dms", entry.ResultId, util.GetSystemTimestamp()-startedAt))
-	}
-	return converted, nil
-}
-
 func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInstance *Instance, query Query) QueryLayout {
 	if pluginInstance == nil {
 		return QueryLayout{}
 	}
 
-	set, ok := m.getQueryResultSetForQuery(query)
+	set, ok := m.resultStore.getQuery(query.SessionId, query.Id)
 	if !ok {
 		return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
 	}
@@ -2777,139 +2382,6 @@ func (m *Manager) getCachedLayoutForPluginQuery(ctx context.Context, pluginInsta
 	return m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
 }
 
-// RecordQueryResultQueryElapsed stores backend receive and batch queue timings for debug tails.
-func (m *Manager) RecordQueryResultQueryElapsed(sessionId string, queryId string, results []QueryResultUI, elapsedMs int64, batchQueueElapsedMs float64) {
-	if sessionId == "" || queryId == "" || len(results) == 0 {
-		return
-	}
-
-	set, found := m.getQueryResultSet(sessionId, queryId)
-	if !found {
-		return
-	}
-
-	for _, result := range results {
-		if result.Id == "" {
-			continue
-		}
-
-		resultCache, ok := set.Results.Load(result.Id)
-		if !ok {
-			continue
-		}
-		if !resultCache.QueryElapsedSet {
-			resultCache.QueryElapsed = elapsedMs
-			resultCache.QueryElapsedSet = true
-		}
-
-		if !resultCache.BatchQueueElapsedSet {
-			resultCache.BatchQueueElapsed = batchQueueElapsedMs
-			resultCache.BatchQueueElapsedSet = true
-		}
-	}
-}
-
-// RecordQueryResultPluginQueryElapsed stores the raw Plugin.Query duration for debug tails.
-func (m *Manager) RecordQueryResultPluginQueryElapsed(sessionId string, queryId string, resultId string, elapsedMs int64) {
-	if sessionId == "" || queryId == "" || resultId == "" {
-		return
-	}
-
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
-	if !found {
-		return
-	}
-	if resultCache.PluginQueryElapsedSet {
-		return
-	}
-
-	resultCache.PluginQueryElapsed = elapsedMs
-	resultCache.PluginQueryElapsedSet = true
-}
-
-func (m *Manager) RecordQueryResultFlushBatch(sessionId string, queryId string, results []QueryResultUI, batch int) {
-	if sessionId == "" || queryId == "" || len(results) == 0 || batch <= 0 {
-		return
-	}
-
-	set, found := m.getQueryResultSet(sessionId, queryId)
-	if !found {
-		return
-	}
-
-	for _, result := range results {
-		if result.Id == "" {
-			continue
-		}
-
-		resultCache, ok := set.Results.Load(result.Id)
-		if !ok {
-			continue
-		}
-		if resultCache.FlushBatch > 0 {
-			continue
-		}
-
-		resultCache.FlushBatch = batch
-	}
-}
-
-func (m *Manager) GetQueryResultDebugInfo(sessionId string, queryId string, resultId string) (batch int, queryElapsed int64, batchQueueElapsed float64, batchQueueElapsedSet bool, pluginQueryElapsed int64, pluginQueryElapsedSet bool, ok bool) {
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
-	if !found {
-		return 0, 0, 0, false, 0, false, false
-	}
-	if resultCache.FlushBatch <= 0 || !resultCache.QueryElapsedSet {
-		return 0, 0, 0, false, 0, false, false
-	}
-
-	return resultCache.FlushBatch, resultCache.QueryElapsed, resultCache.BatchQueueElapsed, resultCache.BatchQueueElapsedSet, resultCache.PluginQueryElapsed, resultCache.PluginQueryElapsedSet, true
-}
-
-func (m *Manager) findResultCacheInSession(sessionId string, queryId string, resultId string) (*QueryResultCache, bool) {
-	if resultId == "" {
-		return nil, false
-	}
-	if queryId != "" {
-		set, found := m.getQueryResultSet(sessionId, queryId)
-		if !found {
-			return nil, false
-		}
-		resultCache, found := set.Results.Load(resultId)
-		if !found {
-			return nil, false
-		}
-		return resultCache, true
-	}
-
-	sessionQueries, found := m.sessionQueryResultCache.Load(sessionId)
-	if !found {
-		return nil, false
-	}
-	var foundCache *QueryResultCache
-	sessionQueries.Range(func(_ string, set *QueryResultSet) bool {
-		resultCache, found := set.Results.Load(resultId)
-		if !found {
-			return true
-		}
-		foundCache = resultCache
-		return false
-	})
-	if foundCache == nil {
-		return nil, false
-	}
-	return foundCache, true
-}
-
-// PluginIDForCachedResult returns the plugin that produced a currently cached result.
-func (m *Manager) PluginIDForCachedResult(sessionId string, queryId string, resultId string) string {
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
-	if !found || resultCache == nil || resultCache.PluginInstance == nil {
-		return ""
-	}
-	return resultCache.PluginInstance.Metadata.Id
-}
-
 // NotifyDragOut delivers a terminal result-file-drag status to the owning plugin.
 // The drag itself already finished; callbacks cannot block or cancel it.
 func (m *Manager) NotifyDragOut(ctx context.Context, pluginId string, event DragOutEvent) {
@@ -2931,79 +2403,6 @@ func (m *Manager) NotifyDragOut(ctx context.Context, pluginId string, event Drag
 			callback(ctx, event)
 		})
 	}
-}
-
-func (m *Manager) findResultCacheById(resultId string) (*QueryResultCache, bool) {
-	if resultId == "" {
-		return nil, false
-	}
-
-	var foundCache *QueryResultCache
-	m.sessionQueryResultCache.Range(func(_ string, sessionQueries *util.HashMap[string, *QueryResultSet]) bool {
-		sessionQueries.Range(func(_ string, set *QueryResultSet) bool {
-			resultCache, found := set.Results.Load(resultId)
-			if !found {
-				return true
-			}
-			foundCache = resultCache
-			return false
-		})
-		if foundCache == nil {
-			return true
-		}
-		return false
-	})
-
-	if foundCache == nil {
-		return nil, false
-	}
-
-	return foundCache, true
-}
-
-func (m *Manager) findResultCacheByIdWithContext(ctx context.Context, resultId string) (*QueryResultCache, bool) {
-	sessionId := util.GetContextSessionId(ctx)
-	queryId := util.GetContextQueryId(ctx)
-	if sessionId != "" {
-		resultCache, ok := m.findResultCacheInSession(sessionId, queryId, resultId)
-		// An explicit query scope must never fall back to another query that
-		// happens to reuse the same stable result id.
-		if ok || queryId != "" {
-			return resultCache, ok
-		}
-	}
-	return m.findResultCacheById(resultId)
-}
-
-func (m *Manager) GetSessionIdByQueryId(queryId string) string {
-	if queryId == "" {
-		return ""
-	}
-	var sessionId string
-	m.sessionQueryResultCache.Range(func(candidateSessionId string, sessionQueries *util.HashMap[string, *QueryResultSet]) bool {
-		if _, ok := sessionQueries.Load(queryId); ok {
-			sessionId = candidateSessionId
-			return false
-		}
-		return true
-	})
-	return sessionId
-}
-
-func (m *Manager) GetResultSessionId(resultId string) string {
-	resultCache, found := m.findResultCacheById(resultId)
-	if !found {
-		return ""
-	}
-	return resultCache.Query.SessionId
-}
-
-func (m *Manager) GetQueryInfoByResultId(resultId string) (string, string) {
-	resultCache, found := m.findResultCacheById(resultId)
-	if !found {
-		return "", ""
-	}
-	return resultCache.Query.SessionId, resultCache.Query.Id
 }
 
 // shouldWrapRemotePreview keeps previews that need their concrete type on the initial UI response inline.
@@ -3129,7 +2528,7 @@ func (m *Manager) buildQueryResultsSnapshot(sessionId string, queryId string, sh
 	// Bug fix: snapshot lookup must use the query id, not the session's latest
 	// query. Multiple backend query pipelines can finish out of order, while
 	// UI filters visibility by QueryId after the response is delivered.
-	set, found := m.getQueryResultSet(sessionId, queryId)
+	set, found := m.resultStore.getQuery(sessionId, queryId)
 	if !found {
 		return []QueryResultUI{}
 	}
@@ -3273,7 +2672,7 @@ func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 	}
 
 	cacheStart := util.GetSystemTimestamp()
-	m.startSessionQueryCache(query)
+	m.resultStore.startQuery(query)
 	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-cacheStart)
@@ -3974,7 +3373,7 @@ func (m *Manager) expandQueryAlias(ctx context.Context, query string, queryAlias
 }
 
 func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId string, resultId string, actionId string) error {
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	resultCache, found := m.resultStore.findInSession(sessionId, queryId, resultId)
 	if !found {
 		return fmt.Errorf("result cache not found for result id (execute action): %s", resultId)
 	}
@@ -4017,7 +3416,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId s
 }
 
 func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryId string, resultId string, actionId string, values map[string]string) error {
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	resultCache, found := m.resultStore.findInSession(sessionId, queryId, resultId)
 	if !found {
 		return fmt.Errorf("result cache not found for result id (submit form action): %s", resultId)
 	}
@@ -4094,7 +3493,7 @@ func (m *Manager) postExecuteAction(ctx context.Context, resultCache *QueryResul
 }
 
 func (m *Manager) GetResultPreview(ctx context.Context, sessionId string, queryId string, resultId string) (WoxPreview, error) {
-	resultCache, found := m.findResultCacheInSession(sessionId, queryId, resultId)
+	resultCache, found := m.resultStore.findInSession(sessionId, queryId, resultId)
 	if !found {
 		return WoxPreview{}, fmt.Errorf("result cache not found for result id (get preview): %s", resultId)
 	}
@@ -4325,7 +3724,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	query.Env.ActiveWindowIsOpenSaveDialogSelectFolder = activeWindowSnapshot.IsOpenSaveDialogSelectFolder
 	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	query.Env.IsMRU = true
-	m.startSessionQueryCache(query)
+	m.resultStore.startQuery(query)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
 	if err != nil {

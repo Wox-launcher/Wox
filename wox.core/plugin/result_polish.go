@@ -269,7 +269,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	// Because we may have replaced preview with remote preview
 	// we need to restore the original preview in the cache
 	resultCopy.Preview = originalPreview
-	m.storeQueryResult(ctx, pluginInstance, query, layout, resultCopy, sourceHash, match)
+	m.resultStore.storeResult(ctx, pluginInstance, query, layout, resultCopy, sourceHash, match)
 	CacheCost := util.GetSystemTimestamp() - cacheStart
 	CacheCostUs := time.Since(cacheTimingStart).Microseconds()
 	polishCost := util.GetSystemTimestamp() - polishStart

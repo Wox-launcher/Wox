@@ -44,39 +44,6 @@ func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
 	assert.Equal(t, "other-plugin", instances[1].Metadata.Id)
 }
 
-func TestClearSessionStateLeavesOnlyDestroyedWindow(t *testing.T) {
-	logger = util.GetLogger()
-	manager := &Manager{
-		sessionPluginQueries:    util.NewHashMap[string, *sessionPluginQueryState](),
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
-		lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
-		pluginToolbarMsgIds:     util.NewHashMap[string, string](),
-	}
-	left := make(chan context.Context, 2)
-	instance := &Instance{Metadata: Metadata{Id: "session-owner", Name: "Session Owner"},
-		LeavePluginQueryCallbacks: []func(context.Context){func(ctx context.Context) { left <- ctx }}}
-	manager.appendPluginInstance(instance)
-	for _, session := range []string{"first", "second"} {
-		manager.sessionPluginQueries.Store(session, &sessionPluginQueryState{PluginId: instance.Metadata.Id, QueryId: "query-" + session})
-	}
-	manager.ClearSessionState(context.Background(), "first")
-	select {
-	case ctx := <-left:
-		assert.Equal(t, "first", util.GetContextSessionId(ctx))
-		assert.Equal(t, "query-first", util.GetContextQueryId(ctx))
-	case <-time.After(time.Second):
-		t.Fatal("destroyed window did not leave the active plugin query")
-	}
-	assert.False(t, manager.isPluginActiveInSession("first", instance.Metadata.Id))
-	assert.True(t, manager.isPluginActiveInSession("second", instance.Metadata.Id))
-	manager.ClearSessionState(context.Background(), "first")
-	select {
-	case <-left:
-		t.Fatal("duplicate leave callback")
-	case <-time.After(30 * time.Millisecond):
-	}
-}
-
 func TestTroubleshootingModeBlocksThirdPartyLoading(t *testing.T) {
 	initPluginManagerLoadTest(t)
 	previousArgs := os.Args
@@ -304,7 +271,7 @@ func TestPolishUpdatableResultClearsPreviewForGlobalQuery(t *testing.T) {
 	assert.NotNil(t, result.Preview)
 	assert.True(t, result.Preview.IsEmpty())
 
-	cachedResult, found := manager.findResultCacheById("result-global")
+	cachedResult, found := manager.resultStore.findByID("result-global")
 	assert.True(t, found)
 	assert.True(t, cachedResult.Result.Preview.IsEmpty())
 }
@@ -376,7 +343,7 @@ func TestMRUResultUpdatesPreserveSystemActions(t *testing.T) {
 			t.Fatalf("MRU system actions changed: %+v", actions)
 		}
 		actions[2].Action(ctx, ActionContext{})
-		cached, found := manager.findResultCacheById("result-mru")
+		cached, found := manager.resultStore.findByID("result-mru")
 		if !found || cached.Result.Title != title || len(cached.Result.Actions) != 3 {
 			t.Fatal("updated MRU result was not retained in cache")
 		}
@@ -459,7 +426,7 @@ func TestConvertResultIconDefersRemoteURLWithoutRequest(t *testing.T) {
 		requestCount++
 	}))
 	defer server.Close()
-	manager := &Manager{lazyResultIcons: util.NewHashMap[string, *lazyResultIconEntry]()}
+	manager := &Manager{resultStore: newQueryResultStore()}
 	query := Query{Id: "query-remote-icon", SessionId: "session-remote-icon"}
 
 	converted := manager.convertResultIcon(context.Background(), nil, query, QueryLayout{}, "result-remote-icon", "Remote", common.NewWoxImageUrl(server.URL+"/icon.png"))
@@ -474,7 +441,7 @@ func TestConvertResultIconDefersRemoteURLWithoutRequest(t *testing.T) {
 	if payload.Token == "" {
 		t.Fatal("manager did not register a lazy remote icon token")
 	}
-	if _, found := manager.lazyResultIcons.Load(payload.Token); !found {
+	if _, found := manager.resultStore.lazyResultIcons.Load(payload.Token); !found {
 		t.Fatal("registered lazy remote icon token is missing from manager cache")
 	}
 }
@@ -495,16 +462,16 @@ func TestLoadLazyResultIconHydratesRemoteGIF(t *testing.T) {
 	query := Query{Id: "query-remote-gif", SessionId: "session-remote-gif"}
 	result := QueryResult{Id: "result-remote-gif"}
 	manager, _ := newTestManagerWithCachedResult(query, result)
-	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-gif-token"
 	source := common.NewWoxImageUrl(server.URL + "/doge.gif")
 	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
-	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
+	cachedResult, found := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")
 	}
 	cachedResult.Result.Icon = lazyIcon
-	manager.lazyResultIcons.Store(token, &lazyResultIconEntry{
+	manager.resultStore.lazyResultIcons.Store(token, &lazyResultIconEntry{
 		SessionId: query.SessionId, QueryId: query.Id, ResultId: result.Id,
 		OriginalIcon: source, TargetSize: common.ResultListIconSize,
 	})
@@ -559,16 +526,16 @@ func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
 	query := Query{Id: "query-remote-icon", SessionId: "session-remote-icon"}
 	result := QueryResult{Id: "result-remote-icon"}
 	manager, _ := newTestManagerWithCachedResult(query, result)
-	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-icon-token"
 	source := common.NewWoxImageUrl(server.URL + "/icon.png")
 	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
-	cachedResult, found := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
+	cachedResult, found := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")
 	}
 	cachedResult.Result.Icon = lazyIcon
-	manager.lazyResultIcons.Store(token, &lazyResultIconEntry{
+	manager.resultStore.lazyResultIcons.Store(token, &lazyResultIconEntry{
 		SessionId: query.SessionId, QueryId: query.Id, ResultId: result.Id,
 		OriginalIcon: source, TargetSize: common.ResultListIconSize,
 	})
@@ -597,50 +564,6 @@ func initPluginImageTestLocation(t *testing.T) {
 		t.Fatalf("init test location: %v", err)
 	}
 	common.ClearConvertIconPathExistenceCache()
-}
-
-func newTestManagerWithCachedResult(query Query, result QueryResult) (*Manager, *Instance) {
-	manager := &Manager{
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
-	}
-	pluginInstance := &Instance{
-		Metadata: Metadata{
-			Id:              "test-plugin",
-			TriggerKeywords: []string{"*", "media"},
-		},
-	}
-	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
-	resultSet := newQueryResultSet(query)
-	resultSet.Results.Store(result.Id, &QueryResultCache{
-		Result:         result,
-		PluginInstance: pluginInstance,
-		Query:          query,
-	})
-	sessionQueries.Store(query.Id, resultSet)
-	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
-
-	return manager, pluginInstance
-}
-
-func TestGetUpdatableResultKeepsExplicitQueryScope(t *testing.T) {
-	oldQuery := Query{Id: "old", SessionId: "session"}
-	manager, instance := newTestManagerWithCachedResult(oldQuery, QueryResult{Id: "row", Title: "old title"})
-	currentQuery := Query{Id: "current", SessionId: "session"}
-	current := newQueryResultSet(currentQuery)
-	current.Results.Store("row", &QueryResultCache{Query: currentQuery, PluginInstance: instance, Result: QueryResult{Id: "row", Title: "current title"}})
-	session, _ := manager.sessionQueryResultCache.Load("session")
-	session.Store("current", current)
-	for _, query := range []Query{oldQuery, currentQuery} {
-		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), query.SessionId), query.Id)
-		update := manager.GetUpdatableResult(ctx, "row")
-		require.NotNil(t, update)
-		assert.Equal(t, query.Id+" title", *update.Title)
-	}
-	for _, query := range []Query{{Id: "missing", SessionId: "session"}, {Id: "current", SessionId: "missing"}} {
-		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), query.SessionId), query.Id)
-		assert.Nil(t, manager.GetUpdatableResult(ctx, "row"), "missing scope must not resolve another query's row")
-	}
-	assert.NotNil(t, manager.GetUpdatableResult(context.Background(), "row"), "unscoped legacy lookup remains supported")
 }
 
 func TestShouldClearGroupForGlobalQueryKeepsFilePlugin(t *testing.T) {
@@ -744,7 +667,7 @@ func TestPolishUpdatableResultFillsEmptySelectionPreview(t *testing.T) {
 func TestBuildQueryResultsSnapshotPlacesPinAheadOfHigherScore(t *testing.T) {
 	query := Query{Id: "query-pin", SessionId: "session-pin", Type: QueryTypeInput, Search: "cb"}
 	manager := &Manager{
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+		resultStore: newQueryResultStore(),
 	}
 	resultSet := newQueryResultSet(query)
 	// Ten minutes newer than the pin. Display order uses the pin tier, not this score.
@@ -760,7 +683,7 @@ func TestBuildQueryResultsSnapshotPlacesPinAheadOfHigherScore(t *testing.T) {
 	})
 	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
 	sessionQueries.Store(query.Id, resultSet)
-	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
+	manager.resultStore.sessions.Store(query.SessionId, sessionQueries)
 
 	results := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
 	if len(results) != 4 {
@@ -787,7 +710,7 @@ func queryPinTail() QueryResultTail {
 func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing.T) {
 	query := Query{Id: "query-1", SessionId: "session-1", Type: QueryTypeInput, Search: "scottqian"}
 	manager := &Manager{
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+		resultStore: newQueryResultStore(),
 	}
 	resultSet := newQueryResultSet(query)
 	resultSet.Results.Store("app", &QueryResultCache{
@@ -798,7 +721,7 @@ func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing
 	})
 	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
 	sessionQueries.Store(query.Id, resultSet)
-	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
+	manager.resultStore.sessions.Store(query.SessionId, sessionQueries)
 
 	results := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
 	if len(results) != 3 {
@@ -818,7 +741,7 @@ func TestBuildQueryResultsSnapshotKeepsUngroupedResultsAboveFileGroup(t *testing
 func TestBuildQueryResultsSnapshotPrefersShorterTitleAndSubtitleOnEqualScore(t *testing.T) {
 	query := Query{Id: "query-tie", SessionId: "session-tie", Type: QueryTypeInput, Search: "qqyy"}
 	manager := &Manager{
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
+		resultStore: newQueryResultStore(),
 	}
 	resultSet := newQueryResultSet(query)
 	resultSet.Results.Store("lyric", &QueryResultCache{
@@ -859,7 +782,7 @@ func TestBuildQueryResultsSnapshotPrefersShorterTitleAndSubtitleOnEqualScore(t *
 	})
 	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
 	sessionQueries.Store(query.Id, resultSet)
-	manager.sessionQueryResultCache.Store(query.SessionId, sessionQueries)
+	manager.resultStore.sessions.Store(query.SessionId, sessionQueries)
 
 	results := manager.BuildQueryResultsSnapshot(query.SessionId, query.Id)
 	if len(results) != 5 {
@@ -870,50 +793,6 @@ func TestBuildQueryResultsSnapshotPrefersShorterTitleAndSubtitleOnEqualScore(t *
 		if results[i+1].Id != wantID {
 			t.Fatalf("results[%d].Id = %q, want %q (results=%#v)", i+1, results[i+1].Id, wantID, results)
 		}
-	}
-}
-
-func TestTrimHiddenSessionQueryCacheKeepsNewest(t *testing.T) {
-	initPluginImageTestLocation(t)
-	manager := &Manager{
-		sessionQueryResultCache: util.NewHashMap[string, *util.HashMap[string, *QueryResultSet]](),
-		lazyResultIcons:         util.NewHashMap[string, *lazyResultIconEntry](),
-	}
-	sessionID := "session-hide"
-	oldSet := newQueryResultSet(Query{Id: "q1", SessionId: sessionID})
-	oldSet.StartedAt = 100
-	oldSet.Results.Store("r1", &QueryResultCache{Result: QueryResult{Id: "r1"}})
-	newSet := newQueryResultSet(Query{Id: "q2", SessionId: sessionID})
-	newSet.StartedAt = 200
-	newSet.Results.Store("r2", &QueryResultCache{Result: QueryResult{Id: "r2"}})
-	sessionQueries := util.NewHashMap[string, *QueryResultSet]()
-	sessionQueries.Store("q1", oldSet)
-	sessionQueries.Store("q2", newSet)
-	manager.sessionQueryResultCache.Store(sessionID, sessionQueries)
-	manager.lazyResultIcons.Store("old-token", &lazyResultIconEntry{SessionId: sessionID, QueryId: "q1"})
-	manager.lazyResultIcons.Store("new-token", &lazyResultIconEntry{SessionId: sessionID, QueryId: "q2"})
-
-	manager.TrimHiddenSessionQueryCache(context.Background(), sessionID)
-
-	if sessionQueries.Len() != 1 {
-		t.Fatalf("cached queries after hide = %d, want 1", sessionQueries.Len())
-	}
-	if _, ok := sessionQueries.Load("q2"); !ok {
-		t.Fatal("newest query must remain after hide")
-	}
-	if _, ok := sessionQueries.Load("q1"); ok {
-		t.Fatal("older query caches must be dropped on hide")
-	}
-	if _, ok := manager.lazyResultIcons.Load("old-token"); ok {
-		t.Fatal("stale lazy icons must be dropped with the old query")
-	}
-	if _, ok := manager.lazyResultIcons.Load("new-token"); !ok {
-		t.Fatal("newest query lazy icons must remain")
-	}
-
-	manager.TrimHiddenSessionQueryCache(context.Background(), sessionID)
-	if sessionQueries.Len() != 1 {
-		t.Fatalf("second hide trim changed the kept query set, len=%d", sessionQueries.Len())
 	}
 }
 

@@ -238,7 +238,7 @@ func (m *Manager) BuildTriggerKeywordConflictResponse(ctx context.Context, query
 	// Error callers bypass the normal query pipeline, so create the result cache
 	// here before polishing. That keeps result actions executable while still
 	// avoiding plugin dispatch for the ambiguous trigger.
-	m.startSessionQueryCache(query)
+	m.resultStore.startQuery(query)
 	return m.buildTriggerKeywordConflictResponse(ctx, query, conflict)
 }
 

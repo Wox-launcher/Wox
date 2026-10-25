@@ -10,7 +10,7 @@ import (
 // and updates must not repeat ranking or wrap the cached preview in a remote URL.
 func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Instance, result UpdatableResult) UpdatableResult {
 	// Get result cache to update it
-	resultCache, found := m.findResultCacheByIdWithContext(ctx, result.Id)
+	resultCache, found := m.resultStore.findWithContext(ctx, result.Id)
 	if !found {
 		return result // Result not in cache, just return as-is
 	}
@@ -160,7 +160,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 
 func (m *Manager) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {
 	// Try to find the result in the cache
-	resultCache, found := m.findResultCacheByIdWithContext(ctx, resultId)
+	resultCache, found := m.resultStore.findWithContext(ctx, resultId)
 	if !found {
 		return nil // Result not found (no longer visible)
 	}

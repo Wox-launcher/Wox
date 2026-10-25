@@ -21,7 +21,7 @@ func TestGridFileIconCacheKeySurvivesQueriesButNotAppUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	file.Close()
-	manager := &Manager{lazyResultIcons: util.NewHashMap[string, *lazyResultIconEntry]()}
+	manager := &Manager{resultStore: newQueryResultStore()}
 	instance := &Instance{Metadata: Metadata{Id: "grid-key"}}
 	source := common.NewWoxImageFileIcon(file.Name())
 	query := Query{Id: "first", SessionId: "session"}
@@ -64,15 +64,15 @@ func TestPluginImageUnloadWaitsForLazyPublication(t *testing.T) {
 	query := Query{Id: "query", SessionId: "session"}
 	result := QueryResult{Id: "result"}
 	manager, _ := newTestManagerWithCachedResult(query, result)
-	manager.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
+	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	source := common.NewWoxImageUrl(server.URL + "/image.gif")
 	icon := instance.convertIcon(ctx, source, common.IconConversion{AllowLazy: true})
 	payload, err := common.ParseWoxLazyLoadImagePayload(icon)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lazy := manager.registerLazyResultIcon(ctx, instance, query, result.Id, *payload.Source, "", 32, payload.CacheScope)
-	cached, _ := manager.findResultCacheInSession(query.SessionId, query.Id, result.Id)
+	lazy := manager.resultStore.registerLazyIcon(ctx, instance, query, result.Id, *payload.Source, "", 32, payload.CacheScope)
+	cached, _ := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
 	cached.Result.Icon = lazy
 	registered, err := common.ParseWoxLazyLoadImagePayload(lazy)
 	if err != nil {

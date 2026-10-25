@@ -1093,12 +1093,12 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 		}
 	}
 	if util.GetContextSessionId(ctx) != "" && util.GetContextQueryId(ctx) != "" {
-		if _, found := GetPluginManager().findResultCacheByIdWithContext(ctx, result.Id); !found {
+		if _, found := GetPluginManager().resultStore.findWithContext(ctx, result.Id); !found {
 			return false
 		}
 	}
 	if _, command, err := WebViewScriptUpdate(result.Preview); command {
-		cache, found := GetPluginManager().findResultCacheByIdWithContext(ctx, result.Id)
+		cache, found := GetPluginManager().resultStore.findWithContext(ctx, result.Id)
 		if err != nil || !found || cache.PluginInstance != a.pluginInstance || !IsInlineWebViewPreview(cache.Result.Preview) {
 			return false
 		}

@@ -598,29 +598,6 @@ type UpdatableResult struct {
 }
 
 // store latest result value after query/refresh, so we can retrieve data later in action/refresh
-type QueryResultCache struct {
-	Result         QueryResult // store the full QueryResult including actions with callbacks
-	PluginInstance *Instance
-	Query          Query
-	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
-	// FlushBatch is the debouncer batch that first sent this result in a visible response.
-	FlushBatch int
-	// BatchQueueElapsed is the elapsed time when queryRun made this result ready for the debouncer queue.
-	BatchQueueElapsed    float64
-	BatchQueueElapsedSet bool
-	// QueryElapsed is the elapsed time when queryRun received the plugin response, measured from the end-to-end query start.
-	QueryElapsed    int64
-	QueryElapsedSet bool
-	// PluginQueryElapsed is only the raw Plugin.Query duration, excluding manager polish and UI conversion.
-	PluginQueryElapsed    int64
-	PluginQueryElapsedSet bool
-	// SourceMRUHash is the MRU identity fixed when the result is cached.
-	// Restored rows retain their saved identity instead of hashing the alias query.
-	SourceMRUHash string
-	// AliasMatchKind ranks alias-restored rows above ordinary plugin results.
-	AliasMatchKind aliasMatchKind
-}
-
 func newQueryInputWithPlugins(query string, pluginInstances []*Instance) (Query, *Instance) {
 	var terms = strings.Split(query, " ")
 	if len(terms) == 0 {
