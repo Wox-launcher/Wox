@@ -22,25 +22,25 @@ func TestDedicatedChatRendersWithoutLauncherMeasurer(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		app.chatView = chat
+		app.chatWindow.chatView = chat
 		// An uninitialized launcher deterministically rejects measurement, including
 		// cache hits, just as a trimmed renderer rejects new native measurements.
 		app.window = &woxui.Window{}
-		app.chatPreview = &chatPreviewState{key: "test", active: true, editor: woxui.NewTextEditor(""), chat: chatData{
+		app.chat.chatPreview = &chatPreviewState{key: "test", active: true, editor: woxui.NewTextEditor(""), chat: chatData{
 			ID: "test", Conversations: []chatConversation{{ID: "answer", Role: "assistant", Text: "Answer\n\n| Column |\n| --- |\n| Value |"}},
 		}}
 		for _, scale := range []float32{1, 1.5, 2} {
 			// Exercise the actual pop-out adapter, including its PrepareMessages callback.
 			app.buildActiveChatPreview(900, 640, scale, false)
-			if len(app.chatMarkdown.entries) != 1 {
-				return fmt.Errorf("expected one prepared Markdown reply, got %d", len(app.chatMarkdown.entries))
+			if len(app.chat.chatMarkdown.entries) != 1 {
+				return fmt.Errorf("expected one prepared Markdown reply, got %d", len(app.chat.chatMarkdown.entries))
 			}
-			for _, entry := range app.chatMarkdown.entries {
+			for _, entry := range app.chat.chatMarkdown.entries {
 				if entry.layout.window != chat.Window() {
 					return fmt.Errorf("dedicated reply measured against the unavailable launcher at scale %g", scale)
 				}
 			}
-			messages := app.chatMessagesProps(chat.Window(), snapshotChatPreviewLocked(app.chatPreview), defaultPalette(), 800, 500, scale)
+			messages := app.chatMessagesProps(chat.Window(), snapshotChatPreviewLocked(app.chat.chatPreview), defaultPalette(), 800, 500, scale)
 			message := messages.Messages[0]
 			if message.Window != chat.Window() || message.Markdown == nil || message.Markdown.Window != chat.Window() {
 				return fmt.Errorf("reply lost its dedicated host at scale %g", scale)
@@ -94,7 +94,7 @@ func TestChatMetadataAndDetailsUseHostWindow(t *testing.T) {
 			return fmt.Errorf("tool badge or details lost host measurements")
 		}
 		app.chatMessageProps(window, "legacy-tool", 0, tool, defaultPalette(), 400, true, false, 1)
-		for key, cached := range app.previewLayouts {
+		for key, cached := range app.previews.previewLayouts {
 			if cached.key.window != window {
 				return fmt.Errorf("layout %q used another window", key)
 			}

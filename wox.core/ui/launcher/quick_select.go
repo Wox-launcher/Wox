@@ -30,7 +30,7 @@ type quickSelectViewport struct {
 }
 
 // onQuickSelectKey holds Alt (Windows/Linux) or Command (macOS) to number visible results.
-func (a *App) onQuickSelectKey(event woxui.KeyEvent) bool {
+func (a *quickSelectController) onQuickSelectKey(event woxui.KeyEvent) bool {
 	if event.Composing || a.quickSelectBlocked() {
 		a.stopQuickSelectLocked()
 		return false
@@ -58,14 +58,14 @@ func (a *App) onQuickSelectKey(event woxui.KeyEvent) bool {
 
 // quickSelectBlocked keeps overlays and empty result sets from entering hold-to-number mode.
 func (a *App) quickSelectBlocked() bool {
-	if a.actionPanel || a.form != nil || a.requirementForm != nil || a.launcherTableEditor != nil {
+	if a.actions.actionPanel || a.forms.form != nil || a.requirements.requirementForm != nil || a.forms.launcherTableEditor != nil {
 		return true
 	}
-	return !hasQuickSelectResult(a.results)
+	return !hasQuickSelectResult(a.resultList.results)
 }
 
 // startQuickSelectTimerLocked begins Flutter's 300ms hold before showing numbers.
-func (a *App) startQuickSelectTimerLocked() {
+func (a *quickSelectController) startQuickSelectTimerLocked() {
 	if a.quickSelectMode || a.quickSelectBlocked() {
 		return
 	}
@@ -86,7 +86,7 @@ func (a *App) startQuickSelectTimerLocked() {
 }
 
 // stopQuickSelectLocked cancels a pending hold and hides result numbers.
-func (a *App) stopQuickSelectLocked() {
+func (a *quickSelectController) stopQuickSelectLocked() {
 	a.quickSelectKeyPressed = false
 	if a.quickSelectTimer != nil {
 		a.quickSelectTimer.Stop()
@@ -96,59 +96,59 @@ func (a *App) stopQuickSelectLocked() {
 		return
 	}
 	a.quickSelectMode = false
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // activateQuickSelectModeLocked shows 1-9 on the visible non-group results.
-func (a *App) activateQuickSelectModeLocked() {
+func (a *quickSelectController) activateQuickSelectModeLocked() {
 	a.quickSelectTimer = nil
 	if a.quickSelectMode || a.quickSelectBlocked() {
 		return
 	}
 	a.quickSelectMode = true
 	util.GetLogger().Debug(quickSelectLogContext(a), "Quick select: activating mode")
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // activateQuickSelectNumber runs the default action of the numbered visible result.
-func (a *App) activateQuickSelectNumber(number int) bool {
-	index := quickSelectResultIndex(a.results, a.quickSelectVisibleLocked(), number)
+func (a *quickSelectController) activateQuickSelectNumber(number int) bool {
+	index := quickSelectResultIndex(a.resultList.results, a.quickSelectVisibleLocked(), number)
 	if index < 0 {
 		return false
 	}
 	util.GetLogger().Debug(quickSelectLogContext(a), "Quick select: selecting item "+strconv.Itoa(number)+" at index "+strconv.Itoa(index))
 	a.stopQuickSelectLocked()
-	if a.window != nil {
+	if a.window() != nil {
 		a.selectResult(index)
 	} else {
-		a.selected = index
+		a.resultList.selected = index
 	}
 	a.activateResult(index)
 	return true
 }
 
 // rememberQuickSelectViewport stores the geometry used to number the current result surface.
-func (a *App) rememberQuickSelectViewport(viewport quickSelectViewport) {
+func (a *quickSelectController) rememberQuickSelectViewport(viewport quickSelectViewport) {
 	a.quickSelectViewport = viewport
 }
 
 // quickSelectVisibleLocked marks the rows that should receive 1-9 for the current viewport.
-func (a *App) quickSelectVisibleLocked() []bool {
+func (a *quickSelectController) quickSelectVisibleLocked() []bool {
 	viewport := a.quickSelectViewport
 	if viewport.height <= 0 {
-		return allQuickSelectVisible(len(a.results))
+		return allQuickSelectVisible(len(a.resultList.results))
 	}
 	if viewport.grid {
-		return quickSelectVisibleGridResults(a.results, viewport.columns, viewport.cellHeight, viewport.offset, viewport.height)
+		return quickSelectVisibleGridResults(a.resultList.results, viewport.columns, viewport.cellHeight, viewport.offset, viewport.height)
 	}
-	return quickSelectVisibleListResults(a.results, viewport.offset, viewport.height, viewport.topPadding, viewport.rowHeight, viewport.groupHeight, viewport.gap)
+	return quickSelectVisibleListResults(a.resultList.results, viewport.offset, viewport.height, viewport.topPadding, viewport.rowHeight, viewport.groupHeight, viewport.gap)
 }
 
-func quickSelectLogContext(a *App) context.Context {
+func quickSelectLogContext(a *quickSelectController) context.Context {
 	if a != nil && a.lifecycleCtx != nil {
 		return a.lifecycleCtx
 	}

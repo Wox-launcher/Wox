@@ -308,10 +308,10 @@ func changeFormFieldsChoiceLocked(fields *formFieldsState, index, delta int) {
 	}
 }
 
-func (a *App) openFormAction(result queryResult, action resultAction) {
+func (a *formActionController) openFormAction(result queryResult, action resultAction) {
 	state := &formState{formFieldsState: newFormFieldsState(action.Form, nil, true), resultID: result.ID, queryID: result.QueryID, action: action}
 	a.form = state
-	a.clearActionPanelStateLocked()
+	a.actions.clearActionPanelStateLocked()
 	a.updateFormTextInput(state.editor != nil)
 	// A hotkey-only form should start recording immediately so the first
 	// keypress is captured without clicking the recorder.
@@ -322,10 +322,10 @@ func (a *App) openFormAction(result queryResult, action resultAction) {
 		}
 	}
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) closeFormAction() {
+func (a *formActionController) closeFormAction() {
 	if a.form == nil {
 		return
 	}
@@ -333,10 +333,10 @@ func (a *App) closeFormAction() {
 	a.form = nil
 	a.restoreQueryTextInput()
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) submitFormAction() {
+func (a *formActionController) submitFormAction() {
 	if a.form == nil {
 		return
 	}
@@ -354,10 +354,10 @@ func (a *App) submitFormAction() {
 	}
 	a.restoreQueryTextInput()
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) onFormKey(event woxui.KeyEvent) bool {
+func (a *formActionController) onFormKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
@@ -461,16 +461,16 @@ func (a *App) onFormKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func (a *App) setFormText(index int, value string) {
+func (a *formActionController) setFormText(index int, value string) {
 	changed := a.form != nil && setFormFieldsTextLocked(&a.form.formFieldsState, index, value)
 	if changed {
 		_ = a.applyWindowBounds()
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 }
 
 // pickFormActionDirectory fills a launcher action dirPath field from the native folder picker.
-func (a *App) pickFormActionDirectory(index int) {
+func (a *formActionController) pickFormActionDirectory(index int) {
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) || a.form.definitions[index].Type != "dirPath" {
 		return
 	}
@@ -492,21 +492,21 @@ func (a *App) pickFormActionDirectory(index int) {
 	a.setFormText(index, path)
 }
 
-func (a *App) onFormTextInput(_ woxui.TextInputEvent) bool {
+func (a *formActionController) onFormTextInput(_ woxui.TextInputEvent) bool {
 	return a.form != nil
 }
 
-func (a *App) editFormKey(event woxui.KeyEvent) {
+func (a *formActionController) editFormKey(event woxui.KeyEvent) {
 	if a.form != nil && a.form.editor != nil && a.form.focused >= 0 && a.form.focused < len(a.form.definitions) {
 		_, changed := handleFormEditorKey(a.form.editor, a.form.definitions[a.form.focused], event)
 		if changed {
 			a.syncFormEditorLocked()
 		}
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) moveFormFocus(delta int) {
+func (a *formActionController) moveFormFocus(delta int) {
 	if a.form == nil || len(a.form.definitions) == 0 {
 		return
 	}
@@ -521,11 +521,11 @@ func (a *App) moveFormFocus(delta int) {
 	}
 	textInput := a.form.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // recordActionFormHotkey starts the shared recorder for an action-form hotkey field.
-func (a *App) recordActionFormHotkey(index int) {
+func (a *formActionController) recordActionFormHotkey(index int) {
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) {
 		return
 	}
@@ -540,7 +540,7 @@ func (a *App) recordActionFormHotkey(index int) {
 	a.startHotkeyRecording("action-form", &a.form.formFieldsState, index, "", kinds, a.onFormKey)
 }
 
-func (a *App) focusFormField(index int) {
+func (a *formActionController) focusFormField(index int) {
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) || !formDefinitionFocusable(a.form.definitions[index]) {
 		return
 	}
@@ -548,23 +548,23 @@ func (a *App) focusFormField(index int) {
 	a.setFormFocusLocked(index)
 	textInput := a.form.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) changeFormChoice(index, delta int) {
+func (a *formActionController) changeFormChoice(index, delta int) {
 	if a.form == nil || index < 0 || index >= len(a.form.definitions) {
 		return
 	}
 	changeFormFieldsChoiceLocked(&a.form.formFieldsState, index, delta)
 	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) setFormFocusLocked(index int) {
+func (a *formActionController) setFormFocusLocked(index int) {
 	setFormFieldsFocusLocked(&a.form.formFieldsState, index)
 }
 
-func (a *App) syncFormEditorLocked() {
+func (a *formActionController) syncFormEditorLocked() {
 	if a.form != nil {
 		syncFormFieldsEditorLocked(&a.form.formFieldsState)
 	}
@@ -595,7 +595,7 @@ func (a *App) restoreQueryTextInput() {
 
 // queryCanFocus keeps modal editors from accepting query input without disabling normal focus switching.
 func (a *App) queryCanFocus() bool {
-	formTableActive := a.launcherTableEditor != nil
-	return !a.show.HideQueryBox && !a.chatFullscreen && !a.terminalFullscreen && a.form == nil && !formTableActive && !a.actionPanel &&
-		(a.requirementForm == nil || !a.requirementForm.active) && (a.triggerConflict == nil || !a.triggerConflict.active)
+	formTableActive := a.forms.launcherTableEditor != nil
+	return !a.show.HideQueryBox && !a.chat.chatFullscreen && !a.terminal.terminalFullscreen && a.forms.form == nil && !formTableActive && !a.actions.actionPanel &&
+		(a.requirements.requirementForm == nil || !a.requirements.requirementForm.active) && (a.conflicts.triggerConflict == nil || !a.conflicts.triggerConflict.active)
 }

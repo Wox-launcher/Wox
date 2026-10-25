@@ -45,44 +45,50 @@ func TestHideLauncherAfterResultDragDefaultsToHide(t *testing.T) {
 }
 
 func TestOnFocusSkipsHideOnBlurDuringResultFileDrag(t *testing.T) {
-	app := &App{visible: true, resultFileDragActive: true}
+	app := bindTestApp(&App{
+		visible:    true,
+		resultDrag: resultDragController{resultFileDragActive: true},
+	})
 	app.show.HideOnBlur = true
 	app.onFocus(woxui.FocusEvent{Active: false})
-	if !app.visible || !app.resultFileDragActive {
+	if !app.visible || !app.resultDrag.resultFileDragActive {
 		t.Fatal("hide-on-blur must not run while a result file drag is active")
 	}
 
 	app.onFocus(woxui.FocusEvent{Active: true})
-	if !app.resultFileDragActive {
+	if !app.resultDrag.resultFileDragActive {
 		t.Fatal("focusing during an OS file drag must not end the hide-on-blur suppress")
 	}
 }
 
 func TestResultDragHoldEndsOnInteractionWithoutNativeBlur(t *testing.T) {
-	app := &App{visible: true, resultFileDragActive: true}
+	app := bindTestApp(&App{
+		visible:    true,
+		resultDrag: resultDragController{resultFileDragActive: true},
+	})
 	app.show.HideOnBlur = true
 	// Input during the native drag must not lift the visibility protection.
-	app.releaseResultFileDragHold()
-	if !app.resultFileDragActive {
+	app.resultDrag.releaseResultFileDragHold()
+	if !app.resultDrag.resultFileDragActive {
 		t.Fatal("input during drag released visibility protection")
 	}
-	app.finishResultFileDrag(woxui.FileDragStatusSuccess, pendingResultFileDrag{preventHide: true})
+	app.resultDrag.finishResultFileDrag(woxui.FileDragStatusSuccess, pendingResultFileDrag{preventHide: true})
 	// Native drag loops can swallow every blur event. Focus bouncing alone must
 	// not dismiss Wox, and a later click/key must still restore normal behavior.
 	app.onFocus(woxui.FocusEvent{Active: true})
-	if !app.resultFileDragHeld || !app.visible {
+	if !app.resultDrag.resultFileDragHeld || !app.visible {
 		t.Fatal("post-drag activation released visibility protection")
 	}
-	app.releaseResultFileDragHold()
-	if app.resultFileDragActive || app.resultFileDragHeld {
+	app.resultDrag.releaseResultFileDragHold()
+	if app.resultDrag.resultFileDragActive || app.resultDrag.resultFileDragHeld {
 		t.Fatal("user interaction did not restore normal blur behavior")
 	}
 }
 
 func TestResultDragDeliversCapturedCallback(t *testing.T) {
 	var got plugin.DragOutEvent
-	app := &App{}
-	app.finishResultFileDrag(woxui.FileDragStatusSuccess, pendingResultFileDrag{
+	app := bindTestApp(&App{})
+	app.resultDrag.finishResultFileDrag(woxui.FileDragStatusSuccess, pendingResultFileDrag{
 		resultID: "result", files: []string{"file"}, preventHide: true,
 		notify: func(event plugin.DragOutEvent) { got = event },
 	})

@@ -13,14 +13,14 @@ import (
 func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.options))
 	for index, option := range snapshot.options {
-		label := a.translate(option.Label)
+		label := a.language.translate(option.Label)
 		if label == "" {
 			label = option.Value
 		}
 		choice := launcherview.SettingsChoice{Value: option.Value, Label: label}
 		if option.Group != "" {
-			choice.Group = a.translate(option.Group)
-			choice.GroupTooltip = a.translate(option.GroupTooltip)
+			choice.Group = a.language.translate(option.Group)
+			choice.GroupTooltip = a.language.translate(option.GroupTooltip)
 		}
 		if option.Icon.ImageType != "" {
 			choice.Leading = a.imageForSurface(option.Icon, physicalImageSize(18, imageScale), palette.Background)
@@ -30,12 +30,12 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
 	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.TextSecondary, physicalImageSize(14, imageScale))
 	var onTooltip func(bool, string, woxui.Rect)
-	if a.settingsTableEditor != nil {
+	if a.settingsWindow.settingsTableEditor != nil {
 		onTooltip = a.setSettingChoiceTooltip
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette, Window: a.formTableNativeWindow(), Title: a.translate(snapshot.title),
-		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
+		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette, Window: a.formTableNativeWindow(), Title: a.language.translate(snapshot.title),
+		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
 	})
 }
 
@@ -43,8 +43,8 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 func (a *App) openFocusedFormTableRowChoice(index int) {
 	anchor := woxui.Rect{}
 	host := a.host
-	if a.settingsTableEditor != nil {
-		host = a.settingsHost
+	if a.settingsWindow.settingsTableEditor != nil {
+		host = a.settingsWindow.settingsHost
 	}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))

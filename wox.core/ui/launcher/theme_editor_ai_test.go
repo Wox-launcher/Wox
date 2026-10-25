@@ -40,7 +40,7 @@ func TestThemeEditorAIUndoPreservesOtherEdits(t *testing.T) {
 	state := newThemeEditorState("settings-theme|ai", raw)
 	controller := newThemeSettingsController(CommonDeps{})
 	controller.SetThemeEditor(state)
-	app := &App{themeSettings: controller}
+	app := bindTestApp(&App{themeSettings: controller})
 	old := state.values["AppBorderRadius"]
 	app.changeThemeEditorTokens(map[string]string{"AppBorderRadius": "24", "QueryBoxBorderRadius": "7"})
 	state.ai.undo = map[string]string{"AppBorderRadius": old}
@@ -81,7 +81,10 @@ func TestThemeEditorAIRequestUpdatesDraftOnly(t *testing.T) {
 	controller := newThemeSettingsController(CommonDeps{})
 	controller.SetThemeEditor(state)
 	release := make(chan struct{})
-	app := &App{themeSettings: controller, services: themeEditorAIServiceStub{release: release}}
+	app := bindTestApp(&App{
+		themeSettings: controller,
+		services:      themeEditorAIServiceStub{release: release},
+	})
 	done := make(chan struct{}, 1)
 	depth := 0
 	app.uiCall = func(fn func()) error {
@@ -167,7 +170,10 @@ func TestThemeEditorAIStopContinueRetainsReasoning(t *testing.T) {
 	controller.SetThemeEditor(state)
 	requests := make(chan interruptedThemeRequest, 2)
 	ui := make(chan func(), 8)
-	app := &App{themeSettings: controller, services: interruptedThemeService{requests: requests}}
+	app := bindTestApp(&App{
+		themeSettings: controller,
+		services:      interruptedThemeService{requests: requests},
+	})
 	app.uiCall = func(fn func()) error { ui <- fn; return nil }
 	step := func() {
 		t.Helper()

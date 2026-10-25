@@ -159,7 +159,7 @@ func TestNotesLinkLooksClickableAndOpensFromText(t *testing.T) {
 	if noteOpenableLink("javascript:alert(1)") != "" || noteOpenableLink("not-a-url") != "" {
 		t.Fatal("unsafe link targets must not become clickable")
 	}
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{ID: "note", Document: document})
 	controller.document, controller.blockRanges = document, ranges
 	if controller.editorCursorAt(ranges[0].TextStart) != woxui.PointerCursorHand {
 		t.Fatal("link hover must show a hand cursor")

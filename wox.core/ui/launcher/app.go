@@ -21,7 +21,6 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/clipboard"
-	"wox/util/emojisearch"
 	"wox/util/screen"
 )
 
@@ -412,146 +411,63 @@ type formValidatorValue struct {
 	ErrorKey  string `json:"ErrorKey"`
 }
 
-// App owns one launcher window and its typed core service boundary.
+// App composes one launcher instance and coordinates cross-feature transitions.
+// Feature controllers own their state and receive only the capabilities they need.
 type App struct {
-	queryHintEditorState queryHintEditor
-	queryTabFeedback     uint64
-	// These narrow locks protect the few resources intentionally accessed outside the UI thread.
-	translationsMu         sync.RWMutex
-	translationsLanguage   string
-	terminalSubscriptionMu sync.Mutex
-	unsubscribersMu        sync.Mutex
-	tooltipMu              sync.Mutex
-	// tooltipCallMu serializes blocking native tooltip calls without blocking reentrant UI state callbacks.
-	tooltipCallMu           sync.Mutex
-	nativeHoverTooltipShown map[string]nativeHoverTooltipIdentity
-	terminalSubscribed      string
-	terminalDesired         atomic.Value
-	openingSettingsShortcut atomic.Bool
+	attention      attentionController
+	emojiCatalog   formTableEmojiCatalog
+	resultDrag     resultDragController
+	appearance     appearanceController
+	requirements   requirementController
+	conflicts      triggerConflictController
+	quickSelect    quickSelectController
+	previews       previewController
+	notes          notesController
+	forms          formActionController
+	glance         glanceController
+	toolbar        toolbarController
+	settingsWindow settingsWindowController
+	onboarding     onboardingController
+	chatWindow     chatWindowController
+	chat           chatController
+	querySession   queryController
+	resultList     resultController
+	actions        actionPanelController
+	dictation      dictationPreviewController
+	terminal       terminalController
+	webView        webViewPreviewController
+	nativeFile     nativeFilePreviewController
+	remotePreview  remotePreviewController
+	filePreview    filePreviewController
+	language       languageCatalog
+	tooltips       tooltipController
+	imageStore     imageStore
 
-	isDev          bool
-	isPrimary      bool
-	instanceName   string
-	sessionID      string
-	windowID       woxui.WindowID
-	services       contract.Services
-	uiCall         func(func()) error
-	uiPost         func(func()) error
-	windows        *woxui.WindowManager
-	instances      *appInstanceRegistry
-	primary        *App
-	destroyOnce    sync.Once
-	unsubscribers  []func()
-	lifecycleCtx   context.Context
-	cancel         context.CancelFunc
-	destroyed      atomic.Bool
-	launcher       *woxui.ManagedWindow
-	settingsView   *woxui.ManagedWindow
-	onboardingView *woxui.ManagedWindow
-	chatView       *woxui.ManagedWindow
-	noteWindows    map[string]*notesWindowController
-	activeNote     *notesWindowController
-	window         *woxui.Window
-	host           *woxwidget.Host
-	settingsHost   *woxwidget.Host
-	onboardingHost *woxwidget.Host
-	chatHost       *woxwidget.Host
+	unsubscribersMu sync.Mutex
 
-	query             plainQuery
-	queryContext      queryContext
-	queryContextKnown bool
-	queryHistories    []plainQuery
-	queryHistoryIndex int
-	canRecallHistory  bool
-	editor            *woxui.TextEditor
-	// selectionAnchor holds the rune offset captured at query drag-selection start so extend updates only the focus.
-	selectionAnchor int
-	// queryMenu* retains the open query context-menu enablement snapshot for refresh/revalidation.
-	queryMenuAnchor           woxui.Point
-	queryMenuEnablement       queryMenuEnablement
-	queryMenuTheme            woxcomponent.Theme
-	terminalMenuAnchor        woxui.Point
-	terminalMenuEnablement    terminalMenuEnablement
-	results                   []queryResult
-	resultRevision            uint64
-	resultsSectionRevision    uint64
-	resultsQueryID            string
-	queryComplete             bool
-	queryTransitionTimer      *time.Timer
-	queryRefreshHoldQueryID   string
-	queryRefreshHoldTimer     *time.Timer
-	queryRefreshSnapshot      *refreshResultSnapshot
-	queryLoading              bool
-	queryLoadingTimer         *time.Timer
-	quickSelectMode           bool
-	quickSelectKeyPressed     bool
-	quickSelectTimer          *time.Timer
-	quickSelectViewport       quickSelectViewport
-	previewTooltipRevision    atomic.Uint64
-	resultTailTooltipRevision atomic.Uint64
-	selected                  int
-	hoveredResult             int
-	pendingSelection          *pendingResultSelection
-	pendingResultFileDrag     pendingResultFileDrag
-	resultFileDragActive      bool
-	// resultFileDragHeld keeps the launcher visible until the next user interaction.
-	resultFileDragHeld         bool
-	resultScroll               scrollController
-	resultScrollDetached       bool
-	layout                     queryLayout
-	refinements                []queryRefinement
-	refinementsSectionRevision uint64
-	refinementOpen             bool
-	refinementScope            string
-	completionHint             *queryCompletionHint
-	toolbarMsg                 *toolbarMessage
-	toolbarFallbackMsg         *toolbarMessage
-	toolbarRevision            uint64
-	form                       *formState
-	requirementForm            *requirementFormState
-	launcherTableEditor        *formTableEditorState
-	triggerConflict            *triggerConflictPreviewState
-	chatPreview                *chatPreviewState
-	webViewPreviewData         string
-	webViewPreviewError        string
-	webViewNavigation          woxui.WebViewNavigationState
-	// Native Office preview state separates selected, delayed, and reported handler generations.
-	nativeFilePreviewPath        string
-	nativeFilePreviewPendingPath string
-	nativeFilePreviewManualPath  string
-	nativeFilePreviewError       string
-	chatFullscreen               bool
-	webViewFullscreen            bool
-	webViewFullscreenResultID    string
-	webViewFullscreenRestore     queryPreview
-	// webViewPreviewWidth and webViewPreviewHeight temporarily size the launcher
-	// window in logical pixels for an in-launcher WebView preview.
-	webViewPreviewWidth  int
-	webViewPreviewHeight int
-	// webViewWantKeyboardFocus retries native page focus until the embedded surface exists.
-	webViewWantKeyboardFocus bool
-	// keepQueryFocusOnWebViewActivate skips page focus when a hotkey show restores
-	// an existing WebView result and has already selected the query box.
-	keepQueryFocusOnWebViewActivate bool
-	chatWindowFocused               bool
-	chatWindowMaximized             bool
-	chatWindowRestoreFrame          woxui.Rect
-	chatWindowGeneration            uint64
-	chatImportQueue                 []chatAttachmentImportJob
-	chatImportRunning               bool
-	chatImportEpoch                 uint64
-	terminalFullscreen              bool
-	actionPanel                     bool
-	actionPanelPurpose              actionPanelPurpose
-	aboutMenuError                  string
-	aboutMenuTooltipRevision        atomic.Uint64
-	actionSelected                  int
-	actionSelectionKey              string
-	actionsSectionRevision          uint64
-	actionSectionState              actionSectionRevisionState
-	actionFilter                    *woxui.TextEditor
-	visible                         bool
-	show                            showAppParams
+	isDev         bool
+	isPrimary     bool
+	instanceName  string
+	sessionID     string
+	windowID      woxui.WindowID
+	services      contract.Services
+	uiCall        func(func()) error
+	uiPost        func(func()) error
+	windows       *woxui.WindowManager
+	instances     *appInstanceRegistry
+	primary       *App
+	destroyOnce   sync.Once
+	unsubscribers []func()
+	lifecycleCtx  context.Context
+	cancel        context.CancelFunc
+	destroyed     atomic.Bool
+	launcher      *woxui.ManagedWindow
+
+	window *woxui.Window
+	host   *woxwidget.Host
+
+	visible bool
+	show    showAppParams
 	// bottomAnchorY keeps QueryBoxAtBottom windows from drifting when DPI
 	// round-trips make Bounds().Height slightly larger than the logical height
 	// we last requested.
@@ -559,128 +475,28 @@ type App struct {
 	// automationFocusInstance routes smoke Snapshot/Bounds/Perform to a named
 	// secondary when set; empty keeps the primary launcher surface.
 	automationFocusInstance string
-	settingsOpen            bool
-	onboardingOpen          bool
-	onboardingStep          int
-	onboardingChoice        string
-	onboardingChoiceAnchor  woxui.Rect
-	onboardingPermission    contract.MacOSPermissionStatus
-	onboardingLoading       bool
-	onboardingError         string
-	onboardingQueryHotkey   *onboardingQueryHotkeyState
-	onboardingPlugins       onboardingPluginState
-	onboardingTheme         onboardingThemeState
-	onboardingMigration     onboardingMigrationState
-	permissionFlowHost      *macOSPermissionFlowHost
-	settingsCtx             settingWindowContext
-	settingTab              string
-	settingRow              int
-	settingSaving           bool
-	settingRestarting       bool
-	settingRestartError     string
-	// pendingBuiltInText is a text value whose field already lost focus. It is held
-	// until the pointer click that caused the blur either saves another setting or releases.
-	pendingBuiltInText            *pendingBuiltInText
-	settingFlash                  string
-	settingFlashTimer             *time.Timer
-	settingsInlineTooltip         *settingsInlineTooltipState
-	settingsInlineTooltipRevision atomic.Uint64
-	cloudPlanTooltip              *cloudPlanTooltipState
-	cloudPlanTooltipRevision      atomic.Uint64
-	settingsDemo                  *settingsDemoState
-	settingsDemoRevision          atomic.Uint64
-	choiceTooltipRevision         atomic.Uint64
-	settingsTableEditor           *formTableEditorState
-	recentFormTableEmojis         []string
-	formTableEmojiSearchOnce      sync.Once
-	formTableEmojiSearchEntries   []emojisearch.Entry
-	glanceItem                    *glanceItem
-	glanceLoading                 bool
-	glanceRevision                uint64
-	glanceTooltipRevision         atomic.Uint64
-	attentionUnreadCount          int
-	attentionQueryWasGlobal       bool // Retains accessory visibility while the next query is being classified.
-	attentionTooltipRevision      atomic.Uint64
-	refinementTooltipRevision     atomic.Uint64
-	glanceTimer                   *time.Timer
-	// Settings controllers (zero App back-dependency; populated by newApp).
-	generalSettings        *generalSettingsController
-	appearanceSettings     *appearanceSettingsController
-	networkSettings        *networkSettingsController
-	dataSettings           *dataSettingsController
-	cloudSettings          *cloudSettingsController
-	runtimeSettings        *runtimeSettingsController
-	themeSettings          *themeSettingsController
-	pluginSettings         *pluginSettingsController
-	nativeSettingsPluginID string
-	aiSettings             *aiSettingsController
-	usageSettings          *usageSettingsController
-	updateSettings         *updateSettingsController
-	privacySettings        *privacySettingsController
-	aboutSettings          *aboutSettingsController
-	hotkeySettings         *hotkeySettingsController
-	settingsSearch         *settingsSearchController
-	sharedEdit             *sharedEditState
-	palette                uiPalette
-	densityMetrics         launcherDensityMetrics
-	translations           map[string]string
-	translationsRevision   atomic.Uint64
-	// imageMu protects the image cache because image decoding completes on background goroutines.
-	imageMu sync.RWMutex
-	// appIcon is decoded during app construction so native title bars never start without their icon.
-	appIcon          *woxui.Image
-	images           map[string]*woxui.Image
-	imagesRevision   atomic.Uint64
-	imageRequested   map[string]string
-	imageVariants    map[string]string
-	imageVariantKeys map[string]string
-	imageLastUsed    map[string]uint64
-	imageUseSequence uint64
-	// imageViewport pins decoded images that are currently inside a scroll viewport.
-	imageViewport map[string]struct{}
-	// pinnedPreview is the full-bleed preview image currently on screen.
-	pinnedPreview viewportPreviewPin
-	// imageCacheSize is the running decoded-byte total so eviction stays O(k) instead of scanning the map.
-	imageCacheSize int
-	imageErrors    map[string]string
-	// retainedResultIcons is the last decoded bitmap for each result row.
-	// A replacement icon keeps that bitmap until its own decode finishes.
-	retainedResultIcons                       map[string]*woxui.Image
-	retainedResultIconRevision                uint64
-	retainedResultIconsPruned                 bool
-	remotePreviews                            map[string]queryPreview
-	previewVisibility                         queryPreviewVisibility
-	previewRequests                           map[string]bool
-	filePreviews                              map[string]filePreviewContent
-	fileRequests                              map[string]bool
-	filePreviewManualPaths                    map[string]bool
-	filePreviewTimer                          *time.Timer
-	filePreviewPendingPath                    string
-	filePreviewLoadGeneration                 uint64
-	nativeFilePreviewGeneration               uint64
-	nativeFilePreviewTimer                    *time.Timer
-	nativeFilePreviewBoundsTimer              *time.Timer
-	nativeFilePreviewBounds                   woxui.Rect
-	nativeFilePreviewBoundsPath               string
-	nativeFilePreviewBoundsGeneration         uint64
-	nativeFilePreviewReportedBounds           woxui.Rect
-	nativeFilePreviewReportedBoundsPath       string
-	nativeFilePreviewReportedBoundsGeneration uint64
-	nativeFilePreviewHasReportedBounds        bool
-	nativeFilePreviewOcclusionTimer           *time.Timer
-	nativeFilePreviewOcclusion                woxui.Rect
-	nativeFilePreviewReportedOcclusion        woxui.Rect
-	mdDocs                                    map[string]woxcomponent.MarkdownDocument
-	chatMarkdown                              chatMarkdownCache
-	terminalLayout                            textLayoutCache
-	previewLayouts                            map[string]*textLayoutCache
-	dictationAudio                            *dictationPreviewAudioState
-	dictationCompare                          *dictationModelCompareState
-	terminalPreview                           *terminalPreviewState
 
-	// queryFocusNotifiedInActiveWindow prevents the initial native activation
-	// from duplicating the query-focus notification already sent while laying out.
-	queryFocusNotifiedInActiveWindow bool
+	// Settings controllers (zero App back-dependency; populated by newApp).
+	generalSettings    *generalSettingsController
+	appearanceSettings *appearanceSettingsController
+	networkSettings    *networkSettingsController
+	dataSettings       *dataSettingsController
+	cloudSettings      *cloudSettingsController
+	runtimeSettings    *runtimeSettingsController
+	themeSettings      *themeSettingsController
+	pluginSettings     *pluginSettingsController
+
+	aiSettings      *aiSettingsController
+	usageSettings   *usageSettingsController
+	updateSettings  *updateSettingsController
+	privacySettings *privacySettingsController
+	aboutSettings   *aboutSettingsController
+	hotkeySettings  *hotkeySettingsController
+	settingsSearch  *settingsSearchController
+	sharedEdit      *sharedEditState
+
+	// appIcon is decoded during app construction so native title bars never start without their icon.
+	appIcon *woxui.Image
 }
 
 // New creates a launcher whose typed core services are supplied by the process composition root.
@@ -709,71 +525,81 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	// full 256 px source kept a 256 KB raster per launcher instance for a 20 px glyph.
 	appIcon, _ := decodeWoxImageWithTint(appIconImageSource, nil, appIconTitleBarPixels)
 	app := &App{
-		isDev:                  isDev,
-		isPrimary:              isPrimary,
-		instanceName:           instanceName,
-		sessionID:              sessionID,
-		windowID:               windowID,
-		services:               services,
-		uiCall:                 woxui.Call,
-		uiPost:                 woxui.Post,
-		windows:                windows,
-		instances:              instances,
-		primary:                primary,
-		lifecycleCtx:           lifecycleCtx,
-		cancel:                 cancel,
-		appIcon:                appIcon,
-		query:                  newInputQuery(""),
-		editor:                 woxui.NewTextEditor(""),
-		selected:               -1,
-		hoveredResult:          -1,
-		settingTab:             "general",
-		palette:                defaultPalette(),
-		densityMetrics:         launcherDensityMetricsFor(""),
-		translations:           map[string]string{},
-		images:                 map[string]*woxui.Image{},
-		imageRequested:         map[string]string{},
-		imageVariants:          map[string]string{},
-		imageVariantKeys:       map[string]string{},
-		imageLastUsed:          map[string]uint64{},
-		imageErrors:            map[string]string{},
-		remotePreviews:         map[string]queryPreview{},
-		previewRequests:        map[string]bool{},
-		filePreviews:           map[string]filePreviewContent{},
-		fileRequests:           map[string]bool{},
-		filePreviewManualPaths: map[string]bool{},
-		mdDocs:                 map[string]woxcomponent.MarkdownDocument{},
-		previewLayouts:         map[string]*textLayoutCache{},
-		noteWindows:            map[string]*notesWindowController{},
+		isDev:        isDev,
+		isPrimary:    isPrimary,
+		instanceName: instanceName,
+		sessionID:    sessionID,
+		windowID:     windowID,
+		services:     services,
+		uiCall:       woxui.Call,
+		uiPost:       woxui.Post,
+		windows:      windows,
+		instances:    instances,
+		primary:      primary,
+		lifecycleCtx: lifecycleCtx,
+		cancel:       cancel,
+		appIcon:      appIcon,
+		querySession: queryController{
+			query:  newInputQuery(""),
+			editor: woxui.NewTextEditor(""),
+		},
+		resultList: resultController{
+			selected:      -1,
+			hoveredResult: -1,
+		},
+		settingsWindow: settingsWindowController{settingTab: "general"},
+		appearance: appearanceController{
+			palette:        defaultPalette(),
+			densityMetrics: launcherDensityMetricsFor(""),
+		},
+		language: languageCatalog{translations: map[string]string{}},
+		imageStore: imageStore{
+			images:           map[string]*woxui.Image{},
+			imageRequested:   map[string]string{},
+			imageVariants:    map[string]string{},
+			imageVariantKeys: map[string]string{},
+			imageLastUsed:    map[string]uint64{},
+			imageErrors:      map[string]string{},
+		},
+		remotePreview: remotePreviewController{
+			remotePreviews:  map[string]queryPreview{},
+			previewRequests: map[string]bool{},
+		},
+		filePreview: filePreviewController{
+			filePreviews:           map[string]filePreviewContent{},
+			fileRequests:           map[string]bool{},
+			filePreviewManualPaths: map[string]bool{},
+		},
+		previews: previewController{
+			mdDocs:         map[string]woxcomponent.MarkdownDocument{},
+			previewLayouts: map[string]*textLayoutCache{},
+		},
+		notes: notesController{noteWindows: map[string]*notesWindowController{}},
 		show: showAppParams{
 			WindowWidth:    defaultWidth,
 			MaxResultCount: defaultMaxResult,
 			StartPage:      "mru",
 		},
 	}
-	app.terminalDesired.Store("")
+	app.bindControllers()
+	app.terminal.terminalDesired.Store("")
 	app.unsubscribersMu.Lock()
 	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
 	app.unsubscribers = append(app.unsubscribers, network.Subscribe(func(enabled bool) {
 		_ = app.runOnUI("apply offline mode", func() {
 			if enabled {
-				app.resetWebView()
+				app.webView.resetWebView()
 			} else {
-				app.imageMu.Lock()
-				for key := range app.imageErrors {
-					delete(app.imageRequested, key)
-				}
-				clear(app.imageErrors)
-				app.imageMu.Unlock()
+				app.imageStore.retryErrors()
 			}
 			_ = app.window.Invalidate()
-			app.invalidateSettingsWindow()
+			app.settingsWindow.invalidateSettingsWindow()
 		})
 	}))
 	app.unsubscribersMu.Unlock()
 	deps := CommonDeps{
-		Invalidate: app.invalidateSettingsWindow,
-		Translate:  app.translate,
+		Invalidate: app.settingsWindow.invalidateSettingsWindow,
+		Translate:  app.language.translate,
 		IsDev:      isDev,
 		RunOnUI:    app.runOnUI,
 	}
@@ -787,7 +613,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.dataSettings.BindCrossDomain(
 		app.reloadSettings,
 		func() (string, error) {
-			window := app.settingsNativeWindow()
+			window := app.settingsWindow.settingsNativeWindow()
 			if window == nil {
 				return "", fmt.Errorf("settings window not ready")
 			}
@@ -826,7 +652,7 @@ func (a *App) start() error {
 	if a.services == nil {
 		return errors.New("core lifecycle services are required")
 	}
-	if err := a.reloadTheme(); err != nil {
+	if err := a.appearance.reloadTheme(); err != nil {
 		log.Printf("load Wox theme, using fallback palette: %v", err)
 	}
 	if err := a.reloadSettings(); err != nil {
@@ -840,7 +666,7 @@ func (a *App) start() error {
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title: "Wox",
 		// The idle launcher has no results yet, so this first size omits the about-menu-only toolbar.
-		Size: woxui.Size{Width: float32(a.show.WindowWidth), Height: a.densityMetrics.queryBoxHeight + a.palette.appPadding.Top + a.palette.appPadding.Bottom},
+		Size: woxui.Size{Width: float32(a.show.WindowWidth), Height: a.appearance.densityMetrics.queryBoxHeight + a.appearance.palette.appPadding.Top + a.appearance.palette.appPadding.Bottom},
 		// Windows uses HWND_TOPMOST so the query window stays above other apps.
 		// macOS floating level and Linux layer-shell TOP already do that without
 		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
@@ -848,24 +674,24 @@ func (a *App) start() error {
 		OnFrame: host.Frame,
 		OnPointer: func(event woxui.PointerEvent) {
 			if event.Kind == woxui.PointerDown {
-				a.releaseResultFileDragHold()
+				a.resultDrag.releaseResultFileDragHold()
 			}
 			host.Pointer(event)
 		},
 		OnFileDrop:      a.handleFileDrop,
-		OnFileDragEnded: a.handleResultDragEnded,
+		OnFileDragEnded: a.resultDrag.handleResultDragEnded,
 		OnKey: func(event woxui.KeyEvent) bool {
 			if event.Down {
-				a.releaseResultFileDragHold()
+				a.resultDrag.releaseResultFileDragHold()
 			}
 			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
 				return true
 			}
 			settingsPluginID := ""
-			if a.chatFullscreen {
+			if a.chat.chatFullscreen {
 				settingsPluginID = common.AIChatPluginID
-			} else if a.webViewPreviewData != "" {
-				settingsPluginID = firstNonEmpty(a.queryContext.PluginID, common.WebViewPluginID)
+			} else if a.webView.webViewPreviewData != "" {
+				settingsPluginID = firstNonEmpty(a.querySession.queryContext.PluginID, common.WebViewPluginID)
 			}
 			return a.dispatchWindowKey(event, host, settingsPluginID, a.requestLauncherShortcutClose, a.onKey)
 		},
@@ -886,10 +712,10 @@ func (a *App) start() error {
 			})
 		},
 		OnWebViewNavigationChanged: func(state woxui.WebViewNavigationState) {
-			if a.webViewPreviewData == "" {
+			if a.isDestroyed() || a.webView.webViewPreviewData == "" {
 				return
 			}
-			a.webViewNavigation = state
+			a.webView.webViewNavigation = state
 			if a.window != nil {
 				_ = a.window.Invalidate()
 			}
@@ -907,10 +733,10 @@ func (a *App) start() error {
 	a.window = launcher.Window()
 	a.host = host
 	host.Attach(a.window)
-	if err := a.window.SetAppearance(a.palette.isDark()); err != nil {
+	if err := a.window.SetAppearance(a.appearance.palette.isDark()); err != nil {
 		return fmt.Errorf("apply Wox UI appearance: %w", err)
 	}
-	if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius, a.palette.background.A != 0); err != nil {
+	if err := a.window.SetWindowChrome(a.appearance.palette.AppWindowChrome, a.appearance.palette.AppBorderRadius, a.appearance.palette.background.A != 0); err != nil {
 		return fmt.Errorf("apply Wox UI chrome: %w", err)
 	}
 	if err := a.window.SetFontFamily(a.generalSettings.Data().AppFontFamily); err != nil {
@@ -935,7 +761,7 @@ func (a *App) start() error {
 // Close releases the protocol connection after the final native window closes.
 func (a *App) Close() error {
 	if !a.isPrimary {
-		if err := a.closeChatWindow(); err != nil {
+		if err := a.chatWindow.closeChatWindow(); err != nil {
 			return err
 		}
 		var launcher *woxui.ManagedWindow
@@ -952,19 +778,18 @@ func (a *App) Close() error {
 	}
 
 	a.destroyed.Store(true)
-	for _, noteWindow := range a.noteWindows {
-		_ = noteWindow.flush()
-	}
 	cancel := a.cancel
 	if cancel != nil {
 		cancel()
 	}
+	cleanupErr := a.runOnUI("dispose launcher controllers", a.disposeControllers)
+	a.terminal.releaseTerminalSubscription()
 	var closeErr error
 	if a.windows != nil {
 		closeErr = a.windows.CloseAll()
 	}
 	a.unsubscribeAll()
-	return closeErr
+	return errors.Join(cleanupErr, closeErr)
 }
 
 func (a *App) showWindow(params showAppParams) error {
@@ -980,42 +805,42 @@ func (a *App) showWindow(params showAppParams) error {
 		if params.MaxResultCount <= 0 {
 			params.MaxResultCount = defaultMaxResult
 		}
-		a.releaseResultFileDragHold()
+		a.resultDrag.releaseResultFileDragHold()
 		wasVisible = a.visible
 		a.show = params
-		a.queryHistories = append(a.queryHistories[:0], params.QueryHistories...)
+		a.querySession.queryHistories = append(a.querySession.queryHistories[:0], params.QueryHistories...)
 		// A selection query on the primary launcher is always transient (Space Quick
 		// Look preview or a selection-bearing query hotkey). Reopening through the
 		// main hotkey must start fresh; otherwise the stale selection context keeps
 		// every keystroke pinned to the previous selection query.
-		if params.ShowSource == string(common.ShowSourceDefault) && a.query.QueryType == "selection" {
-			a.query = newInputQuery("")
-			a.queryHintEditorState = queryHintEditor{}
-			a.queryContext = queryContext{IsGlobalQuery: true}
-			a.queryContextKnown = true
-			a.editor.SetText("", false)
-			a.beginQueryTransitionLocked(false)
+		if params.ShowSource == string(common.ShowSourceDefault) && a.querySession.query.QueryType == "selection" {
+			a.querySession.query = newInputQuery("")
+			a.querySession.queryHintEditorState = queryHintEditor{}
+			a.querySession.queryContext = queryContext{IsGlobalQuery: true}
+			a.querySession.queryContextKnown = true
+			a.querySession.editor.SetText("", false)
+			a.querySession.beginQueryTransitionLocked(false)
 		}
 		preserveQuery = a.applyLaunchModeOnShowLocked()
-		refreshInlinePreview = !wasVisible && a.hasInlinePreviewToRestore()
-		a.canRecallHistory = a.query.QueryType == "input"
+		refreshInlinePreview = !wasVisible && a.previews.hasInlinePreviewToRestore()
+		a.querySession.canRecallHistory = a.querySession.query.QueryType == "input"
 		if params.LaunchMode == "continue" {
 			// The newest history is the current continued query, so the first Up recalls the entry before it.
-			a.queryHistoryIndex = 0
+			a.querySession.queryHistoryIndex = 0
 		} else {
-			a.queryHistoryIndex = -1
+			a.querySession.queryHistoryIndex = -1
 		}
 		if params.SelectAll {
-			a.selectEntireQuery()
+			a.querySession.selectEntireQuery()
 		}
-		a.clearActionPanelStateLocked()
-		a.form = nil
+		a.actions.clearActionPanelStateLocked()
+		a.forms.form = nil
 		a.visible = true
-		queryEmpty = a.query.QueryText == ""
+		queryEmpty = a.querySession.query.QueryText == ""
 		launcher = a.launcher
-		a.keepQueryFocusOnWebViewActivate = true
-		a.reconcileSelectedPreview()
-		a.keepQueryFocusOnWebViewActivate = false
+		a.webView.keepQueryFocusOnWebViewActivate = true
+		a.previews.reconcileSelectedPreview()
+		a.webView.keepQueryFocusOnWebViewActivate = false
 		a.restoreQueryTextInput()
 	}); err != nil {
 		return err
@@ -1058,7 +883,7 @@ func (a *App) showWindow(params showAppParams) error {
 		}
 	}
 	util.Go(a.lifecycleCtx, "refresh glance after window shown", func() {
-		a.refreshGlance("windowShown", "", nil)
+		a.glance.refreshGlance("windowShown", "", nil)
 	})
 	return nil
 }
@@ -1066,7 +891,7 @@ func (a *App) showWindow(params showAppParams) error {
 // restoreQueryFocusAfterShow resets retained preview focus once the visible query tree is mounted.
 func (a *App) restoreQueryFocusAfterShow() bool {
 	// A restored WebView must not retry page focus after the query box is selected.
-	a.webViewWantKeyboardFocus = false
+	a.webView.webViewWantKeyboardFocus = false
 	if a.host == nil || !a.queryCanFocus() {
 		return false
 	}
@@ -1114,19 +939,19 @@ func (a *App) hideWindow(notify bool) error {
 		if a.isPrimary && a.show.RememberPosition {
 			lastX, lastY, saveLast = a.captureLauncherOriginLocked()
 		}
-		a.clearActionPanelStateLocked()
-		a.form = nil
-		a.stopQuickSelectLocked()
+		a.actions.clearActionPanelStateLocked()
+		a.forms.form = nil
+		a.quickSelect.stopQuickSelectLocked()
 		a.visible = false
 		a.bottomAnchorY = 0
-		a.stopGlanceLocked(false)
+		a.glance.stopGlanceLocked(false)
 		a.dismissLauncherHoverTooltipsOnUI()
 		launcher = a.launcher
-		a.reconcileSelectedPreview()
-		a.requirementForm = nil
-		a.triggerConflict = nil
-		a.resetChatPreview()
-		a.clearWebViewPreviewModeLocked()
+		a.previews.reconcileSelectedPreview()
+		a.requirements.requirementForm = nil
+		a.conflicts.triggerConflict = nil
+		a.chat.resetChatPreview()
+		a.webView.clearWebViewPreviewModeLocked()
 		if launcher != nil {
 			hideErr = launcher.Hide()
 		}
@@ -1180,10 +1005,10 @@ func (a *App) shouldRetainSecondaryOnHide() bool {
 
 // hasCacheableWebViewPreviewLocked reports an active WebView preview that opted into session reuse.
 func (a *App) hasCacheableWebViewPreviewLocked() bool {
-	if strings.TrimSpace(a.webViewPreviewData) == "" {
+	if strings.TrimSpace(a.webView.webViewPreviewData) == "" {
 		return false
 	}
-	data, err := decodeWebViewPreview(a.webViewPreviewData)
+	data, err := decodeWebViewPreview(a.webView.webViewPreviewData)
 	if err != nil {
 		return false
 	}
@@ -1239,18 +1064,18 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		a.notifyQueryBoxFocusOnWindowActivation()
 		return
 	}
-	a.queryFocusNotifiedInActiveWindow = false
+	a.querySession.queryFocusNotifiedInActiveWindow = false
 	if !a.visible {
 		return
 	}
 	// Result file drag visibility is owned by PreventHideAfterDrag, not hide-on-blur.
-	if a.resultFileDragActive {
+	if a.resultDrag.resultFileDragActive {
 		return
 	}
 	hideOnBlur := a.show.HideOnBlur
 	launcher := a.launcher
 	// A pop-out still uses this session's services after the launcher loses focus.
-	retainSecondary := a.isPrimary || a.chatWindowOpen() || a.hasCacheableWebViewPreviewLocked()
+	retainSecondary := a.isPrimary || a.chatWindow.chatWindowOpen() || a.hasCacheableWebViewPreviewLocked()
 	var lastX, lastY int
 	saveLast := false
 	if hideOnBlur && a.isPrimary && a.show.RememberPosition {
@@ -1259,7 +1084,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	if hideOnBlur {
 		a.visible = false
 		a.bottomAnchorY = 0
-		a.stopGlanceLocked(false)
+		a.glance.stopGlanceLocked(false)
 	}
 	if hideOnBlur {
 		if !retainSecondary {
@@ -1270,12 +1095,12 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 			})
 			return
 		}
-		a.reconcileSelectedPreview()
+		a.previews.reconcileSelectedPreview()
 		if launcher != nil {
 			_ = launcher.Hide()
 		}
-		a.resetChatPreview()
-		a.clearWebViewPreviewModeLocked()
+		a.chat.resetChatPreview()
+		a.webView.clearWebViewPreviewModeLocked()
 	}
 	if saveLast {
 		if err := saveLastWindowOrigin(lastX, lastY); err != nil {
@@ -1331,15 +1156,15 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 // a QueryID without clearing them keeps reporting that older state for the new query.
 // Callers that replace the whole query, such as setQuery, own this bookkeeping already.
 func (a *App) beginQueryGenerationLocked() {
-	a.releaseRefreshResultHoldLocked()
-	if a.queryContextKnown {
-		a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
+	a.querySession.releaseRefreshResultHoldLocked()
+	if a.querySession.queryContextKnown {
+		a.attention.attentionQueryWasGlobal = a.querySession.queryContext.IsGlobalQuery
 	}
-	a.query.QueryID = newID()
-	a.pendingSelection = nil
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
-	a.queryComplete = false
+	a.querySession.query.QueryID = newID()
+	a.resultList.pendingSelection = nil
+	a.querySession.queryContext = queryContext{}
+	a.querySession.queryContextKnown = false
+	a.querySession.queryComplete = false
 }
 
 func (a *App) setQuery(query plainQuery) {
@@ -1357,8 +1182,8 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	var previous queryHintSnapshot
 	var previousUndo []queryHintSnapshot
 	if rememberPrevious {
-		previous = a.captureQuerySnapshot()
-		previousUndo = append([]queryHintSnapshot(nil), a.queryHintEditorState.undo...)
+		previous = a.querySession.captureQuerySnapshot()
+		previousUndo = append([]queryHintSnapshot(nil), a.querySession.queryHintEditorState.undo...)
 	}
 	if query.QueryID == "" {
 		query.QueryID = newID()
@@ -1366,52 +1191,52 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	if query.QueryType == "" {
 		query.QueryType = "input"
 	}
-	a.queryHintEditorState = queryHintEditor{}
+	a.querySession.queryHintEditorState = queryHintEditor{}
 	hasExplicitHint := query.QueryHint != nil
 	query.QueryHint = query.QueryHint.Clone()
 	query.QueryHint = query.QueryHint.NormalizeForQuery(query.QueryType, query.QueryText)
-	a.query = query
-	a.pendingSelection = nil
-	a.attentionQueryWasGlobal = false
-	a.queryContext = queryContext{}
-	a.queryContextKnown = false
-	a.editor.SetText(query.QueryText, false)
+	a.querySession.query = query
+	a.resultList.pendingSelection = nil
+	a.attention.attentionQueryWasGlobal = false
+	a.querySession.queryContext = queryContext{}
+	a.querySession.queryContextKnown = false
+	a.querySession.editor.SetText(query.QueryText, false)
 	if query.QueryHint != nil {
-		a.installQueryHint(query.QueryHint)
+		a.querySession.installQueryHint(query.QueryHint)
 	} else if !hasExplicitHint && query.QueryType == "input" {
 		// Indicator and other ChangeQuery replacements resolve the same guidance as typing.
-		a.query.QueryText = a.updateQueryHintText(query.QueryText)
+		a.querySession.query.QueryText = a.querySession.updateQueryHintText(query.QueryText)
 	}
-	a.resetQueryTransitionLocked()
-	a.releaseRefreshResultHoldLocked()
-	a.resetQueryLoadingLocked()
-	a.results = nil
-	a.resultsSectionRevision++
-	a.resultsQueryID = ""
-	a.queryComplete = false
-	a.selected = -1
-	a.hoveredResult = -1
-	a.resultScroll.reset()
-	a.resultScrollDetached = false
-	a.layout = queryLayout{}
-	a.stopGlanceLocked(true)
-	a.refinements = nil
-	a.refinementsSectionRevision++
-	a.refinementOpen = false
-	a.refinementScope = ""
-	a.completionHint = nil
-	a.clearActionPanelStateLocked()
-	a.form = nil
-	a.reconcileSelectedPreview()
-	a.requirementForm = nil
-	a.triggerConflict = nil
-	a.resetChatPreview()
-	a.clearWebViewPreviewModeLocked()
+	a.querySession.resetQueryTransitionLocked()
+	a.querySession.releaseRefreshResultHoldLocked()
+	a.querySession.resetQueryLoadingLocked()
+	a.resultList.results = nil
+	a.resultList.resultsSectionRevision++
+	a.resultList.resultsQueryID = ""
+	a.querySession.queryComplete = false
+	a.resultList.selected = -1
+	a.resultList.hoveredResult = -1
+	a.resultList.resultScroll.reset()
+	a.resultList.resultScrollDetached = false
+	a.resultList.layout = queryLayout{}
+	a.glance.stopGlanceLocked(true)
+	a.resultList.refinements = nil
+	a.resultList.refinementsSectionRevision++
+	a.resultList.refinementOpen = false
+	a.resultList.refinementScope = ""
+	a.querySession.completionHint = nil
+	a.actions.clearActionPanelStateLocked()
+	a.forms.form = nil
+	a.previews.reconcileSelectedPreview()
+	a.requirements.requirementForm = nil
+	a.conflicts.triggerConflict = nil
+	a.chat.resetChatPreview()
+	a.webView.clearWebViewPreviewModeLocked()
 	a.restoreQueryTextInput()
 	if rememberPrevious {
-		a.queryHintEditorState.undo = previousUndo
-		if !querySnapshotSameContent(previous, a.captureQuerySnapshot()) {
-			a.appendQueryUndo(previous)
+		a.querySession.queryHintEditorState.undo = previousUndo
+		if !querySnapshotSameContent(previous, a.querySession.captureQuerySnapshot()) {
+			a.querySession.appendQueryUndo(previous)
 		}
 	}
 	_ = a.window.Invalidate()
@@ -1422,11 +1247,11 @@ func (a *App) sendCurrentQuery() error {
 	var startPage string
 	var skipCompletionHint bool
 	if err := a.runOnUI("prepare current query", func() {
-		query = a.query
-		query.QueryHint = a.query.QueryHint.Clone()
+		query = a.querySession.query
+		query.QueryHint = a.querySession.query.QueryHint.Clone()
 		startPage = a.show.StartPage
-		skipCompletionHint = a.query.QueryHint != nil || a.queryHintEditorState.candidate != nil || !a.generalSettings.Data().EnableQueryCompletionHint
-		a.startQueryLoadingLocked()
+		skipCompletionHint = a.querySession.query.QueryHint != nil || a.querySession.queryHintEditorState.candidate != nil || !a.generalSettings.Data().EnableQueryCompletionHint
+		a.querySession.startQueryLoadingLocked()
 	}); err != nil {
 		return err
 	}
@@ -1439,7 +1264,7 @@ func (a *App) sendCurrentQuery() error {
 		return a.requestMRU()
 	}
 	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
-		_ = a.runOnUI("stop query loading after start failure", a.resetQueryLoadingLocked)
+		_ = a.runOnUI("stop query loading after start failure", a.querySession.resetQueryLoadingLocked)
 		return err
 	}
 	return nil
@@ -1464,10 +1289,10 @@ func (a *App) shouldPreserveQueryOnShowLocked() bool {
 		return true
 	}
 	if a.show.LaunchMode == "continue" {
-		if a.query.QueryType == "selection" {
+		if a.querySession.query.QueryType == "selection" {
 			return true
 		}
-		return a.query.QueryType == "input" && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0)
+		return a.querySession.query.QueryType == "input" && (a.querySession.query.QueryText != "" || len(a.querySession.query.QueryScope.Plugins) > 0)
 	}
 	return false
 }
@@ -1481,32 +1306,32 @@ func (a *App) usePinYin() bool {
 func (a *App) requestMRU() error {
 	queryID := ""
 	if err := a.runOnUI("prepare MRU query", func() {
-		previousQueryID := a.query.QueryID
-		a.query = newInputQuery("")
+		previousQueryID := a.querySession.query.QueryID
+		a.querySession.query = newInputQuery("")
 		// MRU replaces the refresh generation; carry its selection into the actual response.
-		if a.pendingSelection != nil && a.pendingSelection.queryID == previousQueryID {
-			a.pendingSelection.queryID = a.query.QueryID
+		if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == previousQueryID {
+			a.resultList.pendingSelection.queryID = a.querySession.query.QueryID
 		}
-		a.queryContext = queryContext{IsGlobalQuery: true}
-		a.queryContextKnown = true
-		a.editor.SetText("", false)
-		queryID = a.query.QueryID
-		a.queryComplete = false
-		a.beginQueryTransitionLocked(false)
+		a.querySession.queryContext = queryContext{IsGlobalQuery: true}
+		a.querySession.queryContextKnown = true
+		a.querySession.editor.SetText("", false)
+		queryID = a.querySession.query.QueryID
+		a.querySession.queryComplete = false
+		a.querySession.beginQueryTransitionLocked(false)
 		// MRU only replaces query results; the window-shown path owns the Glance refresh.
-		a.stopGlanceLocked(false)
-		a.refinements = nil
-		a.refinementsSectionRevision++
-		a.refinementOpen = false
-		a.refinementScope = ""
-		a.completionHint = nil
-		a.clearActionPanelStateLocked()
-		a.form = nil
-		a.reconcileSelectedPreview()
-		a.requirementForm = nil
-		a.triggerConflict = nil
-		a.resetChatPreview()
-		a.clearWebViewPreviewModeLocked()
+		a.glance.stopGlanceLocked(false)
+		a.resultList.refinements = nil
+		a.resultList.refinementsSectionRevision++
+		a.resultList.refinementOpen = false
+		a.resultList.refinementScope = ""
+		a.querySession.completionHint = nil
+		a.actions.clearActionPanelStateLocked()
+		a.forms.form = nil
+		a.previews.reconcileSelectedPreview()
+		a.requirements.requirementForm = nil
+		a.conflicts.triggerConflict = nil
+		a.chat.resetChatPreview()
+		a.webView.clearWebViewPreviewModeLocked()
 	}); err != nil {
 		return err
 	}
@@ -1517,13 +1342,13 @@ func (a *App) requestMRU() error {
 }
 
 func (a *App) applyResults(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64, complete bool) {
-	if a.destroyed.Load() || queryID == "" || queryID != a.query.QueryID {
+	if a.destroyed.Load() || queryID == "" || queryID != a.querySession.query.QueryID {
 		return
 	}
-	if a.holdRefreshResultsLocked(queryID, results, layout, refinements, context, queryStartTimestamp, complete) {
+	if a.querySession.holdRefreshResultsLocked(queryID, results, layout, refinements, context, queryStartTimestamp, complete) {
 		return
 	}
-	a.releaseRefreshResultHoldLocked()
+	a.querySession.releaseRefreshResultHoldLocked()
 	if a.isDev && a.generalSettings.Data().ShowPerformanceTail && a.generalSettings.Data().ShowPerformanceTailUIReceived && queryStartTimestamp > 0 {
 		appendUIReceivedTails(results, max(int64(0), time.Now().UnixMilli()-queryStartTimestamp))
 	}
@@ -1533,55 +1358,41 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		}
 	}
 	if len(results) > 0 || complete {
-		a.resetQueryLoadingLocked()
+		a.querySession.resetQueryLoadingLocked()
 	}
-	a.resetQueryTransitionLocked()
-	for index := range results {
-		a.resultRevision++
-		results[index].Revision = a.resultRevision
-	}
-	a.results = results
-	a.resultsSectionRevision++
-	a.resultsQueryID = queryID
-	a.queryComplete = complete
-	a.hoveredResult = -1
+	a.querySession.resetQueryTransitionLocked()
+	a.resultList.publishRows(queryID, results)
+	a.querySession.queryComplete = complete
 	enterChatMode := layout != nil && layout.ChatMode
-	a.clearWebViewPreviewModeLocked()
+	a.webView.clearWebViewPreviewModeLocked()
 	if layout != nil {
-		a.layout = *layout
+		a.resultList.layout = *layout
 		if !layout.ChatMode {
-			a.chatFullscreen = false
+			a.chat.chatFullscreen = false
 		}
 	}
 	if refinements != nil {
 		a.applyRefinementsLocked(*refinements)
 	}
 	if context != nil {
-		a.queryContext = *context
-		a.queryContextKnown = true
+		a.querySession.queryContext = *context
+		a.querySession.queryContextKnown = true
 	}
 	glanceEligible := a.glanceEligibleLocked()
-	refreshGlance := glanceEligible && a.glanceItem == nil && !a.glanceLoading
-	if glanceEligible && a.glanceItem != nil && !a.glanceLoading && a.glanceTimer == nil {
-		a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
+	refreshGlance := glanceEligible && a.glance.glanceItem == nil && !a.glance.glanceLoading
+	if glanceEligible && a.glance.glanceItem != nil && !a.glance.glanceLoading && a.glance.glanceTimer == nil {
+		a.glance.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 	} else if !glanceEligible {
-		a.stopGlanceLocked(true)
+		a.glance.stopGlanceLocked(true)
 	}
-	selected, preservedSelection, keepPendingSelection := restoreRefreshSelection(results, a.pendingSelection, queryID, complete)
-	a.selected = selected
-	if !keepPendingSelection {
-		a.pendingSelection = nil
-	}
-	if !preservedSelection {
-		a.resultScrollDetached = false
-	}
+	a.resultList.restoreSelection(queryID, complete)
 	closedActionPanel := false
-	if a.shouldSyncActionPanelWithResults() && len(a.currentActionPanelEntries()) == 0 {
-		closedActionPanel = a.resetActionPanelLocked()
-	} else if a.shouldSyncActionPanelWithResults() {
-		a.normalizeActionSelectionLocked()
+	if a.actions.shouldSyncActionPanelWithResults() && len(a.actions.currentActionPanelEntries()) == 0 {
+		closedActionPanel = a.actions.resetActionPanelLocked()
+	} else if a.actions.shouldSyncActionPanelWithResults() {
+		a.actions.normalizeActionSelectionLocked()
 	}
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	if enterChatMode {
 		a.enterChatMode()
 	}
@@ -1590,7 +1401,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	}
 	if refreshGlance {
 		util.Go(a.lifecycleCtx, "refresh glance after query results", func() {
-			a.refreshGlance("manualRefresh", "", nil)
+			a.glance.refreshGlance("manualRefresh", "", nil)
 		})
 	}
 	// Queue the state update before resizing so macOS can consume it in the
@@ -1625,25 +1436,25 @@ func (a *App) resultAreaHeightLocked(results []queryResult, layout queryLayout) 
 	if width <= 0 {
 		width = defaultWidth
 	}
-	if a.webViewFullscreen && a.webViewPreviewWidth > 0 {
-		width = a.webViewPreviewWidth
+	if a.webView.webViewFullscreen && a.webView.webViewPreviewWidth > 0 {
+		width = a.webView.webViewPreviewWidth
 	}
-	contentWidth := max(float32(0), float32(width)-2*a.palette.AppContentInset)
-	if a.palette.Surfaces != nil {
-		extra := a.palette.Surfaces.ContentInsets
+	contentWidth := max(float32(0), float32(width)-2*a.appearance.palette.AppContentInset)
+	if a.appearance.palette.Surfaces != nil {
+		extra := a.appearance.palette.Surfaces.ContentInsets
 		contentWidth = max(0, contentWidth-extra.Left-extra.Right)
 	}
 	maxResults := a.show.MaxResultCount
 	if maxResults <= 0 {
 		maxResults = defaultMaxResult
 	}
-	paddingTop, paddingBottom := int(a.palette.resultContainerPadding.Top), int(a.palette.resultContainerPadding.Bottom)
+	paddingTop, paddingBottom := int(a.appearance.palette.resultContainerPadding.Top), int(a.appearance.palette.resultContainerPadding.Bottom)
 	if layout.GridLayout == nil && len(results) > 0 {
-		padding := launcherListPadding(a.palette, a.show)
+		padding := launcherListPadding(a.appearance.palette, a.show)
 		paddingTop, paddingBottom = int(padding.Top), int(padding.Bottom)
 	}
-	density := a.densityMetrics.normalized()
-	return launcherResultAreaHeight(results, layout, contentWidth, maxResults, int(density.resultRowHeight(a.palette)), paddingTop, paddingBottom, density.groupHeaderHeight())
+	density := a.appearance.densityMetrics.normalized()
+	return launcherResultAreaHeight(results, layout, contentWidth, maxResults, int(density.resultRowHeight(a.appearance.palette)), paddingTop, paddingBottom, density.groupHeaderHeight())
 }
 
 func (a *App) applyWindowBounds() error {
@@ -1670,8 +1481,8 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if runtime.GOOS == "darwin" && a.window != nil {
 		controls := woxui.TitleBarControls{}
 		snapshot := viewSnapshot{
-			show: a.show, results: a.results, selected: a.selected, layout: a.selectedPreviewLayout(),
-			chatFullscreen: a.chatFullscreen, webViewFullscreen: a.webViewFullscreen, terminalFullscreen: a.terminalFullscreen,
+			show: a.show, results: a.resultList.results, selected: a.resultList.selected, layout: a.previews.selectedPreviewLayout(),
+			chatFullscreen: a.chat.chatFullscreen, webViewFullscreen: a.webView.webViewFullscreen, terminalFullscreen: a.terminal.terminalFullscreen,
 		}
 		if launcherPreviewTitleBarVisible(snapshot) {
 			controls = woxui.TitleBarControls{Height: launcherview.SettingsTitleBarHeight, Close: true}
@@ -1681,32 +1492,32 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		}
 	}
 	params := a.show
-	results := a.results
+	results := a.resultList.results
 	resultCount := len(results)
-	layout := a.selectedPreviewLayout()
-	refinementVisible := len(a.refinements) > 0 && a.refinementOpen && !params.HideQueryBox
-	actionPanel := a.actionPanel
-	palette := a.palette
-	densityMetrics := a.densityMetrics.normalized()
-	queryText := a.editor.State().Text
+	layout := a.previews.selectedPreviewLayout()
+	refinementVisible := len(a.resultList.refinements) > 0 && a.resultList.refinementOpen && !params.HideQueryBox
+	actionPanel := a.actions.actionPanel
+	palette := a.appearance.palette
+	densityMetrics := a.appearance.densityMetrics.normalized()
+	queryText := a.querySession.editor.State().Text
 	formHeight := 0
-	if a.form != nil {
+	if a.forms.form != nil {
 		formHeight = int(densityMetrics.scaled(formContentMaximumHeight) + 2*densityMetrics.scaled(10))
 	}
-	toolbarMessageVisible := a.effectiveToolbarMessage() != nil
-	chatFullscreen := a.chatFullscreen
+	toolbarMessageVisible := a.toolbar.effectiveToolbarMessage() != nil
+	chatFullscreen := a.chat.chatFullscreen
 	previewFullscreen := a.isPreviewFullscreen()
 	actionListHeight := 0
 	if actionPanel {
-		entries := a.currentActionPanelEntries()
+		entries := a.actions.currentActionPanelEntries()
 		actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
 	}
 	guidanceFormPreview, previewVisible := false, false
-	if a.selected >= 0 && a.selected < len(a.results) {
-		previewType := a.results[a.selected].Preview.PreviewType
+	if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
+		previewType := a.resultList.results[a.resultList.selected].Preview.PreviewType
 		guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
 		// Grid results can carry preview data without displaying a preview pane.
-		previewVisible = launcherPreviewVisible(layout, a.results[a.selected].Preview)
+		previewVisible = launcherPreviewVisible(layout, a.resultList.results[a.resultList.selected].Preview)
 	}
 	width := params.WindowWidth
 	if width <= 0 {
@@ -1716,8 +1527,8 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if maxResults <= 0 {
 		maxResults = defaultMaxResult
 	}
-	if a.webViewFullscreen && a.webViewPreviewWidth > 0 {
-		width = a.webViewPreviewWidth
+	if a.webView.webViewFullscreen && a.webView.webViewPreviewWidth > 0 {
+		width = a.webView.webViewPreviewWidth
 	}
 	visibleResults := min(resultCount, maxResults)
 	resultRowHeight := int(densityMetrics.resultRowHeight(palette))
@@ -1737,9 +1548,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		// Preserve the existing outer-edge budget for grids and empty launchers.
 		resultBottomInset = int(palette.appPadding.Bottom)
 	}
-	aboutMenuOpen := actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout
-	toolbarHasContent := launcherToolbarHasContent(resultCount, toolbarMessageVisible, aboutMenuOpen || a.form != nil)
-	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webViewFullscreen)
+	aboutMenuOpen := actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeAbout
+	toolbarHasContent := launcherToolbarHasContent(resultCount, toolbarMessageVisible, aboutMenuOpen || a.forms.form != nil)
+	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webView.webViewFullscreen)
 	height := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
@@ -1840,9 +1651,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	height += int(2 * palette.AppContentInset)
 	minimumHeight += int(2 * palette.AppContentInset)
-	if a.webViewFullscreen && a.webViewPreviewHeight > 0 {
+	if a.webView.webViewFullscreen && a.webView.webViewPreviewHeight > 0 {
 		// Width is the launcher window width; height uses the same logical-pixel window size.
-		height = max(a.webViewPreviewHeight, minimumHeight)
+		height = max(a.webView.webViewPreviewHeight, minimumHeight)
 	}
 	current, err := a.window.Bounds()
 	if err != nil {
@@ -2033,59 +1844,59 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	if !event.Down {
-		return a.onQuickSelectKey(event)
+		return a.quickSelect.onQuickSelectKey(event)
 	}
 	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if !a.formTableUsesSettingsWindow() && a.launcherTableEditor != nil {
+	if !a.formTableUsesSettingsWindow() && a.forms.launcherTableEditor != nil {
 		return a.onFormTableKey(event)
 	}
 	// Handle the hold state before feature-local handlers can consume the key.
-	if a.onQuickSelectKey(event) {
+	if a.quickSelect.onQuickSelectKey(event) {
 		return true
 	}
-	if a.onFormKey(event) {
+	if a.forms.onFormKey(event) {
 		return true
 	}
-	if a.onRequirementFormKey(event) {
+	if a.requirements.onRequirementFormKey(event) {
 		return true
 	}
-	if a.onActionKey(event) {
+	if a.actions.onActionKey(event) {
 		return true
 	}
 	if hotkeyMatches(primaryHotkey("p"), event) && !event.Repeat && a.toggleSelectedPreview() {
 		return true
 	}
-	if a.onTriggerConflictPreviewKey(event) {
+	if a.conflicts.onTriggerConflictPreviewKey(event) {
 		return true
 	}
-	if a.onChatPreviewKey(event) {
+	if a.chat.onChatPreviewKey(event) {
 		return true
 	}
 	if a.onWebViewPreviewModeKey(event) {
 		return true
 	}
-	if a.onTerminalPreviewKey(event) {
+	if a.terminal.onTerminalPreviewKey(event) {
 		return true
 	}
 	if a.onFilePreviewKey(event) {
 		return true
 	}
-	if a.onToolbarKey(event) {
+	if a.toolbar.onToolbarKey(event) {
 		return true
 	}
-	if a.onQueryHintKey(event) {
+	if a.querySession.onQueryHintKey(event) {
 		return true
 	}
 	if event.Key == woxui.KeyTab {
 		if event.Modifiers == woxui.KeyModifierShift {
-			a.autoCompleteQueryFromSelectedResult()
+			a.querySession.autoCompleteQueryFromSelectedResult()
 			return true
 		}
 		if event.Modifiers == 0 {
-			if !a.acceptQueryCompletionHint() {
-				a.rejectQueryTab()
+			if !a.querySession.acceptQueryCompletionHint() {
+				a.querySession.rejectQueryTab()
 			}
 			return true
 		}
@@ -2093,16 +1904,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
 		return true
 	}
-	if event.Key == woxui.Key("u") && event.Modifiers.HasPrimary() && a.activateAttentionUnread() {
+	if event.Key == woxui.Key("u") && event.Modifiers.HasPrimary() && a.attention.activateAttentionUnread() {
 		return true
 	}
 	if a.onRefinementHotkey(event) {
 		return true
 	}
-	if a.onResultActionHotkey(event) {
+	if a.actions.onResultActionHotkey(event) {
 		return true
 	}
-	if a.layout.GridLayout != nil {
+	if a.resultList.layout.GridLayout != nil {
 		switch event.Key {
 		case woxui.KeyArrowLeft:
 			a.moveSelection(-1)
@@ -2116,31 +1927,31 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if event.Down && !event.Composing && event.Modifiers.HasPrimary() && (event.Key == woxui.Key("c") || event.Key == woxui.Key("x") || event.Key == woxui.Key("v")) {
 		switch event.Key {
 		case woxui.Key("c"):
-			if a.queryHintEditorState.allSelected {
-				_ = clipboard.WriteText(a.query.QueryText)
+			if a.querySession.queryHintEditorState.allSelected {
+				_ = clipboard.WriteText(a.querySession.query.QueryText)
 				return true
 			}
-			if selected := a.editor.SelectedText(); selected != "" {
+			if selected := a.querySession.editor.SelectedText(); selected != "" {
 				_ = clipboard.WriteText(selected)
 			}
 			return true
 		case woxui.Key("x"):
-			if a.queryHintEditorState.allSelected {
-				if clipboard.WriteText(a.query.QueryText) == nil {
-					a.replaceWholeQueryHint("")
+			if a.querySession.queryHintEditorState.allSelected {
+				if clipboard.WriteText(a.querySession.query.QueryText) == nil {
+					a.querySession.replaceWholeQueryHint("")
 				}
 				return true
 			}
-			previousText := a.editor.State().Text
-			selected := a.editor.SelectedText()
+			previousText := a.querySession.editor.State().Text
+			selected := a.querySession.editor.SelectedText()
 			if selected != "" {
 				_ = clipboard.WriteText(selected)
-				if a.editor.DeleteSelection() {
-					a.applyQueryTextChangeLocked(a.editor.State().Text)
+				if a.querySession.editor.DeleteSelection() {
+					a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 				}
 			}
 			_ = a.window.Invalidate()
-			a.reconcileSelectedPreview()
+			a.previews.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after cut: %v", err)
 			}
@@ -2152,16 +1963,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			if err != nil || text == "" {
 				return true
 			}
-			if a.queryHintEditorState.allSelected {
-				a.replaceWholeQueryHint(text)
+			if a.querySession.queryHintEditorState.allSelected {
+				a.querySession.replaceWholeQueryHint(text)
 				return true
 			}
-			previousText := a.editor.State().Text
-			if a.editor.InsertTextSeparate(text) {
-				a.applyQueryTextChangeLocked(a.editor.State().Text)
+			previousText := a.querySession.editor.State().Text
+			if a.querySession.editor.InsertTextSeparate(text) {
+				a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 			}
 			_ = a.window.Invalidate()
-			a.reconcileSelectedPreview()
+			a.previews.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after paste: %v", err)
 			}
@@ -2176,31 +1987,31 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			a.moveSelectionByGroup(-1)
 			return true
 		case woxui.KeyArrowDown:
-			a.canRecallHistory = false
+			a.querySession.canRecallHistory = false
 			a.moveSelectionByGroup(1)
 			return true
 		}
 	}
-	previousText := a.editor.State().Text
+	previousText := a.querySession.editor.State().Text
 	if event.Down && !event.Composing && event.Key == woxui.KeyBackspace && event.Modifiers == 0 &&
-		a.isPrimary && !a.show.HideQueryBox && previousText == "" && len(a.query.QueryScope.Plugins) > 0 {
-		a.rememberQueryHint()
+		a.isPrimary && !a.show.HideQueryBox && previousText == "" && len(a.querySession.query.QueryScope.Plugins) > 0 {
+		a.querySession.rememberQueryHint()
 		a.clearQueryScopeLocked()
 		_ = a.window.Invalidate()
-		a.reconcileSelectedPreview()
+		a.previews.reconcileSelectedPreview()
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("send query after clearing scope: %v", err)
 		}
 		return true
 	}
-	textHandled, textChanged := handleQueryEditorKey(a.editor, event)
+	textHandled, textChanged := handleQueryEditorKey(a.querySession.editor, event)
 	if textChanged {
-		a.applyQueryTextChangeLocked(a.editor.State().Text)
+		a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 	}
 	if textHandled {
 		_ = a.window.Invalidate()
 		if textChanged {
-			a.reconcileSelectedPreview()
+			a.previews.reconcileSelectedPreview()
 			if err := a.sendCurrentQuery(); err != nil {
 				log.Printf("send query after editing command: %v", err)
 			}
@@ -2211,11 +2022,11 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	switch event.Key {
 	case woxui.KeyArrowUp:
 		if event.Modifiers == 0 {
-			query, handled := a.previousQueryHistory()
+			query, handled := a.querySession.previousQueryHistory()
 			if handled {
 				if query != nil {
 					a.setQuery(*query)
-					a.selectEntireQuery()
+					a.querySession.selectEntireQuery()
 					if err := a.sendCurrentQuery(); err != nil {
 						log.Printf("send recalled query history: %v", err)
 					}
@@ -2223,13 +2034,13 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 				return true
 			}
 		}
-		a.moveSelection(-a.resultNavigationColumns())
+		a.moveSelection(-a.resultList.resultNavigationColumns())
 		return true
 	case woxui.KeyArrowDown:
 		if event.Modifiers == 0 {
-			a.canRecallHistory = false
+			a.querySession.canRecallHistory = false
 		}
-		a.moveSelection(a.resultNavigationColumns())
+		a.moveSelection(a.resultList.resultNavigationColumns())
 		return true
 	case woxui.KeyEnter:
 		a.activateSelected()
@@ -2253,16 +2064,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 
 // clearQueryScopeLocked exits plugin-scoped query mode on the primary launcher.
 func (a *App) clearQueryScopeLocked() {
-	a.query.QueryScope = queryScope{}
-	a.query.QueryRefinements = map[string]string{}
-	a.refinements = nil
-	a.refinementsSectionRevision++
-	a.refinementOpen = false
-	a.refinementScope = ""
-	a.layout = queryLayout{}
+	a.querySession.query.QueryScope = queryScope{}
+	a.querySession.query.QueryRefinements = map[string]string{}
+	a.resultList.refinements = nil
+	a.resultList.refinementsSectionRevision++
+	a.resultList.refinementOpen = false
+	a.resultList.refinementScope = ""
+	a.resultList.layout = queryLayout{}
 	a.beginQueryGenerationLocked()
-	a.beginQueryTransitionLocked(false)
-	a.stopGlanceLocked(false)
+	a.querySession.beginQueryTransitionLocked(false)
+	a.glance.stopGlanceLocked(false)
 }
 
 func handleQueryEditorKey(editor *woxui.TextEditor, event woxui.KeyEvent) (bool, bool) {
@@ -2274,7 +2085,7 @@ func handleQueryEditorKey(editor *woxui.TextEditor, event woxui.KeyEvent) (bool,
 
 // resizeLauncherForQueryLineChange avoids native window work for ordinary single-line edits.
 func (a *App) resizeLauncherForQueryLineChange(previousText string) {
-	if launcherQueryLineCount(previousText) == launcherQueryLineCount(a.editor.State().Text) {
+	if launcherQueryLineCount(previousText) == launcherQueryLineCount(a.querySession.editor.State().Text) {
 		return
 	}
 	if err := a.applyWindowBounds(); err != nil {
@@ -2282,65 +2093,44 @@ func (a *App) resizeLauncherForQueryLineChange(previousText string) {
 	}
 }
 
-// previousQueryHistory advances through the show-time history snapshot while history recall remains active.
-func (a *App) previousQueryHistory() (*plainQuery, bool) {
-	if !a.canRecallHistory {
-		return nil, false
-	}
-	if a.queryHistoryIndex >= len(a.queryHistories)-1 {
-		return nil, true
-	}
-	a.queryHistoryIndex++
-	query := a.queryHistories[a.queryHistoryIndex]
-	return &query, true
-}
-
-func (a *App) resultNavigationColumns() int {
-	layout := a.layout.GridLayout
-	if layout == nil {
-		return 1
-	}
-	return normalizedGridLayout(layout).Columns
-}
-
 func (a *App) onTextInput(event woxui.TextInputEvent) {
-	if a.onActionTextInput(event) {
+	if a.actions.onActionTextInput(event) {
 		return
 	}
 	if !a.formTableUsesSettingsWindow() && a.onFormTableTextInput(event) {
 		return
 	}
-	if a.onFormTextInput(event) {
+	if a.forms.onFormTextInput(event) {
 		return
 	}
-	if a.onRequirementFormTextInput(event) {
+	if a.requirements.onRequirementFormTextInput(event) {
 		return
 	}
-	if a.onTriggerConflictPreviewTextInput(event) {
+	if a.conflicts.onTriggerConflictPreviewTextInput(event) {
 		return
 	}
-	if a.onChatPreviewTextInput(event) {
+	if a.chat.onChatPreviewTextInput(event) {
 		return
 	}
-	if a.onTerminalPreviewTextInput(event) {
+	if a.terminal.onTerminalPreviewTextInput(event) {
 		return
 	}
-	previousText := a.editor.State().Text
+	previousText := a.querySession.editor.State().Text
 	if event.Kind == woxui.TextInputCommit {
 		event.Text = normalizeQueryNewlines(event.Text)
 	}
-	if a.queryHintEditorState.allSelected && event.Kind == woxui.TextInputCommit {
-		a.replaceWholeQueryHint(event.Text)
+	if a.querySession.queryHintEditorState.allSelected && event.Kind == woxui.TextInputCommit {
+		a.querySession.replaceWholeQueryHint(event.Text)
 		return
 	}
-	a.selectTouchedQueryBlocks()
-	committed := a.editor.HandleTextInput(event)
+	a.querySession.selectTouchedQueryBlocks()
+	committed := a.querySession.editor.HandleTextInput(event)
 	if committed {
-		a.applyQueryTextChangeLocked(a.editor.State().Text)
+		a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 	}
 	_ = a.window.Invalidate()
 	if committed {
-		a.reconcileSelectedPreview()
+		a.previews.reconcileSelectedPreview()
 		if err := a.sendCurrentQuery(); err != nil {
 			log.Printf("send committed query: %v", err)
 		}
@@ -2358,37 +2148,37 @@ func normalizeQueryPaste(text string) string {
 }
 
 func (a *App) moveSelection(delta int) {
-	if len(a.results) == 0 {
+	if len(a.resultList.results) == 0 {
 		return
 	}
-	target := a.selected
-	columns := a.resultNavigationColumns()
-	if a.layout.GridLayout != nil && (delta == columns || delta == -columns) {
+	target := a.resultList.selected
+	columns := a.resultList.resultNavigationColumns()
+	if a.resultList.layout.GridLayout != nil && (delta == columns || delta == -columns) {
 		direction := 1
 		if delta < 0 {
 			direction = -1
 		}
-		target = gridSelectionIndex(a.results, a.selected, columns, direction)
+		target = gridSelectionIndex(a.resultList.results, a.resultList.selected, columns, direction)
 	} else {
-		index := a.selected
-		for attempts := 0; attempts < len(a.results); attempts++ {
-			index = (index + delta + len(a.results)) % len(a.results)
-			if !a.results[index].IsGroup {
+		index := a.resultList.selected
+		for attempts := 0; attempts < len(a.resultList.results); attempts++ {
+			index = (index + delta + len(a.resultList.results)) % len(a.resultList.results)
+			if !a.resultList.results[index].IsGroup {
 				target = index
 				break
 			}
 		}
 	}
-	if target >= 0 && target < len(a.results) && !a.results[target].IsGroup {
+	if target >= 0 && target < len(a.resultList.results) && !a.resultList.results[target].IsGroup {
 		a.cancelQuerySelectionRestore(target)
 	}
-	if target != a.selected {
-		a.selected = target
-		a.resultScrollDetached = false
-		a.clearActionPanelStateLocked()
-		a.chatFullscreen = false
-		a.clearWebViewPreviewModeLocked()
-		a.reconcileSelectedPreview()
+	if target != a.resultList.selected {
+		a.resultList.selected = target
+		a.resultList.resultScrollDetached = false
+		a.actions.clearActionPanelStateLocked()
+		a.chat.chatFullscreen = false
+		a.webView.clearWebViewPreviewModeLocked()
+		a.previews.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 		_ = a.applyWindowBounds()
 	}
@@ -2400,20 +2190,20 @@ func (a *App) moveSelection(delta int) {
 // first returns to the current group's first item, then to the previous group's
 // first item. Lists without group headers still treat the whole list as one group.
 func (a *App) moveSelectionByGroup(direction int) {
-	if len(a.results) == 0 {
+	if len(a.resultList.results) == 0 {
 		return
 	}
-	target := groupSelectionIndex(a.results, a.selected, direction)
-	if target >= 0 && target < len(a.results) && !a.results[target].IsGroup {
+	target := groupSelectionIndex(a.resultList.results, a.resultList.selected, direction)
+	if target >= 0 && target < len(a.resultList.results) && !a.resultList.results[target].IsGroup {
 		a.cancelQuerySelectionRestore(target)
 	}
-	if target != a.selected {
-		a.selected = target
-		a.resultScrollDetached = false
-		a.clearActionPanelStateLocked()
-		a.chatFullscreen = false
-		a.clearWebViewPreviewModeLocked()
-		a.reconcileSelectedPreview()
+	if target != a.resultList.selected {
+		a.resultList.selected = target
+		a.resultList.resultScrollDetached = false
+		a.actions.clearActionPanelStateLocked()
+		a.chat.chatFullscreen = false
+		a.webView.clearWebViewPreviewModeLocked()
+		a.previews.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 		_ = a.applyWindowBounds()
 	}
@@ -2424,22 +2214,22 @@ func (a *App) selectResult(index int) {
 	closedPanel := false
 	closedForm := false
 	valid := false
-	if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
+	if index >= 0 && index < len(a.resultList.results) && !a.resultList.results[index].IsGroup {
 		valid = true
 		a.cancelQuerySelectionRestore(index)
-		changed := a.selected != index
-		a.selected = index
-		closedPanel = a.resetActionPanelLocked()
-		closedForm = a.form != nil
-		a.form = nil
+		changed := a.resultList.selected != index
+		a.resultList.selected = index
+		closedPanel = a.actions.resetActionPanelLocked()
+		closedForm = a.forms.form != nil
+		a.forms.form = nil
 		if changed {
-			a.resultScrollDetached = false
-			a.chatFullscreen = false
-			a.clearWebViewPreviewModeLocked()
+			a.resultList.resultScrollDetached = false
+			a.chat.chatFullscreen = false
+			a.webView.clearWebViewPreviewModeLocked()
 		}
 	}
 	if valid {
-		a.reconcileSelectedPreview()
+		a.previews.reconcileSelectedPreview()
 		a.restoreQueryTextInput()
 	}
 	if valid || closedPanel || closedForm {
@@ -2448,26 +2238,16 @@ func (a *App) selectResult(index int) {
 	_ = a.window.Invalidate()
 }
 
-func (a *App) hoverResult(index int, inside bool) {
-	if inside {
-		if index >= 0 && index < len(a.results) && !a.results[index].IsGroup {
-			a.hoveredResult = index
-		}
-	} else if a.hoveredResult == index {
-		a.hoveredResult = -1
-	}
-}
-
 func (a *App) activateSelected() {
-	selected := a.selected
+	selected := a.resultList.selected
 	a.activateResult(selected)
 }
 
 func (a *App) activateResult(index int) {
-	if len(a.results) > 0 && (index < 0 || index >= len(a.results) || a.results[index].IsGroup) {
+	if len(a.resultList.results) > 0 && (index < 0 || index >= len(a.resultList.results) || a.resultList.results[index].IsGroup) {
 		return
 	}
-	entries := unifiedActionPanelEntries(a.results, index, a.toolbarMsg)
+	entries := unifiedActionPanelEntries(a.resultList.results, index, a.toolbar.toolbarMsg)
 	if len(entries) == 0 {
 		return
 	}
@@ -2664,10 +2444,10 @@ func restoreQueryResultSelection(results []queryResult, snapshot queryResultSele
 
 // cancelQuerySelectionRestore lets explicit navigation override a pending undo target.
 func (a *App) cancelQuerySelectionRestore(index int) {
-	if a.pendingSelection != nil && a.pendingSelection.querySnapshot != nil {
+	if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.querySnapshot != nil {
 		// IDs remain stable within this query, so later snapshots can retain the user's choice.
-		a.pendingSelection = &pendingResultSelection{
-			queryID: a.query.QueryID, index: index, resultID: a.results[index].ID, preserveIndex: true,
+		a.resultList.pendingSelection = &pendingResultSelection{
+			queryID: a.querySession.query.QueryID, index: index, resultID: a.resultList.results[index].ID, preserveIndex: true,
 		}
 	}
 }

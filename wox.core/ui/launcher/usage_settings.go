@@ -82,7 +82,7 @@ func usagePeriodLabelKey(period string) string {
 
 // shareUsageToX captures the visible report, copies it as an image, and opens the localized X draft.
 func (a *App) shareUsageToX() {
-	window := a.settingsNativeWindow()
+	window := a.settingsWindow.settingsNativeWindow()
 	if window == nil {
 		return
 	}
@@ -90,26 +90,26 @@ func (a *App) shareUsageToX() {
 	capturePath := filepath.Join(os.TempDir(), "wox-usage-share-window.png")
 	exportPath := filepath.Join(os.TempDir(), "wox-usage-share.png")
 	if err := window.CapturePNG(capturePath); err != nil {
-		a.setUsageShareError(a.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
+		a.setUsageShareError(a.language.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
 		return
 	}
 	windowBounds, err := window.Bounds()
 	if err != nil {
-		a.setUsageShareError(a.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
+		a.setUsageShareError(a.language.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
 		return
 	}
 	if err := cropUsageShareImage(capturePath, exportPath, windowBounds.Width, windowBounds.Height); err != nil {
-		a.setUsageShareError(a.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
+		a.setUsageShareError(a.language.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
 		return
 	}
 	if err := window.WriteClipboardImageFile(exportPath); err != nil {
 		log.Printf("copy usage share image: %v", err)
-		a.setUsageShareError(a.translate("i18n:ui_usage_share_clipboard_unsupported"))
+		a.setUsageShareError(a.language.translate("i18n:ui_usage_share_clipboard_unsupported"))
 	}
 
-	text := url.QueryEscape(a.translate("i18n:ui_usage_share_tweet_text"))
+	text := url.QueryEscape(a.language.translate("i18n:ui_usage_share_tweet_text"))
 	if err := window.OpenExternalURL("https://x.com/intent/tweet?text=" + text); err != nil {
-		a.setUsageShareError(a.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
+		a.setUsageShareError(a.language.translate("i18n:ui_usage_share_failed") + ": " + err.Error())
 	}
 }
 

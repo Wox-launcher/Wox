@@ -62,7 +62,7 @@ var builtInSettingSearchAliases = map[string][]string{
 // The controller owns the loading/loaded/error/plugins state and the load guard; the App still drives
 // the call so it can invalidate the settings window at the right lifecycle points.
 func (a *App) loadSettingsSearchPlugins() {
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	if err := a.settingsSearch.ReloadPlugins(a.lifecycleCtx, a.services, a.sessionID); err != nil {
 		return
 	}
@@ -130,7 +130,7 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 			}
 			texts := []string{key, title}
 			for _, alias := range definition.SearchAliases {
-				texts = append(texts, a.translate(alias))
+				texts = append(texts, a.language.translate(alias))
 			}
 			candidates = append(candidates, settingsSearchResult{
 				kind: settingsSearchPluginSetting, title: title, subtitle: pluginTitle, icon: plugin.Icon, tab: "plugins", pluginID: plugin.ID, settingKey: key,
@@ -220,7 +220,7 @@ func (a *App) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtit
 		texts := []string{key, title, subtitle}
 		texts = append(texts, builtInSettingSearchAliases[key]...)
 		for _, alias := range definition.SearchAliases {
-			texts = append(texts, a.translate(alias))
+			texts = append(texts, a.language.translate(alias))
 		}
 		results = append(results, settingsSearchResult{
 			kind: settingsSearchSetting, title: title, subtitle: subtitle, tab: tab, settingKey: key, searchTexts: normalizeSettingsSearchTexts(texts),
@@ -234,7 +234,7 @@ func (a *App) formDefinitionSearchTitle(definition formDefinition) string {
 	if title == "" {
 		title = definition.Value.Label
 	}
-	return strings.TrimSpace(a.translate(title))
+	return strings.TrimSpace(a.language.translate(title))
 }
 
 func normalizeSettingsSearchTexts(texts []string) []string {
@@ -291,11 +291,11 @@ func (a *App) focusSettingsSearch(selectAll bool) {
 		queryText = strings.TrimSpace(editor.State().Text)
 	}
 	a.settingsSearch.SetPanel(queryText != "")
-	host := a.settingsHost
+	host := a.settingsWindow.settingsHost
 	if host != nil {
 		host.RequestFocus(woxwidget.Key("settings-search-field"))
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // setSettingsSearchFocused keeps controller routing aligned with the retained text-field focus.
@@ -315,7 +315,7 @@ func (a *App) setSettingsSearchFocused(focused bool) {
 	} else {
 		a.settingsSearch.SetPanel(false)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // setSettingsSearchValue applies accessibility value changes through the same search state.
@@ -330,7 +330,7 @@ func (a *App) setSettingsSearchValue(value string) error {
 	}
 	a.settingsSearch.SetPanel(strings.TrimSpace(value) != "")
 	a.settingsSearch.SetSelected(0)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	return nil
 }
 
@@ -343,7 +343,7 @@ func (a *App) clearSettingsSearch() {
 	}
 	a.settingsSearch.SetPanel(false)
 	a.settingsSearch.SetSelected(0)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) blurSettingsSearch() {
@@ -352,11 +352,11 @@ func (a *App) blurSettingsSearch() {
 	}
 	a.settingsSearch.SetFocused(false)
 	a.settingsSearch.SetPanel(false)
-	host := a.settingsHost
+	host := a.settingsWindow.settingsHost
 	if host != nil {
 		host.ClearFocus()
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // onSettingsSearchKey gives the floating result palette first ownership of search navigation keys.
@@ -413,7 +413,7 @@ func (a *App) moveSettingsSearchSelection(delta int) {
 	} else {
 		a.settingsSearch.SetSelected(min(max(0, a.settingsSearch.Selected()+delta), len(results)-1))
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) selectSettingsSearchResult(index int) {
@@ -423,7 +423,7 @@ func (a *App) selectSettingsSearchResult(index int) {
 		return
 	}
 	a.settingsSearch.SetSelected(index)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) activateSelectedSettingsSearchResult() {
@@ -445,7 +445,7 @@ func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
 	}
 	if result.kind == settingsSearchSection {
 		a.selectSettingsNavItem(settingsSearchNavItem(result))
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 
@@ -454,7 +454,7 @@ func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
 		a.focusBuiltInSettingsSearchTarget(result.tab, result.settingKey)
 		a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
@@ -462,7 +462,7 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	items := settingItemsForSnapshot(snapshot)
 	for index, item := range items {
 		if item.key == settingKey {
-			a.settingRow = index
+			a.settingsWindow.settingRow = index
 			if tab == "general" {
 				a.generalSettings.SetFormFocused(false)
 			}
@@ -534,7 +534,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 
 func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 	if settingKey == "" {
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	form := a.pluginSettings.Form()
@@ -547,7 +547,7 @@ func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 			}
 		}
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func settingsSearchHighlightTarget(result settingsSearchResult) string {
@@ -566,30 +566,30 @@ func settingsSearchHighlightTarget(result settingsSearchResult) string {
 
 // startSettingsSearchHighlight flashes the destination after search navigation and replaces any older cue.
 func (a *App) startSettingsSearchHighlight(target string) {
-	if target == "" {
+	if a.isDestroyed() || target == "" {
 		return
 	}
-	if a.settingFlashTimer != nil {
-		a.settingFlashTimer.Stop()
+	if a.settingsWindow.settingFlashTimer != nil {
+		a.settingsWindow.settingFlashTimer.Stop()
 	}
-	a.settingFlash = target
-	a.settingFlashTimer = time.AfterFunc(settingsSearchHighlightDuration, func() {
+	a.settingsWindow.settingFlash = target
+	a.settingsWindow.settingFlashTimer = time.AfterFunc(settingsSearchHighlightDuration, func() {
 		_ = a.runOnUI("clear settings search highlight", func() {
-			if a.settingFlash != target {
+			if a.isDestroyed() || a.settingsWindow.settingFlash != target {
 				return
 			}
-			a.settingFlash = ""
-			a.settingFlashTimer = nil
-			a.invalidateSettingsWindow()
+			a.settingsWindow.settingFlash = ""
+			a.settingsWindow.settingFlashTimer = nil
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 	})
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) clearSettingsSearchHighlight() {
-	if a.settingFlashTimer != nil {
-		a.settingFlashTimer.Stop()
-		a.settingFlashTimer = nil
+	if a.settingsWindow.settingFlashTimer != nil {
+		a.settingsWindow.settingFlashTimer.Stop()
+		a.settingsWindow.settingFlashTimer = nil
 	}
-	a.settingFlash = ""
+	a.settingsWindow.settingFlash = ""
 }

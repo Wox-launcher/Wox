@@ -173,7 +173,10 @@ func (a *App) destroySecondary() {
 		if cancel != nil {
 			cancel()
 		}
-		a.releaseTerminalSubscription()
+		if err := a.runOnUI("dispose secondary controllers", a.disposeControllers); err != nil {
+			util.GetLogger().Warn(a.lifecycleCtx, "dispose secondary controllers: "+err.Error())
+		}
+		a.terminal.releaseTerminalSubscription()
 		a.unsubscribeAll()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		if err := a.services.DestroyInstance(ctx, a.sessionID); err != nil {
@@ -184,24 +187,6 @@ func (a *App) destroySecondary() {
 			a.instances.remove(a)
 		}
 	})
-}
-
-func (a *App) releaseTerminalSubscription() {
-	if err := a.runOnUI("release terminal preview", func() {
-		a.terminalPreview = nil
-	}); err != nil {
-		log.Printf("dispatch terminal preview release: %v", err)
-	}
-	a.terminalDesired.Store("")
-	a.terminalSubscriptionMu.Lock()
-	defer a.terminalSubscriptionMu.Unlock()
-	if a.terminalSubscribed == "" {
-		return
-	}
-	if err := a.services.UnsubscribeTerminal(context.Background(), a.sessionID, a.terminalSubscribed); err != nil {
-		log.Printf("unsubscribe terminal during Wox instance cleanup: %v", err)
-	}
-	a.terminalSubscribed = ""
 }
 
 func (a *App) unsubscribeAll() {
@@ -224,7 +209,7 @@ func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
 		if err := a.reloadTranslations(); err != nil {
 			log.Printf("reload shared translations for %s: %v", a.sessionID, err)
 		}
-		if err := a.reloadTheme(); err != nil {
+		if err := a.appearance.reloadTheme(); err != nil {
 			log.Printf("reload shared theme for %s: %v", a.sessionID, err)
 		}
 		if kind, ok := message.Payload.(string); ok && kind == "plugins" {
@@ -239,7 +224,7 @@ func (a *App) onSharedSettingsChanged(message woxui.WindowMessage) {
 				}
 				_ = window.Invalidate()
 			}
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		}); err != nil {
 			log.Printf("dispatch shared window settings for %s: %v", a.sessionID, err)
 		}

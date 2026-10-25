@@ -122,15 +122,15 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 		if a.isDestroyed() {
 			return
 		}
-		if queryID != a.query.QueryID || !a.completionHintValidLocked(converted) {
-			if queryID == a.query.QueryID {
-				a.completionHint = nil
+		if queryID != a.querySession.query.QueryID || !a.querySession.completionHintValidLocked(converted) {
+			if queryID == a.querySession.query.QueryID {
+				a.querySession.completionHint = nil
 				_ = a.window.Invalidate()
 			}
 			return
 		}
 		copy := *converted
-		a.completionHint = &copy
+		a.querySession.completionHint = &copy
 		_ = a.window.Invalidate()
 	}); err != nil {
 		log.Printf("dispatch query completion hint: %v", err)
@@ -146,9 +146,9 @@ func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
 		if a.isDestroyed() {
 			return
 		}
-		current := a.query.QueryID == queryID
+		current := a.querySession.query.QueryID == queryID
 		if current {
-			a.resetQueryLoadingLocked()
+			a.querySession.resetQueryLoadingLocked()
 			log.Printf("query %s failed: %v", queryID, err)
 			if a.window != nil {
 				_ = a.window.Invalidate()

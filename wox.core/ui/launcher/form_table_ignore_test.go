@@ -28,7 +28,7 @@ func TestFormTableIgnoreRuleSaveDoesNotRestoreUncheckedSavedApp(t *testing.T) {
 }
 
 func TestFormTableOrdinaryAppsColumnKeepsItsText(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	column := formTableColumn{Key: "Apps", Type: "text"}
 	cell := app.formTableViewCell(column, map[string]any{"Apps": "ordinary plugin value"}, woxcomponent.ControlTheme{}, 1)
 	if cell.Text != "ordinary plugin value" || len(cell.Icons) != 0 {
@@ -47,7 +47,11 @@ func (s *ignorePreviewService) IndexedApps(_ context.Context, _ string, pattern 
 // TestFormTablePreviewRequestLifetime delivers results on a controlled UI queue.
 func TestFormTablePreviewRequestLifetime(t *testing.T) {
 	queue := make(chan func(), 4)
-	app := &App{lifecycleCtx: context.Background(), services: &ignorePreviewService{}, uiCall: func(fn func()) error { queue <- fn; return nil }}
+	app := bindTestApp(&App{
+		lifecycleCtx: context.Background(),
+		services:     &ignorePreviewService{},
+		uiCall:       func(fn func()) error { queue <- fn; return nil },
+	})
 	newEditor := func(pattern string) *formTableEditorState {
 		return &formTableEditorState{rowForm: &formFieldsState{values: map[string]string{"Pattern": pattern, "IncludeFuture": "true"}}}
 	}
@@ -62,7 +66,7 @@ func TestFormTablePreviewRequestLifetime(t *testing.T) {
 		}
 	}
 	first := newEditor("old")
-	app.launcherTableEditor = first
+	app.forms.launcherTableEditor = first
 	app.initFormTablePatternPreview(first)
 	oldResult := result()
 	first.rowForm.values["Pattern"] = "new"
@@ -74,7 +78,7 @@ func TestFormTablePreviewRequestLifetime(t *testing.T) {
 		t.Fatalf("stale result replaced current preview: %+v", first.patternPreview.apps)
 	}
 	second := newEditor("new")
-	app.launcherTableEditor = second
+	app.forms.launcherTableEditor = second
 	app.initFormTablePatternPreview(second)
 	if !second.patternPreview.loading {
 		t.Fatal("reopening reused the previous editor's cache")
@@ -166,7 +170,7 @@ func TestFormTableIgnoreRuleAppPathTooltipPrefersPath(t *testing.T) {
 }
 
 func TestFormTableIgnoreRuleAppsCellShowsPathOnHover(t *testing.T) {
-	cell := (&App{}).formTableIgnoreRuleAppsCell(map[string]any{
+	cell := (bindTestApp(&App{})).formTableIgnoreRuleAppsCell(map[string]any{
 		"IncludeFuture": false,
 		"Apps": []map[string]any{
 			{"Name": "notepad", "Path": `C:\Windows\System32\notepad.exe`},

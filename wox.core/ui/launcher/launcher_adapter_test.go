@@ -3,7 +3,7 @@ package launcher
 import "testing"
 
 func TestResultTailWidthBudget(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	// A nil window uses zero text metrics; enough chips still fill the budget
 	// through their padding without requiring native font measurement.
 	tails := make([]resultTail, 40)

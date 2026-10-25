@@ -18,13 +18,13 @@ type privacySamplePayload struct {
 func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	return launcherview.PrivacySettingsView(launcherview.PrivacySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette,
-		Title: a.translate("i18n:ui_privacy"), Description: a.translate("i18n:ui_privacy_description"),
-		PrivateModeTitle: a.translate("i18n:ui_privacy_mode_title"), PrivateModeDescription: a.translate("i18n:ui_privacy_mode_description"),
+		Title: a.language.translate("i18n:ui_privacy"), Description: a.language.translate("i18n:ui_privacy_description"),
+		PrivateModeTitle: a.language.translate("i18n:ui_privacy_mode_title"), PrivateModeDescription: a.language.translate("i18n:ui_privacy_mode_description"),
 		PrivateModeEnabled: snapshot.general.Data.EnablePrivacyMode,
-		OfflineTitle:       a.translate("i18n:ui_offline_title"), OfflineDescription: a.translate("i18n:ui_offline_description"), OfflineEnabled: snapshot.general.Data.EnableOfflineMode, OfflineReason: a.translate("i18n:ui_offline_paused"),
+		OfflineTitle:       a.language.translate("i18n:ui_offline_title"), OfflineDescription: a.language.translate("i18n:ui_offline_description"), OfflineEnabled: snapshot.general.Data.EnableOfflineMode, OfflineReason: a.language.translate("i18n:ui_offline_paused"),
 		OnToggleOffline: func() { a.selectSettingRow(1); a.activateSetting(1) },
-		TelemetryTitle:  a.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.translate("i18n:ui_privacy_anonymous_stats_description"),
-		TelemetryEnabled: snapshot.general.Data.EnableAnonymousUsageStats, ViewSampleLabel: a.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacy.Error,
+		TelemetryTitle:  a.language.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.language.translate("i18n:ui_privacy_anonymous_stats_description"),
+		TelemetryEnabled: snapshot.general.Data.EnableAnonymousUsageStats, ViewSampleLabel: a.language.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacy.Error,
 		OnTogglePrivateMode: func() {
 			a.selectSettingRow(0)
 			a.activateSetting(1)
@@ -44,16 +44,16 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	return launcherview.PrivacySampleDialog(launcherview.PrivacySampleDialogProps{
 		Width: width, Height: height, Theme: snapshot.palette,
-		Title: a.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacy.Sample,
-		CopyLabel: a.translate("i18n:toolbar_copy"), ConfirmLabel: a.translate("i18n:ui_ok"), Error: snapshot.privacy.Error,
+		Title: a.language.translate("i18n:ui_privacy_sample_title"), Sample: snapshot.privacy.Sample,
+		CopyLabel: a.language.translate("i18n:toolbar_copy"), ConfirmLabel: a.language.translate("i18n:ui_ok"), Error: snapshot.privacy.Error,
 		OnCopy: a.copyPrivacySample, OnClose: a.togglePrivacySample,
 	})
 }
 
 // onPrivacySettingsKey keeps the modal sample dialog from driving settings behind it.
 func (a *App) onPrivacySettingsKey(event woxui.KeyEvent) bool {
-	settingsOpen := a.settingsOpen
-	tab := a.settingTab
+	settingsOpen := a.settingsWindow.settingsOpen
+	tab := a.settingsWindow.settingTab
 	if !settingsOpen || tab != "privacy" || !a.privacySettings.SampleVisible() {
 		return false
 	}
@@ -70,5 +70,5 @@ func (a *App) togglePrivacySample() {
 
 // copyPrivacySample publishes the visible sample through the portable clipboard boundary.
 func (a *App) copyPrivacySample() {
-	a.privacySettings.CopySample(a.settingsNativeWindow().WriteClipboardText)
+	a.privacySettings.CopySample(a.settingsWindow.settingsNativeWindow().WriteClipboardText)
 }

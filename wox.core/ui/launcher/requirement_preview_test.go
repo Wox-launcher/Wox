@@ -11,36 +11,40 @@ import (
 )
 
 func TestSubmitRequirementFormAttachesErrorsToFields(t *testing.T) {
-	app := &App{requirementForm: &requirementFormState{
-		formFieldsState: newFormFieldsState([]formDefinition{{
-			Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}},
-		}, {
-			Type: "textbox", Value: formDefinitionValue{Key: "client_id", Validators: []formValidator{{Type: "not_empty"}}},
-		}}, map[string]string{"api_key": "", "client_id": "ok"}, false),
-		key: "req",
-	}}
-	setFormFieldsFocusLocked(&app.requirementForm.formFieldsState, 1)
-	app.submitRequirementForm()
-	if app.requirementForm.error != "" {
-		t.Fatalf("footer error = %q, want field-scoped validation", app.requirementForm.error)
+	app := bindTestApp(&App{
+		requirements: requirementController{
+			requirementForm: &requirementFormState{
+				formFieldsState: newFormFieldsState([]formDefinition{{
+					Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}},
+				}, {
+					Type: "textbox", Value: formDefinitionValue{Key: "client_id", Validators: []formValidator{{Type: "not_empty"}}},
+				}}, map[string]string{"api_key": "", "client_id": "ok"}, false),
+				key: "req",
+			},
+		},
+	})
+	setFormFieldsFocusLocked(&app.requirements.requirementForm.formFieldsState, 1)
+	app.requirements.submitRequirementForm()
+	if app.requirements.requirementForm.error != "" {
+		t.Fatalf("footer error = %q, want field-scoped validation", app.requirements.requirementForm.error)
 	}
-	if got := app.requirementForm.fieldErrors["api_key"]; got == "" {
+	if got := app.requirements.requirementForm.fieldErrors["api_key"]; got == "" {
 		t.Fatal("empty api_key should show an error under that field")
 	}
-	if _, exists := app.requirementForm.fieldErrors["client_id"]; exists {
-		t.Fatalf("filled client_id should not have a field error, got %#v", app.requirementForm.fieldErrors)
+	if _, exists := app.requirements.requirementForm.fieldErrors["client_id"]; exists {
+		t.Fatalf("filled client_id should not have a field error, got %#v", app.requirements.requirementForm.fieldErrors)
 	}
-	if app.requirementForm.focused != 0 {
-		t.Fatalf("focused field = %d, want the first invalid field", app.requirementForm.focused)
+	if app.requirements.requirementForm.focused != 0 {
+		t.Fatalf("focused field = %d, want the first invalid field", app.requirements.requirementForm.focused)
 	}
-	syncFormFieldsEditorLocked(&app.requirementForm.formFieldsState)
-	if got := app.requirementForm.values["api_key"]; got != "" {
+	syncFormFieldsEditorLocked(&app.requirements.requirementForm.formFieldsState)
+	if got := app.requirements.requirementForm.values["api_key"]; got != "" {
 		t.Fatalf("validation copied client_id into api_key: %q", got)
 	}
-	app.requirementForm.editor.SetText("new-key", false)
-	syncFormFieldsEditorLocked(&app.requirementForm.formFieldsState)
-	if app.requirementForm.values["api_key"] != "new-key" || app.requirementForm.values["client_id"] != "ok" {
-		t.Fatalf("editing after validation changed the wrong field: %#v", app.requirementForm.values)
+	app.requirements.requirementForm.editor.SetText("new-key", false)
+	syncFormFieldsEditorLocked(&app.requirements.requirementForm.formFieldsState)
+	if app.requirements.requirementForm.values["api_key"] != "new-key" || app.requirements.requirementForm.values["client_id"] != "ok" {
+		t.Fatalf("editing after validation changed the wrong field: %#v", app.requirements.requirementForm.values)
 	}
 }
 
@@ -61,16 +65,16 @@ func TestRequirementSaveLabelIncludesPrimaryEnterHotkey(t *testing.T) {
 }
 
 func TestRequirementFormPrimaryEnterSavesWithoutFieldFocus(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	event := woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierControl, Down: true}
 	if runtime.GOOS == "darwin" {
 		event.Modifiers = woxui.KeyModifierMeta
 	}
-	if app.onRequirementFormKey(event) {
+	if app.requirements.onRequirementFormKey(event) {
 		t.Fatal("ctrl/cmd+enter must not save when no requirement form is visible")
 	}
-	app.requirementForm = &requirementFormState{saving: true}
-	if !app.onRequirementFormKey(event) {
+	app.requirements.requirementForm = &requirementFormState{saving: true}
+	if !app.requirements.onRequirementFormKey(event) {
 		t.Fatal("ctrl/cmd+enter should save while the requirement preview is visible, even if the query box has focus")
 	}
 }
@@ -80,13 +84,13 @@ func TestRequirementFormTabMovesOneHostFocusPerPress(t *testing.T) {
 		{Type: "textbox", Value: formDefinitionValue{Key: "url"}},
 		{Type: "textbox", Value: formDefinitionValue{Key: "token"}},
 	}, nil, true)
-	app := &App{requirementForm: &requirementFormState{formFieldsState: fields}}
+	app := bindTestApp(&App{requirements: requirementController{requirementForm: &requirementFormState{formFieldsState: fields}}})
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Focusable{Key: "requirement-form-field-0", OnKey: app.onRequirementFormKey, Child: woxwidget.Container{Width: 100, Height: 30}},
-			woxwidget.Focusable{Key: "requirement-form-field-1", OnKey: app.onRequirementFormKey, OnFocusChange: func(focused bool) {
+			woxwidget.Focusable{Key: "requirement-form-field-0", OnKey: app.requirements.onRequirementFormKey, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "requirement-form-field-1", OnKey: app.requirements.onRequirementFormKey, OnFocusChange: func(focused bool) {
 				if focused {
-					app.focusRequirementFormField(1)
+					app.requirements.focusRequirementFormField(1)
 				}
 			}, Child: woxwidget.Container{Width: 100, Height: 30}},
 		}}
@@ -97,11 +101,11 @@ func TestRequirementFormTabMovesOneHostFocusPerPress(t *testing.T) {
 	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 80}, PixelSize: woxui.PixelSize{Width: 100, Height: 80}, Scale: 1})
 	host.RequestFocus("requirement-form-field-0")
 
-	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || app.requirementForm.focused != 1 {
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) || app.requirements.requirementForm.focused != 1 {
 		t.Fatal("Tab from the first requirement field did not focus the second field")
 	}
 	host.Key(woxui.KeyEvent{Key: woxui.KeyTab})
-	if app.requirementForm.focused != 1 {
+	if app.requirements.requirementForm.focused != 1 {
 		t.Fatal("Tab key release moved requirement focus back to the first field")
 	}
 }
@@ -134,17 +138,19 @@ func TestRequirementPreviewRendersSettingTooltipAsMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	app := &App{
+	app := bindTestApp(&App{
 		aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}),
-		requirementForm: &requirementFormState{
-			formFieldsState: newFormFieldsState(data.SettingDefinitions, data.Values, false),
-			key:             key,
-			pluginID:        data.PluginID,
-			pluginName:      data.PluginName,
-			title:           data.Title,
-			message:         data.Message,
+		requirements: requirementController{
+			requirementForm: &requirementFormState{
+				formFieldsState: newFormFieldsState(data.SettingDefinitions, data.Values, false),
+				key:             key,
+				pluginID:        data.PluginID,
+				pluginName:      data.PluginName,
+				title:           data.Title,
+				message:         data.Message,
+			},
 		},
-	}
+	})
 	widget := app.buildRequirementPreview(result, preview, uiPalette{}, 420, 360)
 	root := widget.(woxwidget.Container)
 	column := root.Child.(woxwidget.Flex)

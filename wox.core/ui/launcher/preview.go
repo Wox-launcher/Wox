@@ -25,7 +25,7 @@ type previewListItem struct {
 }
 
 // resolvePreview returns the cached remote preview while preserving unresolved remote state for blank rendering.
-func (a *App) resolvePreview(preview queryPreview) queryPreview {
+func (a *remotePreviewController) resolvePreview(preview queryPreview) queryPreview {
 	if preview.PreviewType != "remote" {
 		return normalizePreviewMetadata(preview)
 	}
@@ -40,8 +40,8 @@ func (a *App) resolvePreview(preview queryPreview) queryPreview {
 }
 
 // prepareRemotePreview starts one deferred preview request before the next render.
-func (a *App) prepareRemotePreview(preview queryPreview) {
-	if preview.PreviewType != "remote" {
+func (a *remotePreviewController) prepareRemotePreview(preview queryPreview) {
+	if a.isDestroyed() || preview.PreviewType != "remote" {
 		return
 	}
 	key := strings.TrimSpace(preview.PreviewData)
@@ -58,12 +58,15 @@ func (a *App) prepareRemotePreview(preview queryPreview) {
 	}
 }
 
-func (a *App) loadRemotePreview(path string, fallback queryPreview) {
+func (a *remotePreviewController) loadRemotePreview(path string, fallback queryPreview) {
+	if a.isDestroyed() {
+		return
+	}
 	resolved := queryPreview{PreviewType: "text", PreviewData: "Unable to load remote preview", PreviewTags: fallback.PreviewTags}
 	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
 		resolved.PreviewData = "Core returned an invalid remote preview path"
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(a.lifecycleCtx, 10*time.Second)
 		parsed, parseErr := url.Parse(path)
 		var err error
 		if parseErr != nil || parsed.Path != "/preview" {
@@ -89,16 +92,16 @@ func (a *App) loadRemotePreview(path string, fallback queryPreview) {
 		}
 	}
 	if err := a.runOnUI("apply remote preview", func() {
+		if a.isDestroyed() {
+			return
+		}
 		if len(a.remotePreviews) >= 256 {
 			// Query IDs make these entries short-lived; a bounded reset avoids an LRU on the frame path.
 			a.remotePreviews = map[string]queryPreview{}
 			a.previewRequests = map[string]bool{path: true}
 		}
 		a.remotePreviews[path] = resolved
-		a.reconcileSelectedPreview()
-		if a.window != nil {
-			_ = a.window.Invalidate()
-		}
+		a.onReady()
 	}); err != nil {
 		log.Printf("dispatch remote preview result: %v", err)
 	}

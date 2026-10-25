@@ -28,12 +28,7 @@ func (a *App) SessionID() string {
 
 // MemoryDiagnostics reports caches owned by this launcher instance without forcing allocation or cleanup.
 func (a *App) MemoryDiagnostics() (decodedImageBytes, rendererBytes uint64) {
-	a.imageMu.RLock()
-	if a.imageCacheSize > 0 {
-		decodedImageBytes = uint64(a.imageCacheSize)
-	}
-	a.imageMu.RUnlock()
-	return decodedImageBytes, a.windows.RendererResidentBytes()
+	return a.imageStore.decodedBytes(), a.windows.RendererResidentBytes()
 }
 
 // Show presents the launcher without changing any independent management window.
@@ -115,32 +110,32 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 // RefreshQuery starts a new query identity while optionally retaining the visible selection.
 func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions) error {
 	if err := a.runOnUI("refresh query", func() {
-		selected := a.selected
-		if a.queryContextKnown {
-			a.attentionQueryWasGlobal = a.queryContext.IsGlobalQuery
+		selected := a.resultList.selected
+		if a.querySession.queryContextKnown {
+			a.attention.attentionQueryWasGlobal = a.querySession.queryContext.IsGlobalQuery
 		}
-		a.query.QueryID = newInputQuery("").QueryID
-		a.queryComplete = false
-		a.queryContext = queryContext{}
-		a.queryContextKnown = false
-		a.completionHint = nil
+		a.querySession.query.QueryID = newInputQuery("").QueryID
+		a.querySession.queryComplete = false
+		a.querySession.queryContext = queryContext{}
+		a.querySession.queryContextKnown = false
+		a.querySession.completionHint = nil
 		// Keep the visible glance through the refresh. Clearing it blanks the query accessory until results return.
-		a.stopGlanceLocked(false)
+		a.glance.stopGlanceLocked(false)
 		if options.SelectedResultId == "" && !options.PreserveSelectedIndex {
-			a.pendingSelection = nil
-			a.selected = -1
-			a.resultScrollDetached = false
+			a.resultList.pendingSelection = nil
+			a.resultList.selected = -1
+			a.resultList.resultScrollDetached = false
 		} else {
-			a.pendingSelection = &pendingResultSelection{
-				queryID:       a.query.QueryID,
+			a.resultList.pendingSelection = &pendingResultSelection{
+				queryID:       a.querySession.query.QueryID,
 				index:         selected,
 				resultID:      options.SelectedResultId,
 				preserveIndex: options.PreserveSelectedIndex,
 			}
-			a.selected = selected
+			a.resultList.selected = selected
 		}
-		a.reconcileSelectedPreview()
-		a.beginRefreshResultHoldLocked()
+		a.previews.reconcileSelectedPreview()
+		a.querySession.beginRefreshResultHoldLocked()
 	}); err != nil {
 		return err
 	}
@@ -150,7 +145,7 @@ func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions
 // RefreshGlance schedules a stale-query-guarded accessory refresh.
 func (a *App) RefreshGlance(_ context.Context, pluginID string, ids []string) error {
 	util.Go(a.lifecycleCtx, "refresh glance manually", func() {
-		a.refreshGlance("manualRefresh", pluginID, append([]string(nil), ids...))
+		a.glance.refreshGlance("manualRefresh", pluginID, append([]string(nil), ids...))
 	})
 	return nil
 }
@@ -193,7 +188,7 @@ func (a *App) FocusSetting(_ context.Context) error {
 	}
 	var settingsView *woxui.ManagedWindow
 	if err := a.runOnUI("resolve settings window for focus", func() {
-		settingsView = a.settingsView
+		settingsView = a.settingsWindow.settingsView
 	}); err != nil {
 		return err
 	}
@@ -210,7 +205,7 @@ func (a *App) OpenNotes(_ context.Context, request common.NotesWindowRequest) er
 		return a.primary.OpenNotes(context.Background(), request)
 	}
 	var openErr error
-	if err := a.runOnUI("open Notes window", func() { openErr = a.openNoteRequest(request) }); err != nil {
+	if err := a.runOnUI("open Notes window", func() { openErr = a.notes.openNoteRequest(request) }); err != nil {
 		return err
 	}
 	return openErr
@@ -222,7 +217,7 @@ func (a *App) RefreshNotes(_ context.Context, noteID string) error {
 		return a.primary.RefreshNotes(context.Background(), noteID)
 	}
 	return a.runOnUI("refresh Notes windows", func() {
-		for _, controller := range a.noteWindows {
+		for _, controller := range a.notes.noteWindows {
 			controller.refresh(noteID)
 		}
 	})
@@ -249,10 +244,10 @@ func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI)
 	converted := fromCoreToolbarMessage(message)
 	return a.runOnUI("show toolbar message", func() {
 		if message.Fallback {
-			a.applyToolbarFallbackMessage(converted)
+			a.toolbar.applyToolbarFallbackMessage(converted)
 			return
 		}
-		a.applyToolbarMessage(converted)
+		a.toolbar.applyToolbarMessage(converted)
 	})
 }
 
@@ -260,7 +255,7 @@ func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI)
 func (a *App) ShowNotificationMessage(ctx context.Context, message common.NotifyMsg) error {
 	converted := toolbarMessage{Text: message.Text, Icon: imageFromString(message.Icon), DisplaySeconds: message.DisplaySeconds}
 	return a.runOnUI("show notification message", func() {
-		a.applyToolbarMessage(converted)
+		a.toolbar.applyToolbarMessage(converted)
 		if message.Confetti {
 			if err := confettioverlay.Show(); err != nil {
 				util.GetLogger().Warn(ctx, "show notification confetti: "+err.Error())
@@ -272,7 +267,7 @@ func (a *App) ShowNotificationMessage(ctx context.Context, message common.Notify
 // ClearToolbarMessage removes the matching plugin-owned toolbar snapshot.
 func (a *App) ClearToolbarMessage(_ context.Context, toolbarMessageID string) error {
 	return a.runOnUI("clear toolbar message", func() {
-		a.clearToolbarMessageByID(toolbarMessageID)
+		a.toolbar.clearToolbarMessageByID(toolbarMessageID)
 	})
 }
 
@@ -282,10 +277,10 @@ func (a *App) UpdateAttentionUnreadCount(_ context.Context, unreadCount int) err
 		unreadCount = 0
 	}
 	return a.runOnUI("update attention unread count", func() {
-		if a.attentionUnreadCount == unreadCount {
+		if a.attention.attentionUnreadCount == unreadCount {
 			return
 		}
-		a.attentionUnreadCount = unreadCount
+		a.attention.attentionUnreadCount = unreadCount
 		if a.window != nil {
 			_ = a.window.Invalidate()
 		}
@@ -296,21 +291,21 @@ func (a *App) UpdateAttentionUnreadCount(_ context.Context, unreadCount int) err
 func (a *App) SendChatResponse(_ context.Context, chat common.AIChatData) error {
 	converted := fromCoreChatData(chat)
 	return a.runOnUI("apply chat response", func() {
-		a.applyChatResponse(converted)
+		a.chat.applyChatResponse(converted)
 	})
 }
 
 // RemoveChat drops a chat deleted outside this UI, for example by Cloud Sync from another device.
 func (a *App) RemoveChat(_ context.Context, chatID string) error {
 	return a.runOnUI("remove chat", func() {
-		a.applyDeletedChat(chatID)
+		a.chat.applyDeletedChat(chatID)
 	})
 }
 
 // ReloadChatResources invalidates the requested AI catalogs.
 func (a *App) ReloadChatResources(_ context.Context, resourceName string) error {
 	return a.runOnUI("reload chat resources", func() {
-		a.reloadChatResourceName(resourceName)
+		a.chat.reloadChatResourceName(resourceName)
 	})
 }
 
@@ -322,7 +317,7 @@ func (a *App) SendAIQuestion(_ context.Context, questionID string, question stri
 	}
 	var applyErr error
 	if err := a.runOnUI("apply AI question", func() {
-		applyErr = a.applyTypedAIQuestion(aiQuestion{QuestionID: questionID, Question: question, Options: converted})
+		applyErr = a.chat.applyTypedAIQuestion(aiQuestion{QuestionID: questionID, Question: question, Options: converted})
 	}); err != nil {
 		return err
 	}
@@ -332,7 +327,7 @@ func (a *App) SendAIQuestion(_ context.Context, questionID string, question stri
 // ReloadSettingPlugins refreshes plugin-backed settings and glance catalogs.
 func (a *App) ReloadSettingPlugins(_ context.Context) error {
 	if err := a.runOnUI("invalidate chat plugin mentions", func() {
-		a.reloadChatResourceName("mentions")
+		a.chat.reloadChatResourceName("mentions")
 	}); err != nil {
 		return err
 	}
@@ -349,11 +344,11 @@ func (a *App) ReloadSetting(_ context.Context) error {
 	if err := a.reloadTranslations(); err != nil {
 		return err
 	}
-	a.stopGlanceLocked(true)
+	a.glance.stopGlanceLocked(true)
 	refreshGlance := a.glanceEligibleLocked()
 	if refreshGlance {
 		util.Go(a.lifecycleCtx, "refresh glance after settings change", func() {
-			a.refreshGlance("settingsChanged", "", nil)
+			a.glance.refreshGlance("settingsChanged", "", nil)
 		})
 	}
 	a.publishSettingsChanged("settings")
@@ -388,17 +383,17 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 		if sessionID := util.GetContextSessionId(ctx); sessionID != "" && sessionID != a.sessionID {
 			return
 		}
-		if queryID := util.GetContextQueryId(ctx); queryID != "" && (queryID != a.query.QueryID || queryID != a.resultsQueryID) {
+		if queryID := util.GetContextQueryId(ctx); queryID != "" && (queryID != a.querySession.query.QueryID || queryID != a.resultList.resultsQueryID) {
 			return
 		}
-		for index := range a.results {
-			if a.results[index].ID == result.Id {
-				previewBecameVisible = index == a.selected && resultPreviewBecameVisible(a.results[index].Preview, result.Preview)
+		for index := range a.resultList.results {
+			if a.resultList.results[index].ID == result.Id {
+				previewBecameVisible = index == a.resultList.selected && resultPreviewBecameVisible(a.resultList.results[index].Preview, result.Preview)
 				break
 			}
 		}
 		if script, command, scriptErr := plugin.WebViewScriptUpdate(result.Preview); command {
-			if scriptErr != nil || a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].ID != result.Id {
+			if scriptErr != nil || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || a.resultList.results[a.resultList.selected].ID != result.Id {
 				return
 			}
 			if !a.window.UpdateWebViewScript(a.webViewDocumentKey(), script) {
@@ -449,8 +444,8 @@ func (a *App) PickFiles(_ context.Context, params common.PickFilesParams) ([]str
 
 // screenshotControlTheme keeps the size dialog on the same Interface size as the rest of Wox.
 func (a *App) screenshotControlTheme() woxcomponent.ControlTheme {
-	theme := a.palette.componentTheme().Controls
-	theme.DensityScale = a.densityMetrics.normalized().scale
+	theme := a.appearance.palette.componentTheme().Controls
+	theme.DensityScale = a.appearance.densityMetrics.normalized().scale
 	return theme
 }
 
@@ -465,58 +460,58 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 		RecordingDefaults: woxscreenshot.RecordingDefaults{FPS: 60, ShowPointer: true}, WindowManager: a.windows,
 		Theme: a.screenshotControlTheme(), FontFamily: a.generalSettings.Data().AppFontFamily,
 		SizeLabels: woxscreenshot.ScreenshotSizeLabels{
-			Title: a.translate("i18n:plugin_screenshot_size_title"),
-			Width: a.translate("i18n:plugin_screenshot_size_width"), Height: a.translate("i18n:plugin_screenshot_size_height"),
-			Apply: a.translate("i18n:plugin_screenshot_size_apply"), Cancel: a.translate("i18n:ui_screenshot_tool_cancel"),
-			InvalidSize:     a.translate("i18n:plugin_screenshot_size_invalid"),
-			LockAspectRatio: a.translate("i18n:plugin_screenshot_size_lock_ratio"), Swap: a.translate("i18n:plugin_screenshot_size_swap"),
+			Title: a.language.translate("i18n:plugin_screenshot_size_title"),
+			Width: a.language.translate("i18n:plugin_screenshot_size_width"), Height: a.language.translate("i18n:plugin_screenshot_size_height"),
+			Apply: a.language.translate("i18n:plugin_screenshot_size_apply"), Cancel: a.language.translate("i18n:ui_screenshot_tool_cancel"),
+			InvalidSize:     a.language.translate("i18n:plugin_screenshot_size_invalid"),
+			LockAspectRatio: a.language.translate("i18n:plugin_screenshot_size_lock_ratio"), Swap: a.language.translate("i18n:plugin_screenshot_size_swap"),
 		},
 		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
-			FontSize:  a.translate("i18n:ui_screenshot_font_size"),
-			Rectangle: a.translate("i18n:ui_screenshot_tool_rectangle"),
-			Ellipse:   a.translate("i18n:ui_screenshot_tool_ellipse"),
-			Text:      a.translate("i18n:ui_screenshot_tool_text"),
-			Arrow:     a.translate("i18n:ui_screenshot_tool_arrow"),
-			Number:    a.translate("i18n:ui_screenshot_tool_number"),
-			Mosaic:    a.translate("i18n:ui_screenshot_tool_mosaic"),
-			Brush:     a.translate("i18n:ui_screenshot_tool_brush"),
-			Eraser:    a.translate("i18n:ui_screenshot_tool_eraser"),
+			FontSize:  a.language.translate("i18n:ui_screenshot_font_size"),
+			Rectangle: a.language.translate("i18n:ui_screenshot_tool_rectangle"),
+			Ellipse:   a.language.translate("i18n:ui_screenshot_tool_ellipse"),
+			Text:      a.language.translate("i18n:ui_screenshot_tool_text"),
+			Arrow:     a.language.translate("i18n:ui_screenshot_tool_arrow"),
+			Number:    a.language.translate("i18n:ui_screenshot_tool_number"),
+			Mosaic:    a.language.translate("i18n:ui_screenshot_tool_mosaic"),
+			Brush:     a.language.translate("i18n:ui_screenshot_tool_brush"),
+			Eraser:    a.language.translate("i18n:ui_screenshot_tool_eraser"),
 		},
 		ActionTooltips: woxscreenshot.ScreenshotActionTooltips{
-			Undo:              a.translate("i18n:ui_screenshot_tool_undo"),
-			ScrollingCapture:  a.translate("i18n:ui_screenshot_tool_scrolling_capture"),
-			Cursor:            a.translate("i18n:ui_screenshot_tool_cursor"),
-			Background:        a.translate("i18n:ui_screenshot_tool_background"),
-			BackgroundLoading: a.translate("i18n:ui_screenshot_background_loading"),
-			BackgroundFailed:  a.translate("i18n:ui_screenshot_background_failed"),
-			Pin:               a.translate("i18n:ui_screenshot_tool_pin"),
-			Record:            a.translate("i18n:ui_screenshot_record_enter"),
-			Cancel:            a.translate("i18n:ui_screenshot_tool_cancel"),
-			Save:              a.translate("i18n:ui_screenshot_tool_save"),
-			SaveTitle:         a.translate("i18n:ui_screenshot_save_title"),
-			Confirm:           a.translate("i18n:ui_screenshot_tool_confirm"),
+			Undo:              a.language.translate("i18n:ui_screenshot_tool_undo"),
+			ScrollingCapture:  a.language.translate("i18n:ui_screenshot_tool_scrolling_capture"),
+			Cursor:            a.language.translate("i18n:ui_screenshot_tool_cursor"),
+			Background:        a.language.translate("i18n:ui_screenshot_tool_background"),
+			BackgroundLoading: a.language.translate("i18n:ui_screenshot_background_loading"),
+			BackgroundFailed:  a.language.translate("i18n:ui_screenshot_background_failed"),
+			Pin:               a.language.translate("i18n:ui_screenshot_tool_pin"),
+			Record:            a.language.translate("i18n:ui_screenshot_record_enter"),
+			Cancel:            a.language.translate("i18n:ui_screenshot_tool_cancel"),
+			Save:              a.language.translate("i18n:ui_screenshot_tool_save"),
+			SaveTitle:         a.language.translate("i18n:ui_screenshot_save_title"),
+			Confirm:           a.language.translate("i18n:ui_screenshot_tool_confirm"),
 		},
 		RecordingRuntime: woxscreenshot.RecordingRuntimeLabels{
-			Title:       a.translate("i18n:ui_screenshot_record_runtime_title"),
-			Description: a.translate("i18n:ui_screenshot_record_runtime_description"),
-			Install:     a.translate("i18n:ui_screenshot_record_runtime_install"),
-			Cancel:      a.translate("i18n:ui_screenshot_record_runtime_cancel"),
-			Retry:       a.translate("i18n:ui_screenshot_record_runtime_retry"),
-			Downloading: a.translate("i18n:ui_screenshot_record_runtime_downloading"),
-			Installing:  a.translate("i18n:ui_screenshot_record_runtime_installing"),
-			Failed:      a.translate("i18n:ui_screenshot_record_runtime_failed"),
-			Unsupported: a.translate("i18n:ui_screenshot_record_runtime_unsupported"),
+			Title:       a.language.translate("i18n:ui_screenshot_record_runtime_title"),
+			Description: a.language.translate("i18n:ui_screenshot_record_runtime_description"),
+			Install:     a.language.translate("i18n:ui_screenshot_record_runtime_install"),
+			Cancel:      a.language.translate("i18n:ui_screenshot_record_runtime_cancel"),
+			Retry:       a.language.translate("i18n:ui_screenshot_record_runtime_retry"),
+			Downloading: a.language.translate("i18n:ui_screenshot_record_runtime_downloading"),
+			Installing:  a.language.translate("i18n:ui_screenshot_record_runtime_installing"),
+			Failed:      a.language.translate("i18n:ui_screenshot_record_runtime_failed"),
+			Unsupported: a.language.translate("i18n:ui_screenshot_record_runtime_unsupported"),
 		},
 		RecordingTooltips: woxscreenshot.RecordingTooltips{
-			Enter: a.translate("i18n:ui_screenshot_record_enter"), Start: a.translate("i18n:ui_screenshot_record_start"),
-			Pause: a.translate("i18n:ui_screenshot_record_pause"), Resume: a.translate("i18n:ui_screenshot_record_resume"),
-			Restart: a.translate("i18n:ui_screenshot_record_restart"), ShowPointer: a.translate("i18n:ui_screenshot_record_pointer"),
-			ShowKeypress: a.translate("i18n:ui_screenshot_record_keypress"), Finish: a.translate("i18n:ui_screenshot_record_finish"),
-			Save: a.translate("i18n:ui_screenshot_record_save"), Play: a.translate("i18n:ui_screenshot_record_play"),
-			Cancel: a.translate("i18n:ui_screenshot_record_cancel"), PrivacyWarning: a.translate("i18n:ui_screenshot_record_privacy"),
-			Format: a.translate("i18n:ui_screenshot_record_format"), FormatMP4: a.translate("i18n:ui_screenshot_record_format_mp4"),
-			FormatGIF: a.translate("i18n:ui_screenshot_record_format_gif"), FormatWebP: a.translate("i18n:ui_screenshot_record_format_webp"),
-			ExportFailed: a.translate("i18n:ui_screenshot_record_export_failed"),
+			Enter: a.language.translate("i18n:ui_screenshot_record_enter"), Start: a.language.translate("i18n:ui_screenshot_record_start"),
+			Pause: a.language.translate("i18n:ui_screenshot_record_pause"), Resume: a.language.translate("i18n:ui_screenshot_record_resume"),
+			Restart: a.language.translate("i18n:ui_screenshot_record_restart"), ShowPointer: a.language.translate("i18n:ui_screenshot_record_pointer"),
+			ShowKeypress: a.language.translate("i18n:ui_screenshot_record_keypress"), Finish: a.language.translate("i18n:ui_screenshot_record_finish"),
+			Save: a.language.translate("i18n:ui_screenshot_record_save"), Play: a.language.translate("i18n:ui_screenshot_record_play"),
+			Cancel: a.language.translate("i18n:ui_screenshot_record_cancel"), PrivacyWarning: a.language.translate("i18n:ui_screenshot_record_privacy"),
+			Format: a.language.translate("i18n:ui_screenshot_record_format"), FormatMP4: a.language.translate("i18n:ui_screenshot_record_format_mp4"),
+			FormatGIF: a.language.translate("i18n:ui_screenshot_record_format_gif"), FormatWebP: a.language.translate("i18n:ui_screenshot_record_format_webp"),
+			ExportFailed: a.language.translate("i18n:ui_screenshot_record_export_failed"),
 		},
 	})
 	if err != nil {
@@ -566,7 +561,7 @@ func (a *App) ApplyTerminalChunk(_ context.Context, sessionID string, chunk term
 	}
 	converted := terminalChunk{SessionID: chunk.SessionID, CursorStart: chunk.CursorStart, CursorEnd: chunk.CursorEnd, Content: chunk.Content, Truncated: chunk.Truncated}
 	return a.runOnUI("apply terminal chunk", func() {
-		a.applyTerminalChunk(converted)
+		a.terminal.applyTerminalChunk(converted)
 	})
 }
 
@@ -580,7 +575,7 @@ func (a *App) ApplyTerminalState(_ context.Context, sessionID string, state term
 		WorkingDirectory: state.WorkingDirectory, Status: string(state.Status), ExitCode: state.ExitCode, Error: state.Error,
 	}
 	return a.runOnUI("apply terminal state", func() {
-		a.applyTerminalState(converted)
+		a.terminal.applyTerminalState(converted)
 	})
 }
 
@@ -812,7 +807,7 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 		// Reloading then would fetch and keep the whole installed plugin catalog for a
 		// page nobody is looking at, so mark the snapshot stale and let the cloud tab
 		// reload it on its next open.
-		if !a.settingsOpen {
+		if !a.settingsWindow.settingsOpen {
 			a.cloudSettings.SetLoaded(false)
 			return
 		}
@@ -828,27 +823,27 @@ func resultPreviewBecameVisible(previous queryPreview, update *plugin.WoxPreview
 func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 	updated := false
 	updatedIndex := -1
-	for index := range a.results {
-		if a.results[index].ID != result.Id {
+	for index := range a.resultList.results {
+		if a.resultList.results[index].ID != result.Id {
 			continue
 		}
 		if result.Title != nil {
-			a.results[index].Title = *result.Title
+			a.resultList.results[index].Title = *result.Title
 		}
 		if result.SubTitle != nil {
-			a.results[index].SubTitle = *result.SubTitle
+			a.resultList.results[index].SubTitle = *result.SubTitle
 		}
 		if result.Icon != nil {
-			a.results[index].Icon = fromCoreImage(*result.Icon)
+			a.resultList.results[index].Icon = fromCoreImage(*result.Icon)
 		}
 		if result.Preview != nil {
-			a.results[index].Preview = fromCorePreview(*result.Preview)
+			a.resultList.results[index].Preview = fromCorePreview(*result.Preview)
 		}
 		if result.Tails != nil {
-			a.results[index].Tails = fromCoreTails(*result.Tails)
+			a.resultList.results[index].Tails = fromCoreTails(*result.Tails)
 		}
 		if result.TitleTags != nil {
-			a.results[index].TitleTags = fromCoreTitleTags(*result.TitleTags)
+			a.resultList.results[index].TitleTags = fromCoreTitleTags(*result.TitleTags)
 		}
 		if result.Actions != nil {
 			queryResult := plugin.QueryResult{Actions: *result.Actions}
@@ -857,21 +852,21 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 			for actionIndex := range uiActions {
 				actions[actionIndex] = fromCoreResultAction(uiActions[actionIndex])
 			}
-			a.results[index].Actions = actions
+			a.resultList.results[index].Actions = actions
 		}
 		if result.DragData != nil {
-			a.results[index].DragData = &queryResultDragData{Type: result.DragData.Type, Files: append([]string(nil), result.DragData.Files...), PreventHideAfterDrag: result.DragData.PreventHideAfterDrag}
+			a.resultList.results[index].DragData = &queryResultDragData{Type: result.DragData.Type, Files: append([]string(nil), result.DragData.Files...), PreventHideAfterDrag: result.DragData.PreventHideAfterDrag}
 		}
 		updated = true
 		updatedIndex = index
 		break
 	}
 	if updated {
-		a.resultRevision++
-		a.results[updatedIndex].Revision = a.resultRevision
-		a.resultsSectionRevision++
-		a.reconcileSelectedPreview()
-		keys := updatedResultBoundaryKeys(result, a.layout.GridLayout != nil)
+		a.resultList.resultRevision++
+		a.resultList.results[updatedIndex].Revision = a.resultList.resultRevision
+		a.resultList.resultsSectionRevision++
+		a.previews.reconcileSelectedPreview()
+		keys := updatedResultBoundaryKeys(result, a.resultList.layout.GridLayout != nil)
 		if result.Preview == nil && result.Actions == nil && a.host != nil {
 			if len(keys) == 0 {
 				return updated
@@ -890,7 +885,7 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 }
 
 func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, error) {
-	if queryID != a.query.QueryID {
+	if queryID != a.querySession.query.QueryID {
 		return false, nil
 	}
 	for index := range results {
@@ -898,35 +893,35 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 			results[index].QueryID = queryID
 		}
 	}
-	a.resetQueryLoadingLocked()
-	a.resetQueryTransitionLocked()
-	a.releaseRefreshResultHoldLocked()
-	if a.resultsQueryID != queryID {
-		a.results = nil
-		a.resultsSectionRevision++
-		a.selected = -1
-		a.hoveredResult = -1
-		a.resultScroll.reset()
-		a.resultScrollDetached = false
-		a.layout = queryLayout{}
+	a.querySession.resetQueryLoadingLocked()
+	a.querySession.resetQueryTransitionLocked()
+	a.querySession.releaseRefreshResultHoldLocked()
+	if a.resultList.resultsQueryID != queryID {
+		a.resultList.results = nil
+		a.resultList.resultsSectionRevision++
+		a.resultList.selected = -1
+		a.resultList.hoveredResult = -1
+		a.resultList.resultScroll.reset()
+		a.resultList.resultScrollDetached = false
+		a.resultList.layout = queryLayout{}
 	}
-	a.resultsQueryID = queryID
+	a.resultList.resultsQueryID = queryID
 	for index := range results {
-		a.resultRevision++
-		results[index].Revision = a.resultRevision
+		a.resultList.resultRevision++
+		results[index].Revision = a.resultList.resultRevision
 	}
-	a.results = append(a.results, results...)
-	a.resultsSectionRevision++
-	if a.pendingSelection != nil && a.pendingSelection.queryID == queryID && a.pendingSelection.querySnapshot != nil {
-		selected, _, keep := restoreRefreshSelection(a.results, a.pendingSelection, queryID, a.queryComplete)
-		a.selected = selected
+	a.resultList.results = append(a.resultList.results, results...)
+	a.resultList.resultsSectionRevision++
+	if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == queryID && a.resultList.pendingSelection.querySnapshot != nil {
+		selected, _, keep := restoreRefreshSelection(a.resultList.results, a.resultList.pendingSelection, queryID, a.querySession.queryComplete)
+		a.resultList.selected = selected
 		if !keep {
-			a.pendingSelection = nil
+			a.resultList.pendingSelection = nil
 		}
-	} else if a.selected < 0 {
-		a.selected = selectableIndex(a.results)
+	} else if a.resultList.selected < 0 {
+		a.resultList.selected = selectableIndex(a.resultList.results)
 	}
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	if err := a.applyWindowBounds(); err != nil {
 		return false, err
 	}

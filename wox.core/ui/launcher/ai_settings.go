@@ -28,7 +28,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 	aiForm := snapshot.ai.Form
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Available: aiForm != nil,
-		Title: a.translate("i18n:ui_ai"), Description: a.translate("i18n:ui_ai_description"),
+		Title: a.language.translate("i18n:ui_ai"), Description: a.language.translate("i18n:ui_ai_description"),
 	}
 	if aiForm == nil {
 		return launcherview.AISettingsView(props)
@@ -48,9 +48,9 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 			field.OnAdd = nil
 			a.addAIBuiltinToolSwitches(&field, definition, aiForm.values[definition.Value.Key], snapshot.palette)
 		case "AIMCPServers":
-			field.EmptyLabel = a.translate("i18n:ui_ai_mcp_empty")
+			field.EmptyLabel = a.language.translate("i18n:ui_ai_mcp_empty")
 			field.OnAdd = func() { a.addAISettingsTableRow(index) }
-			field.SecondaryLabel = a.translate("i18n:ui_ai_mcp_import_json")
+			field.SecondaryLabel = a.language.translate("i18n:ui_ai_mcp_import_json")
 			mcpIconColor := snapshot.palette.Text
 			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
 			field.OnSecondary = a.openAIMCPJSONImport
@@ -150,7 +150,7 @@ func (a *App) setAIBuiltinToolEnabled(name string, enabled bool) {
 		form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, next)
 	}
 	a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = next })
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save AI builtin tool enabled", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "AIDisabledBuiltinTools", string(encoded))
@@ -163,7 +163,7 @@ func (a *App) setAIBuiltinToolEnabled(name string, enabled bool) {
 			if form := a.aiSettings.Form(); form != nil {
 				form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, previousDisabled)
 			}
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 	})
 }
@@ -186,7 +186,7 @@ func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, va
 			continue
 		}
 		field.Rows[viewIndex].TrailingActions = append(field.Rows[viewIndex].TrailingActions, launcherview.FormTableRowAction{
-			ID: "open-folder", Label: a.translate("i18n:plugin_file_open"), Icon: folderIcon,
+			ID: "open-folder", Label: a.language.translate("i18n:plugin_file_open"), Icon: folderIcon,
 			OnTap: func() { a.openAISkillPath(skillPath) },
 		})
 	}
@@ -324,7 +324,7 @@ func (a *App) loadAIProviderCatalog() {
 		if form := a.aiSettings.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
 		}
-		if state := a.settingsTableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
+		if state := a.settingsWindow.settingsTableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
 			state.definition = state.target.definitions[state.fieldIndex]
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
@@ -439,7 +439,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "ai" && a.aiSettings.Form() != nil && a.settingsTableEditor == nil
+	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai" && a.aiSettings.Form() != nil && a.settingsWindow.settingsTableEditor == nil
 	if !active {
 		return false
 	}
@@ -459,31 +459,31 @@ func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 // selectAISettingsTable moves keyboard focus between the AI table cards.
 func (a *App) selectAISettingsTable(index int) {
 	if form := a.aiSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) {
-		a.settingRow = index
+		a.settingsWindow.settingRow = index
 		setFormFieldsFocusLocked(form, index)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // moveAISettingsTable wraps table-card selection without entering the modal editor.
 func (a *App) moveAISettingsTable(delta int) {
 	if form := a.aiSettings.Form(); form != nil && len(form.definitions) > 0 {
-		a.settingRow = (a.settingRow + delta + len(form.definitions)) % len(form.definitions)
-		setFormFieldsFocusLocked(form, a.settingRow)
+		a.settingsWindow.settingRow = (a.settingsWindow.settingRow + delta + len(form.definitions)) % len(form.definitions)
+		setFormFieldsFocusLocked(form, a.settingsWindow.settingRow)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) openSelectedAISettingsTable() {
-	index := a.settingRow
+	index := a.settingsWindow.settingRow
 	a.openAISettingsTable(index)
 }
 
 // openAISettingsTable opens a settings-owned target in the same modal table editor used by plugin forms.
 func (a *App) openAISettingsTable(index int) {
 	form := a.aiSettings.Form()
-	if a.settingsOpen && a.settingTab == "ai" && form != nil {
-		a.settingRow = index
+	if a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai" && form != nil {
+		a.settingsWindow.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
 	a.finishOpeningFormTable()
@@ -511,11 +511,11 @@ func (a *App) addAISettingsTableRow(index int) {
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
 func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	form := a.aiSettings.Form()
-	if a.settingsOpen && a.settingTab == "ai" && form != nil {
-		a.settingRow = tableIndex
+	if a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai" && form != nil {
+		a.settingsWindow.settingRow = tableIndex
 		a.openFormTableLocked(form, tableIndex)
-		if a.settingsTableEditor != nil && rowIndex >= 0 && rowIndex < len(a.settingsTableEditor.rows) {
-			a.settingsTableEditor.selected = rowIndex
+		if a.settingsWindow.settingsTableEditor != nil && rowIndex >= 0 && rowIndex < len(a.settingsWindow.settingsTableEditor.rows) {
+			a.settingsWindow.settingsTableEditor.selected = rowIndex
 		}
 	}
 	a.finishOpeningFormTable()
@@ -557,13 +557,13 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		coreValue, err = settingsIgnoredHotkeyAppsCoreJSON(value)
 		if err != nil {
 			_ = a.runOnUI("apply invalid settings table value", func() {
-				a.settingSaving = false
+				a.settingsWindow.settingSaving = false
 				state.target.values[key] = previousValue
-				if a.settingsTableEditor == state {
+				if a.settingsWindow.settingsTableEditor == state {
 					state.saving = false
 					state.status = "Could not save: " + err.Error()
 				}
-				a.invalidateSettingsWindow()
+				a.settingsWindow.invalidateSettingsWindow()
 			})
 			return
 		}
@@ -573,10 +573,10 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 	cancel()
 
 	_ = a.runOnUI("apply settings table save", func() {
-		a.settingSaving = false
+		a.settingsWindow.settingSaving = false
 		if err != nil {
 			state.target.values[key] = previousValue
-			if a.settingsTableEditor == state {
+			if a.settingsWindow.settingsTableEditor == state {
 				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
 					state.rows = rows
 					state.selected = min(state.selected, len(rows)-1)
@@ -590,12 +590,12 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			} else if state.target == a.hotkeySettings.Form() || state.target == a.generalQuerySettingsForm() {
 				a.applyHotkeySettingsRawLocked(key, coreValue)
 			}
-			if a.settingsTableEditor == state {
+			if a.settingsWindow.settingsTableEditor == state {
 				state.saving = false
 				state.status = ""
 			}
 		}
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	})
 }
 
@@ -606,13 +606,13 @@ func (a *App) refreshAIMCPServerToolsLocked() {
 		return
 	}
 	form.values["AIMCPServers"] = attachMCPServerToolNames(form.values["AIMCPServers"])
-	if state := a.settingsTableEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
+	if state := a.settingsWindow.settingsTableEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
 		if rows, err := decodeFormTableRows(form.values["AIMCPServers"]); err == nil {
 			overlayMCPServerToolNames(rows)
 			state.rows = rows
 		}
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // applyAISettingsRawLocked keeps the settings snapshot and dependent chat catalogs coherent after a save.

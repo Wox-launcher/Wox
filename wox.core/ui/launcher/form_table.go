@@ -397,32 +397,32 @@ func (a *App) settingsOwnedTableTarget(target *formFieldsState) bool {
 
 // activeFormTableEditor returns the settings flow first because its modal state remains independent when the launcher is activated.
 func (a *App) activeFormTableEditor() *formTableEditorState {
-	if a.settingsTableEditor != nil {
-		return a.settingsTableEditor
+	if a.settingsWindow.settingsTableEditor != nil {
+		return a.settingsWindow.settingsTableEditor
 	}
-	return a.launcherTableEditor
+	return a.forms.launcherTableEditor
 }
 
 // formTableTargetCurrentWithFormsLocked compares one table target using controller pointers captured for the UI-thread snapshot.
 func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, pluginForm *pluginSettingsFormState, aiForm *formFieldsState, hotkeyForm *formFieldsState, generalForm *formFieldsState) bool {
-	return target != nil && ((a.form != nil && target == &a.form.formFieldsState) ||
-		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
+	return target != nil && ((a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
+		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState) ||
-		(a.settingsOpen && a.settingTab == "ai" && target == aiForm) ||
-		(a.settingsOpen && a.settingTab == "hotkey" && target == hotkeyForm) ||
-		(a.settingsOpen && a.settingTab == "general" && target == generalForm))
+		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai" && target == aiForm) ||
+		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey" && target == hotkeyForm) ||
+		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "general" && target == generalForm))
 }
 
 func (a *App) openActionFormTable(index int) {
-	if a.form != nil {
-		a.openFormTableLocked(&a.form.formFieldsState, index)
+	if a.forms.form != nil {
+		a.openFormTableLocked(&a.forms.form.formFieldsState, index)
 	}
 	a.finishOpeningFormTable()
 }
 
 func (a *App) openRequirementFormTable(index int) {
-	if a.requirementForm != nil {
-		a.openFormTableLocked(&a.requirementForm.formFieldsState, index)
+	if a.requirements.requirementForm != nil {
+		a.openFormTableLocked(&a.requirements.requirementForm.formFieldsState, index)
 	}
 	a.finishOpeningFormTable()
 }
@@ -460,9 +460,9 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 		state.status = "Invalid table JSON. Close this editor without saving to preserve the original value."
 	}
 	if a.formTableTargetUsesSettingsLocked(target) {
-		a.settingsTableEditor = state
+		a.settingsWindow.settingsTableEditor = state
 	} else {
-		a.launcherTableEditor = state
+		a.forms.launcherTableEditor = state
 	}
 }
 
@@ -470,16 +470,16 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 func (a *App) closeFormTableEditor() {
 	a.stopHotkeyRecording()
 	state := a.activeFormTableEditor()
-	if state == a.settingsTableEditor {
-		a.settingsTableEditor = nil
-	} else if state == a.launcherTableEditor {
-		a.launcherTableEditor = nil
+	if state == a.settingsWindow.settingsTableEditor {
+		a.settingsWindow.settingsTableEditor = nil
+	} else if state == a.forms.launcherTableEditor {
+		a.forms.launcherTableEditor = nil
 	}
 	textInput := state != nil && a.formTableTargetCurrentLocked(state.target) && state.target.editor != nil
 	settingsTarget := state != nil && a.formTableTargetUsesSettingsLocked(state.target)
 	if settingsTarget {
 		a.updateSettingsTextInput(textInput)
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	} else {
 		a.updateFormTextInput(textInput)
 		_ = a.window.Invalidate()
@@ -1013,7 +1013,7 @@ func (a *App) translateFormTableFieldErrors(errors map[string]string) map[string
 	}
 	translated := make(map[string]string, len(errors))
 	for key, message := range errors {
-		translated[key] = a.translate(message)
+		translated[key] = a.language.translate(message)
 	}
 	return translated
 }
@@ -1187,7 +1187,7 @@ func (a *App) saveFormTableRowEdit() {
 	clearFormTableRowValidationLocked(state)
 	if persist {
 		state.saving = true
-		a.settingSaving = true
+		a.settingsWindow.settingSaving = true
 	}
 	if closeEditor {
 		a.closeFormTableEditor()
@@ -1229,7 +1229,7 @@ func (a *App) beginFormTableRowDelete(direct bool) {
 		return
 	}
 	if len(state.rows) <= state.definition.Value.MinimumRowCount {
-		state.status = a.translate(state.definition.Value.MinimumRowMessage)
+		state.status = a.language.translate(state.definition.Value.MinimumRowMessage)
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -1301,7 +1301,7 @@ func (a *App) confirmFormTableRowDelete() {
 		value = state.target.values[key]
 		if persist {
 			state.saving = true
-			a.settingSaving = true
+			a.settingsWindow.settingSaving = true
 		}
 	}
 	if direct {
@@ -1427,7 +1427,7 @@ func (a *App) moveFormTableRowFocus(delta int) {
 	}
 	host := a.host
 	if a.formTableUsesSettingsWindow() {
-		host = a.settingsHost
+		host = a.settingsWindow.settingsHost
 	}
 	if host != nil {
 		host.RequestFocus(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
@@ -1916,8 +1916,8 @@ func (a *App) updateFormTableQueryVariableTrigger(index int) {
 		anchor = state.queryVariable.anchor
 	} else {
 		host := a.host
-		if a.settingsTableEditor != nil {
-			host = a.settingsHost
+		if a.settingsWindow.settingsTableEditor != nil {
+			host = a.settingsWindow.settingsHost
 		}
 		if host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
@@ -1934,7 +1934,7 @@ func (a *App) filteredQueryHotkeyVariables(kind, query string) []queryHotkeyVari
 	}
 	filtered := make([]queryHotkeyVariable, 0, len(options))
 	for _, option := range options {
-		searchable := option.value + " " + a.translate(option.label)
+		searchable := option.value + " " + a.language.translate(option.label)
 		if strings.Contains(strings.ToLower(searchable), query) {
 			filtered = append(filtered, option)
 		}
@@ -1957,8 +1957,8 @@ func (a *App) openFormTableQueryVariablePicker(index int, anchor woxui.Rect) {
 	state.choicePicker = nil
 	state.status = ""
 	host := a.host
-	if a.settingsTableEditor != nil {
-		host = a.settingsHost
+	if a.settingsWindow.settingsTableEditor != nil {
+		host = a.settingsWindow.settingsHost
 	}
 	if host != nil {
 		if bounds, ok := host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d-trailing", index))); ok {

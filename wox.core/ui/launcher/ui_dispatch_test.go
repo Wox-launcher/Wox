@@ -8,13 +8,13 @@ import (
 func TestRunOnUIUsesInjectedDispatcher(t *testing.T) {
 	dispatched := false
 	ran := false
-	app := &App{
+	app := bindTestApp(&App{
 		uiCall: func(fn func()) error {
 			dispatched = true
 			fn()
 			return nil
 		},
-	}
+	})
 
 	if err := app.runOnUI("test operation", func() { ran = true }); err != nil {
 		t.Fatalf("runOnUI returned error: %v", err)
@@ -26,7 +26,7 @@ func TestRunOnUIUsesInjectedDispatcher(t *testing.T) {
 
 func TestRunOnUIRunsInlineWithoutDispatcher(t *testing.T) {
 	ran := false
-	app := &App{}
+	app := bindTestApp(&App{})
 
 	if err := app.runOnUI("test operation", func() { ran = true }); err != nil {
 		t.Fatalf("runOnUI returned error: %v", err)
@@ -37,7 +37,7 @@ func TestRunOnUIRunsInlineWithoutDispatcher(t *testing.T) {
 }
 
 func TestRunOnUIWrapsDispatcherError(t *testing.T) {
-	app := &App{uiCall: func(func()) error { return errors.New("runtime stopped") }}
+	app := bindTestApp(&App{uiCall: func(func()) error { return errors.New("runtime stopped") }})
 
 	err := app.runOnUI("apply query response", func() {})
 	if err == nil || err.Error() != "apply query response: runtime stopped" {

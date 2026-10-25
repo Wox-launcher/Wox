@@ -29,19 +29,21 @@ func TestCloudSyncNeedsBootstrapAfterAuthentication(t *testing.T) {
 }
 
 func TestCloudSyncPresentationShowsUnknownTotalProgress(t *testing.T) {
-	app := &App{
-		translations: map[string]string{
-			"ui_cloud_sync_syncing":              "Syncing...",
-			"ui_cloud_sync_progress_starting":    "Preparing sync...",
-			"ui_cloud_sync_progress_count":       " ({count} items processed)",
-			"ui_cloud_sync_progress_restoring":   "Restoring {target}{count}",
-			"ui_cloud_sync_progress_plugin":      "plugin {plugin}",
-			"ui_cloud_sync_progress_data":        "sync data",
-			"ui_cloud_sync_progress_uploading":   "Uploading {target}{count}",
-			"ui_cloud_sync_progress_wox_setting": "Wox settings",
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_cloud_sync_syncing":              "Syncing...",
+				"ui_cloud_sync_progress_starting":    "Preparing sync...",
+				"ui_cloud_sync_progress_count":       " ({count} items processed)",
+				"ui_cloud_sync_progress_restoring":   "Restoring {target}{count}",
+				"ui_cloud_sync_progress_plugin":      "plugin {plugin}",
+				"ui_cloud_sync_progress_data":        "sync data",
+				"ui_cloud_sync_progress_uploading":   "Uploading {target}{count}",
+				"ui_cloud_sync_progress_wox_setting": "Wox settings",
+			},
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
-	}
+	})
 	_, detail, _, _ := app.cloudSyncPresentation(settingsSnapshot{
 		cloud: cloudSettingsSnapshot{
 			Sync: cloudSyncStatus{
@@ -103,15 +105,17 @@ func TestCloudBillingPriceTextPrefersFormattedServerPrice(t *testing.T) {
 }
 
 func TestCloudBillingPriceWithTrial(t *testing.T) {
-	app := &App{
-		translations: map[string]string{
-			"ui_cloud_sync_plan_trial_one_month":  "1 month free trial",
-			"ui_cloud_sync_plan_trial_months":     "{count} months free trial",
-			"ui_cloud_sync_plan_trial_days":       "{days}-day free trial",
-			"ui_cloud_sync_plan_price_with_trial": "{price} · {trial}",
-			"ui_cloud_sync_plan_price_loading":    "Loading...",
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_cloud_sync_plan_trial_one_month":  "1 month free trial",
+				"ui_cloud_sync_plan_trial_months":     "{count} months free trial",
+				"ui_cloud_sync_plan_trial_days":       "{days}-day free trial",
+				"ui_cloud_sync_plan_price_with_trial": "{price} · {trial}",
+				"ui_cloud_sync_plan_price_loading":    "Loading...",
+			},
 		},
-	}
+	})
 	price := cloudBillingPlanPrice{Formatted: "$1.99/month"}
 	monthTrial := &cloudBillingPlanTrial{Days: 30, Interval: "month", IntervalCount: 1, Formatted: "1 month free"}
 	if got := cloudBillingPriceWithTrial(app, price, monthTrial, true); got != "$1.99/month · 1 month free trial" {
@@ -126,14 +130,16 @@ func TestCloudBillingPriceWithTrial(t *testing.T) {
 }
 
 func TestFormatCloudSyncProgressUsesCachedPluginName(t *testing.T) {
-	app := &App{
-		translations: map[string]string{
-			"ui_cloud_sync_progress_count":     " ({count} items processed)",
-			"ui_cloud_sync_progress_restoring": "Restoring {target}{count}",
-			"ui_cloud_sync_progress_plugin":    "plugin {plugin}",
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_cloud_sync_progress_count":     " ({count} items processed)",
+				"ui_cloud_sync_progress_restoring": "Restoring {target}{count}",
+				"ui_cloud_sync_progress_plugin":    "plugin {plugin}",
+			},
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
-	}
+	})
 	app.pluginSettings.cachePlugins(false, []pluginSettingsPlugin{{
 		ID:   "ea521bb8-4414-44be-bf42-4b2851ae32ad",
 		Name: "DeepL",
@@ -151,14 +157,16 @@ func TestFormatCloudSyncProgressUsesCachedPluginName(t *testing.T) {
 }
 
 func TestFormatCloudSyncProgressUsesPushTargetAndTotal(t *testing.T) {
-	app := &App{
-		translations: map[string]string{
-			"ui_cloud_sync_progress_count":       " ({count} items processed)",
-			"ui_cloud_sync_progress_uploading":   "Uploading {target}{count}",
-			"ui_cloud_sync_progress_wox_setting": "Wox settings",
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_cloud_sync_progress_count":       " ({count} items processed)",
+				"ui_cloud_sync_progress_uploading":   "Uploading {target}{count}",
+				"ui_cloud_sync_progress_wox_setting": "Wox settings",
+			},
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
-	}
+	})
 	detail := app.formatCloudSyncProgress(&cloudSyncProgress{
 		Active:     true,
 		Operation:  cloudsync.CloudSyncProgressOperationPush,
@@ -201,7 +209,7 @@ func TestCloudDevicePlatformIcons(t *testing.T) {
 
 // TestCloudActivityTime uses the viewer's local date, including year and day transitions.
 func TestCloudActivityTime(t *testing.T) {
-	app := &App{translations: map[string]string{"ui_cloud_sync_today": "Today", "ui_cloud_sync_never": "Never"}}
+	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{"ui_cloud_sync_today": "Today", "ui_cloud_sync_never": "Never"}}})
 	now := time.Date(2026, 1, 2, 0, 30, 0, 0, time.FixedZone("local", 8*3600))
 	for _, test := range []struct {
 		date time.Time
@@ -222,7 +230,7 @@ func TestCloudActivityTime(t *testing.T) {
 
 // TestCloudSyncStatusIcons never presents loading, errors or disabled sync as successful.
 func TestCloudSyncStatusIcons(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	ready := cloudSettingsSnapshot{Account: cloudAccountStatus{SyncEligible: true, SyncEnabled: true}, Sync: cloudSyncStatus{Enabled: true, KeyStatus: cloudSyncKeyStatus{Available: true}, State: &cloudSyncState{Bootstrapped: true}}}
 	for _, test := range []struct {
 		state cloudSettingsSnapshot

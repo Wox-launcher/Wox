@@ -75,7 +75,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	setFormFieldsFocusLocked(target, index)
 	hint := a.hotkeyRecordingHint(target.definitions[index], allowedKinds)
 	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
-		hint = a.translate("i18n:ui_hotkey_windows_key_hint")
+		hint = a.language.translate("i18n:ui_hotkey_windows_key_hint")
 	}
 	key := target.definitions[index].Value.Key
 	state := &hotkeyRecordingState{
@@ -100,7 +100,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 			util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI capability: current=%t raw=%t fallback=%v unavailable=%s error=%v", a.hotkeySettings.Recording() == state, capability.RawRecorderAvailable, capability.FallbackAllowedKinds, capability.UnavailableReason, err))
 			if a.hotkeySettings.Recording() == state {
 				if err != nil {
-					state.status = a.translate(err.Error())
+					state.status = a.language.translate(err.Error())
 					state.statusError = true
 				} else {
 					state.raw = capability.RawRecorderAvailable
@@ -111,7 +111,7 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 					if !state.raw && !state.fallback {
 						state.status = strings.TrimSpace(capability.UnavailableReason)
 						if state.status == "" {
-							state.status = a.translate("i18n:ui_hotkey_raw_recorder_unavailable")
+							state.status = a.language.translate("i18n:ui_hotkey_raw_recorder_unavailable")
 						}
 						state.statusError = true
 					}
@@ -124,12 +124,12 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 
 func (a *App) hotkeyRecordingHint(definition formDefinition, allowedKinds []string) string {
 	if definition.Type == "dictationHotkey" {
-		return a.translate("i18n:ui_hotkey_dictation_press_hint")
+		return a.language.translate("i18n:ui_hotkey_dictation_press_hint")
 	}
 	if containsString(allowedKinds, "pressModifier") {
-		return a.translate("i18n:ui_hotkey_modifier_press_hint")
+		return a.language.translate("i18n:ui_hotkey_modifier_press_hint")
 	}
-	return a.translate("i18n:ui_hotkey_press_hint")
+	return a.language.translate("i18n:ui_hotkey_press_hint")
 }
 
 func containsString(values []string, target string) bool {
@@ -144,11 +144,11 @@ func containsString(values []string, target string) bool {
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
 	tableEditor := a.activeFormTableEditor()
-	return target != nil && (((a.onboardingOpen || (a.settingsOpen && a.settingTab == "hotkey")) && target == a.hotkeySettings.Form()) ||
-		(a.onboardingOpen && a.onboardingQueryHotkey != nil && target == &a.onboardingQueryHotkey.form) ||
+	return target != nil && (((a.onboarding.onboardingOpen || (a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey")) && target == a.hotkeySettings.Form()) ||
+		(a.onboarding.onboardingOpen && a.onboarding.onboardingQueryHotkey != nil && target == &a.onboarding.onboardingQueryHotkey.form) ||
 		(tableEditor != nil && tableEditor.rowForm == target) ||
-		(a.form != nil && target == &a.form.formFieldsState) ||
-		(a.requirementForm != nil && target == &a.requirementForm.formFieldsState) ||
+		(a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
+		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState))
 }
 
@@ -321,19 +321,19 @@ func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 func (a *App) hotkeyConflictMessage(kind, value string) string {
 	switch kind {
 	case "unsupported":
-		return a.translate("i18n:ui_hotkey_registration_unsupported")
+		return a.language.translate("i18n:ui_hotkey_registration_unsupported")
 	case "registration_failed":
-		return a.translate("i18n:ui_hotkey_registration_failed")
+		return a.language.translate("i18n:ui_hotkey_registration_failed")
 	case "main":
-		return a.translate("i18n:ui_hotkey_conflict_main")
+		return a.language.translate("i18n:ui_hotkey_conflict_main")
 	case "selection":
-		return a.translate("i18n:ui_hotkey_conflict_selection")
+		return a.language.translate("i18n:ui_hotkey_conflict_selection")
 	case "query":
-		return strings.ReplaceAll(a.translate("i18n:ui_hotkey_conflict_query"), "{query}", value)
+		return strings.ReplaceAll(a.language.translate("i18n:ui_hotkey_conflict_query"), "{query}", value)
 	case "system":
-		return a.translate("i18n:ui_hotkey_conflict_system")
+		return a.language.translate("i18n:ui_hotkey_conflict_system")
 	default:
-		return a.translate("i18n:ui_hotkey_unavailable")
+		return a.language.translate("i18n:ui_hotkey_unavailable")
 	}
 }
 
@@ -353,7 +353,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		editor.status = ""
 	}
 	a.invalidateHotkeyWindows()
-	if a.onboardingOpen && state.idPrefix == "onboarding-query-hotkey" {
+	if a.onboarding.onboardingOpen && state.idPrefix == "onboarding-query-hotkey" {
 		a.saveOnboardingQueryHotkey(value)
 		a.stopHotkeyRecording()
 		return
@@ -367,7 +367,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		})
 	}
 	// Onboarding treats one valid combination as completion; Settings keeps recording for rapid edits.
-	if a.onboardingOpen && state.idPrefix == "hotkey-settings" {
+	if a.onboarding.onboardingOpen && state.idPrefix == "hotkey-settings" {
 		a.stopHotkeyRecording()
 	}
 }
@@ -386,16 +386,16 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			state.status = err.Error()
 			state.statusError = true
 			if state.persistKey == "MainHotkey" || state.persistKey == "SelectionHotkey" {
-				state.status = a.translate(corehotkey.RegistrationErrorKey(err))
+				state.status = a.language.translate(corehotkey.RegistrationErrorKey(err))
 			}
 			// Onboarding closes the recorder before the asynchronous save finishes.
 			// Keep its error on the page instead of losing it with the recorder state.
-			if a.onboardingOpen && state.persistKey == "MainHotkey" {
-				a.onboardingError = state.status
+			if a.onboarding.onboardingOpen && state.persistKey == "MainHotkey" {
+				a.onboarding.onboardingError = state.status
 			}
 		} else {
-			if a.onboardingOpen && state.persistKey == "MainHotkey" {
-				a.onboardingError = ""
+			if a.onboarding.onboardingOpen && state.persistKey == "MainHotkey" {
+				a.onboarding.onboardingError = ""
 			}
 			switch state.persistKey {
 			case "MainHotkey":
@@ -404,13 +404,13 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 					d.MainHotkeyRegistrationFailed = false
 					d.MainHotkeyRegistrationError = ""
 				})
-				a.onboardingMigration.stagedMainHotkey = ""
-				a.onboardingMigration.stagedMainHotkeyError = ""
+				a.onboarding.onboardingMigration.stagedMainHotkey = ""
+				a.onboarding.onboardingMigration.stagedMainHotkeyError = ""
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 			case "ActionPanelHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.ActionPanelHotkey = value })
-				a.syncWebViewActionHotkey()
+				a.webView.syncWebViewActionHotkey()
 			}
 		}
 		a.invalidateHotkeyWindows()

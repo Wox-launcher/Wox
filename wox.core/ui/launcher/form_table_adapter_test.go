@@ -22,7 +22,7 @@ func TestFormTableHeaderWeightKeepsPluginTablesRegular(t *testing.T) {
 // TestFormTableHotkeysFormatOnlyTheVisibleLabel protects stored values and search
 // text while reusing the same key labels as the hotkey recorder.
 func TestFormTableHotkeysFormatOnlyTheVisibleLabel(t *testing.T) {
-	a := &App{}
+	a := bindTestApp(&App{})
 	for _, tc := range []struct{ raw, want string }{
 		{"capslock+e", "Caps Lock + E"}, {"ctrl+ctrl", "Ctrl + Ctrl"},
 		{"shift+ctrl+l", "Shift + Ctrl + L"}, {"", ""},

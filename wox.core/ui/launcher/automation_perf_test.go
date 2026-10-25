@@ -33,9 +33,15 @@ func TestAutomationQueryStateRejectsStaleFrames(t *testing.T) {
 		{name: "empty retained row", resultsQuery: "new", input: "terminal", empty: true, row: "old-row", frameComplete: true, complete: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			app := &App{query: plainQuery{QueryID: "new", QueryText: "terminal"}, resultsQueryID: test.resultsQuery, queryComplete: test.complete}
+			app := bindTestApp(&App{
+				querySession: queryController{
+					query:         plainQuery{QueryID: "new", QueryText: "terminal"},
+					queryComplete: test.complete,
+				},
+				resultList: resultController{resultsQueryID: test.resultsQuery},
+			})
 			if !test.empty {
-				app.results = []queryResult{{ID: "new-row", QueryID: "new"}}
+				app.resultList.results = []queryResult{{ID: "new-row", QueryID: "new"}}
 			}
 			app.host = woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 				status := "loading"

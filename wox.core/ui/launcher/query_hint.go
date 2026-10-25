@@ -51,7 +51,7 @@ type queryResultSelection struct {
 }
 
 // captureQuerySnapshot records the query box document and routing state for undo.
-func (a *App) captureQuerySnapshot() queryHintSnapshot {
+func (a *queryController) captureQuerySnapshot() queryHintSnapshot {
 	s := &a.queryHintEditorState
 	queryType := a.query.QueryType
 	if queryType == "" {
@@ -68,13 +68,13 @@ func (a *App) captureQuerySnapshot() queryHintSnapshot {
 		}
 	}
 	var resultSelection *queryResultSelection
-	if pending := a.pendingSelection; pending != nil && pending.queryID == a.query.QueryID && pending.querySnapshot != nil {
+	if pending := a.resultList.pendingSelection; pending != nil && pending.queryID == a.query.QueryID && pending.querySnapshot != nil {
 		// Rapid undo/redo must retain the intended target, not a partial or stale result list.
 		copy := *pending.querySnapshot
 		resultSelection = &copy
-	} else if a.resultsQueryID == a.query.QueryID && a.selected >= 0 && a.selected < len(a.results) && !a.results[a.selected].IsGroup {
-		result := a.results[a.selected]
-		resultSelection = &queryResultSelection{title: result.Title, subTitle: result.SubTitle, index: a.selected}
+	} else if a.resultList.resultsQueryID == a.query.QueryID && a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) && !a.resultList.results[a.resultList.selected].IsGroup {
+		result := a.resultList.results[a.resultList.selected]
+		resultSelection = &queryResultSelection{title: result.Title, subTitle: result.SubTitle, index: a.resultList.selected}
 	}
 	return queryHintSnapshot{
 		template:        s.template.Clone(),
@@ -115,12 +115,12 @@ func cloneSelection(value selection) selection {
 }
 
 // rememberQueryHint snapshots content before an element edit or a structural transition.
-func (a *App) rememberQueryHint() {
+func (a *queryController) rememberQueryHint() {
 	a.appendQueryUndo(a.captureQuerySnapshot())
 }
 
 // appendQueryUndo records one query-box snapshot and drops the oldest entry past the cap.
-func (a *App) appendQueryUndo(snapshot queryHintSnapshot) {
+func (a *queryController) appendQueryUndo(snapshot queryHintSnapshot) {
 	s := &a.queryHintEditorState
 	if len(s.undo) > 0 && querySnapshotSameContent(s.undo[len(s.undo)-1], snapshot) {
 		s.undo[len(s.undo)-1].resultSelection = snapshot.resultSelection
@@ -135,7 +135,7 @@ func (a *App) appendQueryUndo(snapshot queryHintSnapshot) {
 }
 
 // applyQuerySnapshot restores one query-box undo or redo entry, including plugin scope.
-func (a *App) applyQuerySnapshot(snapshot queryHintSnapshot) {
+func (a *queryController) applyQuerySnapshot(snapshot queryHintSnapshot) {
 	s := &a.queryHintEditorState
 	s.template = snapshot.template.Clone()
 	a.query.QueryHint = snapshot.hint.Clone()
@@ -158,7 +158,7 @@ func (a *App) applyQuerySnapshot(snapshot queryHintSnapshot) {
 }
 
 // installQueryHint installs semantic content without splitting the native text editor.
-func (a *App) installQueryHint(hint *common.QueryHint) {
+func (a *queryController) installQueryHint(hint *common.QueryHint) {
 	a.queryHintEditorState.template = nil
 	a.query.QueryHint = hint.Clone()
 	a.query.QueryText = hint.PlainText()
@@ -181,7 +181,7 @@ func (a *App) installQueryHint(hint *common.QueryHint) {
 }
 
 // installQueryHintTemplate defers unused whitespace separators until navigation needs them.
-func (a *App) installQueryHintTemplate(template *common.QueryHint) {
+func (a *queryController) installQueryHintTemplate(template *common.QueryHint) {
 	hint := template.Clone()
 	lastValue := 0
 	for i, element := range hint.Elements {
@@ -200,7 +200,7 @@ func (a *App) installQueryHintTemplate(template *common.QueryHint) {
 }
 
 // updateQueryHintText maps continuous edits back to semantic values, or offers a command template.
-func (a *App) updateQueryHintText(text string) string {
+func (a *queryController) updateQueryHintText(text string) string {
 	s := &a.queryHintEditorState
 	if hint := a.query.QueryHint; hint != nil {
 		a.rememberQueryHint()
@@ -287,7 +287,7 @@ func (a *App) updateQueryHintText(text string) string {
 }
 
 // queryHintChanged shares normal query invalidation without treating full text as a slot edit.
-func (a *App) queryHintChanged() {
+func (a *queryController) queryHintChanged() {
 	a.queryHintChangedWithSelection(nil)
 }
 
@@ -296,16 +296,16 @@ func (a *App) queryHintChangedWithSelection(resultSelection *queryResultSelectio
 	a.beginQueryGenerationLocked()
 	if resultSelection != nil {
 		copy := *resultSelection
-		a.pendingSelection = &pendingResultSelection{queryID: a.query.QueryID, querySnapshot: &copy}
-		a.resultScrollDetached = false
+		a.resultList.pendingSelection = &pendingResultSelection{queryID: a.querySession.query.QueryID, querySnapshot: &copy}
+		a.resultList.resultScrollDetached = false
 	}
-	a.beginQueryTransitionLocked(false)
-	a.completionHint = nil
-	a.canRecallHistory = false
+	a.querySession.beginQueryTransitionLocked(false)
+	a.querySession.completionHint = nil
+	a.querySession.canRecallHistory = false
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	if a.services != nil {
 		if err := a.sendCurrentQuery(); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, err.Error())
@@ -314,7 +314,7 @@ func (a *App) queryHintChangedWithSelection(resultSelection *queryResultSelectio
 }
 
 // focusQueryElement changes only local editing state; navigation never starts a query.
-func (a *App) focusQueryElement(index int) bool {
+func (a *queryController) focusQueryElement(index int) bool {
 	hint := a.query.QueryHint
 	if hint == nil || a.editor.State().Composition != "" {
 		return false
@@ -357,8 +357,8 @@ func (a *App) focusQueryElement(index int) bool {
 	a.queryHintEditorState.allSelected = false
 	start, end := queryElementRange(hint, next)
 	a.editor.SetSelection(start, end)
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 	return true
 }
@@ -450,18 +450,18 @@ func queryHintSuggestion(hint *common.QueryHint, active int, state woxui.TextEdi
 }
 
 // rejectQueryTab signals an unavailable action without changing the editor or IME anchor.
-func (a *App) rejectQueryTab() {
+func (a *queryController) rejectQueryTab() {
 	if a.editor.State().Composition != "" {
 		return
 	}
 	a.queryTabFeedback++
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // onQueryHintKey handles document operations before ordinary completion and text shortcuts.
-func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
+func (a *queryController) onQueryHintKey(event woxui.KeyEvent) bool {
 	s := &a.queryHintEditorState
 	if event.Modifiers.HasPrimary() && (event.Key == woxui.Key("z") || event.Key == woxui.Key("y")) && len(s.undo)+len(s.redo) > 0 {
 		from, to := &s.undo, &s.redo
@@ -496,7 +496,7 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 		}
 		s.active = queryHintResolveActive(hint, s.active, a.editor.State().Selection)
 		if event.Modifiers == 0 {
-			focused := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
+			focused := a.host() != nil && a.host().HasFocus(launcherview.LauncherQueryInputKey)
 			if index, suffix := queryHintSuggestion(hint, s.active, a.editor.State(), focused); suffix != "" {
 				a.rememberQueryHint()
 				next := hint.Clone()
@@ -537,8 +537,8 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 	}
 	if event.Key == woxui.Key("a") && event.Modifiers.HasPrimary() {
 		a.selectEntireQuery()
-		if a.window != nil {
-			_ = a.window.Invalidate()
+		if a.window() != nil {
+			_ = a.window().Invalidate()
 		}
 		return true
 	}
@@ -581,7 +581,7 @@ func (a *App) onQueryHintKey(event woxui.KeyEvent) bool {
 }
 
 // replaceWholeQueryHint intentionally leaves pasted text unparsed.
-func (a *App) replaceWholeQueryHint(text string) {
+func (a *queryController) replaceWholeQueryHint(text string) {
 	a.rememberQueryHint()
 	a.query.QueryHint = nil
 	a.queryHintEditorState.allSelected = false
@@ -601,7 +601,7 @@ func queryPrimaryModifier() woxui.KeyModifiers {
 }
 
 // selectEntireQuery selects the same continuous document used for painting and native editing.
-func (a *App) selectEntireQuery() {
+func (a *queryController) selectEntireQuery() {
 	a.queryHintEditorState.allSelected = a.query.QueryHint != nil
 	a.editor.SelectAll()
 }
@@ -621,7 +621,7 @@ func queryElementRange(hint *common.QueryHint, index int) (start, end int) {
 
 // selectTouchedQueryBlocks expands edits touching atomic content without affecting
 // freely editable argument ranges. The same rule applies to keyboard, IME and clipboard.
-func (a *App) selectTouchedQueryBlocks() {
+func (a *queryController) selectTouchedQueryBlocks() {
 	if a == nil {
 		return
 	}

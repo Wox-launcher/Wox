@@ -14,10 +14,10 @@ func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("g wox")
+	app.querySession.query = newInputQuery("g wox")
 	defer app.cancel()
 
-	app.results = []queryResult{{
+	app.resultList.results = []queryResult{{
 		ID: "search",
 		Actions: []resultAction{{
 			ID:                     openWebViewPreviewActionID,
@@ -25,25 +25,25 @@ func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 			ContextData:            map[string]string{webViewPreviewURLContextKey: "https://www.google.com/search?q=wox"},
 		}},
 	}}
-	app.selected = 0
+	app.resultList.selected = 0
 	app.activateAction(0, 0)
-	if !app.webViewFullscreen || !app.webViewWantKeyboardFocus || !app.queryCanFocus() || app.results[0].Preview.PreviewType != "webview" {
-		t.Fatalf("webview mode = fullscreen:%v pageFocusPending:%v queryFocus:%v preview:%+v", app.webViewFullscreen, app.webViewWantKeyboardFocus, app.queryCanFocus(), app.results[0].Preview)
+	if !app.webView.webViewFullscreen || !app.webView.webViewWantKeyboardFocus || !app.queryCanFocus() || app.resultList.results[0].Preview.PreviewType != "webview" {
+		t.Fatalf("webview mode = fullscreen:%v pageFocusPending:%v queryFocus:%v preview:%+v", app.webView.webViewFullscreen, app.webView.webViewWantKeyboardFocus, app.queryCanFocus(), app.resultList.results[0].Preview)
 	}
-	data, err := decodeWebViewPreview(app.results[0].Preview.PreviewData)
+	data, err := decodeWebViewPreview(app.resultList.results[0].Preview.PreviewData)
 	if err != nil || data.URL != "https://www.google.com/search?q=wox" || !data.CacheDisabled {
 		t.Fatalf("preview data = %+v err=%v", data, err)
 	}
 	if content := data.content(); !content.CacheDisabled || content.CacheKey != "" || content.InjectCSS != "" {
 		t.Fatalf("fullscreen preview must not reuse a cached session: %+v", content)
 	}
-	if got := launcherPreviewRatio(app.layout, app.isPreviewFullscreen()); got != 0 {
+	if got := launcherPreviewRatio(app.resultList.layout, app.isPreviewFullscreen()); got != 0 {
 		t.Fatalf("fullscreen preview ratio = %v, want 0", got)
 	}
 
 	app.handleWebViewFallbackEscape()
-	if app.webViewFullscreen || app.webViewWantKeyboardFocus || app.results[0].Preview.PreviewType != "" || !app.queryCanFocus() {
-		t.Fatalf("escape restored fullscreen:%v pageFocusPending:%v preview:%+v queryFocus:%v", app.webViewFullscreen, app.webViewWantKeyboardFocus, app.results[0].Preview, app.queryCanFocus())
+	if app.webView.webViewFullscreen || app.webView.webViewWantKeyboardFocus || app.resultList.results[0].Preview.PreviewType != "" || !app.queryCanFocus() {
+		t.Fatalf("escape restored fullscreen:%v pageFocusPending:%v preview:%+v queryFocus:%v", app.webView.webViewFullscreen, app.webView.webViewWantKeyboardFocus, app.resultList.results[0].Preview, app.queryCanFocus())
 	}
 }
 
@@ -55,7 +55,7 @@ func TestActivateOpenWebViewPreviewActionAppliesPerSearchChrome(t *testing.T) {
 	app.show.MaxResultCount = 8
 	defer app.cancel()
 
-	app.results = []queryResult{{
+	app.resultList.results = []queryResult{{
 		ID: "search",
 		Actions: []resultAction{{
 			ID: openWebViewPreviewActionID,
@@ -68,16 +68,16 @@ func TestActivateOpenWebViewPreviewActionAppliesPerSearchChrome(t *testing.T) {
 		}},
 	}}
 	app.activateAction(0, 0)
-	data, err := decodeWebViewPreview(app.results[0].Preview.PreviewData)
+	data, err := decodeWebViewPreview(app.resultList.results[0].Preview.PreviewData)
 	if err != nil || data.InjectCSS != "header{display:none}" || !data.CacheDisabled {
 		t.Fatalf("preview data = %+v err=%v", data, err)
 	}
-	if app.webViewPreviewWidth != 640 || app.webViewPreviewHeight != 720 {
-		t.Fatalf("preview size = %dx%d", app.webViewPreviewWidth, app.webViewPreviewHeight)
+	if app.webView.webViewPreviewWidth != 640 || app.webView.webViewPreviewHeight != 720 {
+		t.Fatalf("preview size = %dx%d", app.webView.webViewPreviewWidth, app.webView.webViewPreviewHeight)
 	}
 	app.handleWebViewFallbackEscape()
-	if app.webViewPreviewWidth != 0 || app.webViewPreviewHeight != 0 {
-		t.Fatalf("escape should restore the previous window size, got %dx%d", app.webViewPreviewWidth, app.webViewPreviewHeight)
+	if app.webView.webViewPreviewWidth != 0 || app.webView.webViewPreviewHeight != 0 {
+		t.Fatalf("escape should restore the previous window size, got %dx%d", app.webView.webViewPreviewWidth, app.webView.webViewPreviewHeight)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestOpenWebViewPreviewActionIgnoresInvalidURL(t *testing.T) {
 	app.visible = true
 	defer app.cancel()
 
-	app.results = []queryResult{{
+	app.resultList.results = []queryResult{{
 		ID: "search",
 		Actions: []resultAction{{
 			ID:          openWebViewPreviewActionID,
@@ -95,7 +95,7 @@ func TestOpenWebViewPreviewActionIgnoresInvalidURL(t *testing.T) {
 		}},
 	}}
 	app.activateAction(0, 0)
-	if app.webViewFullscreen {
+	if app.webView.webViewFullscreen {
 		t.Fatal("invalid URL entered webview fullscreen")
 	}
 }
@@ -104,21 +104,21 @@ func TestApplyResultsExitsWebViewPreviewMode(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("g wox")
+	app.querySession.query = newInputQuery("g wox")
 	defer app.cancel()
 
-	app.results = []queryResult{{ID: "search", Actions: []resultAction{{
+	app.resultList.results = []queryResult{{ID: "search", Actions: []resultAction{{
 		ID:          openWebViewPreviewActionID,
 		ContextData: map[string]string{webViewPreviewURLContextKey: "https://example.com/?q=wox"},
 	}}}}
-	app.selected = 0
+	app.resultList.selected = 0
 	app.activateAction(0, 0)
-	if !app.webViewFullscreen {
+	if !app.webView.webViewFullscreen {
 		t.Fatal("expected webview fullscreen before results refresh")
 	}
 
-	app.applyResults(app.query.QueryID, []queryResult{{ID: "next", Title: "Search"}}, &queryLayout{}, nil, nil, 0, true)
-	if app.webViewFullscreen {
+	app.applyResults(app.querySession.query.QueryID, []queryResult{{ID: "next", Title: "Search"}}, &queryLayout{}, nil, nil, 0, true)
+	if app.webView.webViewFullscreen {
 		t.Fatal("new results should leave webview fullscreen")
 	}
 }
@@ -126,7 +126,7 @@ func TestApplyResultsExitsWebViewPreviewMode(t *testing.T) {
 func TestWebViewFullscreenKeepsQueryBox(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
-	app.webViewFullscreen = true
+	app.webView.webViewFullscreen = true
 	if !app.queryCanFocus() {
 		t.Fatal("query box should stay focusable during webview preview")
 	}
@@ -147,12 +147,12 @@ func TestWebViewPreviewIgnoresQueryBoxArrowKeys(t *testing.T) {
 	app.visible = true
 	defer app.cancel()
 
-	app.results = []queryResult{{ID: "search"}, {ID: "chat"}}
-	app.selected = 0
-	app.webViewFullscreen = true
-	app.webViewFullscreenResultID = "search"
-	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webViewFullscreen || app.selected != 0 {
-		t.Fatalf("arrow keys dismissed webview: fullscreen=%v selected=%d", app.webViewFullscreen, app.selected)
+	app.resultList.results = []queryResult{{ID: "search"}, {ID: "chat"}}
+	app.resultList.selected = 0
+	app.webView.webViewFullscreen = true
+	app.webView.webViewFullscreenResultID = "search"
+	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webView.webViewFullscreen || app.resultList.selected != 0 {
+		t.Fatalf("arrow keys dismissed webview: fullscreen=%v selected=%d", app.webView.webViewFullscreen, app.resultList.selected)
 	}
 }
 
@@ -162,14 +162,14 @@ func TestOnWebViewPreviewModeKeyLeavesOnEscape(t *testing.T) {
 	app.visible = true
 	defer app.cancel()
 
-	app.results = []queryResult{{ID: "search", Preview: queryPreview{PreviewType: "text"}}}
-	app.webViewFullscreen = true
-	app.webViewFullscreenResultID = "search"
-	app.webViewFullscreenRestore = app.results[0].Preview
-	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webViewFullscreen {
+	app.resultList.results = []queryResult{{ID: "search", Preview: queryPreview{PreviewType: "text"}}}
+	app.webView.webViewFullscreen = true
+	app.webView.webViewFullscreenResultID = "search"
+	app.webView.webViewFullscreenRestore = app.resultList.results[0].Preview
+	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webView.webViewFullscreen {
 		t.Fatal("launcher keys should stay consumed while webview fullscreen is active")
 	}
-	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.webViewFullscreen {
+	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.webView.webViewFullscreen {
 		t.Fatal("escape should consume the key and exit webview fullscreen")
 	}
 }
@@ -178,27 +178,27 @@ func TestGlobalWebViewPreviewRequestsKeyboardFocus(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
 	preview := `{"url":"https://gemini.google.com"}`
-	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
-	app.selected = 0
-	if app.activateWebViewPreview(preview) {
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.resultList.selected = 0
+	if app.webView.activateWebViewPreview(preview) {
 		t.Fatal("first activation should not reset a missing session")
 	}
-	if !app.webViewWantKeyboardFocus {
+	if !app.webView.webViewWantKeyboardFocus {
 		t.Fatal("a result-owned webview preview should request page focus")
 	}
 
-	app.webViewWantKeyboardFocus = false
-	if app.activateWebViewPreview(preview) {
+	app.webView.webViewWantKeyboardFocus = false
+	if app.webView.activateWebViewPreview(preview) {
 		t.Fatal("same preview should not reset")
 	}
-	if app.webViewWantKeyboardFocus {
+	if app.webView.webViewWantKeyboardFocus {
 		t.Fatal("same session should not steal focus back")
 	}
 
-	if !app.activateWebViewPreview(`{"url":"https://x.com"}`) {
+	if !app.webView.activateWebViewPreview(`{"url":"https://x.com"}`) {
 		t.Fatal("a new URL should replace the previous session")
 	}
-	if !app.webViewWantKeyboardFocus {
+	if !app.webView.webViewWantKeyboardFocus {
 		t.Fatal("switching result-owned webview pages should request page focus again")
 	}
 }
@@ -207,16 +207,16 @@ func TestHotkeyShowKeepsQueryFocusOnGlobalWebViewPreview(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
 	preview := `{"url":"https://gemini.google.com"}`
-	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
-	app.selected = 0
-	app.keepQueryFocusOnWebViewActivate = true
-	if app.activateWebViewPreview(preview); app.webViewWantKeyboardFocus {
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.resultList.selected = 0
+	app.webView.keepQueryFocusOnWebViewActivate = true
+	if app.webView.activateWebViewPreview(preview); app.webView.webViewWantKeyboardFocus {
 		t.Fatal("hotkey show should keep the selected query box focused")
 	}
 
-	app.keepQueryFocusOnWebViewActivate = false
-	app.webViewPreviewData = ""
-	if app.activateWebViewPreview(preview); !app.webViewWantKeyboardFocus {
+	app.webView.keepQueryFocusOnWebViewActivate = false
+	app.webView.webViewPreviewData = ""
+	if app.webView.activateWebViewPreview(preview); !app.webView.webViewWantKeyboardFocus {
 		t.Fatal("a live webview query should still request page focus")
 	}
 }
@@ -224,11 +224,11 @@ func TestHotkeyShowKeepsQueryFocusOnGlobalWebViewPreview(t *testing.T) {
 func TestRestoreQueryFocusAfterShowCancelsWebViewFocus(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
-	app.webViewWantKeyboardFocus = true
+	app.webView.webViewWantKeyboardFocus = true
 	if app.restoreQueryFocusAfterShow() {
 		t.Fatal("query restore should no-op without a host")
 	}
-	if app.webViewWantKeyboardFocus {
+	if app.webView.webViewWantKeyboardFocus {
 		t.Fatal("hotkey show must cancel pending webview page focus")
 	}
 }
@@ -236,9 +236,9 @@ func TestRestoreQueryFocusAfterShowCancelsWebViewFocus(t *testing.T) {
 func TestFileWebViewPreviewKeepsQueryFocus(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
-	app.results = []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "notes.md"}}}
-	app.selected = 0
-	if app.activateWebViewPreview(`{"url":"https://example.com"}`); app.webViewWantKeyboardFocus {
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "notes.md"}}}
+	app.resultList.selected = 0
+	if app.webView.activateWebViewPreview(`{"url":"https://example.com"}`); app.webView.webViewWantKeyboardFocus {
 		t.Fatal("a file preview that happens to use a webview should leave the query box focused")
 	}
 }
@@ -262,25 +262,25 @@ func TestWebViewPreviewActivationHostFocus(t *testing.T) {
 	app.host = host
 	// Both replacing HTML in one result and selecting another HTML result must
 	// keep keyboard navigation on the query input.
-	app.results = []queryResult{
+	app.resultList.results = []queryResult{
 		{ID: "first", Preview: queryPreview{PreviewType: "webview", PreviewData: `{"html":"<p>first</p>"}`}},
 		{ID: "second", Preview: queryPreview{PreviewType: "webview", PreviewData: `{"html":"<p>second</p>"}`}},
 	}
 	for _, selected := range []int{0, 1, 0} {
-		app.selected = selected
-		app.activateWebViewPreview(app.results[selected].Preview.PreviewData)
-		if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webViewWantKeyboardFocus {
-			t.Fatalf("HTML result %d stole query focus: key=%q pending=%t", selected, host.FocusedKey(), app.webViewWantKeyboardFocus)
+		app.resultList.selected = selected
+		app.webView.activateWebViewPreview(app.resultList.results[selected].Preview.PreviewData)
+		if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webView.webViewWantKeyboardFocus {
+			t.Fatalf("HTML result %d stole query focus: key=%q pending=%t", selected, host.FocusedKey(), app.webView.webViewWantKeyboardFocus)
 		}
 	}
-	app.activateWebViewPreview(`{"html":"<p>updated</p>"}`)
-	if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webViewWantKeyboardFocus {
+	app.webView.activateWebViewPreview(`{"html":"<p>updated</p>"}`)
+	if !host.HasFocus(launcherview.LauncherQueryInputKey) || app.webView.webViewWantKeyboardFocus {
 		t.Fatal("updating HTML must keep query focus")
 	}
 	preview := `{"url":"https://gemini.google.com"}`
-	app.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
-	app.selected = 0
-	app.activateWebViewPreview(preview)
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: preview}}}
+	app.resultList.selected = 0
+	app.webView.activateWebViewPreview(preview)
 	if !host.HasFocus(previewview.WebViewPreviewFocusKey) {
 		t.Fatalf("focused key = %q, want the webview preview so the query caret stops blinking", host.FocusedKey())
 	}

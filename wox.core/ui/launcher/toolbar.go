@@ -65,7 +65,7 @@ func (m toolbarMessage) displayText() string {
 	return m.Text
 }
 
-func (a *App) effectiveToolbarMessage() *toolbarMessage {
+func (a *toolbarController) effectiveToolbarMessage() *toolbarMessage {
 	if a.toolbarMsg != nil {
 		return a.toolbarMsg
 	}
@@ -73,28 +73,28 @@ func (a *App) effectiveToolbarMessage() *toolbarMessage {
 }
 
 // applyToolbarFallbackMessage keeps a launcher-wide warning behind query-owned toolbar state.
-func (a *App) applyToolbarFallbackMessage(message toolbarMessage) {
+func (a *toolbarController) applyToolbarFallbackMessage(message toolbarMessage) {
 	a.toolbarFallbackMsg = &message
 	a.toolbarRevision++
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) applyToolbarMessage(message toolbarMessage) {
+func (a *toolbarController) applyToolbarMessage(message toolbarMessage) {
 	if !message.persistent() && a.effectiveToolbarMessage() != nil && a.effectiveToolbarMessage().persistent() {
 		return
 	}
 	a.toolbarRevision++
 	revision := a.toolbarRevision
 	a.toolbarMsg = &message
-	panelVisible := a.actionPanel
+	panelVisible := a.actions.actionPanel
 	panelClosed := false
 	// About Menu only defers presenting the latest message; expiry and replacement keep running.
-	if a.shouldSyncActionPanelWithResults() {
-		if len(a.currentActionPanelEntries()) == 0 {
-			panelClosed = a.resetActionPanelLocked()
+	if a.actions.shouldSyncActionPanelWithResults() {
+		if len(a.actions.currentActionPanelEntries()) == 0 {
+			panelClosed = a.actions.resetActionPanelLocked()
 		} else {
-			a.normalizeActionSelectionLocked()
+			a.actions.normalizeActionSelectionLocked()
 		}
 	}
 	if panelVisible {
@@ -103,18 +103,25 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	if panelClosed {
 		a.restoreQueryTextInput()
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 	if !message.persistent() && message.DisplaySeconds > 0 {
 		util.Go(a.lifecycleCtx, "expire transient toolbar message", func() {
 			timer := time.NewTimer(time.Duration(message.DisplaySeconds) * time.Second)
 			defer timer.Stop()
-			<-timer.C
+			select {
+			case <-a.lifecycleCtx.Done():
+				return
+			case <-timer.C:
+			}
 			if err := a.runOnUI("expire transient toolbar message", func() {
+				if a.lifecycleCtx.Err() != nil {
+					return
+				}
 				if a.toolbarRevision == revision && a.toolbarMsg != nil && a.toolbarMsg.Text == message.Text {
 					a.toolbarMsg = nil
 					a.toolbarRevision++
 				}
-				_ = a.window.Invalidate()
+				_ = a.window().Invalidate()
 			}); err != nil {
 				log.Printf("dispatch toolbar message expiry: %v", err)
 			}
@@ -122,18 +129,18 @@ func (a *App) applyToolbarMessage(message toolbarMessage) {
 	}
 }
 
-func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
+func (a *toolbarController) clearToolbarMessageByID(toolbarMessageID string) {
 	changed := false
 	panelClosed := false
 	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID {
 		a.toolbarMsg = nil
 		a.toolbarRevision++
 		changed = true
-		if a.shouldSyncActionPanelWithResults() {
-			if len(a.currentActionPanelEntries()) == 0 {
-				panelClosed = a.resetActionPanelLocked()
+		if a.actions.shouldSyncActionPanelWithResults() {
+			if len(a.actions.currentActionPanelEntries()) == 0 {
+				panelClosed = a.actions.resetActionPanelLocked()
 			} else {
-				a.normalizeActionSelectionLocked()
+				a.actions.normalizeActionSelectionLocked()
 			}
 		}
 	}
@@ -148,12 +155,12 @@ func (a *App) clearToolbarMessageByID(toolbarMessageID string) {
 	if panelClosed {
 		a.restoreQueryTextInput()
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) onToolbarKey(event woxui.KeyEvent) bool {
+func (a *toolbarController) onToolbarKey(event woxui.KeyEvent) bool {
 	message := a.toolbarMsg
-	panelVisible := a.actionPanel
+	panelVisible := a.actions.actionPanel
 	if message == nil || panelVisible {
 		return false
 	}
@@ -169,7 +176,7 @@ func (a *App) onToolbarKey(event woxui.KeyEvent) bool {
 	return false
 }
 
-func (a *App) activateToolbarAction(action toolbarMessageAction) {
+func (a *toolbarController) activateToolbarAction(action toolbarMessageAction) {
 	message := a.toolbarMsg
 	if message == nil {
 		return
@@ -178,7 +185,7 @@ func (a *App) activateToolbarAction(action toolbarMessageAction) {
 }
 
 // activateToolbarActionForMessage prevents a refreshed toolbar from executing an action from an older panel snapshot.
-func (a *App) activateToolbarActionForMessage(messageID string, action toolbarMessageAction) {
+func (a *toolbarController) activateToolbarActionForMessage(messageID string, action toolbarMessageAction) {
 	message := a.toolbarMsg
 	if message == nil || message.ID != messageID || messageID == "" || action.ID == "" {
 		return
@@ -190,7 +197,7 @@ func (a *App) activateToolbarActionForMessage(messageID string, action toolbarMe
 		log.Printf("execute toolbar message action: %v", err)
 		return
 	}
-	a.hideActionPanel()
+	a.actions.hideActionPanel()
 	if !action.PreventHideAfterAction {
 		util.Go(a.lifecycleCtx, "hide launcher after toolbar action", func() {
 			if err := a.runOnUI("hide launcher after toolbar action", func() {

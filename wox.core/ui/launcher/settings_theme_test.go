@@ -39,8 +39,8 @@ func TestSettingsPaletteIgnoresLauncherTheme(t *testing.T) {
 			t.Fatal(err)
 		}
 		draft := paletteForTheme(draftTheme)
-		if draft.background != app.palette.background {
-			t.Fatalf("preview color %v does not match theme %v", draft.background, app.palette.background)
+		if draft.background != app.appearance.palette.background {
+			t.Fatalf("preview color %v does not match theme %v", draft.background, app.appearance.palette.background)
 		}
 	}
 }
@@ -50,13 +50,13 @@ func TestSettingsPaletteIgnoresLauncherTheme(t *testing.T) {
 func TestSettingsImagesKeepTheirOwnAppearance(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.palette = paletteForTheme(themeData{AppBackgroundColor: "#FFFFFFFF"})
+	app.appearance.palette = paletteForTheme(themeData{AppBackgroundColor: "#FFFFFFFF"})
 	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><path fill="var(--wox-theme-icon-color)" d="M0 0h8v16H0z"/><path fill="#FF0000" d="M8 0h8v16H8z"/></svg>`}
 	for _, scale := range []float32{1, 1.25, 1.5, 2} {
 		size := physicalImageSize(16, scale)
 		light, dark := &woxui.Image{Width: size}, &woxui.Image{Width: size}
 		key := fmt.Sprintf("%s-svg-%d", imageKey(source), size)
-		app.images[key], app.images[key+"-dark"] = light, dark
+		app.imageStore.images[key], app.imageStore.images[key+"-dark"] = light, dark
 		if app.imageForSurface(source, size, settingsPalette().Background) != dark {
 			t.Fatalf("Settings used light SVG at scale %v", scale)
 		}

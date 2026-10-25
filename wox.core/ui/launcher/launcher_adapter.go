@@ -102,7 +102,7 @@ type viewSnapshot struct {
 	actionFilter          string
 	actionEntries         []actionPanelEntry
 	actionIndices         []int
-	actionsRevision       uint64
+	toolbarRevision       uint64
 	show                  showAppParams
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
@@ -111,37 +111,28 @@ type viewSnapshot struct {
 	quickSelectMode       bool
 }
 
-type actionSectionRevisionState struct {
-	Open            bool
-	Purpose         actionPanelPurpose
-	Selected        int
-	Filter          string
-	ResultsRevision uint64
-	ToolbarRevision uint64
-}
-
 // snapshot prepares one UI-thread-only render view; collection references are consumed before buildLauncher returns.
 func (a *App) snapshot() viewSnapshot {
 	var tableEditor *formTableEditorSnapshot
-	if a.launcherTableEditor != nil && a.formTableTargetCurrentLocked(a.launcherTableEditor.target) {
-		tableEditor = snapshotFormTableEditorLocked(a.launcherTableEditor)
+	if a.forms.launcherTableEditor != nil && a.formTableTargetCurrentLocked(a.forms.launcherTableEditor.target) {
+		tableEditor = snapshotFormTableEditorLocked(a.forms.launcherTableEditor)
 	}
 	var completionHint *queryCompletionHint
-	if a.completionHint != nil {
-		copy := *a.completionHint
+	if a.querySession.completionHint != nil {
+		copy := *a.querySession.completionHint
 		completionHint = &copy
 	}
 	var toolbarMsg *toolbarMessage
-	if effectiveToolbarMsg := a.effectiveToolbarMessage(); effectiveToolbarMsg != nil {
+	if effectiveToolbarMsg := a.toolbar.effectiveToolbarMessage(); effectiveToolbarMsg != nil {
 		copy := *effectiveToolbarMsg
 		copy.Actions = append([]toolbarMessageAction(nil), effectiveToolbarMsg.Actions...)
 		toolbarMsg = &copy
 	}
 	var glance *glanceItem
-	if a.glanceItem != nil {
-		copy := *a.glanceItem
-		if a.glanceItem.Action != nil {
-			action := *a.glanceItem.Action
+	if a.glance.glanceItem != nil {
+		copy := *a.glance.glanceItem
+		if a.glance.glanceItem.Action != nil {
+			action := *a.glance.glanceItem.Action
 			copy.Action = &action
 		}
 		glance = &copy
@@ -149,68 +140,63 @@ func (a *App) snapshot() viewSnapshot {
 	actionFilter := ""
 	var actionEntries []actionPanelEntry
 	var actionIndices []int
-	if a.actionPanel && a.actionFilter != nil {
-		actionFilter = a.actionFilter.State().Text
-		actionEntries = a.currentActionPanelEntries()
-		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.translationSnapshot(), a.usePinYin())
-	}
-	actionState := actionSectionRevisionState{Open: a.actionPanel, Purpose: a.actionPanelPurpose, Selected: a.actionSelected, Filter: actionFilter, ResultsRevision: a.resultsSectionRevision, ToolbarRevision: a.toolbarRevision}
-	if actionState != a.actionSectionState {
-		a.actionSectionState = actionState
-		a.actionsSectionRevision++
+	if a.actions.actionPanel && a.actions.actionFilter != nil {
+		actionFilter = a.actions.actionFilter.State().Text
+		actionEntries = a.actions.currentActionPanelEntries()
+		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.language.translationSnapshot(), a.usePinYin())
 	}
 	selectedPreviewType := ""
-	if a.selected >= 0 && a.selected < len(a.results) {
-		preview := a.resolvePreview(a.results[a.selected].Preview)
+	if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
+		preview := a.remotePreview.resolvePreview(a.resultList.results[a.resultList.selected].Preview)
 		selectedPreviewType = preview.PreviewType
 	}
 	return viewSnapshot{
-		queryTabFeedback:      a.queryTabFeedback,
-		hint:                  a.query.QueryHint.Clone(),
-		queryHintActive:       a.queryHintEditorState.active,
-		editing:               a.editor.State(),
-		results:               a.results,
-		resultsRevision:       a.resultsSectionRevision,
-		resultsQueryID:        a.resultsQueryID,
-		queryComplete:         a.queryComplete,
-		queryLoading:          a.queryLoading,
-		selected:              a.selected,
-		hoveredResult:         a.hoveredResult,
-		resultScroll:          a.resultScroll,
-		resultScrollDetached:  a.resultScrollDetached,
-		layout:                a.selectedPreviewLayout(),
-		refinements:           a.refinements,
-		refinementsRevision:   a.refinementsSectionRevision,
-		refinementValues:      a.query.QueryRefinements,
-		refinementOpen:        a.refinementOpen,
+		queryTabFeedback:      a.querySession.queryTabFeedback,
+		hint:                  a.querySession.query.QueryHint.Clone(),
+		queryHintActive:       a.querySession.queryHintEditorState.active,
+		editing:               a.querySession.editor.State(),
+		results:               a.resultList.results,
+		resultsRevision:       a.resultList.resultsSectionRevision,
+		resultsQueryID:        a.resultList.resultsQueryID,
+		queryComplete:         a.querySession.queryComplete,
+		queryLoading:          a.querySession.queryLoading,
+		selected:              a.resultList.selected,
+		hoveredResult:         a.resultList.hoveredResult,
+		resultScroll:          a.resultList.resultScroll,
+		resultScrollDetached:  a.resultList.resultScrollDetached,
+		layout:                a.previews.selectedPreviewLayout(),
+		refinements:           a.resultList.refinements,
+		refinementsRevision:   a.resultList.refinementsSectionRevision,
+		refinementValues:      a.querySession.query.QueryRefinements,
+		refinementOpen:        a.resultList.refinementOpen,
 		completionHint:        completionHint,
 		toolbarMsg:            toolbarMsg,
 		glance:                glance,
 		hideGlanceIcon:        a.generalSettings.Data().HideGlanceIcon,
-		attentionUnreadCount:  a.attentionUnreadCount,
-		attentionVisible:      a.attentionEligibleLocked(),
-		form:                  snapshotFormLocked(a.form),
+		attentionUnreadCount:  a.attention.attentionUnreadCount,
+		attentionVisible:      a.attention.attentionEligibleLocked(),
+		form:                  snapshotFormLocked(a.forms.form),
 		tableEditor:           tableEditor,
-		requirementFormActive: a.requirementForm != nil && a.requirementForm.active,
+		requirementFormActive: a.requirements.requirementForm != nil && a.requirements.requirementForm.active,
 		queryFocused:          a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey),
 		queryEnabled:          a.queryCanFocus(),
-		chatFullscreen:        a.chatFullscreen,
-		webViewFullscreen:     a.webViewFullscreen,
-		terminalFullscreen:    a.terminalFullscreen,
-		actionPanel:           a.actionPanel,
-		actionPanelPurpose:    a.actionPanelPurpose,
-		aboutMenuError:        a.aboutMenuError,
-		actionSelected:        a.actionSelected,
+		chatFullscreen:        a.chat.chatFullscreen,
+		webViewFullscreen:     a.webView.webViewFullscreen,
+		terminalFullscreen:    a.terminal.terminalFullscreen,
+		actionPanel:           a.actions.actionPanel,
+		actionPanelPurpose:    a.actions.actionPanelPurpose,
+		aboutMenuError:        a.actions.aboutMenuError,
+		actionSelected:        a.actions.actionSelected,
 		actionFilter:          actionFilter,
 		actionEntries:         actionEntries,
 		actionIndices:         actionIndices,
-		actionsRevision:       a.actionsSectionRevision,
+		toolbarRevision:       a.toolbar.toolbarRevision,
 		show:                  a.show,
-		palette:               a.palette,
-		densityMetrics:        a.densityMetrics.normalized(),
+		palette:               a.appearance.palette,
+		densityMetrics:        a.appearance.densityMetrics.normalized(),
 		selectedPreviewType:   selectedPreviewType,
-		webViewNavigation:     a.webViewNavigation,
-		quickSelectMode:       a.quickSelectMode && a.actionPanel == false && a.form == nil && a.requirementForm == nil,
+		webViewNavigation:     a.webView.webViewNavigation,
+		quickSelectMode:       a.quickSelect.quickSelectMode && a.actions.actionPanel == false && a.forms.form == nil && a.requirements.requirementForm == nil,
 	}
 }
 
@@ -319,7 +305,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		nativePreviewOcclusion.X += contentBounds.X
 		nativePreviewOcclusion.Y += contentBounds.Y
 	}
-	a.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
+	a.nativeFile.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
 	return launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: frame.Size.Width, Height: frame.Size.Height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer, FooterOverlay: footerOverlay,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
@@ -351,10 +337,10 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 		return launcherview.WebViewTitleBar(launcherview.WebViewTitleBarProps{
 			Width: width, Platform: runtime.GOOS, AppIcon: a.appIcon, Theme: snapshot.palette.componentTheme(), Active: windowFocused,
 			URL: url, CanGoBack: snapshot.webViewNavigation.CanGoBack, CanGoForward: snapshot.webViewNavigation.CanGoForward,
-			GoBackLabel: a.translate("i18n:ui_action_webview_go_back"), RefreshLabel: a.translate("i18n:ui_action_webview_refresh"),
-			GoForwardLabel: a.translate("i18n:ui_action_webview_go_forward"), OpenInBrowserLabel: a.translate("i18n:ui_action_webview_open_in_browser"),
+			GoBackLabel: a.language.translate("i18n:ui_action_webview_go_back"), RefreshLabel: a.language.translate("i18n:ui_action_webview_refresh"),
+			GoForwardLabel: a.language.translate("i18n:ui_action_webview_go_forward"), OpenInBrowserLabel: a.language.translate("i18n:ui_action_webview_open_in_browser"),
 			OnTooltip: func(inside bool, text string, anchor woxui.Rect) {
-				a.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-titlebar-action", "update title bar tooltip", inside, text, anchor, "bottom", func() *woxui.Window { return a.window })
+				a.tooltips.setNativeHoverTooltip(&a.previews.previewTooltipRevision, "go-ui-titlebar-action", "update title bar tooltip", inside, text, anchor, "bottom", func() *woxui.Window { return a.window })
 			},
 			OnDrag: func() {
 				if a.window != nil {
@@ -380,9 +366,9 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 			OnOpenInBrowser: a.openWebViewInSystemBrowser,
 		})
 	}
-	preview := a.resolvePreview(snapshot.results[snapshot.selected].Preview)
+	preview := a.remotePreview.resolvePreview(snapshot.results[snapshot.selected].Preview)
 	if preview.PreviewType == "chat" {
-		if chatSnapshot, err := a.chatPreviewSnapshotFor(snapshot.results[snapshot.selected], preview); err == nil {
+		if chatSnapshot, err := a.chat.chatPreviewSnapshotFor(snapshot.results[snapshot.selected], preview); err == nil {
 			_, contentWidth := launcherview.TitleBarContentFrame(runtime.GOOS, true, width)
 			header := previewview.ChatHeader(a.chatHeaderProps(chatSnapshot, snapshot.palette, contentWidth, launcherview.SettingsTitleBarHeight, false, true))
 			return launcherview.SettingsTitleBar(launcherview.SettingsTitleBarProps{
@@ -536,14 +522,14 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	var statusTags []launcherview.LauncherStatusTag
 	if util.IsThirdPartyPluginsDisabled() {
 		statusTags = append(statusTags, launcherview.LauncherStatusTag{
-			ID: "launcher.plugin-mode", Label: a.translate("i18n:plugin_feedback_third_party_plugins_disabled_tag"),
-			Description: a.translate("i18n:plugin_feedback_third_party_plugins_disabled"),
+			ID: "launcher.plugin-mode", Label: a.language.translate("i18n:plugin_feedback_third_party_plugins_disabled_tag"),
+			Description: a.language.translate("i18n:plugin_feedback_third_party_plugins_disabled"),
 		})
 	}
 	if supervisor.DebugModeEnabled() {
 		statusTags = append(statusTags, launcherview.LauncherStatusTag{
-			ID: "launcher.debug-mode", Label: a.translate("i18n:plugin_feedback_debug_tag"),
-			Description: a.translate("i18n:plugin_feedback_debug_disable_subtitle"),
+			ID: "launcher.debug-mode", Label: a.language.translate("i18n:plugin_feedback_debug_tag"),
+			Description: a.language.translate("i18n:plugin_feedback_debug_disable_subtitle"),
 		})
 	}
 	statusWidth := float32(0)
@@ -570,8 +556,8 @@ func (a *App) buildHeader(snapshot viewSnapshot, width, height, queryLineHeight,
 	}
 	queryWidth = max(snapshot.densityMetrics.scaled(140), queryWidth)
 	_, headerPadding := launcherQueryChromeMetrics(queryBoxHeight, snapshot.palette.appPadding, snapshot.show.QueryBoxAtBottom)
-	if snapshot.hint == nil && a.queryHintEditorState.candidate != nil {
-		snapshot.hint = a.queryHintEditorState.candidate.Clone()
+	if snapshot.hint == nil && a.querySession.queryHintEditorState.candidate != nil {
+		snapshot.hint = a.querySession.queryHintEditorState.candidate.Clone()
 		snapshot.queryHintCandidate = true
 	}
 	var hintView woxwidget.Widget
@@ -645,15 +631,15 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure,
 	)
 	selectQueryAt := func(point woxui.Point, line bool) {
-		a.queryHintEditorState.allSelected = false
-		a.hideActionPanel()
-		a.deactivateRequirementForm()
-		a.clearTerminalSelection()
-		offset := a.queryOffsetAt(a.editor.State().Text, point, style, lineHeight)
+		a.querySession.queryHintEditorState.allSelected = false
+		a.actions.hideActionPanel()
+		a.requirements.deactivateRequirementForm()
+		a.terminal.clearTerminalSelection()
+		offset := a.queryOffsetAt(a.querySession.editor.State().Text, point, style, lineHeight)
 		if line {
-			a.editor.SelectLineAt(offset)
+			a.querySession.editor.SelectLineAt(offset)
 		} else {
-			a.editor.SelectWordAt(offset)
+			a.querySession.editor.SelectWordAt(offset)
 		}
 		_ = a.window.Invalidate()
 	}
@@ -675,26 +661,26 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			focusQuery()
 		},
 		OnSelectionStart: func(point woxui.Point, modifiers woxui.KeyModifiers) {
-			a.queryHintEditorState.allSelected = false
-			a.hideActionPanel()
-			a.deactivateRequirementForm()
-			a.clearTerminalSelection()
-			text := a.editor.State().Text
+			a.querySession.queryHintEditorState.allSelected = false
+			a.actions.hideActionPanel()
+			a.requirements.deactivateRequirementForm()
+			a.terminal.clearTerminalSelection()
+			text := a.querySession.editor.State().Text
 			focus := a.queryOffsetAt(text, point, style, lineHeight)
 			if modifiers&woxui.KeyModifierShift != 0 {
-				anchor := a.editor.State().Selection.Anchor
-				a.selectionAnchor = anchor
-				a.editor.SetSelection(anchor, focus)
+				anchor := a.querySession.editor.State().Selection.Anchor
+				a.querySession.selectionAnchor = anchor
+				a.querySession.editor.SetSelection(anchor, focus)
 			} else {
-				a.selectionAnchor = focus
-				a.editor.SetCaret(focus)
+				a.querySession.selectionAnchor = focus
+				a.querySession.editor.SetCaret(focus)
 			}
 			_ = a.window.Invalidate()
 		},
 		OnSelectionExtend: func(point woxui.Point) {
-			text := a.editor.State().Text
+			text := a.querySession.editor.State().Text
 			focus := a.queryOffsetAt(text, point, style, lineHeight)
-			a.editor.SetSelection(a.selectionAnchor, focus)
+			a.querySession.editor.SetSelection(a.querySession.selectionAnchor, focus)
 			_ = a.window.Invalidate()
 		},
 		OnSecondaryTapDown: func(point woxui.Point) {
@@ -706,18 +692,18 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		OnKey: a.onKey, OnTextInput: func(event woxui.TextInputEvent) bool { a.onTextInput(event); return true }, OnFocusChange: a.onQueryFocusChanged, OnSetValue: a.setQueryText,
 		OnTextInputState: func(state woxui.TextInputState) { _ = a.window.SetTextInputState(state) },
 		OnSelectAll: func() error {
-			if !a.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: queryPrimaryModifier(), Down: true}) {
-				a.editor.SelectAll()
+			if !a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("a"), Modifiers: queryPrimaryModifier(), Down: true}) {
+				a.querySession.editor.SelectAll()
 			}
 			_ = a.window.Invalidate()
 			return nil
 		},
 		OnCopy: func() error {
-			a.selectTouchedQueryBlocks()
-			if a.queryHintEditorState.allSelected {
-				return clipboard.WriteText(a.query.QueryText)
+			a.querySession.selectTouchedQueryBlocks()
+			if a.querySession.queryHintEditorState.allSelected {
+				return clipboard.WriteText(a.querySession.query.QueryText)
 			}
-			if selected := a.editor.SelectedText(); selected != "" {
+			if selected := a.querySession.editor.SelectedText(); selected != "" {
 				_ = clipboard.WriteText(selected)
 			}
 			return nil
@@ -766,7 +752,7 @@ func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.The
 	if a == nil || a.host == nil || !a.queryCanFocus() {
 		return
 	}
-	state := a.editor.State()
+	state := a.querySession.editor.State()
 	en := computeQueryMenuEnablement(state, true)
 	owner := launcherview.LauncherQueryInputKey
 	var token uint64
@@ -778,7 +764,7 @@ func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.The
 		CanCut: en.canCut, CanCopy: en.canCopy, CanPaste: en.canPaste, CanSelectAll: en.canSelectAll,
 		OnAction: func(action woxcomponent.TextEditContextAction) {
 			clear()
-			live := computeQueryMenuEnablement(a.editor.State(), a.queryCanFocus())
+			live := computeQueryMenuEnablement(a.querySession.editor.State(), a.queryCanFocus())
 			switch action {
 			case woxcomponent.TextEditContextCut:
 				if !live.canCut {
@@ -789,7 +775,7 @@ func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.The
 				if !live.canCopy {
 					return
 				}
-				if selected := a.editor.SelectedText(); selected != "" {
+				if selected := a.querySession.editor.SelectedText(); selected != "" {
 					_ = clipboard.WriteText(selected)
 				}
 			case woxcomponent.TextEditContextPaste:
@@ -801,16 +787,16 @@ func (a *App) openQueryContextMenu(windowPos woxui.Point, theme woxcomponent.The
 				if !live.canSelectAll {
 					return
 				}
-				a.selectEntireQuery()
+				a.querySession.selectEntireQuery()
 				a.refreshQueryContextMenuIfStale(theme)
 				_ = a.window.Invalidate()
 			}
 		},
 	})
 	token = a.host.SetOverlay(owner, woxcomponent.PlaceTextEditContextMenu(a.host.FrameSize(), windowPos, string(owner), menu, clear))
-	a.queryMenuAnchor = windowPos
-	a.queryMenuEnablement = en
-	a.queryMenuTheme = theme
+	a.querySession.queryMenuAnchor = windowPos
+	a.querySession.queryMenuEnablement = en
+	a.querySession.queryMenuTheme = theme
 }
 
 // refreshQueryContextMenuIfStale rebuilds the query menu when selection or focus enablement changed.
@@ -823,37 +809,37 @@ func (a *App) refreshQueryContextMenuIfStale(theme woxcomponent.Theme) {
 		return
 	}
 	if theme == (woxcomponent.Theme{}) {
-		theme = a.queryMenuTheme
+		theme = a.querySession.queryMenuTheme
 	}
-	next := computeQueryMenuEnablement(a.editor.State(), true)
-	if next == a.queryMenuEnablement && theme == a.queryMenuTheme {
+	next := computeQueryMenuEnablement(a.querySession.editor.State(), true)
+	if next == a.querySession.queryMenuEnablement && theme == a.querySession.queryMenuTheme {
 		return
 	}
-	a.openQueryContextMenu(a.queryMenuAnchor, theme)
+	a.openQueryContextMenu(a.querySession.queryMenuAnchor, theme)
 }
 
 func (a *App) queryViewClipboardCut() error {
-	a.selectTouchedQueryBlocks()
-	if a != nil && a.queryHintEditorState.allSelected {
-		if err := clipboard.WriteText(a.query.QueryText); err != nil {
+	a.querySession.selectTouchedQueryBlocks()
+	if a != nil && a.querySession.queryHintEditorState.allSelected {
+		if err := clipboard.WriteText(a.querySession.query.QueryText); err != nil {
 			return err
 		}
-		a.replaceWholeQueryHint("")
+		a.querySession.replaceWholeQueryHint("")
 		return nil
 	}
 	if a == nil || !a.queryCanFocus() {
 		return nil
 	}
-	previousText := a.editor.State().Text
-	selected := a.editor.SelectedText()
+	previousText := a.querySession.editor.State().Text
+	selected := a.querySession.editor.SelectedText()
 	if selected != "" {
 		_ = clipboard.WriteText(selected)
-		if a.editor.DeleteSelection() {
-			a.applyQueryTextChangeLocked(a.editor.State().Text)
+		if a.querySession.editor.DeleteSelection() {
+			a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 		}
 	}
 	_ = a.window.Invalidate()
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after cut: %v", err)
 	}
@@ -862,7 +848,7 @@ func (a *App) queryViewClipboardCut() error {
 }
 
 func (a *App) queryViewClipboardPaste() error {
-	a.selectTouchedQueryBlocks()
+	a.querySession.selectTouchedQueryBlocks()
 	if a == nil || !a.queryCanFocus() {
 		return nil
 	}
@@ -871,16 +857,16 @@ func (a *App) queryViewClipboardPaste() error {
 	if err != nil || text == "" {
 		return nil
 	}
-	if a.queryHintEditorState.allSelected {
-		a.replaceWholeQueryHint(text)
+	if a.querySession.queryHintEditorState.allSelected {
+		a.querySession.replaceWholeQueryHint(text)
 		return nil
 	}
-	previousText := a.editor.State().Text
-	if a.editor.InsertTextSeparate(text) {
-		a.applyQueryTextChangeLocked(a.editor.State().Text)
+	previousText := a.querySession.editor.State().Text
+	if a.querySession.editor.InsertTextSeparate(text) {
+		a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
 	}
 	_ = a.window.Invalidate()
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after paste: %v", err)
 	}
@@ -892,27 +878,27 @@ func (a *App) queryViewClipboardPaste() error {
 // Replacing the launcher query must drop the previous result's Action Panel. Typing does that
 // when the query box takes focus; SetValue does not move focus, so close it here as well.
 func (a *App) setQueryText(value string) error {
-	a.deactivateRequirementForm()
-	a.hideActionPanel()
-	previousText := a.editor.State().Text
+	a.requirements.deactivateRequirementForm()
+	a.actions.hideActionPanel()
+	previousText := a.querySession.editor.State().Text
 	value = normalizeQueryNewlines(value)
-	a.rememberQueryHint()
-	a.editor.SetText(value, false)
+	a.querySession.rememberQueryHint()
+	a.querySession.editor.SetText(value, false)
 	a.applyQueryTextChangeLocked(value)
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	_ = a.window.Invalidate()
 	a.resizeLauncherForQueryLineChange(previousText)
 	return a.sendCurrentQuery()
 }
 
 func (a *App) placeQueryCaret(point woxui.Point, style woxui.TextStyle, lineHeight float32) {
-	a.queryHintEditorState.allSelected = false
-	a.hideActionPanel()
-	a.deactivateRequirementForm()
-	a.clearTerminalSelection()
-	text := a.editor.State().Text
+	a.querySession.queryHintEditorState.allSelected = false
+	a.actions.hideActionPanel()
+	a.requirements.deactivateRequirementForm()
+	a.terminal.clearTerminalSelection()
+	text := a.querySession.editor.State().Text
 	offset := a.queryOffsetAt(text, point, style, lineHeight)
-	a.editor.SetCaret(offset)
+	a.querySession.editor.SetCaret(offset)
 	_ = a.window.Invalidate()
 }
 
@@ -1010,8 +996,8 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 	if ratio <= 0 {
 		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
-		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.resolvePreview(result.Preview).PreviewType != "chat" && !launcherPreviewTitleBarVisible(snapshot) {
-			label := a.translate("i18n:ui_close")
+		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.remotePreview.resolvePreview(result.Preview).PreviewType != "chat" && !launcherPreviewTitleBarVisible(snapshot) {
+			label := a.language.translate("i18n:ui_close")
 			if strings.TrimSpace(label) == "" || label == "i18n:ui_close" {
 				label = "Close"
 			}
@@ -1047,7 +1033,7 @@ func wrapPreviewOnlyResults(snapshot viewSnapshot, preview woxwidget.Widget) wox
 }
 
 func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
-	resolved := a.resolvePreview(result.Preview)
+	resolved := a.remotePreview.resolvePreview(result.Preview)
 	showChatHeader := resolved.PreviewType != "chat" || !launcherPreviewTitleBarVisible(snapshot)
 	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader)
 	// Chat is already prepared above and owns retained scrolling/message state.
@@ -1056,37 +1042,37 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
 		return child
 	}
-	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.translationsRevision.Load(), a.imagesRevision.Load()}
+	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load()}
 	switch resolved.PreviewType {
 	case "query_requirement_settings":
-		if a.requirementForm != nil {
-			state = append(state, snapshotRequirementFormLocked(a.requirementForm, a.aiSettings.ModelsError()))
+		if a.requirements.requirementForm != nil {
+			state = append(state, snapshotRequirementFormLocked(a.requirements.requirementForm, a.aiSettings.ModelsError()))
 		}
 	case "trigger_keyword_conflict":
-		if a.triggerConflict != nil {
-			state = append(state, snapshotTriggerConflictPreviewLocked(a.triggerConflict))
+		if a.conflicts.triggerConflict != nil {
+			state = append(state, snapshotTriggerConflictPreviewLocked(a.conflicts.triggerConflict))
 		}
 	case "terminal":
-		state = append(state, snapshotTerminalPreview(a.terminalPreview))
+		state = append(state, snapshotTerminalPreview(a.terminal.terminalPreview))
 	case "dictation_history":
-		if a.dictationAudio != nil {
-			state = append(state, a.dictationAudio.revision, a.dictationAudio.path, a.dictationAudio.snapshot)
+		if a.dictation.dictationAudio != nil {
+			state = append(state, a.dictation.dictationAudio.revision, a.dictation.dictationAudio.path, a.dictation.dictationAudio.snapshot)
 		}
-		if a.dictationCompare != nil {
-			state = append(state, a.dictationCompare.revision, a.dictationCompare.sessionKey, a.dictationCompare.busy, a.dictationCompare.models)
+		if a.dictation.dictationCompare != nil {
+			state = append(state, a.dictation.dictationCompare.revision, a.dictation.dictationCompare.sessionKey, a.dictation.dictationCompare.busy, a.dictation.dictationCompare.models)
 		}
 	case "file":
-		filePreview := a.filePreviewFor(resolved.PreviewData)
+		filePreview := a.filePreview.filePreviewFor(resolved.PreviewData)
 		state = append(state, filePreview)
 		// Native surfaces report initialization failures after paint; include their controller state so the retained section can replace its placeholder.
 		if filePreview.Kind == "native_file" {
-			state = append(state, a.nativeFilePreviewPath, a.nativeFilePreviewPendingPath, a.nativeFilePreviewManualPath, a.nativeFilePreviewError, a.nativeFilePreviewGeneration)
+			state = append(state, a.nativeFile.nativeFilePreviewPath, a.nativeFile.nativeFilePreviewPendingPath, a.nativeFile.nativeFilePreviewManualPath, a.nativeFile.nativeFilePreviewError, a.nativeFile.nativeFilePreviewGeneration)
 		}
 		if filePreview.Kind == "webview" {
-			state = append(state, a.webViewPreviewData, a.webViewPreviewError)
+			state = append(state, a.webView.webViewPreviewData, a.webView.webViewPreviewError)
 		}
 	case "webview":
-		state = append(state, a.webViewPreviewData, a.webViewPreviewError)
+		state = append(state, a.webView.webViewPreviewData, a.webView.webViewPreviewError)
 	}
 	return launcherPreparedSection("launcher-preview-section", "preview", launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height, Child: child})
 }
@@ -1138,7 +1124,7 @@ func launcherListPadding(palette uiPalette, show showAppParams) woxwidget.Insets
 }
 
 func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
-	a.pruneRetainedResultIcons(snapshot.results, snapshot.resultsRevision)
+	a.resultList.pruneRetainedResultIcons(snapshot.results, snapshot.resultsRevision)
 	if snapshot.layout.GridLayout != nil {
 		return a.buildGridResults(snapshot, width, height, imageScale, underlayHeight)
 	}
@@ -1153,8 +1139,8 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	tailLayoutWidth := max(float32(0), width-containerPadding.Left-containerPadding.Right-snapshot.palette.resultItemPadding.Left-snapshot.palette.resultItemPadding.Right)
 	contentHeight := listResultsContentHeight(snapshot.results, 0, 0, rowHeight, groupHeight, resultRowGap)
 	scroll := resolveResultScroll(snapshot.results, nil, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
-	a.rememberResolvedResultScroll(snapshot, scroll)
-	a.rememberQuickSelectViewport(quickSelectViewport{
+	a.resultList.rememberResolvedResultScroll(snapshot, scroll)
+	a.quickSelect.rememberQuickSelectViewport(quickSelectViewport{
 		offset: scroll.offset, height: height, topPadding: 0, rowHeight: rowHeight, groupHeight: groupHeight, gap: resultRowGap,
 	})
 	offset := scroll.offset
@@ -1163,7 +1149,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 	startOffset := listResultsPrefixHeight(snapshot.results, start, rowHeight, groupHeight, resultRowGap)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
-		quickSelectVisible = a.quickSelectVisibleLocked()
+		quickSelectVisible = a.quickSelect.quickSelectVisibleLocked()
 	}
 	items := make([]launcherview.LauncherResultItem, 0, end-start)
 	for index := start; index < end; index++ {
@@ -1185,15 +1171,15 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		if index == snapshot.selected && result.Preview.PreviewData != "" && !launcherPreviewVisible(snapshot.layout, result.Preview) {
 			color := snapshot.palette.selectedTail
 			previewIcon = a.imageForTint(fromCoreImage(icons.Get(icons.ControlPreviewOpen)), &color, physicalImageSize(int(densityMetrics.scaled(20)), imageScale))
-			previewTooltip = strings.ReplaceAll(a.translate("i18n:ui_preview_open_tooltip"), "{hotkey}", strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+"))
+			previewTooltip = strings.ReplaceAll(a.language.translate("i18n:ui_preview_open_tooltip"), "{hotkey}", strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+"))
 		}
 		items = append(items, launcherview.LauncherResultItem{
 			ID: result.ID, Title: result.Title, Subtitle: result.SubTitle, Selected: index == snapshot.selected, Hovered: index == snapshot.hoveredResult,
 			Icon: icon, IconShowContainer: result.IconShowContainer, Loading: loading, TitleTags: fromCoreResultTitleTags(result.TitleTags), Tails: tails, TailWidth: tailWidth, TailHeight: tailHeight,
 			QuickSelectNumber: quickSelectNumberFor(snapshot.results, quickSelectVisible, index),
 			PreviewIcon:       previewIcon, PreviewTooltip: previewTooltip, OnOpenPreview: func() { a.toggleSelectedPreview() },
-			OnHover: func(inside bool) { a.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
-			OnDragStart: func() { a.startResultDrag(index) }, OnTooltip: a.setResultTailTooltip,
+			OnHover: func(inside bool) { a.resultList.hoverResult(index, inside) }, OnSelect: func() { a.selectResult(index) }, OnSecondaryTapDown: func() { a.openResultActionPanel(index) }, OnActivate: func() { a.activateResult(index) },
+			OnDragStart: func() { a.resultDrag.startResultDrag(index) }, OnTooltip: a.setResultTailTooltip,
 		})
 	}
 	return launcherview.LauncherResultsView(launcherview.LauncherResultsProps{
@@ -1201,7 +1187,7 @@ func (a *App) buildResults(snapshot viewSnapshot, width, height, imageScale, und
 		ContainerPadding: containerPadding, ItemPadding: rowPadding, ItemRadius: snapshot.palette.resultItemRadius,
 		TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail, Theme: snapshot.palette.componentTheme(), DensityScale: densityMetrics.scale, Window: a.window, Items: items,
 		Complete: snapshot.queryComplete, ScrollDetached: snapshot.resultScrollDetached,
-		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
+		OnScroll: func(delta float32) { a.resultList.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
 
@@ -1276,7 +1262,7 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 
 // setResultTailTooltip anchors Flutter-style hover help for result tails to the launcher window.
 func (a *App) setResultTailTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.setNativeHoverTooltip(&a.resultTailTooltipRevision, "go-ui-result-tail", "update result tail tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
+	a.tooltips.setNativeHoverTooltip(&a.resultList.resultTailTooltipRevision, "go-ui-result-tail", "update result tail tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 // listItemRowHeight returns the painted height of one list row.
@@ -1403,7 +1389,7 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 }
 
 // rememberResolvedResultScroll makes consecutive key moves start from the viewport that was actually rendered.
-func (a *App) rememberResolvedResultScroll(snapshot viewSnapshot, scroll scrollController) {
+func (a *resultController) rememberResolvedResultScroll(snapshot viewSnapshot, scroll scrollController) {
 	if scroll == snapshot.resultScroll {
 		return
 	}
@@ -1413,7 +1399,7 @@ func (a *App) rememberResolvedResultScroll(snapshot viewSnapshot, scroll scrollC
 }
 
 // scrollResultsFrom detaches pointer scrolling from selection-following until selection changes.
-func (a *App) scrollResultsFrom(snapshotDetached bool, rendered scrollController, delta float32) {
+func (a *resultController) scrollResultsFrom(snapshotDetached bool, rendered scrollController, delta float32) {
 	base := a.resultScroll
 	if !snapshotDetached && !a.resultScrollDetached {
 		base = rendered
@@ -1445,7 +1431,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	actions := make([]launcherview.LauncherToolbarAction, 0)
 	entries := unifiedActionPanelEntriesWithHide(snapshot.results, snapshot.selected, snapshot.toolbarMsg, a.canHideWebViewPage())
 	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
-		label := a.translate(entry.Name)
+		label := a.language.translate(entry.Name)
 		if strings.TrimSpace(label) == "" {
 			continue
 		}
@@ -1456,8 +1442,8 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	}
 	if len(entries) > 0 {
 		actions = append(actions, launcherview.LauncherToolbarAction{
-			ID: "result-toolbar-more", Label: a.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(a.actionPanelHotkey()),
-			Active: snapshot.actionPanel && snapshot.actionPanelPurpose != actionPanelPurposeAbout, OnTap: a.toggleActionPanel,
+			ID: "result-toolbar-more", Label: a.language.translate("i18n:toolbar_more_actions"), HotkeyLabels: formatHotkeyLabels(a.actionPanelHotkey()),
+			Active: snapshot.actionPanel && snapshot.actionPanelPurpose != actionPanelPurposeAbout, OnTap: a.actions.toggleActionPanel,
 		})
 	}
 	var menuIcon *woxui.Image
@@ -1469,7 +1455,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 		Width: width, Height: height, Padding: snapshot.palette.toolbarPadding, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
 		Label: leftLabel, Icon: leftIcon, Progress: progress, HasProgress: hasProgress, Indeterminate: indeterminate, Actions: actions,
 		MenuVisible: showAboutMenu, MenuActive: snapshot.actionPanel && snapshot.actionPanelPurpose == actionPanelPurposeAbout,
-		MenuLabel: a.translate("i18n:toolbar_about_menu"), MenuIcon: menuIcon,
+		MenuLabel: a.language.translate("i18n:toolbar_about_menu"), MenuIcon: menuIcon,
 		OnMenuTap: a.toggleAboutMenu, OnMenuHoverAt: a.onAboutMenuHover,
 		OnDragStart: func() {
 			if err := a.window.StartDragging(); err != nil {

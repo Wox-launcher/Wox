@@ -68,10 +68,14 @@ func TestSettingsDataFromContract(t *testing.T) {
 }
 
 func TestLocalizedLanguageSettingIncludesDescription(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_lang":      "语言",
-		"ui_lang_tips": "Wox 使用的界面语言",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_lang":      "语言",
+				"ui_lang_tips": "Wox 使用的界面语言",
+			},
+		},
+	})
 	item := app.localizedSettingItem(settingItem{key: "LangCode", title: "Language", description: "Language used by Wox"})
 
 	if item.title != "语言" || item.description != "Wox 使用的界面语言" {
@@ -80,11 +84,15 @@ func TestLocalizedLanguageSettingIncludesDescription(t *testing.T) {
 }
 
 func TestLocalizedAppFontFamilySystemDefault(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_app_font_family":                "字体",
-		"ui_app_font_family_tips":           "为 Wox 界面选择系统字体",
-		"ui_app_font_family_system_default": "跟随系统默认",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_app_font_family":                "字体",
+				"ui_app_font_family_tips":           "为 Wox 界面选择系统字体",
+				"ui_app_font_family_system_default": "跟随系统默认",
+			},
+		},
+	})
 	item := app.localizedSettingItem(systemFontSettingItem(settingsSnapshot{
 		appearance: appearanceSettingsSnapshot{FontFamilies: []string{"Arial", "Bahnschrift"}},
 	}))
@@ -107,24 +115,28 @@ func TestLocalizedAppFontFamilySystemDefault(t *testing.T) {
 }
 
 func TestLocalizedDebugSettings(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_cloud_sync_server_url":                             "同步服务地址",
-		"ui_cloud_sync_server_url_tips":                        "切换后退出当前同步账户",
-		"ui_cloud_sync_server_url_production":                  "产线",
-		"ui_cloud_sync_server_url_local":                       "本地",
-		"ui_debug_show_score_tail":                             "显示分数尾标",
-		"ui_debug_show_score_tail_tips":                        "显示排序分数",
-		"ui_debug_show_performance_tail":                       "显示性能尾标",
-		"ui_debug_show_performance_tail_tips":                  "显示查询耗时",
-		"ui_debug_show_performance_tail_batch":                 "批次",
-		"ui_debug_show_performance_tail_batch_tips":            "显示批次",
-		"ui_debug_show_performance_tail_plugin_query":          "插件执行时间",
-		"ui_debug_show_performance_tail_plugin_query_tips":     "显示插件耗时",
-		"ui_debug_show_performance_tail_backend_prepared":      "后端准备发送时间",
-		"ui_debug_show_performance_tail_backend_prepared_tips": "显示后端耗时",
-		"ui_debug_show_performance_tail_ui_received":           "UI 收到结果时间",
-		"ui_debug_show_performance_tail_ui_received_tips":      "显示 UI 接收耗时",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_cloud_sync_server_url":                             "同步服务地址",
+				"ui_cloud_sync_server_url_tips":                        "切换后退出当前同步账户",
+				"ui_cloud_sync_server_url_production":                  "产线",
+				"ui_cloud_sync_server_url_local":                       "本地",
+				"ui_debug_show_score_tail":                             "显示分数尾标",
+				"ui_debug_show_score_tail_tips":                        "显示排序分数",
+				"ui_debug_show_performance_tail":                       "显示性能尾标",
+				"ui_debug_show_performance_tail_tips":                  "显示查询耗时",
+				"ui_debug_show_performance_tail_batch":                 "批次",
+				"ui_debug_show_performance_tail_batch_tips":            "显示批次",
+				"ui_debug_show_performance_tail_plugin_query":          "插件执行时间",
+				"ui_debug_show_performance_tail_plugin_query_tips":     "显示插件耗时",
+				"ui_debug_show_performance_tail_backend_prepared":      "后端准备发送时间",
+				"ui_debug_show_performance_tail_backend_prepared_tips": "显示后端耗时",
+				"ui_debug_show_performance_tail_ui_received":           "UI 收到结果时间",
+				"ui_debug_show_performance_tail_ui_received_tips":      "显示 UI 接收耗时",
+			},
+		},
+	})
 	items := settingItems("debug", settingsData{})
 	wantTitles := []string{"同步服务地址", "显示分数尾标", "显示性能尾标", "批次", "插件执行时间", "后端准备发送时间", "UI 收到结果时间"}
 	wantDescriptions := []string{"切换后退出当前同步账户", "显示排序分数", "显示查询耗时", "显示批次", "显示插件耗时", "显示后端耗时", "显示 UI 接收耗时"}

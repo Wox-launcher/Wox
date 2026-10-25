@@ -25,11 +25,11 @@ type refreshResultSnapshot struct {
 
 // beginRefreshResultHoldLocked keeps the current list up until this refresh can
 // replace it without shrinking the window, or until the hold expires.
-func (a *App) beginRefreshResultHoldLocked() {
+func (a *queryController) beginRefreshResultHoldLocked() {
 	a.releaseRefreshResultHoldLocked()
 	// A typed-query clear still in flight would blank the list this refresh is keeping.
 	a.resetQueryTransitionLocked()
-	if !a.visible || len(a.results) == 0 {
+	if !a.visible() || len(a.resultList.results) == 0 {
 		return
 	}
 	if a.query.QueryText == "" && len(a.query.QueryScope.Plugins) == 0 {
@@ -48,15 +48,15 @@ func (a *App) beginRefreshResultHoldLocked() {
 
 // holdRefreshResultsLocked buffers only the latest partial snapshot that would
 // shrink the result area; group headers and grid rows use the actual layout geometry.
-func (a *App) holdRefreshResultsLocked(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64, complete bool) bool {
-	if complete || queryID == "" || a.queryRefreshHoldQueryID != queryID || a.resultsQueryID == queryID {
+func (a *queryController) holdRefreshResultsLocked(queryID string, results []queryResult, layout *queryLayout, refinements *[]queryRefinement, context *queryContext, queryStartTimestamp int64, complete bool) bool {
+	if complete || queryID == "" || a.queryRefreshHoldQueryID != queryID || a.resultList.resultsQueryID == queryID {
 		return false
 	}
-	nextLayout := a.layout
+	nextLayout := a.resultList.layout
 	if layout != nil {
 		nextLayout = *layout
 	}
-	if a.resultAreaHeightLocked(results, nextLayout) >= a.resultAreaHeightLocked(a.results, a.layout) {
+	if a.resultAreaHeightLocked(results, nextLayout) >= a.resultAreaHeightLocked(a.resultList.results, a.resultList.layout) {
 		return false
 	}
 	a.queryRefreshSnapshot = &refreshResultSnapshot{
@@ -67,7 +67,7 @@ func (a *App) holdRefreshResultsLocked(queryID string, results []queryResult, la
 }
 
 // releaseRefreshResultHoldLocked drops the hold once a snapshot is safe to paint.
-func (a *App) releaseRefreshResultHoldLocked() {
+func (a *queryController) releaseRefreshResultHoldLocked() {
 	if a.queryRefreshHoldTimer != nil {
 		a.queryRefreshHoldTimer.Stop()
 		a.queryRefreshHoldTimer = nil
@@ -78,13 +78,13 @@ func (a *App) releaseRefreshResultHoldLocked() {
 
 // expireRefreshResultHold publishes the newest buffered snapshot at the deadline.
 // Only a refresh that has not received any snapshot falls back to the normal waiting state.
-func (a *App) expireRefreshResultHold(queryID string) {
+func (a *queryController) expireRefreshResultHold(queryID string) {
 	if a.queryRefreshHoldQueryID != queryID {
 		return
 	}
 	snapshot := a.queryRefreshSnapshot
 	a.releaseRefreshResultHoldLocked()
-	if a.destroyed.Load() || a.query.QueryID != queryID {
+	if a.isDestroyed() || a.query.QueryID != queryID {
 		return
 	}
 	if snapshot != nil {

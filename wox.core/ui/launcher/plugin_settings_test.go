@@ -220,10 +220,10 @@ func (h runtimeFilterHost) LoadPlugin(context.Context, plugin.Metadata, string) 
 func (h runtimeFilterHost) UnloadPlugin(context.Context, plugin.Metadata) {}
 
 func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
-	app := &App{
+	app := bindTestApp(&App{
 		pluginSettings:  newPluginSettingsController(CommonDeps{}),
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
-	}
+	})
 	app.pluginSettings.SetFilters(pluginFilterState{
 		enabledStatus: pluginFilterDisabled,
 		pluginType:    pluginFilterThirdParty,
@@ -360,7 +360,10 @@ func TestValidatePluginTriggerKeywordTableRowAllowsGlobalAndRejectsInstalledConf
 		{ID: "other", Name: "Clipboard", TriggerKeywords: []string{"cb"}},
 	})
 	plugins.SetForm(&pluginSettingsFormState{pluginID: "current"})
-	a := &App{pluginSettings: plugins, translations: map[string]string{"ui_plugin_trigger_keyword_duplicate_in_other_plugin": "%s conflict"}}
+	a := bindTestApp(&App{
+		pluginSettings: plugins,
+		language:       languageCatalog{translations: map[string]string{"ui_plugin_trigger_keyword_duplicate_in_other_plugin": "%s conflict"}},
+	})
 	state := &formTableEditorState{
 		definition: pluginTriggerKeywordDefinition(),
 		rowForm:    &formFieldsState{values: map[string]string{"keyword": " cb "}},
@@ -400,7 +403,11 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 	deps := CommonDeps{}
 	plugins := newPluginSettingsController(deps)
 	plugins.SetForm(&pluginSettingsFormState{formFieldsState: fields})
-	app := &App{settingTab: "plugins", pluginSettings: plugins, hotkeySettings: newHotkeySettingsController(deps)}
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{settingTab: "plugins"},
+		pluginSettings: plugins,
+		hotkeySettings: newHotkeySettingsController(deps),
+	})
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 			woxwidget.Focusable{Key: "plugin-settings-field-0", OnKey: app.onPluginSettingsKey, Child: woxwidget.Container{Width: 100, Height: 30}},
@@ -414,7 +421,7 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 		}}
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsHost = host
+	app.settingsWindow.settingsHost = host
 	displayList := woxui.DisplayList{}
 	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 120}, PixelSize: woxui.PixelSize{Width: 100, Height: 120}, Scale: 1})
 	host.RequestFocus("plugin-settings-field-0")
@@ -449,7 +456,7 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":         "Command help",
 		"ui_plugin_command_name_column":  "Name",
 		"ui_plugin_command_desc_column":  "Description",
@@ -512,7 +519,7 @@ func TestPluginInstalledToolsUseReadonlyTable(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_tools_tip":            "Tool help",
 		"ui_plugin_tool_name_column":     "Name",
 		"ui_plugin_tool_desc_column":     "Description",
@@ -562,7 +569,7 @@ func TestPluginOmitsToolsSectionWhenEmpty(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":         "Settings",
 		"ui_plugin_tab_trigger_keywords": "Keywords",
 		"ui_plugin_tab_privacy":          "Privacy",
@@ -609,7 +616,7 @@ func TestPluginInstalledTablesOfferQueryTest(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":           "Command help",
 		"ui_plugin_command_name_column":    "Name",
 		"ui_plugin_command_desc_column":    "Description",
@@ -665,7 +672,7 @@ func TestPluginGlobalTriggerKeywordOmitsQueryTest(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_tab_trigger_keywords":   "Keywords",
 		"ui_plugin_tab_settings":           "Settings",
 		"ui_plugin_tab_description":        "Description",
@@ -707,7 +714,7 @@ func TestPluginStoreTablesOmitQueryTest(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":            "Command help",
 		"ui_plugin_command_name_column":     "Name",
 		"ui_plugin_command_desc_column":     "Description",
@@ -1097,7 +1104,7 @@ func formErrors(form *pluginSettingsFormState) map[string]string {
 func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	a.language.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
 	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}}}
 	a.pluginSettings.SetForm(&pluginSettingsFormState{
 		pluginID:        "yt",
@@ -1124,7 +1131,7 @@ func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
 func TestDeactivatePluginFormShowsNotEmptyError(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	a.language.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
 	definition := formDefinition{Type: "textbox", Value: formDefinitionValue{Key: "api_key", Validators: []formValidator{{Type: "not_empty"}}}}
 	a.pluginSettings.SetForm(&pluginSettingsFormState{
 		pluginID:        "yt",
@@ -1160,7 +1167,7 @@ func TestPluginDetailRendersRequiredSettingErrorUnderField(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":         "Settings",
 		"ui_plugin_tab_commands":         "Commands",
 		"ui_plugin_tab_description":      "Description",
@@ -1220,7 +1227,7 @@ func TestPluginDetailShowsNativeSettingsButton(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":                "Settings",
 		"ui_plugin_tab_commands":                "Commands",
 		"ui_plugin_tab_description":             "Description",
@@ -1265,7 +1272,7 @@ func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 func TestPluginSelectionRefreshPreservesUnsavedField(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
+	a.language.translations = map[string]string{"ui_validator_value_can_not_be_empty": "Value cannot be empty"}
 	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
 		ID: "app", Name: "Apps",
 		SettingDefinitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{
@@ -1325,7 +1332,7 @@ func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
 func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.translations = map[string]string{
+	a.language.translations = map[string]string{
 		"ui_ai_model_selector_no_models_title":  "No AI provider configured",
 		"ui_ai_model_selector_open_ai_settings": "Open AI settings",
 		"ui_ai_model_selector_no_models_desc":   "Configure a provider first.",
@@ -1399,7 +1406,7 @@ func TestPreparePluginSettingSaveValuesTracksDictationDerivedFields(t *testing.T
 func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.translations = map[string]string{"ui_plugin_website": "Website"}
+	a.language.translations = map[string]string{"ui_plugin_website": "Website"}
 	for _, test := range []struct{ website, label string }{
 		{"https://github.com/example/plugin", "GitHub"},
 		{"https://gist.github.com/example/123", "GitHub"},

@@ -47,15 +47,17 @@ func skillAddTestApp(t *testing.T, services *skillAddTestServices) *App {
 	deps := CommonDeps{}
 	ai := newAISettingsController(deps)
 	ai.SetForm(&aiForm)
-	return &App{
-		settingsOpen:   true,
-		settingTab:     "ai",
+	return bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "ai",
+		},
 		aiSettings:     ai,
 		pluginSettings: newPluginSettingsController(deps),
 		hotkeySettings: newHotkeySettingsController(deps),
 		services:       services,
 		lifecycleCtx:   context.Background(),
-	}
+	})
 }
 
 func waitForSettingsUpdate(t *testing.T, services *skillAddTestServices, key string) {
@@ -75,7 +77,7 @@ func TestOpenFormTableSkillAddDialog(t *testing.T) {
 	app.openAISettingsTable(0)
 	app.openFormTableSkillAdd()
 
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state == nil || state.skillAdd == nil {
 		t.Fatal("add-skill dialog did not open over the skills table")
 	}
@@ -96,10 +98,10 @@ func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 	app.openFormTableSkillAdd()
 
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), settingsPalette(), 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.settingsTableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsHost = host
+	app.settingsWindow.settingsHost = host
 	displayList := woxui.DisplayList{}
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
 	host.Frame(&displayList, frame)
@@ -120,7 +122,7 @@ func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 	app.openFormTableSkillAdd()
 	app.switchFormTableSkillAddTab(1)
 
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state.skillAdd.tab != 1 {
 		t.Fatalf("tab = %d, want remote", state.skillAdd.tab)
 	}
@@ -129,8 +131,8 @@ func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 	}
 
 	app.switchFormTableSkillAddTab(0)
-	if app.settingsTableEditor.skillAdd.tab != 0 {
-		t.Fatalf("switching back to local failed, tab = %d", app.settingsTableEditor.skillAdd.tab)
+	if app.settingsWindow.settingsTableEditor.skillAdd.tab != 0 {
+		t.Fatalf("switching back to local failed, tab = %d", app.settingsWindow.settingsTableEditor.skillAdd.tab)
 	}
 }
 
@@ -142,7 +144,7 @@ func TestAddLocalSkillFromDialogAppendsAndSaves(t *testing.T) {
 	app.setFormTableSkillAddText(0, "/tmp/my-skill")
 	app.addFormTableSkill()
 
-	if app.settingsTableEditor != nil {
+	if app.settingsWindow.settingsTableEditor != nil {
 		t.Fatal("successful local skill add should close the dialog")
 	}
 	waitForSettingsUpdate(t, services, "AISkills")
@@ -157,7 +159,7 @@ func TestAddSkillDialogValidatesLocalPath(t *testing.T) {
 	app.openFormTableSkillAdd()
 	app.addFormTableSkill()
 
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state == nil || state.skillAdd == nil {
 		t.Fatal("empty path must keep the dialog open")
 	}
@@ -182,7 +184,7 @@ func TestAddRemoteSkillFromDialogClonesAndSaves(t *testing.T) {
 	app.addFormTableSkill()
 
 	waitForSettingsUpdate(t, services, "AISkills")
-	if app.settingsTableEditor != nil {
+	if app.settingsWindow.settingsTableEditor != nil {
 		t.Fatal("successful remote skill clone should close the dialog")
 	}
 	value := services.updated["AISkills"]
@@ -202,7 +204,7 @@ func TestAddRemoteSkillFromDialogKeepsOpenOnCloneError(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		state := app.settingsTableEditor
+		state := app.settingsWindow.settingsTableEditor
 		if state != nil && state.skillAdd != nil && !state.skillAdd.cloning && state.skillAdd.error != "" {
 			if len(state.rows) != 0 {
 				t.Fatal("clone failure must not append rows")
@@ -211,5 +213,5 @@ func TestAddRemoteSkillFromDialogKeepsOpenOnCloneError(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("clone failure should surface in the dialog and keep it open, editor=%v", app.settingsTableEditor)
+	t.Fatalf("clone failure should surface in the dialog and keep it open, editor=%v", app.settingsWindow.settingsTableEditor)
 }

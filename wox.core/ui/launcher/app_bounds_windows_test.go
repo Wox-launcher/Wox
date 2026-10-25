@@ -15,7 +15,11 @@ func TestLauncherBoundsKeepsNewerPreview(t *testing.T) {
 			return err
 		}
 		defer window.Close()
-		app := &App{window: window, editor: woxui.NewTextEditor("chat "), palette: defaultPalette()}
+		app := bindTestApp(&App{
+			window:       window,
+			querySession: queryController{editor: woxui.NewTextEditor("chat ")},
+			appearance:   appearanceController{palette: defaultPalette()},
+		})
 		injected := false
 		var previewBounds woxui.Rect
 		app.uiCall = func(fn func()) error {
@@ -26,8 +30,8 @@ func TestLauncherBoundsKeepsNewerPreview(t *testing.T) {
 			injected = true
 			// The old implementation yielded after its empty-results snapshot, so
 			// this newer preview resize was subsequently overwritten by that snapshot.
-			app.results = []queryResult{{ID: "chat", Preview: queryPreview{PreviewType: "chat", PreviewData: "{}"}}}
-			app.layout = queryLayout{ChatMode: true}
+			app.resultList.results = []queryResult{{ID: "chat", Preview: queryPreview{PreviewType: "chat", PreviewData: "{}"}}}
+			app.resultList.layout = queryLayout{ChatMode: true}
 			if err := app.applyWindowBounds(); err != nil {
 				return err
 			}
@@ -59,11 +63,15 @@ func TestGridBoundsIgnoreHiddenPreview(t *testing.T) {
 			return err
 		}
 		defer window.Close()
-		app := &App{
-			window: window, editor: woxui.NewTextEditor("drop "), palette: defaultPalette(),
-			layout:  queryLayout{GridLayout: &gridLayout{Columns: 5, ShowTitle: true}},
-			results: []queryResult{{ID: "file"}},
-		}
+		app := bindTestApp(&App{
+			window:       window,
+			querySession: queryController{editor: woxui.NewTextEditor("drop ")},
+			appearance:   appearanceController{palette: defaultPalette()},
+			resultList: resultController{
+				layout:  queryLayout{GridLayout: &gridLayout{Columns: 5, ShowTitle: true}},
+				results: []queryResult{{ID: "file"}},
+			},
+		})
 		if err := app.applyWindowBounds(); err != nil {
 			return err
 		}
@@ -71,7 +79,7 @@ func TestGridBoundsIgnoreHiddenPreview(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		app.results[0].Preview = queryPreview{PreviewType: "file", PreviewData: "file.exe"}
+		app.resultList.results[0].Preview = queryPreview{PreviewType: "file", PreviewData: "file.exe"}
 		if err := app.applyWindowBounds(); err != nil {
 			return err
 		}
@@ -82,7 +90,7 @@ func TestGridBoundsIgnoreHiddenPreview(t *testing.T) {
 		if !launcherBoundsEffectivelyEqual(withoutPreview, withHiddenPreview) {
 			return fmt.Errorf("hidden grid preview expanded window: without=%+v with=%+v", withoutPreview, withHiddenPreview)
 		}
-		app.layout = queryLayout{}
+		app.resultList.layout = queryLayout{}
 		if err := app.applyWindowBounds(); err != nil {
 			return err
 		}

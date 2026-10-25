@@ -17,12 +17,12 @@ type reentrantTooltipServices struct {
 }
 
 func (s *reentrantTooltipServices) ShowTooltip(_ context.Context, _ string, options contract.TooltipOptions) error {
-	s.app.nativeHoverTooltipNeedsReplace(options.Name, options.Text, woxui.Rect{Width: 1, Height: 1})
+	s.app.tooltips.nativeHoverTooltipNeedsReplace(options.Name, options.Text, woxui.Rect{Width: 1, Height: 1})
 	return nil
 }
 
 func (s *reentrantTooltipServices) HideTooltip(_ context.Context, _ string, name string) error {
-	s.app.nativeHoverTooltipNeedsReplace(name, "next", woxui.Rect{Width: 1, Height: 1})
+	s.app.tooltips.nativeHoverTooltipNeedsReplace(name, "next", woxui.Rect{Width: 1, Height: 1})
 	close(s.hideCalled)
 	return nil
 }
@@ -67,11 +67,11 @@ func TestNativeHoverTooltipReplacesADifferentVisibleTrigger(t *testing.T) {
 }
 
 func TestWaitHoverTooltipDelayRespectsCancellation(t *testing.T) {
-	app := &App{lifecycleCtx: t.Context()}
+	app := bindTestApp(&App{lifecycleCtx: t.Context()})
 	var revision atomic.Uint64
 	revisionID := revision.Add(1)
 	revision.Add(1)
-	if app.waitHoverTooltipDelay(&revision, revisionID) {
+	if app.tooltips.waitHoverTooltipDelay(&revision, revisionID) {
 		t.Fatal("a newer hover revision must cancel the pending tooltip dwell")
 	}
 }
@@ -94,10 +94,10 @@ func TestNativeHoverTooltipPointOnAnchor(t *testing.T) {
 }
 
 func TestWaitHoverTooltipDelayCompletesForCurrentRevision(t *testing.T) {
-	app := &App{lifecycleCtx: t.Context()}
+	app := bindTestApp(&App{lifecycleCtx: t.Context()})
 	var revision atomic.Uint64
 	revisionID := revision.Add(1)
-	if !app.waitHoverTooltipDelay(&revision, revisionID) {
+	if !app.tooltips.waitHoverTooltipDelay(&revision, revisionID) {
 		t.Fatal("an uncancelled dwell must show after the shared delay")
 	}
 }
@@ -114,22 +114,24 @@ func (s *recordingTooltipServices) HideTooltip(_ context.Context, _ string, name
 
 func TestDismissLauncherHoverTooltipsClosesNamedOverlaysOnUITurn(t *testing.T) {
 	services := &recordingTooltipServices{}
-	app := &App{
+	app := bindTestApp(&App{
 		services: services,
-		nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
-			"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 10, Height: 10}},
-			"go-ui-glance":      {text: "CPU", anchor: woxui.Rect{Width: 10, Height: 10}},
+		tooltips: tooltipController{
+			nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
+				"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 10, Height: 10}},
+				"go-ui-glance":      {text: "CPU", anchor: woxui.Rect{Width: 10, Height: 10}},
+			},
 		},
-	}
-	app.previewTooltipRevision.Store(4)
+	})
+	app.previews.previewTooltipRevision.Store(4)
 	app.dismissLauncherHoverTooltipsOnUI()
-	if app.previewTooltipRevision.Load() != 5 {
-		t.Fatalf("preview tooltip revision = %d, want 5 so a pending dwell cannot show after hide", app.previewTooltipRevision.Load())
+	if app.previews.previewTooltipRevision.Load() != 5 {
+		t.Fatalf("preview tooltip revision = %d, want 5 so a pending dwell cannot show after hide", app.previews.previewTooltipRevision.Load())
 	}
-	if _, ok := app.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
+	if _, ok := app.tooltips.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
 		t.Fatal("dismiss must forget the preview tooltip trigger")
 	}
-	if _, ok := app.nativeHoverTooltipShown["go-ui-glance"]; ok {
+	if _, ok := app.tooltips.nativeHoverTooltipShown["go-ui-glance"]; ok {
 		t.Fatal("dismiss must forget the glance tooltip trigger")
 	}
 	if len(services.hidden) != len(launcherHoverTooltipNames) {
@@ -144,14 +146,16 @@ func TestDismissLauncherHoverTooltipsClosesNamedOverlaysOnUITurn(t *testing.T) {
 
 func TestHideWindowDismissesLauncherTooltipsOnTheSameUITurn(t *testing.T) {
 	services := &recordingTooltipServices{}
-	app := &App{
+	app := bindTestApp(&App{
 		isPrimary: true,
 		visible:   true,
 		services:  services,
-		nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
-			"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 8, Height: 8}},
+		tooltips: tooltipController{
+			nativeHoverTooltipShown: map[string]nativeHoverTooltipIdentity{
+				"go-ui-preview-tag": {text: "Tag", anchor: woxui.Rect{Width: 8, Height: 8}},
+			},
 		},
-	}
+	})
 	err := app.hideWindow(false)
 	if err == nil || err.Error() != "launcher window is not initialized" {
 		t.Fatalf("hideWindow error = %v, want missing native window", err)
@@ -159,7 +163,7 @@ func TestHideWindowDismissesLauncherTooltipsOnTheSameUITurn(t *testing.T) {
 	if app.visible {
 		t.Fatal("hide must clear visible before returning the missing-window error")
 	}
-	if _, ok := app.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
+	if _, ok := app.tooltips.nativeHoverTooltipShown["go-ui-preview-tag"]; ok {
 		t.Fatal("hide must close launcher tooltips before gtk_widget_hide")
 	}
 	if len(services.hidden) != len(launcherHoverTooltipNames) {
@@ -169,14 +173,17 @@ func TestHideWindowDismissesLauncherTooltipsOnTheSameUITurn(t *testing.T) {
 
 func TestNativeHoverTooltipServiceCallsAllowReentrantStateAccess(t *testing.T) {
 	services := &reentrantTooltipServices{hideCalled: make(chan struct{})}
-	app := &App{lifecycleCtx: t.Context(), services: services}
+	app := bindTestApp(&App{
+		lifecycleCtx: t.Context(),
+		services:     services,
+	})
 	services.app = app
 
 	var revision atomic.Uint64
 	revisionID := revision.Add(1)
 	showDone := make(chan struct{})
 	go func() {
-		app.showNativeHoverTooltipAtBounds(
+		app.tooltips.showNativeHoverTooltipAtBounds(
 			&revision, revisionID, "tooltip", "Help", nil, woxui.Rect{Width: 20, Height: 20}, "top",
 			woxui.Rect{X: 100, Y: 100, Width: 400, Height: 300}, false,
 		)
@@ -188,7 +195,7 @@ func TestNativeHoverTooltipServiceCallsAllowReentrantStateAccess(t *testing.T) {
 		t.Fatal("show tooltip deadlocked during reentrant state access")
 	}
 
-	app.hideNativeHoverTooltip("tooltip", "hide tooltip in test")
+	app.tooltips.hideNativeHoverTooltip("tooltip", "hide tooltip in test")
 	select {
 	case <-services.hideCalled:
 	case <-time.After(time.Second):

@@ -11,9 +11,12 @@ import (
 
 // TestThemeEditorFieldsUseSettingsWindow prevents fields from borrowing a dormant launcher window.
 func TestThemeEditorFieldsUseSettingsWindow(t *testing.T) {
-	app := &App{window: &woxui.Window{}, settingsView: &woxui.ManagedWindow{}}
+	app := bindTestApp(&App{
+		window:         &woxui.Window{},
+		settingsWindow: settingsWindowController{settingsView: &woxui.ManagedWindow{}},
+	})
 	for _, prefix := range []string{"theme-editor", "theme-editor-dialog"} {
-		if got := app.formFieldNativeWindow(prefix); got != app.settingsView.Window() {
+		if got := app.formFieldNativeWindow(prefix); got != app.settingsWindow.settingsView.Window() {
 			t.Fatalf("%s uses the launcher window instead of its settings window", prefix)
 		}
 	}

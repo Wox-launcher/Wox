@@ -7,28 +7,28 @@ type queryPreviewVisibility struct {
 }
 
 // reconcilePreviewVisibility preserves manual input across selection changes and streamed results.
-func (a *App) reconcilePreviewVisibility() {
-	if a.previewVisibility.queryID != a.query.QueryID {
-		a.previewVisibility = queryPreviewVisibility{queryID: a.query.QueryID}
+func (a *previewController) reconcilePreviewVisibility() {
+	if a.previewVisibility.queryID != a.querySession.query.QueryID {
+		a.previewVisibility = queryPreviewVisibility{queryID: a.querySession.query.QueryID}
 	}
 }
 
 // selectedPreviewLayout applies transient visibility without changing the plugin's layout or preview payload.
-func (a *App) selectedPreviewLayout() queryLayout {
-	layout := a.layout
+func (a *previewController) selectedPreviewLayout() queryLayout {
+	layout := a.resultList.layout
 	if a.isPreviewFullscreen() {
 		ratio := 0.0
 		layout.ResultPreviewWidthRatio = &ratio
 		return layout
 	}
 	// Preview-only windows have no result row from which the user could reopen the content.
-	if a.selected < 0 || a.selected >= len(a.results) || launcherPreviewRatio(layout, false) == 0 {
+	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || launcherPreviewRatio(layout, false) == 0 {
 		return layout
 	}
-	result := a.results[a.selected]
+	result := a.resultList.results[a.resultList.selected]
 	visible := !result.Preview.DefaultHidden && launcherPreviewRatio(layout, false) < 1
 	state := a.previewVisibility
-	if state.queryID == a.resultsQueryID && state.visible != nil {
+	if state.queryID == a.resultList.resultsQueryID && state.visible != nil {
 		visible = *state.visible
 	}
 	if !visible {
@@ -42,19 +42,19 @@ func (a *App) selectedPreviewLayout() queryLayout {
 
 // toggleSelectedPreview shares one transition between the row affordance and the platform shortcut.
 func (a *App) toggleSelectedPreview() bool {
-	if a.selected < 0 || a.selected >= len(a.results) || a.resultsQueryID != a.query.QueryID {
+	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || a.resultList.resultsQueryID != a.querySession.query.QueryID {
 		return false
 	}
-	preview := a.results[a.selected].Preview
+	preview := a.resultList.results[a.resultList.selected].Preview
 	// Grid and preview-only surfaces retain their existing navigation contracts.
-	if preview.PreviewData == "" || a.layout.GridLayout != nil || launcherPreviewRatio(a.layout, false) == 0 || a.isPreviewFullscreen() {
+	if preview.PreviewData == "" || a.resultList.layout.GridLayout != nil || launcherPreviewRatio(a.resultList.layout, false) == 0 || a.isPreviewFullscreen() {
 		return false
 	}
-	a.reconcilePreviewVisibility()
-	visible := !launcherPreviewVisible(a.selectedPreviewLayout(), preview)
-	a.previewVisibility.visible = &visible
+	a.previews.reconcilePreviewVisibility()
+	visible := !launcherPreviewVisible(a.previews.selectedPreviewLayout(), preview)
+	a.previews.previewVisibility.visible = &visible
 	a.dismissLauncherHoverTooltipsOnUI()
-	a.reconcileSelectedPreview()
+	a.previews.reconcileSelectedPreview()
 	a.restoreQueryFocusAfterShow()
 	a.restoreQueryTextInput()
 	if a.window != nil {

@@ -26,16 +26,21 @@ func TestUpdateResultRejectsObsoleteQueryScope(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			app := &App{
-				sessionID: "session", query: plainQuery{QueryID: "current"}, resultsQueryID: "current",
-				results: []queryResult{{ID: "row", Title: "before"}}, selected: -1,
-			}
+			app := bindTestApp(&App{
+				sessionID:    "session",
+				querySession: queryController{query: plainQuery{QueryID: "current"}},
+				resultList: resultController{
+					resultsQueryID: "current",
+					results:        []queryResult{{ID: "row", Title: "before"}},
+					selected:       -1,
+				},
+			})
 			if tc.retained {
-				app.resultsQueryID = "old"
+				app.resultList.resultsQueryID = "old"
 			}
 			if tc.transition {
 				app.uiCall = func(fn func()) error {
-					app.query.QueryID = "next"
+					app.querySession.query.QueryID = "next"
 					fn()
 					return nil
 				}
@@ -46,10 +51,10 @@ func TestUpdateResultRejectsObsoleteQueryScope(t *testing.T) {
 			if err != nil || updated != tc.want {
 				t.Fatalf("update = %v, err = %v, want %v", updated, err, tc.want)
 			}
-			if tc.want && app.results[0].Title != title {
+			if tc.want && app.resultList.results[0].Title != title {
 				t.Fatal("current query's update was not applied")
 			}
-			if !tc.want && app.results[0].Title != "before" {
+			if !tc.want && app.resultList.results[0].Title != "before" {
 				t.Fatal("obsolete update overwrote the visible row")
 			}
 		})
@@ -58,12 +63,20 @@ func TestUpdateResultRejectsObsoleteQueryScope(t *testing.T) {
 
 func TestScriptUpdateRejectsMissingCurrentDocument(t *testing.T) {
 	for _, selected := range []int{-1, 0, 1} {
-		app := &App{sessionID: "session", query: plainQuery{QueryID: "query"}, resultsQueryID: "query", results: []queryResult{{ID: "row", Title: "before"}, {ID: "other"}}, selected: selected}
+		app := bindTestApp(&App{
+			sessionID:    "session",
+			querySession: queryController{query: plainQuery{QueryID: "query"}},
+			resultList: resultController{
+				resultsQueryID: "query",
+				results:        []queryResult{{ID: "row", Title: "before"}, {ID: "other"}},
+				selected:       selected,
+			},
+		})
 		ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "session"), "query")
 		command := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeWebView, PreviewData: `{"updateMode":"script","script":"tick()"}`}
 		title := "after"
 		accepted, err := app.UpdateResult(ctx, plugin.UpdatableResult{Id: "row", Title: &title, Preview: &command})
-		if err != nil || accepted || app.results[0].Title != "before" {
+		if err != nil || accepted || app.resultList.results[0].Title != "before" {
 			t.Fatal("script without current document was applied")
 		}
 	}

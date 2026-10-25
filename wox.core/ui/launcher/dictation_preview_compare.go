@@ -34,7 +34,7 @@ type dictationModelCompareRow struct {
 }
 
 // ensureDictationModelCompare keeps one comparison session per diagnostic recording.
-func (a *App) ensureDictationModelCompare(rawPath string) *dictationModelCompareState {
+func (a *dictationPreviewController) ensureDictationModelCompare(rawPath string) *dictationModelCompareState {
 	if state := a.dictationCompare; state != nil && state.sessionKey == rawPath {
 		return state
 	}
@@ -69,7 +69,7 @@ func (a *App) dictationModelCompareProps(state *dictationModelCompareState, scro
 		results = append(results, previewview.DictationModelCompareResult{
 			ID: model.ID, Name: model.Name, Status: model.Status, Error: model.Error,
 			Text: text, Duration: formatDictationCompareDuration(model.Elapsed),
-			Layout: a.previewTextLayout(a.window, scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
+			Layout: a.previews.previewTextLayout(a.window, scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
 		})
 	}
 	return results
@@ -84,7 +84,7 @@ func formatDictationCompareDuration(value time.Duration) string {
 
 // startDictationModelCompare decodes the raw recording sequentially so large
 // models are not loaded at the same time.
-func (a *App) startDictationModelCompare(modelIDs []string) {
+func (a *dictationPreviewController) startDictationModelCompare(modelIDs []string) {
 	state := a.dictationCompare
 	if state == nil || state.busy || len(modelIDs) == 0 {
 		return
@@ -112,8 +112,8 @@ func (a *App) startDictationModelCompare(modelIDs []string) {
 	rawPath := state.rawPath
 	ctx, cancel := context.WithCancel(a.lifecycleCtx)
 	state.cancel = cancel
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 	util.Go(a.lifecycleCtx, "dictation model compare", func() {
 		defer cancel()
@@ -145,8 +145,8 @@ func (a *App) startDictationModelCompare(modelIDs []string) {
 					break
 				}
 				state.revision++
-				if a.window != nil {
-					_ = a.window.Invalidate()
+				if a.window() != nil {
+					_ = a.window().Invalidate()
 				}
 			})
 		}
@@ -156,18 +156,18 @@ func (a *App) startDictationModelCompare(modelIDs []string) {
 			}
 			state.busy = false
 			state.revision++
-			if a.window != nil {
-				_ = a.window.Invalidate()
+			if a.window() != nil {
+				_ = a.window().Invalidate()
 			}
 		})
 	})
 }
 
-func (a *App) compareDictationModel(modelID string) {
+func (a *dictationPreviewController) compareDictationModel(modelID string) {
 	a.startDictationModelCompare([]string{modelID})
 }
 
-func (a *App) compareAllDictationModels() {
+func (a *dictationPreviewController) compareAllDictationModels() {
 	state := a.dictationCompare
 	if state == nil {
 		return

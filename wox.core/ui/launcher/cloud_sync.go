@@ -200,7 +200,7 @@ func (a *App) runCloudAction(name string, action func(context.Context) error) {
 	}
 	a.cloudSettings.SetBusy(name)
 	a.cloudSettings.SetError("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "run cloud action", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := action(ctx)
@@ -216,7 +216,7 @@ func (a *App) runCloudAction(name string, action func(context.Context) error) {
 		}
 		if err != nil {
 			a.cloudSettings.SetError(fmt.Sprintf("%s failed: %v", cloudActionLabel(name), err))
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		}
 	})
 }
@@ -248,26 +248,26 @@ func (a *App) openCloudBilling() {
 	}
 	a.cloudSettings.SetBusy("billing")
 	a.cloudSettings.SetError("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "open cloud billing", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		session, err := a.services.BillingSession(ctx, a.sessionID, kind)
 		cancel()
 		if err == nil && session.URL != "" {
-			err = a.settingsNativeWindow().OpenExternalURL(session.URL)
+			err = a.settingsWindow.settingsNativeWindow().OpenExternalURL(session.URL)
 		}
 		if err != nil {
 			a.cloudSettings.SetError("Could not open billing: " + err.Error())
 		}
 		a.cloudSettings.SetBusy("")
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	})
 }
 
 // openCloudSupportEmail opens the localized billing-support draft in the default mail application.
 func (a *App) openCloudSupportEmail() {
-	subject := url.QueryEscape(a.translate("i18n:ui_cloud_sync_billing_help_email_subject"))
-	if err := a.settingsNativeWindow().OpenExternalURL("mailto:billing@woxlauncher.com?subject=" + subject); err != nil {
+	subject := url.QueryEscape(a.language.translate("i18n:ui_cloud_sync_billing_help_email_subject"))
+	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL("mailto:billing@woxlauncher.com?subject=" + subject); err != nil {
 		util.GetLogger().Error(context.Background(), "failed to open cloud support email: "+err.Error())
 	}
 }
@@ -280,12 +280,12 @@ func (a *App) toggleCloudActionMenu(menu string) {
 	} else {
 		a.cloudSettings.SetActionMenu(menu)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) closeCloudActionMenu() {
 	a.cloudSettings.SetActionMenu("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // openCloudPluginExclusionDialog opens Flutter's single-row editor with the first available plugin selected.
@@ -307,13 +307,13 @@ func (a *App) openCloudPluginExclusionDialog() {
 	}
 	a.cloudSettings.SetActionMenu("")
 	a.cloudSettings.SetPluginDialog(&cloudPluginExclusionDialogState{selected: selected})
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // closeCloudPluginExclusionDialog dismisses the add-exclusion row editor and its choice menu.
 func (a *App) closeCloudPluginExclusionDialog() {
 	a.cloudSettings.SetPluginDialog(nil)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // openCloudPluginExclusionChoice opens the field-anchored plugin selector inside the row editor.
@@ -325,7 +325,7 @@ func (a *App) openCloudPluginExclusionChoice(anchor woxui.Rect) {
 	state.choiceOpen = true
 	state.choiceAnchor = anchor
 	a.cloudSettings.SetPluginDialog(state)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // chooseCloudPluginExclusion updates the uncommitted plugin selection in the row editor.
@@ -341,7 +341,7 @@ func (a *App) chooseCloudPluginExclusion(index int) {
 	state.selected = choices[index].ID
 	state.choiceOpen = false
 	a.cloudSettings.SetPluginDialog(state)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // saveCloudPluginExclusion commits the selected plugin using the existing cloud setting update path.
@@ -399,7 +399,7 @@ func (a *App) beginCloudBootstrap() {
 	}
 	a.cloudSettings.SetBusy("bootstrap-status")
 	a.cloudSettings.SetError("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "prepare cloud bootstrap", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		status, err := a.services.CloudBootstrapStatus(ctx, a.sessionID)
@@ -407,13 +407,13 @@ func (a *App) beginCloudBootstrap() {
 		if err != nil {
 			a.cloudSettings.SetError("Could not prepare cloud sync: " + err.Error())
 			a.cloudSettings.SetBusy("")
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 			return
 		}
 		a.cloudSettings.SetBusy("")
 		a.cloudSettings.SetForm(newCloudBootstrapForm(status))
 		a.updateSettingsTextInput(true)
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	})
 }
 
@@ -448,7 +448,7 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 	}
 	a.cloudSettings.SetBusy("bootstrap")
 	a.cloudSettings.SetError("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "start cloud bootstrap", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := a.services.StartCloudBootstrap(ctx, a.sessionID, recoveryCode)
@@ -469,7 +469,7 @@ func (a *App) runCloudBootstrap(recoveryCode string) {
 // openCloudAccountForm creates account lifecycle forms from the shared text-editing engine.
 func (a *App) openCloudAccountForm(kind string) {
 	definitions := []formDefinition{}
-	title := a.translate("i18n:ui_cloud_sync_account_login")
+	title := a.language.translate("i18n:ui_cloud_sync_account_login")
 	switch kind {
 	case "login", "register":
 		definitions = append(definitions,
@@ -495,7 +495,7 @@ func (a *App) openCloudAccountForm(kind string) {
 		)
 	}
 	if kind == "register" {
-		title = a.translate("i18n:ui_cloud_sync_account_register")
+		title = a.language.translate("i18n:ui_cloud_sync_account_register")
 		definitions = append(definitions,
 			formDefinition{Type: "password", Value: formDefinitionValue{Key: "ConfirmPassword", Label: "i18n:ui_cloud_sync_account_confirm_password", MaxLines: 1}},
 			formDefinition{Type: "checkbox", Value: formDefinitionValue{Key: "AcceptedLegal", Label: "i18n:ui_cloud_sync_account_accept_prefix"}},
@@ -505,7 +505,7 @@ func (a *App) openCloudAccountForm(kind string) {
 	fields := newFormFieldsState(definitions, values, true)
 	a.cloudSettings.SetForm(newCloudFormState(fields, kind, title))
 	a.updateSettingsTextInput(true)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) openCloudVerificationForm(email string) {
@@ -515,7 +515,7 @@ func (a *App) openCloudVerificationForm(email string) {
 	form.email = email
 	a.cloudSettings.SetForm(form)
 	a.updateSettingsTextInput(true)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // resendCloudVerification keeps the current verification editor open while requesting a fresh code.
@@ -530,7 +530,7 @@ func (a *App) resendCloudVerification() {
 	form.error = ""
 	form.notice = ""
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "resend cloud verification", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		err := a.services.ResendAccountVerification(ctx, a.sessionID, email, lang)
@@ -546,7 +546,7 @@ func (a *App) resendCloudVerification() {
 				}
 			}
 			a.updateSettingsTextInput(true)
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 	})
 }
@@ -554,7 +554,7 @@ func (a *App) resendCloudVerification() {
 func (a *App) closeCloudForm() {
 	a.cloudSettings.SetForm(nil)
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) focusCloudFormField(index int) {
@@ -569,7 +569,7 @@ func (a *App) focusCloudFormField(index int) {
 	if focusNode != nil {
 		focusNode.RequestFocus()
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // setCloudFormText keeps business form values synchronized with retained field controllers.
@@ -581,7 +581,7 @@ func (a *App) setCloudFormText(index int, value string) {
 			form.values[definition.Value.Key] = value
 		}
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // setCloudFormFieldFocused mirrors Host focus into form navigation and scroll state.
@@ -593,7 +593,7 @@ func (a *App) setCloudFormFieldFocused(index int, focused bool) {
 	if form != nil && !form.saving && index >= 0 && index < len(form.definitions) {
 		setCloudFormFocusLocked(form, index)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) changeCloudFormField(index, delta int) {
@@ -601,7 +601,7 @@ func (a *App) changeCloudFormField(index, delta int) {
 	if form != nil && !form.saving {
 		changeFormFieldsChoiceLocked(&form.formFieldsState, index, delta)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) moveCloudFormFocus(delta int) {
@@ -624,28 +624,28 @@ func (a *App) moveCloudFormFocus(delta int) {
 	if focusNode != nil {
 		focusNode.RequestFocus()
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // onCloudSettingsKey gives the active account/bootstrap modal exclusive keyboard ownership.
 func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
-	pluginDialog := a.settingsOpen && a.cloudSettings.PluginDialog() != nil
+	pluginDialog := a.settingsWindow.settingsOpen && a.cloudSettings.PluginDialog() != nil
 	if pluginDialog {
 		if event.Key == woxui.KeyEscape {
 			state := a.cloudSettings.PluginDialog()
 			if state != nil && state.choiceOpen {
 				state.choiceOpen = false
 				a.cloudSettings.SetPluginDialog(state)
-				a.invalidateSettingsWindow()
+				a.settingsWindow.invalidateSettingsWindow()
 			} else {
 				a.closeCloudPluginExclusionDialog()
 			}
 		}
 		return true
 	}
-	menuActive := a.settingsOpen && a.cloudSettings.ActionMenu() != ""
+	menuActive := a.settingsWindow.settingsOpen && a.cloudSettings.ActionMenu() != ""
 	form := a.cloudSettings.Form()
-	active := a.settingsOpen && form != nil
+	active := a.settingsWindow.settingsOpen && form != nil
 	saving := active && form.saving
 	if menuActive && !active {
 		if event.Key == woxui.KeyEscape {
@@ -695,7 +695,7 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 
 // onCloudFormTextInput blocks fallback routing while retained text fields own cloud modal input.
 func (a *App) onCloudFormTextInput(_ woxui.TextInputEvent) bool {
-	return a.settingsOpen && a.cloudSettings.Form() != nil
+	return a.settingsWindow.settingsOpen && a.cloudSettings.Form() != nil
 }
 
 // submitCloudForm validates local invariants before sending credentials or recovery data to core.
@@ -720,13 +720,13 @@ func (a *App) submitCloudForm() {
 	validationError := validateCloudForm(kind, values, hasRemoteData)
 	if validationError != "" {
 		form.error = validationError
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	form.saving = true
 	form.error = ""
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "submit cloud form", func() {
 		a.submitCloudFormRequest(kind, values, email)
 	})
@@ -869,7 +869,7 @@ func (a *App) submitCloudFormRequest(kind string, values map[string]string, emai
 				form.error = err.Error()
 			}
 			a.updateSettingsTextInput(form != nil && form.editor != nil)
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 		return
 	}
@@ -936,12 +936,12 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 	encoded, err := json.Marshal(next)
 	if err != nil {
 		a.cloudSettings.SetError("Could not encode plugin exclusions: " + err.Error())
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	a.cloudSettings.SetBusy("exclusion-" + pluginID)
 	a.cloudSettings.SetError("")
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save cloud plugin exclusions", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "CloudSyncDisabledPlugins", string(encoded))
@@ -953,7 +953,7 @@ func (a *App) toggleCloudPluginExclusion(pluginID string) {
 			a.cloudSettings.SetError("Could not save plugin exclusions: " + err.Error())
 		}
 		a.cloudSettings.SetBusy("")
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	})
 }
 
@@ -980,11 +980,11 @@ func (a *App) openCloudLegalPage(path string) {
 	if strings.HasPrefix(lang, "zh") {
 		prefix = "/zh"
 	}
-	if err := a.settingsNativeWindow().OpenExternalURL("https://sync.woxlauncher.com" + prefix + path); err != nil {
+	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL("https://sync.woxlauncher.com" + prefix + path); err != nil {
 		form := a.cloudSettings.Form()
 		if form != nil {
 			form.error = "Could not open legal page: " + err.Error()
 		}
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	}
 }

@@ -10,7 +10,7 @@ import (
 
 func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 
 	app.openFormTableEmojiPicker(0)
 	if state.emojiPicker == nil {
@@ -22,8 +22,8 @@ func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 	if state.emojiPicker.initialEmoji != "📋" {
 		t.Fatalf("emoji picker initial emoji = %q, want 📋", state.emojiPicker.initialEmoji)
 	}
-	if len(app.formTableEmojiSearchEntries) < 5000 {
-		t.Fatalf("emoji picker search catalog count = %d, want at least 5000", len(app.formTableEmojiSearchEntries))
+	if len(app.emojiCatalog.formTableEmojiSearchEntries) < 5000 {
+		t.Fatalf("emoji picker search catalog count = %d, want at least 5000", len(app.emojiCatalog.formTableEmojiSearchEntries))
 	}
 
 	app.closeFormTableEmojiPicker()
@@ -39,7 +39,7 @@ func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 
 func TestChooseFormTableEmojiCommitsAndCloses(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	app.openFormTableEmojiPicker(0)
 
 	app.chooseFormTableEmoji("🤖")
@@ -65,7 +65,7 @@ func TestWoxImageRowFieldIsNotTextEditable(t *testing.T) {
 
 func TestTrayQueryRowEditorFocusesQueryNotIcon(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
@@ -99,19 +99,19 @@ func TestFormTableEmojiCatalogIncludesExpandedGroups(t *testing.T) {
 }
 
 func TestRememberFormTableEmojiMaintainsUniqueMRU(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	for index := 0; index < 30; index++ {
-		app.rememberFormTableEmoji(string(rune('A' + index)))
+		app.emojiCatalog.rememberFormTableEmoji(string(rune('A' + index)))
 	}
-	if len(app.recentFormTableEmojis) != 24 {
-		t.Fatalf("recent emoji count = %d, want 24", len(app.recentFormTableEmojis))
+	if len(app.emojiCatalog.recentFormTableEmojis) != 24 {
+		t.Fatalf("recent emoji count = %d, want 24", len(app.emojiCatalog.recentFormTableEmojis))
 	}
-	app.rememberFormTableEmoji("Z")
-	if app.recentFormTableEmojis[0] != "Z" || len(app.recentFormTableEmojis) != 24 {
-		t.Fatalf("recent emojis after reuse = %v", app.recentFormTableEmojis)
+	app.emojiCatalog.rememberFormTableEmoji("Z")
+	if app.emojiCatalog.recentFormTableEmojis[0] != "Z" || len(app.emojiCatalog.recentFormTableEmojis) != 24 {
+		t.Fatalf("recent emojis after reuse = %v", app.emojiCatalog.recentFormTableEmojis)
 	}
-	seen := make(map[string]struct{}, len(app.recentFormTableEmojis))
-	for _, emoji := range app.recentFormTableEmojis {
+	seen := make(map[string]struct{}, len(app.emojiCatalog.recentFormTableEmojis))
+	for _, emoji := range app.emojiCatalog.recentFormTableEmojis {
 		if _, exists := seen[emoji]; exists {
 			t.Fatalf("recent emojis contain duplicate %q", emoji)
 		}
@@ -123,10 +123,10 @@ func TestFormTableEmojiPickerSearchAcceptsCommittedText(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
 	app.openFormTableEmojiPicker(0)
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsTableEditor), settingsPalette(), 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.settingsTableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsHost = host
+	app.settingsWindow.settingsHost = host
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
 	displayList := woxui.DisplayList{}
 	host.Frame(&displayList, frame)
@@ -166,9 +166,11 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 	})
 	general := newGeneralSettingsController(deps, newSharedEditState())
 	general.SetForm(&form)
-	app := &App{
-		settingsOpen:    true,
-		settingTab:      "general",
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "general",
+		},
 		generalSettings: general,
 		hotkeySettings:  newHotkeySettingsController(deps),
 		aiSettings:      newAISettingsController(deps),
@@ -176,13 +178,15 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 		settingsSearch:  newSettingsSearchController(deps),
 		themeSettings:   newThemeSettingsController(deps),
 		sharedEdit:      newSharedEditState(),
-		images:          map[string]*woxui.Image{},
-		imageRequested:  map[string]string{},
-		imageLastUsed:   map[string]uint64{},
-		imageErrors:     map[string]string{},
-	}
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+	})
 	app.openTrayQueryEditor(0)
-	if app.settingsTableEditor == nil || app.settingsTableEditor.rowForm == nil {
+	if app.settingsWindow.settingsTableEditor == nil || app.settingsWindow.settingsTableEditor.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
 	return app

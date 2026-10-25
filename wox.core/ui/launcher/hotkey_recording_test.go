@@ -37,7 +37,7 @@ func TestHotkeyRecordingPresentationKeepsConflictCandidate(t *testing.T) {
 	controller.SetRecording(&hotkeyRecordingState{
 		idPrefix: "plugin-settings", fieldIndex: 2, display: "cmd+a", status: "conflict", statusError: true,
 	})
-	app := &App{hotkeySettings: controller}
+	app := bindTestApp(&App{hotkeySettings: controller})
 
 	presentation := app.hotkeyRecordingFieldStatus("plugin-settings", 2)
 	if !presentation.Active || presentation.Value != "cmd+a" || presentation.Status != "conflict" || !presentation.Error {
@@ -123,7 +123,11 @@ func TestHotkeyLocalFallbackWithRawAvailable(t *testing.T) {
 	controller.SetRecording(&hotkeyRecordingState{
 		ready: true, raw: true, fallback: true, diagnosticCtx: context.Background(),
 	})
-	app := &App{hotkeySettings: controller, services: services, lifecycleCtx: context.Background()}
+	app := bindTestApp(&App{
+		hotkeySettings: controller,
+		services:       services,
+		lifecycleCtx:   context.Background(),
+	})
 	if !app.onHotkeyRecordingKey(woxui.KeyEvent{Key: woxui.Key("a"), Down: true, Modifiers: woxui.KeyModifierControl}) {
 		t.Fatal("recording did not consume the local key")
 	}
@@ -173,25 +177,27 @@ func (s *actionRecordingTestServices) CheckHotkeyAvailability(context.Context, s
 // newActionFormHotkeyTestApp builds a launcher app that can open action forms without a native loop.
 func newActionFormHotkeyTestApp(services contract.Services) *App {
 	deps := CommonDeps{}
-	return &App{
+	return bindTestApp(&App{
 		hotkeySettings: newHotkeySettingsController(deps),
 		pluginSettings: newPluginSettingsController(deps),
 		services:       services,
 		lifecycleCtx:   context.Background(),
 		window:         &woxui.Window{},
-		editor:         woxui.NewTextEditor(""),
-		translations:   map[string]string{},
-		palette:        defaultPalette(),
-		densityMetrics: launcherDensityMetricsFor(""),
-		show:           showAppParams{WindowWidth: 800, MaxResultCount: 8},
-	}
+		querySession:   queryController{editor: woxui.NewTextEditor("")},
+		language:       languageCatalog{translations: map[string]string{}},
+		appearance: appearanceController{
+			palette:        defaultPalette(),
+			densityMetrics: launcherDensityMetricsFor(""),
+		},
+		show: showAppParams{WindowWidth: 800, MaxResultCount: 8},
+	})
 }
 
 // TestOpenFormActionStartsHotkeyRecording starts capture as soon as a hotkey form opens.
 func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newActionFormHotkeyTestApp(services)
-	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+	app.forms.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
 		ID:   "__system_set_result_hotkey__",
 		Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
 	})
@@ -204,7 +210,7 @@ func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("opening a hotkey form did not start the recorder")
 	}
-	app.closeFormAction()
+	app.forms.closeFormAction()
 	if app.hotkeySettings.Recording() != nil {
 		t.Fatal("closing the form must stop recording")
 	}
@@ -214,7 +220,7 @@ func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
 func TestOpenFormActionSkipsRecordingForTextFields(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newActionFormHotkeyTestApp(services)
-	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+	app.forms.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
 		ID:   "__system_set_result_alias__",
 		Form: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "alias"}}},
 	})
@@ -235,7 +241,7 @@ func TestActionFormEscapeAndEnterStopRecordingOnce(t *testing.T) {
 	for _, key := range []woxui.Key{woxui.KeyEscape, woxui.KeyEnter} {
 		services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 		app := newActionFormHotkeyTestApp(services)
-		app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+		app.forms.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
 			ID:   "__system_set_result_hotkey__",
 			Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
 		})
@@ -244,7 +250,7 @@ func TestActionFormEscapeAndEnterStopRecordingOnce(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("opening a hotkey form did not start the recorder")
 		}
-		formSnapshot := viewSnapshot{form: snapshotFormLocked(app.form), palette: app.palette, densityMetrics: app.densityMetrics}
+		formSnapshot := viewSnapshot{form: snapshotFormLocked(app.forms.form), palette: app.appearance.palette, densityMetrics: app.appearance.densityMetrics}
 		recordingSignature := app.launcherFormSectionSignature(formSnapshot, 400)
 		if !app.onHotkeyRecordingKey(woxui.KeyEvent{Key: key, Down: true}) {
 			t.Fatalf("%s should stop the action-form recorder", key)
@@ -255,7 +261,7 @@ func TestActionFormEscapeAndEnterStopRecordingOnce(t *testing.T) {
 		if app.launcherFormSectionSignature(formSnapshot, 400) == recordingSignature {
 			t.Fatalf("%s stopped recording but the form section cache would still show Recording...", key)
 		}
-		if app.onFormKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) && app.hotkeySettings.Recording() != nil {
+		if app.forms.onFormKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) && app.hotkeySettings.Recording() != nil {
 			t.Fatalf("a follow-up Enter after %s restarted recording", key)
 		}
 	}
@@ -280,7 +286,7 @@ func TestApplyRecordedHotkeyShowsCandidateBeforeAvailability(t *testing.T) {
 		release:                     make(chan struct{}),
 	}
 	app := newActionFormHotkeyTestApp(services)
-	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+	app.forms.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
 		ID:   "__system_set_result_hotkey__",
 		Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
 	})
@@ -322,7 +328,7 @@ func TestActionFormPrimaryEnterSavesWhileRecording(t *testing.T) {
 		submitted:                   make(chan map[string]string, 1),
 	}
 	app := newActionFormHotkeyTestApp(services)
-	app.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
+	app.forms.openFormAction(queryResult{ID: "settings", QueryID: "q"}, resultAction{
 		ID:   "__system_set_result_hotkey__",
 		Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
 	})
@@ -341,7 +347,7 @@ func TestActionFormPrimaryEnterSavesWhileRecording(t *testing.T) {
 	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: saveHotkey, Kind: "normalCombo"}); err != nil {
 		t.Fatal(err)
 	}
-	if app.form != nil {
+	if app.forms.form != nil {
 		t.Fatal("Ctrl/Cmd+Enter left the action form open")
 	}
 	if app.hotkeySettings.Recording() != nil {
@@ -365,10 +371,16 @@ func TestRecordedHotkeyWithoutParentHookStaysACandidate(t *testing.T) {
 		target: &fields, fieldIndex: 0, idPrefix: "hotkey-settings", allowed: map[string]bool{"normalCombo": true},
 		diagnosticCtx: context.Background(),
 	})
-	app := &App{
-		hotkeySettings: controller, pluginSettings: newPluginSettingsController(CommonDeps{}),
-		settingsOpen: true, settingTab: "hotkey", services: &actionRecordingTestServices{}, lifecycleCtx: context.Background(),
-	}
+	app := bindTestApp(&App{
+		hotkeySettings: controller,
+		pluginSettings: newPluginSettingsController(CommonDeps{}),
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "hotkey",
+		},
+		services:     &actionRecordingTestServices{},
+		lifecycleCtx: context.Background(),
+	})
 	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "ctrl+enter", Kind: "normalCombo"}); err != nil {
 		t.Fatal(err)
 	}
@@ -382,8 +394,8 @@ func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsOpen = true
-	app.settingTab = "hotkey"
+	app.settingsWindow.settingsOpen = true
+	app.settingsWindow.settingTab = "hotkey"
 	form := newHotkeySettingsForm(settingsData{})
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {
@@ -408,8 +420,8 @@ func TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsOpen = true
-	app.settingTab = "hotkey"
+	app.settingsWindow.settingsOpen = true
+	app.settingsWindow.settingTab = "hotkey"
 	form := newHotkeySettingsForm(settingsData{})
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {

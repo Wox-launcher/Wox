@@ -26,22 +26,22 @@ func (s *faviconTestServices) FetchWebsiteIcon(context.Context, string, string) 
 
 func TestFormTableFaviconShowsURLHint(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	app.translations = map[string]string{
+	app.language.translations = map[string]string{
 		"ui_image_editor_url_hint": "Paste an image URL or a website URL.",
 	}
 	app.openFormTableFavicon(0)
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
 		t.Fatal("idle dialog must explain image and website URLs")
 	}
-	app.settingsTableEditor.favicon.error = "bad url"
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
+	app.settingsWindow.settingsTableEditor.favicon.error = "bad url"
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
 		t.Fatal("errors must replace the URL hint")
 	}
 }
 
 func TestFormTableURLFetchError(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	app.translations = map[string]string{
+	app.language.translations = map[string]string{
 		"ui_image_editor_url_failed":      "generic-fail",
 		"ui_image_editor_url_unavailable": "expired-or-private",
 	}
@@ -79,7 +79,7 @@ func TestFormTableFaviconLifecycle(t *testing.T) {
 			}
 			app.services = service
 			callbacks := make(chan func(), 1)
-			state := app.settingsTableEditor
+			state := app.settingsWindow.settingsTableEditor
 			original := state.rowForm.values["Icon"]
 			app.openFormTableFavicon(1)
 			if state.favicon != nil {

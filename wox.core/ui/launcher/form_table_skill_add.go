@@ -38,7 +38,7 @@ func (a *App) openFormTableSkillAdd() {
 // openFormTableSkillAddTab keeps the inline table and the list editor footer both
 // pointing at the same dialog, matching Flutter's single custom create dialog.
 func (a *App) openFormTableSkillAddTab(tab int) {
-	state := a.settingsTableEditor
+	state := a.settingsWindow.settingsTableEditor
 	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		return
 	}
@@ -143,7 +143,7 @@ func (a *App) addFormTableSkill() {
 	if state.skillAdd.tab == 0 {
 		path := strings.TrimSpace(state.skillAdd.fields.values["Path"])
 		if path == "" {
-			state.skillAdd.error = a.translate("i18n:ui_ai_skill_add_path_required")
+			state.skillAdd.error = a.language.translate("i18n:ui_ai_skill_add_path_required")
 			a.invalidateFormTableWindow()
 			return
 		}
@@ -152,7 +152,7 @@ func (a *App) addFormTableSkill() {
 	}
 	url := strings.TrimSpace(state.skillAdd.fields.values["SourceUrl"])
 	if url == "" {
-		state.skillAdd.error = a.translate("i18n:ui_ai_skill_add_url_required")
+		state.skillAdd.error = a.language.translate("i18n:ui_ai_skill_add_url_required")
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -172,7 +172,7 @@ func (a *App) addLocalSkill(state *formTableEditorState, path string) {
 	key := state.definition.Value.Key
 	value := state.target.values[key]
 	state.saving = true
-	a.settingSaving = true
+	a.settingsWindow.settingSaving = true
 	a.closeFormTableEditor()
 	util.Go(a.lifecycleCtx, "save settings table after local skill add", func() {
 		a.saveSettingsTable(state, key, value, previousValue)
@@ -211,7 +211,7 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 	var value string
 	save := false
 	_ = a.runOnUI("apply cloned AI skills to add dialog", func() {
-		if a.settingsTableEditor != state || state.skillAdd == nil {
+		if a.settingsWindow.settingsTableEditor != state || state.skillAdd == nil {
 			return
 		}
 		state.skillAdd.cloning = false
@@ -232,7 +232,7 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 		value = state.target.values[state.definition.Value.Key]
 		save = true
 		state.saving = true
-		a.settingSaving = true
+		a.settingsWindow.settingSaving = true
 		a.closeFormTableEditor()
 	})
 	if save {
@@ -252,17 +252,17 @@ func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, 
 		pickDir:    a.pickFormTableSkillAddDirectory,
 	}
 	theme := palette
-	cancelLabel := a.translate("i18n:ui_cancel")
-	addLabel := a.translate("i18n:ui_add")
+	cancelLabel := a.language.translate("i18n:ui_cancel")
+	addLabel := a.language.translate("i18n:ui_add")
 	fieldWidth := max(float32(0), min(float32(480), width-140))
 	definition := fields.definitions[snapshot.tab]
 	field := a.buildFormTableRowField(*fields, callbacks, palette, snapshot.tab, definition, fieldWidth, a.formTableRowLabelWidth(fields.definitions), "")
 	return launcherview.FormTableSkillAddDialog(launcherview.FormTableSkillAddDialogProps{
 		Width: width, Height: height,
-		Title:      a.translate("i18n:ui_ai_skill_add"),
-		LocalLabel: a.translate("i18n:ui_ai_skill_add_local"), RemoteLabel: a.translate("i18n:ui_ai_skill_add_remote"),
-		LocalHint: a.translate("i18n:ui_ai_skill_add_local_hint"), RemoteHint: a.translate("i18n:ui_ai_skill_add_remote_hint"),
-		Tab: snapshot.tab, Error: snapshot.error, Cloning: snapshot.cloning, CloningLabel: a.translate("i18n:ui_ai_skill_cloning"),
+		Title:      a.language.translate("i18n:ui_ai_skill_add"),
+		LocalLabel: a.language.translate("i18n:ui_ai_skill_add_local"), RemoteLabel: a.language.translate("i18n:ui_ai_skill_add_remote"),
+		LocalHint: a.language.translate("i18n:ui_ai_skill_add_local_hint"), RemoteHint: a.language.translate("i18n:ui_ai_skill_add_remote_hint"),
+		Tab: snapshot.tab, Error: snapshot.error, Cloning: snapshot.cloning, CloningLabel: a.language.translate("i18n:ui_ai_skill_cloning"),
 		CancelLabel: cancelLabel, AddLabel: addLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 80), AddWidth: a.formTableButtonWidth(addLabel, 80),
 		Field: field, FieldHeight: launcherview.FormTableRowFieldHeight(definition.Type, "", 1), Theme: theme,
 		OnTab: a.switchFormTableSkillAddTab, OnCancel: a.cancelFormTableSkillAdd, OnAdd: a.addFormTableSkill,

@@ -108,24 +108,24 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		SessionID: snapshot.SessionID, Command: snapshot.Command, Status: snapshot.Status, Error: snapshot.Error, Text: snapshot.Text,
 		Scroll: snapshot.Scroll, LoadingHistory: snapshot.LoadingHistory, SearchOpen: snapshot.SearchOpen, SearchEditing: snapshot.SearchEditing,
 		CaseSensitive: snapshot.CaseSensitive, MatchCount: snapshot.MatchCount, MatchIndex: snapshot.MatchIndex, Matches: matches,
-		Fullscreen: a.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
+		Fullscreen: a.terminal.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
 		FullscreenHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+"), Tags: tags,
 		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
-			return a.terminalLayout.measure(value, textLayoutKey{
+			return a.terminal.terminalLayout.measure(value, textLayoutKey{
 				session: snapshot.SessionID, font: font, window: a.window, width: textWidth,
 				scale: imageScale, lineHeight: lineHeight, style: style,
 			})
 		},
-		OnClampScroll: a.clampTerminalPreviewScroll, OnScroll: a.scrollTerminalPreview, OnOpenSearch: a.openTerminalSearch,
-		OnSetSearch: a.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.setTerminalSearchQuery(value) },
-		OnSearchKey:  a.onTerminalPreviewKey,
-		OnMoveSearch: a.moveTerminalSearch, OnToggleSearchCase: a.toggleTerminalSearchCase, OnCloseSearch: a.closeTerminalSearch,
-		OnToggleFullscreen: a.toggleTerminalFullscreen, OnTagHover: a.setPreviewTooltip,
+		OnClampScroll: a.terminal.clampTerminalPreviewScroll, OnScroll: a.terminal.scrollTerminalPreview, OnOpenSearch: a.terminal.openTerminalSearch,
+		OnSetSearch: a.terminal.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.terminal.setTerminalSearchQuery(value) },
+		OnSearchKey:  a.terminal.onTerminalPreviewKey,
+		OnMoveSearch: a.terminal.moveTerminalSearch, OnToggleSearchCase: a.terminal.toggleTerminalSearchCase, OnCloseSearch: a.terminal.closeTerminalSearch,
+		OnToggleFullscreen: a.terminal.toggleTerminalFullscreen, OnTagHover: a.setPreviewTooltip,
 		SelectionAnchor: snapshot.SelectionAnchor, SelectionFocus: snapshot.SelectionFocus,
-		OnSelectionStart: a.startTerminalSelection, OnSelectionExtend: a.extendTerminalSelection,
-		OnSelectWord: a.selectTerminalWord, OnSelectLine: a.selectTerminalLine,
-		OnCopy: a.copyTerminalPreviewOutput, OnSelectAll: a.selectAllTerminalPreview,
-		OnContextMenu: a.openTerminalContextMenu,
+		OnSelectionStart: a.terminal.startTerminalSelection, OnSelectionExtend: a.terminal.extendTerminalSelection,
+		OnSelectWord: a.terminal.selectTerminalWord, OnSelectLine: a.terminal.selectTerminalLine,
+		OnCopy: a.terminal.copyTerminalPreviewOutput, OnSelectAll: a.terminal.selectAllTerminalPreview,
+		OnContextMenu: a.terminal.openTerminalContextMenu,
 	})
 }
 
@@ -138,7 +138,7 @@ func decodeTerminalPreviewData(value string) terminalPreviewData {
 }
 
 // activateTerminalPreview switches the single visible terminal subscription before rendering.
-func (a *App) activateTerminalPreview(preview queryPreview) {
+func (a *terminalController) activateTerminalPreview(preview queryPreview) {
 	data := decodeTerminalPreviewData(preview.PreviewData)
 	state := a.terminalPreview
 	oldSessionID := ""
@@ -164,7 +164,7 @@ func (a *App) activateTerminalPreview(preview queryPreview) {
 }
 
 // terminalPreviewSnapshotFor returns the prepared terminal state for rendering.
-func (a *App) terminalPreviewSnapshotFor(preview queryPreview) terminalPreviewSnapshot {
+func (a *terminalController) terminalPreviewSnapshotFor(preview queryPreview) terminalPreviewSnapshot {
 	data := decodeTerminalPreviewData(preview.PreviewData)
 	if a.terminalPreview == nil || a.terminalPreview.SessionID != data.SessionID {
 		return terminalPreviewSnapshot{SessionID: data.SessionID, Command: data.Command, Status: data.Status}
@@ -188,7 +188,7 @@ func snapshotTerminalPreview(state *terminalPreviewState) terminalPreviewSnapsho
 }
 
 // reconcileTerminalSubscription serializes transport writes and converges on the latest visible session.
-func (a *App) reconcileTerminalSubscription() {
+func (a *terminalController) reconcileTerminalSubscription() {
 	a.terminalSubscriptionMu.Lock()
 	defer a.terminalSubscriptionMu.Unlock()
 
@@ -216,13 +216,13 @@ func (a *App) reconcileTerminalSubscription() {
 }
 
 // scheduleTerminalSubscription publishes the latest desired session without blocking the UI thread on transport I/O.
-func (a *App) scheduleTerminalSubscription(sessionID string) {
+func (a *terminalController) scheduleTerminalSubscription(sessionID string) {
 	a.terminalDesired.Store(sessionID)
 	util.Go(a.lifecycleCtx, "reconcile terminal subscription", a.reconcileTerminalSubscription)
 }
 
 // deactivateTerminalPreview releases core output when the selected preview no longer uses it.
-func (a *App) deactivateTerminalPreview() {
+func (a *terminalController) deactivateTerminalPreview() {
 	a.terminalLayout = textLayoutCache{}
 	oldSessionID := ""
 	searchWasOpen := false
@@ -242,7 +242,7 @@ func (a *App) deactivateTerminalPreview() {
 }
 
 // applyTerminalChunk merges byte-cursor updates so UTF-8 output follows the core ring buffer exactly.
-func (a *App) applyTerminalChunk(chunk terminalChunk) {
+func (a *terminalController) applyTerminalChunk(chunk terminalChunk) {
 	if chunk.SessionID == "" || chunk.Content == "" {
 		return
 	}
@@ -292,10 +292,10 @@ func (a *App) applyTerminalChunk(chunk terminalChunk) {
 	if state.AutoFollow {
 		state.Scroll = float32(math.MaxFloat32)
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) applyTerminalState(update terminalSessionState) {
+func (a *terminalController) applyTerminalState(update terminalSessionState) {
 	if update.SessionID == "" {
 		return
 	}
@@ -306,10 +306,10 @@ func (a *App) applyTerminalState(update terminalSessionState) {
 		state.Status = update.Status
 		state.Error = update.Error
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) clampTerminalPreviewScroll(maxOffset float32) {
+func (a *terminalController) clampTerminalPreviewScroll(maxOffset float32) {
 	if state := a.terminalPreview; state != nil {
 		state.MaxScroll = max(float32(0), maxOffset)
 		state.Scroll = min(max(float32(0), state.Scroll), maxOffset)
@@ -317,7 +317,7 @@ func (a *App) clampTerminalPreviewScroll(maxOffset float32) {
 	}
 }
 
-func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
+func (a *terminalController) scrollTerminalPreview(delta, maxOffset float32) {
 	if delta == 0 {
 		return
 	}
@@ -339,7 +339,7 @@ func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
 			}
 		}
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 	if requestSession != "" {
 		util.Go(a.lifecycleCtx, "request terminal history", func() {
 			a.requestTerminalHistory(requestSession, requestCursor)
@@ -348,7 +348,7 @@ func (a *App) scrollTerminalPreview(delta, maxOffset float32) {
 }
 
 // requestTerminalHistory resets the existing core subscription to an earlier byte cursor without racing selection changes.
-func (a *App) requestTerminalHistory(sessionID string, cursor int64) {
+func (a *terminalController) requestTerminalHistory(sessionID string, cursor int64) {
 	a.terminalSubscriptionMu.Lock()
 	var err error
 	sent := false
@@ -367,7 +367,7 @@ func (a *App) requestTerminalHistory(sessionID string, cursor int64) {
 				state.HistoryAnchorBase = 0
 			}
 		}
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}); dispatchErr != nil {
 		log.Printf("dispatch terminal history result: %v", dispatchErr)
 	}
@@ -425,7 +425,7 @@ func rebuildTerminalMatches(state *terminalPreviewState, preserveCurrent bool) {
 }
 
 // openTerminalSearch transfers keyboard and IME ownership from the query box to the preview-local editor.
-func (a *App) openTerminalSearch() {
+func (a *terminalController) openTerminalSearch() {
 	state := a.terminalPreview
 	if state == nil {
 		return
@@ -435,36 +435,36 @@ func (a *App) openTerminalSearch() {
 		state.SearchEditor = woxui.NewTextEditor("")
 	}
 	rebuildTerminalMatches(state, false)
-	if a.host != nil {
-		a.host.RequestFocus(previewview.TerminalSearchInputKey(state.SessionID))
+	if a.host() != nil {
+		a.host().RequestFocus(previewview.TerminalSearchInputKey(state.SessionID))
 	}
 	a.updateFormTextInput(true)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // closeTerminalSearch returns text input ownership to the launcher query.
-func (a *App) closeTerminalSearch() {
+func (a *terminalController) closeTerminalSearch() {
 	if state := a.terminalPreview; state != nil {
 		state.SearchOpen = false
 		state.Matches = nil
 		state.MatchIndex = -1
 	}
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // setTerminalSearchQuery replaces the local find value for accessibility set-value actions.
-func (a *App) setTerminalSearchQuery(value string) error {
+func (a *terminalController) setTerminalSearchQuery(value string) error {
 	if state := a.terminalPreview; state != nil && state.SearchOpen && state.SearchEditor != nil {
 		state.SearchEditor.SetText(value, false)
 		rebuildTerminalMatches(state, false)
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 	return nil
 }
 
 // moveTerminalSearch advances through loaded matches and scrolls to an approximate text-layout position.
-func (a *App) moveTerminalSearch(delta int) {
+func (a *terminalController) moveTerminalSearch(delta int) {
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
 		return
@@ -484,16 +484,16 @@ func (a *App) moveTerminalSearch(delta int) {
 		state.Scroll = min(max(float32(0), ratio*state.MaxScroll), state.MaxScroll)
 		state.AutoFollow = false
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // toggleTerminalSearchCase rebuilds the loaded-window index without a core round trip.
-func (a *App) toggleTerminalSearchCase() {
+func (a *terminalController) toggleTerminalSearchCase() {
 	if state := a.terminalPreview; state != nil && state.SearchOpen {
 		state.CaseSensitive = !state.CaseSensitive
 		rebuildTerminalMatches(state, false)
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // remapTerminalSelection keeps an existing highlight attached to the same absolute output bytes.
@@ -527,18 +527,18 @@ func terminalSelectedText(state *terminalPreviewState) string {
 }
 
 // focusQueryForTerminalSelection returns IME ownership to the query so Ctrl+C copies output, not find text.
-func (a *App) focusQueryForTerminalSelection() {
-	if a.host == nil || !a.queryCanFocus() {
+func (a *terminalController) focusQueryForTerminalSelection() {
+	if a.host() == nil || !a.queryCanFocus() {
 		return
 	}
 	if a.terminalSearchFocused() {
-		a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+		a.host().RequestFocus(launcherview.LauncherQueryInputKey)
 		a.restoreQueryTextInput()
 	}
 }
 
 // startTerminalSelection begins a drag or shift-click highlight at the given output byte offset.
-func (a *App) startTerminalSelection(offset int, modifiers woxui.KeyModifiers) {
+func (a *terminalController) startTerminalSelection(offset int, modifiers woxui.KeyModifiers) {
 	state := a.terminalPreview
 	if state == nil || strings.TrimSpace(state.Text) == "" {
 		return
@@ -552,22 +552,22 @@ func (a *App) startTerminalSelection(offset int, modifiers woxui.KeyModifiers) {
 		state.SelectionFocus = offset
 	}
 	a.refreshTerminalContextMenuIfStale()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // extendTerminalSelection updates the highlight focus while the pointer is dragged.
-func (a *App) extendTerminalSelection(offset int) {
+func (a *terminalController) extendTerminalSelection(offset int) {
 	state := a.terminalPreview
 	if state == nil || strings.TrimSpace(state.Text) == "" {
 		return
 	}
 	state.SelectionFocus = previewview.TerminalClampUTF8Offset(state.Text, offset)
 	a.refreshTerminalContextMenuIfStale()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // selectTerminalWord selects the word under a double-click.
-func (a *App) selectTerminalWord(offset int) {
+func (a *terminalController) selectTerminalWord(offset int) {
 	state := a.terminalPreview
 	if state == nil || strings.TrimSpace(state.Text) == "" {
 		return
@@ -576,11 +576,11 @@ func (a *App) selectTerminalWord(offset int) {
 	start, end := previewview.TerminalWordByteRange(state.Text, offset)
 	state.SelectionAnchor, state.SelectionFocus = start, end
 	a.refreshTerminalContextMenuIfStale()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // selectTerminalLine selects the newline-delimited line under a triple-click.
-func (a *App) selectTerminalLine(offset int) {
+func (a *terminalController) selectTerminalLine(offset int) {
 	state := a.terminalPreview
 	if state == nil || strings.TrimSpace(state.Text) == "" {
 		return
@@ -589,22 +589,22 @@ func (a *App) selectTerminalLine(offset int) {
 	start, end := previewview.TerminalLineByteRange(state.Text, offset)
 	state.SelectionAnchor, state.SelectionFocus = start, end
 	a.refreshTerminalContextMenuIfStale()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // selectAllTerminalPreview highlights the complete loaded output window.
-func (a *App) selectAllTerminalPreview() {
+func (a *terminalController) selectAllTerminalPreview() {
 	state := a.terminalPreview
 	if state == nil || state.Text == "" {
 		return
 	}
 	state.SelectionAnchor, state.SelectionFocus = 0, len(state.Text)
 	a.refreshTerminalContextMenuIfStale()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // copyTerminalPreviewOutput copies the current highlight, or the full output when none is selected.
-func (a *App) copyTerminalPreviewOutput() {
+func (a *terminalController) copyTerminalPreviewOutput() {
 	state := a.terminalPreview
 	if state == nil {
 		return
@@ -620,7 +620,7 @@ func (a *App) copyTerminalPreviewOutput() {
 }
 
 // copyTerminalPreviewSelection copies a non-empty highlight and reports whether Ctrl+C should be consumed.
-func (a *App) copyTerminalPreviewSelection() bool {
+func (a *terminalController) copyTerminalPreviewSelection() bool {
 	text := terminalSelectedText(a.terminalPreview)
 	if text == "" {
 		return false
@@ -641,8 +641,8 @@ func computeTerminalMenuEnablement(state *terminalPreviewState) terminalMenuEnab
 }
 
 // openTerminalContextMenu shows Copy and Select All above the terminal output.
-func (a *App) openTerminalContextMenu(windowPos woxui.Point) {
-	if a == nil || a.host == nil {
+func (a *terminalController) openTerminalContextMenu(windowPos woxui.Point) {
+	if a == nil || a.host() == nil {
 		return
 	}
 	state := a.terminalPreview
@@ -651,11 +651,11 @@ func (a *App) openTerminalContextMenu(windowPos woxui.Point) {
 	}
 	a.focusQueryForTerminalSelection()
 	en := computeTerminalMenuEnablement(state)
-	theme := a.palette.componentTheme()
+	theme := a.palette().componentTheme()
 	owner := previewview.TerminalOutputKey(state.SessionID)
 	var token uint64
 	clear := func() {
-		a.host.ClearOverlay(owner, token)
+		a.host().ClearOverlay(owner, token)
 	}
 	menu := woxcomponent.BuildTextEditContextMenu(woxcomponent.TextEditContextMenuProps{
 		ID: "launcher.preview.terminal.menu", Theme: theme.Controls,
@@ -675,15 +675,15 @@ func (a *App) openTerminalContextMenu(windowPos woxui.Point) {
 			}
 		},
 	})
-	token = a.host.SetOverlay(owner, woxcomponent.PlaceTextEditContextMenu(a.host.FrameSize(), windowPos, string(owner), menu, clear))
+	token = a.host().SetOverlay(owner, woxcomponent.PlaceTextEditContextMenu(a.host().FrameSize(), windowPos, string(owner), menu, clear))
 	a.terminalMenuAnchor = windowPos
 	a.terminalMenuEnablement = en
 }
 
 // refreshTerminalContextMenuIfStale rebuilds an open menu when copy/select-all enablement changed.
-func (a *App) refreshTerminalContextMenuIfStale() {
+func (a *terminalController) refreshTerminalContextMenuIfStale() {
 	state := a.terminalPreview
-	if a == nil || a.host == nil || state == nil || a.host.OverlayOwner() != previewview.TerminalOutputKey(state.SessionID) {
+	if a == nil || a.host() == nil || state == nil || a.host().OverlayOwner() != previewview.TerminalOutputKey(state.SessionID) {
 		return
 	}
 	next := computeTerminalMenuEnablement(state)
@@ -694,28 +694,28 @@ func (a *App) refreshTerminalContextMenuIfStale() {
 }
 
 // clearTerminalSelection drops an output highlight so later query copy shortcuts stay with the editor.
-func (a *App) clearTerminalSelection() {
+func (a *terminalController) clearTerminalSelection() {
 	state := a.terminalPreview
 	if state == nil || state.SelectionAnchor == state.SelectionFocus {
 		return
 	}
 	state.SelectionAnchor, state.SelectionFocus = 0, 0
 	a.refreshTerminalContextMenuIfStale()
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // closeTerminalContextMenu dismisses the output context menu for the visible session.
-func (a *App) closeTerminalContextMenu() {
-	if a == nil || a.host == nil || a.terminalPreview == nil {
+func (a *terminalController) closeTerminalContextMenu() {
+	if a == nil || a.host() == nil || a.terminalPreview == nil {
 		return
 	}
-	a.host.ClearOverlay(previewview.TerminalOutputKey(a.terminalPreview.SessionID), 0)
+	a.host().ClearOverlay(previewview.TerminalOutputKey(a.terminalPreview.SessionID), 0)
 }
 
 // onTerminalPreviewKey handles preview-local find and output copy before launcher navigation sees the keystroke.
-func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
+func (a *terminalController) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
@@ -723,7 +723,7 @@ func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 	if state == nil {
 		return false
 	}
-	if event.Key == woxui.KeyEscape && a.host != nil && a.host.HasOverlay() && a.host.OverlayOwner() == previewview.TerminalOutputKey(state.SessionID) {
+	if event.Key == woxui.KeyEscape && a.host() != nil && a.host().HasOverlay() && a.host().OverlayOwner() == previewview.TerminalOutputKey(state.SessionID) {
 		a.closeTerminalContextMenu()
 		return true
 	}
@@ -757,7 +757,7 @@ func (a *App) onTerminalPreviewKey(event woxui.KeyEvent) bool {
 }
 
 // onTerminalPreviewTextInput commits native IME input only while terminal find owns focus.
-func (a *App) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
+func (a *terminalController) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
 		return false
@@ -765,16 +765,34 @@ func (a *App) onTerminalPreviewTextInput(_ woxui.TextInputEvent) bool {
 	return a.terminalSearchFocused()
 }
 
-func (a *App) terminalSearchFocused() bool {
-	return a.host != nil && a.terminalPreview != nil && a.host.HasFocus(previewview.TerminalSearchInputKey(a.terminalPreview.SessionID))
+func (a *terminalController) terminalSearchFocused() bool {
+	return a.host() != nil && a.terminalPreview != nil && a.host().HasFocus(previewview.TerminalSearchInputKey(a.terminalPreview.SessionID))
 }
 
 // toggleTerminalFullscreen switches the terminal preview between split and preview-only layout.
-func (a *App) toggleTerminalFullscreen() {
+func (a *terminalController) toggleTerminalFullscreen() {
 	if a.terminalPreview == nil {
 		return
 	}
 	a.terminalFullscreen = !a.terminalFullscreen
 	_ = a.applyWindowBounds()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
+}
+
+func (a *terminalController) releaseTerminalSubscription() {
+	if err := a.runOnUI("release terminal preview", func() {
+		a.terminalPreview = nil
+	}); err != nil {
+		log.Printf("dispatch terminal preview release: %v", err)
+	}
+	a.terminalDesired.Store("")
+	a.terminalSubscriptionMu.Lock()
+	defer a.terminalSubscriptionMu.Unlock()
+	if a.terminalSubscribed == "" {
+		return
+	}
+	if err := a.services.UnsubscribeTerminal(context.Background(), a.sessionID, a.terminalSubscribed); err != nil {
+		log.Printf("unsubscribe terminal during Wox instance cleanup: %v", err)
+	}
+	a.terminalSubscribed = ""
 }

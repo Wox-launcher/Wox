@@ -8,20 +8,20 @@ import (
 )
 
 func TestBuiltInTextBlurDropsAnUnchangedEdit(t *testing.T) {
-	app := &App{generalSettings: newGeneralControllerForTest()}
+	app := bindTestApp(&App{generalSettings: newGeneralControllerForTest()})
 	if !app.generalSettings.StartEdit("HttpProxyUrl", "http://localhost:7890", -1) {
 		t.Fatal("StartEdit should claim the proxy URL")
 	}
 
 	app.blurBuiltInSettingEdit(settingItem{key: "HttpProxyUrl", value: "http://localhost:7890", text: true})
 
-	if app.generalSettings.EditKey() != "" || app.pendingBuiltInText != nil || app.settingSaving {
-		t.Fatalf("edit = %q pending = %+v saving = %v, want an unchanged blur to only leave the session", app.generalSettings.EditKey(), app.pendingBuiltInText, app.settingSaving)
+	if app.generalSettings.EditKey() != "" || app.settingsWindow.pendingBuiltInText != nil || app.settingsWindow.settingSaving {
+		t.Fatalf("edit = %q pending = %+v saving = %v, want an unchanged blur to only leave the session", app.generalSettings.EditKey(), app.settingsWindow.pendingBuiltInText, app.settingsWindow.settingSaving)
 	}
 }
 
 func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
-	app := &App{generalSettings: newGeneralControllerForTest()}
+	app := bindTestApp(&App{generalSettings: newGeneralControllerForTest()})
 	if !app.generalSettings.StartEdit("HttpProxyUrl", "sdfdf", -1) {
 		t.Fatal("StartEdit should claim the proxy URL")
 	}
@@ -39,7 +39,7 @@ func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
 				if app.generalSettings.EditKey() != "" {
 					t.Errorf("EditKey = %q, want the text session ended before the switch click", app.generalSettings.EditKey())
 				}
-				pending := app.pendingBuiltInText
+				pending := app.settingsWindow.pendingBuiltInText
 				if pending == nil || pending.key != "HttpProxyUrl" || pending.value != "sdfdf" {
 					t.Errorf("pending = %+v, want deferred HttpProxyUrl sdfdf", pending)
 				}
@@ -48,7 +48,7 @@ func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
 	})
 	host.AttachServices(formTableHostServices{})
 	defer host.Dispose()
-	app.settingsHost = host
+	app.settingsWindow.settingsHost = host
 
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 80, Height: 20}, PixelSize: woxui.PixelSize{Width: 80, Height: 20}, Scale: 1}
 	host.Frame(&woxui.DisplayList{}, frame)
@@ -63,7 +63,7 @@ func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
 	if !sawTap {
 		t.Fatal("switch tap was not delivered")
 	}
-	if app.pendingBuiltInText == nil {
+	if app.settingsWindow.pendingBuiltInText == nil {
 		t.Fatal("releasing the switch should leave the typed URL pending until that click saves")
 	}
 }

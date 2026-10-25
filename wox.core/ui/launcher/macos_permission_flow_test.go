@@ -24,7 +24,7 @@ func TestMacOSPermissionFlowTitleKey(t *testing.T) {
 }
 
 func TestOpenMacOSPermissionFlowRejectsInvalidType(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	if err := app.openMacOSPermissionFlow("camera"); err == nil {
 		t.Fatal("invalid permission type must be rejected before opening System Settings")
 	}

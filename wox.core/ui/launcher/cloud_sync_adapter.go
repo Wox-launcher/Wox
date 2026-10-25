@@ -32,7 +32,7 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 	devices := a.cloudDevicesViewProps(snapshot, imageScale)
 	// Share the widest translated action, including busy labels, across the three sections.
 	actionWidth := theme.Scaled(100)
-	if window := a.settingsNativeWindow(); window != nil {
+	if window := a.settingsWindow.settingsNativeWindow(); window != nil {
 		for _, label := range []string{account.SupportLabel, sync.ButtonLabel, devices.RefreshLabel} {
 			if metrics, err := window.MeasureText(label, woxui.TextStyle{Size: theme.Scaled(woxcomponent.CompactButtonFontSize)}); err == nil {
 				actionWidth = max(actionWidth, metrics.Size.Width+48)
@@ -43,8 +43,8 @@ func (a *App) buildCloudSettingsPage(snapshot settingsSnapshot, width, height, i
 	return launcherview.CloudSettingsPage(launcherview.CloudSettingsPageProps{
 		Width:        width,
 		Height:       height,
-		Title:        a.translate("i18n:ui_cloud_sync"),
-		Description:  a.translate("i18n:ui_cloud_sync_description"),
+		Title:        a.language.translate("i18n:ui_cloud_sync"),
+		Description:  a.language.translate("i18n:ui_cloud_sync_description"),
 		Intro:        a.cloudIntroViewProps(snapshot, imageScale),
 		Account:      account,
 		Sync:         sync,
@@ -68,24 +68,24 @@ func (a *App) cloudIntroViewProps(snapshot settingsSnapshot, imageScale float32)
 	}
 	proPrice := cloudBillingPriceWithTrial(a, snapshot.cloud.BillingPlan.Pro.Price, snapshot.cloud.BillingPlan.Pro.Trial, snapshot.cloud.BillingLoaded)
 	return launcherview.CloudIntroProps{
-		SectionLabel: a.translate("i18n:ui_cloud_sync_intro_title"),
-		Headline:     a.translate("i18n:ui_cloud_sync_intro_headline"),
-		Description:  a.translate("i18n:ui_cloud_sync_intro_description"),
+		SectionLabel: a.language.translate("i18n:ui_cloud_sync_intro_title"),
+		Headline:     a.language.translate("i18n:ui_cloud_sync_intro_headline"),
+		Description:  a.language.translate("i18n:ui_cloud_sync_intro_description"),
 		HeroIcon:     a.imageForTint(settingNavIconSource("data.cloudsync"), &iconTint, physicalImageSize(28, imageScale)),
 		HeroFallback: "☁",
-		FreeLabel:    a.translate("i18n:ui_cloud_sync_plan_free"),
-		ProLabel:     a.translate("i18n:ui_cloud_sync_plan_pro"),
+		FreeLabel:    a.language.translate("i18n:ui_cloud_sync_plan_free"),
+		ProLabel:     a.language.translate("i18n:ui_cloud_sync_plan_pro"),
 		Features: []launcherview.CloudIntroFeatureProps{
-			{Title: a.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⚙"},
-			{Title: a.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "◇"},
-			{Title: a.translate("i18n:ui_cloud_sync_intro_keys_title"), Description: a.translate("i18n:ui_cloud_sync_intro_keys_description"), Icon: a.imageForTint(settingControlIconSource("key"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⌁"},
+			{Title: a.language.translate("i18n:ui_cloud_sync_intro_settings_title"), Description: a.language.translate("i18n:ui_cloud_sync_intro_settings_description"), Icon: a.imageForTint(settingNavIconSource("general"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⚙"},
+			{Title: a.language.translate("i18n:ui_cloud_sync_intro_plugins_title"), Description: a.language.translate("i18n:ui_cloud_sync_intro_plugins_description"), Icon: a.imageForTint(settingNavIconSource("plugins"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "◇"},
+			{Title: a.language.translate("i18n:ui_cloud_sync_intro_keys_title"), Description: a.language.translate("i18n:ui_cloud_sync_intro_keys_description"), Icon: a.imageForTint(settingControlIconSource("key"), &iconTint, physicalImageSize(17, imageScale)), FallbackIcon: "⌁"},
 		},
 		PlanRows: []launcherview.CloudPlanRowProps{
-			{Label: a.translate("i18n:ui_cloud_sync_plan_row_price"), FreeValue: freePrice, ProValue: proPrice},
-			{Label: a.translate("i18n:ui_cloud_sync_plan_row_devices"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_two_devices"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_unlimited_devices")},
-			{Label: a.translate("i18n:ui_cloud_sync_plan_row_sync_mode"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_manual_sync"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_auto_sync")},
-			{Label: a.translate("i18n:ui_cloud_sync_plan_row_frequency"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_feature_strict_sync_limit"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_relaxed_sync_limit")},
-			{Label: a.translate("i18n:ui_cloud_sync_plan_row_scope"), FreeValue: a.translate("i18n:ui_cloud_sync_plan_scope_free"), ProValue: a.translate("i18n:ui_cloud_sync_plan_feature_everything_free")},
+			{Label: a.language.translate("i18n:ui_cloud_sync_plan_row_price"), FreeValue: freePrice, ProValue: proPrice},
+			{Label: a.language.translate("i18n:ui_cloud_sync_plan_row_devices"), FreeValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_two_devices"), ProValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_unlimited_devices")},
+			{Label: a.language.translate("i18n:ui_cloud_sync_plan_row_sync_mode"), FreeValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_manual_sync"), ProValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_auto_sync")},
+			{Label: a.language.translate("i18n:ui_cloud_sync_plan_row_frequency"), FreeValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_strict_sync_limit"), ProValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_relaxed_sync_limit")},
+			{Label: a.language.translate("i18n:ui_cloud_sync_plan_row_scope"), FreeValue: a.language.translate("i18n:ui_cloud_sync_plan_scope_free"), ProValue: a.language.translate("i18n:ui_cloud_sync_plan_feature_everything_free")},
 		},
 	}
 }
@@ -95,15 +95,15 @@ func cloudBillingPriceWithTrial(a *App, price cloudBillingPlanPrice, trial *clou
 	proPrice := cloudBillingPriceText(price)
 	if proPrice == "" {
 		if loaded {
-			return a.translate("i18n:ui_cloud_sync_plan_price_unavailable")
+			return a.language.translate("i18n:ui_cloud_sync_plan_price_unavailable")
 		}
-		return a.translate("i18n:ui_cloud_sync_plan_price_loading")
+		return a.language.translate("i18n:ui_cloud_sync_plan_price_loading")
 	}
 	trialText := cloudBillingTrialText(a, trial)
 	if trialText == "" {
 		return proPrice
 	}
-	return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_price_with_trial"), "{price}", proPrice), "{trial}", trialText)
+	return strings.ReplaceAll(strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_plan_price_with_trial"), "{price}", proPrice), "{trial}", trialText)
 }
 
 func cloudBillingTrialText(a *App, trial *cloudBillingPlanTrial) string {
@@ -111,13 +111,13 @@ func cloudBillingTrialText(a *App, trial *cloudBillingPlanTrial) string {
 		return ""
 	}
 	if strings.EqualFold(trial.Interval, "month") && trial.IntervalCount == 1 {
-		return a.translate("i18n:ui_cloud_sync_plan_trial_one_month")
+		return a.language.translate("i18n:ui_cloud_sync_plan_trial_one_month")
 	}
 	if strings.EqualFold(trial.Interval, "month") && trial.IntervalCount > 1 {
-		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_trial_months"), "{count}", fmt.Sprint(trial.IntervalCount))
+		return strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_plan_trial_months"), "{count}", fmt.Sprint(trial.IntervalCount))
 	}
 	if trial.Days > 0 {
-		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_plan_trial_days"), "{days}", fmt.Sprint(trial.Days))
+		return strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_plan_trial_days"), "{days}", fmt.Sprint(trial.Days))
 	}
 	return strings.TrimSpace(trial.Formatted)
 }
@@ -143,28 +143,28 @@ func cloudBillingPriceText(price cloudBillingPlanPrice) string {
 
 // cloudAccountViewProps prepares translated account state and controller actions.
 func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, imageScale float32) launcherview.CloudAccountProps {
-	status := a.translate("i18n:ui_cloud_sync_plan_free_status")
+	status := a.language.translate("i18n:ui_cloud_sync_plan_free_status")
 	if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") {
-		status = a.translate("i18n:ui_cloud_sync_plan_pro_status")
+		status = a.language.translate("i18n:ui_cloud_sync_plan_pro_status")
 	}
 	if snapshot.cloud.Account.SessionExpired {
-		status = a.translate("i18n:ui_cloud_sync_account_session_expired")
+		status = a.language.translate("i18n:ui_cloud_sync_account_session_expired")
 	}
 	labelWidth := cloudSettingsLabelWidth(contentWidth, 220)
 	return launcherview.CloudAccountProps{
-		SectionLabel:           a.translate("i18n:ui_cloud_sync_account"),
+		SectionLabel:           a.language.translate("i18n:ui_cloud_sync_account"),
 		LoggedIn:               snapshot.cloud.Account.LoggedIn,
 		LabelWidth:             labelWidth,
-		LoginLabel:             a.translate("i18n:ui_cloud_sync_account_login"),
-		RegisterLabel:          a.translate("i18n:ui_cloud_sync_account_register"),
-		EmailLabel:             a.translate("i18n:ui_cloud_sync_account_email"),
+		LoginLabel:             a.language.translate("i18n:ui_cloud_sync_account_login"),
+		RegisterLabel:          a.language.translate("i18n:ui_cloud_sync_account_register"),
+		EmailLabel:             a.language.translate("i18n:ui_cloud_sync_account_email"),
 		Email:                  snapshot.cloud.Account.Email,
-		PlanLabel:              a.translate("i18n:ui_cloud_sync_plan_status"),
-		PlanTips:               a.translate("i18n:ui_cloud_sync_plan_status_tips"),
+		PlanLabel:              a.language.translate("i18n:ui_cloud_sync_plan_status"),
+		PlanTips:               a.language.translate("i18n:ui_cloud_sync_plan_status_tips"),
 		PlanStatus:             status,
-		BillingLabel:           a.translate("i18n:ui_cloud_sync_billing_help"),
-		BillingTips:            a.translate("i18n:ui_cloud_sync_billing_help_tips"),
-		SupportLabel:           a.translate("i18n:ui_cloud_sync_contact_support"),
+		BillingLabel:           a.language.translate("i18n:ui_cloud_sync_billing_help"),
+		BillingTips:            a.language.translate("i18n:ui_cloud_sync_billing_help_tips"),
+		SupportLabel:           a.language.translate("i18n:ui_cloud_sync_contact_support"),
 		InfoIcon:               a.imageForTint(settingNavIconSource("about"), &snapshot.palette.TextSecondary, physicalImageSize(14, imageScale)),
 		SupportIcon:            a.imageForTint(settingControlIconSource("email"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		ActionsEnabled:         snapshot.cloud.Busy == "",
@@ -180,32 +180,32 @@ func (a *App) cloudAccountViewProps(snapshot settingsSnapshot, contentWidth, ima
 // setCloudPlanTooltip keeps the rich comparison inside the settings window instead of falling back to the native plain-text tooltip service.
 func (a *App) setCloudPlanTooltip(inside bool, anchor woxui.Rect) {
 	if !inside {
-		a.cloudPlanTooltipRevision.Add(1)
-		if a.cloudPlanTooltip == nil {
+		a.settingsWindow.cloudPlanTooltipRevision.Add(1)
+		if a.settingsWindow.cloudPlanTooltip == nil {
 			return
 		}
-		a.cloudPlanTooltip = nil
-		a.invalidateSettingsWindow()
+		a.settingsWindow.cloudPlanTooltip = nil
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
-	if a.cloudPlanTooltip != nil && a.cloudPlanTooltip.anchor == anchor {
+	if a.settingsWindow.cloudPlanTooltip != nil && a.settingsWindow.cloudPlanTooltip.anchor == anchor {
 		return
 	}
 	a.ensureCloudBillingPlan()
-	revision := a.cloudPlanTooltipRevision.Add(1)
+	revision := a.settingsWindow.cloudPlanTooltipRevision.Add(1)
 	util.Go(a.lifecycleCtx, "show cloud plan tooltip after dwell", func() {
-		if !a.waitHoverTooltipDelay(&a.cloudPlanTooltipRevision, revision) {
+		if !a.tooltips.waitHoverTooltipDelay(&a.settingsWindow.cloudPlanTooltipRevision, revision) {
 			return
 		}
 		apply := func() {
-			if revision != a.cloudPlanTooltipRevision.Load() {
+			if revision != a.settingsWindow.cloudPlanTooltipRevision.Load() {
 				return
 			}
-			if a.cloudPlanTooltip != nil && a.cloudPlanTooltip.anchor == anchor {
+			if a.settingsWindow.cloudPlanTooltip != nil && a.settingsWindow.cloudPlanTooltip.anchor == anchor {
 				return
 			}
-			a.cloudPlanTooltip = &cloudPlanTooltipState{anchor: anchor}
-			a.invalidateSettingsWindow()
+			a.settingsWindow.cloudPlanTooltip = &cloudPlanTooltipState{anchor: anchor}
+			a.settingsWindow.invalidateSettingsWindow()
 		}
 		if err := a.runOnUI("show cloud plan tooltip", apply); err != nil {
 			util.GetLogger().Warn(a.lifecycleCtx, err.Error())
@@ -222,7 +222,7 @@ func cloudSettingsLabelWidth(contentWidth, reservedWidth float32) float32 {
 func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudSyncProps {
 	label, detail, color, statusIcon := a.cloudSyncPresentation(snapshot)
 	ready := cloudSyncReady(snapshot)
-	buttonLabel := a.translate("i18n:ui_cloud_sync_sync_now")
+	buttonLabel := a.language.translate("i18n:ui_cloud_sync_sync_now")
 	buttonAction := func() {
 		if !ready || !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
 			a.beginCloudBootstrap()
@@ -231,7 +231,7 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, imageScale float32) 
 		a.runCloudAction("sync", func(ctx context.Context) error { return a.services.SyncCloud(ctx, a.sessionID) })
 	}
 	if cloudCurrentDeviceRevoked(snapshot.cloud.Devices) {
-		buttonLabel = a.translate("i18n:ui_cloud_sync_join")
+		buttonLabel = a.language.translate("i18n:ui_cloud_sync_join")
 		buttonAction = func() {
 			a.runCloudAction("join", func(ctx context.Context) error {
 				return a.services.JoinCloudDevice(ctx, a.sessionID)
@@ -243,7 +243,7 @@ func (a *App) cloudSyncViewProps(snapshot settingsSnapshot, imageScale float32) 
 		detailColor = color
 	}
 	return launcherview.CloudSyncProps{
-		SectionLabel:  a.translate("i18n:ui_cloud_sync_sync"),
+		SectionLabel:  a.language.translate("i18n:ui_cloud_sync_sync"),
 		StatusIcon:    a.imageForTint(fromCoreImage(icons.Get(statusIcon)), &color, physicalImageSize(24, imageScale)),
 		ButtonIcon:    a.imageForTint(fromCoreImage(icons.Get(icons.ControlRefresh)), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		Label:         label,
@@ -259,34 +259,34 @@ func (a *App) cloudSyncPresentation(snapshot settingsSnapshot) (string, string, 
 	muted := snapshot.palette.TextSecondary
 	errorColor := snapshot.palette.Error
 	if snapshot.cloud.Loading {
-		return a.translate("i18n:ui_cloud_sync_loading"), "", muted, icons.ControlHourglassEmpty
+		return a.language.translate("i18n:ui_cloud_sync_loading"), "", muted, icons.ControlHourglassEmpty
 	}
 	if snapshot.cloud.Account.SessionExpired {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), a.translate("i18n:ui_cloud_sync_account_session_expired"), errorColor, icons.ControlError
+		return a.language.translate("i18n:ui_cloud_sync_sync_error"), a.language.translate("i18n:ui_cloud_sync_account_session_expired"), errorColor, icons.ControlError
 	}
 	if snapshot.cloud.Error != "" {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor, icons.ControlError
+		return a.language.translate("i18n:ui_cloud_sync_sync_error"), snapshot.cloud.Error, errorColor, icons.ControlError
 	}
 	if progress := snapshot.cloud.Sync.Progress; progress != nil && progress.Active {
-		return a.translate("i18n:ui_cloud_sync_syncing"), a.formatCloudSyncProgress(progress, snapshot.cloud.Busy == "sync"), muted, icons.ControlHourglassEmpty
+		return a.language.translate("i18n:ui_cloud_sync_syncing"), a.formatCloudSyncProgress(progress, snapshot.cloud.Busy == "sync"), muted, icons.ControlHourglassEmpty
 	}
 	if snapshot.cloud.Busy == "sync" {
-		return a.translate("i18n:ui_cloud_sync_syncing"), a.translate("i18n:ui_cloud_sync_progress_starting"), muted, icons.ControlHourglassEmpty
+		return a.language.translate("i18n:ui_cloud_sync_syncing"), a.language.translate("i18n:ui_cloud_sync_progress_starting"), muted, icons.ControlHourglassEmpty
 	}
 	if state := snapshot.cloud.Sync.State; state != nil && state.LastError != "" {
-		return a.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor, icons.ControlError
+		return a.language.translate("i18n:ui_cloud_sync_sync_error"), state.LastError, errorColor, icons.ControlError
 	}
 	if !snapshot.cloud.Account.SyncEligible {
-		return a.translate("i18n:ui_cloud_sync_unsynced"), a.translate("i18n:ui_cloud_sync_subscription_required"), muted, icons.SettingsDataCloudsync
+		return a.language.translate("i18n:ui_cloud_sync_unsynced"), a.language.translate("i18n:ui_cloud_sync_subscription_required"), muted, icons.SettingsDataCloudsync
 	}
 	if !cloudSyncReady(snapshot) {
-		return a.translate("i18n:ui_cloud_sync_unsynced"), "", muted, icons.SettingsDataCloudsync
+		return a.language.translate("i18n:ui_cloud_sync_unsynced"), "", muted, icons.SettingsDataCloudsync
 	}
 	if !snapshot.cloud.Account.SyncEnabled || !snapshot.cloud.Sync.Enabled {
-		return a.translate("i18n:ui_cloud_sync_disabled"), "", muted, icons.SettingsDataCloudsync
+		return a.language.translate("i18n:ui_cloud_sync_disabled"), "", muted, icons.SettingsDataCloudsync
 	}
 	lastSync := max(cloudStateTimestamp(snapshot.cloud.Sync.State, true), cloudStateTimestamp(snapshot.cloud.Sync.State, false))
-	return a.translate("i18n:ui_cloud_sync_synced"), a.translate("i18n:ui_cloud_sync_last_sync_time") + " · " + a.formatCloudActivityTime(lastSync, util.GetSystemTime()), snapshot.palette.Success, icons.ControlCheckCircle
+	return a.language.translate("i18n:ui_cloud_sync_synced"), a.language.translate("i18n:ui_cloud_sync_last_sync_time") + " · " + a.formatCloudActivityTime(lastSync, util.GetSystemTime()), snapshot.palette.Success, icons.ControlCheckCircle
 }
 
 func cloudSyncReady(snapshot settingsSnapshot) bool {
@@ -297,7 +297,7 @@ func cloudSyncReady(snapshot settingsSnapshot) bool {
 func (a *App) formatCloudSyncProgress(progress *cloudSyncProgress, isBusy bool) string {
 	if progress == nil || !progress.Active || strings.TrimSpace(progress.Operation) == "" {
 		if isBusy {
-			return a.translate("i18n:ui_cloud_sync_progress_starting")
+			return a.language.translate("i18n:ui_cloud_sync_progress_starting")
 		}
 		return ""
 	}
@@ -308,42 +308,42 @@ func (a *App) formatCloudSyncProgress(progress *cloudSyncProgress, isBusy bool) 
 		if progress.Total > 0 {
 			countText = fmt.Sprintf("%d/%d", progress.Current, progress.Total)
 		}
-		countSuffix = strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_count"), "{count}", countText)
+		countSuffix = strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_progress_count"), "{count}", countText)
 	}
 
 	switch progress.Operation {
 	case cloudsync.CloudSyncProgressOperationSnapshot:
-		return a.translate("i18n:ui_cloud_sync_progress_snapshot")
+		return a.language.translate("i18n:ui_cloud_sync_progress_snapshot")
 	case cloudsync.CloudSyncProgressOperationPush:
-		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_uploading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+		return strings.ReplaceAll(strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_progress_uploading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
 	case cloudsync.CloudSyncProgressOperationPull:
-		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_downloading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+		return strings.ReplaceAll(strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_progress_downloading"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
 	case cloudsync.CloudSyncProgressOperationRestore:
-		return strings.ReplaceAll(strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_restoring"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
+		return strings.ReplaceAll(strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_progress_restoring"), "{target}", a.cloudSyncProgressTarget(progress)), "{count}", countSuffix)
 	default:
-		return a.translate("i18n:ui_cloud_sync_progress_starting")
+		return a.language.translate("i18n:ui_cloud_sync_progress_starting")
 	}
 }
 
 // cloudSyncProgressTarget resolves the current sync item into a short localized label.
 func (a *App) cloudSyncProgressTarget(progress *cloudSyncProgress) string {
 	if progress == nil {
-		return a.translate("i18n:ui_cloud_sync_progress_data")
+		return a.language.translate("i18n:ui_cloud_sync_progress_data")
 	}
 	switch progress.EntityType {
 	case cloudsync.EntityWoxSetting:
-		return a.translate("i18n:ui_cloud_sync_progress_wox_setting")
+		return a.language.translate("i18n:ui_cloud_sync_progress_wox_setting")
 	case cloudsync.EntityPluginSetting, cloudsync.EntityInstalledPlugin:
 		pluginName := a.cloudSyncProgressPluginName(progress.PluginID)
 		if pluginName == "" {
 			pluginName = a.cloudSyncProgressPluginName(progress.Key)
 		}
 		if pluginName == "" {
-			pluginName = a.translate("i18n:ui_cloud_sync_progress_data")
+			pluginName = a.language.translate("i18n:ui_cloud_sync_progress_data")
 		}
-		return strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_progress_plugin"), "{plugin}", pluginName)
+		return strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_progress_plugin"), "{plugin}", pluginName)
 	default:
-		return a.translate("i18n:ui_cloud_sync_progress_data")
+		return a.language.translate("i18n:ui_cloud_sync_progress_data")
 	}
 }
 
@@ -427,7 +427,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, imageScale float3
 		}
 		currentLabel := ""
 		if device.Current {
-			currentLabel = a.translate("i18n:ui_cloud_sync_devices_current")
+			currentLabel = a.language.translate("i18n:ui_cloud_sync_devices_current")
 		}
 		items = append(items, launcherview.CloudDeviceProps{
 			ID:            fmt.Sprintf("cloud-revoke-%d", index),
@@ -436,7 +436,7 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, imageScale float3
 			LastSeen:      a.formatCloudActivityTime(device.LastSeenAt, now),
 			CurrentLabel:  currentLabel,
 			Icon:          a.imageForTint(fromCoreImage(icons.Get(cloudDevicePlatformIcon(device.Platform))), &snapshot.palette.TextSecondary, physicalImageSize(24, imageScale)),
-			RevokeLabel:   a.translate("i18n:ui_cloud_sync_devices_revoke"),
+			RevokeLabel:   a.language.translate("i18n:ui_cloud_sync_devices_revoke"),
 			ShowRevoke:    !strings.EqualFold(snapshot.cloud.Account.Plan, "pro") && !device.Current && device.RevokedAt == 0,
 			RevokeEnabled: snapshot.cloud.Busy == "",
 			OnRevoke: func() {
@@ -447,23 +447,23 @@ func (a *App) cloudDevicesViewProps(snapshot settingsSnapshot, imageScale float3
 			},
 		})
 	}
-	tips := a.translate("i18n:ui_cloud_sync_devices_pro_tips")
+	tips := a.language.translate("i18n:ui_cloud_sync_devices_pro_tips")
 	if !strings.EqualFold(snapshot.cloud.Account.Plan, "pro") {
 		limit := 2
 		if snapshot.cloud.Devices.DeviceLimit != nil && *snapshot.cloud.Devices.DeviceLimit > 0 {
 			limit = *snapshot.cloud.Devices.DeviceLimit
 		}
-		tips = strings.ReplaceAll(a.translate("i18n:ui_cloud_sync_devices_free_tips"), "{count}", fmt.Sprint(snapshot.cloud.Devices.DeviceCount))
+		tips = strings.ReplaceAll(a.language.translate("i18n:ui_cloud_sync_devices_free_tips"), "{count}", fmt.Sprint(snapshot.cloud.Devices.DeviceCount))
 		tips = strings.ReplaceAll(tips, "{limit}", fmt.Sprint(limit))
 	}
 	return launcherview.CloudDevicesProps{
-		SectionLabel:    a.translate("i18n:ui_cloud_sync_devices"),
+		SectionLabel:    a.language.translate("i18n:ui_cloud_sync_devices"),
 		Tips:            tips,
-		LastActiveLabel: a.translate("i18n:ui_cloud_sync_devices_last_active"),
+		LastActiveLabel: a.language.translate("i18n:ui_cloud_sync_devices_last_active"),
 		RefreshLabel:    cloudRefreshLabel(a, snapshot),
 		RefreshIcon:     a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(16, imageScale)),
 		RefreshEnabled:  !snapshot.cloud.Loading && snapshot.cloud.Busy == "",
-		EmptyLabel:      a.translate("i18n:ui_cloud_sync_devices_empty"),
+		EmptyLabel:      a.language.translate("i18n:ui_cloud_sync_devices_empty"),
 		Items:           items,
 		OnRefresh:       func() { util.Go(a.lifecycleCtx, "reload cloud sync devices", a.reloadCloudSync) },
 	}
@@ -493,15 +493,15 @@ func cloudDevicePlatform(a *App, platform string) string {
 	case "linux":
 		return "Linux"
 	default:
-		return a.translate("i18n:ui_cloud_sync_devices_unknown_platform")
+		return a.language.translate("i18n:ui_cloud_sync_devices_unknown_platform")
 	}
 }
 
 func cloudRefreshLabel(a *App, snapshot settingsSnapshot) string {
 	if snapshot.cloud.Loading {
-		return a.translate("i18n:ui_cloud_sync_loading")
+		return a.language.translate("i18n:ui_cloud_sync_loading")
 	}
-	return a.translate("i18n:ui_cloud_sync_refresh")
+	return a.language.translate("i18n:ui_cloud_sync_refresh")
 }
 
 // cloudPluginExclusionsViewProps prepares the visible plugin boundary and toggle actions.
@@ -520,7 +520,7 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 		plugin := plugins[pluginID]
 		name := plugin.Name
 		if strings.TrimSpace(name) == "" {
-			name = pluginID + " (" + a.translate("i18n:ui_cloud_sync_plugin_exclusions_uninstalled") + ")"
+			name = pluginID + " (" + a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_uninstalled") + ")"
 		}
 		var icon *woxui.Image
 		if plugin.Icon.ImageType != "" {
@@ -533,12 +533,12 @@ func (a *App) cloudPluginExclusionsViewProps(snapshot settingsSnapshot, imageSca
 	}
 	foreground := snapshot.palette.TextSecondary
 	return launcherview.CloudPluginExclusionsProps{
-		SectionLabel:   a.translate("i18n:ui_cloud_sync_plugin_exclusions"),
-		Tips:           a.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
-		ColumnLabel:    a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"),
+		SectionLabel:   a.language.translate("i18n:ui_cloud_sync_plugin_exclusions"),
+		Tips:           a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_tips"),
+		ColumnLabel:    a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"),
 		Items:          items,
-		AddLabel:       a.translate("i18n:ui_add"),
-		OperationLabel: a.translate("i18n:ui_operation"),
+		AddLabel:       a.language.translate("i18n:ui_add"),
+		OperationLabel: a.language.translate("i18n:ui_operation"),
 		AddIcon:        a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)),
 		DeleteIcon:     a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)),
 		OnAdd:          a.openCloudPluginExclusionDialog,
@@ -568,9 +568,9 @@ func (a *App) buildCloudPluginExclusionOverlay(dialog *cloudPluginExclusionDialo
 	}
 	return launcherview.CloudPluginExclusionDialog(launcherview.CloudPluginExclusionDialogProps{
 		Width: width, Height: height, PanelWidth: 648, PanelHeight: launcherview.CloudPluginExclusionDialogHeight,
-		FieldLabel: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"), Description: a.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin_tips"),
+		FieldLabel: a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin"), Description: a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_plugin_tips"),
 		Selected: dialog.Selected, SelectedName: selectedName, SelectedIcon: selectedIcon, Choices: choices, ChoiceAnchor: dialog.ChoiceAnchor, ChoiceOpen: dialog.ChoiceOpen,
-		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), Window: a.settingsNativeWindow(), Theme: palette,
+		CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: a.language.translate("i18n:ui_save"), Window: a.settingsWindow.settingsNativeWindow(), Theme: palette,
 		OnChoiceTap: a.openCloudPluginExclusionChoice, OnChoose: a.chooseCloudPluginExclusion, OnCancel: a.closeCloudPluginExclusionDialog, OnSave: a.saveCloudPluginExclusion,
 	})
 }
@@ -588,16 +588,16 @@ func (a *App) cloudConfigNotesViewProps(snapshot settingsSnapshot, imageScale fl
 	items := make([]launcherview.CloudConfigNoteProps, 0, len(notes))
 	for _, note := range notes {
 		items = append(items, launcherview.CloudConfigNoteProps{
-			Item:    a.translate("i18n:ui_cloud_sync_config_note_" + note[0]),
-			Mode:    a.translate("i18n:ui_cloud_sync_config_notes_mode_" + note[1]),
-			Tooltip: a.translate("i18n:ui_cloud_sync_config_note_" + note[2] + "_tips"),
+			Item:    a.language.translate("i18n:ui_cloud_sync_config_note_" + note[0]),
+			Mode:    a.language.translate("i18n:ui_cloud_sync_config_notes_mode_" + note[1]),
+			Tooltip: a.language.translate("i18n:ui_cloud_sync_config_note_" + note[2] + "_tips"),
 		})
 	}
 	return launcherview.CloudConfigNotesProps{
-		SectionLabel: a.translate("i18n:ui_cloud_sync_config_notes"),
-		Tips:         a.translate("i18n:ui_cloud_sync_config_notes_tips"),
-		ItemLabel:    a.translate("i18n:ui_cloud_sync_config_notes_item"),
-		ModeLabel:    a.translate("i18n:ui_cloud_sync_config_notes_mode"),
+		SectionLabel: a.language.translate("i18n:ui_cloud_sync_config_notes"),
+		Tips:         a.language.translate("i18n:ui_cloud_sync_config_notes_tips"),
+		ItemLabel:    a.language.translate("i18n:ui_cloud_sync_config_notes_item"),
+		ModeLabel:    a.language.translate("i18n:ui_cloud_sync_config_notes_mode"),
 		InfoIcon:     a.imageForTint(settingNavIconSource("about"), &snapshot.palette.TextSecondary, physicalImageSize(14, imageScale)),
 		Items:        items,
 		OnTooltip:    a.setSettingChoiceTooltip,
@@ -615,17 +615,17 @@ func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.
 		action string
 	}
 	actions := []menuAction{
-		{id: "change-password", label: a.translate("i18n:ui_cloud_sync_account_change_password"), action: "change-password"},
-		{id: "logout", label: a.translate("i18n:ui_cloud_sync_account_logout"), action: "logout"},
+		{id: "change-password", label: a.language.translate("i18n:ui_cloud_sync_account_change_password"), action: "change-password"},
+		{id: "logout", label: a.language.translate("i18n:ui_cloud_sync_account_logout"), action: "logout"},
 	}
 	top := float32(145)
 	if snapshot.cloud.ActionMenu == "subscription" {
-		billingLabel := a.translate("i18n:ui_cloud_sync_subscribe")
+		billingLabel := a.language.translate("i18n:ui_cloud_sync_subscribe")
 		if strings.EqualFold(snapshot.cloud.Account.Plan, "pro") {
-			billingLabel = a.translate("i18n:ui_cloud_sync_manage_subscription")
+			billingLabel = a.language.translate("i18n:ui_cloud_sync_manage_subscription")
 		}
 		actions = []menuAction{
-			{id: "refresh", label: a.translate("i18n:ui_cloud_sync_refresh_status"), action: "refresh"},
+			{id: "refresh", label: a.language.translate("i18n:ui_cloud_sync_refresh_status"), action: "refresh"},
 			{id: "billing", label: billingLabel, action: "billing"},
 		}
 		top = 205
@@ -666,7 +666,7 @@ func (a *App) cloudActionMenuViewProps(snapshot settingsSnapshot) *launcherview.
 
 func (a *App) formatCloudTime(timestamp int64) string {
 	if timestamp <= 0 {
-		return a.translate("i18n:ui_cloud_sync_never")
+		return a.language.translate("i18n:ui_cloud_sync_never")
 	}
 	return time.UnixMilli(timestamp).Local().Format("2006-01-02 15:04:05")
 }
@@ -674,11 +674,11 @@ func (a *App) formatCloudTime(timestamp int64) string {
 // formatCloudActivityTime keeps recent activity compact while retaining the year for older dates.
 func (a *App) formatCloudActivityTime(timestamp int64, now time.Time) string {
 	if timestamp <= 0 {
-		return a.translate("i18n:ui_cloud_sync_never")
+		return a.language.translate("i18n:ui_cloud_sync_never")
 	}
 	date := time.UnixMilli(timestamp).In(now.Location())
 	if date.Format("2006-01-02") == now.Format("2006-01-02") {
-		return a.translate("i18n:ui_cloud_sync_today") + " " + date.Format("15:04")
+		return a.language.translate("i18n:ui_cloud_sync_today") + " " + date.Format("15:04")
 	}
 	if date.Year() == now.Year() {
 		return date.Format("01-02 15:04")
@@ -708,7 +708,7 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette woxcomp
 		field := launcherview.CloudFormFieldProps{
 			ID:            fmt.Sprintf("cloud-form-field-%d", index),
 			Kind:          definition.Type,
-			Label:         a.translate(definition.Value.Label),
+			Label:         a.language.translate(definition.Value.Label),
 			State:         state,
 			Focused:       focused,
 			Autofocus:     focused,
@@ -734,27 +734,27 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette woxcomp
 	var fieldLink *launcherview.CloudFormLinkProps
 	switch snapshot.kind {
 	case "register":
-		linkPrefix = a.translate("i18n:ui_cloud_sync_account_accept_prefix")
+		linkPrefix = a.language.translate("i18n:ui_cloud_sync_account_accept_prefix")
 		links = append(links,
-			launcherview.CloudFormLinkProps{ID: "cloud-terms", Label: a.translate("i18n:ui_cloud_sync_account_terms"), Width: 112, OnTap: func() { a.openCloudLegalPage("/terms") }},
-			launcherview.CloudFormLinkProps{ID: "cloud-privacy", Label: a.translate("i18n:ui_cloud_sync_account_privacy"), Width: 112, OnTap: func() { a.openCloudLegalPage("/privacy") }},
+			launcherview.CloudFormLinkProps{ID: "cloud-terms", Label: a.language.translate("i18n:ui_cloud_sync_account_terms"), Width: 112, OnTap: func() { a.openCloudLegalPage("/terms") }},
+			launcherview.CloudFormLinkProps{ID: "cloud-privacy", Label: a.language.translate("i18n:ui_cloud_sync_account_privacy"), Width: 112, OnTap: func() { a.openCloudLegalPage("/privacy") }},
 		)
 	case "login":
-		fieldLink = &launcherview.CloudFormLinkProps{ID: "cloud-forgot-password", Label: a.translate("i18n:ui_cloud_sync_account_reset_request"), Width: 96, OnTap: func() { a.openCloudAccountForm("reset-request") }}
+		fieldLink = &launcherview.CloudFormLinkProps{ID: "cloud-forgot-password", Label: a.language.translate("i18n:ui_cloud_sync_account_reset_request"), Width: 96, OnTap: func() { a.openCloudAccountForm("reset-request") }}
 	case "verify":
 		links = append(links, launcherview.CloudFormLinkProps{ID: "cloud-resend-code", Label: "Resend code", Width: 112, OnTap: a.resendCloudVerification})
 	}
 
-	feedback := a.translate(snapshot.notice)
+	feedback := a.language.translate(snapshot.notice)
 	feedbackColor := palette.TextSecondary
 	theme := palette
 	if snapshot.error != "" {
-		feedback = a.translate(snapshot.error)
+		feedback = a.language.translate(snapshot.error)
 		feedbackColor = theme.Error
 	}
-	submitLabel := a.translate("i18n:ui_cloud_sync_confirm")
+	submitLabel := a.language.translate("i18n:ui_cloud_sync_confirm")
 	if snapshot.saving {
-		submitLabel = a.translate("i18n:ui_cloud_sync_loading")
+		submitLabel = a.language.translate("i18n:ui_cloud_sync_loading")
 	}
 	submitEnabled := !snapshot.saving
 	if snapshot.kind == "register" && snapshot.values["AcceptedLegal"] != "true" {
@@ -764,15 +764,15 @@ func (a *App) buildCloudFormOverlay(snapshot *cloudFormSnapshot, palette woxcomp
 		Width:         width,
 		Height:        height,
 		PanelWidth:    panelWidth,
-		Title:         a.translate(snapshot.title),
-		Description:   a.translate(cloudFormDescription(snapshot)),
+		Title:         a.language.translate(snapshot.title),
+		Description:   a.language.translate(cloudFormDescription(snapshot)),
 		Fields:        fields,
 		LinkPrefix:    linkPrefix,
 		Links:         links,
 		FieldLink:     fieldLink,
 		Feedback:      feedback,
 		FeedbackColor: feedbackColor,
-		CancelLabel:   a.translate("i18n:ui_cloud_sync_cancel"),
+		CancelLabel:   a.language.translate("i18n:ui_cloud_sync_cancel"),
 		SubmitLabel:   submitLabel,
 		SubmitEnabled: submitEnabled,
 		Saving:        snapshot.saving,

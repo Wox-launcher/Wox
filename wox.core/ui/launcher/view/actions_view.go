@@ -119,6 +119,8 @@ func ActionPanelListHeight(items []ActionItem) float32 {
 // ActionsProps contains the action panel state and callbacks.
 type ActionsProps struct {
 	Revision              uint64
+	ResultsRevision       uint64
+	ToolbarRevision       uint64
 	Window                *woxui.Window
 	WindowWidth           float32
 	WindowHeight          float32
@@ -149,7 +151,7 @@ type ActionsProps struct {
 
 // Equal compares every render dependency for the floating action panel.
 func (p ActionsProps) Equal(other ActionsProps) bool {
-	if p.ListHeightLimit != other.ListHeightLimit || p.Revision != other.Revision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.BottomOffset != other.BottomOffset || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
+	if p.ListHeightLimit != other.ListHeightLimit || p.Revision != other.Revision || p.ResultsRevision != other.ResultsRevision || p.ToolbarRevision != other.ToolbarRevision || p.Window != other.Window || p.WindowWidth != other.WindowWidth || p.WindowHeight != other.WindowHeight || p.QueryHeight != other.QueryHeight || p.ToolbarHeight != other.ToolbarHeight || p.DensityScale != other.DensityScale || p.Theme != other.Theme || p.ActionHeader != other.ActionHeader || p.ActionQueryBackground != other.ActionQueryBackground || p.ActionQueryText != other.ActionQueryText || p.ResultTail != other.ResultTail || p.SelectedTail != other.SelectedTail || p.ActionQueryRadius != other.ActionQueryRadius || p.ActionPadding != other.ActionPadding || p.BottomOffset != other.BottomOffset || p.HeaderLabel != other.HeaderLabel || p.NoMatchesLabel != other.NoMatchesLabel || p.Selected != other.Selected || p.Filter != other.Filter || len(p.Items) != len(other.Items) {
 		return false
 	}
 	for index := range p.Items {

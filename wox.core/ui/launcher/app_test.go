@@ -118,10 +118,10 @@ func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("chat ")
+	app.querySession.query = newInputQuery("chat ")
 	defer app.cancel()
 
-	app.applyResults(app.query.QueryID, []queryResult{{
+	app.applyResults(app.querySession.query.QueryID, []queryResult{{
 		ID: "chat",
 		Preview: queryPreview{
 			PreviewType: "chat",
@@ -129,22 +129,22 @@ func TestApplyResultsEntersChatModeFromLayout(t *testing.T) {
 		},
 	}}, &queryLayout{ChatMode: true}, nil, nil, 0, true)
 
-	if !app.chatFullscreen || app.chatPreview == nil || !app.chatPreview.active {
-		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chatFullscreen, app.chatPreview)
+	if !app.chat.chatFullscreen || app.chat.chatPreview == nil || !app.chat.chatPreview.active {
+		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chat.chatFullscreen, app.chat.chatPreview)
 	}
 	preview := queryPreview{PreviewType: "chat", PreviewData: `{"ActiveChat":{"Id":"chat","IsStreaming":true}}`}
-	result := app.results[0]
-	if err := app.activateChatPreview(result, preview); err != nil {
+	result := app.resultList.results[0]
+	if err := app.chat.activateChatPreview(result, preview); err != nil {
 		t.Fatal(err)
 	}
-	if !app.chatPreview.chat.IsStreaming || !app.chatFullscreen {
+	if !app.chat.chatPreview.chat.IsStreaming || !app.chat.chatFullscreen {
 		t.Fatal("fullscreen chat ignored its originating result's preview update")
 	}
 	preview.PreviewData = `{"ActiveChat":{"Id":"chat","IsStreaming":false}}`
-	if err := app.activateChatPreview(result, preview); err != nil {
+	if err := app.chat.activateChatPreview(result, preview); err != nil {
 		t.Fatal(err)
 	}
-	if app.chatPreview.chat.IsStreaming || !app.chatFullscreen {
+	if app.chat.chatPreview.chat.IsStreaming || !app.chat.chatFullscreen {
 		t.Fatal("fullscreen chat did not finish the stream")
 	}
 }
@@ -153,12 +153,12 @@ func TestApplyResultsKeepsChatModeWhenPreviewIsStillRemote(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("chat ")
+	app.querySession.query = newInputQuery("chat ")
 	defer app.cancel()
 
 	path := "/preview?sessionId=s&queryId=q&id=chat"
-	app.previewRequests[path] = true
-	app.applyResults(app.query.QueryID, []queryResult{{
+	app.remotePreview.previewRequests[path] = true
+	app.applyResults(app.querySession.query.QueryID, []queryResult{{
 		ID: "chat",
 		Preview: queryPreview{
 			PreviewType: "remote",
@@ -170,11 +170,11 @@ func TestApplyResultsKeepsChatModeWhenPreviewIsStillRemote(t *testing.T) {
 		}},
 	}}, &queryLayout{ChatMode: true}, nil, nil, 0, true)
 
-	if !app.chatFullscreen {
+	if !app.chat.chatFullscreen {
 		t.Fatal("chat mode should stay fullscreen while the chat preview is still remote-wrapped")
 	}
-	app.reconcileSelectedPreviewOnUI()
-	if !app.chatFullscreen {
+	app.previews.reconcileSelectedPreviewOnUI()
+	if !app.chat.chatFullscreen {
 		t.Fatal("unresolved remote preview should not tear down chat fullscreen")
 	}
 }
@@ -183,11 +183,11 @@ func TestActivateEnterChatActionIgnoresRemotePreviewType(t *testing.T) {
 	app := New(false, nil)
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("chat ")
-	app.layout.ChatMode = true
+	app.querySession.query = newInputQuery("chat ")
+	app.resultList.layout.ChatMode = true
 	defer app.cancel()
 
-	app.results = []queryResult{{
+	app.resultList.results = []queryResult{{
 		ID: "chat",
 		Preview: queryPreview{
 			PreviewType: "remote",
@@ -198,9 +198,9 @@ func TestActivateEnterChatActionIgnoresRemotePreviewType(t *testing.T) {
 			IsDefault: true,
 		}},
 	}}
-	app.selected = 0
+	app.resultList.selected = 0
 	app.activateAction(0, 0)
-	if !app.chatFullscreen {
+	if !app.chat.chatFullscreen {
 		t.Fatal("Start Chat should enter fullscreen even when the preview is still remote-wrapped")
 	}
 }
@@ -213,11 +213,11 @@ func TestChatPreviewUpdatesPreserveLocalState(t *testing.T) {
 			defer app.cancel()
 			result := queryResult{ID: "result", QueryID: "query"}
 			preview := queryPreview{PreviewType: "chat", PreviewData: `{"ActiveChat":{"Id":"chat"}}`}
-			if err := app.activateChatPreview(result, preview); err != nil {
+			if err := app.chat.activateChatPreview(result, preview); err != nil {
 				t.Fatal(err)
 			}
-			app.chatFullscreen = fullscreen
-			state := app.chatPreview
+			app.chat.chatFullscreen = fullscreen
+			state := app.chat.chatPreview
 			state.editor = woxui.NewTextEditor("unsent draft")
 			state.scroll.Scroll(-158, 200)
 			state.expandedRounds["round"] = true
@@ -228,25 +228,25 @@ func TestChatPreviewUpdatesPreserveLocalState(t *testing.T) {
 			state.attachments = []common.AIChatAttachment{{ID: "draft-attachment"}}
 			for _, streaming := range []bool{true, false} {
 				preview.PreviewData = fmt.Sprintf(`{"ActiveChat":{"Id":"chat","IsStreaming":%t}}`, streaming)
-				if err := app.activateChatPreview(result, preview); err != nil {
+				if err := app.chat.activateChatPreview(result, preview); err != nil {
 					t.Fatal(err)
 				}
-				if app.chatPreview != state || state.editor.State().Text != "unsent draft" || state.scroll.Position(200) != 42 || !state.expandedRounds["round"] {
+				if app.chat.chatPreview != state || state.editor.State().Text != "unsent draft" || state.scroll.Position(200) != 42 || !state.expandedRounds["round"] {
 					t.Fatal("stream update discarded local interaction state")
 				}
 				if state.question != question || state.questionEditor.State().Text != "partial answer" || len(state.attachments) != 1 || state.attachments[0].ID != "draft-attachment" {
 					t.Fatal("stream update discarded the pending question or draft attachments")
 				}
-				if state.chat.IsStreaming != streaming || state.chat.Model.Name != "next-model" || app.chatFullscreen != fullscreen {
+				if state.chat.IsStreaming != streaming || state.chat.Model.Name != "next-model" || app.chat.chatFullscreen != fullscreen {
 					t.Fatal("stream update lost remote data, model selection, or fullscreen ownership")
 				}
-				if _, err := app.chatPreviewSnapshotFor(result, preview); err != nil {
+				if _, err := app.chat.chatPreviewSnapshotFor(result, preview); err != nil {
 					t.Fatalf("updated preview identity is not renderable: %v", err)
 				}
 			}
-			app.applyChatResponse(chatData{ID: "chat", Title: "newer service snapshot"})
+			app.chat.applyChatResponse(chatData{ID: "chat", Title: "newer service snapshot"})
 			preview.PreviewData = `{"ActiveChat":{"Id":"chat","Title":"stale preview"}}`
-			if err := app.activateChatPreview(result, preview); err != nil {
+			if err := app.chat.activateChatPreview(result, preview); err != nil {
 				t.Fatal(err)
 			}
 			if state.chat.Title != "newer service snapshot" {
@@ -269,12 +269,12 @@ func TestLauncherGridHidesRegularPreview(t *testing.T) {
 func TestMRUResultsResetGridLayout(t *testing.T) {
 	app := New(false, mruResultsTestServices{})
 	app.uiCall = nil
-	app.layout = queryLayout{GridLayout: &gridLayout{Columns: 4}}
+	app.resultList.layout = queryLayout{GridLayout: &gridLayout{Columns: 4}}
 	defer app.cancel()
 
-	app.loadTypedMRU(app.query.QueryID)
+	app.loadTypedMRU(app.querySession.query.QueryID)
 
-	if app.layout.GridLayout != nil {
+	if app.resultList.layout.GridLayout != nil {
 		t.Fatal("MRU results retained the previous query's grid layout")
 	}
 }
@@ -398,16 +398,18 @@ func newPreviewImageTestApp(show showAppParams, source woxImage, width, height f
 	size := previewImageRequestSize(width, height)
 	key := imageKey(source) + fmt.Sprintf("-svg-%d", size)
 	image := &woxui.Image{Width: 16, Height: 16}
-	return &App{
-		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
-		show:             show,
-		images:           map[string]*woxui.Image{key: image},
-		imageRequested:   map[string]string{},
-		imageVariants:    map[string]string{imageVariantKey(source, nil): key},
-		imageVariantKeys: map[string]string{},
-		imageLastUsed:    map[string]uint64{},
-		imageErrors:      map[string]string{},
-	}
+	return bindTestApp(&App{
+		appearance: appearanceController{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		show:       show,
+		imageStore: imageStore{
+			images:           map[string]*woxui.Image{key: image},
+			imageRequested:   map[string]string{},
+			imageVariants:    map[string]string{imageVariantKey(source, nil): key},
+			imageVariantKeys: map[string]string{},
+			imageLastUsed:    map[string]uint64{},
+			imageErrors:      map[string]string{},
+		},
+	})
 }
 
 func TestLauncherReservesFullPreviewHeightBeforeResultsArrive(t *testing.T) {
@@ -427,7 +429,7 @@ func TestLauncherReservesFullPreviewHeightBeforeResultsArrive(t *testing.T) {
 }
 
 func TestSecondaryLauncherHideClosesWithoutWebViewCache(t *testing.T) {
-	app := &App{isPrimary: false}
+	app := bindTestApp(&App{isPrimary: false})
 	app.destroyOnce.Do(func() {})
 	if err := app.hideWindow(false); err != nil {
 		t.Fatalf("non-WebView secondary hide should close the instance: %v", err)
@@ -437,11 +439,11 @@ func TestSecondaryLauncherHideClosesWithoutWebViewCache(t *testing.T) {
 func TestSecondaryLauncherHideRetainsCacheableWebView(t *testing.T) {
 	// WebView secondaries are independent named windows; only they hide-and-retain
 	// so browsing position survives reopen. Selection/explorer/tray still destroy.
-	app := &App{
-		isPrimary:          false,
-		visible:            false,
-		webViewPreviewData: `{"url":"https://example.com","cacheDisabled":false}`,
-	}
+	app := bindTestApp(&App{
+		isPrimary: false,
+		visible:   false,
+		webView:   webViewPreviewController{webViewPreviewData: `{"url":"https://example.com","cacheDisabled":false}`},
+	})
 	if err := app.hideWindow(false); err != nil {
 		t.Fatalf("cacheable WebView secondary hide should preserve the instance: %v", err)
 	}
@@ -451,29 +453,31 @@ func TestSecondaryLauncherHideRetainsCacheableWebView(t *testing.T) {
 }
 
 func TestHasCacheableWebViewPreviewIgnoresDisabledCache(t *testing.T) {
-	app := &App{webViewPreviewData: `{"url":"https://example.com","cacheDisabled":true}`}
+	app := bindTestApp(&App{webView: webViewPreviewController{webViewPreviewData: `{"url":"https://example.com","cacheDisabled":true}`}})
 	if app.hasCacheableWebViewPreviewLocked() {
 		t.Fatal("cache-disabled WebView previews must not retain secondary windows")
 	}
 }
 
 func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
-	app := &App{
-		visible:            true,
-		editor:             woxui.NewTextEditor("webview ig"),
-		query:              newInputQuery("webview ig"),
-		queryContext:       queryContext{PluginID: common.WebViewPluginID},
-		webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`,
-	}
+	app := bindTestApp(&App{
+		visible: true,
+		querySession: queryController{
+			editor:       woxui.NewTextEditor("webview ig"),
+			query:        newInputQuery("webview ig"),
+			queryContext: queryContext{PluginID: common.WebViewPluginID},
+		},
+		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`},
+	})
 	app.closeWebViewPage()
-	if app.webViewPreviewData != "" {
+	if app.webView.webViewPreviewData != "" {
 		t.Fatal("close must drop the cached preview session")
 	}
 	if app.hasCacheableWebViewPreviewLocked() {
 		t.Fatal("closed WebView must not stay retained in the background")
 	}
-	if app.query.QueryText != webViewPluginQuery || app.editor.State().Text != webViewPluginQuery {
-		t.Fatalf("query = %q editor = %q, want %q so the next show cannot reload the site", app.query.QueryText, app.editor.State().Text, webViewPluginQuery)
+	if app.querySession.query.QueryText != webViewPluginQuery || app.querySession.editor.State().Text != webViewPluginQuery {
+		t.Fatalf("query = %q editor = %q, want %q so the next show cannot reload the site", app.querySession.query.QueryText, app.querySession.editor.State().Text, webViewPluginQuery)
 	}
 	if !app.visible {
 		t.Fatal("close must keep Wox visible after destroying the page")
@@ -481,56 +485,58 @@ func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
 }
 
 func TestCloseWebViewPageDestroysFullPreviewWithoutRewritingQuery(t *testing.T) {
-	app := &App{
-		isPrimary:          false,
-		visible:            true,
-		editor:             woxui.NewTextEditor("webview x"),
-		query:              newInputQuery("webview x"),
-		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`,
-		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
-	}
+	app := bindTestApp(&App{
+		isPrimary: false,
+		visible:   true,
+		querySession: queryController{
+			editor: woxui.NewTextEditor("webview x"),
+			query:  newInputQuery("webview x"),
+		},
+		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`},
+		show:    showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	})
 	app.destroyOnce.Do(func() {})
 	app.closeWebViewPage()
-	if app.webViewPreviewData != "" {
+	if app.webView.webViewPreviewData != "" {
 		t.Fatal("full-preview close must destroy the page")
 	}
-	if app.query.QueryText != "webview x" || app.editor.State().Text != "webview x" {
-		t.Fatalf("full-preview query = %q editor = %q, want the original hotkey query", app.query.QueryText, app.editor.State().Text)
+	if app.querySession.query.QueryText != "webview x" || app.querySession.editor.State().Text != "webview x" {
+		t.Fatalf("full-preview query = %q editor = %q, want the original hotkey query", app.querySession.query.QueryText, app.querySession.editor.State().Text)
 	}
 }
 
 func TestHideWebViewPageKeepsCacheableFullPreview(t *testing.T) {
-	app := &App{
-		isPrimary:          false,
-		visible:            false,
-		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`,
-		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
-	}
+	app := bindTestApp(&App{
+		isPrimary: false,
+		visible:   false,
+		webView:   webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`},
+		show:      showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	})
 	if !app.canHideWebViewPage() {
 		t.Fatal("Run in background full-preview windows must offer Hide Webpage")
 	}
 	app.hideWebViewPage()
-	if app.webViewPreviewData == "" || app.destroyed.Load() {
+	if app.webView.webViewPreviewData == "" || app.destroyed.Load() {
 		t.Fatal("hide must keep the page and the secondary window")
 	}
 }
 
 func TestCanHideWebViewPageRequiresBackgroundFullPreview(t *testing.T) {
-	inline := &App{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`}
+	inline := bindTestApp(&App{webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`}})
 	if inline.canHideWebViewPage() {
 		t.Fatal("typed WebView queries should not offer Hide Webpage")
 	}
-	disabled := &App{
-		webViewPreviewData: `{"url":"https://x.com","cacheDisabled":true}`,
-		show:               showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
-	}
+	disabled := bindTestApp(&App{
+		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":true}`},
+		show:    showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
+	})
 	if disabled.canHideWebViewPage() {
 		t.Fatal("Hide Webpage requires Run in background")
 	}
 }
 
 func TestSecondaryLauncherIgnoresGlobalFocusLoss(t *testing.T) {
-	if err := (&App{}).notifyFocusLost(); err != nil {
+	if err := (bindTestApp(&App{})).notifyFocusLost(); err != nil {
 		t.Fatalf("secondary launcher should ignore global focus loss: %v", err)
 	}
 }
@@ -562,7 +568,11 @@ func TestLauncherReactivationNotifiesRetainedQueryFocus(t *testing.T) {
 	}
 
 	services := &queryFocusLifecycleTestServices{calls: make(chan struct{}, 2)}
-	app := &App{visible: true, host: host, services: services}
+	app := bindTestApp(&App{
+		visible:  true,
+		host:     host,
+		services: services,
+	})
 	app.onFocus(woxui.FocusEvent{Active: true})
 	select {
 	case <-services.calls:
@@ -608,7 +618,7 @@ func TestLauncherShowRestoresQueryFocusFromWebView(t *testing.T) {
 		t.Fatal("failed to focus WebView before launcher show")
 	}
 
-	app := &App{host: host}
+	app := bindTestApp(&App{host: host})
 	if !app.restoreQueryFocusAfterShow() {
 		t.Fatal("launcher show did not restore query focus")
 	}
@@ -630,7 +640,10 @@ func TestLauncherShowPreservesPreviewFocusWithoutQueryBox(t *testing.T) {
 	var displayList woxui.DisplayList
 	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 30}, PixelSize: woxui.PixelSize{Width: 100, Height: 30}, Scale: 1})
 
-	app := &App{host: host, show: showAppParams{HideQueryBox: true}}
+	app := bindTestApp(&App{
+		host: host,
+		show: showAppParams{HideQueryBox: true},
+	})
 	if app.restoreQueryFocusAfterShow() {
 		t.Fatal("launcher show restored a query focus target while the query box was hidden")
 	}
@@ -640,26 +653,26 @@ func TestLauncherShowPreservesPreviewFocusWithoutQueryBox(t *testing.T) {
 }
 
 func TestQueryCanFocusWhileChatPreviewIsActive(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	if !app.queryCanFocus() {
 		t.Fatal("query input should own focus without an active overlay")
 	}
-	app.chatPreview = &chatPreviewState{active: true}
+	app.chat.chatPreview = &chatPreviewState{active: true}
 	if !app.queryCanFocus() {
 		t.Fatal("active chat input prevented the query from accepting pointer focus")
 	}
 }
 
 func TestQueryCanFocusWhileTerminalSearchIsOpen(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{SearchOpen: true}}
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{SearchOpen: true}}})
 	if !app.queryCanFocus() {
 		t.Fatal("terminal search prevented pointer focus from returning to the query input")
 	}
 }
 
 func TestTerminalSearchIgnoresKeyUp(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{SearchOpen: true, Matches: []terminalMatch{{start: 0, end: 2}, {start: 3, end: 5}}, MatchIndex: 0}}
-	if app.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter}) || app.terminalPreview.MatchIndex != 0 {
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{SearchOpen: true, Matches: []terminalMatch{{start: 0, end: 2}, {start: 3, end: 5}}, MatchIndex: 0}}})
+	if app.terminal.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter}) || app.terminal.terminalPreview.MatchIndex != 0 {
 		t.Fatal("terminal search advanced on Enter key-up")
 	}
 }
@@ -817,7 +830,7 @@ func TestSelectableIndexFromPreservesExplicitRefreshIndex(t *testing.T) {
 func TestRefreshMRUPreservesSelection(t *testing.T) {
 	services := &sendQueryRecorderServices{}
 	app := newSendQueryTestApp(services, newInputQuery(""), showAppParams{StartPage: "mru"})
-	app.selected = 2
+	app.resultList.selected = 2
 	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
 		t.Fatalf("refresh homepage: %v", err)
 	}
@@ -825,7 +838,7 @@ func TestRefreshMRUPreservesSelection(t *testing.T) {
 		t.Fatal("homepage refresh started an unnecessary empty query")
 	}
 	results := []queryResult{{ID: "first"}, {ID: "second"}, {ID: "third"}}
-	selected, preserved, _ := restoreRefreshSelection(results, app.pendingSelection, app.query.QueryID, true)
+	selected, preserved, _ := restoreRefreshSelection(results, app.resultList.pendingSelection, app.querySession.query.QueryID, true)
 	if selected != 2 || !preserved {
 		t.Fatalf("homepage selection = %d preserved=%v, want 2/true", selected, preserved)
 	}
@@ -839,31 +852,31 @@ func TestRefreshQueryKeepsListUntilSnapshotStopsShrinking(t *testing.T) {
 	query := newInputQuery("setting")
 	app := newSendQueryTestApp(services, query, showAppParams{MaxResultCount: 8})
 	app.visible = true
-	app.results = make([]queryResult, 8)
-	for index := range app.results {
-		app.results[index] = queryResult{ID: fmt.Sprintf("old-%d", index), QueryID: query.QueryID}
+	app.resultList.results = make([]queryResult, 8)
+	for index := range app.resultList.results {
+		app.resultList.results[index] = queryResult{ID: fmt.Sprintf("old-%d", index), QueryID: query.QueryID}
 	}
-	app.resultsQueryID = query.QueryID
-	app.selected = 1
+	app.resultList.resultsQueryID = query.QueryID
+	app.resultList.selected = 1
 
 	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{SelectedResultId: "old-1"}); err != nil {
 		t.Fatalf("refresh query: %v", err)
 	}
 	t.Cleanup(func() {
-		app.resetQueryTransitionLocked()
-		app.releaseRefreshResultHoldLocked()
-		app.resetQueryLoadingLocked()
+		app.querySession.resetQueryTransitionLocked()
+		app.querySession.releaseRefreshResultHoldLocked()
+		app.querySession.resetQueryLoadingLocked()
 	})
-	refreshedQueryID := app.query.QueryID
-	if app.queryRefreshHoldQueryID != refreshedQueryID || app.queryRefreshHoldTimer == nil {
+	refreshedQueryID := app.querySession.query.QueryID
+	if app.querySession.queryRefreshHoldQueryID != refreshedQueryID || app.querySession.queryRefreshHoldTimer == nil {
 		t.Fatal("refresh did not hold the previous results")
 	}
 
 	app.applyResults(refreshedQueryID, []queryResult{{ID: "fast-1"}, {ID: "fast-2"}, {ID: "fast-3"}}, &queryLayout{}, nil, nil, 0, false)
-	if len(app.results) != 8 || app.results[0].ID != "old-0" || app.resultsQueryID != query.QueryID {
-		t.Fatalf("early snapshot replaced retained results: %#v query %q", app.results, app.resultsQueryID)
+	if len(app.resultList.results) != 8 || app.resultList.results[0].ID != "old-0" || app.resultList.resultsQueryID != query.QueryID {
+		t.Fatalf("early snapshot replaced retained results: %#v query %q", app.resultList.results, app.resultList.resultsQueryID)
 	}
-	if app.queryRefreshHoldQueryID != refreshedQueryID {
+	if app.querySession.queryRefreshHoldQueryID != refreshedQueryID {
 		t.Fatal("early snapshot cancelled the refresh hold")
 	}
 
@@ -872,10 +885,10 @@ func TestRefreshQueryKeepsListUntilSnapshotStopsShrinking(t *testing.T) {
 		final[index] = queryResult{ID: fmt.Sprintf("new-%d", index)}
 	}
 	app.applyResults(refreshedQueryID, final, &queryLayout{}, nil, nil, 0, true)
-	if len(app.results) != 8 || app.results[0].ID != "new-0" || app.resultsQueryID != refreshedQueryID {
-		t.Fatalf("final snapshot = %#v query %q", app.results, app.resultsQueryID)
+	if len(app.resultList.results) != 8 || app.resultList.results[0].ID != "new-0" || app.resultList.resultsQueryID != refreshedQueryID {
+		t.Fatalf("final snapshot = %#v query %q", app.resultList.results, app.resultList.resultsQueryID)
 	}
-	if app.queryRefreshHoldQueryID != "" || app.queryRefreshHoldTimer != nil {
+	if app.querySession.queryRefreshHoldQueryID != "" || app.querySession.queryRefreshHoldTimer != nil {
 		t.Fatal("final snapshot left the refresh hold active")
 	}
 }
@@ -884,57 +897,61 @@ func TestRefreshQueryKeepsVisibleGlance(t *testing.T) {
 	services := &sendQueryRecorderServices{}
 	app := newSendQueryTestApp(services, newInputQuery("setting"), showAppParams{})
 	app.visible = true
-	app.results = []queryResult{{ID: "old", QueryID: app.query.QueryID}}
-	app.resultsQueryID = app.query.QueryID
-	app.glanceItem = &glanceItem{Text: "638.3 MB"}
+	app.resultList.results = []queryResult{{ID: "old", QueryID: app.querySession.query.QueryID}}
+	app.resultList.resultsQueryID = app.querySession.query.QueryID
+	app.glance.glanceItem = &glanceItem{Text: "638.3 MB"}
 
 	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{SelectedResultId: "old"}); err != nil {
 		t.Fatalf("refresh query: %v", err)
 	}
 	t.Cleanup(func() {
-		app.resetQueryTransitionLocked()
-		app.releaseRefreshResultHoldLocked()
-		app.resetQueryLoadingLocked()
+		app.querySession.resetQueryTransitionLocked()
+		app.querySession.releaseRefreshResultHoldLocked()
+		app.querySession.resetQueryLoadingLocked()
 	})
-	if app.glanceItem == nil || app.glanceItem.Text != "638.3 MB" {
-		t.Fatalf("refresh glance = %#v, want the previous accessory kept", app.glanceItem)
+	if app.glance.glanceItem == nil || app.glance.glanceItem.Text != "638.3 MB" {
+		t.Fatalf("refresh glance = %#v, want the previous accessory kept", app.glance.glanceItem)
 	}
 }
 
 func TestRefreshResultHoldClearsWhenResultsStayLate(t *testing.T) {
-	app := &App{
-		visible:        true,
-		query:          newInputQuery("setting"),
-		show:           showAppParams{MaxResultCount: 8},
-		results:        []queryResult{{ID: "old", QueryID: "old-query"}},
-		resultsQueryID: "old-query",
-		selected:       0,
-	}
-	app.query.QueryID = "refresh"
-	app.beginRefreshResultHoldLocked()
-	if app.queryRefreshHoldTimer == nil {
+	app := bindTestApp(&App{
+		visible:      true,
+		querySession: queryController{query: newInputQuery("setting")},
+		show:         showAppParams{MaxResultCount: 8},
+		resultList: resultController{
+			results:        []queryResult{{ID: "old", QueryID: "old-query"}},
+			resultsQueryID: "old-query",
+			selected:       0,
+		},
+	})
+	app.querySession.query.QueryID = "refresh"
+	app.querySession.beginRefreshResultHoldLocked()
+	if app.querySession.queryRefreshHoldTimer == nil {
 		t.Fatal("refresh hold timer is nil")
 	}
-	app.queryRefreshHoldTimer.Stop()
-	app.queryRefreshHoldTimer = nil
+	app.querySession.queryRefreshHoldTimer.Stop()
+	app.querySession.queryRefreshHoldTimer = nil
 
-	app.expireRefreshResultHold("refresh")
-	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 || app.queryRefreshHoldQueryID != "" {
-		t.Fatalf("expired hold = results %#v query %q selected %d hold %q", app.results, app.resultsQueryID, app.selected, app.queryRefreshHoldQueryID)
+	app.querySession.expireRefreshResultHold("refresh")
+	if len(app.resultList.results) != 0 || app.resultList.resultsQueryID != "" || app.resultList.selected != -1 || app.querySession.queryRefreshHoldQueryID != "" {
+		t.Fatalf("expired hold = results %#v query %q selected %d hold %q", app.resultList.results, app.resultList.resultsQueryID, app.resultList.selected, app.querySession.queryRefreshHoldQueryID)
 	}
 }
 
 func TestMoveSelectionWrapsPastLeadingGroup(t *testing.T) {
-	app := &App{
-		selected: 2,
-		results:  []queryResult{{ID: "group", IsGroup: true}, {ID: "first"}, {ID: "last"}},
-		uiCall:   func(func()) error { return nil },
-	}
+	app := bindTestApp(&App{
+		resultList: resultController{
+			selected: 2,
+			results:  []queryResult{{ID: "group", IsGroup: true}, {ID: "first"}, {ID: "last"}},
+		},
+		uiCall: func(func()) error { return nil },
+	})
 
 	app.moveSelection(1)
 
-	if app.selected != 1 {
-		t.Fatalf("wrapped selected index = %d, want 1", app.selected)
+	if app.resultList.selected != 1 {
+		t.Fatalf("wrapped selected index = %d, want 1", app.resultList.selected)
 	}
 }
 
@@ -1004,40 +1021,42 @@ func TestQueryGroupJumpModifierAvoidsMacOSCommandArrows(t *testing.T) {
 }
 
 func TestMoveSelectionByGroupJumpsAdjacentGroups(t *testing.T) {
-	app := &App{
-		selected: 1,
-		results: []queryResult{
-			{ID: "group-a", IsGroup: true},
-			{ID: "a1"},
-			{ID: "a2"},
-			{ID: "group-b", IsGroup: true},
-			{ID: "b1"},
-			{ID: "b2"},
+	app := bindTestApp(&App{
+		resultList: resultController{
+			selected: 1,
+			results: []queryResult{
+				{ID: "group-a", IsGroup: true},
+				{ID: "a1"},
+				{ID: "a2"},
+				{ID: "group-b", IsGroup: true},
+				{ID: "b1"},
+				{ID: "b2"},
+			},
 		},
 		uiCall: func(fn func()) error {
 			fn()
 			return nil
 		},
+	})
+
+	app.moveSelectionByGroup(1)
+	if app.resultList.selected != 4 {
+		t.Fatalf("down to next group selected = %d, want 4", app.resultList.selected)
 	}
 
 	app.moveSelectionByGroup(1)
-	if app.selected != 4 {
-		t.Fatalf("down to next group selected = %d, want 4", app.selected)
-	}
-
-	app.moveSelectionByGroup(1)
-	if app.selected != 5 {
-		t.Fatalf("down without next group selected = %d, want 5", app.selected)
+	if app.resultList.selected != 5 {
+		t.Fatalf("down without next group selected = %d, want 5", app.resultList.selected)
 	}
 
 	app.moveSelectionByGroup(-1)
-	if app.selected != 4 {
-		t.Fatalf("up from last of current group selected = %d, want 4", app.selected)
+	if app.resultList.selected != 4 {
+		t.Fatalf("up from last of current group selected = %d, want 4", app.resultList.selected)
 	}
 
 	app.moveSelectionByGroup(-1)
-	if app.selected != 1 {
-		t.Fatalf("up from first of current group selected = %d, want 1", app.selected)
+	if app.resultList.selected != 1 {
+		t.Fatalf("up from first of current group selected = %d, want 1", app.resultList.selected)
 	}
 }
 
@@ -1073,50 +1092,60 @@ func TestHotkeyMatchesOnlyKeyDown(t *testing.T) {
 }
 
 func TestPreviousQueryHistoryStartsAtLatestInFreshMode(t *testing.T) {
-	app := &App{
-		queryHistories:    []plainQuery{newInputQuery("latest"), newInputQuery("older")},
-		queryHistoryIndex: -1,
-		canRecallHistory:  true,
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{
+			queryHistories:    []plainQuery{newInputQuery("latest"), newInputQuery("older")},
+			queryHistoryIndex: -1,
+			canRecallHistory:  true,
+		},
+	})
 
-	query, handled := app.previousQueryHistory()
+	query, handled := app.querySession.previousQueryHistory()
 	if !handled || query == nil || query.QueryText != "latest" {
 		t.Fatalf("first recalled query = %#v, handled = %v, want latest", query, handled)
 	}
-	query, handled = app.previousQueryHistory()
+	query, handled = app.querySession.previousQueryHistory()
 	if !handled || query == nil || query.QueryText != "older" {
 		t.Fatalf("second recalled query = %#v, handled = %v, want older", query, handled)
 	}
-	query, handled = app.previousQueryHistory()
+	query, handled = app.querySession.previousQueryHistory()
 	if !handled || query != nil {
 		t.Fatalf("exhausted history query = %#v, handled = %v, want nil and handled", query, handled)
 	}
 }
 
 func TestPreviousQueryHistorySkipsCurrentQueryInContinueMode(t *testing.T) {
-	app := &App{
-		queryHistories:    []plainQuery{newInputQuery("current"), newInputQuery("previous")},
-		queryHistoryIndex: 0,
-		canRecallHistory:  true,
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{
+			queryHistories:    []plainQuery{newInputQuery("current"), newInputQuery("previous")},
+			queryHistoryIndex: 0,
+			canRecallHistory:  true,
+		},
+	})
 
-	query, handled := app.previousQueryHistory()
+	query, handled := app.querySession.previousQueryHistory()
 	if !handled || query == nil || query.QueryText != "previous" {
 		t.Fatalf("recalled query = %#v, handled = %v, want previous", query, handled)
 	}
-	app.canRecallHistory = false
-	query, handled = app.previousQueryHistory()
+	app.querySession.canRecallHistory = false
+	query, handled = app.querySession.previousQueryHistory()
 	if handled || query != nil {
 		t.Fatalf("disabled history query = %#v, handled = %v, want nil and unhandled", query, handled)
 	}
 }
 
 func TestQueryTextChangeDisablesHistoryRecall(t *testing.T) {
-	app := &App{query: newInputQuery(""), canRecallHistory: true, selected: -1}
+	app := bindTestApp(&App{
+		querySession: queryController{
+			query:            newInputQuery(""),
+			canRecallHistory: true,
+		},
+		resultList: resultController{selected: -1},
+	})
 
 	app.applyQueryTextChangeLocked("typed")
 
-	if app.canRecallHistory {
+	if app.querySession.canRecallHistory {
 		t.Fatal("history recall remained enabled after query text changed")
 	}
 }
@@ -1124,12 +1153,12 @@ func TestQueryTextChangeDisablesHistoryRecall(t *testing.T) {
 func TestRequestMRUPreservesGlance(t *testing.T) {
 	item := &glanceItem{Text: "100 MB"}
 	uiDepth := 0
-	app := &App{
+	app := bindTestApp(&App{
 		services:      requestMRUTestServices{},
 		lifecycleCtx:  context.Background(),
-		editor:        woxui.NewTextEditor("query"),
-		glanceItem:    item,
-		selected:      -1,
+		querySession:  queryController{editor: woxui.NewTextEditor("query")},
+		glance:        glanceController{glanceItem: item},
+		resultList:    resultController{selected: -1},
 		themeSettings: newThemeSettingsController(CommonDeps{}),
 		uiCall: func(fn func()) error {
 			uiDepth++
@@ -1139,45 +1168,49 @@ func TestRequestMRUPreservesGlance(t *testing.T) {
 			}
 			return nil
 		},
-	}
+	})
 
 	if err := app.requestMRU(); err != nil {
 		t.Fatalf("request MRU: %v", err)
 	}
-	if app.glanceItem != item {
+	if app.glance.glanceItem != item {
 		t.Fatal("MRU request cleared the visible Glance item")
 	}
 }
 
 func TestRequestMRUPreservesVisibleResultsDuringTransition(t *testing.T) {
-	app := &App{
-		services:       requestMRUTestServices{},
-		lifecycleCtx:   context.Background(),
-		editor:         woxui.NewTextEditor("query"),
-		show:           showAppParams{StartPage: "mru"},
-		visible:        true,
-		query:          newInputQuery("old"),
-		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
-		resultsQueryID: "old-query",
-		selected:       0,
-		themeSettings:  newThemeSettingsController(CommonDeps{}),
-	}
+	app := bindTestApp(&App{
+		services:     requestMRUTestServices{},
+		lifecycleCtx: context.Background(),
+		querySession: queryController{
+			editor: woxui.NewTextEditor("query"),
+			query:  newInputQuery("old"),
+		},
+		show:    showAppParams{StartPage: "mru"},
+		visible: true,
+		resultList: resultController{
+			results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+			resultsQueryID: "old-query",
+			selected:       0,
+		},
+		themeSettings: newThemeSettingsController(CommonDeps{}),
+	})
 
-	oldQueryID := app.query.QueryID
+	oldQueryID := app.querySession.query.QueryID
 	if err := app.requestMRU(); err != nil {
 		t.Fatalf("request MRU: %v", err)
 	}
-	if app.queryTransitionTimer == nil {
+	if app.querySession.queryTransitionTimer == nil {
 		t.Fatal("MRU request did not start result transition timer")
 	}
-	app.queryTransitionTimer.Stop()
-	app.queryTransitionTimer = nil
+	app.querySession.queryTransitionTimer.Stop()
+	app.querySession.queryTransitionTimer = nil
 
-	if app.query.QueryID == oldQueryID {
+	if app.querySession.query.QueryID == oldQueryID {
 		t.Fatal("MRU request reused the previous query ID")
 	}
-	if len(app.results) != 1 || app.results[0].ID != "old-result" || app.selected != 0 {
-		t.Fatalf("MRU transition state = results %#v selected %d, want previous result selected", app.results, app.selected)
+	if len(app.resultList.results) != 1 || app.resultList.results[0].ID != "old-result" || app.resultList.selected != 0 {
+		t.Fatalf("MRU transition state = results %#v selected %d, want previous result selected", app.resultList.results, app.resultList.selected)
 	}
 }
 
@@ -1191,11 +1224,11 @@ func newRetainedMRUTestApp(t *testing.T) *App {
 	t.Cleanup(app.cancel)
 	app.show = showAppParams{StartPage: "mru"}
 	app.visible = true
-	app.query = newInputQuery("1+1")
-	app.editor = woxui.NewTextEditor("1+1")
-	app.results = []queryResult{{ID: "calculator", QueryID: app.query.QueryID}}
-	app.resultsQueryID = app.query.QueryID
-	app.selected = 0
+	app.querySession.query = newInputQuery("1+1")
+	app.querySession.editor = woxui.NewTextEditor("1+1")
+	app.resultList.results = []queryResult{{ID: "calculator", QueryID: app.querySession.query.QueryID}}
+	app.resultList.resultsQueryID = app.querySession.query.QueryID
+	app.resultList.selected = 0
 	return app
 }
 
@@ -1211,21 +1244,21 @@ func TestInPlaceQueryGenerationsClearPreviousCompletion(t *testing.T) {
 	for name, start := range starts {
 		t.Run(name, func(t *testing.T) {
 			app := newRetainedMRUTestApp(t)
-			app.queryComplete = true
-			previousQueryID := app.query.QueryID
+			app.querySession.queryComplete = true
+			previousQueryID := app.querySession.query.QueryID
 
 			start(app)
-			if app.queryTransitionTimer != nil {
-				defer app.queryTransitionTimer.Stop()
+			if app.querySession.queryTransitionTimer != nil {
+				defer app.querySession.queryTransitionTimer.Stop()
 			}
 
-			if app.query.QueryID == previousQueryID {
+			if app.querySession.query.QueryID == previousQueryID {
 				t.Fatal("reused the previous query generation")
 			}
-			if app.queryComplete {
+			if app.querySession.queryComplete {
 				t.Fatal("kept the previous generation's completion")
 			}
-			if len(app.results) == 0 {
+			if len(app.resultList.results) == 0 {
 				t.Fatal("dropped the retained results this invariant depends on")
 			}
 		})
@@ -1238,17 +1271,17 @@ func TestEmptyMRUResponseDropsRetainedResults(t *testing.T) {
 	if err := app.requestMRU(); err != nil {
 		t.Fatalf("request MRU: %v", err)
 	}
-	mruQueryID := app.query.QueryID
-	if app.queryTransitionTimer == nil {
+	mruQueryID := app.querySession.query.QueryID
+	if app.querySession.queryTransitionTimer == nil {
 		t.Fatal("MRU request did not retain the previous results behind a transition timer")
 	}
-	app.queryTransitionTimer.Stop()
-	app.queryTransitionTimer = nil
+	app.querySession.queryTransitionTimer.Stop()
+	app.querySession.queryTransitionTimer = nil
 
 	app.applyResults(mruQueryID, nil, &queryLayout{}, nil, nil, 0, true)
 
-	if len(app.results) != 0 || app.resultsQueryID != mruQueryID || app.selected != -1 {
-		t.Fatalf("state after an empty MRU response = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	if len(app.resultList.results) != 0 || app.resultList.resultsQueryID != mruQueryID || app.resultList.selected != -1 {
+		t.Fatalf("state after an empty MRU response = results %#v query %q selected %d, want cleared", app.resultList.results, app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
@@ -1258,12 +1291,12 @@ func TestQueryTransitionTimerDropsRetainedResultsWhenMRUNeverApplies(t *testing.
 	if err := app.requestMRU(); err != nil {
 		t.Fatalf("request MRU: %v", err)
 	}
-	mruQueryID := app.query.QueryID
+	mruQueryID := app.querySession.query.QueryID
 
-	app.showPendingQueryResults(mruQueryID, false)
+	app.querySession.showPendingQueryResults(mruQueryID, false)
 
-	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 {
-		t.Fatalf("state after the transition timer = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	if len(app.resultList.results) != 0 || app.resultList.resultsQueryID != "" || app.resultList.selected != -1 {
+		t.Fatalf("state after the transition timer = results %#v query %q selected %d, want cleared", app.resultList.results, app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
@@ -1278,26 +1311,26 @@ func TestStaleMRUResponseStillDropsRetainedResults(t *testing.T) {
 	if err := app.requestMRU(); err != nil {
 		t.Fatalf("request MRU: %v", err)
 	}
-	staleQueryID := app.query.QueryID
+	staleQueryID := app.querySession.query.QueryID
 
 	app.applyQueryTextChangeLocked("h 1+1")
-	if app.query.QueryID == staleQueryID {
+	if app.querySession.query.QueryID == staleQueryID {
 		t.Fatal("query text change reused the MRU generation")
 	}
 	app.applyResults(staleQueryID, nil, &queryLayout{}, nil, nil, 0, true)
-	if len(app.results) == 0 {
+	if len(app.resultList.results) == 0 {
 		t.Fatal("stale MRU response cleared results for a newer query generation")
 	}
 
-	if app.queryTransitionTimer == nil {
+	if app.querySession.queryTransitionTimer == nil {
 		t.Fatal("newer query did not retain the previous results behind a transition timer")
 	}
-	app.queryTransitionTimer.Stop()
-	app.queryTransitionTimer = nil
-	app.showPendingQueryResults(app.query.QueryID, false)
+	app.querySession.queryTransitionTimer.Stop()
+	app.querySession.queryTransitionTimer = nil
+	app.querySession.showPendingQueryResults(app.querySession.query.QueryID, false)
 
-	if len(app.results) != 0 {
-		t.Fatalf("retained results after the newer transition = %#v, want cleared", app.results)
+	if len(app.resultList.results) != 0 {
+		t.Fatalf("retained results after the newer transition = %#v, want cleared", app.resultList.results)
 	}
 }
 
@@ -1318,15 +1351,17 @@ func (s *sendQueryRecorderServices) QueryMRU(context.Context, string, string) ([
 }
 
 func newSendQueryTestApp(services *sendQueryRecorderServices, query plainQuery, show showAppParams) *App {
-	return &App{
-		services:        services,
-		lifecycleCtx:    context.Background(),
-		editor:          woxui.NewTextEditor(query.QueryText),
+	return bindTestApp(&App{
+		services:     services,
+		lifecycleCtx: context.Background(),
+		querySession: queryController{
+			editor: woxui.NewTextEditor(query.QueryText),
+			query:  query,
+		},
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 		themeSettings:   newThemeSettingsController(CommonDeps{}),
-		query:           query,
 		show:            show,
-	}
+	})
 }
 
 func waitForMRUCalled(t *testing.T, services *sendQueryRecorderServices) bool {
@@ -1352,8 +1387,8 @@ func TestSendCurrentQueryPreservesSelectionQuery(t *testing.T) {
 	if services.startedQuery.QueryType != "selection" {
 		t.Fatalf("started query type = %q, want selection", services.startedQuery.QueryType)
 	}
-	if app.query.QueryType != "selection" || app.query.QuerySelection.Text != "selected text" {
-		t.Fatalf("selection query was not preserved: %+v", app.query)
+	if app.querySession.query.QueryType != "selection" || app.querySession.query.QuerySelection.Text != "selected text" {
+		t.Fatalf("selection query was not preserved: %+v", app.querySession.query)
 	}
 	if waitForMRUCalled(t, services) {
 		t.Fatal("selection query was replaced by MRU results")
@@ -1418,16 +1453,16 @@ func TestApplyLaunchModeOnShowLocked(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			app := newSendQueryTestApp(&sendQueryRecorderServices{}, newInputQuery("stale"), test.show)
-			app.results = []queryResult{{ID: "stale-result"}}
+			app.resultList.results = []queryResult{{ID: "stale-result"}}
 
 			if got := app.applyLaunchModeOnShowLocked(); got != test.wantPreserved {
 				t.Fatalf("applyLaunchModeOnShowLocked() = %v, want %v", got, test.wantPreserved)
 			}
-			if app.query.QueryText != test.wantQueryText || app.editor.State().Text != test.wantQueryText {
-				t.Fatalf("query text = %q editor text = %q, want %q", app.query.QueryText, app.editor.State().Text, test.wantQueryText)
+			if app.querySession.query.QueryText != test.wantQueryText || app.querySession.editor.State().Text != test.wantQueryText {
+				t.Fatalf("query text = %q editor text = %q, want %q", app.querySession.query.QueryText, app.querySession.editor.State().Text, test.wantQueryText)
 			}
-			if len(app.results) != test.wantResultCount {
-				t.Fatalf("result count = %d, want %d", len(app.results), test.wantResultCount)
+			if len(app.resultList.results) != test.wantResultCount {
+				t.Fatalf("result count = %d, want %d", len(app.resultList.results), test.wantResultCount)
 			}
 		})
 	}
@@ -1438,23 +1473,23 @@ func TestApplyLaunchModeOnShowLockedContinuesPreviousQuery(t *testing.T) {
 	query := newInputQuery("continued query")
 	query.QueryID = "continued-query-id"
 	app := newSendQueryTestApp(&sendQueryRecorderServices{}, query, showAppParams{LaunchMode: "continue", ShowSource: "default"})
-	app.results = []queryResult{{ID: "continued-result", QueryID: query.QueryID}}
-	app.resultsQueryID = query.QueryID
-	app.selected = 0
+	app.resultList.results = []queryResult{{ID: "continued-result", QueryID: query.QueryID}}
+	app.resultList.resultsQueryID = query.QueryID
+	app.resultList.selected = 0
 
 	if !app.applyLaunchModeOnShowLocked() {
 		t.Fatal("continue mode should preserve the previous query")
 	}
-	if app.query.QueryID != query.QueryID || app.query.QueryText != query.QueryText || app.editor.State().Text != query.QueryText {
-		t.Fatalf("continued query state = id %q query %q editor %q, want id %q text %q", app.query.QueryID, app.query.QueryText, app.editor.State().Text, query.QueryID, query.QueryText)
+	if app.querySession.query.QueryID != query.QueryID || app.querySession.query.QueryText != query.QueryText || app.querySession.editor.State().Text != query.QueryText {
+		t.Fatalf("continued query state = id %q query %q editor %q, want id %q text %q", app.querySession.query.QueryID, app.querySession.query.QueryText, app.querySession.editor.State().Text, query.QueryID, query.QueryText)
 	}
-	if len(app.results) != 1 || app.results[0].ID != "continued-result" || app.resultsQueryID != query.QueryID || app.selected != 0 {
-		t.Fatalf("continued result state = results %#v query id %q selected %d", app.results, app.resultsQueryID, app.selected)
+	if len(app.resultList.results) != 1 || app.resultList.results[0].ID != "continued-result" || app.resultList.resultsQueryID != query.QueryID || app.resultList.selected != 0 {
+		t.Fatalf("continued result state = results %#v query id %q selected %d", app.resultList.results, app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
 func TestInformationalGlanceCanBeTapped(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	widget := app.buildGlance(glanceItem{Text: "100 MB"}, true, defaultPalette(), 100, 1, launcherDensityMetricsFor(""))
 	boundary, ok := widget.(woxwidget.Boundary[launcherview.GlanceProps])
 	if !ok {
@@ -1507,7 +1542,7 @@ func TestResultPreviewBecameVisible(t *testing.T) {
 
 func TestLivePreviewBypassesPreparedSectionBoundary(t *testing.T) {
 	for _, kind := range []string{"media", "chat"} {
-		app := &App{}
+		app := bindTestApp(&App{})
 		result := queryResult{Preview: queryPreview{PreviewType: kind, PreviewData: `{"title":"Track"}`}}
 		widget := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1)
 		if _, wrapped := widget.(woxwidget.Boundary[launcherPreparedSectionProps]); wrapped {
@@ -1517,7 +1552,7 @@ func TestLivePreviewBypassesPreparedSectionBoundary(t *testing.T) {
 }
 
 func TestUnresolvedRemotePreviewRendersBlank(t *testing.T) {
-	app := &App{remotePreviews: map[string]queryPreview{}}
+	app := bindTestApp(&App{remotePreview: remotePreviewController{remotePreviews: map[string]queryPreview{}}})
 	widget := app.buildPreview(queryResult{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=result"}}, defaultPalette(), 700, 400, 1)
 	blank, ok := widget.(woxwidget.Container)
 	if !ok || blank.Child != nil || blank.Width != 700 || blank.Height != 400 {
@@ -1528,20 +1563,22 @@ func TestUnresolvedRemotePreviewRendersBlank(t *testing.T) {
 func TestPrepareRemotePreviewStartsDeferredRequest(t *testing.T) {
 	path := "/preview?sessionId=session&queryId=query&id=result"
 	services := &remotePreviewTestServices{called: make(chan struct{})}
-	app := &App{
-		services:        services,
-		lifecycleCtx:    context.Background(),
-		remotePreviews:  map[string]queryPreview{},
-		previewRequests: map[string]bool{},
-	}
+	app := bindTestApp(&App{
+		services:     services,
+		lifecycleCtx: context.Background(),
+		remotePreview: remotePreviewController{
+			remotePreviews:  map[string]queryPreview{},
+			previewRequests: map[string]bool{},
+		},
+	})
 
-	app.prepareRemotePreview(queryPreview{PreviewType: "remote", PreviewData: path})
+	app.remotePreview.prepareRemotePreview(queryPreview{PreviewType: "remote", PreviewData: path})
 	select {
 	case <-services.called:
 	case <-time.After(time.Second):
 		t.Fatal("deferred remote preview request did not start")
 	}
-	if !app.previewRequests[path] {
+	if !app.remotePreview.previewRequests[path] {
 		t.Fatal("remote preview request was not marked as pending")
 	}
 }

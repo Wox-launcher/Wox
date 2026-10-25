@@ -18,16 +18,16 @@ func (a *App) AutomationQueryState() (automation.QueryState, error) {
 	target := a.resolveAutomationTarget()
 	var state automation.QueryState
 	err := target.runOnUI("read automation query state", func() {
-		state.QueryID = target.query.QueryID
-		state.QueryText = target.query.QueryText
-		state.ResultCount = len(target.results)
-		if target.host == nil || target.resultsQueryID != state.QueryID {
+		state.QueryID = target.querySession.query.QueryID
+		state.QueryText = target.querySession.query.QueryText
+		state.ResultCount = len(target.resultList.results)
+		if target.host == nil || target.resultList.resultsQueryID != state.QueryID {
 			return
 		}
 		snapshot := target.host.Snapshot()
 		inputMatches, frameComplete, hasRows := false, false, false
-		currentIDs := make(map[string]bool, len(target.results))
-		for _, result := range target.results {
+		currentIDs := make(map[string]bool, len(target.resultList.results))
+		for _, result := range target.resultList.results {
 			currentIDs["launcher.result."+result.ID] = true
 		}
 		for _, node := range snapshot.Tree.Nodes {
@@ -44,7 +44,7 @@ func (a *App) AutomationQueryState() (automation.QueryState, error) {
 			}
 		}
 		state.Visible = state.Visible && inputMatches
-		state.Complete = inputMatches && target.queryComplete && frameComplete && (state.Visible || (len(target.results) == 0 && !hasRows))
+		state.Complete = inputMatches && target.querySession.queryComplete && frameComplete && (state.Visible || (len(target.resultList.results) == 0 && !hasRows))
 	})
 	return state, err
 }
@@ -111,7 +111,7 @@ func (a *App) installCatalogPerfFixture(count int) {
 	if count > 0 {
 		a.themeSettings.SetThemeSelected(0)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) resetAutomationPerfCatalog() {

@@ -68,9 +68,11 @@ func TestOpenTrayQueryEditorOpensSelectedRow(t *testing.T) {
 	})
 	general := newGeneralSettingsController(deps, newSharedEditState())
 	general.SetForm(&form)
-	app := &App{
-		settingsOpen:    true,
-		settingTab:      "general",
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "general",
+		},
 		generalSettings: general,
 		hotkeySettings:  newHotkeySettingsController(deps),
 		aiSettings:      newAISettingsController(deps),
@@ -78,14 +80,14 @@ func TestOpenTrayQueryEditorOpensSelectedRow(t *testing.T) {
 		settingsSearch:  newSettingsSearchController(deps),
 		themeSettings:   newThemeSettingsController(deps),
 		sharedEdit:      newSharedEditState(),
-	}
+	})
 
 	app.openTrayQueryEditor(1)
 
-	if app.settingsTableEditor == nil {
+	if app.settingsWindow.settingsTableEditor == nil {
 		t.Fatal("tray query editor did not open a form table")
 	}
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state.definition.Value.Key != "TrayQueries" {
 		t.Fatalf("opened table = %q, want TrayQueries", state.definition.Value.Key)
 	}
@@ -129,9 +131,11 @@ func TestOpenTrayQueryEditorIgnoresInvalidRow(t *testing.T) {
 	})
 	general := newGeneralSettingsController(deps, newSharedEditState())
 	general.SetForm(&form)
-	app := &App{
-		settingsOpen:    true,
-		settingTab:      "general",
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "general",
+		},
 		generalSettings: general,
 		hotkeySettings:  newHotkeySettingsController(deps),
 		aiSettings:      newAISettingsController(deps),
@@ -139,14 +143,14 @@ func TestOpenTrayQueryEditorIgnoresInvalidRow(t *testing.T) {
 		settingsSearch:  newSettingsSearchController(deps),
 		themeSettings:   newThemeSettingsController(deps),
 		sharedEdit:      newSharedEditState(),
-	}
+	})
 
 	app.openTrayQueryEditor(5)
 
-	if app.settingsTableEditor == nil {
+	if app.settingsWindow.settingsTableEditor == nil {
 		t.Fatal("tray query table should open so the row list is visible")
 	}
-	if app.settingsTableEditor.rowForm != nil {
+	if app.settingsWindow.settingsTableEditor.rowForm != nil {
 		t.Fatal("out-of-range row should not open a row editor")
 	}
 }
@@ -181,18 +185,18 @@ func TestFullscreenHotkeySetting(t *testing.T) {
 func TestGeneralQueryTablesKeyboardNavigation(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsOpen = true
-	app.settingTab = "general"
+	app.settingsWindow.settingsOpen = true
+	app.settingsWindow.settingTab = "general"
 	form := newGeneralQuerySettingsForm(settingsData{})
 	app.generalSettings.SetForm(&form)
 	app.focusBuiltInSettingsSearchTarget("general", "QueryAliases")
 	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || form.focused != 1 {
 		t.Fatal("search-focused query table did not navigate to TrayQueries")
 	}
-	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.settingsTableEditor == nil || app.settingsTableEditor.definition.Value.Key != "TrayQueries" {
+	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.settingsWindow.settingsTableEditor == nil || app.settingsWindow.settingsTableEditor.definition.Value.Key != "TrayQueries" {
 		t.Fatal("Enter did not open the focused query table")
 	}
-	app.settingsTableEditor = nil
+	app.settingsWindow.settingsTableEditor = nil
 	app.selectSettingRow(0)
 	if app.generalSettings.FormFocused() || app.onGeneralQuerySettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) {
 		t.Fatal("query table retained keyboard ownership after selecting a built-in row")

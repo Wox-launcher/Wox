@@ -18,20 +18,23 @@ func TestFormatDictationCompareDuration(t *testing.T) {
 }
 
 func TestEnsureDictationModelCompareReusesSession(t *testing.T) {
-	app := &App{isDev: true, lifecycleCtx: context.Background()}
-	first := app.ensureDictationModelCompare("/tmp/raw.wav")
+	app := bindTestApp(&App{
+		isDev:        true,
+		lifecycleCtx: context.Background(),
+	})
+	first := app.dictation.ensureDictationModelCompare("/tmp/raw.wav")
 	ctx, cancel := context.WithCancel(app.lifecycleCtx)
 	defer cancel()
 	first.cancel = cancel
 	first.models = []dictationModelCompareRow{{ID: "kept", Status: previewview.DictationModelCompareDone, Text: "cached"}}
-	second := app.ensureDictationModelCompare("/tmp/raw.wav")
+	second := app.dictation.ensureDictationModelCompare("/tmp/raw.wav")
 	if second != first || len(second.models) != 1 || second.models[0].Text != "cached" {
 		t.Fatalf("session should reuse in-progress comparison results: %+v", second)
 	}
 	if ctx.Err() != nil {
 		t.Fatal("reusing the recording should keep its comparison running")
 	}
-	third := app.ensureDictationModelCompare("/tmp/other-raw.wav")
+	third := app.dictation.ensureDictationModelCompare("/tmp/other-raw.wav")
 	if third == first || third.sessionKey == first.sessionKey {
 		t.Fatal("a different diagnostic pair should start a new comparison session")
 	}

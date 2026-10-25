@@ -40,14 +40,14 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	installedTint := woxui.Color{R: 56, G: 176, B: 92, A: 255}
 	props := launcherview.PluginListProps{
 		Width: width, Height: height,
-		Placeholder:           fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(plugins.Plugins)),
+		Placeholder:           fmt.Sprintf(a.language.translate("i18n:ui_search_plugins"), len(plugins.Plugins)),
 		Search:                plugins.PluginSearch,
 		Focused:               plugins.PluginSearchFocused,
-		Window:                a.settingsNativeWindow(),
+		Window:                a.settingsWindow.settingsNativeWindow(),
 		FilterIcon:            a.imageForTint(settingControlIconSource("filter"), &iconTint, physicalImageSize(16, imageScale)),
 		InstalledIcon:         a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
 		InstalledSelectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &selectedIconTint, physicalImageSize(20, imageScale)),
-		FilterLabel:           a.translate("i18n:ui_filter_placeholder"),
+		FilterLabel:           a.language.translate("i18n:ui_filter_placeholder"),
 		FilterActive:          plugins.PluginFilters.applied(plugins.PluginsStore),
 		Theme:                 snapshot.palette,
 		OnClear:               a.clearPluginSearch,
@@ -56,7 +56,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 		OnFilter: a.togglePluginFilterPanel,
 	}
 	if plugins.PluginsLoading && len(plugins.Plugins) == 0 {
-		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
+		props.Message = a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 		return props
 	}
 	if plugins.PluginsError != "" && len(plugins.Plugins) == 0 {
@@ -66,7 +66,7 @@ func (a *App) pluginListProps(snapshot settingsSnapshot, width, height, imageSca
 	}
 
 	filtered := filterPlugins(plugins.Plugins, plugins.PluginSearch.Text, plugins.PluginFilters, plugins.PluginsStore, snapshot.general.Data.UsePinYin)
-	props.Placeholder = fmt.Sprintf(a.translate("i18n:ui_search_plugins"), len(filtered))
+	props.Placeholder = fmt.Sprintf(a.language.translate("i18n:ui_search_plugins"), len(filtered))
 	a.applyPluginCatalogEmptyState(&props, plugins, filtered, iconTint, imageScale)
 	props.Entries = a.pluginListEntries(snapshot, filtered, imageScale)
 	props.ResolveIcon = a.pluginListIconResolver(filtered, imageScale)
@@ -104,16 +104,16 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
 		if plugin.IsUpgradable {
-			status = a.translate("i18n:ui_update") + "  " + status
+			status = a.language.translate("i18n:ui_update") + "  " + status
 		}
 		badge := ""
 		if plugin.IsSystem {
-			badge = a.translate("i18n:ui_setting_plugin_system_tag")
+			badge = a.language.translate("i18n:ui_setting_plugin_system_tag")
 		} else if plugin.IsDev {
-			badge = a.translate("i18n:ui_plugin_dev_tag")
+			badge = a.language.translate("i18n:ui_plugin_dev_tag")
 		}
 		if network.IsOffline() && !plugin.IsSystem {
-			badge = a.translate("i18n:ui_plugin_offline_paused")
+			badge = a.language.translate("i18n:ui_plugin_offline_paused")
 		}
 		itemIndex := visibleIndex
 		visibleIndex++
@@ -145,9 +145,9 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 	sections := groupInstalledPlugins(filtered)
 	entries := make([]launcherview.PluginListEntry, 0, len(filtered)+len(sections))
 	for _, section := range sections {
-		label := a.translate("i18n:ui_setting_plugin_section_enabled")
+		label := a.language.translate("i18n:ui_setting_plugin_section_enabled")
 		if section.ID == pluginSectionDisabled {
-			label = a.translate("i18n:ui_setting_plugin_section_disabled")
+			label = a.language.translate("i18n:ui_setting_plugin_section_disabled")
 		}
 		entries = append(entries, launcherview.PluginListEntry{ID: section.ID, Header: label})
 		for _, entry := range section.Plugins {
@@ -160,8 +160,8 @@ func (a *App) pluginListEntries(snapshot settingsSnapshot, filtered []filteredPl
 // pluginStoreSection resolves one catalog title and its brand mark.
 func (a *App) pluginStoreSection(storeID string, imageScale float32) (string, *woxui.Image) {
 	label, source := woxplugin.PluginStorePresentation(storeID)
-	label = a.translate(label)
-	if a.imageLastUsed == nil || source.IsEmpty() {
+	label = a.language.translate(label)
+	if a.imageStore.imageLastUsed == nil || source.IsEmpty() {
 		return label, nil
 	}
 	size := physicalImageSize(launcherview.PluginListSectionIconSize, imageScale)
@@ -176,12 +176,12 @@ func (a *App) applyPluginCatalogEmptyState(props *launcherview.PluginListProps, 
 	emptyIconTint.A = 160
 	props.EmptyIcon = a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale))
 	if len(plugins.Plugins) > 0 {
-		props.EmptyTitle = a.translate("i18n:ui_no_matches")
-		props.EmptyDescription = a.translate("i18n:ui_setting_catalog_search_empty_subtitle")
+		props.EmptyTitle = a.language.translate("i18n:ui_no_matches")
+		props.EmptyDescription = a.language.translate("i18n:ui_setting_catalog_search_empty_subtitle")
 		return
 	}
-	props.EmptyTitle = a.translate("i18n:ui_setting_plugin_empty_data")
-	props.EmptyDescription = a.translate("i18n:ui_setting_plugin_empty_subtitle")
+	props.EmptyTitle = a.language.translate("i18n:ui_setting_plugin_empty_data")
+	props.EmptyDescription = a.language.translate("i18n:ui_setting_plugin_empty_subtitle")
 }
 
 // pluginDetailProps maps the selected plugin into an empty, store, or editable detail view.
@@ -190,9 +190,9 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	emptyIconTint := snapshot.palette.Text
 	emptyIconTint.A = 160
 	props := launcherview.PluginDetailProps{
-		Width: width, Height: height, EmptyLabel: a.translate("i18n:ui_setting_plugin_empty_data"),
-		EmptyTitle: a.translate("i18n:ui_setting_plugin_empty_data"), EmptyDescription: a.translate("i18n:ui_setting_plugin_empty_subtitle"),
-		EmptyIcon: a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale)), Window: a.settingsNativeWindow(),
+		Width: width, Height: height, EmptyLabel: a.language.translate("i18n:ui_setting_plugin_empty_data"),
+		EmptyTitle: a.language.translate("i18n:ui_setting_plugin_empty_data"), EmptyDescription: a.language.translate("i18n:ui_setting_plugin_empty_subtitle"),
+		EmptyIcon: a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale)), Window: a.settingsWindow.settingsNativeWindow(),
 		Theme: snapshot.palette,
 	}
 	if plugins.PluginSelected < 0 || plugins.PluginSelected >= len(plugins.Plugins) {
@@ -247,10 +247,10 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	innerWidth := max(float32(0), width-32)
 	keywordTable := a.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
 	keywordTable.Title = ""
-	keywordTable.Description = a.translate("i18n:ui_plugin_trigger_keywords_tip")
+	keywordTable.Description = a.language.translate("i18n:ui_plugin_trigger_keywords_tip")
 	for index := range keywordTable.Rows {
 		if len(keywordTable.Rows[index].Cells) > 0 && keywordTable.Rows[index].Cells[0].Text == "*" {
-			keywordTable.Rows[index].Cells[0].Text = a.translate("i18n:ui_plugin_trigger_keyword_global")
+			keywordTable.Rows[index].Cells[0].Text = a.language.translate("i18n:ui_plugin_trigger_keyword_global")
 		}
 	}
 	a.addPluginKeywordQueryTests(&keywordTable, plugin.ID, form.values["TriggerKeywords"], imageScale)
@@ -258,7 +258,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	editor.Keywords = a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
 	}, accent)
-	editor.Keywords.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
+	editor.Keywords.SectionLabel = a.language.translate("i18n:ui_plugin_tab_trigger_keywords")
 	editor.Commands = a.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true, true, pluginFormTriggerKeywords(plugin, form.values))
 	editor.Tools = a.pluginToolsFormProps(snapshot, plugin, innerWidth, imageScale)
 
@@ -279,10 +279,10 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	if plugin.HasNativeSettings {
 		pluginID := plugin.ID
 		field := launcherview.FormButtonField(launcherview.FormButtonFieldProps{
-			ID: "plugin-native-settings-field", Label: a.translate("i18n:ui_plugin_native_settings_title"),
-			Description: a.translate("i18n:ui_plugin_native_settings_description"),
-			ButtonID:    "plugin-native-settings", ButtonLabel: a.translate("i18n:ui_plugin_native_settings_open"),
-			Disabled: a.nativeSettingsPluginID == pluginID, Width: innerWidth, LabelWidth: callbacks.labelWidth, Theme: snapshot.palette,
+			ID: "plugin-native-settings-field", Label: a.language.translate("i18n:ui_plugin_native_settings_title"),
+			Description: a.language.translate("i18n:ui_plugin_native_settings_description"),
+			ButtonID:    "plugin-native-settings", ButtonLabel: a.language.translate("i18n:ui_plugin_native_settings_open"),
+			Disabled: a.settingsWindow.nativeSettingsPluginID == pluginID, Width: innerWidth, LabelWidth: callbacks.labelWidth, Theme: snapshot.palette,
 			OnTap: func() { a.openNativePluginSettings(pluginID) },
 		})
 		rows = append([]woxwidget.Widget{woxwidget.Keyed{Key: "plugin-native-settings-row", Child: field}}, rows...)
@@ -295,9 +295,9 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 		rows = append([]woxwidget.Widget{woxwidget.Keyed{Key: "plugin-settings-status", Child: status}}, rows...)
 	}
 	editor.Form = &launcherview.PluginFormProps{
-		SectionLabel: a.translate("i18n:ui_plugin_tab_settings"),
+		SectionLabel: a.language.translate("i18n:ui_plugin_tab_settings"),
 		Rows:         rows, KeepVisibleKey: keepVisibleKey,
-		EmptyTitle: a.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.translate("i18n:ui_plugin_no_settings_subtitle"),
+		EmptyTitle: a.language.translate("i18n:ui_plugin_no_settings"), EmptyDescription: a.language.translate("i18n:ui_plugin_no_settings_subtitle"),
 	}
 	props.Editor = editor
 	return props
@@ -305,7 +305,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 
 // openPluginSettingLink opens Markdown links from plugin setting help text.
 func (a *App) openPluginSettingLink(target string) {
-	window := a.settingsNativeWindow()
+	window := a.settingsWindow.settingsNativeWindow()
 	if window == nil {
 		return
 	}
@@ -316,7 +316,7 @@ func (a *App) openPluginSettingLink(target string) {
 
 // pluginFormLabelWidth mirrors Flutter's shared measured label column for each plugin.
 func (a *App) pluginFormLabelWidth(definitions []formDefinition) float32 {
-	window := a.settingsNativeWindow()
+	window := a.settingsWindow.settingsNativeWindow()
 	if window == nil {
 		return 120
 	}
@@ -356,8 +356,8 @@ func (a *App) pluginDetailIntroFormProps(snapshot settingsSnapshot, imageScale f
 
 func (a *App) pluginDetailEmptyFormProps(titleKey, subtitleKey string) *launcherview.PluginFormProps {
 	return &launcherview.PluginFormProps{
-		EmptyTitle:       a.translate(titleKey),
-		EmptyDescription: a.translate(subtitleKey),
+		EmptyTitle:       a.language.translate(titleKey),
+		EmptyDescription: a.language.translate(subtitleKey),
 	}
 }
 
@@ -370,23 +370,23 @@ func (a *App) pluginKeywordsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	for index, keyword := range plugin.TriggerKeywords {
 		text := keyword
 		if text == "*" {
-			text = a.translate("i18n:ui_plugin_trigger_keyword_global")
+			text = a.language.translate("i18n:ui_plugin_trigger_keyword_global")
 		}
 		rows = append(rows, launcherview.FormTableRow{Index: index, Cells: []launcherview.FormTableCell{{Text: text}}})
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-keywords", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
-		Description: a.translate("i18n:ui_plugin_trigger_keywords_tip"),
+		Description: a.language.translate("i18n:ui_plugin_trigger_keywords_tip"),
 		Columns: []launcherview.FormTableColumn{
-			{Label: a.translate("i18n:ui_plugin_trigger_keyword_column"), Tooltip: a.translate("i18n:ui_plugin_trigger_keyword_tooltip")},
+			{Label: a.language.translate("i18n:ui_plugin_trigger_keyword_column"), Tooltip: a.language.translate("i18n:ui_plugin_trigger_keyword_tooltip")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette,
+		Rows: rows, EmptyLabel: a.language.translate("i18n:ui_plugin_no_trigger_keywords"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
 	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-keyword-table", Child: launcherview.FormTableField(table)},
 	}, accent)
-	form.SectionLabel = a.translate("i18n:ui_plugin_tab_trigger_keywords")
+	form.SectionLabel = a.language.translate("i18n:ui_plugin_tab_trigger_keywords")
 	return form
 }
 
@@ -402,12 +402,12 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-commands", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: readOnly,
-		Description: a.translate("i18n:ui_plugin_commands_tip"),
+		Description: a.language.translate("i18n:ui_plugin_commands_tip"),
 		Columns: []launcherview.FormTableColumn{
-			{Label: a.translate("i18n:ui_plugin_command_name_column"), Width: 120},
-			{Label: a.translate("i18n:ui_plugin_command_desc_column")},
+			{Label: a.language.translate("i18n:ui_plugin_command_name_column"), Width: 120},
+			{Label: a.language.translate("i18n:ui_plugin_command_desc_column")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_no_commands"), OperationLabel: a.translate("i18n:ui_operation"),
+		Rows: rows, EmptyLabel: a.language.translate("i18n:ui_plugin_no_commands"), OperationLabel: a.language.translate("i18n:ui_operation"),
 		OnTooltip: a.setSettingChoiceTooltip, Theme: snapshot.palette,
 	}
 	if testable {
@@ -417,7 +417,7 @@ func (a *App) pluginCommandsFormProps(snapshot settingsSnapshot, plugin pluginSe
 	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-command-table", Child: launcherview.FormTableField(table)},
 	}, accent)
-	form.SectionLabel = a.translate("i18n:ui_plugin_tab_commands")
+	form.SectionLabel = a.language.translate("i18n:ui_plugin_tab_commands")
 	return form
 }
 
@@ -433,18 +433,18 @@ func (a *App) pluginToolsFormProps(snapshot settingsSnapshot, plugin pluginSetti
 	}
 	table := launcherview.FormTableFieldProps{
 		ID: "plugin-tools", Width: width, MaxHeight: 300, InlineTitle: true, ReadOnly: true,
-		Description: a.translate("i18n:ui_plugin_tools_tip"),
+		Description: a.language.translate("i18n:ui_plugin_tools_tip"),
 		Columns: []launcherview.FormTableColumn{
-			{Label: a.translate("i18n:ui_plugin_tool_name_column"), Width: 160},
-			{Label: a.translate("i18n:ui_plugin_tool_desc_column")},
+			{Label: a.language.translate("i18n:ui_plugin_tool_name_column"), Width: 160},
+			{Label: a.language.translate("i18n:ui_plugin_tool_desc_column")},
 		},
-		Rows: rows, EmptyLabel: a.translate("i18n:ui_plugin_tab_tools"), Theme: snapshot.palette,
+		Rows: rows, EmptyLabel: a.language.translate("i18n:ui_plugin_tab_tools"), Theme: snapshot.palette,
 	}
 	accent := snapshot.palette.Info
 	form := a.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
 		woxwidget.Keyed{Key: "plugin-tool-table", Child: launcherview.FormTableField(table)},
 	}, accent)
-	form.SectionLabel = a.translate("i18n:ui_plugin_tab_tools")
+	form.SectionLabel = a.language.translate("i18n:ui_plugin_tab_tools")
 	return form
 }
 
@@ -491,7 +491,7 @@ func (a *App) addPluginKeywordQueryTests(table *launcherview.FormTableFieldProps
 		if keyword == "*" {
 			continue
 		}
-		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.translate("i18n:ui_plugin_test_keyword"), func() {
+		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.language.translate("i18n:ui_plugin_test_keyword"), func() {
 			a.runPluginKeywordQueryTest(pluginID, keyword)
 		}))
 	}
@@ -505,7 +505,7 @@ func (a *App) addPluginCommandQueryTests(table *launcherview.FormTableFieldProps
 			continue
 		}
 		command := commands[sourceIndex].Command
-		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.translate("i18n:ui_plugin_test_command"), func() {
+		table.Rows[viewIndex].LeadingActions = append(table.Rows[viewIndex].LeadingActions, a.pluginQueryTestAction(table.Theme, imageScale, a.language.translate("i18n:ui_plugin_test_command"), func() {
 			a.runPluginCommandQueryTest(triggers, command)
 		}))
 	}
@@ -552,11 +552,11 @@ func (a *App) pluginMetadataProps(plugin pluginSettingsPlugin, tab string) launc
 		props.DescriptionOnly = true
 		props.Description = plugin.Description
 	case "privacy":
-		props.Header = a.translate("i18n:ui_plugin_tab_privacy")
+		props.Header = a.language.translate("i18n:ui_plugin_tab_privacy")
 		accesses := pluginPrivacyAccesses(plugin.Features)
 		if len(accesses) == 0 {
-			props.EmptyTitle = a.translate("i18n:ui_plugin_no_data_access")
-			props.EmptyDescription = a.translate("i18n:ui_plugin_no_data_access_subtitle")
+			props.EmptyTitle = a.language.translate("i18n:ui_plugin_no_data_access")
+			props.EmptyDescription = a.language.translate("i18n:ui_plugin_no_data_access_subtitle")
 			break
 		}
 		for _, access := range accesses {
@@ -604,21 +604,21 @@ func pluginPrivacyAccesses(features []pluginFeature) []string {
 func pluginPrivacyDescription(a *App, access string) string {
 	switch access {
 	case "requireActiveWindowName":
-		return a.translate("i18n:ui_plugin_privacy_window_name_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_window_name_desc")
 	case "requireActiveWindowPid":
-		return a.translate("i18n:ui_plugin_privacy_window_pid_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_window_pid_desc")
 	case "requireActiveWindowId":
-		return a.translate("i18n:ui_plugin_privacy_window_id_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_window_id_desc")
 	case "requireActiveWindowIcon":
-		return a.translate("i18n:ui_plugin_privacy_window_icon_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_window_icon_desc")
 	case "requireActiveWindowIsOpenSaveDialog":
-		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_open_save_dialog_desc")
 	case "requireActiveWindowIsOpenSaveDialogSelectFolder":
-		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder_desc")
 	case "requireActiveBrowserUrl":
-		return a.translate("i18n:ui_plugin_privacy_browser_url_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_browser_url_desc")
 	case "llm":
-		return a.translate("i18n:ui_plugin_privacy_llm_desc")
+		return a.language.translate("i18n:ui_plugin_privacy_llm_desc")
 	default:
 		return ""
 	}
@@ -627,21 +627,21 @@ func pluginPrivacyDescription(a *App, access string) string {
 func pluginPrivacyTitle(a *App, access string) string {
 	switch access {
 	case "requireActiveWindowName":
-		return a.translate("i18n:ui_plugin_privacy_window_name")
+		return a.language.translate("i18n:ui_plugin_privacy_window_name")
 	case "requireActiveWindowPid":
-		return a.translate("i18n:ui_plugin_privacy_window_pid")
+		return a.language.translate("i18n:ui_plugin_privacy_window_pid")
 	case "requireActiveWindowId":
-		return a.translate("i18n:ui_plugin_privacy_window_id")
+		return a.language.translate("i18n:ui_plugin_privacy_window_id")
 	case "requireActiveWindowIcon":
-		return a.translate("i18n:ui_plugin_privacy_window_icon")
+		return a.language.translate("i18n:ui_plugin_privacy_window_icon")
 	case "requireActiveWindowIsOpenSaveDialog":
-		return a.translate("i18n:ui_plugin_privacy_open_save_dialog")
+		return a.language.translate("i18n:ui_plugin_privacy_open_save_dialog")
 	case "requireActiveWindowIsOpenSaveDialogSelectFolder":
-		return a.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder")
+		return a.language.translate("i18n:ui_plugin_privacy_open_save_dialog_select_folder")
 	case "requireActiveBrowserUrl":
-		return a.translate("i18n:ui_plugin_privacy_browser_url")
+		return a.language.translate("i18n:ui_plugin_privacy_browser_url")
 	case "llm":
-		return a.translate("i18n:ui_plugin_privacy_llm")
+		return a.language.translate("i18n:ui_plugin_privacy_llm")
 	default:
 		return access
 	}
@@ -655,7 +655,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 	var externalIcon *woxui.Image
 	var websiteIcon *woxui.Image
 	if strings.TrimSpace(plugin.Website) != "" {
-		websiteLabel = a.translate("i18n:ui_plugin_website")
+		websiteLabel = a.language.translate("i18n:ui_plugin_website")
 		websiteChipLabel = websiteLabel
 		onWebsite = a.openSelectedPluginWebsite
 		iconTint := snapshot.palette.Text
@@ -675,7 +675,7 @@ func (a *App) pluginStoreDetailProps(snapshot settingsSnapshot, plugin pluginSet
 			runtimeIcon = a.imageForSurface(source, 256, settingsPalette().Background)
 		}
 		onRuntimeHover = func(inside bool, anchor woxui.Rect) {
-			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_plugin_filter_runtime")+": "+runtimeLabel, anchor)
+			a.setSettingChoiceTooltip(inside, a.language.translate("i18n:ui_plugin_filter_runtime")+": "+runtimeLabel, anchor)
 		}
 	}
 	var screenshot *woxui.Image
@@ -713,7 +713,7 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 	}
 	fields := a.pluginFilterFields(plugins.PluginFilters, plugins.PluginsStore)
 	labelWidth := float32(80)
-	if window := a.settingsNativeWindow(); window != nil {
+	if window := a.settingsWindow.settingsNativeWindow(); window != nil {
 		for _, field := range fields {
 			if metrics, err := window.MeasureText(field.Label, woxui.TextStyle{Size: snapshot.palette.Scaled(woxcomponent.SettingsLabelFontSize)}); err == nil {
 				labelWidth = max(labelWidth, metrics.Size.Width)
@@ -727,7 +727,7 @@ func (a *App) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.Pl
 	}
 	return &launcherview.PluginFilterPanelProps{
 		Width: width, LabelWidth: labelWidth, Fields: fields,
-		ResetLabel: a.translate("i18n:ui_plugin_filter_reset"), ResetEnabled: plugins.PluginFilters.applied(plugins.PluginsStore),
+		ResetLabel: a.language.translate("i18n:ui_plugin_filter_reset"), ResetEnabled: plugins.PluginFilters.applied(plugins.PluginsStore),
 		Theme: snapshot.palette, OnOpen: a.openPluginFilterChoice, OnReset: a.resetPluginFilters, OnDismiss: a.closePluginFilterPanel,
 	}
 }
@@ -737,17 +737,17 @@ func (a *App) pluginFilterFields(filters pluginFilterState, store bool) []launch
 	fields := make([]launcherview.PluginFilterField, 0, 4)
 	if store {
 		fields = append(fields, launcherview.PluginFilterField{
-			ID: "install", Label: a.translate("i18n:ui_plugin_filter_install_status"), Value: a.pluginFilterChoiceLabel("install", filters.installStatus),
+			ID: "install", Label: a.language.translate("i18n:ui_plugin_filter_install_status"), Value: a.pluginFilterChoiceLabel("install", filters.installStatus),
 		})
 	} else {
 		fields = append(fields,
-			launcherview.PluginFilterField{ID: "enabled", Label: a.translate("i18n:ui_plugin_filter_enabled_status"), Value: a.pluginFilterChoiceLabel("enabled", filters.enabledStatus)},
-			launcherview.PluginFilterField{ID: "upgrade", Label: a.translate("i18n:ui_plugin_filter_upgrade_status"), Value: a.pluginFilterChoiceLabel("upgrade", filters.upgradeStatus)},
+			launcherview.PluginFilterField{ID: "enabled", Label: a.language.translate("i18n:ui_plugin_filter_enabled_status"), Value: a.pluginFilterChoiceLabel("enabled", filters.enabledStatus)},
+			launcherview.PluginFilterField{ID: "upgrade", Label: a.language.translate("i18n:ui_plugin_filter_upgrade_status"), Value: a.pluginFilterChoiceLabel("upgrade", filters.upgradeStatus)},
 		)
 	}
 	fields = append(fields,
-		launcherview.PluginFilterField{ID: "type", Label: a.translate("i18n:ui_plugin_filter_plugin_type"), Value: a.pluginFilterChoiceLabel("type", filters.pluginType)},
-		launcherview.PluginFilterField{ID: "runtime", Label: a.translate("i18n:ui_plugin_filter_runtime"), Value: a.pluginFilterChoiceLabel("runtime", filters.runtime)},
+		launcherview.PluginFilterField{ID: "type", Label: a.language.translate("i18n:ui_plugin_filter_plugin_type"), Value: a.pluginFilterChoiceLabel("type", filters.pluginType)},
+		launcherview.PluginFilterField{ID: "runtime", Label: a.language.translate("i18n:ui_plugin_filter_runtime"), Value: a.pluginFilterChoiceLabel("runtime", filters.runtime)},
 	)
 	return fields
 }
@@ -759,15 +759,15 @@ func (a *App) pluginFilterChoiceItem(id string) settingItem {
 	var title string
 	switch id {
 	case "enabled":
-		title, value = a.translate("i18n:ui_plugin_filter_enabled_status"), filters.enabledStatus
+		title, value = a.language.translate("i18n:ui_plugin_filter_enabled_status"), filters.enabledStatus
 	case "upgrade":
-		title, value = a.translate("i18n:ui_plugin_filter_upgrade_status"), filters.upgradeStatus
+		title, value = a.language.translate("i18n:ui_plugin_filter_upgrade_status"), filters.upgradeStatus
 	case "type":
-		title, value = a.translate("i18n:ui_plugin_filter_plugin_type"), filters.pluginType
+		title, value = a.language.translate("i18n:ui_plugin_filter_plugin_type"), filters.pluginType
 	case "runtime":
-		title, value = a.translate("i18n:ui_plugin_filter_runtime"), filters.runtime
+		title, value = a.language.translate("i18n:ui_plugin_filter_runtime"), filters.runtime
 	case "install":
-		title, value = a.translate("i18n:ui_plugin_filter_install_status"), filters.installStatus
+		title, value = a.language.translate("i18n:ui_plugin_filter_install_status"), filters.installStatus
 	default:
 		return settingItem{}
 	}
@@ -787,27 +787,27 @@ func (a *App) pluginFilterChoiceLabel(id, value string) string {
 			return choice.label
 		}
 	}
-	return a.translate("i18n:ui_all")
+	return a.language.translate("i18n:ui_all")
 }
 
 // pluginFilterChoices lists the exclusive options for one catalog filter dropdown.
 func (a *App) pluginFilterChoices(id string) []settingChoice {
-	all := settingChoice{value: pluginFilterAll, label: a.translate("i18n:ui_all")}
+	all := settingChoice{value: pluginFilterAll, label: a.language.translate("i18n:ui_all")}
 	switch id {
 	case "enabled":
-		return []settingChoice{all, {value: pluginFilterEnabled, label: a.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: a.translate("i18n:ui_plugin_filter_disabled")}}
+		return []settingChoice{all, {value: pluginFilterEnabled, label: a.language.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: a.language.translate("i18n:ui_plugin_filter_disabled")}}
 	case "upgrade":
-		return []settingChoice{all, {value: pluginFilterUpgradable, label: a.translate("i18n:ui_plugin_filter_upgradable")}, {value: pluginFilterNotUpgradable, label: a.translate("i18n:ui_plugin_filter_not_upgradable")}}
+		return []settingChoice{all, {value: pluginFilterUpgradable, label: a.language.translate("i18n:ui_plugin_filter_upgradable")}, {value: pluginFilterNotUpgradable, label: a.language.translate("i18n:ui_plugin_filter_not_upgradable")}}
 	case "type":
-		return []settingChoice{all, {value: pluginFilterSystem, label: a.translate("i18n:ui_plugin_filter_system")}, {value: pluginFilterThirdParty, label: a.translate("i18n:ui_plugin_filter_third_party")}}
+		return []settingChoice{all, {value: pluginFilterSystem, label: a.language.translate("i18n:ui_plugin_filter_system")}, {value: pluginFilterThirdParty, label: a.language.translate("i18n:ui_plugin_filter_third_party")}}
 	case "install":
-		return []settingChoice{all, {value: pluginFilterInstalled, label: a.translate("i18n:ui_plugin_filter_installed")}, {value: pluginFilterUninstalled, label: a.translate("i18n:ui_not_installed")}}
+		return []settingChoice{all, {value: pluginFilterInstalled, label: a.language.translate("i18n:ui_plugin_filter_installed")}, {value: pluginFilterUninstalled, label: a.language.translate("i18n:ui_not_installed")}}
 	case "runtime":
 		choices := []settingChoice{
 			all,
-			{value: pluginFilterRuntimeNodeJS, label: a.translate("i18n:ui_runtime_name_nodejs")},
-			{value: pluginFilterRuntimePython, label: a.translate("i18n:ui_runtime_name_python")},
-			{value: pluginFilterRuntimeScript, label: a.translate("i18n:ui_runtime_name_script")},
+			{value: pluginFilterRuntimeNodeJS, label: a.language.translate("i18n:ui_runtime_name_nodejs")},
+			{value: pluginFilterRuntimePython, label: a.language.translate("i18n:ui_runtime_name_python")},
+			{value: pluginFilterRuntimeScript, label: a.language.translate("i18n:ui_runtime_name_script")},
 		}
 		for _, runtime := range thirdPartyRuntimeFilterValues() {
 			choices = append(choices, settingChoice{value: runtime, label: a.localizedRuntimeDisplayName(runtime)})
@@ -846,31 +846,31 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 	busy := plugins.PluginOperation != ""
 	if !plugin.IsInstalled {
 		return []launcherview.PluginAction{{
-			ID: "plugin-install", Label: pluginOperationButtonLabel(plugins, "install", plugin.ID, a.translate("i18n:ui_plugin_install")), Width: 104,
+			ID: "plugin-install", Label: pluginOperationButtonLabel(plugins, "install", plugin.ID, a.language.translate("i18n:ui_plugin_install")), Width: 104,
 			Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("install") },
 		}}
 	}
 	actions := make([]launcherview.PluginAction, 0, 3)
 	if plugin.IsUpgradable {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-upgrade", Label: pluginOperationButtonLabel(plugins, "upgrade", plugin.ID, a.translate("i18n:ui_update")), Width: 104, Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("upgrade") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-upgrade", Label: pluginOperationButtonLabel(plugins, "upgrade", plugin.ID, a.language.translate("i18n:ui_update")), Width: 104, Enabled: !busy, Primary: true, OnTap: func() { a.runPluginOperation("upgrade") }})
 	}
 	if !plugin.IsSystem {
-		label := a.translate("i18n:ui_plugin_uninstall")
+		label := a.language.translate("i18n:ui_plugin_uninstall")
 		if plugins.PluginUninstallArmed == plugin.ID {
-			label = a.translate("i18n:ui_cloud_sync_confirm") + " " + label
+			label = a.language.translate("i18n:ui_cloud_sync_confirm") + " " + label
 		}
 		actions = append(actions, launcherview.PluginAction{ID: "plugin-uninstall", Label: pluginOperationButtonLabel(plugins, "uninstall", plugin.ID, label), Width: 124, Enabled: !busy, OnTap: func() { a.runPluginOperation("uninstall") }})
 	}
 	if plugin.IsDisable {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(plugins, "enable", plugin.ID, a.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-enable", Label: pluginOperationButtonLabel(plugins, "enable", plugin.ID, a.language.translate("i18n:ui_plugin_enable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("enable") }})
 	} else {
-		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
+		actions = append(actions, launcherview.PluginAction{ID: "plugin-disable", Label: pluginOperationButtonLabel(plugins, "disable", plugin.ID, a.language.translate("i18n:ui_plugin_disable")), Width: 96, Enabled: !busy, OnTap: func() { a.runPluginOperation("disable") }})
 	}
 	if !plugin.IsSystem && strings.TrimSpace(plugin.PluginDirectory) != "" {
-		label := a.translate("i18n:ui_plugin_open_directory")
+		label := a.language.translate("i18n:ui_plugin_open_directory")
 		width := float32(132)
 		if woxplugin.IsSingleFilePluginDirectory(plugin.PluginDirectory) {
-			label = a.translate("i18n:ui_plugin_locate_file")
+			label = a.language.translate("i18n:ui_plugin_locate_file")
 			width = 160
 		}
 		actions = append(actions, launcherview.PluginAction{
@@ -881,7 +881,7 @@ func (a *App) pluginManagementActions(snapshot settingsSnapshot, plugin pluginSe
 		for index := range actions {
 			if actions[index].ID == "plugin-enable" || actions[index].ID == "plugin-disable" || actions[index].ID == "plugin-upgrade" {
 				actions[index].Enabled = false
-				actions[index].Label = a.translate("i18n:ui_plugin_offline_paused")
+				actions[index].Label = a.language.translate("i18n:ui_plugin_offline_paused")
 				actions[index].OnTap = nil
 			}
 		}
@@ -896,7 +896,7 @@ func (a *App) pluginMetadataActions(snapshot settingsSnapshot, plugin pluginSett
 	if strings.TrimSpace(plugin.Website) != "" {
 		iconTint := snapshot.palette.Text
 		actions = append(actions, launcherview.PluginAction{
-			ID: "plugin-website", Label: a.translate("i18n:ui_plugin_website"), Icon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(14, imageScale)),
+			ID: "plugin-website", Label: a.language.translate("i18n:ui_plugin_website"), Icon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(14, imageScale)),
 			Width: 88, Enabled: true, OnTap: a.openSelectedPluginWebsite,
 		})
 	}

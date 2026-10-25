@@ -20,7 +20,7 @@ const settingsTitleBarHeight = launcherview.SettingsTitleBarHeight
 func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
 	snapshot.general.Data.EnableOfflineMode = network.IsOffline()
-	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
+	snapshot.palette.DensityScale = a.appearance.densityMetrics.normalized().scale
 	items := settingItemsForSnapshot(snapshot)
 	if snapshot.row >= len(items) && len(items) > 0 {
 		snapshot.row = len(items) - 1
@@ -32,7 +32,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	railWidth := woxcomponent.SettingsRailWidth(width)
 	var page woxwidget.Widget
 	if network.IsOffline() && (snapshot.tab == "cloud" || (snapshot.tab == "plugins" && snapshot.plugins.PluginsStore) || (snapshot.tab == "theme" && snapshot.theme.ThemesMode == "store")) {
-		page = launcherview.OfflineSettingsView(launcherview.OfflineSettingsProps{Width: width - railWidth, Height: pageHeight, Theme: snapshot.palette, Icon: a.imageForTint(fromCoreImage(icons.Get(icons.StatusOffline)), &snapshot.palette.TextSecondary, physicalImageSize(48, frame.Scale*snapshot.palette.Scaled(1))), Window: a.settingsNativeWindow(), Title: a.translate("i18n:ui_offline_title"), Description: a.translate("i18n:ui_offline_unavailable"), SettingsLabel: a.translate("i18n:ui_offline_open_settings"), OnSettings: func() { a.selectSettingTab("privacy") }})
+		page = launcherview.OfflineSettingsView(launcherview.OfflineSettingsProps{Width: width - railWidth, Height: pageHeight, Theme: snapshot.palette, Icon: a.imageForTint(fromCoreImage(icons.Get(icons.StatusOffline)), &snapshot.palette.TextSecondary, physicalImageSize(48, frame.Scale*snapshot.palette.Scaled(1))), Window: a.settingsWindow.settingsNativeWindow(), Title: a.language.translate("i18n:ui_offline_title"), Description: a.language.translate("i18n:ui_offline_unavailable"), SettingsLabel: a.language.translate("i18n:ui_offline_open_settings"), OnSettings: func() { a.selectSettingTab("privacy") }})
 	} else if snapshot.tab == "plugins" {
 		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "theme" {
@@ -73,12 +73,12 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	} else if snapshot.tab == "theme" && snapshot.theme.AutoEditor != nil {
 		overlay = a.buildAutoThemeEditorOverlay(snapshot, width, height, frame.Scale)
-	} else if a.settingsDemo != nil {
+	} else if a.settingsWindow.settingsDemo != nil {
 		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
-	} else if snapshot.tab == "cloud" && a.cloudPlanTooltip != nil {
-		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.cloudPlanTooltip.anchor, width, height, snapshot.palette)
+	} else if snapshot.tab == "cloud" && a.settingsWindow.cloudPlanTooltip != nil {
+		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.settingsWindow.cloudPlanTooltip.anchor, width, height, snapshot.palette)
 	}
-	if snapshot.tableEditor != nil && a.settingsDemo != nil {
+	if snapshot.tableEditor != nil && a.settingsWindow.settingsDemo != nil {
 		demo, left, top := a.buildSettingsDemoOverlay(snapshot, width, height)
 		overlay = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: overlay},
@@ -89,7 +89,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	if snapshot.tooltip != nil {
 		tooltip, left, top := launcherview.SettingsInlineTooltipOverlay(launcherview.SettingsInlineTooltipProps{
 			Width: width, Height: height, Anchor: snapshot.tooltip.Anchor, Message: snapshot.tooltip.Text, Side: snapshot.tooltip.Side, Theme: snapshot.palette,
-			Window: a.settingsNativeWindow(),
+			Window: a.settingsWindow.settingsNativeWindow(),
 		})
 		if tooltip != nil {
 			if overlay == nil {
@@ -114,7 +114,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 }
 
 func (a *App) settingsWindowTitle() string {
-	title := a.translate("i18n:ui_settings_window_title")
+	title := a.language.translate("i18n:ui_settings_window_title")
 	if title == "" {
 		return "Wox Settings"
 	}
@@ -125,7 +125,7 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 	title := a.settingsWindowTitle()
 	titleStyle := woxui.TextStyle{Size: snapshot.palette.Scaled(13), Weight: woxui.FontWeightSemibold}
 	titleWidth := float32(160)
-	if window := a.settingsNativeWindow(); window != nil {
+	if window := a.settingsWindow.settingsNativeWindow(); window != nil {
 		if metrics, err := window.MeasureText(title, titleStyle); err == nil {
 			titleWidth = metrics.Size.Width + 24
 		}
@@ -135,12 +135,12 @@ func (a *App) buildSettingsTitleBar(snapshot settingsSnapshot, width, railWidth 
 		Width: width, RailWidth: railWidth, Title: title, TitleWidth: titleWidth, Platform: runtime.GOOS, AppIcon: a.imageForSurface(appIconImageSource, physicalImageSize(20, imageScale), settingsPalette().Background),
 		Theme: snapshot.palette, Active: windowFocused,
 		OnDrag: func() {
-			if window := a.settingsNativeWindow(); window != nil {
+			if window := a.settingsWindow.settingsNativeWindow(); window != nil {
 				_ = window.StartDragging()
 			}
 		},
 		OnMinimize: func() {
-			if window := a.settingsNativeWindow(); window != nil {
+			if window := a.settingsWindow.settingsNativeWindow(); window != nil {
 				_ = window.Minimize()
 			}
 		},
@@ -213,7 +213,7 @@ func (a *App) buildSettingsRail(snapshot settingsSnapshot, width, height, imageS
 }
 
 func (a *App) settingNavLabel(spec settingNavSpec) string {
-	translated := a.translate("i18n:" + spec.labelKey)
+	translated := a.language.translate("i18n:" + spec.labelKey)
 	if translated == "" || translated == strings.ReplaceAll(spec.labelKey, "_", " ") {
 		return spec.fallback
 	}
@@ -227,16 +227,16 @@ func (a *App) activeSettingsNavLabel(snapshot settingsSnapshot) string {
 			return a.settingNavLabel(spec)
 		}
 	}
-	return a.translate("i18n:ui_tray_open_setting_window")
+	return a.language.translate("i18n:ui_tray_open_setting_window")
 }
 
 // buildSettingsSearchBox owns the settings window's default text-input focus and native IME cursor.
 func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScale float32) woxwidget.Widget {
-	placeholder := a.translate("i18n:ui_setting_search_placeholder")
+	placeholder := a.language.translate("i18n:ui_setting_search_placeholder")
 	iconTint := snapshot.palette.TextSecondary
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused, Controller: a.settingsSearch.Editor(),
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsNativeWindow(), Theme: snapshot.palette,
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsWindow.settingsNativeWindow(), Theme: snapshot.palette,
 		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
 		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
 	})
@@ -262,10 +262,10 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 			OnHover: func() { a.selectSettingsSearchResult(index) }, OnTap: func() { a.activateSettingsSearchResult(result) },
 		})
 	}
-	emptyMessage := a.translate("i18n:ui_setting_search_empty")
+	emptyMessage := a.language.translate("i18n:ui_setting_search_empty")
 	if len(results) == 0 {
 		if snapshot.search.Loading {
-			emptyMessage = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
+			emptyMessage = a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 		} else if snapshot.search.Error != "" {
 			emptyMessage = snapshot.search.Error
 		}
@@ -290,13 +290,13 @@ func settingsSearchResultIconSource(kind settingsSearchResultKind) woxImage {
 func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) string {
 	switch kind {
 	case settingsSearchPlugin:
-		return a.translate("i18n:ui_setting_search_type_plugin")
+		return a.language.translate("i18n:ui_setting_search_type_plugin")
 	case settingsSearchPluginSetting:
-		return a.translate("i18n:ui_setting_search_type_plugin_setting")
+		return a.language.translate("i18n:ui_setting_search_type_plugin_setting")
 	case settingsSearchSection:
-		return a.translate("i18n:ui_setting_search_type_setting")
+		return a.language.translate("i18n:ui_setting_search_type_setting")
 	default:
-		return a.translate("i18n:ui_setting_search_type_setting")
+		return a.language.translate("i18n:ui_setting_search_type_setting")
 	}
 }
 
@@ -346,7 +346,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 	}
 	if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil {
-		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
+		children = append(children, a.buildSettingsSectionHeader(a.language.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
@@ -399,7 +399,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 	}
 	if len(networkRows) > 0 {
-		children = append(children, a.buildSettingsSectionHeader(a.translate("i18n:ui_network"), contentWidth, snapshot.palette))
+		children = append(children, a.buildSettingsSectionHeader(a.language.translate("i18n:ui_network"), contentWidth, snapshot.palette))
 		children = append(children, networkRows...)
 	}
 	return launcherview.SettingsPage(launcherview.SettingsPageProps{Theme: snapshot.palette,
@@ -417,15 +417,15 @@ func (a *App) buildSettingsPageHeader(title, description string, width float32, 
 func (a *App) settingsPageDescription(tab string) string {
 	switch tab {
 	case "general":
-		return a.translate("i18n:ui_general_description")
+		return a.language.translate("i18n:ui_general_description")
 	case "appearance":
-		return a.translate("i18n:ui_ui_description")
+		return a.language.translate("i18n:ui_ui_description")
 	case "hotkey":
-		return a.translate("i18n:ui_hotkeys_description")
+		return a.language.translate("i18n:ui_hotkeys_description")
 	case "debug":
-		return a.translate("i18n:ui_debug_description")
+		return a.language.translate("i18n:ui_debug_description")
 	case "updates":
-		return a.translate("i18n:ui_update_description")
+		return a.language.translate("i18n:ui_update_description")
 	default:
 		return ""
 	}
@@ -439,31 +439,31 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 	if tab == "general" {
 		switch key {
 		case "EnableAutostart", "HideOnStart":
-			return a.translate("i18n:ui_general_section_startup")
+			return a.language.translate("i18n:ui_general_section_startup")
 		case "UsePinYin", "SwitchInputMethodABC":
-			return a.translate("i18n:ui_general_section_input_search")
+			return a.language.translate("i18n:ui_general_section_input_search")
 		case "HttpProxyEnabled", "HttpProxyUrl":
-			return a.translate("i18n:ui_network")
+			return a.language.translate("i18n:ui_network")
 		default:
-			return a.translate("i18n:ui_general_section_launch")
+			return a.language.translate("i18n:ui_general_section_launch")
 		}
 	}
 	if tab == "appearance" {
 		switch key {
 		case "UseSoftwareRendering":
-			return a.translate("i18n:ui_rendering")
+			return a.language.translate("i18n:ui_rendering")
 		case "LangCode":
-			return a.translate("i18n:ui_general_section_language")
+			return a.language.translate("i18n:ui_general_section_language")
 		case "MaxResultCount":
-			return a.translate("i18n:ui_ui_section_results")
+			return a.language.translate("i18n:ui_ui_section_results")
 		case "EnableGlance", "HideGlanceIcon", "PrimaryGlance":
-			return a.translate("i18n:ui_ui_section_glance")
+			return a.language.translate("i18n:ui_ui_section_glance")
 		default:
-			return a.translate("i18n:ui_ui_section_launcher")
+			return a.language.translate("i18n:ui_ui_section_launcher")
 		}
 	}
 	if tab == "updates" {
-		return a.translate("i18n:ui_update_section_updates")
+		return a.language.translate("i18n:ui_update_section_updates")
 	}
 	return ""
 }
@@ -491,13 +491,13 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		"EnableAutoUpdate":  {"ui_enable_auto_update", "ui_enable_auto_update_tips"}, "ReleaseChannel": {"ui_release_channel", "ui_release_channel_tips"},
 	}
 	if pair, ok := keys[item.key]; ok {
-		item.title = a.translate("i18n:" + pair[0])
+		item.title = a.language.translate("i18n:" + pair[0])
 		if pair[1] != "" {
-			item.description = a.translate("i18n:" + pair[1])
+			item.description = a.language.translate("i18n:" + pair[1])
 		}
 	}
 	if item.key == "IgnoreHotkeysOnFullscreen" && item.disabled {
-		item.description = a.translate("i18n:ui_hotkey_ignore_fullscreen_unavailable")
+		item.description = a.language.translate("i18n:ui_hotkey_ignore_fullscreen_unavailable")
 	}
 	for index := range item.choices {
 		item.choices[index].label = a.localizedSettingChoiceLabel(item.key, item.choices[index])
@@ -517,7 +517,7 @@ func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) stri
 	}
 	if valueKeys := choiceKeys[key]; valueKeys != nil {
 		if labelKey := valueKeys[choice.value]; labelKey != "" {
-			return a.translate("i18n:" + labelKey)
+			return a.language.translate("i18n:" + labelKey)
 		}
 	}
 	return choice.label
@@ -531,7 +531,7 @@ func (a *App) localizedSettingChoiceTooltip(key string, choice settingChoice) st
 	}
 	if valueKeys := tooltipKeys[key]; valueKeys != nil {
 		if tooltipKey := valueKeys[choice.value]; tooltipKey != "" {
-			return a.translate("i18n:" + tooltipKey)
+			return a.language.translate("i18n:" + tooltipKey)
 		}
 	}
 	return ""
@@ -542,7 +542,7 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	if offlinePaused {
 		item.disabled = true
 		item.value = "false"
-		item.description = a.translate("i18n:ui_offline_paused")
+		item.description = a.language.translate("i18n:ui_offline_paused")
 	}
 	kind := "choice"
 	value := settingValueLabel(item)
@@ -569,7 +569,7 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	var controlAction woxwidget.Widget
 	if item.key == "UseSoftwareRendering" && snapshot.general.Data.SoftwareRenderingRestartRequired {
 		controlAction = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "settings-restart-wox", Label: a.translate("i18n:ui_restart_wox"),
+			ID: "settings-restart-wox", Label: a.language.translate("i18n:ui_restart_wox"),
 			Variant: woxcomponent.ButtonSecondary, Disabled: snapshot.saving || snapshot.restarting,
 			OnTap: a.restartFromSettings, Theme: snapshot.palette,
 		})
@@ -581,7 +581,7 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ControlAction: controlAction, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
 		Width: width, Background: background, Disabled: item.disabled, PreserveLabelColor: offlinePaused,
-		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsNativeWindow(), Theme: snapshot.palette,
+		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsWindow.settingsNativeWindow(), Theme: snapshot.palette,
 		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
 		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
 		OnFocus:     func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },

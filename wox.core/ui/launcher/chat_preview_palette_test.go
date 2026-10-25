@@ -33,45 +33,49 @@ func TestSetChatTextKeepsHistorySidebarOpen(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "deepseek-v4-flash", Provider: "deepseek"}})
 	ai.SetSkills(nil)
-	app := &App{
+	app := bindTestApp(&App{
 		aiSettings: ai,
-		chatPreview: &chatPreviewState{
-			panel:  "history",
-			editor: woxui.NewTextEditor(""),
-			chat:   chatData{ID: "1", Title: "Suzhou"},
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				panel:  "history",
+				editor: woxui.NewTextEditor(""),
+				chat:   chatData{ID: "1", Title: "Suzhou"},
+			},
 		},
-	}
+	})
 
-	app.setChatText("/")
-	if !app.chatPreview.sidebarOpen {
+	app.chat.setChatText("/")
+	if !app.chat.chatPreview.sidebarOpen {
 		t.Fatal("typing / hid the conversation sidebar")
 	}
-	if app.chatPreview.panel != chatCommandPanel {
-		t.Fatalf("panel = %q, want %q", app.chatPreview.panel, chatCommandPanel)
+	if app.chat.chatPreview.panel != chatCommandPanel {
+		t.Fatalf("panel = %q, want %q", app.chat.chatPreview.panel, chatCommandPanel)
 	}
 
-	app.setChatText("hello")
-	if app.chatPreview.panel != "history" || !app.chatPreview.sidebarOpen {
-		t.Fatalf("clearing / did not restore the sidebar: panel=%q open=%v", app.chatPreview.panel, app.chatPreview.sidebarOpen)
+	app.chat.setChatText("hello")
+	if app.chat.chatPreview.panel != "history" || !app.chat.chatPreview.sidebarOpen {
+		t.Fatalf("clearing / did not restore the sidebar: panel=%q open=%v", app.chat.chatPreview.panel, app.chat.chatPreview.sidebarOpen)
 	}
 }
 
 func TestDedicatedChatSnapshotAttachesModelCatalog(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "deepseek-v4-flash", Provider: "deepseek"}})
-	app := &App{
+	app := bindTestApp(&App{
 		aiSettings: ai,
-		chatPreview: &chatPreviewState{
-			panel: chatCommandPanel,
-			chat:  chatData{Model: aiModel{Name: "deepseek-v4-flash", Provider: "deepseek"}},
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				panel: chatCommandPanel,
+				chat:  chatData{Model: aiModel{Name: "deepseek-v4-flash", Provider: "deepseek"}},
+			},
 		},
-	}
+	})
 
-	snapshot := snapshotChatPreviewLocked(app.chatPreview)
+	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
 	if len(snapshot.models) != 0 {
 		t.Fatal("raw snapshot unexpectedly included models before attach")
 	}
-	app.attachChatPreviewCatalogs(snapshot)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
 	if len(items) != 1 || items[0].title != "deepseek-v4-flash" {
 		t.Fatalf("attached command palette = %+v, want the loaded model", items)
@@ -125,13 +129,13 @@ func TestChatCommandCatalogShowsModelLoadingWhileSkillsReady(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetSkills([]chatSkill{{Name: "wox-plugin-creator", Description: "Create plugins"}})
 	ai.SetModelsLoading(true)
-	app := &App{
-		aiSettings:  ai,
-		chatPreview: &chatPreviewState{panel: chatCommandPanel, key: "chat-1"},
-	}
+	app := bindTestApp(&App{
+		aiSettings: ai,
+		chat:       chatController{chatPreview: &chatPreviewState{panel: chatCommandPanel, key: "chat-1"}},
+	})
 
-	snapshot := snapshotChatPreviewLocked(app.chatPreview)
-	app.attachChatPreviewCatalogs(snapshot)
+	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
 	if len(props.Items) != 2 {
 		t.Fatalf("catalog items = %+v, want loading model + ready skill", props.Items)
@@ -144,8 +148,8 @@ func TestChatCommandCatalogShowsModelLoadingWhileSkillsReady(t *testing.T) {
 	}
 
 	ai.SetModels([]aiModel{{Name: "grok-4.6", Provider: "grok"}})
-	snapshot = snapshotChatPreviewLocked(app.chatPreview)
-	app.attachChatPreviewCatalogs(snapshot)
+	snapshot = snapshotChatPreviewLocked(app.chat.chatPreview)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	props = app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
 	if len(props.Items) != 2 || props.Items[0].Placeholder || props.Items[0].Title != "grok-4.6" || props.Items[1].Title != "wox-plugin-creator" {
 		t.Fatalf("after models loaded = %+v", props.Items)
@@ -190,29 +194,31 @@ func TestChatModelPaletteHeightIncludesTitleWhileLoading(t *testing.T) {
 func TestSetChatTextOpensPluginMentionPanel(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
-	app := &App{
+	app := bindTestApp(&App{
 		aiSettings: ai,
-		chatPreview: &chatPreviewState{
-			panel:  "history",
-			editor: woxui.NewTextEditor(""),
-			chat:   chatData{ID: "1", Title: "Suzhou"},
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				panel:  "history",
+				editor: woxui.NewTextEditor(""),
+				chat:   chatData{ID: "1", Title: "Suzhou"},
+			},
 		},
-	}
+	})
 
-	app.setChatText("@no")
-	if !app.chatPreview.sidebarOpen {
+	app.chat.setChatText("@no")
+	if !app.chat.chatPreview.sidebarOpen {
 		t.Fatal("typing @ hid the conversation sidebar")
 	}
-	if app.chatPreview.panel != chatMentionPanel {
-		t.Fatalf("panel = %q, want %q", app.chatPreview.panel, chatMentionPanel)
+	if app.chat.chatPreview.panel != chatMentionPanel {
+		t.Fatalf("panel = %q, want %q", app.chat.chatPreview.panel, chatMentionPanel)
 	}
-	if app.chatPreview.panelQuery != "no" {
-		t.Fatalf("plugin query = %q", app.chatPreview.panelQuery)
+	if app.chat.chatPreview.panelQuery != "no" {
+		t.Fatalf("plugin query = %q", app.chat.chatPreview.panelQuery)
 	}
 
-	app.setChatText("hello")
-	if app.chatPreview.panel != "history" || !app.chatPreview.sidebarOpen {
-		t.Fatalf("clearing @ did not restore the sidebar: panel=%q open=%v", app.chatPreview.panel, app.chatPreview.sidebarOpen)
+	app.chat.setChatText("hello")
+	if app.chat.chatPreview.panel != "history" || !app.chat.chatPreview.sidebarOpen {
+		t.Fatalf("clearing @ did not restore the sidebar: panel=%q open=%v", app.chat.chatPreview.panel, app.chat.chatPreview.sidebarOpen)
 	}
 }
 
@@ -253,17 +259,19 @@ func TestChatMentionPaletteItemsMatchPinyinWhenEnabled(t *testing.T) {
 func TestChatMentionCatalogGroupsPlugins(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
-	app := &App{
-		aiSettings:     ai,
-		lifecycleCtx:   context.Background(),
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-		chatPreview:    &chatPreviewState{panel: chatMentionPanel, key: "chat-1"},
-	}
-	snapshot := snapshotChatPreviewLocked(app.chatPreview)
-	app.attachChatPreviewCatalogs(snapshot)
+	app := bindTestApp(&App{
+		aiSettings:   ai,
+		lifecycleCtx: context.Background(),
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+		chat: chatController{chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "chat-1"}},
+	})
+	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
 	if props.Label != "" {
 		t.Fatalf("mention catalog should use group headers, label = %q", props.Label)
@@ -305,9 +313,12 @@ func TestChatPickerIDsDoNotCapturePluginMentions(t *testing.T) {
 		ai.SetPluginMentions([]chatPluginMention{{ID: id, Name: "Picker plugin"}})
 		editor := woxui.NewTextEditor("@")
 		editor.SetCaret(1)
-		app := &App{aiSettings: ai, chatPreview: &chatPreviewState{panel: chatMentionPanel, editor: editor}}
-		catalog := app.chatMentionCatalog()
-		app.insertChatMention(chatCommandPaletteItem{sourceIndex: 2})
+		app := bindTestApp(&App{
+			aiSettings: ai,
+			chat:       chatController{chatPreview: &chatPreviewState{panel: chatMentionPanel, editor: editor}},
+		})
+		catalog := app.chat.chatMentionCatalog()
+		app.chat.insertChatMention(chatCommandPaletteItem{sourceIndex: 2})
 		if got := editor.State().Text; got != "{plugin:"+id+"} " {
 			t.Fatalf("plugin %s inserted %q", id, got)
 		}
@@ -328,16 +339,21 @@ func TestChatMentionPluginErrorRemainsVisibleWithFileActions(t *testing.T) {
 			ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes"}})
 		}
 		ai.SetPluginMentionsError("Plugin catalog unavailable")
-		app := &App{
-			aiSettings: ai, lifecycleCtx: context.Background(),
-			images: map[string]*woxui.Image{}, imageRequested: map[string]string{},
-			imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
-			chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "error-test"},
-		}
+		app := bindTestApp(&App{
+			aiSettings:   ai,
+			lifecycleCtx: context.Background(),
+			imageStore: imageStore{
+				images:         map[string]*woxui.Image{},
+				imageRequested: map[string]string{},
+				imageLastUsed:  map[string]uint64{},
+				imageErrors:    map[string]string{},
+			},
+			chat: chatController{chatPreview: &chatPreviewState{panel: chatMentionPanel, key: "error-test"}},
+		})
 		for _, query := range []string{"", "no-match"} {
-			app.chatPreview.panelQuery = query
-			snapshot := snapshotChatPreviewLocked(app.chatPreview)
-			app.attachChatPreviewCatalogs(snapshot)
+			app.chat.chatPreview.panelQuery = query
+			snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
+			app.chat.attachChatPreviewCatalogs(snapshot)
 			props := app.chatMentionCatalogProps(snapshot, defaultPalette(), 400, 100)
 			if len(props.Items) == 0 {
 				t.Fatal("missing plugin error row")
@@ -359,8 +375,8 @@ func TestChatMentionPluginErrorRemainsVisibleWithFileActions(t *testing.T) {
 			if props.ContentHeight != height || chatCatalogPanelHeight(snapshot, 600) != previewview.ChatCatalogHeight(height, false, 600) {
 				t.Fatal("plugin error row is missing from panel geometry")
 			}
-			app.scrollChatPanel(1000)
-			if app.chatPreview.panelScroll != max(float32(0), height-app.chatPreview.panelViewport) {
+			app.chat.scrollChatPanel(1000)
+			if app.chat.chatPreview.panelScroll != max(float32(0), height-app.chat.chatPreview.panelViewport) {
 				t.Fatal("plugin error row is outside the scroll range")
 			}
 		}
@@ -387,26 +403,28 @@ func TestInsertChatFileMentionClearsAtToken(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	editor := woxui.NewTextEditor("see @fi")
 	editor.SetCaret(len([]rune("see @fi")))
-	app := &App{
+	app := bindTestApp(&App{
 		aiSettings: ai,
-		chatPreview: &chatPreviewState{
-			panel:  chatMentionPanel,
-			editor: editor,
-			chat:   chatData{ID: "1"},
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				panel:  chatMentionPanel,
+				editor: editor,
+				chat:   chatData{ID: "1"},
+			},
 		},
-	}
-	items := app.filteredChatMentionItems(app.chatMentionCatalog(), "fi")
+	})
+	items := app.chat.filteredChatMentionItems(app.chat.chatMentionCatalog(), "fi")
 	if len(items) == 0 || items[0].sourceIndex != 0 {
 		t.Fatalf("file mention items = %+v", items)
 	}
-	app.insertChatMention(items[0])
-	if got := app.chatPreview.editor.State().Text; got != "see " {
+	app.chat.insertChatMention(items[0])
+	if got := app.chat.chatPreview.editor.State().Text; got != "see " {
 		t.Fatalf("composer text = %q, want the @ token removed", got)
 	}
-	if app.chatPreview.panel == chatMentionPanel {
+	if app.chat.chatPreview.panel == chatMentionPanel {
 		t.Fatal("file picker should close the mention overlay")
 	}
-	if strings.Contains(app.chatPreview.editor.State().Text, "{") {
+	if strings.Contains(app.chat.chatPreview.editor.State().Text, "{") {
 		t.Fatal("file picker must not insert a mention tag")
 	}
 }
@@ -449,9 +467,12 @@ func TestLookupChatMentionMatchesNameAndID(t *testing.T) {
 func TestChatInputPluginChipUsesLocalizedCatalogName(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Media Player", NameEn: "Media Player"}})
-	app := &App{aiSettings: ai, chatPreview: &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:notes} hello")}}
-	snapshot := snapshotChatPreviewLocked(app.chatPreview)
-	app.attachChatPreviewCatalogs(snapshot)
+	app := bindTestApp(&App{
+		aiSettings: ai,
+		chat:       chatController{chatPreview: &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:notes} hello")}},
+	})
+	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatInputProps(snapshot, defaultPalette(), 400, 80, nil, nil)
 	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "@Media Player" {
 		t.Fatalf("localized chip = %#v", props.RichRuns)
@@ -461,15 +482,17 @@ func TestChatInputPluginChipUsesLocalizedCatalogName(t *testing.T) {
 func TestChatMessagePropsRendersPluginMentionAsChip(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "笔记", NameEn: "Notes", Icon: woxImage{ImageType: "emoji", ImageData: "📝"}}})
-	app := &App{
-		aiSettings:     ai,
-		lifecycleCtx:   context.Background(),
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-		previewLayouts: map[string]*textLayoutCache{},
-	}
+	app := bindTestApp(&App{
+		aiSettings:   ai,
+		lifecycleCtx: context.Background(),
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+		previews: previewController{previewLayouts: map[string]*textLayoutCache{}},
+	})
 	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "{plugin:notes} 现在有几个笔记?",
 		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
@@ -487,7 +510,10 @@ func TestChatMessagePropsRendersPluginMentionAsChip(t *testing.T) {
 }
 
 func TestChatMessagePropsRendersSkillTagAsChip(t *testing.T) {
-	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
+	app := bindTestApp(&App{
+		aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}),
+		previews:   previewController{previewLayouts: map[string]*textLayoutCache{}},
+	})
 	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "{skill:review} please",
 		SkillRefs: []chatSkillRef{{ID: "review", Name: "review"}},
@@ -501,7 +527,10 @@ func TestChatMessagePropsRendersSkillTagAsChip(t *testing.T) {
 }
 
 func TestChatMessagePropsKeepsSkillsFooterWithoutInlineTags(t *testing.T) {
-	app := &App{aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}), previewLayouts: map[string]*textLayoutCache{}}
+	app := bindTestApp(&App{
+		aiSettings: newAISettingsController(CommonDeps{Translate: func(s string) string { return s }}),
+		previews:   previewController{previewLayouts: map[string]*textLayoutCache{}},
+	})
 	props := app.chatMessageProps(app.window, "chat", 0, chatConversation{
 		Role: "user", Text: "hello",
 		Mentions: []chatMentionRef{{Kind: chatMentionKindPlugin, ID: "notes", Name: "笔记"}},
@@ -517,17 +546,19 @@ func TestChatMessagePropsKeepsSkillsFooterWithoutInlineTags(t *testing.T) {
 func TestChatInputPluginChipUsesCatalogIcon(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetPluginMentions([]chatPluginMention{{ID: "notes", Name: "Notes", Icon: woxImage{ImageType: "emoji", ImageData: "📝"}}})
-	app := &App{
-		aiSettings:     ai,
-		lifecycleCtx:   context.Background(),
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-		chatPreview:    &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:Notes} hello")},
-	}
-	snapshot := snapshotChatPreviewLocked(app.chatPreview)
-	app.attachChatPreviewCatalogs(snapshot)
+	app := bindTestApp(&App{
+		aiSettings:   ai,
+		lifecycleCtx: context.Background(),
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+		chat: chatController{chatPreview: &chatPreviewState{key: "chat-1", editor: woxui.NewTextEditor("{plugin:Notes} hello")}},
+	})
+	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
+	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatInputProps(snapshot, defaultPalette(), 400, 80, nil, nil)
 	if len(props.RichRuns) != 1 || props.RichRuns[0].ChipLabel != "@Notes" {
 		t.Fatalf("plugin chip = %#v", props.RichRuns)
@@ -562,58 +593,60 @@ func TestReplaceChatSlashTokenWithSkillTag(t *testing.T) {
 }
 
 func TestChatPaletteIgnoresKeyRelease(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{active: true, panel: chatCommandPanel, panelSelected: 2}}
-	if app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{active: true, panel: chatCommandPanel, panelSelected: 2}}})
+	if app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
 		t.Fatal("key release was handled")
 	}
-	if app.chatPreview.panelSelected != 2 {
-		t.Fatalf("selection moved to %d on key release", app.chatPreview.panelSelected)
+	if app.chat.chatPreview.panelSelected != 2 {
+		t.Fatalf("selection moved to %d on key release", app.chat.chatPreview.panelSelected)
 	}
 }
 
 func TestPrimaryChatEscapeReturnsToQuery(t *testing.T) {
-	app := &App{
-		isPrimary:      true,
-		chatFullscreen: true,
-		chatPreview:    &chatPreviewState{active: true},
-		editor:         woxui.NewTextEditor("chat "),
-	}
+	app := bindTestApp(&App{
+		isPrimary: true,
+		chat: chatController{
+			chatFullscreen: true,
+			chatPreview:    &chatPreviewState{active: true},
+		},
+		querySession: queryController{editor: woxui.NewTextEditor("chat ")},
+	})
 
-	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
+	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
 		t.Fatal("Escape was not handled")
 	}
-	if app.chatFullscreen || app.chatPreview == nil || app.chatPreview.active {
-		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chatFullscreen, app.chatPreview)
+	if app.chat.chatFullscreen || app.chat.chatPreview == nil || app.chat.chatPreview.active {
+		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chat.chatFullscreen, app.chat.chatPreview)
 	}
-	if selection := app.editor.State().Selection; selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
+	if selection := app.querySession.editor.State().Selection; selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
 		t.Fatalf("query selection after escape = %+v, want full text selected", selection)
 	}
 }
 
 func TestPrimaryChatShortcutTogglesHistorySidebar(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{active: true}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{active: true}}})
 
 	primaryModifier := woxui.KeyModifierControl
 	if strings.HasPrefix(primaryHotkey("b"), "command+") {
 		primaryModifier = woxui.KeyModifierMeta
 	}
 	event := woxui.KeyEvent{Key: woxui.Key("b"), Modifiers: primaryModifier, Down: true}
-	if !app.onChatPreviewKey(event) {
+	if !app.chat.onChatPreviewKey(event) {
 		t.Fatal("primary+B was not handled")
 	}
-	if app.chatPreview.panel != "history" {
-		t.Fatalf("history panel = %q after primary+B, want open", app.chatPreview.panel)
+	if app.chat.chatPreview.panel != "history" {
+		t.Fatalf("history panel = %q after primary+B, want open", app.chat.chatPreview.panel)
 	}
-	if !app.onChatPreviewKey(event) {
+	if !app.chat.onChatPreviewKey(event) {
 		t.Fatal("second primary+B was not handled")
 	}
-	if app.chatPreview.panel != "" {
-		t.Fatalf("history panel = %q after second primary+B, want closed", app.chatPreview.panel)
+	if app.chat.chatPreview.panel != "" {
+		t.Fatalf("history panel = %q after second primary+B, want closed", app.chat.chatPreview.panel)
 	}
 }
 
 func TestHistoryDrawerLeavesComposerKeysToTheEditor(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{active: true, panel: "history", sidebarOpen: true, editor: woxui.NewTextEditor("")}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{active: true, panel: "history", sidebarOpen: true, editor: woxui.NewTextEditor("")}}})
 	for _, event := range []woxui.KeyEvent{
 		{Key: woxui.KeyEnter, Down: true, Modifiers: woxui.KeyModifierShift},
 		{Key: woxui.KeyDelete, Down: true},
@@ -621,15 +654,15 @@ func TestHistoryDrawerLeavesComposerKeysToTheEditor(t *testing.T) {
 		{Key: woxui.KeyArrowDown, Down: true},
 		{Key: woxui.KeyTab, Down: true},
 	} {
-		if app.onChatPreviewKey(event) {
+		if app.chat.onChatPreviewKey(event) {
 			t.Fatalf("history drawer intercepted composer key %+v", event)
 		}
 	}
 	// Empty-submit validation proves Enter reached send rather than history activation.
-	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.chatPreview.error == "" {
+	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.chat.chatPreview.error == "" {
 		t.Fatal("Enter did not reach composer submission")
 	}
-	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chatPreview.panel != "" || !app.chatPreview.active {
+	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chat.chatPreview.panel != "" || !app.chat.chatPreview.active {
 		t.Fatal("Escape should dismiss the drawer while keeping the composer active")
 	}
 }
@@ -660,14 +693,17 @@ func TestChatMentionWheelScrollUsesMentionContentHeight(t *testing.T) {
 		plugins[i] = chatPluginMention{ID: fmt.Sprintf("p%d", i), Name: fmt.Sprintf("Plugin %d", i)}
 	}
 	ai.SetPluginMentions(plugins)
-	app := &App{aiSettings: ai, chatPreview: &chatPreviewState{panel: chatMentionPanel, panelViewport: 160}}
-	contentHeight := chatCommandContentHeight(app.filteredChatMentionItems(app.chatMentionCatalog(), ""))
+	app := bindTestApp(&App{
+		aiSettings: ai,
+		chat:       chatController{chatPreview: &chatPreviewState{panel: chatMentionPanel, panelViewport: 160}},
+	})
+	contentHeight := chatCommandContentHeight(app.chat.filteredChatMentionItems(app.chat.chatMentionCatalog(), ""))
 	if contentHeight <= 160 {
 		t.Fatalf("mention catalog too short to overflow: %.0f", contentHeight)
 	}
-	app.scrollChatPanel(80)
-	if app.chatPreview.panelScroll != 80 {
-		t.Fatalf("mention wheel scroll = %.0f, want 80 (content %.0f)", app.chatPreview.panelScroll, contentHeight)
+	app.chat.scrollChatPanel(80)
+	if app.chat.chatPreview.panelScroll != 80 {
+		t.Fatalf("mention wheel scroll = %.0f, want 80 (content %.0f)", app.chat.chatPreview.panelScroll, contentHeight)
 	}
 }
 
@@ -680,32 +716,32 @@ func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 	// The old len*38 estimate kept maxOffset at 0 for moderate histories, so wheel scroll never moved.
 	contentHeight := chatHistoryContentHeight(chats, time.Now())
 	viewport := float32(576)
-	app := &App{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: viewport}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: viewport}}})
 
-	app.scrollChatPanel(120)
+	app.chat.scrollChatPanel(120)
 	want := min(float32(120), max(float32(0), contentHeight-viewport))
-	if app.chatPreview.panelScroll != want {
-		t.Fatalf("history panel scroll = %.0f, want %.0f (content %.0f, viewport %.0f)", app.chatPreview.panelScroll, want, contentHeight, viewport)
+	if app.chat.chatPreview.panelScroll != want {
+		t.Fatalf("history panel scroll = %.0f, want %.0f (content %.0f, viewport %.0f)", app.chat.chatPreview.panelScroll, want, contentHeight, viewport)
 	}
-	if app.chatPreview.panelScroll == 0 {
+	if app.chat.chatPreview.panelScroll == 0 {
 		t.Fatal("history wheel scroll stayed at 0 with overflow")
 	}
 }
 
 func TestChatDebugHeaderCopiesWithoutOpeningPanel(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{panel: "history"}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{panel: "history"}}})
 	snapshot := &chatPreviewSnapshot{chat: chatData{DebugTrace: []byte(`{"Events":[]}`)}}
 	props := app.chatHeaderProps(snapshot, uiPalette{}, 500, 52, false, false)
 	if !props.ShowDebug {
 		t.Fatal("debug action is hidden for an available trace")
 	}
 	props.OnDebug()
-	if app.chatPreview.panel != "history" {
-		t.Fatalf("debug action changed panel to %q", app.chatPreview.panel)
+	if app.chat.chatPreview.panel != "history" {
+		t.Fatalf("debug action changed panel to %q", app.chat.chatPreview.panel)
 	}
 	// An uninitialized native window proves the action reached the clipboard path.
-	if !strings.HasPrefix(app.chatPreview.error, "Copy failed:") {
-		t.Fatalf("debug action did not attempt to copy: %q", app.chatPreview.error)
+	if !strings.HasPrefix(app.chat.chatPreview.error, "Copy failed:") {
+		t.Fatalf("debug action did not attempt to copy: %q", app.chat.chatPreview.error)
 	}
 }
 
@@ -728,17 +764,17 @@ func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
 	for i := range chats {
 		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
 	}
-	app := &App{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: 576}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: 576}}})
 
-	app.scrollChatPanel(120)
-	scrolled := app.chatPreview.panelScroll
+	app.chat.scrollChatPanel(120)
+	scrolled := app.chat.chatPreview.panelScroll
 	if scrolled == 0 {
 		t.Fatal("wheel scroll did not move")
 	}
 	// The next build re-records the viewport and must not clamp the offset back to zero.
-	app.setChatPanelViewport(576)
-	if app.chatPreview.panelScroll != scrolled {
-		t.Fatalf("viewport update changed scroll from %.0f to %.0f", scrolled, app.chatPreview.panelScroll)
+	app.chat.setChatPanelViewport(576)
+	if app.chat.chatPreview.panelScroll != scrolled {
+		t.Fatalf("viewport update changed scroll from %.0f to %.0f", scrolled, app.chat.chatPreview.panelScroll)
 	}
 }
 
@@ -799,7 +835,11 @@ func TestPrefetchChatCatalogsLoadsOnceWhenUncached(t *testing.T) {
 		release:       make(chan struct{}),
 	}
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
-	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+	app := bindTestApp(&App{
+		lifecycleCtx: t.Context(),
+		aiSettings:   ai,
+		services:     service,
+	})
 
 	app.prefetchChatCatalogs()
 	waitChatCatalogPrefetch(t, service.modelsStarted)
@@ -823,7 +863,11 @@ func TestPrefetchChatCatalogsSkipsCachedCatalogs(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "flash", Provider: "deepseek"}})
 	ai.SetSkills([]chatSkill{{ID: "s1", Name: "creator"}})
-	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+	app := bindTestApp(&App{
+		lifecycleCtx: t.Context(),
+		aiSettings:   ai,
+		services:     service,
+	})
 
 	app.prefetchChatCatalogs()
 	if ai.ModelsLoading() || ai.SkillsLoading() {
@@ -841,13 +885,13 @@ func TestEnterChatModePrefetchesUncachedCatalogs(t *testing.T) {
 		release:       make(chan struct{}),
 	}
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
-	app := &App{
+	app := bindTestApp(&App{
 		lifecycleCtx: t.Context(),
 		aiSettings:   ai,
 		services:     service,
-		editor:       woxui.NewTextEditor(""),
-		chatPreview:  &chatPreviewState{editor: woxui.NewTextEditor("")},
-	}
+		querySession: queryController{editor: woxui.NewTextEditor("")},
+		chat:         chatController{chatPreview: &chatPreviewState{editor: woxui.NewTextEditor("")}},
+	})
 
 	app.enterChatMode()
 	waitChatCatalogPrefetch(t, service.modelsStarted)
@@ -865,9 +909,13 @@ func TestActivateChatPreviewPrefetchesUncachedCatalogs(t *testing.T) {
 		release:       make(chan struct{}),
 	}
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
-	app := &App{lifecycleCtx: t.Context(), aiSettings: ai, services: service}
+	app := bindTestApp(&App{
+		lifecycleCtx: t.Context(),
+		aiSettings:   ai,
+		services:     service,
+	})
 
-	if err := app.activateChatPreview(queryResult{ID: "result", QueryID: "query"}, queryPreview{
+	if err := app.chat.activateChatPreview(queryResult{ID: "result", QueryID: "query"}, queryPreview{
 		PreviewType: "chat",
 		PreviewData: `{"ActiveChat":{"Id":"chat"}}`,
 	}); err != nil {

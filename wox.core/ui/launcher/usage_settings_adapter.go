@@ -16,7 +16,7 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, i
 	periods := make([]launcherview.UsagePeriod, 0, 4)
 	for _, id := range []string{"7d", "30d", "365d", "all"} {
 		periods = append(periods, launcherview.UsagePeriod{
-			ID: id, Label: a.translate("i18n:" + usagePeriodLabelKey(id)), Selected: id == snapshot.usage.Period,
+			ID: id, Label: a.language.translate("i18n:" + usagePeriodLabelKey(id)), Selected: id == snapshot.usage.Period,
 			OnSelect: func() {
 				util.Go(a.lifecycleCtx, "reload usage stats", func() {
 					a.reloadUsageStats(id)
@@ -30,10 +30,10 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, i
 	}
 	monthLabels := make([]string, 12)
 	for month := 1; month <= 12; month++ {
-		monthLabels[month-1] = a.translate(fmt.Sprintf("i18n:ui_month_short_%d", month))
+		monthLabels[month-1] = a.language.translate(fmt.Sprintf("i18n:ui_month_short_%d", month))
 	}
-	periodLabel := a.translate("i18n:" + usagePeriodLabelKey(snapshot.usage.Period))
-	overview := strings.ReplaceAll(a.translate("i18n:ui_usage_overview"), "{period}", periodLabel)
+	periodLabel := a.language.translate("i18n:" + usagePeriodLabelKey(snapshot.usage.Period))
+	overview := strings.ReplaceAll(a.language.translate("i18n:ui_usage_overview"), "{period}", periodLabel)
 
 	blueAccent := woxui.Color{R: 59, G: 130, B: 246, A: 255}
 	tealAccent := woxui.Color{R: 20, G: 184, B: 166, A: 255}
@@ -44,16 +44,16 @@ func (a *App) buildUsageSettingsPage(snapshot settingsSnapshot, width, height, i
 	bronzeAccent := woxui.Color{R: 190, G: 121, B: 69, A: 255}
 
 	return launcherview.UsageSettingsView(launcherview.UsageSettingsProps{
-		Width: width, Height: height, Theme: theme, Title: a.translate("i18n:ui_usage"), Overview: overview,
-		ShareLabel: a.translate("i18n:ui_usage_share_x"), Periods: periods, Error: snapshot.usage.Error,
-		ActivityTitle: a.translate("i18n:ui_usage_opened_by_day"), TopAppsTitle: a.translate("i18n:ui_usage_top_apps"),
-		TopPluginsTitle: a.translate("i18n:ui_usage_top_plugins"), EmptyLabel: a.translate("i18n:ui_usage_no_data"),
+		Width: width, Height: height, Theme: theme, Title: a.language.translate("i18n:ui_usage"), Overview: overview,
+		ShareLabel: a.language.translate("i18n:ui_usage_share_x"), Periods: periods, Error: snapshot.usage.Error,
+		ActivityTitle: a.language.translate("i18n:ui_usage_opened_by_day"), TopAppsTitle: a.language.translate("i18n:ui_usage_top_apps"),
+		TopPluginsTitle: a.language.translate("i18n:ui_usage_top_plugins"), EmptyLabel: a.language.translate("i18n:ui_usage_no_data"),
 		MonthLabels: monthLabels, OnShare: a.shareUsageToX,
 		KPIs: []launcherview.UsageKPI{
-			{Label: a.translate("i18n:ui_usage_opened"), Value: snapshot.usage.Stats.PeriodOpened, Icon: a.imageForTint(usageIconSource("visibility"), &blueAccent, physicalImageSize(22, imageScale)), Accent: blueAccent},
-			{Label: a.translate("i18n:ui_usage_app_launches"), Value: snapshot.usage.Stats.PeriodAppLaunch, Icon: a.imageForTint(usageIconSource("rocket"), &tealAccent, physicalImageSize(22, imageScale)), Accent: tealAccent},
-			{Label: a.translate("i18n:ui_usage_apps_used"), Value: snapshot.usage.Stats.PeriodAppsUsed, Icon: a.imageForTint(usageIconSource("apps"), &amberAccent, physicalImageSize(22, imageScale)), Accent: amberAccent},
-			{Label: a.translate("i18n:ui_usage_actions"), Value: snapshot.usage.Stats.PeriodActions, Icon: a.imageForTint(usageIconSource("bolt"), &violetAccent, physicalImageSize(22, imageScale)), Accent: violetAccent},
+			{Label: a.language.translate("i18n:ui_usage_opened"), Value: snapshot.usage.Stats.PeriodOpened, Icon: a.imageForTint(usageIconSource("visibility"), &blueAccent, physicalImageSize(22, imageScale)), Accent: blueAccent},
+			{Label: a.language.translate("i18n:ui_usage_app_launches"), Value: snapshot.usage.Stats.PeriodAppLaunch, Icon: a.imageForTint(usageIconSource("rocket"), &tealAccent, physicalImageSize(22, imageScale)), Accent: tealAccent},
+			{Label: a.language.translate("i18n:ui_usage_apps_used"), Value: snapshot.usage.Stats.PeriodAppsUsed, Icon: a.imageForTint(usageIconSource("apps"), &amberAccent, physicalImageSize(22, imageScale)), Accent: amberAccent},
+			{Label: a.language.translate("i18n:ui_usage_actions"), Value: snapshot.usage.Stats.PeriodActions, Icon: a.imageForTint(usageIconSource("bolt"), &violetAccent, physicalImageSize(22, imageScale)), Accent: violetAccent},
 		},
 		Days: days, HeatmapAccent: greenAccent,
 		TopApps: usageRankingItems(a, snapshot.usage.Stats.TopApps, true), TopPlugins: usageRankingItems(a, snapshot.usage.Stats.TopPlugins, false),

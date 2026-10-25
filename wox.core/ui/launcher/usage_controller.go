@@ -29,7 +29,10 @@ type usageSettingsController struct {
 }
 
 func newUsageSettingsController(deps CommonDeps) *usageSettingsController {
-	return &usageSettingsController{deps: deps, period: "30d"}
+	return &usageSettingsController{
+		deps:   deps,
+		period: "30d",
+	}
 }
 
 // CurrentPeriod returns the active reporting period, defaulting to "30d".

@@ -99,19 +99,24 @@ func (s *notesWindowTestServices) NotesSave(_ context.Context, id, _ string, doc
 
 func TestNotesConflictRebindsOnlyTheEditedWindow(t *testing.T) {
 	services := &notesWindowTestServices{saveID: "conflict", conflict: true, saveCall: make(chan struct{}, 1)}
-	app := &App{services: services, palette: defaultPalette(), lifecycleCtx: context.Background(), noteWindows: map[string]*notesWindowController{}}
+	app := bindTestApp(&App{
+		services:     services,
+		appearance:   appearanceController{palette: defaultPalette()},
+		lifecycleCtx: context.Background(),
+		notes:        notesController{noteWindows: map[string]*notesWindowController{}},
+	})
 	record := common.NoteRecord{ID: "original", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}}}
-	controller := newNotesWindowController(app, record)
+	controller := newNotesWindowController(&app.notes, record)
 	windowID := controller.windowID
-	app.noteWindows[record.ID] = controller
+	app.notes.noteWindows[record.ID] = controller
 	controller.document.Blocks[0].Text = "local edit"
 	controller.dirty = true
 
 	if err := controller.flush(); err != nil {
 		t.Fatalf("flush conflict: %v", err)
 	}
-	if app.noteWindows["original"] != nil || app.noteWindows["conflict"] != controller {
-		t.Fatalf("conflict window map = %#v, want controller rebound to conflict note", app.noteWindows)
+	if app.notes.noteWindows["original"] != nil || app.notes.noteWindows["conflict"] != controller {
+		t.Fatalf("conflict window map = %#v, want controller rebound to conflict note", app.notes.noteWindows)
 	}
 	if controller.windowID != windowID {
 		t.Fatalf("native window ID changed from %q to %q during note conflict", windowID, controller.windowID)
@@ -119,8 +124,8 @@ func TestNotesConflictRebindsOnlyTheEditedWindow(t *testing.T) {
 }
 
 func TestNotesMenuRowUsesHoverHighlight(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	theme := woxcomponent.Theme{
@@ -138,8 +143,8 @@ func TestNotesMenuRowUsesHoverHighlight(t *testing.T) {
 }
 
 func TestNotesSearchRowUsesHoverHighlight(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	theme := woxcomponent.Theme{
@@ -206,9 +211,9 @@ func TestNotesSearchSectionIsDistinctFromRows(t *testing.T) {
 }
 
 func TestNotesDeleteColumnUndoRestoresTheColumn(t *testing.T) {
-	app := &App{palette: defaultPalette()}
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "t", Type: common.NoteBlockTable, Table: &table},
 		}},
@@ -228,8 +233,8 @@ func TestNotesDeleteColumnUndoRestoresTheColumn(t *testing.T) {
 }
 
 func TestNotesUndoRestoresCaretAtTheEdit(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "hello world"},
 		}},
@@ -261,8 +266,8 @@ func TestNotesUndoRestoresCaretAtTheEdit(t *testing.T) {
 }
 
 func TestNotesMarkdownUndoRestoresCaret(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: notesplugin.ParseMarkdown("hello world"),
 	})
 	controller.markdownView = true
@@ -283,9 +288,9 @@ func TestNotesMarkdownUndoRestoresCaret(t *testing.T) {
 }
 
 func TestNotesTableActionsWorkWithoutCellFocus(t *testing.T) {
-	app := &App{palette: defaultPalette()}
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}, {Text: "B"}}, {{Text: "1"}, {Text: "2"}}}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "before"},
 			{ID: "t", Type: common.NoteBlockTable, Table: &table},
@@ -306,8 +311,8 @@ func TestNotesTableActionsWorkWithoutCellFocus(t *testing.T) {
 }
 
 func TestNotesSearchHighlightsFirstResultAndMovesWithArrows(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	controller.summaries = []common.NoteSummary{
@@ -332,8 +337,8 @@ func TestNotesSearchHighlightsFirstResultAndMovesWithArrows(t *testing.T) {
 }
 
 func TestNotesSearchUsesSharedScrollbar(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	controller.summaries = make([]common.NoteSummary, 8)
@@ -352,13 +357,17 @@ func TestNotesSearchSwitchesNoteInCurrentWindow(t *testing.T) {
 		Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "other note"}}},
 	}
 	services := &notesWindowTestServices{records: map[string]common.NoteRecord{"target": target}}
-	app := &App{services: services, palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		services:   services,
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "current", Revision: "r0",
 		Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "this note"}}},
 	})
 	windowID := controller.windowID
-	app.noteWindows[controller.record.ID] = controller
+	app.notes.noteWindows[controller.record.ID] = controller
 	controller.searchOpen = true
 
 	controller.openSearchItem(common.NoteSummary{ID: "target", Title: "other note"})
@@ -368,8 +377,8 @@ func TestNotesSearchSwitchesNoteInCurrentWindow(t *testing.T) {
 	if controller.windowID != windowID {
 		t.Fatalf("search opened a new native window %q", controller.windowID)
 	}
-	if app.noteWindows["current"] != nil || app.noteWindows["target"] != controller {
-		t.Fatalf("window map = %#v, want current window rebound to target", app.noteWindows)
+	if app.notes.noteWindows["current"] != nil || app.notes.noteWindows["target"] != controller {
+		t.Fatalf("window map = %#v, want current window rebound to target", app.notes.noteWindows)
 	}
 	if controller.searchOpen {
 		t.Fatal("search overlay stayed open after switching")
@@ -385,19 +394,23 @@ func TestNotesSearchRestoresDeletedNoteInCurrentWindow(t *testing.T) {
 		Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "trashed note"}}},
 	}
 	services := &notesWindowTestServices{records: map[string]common.NoteRecord{"trashed": target}}
-	app := &App{services: services, palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		services:   services,
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "current", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "this note"}}},
 	})
 	windowID := controller.windowID
-	app.noteWindows[controller.record.ID] = controller
+	app.notes.noteWindows[controller.record.ID] = controller
 
 	controller.openSearchItem(common.NoteSummary{ID: "trashed", Title: "trashed note", DeletedAt: 1})
 	if controller.record.ID != "trashed" || controller.record.DeletedAt != 0 {
 		t.Fatalf("restored note = id %q deleted %d, want trashed in this window", controller.record.ID, controller.record.DeletedAt)
 	}
-	if controller.windowID != windowID || app.noteWindows["trashed"] != controller {
-		t.Fatalf("restore opened another window: id %q map %#v", controller.windowID, app.noteWindows)
+	if controller.windowID != windowID || app.notes.noteWindows["trashed"] != controller {
+		t.Fatalf("restore opened another window: id %q map %#v", controller.windowID, app.notes.noteWindows)
 	}
 	if controller.editor.Text() != "trashed note" {
 		t.Fatalf("editor = %q, want restored note text", controller.editor.Text())
@@ -406,8 +419,11 @@ func TestNotesSearchRestoresDeletedNoteInCurrentWindow(t *testing.T) {
 
 func TestNotesSearchResetsSelectionWhenOpened(t *testing.T) {
 	services := &notesWindowTestServices{}
-	app := &App{services: services, palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	app := bindTestApp(&App{
+		services:   services,
+		appearance: appearanceController{palette: defaultPalette()},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
 	controller.searchIndex = 4
 	controller.toggleSearch()
 	if !controller.searchOpen || controller.searchIndex != 0 {
@@ -416,9 +432,12 @@ func TestNotesSearchResetsSelectionWhenOpened(t *testing.T) {
 }
 
 func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
-	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
 	record := common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}}}
-	controller := newNotesWindowController(app, record)
+	controller := newNotesWindowController(&app.notes, record)
 	toolbar := controller.buildToolbar(420, true, woxcomponent.Theme{}).(woxwidget.Container).Child.(woxwidget.Stack)
 	controls := map[woxwidget.Key]bool{}
 	labels := map[woxwidget.Key]string{}
@@ -516,8 +535,8 @@ func TestNotesTitleSlotLeavesRoomAtDefaultWidth(t *testing.T) {
 }
 
 func TestNotesImageActionsScaleAndDelete(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "caption"},
@@ -545,8 +564,8 @@ func TestNotesImageActionsScaleAndDelete(t *testing.T) {
 }
 
 func TestNotesMoreMenuOmitsListPin(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	overlay := controller.buildMoreOverlay(woxui.Size{Width: 420, Height: 320}, woxcomponent.Theme{})
@@ -563,8 +582,8 @@ func TestNotesMoreMenuOmitsListPin(t *testing.T) {
 }
 
 func TestNotesMoreMenuViewLabelFollowsEditorMode(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "hello"}}},
 	})
 	shortcut := strings.Join(formatHotkeyLabels(primaryHotkey("e")), "+")
@@ -580,8 +599,8 @@ func TestNotesMoreMenuViewLabelFollowsEditorMode(t *testing.T) {
 }
 
 func TestNotesTogglesMarkdownViewWithPrimaryE(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "h", Type: common.NoteBlockHeading1, Text: "Title"},
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "body"},
@@ -605,8 +624,8 @@ func TestNotesTogglesMarkdownViewWithPrimaryE(t *testing.T) {
 func TestNotesToggleMarkdownViewKeepsCaretOutOfLinkURL(t *testing.T) {
 	const source = "当时收到来自Alfred的警告信，也是在群友的[建议下](https://v2ex.com/t/986005/#r_939222)，最终改名 **Wox**，寓意 it just works.\n\n一转眼13年过去了，在这些年里，Wox经历过两轮主要维护者。"
 	caret := utf8.RuneCountInString(source[:strings.Index(source, "https://v2ex.com")]) + 8
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: notesplugin.ParseMarkdown(source),
 	})
 	controller.markdownView = true
@@ -629,8 +648,8 @@ func TestNotesToggleMarkdownViewKeepsCaretOutOfLinkURL(t *testing.T) {
 func TestNotesToggleMarkdownViewKeepsCaretInsideLinkedParagraph(t *testing.T) {
 	const source = "最终改名 **Wox**，寓意 it just works.\n\n一转眼13年过去了，在这些年里，Wox经历过[两轮主要维护者](https://github.com/wox-launcher/Wox/grap\nhs/contributors?all=1)。我从2013年开始维护。"
 	caret := utf8.RuneCountInString(source[:strings.Index(source, "在这些年里，Wox")+len("在这些年里，")]) + 1
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: notesplugin.ParseMarkdown(source),
 	})
 	controller.markdownView = true
@@ -657,8 +676,8 @@ func TestNotesToggleMarkdownViewKeepsCaretInsideLinkedParagraph(t *testing.T) {
 }
 
 func TestNotesToggleMarkdownViewKeepsCaret(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "h", Type: common.NoteBlockHeading1, Text: "Title"},
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "body text"},
@@ -685,8 +704,8 @@ func TestNotesToggleMarkdownViewKeepsCaret(t *testing.T) {
 }
 
 func TestNotesToggleMarkdownViewScrollsCaretIntoView(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: strings.Repeat("body line\n", 40) + "caret here"},
 		}},
@@ -725,8 +744,8 @@ func TestNotesToggleMarkdownViewScrollsCaretIntoView(t *testing.T) {
 }
 
 func TestNotesMarkdownEditorUsesSharedScrollbar(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: strings.Repeat("line\n", 40)},
 		}},
@@ -756,8 +775,8 @@ func TestNotesMarkdownEditorUsesSharedScrollbar(t *testing.T) {
 }
 
 func TestNotesMarkdownViewRoundTripsTables(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "intro"},
 			{ID: "t", Type: common.NoteBlockTable, Table: &common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{
@@ -780,8 +799,8 @@ func TestNotesMarkdownViewRoundTripsTables(t *testing.T) {
 }
 
 func TestNotesMarkdownViewRoundTripsImages(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "clipboard.png", Width: 800, Height: 400}},
 		}},
@@ -802,8 +821,8 @@ func TestNotesMarkdownViewRoundTripsImages(t *testing.T) {
 
 func TestNotesMarkdownViewRoundTripsRemoteImages(t *testing.T) {
 	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: notesplugin.ParseMarkdown("intro\n\n![](" + url + ")\n\nafter"),
 	})
 	controller.toggleMarkdownView()
@@ -819,8 +838,8 @@ func TestNotesMarkdownViewRoundTripsRemoteImages(t *testing.T) {
 
 func TestNotesMarkdownViewKeepsRemoteImageScale(t *testing.T) {
 	const url = "https://www.woxlauncher.com/images/hero-glass-dark.png"
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{URL: url, Scale: 70}},
 		}},
@@ -837,8 +856,8 @@ func TestNotesMarkdownViewKeepsRemoteImageScale(t *testing.T) {
 }
 
 func TestNotesSelectAllSpansImages(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
@@ -874,8 +893,8 @@ func TestNotesSelectAllSpansImages(t *testing.T) {
 }
 
 func TestNotesSelectAllReplaceDropsTrailingBlocks(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
@@ -903,8 +922,8 @@ func TestNotesSelectAllReplaceDropsTrailingBlocks(t *testing.T) {
 }
 
 func TestNotesSelectAllFromFocusedImage(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
@@ -921,15 +940,15 @@ func TestNotesSelectAllFromFocusedImage(t *testing.T) {
 }
 
 func TestNotesEditorHostSelectAllSpansImages(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "before", Type: common.NoteBlockParagraph, Text: "before"},
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
 			{ID: "after", Type: common.NoteBlockParagraph, Text: "after"},
 		}},
 	})
-	theme := app.palette.componentTheme()
+	theme := app.appearance.palette.componentTheme()
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Document: controller.document, Width: 400, Height: 320,
@@ -957,8 +976,8 @@ func TestNotesEditorHostSelectAllSpansImages(t *testing.T) {
 }
 
 func TestNotesPlainSelectAllStaysInTheField(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "only text"},
 		}},
@@ -969,8 +988,8 @@ func TestNotesPlainSelectAllStaysInTheField(t *testing.T) {
 }
 
 func TestNotesArrowKeysLeaveAFocusedImage(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
 		}},
@@ -1000,7 +1019,13 @@ func TestNotesListKeyboardAfterStructuralBlocks(t *testing.T) {
 				image := common.NoteImage{ID: "shot.png", Width: 400, Height: 200}
 				source := woxImage{ImageType: "absolute", ImageData: notesplugin.ResolveNoteImagePath(image)}
 				key := fmt.Sprintf("%s-svg-%d", imageKey(source), previewImageRequestSize(800, woxcomponent.NoteEditorImageMaxHeight))
-				app := &App{palette: defaultPalette(), images: map[string]*woxui.Image{key: {Width: 400, Height: 200}}, imageLastUsed: map[string]uint64{}}
+				app := bindTestApp(&App{
+					appearance: appearanceController{palette: defaultPalette()},
+					imageStore: imageStore{
+						images:        map[string]*woxui.Image{key: {Width: 400, Height: 200}},
+						imageLastUsed: map[string]uint64{},
+					},
+				})
 				blocks := []common.NoteBlock{{ID: "intro", Type: common.NoteBlockParagraph, Text: "intro"}}
 				switch prefix {
 				case common.NoteBlockTable:
@@ -1010,7 +1035,7 @@ func TestNotesListKeyboardAfterStructuralBlocks(t *testing.T) {
 				}
 				item := len(blocks)
 				blocks = append(blocks, common.NoteBlock{ID: "first", Type: kind, Text: "first"})
-				controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: blocks}})
+				controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: blocks}})
 				t.Cleanup(func() {
 					if controller.saveTimer != nil {
 						controller.saveTimer.Stop()
@@ -1077,7 +1102,7 @@ func TestNotesListKeyboardAfterStructuralBlocks(t *testing.T) {
 func TestNotesListCaretScrollsDocument(t *testing.T) {
 	for _, kind := range []common.NoteBlockType{common.NoteBlockBullet, common.NoteBlockOrdered, common.NoteBlockTask, common.NoteBlockQuote} {
 		t.Run(string(kind), func(t *testing.T) {
-			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+			controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
 				ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 					{ID: "table", Type: common.NoteBlockTable, Table: &common.NoteTable{Rows: [][]common.NoteTableCell{{{Text: "cell"}}}}},
 					{ID: "first", Type: kind, Text: "first"},
@@ -1095,7 +1120,7 @@ func TestNotesListCaretScrollsDocument(t *testing.T) {
 				return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 					ID: "notes.editor", Document: controller.document, Width: 400, Height: 240, LineHeight: 24, Zoom: 1,
 					Padding: notesEditorPadding(), Style: controller.editorStyle(),
-					Theme: controller.app.palette.componentTheme().Controls, Window: window, Autofocus: true,
+					Theme: controller.owner.palette().componentTheme().Controls, Window: window, Autofocus: true,
 					Controller: controller.editor, FocusNode: controller.editorFocus, Focused: controller.editorFocus.HasFocus(),
 					FocusedTableBlock: -1, FocusedImageBlock: -1, ActiveSegmentStart: controller.activeTextSegment.Start,
 					OnTextFocus: controller.focusNoteText, OnChanged: controller.onSegmentChanged, OnKey: controller.onKey,
@@ -1151,7 +1176,7 @@ func TestNotesClickBelowTextBlocks(t *testing.T) {
 			if blockType == common.NoteBlockDivider {
 				block.Text = ""
 			}
-			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+			controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
 				ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{block}},
 			})
 			t.Cleanup(func() {
@@ -1229,7 +1254,7 @@ func TestNotesTypingBelowTrailingTable(t *testing.T) {
 			if source == "pasted" {
 				document.Blocks = document.Blocks[:1]
 			}
-			controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
+			controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{ID: "note", Document: document})
 			t.Cleanup(func() {
 				if controller.saveTimer != nil {
 					controller.saveTimer.Stop()
@@ -1289,8 +1314,14 @@ func TestNotesImageSelectionSurvivesFrames(t *testing.T) {
 	image := common.NoteImage{ID: "shot.png", Width: 400, Height: 200}
 	source := woxImage{ImageType: "absolute", ImageData: notesplugin.ResolveNoteImagePath(image)}
 	key := fmt.Sprintf("%s-svg-%d", imageKey(source), previewImageRequestSize(800, woxcomponent.NoteEditorImageMaxHeight))
-	app := &App{palette: defaultPalette(), images: map[string]*woxui.Image{key: {Width: 400, Height: 200}}, imageLastUsed: map[string]uint64{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{key: {Width: 400, Height: 200}},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "above", Type: common.NoteBlockParagraph, Text: "above"},
 			{ID: "img", Type: common.NoteBlockImage, Image: &image},
@@ -1375,8 +1406,8 @@ func TestNotesImageSelectionSurvivesFrames(t *testing.T) {
 }
 
 func TestNotesClickingTextLeavesAFocusedImage(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "img", Type: common.NoteBlockImage, Image: &common.NoteImage{ID: "shot.png", FileName: "shot.png"}},
 		}},
@@ -1508,8 +1539,8 @@ func notesFormatBarHasStats(bar woxwidget.Widget) bool {
 }
 
 func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{R: 240, G: 240, B: 240, A: 255}}
@@ -1545,8 +1576,8 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 }
 
 func TestNotesFormatBarHidesStatsBeforeCollapsingTools(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	bar := controller.buildFormatBar(notesDefaultWidth, defaultPalette().componentTheme())
@@ -1559,8 +1590,8 @@ func TestNotesFormatBarHidesStatsBeforeCollapsingTools(t *testing.T) {
 }
 
 func TestNotesFormatBarCollapsesToolsWhenCountHidingIsNotEnough(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	bar := controller.buildFormatBar(360, defaultPalette().componentTheme())
@@ -1574,8 +1605,8 @@ func TestNotesFormatBarCollapsesToolsWhenCountHidingIsNotEnough(t *testing.T) {
 }
 
 func TestNotesFormatBarKeepsCountInMarkdownView(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "p", Type: common.NoteBlockParagraph, Text: "hello world"},
 		}},
@@ -1597,8 +1628,11 @@ func TestNotesToolbarTooltipUsesLinuxInlineFallback(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-only tooltip fallback")
 	}
-	app := &App{palette: defaultPalette(), lifecycleCtx: t.Context()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		appearance:   appearanceController{palette: defaultPalette()},
+		lifecycleCtx: t.Context(),
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	anchor := woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32}
@@ -1630,14 +1664,14 @@ func TestNotesToolbarTooltipUsesLinuxInlineFallback(t *testing.T) {
 }
 
 func TestNotesLinuxInlineTooltipPaintsInsideWindow(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	controller.inlineTooltip = &settingsInlineTooltipState{
 		Text: "Search", Side: "top", Anchor: woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32},
 	}
-	theme := app.palette.componentTheme()
+	theme := app.appearance.palette.componentTheme()
 	overlay := controller.composeLinuxInlineTooltip(woxui.Size{Width: 460, Height: 320}, theme, nil)
 	if !notesOverlayContainsText(overlay, "Search") {
 		t.Fatal("expected in-window tooltip overlay")
@@ -1649,15 +1683,15 @@ func TestNotesLinuxInlineTooltipPaintsInsideWindow(t *testing.T) {
 }
 
 func TestNotesLinuxInlineTooltipStacksAboveSearchOverlay(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	controller.inlineTooltip = &settingsInlineTooltipState{
 		Text: "Search", Side: "top", Anchor: woxui.Rect{X: 300, Y: 4, Width: 32, Height: 32},
 	}
 	search := woxwidget.Container{Width: 460, Height: 320}
-	overlay := controller.composeLinuxInlineTooltip(woxui.Size{Width: 460, Height: 320}, app.palette.componentTheme(), search)
+	overlay := controller.composeLinuxInlineTooltip(woxui.Size{Width: 460, Height: 320}, app.appearance.palette.componentTheme(), search)
 	stack, ok := overlay.(woxwidget.Stack)
 	if !ok || len(stack.Children) != 2 {
 		t.Fatalf("overlay = %#v, want search under the tooltip", overlay)
@@ -1686,7 +1720,7 @@ func TestNotesAltArrowReordersChecklistItem(t *testing.T) {
 		{ID: "b", Type: common.NoteBlockTask, Text: "two"},
 		{ID: "c", Type: common.NoteBlockTask, Text: "three"},
 	}}
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note", Document: document})
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{ID: "note", Document: document})
 	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[1].TextStart, Focus: ranges[1].TextStart}
@@ -1702,13 +1736,13 @@ func TestNotesAltArrowReordersChecklistItem(t *testing.T) {
 }
 
 func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {
-	app := &App{palette: defaultPalette()}
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
 	table := common.NoteTable{HeaderRows: 1, Rows: [][]common.NoteTableCell{{{Text: "A"}}, {{Text: "1"}}}}
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 		{ID: "t", Type: common.NoteBlockTable, Table: &table},
 		{ID: "b", Type: common.NoteBlockBullet, Text: "官方提供少而精的真实示例。"},
 	}}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: document})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note", Document: document})
 	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 1, Focus: ranges[0].TextStart + 1}
@@ -1732,11 +1766,11 @@ func TestNotesFormatBarInTableDoesNotHighlightOutsideBullet(t *testing.T) {
 }
 
 func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
-	app := &App{palette: defaultPalette()}
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
 	document := common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 		{ID: "block", Type: common.NoteBlockParagraph, Text: "hello dsafdsfa", Spans: []common.NoteSpan{{Start: 6, End: 14, Underline: true}}},
 	}}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: document})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note", Document: document})
 	_, _, ranges := projectNoteDocument(document, woxui.TextStyle{Size: 14}, woxcomponent.ControlTheme{})
 	controller.document, controller.blockRanges = document, ranges
 	controller.selection = woxui.TextSelection{Anchor: ranges[0].TextStart + 8, Focus: ranges[0].TextStart + 8}
@@ -1761,7 +1795,7 @@ func TestNotesFormatBarHighlightsActiveUnderline(t *testing.T) {
 
 // TestNotesToolbarToggleIconFollowsVisibility checks both directions through the real button callback.
 func TestNotesToolbarToggleIconFollowsVisibility(t *testing.T) {
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{ID: "note"})
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{ID: "note"})
 	controller.formatVisible = true
 	theme := woxcomponent.Theme{ToolbarText: woxui.Color{A: 255}}
 	var shown *woxui.Image
@@ -1798,8 +1832,11 @@ func TestNotesToolbarToggleIconFollowsVisibility(t *testing.T) {
 }
 
 func TestNotesToolbarSupportsCaptionButtonsAndTitleBarDoubleClick(t *testing.T) {
-	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	toolbar := controller.buildToolbar(420, true, woxcomponent.Theme{}).(woxwidget.Container).Child.(woxwidget.Stack)
@@ -1824,8 +1861,8 @@ func TestNotesToolbarSupportsCaptionButtonsAndTitleBarDoubleClick(t *testing.T) 
 }
 
 func TestNotesBuildKeepsThemeBackground(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	root := controller.buildNotes(woxui.FrameInfo{Size: woxui.Size{Width: 460, Height: 320}}).(woxwidget.Semantics)
@@ -1837,8 +1874,8 @@ func TestNotesBuildKeepsThemeBackground(t *testing.T) {
 }
 
 func TestNotesFormatBarDoesNotPaintToolbarBackground(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	bar := controller.buildFormatBar(420, woxcomponent.Theme{ToolbarBackground: woxui.Color{R: 245, G: 245, B: 245, A: 255}}).(woxwidget.Container)
@@ -1864,15 +1901,18 @@ func TestNotesMaximizeBoundsUsesLogicalWorkArea(t *testing.T) {
 
 func TestNotesWindowMaximizePersistsPerNote(t *testing.T) {
 	services := &notesWindowTestServices{local: map[string]string{}}
-	app := &App{services: services, palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	app := bindTestApp(&App{
+		services:   services,
+		appearance: appearanceController{palette: defaultPalette()},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
 	controller.windowMaximized = true
 	controller.restoreFrame = woxui.Rect{X: 40, Y: 60, Width: 420, Height: 320}
 	controller.persistMaximizePreference()
 	if services.local["windowMaximized:note"] != "1" {
 		t.Fatalf("window maximize preference = %#v", services.local)
 	}
-	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	reopened := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
 	if !reopened.readWindowMaximized() {
 		t.Fatal("reopened note lost maximized preference")
 	}
@@ -1880,8 +1920,11 @@ func TestNotesWindowMaximizePersistsPerNote(t *testing.T) {
 
 func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	services := &notesWindowTestServices{local: map[string]string{}}
-	app := &App{services: services, palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	app := bindTestApp(&App{
+		services:   services,
+		appearance: appearanceController{palette: defaultPalette()},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
 	if !controller.windowPinned {
 		t.Fatal("new notes must start pinned")
 	}
@@ -1892,7 +1935,7 @@ func TestNotesWindowPinPersistsPerNote(t *testing.T) {
 	if services.local["windowPinned:note"] != "0" {
 		t.Fatalf("window unpin preference = %#v", services.local)
 	}
-	reopened := newNotesWindowController(app, common.NoteRecord{ID: "note"})
+	reopened := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
 	if reopened.windowPinned {
 		t.Fatal("reopened note lost window unpin preference")
 	}
@@ -1921,9 +1964,9 @@ func TestNotesWindowUsesNotesPluginIconOnTaskbar(t *testing.T) {
 }
 
 func TestNotesUseIndependentNativeWindowIDs(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	first := newNotesWindowController(app, common.NoteRecord{ID: "first"})
-	second := newNotesWindowController(app, common.NoteRecord{ID: "second"})
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	first := newNotesWindowController(&app.notes, common.NoteRecord{ID: "first"})
+	second := newNotesWindowController(&app.notes, common.NoteRecord{ID: "second"})
 	if first.windowID == second.windowID {
 		t.Fatalf("two notes shared native window ID %q", first.windowID)
 	}
@@ -1992,10 +2035,16 @@ func (s *notesWindowTestServices) NotesDiscard(_ context.Context, id string) err
 
 func TestNotesWindowAutosavesAndRetainsDirtyStateOnFailure(t *testing.T) {
 	services := &notesWindowTestServices{saveCall: make(chan struct{}, 1)}
-	app := &App{services: services, palette: defaultPalette(), lifecycleCtx: context.Background(), uiCall: func(callback func()) error { callback(); return nil }, noteWindows: map[string]*notesWindowController{}}
+	app := bindTestApp(&App{
+		services:     services,
+		appearance:   appearanceController{palette: defaultPalette()},
+		lifecycleCtx: context.Background(),
+		uiCall:       func(callback func()) error { callback(); return nil },
+		notes:        notesController{noteWindows: map[string]*notesWindowController{}},
+	})
 	record := common.NoteRecord{ID: "note", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}}}
-	controller := newNotesWindowController(app, record)
-	app.noteWindows[controller.record.ID] = controller
+	controller := newNotesWindowController(&app.notes, record)
+	app.notes.noteWindows[controller.record.ID] = controller
 	controller.onEditorChanged("hello")
 	select {
 	case <-services.saveCall:
@@ -2023,9 +2072,14 @@ func TestNotesWindowAutosavesAndRetainsDirtyStateOnFailure(t *testing.T) {
 
 func TestNotesFlushSkipsEmptyDraft(t *testing.T) {
 	services := &notesWindowTestServices{saveCall: make(chan struct{}, 1)}
-	app := &App{services: services, palette: defaultPalette(), lifecycleCtx: context.Background(), noteWindows: map[string]*notesWindowController{}}
+	app := bindTestApp(&App{
+		services:     services,
+		appearance:   appearanceController{palette: defaultPalette()},
+		lifecycleCtx: context.Background(),
+		notes:        notesController{noteWindows: map[string]*notesWindowController{}},
+	})
 	record := common.NoteRecord{ID: "draft", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}}}
-	controller := newNotesWindowController(app, record)
+	controller := newNotesWindowController(&app.notes, record)
 	controller.dirty = true
 	if err := controller.flush(); err != nil {
 		t.Fatalf("flush empty draft: %v", err)
@@ -2039,10 +2093,15 @@ func TestNotesFlushSkipsEmptyDraft(t *testing.T) {
 
 func TestNotesDiscardEmptyDraftOnClose(t *testing.T) {
 	services := &notesWindowTestServices{discardCall: make(chan struct{}, 1)}
-	app := &App{services: services, palette: defaultPalette(), lifecycleCtx: context.Background(), noteWindows: map[string]*notesWindowController{}}
+	app := bindTestApp(&App{
+		services:     services,
+		appearance:   appearanceController{palette: defaultPalette()},
+		lifecycleCtx: context.Background(),
+		notes:        notesController{noteWindows: map[string]*notesWindowController{}},
+	})
 	record := common.NoteRecord{ID: "draft", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}}}
-	controller := newNotesWindowController(app, record)
-	app.noteWindows[record.ID] = controller
+	controller := newNotesWindowController(&app.notes, record)
+	app.notes.noteWindows[record.ID] = controller
 	controller.discardEmptyNote()
 	select {
 	case <-services.discardCall:
@@ -2058,8 +2117,11 @@ func TestNotesDiscardEmptyDraftOnClose(t *testing.T) {
 }
 
 func TestNotesEditorRepeatedBackspaceKeepsCaret(t *testing.T) {
-	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "block", Type: common.NoteBlockParagraph, Text: "hello world"},
 		}},
@@ -2083,14 +2145,17 @@ func TestNotesEditorRepeatedBackspaceKeepsCaret(t *testing.T) {
 }
 
 func TestNotesEditorHostBackspaceKeepsFocus(t *testing.T) {
-	app := &App{palette: defaultPalette(), noteWindows: map[string]*notesWindowController{}}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
+	})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{
 			{ID: "block", Type: common.NoteBlockParagraph, Text: "hello"},
 		}},
 	})
 	controller.editor.SetCaret(3)
-	theme := app.palette.componentTheme()
+	theme := app.appearance.palette.componentTheme()
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
 			ID: "notes.editor", Document: controller.document, Width: 400, Height: 240,
@@ -2158,8 +2223,8 @@ func (s *notesEditorHostServices) UpdateAccessibility(woxui.AccessibilityTree, w
 }
 
 func TestNotesSearchOverlayDoesNotOverflow(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
 	controller.summaries = []common.NoteSummary{{ID: "note", Title: "Wox Notes Smoke", UpdatedAt: 1, DeletedAt: 1}}
@@ -2181,7 +2246,7 @@ func TestNotesSearchOverlayDoesNotOverflow(t *testing.T) {
 }
 
 func TestNotesPastePlainTextLeavesDefaultInsert(t *testing.T) {
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}},
 	})
 	if controller.pasteDocument("hello") {
@@ -2205,7 +2270,7 @@ func TestNotesClipboardImageBeatsLoneURLOrFilename(t *testing.T) {
 
 func TestNotesPasteInsertsClipboardImage(t *testing.T) {
 	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}}},
 	})
 	if !controller.pasteImportedImage(image.NewRGBA(image.Rect(0, 0, 8, 6)), "clipboard.png") {
@@ -2236,7 +2301,7 @@ func TestNotesPasteInsertsImageFile(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatalf("close image: %v", err)
 	}
-	controller := newNotesWindowController(&App{palette: defaultPalette()}, common.NoteRecord{
+	controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "above"}}},
 	})
 	if !controller.pasteClipboardFiles([]string{path}) {
@@ -2255,10 +2320,10 @@ func TestNotesPasteInsertsImageFile(t *testing.T) {
 
 // TestNotesToolbarActionBounds checks real layout, including right anchoring after resize.
 func TestNotesToolbarActionBounds(t *testing.T) {
-	app := &App{palette: defaultPalette()}
-	controller := newNotesWindowController(app, common.NoteRecord{ID: "toolbar"})
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "toolbar"})
 	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
-		return controller.buildToolbar(frame.Size.Width, true, app.palette.componentTheme())
+		return controller.buildToolbar(frame.Size.Width, true, app.appearance.palette.componentTheme())
 	})
 	host.AttachServices(&notesEditorHostServices{})
 	for _, width := range []float32{420, 800, 600} {

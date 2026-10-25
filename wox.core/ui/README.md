@@ -34,6 +34,62 @@ System WebView previews keep their public facade on `runtime.Window`, while `run
 
 Launcher presentation is split into three layers. `launcher/component/wox_*.go` owns theme-aware Wox controls and their shared interaction/accessibility behavior, with one component per file. `launcher/view/` owns pure page composition through immutable props and callbacks; cohesive domains such as preview rendering live in a dedicated subpackage (`launcher/view/preview`). The `launcher` package root retains controller state, core requests, native-window lifecycle, and adapters that prepare typed view props; adapters do not construct primitive widget trees. Widget slots are reserved for composing an already separate view or shared form control. View and component packages must not depend on `launcher.App`.
 
+### Launcher state ownership
+
+`launcher.App` composes per-instance controllers through `bindControllers` in
+`launcher/controllers.go`. It owns instance identity, the launcher window, shared
+window registration, and cross-feature commands such as applying a query response
+or changing the selected surface. Controllers remain in the launcher feature
+package; they receive narrow service interfaces, explicit peer controllers, and
+semantic callbacks. They must not store `*App` or accept the entire `Services`
+contract merely to reach another feature.
+
+| Owner | Responsibility |
+| --- | --- |
+| `queryController`, `resultController` | Query editing, hints, history, generation timers; published rows, selection, refinements and scrolling |
+| `actionPanelController`, `formActionController` | Action filtering and selection; submitted action forms and their editor state |
+| `previewController` | Selected-preview visibility and resource transitions; Markdown and text-layout caches |
+| Remote, file, native-file, WebView, terminal and dictation controllers | Each preview's requests, caches, native/session state and cleanup |
+| `chatController`, `chatWindowController` | One chat session and attachment imports; the dedicated window presenting that session |
+| `settingsWindowController`, `onboardingController` | Window lifecycle, hosts and surface state; existing settings-domain controllers retain editing and persistence policies |
+| `notesController` | Note-window registry and the capabilities used by individual note editors |
+| Glance, Attention, toolbar, quick-select and result-drag controllers | Accessory refresh and inbox visibility, message expiry, modifier-hold selection and drag lifecycle |
+| `imageStore`, `languageCatalog`, `formTableEmojiCatalog`, `tooltipController`, `appearanceController` | Decoded-image budget and request deduplication, published translations, table-editor emoji search/recent choices, tooltip lifecycle and launcher appearance |
+
+Mutable controller state is confined to the UI thread, except for explicitly
+synchronized image bookkeeping, terminal subscription reconciliation, and atomic
+revisions. Background work publishes through UI dispatch and retains its existing
+query IDs, session keys or generation checks. Result refresh still holds shrinking
+partial snapshots for 400 ms using actual list/grid geometry; typed-query grace
+and final-response handling remain separate policies.
+
+`snapshot()` only reads state. Its collection references are borrowed for the
+current synchronous launcher build, not retained for asynchronous use. Retained
+`widget.Boundary.Build` callbacks consume their supplied props and stable
+callbacks only. Action-panel invalidation compares the result and toolbar
+revisions directly instead of advancing a revision during snapshot creation.
+
+Final destruction cancels the instance context, stops query/Glance/quick-select,
+file-preview (including native occlusion) and settings-highlight timers, cancels
+dictation and attachment imports, and releases terminal subscriptions. Notes get
+a final save attempt on the UI thread; stopping autosave also invalidates already
+queued timer callbacks. Native tooltips are dismissed on that same UI thread.
+Image and remote preview service calls inherit the instance context. Image/file/remote
+loaders reject new work and late completions after destruction, and disposal clears
+their request records without changing normal cache or retry behavior. In-progress
+local file inspection may finish, but cannot publish into the destroyed instance.
+WebView controllers clear presentation state; native WebView destruction remains
+owned by the runtime window. Hiding the launcher is a different transition:
+dedicated chat windows keep their shared session, and existing hidden-window
+resource retention policies still apply. Native focus, IME, geometry and DPI
+conversion remain owned by the existing runtime window capabilities.
+
+Test fixtures use `bindTestApp` to supply missing General/Appearance settings
+controllers and wire the same capabilities while preserving explicit fixture state,
+without starting native windows or subscribing to process services. Production wiring
+must remain centralized in `bindControllers` so test and application ownership
+do not diverge.
+
 The widget Host supports incremental retained `Stateful` elements alongside legacy stateless descriptions. Stateful identity is scoped by widget type and stable key; the Host owns mount, update, build, post-frame work, and disposal ordering, while `StateContext` schedules frames without moving native work into rendering. `FocusNode` attachments remain window-specific, `TextEditingController` retains portable editor state across immutable rebuilds, and keyed `ScrollView` widgets retain offsets through `ScrollController` and consume declarative `KeepVisible` ranges when the target or viewport changes. `WoxTextField` always mounts retained State and exposes only its committed business value by default; caret, selection, and IME composition stay inside the field unless an advanced stateful owner explicitly supplies a controller. Shared choice overlays own query editing, keyboard highlight, and list scrolling while adapters receive only the committed option. Settings pages, navigation and search, plugin/theme catalogs, runtime row following, title-bar hover, shared forms, form-table pickers/editors, and model-manager lists keep transient interaction state below `launcher.App`. Modal focus trapping and restoration stay Host-owned, while `WoxDialog` State can request a specific descendant after its first layout. New stateful controls should use this lifecycle instead of storing interaction state in `launcher.App`; legacy controls can migrate independently without replacing the complete widget tree at once.
 
 List result gutters are fixed outside the scrolling rows. Window sizing and list composition share the same resolved padding: `ResultContainerPaddingTop/Bottom` frame the viewport, and `AppPaddingBottom` is added below results only when neither a toolbar nor a bottom query box owns that edge. The result-count budget applies to row content; group headers add their own height without consuming a result slot. Selection following and quick selection use the inner viewport without padding. Lists with a bottom gutter stop painting at that viewport; edge-to-edge lists can extend behind the toolbar.

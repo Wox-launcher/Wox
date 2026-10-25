@@ -8,13 +8,17 @@ import (
 )
 
 func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_update":                          "Update",
-		"ui_disabled":                        "Disabled",
-		"ui_setting_plugin_section_enabled":  "Enabled",
-		"ui_setting_plugin_section_disabled": "Disabled",
-		"ui_plugin_store_wox":                "Wox Store",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_update":                          "Update",
+				"ui_disabled":                        "Disabled",
+				"ui_setting_plugin_section_enabled":  "Enabled",
+				"ui_setting_plugin_section_disabled": "Disabled",
+				"ui_plugin_store_wox":                "Wox Store",
+			},
+		},
+	})
 	installed := app.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{
 			Plugins: []pluginSettingsPlugin{
@@ -83,7 +87,7 @@ func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
 }
 
 func TestPluginListEntriesOmitHeaderWhenOneStoreRemains(t *testing.T) {
-	app := &App{translations: map[string]string{"ui_plugin_store_wox": "Wox Store"}}
+	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{"ui_plugin_store_wox": "Wox Store"}}})
 	entries := app.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{PluginsStore: true},
 	}, []filteredPlugin{
@@ -99,11 +103,15 @@ func TestPluginListEntriesOmitHeaderWhenOneStoreRemains(t *testing.T) {
 }
 
 func TestPluginListEntriesOmitScriptBadge(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_setting_plugin_script_tag": "Script",
-		"ui_setting_plugin_system_tag": "System",
-		"ui_plugin_dev_tag":            "Dev",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_setting_plugin_script_tag": "Script",
+				"ui_setting_plugin_system_tag": "System",
+				"ui_plugin_dev_tag":            "Dev",
+			},
+		},
+	})
 	for _, store := range []bool{false, true} {
 		entries := app.pluginListEntries(settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: store}}, []filteredPlugin{
 			{plugin: pluginSettingsPlugin{ID: "script", Runtime: "Script"}},

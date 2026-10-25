@@ -19,23 +19,23 @@ func TestDedicatedChatSurvivesLauncherPreviewReplacement(t *testing.T) {
 	// Headless unit tests have no native UI thread. Clear the runtime dispatcher
 	// so applyResults can reconcile preview state inline, matching app_test.go.
 	app.uiCall = nil
-	app.chatPreview = state
-	app.chatView = &woxui.ManagedWindow{}
+	app.chat.chatPreview = state
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
 	app.visible = true
-	app.query = newInputQuery("chat ")
+	app.querySession.query = newInputQuery("chat ")
 	data, err := json.Marshal(chatPreviewData{ActiveChat: chatData{ID: "replacement"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	preview := queryPreview{PreviewType: "chat", PreviewData: string(data)}
-	if err := app.activateChatPreview(queryResult{ID: "new-result", QueryID: "new-query"}, preview); err != nil {
+	if err := app.chat.activateChatPreview(queryResult{ID: "new-result", QueryID: "new-query"}, preview); err != nil {
 		t.Fatal(err)
 	}
-	app.applyResults(app.query.QueryID, []queryResult{{ID: "replacement", Preview: preview}}, &queryLayout{}, nil, nil, 0, true)
-	if app.chatFullscreen || !app.visible {
+	app.applyResults(app.querySession.query.QueryID, []queryResult{{ID: "replacement", Preview: preview}}, &queryLayout{}, nil, nil, 0, true)
+	if app.chat.chatFullscreen || !app.visible {
 		t.Fatal("incoming chat results should not move focus away from the launcher")
 	}
-	if app.chatPreview != state || state.editor.State().Text != "unsent draft" || !state.active {
+	if app.chat.chatPreview != state || state.editor.State().Text != "unsent draft" || !state.active {
 		t.Fatal("a launcher result replaced the pop-out conversation or its draft")
 	}
 	view := app.buildChatPreview(queryResult{}, preview, defaultPalette(), 400, 300, 1, true)
@@ -49,30 +49,30 @@ func TestChatQueryKeepsEmbeddedAndDedicatedEntrances(t *testing.T) {
 	defer app.cancel()
 	app.uiCall = nil
 	app.visible = true
-	app.query = newInputQuery("chat ")
-	app.chatView = &woxui.ManagedWindow{}
+	app.querySession.query = newInputQuery("chat ")
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
 	state := &chatPreviewState{active: true, editor: woxui.NewTextEditor("unsent draft")}
-	app.chatPreview = state
+	app.chat.chatPreview = state
 	results := []queryResult{{ID: "chat", Preview: queryPreview{PreviewType: "chat", PreviewData: `{"ActiveChat":{"Id":"chat"}}`}}}
-	app.applyResults(app.query.QueryID, results, &queryLayout{ChatMode: true}, nil, nil, 0, true)
-	if !app.chatFullscreen || !app.visible || app.chatPreview != state || state.editor.State().Text != "unsent draft" {
+	app.applyResults(app.querySession.query.QueryID, results, &queryLayout{ChatMode: true}, nil, nil, 0, true)
+	if !app.chat.chatFullscreen || !app.visible || app.chat.chatPreview != state || state.editor.State().Text != "unsent draft" {
 		t.Fatal("chat query must open embedded chat and preserve the shared draft")
 	}
-	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true, Modifiers: 0}) || state.error == "" {
+	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true, Modifiers: 0}) || state.error == "" {
 		t.Fatal("embedded Enter should reach chat submission validation")
 	}
 	app.onChatWindowClosed()
-	if !app.chatFullscreen || app.chatPreview != state || state.editor.State().Text != "unsent draft" {
+	if !app.chat.chatFullscreen || app.chat.chatPreview != state || state.editor.State().Text != "unsent draft" {
 		t.Fatal("closing the dedicated entrance discarded the embedded conversation")
 	}
-	if _, err := app.chatPreviewSnapshotFor(results[0], results[0].Preview); err != nil {
+	if _, err := app.chat.chatPreviewSnapshotFor(results[0], results[0].Preview); err != nil {
 		t.Fatalf("embedded conversation stopped rendering after pop-out close: %v", err)
 	}
-	app.chatView = &woxui.ManagedWindow{}
-	if !app.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chatFullscreen || !state.active {
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chat.chatFullscreen || !state.active {
 		t.Fatal("embedded Escape should return to the query without deactivating dedicated chat")
 	}
-	if !app.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || !app.chatWindowOpen() || !state.active {
+	if !app.chat.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || !app.chatWindow.chatWindowOpen() || !state.active {
 		t.Fatal("dedicated Escape should leave the window and shared conversation active")
 	}
 }
@@ -81,45 +81,48 @@ func TestDedicatedChatDoesNotConsumeLauncherShortcuts(t *testing.T) {
 	app := New(false, nil)
 	defer app.cancel()
 	app.uiCall = nil
-	app.chatView = &woxui.ManagedWindow{}
-	app.chatPreview = &chatPreviewState{active: true}
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	app.chat.chatPreview = &chatPreviewState{active: true}
 	modifier := woxui.KeyModifierControl
 	if primaryHotkey("b") == "command+b" {
 		modifier = woxui.KeyModifierMeta
 	}
 	app.onKey(woxui.KeyEvent{Key: "b", Down: true, Modifiers: modifier})
-	if app.chatPreview.panel != "" {
+	if app.chat.chatPreview.panel != "" {
 		t.Fatal("launcher shortcut changed the independent chat sidebar")
 	}
-	if app.onChatPreviewTextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "query"}) {
+	if app.chat.onChatPreviewTextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "query"}) {
 		t.Fatal("dedicated chat intercepted launcher text input")
 	}
 }
 
 func TestDedicatedChatEscapeDismissesPanelsWithoutClosingWindow(t *testing.T) {
 	dispatched := make(chan struct{}, 1)
-	app := &App{
-		isPrimary: true, lifecycleCtx: context.Background(), chatView: &woxui.ManagedWindow{},
-		chatPreview: &chatPreviewState{active: true, editor: woxui.NewTextEditor("unsent draft")}, editor: woxui.NewTextEditor("query"),
-		uiCall: func(func()) error { dispatched <- struct{}{}; return nil },
-	}
+	app := bindTestApp(&App{
+		isPrimary:    true,
+		lifecycleCtx: context.Background(),
+		chatWindow:   chatWindowController{chatView: &woxui.ManagedWindow{}},
+		chat:         chatController{chatPreview: &chatPreviewState{active: true, editor: woxui.NewTextEditor("unsent draft")}},
+		querySession: queryController{editor: woxui.NewTextEditor("query")},
+		uiCall:       func(func()) error { dispatched <- struct{}{}; return nil },
+	})
 	for _, panel := range []string{"", "history", "models", "skills", chatCommandPanel, chatMentionPanel} {
-		app.chatPreview.panel = panel
-		app.chatPreview.sidebarOpen = panel == "history"
-		if !app.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
+		app.chat.chatPreview.panel = panel
+		app.chat.chatPreview.sidebarOpen = panel == "history"
+		if !app.chat.onDedicatedChatKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
 			t.Fatalf("dedicated window did not handle Escape for panel %q", panel)
 		}
-		if !app.chatPreview.active || app.chatPreview.editor.State().Text != "unsent draft" {
+		if !app.chat.chatPreview.active || app.chat.chatPreview.editor.State().Text != "unsent draft" {
 			t.Fatalf("Escape must keep the dedicated composer after panel %q", panel)
 		}
 		if chatOverlayPanel(panel) {
-			if app.chatPreview.panel != "" || app.chatPreview.sidebarOpen {
+			if app.chat.chatPreview.panel != "" || app.chat.chatPreview.sidebarOpen {
 				t.Fatalf("Escape must dismiss overlay %q without opening the sidebar", panel)
 			}
 			continue
 		}
-		if app.chatPreview.panel != panel || app.chatPreview.sidebarOpen != (panel == "history") {
-			t.Fatalf("dedicated Escape folded the root surface: panel %q -> %q sidebar=%v", panel, app.chatPreview.panel, app.chatPreview.sidebarOpen)
+		if app.chat.chatPreview.panel != panel || app.chat.chatPreview.sidebarOpen != (panel == "history") {
+			t.Fatalf("dedicated Escape folded the root surface: panel %q -> %q sidebar=%v", panel, app.chat.chatPreview.panel, app.chat.chatPreview.sidebarOpen)
 		}
 	}
 	select {
@@ -127,7 +130,7 @@ func TestDedicatedChatEscapeDismissesPanelsWithoutClosingWindow(t *testing.T) {
 		t.Fatal("Escape dispatched a window close")
 	case <-time.After(100 * time.Millisecond):
 	}
-	if !app.chatPreview.active || app.editor.State().Selection.Anchor != app.editor.State().Selection.Focus {
+	if !app.chat.chatPreview.active || app.querySession.editor.State().Selection.Anchor != app.querySession.editor.State().Selection.Focus {
 		t.Fatal("dedicated Escape changed launcher input state")
 	}
 }
@@ -140,15 +143,15 @@ func TestDedicatedChatKeepsSecondarySessionAliveOnLauncherBlur(t *testing.T) {
 	app.isPrimary = false
 	app.visible = true
 	app.show.HideOnBlur = true
-	app.chatView = &woxui.ManagedWindow{}
-	app.chatPreview = &chatPreviewState{active: true}
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	app.chat.chatPreview = &chatPreviewState{active: true}
 	app.onFocus(woxui.FocusEvent{Active: false})
 	select {
 	case <-hidden:
 	case <-time.After(5 * time.Second):
 		t.Fatal("launcher blur did not finish hiding its session")
 	}
-	if app.destroyed.Load() || app.visible || !app.chatPreview.active {
+	if app.destroyed.Load() || app.visible || !app.chat.chatPreview.active {
 		t.Fatal("launcher blur must keep the pop-out's session and conversation alive")
 	}
 }
@@ -165,15 +168,22 @@ func (s chatWindowTestServices) Hidden(context.Context, string) error {
 
 func TestPreviewTooltipWindowStaysOnLauncherUntilChatWindowIsFocused(t *testing.T) {
 	launcher := &woxui.Window{}
-	app := &App{window: launcher, visible: true, chatView: &woxui.ManagedWindow{}, chatWindowFocused: false}
+	app := bindTestApp(&App{
+		window:  launcher,
+		visible: true,
+		chatWindow: chatWindowController{
+			chatView:          &woxui.ManagedWindow{},
+			chatWindowFocused: false,
+		},
+	})
 	if app.previewTooltipWindow() != launcher {
 		t.Fatal("unfocused dedicated chat must keep preview tooltips on the launcher")
 	}
-	app.chatWindowFocused = true
+	app.chatWindow.chatWindowFocused = true
 	if app.previewTooltipWindow() != launcher {
 		t.Fatal("a focused chat window without a live native surface must fall back to the launcher")
 	}
-	app.chatWindowFocused = false
+	app.chatWindow.chatWindowFocused = false
 	app.visible = false
 	if app.previewTooltipWindow() != launcher {
 		t.Fatal("a hidden launcher without a live chat surface must fall back to the launcher window")
@@ -181,56 +191,63 @@ func TestPreviewTooltipWindowStaysOnLauncherUntilChatWindowIsFocused(t *testing.
 }
 
 func TestChatWindowOpenDetectsLiveInstance(t *testing.T) {
-	app := &App{}
-	if app.chatWindowOpen() || app.chatSurfaceVisible() {
+	app := bindTestApp(&App{})
+	if app.chatWindow.chatWindowOpen() || app.chatSurfaceVisible() {
 		t.Fatal("empty app reported a visible chat surface")
 	}
-	app.chatView = &woxui.ManagedWindow{}
-	if !app.chatWindowOpen() || !app.chatSurfaceVisible() {
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	if !app.chatWindow.chatWindowOpen() || !app.chatSurfaceVisible() {
 		t.Fatal("created dedicated window should keep the chat surface visible")
 	}
 }
 
 func TestOpenDedicatedChatWindowRequiresActiveChat(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	if err := app.openDedicatedChatWindow(); err == nil {
 		t.Fatal("expected an error when no conversation is active")
 	}
 }
 
 func TestResetChatPreviewKeepsStateWhileDedicatedWindowOpen(t *testing.T) {
-	app := &App{
-		chatPreview:    &chatPreviewState{key: "chat", active: true, chat: chatData{ID: "1", Title: "Hello"}},
-		chatFullscreen: true,
-		chatView:       &woxui.ManagedWindow{},
-	}
-	app.resetChatPreview()
-	if app.chatPreview == nil || app.chatPreview.chat.ID != "1" {
+	app := bindTestApp(&App{
+		chat: chatController{
+			chatPreview:    &chatPreviewState{key: "chat", active: true, chat: chatData{ID: "1", Title: "Hello"}},
+			chatFullscreen: true,
+		},
+		chatWindow: chatWindowController{chatView: &woxui.ManagedWindow{}},
+	})
+	app.chat.resetChatPreview()
+	if app.chat.chatPreview == nil || app.chat.chatPreview.chat.ID != "1" {
 		t.Fatal("reset discarded the conversation while the dedicated window is open")
 	}
-	if app.chatFullscreen {
+	if app.chat.chatFullscreen {
 		t.Fatal("launcher fullscreen lingered after reset behind the dedicated window")
 	}
 }
 
 func TestDeactivateChatPreviewKeepsActiveConversationInDedicatedWindow(t *testing.T) {
-	app := &App{
-		chatPreview:    &chatPreviewState{key: "chat", active: true},
-		chatFullscreen: true,
-		chatView:       &woxui.ManagedWindow{},
-	}
-	app.deactivateChatPreview()
-	if app.chatPreview == nil || !app.chatPreview.active {
+	app := bindTestApp(&App{
+		chat: chatController{
+			chatPreview:    &chatPreviewState{key: "chat", active: true},
+			chatFullscreen: true,
+		},
+		chatWindow: chatWindowController{chatView: &woxui.ManagedWindow{}},
+	})
+	app.chat.deactivateChatPreview()
+	if app.chat.chatPreview == nil || !app.chat.chatPreview.active {
 		t.Fatal("dedicated window conversation was deactivated")
 	}
-	if app.chatFullscreen {
+	if app.chat.chatFullscreen {
 		t.Fatal("launcher fullscreen lingered after deactivate")
 	}
 }
 
 func TestChatWindowTitleBarIncludesCaptionControls(t *testing.T) {
-	app := &App{palette: defaultPalette(), chatPreview: &chatPreviewState{key: "revision", resultID: "result", chat: chatData{ID: "chat", Title: "Hello"}}}
-	bar := app.buildChatWindowTitleBar(800, true, app.palette.componentTheme()).(woxwidget.Stack)
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: defaultPalette()},
+		chat:       chatController{chatPreview: &chatPreviewState{key: "revision", resultID: "result", chat: chatData{ID: "chat", Title: "Hello"}}},
+	})
+	bar := app.buildChatWindowTitleBar(800, true, app.appearance.palette.componentTheme()).(woxwidget.Stack)
 	var chrome woxcomponent.WindowCloseChromeProps
 	found := false
 	for _, child := range bar.Children {
@@ -296,16 +313,18 @@ func findChatWindowHeader(bar woxwidget.Stack) (woxwidget.Container, bool) {
 }
 
 func TestHideLauncherAfterChatPopOutLeavesConversation(t *testing.T) {
-	app := &App{
-		visible:        true,
-		chatFullscreen: true,
-		chatPreview:    &chatPreviewState{key: "chat", active: true, chat: chatData{ID: "1"}},
-	}
+	app := bindTestApp(&App{
+		visible: true,
+		chat: chatController{
+			chatFullscreen: true,
+			chatPreview:    &chatPreviewState{key: "chat", active: true, chat: chatData{ID: "1"}},
+		},
+	})
 	app.hideLauncherAfterChatPopOut()
-	if app.visible || app.chatFullscreen {
+	if app.visible || app.chat.chatFullscreen {
 		t.Fatal("launcher should hide after popping chat into its own window")
 	}
-	if app.chatPreview == nil || !app.chatPreview.active {
+	if app.chat.chatPreview == nil || !app.chat.chatPreview.active {
 		t.Fatal("pop-out hid the conversation instead of continuing it")
 	}
 }

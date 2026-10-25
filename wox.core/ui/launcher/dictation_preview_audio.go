@@ -19,7 +19,7 @@ func dictationPlaybackProps(snapshot audio.FilePlaybackSnapshot) previewview.Dic
 }
 
 // reconcileDictationAudioPreview releases a track that does not belong to the selected history result.
-func (a *App) reconcileDictationAudioPreview(preview queryPreview) {
+func (a *dictationPreviewController) reconcileDictationAudioPreview(preview queryPreview) {
 	if a.dictationAudio == nil {
 		return
 	}
@@ -30,7 +30,7 @@ func (a *App) reconcileDictationAudioPreview(preview queryPreview) {
 }
 
 // dictationAudioSnapshot returns playback state only for the requested track.
-func (a *App) dictationAudioSnapshot(path string) audio.FilePlaybackSnapshot {
+func (a *dictationPreviewController) dictationAudioSnapshot(path string) audio.FilePlaybackSnapshot {
 	if a.dictationAudio == nil || a.dictationAudio.path != path {
 		return audio.FilePlaybackSnapshot{Path: path}
 	}
@@ -38,7 +38,7 @@ func (a *App) dictationAudioSnapshot(path string) audio.FilePlaybackSnapshot {
 }
 
 // toggleDictationAudio creates, pauses, or resumes the selected diagnostic track.
-func (a *App) toggleDictationAudio(path string) {
+func (a *dictationPreviewController) toggleDictationAudio(path string) {
 	if path == "" {
 		return
 	}
@@ -62,21 +62,21 @@ func (a *App) toggleDictationAudio(path string) {
 	a.deactivateDictationAudio()
 	state := &dictationPreviewAudioState{revision: 1, path: path, snapshot: audio.FilePlaybackSnapshot{Path: path}}
 	a.dictationAudio = state
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 	go a.loadDictationAudio(state, state.revision)
 }
 
-func (a *App) loadDictationAudio(state *dictationPreviewAudioState, revision uint64) {
+func (a *dictationPreviewController) loadDictationAudio(state *dictationPreviewAudioState, revision uint64) {
 	player, err := audio.NewFilePlayer(state.path, func(snapshot audio.FilePlaybackSnapshot) {
 		_ = a.uiCall(func() {
 			if a.dictationAudio != state || state.revision != revision {
 				return
 			}
 			state.snapshot = snapshot
-			if a.window != nil {
-				_ = a.window.Invalidate()
+			if a.window() != nil {
+				_ = a.window().Invalidate()
 			}
 		})
 	})
@@ -84,8 +84,8 @@ func (a *App) loadDictationAudio(state *dictationPreviewAudioState, revision uin
 		_ = a.uiCall(func() {
 			if a.dictationAudio == state && state.revision == revision {
 				log.Printf("load dictation preview audio: %v", err)
-				if a.window != nil {
-					_ = a.window.Invalidate()
+				if a.window() != nil {
+					_ = a.window().Invalidate()
 				}
 			}
 		})
@@ -115,7 +115,7 @@ func (a *App) loadDictationAudio(state *dictationPreviewAudioState, revision uin
 }
 
 // deactivateDictationAudio stops playback and releases its device outside rendering.
-func (a *App) deactivateDictationAudio() {
+func (a *dictationPreviewController) deactivateDictationAudio() {
 	state := a.dictationAudio
 	if state == nil {
 		return

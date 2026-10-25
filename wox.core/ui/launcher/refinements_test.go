@@ -9,9 +9,13 @@ import (
 )
 
 func TestRefinementToggleTooltipUsesPlatformHotkey(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_query_refinement_filters_tooltip": "过滤搜索结果({hotkey})",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_query_refinement_filters_tooltip": "过滤搜索结果({hotkey})",
+			},
+		},
+	})
 	want := "过滤搜索结果(" + strings.Join(formatHotkeyLabels(primaryHotkey("f")), "+") + ")"
 	if got := app.refinementToggleTooltip(); got != want {
 		t.Fatalf("refinement tooltip = %q, want %q", got, want)
@@ -45,7 +49,7 @@ func TestNextRefinementHotkeyValues(t *testing.T) {
 }
 
 func TestRefinementHotkeyTargetRequiresKeyDown(t *testing.T) {
-	app := &App{refinements: []queryRefinement{{ID: "type", Type: "singleSelect", Hotkey: "cmd+t", Options: []queryRefinementOption{{Value: "all"}, {Value: "text"}}}}}
+	app := bindTestApp(&App{resultList: resultController{refinements: []queryRefinement{{ID: "type", Type: "singleSelect", Hotkey: "cmd+t", Options: []queryRefinementOption{{Value: "all"}, {Value: "text"}}}}}})
 	event := woxui.KeyEvent{Key: "t", Modifiers: woxui.KeyModifierMeta}
 	if app.onRefinementHotkey(event) {
 		t.Fatal("key-up unexpectedly handled refinement hotkey")
@@ -53,133 +57,143 @@ func TestRefinementHotkeyTargetRequiresKeyDown(t *testing.T) {
 }
 
 func TestBeginQueryTransitionKeepsVisibleResultsDuringGracePeriod(t *testing.T) {
-	app := &App{
-		query:          plainQuery{QueryID: "new-query", QueryText: "cb "},
-		visible:        true,
-		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
-		resultsQueryID: "old-query",
-		selected:       0,
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{query: plainQuery{QueryID: "new-query", QueryText: "cb "}},
+		visible:      true,
+		resultList: resultController{
+			results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+			resultsQueryID: "old-query",
+			selected:       0,
+		},
+	})
 
-	app.beginQueryTransitionLocked(false)
-	timer := app.queryTransitionTimer
+	app.querySession.beginQueryTransitionLocked(false)
+	timer := app.querySession.queryTransitionTimer
 	if timer == nil {
 		t.Fatal("query transition timer is nil, want stale-result grace period")
 	}
 	timer.Stop()
-	app.queryTransitionTimer = nil
+	app.querySession.queryTransitionTimer = nil
 
-	if len(app.results) != 1 || app.results[0].ID != "old-result" {
-		t.Fatalf("visible results = %#v, want previous snapshot during grace period", app.results)
+	if len(app.resultList.results) != 1 || app.resultList.results[0].ID != "old-result" {
+		t.Fatalf("visible results = %#v, want previous snapshot during grace period", app.resultList.results)
 	}
-	if app.resultsQueryID != "old-query" || app.selected != 0 {
-		t.Fatalf("visible result state = query %q selected %d, want old-query and 0", app.resultsQueryID, app.selected)
+	if app.resultList.resultsQueryID != "old-query" || app.resultList.selected != 0 {
+		t.Fatalf("visible result state = query %q selected %d, want old-query and 0", app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
 func TestBeginQueryTransitionKeepsVisibleResultsForMRU(t *testing.T) {
-	app := &App{
-		query:          plainQuery{QueryID: "mru-query"},
-		show:           showAppParams{StartPage: "mru"},
-		visible:        true,
-		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
-		resultsQueryID: "old-query",
-		selected:       0,
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{query: plainQuery{QueryID: "mru-query"}},
+		show:         showAppParams{StartPage: "mru"},
+		visible:      true,
+		resultList: resultController{
+			results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+			resultsQueryID: "old-query",
+			selected:       0,
+		},
+	})
 
-	app.beginQueryTransitionLocked(false)
-	timer := app.queryTransitionTimer
+	app.querySession.beginQueryTransitionLocked(false)
+	timer := app.querySession.queryTransitionTimer
 	if timer == nil {
 		t.Fatal("MRU transition timer is nil, want stale-result grace period")
 	}
 	timer.Stop()
-	app.queryTransitionTimer = nil
+	app.querySession.queryTransitionTimer = nil
 
-	if len(app.results) != 1 || app.results[0].ID != "old-result" {
-		t.Fatalf("visible MRU transition results = %#v, want previous snapshot", app.results)
+	if len(app.resultList.results) != 1 || app.resultList.results[0].ID != "old-result" {
+		t.Fatalf("visible MRU transition results = %#v, want previous snapshot", app.resultList.results)
 	}
-	if app.resultsQueryID != "old-query" || app.selected != 0 {
-		t.Fatalf("visible MRU transition state = query %q selected %d, want old-query and 0", app.resultsQueryID, app.selected)
+	if app.resultList.resultsQueryID != "old-query" || app.resultList.selected != 0 {
+		t.Fatalf("visible MRU transition state = query %q selected %d, want old-query and 0", app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
 func TestBeginQueryTransitionClearsResultsWithoutVisibleGracePeriod(t *testing.T) {
-	app := &App{
-		query:          plainQuery{QueryID: "new-query", QueryText: "cb "},
-		results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
-		resultsQueryID: "old-query",
-		selected:       0,
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{query: plainQuery{QueryID: "new-query", QueryText: "cb "}},
+		resultList: resultController{
+			results:        []queryResult{{ID: "old-result", QueryID: "old-query"}},
+			resultsQueryID: "old-query",
+			selected:       0,
+		},
+	})
 
-	app.beginQueryTransitionLocked(false)
+	app.querySession.beginQueryTransitionLocked(false)
 
-	if app.queryTransitionTimer != nil {
+	if app.querySession.queryTransitionTimer != nil {
 		t.Fatal("hidden query unexpectedly scheduled a stale-result grace period")
 	}
-	if len(app.results) != 0 || app.resultsQueryID != "" || app.selected != -1 {
-		t.Fatalf("hidden result state = results %#v query %q selected %d, want cleared", app.results, app.resultsQueryID, app.selected)
+	if len(app.resultList.results) != 0 || app.resultList.resultsQueryID != "" || app.resultList.selected != -1 {
+		t.Fatalf("hidden result state = results %#v query %q selected %d, want cleared", app.resultList.results, app.resultList.resultsQueryID, app.resultList.selected)
 	}
 }
 
 func TestQueryTextChangeKeepsConfirmedPluginLayoutWithinTriggerScope(t *testing.T) {
 	icon := woxImage{ImageType: "svg", ImageData: "everything-icon"}
-	app := &App{
-		query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
-		queryContext:      queryContext{PluginID: "everything"},
-		queryContextKnown: true,
-		layout:            queryLayout{Icon: icon, GridLayout: &gridLayout{Columns: 4}},
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{
+			query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
+			queryContext:      queryContext{PluginID: "everything"},
+			queryContextKnown: true,
+		},
+		resultList: resultController{layout: queryLayout{Icon: icon, GridLayout: &gridLayout{Columns: 4}}},
+	})
 
 	app.applyQueryTextChangeLocked("e main.go;d")
 
-	if app.layout.Icon != icon || app.layout.GridLayout == nil || app.layout.GridLayout.Columns != 4 {
-		t.Fatalf("plugin layout = %#v, want previous confirmed layout", app.layout)
+	if app.resultList.layout.Icon != icon || app.resultList.layout.GridLayout == nil || app.resultList.layout.GridLayout.Columns != 4 {
+		t.Fatalf("plugin layout = %#v, want previous confirmed layout", app.resultList.layout)
 	}
 }
 
 func TestQueryTextChangeClearsPluginLayoutWhenTriggerScopeChanges(t *testing.T) {
-	app := &App{
-		query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
-		queryContext:      queryContext{PluginID: "everything"},
-		queryContextKnown: true,
-		layout:            queryLayout{Icon: woxImage{ImageType: "svg", ImageData: "everything-icon"}},
-	}
+	app := bindTestApp(&App{
+		querySession: queryController{
+			query:             plainQuery{QueryID: "old-query", QueryType: "input", QueryText: "e main.go"},
+			queryContext:      queryContext{PluginID: "everything"},
+			queryContextKnown: true,
+		},
+		resultList: resultController{layout: queryLayout{Icon: woxImage{ImageType: "svg", ImageData: "everything-icon"}}},
+	})
 
 	app.applyQueryTextChangeLocked("main.go")
 
-	if app.layout.Icon.ImageData != "" {
-		t.Fatalf("layout icon = %q, want cleared after leaving plugin trigger scope", app.layout.Icon.ImageData)
+	if app.resultList.layout.Icon.ImageData != "" {
+		t.Fatalf("layout icon = %q, want cleared after leaving plugin trigger scope", app.resultList.layout.Icon.ImageData)
 	}
 }
 
 func TestQueryLoadingOnlyAppearsForUnansweredCurrentQuery(t *testing.T) {
-	app := &App{query: plainQuery{QueryID: "current", QueryText: "slow"}}
-	app.startQueryLoadingLocked()
-	if app.queryLoadingTimer == nil {
+	app := bindTestApp(&App{querySession: queryController{query: plainQuery{QueryID: "current", QueryText: "slow"}}})
+	app.querySession.startQueryLoadingLocked()
+	if app.querySession.queryLoadingTimer == nil {
 		t.Fatal("query loading timer is nil")
 	}
-	app.queryLoadingTimer.Stop()
-	app.queryLoadingTimer = nil
+	app.querySession.queryLoadingTimer.Stop()
+	app.querySession.queryLoadingTimer = nil
 
-	app.showQueryLoading("stale")
-	if app.queryLoading {
+	app.querySession.showQueryLoading("stale")
+	if app.querySession.queryLoading {
 		t.Fatal("stale query showed loading")
 	}
-	app.showQueryLoading("current")
-	if !app.queryLoading {
+	app.querySession.showQueryLoading("current")
+	if !app.querySession.queryLoading {
 		t.Fatal("unanswered current query did not show loading")
 	}
-	app.resetQueryLoadingLocked()
-	app.resultsQueryID = "current"
-	app.results = []queryResult{{ID: "result", QueryID: "current"}}
-	app.showQueryLoading("current")
-	if app.queryLoading {
+	app.querySession.resetQueryLoadingLocked()
+	app.resultList.resultsQueryID = "current"
+	app.resultList.results = []queryResult{{ID: "result", QueryID: "current"}}
+	app.querySession.showQueryLoading("current")
+	if app.querySession.queryLoading {
 		t.Fatal("answered current query showed loading")
 	}
-	app.results = nil
-	app.queryComplete = false
-	app.showQueryLoading("current")
-	if !app.queryLoading {
+	app.resultList.results = nil
+	app.querySession.queryComplete = false
+	app.querySession.showQueryLoading("current")
+	if !app.querySession.queryLoading {
 		t.Fatal("non-final empty response stopped loading")
 	}
 }

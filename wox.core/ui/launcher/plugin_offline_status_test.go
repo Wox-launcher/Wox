@@ -10,7 +10,7 @@ func TestPluginOfflineStatusAfterStartup(t *testing.T) {
 	previous := network.IsOffline()
 	network.Default.SetOffline(true)
 	defer network.Default.SetOffline(previous)
-	app := &App{}
+	app := bindTestApp(&App{})
 	for _, disabled := range []bool{false, true} {
 		plugin := pluginSettingsPlugin{ID: "offline-plugin", IsInstalled: true, IsDisable: disabled}
 		actions := app.pluginManagementActions(settingsSnapshot{}, plugin)
@@ -18,7 +18,7 @@ func TestPluginOfflineStatusAfterStartup(t *testing.T) {
 		for _, action := range actions {
 			if action.ID == "plugin-enable" || action.ID == "plugin-disable" {
 				found = true
-				if action.Enabled || action.OnTap != nil || action.Label != app.translate("i18n:ui_plugin_offline_paused") {
+				if action.Enabled || action.OnTap != nil || action.Label != app.language.translate("i18n:ui_plugin_offline_paused") {
 					t.Fatal("offline plugin lifecycle action did not explain the pause")
 				}
 			}

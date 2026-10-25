@@ -65,22 +65,26 @@ func chatMentionsFromPlugins(plugins []chatPluginMention) []chatMention {
 	return mentions
 }
 
-func (a *App) chatMentionCatalog() []chatMention {
-	mentions := chatFileMentions(a)
-	if a == nil || a.aiSettings == nil {
+func (a *chatController) chatMentionCatalog() []chatMention {
+	var translate func(string) string
+	if a != nil {
+		translate = a.language.translate
+	}
+	mentions := chatFileMentions(translate)
+	if a == nil || a.aiSettings() == nil {
 		return mentions
 	}
 	// Additional @ kinds append here. The overlay stays one grouped catalog.
-	return append(mentions, chatMentionsFromPlugins(a.aiSettings.PluginMentions())...)
+	return append(mentions, chatMentionsFromPlugins(a.aiSettings().PluginMentions())...)
 }
 
 // chatFileMentions are always-visible @ actions that open the native file or folder picker.
-func chatFileMentions(a *App) []chatMention {
+func chatFileMentions(translate func(string) string) []chatMention {
 	fileName := "Select file"
 	folderName := "Select folder"
-	if a != nil {
-		fileName = a.translate("i18n:ui_ai_chat_select_file")
-		folderName = a.translate("i18n:ui_ai_chat_select_folder")
+	if translate != nil {
+		fileName = translate("i18n:ui_ai_chat_select_file")
+		folderName = translate("i18n:ui_ai_chat_select_folder")
 	}
 	return []chatMention{
 		{Kind: chatMentionKindFiles, ID: chatMentionIDOpenFile, Name: fileName, NameEn: "Select file", Icon: fromCoreImage(icons.Get(icons.ChatSelectFile))},
@@ -117,11 +121,11 @@ func chatMentionStatusHeight(items []chatCommandPaletteItem, loading bool, loadE
 	return height
 }
 
-func (a *App) chatMentionUsePinYin() bool {
-	return a != nil && a.generalSettings != nil && a.usePinYin()
+func (a *chatController) chatMentionUsePinYin() bool {
+	return a != nil && a.usePinYin()
 }
 
-func (a *App) filteredChatMentionItems(mentions []chatMention, query string) []chatCommandPaletteItem {
+func (a *chatController) filteredChatMentionItems(mentions []chatMention, query string) []chatCommandPaletteItem {
 	return chatMentionPaletteItems(mentions, query, a.chatMentionUsePinYin())
 }
 

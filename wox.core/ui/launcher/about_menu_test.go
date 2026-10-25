@@ -115,12 +115,12 @@ func TestAboutMenuHotkeyOpensAndClosesPanel(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		modifiers = woxui.KeyModifierMeta | woxui.KeyModifierShift
 	}
-	app := &App{generalSettings: &generalSettingsController{}}
+	app := bindTestApp(&App{generalSettings: &generalSettingsController{}})
 	event := woxui.KeyEvent{Key: "k", Modifiers: modifiers, Down: true}
-	if !app.onActionKey(event) || !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeAbout {
+	if !app.actions.onActionKey(event) || !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout {
 		t.Fatal("about menu hotkey should open the left panel")
 	}
-	if !app.onActionKey(event) || app.actionPanel {
+	if !app.actions.onActionKey(event) || app.actions.actionPanel {
 		t.Fatal("about menu hotkey should close an already open about menu")
 	}
 }
@@ -136,84 +136,101 @@ func TestAboutMenuHotkeyMatchesPrimaryShiftK(t *testing.T) {
 	if hotkeyMatches(aboutMenuHotkey(), woxui.KeyEvent{Key: "k", Modifiers: modifiers, Down: true, Composing: true}) {
 		t.Fatal("IME composition must not toggle the about menu")
 	}
-	app := &App{generalSettings: &generalSettingsController{}}
-	if !app.onActionKey(woxui.KeyEvent{Key: "k", Modifiers: modifiers, Down: true, Repeat: true}) {
+	app := bindTestApp(&App{generalSettings: &generalSettingsController{}})
+	if !app.actions.onActionKey(woxui.KeyEvent{Key: "k", Modifiers: modifiers, Down: true, Repeat: true}) {
 		t.Fatal("repeat about-menu hotkey should be consumed")
 	}
-	if app.actionPanel {
+	if app.actions.actionPanel {
 		t.Fatal("repeat about-menu hotkey must not toggle the panel")
 	}
 }
 
 func TestToggleAboutMenuAndResultPanelAreExclusive(t *testing.T) {
-	app := &App{generalSettings: &generalSettingsController{}, editor: woxui.NewTextEditor(""), results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}}}}}
+	app := bindTestApp(&App{
+		generalSettings: &generalSettingsController{},
+		querySession:    queryController{editor: woxui.NewTextEditor("")},
+		resultList:      resultController{results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}}}}},
+	})
 	app.toggleAboutMenu()
-	if !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeAbout {
+	if !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout {
 		t.Fatal("about menu should open")
 	}
-	if app.actionFilter == nil || app.actionFilter.State().Text != "" {
+	if app.actions.actionFilter == nil || app.actions.actionFilter.State().Text != "" {
 		t.Fatal("opening about menu should clear the filter")
 	}
-	app.actionFilter.SetText("guide", false)
-	app.toggleActionPanel()
-	if !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeResult {
+	app.actions.actionFilter.SetText("guide", false)
+	app.actions.toggleActionPanel()
+	if !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeResult {
 		t.Fatal("result panel should replace the about menu")
 	}
-	if app.actionFilter.State().Text != "" {
+	if app.actions.actionFilter.State().Text != "" {
 		t.Fatal("switching panels should clear retained filter state")
 	}
 	app.toggleAboutMenu()
-	if app.actionPanelPurpose != actionPanelPurposeAbout {
+	if app.actions.actionPanelPurpose != actionPanelPurposeAbout {
 		t.Fatal("about menu should replace the result panel")
 	}
 }
 
 func TestToggleActionPanelDoesNotCloseAboutMenuWithoutResultActions(t *testing.T) {
-	app := &App{generalSettings: &generalSettingsController{}, editor: woxui.NewTextEditor("")}
+	app := bindTestApp(&App{
+		generalSettings: &generalSettingsController{},
+		querySession:    queryController{editor: woxui.NewTextEditor("")},
+	})
 	app.toggleAboutMenu()
-	app.toggleActionPanel()
-	if !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeAbout {
+	app.actions.toggleActionPanel()
+	if !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout {
 		t.Fatal("a result-panel request without actions must not destroy the about menu")
 	}
 }
 
 func TestToolbarAndResultUpdatesKeepAboutMenu(t *testing.T) {
-	app := &App{generalSettings: &generalSettingsController{}, editor: woxui.NewTextEditor(""), actionFilter: woxui.NewTextEditor("guide")}
+	app := bindTestApp(&App{
+		generalSettings: &generalSettingsController{},
+		querySession:    queryController{editor: woxui.NewTextEditor("")},
+		actions:         actionPanelController{actionFilter: woxui.NewTextEditor("guide")},
+	})
 	app.toggleAboutMenu()
-	app.actionSelectionKey = "about:guide"
-	app.actionSelected = 1
-	if app.shouldSyncActionPanelWithResults() {
+	app.actions.actionSelectionKey = "about:guide"
+	app.actions.actionSelected = 1
+	if app.actions.shouldSyncActionPanelWithResults() {
 		t.Fatal("about menu must not resync from result or toolbar updates")
 	}
-	app.actionFilter.SetText("guide", false)
-	app.query = plainQuery{QueryID: "about-query", QueryText: "example"}
-	app.applyToolbarFallbackMessage(toolbarMessage{ID: "fallback", Title: "Warning"})
-	app.applyToolbarMessage(toolbarMessage{Title: "Indexing", ID: "msg-a"})
-	if !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeAbout || app.actionSelectionKey != "about:guide" {
+	app.actions.actionFilter.SetText("guide", false)
+	app.querySession.query = plainQuery{QueryID: "about-query", QueryText: "example"}
+	app.toolbar.applyToolbarFallbackMessage(toolbarMessage{ID: "fallback", Title: "Warning"})
+	app.toolbar.applyToolbarMessage(toolbarMessage{Title: "Indexing", ID: "msg-a"})
+	if !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout || app.actions.actionSelectionKey != "about:guide" {
 		t.Fatal("storing a toolbar message must not change the open about menu")
 	}
-	app.applyToolbarMessage(toolbarMessage{Title: "Done", ID: "msg-b"})
+	app.toolbar.applyToolbarMessage(toolbarMessage{Title: "Done", ID: "msg-b"})
 	app.applyResults("about-query", nil, &queryLayout{}, nil, nil, 0, true)
-	if app.actionFilter.State().Text != "guide" || app.actionSelectionKey != "about:guide" {
+	if app.actions.actionFilter.State().Text != "guide" || app.actions.actionSelectionKey != "about:guide" {
 		t.Fatal("updates changed menu selection or filter")
 	}
-	app.clearToolbarMessageByID("msg-b")
-	if app.effectiveToolbarMessage().ID != "fallback" || !app.actionPanel {
+	app.toolbar.clearToolbarMessageByID("msg-b")
+	if app.toolbar.effectiveToolbarMessage().ID != "fallback" || !app.actions.actionPanel {
 		t.Fatal("clear must restore fallback without closing menu")
 	}
-	app.applyToolbarMessage(toolbarMessage{Title: "Done", ID: "msg-b"})
-	if !aboutMenuButtonVisible(app.actionPanel, app.actionPanelPurpose, app.effectiveToolbarMessage()) {
+	app.toolbar.applyToolbarMessage(toolbarMessage{Title: "Done", ID: "msg-b"})
+	if !aboutMenuButtonVisible(app.actions.actionPanel, app.actions.actionPanelPurpose, app.toolbar.effectiveToolbarMessage()) {
 		t.Fatal("open about menu should keep the toolbar button while a newer message is stored")
 	}
-	app.hideActionPanel()
-	if app.effectiveToolbarMessage() == nil || app.effectiveToolbarMessage().ID != "msg-b" {
+	app.actions.hideActionPanel()
+	if app.toolbar.effectiveToolbarMessage() == nil || app.toolbar.effectiveToolbarMessage().ID != "msg-b" {
 		t.Fatal("closing the about menu should present the latest stored message")
 	}
 }
 
 func TestAboutMenuCurrentEntriesIgnoreResultRefresh(t *testing.T) {
-	app := &App{actionPanel: true, actionPanelPurpose: actionPanelPurposeAbout, results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}}}}}
-	entries := app.currentActionPanelEntries()
+	app := bindTestApp(&App{
+		actions: actionPanelController{
+			actionPanel:        true,
+			actionPanelPurpose: actionPanelPurposeAbout,
+		},
+		resultList: resultController{results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}}}}},
+	})
+	entries := app.actions.currentActionPanelEntries()
 	if len(entries) == 0 || entries[0].ID != aboutMenuFeedbackID {
 		t.Fatalf("about panel entries = %#v", entries)
 	}
@@ -241,28 +258,35 @@ func TestAboutMenuDisplayItemsInsertCommunityHeaderAfterFilter(t *testing.T) {
 }
 
 func TestAboutMenuErrorIsVisibleWithoutReplacingToolbarMessage(t *testing.T) {
-	app := &App{generalSettings: &generalSettingsController{}, toolbarMsg: &toolbarMessage{ID: "progress", Title: "Indexing"}}
+	app := bindTestApp(&App{
+		generalSettings: &generalSettingsController{},
+		toolbar:         toolbarController{toolbarMsg: &toolbarMessage{ID: "progress", Title: "Indexing"}},
+	})
 	app.toggleAboutMenu()
 	app.notifyAboutMenuError("Could not open the link")
-	snapshot := viewSnapshot{actionPanelPurpose: app.actionPanelPurpose, aboutMenuError: app.aboutMenuError}
+	snapshot := viewSnapshot{actionPanelPurpose: app.actions.actionPanelPurpose, aboutMenuError: app.actions.aboutMenuError}
 	if got := actionPanelHeaderLabel(snapshot, "Actions", "2.0"); got != "Could not open the link" {
 		t.Fatalf("visible header = %q", got)
 	}
-	if !app.actionPanel || app.toolbarMsg.ID != "progress" {
+	if !app.actions.actionPanel || app.toolbar.toolbarMsg.ID != "progress" {
 		t.Fatal("error must preserve menu and background message")
 	}
-	app.hideActionPanel()
-	if app.aboutMenuError != "" {
+	app.actions.hideActionPanel()
+	if app.actions.aboutMenuError != "" {
 		t.Fatal("closing must clear the error")
 	}
 }
 
 func TestAboutMenuMessageExpiresThroughUIWhileOpen(t *testing.T) {
-	app := &App{lifecycleCtx: context.Background(), generalSettings: &generalSettingsController{}, editor: woxui.NewTextEditor("")}
+	app := bindTestApp(&App{
+		lifecycleCtx:    context.Background(),
+		generalSettings: &generalSettingsController{},
+		querySession:    queryController{editor: woxui.NewTextEditor("")},
+	})
 	app.toggleAboutMenu()
 	dispatched := make(chan func(), 2)
 	app.uiCall = func(fn func()) error { dispatched <- fn; return nil }
-	app.applyToolbarMessage(toolbarMessage{Text: "Temporary", DisplaySeconds: 1})
+	app.toolbar.applyToolbarMessage(toolbarMessage{Text: "Temporary", DisplaySeconds: 1})
 	// Apply the synchronous bounds callback on the test's UI goroutine.
 	(<-dispatched)()
 	select {
@@ -271,7 +295,7 @@ func TestAboutMenuMessageExpiresThroughUIWhileOpen(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("message expiry was not dispatched")
 	}
-	if app.toolbarMsg != nil || !app.actionPanel || app.actionPanelPurpose != actionPanelPurposeAbout {
+	if app.toolbar.toolbarMsg != nil || !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout {
 		t.Fatal("expiry must clear only the message")
 	}
 }

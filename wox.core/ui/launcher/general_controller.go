@@ -52,7 +52,10 @@ type generalSettingsController struct {
 }
 
 func newGeneralSettingsController(deps CommonDeps, shared *sharedEditState) *generalSettingsController {
-	return &generalSettingsController{deps: deps, shared: shared}
+	return &generalSettingsController{
+		deps:   deps,
+		shared: shared,
+	}
 }
 
 // ApplyData replaces the full settingsData owned by the general controller. Called by

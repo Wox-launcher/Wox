@@ -160,16 +160,16 @@ func TestChatAttachmentsRoundTripAndRestoreForEditing(t *testing.T) {
 			t.Fatalf("lost attachments: %+v", restored)
 		}
 	}
-	app := &App{chatPreview: &chatPreviewState{chat: decoded, editor: woxui.NewTextEditor("")}}
-	app.editChatConversation("message")
-	if app.chatPreview.editor.State().Text != "Explain" || !reflect.DeepEqual(app.chatPreview.attachments, attachments) {
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{chat: decoded, editor: woxui.NewTextEditor("")}}})
+	app.chat.editChatConversation("message")
+	if app.chat.chatPreview.editor.State().Text != "Explain" || !reflect.DeepEqual(app.chat.chatPreview.attachments, attachments) {
 		t.Fatal("editing failed to restore separate instructions and attachments")
 	}
-	if unresolvedChatSkillTag(app.chatPreview.editor.State().Text, nil) != "" {
+	if unresolvedChatSkillTag(app.chat.chatPreview.editor.State().Text, nil) != "" {
 		t.Fatal("quoted skill tag entered the editor")
 	}
-	app.dismissChatAttachment("quote-1")
-	if len(app.chatPreview.attachments) != 1 || app.chatPreview.attachments[0].ID != "quote-2" {
+	app.chat.dismissChatAttachment("quote-1")
+	if len(app.chat.chatPreview.attachments) != 1 || app.chat.chatPreview.attachments[0].ID != "quote-2" {
 		t.Fatal("dismiss should remove only the selected attachment")
 	}
 	if !reflect.DeepEqual(contract.Conversations[0].Attachments, attachments) {
@@ -181,92 +181,106 @@ func TestChatAttachmentsRoundTripAndRestoreForEditing(t *testing.T) {
 }
 
 func TestNewChatClearsDraftAttachments(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{chat: chatData{Model: aiModel{Name: "model"}}, editor: woxui.NewTextEditor("old question"), attachments: []common.AIChatAttachment{{ID: "old", Kind: common.AIChatAttachmentQuote, Text: "old reference"}}}}
-	app.startNewChat()
-	if len(app.chatPreview.attachments) != 0 || app.chatPreview.editor.State().Text != "" {
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{chat: chatData{Model: aiModel{Name: "model"}}, editor: woxui.NewTextEditor("old question"), attachments: []common.AIChatAttachment{{ID: "old", Kind: common.AIChatAttachmentQuote, Text: "old reference"}}}}})
+	app.chat.startNewChat()
+	if len(app.chat.chatPreview.attachments) != 0 || app.chat.chatPreview.editor.State().Text != "" {
 		t.Fatal("new chat retained the previous draft")
 	}
 }
 
 func TestNewChatLeavesActiveResponseRunning(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{
-		chat:    chatData{ID: "streaming", Model: aiModel{Name: "model"}, IsStreaming: true, Conversations: []chatConversation{{ID: "u", Role: "user", Text: "hi"}}},
-		editor:  woxui.NewTextEditor("draft"),
-		sending: true,
-		chats:   []chatData{{ID: "streaming", Title: "streaming", IsStreaming: true, IsSummary: true}},
-	}}
-	app.startNewChat()
-	if app.chatPreview.error != "" {
-		t.Fatalf("new chat error = %q, want empty", app.chatPreview.error)
+	app := bindTestApp(&App{
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				chat:    chatData{ID: "streaming", Model: aiModel{Name: "model"}, IsStreaming: true, Conversations: []chatConversation{{ID: "u", Role: "user", Text: "hi"}}},
+				editor:  woxui.NewTextEditor("draft"),
+				sending: true,
+				chats:   []chatData{{ID: "streaming", Title: "streaming", IsStreaming: true, IsSummary: true}},
+			},
+		},
+	})
+	app.chat.startNewChat()
+	if app.chat.chatPreview.error != "" {
+		t.Fatalf("new chat error = %q, want empty", app.chat.chatPreview.error)
 	}
-	if app.chatPreview.chat.ID == "streaming" || app.chatPreview.sending || app.chatPreview.chat.IsStreaming {
+	if app.chat.chatPreview.chat.ID == "streaming" || app.chat.chatPreview.sending || app.chat.chatPreview.chat.IsStreaming {
 		t.Fatal("new draft should not inherit the previous stream")
 	}
-	if len(app.chatPreview.chats) == 0 || app.chatPreview.chats[0].ID != "streaming" || !app.chatPreview.chats[0].IsStreaming {
+	if len(app.chat.chatPreview.chats) == 0 || app.chat.chatPreview.chats[0].ID != "streaming" || !app.chat.chatPreview.chats[0].IsStreaming {
 		t.Fatal("previous conversation must keep streaming in history")
 	}
 }
 
 func TestSelectChatHistoryLeavesActiveResponseRunning(t *testing.T) {
 	other := common.AIChatData{Id: "other", Title: "Other", Conversations: []common.Conversation{{Id: "u", Role: common.ConversationRoleUser, Text: "old"}}}
-	app := &App{
+	app := bindTestApp(&App{
 		lifecycleCtx: context.Background(),
 		services:     chatHistoryTestServices{chat: other},
-		chatPreview: &chatPreviewState{
-			chat:    chatData{ID: "streaming", Model: aiModel{Name: "model"}, IsStreaming: true, Conversations: []chatConversation{{ID: "u", Role: "user", Text: "hi"}}},
-			editor:  woxui.NewTextEditor(""),
-			sending: true,
-			chats: []chatData{
-				{ID: "streaming", Title: "streaming", IsStreaming: true, IsSummary: true},
-				{ID: "other", Title: "Other", IsSummary: true},
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				chat:    chatData{ID: "streaming", Model: aiModel{Name: "model"}, IsStreaming: true, Conversations: []chatConversation{{ID: "u", Role: "user", Text: "hi"}}},
+				editor:  woxui.NewTextEditor(""),
+				sending: true,
+				chats: []chatData{
+					{ID: "streaming", Title: "streaming", IsStreaming: true, IsSummary: true},
+					{ID: "other", Title: "Other", IsSummary: true},
+				},
 			},
 		},
+	})
+	app.chat.selectChatHistory("other")
+	if app.chat.chatPreview.error != "" {
+		t.Fatalf("switch error = %q, want empty", app.chat.chatPreview.error)
 	}
-	app.selectChatHistory("other")
-	if app.chatPreview.error != "" {
-		t.Fatalf("switch error = %q, want empty", app.chatPreview.error)
-	}
-	if app.chatPreview.chat.ID != "other" || app.chatPreview.sending {
+	if app.chat.chatPreview.chat.ID != "other" || app.chat.chatPreview.sending {
 		t.Fatal("switch should show the selected chat without stopping the previous stream")
 	}
-	if !app.chatPreview.chats[0].IsStreaming || app.chatPreview.chats[0].ID != "streaming" {
+	if !app.chat.chatPreview.chats[0].IsStreaming || app.chat.chatPreview.chats[0].ID != "streaming" {
 		t.Fatal("background stream summary was cleared")
 	}
-	if app.chatPreview.panel != "history" || app.chatPreview.panelSelected != 1 {
-		t.Fatalf("history panel = %q selected %d, want stay open on the chosen row", app.chatPreview.panel, app.chatPreview.panelSelected)
+	if app.chat.chatPreview.panel != "history" || app.chat.chatPreview.panelSelected != 1 {
+		t.Fatalf("history panel = %q selected %d, want stay open on the chosen row", app.chat.chatPreview.panel, app.chat.chatPreview.panelSelected)
 	}
 }
 
 func TestSelectChatHistoryKeepsSidebarOpen(t *testing.T) {
 	current := chatData{ID: "current", Title: "Current", Conversations: []chatConversation{{ID: "u", Role: "user", Text: "hi"}}}
-	app := &App{chatPreview: &chatPreviewState{
-		chat: current, editor: woxui.NewTextEditor(""), panel: "history", panelSelected: 0,
-		chats: []chatData{current, {ID: "other", Title: "Other", IsSummary: true}},
-	}}
-	app.selectChatHistory("current")
-	if app.chatPreview.panel != "history" || app.chatPreview.panelSelected != 0 {
-		t.Fatalf("reselecting the current chat closed the sidebar: panel=%q selected=%d", app.chatPreview.panel, app.chatPreview.panelSelected)
+	app := bindTestApp(&App{
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				chat: current, editor: woxui.NewTextEditor(""), panel: "history", panelSelected: 0,
+				chats: []chatData{current, {ID: "other", Title: "Other", IsSummary: true}},
+			},
+		},
+	})
+	app.chat.selectChatHistory("current")
+	if app.chat.chatPreview.panel != "history" || app.chat.chatPreview.panelSelected != 0 {
+		t.Fatalf("reselecting the current chat closed the sidebar: panel=%q selected=%d", app.chat.chatPreview.panel, app.chat.chatPreview.panelSelected)
 	}
 
-	app.startNewChat()
-	if app.chatPreview.panel != "history" {
-		t.Fatalf("new chat from the sidebar closed it: panel=%q", app.chatPreview.panel)
+	app.chat.startNewChat()
+	if app.chat.chatPreview.panel != "history" {
+		t.Fatalf("new chat from the sidebar closed it: panel=%q", app.chat.chatPreview.panel)
 	}
 }
 
 func TestApplyChatResponseUpdatesBackgroundStreamOnly(t *testing.T) {
-	app := &App{chatPreview: &chatPreviewState{
-		chat:  chatData{ID: "current", Title: "current"},
-		chats: []chatData{{ID: "background", Title: "bg", IsStreaming: true, IsSummary: true}},
-	}}
-	app.applyChatResponse(chatData{
+	app := bindTestApp(&App{
+		chat: chatController{
+			chatPreview: &chatPreviewState{
+				chat:  chatData{ID: "current", Title: "current"},
+				chats: []chatData{{ID: "background", Title: "bg", IsStreaming: true, IsSummary: true}},
+			},
+		},
+	})
+	app.chat.applyChatResponse(chatData{
 		ID: "background", Title: "updated", IsStreaming: true,
 		Conversations: []chatConversation{{ID: "a", Role: "assistant", Text: "hello"}},
 	})
-	if app.chatPreview.chat.ID != "current" || app.chatPreview.chat.Title != "current" {
+	if app.chat.chatPreview.chat.ID != "current" || app.chat.chatPreview.chat.Title != "current" {
 		t.Fatal("background snapshot replaced the visible chat")
 	}
-	if app.chatPreview.chats[0].ID != "background" || app.chatPreview.chats[0].Title != "updated" || !app.chatPreview.chats[0].IsStreaming {
+	if app.chat.chatPreview.chats[0].ID != "background" || app.chat.chatPreview.chats[0].Title != "updated" || !app.chat.chatPreview.chats[0].IsStreaming {
 		t.Fatal("background stream summary was not mirrored")
 	}
 }
@@ -282,25 +296,26 @@ func TestSelectedModelSurvivesStreamingSnapshotsUntilNextSend(t *testing.T) {
 	aiSettings := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	aiSettings.SetModels([]aiModel{nextModel})
 	persisted := make(chan common.Model, 1)
-	app := &App{
-		lifecycleCtx: context.Background(), aiSettings: aiSettings,
-		services:    chatModelTestServices{persisted: persisted},
-		chatPreview: &chatPreviewState{active: true, chat: chatData{ID: "chat", Model: oldModel, IsStreaming: true}},
-	}
-	app.selectChatModel(0)
+	app := bindTestApp(&App{
+		lifecycleCtx: context.Background(),
+		aiSettings:   aiSettings,
+		services:     chatModelTestServices{persisted: persisted},
+		chat:         chatController{chatPreview: &chatPreviewState{active: true, chat: chatData{ID: "chat", Model: oldModel, IsStreaming: true}}},
+	})
+	app.chat.selectChatModel(0)
 	select {
 	case <-persisted:
 	case <-time.After(5 * time.Second):
 		t.Fatal("selected model was not persisted")
 	}
 	for _, streaming := range []bool{true, false} {
-		app.applyChatResponse(chatData{ID: "chat", Model: oldModel, IsStreaming: streaming})
-		if app.chatPreview.chat.Model != nextModel {
+		app.chat.applyChatResponse(chatData{ID: "chat", Model: oldModel, IsStreaming: streaming})
+		if app.chat.chatPreview.chat.Model != nextModel {
 			t.Fatal("a server snapshot replaced the model selected for the next send")
 		}
 	}
-	_, _, request := beginChatRequestLocked(app.chatPreview)
-	if request.Model != nextModel || app.chatPreview.nextModel != nil {
+	_, _, request := beginChatRequestLocked(app.chat.chatPreview)
+	if request.Model != nextModel || app.chat.chatPreview.nextModel != nil {
 		t.Fatal("next request did not consume the selected model")
 	}
 }

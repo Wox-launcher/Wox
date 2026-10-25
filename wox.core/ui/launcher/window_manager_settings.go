@@ -381,7 +381,7 @@ func (a *App) saveWindowManagerGroupEdit() {
 	editor := state.windowGroupEditor
 	name := strings.TrimSpace(editor.group.Name)
 	if name == "" {
-		editor.nameError = a.translate("i18n:plugin_window_manager_group_name_required")
+		editor.nameError = a.language.translate("i18n:plugin_window_manager_group_name_required")
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -632,17 +632,17 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 		Width: width, Height: height, GroupName: editor.group.Name, NameError: editor.nameError,
 		LoadingDisplays: editor.loadingDisplays, DisplaysError: editor.displaysError, Editing: editor.editing,
 		SelectedDisplay: editor.selectedDisplay, Theme: palette, Window: a.formTableNativeWindow(),
-		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"),
-		SelectDisplayLabel:   a.translate("i18n:plugin_window_manager_group_select_display"),
-		NoDisplaysLabel:      a.translate("i18n:plugin_window_manager_group_no_displays"),
-		PrimaryDisplayLabel:  a.translate("i18n:plugin_window_manager_group_display_primary"),
-		LayoutsLabel:         a.translate("i18n:plugin_window_manager_group_layouts"),
-		LayoutsDescription:   a.translate("i18n:plugin_window_manager_group_layouts_description"),
-		ChooseAppLabel:       a.translate("i18n:plugin_window_manager_group_slot_choose_app"),
-		ChangeAppLabel:       a.translate("i18n:plugin_window_manager_group_slot_change_app"),
-		BrowserUrlsLabel:     a.translate("i18n:plugin_window_manager_group_browser_urls"),
+		CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: a.language.translate("i18n:ui_save"),
+		SelectDisplayLabel:   a.language.translate("i18n:plugin_window_manager_group_select_display"),
+		NoDisplaysLabel:      a.language.translate("i18n:plugin_window_manager_group_no_displays"),
+		PrimaryDisplayLabel:  a.language.translate("i18n:plugin_window_manager_group_display_primary"),
+		LayoutsLabel:         a.language.translate("i18n:plugin_window_manager_group_layouts"),
+		LayoutsDescription:   a.language.translate("i18n:plugin_window_manager_group_layouts_description"),
+		ChooseAppLabel:       a.language.translate("i18n:plugin_window_manager_group_slot_choose_app"),
+		ChangeAppLabel:       a.language.translate("i18n:plugin_window_manager_group_slot_change_app"),
+		BrowserUrlsLabel:     a.language.translate("i18n:plugin_window_manager_group_browser_urls"),
 		BrowserUrlEmptyLabel: "URL",
-		RetryLabel:           a.translate("i18n:plugin_window_manager_group_retry"),
+		RetryLabel:           a.language.translate("i18n:plugin_window_manager_group_retry"),
 		AddSlotIcon:          a.imageForTint(settingControlIconSource("add-circle"), &addIconTint, physicalImageSize(15, imageScale)),
 		AppsIcon:             a.imageForTint(usageIconSource("apps"), &iconTint, physicalImageSize(18, imageScale)),
 		LinkIcon:             a.imageForTint(settingControlIconSource("link"), &linkTint, physicalImageSize(13, imageScale)),
@@ -651,11 +651,11 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 		OnOpenAppPicker: a.openWindowManagerGroupAppPicker, OnOpenUrlEditor: a.openWindowManagerGroupUrlEditor,
 	}
 	if editor.editing {
-		props.Title = a.translate("i18n:plugin_window_manager_group_edit_dialog_title")
+		props.Title = a.language.translate("i18n:plugin_window_manager_group_edit_dialog_title")
 	} else {
-		props.Title = a.translate("i18n:plugin_window_manager_group_create_dialog_title")
+		props.Title = a.language.translate("i18n:plugin_window_manager_group_create_dialog_title")
 	}
-	props.NamePlaceholder = a.translate("i18n:plugin_window_manager_group_name")
+	props.NamePlaceholder = a.language.translate("i18n:plugin_window_manager_group_name")
 	for _, display := range editor.displays {
 		props.Displays = append(props.Displays, launcherview.WindowGroupDisplayProps{
 			Id: display.Id, Bounds: display.Bounds, WorkArea: display.WorkArea, IsPrimary: display.IsPrimary,
@@ -672,11 +672,11 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 		if len(layouts) == 0 {
 			continue
 		}
-		slotLabel := strings.ReplaceAll(a.translate("i18n:plugin_window_manager_group_slot_count"), "{count}", strconv.Itoa(slotCount))
+		slotLabel := strings.ReplaceAll(a.language.translate("i18n:plugin_window_manager_group_slot_count"), "{count}", strconv.Itoa(slotCount))
 		group := launcherview.WindowGroupLayoutGroupProps{SlotCountLabel: slotLabel}
 		for _, layout := range layouts {
 			option := launcherview.WindowGroupLayoutOptionProps{
-				ID: layout.Id, Label: a.translate("i18n:" + layout.TitleKey), Selected: layout.Id == selectedLayout.Id,
+				ID: layout.Id, Label: a.language.translate("i18n:" + layout.TitleKey), Selected: layout.Id == selectedLayout.Id,
 			}
 			for _, slot := range layout.Slots {
 				option.Slots = append(option.Slots, launcherview.WindowGroupSlotProps{
@@ -777,13 +777,13 @@ func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette
 		}
 	}
 	theme := palette
-	cancelLabel := a.translate("i18n:ui_cancel")
-	confirmLabel := a.translate("i18n:ui_ok")
+	cancelLabel := a.language.translate("i18n:ui_cancel")
+	confirmLabel := a.language.translate("i18n:ui_ok")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
 		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
-		Title:             a.translate("i18n:plugin_window_manager_group_app_selector_title"),
-		SearchPlaceholder: a.translate("i18n:ui_hotkey_ignore_apps_search"),
-		LoadingLabel:      a.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.translate("i18n:ui_hotkey_ignore_apps_empty"),
+		Title:             a.language.translate("i18n:plugin_window_manager_group_app_selector_title"),
+		SearchPlaceholder: a.language.translate("i18n:ui_hotkey_ignore_apps_search"),
+		LoadingLabel:      a.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
 		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: a.formTableButtonWidth(confirmLabel, 70),
 		Candidates: candidates, SelectedIdentity: current.Identity,
 		Loading: a.hotkeySettings.AppsLoading() || (!a.hotkeySettings.AppsLoaded() && a.hotkeySettings.AppsError() == ""),
@@ -805,12 +805,12 @@ func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGrou
 
 	return launcherview.WindowGroupUrlEditor(launcherview.WindowGroupUrlEditorProps{
 		Width: width, Height: height, URLs: urls, Window: a.formTableNativeWindow(), Theme: theme,
-		Title: a.translate("i18n:plugin_window_manager_group_browser_urls"), Description: a.translate("i18n:plugin_window_manager_group_browser_urls_description"),
-		CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: a.translate("i18n:ui_save"), AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"),
-		DeleteLabel: a.translate("i18n:ui_delete"), OperationLabel: a.translate("i18n:ui_operation"), DeleteConfirmation: a.translate("i18n:ui_delete_row_confirm"), RequiredLabel: a.translate("i18n:ui_validator_value_can_not_be_empty"),
+		Title: a.language.translate("i18n:plugin_window_manager_group_browser_urls"), Description: a.language.translate("i18n:plugin_window_manager_group_browser_urls_description"),
+		CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: a.language.translate("i18n:ui_save"), AddLabel: a.language.translate("i18n:ui_add"), EditLabel: a.language.translate("i18n:ui_setting_theme_edit"),
+		DeleteLabel: a.language.translate("i18n:ui_delete"), OperationLabel: a.language.translate("i18n:ui_operation"), DeleteConfirmation: a.language.translate("i18n:ui_delete_row_confirm"), RequiredLabel: a.language.translate("i18n:ui_validator_value_can_not_be_empty"),
 		ExtensionChecking: editor.extensionChecking, ExtensionConnected: editor.extensionConnected,
-		ExtensionConnectedLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_connected"), ExtensionDisconnectedLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_not_connected"),
-		ExtensionInstallLabel: a.translate("i18n:plugin_window_manager_group_browser_extension_install"),
+		ExtensionConnectedLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_connected"), ExtensionDisconnectedLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_not_connected"),
+		ExtensionInstallLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_install"),
 		AddIcon:               a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)), EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(16, imageScale)),
 		DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
 		ExtensionLoadingIcon: a.imageForTint(settingControlIconSource("loading"), &foreground, physicalImageSize(14, imageScale)), ExtensionConnectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &palette.Success, physicalImageSize(14, imageScale)),

@@ -84,11 +84,16 @@ func TestWindowGroupEditorLeavesPrintableKeysToNativeTextInput(t *testing.T) {
 	deps := CommonDeps{}
 	plugins := newPluginSettingsController(deps)
 	plugins.SetForm(&pluginSettingsFormState{pluginID: windowManagerPluginID, formFieldsState: target})
-	app := &App{
-		settingsOpen: true, settingTab: "plugins", pluginSettings: plugins,
-		aiSettings: newAISettingsController(deps), hotkeySettings: newHotkeySettingsController(deps),
-	}
-	app.settingsTableEditor = &formTableEditorState{
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "plugins",
+		},
+		pluginSettings: plugins,
+		aiSettings:     newAISettingsController(deps),
+		hotkeySettings: newHotkeySettingsController(deps),
+	})
+	app.settingsWindow.settingsTableEditor = &formTableEditorState{
 		target: &plugins.Form().formFieldsState, definition: definition,
 		windowGroupEditor: &windowGroupEditorState{group: windowManagerGroupUI{}},
 	}
@@ -99,7 +104,7 @@ func TestWindowGroupEditorLeavesPrintableKeysToNativeTextInput(t *testing.T) {
 	if !app.onSettingsWindowKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
 		t.Fatal("Escape should cancel the workspace editor")
 	}
-	if app.settingsTableEditor.windowGroupEditor != nil {
+	if app.settingsWindow.settingsTableEditor.windowGroupEditor != nil {
 		t.Fatal("Escape did not cancel the workspace editor")
 	}
 }

@@ -72,7 +72,7 @@ type folderPreviewEntry struct {
 }
 
 // filePreviewFor returns cached file content without starting I/O from the frame builder.
-func (a *App) filePreviewFor(path string) filePreviewContent {
+func (a *filePreviewController) filePreviewFor(path string) filePreviewContent {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return filePreviewContent{Kind: "error", Text: "File preview path is empty"}
@@ -91,7 +91,10 @@ func (a *App) filePreviewFor(path string) filePreviewContent {
 }
 
 // prepareFilePreview inspects the selected file without starting obsolete I/O during rapid selection.
-func (a *App) prepareFilePreview(path string) {
+func (a *filePreviewController) prepareFilePreview(path string) {
+	if a.isDestroyed() {
+		return
+	}
 	path = strings.TrimSpace(path)
 	if path == "" || strings.HasPrefix(strings.ToLower(path), "http://") || strings.HasPrefix(strings.ToLower(path), "https://") {
 		a.cancelScheduledFilePreview()
@@ -120,8 +123,8 @@ func (a *App) prepareFilePreview(path string) {
 }
 
 // scheduleFilePreviewLoad waits for selection to settle, matching Flutter's delayed file preview.
-func (a *App) scheduleFilePreviewLoad(path, extension string) {
-	if path == "" || a.filePreviewPendingPath == path {
+func (a *filePreviewController) scheduleFilePreviewLoad(path, extension string) {
+	if a.isDestroyed() || path == "" || a.filePreviewPendingPath == path {
 		return
 	}
 	a.cancelScheduledFilePreview()
@@ -138,15 +141,13 @@ func (a *App) scheduleFilePreviewLoad(path, extension string) {
 }
 
 // startScheduledFilePreview starts a delayed read only when that selection is still current.
-func (a *App) startScheduledFilePreview(path, extension string, generation uint64) {
-	if a.destroyed.Load() || a.filePreviewLoadGeneration != generation || a.filePreviewPendingPath != path {
+func (a *filePreviewController) startScheduledFilePreview(path, extension string, generation uint64) {
+	if a.isDestroyed() || a.filePreviewLoadGeneration != generation || a.filePreviewPendingPath != path {
 		return
 	}
 	a.filePreviewTimer = nil
 	a.filePreviewPendingPath = ""
-	_, preview, visible := a.selectedPreviewForLifecycle()
-	preview = a.resolvePreview(preview)
-	if !visible || preview.PreviewType != "file" || strings.TrimSpace(preview.PreviewData) != path {
+	if !a.isSelected(path) {
 		return
 	}
 	if _, loaded := a.filePreviews[path]; loaded || a.fileRequests[path] {
@@ -156,7 +157,10 @@ func (a *App) startScheduledFilePreview(path, extension string, generation uint6
 }
 
 // startFilePreviewLoad keeps both metadata inspection and content reads off the UI thread.
-func (a *App) startFilePreviewLoad(path, extension string, forceLoad bool) {
+func (a *filePreviewController) startFilePreviewLoad(path, extension string, forceLoad bool) {
+	if a.isDestroyed() {
+		return
+	}
 	if a.fileRequests[path] {
 		return
 	}
@@ -167,7 +171,7 @@ func (a *App) startFilePreviewLoad(path, extension string, forceLoad bool) {
 }
 
 // cancelScheduledFilePreview drops a pending automatic load when the user has already moved on.
-func (a *App) cancelScheduledFilePreview() {
+func (a *filePreviewController) cancelScheduledFilePreview() {
 	if a.filePreviewTimer != nil {
 		a.filePreviewTimer.Stop()
 		a.filePreviewTimer = nil
@@ -180,7 +184,10 @@ func (a *App) cancelScheduledFilePreview() {
 }
 
 // requestManualFilePreview loads a deferred preview after the user asks for the full contents.
-func (a *App) requestManualFilePreview(path string) {
+func (a *filePreviewController) requestManualFilePreview(path string) {
+	if a.isDestroyed() {
+		return
+	}
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return
@@ -192,15 +199,19 @@ func (a *App) requestManualFilePreview(path string) {
 	delete(a.filePreviews, path)
 	delete(a.fileRequests, path)
 	a.prepareFilePreview(path)
-	if a.window != nil {
-		_ = a.window.Invalidate()
-	}
+	a.invalidate()
 }
 
 // loadFilePreview applies every inspection result through the same bounded cache.
-func (a *App) loadFilePreview(path, extension string, forceLoad bool) {
+func (a *filePreviewController) loadFilePreview(path, extension string, forceLoad bool) {
+	if a.isDestroyed() {
+		return
+	}
 	content := inspectPreviewFile(path, extension, forceLoad)
 	if err := a.runOnUI("apply file preview", func() {
+		if a.isDestroyed() {
+			return
+		}
 		if len(a.filePreviews) >= 128 {
 			// File previews are immutable during one query session; reset keeps ownership obvious.
 			a.filePreviews = map[string]filePreviewContent{}
@@ -212,10 +223,7 @@ func (a *App) loadFilePreview(path, extension string, forceLoad bool) {
 			}
 		}
 		a.filePreviews[path] = content
-		a.reconcileSelectedPreviewOnUI()
-		if a.window != nil {
-			_ = a.window.Invalidate()
-		}
+		a.onReady()
 	}); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, "dispatch file preview result: "+err.Error())
 	}
@@ -645,23 +653,23 @@ func (a *App) onFilePreviewKey(event woxui.KeyEvent) bool {
 	if !hotkeyMatches(primaryHotkey("l"), event) {
 		return false
 	}
-	_, preview, visible := a.selectedPreviewForLifecycle()
-	preview = a.resolvePreview(preview)
+	_, preview, visible := a.previews.selectedPreviewForLifecycle()
+	preview = a.remotePreview.resolvePreview(preview)
 	if !visible || preview.PreviewType != "file" {
 		return false
 	}
-	content := a.filePreviewFor(preview.PreviewData)
+	content := a.filePreview.filePreviewFor(preview.PreviewData)
 	switch content.Kind {
 	case "large":
-		a.requestManualFilePreview(preview.PreviewData)
+		a.filePreview.requestManualFilePreview(preview.PreviewData)
 		return true
 	case "too_large":
 		return true
 	case "native_file":
-		if content.NativeFileAutoLoad || a.nativeFilePreviewManualPath == content.NativeFilePath {
+		if content.NativeFileAutoLoad || a.nativeFile.nativeFilePreviewManualPath == content.NativeFilePath {
 			return false
 		}
-		a.requestManualNativeFilePreview(content.NativeFilePath)
+		a.nativeFile.requestManualNativeFilePreview(content.NativeFilePath)
 		return true
 	default:
 		return false

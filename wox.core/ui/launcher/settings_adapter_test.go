@@ -29,13 +29,13 @@ func TestSettingsRailKeepsCachedIconWhileSelectedTintLoads(t *testing.T) {
 			continue
 		}
 		icon := &woxui.Image{}
-		app.images[cacheKey(source, palette.TextSecondary, 18)] = icon
+		app.imageStore.images[cacheKey(source, palette.TextSecondary, 18)] = icon
 	}
 	selectedSource := settingNavIconSource("ui")
-	normalIcon := app.images[cacheKey(selectedSource, palette.TextSecondary, 18)]
-	app.imageRequested[cacheKey(selectedSource, palette.SelectionText, 18)] = selectedSource.ImageData
+	normalIcon := app.imageStore.images[cacheKey(selectedSource, palette.TextSecondary, 18)]
+	app.imageStore.imageRequested[cacheKey(selectedSource, palette.SelectionText, 18)] = selectedSource.ImageData
 	searchSource := settingControlIconSource("search")
-	app.images[cacheKey(searchSource, palette.TextSecondary, 18)] = &woxui.Image{}
+	app.imageStore.images[cacheKey(searchSource, palette.TextSecondary, 18)] = &woxui.Image{}
 
 	rail := app.buildSettingsRail(settingsSnapshot{tab: "appearance", palette: palette}, 260, 600, 1).(woxwidget.Stack)
 	railContainer := rail.Children[0].Child.(woxwidget.Container)
@@ -67,7 +67,7 @@ func TestSettingsSearchSelectedBuiltInIconUsesSelectedTextColor(t *testing.T) {
 	source := settingsSearchResultIconSource(settingsSearchSetting)
 	key := fmt.Sprintf("%s-svg-%d-tint-%02x%02x%02x%02x", imageKey(source), 24, palette.SelectionText.R, palette.SelectionText.G, palette.SelectionText.B, palette.SelectionText.A)
 	selectedIcon := &woxui.Image{}
-	app.images[key] = selectedIcon
+	app.imageStore.images[key] = selectedIcon
 	snapshot := settingsSnapshot{palette: palette, search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "font"}}}
 
 	panel := app.buildSettingsSearchResultPanel(snapshot, 240, 200, 1).(woxwidget.Container)
@@ -139,16 +139,16 @@ func TestUISettingsStartWithLanguage(t *testing.T) {
 	if len(items) == 0 || items[0].key != "LangCode" || items[0].value != "zh_CN" {
 		t.Fatalf("appearance first item = %+v, want LangCode=zh_CN", items)
 	}
-	app := &App{translations: map[string]string{"ui_general_section_language": "Language"}}
+	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{"ui_general_section_language": "Language"}}})
 	if got := app.settingsSectionLabel("appearance", "LangCode"); got != "Language" {
 		t.Fatalf("appearance language section = %q, want Language", got)
 	}
 }
 
 func TestSettingsSectionLabelMatchesFlutterGrouping(t *testing.T) {
-	app := &App{translations: map[string]string{"ui_update_section_updates": "Updates"}}
+	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{"ui_update_section_updates": "Updates"}}})
 
-	app.translations["ui_network"] = "Network"
+	app.language.translations["ui_network"] = "Network"
 	if got := app.settingsSectionLabel("general", "HttpProxyEnabled"); got != "Network" {
 		t.Fatalf("general proxy section label = %q, want Network", got)
 	}
@@ -262,7 +262,7 @@ func TestSettingsTitleBarUsesFixedWindowTitle(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.translations["ui_settings_window_title"] = "Wox Settings"
+	app.language.translations["ui_settings_window_title"] = "Wox Settings"
 	titleBar := app.buildSettingsTitleBar(settingsSnapshot{tab: "general"}, 1200, 240, true, 1).(woxwidget.Stateful)
 	props := titleBar.Widget.(launcherview.SettingsTitleBarProps)
 

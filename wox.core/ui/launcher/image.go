@@ -134,7 +134,7 @@ func (a *App) imageForResult(source woxImage, size int, palette uiPalette, selec
 	if selected {
 		color = palette.selectedTitle
 	}
-	return a.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color, false)
+	return a.imageStore.imageForTintAppearance(source, nil, size, size, palette.isDark(), &color, false)
 }
 
 // imageForResultRow resolves one result icon and keeps the previous bitmap while a
@@ -144,29 +144,29 @@ func (a *App) imageForResult(source woxImage, size int, palette uiPalette, selec
 func (a *App) imageForResultRow(id string, source woxImage, size int, palette uiPalette, selected bool) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		if id != "" {
-			delete(a.retainedResultIcons, id)
+			delete(a.resultList.retainedResultIcons, id)
 		}
 		return nil
 	}
 	image := a.imageForResult(source, size, palette, selected)
 	if image != nil {
 		if id != "" {
-			if a.retainedResultIcons == nil {
-				a.retainedResultIcons = map[string]*woxui.Image{}
+			if a.resultList.retainedResultIcons == nil {
+				a.resultList.retainedResultIcons = map[string]*woxui.Image{}
 			}
-			a.retainedResultIcons[id] = image
+			a.resultList.retainedResultIcons[id] = image
 		}
 		return image
 	}
 	if id == "" {
 		return nil
 	}
-	return a.retainedResultIcons[id]
+	return a.resultList.retainedResultIcons[id]
 }
 
 // pruneRetainedResultIcons drops bitmaps for results that left the list.
 // The results revision gates the scan so later frames of the same list do not rebuild it.
-func (a *App) pruneRetainedResultIcons(results []queryResult, revision uint64) {
+func (a *resultController) pruneRetainedResultIcons(results []queryResult, revision uint64) {
 	if a.retainedResultIconsPruned && a.retainedResultIconRevision == revision {
 		return
 	}
@@ -284,7 +284,7 @@ func (a *App) imageForTint(source woxImage, tint *woxui.Color, svgSize int) *wox
 
 // imageForTintDimensions keeps cache and decode dimensions aligned for rectangular SVGs.
 func (a *App) imageForTintDimensions(source woxImage, tint *woxui.Color, svgWidth, svgHeight int) *woxui.Image {
-	return a.imageForTintAppearance(source, tint, svgWidth, svgHeight, a.palette.isDark(), nil, false)
+	return a.imageStore.imageForTintAppearance(source, tint, svgWidth, svgHeight, a.appearance.palette.isDark(), nil, false)
 }
 
 // viewportPreviewPin identifies the single full-bleed preview image on screen.
@@ -297,7 +297,7 @@ type viewportPreviewPin struct {
 // imageForViewport resolves one picture that is currently inside a scroll viewport.
 // The decoded entry stays pinned until releaseViewportImage, so cache pressure cannot drop it.
 func (a *App) imageForViewport(source woxImage, size int) *woxui.Image {
-	return a.imageForTintAppearance(source, nil, size, size, a.palette.isDark(), nil, true)
+	return a.imageStore.imageForTintAppearance(source, nil, size, size, a.appearance.palette.isDark(), nil, true)
 }
 
 // releaseViewportImage lets a picture that left the viewport be evicted again.
@@ -306,12 +306,12 @@ func (a *App) releaseViewportImage(source woxImage, size int) {
 		return
 	}
 	size = max(1, size)
-	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
-	a.releaseViewportImageKey(key)
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.appearance.palette.isDark(), nil)
+	a.imageStore.releaseViewportImageKey(key)
 }
 
 // releaseViewportImageKey uses the original appearance key and immediately retires oversized inactive images.
-func (a *App) releaseViewportImageKey(key string) {
+func (a *imageStore) releaseViewportImageKey(key string) {
 	a.imageMu.Lock()
 	defer a.imageMu.Unlock()
 	if !a.imageViewportPinned(key) {
@@ -327,11 +327,11 @@ func (a *App) releaseViewportImageKey(key string) {
 // imageForSurface resolves only explicit SVG theme variables for the owning
 // surface, preserving fixed brand colors and sharing the appearance-aware cache.
 func (a *App) imageForSurface(source woxImage, size int, background woxui.Color) *woxui.Image {
-	return a.imageForTintAppearance(source, nil, size, size, themeColorIsDark(background), nil, false)
+	return a.imageStore.imageForTintAppearance(source, nil, size, size, themeColorIsDark(background), nil, false)
 }
 
 // imageForTintAppearance captures appearance before asynchronous image decoding.
-func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color, viewport bool) *woxui.Image {
+func (a *imageStore) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color, viewport bool) *woxui.Image {
 	if source.ImageType == "" || source.ImageData == "" {
 		return nil
 	}
@@ -339,6 +339,14 @@ func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidt
 	svgHeight = max(1, svgHeight)
 	key, variantKey, dark := imageAppearanceCacheKey(source, tint, svgWidth, svgHeight, dark, themeIconColor)
 	a.imageMu.Lock()
+	if a.isDestroyed() {
+		image := a.images[key]
+		if image == nil {
+			image = a.images[a.imageVariants[variantKey]]
+		}
+		a.imageMu.Unlock()
+		return image
+	}
 	if viewport {
 		if a.imageViewport == nil {
 			a.imageViewport = map[string]struct{}{}
@@ -373,7 +381,10 @@ func (a *App) imageForTintAppearance(source woxImage, tint *woxui.Color, svgWidt
 	return nil
 }
 
-func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color) {
+func (a *imageStore) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color) {
+	if a.isDestroyed() {
+		return
+	}
 	if source.ImageType == "lazyloadimage" {
 		var payload lazyImagePayload
 		if err := json.Unmarshal([]byte(source.ImageData), &payload); err != nil {
@@ -387,7 +398,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 		if payload.Token == "" {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(a.lifecycleCtx, 10*time.Second)
 		loaded, err := a.services.LoadLazyResultImage(ctx, a.sessionID, payload.Token)
 		cancel()
 		if err != nil {
@@ -406,7 +417,7 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 		return
 	}
 	if source.ImageType == "url" || source.ImageType == "emoji" || source.ImageType == "fileicon" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(a.lifecycleCtx, 10*time.Second)
 		loaded, err := a.services.ResolveImage(ctx, a.sessionID, common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}, max(svgWidth, svgHeight))
 		cancel()
 		if err != nil {
@@ -436,11 +447,14 @@ func (a *App) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth
 	a.storeImage(key, image)
 }
 
-func (a *App) storeImage(key string, image *woxui.Image) {
+func (a *imageStore) storeImage(key string, image *woxui.Image) {
 	if image == nil {
 		return
 	}
 	if err := a.runOnUI("store launcher image", func() {
+		if a.isDestroyed() {
+			return
+		}
 		a.imageMu.Lock()
 		a.insertImageLocked(key, image)
 		if variantKey := a.imageVariantKeys[key]; variantKey != "" {
@@ -458,8 +472,11 @@ func (a *App) storeImage(key string, image *woxui.Image) {
 	}
 }
 
-func (a *App) storeImageError(key string, err error) {
+func (a *imageStore) storeImageError(key string, err error) {
 	if dispatchErr := a.runOnUI("store launcher image error", func() {
+		if a.isDestroyed() {
+			return
+		}
 		a.imageMu.Lock()
 		a.imageErrors[key] = err.Error()
 		// Cached preview trees must rebuild when loading finishes with an error too.
@@ -472,7 +489,7 @@ func (a *App) storeImageError(key string, err error) {
 }
 
 // insertImageLocked stores one decoded image and evicts cold entries to the visible dual budget.
-func (a *App) insertImageLocked(key string, image *woxui.Image) {
+func (a *imageStore) insertImageLocked(key string, image *woxui.Image) {
 	if a.images == nil {
 		a.images = map[string]*woxui.Image{}
 	}
@@ -497,23 +514,20 @@ func (a *App) insertImageLocked(key string, image *woxui.Image) {
 // trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
 // Must run on the UI thread like every other access to the image maps.
 func (a *App) trimIdleImageCache() {
-	if a.settingsOpen || a.onboardingOpen {
+	if a.settingsWindow.settingsOpen || a.onboarding.onboardingOpen {
 		return
 	}
-	a.imageMu.Lock()
-	defer a.imageMu.Unlock()
-	a.evictImagesToBudget("", hiddenImageCacheKeepCount, hiddenImageCacheMaxBytes)
-	a.imagesRevision.Add(1)
+	a.imageStore.trimIdle()
 }
 
-func (a *App) imageCacheByteSizeLocked() int {
+func (a *imageStore) imageCacheByteSizeLocked() int {
 	if a.imageCacheSize < 0 {
 		a.imageCacheSize = 0
 	}
 	return a.imageCacheSize
 }
 
-func (a *App) clearImageCacheLocked(keepKey string) {
+func (a *imageStore) clearImageCacheLocked(keepKey string) {
 	for key := range a.images {
 		if key == keepKey || a.imageViewportPinned(key) {
 			continue
@@ -522,7 +536,7 @@ func (a *App) clearImageCacheLocked(keepKey string) {
 	}
 }
 
-func (a *App) imageViewportPinned(key string) bool {
+func (a *imageStore) imageViewportPinned(key string) bool {
 	_, pinned := a.imageViewport[key]
 	return pinned
 }
@@ -530,7 +544,7 @@ func (a *App) imageViewportPinned(key string) bool {
 // evictImagesToBudget drops the coldest images until both budgets fit, ordering candidates
 // once instead of rescanning the map per eviction. Hiding the launcher can trim hundreds of
 // entries in a single call, where the repeated-scan form degraded to O(k*n).
-func (a *App) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
+func (a *imageStore) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
 	if len(a.images) <= maxCount && a.imageCacheSize <= maxBytes {
 		return
 	}
@@ -563,7 +577,7 @@ func (a *App) evictImagesToBudget(keepKey string, maxCount, maxBytes int) {
 	}
 }
 
-func (a *App) removeImageLocked(key string) {
+func (a *imageStore) removeImageLocked(key string) {
 	if image, ok := a.images[key]; ok {
 		a.imageCacheSize -= imageCacheBytes(image)
 		if a.imageCacheSize < 0 {
@@ -583,10 +597,10 @@ func (a *App) removeImageLocked(key string) {
 // imageErrorFor uses the same size and appearance as the viewport decode request.
 func (a *App) imageErrorFor(source woxImage, size int) string {
 	size = max(1, size)
-	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.palette.isDark(), nil)
-	a.imageMu.RLock()
-	defer a.imageMu.RUnlock()
-	return a.imageErrors[key]
+	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.appearance.palette.isDark(), nil)
+	a.imageStore.imageMu.RLock()
+	defer a.imageStore.imageMu.RUnlock()
+	return a.imageStore.imageErrors[key]
 }
 
 func decodeWoxImage(source woxImage) (*woxui.Image, error) {

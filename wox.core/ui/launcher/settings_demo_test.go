@@ -29,13 +29,13 @@ func TestDelayedOverlaysDoNotApplyAfterDispatchFailure(t *testing.T) {
 			case "cloud":
 				app.setCloudPlanTooltip(true, anchor)
 			case "inline":
-				app.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{revision: &revision, state: &inline, open: true}, true, "help", anchor, "bottom")
+				app.tooltips.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{revision: &revision, state: &inline, open: true}, true, "help", anchor, "bottom")
 			}
 			time.Sleep(nativeHoverTooltipDelay + 100*time.Millisecond)
 			if !dispatched.Load() {
 				t.Fatal("delayed overlay did not attempt UI dispatch")
 			}
-			if app.settingsDemo != nil || app.cloudPlanTooltip != nil || inline != nil {
+			if app.settingsWindow.settingsDemo != nil || app.settingsWindow.cloudPlanTooltip != nil || inline != nil {
 				t.Fatal("failed UI dispatch applied overlay state on the worker")
 			}
 		})
@@ -52,7 +52,7 @@ func TestSetSettingsDemoHoverWaitsForDwell(t *testing.T) {
 
 	anchor := woxui.Rect{X: 240, Y: 120, Width: 18, Height: 18}
 	app.setSettingsDemoHover("query-hotkeys", true, anchor)
-	if app.settingsDemo != nil {
+	if app.settingsWindow.settingsDemo != nil {
 		t.Fatal("settings demo must wait for the shared hover dwell")
 	}
 
@@ -63,11 +63,11 @@ func TestSetSettingsDemoHoverWaitsForDwell(t *testing.T) {
 	case <-time.After(nativeHoverTooltipDelay + time.Second):
 		t.Fatal("settings demo did not dispatch after dwell")
 	}
-	if app.settingsDemo == nil {
+	if app.settingsWindow.settingsDemo == nil {
 		t.Fatal("expected settings demo after the hover dwell")
 	}
-	if app.settingsDemo.kind != "query-hotkeys" || app.settingsDemo.anchor != anchor {
-		t.Fatalf("settings demo = %+v, want query-hotkeys at %+v", app.settingsDemo, anchor)
+	if app.settingsWindow.settingsDemo.kind != "query-hotkeys" || app.settingsWindow.settingsDemo.anchor != anchor {
+		t.Fatalf("settings demo = %+v, want query-hotkeys at %+v", app.settingsWindow.settingsDemo, anchor)
 	}
 }
 
@@ -78,8 +78,8 @@ func TestSetSettingsDemoHoverCancelBeforeDwell(t *testing.T) {
 	app.setSettingsDemoHover("query-hotkeys", true, woxui.Rect{X: 240, Y: 120, Width: 18, Height: 18})
 	app.setSettingsDemoHover("query-hotkeys", false, woxui.Rect{})
 	time.Sleep(nativeHoverTooltipDelay + 80*time.Millisecond)
-	if app.settingsDemo != nil {
-		t.Fatalf("settings demo = %+v, want nil after leaving before the dwell", app.settingsDemo)
+	if app.settingsWindow.settingsDemo != nil {
+		t.Fatalf("settings demo = %+v, want nil after leaving before the dwell", app.settingsWindow.settingsDemo)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestSetCloudPlanTooltipWaitsForDwell(t *testing.T) {
 
 	anchor := woxui.Rect{X: 80, Y: 40, Width: 16, Height: 16}
 	app.setCloudPlanTooltip(true, anchor)
-	if app.cloudPlanTooltip != nil {
+	if app.settingsWindow.cloudPlanTooltip != nil {
 		t.Fatal("cloud plan tooltip must wait for the shared hover dwell")
 	}
 
@@ -102,15 +102,15 @@ func TestSetCloudPlanTooltipWaitsForDwell(t *testing.T) {
 	case <-time.After(nativeHoverTooltipDelay + time.Second):
 		t.Fatal("cloud tooltip did not dispatch after dwell")
 	}
-	if app.cloudPlanTooltip == nil {
+	if app.settingsWindow.cloudPlanTooltip == nil {
 		t.Fatal("expected cloud plan tooltip after the hover dwell")
 	}
-	if app.cloudPlanTooltip.anchor != anchor {
-		t.Fatalf("cloud plan tooltip anchor = %+v, want %+v", app.cloudPlanTooltip.anchor, anchor)
+	if app.settingsWindow.cloudPlanTooltip.anchor != anchor {
+		t.Fatalf("cloud plan tooltip anchor = %+v, want %+v", app.settingsWindow.cloudPlanTooltip.anchor, anchor)
 	}
 
 	app.setCloudPlanTooltip(false, woxui.Rect{})
-	if app.cloudPlanTooltip != nil {
-		t.Fatalf("cloud plan tooltip = %+v, want nil after leave", app.cloudPlanTooltip)
+	if app.settingsWindow.cloudPlanTooltip != nil {
+		t.Fatalf("cloud plan tooltip = %+v, want nil after leave", app.settingsWindow.cloudPlanTooltip)
 	}
 }

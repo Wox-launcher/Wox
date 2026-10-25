@@ -100,10 +100,14 @@ func TestFolderPreviewDisplayNameUsesVolumeRoot(t *testing.T) {
 
 // TestFolderPreviewTagsUseSeparateCounts covers complete, bounded, empty, and failed scans.
 func TestFolderPreviewTagsUseSeparateCounts(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_file_preview_folder_folders_count": "{count} folders",
-		"ui_file_preview_folder_files_count":   "{count} files",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_file_preview_folder_folders_count": "{count} folders",
+				"ui_file_preview_folder_files_count":   "{count} files",
+			},
+		},
+	})
 	for _, test := range []struct {
 		folder         folderPreviewContent
 		folders, files string

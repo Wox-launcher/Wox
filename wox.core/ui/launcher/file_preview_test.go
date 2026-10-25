@@ -17,8 +17,8 @@ import (
 )
 
 func TestFilePreviewForUsesLoadingKindBeforeContentArrives(t *testing.T) {
-	app := &App{}
-	content := app.filePreviewFor(filepath.Join(t.TempDir(), "notes.txt"))
+	app := bindTestApp(&App{})
+	content := app.filePreview.filePreviewFor(filepath.Join(t.TempDir(), "notes.txt"))
 	if content.Kind != "loading" {
 		t.Fatalf("uncached file preview kind = %q, want loading", content.Kind)
 	}
@@ -31,7 +31,7 @@ func TestFilePreviewForImageIncludesSizeTag(t *testing.T) {
 		t.Fatalf("write image: %v", err)
 	}
 
-	content := (&App{}).filePreviewFor(filePath)
+	content := (bindTestApp(&App{})).filePreview.filePreviewFor(filePath)
 	wantSize := formatFileSize(int64(len(payload)))
 	if content.Kind != "image" || len(content.Tags) != 2 || content.Tags[0].Label != "JPEG" || content.Tags[1].Label != wantSize {
 		t.Fatalf("image preview = %#v, want JPEG and %s", content, wantSize)
@@ -47,14 +47,14 @@ func TestFilePreviewForSVGUsesImagePipeline(t *testing.T) {
 			if err := os.WriteFile(filePath, payload, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			app := &App{}
-			app.prepareFilePreview(filePath)
-			defer app.cancelScheduledFilePreview()
-			content := app.filePreviewFor(filePath)
+			app := bindTestApp(&App{})
+			app.filePreview.prepareFilePreview(filePath)
+			defer app.filePreview.cancelScheduledFilePreview()
+			content := app.filePreview.filePreviewFor(filePath)
 			if content.Kind != "image" || content.Image.ImageType != "absolute" || content.Image.ImageData != filePath {
 				t.Fatalf("SVG preview = %#v, want image file", content)
 			}
-			if app.filePreviewTimer != nil || app.fileRequests[filePath] {
+			if app.filePreview.filePreviewTimer != nil || app.filePreview.fileRequests[filePath] {
 				t.Fatal("SVG preview scheduled a text file read")
 			}
 			decoded, err := decodeWoxImage(content.Image)
@@ -343,33 +343,45 @@ func TestInspectPreviewFileRejectsHugeOfficePreview(t *testing.T) {
 }
 
 func TestPrepareFilePreviewDelaysSmallTextUntilSelectionSettles(t *testing.T) {
-	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}, filePreviewManualPaths: map[string]bool{}}
+	app := bindTestApp(&App{
+		filePreview: filePreviewController{
+			filePreviews:           map[string]filePreviewContent{},
+			fileRequests:           map[string]bool{},
+			filePreviewManualPaths: map[string]bool{},
+		},
+	})
 	filePath := writeSizedPreviewFile(t, "notes.js", 32, 'd')
-	app.prepareFilePreview(filePath)
-	if app.fileRequests[filePath] {
+	app.filePreview.prepareFilePreview(filePath)
+	if app.filePreview.fileRequests[filePath] {
 		t.Fatal("small file preview should wait for the Flutter-style settle delay")
 	}
-	if app.filePreviewPendingPath != filePath || app.filePreviewTimer == nil {
+	if app.filePreview.filePreviewPendingPath != filePath || app.filePreview.filePreviewTimer == nil {
 		t.Fatal("small file preview should schedule one delayed load")
 	}
-	app.cancelScheduledFilePreview()
+	app.filePreview.cancelScheduledFilePreview()
 }
 
 func TestPrepareFilePreviewCancelsObsoleteDelayedLoad(t *testing.T) {
-	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}, filePreviewManualPaths: map[string]bool{}}
+	app := bindTestApp(&App{
+		filePreview: filePreviewController{
+			filePreviews:           map[string]filePreviewContent{},
+			fileRequests:           map[string]bool{},
+			filePreviewManualPaths: map[string]bool{},
+		},
+	})
 	first := writeSizedPreviewFile(t, "first.js", 32, 'e')
 	second := writeSizedPreviewFile(t, "second.js", 32, 'f')
-	app.prepareFilePreview(first)
-	generation := app.filePreviewLoadGeneration
-	app.prepareFilePreview(second)
-	if app.filePreviewPendingPath != second {
-		t.Fatalf("pending preview = %q, want the latest selection", app.filePreviewPendingPath)
+	app.filePreview.prepareFilePreview(first)
+	generation := app.filePreview.filePreviewLoadGeneration
+	app.filePreview.prepareFilePreview(second)
+	if app.filePreview.filePreviewPendingPath != second {
+		t.Fatalf("pending preview = %q, want the latest selection", app.filePreview.filePreviewPendingPath)
 	}
-	app.startScheduledFilePreview(first, ".js", generation)
-	if app.fileRequests[first] {
+	app.filePreview.startScheduledFilePreview(first, ".js", generation)
+	if app.filePreview.fileRequests[first] {
 		t.Fatal("obsolete delayed preview started a read")
 	}
-	app.cancelScheduledFilePreview()
+	app.filePreview.cancelScheduledFilePreview()
 }
 
 func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
@@ -377,22 +389,29 @@ func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
 		t.Run(fmt.Sprintf("remote=%v", remote), func(t *testing.T) {
 			filePath := writeSizedPreviewFile(t, "ready.js", 32, 'g')
 			applied := make(chan func(), 1)
-			app := &App{
-				uiCall:  func(fn func()) error { applied <- fn; return nil },
-				visible: true, query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
-				results:                   []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: filePath}}},
-				filePreviews:              map[string]filePreviewContent{},
-				fileRequests:              map[string]bool{},
-				filePreviewManualPaths:    map[string]bool{},
-				filePreviewPendingPath:    filePath,
-				filePreviewLoadGeneration: 4,
-			}
+			app := bindTestApp(&App{
+				uiCall:       func(fn func()) error { applied <- fn; return nil },
+				visible:      true,
+				querySession: queryController{query: plainQuery{QueryID: "q"}},
+				resultList: resultController{
+					resultsQueryID: "q",
+					selected:       0,
+					results:        []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: filePath}}},
+				},
+				filePreview: filePreviewController{
+					filePreviews:              map[string]filePreviewContent{},
+					fileRequests:              map[string]bool{},
+					filePreviewManualPaths:    map[string]bool{},
+					filePreviewPendingPath:    filePath,
+					filePreviewLoadGeneration: 4,
+				},
+			})
 			if remote {
-				app.remotePreviews = map[string]queryPreview{"/preview?id=file": app.results[0].Preview}
-				app.results[0].Preview = queryPreview{PreviewType: "remote", PreviewData: "/preview?id=file"}
+				app.remotePreview.remotePreviews = map[string]queryPreview{"/preview?id=file": app.resultList.results[0].Preview}
+				app.resultList.results[0].Preview = queryPreview{PreviewType: "remote", PreviewData: "/preview?id=file"}
 			}
-			app.startScheduledFilePreview(filePath, ".js", 4)
-			if !app.fileRequests[filePath] {
+			app.filePreview.startScheduledFilePreview(filePath, ".js", 4)
+			if !app.filePreview.fileRequests[filePath] {
 				t.Fatal("settled file preview did not start its delayed read")
 			}
 			select {
@@ -401,7 +420,7 @@ func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("file inspection did not finish")
 			}
-			if app.filePreviewFor(filePath).Kind != "code" {
+			if app.filePreview.filePreviewFor(filePath).Kind != "code" {
 				t.Fatal("selected file was not loaded")
 			}
 		})
@@ -409,12 +428,18 @@ func TestStartScheduledFilePreviewLoadsCurrentSelection(t *testing.T) {
 }
 
 func TestPrepareFilePreviewDelaysLargeTextInspection(t *testing.T) {
-	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}, filePreviewManualPaths: map[string]bool{}}
+	app := bindTestApp(&App{
+		filePreview: filePreviewController{
+			filePreviews:           map[string]filePreviewContent{},
+			fileRequests:           map[string]bool{},
+			filePreviewManualPaths: map[string]bool{},
+		},
+	})
 	filePath := writeSizedPreviewFile(t, "vendor.js", 6*1024*1024, 'c')
-	app.prepareFilePreview(filePath)
-	defer app.cancelScheduledFilePreview()
-	content := app.filePreviewFor(filePath)
-	if content.Kind != "loading" || app.fileRequests[filePath] || app.filePreviewPendingPath != filePath {
+	app.filePreview.prepareFilePreview(filePath)
+	defer app.filePreview.cancelScheduledFilePreview()
+	content := app.filePreview.filePreviewFor(filePath)
+	if content.Kind != "loading" || app.filePreview.fileRequests[filePath] || app.filePreview.filePreviewPendingPath != filePath {
 		t.Fatal("large files must wait for background inspection")
 	}
 	if content.Text != "" {
@@ -424,20 +449,25 @@ func TestPrepareFilePreviewDelaysLargeTextInspection(t *testing.T) {
 
 func TestDeferredFilePreviewUsesBoundedCacheAndRemoteLoadHotkey(t *testing.T) {
 	filePath := writeSizedPreviewFile(t, "large.docx", officePreviewManualLoadBytes+1, 'x')
-	app := &App{filePreviews: map[string]filePreviewContent{}, fileRequests: map[string]bool{}}
+	app := bindTestApp(&App{
+		filePreview: filePreviewController{
+			filePreviews: map[string]filePreviewContent{},
+			fileRequests: map[string]bool{},
+		},
+	})
 	for i := 0; i < 128; i++ {
 		path := fmt.Sprint(i)
-		app.filePreviews[path] = filePreviewContent{Kind: "large"}
-		app.fileRequests[path] = true
+		app.filePreview.filePreviews[path] = filePreviewContent{Kind: "large"}
+		app.filePreview.fileRequests[path] = true
 	}
-	app.loadFilePreview(filePath, ".docx", false)
-	if len(app.filePreviews) != 1 || len(app.fileRequests) != 1 || app.filePreviewFor(filePath).Kind != "large" {
+	app.filePreview.loadFilePreview(filePath, ".docx", false)
+	if len(app.filePreview.filePreviews) != 1 || len(app.filePreview.fileRequests) != 1 || app.filePreview.filePreviewFor(filePath).Kind != "large" {
 		t.Fatal("deferred previews must use the bounded cache")
 	}
-	app.visible, app.selected = true, 0
-	app.query.QueryID, app.resultsQueryID = "q", "q"
-	app.results = []queryResult{{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=file"}}}
-	app.remotePreviews = map[string]queryPreview{"/preview?id=file": {PreviewType: "file", PreviewData: filePath}}
+	app.visible, app.resultList.selected = true, 0
+	app.querySession.query.QueryID, app.resultList.resultsQueryID = "q", "q"
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview?id=file"}}}
+	app.remotePreview.remotePreviews = map[string]queryPreview{"/preview?id=file": {PreviewType: "file", PreviewData: filePath}}
 	applied := make(chan func(), 1)
 	app.uiCall = func(fn func()) error { applied <- fn; return nil }
 	modifier := woxui.KeyModifierControl
@@ -453,7 +483,7 @@ func TestDeferredFilePreviewUsesBoundedCacheAndRemoteLoadHotkey(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("manual preview did not finish")
 	}
-	if content := app.filePreviewFor(filePath); content.Kind != "native_file" || !content.NativeFileAutoLoad {
+	if content := app.filePreview.filePreviewFor(filePath); content.Kind != "native_file" || !content.NativeFileAutoLoad {
 		t.Fatal("manual preview did not enable the Office preview")
 	}
 }

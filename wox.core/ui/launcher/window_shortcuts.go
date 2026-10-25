@@ -42,15 +42,15 @@ func (a *App) requestSettingsFromShortcut(pluginID string) {
 		a.primary.requestSettingsFromShortcut(pluginID)
 		return
 	}
-	if !a.openingSettingsShortcut.CompareAndSwap(false, true) {
+	if !a.settingsWindow.openingSettingsShortcut.CompareAndSwap(false, true) {
 		return
 	}
 	util.Go(a.lifecycleCtx, "open settings from shortcut", func() {
-		defer a.openingSettingsShortcut.Store(false)
+		defer a.settingsWindow.openingSettingsShortcut.Store(false)
 		var existing *woxui.ManagedWindow
 		err := a.runOnUI("resolve settings shortcut target", func() {
-			if a.settingsView != nil && a.settingsView.Lifecycle() != woxui.WindowLifecycleClosed {
-				existing = a.settingsView
+			if a.settingsWindow.settingsView != nil && a.settingsWindow.settingsView.Lifecycle() != woxui.WindowLifecycleClosed {
+				existing = a.settingsWindow.settingsView
 				if pluginID != "" {
 					a.activateSettingsSearchResult(settingsSearchResult{kind: settingsSearchPlugin, pluginID: pluginID})
 					a.pluginSettings.SetDetailTab("settings")
@@ -76,11 +76,11 @@ func (a *App) requestSettingsFromShortcut(pluginID string) {
 
 // requestLauncherShortcutClose lets native WebView callbacks unwind before destroying a browser.
 func (a *App) requestLauncherShortcutClose() {
-	if a.webViewPreviewData != "" {
-		queryID, previewData := a.query.QueryID, a.webViewPreviewData
+	if a.webView.webViewPreviewData != "" {
+		queryID, previewData := a.querySession.query.QueryID, a.webView.webViewPreviewData
 		closePage := func() {
 			// A query change or an earlier close may have replaced this page while the callback was queued.
-			if !a.destroyed.Load() && a.query.QueryID == queryID && a.webViewPreviewData == previewData {
+			if !a.destroyed.Load() && a.querySession.query.QueryID == queryID && a.webView.webViewPreviewData == previewData {
 				a.closeWebViewPage()
 			}
 		}

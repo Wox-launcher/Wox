@@ -12,9 +12,9 @@ import (
 const settingsChangedTopic = "settings.changed"
 
 // ensureSettingsWindow creates the independent settings host once per native lifetime.
-func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
-	if !a.isPrimary && a.primary != nil {
-		return a.primary.ensureSettingsWindow()
+func (a *settingsWindowController) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
+	if primary := a.primaryOwner(); primary != nil {
+		return primary.ensureSettingsWindow()
 	}
 
 	var managed *woxui.ManagedWindow
@@ -63,7 +63,7 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 			a.settingsView = managed
 			a.settingsHost = host
 			a.settingsOpen = true
-			fontFamily = a.generalSettings.Data().AppFontFamily
+			fontFamily = a.fontFamily()
 			created = true
 		}
 	}); err != nil {
@@ -92,9 +92,9 @@ func (a *App) ensureSettingsWindow() (*woxui.ManagedWindow, error) {
 }
 
 // ensureOnboardingWindow creates the first-run guide as its own managed window.
-func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
-	if !a.isPrimary && a.primary != nil {
-		return a.primary.ensureOnboardingWindow()
+func (a *onboardingController) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
+	if primary := a.primaryOwner(); primary != nil {
+		return primary.ensureOnboardingWindow()
 	}
 
 	var managed *woxui.ManagedWindow
@@ -108,7 +108,7 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 		}
 		host := woxwidget.NewHost(a.buildOnboarding)
 		managed, _, openErr = a.windows.Open(onboardingWindowID, woxui.WindowOptions{
-			Title:     a.translate("i18n:onboarding_title"),
+			Title:     a.language.translate("i18n:onboarding_title"),
 			Size:      woxui.Size{Width: onboardingWindowWidth, Height: onboardingWindowHeight},
 			Role:      woxui.WindowRoleApplication,
 			OnFrame:   host.Frame,
@@ -140,7 +140,7 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 			host.Attach(managed.Window())
 			a.onboardingView = managed
 			a.onboardingHost = host
-			fontFamily = a.generalSettings.Data().AppFontFamily
+			fontFamily = a.fontFamily()
 			created = true
 		}
 	}); err != nil {
@@ -167,41 +167,41 @@ func (a *App) ensureOnboardingWindow() (*woxui.ManagedWindow, error) {
 	return managed, nil
 }
 
-func (a *App) settingsNativeWindow() *woxui.Window {
+func (a *settingsWindowController) settingsNativeWindow() *woxui.Window {
 	var managed *woxui.ManagedWindow
 	if err := a.runOnUI("resolve settings native window", func() {
 		managed = a.settingsView
 	}); err != nil {
 		log.Printf("resolve settings native window: %v", err)
-		return a.window
+		return a.window()
 	}
 	if managed == nil {
-		return a.window
+		return a.window()
 	}
 	return managed.Window()
 }
 
-func (a *App) onboardingNativeWindow() *woxui.Window {
+func (a *onboardingController) onboardingNativeWindow() *woxui.Window {
 	var managed *woxui.ManagedWindow
 	if err := a.runOnUI("resolve onboarding native window", func() {
 		managed = a.onboardingView
 	}); err != nil {
 		log.Printf("resolve onboarding native window: %v", err)
-		return a.window
+		return a.window()
 	}
 	if managed == nil {
-		return a.window
+		return a.window()
 	}
 	return managed.Window()
 }
 
-func (a *App) invalidateSettingsWindow() {
+func (a *settingsWindowController) invalidateSettingsWindow() {
 	if window := a.settingsNativeWindow(); window != nil {
 		_ = window.Invalidate()
 	}
 }
 
-func (a *App) invalidateOnboardingWindow() {
+func (a *onboardingController) invalidateOnboardingWindow() {
 	if window := a.onboardingNativeWindow(); window != nil {
 		_ = window.Invalidate()
 	}
@@ -221,14 +221,14 @@ func (a *App) invalidateAllWindows() {
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
-	if settingsWindow := a.settingsNativeWindow(); settingsWindow != nil && settingsWindow != a.window {
+	if settingsWindow := a.settingsWindow.settingsNativeWindow(); settingsWindow != nil && settingsWindow != a.window {
 		_ = settingsWindow.Invalidate()
 	}
-	if onboardingWindow := a.onboardingNativeWindow(); onboardingWindow != nil && onboardingWindow != a.window {
+	if onboardingWindow := a.onboarding.onboardingNativeWindow(); onboardingWindow != nil && onboardingWindow != a.window {
 		_ = onboardingWindow.Invalidate()
 	}
-	a.invalidateChatWindow()
-	for _, controller := range a.noteWindows {
+	a.chatWindow.invalidateChatWindow()
+	for _, controller := range a.notes.noteWindows {
 		if controller.managed != nil {
 			_ = controller.managed.Window().Invalidate()
 		}
@@ -236,7 +236,7 @@ func (a *App) invalidateAllWindows() {
 }
 
 func (a *App) updateSettingsTextInput(enabled bool) {
-	window := a.settingsNativeWindow()
+	window := a.settingsWindow.settingsNativeWindow()
 	if window == nil {
 		return
 	}
@@ -249,7 +249,7 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 }
 
 func (a *App) themeEditorNativeWindow() *woxui.Window {
-	return a.settingsNativeWindow()
+	return a.settingsWindow.settingsNativeWindow()
 }
 
 func (a *App) invalidateThemeEditorWindow() {
@@ -267,7 +267,7 @@ func (a *App) restoreThemeEditorTextInput() {
 }
 
 func (a *App) formTableUsesSettingsWindow() bool {
-	return a.settingsTableEditor != nil
+	return a.settingsWindow.settingsTableEditor != nil
 }
 
 func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
@@ -277,7 +277,7 @@ func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
 
 func (a *App) formTableNativeWindow() *woxui.Window {
 	if a.formTableUsesSettingsWindow() {
-		return a.settingsNativeWindow()
+		return a.settingsWindow.settingsNativeWindow()
 	}
 	return a.window
 }
@@ -301,8 +301,8 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 	usesSettings := false
 	if state != nil {
 		pluginForm := a.pluginSettings.Form()
-		usesSettings = (!a.onboardingOpen && state.target == a.hotkeySettings.Form()) || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
-		if !usesSettings && a.settingsTableEditor != nil && a.settingsTableEditor.rowForm == state.target {
+		usesSettings = (!a.onboarding.onboardingOpen && state.target == a.hotkeySettings.Form()) || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
+		if !usesSettings && a.settingsWindow.settingsTableEditor != nil && a.settingsWindow.settingsTableEditor.rowForm == state.target {
 			usesSettings = true
 		}
 	}
@@ -311,15 +311,15 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 
 func (a *App) hotkeyRecordingUsesOnboardingWindow() bool {
 	state := a.hotkeySettings.Recording()
-	return a.onboardingOpen && state != nil && (state.target == a.hotkeySettings.Form() || (a.onboardingQueryHotkey != nil && state.target == &a.onboardingQueryHotkey.form))
+	return a.onboarding.onboardingOpen && state != nil && (state.target == a.hotkeySettings.Form() || (a.onboarding.onboardingQueryHotkey != nil && state.target == &a.onboarding.onboardingQueryHotkey.form))
 }
 
 func (a *App) hotkeyRecordingNativeWindow() *woxui.Window {
 	if a.hotkeyRecordingUsesOnboardingWindow() {
-		return a.onboardingNativeWindow()
+		return a.onboarding.onboardingNativeWindow()
 	}
 	if a.hotkeyRecordingUsesSettingsWindow() {
-		return a.settingsNativeWindow()
+		return a.settingsWindow.settingsNativeWindow()
 	}
 	return a.window
 }
@@ -331,12 +331,12 @@ func (a *App) invalidateHotkeyWindows() {
 func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
 	switch idPrefix {
 	case "hotkey-settings", "onboarding-query-hotkey":
-		if a.onboardingOpen {
-			return a.onboardingNativeWindow()
+		if a.onboarding.onboardingOpen {
+			return a.onboarding.onboardingNativeWindow()
 		}
-		return a.settingsNativeWindow()
+		return a.settingsWindow.settingsNativeWindow()
 	case "plugin-settings", "ai-settings", "cloud-form":
-		return a.settingsNativeWindow()
+		return a.settingsWindow.settingsNativeWindow()
 	case "theme-editor", "theme-editor-dialog":
 		return a.themeEditorNativeWindow()
 	case "form-table-row":
@@ -402,9 +402,9 @@ func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onLauncherWindowClosed() {
-	a.releasePinnedPreviewImage()
+	a.previews.releasePinnedPreviewImage()
 	wasVisible := a.visible
-	a.deactivateDictationAudio()
+	a.dictation.deactivateDictationAudio()
 	a.launcher = nil
 	a.host = nil
 	a.visible = false
@@ -426,12 +426,12 @@ func (a *App) onLauncherWindowClosed() {
 
 // onSettingsWindowClosed releases window-owned interaction state before notifying core.
 func (a *App) onSettingsWindowClosed() {
-	wasOpen := a.settingsOpen
+	wasOpen := a.settingsWindow.settingsOpen
 	wasRecording := a.hotkeyRecordingUsesSettingsWindow()
-	a.settingsOpen = false
-	a.settingsView = nil
-	a.settingsHost = nil
-	a.settingSaving = false
+	a.settingsWindow.settingsOpen = false
+	a.settingsWindow.settingsView = nil
+	a.settingsWindow.settingsHost = nil
+	a.settingsWindow.settingSaving = false
 	a.generalSettings.EndEdit()
 	a.settingsSearch.ReleaseWindowMemory()
 	a.clearSettingsSearchHighlight()
@@ -450,23 +450,23 @@ func (a *App) onSettingsWindowClosed() {
 	// fetched for the exclusion list does not need to outlive the window.
 	a.cloudSettings.SetPlugins(nil)
 	a.cloudSettings.SetLoaded(false)
-	a.settingsTableEditor = nil
+	a.settingsWindow.settingsTableEditor = nil
 	a.aiSettings.SetForm(nil)
 	a.abandonModelManager()
 	a.generalSettings.SetForm(nil)
-	if !a.onboardingOpen {
+	if !a.onboarding.onboardingOpen {
 		a.hotkeySettings.ReleaseWindowMemory()
 	} else {
 		a.hotkeySettings.SetForm(nil)
 		a.hotkeySettings.ClearRecording()
 		a.hotkeySettings.SetFocused(false)
 	}
-	a.cloudPlanTooltip = nil
-	a.cloudPlanTooltipRevision.Add(1)
-	a.settingsInlineTooltip = nil
-	a.settingsInlineTooltipRevision.Add(1)
-	a.settingsDemo = nil
-	a.settingsDemoRevision.Add(1)
+	a.settingsWindow.cloudPlanTooltip = nil
+	a.settingsWindow.cloudPlanTooltipRevision.Add(1)
+	a.settingsWindow.settingsInlineTooltip = nil
+	a.settingsWindow.settingsInlineTooltipRevision.Add(1)
+	a.settingsWindow.settingsDemo = nil
+	a.settingsWindow.settingsDemoRevision.Add(1)
 	if form := a.pluginSettings.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
@@ -498,20 +498,20 @@ func (a *App) onSettingsWindowClosed() {
 		}
 	}
 	util.Go(a.lifecycleCtx, "refresh glance after settings close", func() {
-		a.refreshGlance("settingsChanged", "", nil)
+		a.glance.refreshGlance("settingsChanged", "", nil)
 	})
 }
 
 func (a *App) onOnboardingWindowClosed() {
-	wasOpen := a.onboardingOpen
+	wasOpen := a.onboarding.onboardingOpen
 	wasRecording := a.hotkeyRecordingUsesOnboardingWindow()
 	a.releaseOnboardingMigrationSession()
-	a.onboardingOpen = false
-	a.onboardingChoice = ""
-	a.onboardingChoiceAnchor = woxui.Rect{}
+	a.onboarding.onboardingOpen = false
+	a.onboarding.onboardingChoice = ""
+	a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
 	a.releaseDemoWallpaperLocked()
-	a.onboardingView = nil
-	a.onboardingHost = nil
+	a.onboarding.onboardingView = nil
+	a.onboarding.onboardingHost = nil
 	if wasRecording {
 		a.hotkeySettings.ClearRecording()
 		a.postHotkeyRecordingStopped()

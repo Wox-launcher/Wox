@@ -39,22 +39,22 @@ func TestRemapTerminalSelectionFollowsAbsoluteCursors(t *testing.T) {
 }
 
 func TestApplyTerminalChunkKeepsSelectionOnAppend(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{SessionID: "s", Text: "hello", BaseCursor: 0, SelectionAnchor: 1, SelectionFocus: 4}}
-	app.applyTerminalChunk(terminalChunk{SessionID: "s", CursorStart: 5, CursorEnd: 8, Content: "!!!"})
-	if app.terminalPreview.Text != "hello!!!" || terminalSelectedText(app.terminalPreview) != "ell" {
-		t.Fatalf("appended text = %q selected = %q", app.terminalPreview.Text, terminalSelectedText(app.terminalPreview))
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{SessionID: "s", Text: "hello", BaseCursor: 0, SelectionAnchor: 1, SelectionFocus: 4}}})
+	app.terminal.applyTerminalChunk(terminalChunk{SessionID: "s", CursorStart: 5, CursorEnd: 8, Content: "!!!"})
+	if app.terminal.terminalPreview.Text != "hello!!!" || terminalSelectedText(app.terminal.terminalPreview) != "ell" {
+		t.Fatalf("appended text = %q selected = %q", app.terminal.terminalPreview.Text, terminalSelectedText(app.terminal.terminalPreview))
 	}
 }
 
 // TestTerminalReverseSelection preserves the anchor across output changes and continued dragging.
 func TestTerminalReverseSelection(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{SessionID: "s", Text: "abcdef", SelectionAnchor: 5, SelectionFocus: 2}}
-	app.applyTerminalChunk(terminalChunk{SessionID: "s", CursorStart: 6, CursorEnd: 7, Content: "!"})
-	state := app.terminalPreview
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{SessionID: "s", Text: "abcdef", SelectionAnchor: 5, SelectionFocus: 2}}})
+	app.terminal.applyTerminalChunk(terminalChunk{SessionID: "s", CursorStart: 6, CursorEnd: 7, Content: "!"})
+	state := app.terminal.terminalPreview
 	if state.SelectionAnchor != 5 || state.SelectionFocus != 2 {
 		t.Fatalf("appended selection = %d:%d, want 5:2", state.SelectionAnchor, state.SelectionFocus)
 	}
-	app.extendTerminalSelection(1)
+	app.terminal.extendTerminalSelection(1)
 	if got := terminalSelectedText(state); got != "bcde" {
 		t.Fatalf("extended selection = %q, want bcde", got)
 	}
@@ -71,32 +71,32 @@ func TestTerminalReverseSelection(t *testing.T) {
 }
 
 func TestTerminalPreviewCopyShortcutConsumesSelection(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{Text: "hello world", SelectionAnchor: 0, SelectionFocus: 5}}
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{Text: "hello world", SelectionAnchor: 0, SelectionFocus: 5}}})
 	modifiers := woxui.KeyModifierControl
 	if runtime.GOOS == "darwin" {
 		modifiers = woxui.KeyModifierMeta
 	}
-	if !app.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.Key("c"), Modifiers: modifiers, Down: true}) {
+	if !app.terminal.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.Key("c"), Modifiers: modifiers, Down: true}) {
 		t.Fatal("ctrl/cmd+c should copy a terminal highlight instead of the query")
 	}
-	app.terminalPreview.SelectionAnchor, app.terminalPreview.SelectionFocus = 0, 0
-	if app.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.Key("c"), Modifiers: modifiers, Down: true}) {
+	app.terminal.terminalPreview.SelectionAnchor, app.terminal.terminalPreview.SelectionFocus = 0, 0
+	if app.terminal.onTerminalPreviewKey(woxui.KeyEvent{Key: woxui.Key("c"), Modifiers: modifiers, Down: true}) {
 		t.Fatal("collapsed terminal selection must leave copy for the query editor")
 	}
 }
 
 func TestSelectAllTerminalPreviewHighlightsLoadedOutput(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{Text: "abc"}}
-	app.selectAllTerminalPreview()
-	if terminalSelectedText(app.terminalPreview) != "abc" {
-		t.Fatalf("select all = %q", terminalSelectedText(app.terminalPreview))
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{Text: "abc"}}})
+	app.terminal.selectAllTerminalPreview()
+	if terminalSelectedText(app.terminal.terminalPreview) != "abc" {
+		t.Fatalf("select all = %q", terminalSelectedText(app.terminal.terminalPreview))
 	}
 }
 
 func TestClearTerminalSelectionDropsHighlight(t *testing.T) {
-	app := &App{terminalPreview: &terminalPreviewState{Text: "abc", SelectionAnchor: 0, SelectionFocus: 3}}
-	app.clearTerminalSelection()
-	if terminalSelectedText(app.terminalPreview) != "" {
-		t.Fatalf("cleared selection = %q", terminalSelectedText(app.terminalPreview))
+	app := bindTestApp(&App{terminal: terminalController{terminalPreview: &terminalPreviewState{Text: "abc", SelectionAnchor: 0, SelectionFocus: 3}}})
+	app.terminal.clearTerminalSelection()
+	if terminalSelectedText(app.terminal.terminalPreview) != "" {
+		t.Fatalf("cleared selection = %q", terminalSelectedText(app.terminal.terminalPreview))
 	}
 }

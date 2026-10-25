@@ -19,28 +19,28 @@ func (a *App) buildNativeFilePreview(path string, autoLoad bool, palette uiPalet
 	if runtime.GOOS != "windows" {
 		return previewview.WebViewPreviewMessage("High-fidelity Office preview is currently available on Windows only.", theme.PreviewText, theme, width, height)
 	}
-	active := a.nativeFilePreviewPath == path
-	if a.nativeFilePreviewError != "" && active {
-		return previewview.WebViewPreviewMessage(a.nativeFilePreviewError, theme.ErrorText, theme, width, height)
+	active := a.nativeFile.nativeFilePreviewPath == path
+	if a.nativeFile.nativeFilePreviewError != "" && active {
+		return previewview.WebViewPreviewMessage(a.nativeFile.nativeFilePreviewError, theme.ErrorText, theme, width, height)
 	}
-	if !autoLoad && !active && a.nativeFilePreviewPendingPath != path && a.nativeFilePreviewManualPath != path {
+	if !autoLoad && !active && a.nativeFile.nativeFilePreviewPendingPath != path && a.nativeFile.nativeFilePreviewManualPath != path {
 		return a.buildManualNativeFilePreview(path, palette, width, height)
 	}
 	if !active {
 		return previewview.WebViewPreviewLoading(theme, width, height)
 	}
-	generation := a.nativeFilePreviewGeneration
+	generation := a.nativeFile.nativeFilePreviewGeneration
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{
 		Width: width, Height: height, Theme: theme,
 		OnBounds: func(bounds woxui.Rect) {
-			a.requestNativeFilePreviewBounds(path, generation, bounds)
+			a.nativeFile.requestNativeFilePreviewBounds(path, generation, bounds)
 		},
 	})
 }
 
 // buildManualNativeFilePreview keeps large Office documents from starting a shell handler until requested.
 func (a *App) buildManualNativeFilePreview(path string, palette uiPalette, width, height float32) woxwidget.Widget {
-	file := a.filePreviewFor(path)
+	file := a.filePreview.filePreviewFor(path)
 	if file.Path == "" {
 		file.Path = path
 	}
@@ -51,16 +51,19 @@ func (a *App) buildManualNativeFilePreview(path string, palette uiPalette, width
 }
 
 // requestManualNativeFilePreview records an explicit large-file request before scheduling the handler.
-func (a *App) requestManualNativeFilePreview(path string) {
+func (a *nativeFilePreviewController) requestManualNativeFilePreview(path string) {
+	if a.isDestroyed() {
+		return
+	}
 	a.nativeFilePreviewManualPath = path
-	if a.scheduleNativeFilePreview(path) && a.window != nil {
-		_ = a.window.Invalidate()
+	if a.scheduleNativeFilePreview(path) && a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // scheduleNativeFilePreview delays shell-handler construction so rapid result changes cancel obsolete work.
-func (a *App) scheduleNativeFilePreview(path string) bool {
-	if path == "" || a.nativeFilePreviewPath == path || a.nativeFilePreviewPendingPath == path {
+func (a *nativeFilePreviewController) scheduleNativeFilePreview(path string) bool {
+	if a.isDestroyed() || path == "" || a.nativeFilePreviewPath == path || a.nativeFilePreviewPendingPath == path {
 		return false
 	}
 	a.stopNativeFilePreviewTimers()
@@ -79,22 +82,22 @@ func (a *App) scheduleNativeFilePreview(path string) bool {
 }
 
 // activateScheduledNativeFilePreview makes a delayed request current only when no later selection replaced it.
-func (a *App) activateScheduledNativeFilePreview(path string, generation uint64) {
-	if a.destroyed.Load() || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewPendingPath != path {
+func (a *nativeFilePreviewController) activateScheduledNativeFilePreview(path string, generation uint64) {
+	if a.isDestroyed() || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewPendingPath != path {
 		return
 	}
 	a.nativeFilePreviewTimer = nil
 	a.nativeFilePreviewPendingPath = ""
 	a.nativeFilePreviewPath = path
 	a.clearNativeFilePreviewBounds()
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // requestNativeFilePreviewBounds coalesces paint-time geometry into one deferred native-window update.
-func (a *App) requestNativeFilePreviewBounds(path string, generation uint64, bounds woxui.Rect) {
-	if a.nativeFilePreviewPath != path || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewError != "" {
+func (a *nativeFilePreviewController) requestNativeFilePreviewBounds(path string, generation uint64, bounds woxui.Rect) {
+	if a.isDestroyed() || a.nativeFilePreviewPath != path || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewError != "" {
 		return
 	}
 	if a.nativeFilePreviewHasReportedBounds && a.nativeFilePreviewReportedBoundsPath == path && a.nativeFilePreviewReportedBoundsGeneration == generation && a.nativeFilePreviewReportedBounds == bounds {
@@ -114,18 +117,18 @@ func (a *App) requestNativeFilePreviewBounds(path string, generation uint64, bou
 }
 
 // flushNativeFilePreviewBounds applies only the latest valid paint geometry outside the render callback.
-func (a *App) flushNativeFilePreviewBounds() {
+func (a *nativeFilePreviewController) flushNativeFilePreviewBounds() {
 	a.nativeFilePreviewBoundsTimer = nil
 	path := a.nativeFilePreviewBoundsPath
 	generation := a.nativeFilePreviewBoundsGeneration
 	bounds := a.nativeFilePreviewBounds
-	if path == "" || a.nativeFilePreviewPath != path || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewError != "" || a.window == nil {
+	if a.isDestroyed() || path == "" || a.nativeFilePreviewPath != path || a.nativeFilePreviewGeneration != generation || a.nativeFilePreviewError != "" || a.window() == nil {
 		return
 	}
 	if a.nativeFilePreviewHasReportedBounds && a.nativeFilePreviewReportedBoundsPath == path && a.nativeFilePreviewReportedBoundsGeneration == generation && a.nativeFilePreviewReportedBounds == bounds {
 		return
 	}
-	if err := a.window.ShowNativeFilePreview(path, bounds, previewview.WebViewPreviewCornerRadius, generation); err != nil {
+	if err := a.window().ShowNativeFilePreview(path, bounds, previewview.WebViewPreviewCornerRadius, generation); err != nil {
 		a.setNativeFilePreviewError(generation, err)
 		return
 	}
@@ -138,8 +141,8 @@ func (a *App) flushNativeFilePreviewBounds() {
 // requestNativeFilePreviewOcclusion records the Wox-drawn overlay that must stay above the handler.
 // The native region call is deferred for the same reason as the placement above: it repaints the
 // child window and must not run inside the build pass that produced the geometry.
-func (a *App) requestNativeFilePreviewOcclusion(bounds woxui.Rect) {
-	if a.nativeFilePreviewOcclusion == bounds {
+func (a *nativeFilePreviewController) requestNativeFilePreviewOcclusion(bounds woxui.Rect) {
+	if a.isDestroyed() || a.nativeFilePreviewOcclusion == bounds {
 		return
 	}
 	a.nativeFilePreviewOcclusion = bounds
@@ -154,22 +157,25 @@ func (a *App) requestNativeFilePreviewOcclusion(bounds woxui.Rect) {
 }
 
 // flushNativeFilePreviewOcclusion applies only the latest overlay outside the build pass.
-func (a *App) flushNativeFilePreviewOcclusion() {
+func (a *nativeFilePreviewController) flushNativeFilePreviewOcclusion() {
 	a.nativeFilePreviewOcclusionTimer = nil
-	if a.window == nil || a.nativeFilePreviewReportedOcclusion == a.nativeFilePreviewOcclusion {
+	if a.isDestroyed() || a.window() == nil || a.nativeFilePreviewReportedOcclusion == a.nativeFilePreviewOcclusion {
 		return
 	}
 	// Record the attempt even when it fails. An overlay is transient chrome, so a stale region is
 	// corrected by the next open or close instead of by retrying on every following build.
 	bounds := a.nativeFilePreviewOcclusion
 	a.nativeFilePreviewReportedOcclusion = bounds
-	if err := a.window.SetNativeFilePreviewOcclusion(bounds); err != nil {
+	if err := a.window().SetNativeFilePreviewOcclusion(bounds); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, "update native file preview occlusion: "+err.Error())
 	}
 }
 
 // activateNativeFilePreview makes one native handler the owner of the preview rectangle.
-func (a *App) activateNativeFilePreview(path string) bool {
+func (a *nativeFilePreviewController) activateNativeFilePreview(path string) bool {
+	if a.isDestroyed() {
+		return false
+	}
 	changed := a.nativeFilePreviewPath != path
 	if changed {
 		a.stopNativeFilePreviewTimers()
@@ -183,7 +189,7 @@ func (a *App) activateNativeFilePreview(path string) bool {
 }
 
 // nativeFilePreviewTargetPath returns the current or delayed handler owner.
-func (a *App) nativeFilePreviewTargetPath() string {
+func (a *nativeFilePreviewController) nativeFilePreviewTargetPath() string {
 	if a.nativeFilePreviewPath != "" {
 		return a.nativeFilePreviewPath
 	}
@@ -191,7 +197,7 @@ func (a *App) nativeFilePreviewTargetPath() string {
 }
 
 // deactivateNativeFilePreview releases the platform child window and clears its controller state.
-func (a *App) deactivateNativeFilePreview() {
+func (a *nativeFilePreviewController) deactivateNativeFilePreview() {
 	hadPreview := a.nativeFilePreviewPath != "" || a.nativeFilePreviewPendingPath != "" || a.nativeFilePreviewTimer != nil || a.nativeFilePreviewBoundsTimer != nil
 	a.stopNativeFilePreviewTimers()
 	a.nativeFilePreviewPath = ""
@@ -203,18 +209,18 @@ func (a *App) deactivateNativeFilePreview() {
 		return
 	}
 	a.nativeFilePreviewGeneration++
-	if a.window == nil {
+	if a.window() == nil {
 		return
 	}
 	// The child window can outlive controller state while a retained preview tree is being replaced.
 	generation := a.nativeFilePreviewGeneration
-	if err := woxui.Call(func() { _ = a.window.HideNativeFilePreview(generation) }); err != nil {
+	if err := woxui.Call(func() { _ = a.window().HideNativeFilePreview(generation) }); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, "hide native file preview: "+err.Error())
 	}
 }
 
 // stopNativeFilePreviewTimers cancels work that was scheduled by an obsolete selected result.
-func (a *App) stopNativeFilePreviewTimers() {
+func (a *nativeFilePreviewController) stopNativeFilePreviewTimers() {
 	if a.nativeFilePreviewTimer != nil {
 		a.nativeFilePreviewTimer.Stop()
 		a.nativeFilePreviewTimer = nil
@@ -225,8 +231,19 @@ func (a *App) stopNativeFilePreviewTimers() {
 	}
 }
 
+// dispose also cancels instance-wide occlusion work, which normally survives a result change.
+func (a *nativeFilePreviewController) dispose() {
+	a.deactivateNativeFilePreview()
+	if a.nativeFilePreviewOcclusionTimer != nil {
+		a.nativeFilePreviewOcclusionTimer.Stop()
+		a.nativeFilePreviewOcclusionTimer = nil
+	}
+	a.nativeFilePreviewOcclusion = woxui.Rect{}
+	a.nativeFilePreviewReportedOcclusion = woxui.Rect{}
+}
+
 // clearNativeFilePreviewBounds forgets geometry tied to a previous handler generation.
-func (a *App) clearNativeFilePreviewBounds() {
+func (a *nativeFilePreviewController) clearNativeFilePreviewBounds() {
 	a.nativeFilePreviewBounds = woxui.Rect{}
 	a.nativeFilePreviewBoundsPath = ""
 	a.nativeFilePreviewBoundsGeneration = 0
@@ -236,8 +253,8 @@ func (a *App) clearNativeFilePreviewBounds() {
 	a.nativeFilePreviewHasReportedBounds = false
 }
 
-func (a *App) setNativeFilePreviewError(generation uint64, err error) {
-	if err == nil || a.nativeFilePreviewGeneration != generation {
+func (a *nativeFilePreviewController) setNativeFilePreviewError(generation uint64, err error) {
+	if a.isDestroyed() || err == nil || a.nativeFilePreviewGeneration != generation {
 		return
 	}
 	detail := a.translate("i18n:ui_file_preview_office_preview_handler_unavailable")
@@ -252,11 +269,11 @@ func (a *App) setNativeFilePreviewError(generation uint64, err error) {
 	a.nativeFilePreviewGeneration++
 	a.stopNativeFilePreviewTimers()
 	a.clearNativeFilePreviewBounds()
-	if a.window != nil {
+	if a.window() != nil {
 		generation := a.nativeFilePreviewGeneration
-		if err := woxui.Call(func() { _ = a.window.HideNativeFilePreview(generation) }); err != nil {
+		if err := woxui.Call(func() { _ = a.window().HideNativeFilePreview(generation) }); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, "hide native file preview after error: "+err.Error())
 		}
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 }

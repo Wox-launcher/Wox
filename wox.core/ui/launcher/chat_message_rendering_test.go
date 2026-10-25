@@ -9,7 +9,10 @@ import (
 
 // TestChatMessageLayoutsUseHostWindow covers both pop-out chat and Settings AI assistance.
 func TestChatMessageLayoutsUseHostWindow(t *testing.T) {
-	app := &App{window: &woxui.Window{}, previewLayouts: map[string]*textLayoutCache{}}
+	app := bindTestApp(&App{
+		window:   &woxui.Window{},
+		previews: previewController{previewLayouts: map[string]*textLayoutCache{}},
+	})
 	for _, host := range []*woxui.Window{app.window, {}, {}} {
 		for _, role := range []string{"user", "assistant"} {
 			props := preview.ChatMessageProps{Key: role, Role: role, Text: "Message", Reasoning: "Reasoning"}
@@ -21,7 +24,7 @@ func TestChatMessageLayoutsUseHostWindow(t *testing.T) {
 				if role == "assistant" && key == "chat-text-assistant" {
 					continue
 				}
-				if cached := app.previewLayouts[key]; cached == nil || cached.key.window != host {
+				if cached := app.previews.previewLayouts[key]; cached == nil || cached.key.window != host {
 					t.Fatalf("%s layout did not follow its host window", key)
 				}
 			}
@@ -30,7 +33,7 @@ func TestChatMessageLayoutsUseHostWindow(t *testing.T) {
 }
 
 func TestChatMessageRenderingSharesMarkdownAcrossHosts(t *testing.T) {
-	app := &App{previewLayouts: map[string]*textLayoutCache{}}
+	app := bindTestApp(&App{previews: previewController{previewLayouts: map[string]*textLayoutCache{}}})
 	for _, key := range []string{"chat-reply", "theme-editor-reply"} {
 		props := preview.ChatMessageProps{Key: key, Role: "assistant", Text: "**Heading**\n\n- First\n- Second\n\n`color`"}
 		plain := app.prepareChatMessage(props, nil, 400, 1)

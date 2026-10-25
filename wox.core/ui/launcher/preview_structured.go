@@ -99,11 +99,11 @@ func previewTagsForValues(values ...string) []previewTag {
 func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	// The header title carries the update state and the pill carries the version,
 	// so the panel does not echo the "update" query as a bare "Update" heading.
-	title := a.translate("i18n:plugin_update_title")
+	title := a.language.translate("i18n:plugin_update_title")
 	status := ""
 	statusColor := woxui.Color{R: 76, G: 175, B: 80, A: 255}
 	if !data.AutoUpdateEnabled {
-		status = a.translate("i18n:plugin_update_status_auto_update_disabled")
+		status = a.language.translate("i18n:plugin_update_status_auto_update_disabled")
 		statusColor = woxui.Color{R: 255, G: 152, B: 0, A: 255}
 	} else if !data.HasUpdate {
 		version := strings.TrimSpace(data.LatestVersion)
@@ -111,15 +111,15 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 			version = strings.TrimSpace(data.CurrentVersion)
 		}
 		if version == "" {
-			status = a.translate("i18n:plugin_update_status_none")
+			status = a.language.translate("i18n:plugin_update_status_none")
 		} else {
-			title = a.translate("i18n:plugin_update_title_up_to_date")
+			title = a.language.translate("i18n:plugin_update_title_up_to_date")
 			status = version
 		}
 	} else {
 		current := strings.TrimSpace(data.CurrentVersion)
 		latest := strings.TrimSpace(data.LatestVersion)
-		unknown := a.translate("i18n:plugin_update_unknown")
+		unknown := a.language.translate("i18n:plugin_update_unknown")
 		if current == "" {
 			current = unknown
 		}
@@ -138,24 +138,24 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 		}
 	}
 	if data.HasUpdate {
-		title = a.translate("i18n:plugin_doctor_version_update_available")
+		title = a.language.translate("i18n:plugin_doctor_version_update_available")
 	}
 	betaLabel := ""
 	if strings.EqualFold(data.ReleaseChannel, "beta") {
-		betaLabel = a.translate("i18n:plugin_update_release_channel_beta")
+		betaLabel = a.language.translate("i18n:plugin_update_release_channel_beta")
 	}
-	scale := a.densityMetrics.normalized().scale
+	scale := a.appearance.densityMetrics.normalized().scale
 	return previewview.UpdatePreviewView(previewview.UpdatePreviewProps{
 		ID: id, Width: width, Height: height, Scale: scale, Window: a.window, Theme: palette.componentTheme(), Title: title, Error: data.Error,
 		BetaLabel: betaLabel, StatusLabel: status, StatusColor: statusColor, AutoUpdateEnabled: data.AutoUpdateEnabled,
-		DisabledTitle: a.translate("i18n:plugin_update_auto_update_disabled_title"), DisabledDescription: a.translate("i18n:plugin_update_auto_update_disabled_desc"),
-		DisabledAction: a.translate("i18n:plugin_update_action_enable_auto_update") + " (enter)", OnPrimaryAction: a.activateSelected,
-		ReleaseNotes: data.ReleaseNotes, NoReleaseNotes: a.translate("i18n:plugin_update_no_release_notes"),
-		SectionNew: a.translate("i18n:plugin_update_section_new"), SectionImprovements: a.translate("i18n:plugin_update_section_improvements"),
-		SectionFixes: a.translate("i18n:plugin_update_section_fixes"), SectionChanged: a.translate("i18n:plugin_update_section_changed"),
-		SectionRemoved: a.translate("i18n:plugin_update_section_removed"), SectionSecurity: a.translate("i18n:plugin_update_section_security"),
-		SectionStore: a.translate("i18n:plugin_update_section_store"), GroupPlugin: a.translate("i18n:plugin_update_group_plugin"),
-		GroupTheme: a.translate("i18n:plugin_update_group_theme"),
+		DisabledTitle: a.language.translate("i18n:plugin_update_auto_update_disabled_title"), DisabledDescription: a.language.translate("i18n:plugin_update_auto_update_disabled_desc"),
+		DisabledAction: a.language.translate("i18n:plugin_update_action_enable_auto_update") + " (enter)", OnPrimaryAction: a.activateSelected,
+		ReleaseNotes: data.ReleaseNotes, NoReleaseNotes: a.language.translate("i18n:plugin_update_no_release_notes"),
+		SectionNew: a.language.translate("i18n:plugin_update_section_new"), SectionImprovements: a.language.translate("i18n:plugin_update_section_improvements"),
+		SectionFixes: a.language.translate("i18n:plugin_update_section_fixes"), SectionChanged: a.language.translate("i18n:plugin_update_section_changed"),
+		SectionRemoved: a.language.translate("i18n:plugin_update_section_removed"), SectionSecurity: a.language.translate("i18n:plugin_update_section_security"),
+		SectionStore: a.language.translate("i18n:plugin_update_section_store"), GroupPlugin: a.language.translate("i18n:plugin_update_group_plugin"),
+		GroupTheme: a.language.translate("i18n:plugin_update_group_theme"),
 		MeasureText: func(value string, style woxui.TextStyle) float32 {
 			metrics, _ := a.window.MeasureText(value, style)
 			return metrics.Size.Width
@@ -199,41 +199,41 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		}
 		return previewview.HotkeyOverviewPreviewEntry{RawShortcut: strings.TrimSpace(shortcut), Labels: labels, Action: action, Detail: detail, Scope: scope, Source: source}
 	}
-	globalScope := a.translate("i18n:ui_hotkey_overview_global")
-	windowScope := a.translate("i18n:ui_hotkey_overview_window")
-	launcherScope := a.translate("i18n:ui_hotkey_overview_launcher")
-	previewScope := a.translate("i18n:ui_hotkey_overview_preview")
-	settingSource := a.translate("i18n:ui_hotkey_overview_source_setting")
-	builtinSource := a.translate("i18n:ui_hotkey_overview_source_builtin")
-	userSource := a.translate("i18n:ui_hotkey_overview_source_user")
+	globalScope := a.language.translate("i18n:ui_hotkey_overview_global")
+	windowScope := a.language.translate("i18n:ui_hotkey_overview_window")
+	launcherScope := a.language.translate("i18n:ui_hotkey_overview_launcher")
+	previewScope := a.language.translate("i18n:ui_hotkey_overview_preview")
+	settingSource := a.language.translate("i18n:ui_hotkey_overview_source_setting")
+	builtinSource := a.language.translate("i18n:ui_hotkey_overview_source_builtin")
+	userSource := a.language.translate("i18n:ui_hotkey_overview_source_user")
 	sections := []previewview.HotkeyOverviewPreviewSection{
 		{Title: globalScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
-			entry(settings.MainHotkey, a.translate("i18n:ui_hotkey_overview_open_wox"), globalScope, settingSource, "", true),
-			entry(settings.SelectionHotkey, a.translate("i18n:ui_hotkey_overview_search_selection"), globalScope, settingSource, "", true),
+			entry(settings.MainHotkey, a.language.translate("i18n:ui_hotkey_overview_open_wox"), globalScope, settingSource, "", true),
+			entry(settings.SelectionHotkey, a.language.translate("i18n:ui_hotkey_overview_search_selection"), globalScope, settingSource, "", true),
 		}},
 		{Title: windowScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
-			entry(primaryHotkey(","), a.translate("i18n:ui_hotkey_overview_open_settings"), windowScope, builtinSource, "", true),
-			entry(primaryHotkey("w"), a.translate("i18n:ui_hotkey_overview_close_window"), windowScope, builtinSource, a.translate("i18n:ui_hotkey_overview_close_window_detail"), true),
+			entry(primaryHotkey(","), a.language.translate("i18n:ui_hotkey_overview_open_settings"), windowScope, builtinSource, "", true),
+			entry(primaryHotkey("w"), a.language.translate("i18n:ui_hotkey_overview_close_window"), windowScope, builtinSource, a.language.translate("i18n:ui_hotkey_overview_close_window_detail"), true),
 		}},
 		{Title: launcherScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
-			entry(primaryHotkey("p"), a.translate("i18n:ui_hotkey_overview_preview_toggle"), launcherScope, builtinSource, "", true),
-			entry(a.actionPanelHotkey(), a.translate("i18n:ui_hotkey_overview_more_actions"), launcherScope, settingSource, "", true),
-			entry(primaryHotkey("f"), a.translate("i18n:ui_hotkey_overview_filters"), launcherScope, builtinSource, "", true),
-			entry(primaryHotkey("u"), a.translate("i18n:ui_hotkey_overview_attention"), launcherScope, builtinSource, "", true),
+			entry(primaryHotkey("p"), a.language.translate("i18n:ui_hotkey_overview_preview_toggle"), launcherScope, builtinSource, "", true),
+			entry(a.actionPanelHotkey(), a.language.translate("i18n:ui_hotkey_overview_more_actions"), launcherScope, settingSource, "", true),
+			entry(primaryHotkey("f"), a.language.translate("i18n:ui_hotkey_overview_filters"), launcherScope, builtinSource, "", true),
+			entry(primaryHotkey("u"), a.language.translate("i18n:ui_hotkey_overview_attention"), launcherScope, builtinSource, "", true),
 		}},
 		{Title: previewScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
-			entry(primaryHotkey("b"), a.translate("i18n:ui_hotkey_overview_preview_fullscreen"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("shift+f"), a.translate("i18n:ui_hotkey_overview_preview_search"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("l"), a.translate("i18n:ui_hotkey_overview_file_preview_load"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("r"), a.translate("i18n:ui_hotkey_overview_webview_refresh"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("["), a.translate("i18n:ui_hotkey_overview_webview_back"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("]"), a.translate("i18n:ui_hotkey_overview_webview_forward"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("o"), a.translate("i18n:ui_hotkey_overview_webview_open_in_browser"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("h"), a.translate("i18n:ui_hotkey_overview_webview_hide_page"), previewScope, builtinSource, "", true),
-			entry(primaryHotkey("w"), a.translate("i18n:ui_hotkey_overview_webview_close_page"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("b"), a.language.translate("i18n:ui_hotkey_overview_preview_fullscreen"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("shift+f"), a.language.translate("i18n:ui_hotkey_overview_preview_search"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("l"), a.language.translate("i18n:ui_hotkey_overview_file_preview_load"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("r"), a.language.translate("i18n:ui_hotkey_overview_webview_refresh"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("["), a.language.translate("i18n:ui_hotkey_overview_webview_back"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("]"), a.language.translate("i18n:ui_hotkey_overview_webview_forward"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("o"), a.language.translate("i18n:ui_hotkey_overview_webview_open_in_browser"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("h"), a.language.translate("i18n:ui_hotkey_overview_webview_hide_page"), previewScope, builtinSource, "", true),
+			entry(primaryHotkey("w"), a.language.translate("i18n:ui_hotkey_overview_webview_close_page"), previewScope, builtinSource, "", true),
 		}},
 	}
-	queryHotkeys := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_hotkeys")}
+	queryHotkeys := previewview.HotkeyOverviewPreviewSection{Title: a.language.translate("i18n:ui_hotkey_overview_query_hotkeys")}
 	for _, item := range settings.QueryHotkeys {
 		if item.Disabled || strings.TrimSpace(item.Hotkey) == "" || strings.TrimSpace(item.Query) == "" {
 			continue
@@ -249,7 +249,7 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		queryHotkeys.Entries = append(queryHotkeys.Entries, entry(item.Hotkey, action, queryHotkeys.Title, userSource, detail, true))
 	}
 	sections = append(sections, queryHotkeys)
-	queryAliases := previewview.HotkeyOverviewPreviewSection{Title: a.translate("i18n:ui_hotkey_overview_query_shortcuts")}
+	queryAliases := previewview.HotkeyOverviewPreviewSection{Title: a.language.translate("i18n:ui_hotkey_overview_query_shortcuts")}
 	for _, item := range settings.QueryAliases {
 		if !item.Disabled && strings.TrimSpace(item.Alias) != "" && strings.TrimSpace(item.Query) != "" {
 			queryAliases.Entries = append(queryAliases.Entries, entry(item.Alias, item.Query, queryAliases.Title, userSource, "", false))
@@ -257,8 +257,8 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 	}
 	sections = append(sections, queryAliases)
 	return previewview.HotkeyOverviewPreviewView(previewview.HotkeyOverviewPreviewProps{
-		Width: width, Height: height, Scale: a.densityMetrics.normalized().scale, Search: data.Search,
-		Title: a.translate("i18n:ui_hotkey_overview_title"), Subtitle: a.translate("i18n:ui_hotkey_overview_subtitle"),
-		Count: a.translate("i18n:ui_hotkey_overview_count"), Empty: a.translate("i18n:ui_hotkey_overview_empty"), Sections: sections, Theme: palette.componentTheme(),
+		Width: width, Height: height, Scale: a.appearance.densityMetrics.normalized().scale, Search: data.Search,
+		Title: a.language.translate("i18n:ui_hotkey_overview_title"), Subtitle: a.language.translate("i18n:ui_hotkey_overview_subtitle"),
+		Count: a.language.translate("i18n:ui_hotkey_overview_count"), Empty: a.language.translate("i18n:ui_hotkey_overview_empty"), Sections: sections, Theme: palette.componentTheme(),
 	})
 }

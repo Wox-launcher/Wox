@@ -60,21 +60,21 @@ func (a *App) themeCatalogProps(snapshot settingsSnapshot, width, height, imageS
 	previewTexts := make([]string, 5)
 	previewSubtitles := make([]string, 5)
 	for index := range previewTexts {
-		previewTexts[index] = a.translate(fmt.Sprintf("i18n:ui_theme_preview_text_%d", index+1))
-		previewSubtitles[index] = strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", fmt.Sprintf("%d", index+1))
+		previewTexts[index] = a.language.translate(fmt.Sprintf("i18n:ui_theme_preview_text_%d", index+1))
+		previewSubtitles[index] = strings.ReplaceAll(a.language.translate("i18n:ui_theme_preview_subtitle"), "{index}", fmt.Sprintf("%d", index+1))
 	}
 	props := launcherview.ThemeSettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Mode: themeSnap.ThemesMode,
 		Error: themeSnap.ThemesError, Operation: themeSnap.ThemeOperation, UninstallArmed: themeSnap.ThemeUninstallArmed, Items: items, Detail: detail,
-		Search: themeSnap.ThemeSearch, SearchFocused: themeSnap.ThemeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
-		LocateLabel: a.translate("i18n:ui_setting_theme_locate_current"),
-		EmptyLabel:  a.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.translate("i18n:ui_setting_theme_website"), InstallLabel: a.translate("i18n:ui_setting_theme_install"),
-		ApplyLabel: a.translate("i18n:ui_setting_theme_apply"), AppliedLabel: a.translate("i18n:ui_setting_theme_applied"), UninstallLabel: a.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.translate("i18n:ui_update"),
-		PreviewLabel: a.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.translate("i18n:ui_setting_theme_description"), SystemLabel: a.translate("i18n:ui_setting_theme_system_tag"),
-		ImageLabel: a.translate("i18n:ui_setting_theme_image_tag"), ImageMemoryLabel: a.translate("i18n:ui_setting_theme_image_memory"),
-		PreviewTitle: a.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
-		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.translate("i18n:ui_theme_preview_open"),
-		PreviewMoreLabel: a.translate("i18n:toolbar_more_actions"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsNativeWindow(),
+		Search: themeSnap.ThemeSearch, SearchFocused: themeSnap.ThemeSearchFocused, SearchPlaceholder: fmt.Sprintf(a.language.translate("i18n:ui_setting_theme_search_placeholder"), len(items)),
+		LocateLabel: a.language.translate("i18n:ui_setting_theme_locate_current"),
+		EmptyLabel:  a.language.translate("i18n:ui_setting_theme_empty_data"), WebsiteLabel: a.language.translate("i18n:ui_setting_theme_website"), InstallLabel: a.language.translate("i18n:ui_setting_theme_install"),
+		ApplyLabel: a.language.translate("i18n:ui_setting_theme_apply"), AppliedLabel: a.language.translate("i18n:ui_setting_theme_applied"), UninstallLabel: a.language.translate("i18n:ui_setting_theme_uninstall"), UpdateLabel: a.language.translate("i18n:ui_update"),
+		PreviewLabel: a.language.translate("i18n:ui_setting_theme_preview"), DescriptionLabel: a.language.translate("i18n:ui_setting_theme_description"), SystemLabel: a.language.translate("i18n:ui_setting_theme_system_tag"),
+		ImageLabel: a.language.translate("i18n:ui_setting_theme_image_tag"), ImageMemoryLabel: a.language.translate("i18n:ui_setting_theme_image_memory"),
+		PreviewTitle: a.language.translate("i18n:ui_theme_preview_title"), PreviewTexts: previewTexts,
+		PreviewSubtitles: previewSubtitles, PreviewOpenLabel: a.language.translate("i18n:ui_theme_preview_open"),
+		PreviewMoreLabel: a.language.translate("i18n:toolbar_more_actions"), ActiveDetailTab: themeSnap.ThemeDetailTab, Window: a.settingsWindow.settingsNativeWindow(),
 		LocateIcon: a.imageForTint(settingControlIconSource("locate"), &searchActionTint, physicalImageSize(18, imageScale)),
 		Wallpaper:  themeSnap.ThemeWallpaperImage, WallpaperBlurred: themeSnap.ThemeWallpaperBlurred,
 		ExternalIcon: a.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale)), InstalledIcon: a.imageForTint(settingControlIconSource("check-circle"), &installedTint, physicalImageSize(20, imageScale)),
@@ -85,11 +85,11 @@ func (a *App) themeCatalogProps(snapshot settingsSnapshot, width, height, imageS
 		OnClear:         func() { _ = a.setThemeSearchValue("") },
 		OnLocateCurrent: a.locateCurrentTheme, OnTooltip: a.setSettingChoiceTooltip, OnSelectDetailTab: a.selectThemeDetailTab,
 		OnOpenWebsite: a.openSelectedThemeWebsite, OnOperation: a.runThemeOperation,
-		CreateAutoLabel: a.translate("i18n:ui_setting_theme_new_auto"), CreateAutoIcon: a.imageForTint(settingControlIconSource("add"), &iconTint, physicalImageSize(16, imageScale)),
-		EditAutoLabel:   a.translate("i18n:ui_setting_theme_edit"),
-		ModifyAutoLabel: a.translate("i18n:ui_setting_theme_auto_modify"), AutoNamePlaceholder: a.translate("i18n:ui_setting_theme_auto_name"),
-		SaveAutoLabel: a.translate("i18n:ui_save"), CancelAutoLabel: a.translate("i18n:ui_cancel"),
-		PickLightTitle: a.translate("i18n:ui_setting_theme_auto_pick_light"), PickDarkTitle: a.translate("i18n:ui_setting_theme_auto_pick_dark"),
+		CreateAutoLabel: a.language.translate("i18n:ui_setting_theme_new_auto"), CreateAutoIcon: a.imageForTint(settingControlIconSource("add"), &iconTint, physicalImageSize(16, imageScale)),
+		EditAutoLabel:   a.language.translate("i18n:ui_setting_theme_edit"),
+		ModifyAutoLabel: a.language.translate("i18n:ui_setting_theme_auto_modify"), AutoNamePlaceholder: a.language.translate("i18n:ui_setting_theme_auto_name"),
+		SaveAutoLabel: a.language.translate("i18n:ui_save"), CancelAutoLabel: a.language.translate("i18n:ui_cancel"),
+		PickLightTitle: a.language.translate("i18n:ui_setting_theme_auto_pick_light"), PickDarkTitle: a.language.translate("i18n:ui_setting_theme_auto_pick_dark"),
 		AutoPickerThemes: themeAutoPickerItems(snapshot.theme.Themes, snapshot),
 		OnCreateAuto:     a.openNewAutoThemeEditor, OnEditAuto: a.openSelectedAutoThemeEditor,
 		OnCancelAuto: a.closeAutoThemeEditor, OnSaveAuto: a.saveAutoThemeEditor,
@@ -104,7 +104,7 @@ func (a *App) themeCatalogProps(snapshot settingsSnapshot, width, height, imageS
 		}
 	}
 	if themeSnap.ThemesLoading && len(themeSnap.Themes) == 0 {
-		props.Message = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
+		props.Message = a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 	} else if themeSnap.ThemesError != "" && len(themeSnap.Themes) == 0 {
 		props.Message = themeSnap.ThemesError
 		props.MessageError = true
@@ -130,12 +130,12 @@ func (a *App) applyThemeCatalogEmptyState(props *launcherview.ThemeSettingsProps
 	emptyIconTint.A = 160
 	props.EmptyIcon = a.imageForTint(settingControlIconSource("search"), &emptyIconTint, physicalImageSize(24, imageScale))
 	if len(themeSnap.Themes) > 0 || strings.TrimSpace(themeSnap.ThemeSearch.Text) != "" {
-		props.EmptyTitle = a.translate("i18n:ui_no_matches")
-		props.EmptyDescription = a.translate("i18n:ui_setting_catalog_search_empty_subtitle")
+		props.EmptyTitle = a.language.translate("i18n:ui_no_matches")
+		props.EmptyDescription = a.language.translate("i18n:ui_setting_catalog_search_empty_subtitle")
 		return
 	}
-	props.EmptyTitle = a.translate("i18n:ui_setting_theme_empty_data")
-	props.EmptyDescription = a.translate("i18n:ui_setting_theme_empty_subtitle")
+	props.EmptyTitle = a.language.translate("i18n:ui_setting_theme_empty_data")
+	props.EmptyDescription = a.language.translate("i18n:ui_setting_theme_empty_subtitle")
 }
 
 type filteredTheme struct {
@@ -237,7 +237,7 @@ func (a *App) switchThemeSettingsMode(mode string) {
 	themeEditor := a.themeSettings.ThemeEditor()
 	if a.themeSettings.ThemesMode() == "editor" && themeEditorDirtyLocked(themeEditor) {
 		themeEditor.error = "Save the current theme changes before switching views."
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	a.themeSettings.SetThemesMode(mode)
@@ -256,14 +256,14 @@ func (a *App) switchThemeSettingsMode(mode string) {
 	}
 	loadEditor := mode == "editor" && (themeEditor == nil || !strings.HasPrefix(themeEditor.key, "settings-theme|"))
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 
 	if loadEditor {
 		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
 			if err := a.loadSettingsThemeEditor(); err != nil {
 				_ = a.runOnUI("apply settings theme editor error", func() {
 					a.themeSettings.SetThemesError(err.Error())
-					a.invalidateSettingsWindow()
+					a.settingsWindow.invalidateSettingsWindow()
 				})
 			}
 		})
@@ -318,7 +318,7 @@ func (a *App) runThemeOperation(kind string) {
 		}
 		if a.themeSettings.ThemeUninstallArmed() != theme.ID {
 			a.themeSettings.SetThemeUninstallArmed(theme.ID)
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 			return
 		}
 	default:
@@ -328,7 +328,7 @@ func (a *App) runThemeOperation(kind string) {
 	a.themeSettings.SetThemesError("")
 	a.themeSettings.SetThemeOperation(kind + ":" + theme.ID)
 	mode := a.themeSettings.ThemesMode()
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 
 	util.Go(a.lifecycleCtx, kind+" theme", func() {
 		operation := contract.ThemeOperation(kind)
@@ -343,16 +343,16 @@ func (a *App) runThemeOperation(kind string) {
 		err := a.services.OperateTheme(ctx, a.sessionID, theme.ID, operation)
 		cancel()
 		if err == nil && kind == "apply" {
-			err = a.reloadTheme()
+			err = a.appearance.reloadTheme()
 			if err == nil {
 				a.generalSettings.Update(func(d *settingsData) { d.ThemeID = theme.ID })
 			}
 		}
 		if err == nil && kind == "upgrade" && theme.ID == a.currentThemeID() {
-			err = a.reloadTheme()
+			err = a.appearance.reloadTheme()
 		}
 		if err == nil && kind == "uninstall" {
-			if reloadErr := a.reloadTheme(); reloadErr != nil {
+			if reloadErr := a.appearance.reloadTheme(); reloadErr != nil {
 				err = reloadErr
 			} else if reloadErr := a.reloadSettings(); reloadErr != nil {
 				err = reloadErr
@@ -374,7 +374,7 @@ func (a *App) runThemeOperation(kind string) {
 			} else {
 				a.themeSettings.SetThemesError("")
 			}
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 		if err != nil {
 			log.Printf("%s theme %s: %v", kind, theme.ID, err)
@@ -396,9 +396,9 @@ func (a *App) openSelectedThemeWebsite() {
 	if target == "" {
 		return
 	}
-	if err := a.settingsNativeWindow().OpenExternalURL(target); err != nil {
+	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL(target); err != nil {
 		a.themeSettings.SetThemesError(err.Error())
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	}
 }
 
@@ -411,7 +411,7 @@ func (a *App) selectTheme(index int) {
 	a.themeSettings.SetThemeUninstallArmed("")
 	a.themeSettings.SetThemesError("")
 	a.themeSettings.SetAutoEditor(nil)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) themeSearchQueryLocked() string {
@@ -432,7 +432,7 @@ func (a *App) setThemeSearchFocused(focused bool) {
 		a.settingsSearch.SetPanel(false)
 		a.pluginSettings.SetSearchFocused(false)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) setThemeSearchValue(value string) error {
@@ -442,12 +442,12 @@ func (a *App) setThemeSearchValue(value string) error {
 	} else {
 		editor.SetText(value, false)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	return nil
 }
 
 func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
+	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
 	if !active {
 		return false
 	}
@@ -458,7 +458,7 @@ func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onThemeSearchTextInput(_ woxui.TextInputEvent) bool {
-	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
+	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
 	return active
 }
 
@@ -479,7 +479,7 @@ func (a *App) locateCurrentTheme() {
 			break
 		}
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) selectThemeDetailTab(tab string) {
@@ -487,7 +487,7 @@ func (a *App) selectThemeDetailTab(tab string) {
 		return
 	}
 	a.themeSettings.SetThemeDetailTab(tab)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) moveFilteredThemeSelection(delta int) {
@@ -517,7 +517,7 @@ func (a *App) onThemeSettingsKey(event woxui.KeyEvent) bool {
 	if editor := a.themeSettings.AutoEditor(); editor != nil && editor.active {
 		return false
 	}
-	active := a.settingsOpen && a.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemeSearchFocused()
+	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemeSearchFocused()
 	themes := a.themeSettings.Themes()
 	filtered := filterThemes(themes, a.themeSearchQueryLocked())
 	if !active || len(filtered) == 0 {
@@ -562,7 +562,7 @@ func themeAutoPickerItems(themes []themeSettingsTheme, snapshot settingsSnapshot
 
 func (a *App) openNewAutoThemeEditor() {
 	a.openAutoThemeEditor(autoThemeEditorState{
-		active: true, nameEditor: woxui.NewTextEditor(a.translate("i18n:ui_setting_theme_auto_default_name")),
+		active: true, nameEditor: woxui.NewTextEditor(a.language.translate("i18n:ui_setting_theme_auto_default_name")),
 		nameFocused: true, lightThemeID: setting.DefaultLightThemeId, darkThemeID: setting.DefaultDarkThemeId,
 	})
 }
@@ -588,13 +588,13 @@ func (a *App) openAutoThemeEditor(state autoThemeEditorState) {
 	a.themeSettings.SetThemeSearchFocused(false)
 	a.themeSettings.SetThemesError("")
 	a.updateSettingsTextInput(true)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) closeAutoThemeEditor() {
 	a.themeSettings.SetAutoEditor(nil)
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) setAutoThemeName(value string) error {
@@ -611,7 +611,7 @@ func (a *App) setAutoThemeName(value string) error {
 	// the dialog and makes the name jump even when the shared setting geometry is correct.
 	if editor.error != "" {
 		editor.error = ""
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 	}
 	return nil
 }
@@ -626,7 +626,7 @@ func (a *App) setAutoThemeNameFocused(focused bool) {
 		a.themeSettings.SetThemeSearchFocused(false)
 		a.updateSettingsTextInput(true)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) setAutoThemeHoverSlot(slot string) {
@@ -635,7 +635,7 @@ func (a *App) setAutoThemeHoverSlot(slot string) {
 		return
 	}
 	editor.hoverSlot = slot
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) openAutoThemePicker(slot string) {
@@ -658,7 +658,7 @@ func (a *App) openAutoThemePicker(slot string) {
 		return
 	}
 	editor.pickerSlot = slot
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) closeAutoThemePicker() {
@@ -667,7 +667,7 @@ func (a *App) closeAutoThemePicker() {
 		return
 	}
 	editor.pickerSlot = ""
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) pickAutoThemeEndpoint(themeID string) {
@@ -682,7 +682,7 @@ func (a *App) pickAutoThemeEndpoint(themeID string) {
 	}
 	editor.pickerSlot = ""
 	editor.error = ""
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) saveAutoThemeEditor() {
@@ -695,8 +695,8 @@ func (a *App) saveAutoThemeEditor() {
 		name = strings.TrimSpace(editor.nameEditor.State().Text)
 	}
 	if name == "" {
-		editor.error = a.translate("i18n:ui_theme_editor_name_required")
-		a.invalidateSettingsWindow()
+		editor.error = a.language.translate("i18n:ui_theme_editor_name_required")
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	editor.saving = true
@@ -705,7 +705,7 @@ func (a *App) saveAutoThemeEditor() {
 	sourceID := editor.sourceID
 	lightID := editor.lightThemeID
 	darkID := editor.darkThemeID
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "save auto theme", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		saved, err := a.services.SaveAutoTheme(ctx, a.sessionID, name, lightID, darkID, sourceID, overwrite)
@@ -714,12 +714,12 @@ func (a *App) saveAutoThemeEditor() {
 			err = a.reloadThemes("installed", saved.ThemeId)
 		}
 		if err == nil && saved.ThemeId == a.currentThemeID() {
-			err = a.reloadTheme()
+			err = a.appearance.reloadTheme()
 		}
 		_ = a.runOnUI("apply saved auto theme", func() {
 			current := a.themeSettings.AutoEditor()
 			if current == nil {
-				a.invalidateSettingsWindow()
+				a.settingsWindow.invalidateSettingsWindow()
 				return
 			}
 			current.saving = false
@@ -729,7 +729,7 @@ func (a *App) saveAutoThemeEditor() {
 				a.themeSettings.SetAutoEditor(nil)
 				a.updateSettingsTextInput(false)
 			}
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 		if err != nil {
 			log.Printf("save auto theme: %v", err)

@@ -33,29 +33,29 @@ func TestPreviewTextReplacesStreamVersions(t *testing.T) {
 	style := woxui.TextStyle{Size: 11}
 	for i := range 200 {
 		value := "completed paragraph\n" + fmt.Sprint(i)
-		got := app.previewTextLayout(app.window, "reasoning", value, style, 560, 16)
-		if len(app.previewLayouts) != 1 || app.previewLayouts["reasoning"].value != value {
+		got := app.previews.previewTextLayout(app.window, "reasoning", value, style, 560, 16)
+		if len(app.previews.previewLayouts) != 1 || app.previews.previewLayouts["reasoning"].value != value {
 			t.Fatal("stream update retained an obsolete text version")
 		}
-		reused := app.previewTextLayout(app.window, "reasoning", value, style, 560, 16)
+		reused := app.previews.previewTextLayout(app.window, "reasoning", value, style, 560, 16)
 		if &got.Lines[0] != &reused.Lines[0] {
 			t.Fatal("scrolling rebuilt unchanged reasoning")
 		}
 	}
-	got := app.previewTextLayout(app.window, "reasoning", "replacement", style, 320, 22)
+	got := app.previews.previewTextLayout(app.window, "reasoning", "replacement", style, 320, 22)
 	want := woxwidget.LayoutTextBlock(nil, "replacement", style, 320, 0, 22)
 	if got.Size != want.Size || got.LineHeight != want.LineHeight || got.Lines[0] != "replacement" {
 		t.Fatal("replacement or changed layout constraints reused stale output")
 	}
 	for i := range 130 {
-		app.previewTextLayout(app.window, fmt.Sprint(i), "small", style, 560, 16)
+		app.previews.previewTextLayout(app.window, fmt.Sprint(i), "small", style, 560, 16)
 	}
-	if len(app.previewLayouts) > 128 {
+	if len(app.previews.previewLayouts) > 128 {
 		t.Fatal("text cache exceeded its entry budget")
 	}
-	app.previewLayouts["large"] = &textLayoutCache{value: strings.Repeat("x", 2<<20)}
-	app.previewTextLayout(app.window, "next", "small", style, 560, 16)
-	if len(app.previewLayouts) != 1 {
+	app.previews.previewLayouts["large"] = &textLayoutCache{value: strings.Repeat("x", 2<<20)}
+	app.previews.previewTextLayout(app.window, "next", "small", style, 560, 16)
+	if len(app.previews.previewLayouts) != 1 {
 		t.Fatal("text cache exceeded its source byte budget")
 	}
 	snapshot := &chatPreviewSnapshot{chat: chatData{ID: "width", IsStreaming: true, Conversations: []chatConversation{{Role: "assistant", Reasoning: "thinking"}}}}
@@ -79,22 +79,22 @@ func TestCollapsedChatToolsSkipHiddenLayouts(t *testing.T) {
 		}})
 	}
 	props := app.chatToolActivityProps(app.window, item, nil, palette, 560)
-	if len(props.Tools) != 0 || len(app.previewLayouts) != 0 || props.ToolSummary == "" {
+	if len(props.Tools) != 0 || len(app.previews.previewLayouts) != 0 || props.ToolSummary == "" {
 		t.Fatal("collapsed group prepared hidden tools or lost its summary")
 	}
 	item.roundExpanded = true
 	props = app.chatToolActivityProps(app.window, item, nil, palette, 560)
-	if len(props.Tools) != 31 || len(app.previewLayouts) != 0 {
+	if len(props.Tools) != 31 || len(app.previews.previewLayouts) != 0 {
 		t.Fatal("expanded group must prepare headers without hidden detail layouts")
 	}
 	props = app.chatToolActivityProps(app.window, item, map[string]bool{"0": true}, palette, 560)
 	if len(props.Tools[0].Details) == 0 || props.Tools[0].DetailsHeight <= 16 || len(props.Tools[1].Details) != 0 {
 		t.Fatal("only the expanded tool must prepare details")
 	}
-	clear(app.previewLayouts)
+	clear(app.previews.previewLayouts)
 	item.roundExpanded = false
 	app.chatToolActivityProps(app.window, item, map[string]bool{"0": true}, palette, 560)
-	if len(app.previewLayouts) != 0 {
+	if len(app.previews.previewLayouts) != 0 {
 		t.Fatal("collapsing the parent still measured an expanded child")
 	}
 }
@@ -182,20 +182,20 @@ func TestChatMarkdownCache(t *testing.T) {
 	}
 	app := New(false, nil)
 	defer app.cancel()
-	app.chatMarkdown = cache
-	app.chatMarkdown.chatID = "old"
+	app.chat.chatMarkdown = cache
+	app.chat.chatMarkdown.chatID = "old"
 	app.chatMessagesProps(app.window, &chatPreviewSnapshot{chat: chatData{ID: "new"}}, defaultPalette(), 400, 300, 1)
-	if len(app.chatMarkdown.entries) != 0 || app.chatMarkdown.chatID != "new" {
+	if len(app.chat.chatMarkdown.entries) != 0 || app.chat.chatMarkdown.chatID != "new" {
 		t.Fatal("switching conversations retained the old cache")
 	}
-	app.chatMarkdown = cache
-	app.deactivateChatPreview()
-	if app.chatMarkdown.entries != nil || app.chatMarkdown.bytes != 0 {
+	app.chat.chatMarkdown = cache
+	app.chat.deactivateChatPreview()
+	if app.chat.chatMarkdown.entries != nil || app.chat.chatMarkdown.bytes != 0 {
 		t.Fatal("deactivation retained Markdown documents")
 	}
-	app.chatMarkdown = cache
-	app.resetChatPreview()
-	if app.chatMarkdown.entries != nil {
+	app.chat.chatMarkdown = cache
+	app.chat.resetChatPreview()
+	if app.chat.chatMarkdown.entries != nil {
 		t.Fatal("reset retained Markdown documents")
 	}
 }

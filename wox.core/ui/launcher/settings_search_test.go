@@ -10,11 +10,11 @@ import (
 
 func TestSettingsSearchPrimaryFSelectsExistingText(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
-	app := &App{
+	app := bindTestApp(&App{
 		settingsSearch: newSettingsSearchController(deps),
 		pluginSettings: newPluginSettingsController(deps),
 		themeSettings:  newThemeSettingsController(deps),
-	}
+	})
 	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController("existing"))
 
 	modifier := woxui.KeyModifierControl
@@ -33,8 +33,8 @@ func TestSettingsSearchPrimaryFSelectsExistingText(t *testing.T) {
 func TestSettingsSearchKeepsPrintableKeysAfterOCRModelManagerCloses(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsOpen = true
-	app.settingTab = "plugins"
+	app.settingsWindow.settingsOpen = true
+	app.settingsWindow.settingTab = "plugins"
 	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 	fields := newFormFieldsState([]formDefinition{{Type: "ocrModel"}}, nil, true)
 	setFormFieldsFocusLocked(&fields, 0)
@@ -48,7 +48,7 @@ func TestSettingsSearchKeepsPrintableKeysAfterOCRModelManagerCloses(t *testing.T
 
 func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 	icon := woxImage{ImageType: "emoji", ImageData: "P"}
-	app := &App{}
+	app := bindTestApp(&App{})
 	results := app.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{
 			Query:   woxui.TextEditingState{Text: "UniqueIconPlugin"},
@@ -65,7 +65,7 @@ func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 }
 
 func TestSettingsSearchMatchesPluginEnglishName(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	results := app.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{
 			Query:   woxui.TextEditingState{Text: "File Search"},
@@ -84,7 +84,7 @@ func TestSettingsSearchMatchesPluginEnglishName(t *testing.T) {
 func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 	deps, _ := newSearchControllerDeps()
 	shared := newSharedEditState()
-	app := &App{
+	app := bindTestApp(&App{
 		settingsSearch:     newSettingsSearchController(deps),
 		pluginSettings:     newPluginSettingsController(deps),
 		themeSettings:      newThemeSettingsController(deps),
@@ -99,21 +99,21 @@ func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 		runtimeSettings:    newRuntimeSettingsController(deps),
 		updateSettings:     newUpdateSettingsController(deps),
 		sharedEdit:         shared,
-		settingTab:         "general",
-	}
+		settingsWindow:     settingsWindowController{settingTab: "general"},
+	})
 	app.themeSettings.SetThemeEditor(&themeEditorPreviewState{key: "settings-theme|test"})
 	app.themeSettings.SetThemeWallpaperLoading(true)
 
 	app.activateSettingsSearchResult(settingsSearchResult{
 		kind: settingsSearchSection, title: "Theme Editor", tab: "theme", mode: "editor", navID: "themes.edit",
 	})
-	if app.settingTab != "theme" || app.themeSettings.ThemesMode() != "editor" {
-		t.Fatalf("activated destination = %s/%s, want theme/editor", app.settingTab, app.themeSettings.ThemesMode())
+	if app.settingsWindow.settingTab != "theme" || app.themeSettings.ThemesMode() != "editor" {
+		t.Fatalf("activated destination = %s/%s, want theme/editor", app.settingsWindow.settingTab, app.themeSettings.ThemesMode())
 	}
 }
 
 func TestSettingsSearchMatchesThemeEditor(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	for _, query := range []string{"Theme Editor", "themeeditor"} {
 		results := app.settingsSearchResults(settingsSnapshot{
 			search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: query}},
@@ -139,10 +139,14 @@ func TestSettingsSearchMatchesThemeEditor(t *testing.T) {
 }
 
 func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
-	app := &App{translations: map[string]string{
-		"ui_ui":   "界面",
-		"ui_lang": "语言",
-	}}
+	app := bindTestApp(&App{
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_ui":   "界面",
+				"ui_lang": "语言",
+			},
+		},
+	})
 	results := app.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "语言"}},
 	})
@@ -194,16 +198,16 @@ func TestSettingsSearchHighlightTargetsMatchDestinationKinds(t *testing.T) {
 }
 
 func TestStartSettingsSearchHighlightReplacesPreviousCue(t *testing.T) {
-	app := &App{}
+	app := bindTestApp(&App{})
 	app.startSettingsSearchHighlight("built-in:MainHotkey")
 	defer app.clearSettingsSearchHighlight()
-	firstTimer := app.settingFlashTimer
+	firstTimer := app.settingsWindow.settingFlashTimer
 
 	app.startSettingsSearchHighlight("plugin:clipboard")
-	if app.settingFlash != "plugin:clipboard" {
-		t.Fatalf("highlight target = %q, want latest destination", app.settingFlash)
+	if app.settingsWindow.settingFlash != "plugin:clipboard" {
+		t.Fatalf("highlight target = %q, want latest destination", app.settingsWindow.settingFlash)
 	}
-	if app.settingFlashTimer == nil || app.settingFlashTimer == firstTimer {
+	if app.settingsWindow.settingFlashTimer == nil || app.settingsWindow.settingFlashTimer == firstTimer {
 		t.Fatal("highlight timer was not replaced")
 	}
 }

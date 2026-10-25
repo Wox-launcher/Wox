@@ -458,7 +458,7 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, isDir bool,
 		IdentityKey: path,
 		Group:       "i18n:plugin_folder_favorites",
 		Preview:     folderPathPreview(path),
-		Actions:     attachFolderMRUContext(p.buildFavoriteActions(name, path, favoriteIndex), path),
+		Actions:     attachFolderMRUContext(p.buildFavoriteActions(name, path, isDir, favoriteIndex), path),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{path},

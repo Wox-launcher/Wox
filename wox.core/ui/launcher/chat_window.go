@@ -52,23 +52,23 @@ func (a *App) requestOpenDedicatedChatWindow() {
 }
 
 // chatWindowOpen reports whether the dedicated chat window still has a live native instance.
-func (a *App) chatWindowOpen() bool {
+func (a *chatWindowController) chatWindowOpen() bool {
 	return a != nil && a.chatView != nil && a.chatView.Lifecycle() != woxui.WindowLifecycleClosed
 }
 
 // chatSurfaceVisible is true while launcher chat or the dedicated window can present the conversation.
 func (a *App) chatSurfaceVisible() bool {
-	return a.visible || a.chatWindowOpen()
+	return a.visible || a.chatWindow.chatWindowOpen()
 }
 
-func (a *App) chatNativeWindow() *woxui.Window {
+func (a *chatWindowController) chatNativeWindow() *woxui.Window {
 	if !a.chatWindowOpen() {
 		return nil
 	}
 	return a.chatView.Window()
 }
 
-func (a *App) invalidateChatWindow() {
+func (a *chatWindowController) invalidateChatWindow() {
 	if window := a.chatNativeWindow(); window != nil {
 		_ = window.Invalidate()
 	}
@@ -79,13 +79,13 @@ func (a *App) invalidateChatSurfaces() {
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
-	a.invalidateChatWindow()
+	a.chatWindow.invalidateChatWindow()
 }
 
 // chatTextInputWindow routes imperative IME updates to the active input surface.
 func (a *App) chatTextInputWindow() *woxui.Window {
-	if a.chatWindowFocused || !a.visible {
-		if window := a.chatNativeWindow(); window != nil {
+	if a.chatWindow.chatWindowFocused || !a.visible {
+		if window := a.chatWindow.chatNativeWindow(); window != nil {
 			return window
 		}
 	}
@@ -105,17 +105,17 @@ func (a *App) openDedicatedChatWindow() error {
 
 // openDedicatedChatWindowLocked transfers presentation and input ownership on the UI thread.
 func (a *App) openDedicatedChatWindowLocked() error {
-	if a.chatPreview == nil {
+	if a.chat.chatPreview == nil {
 		return fmt.Errorf("chat is not active")
 	}
-	managed, err := a.ensureChatWindow()
+	managed, err := a.chatWindow.ensureChatWindow()
 	if err != nil {
 		return err
 	}
-	a.chatPreview.active = true
-	a.chatFullscreen = false
+	a.chat.chatPreview.active = true
+	a.chat.chatFullscreen = false
 	a.prefetchChatCatalogs()
-	a.updateChatTextInput(true)
+	a.chat.updateChatTextInput(true)
 	if _, err := managed.Show(); err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (a *App) openDedicatedChatWindowLocked() error {
 // hideLauncherAfterChatPopOut leaves the conversation in the dedicated window.
 func (a *App) hideLauncherAfterChatPopOut() {
 	a.visible = false
-	a.chatFullscreen = false
+	a.chat.chatFullscreen = false
 	if a.launcher == nil {
 		return
 	}
@@ -143,7 +143,7 @@ func (a *App) hideLauncherAfterChatPopOut() {
 }
 
 // ensureChatWindow creates the dedicated chat host once per native lifetime.
-func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
+func (a *chatWindowController) ensureChatWindow() (*woxui.ManagedWindow, error) {
 	if a.windows == nil {
 		return nil, fmt.Errorf("window manager is not initialized")
 	}
@@ -175,11 +175,11 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 				host.SetWindowFocused(event.Active)
 				a.chatWindowFocused = event.Active
 				if event.Active {
-					a.updateChatTextInput(true)
+					a.chat.updateChatTextInput(true)
 				}
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
-				return a.dispatchWindowKey(event, host, common.AIChatPluginID, a.requestCloseChatWindow, a.onDedicatedChatKey)
+				return a.dispatchWindowKey(event, host, common.AIChatPluginID, a.requestCloseChatWindow, a.chat.onDedicatedChatKey)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
 			OnFileDrop:       a.handleChatWindowFileDrop,
@@ -194,8 +194,8 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 			a.chatView = managed
 			a.chatHost = host
 			a.chatWindowGeneration++
-			fontFamily = a.generalSettings.Data().AppFontFamily
-			isDark = a.palette.isDark()
+			fontFamily = a.fontFamily()
+			isDark = a.palette().isDark()
 			created = true
 		}
 	}); err != nil {
@@ -228,8 +228,8 @@ func (a *App) ensureChatWindow() (*woxui.ManagedWindow, error) {
 }
 
 // chatWindowTitle resolves the shared native and accessibility window label.
-func (a *App) chatWindowTitle() string {
-	title := strings.TrimSpace(a.translate("i18n:ui_ai_chat_window_title"))
+func (a *chatWindowController) chatWindowTitle() string {
+	title := strings.TrimSpace(a.language.translate("i18n:ui_ai_chat_window_title"))
 	if title == "" || title == "i18n:ui_ai_chat_window_title" {
 		return "Wox Chat"
 	}
@@ -237,7 +237,7 @@ func (a *App) chatWindowTitle() string {
 }
 
 // closeChatWindow saves placement before the native handle is destroyed.
-func (a *App) closeChatWindow() error {
+func (a *chatWindowController) closeChatWindow() error {
 	var managed *woxui.ManagedWindow
 	if err := a.runOnUI("close dedicated chat window", func() {
 		managed = a.chatView
@@ -257,21 +257,21 @@ func (a *App) closeChatWindow() error {
 
 // onChatWindowClosed returns preview lifecycle and keyboard ownership to the launcher.
 func (a *App) onChatWindowClosed() {
-	a.chatWindowGeneration++
-	a.chatView = nil
-	a.chatHost = nil
-	a.chatWindowFocused = false
+	a.chatWindow.chatWindowGeneration++
+	a.chatWindow.chatView = nil
+	a.chatWindow.chatHost = nil
+	a.chatWindow.chatWindowFocused = false
 	if a.destroyed.Load() {
 		return
 	}
 	a.setPreviewTooltip(false, "", woxui.Rect{})
-	if a.visible && a.chatFullscreen {
+	if a.visible && a.chat.chatFullscreen {
 		// Closing one entrance must not discard the conversation still open in the other.
 		a.invalidateChatSurfaces()
 		return
 	}
-	a.deactivateChatPreview()
-	a.reconcileSelectedPreviewOnUI()
+	a.chat.deactivateChatPreview()
+	a.previews.reconcileSelectedPreviewOnUI()
 	if !a.isPrimary && !a.visible {
 		util.Go(a.lifecycleCtx, "close chat launcher session", func() {
 			if err := a.Close(); err != nil {
@@ -285,44 +285,44 @@ func (a *App) onChatWindowClosed() {
 func (a *App) buildChatWindow(frame woxui.FrameInfo) woxwidget.Widget {
 	width := frame.Size.Width
 	height := frame.Size.Height
-	a.syncChatWindowMaximizedFromFrame(frame.Size)
-	theme := a.palette.componentTheme()
+	a.chatWindow.syncChatWindowMaximizedFromFrame(frame.Size)
+	theme := a.appearance.palette.componentTheme()
 	titleBar := a.buildChatWindowTitleBar(width, frame.WindowFocused, theme)
 	bodyHeight := max(float32(0), height-launcherview.ChatWindowTitleBarHeight)
 	body := a.buildActiveChatPreview(width, bodyHeight, frame.Scale, false)
 	return launcherview.ChatWindow(launcherview.ChatWindowProps{
-		Width: width, Height: height, Title: a.chatWindowTitle(), TitleBar: titleBar, Body: body, Theme: theme,
+		Width: width, Height: height, Title: a.chatWindow.chatWindowTitle(), TitleBar: titleBar, Body: body, Theme: theme,
 	})
 }
 
 // buildActiveChatPreview shares the preview view with the dedicated conversation owner.
 func (a *App) buildActiveChatPreview(width, height, imageScale float32, showHeader bool) woxwidget.Widget {
-	snapshot := snapshotChatPreviewLocked(a.chatPreview)
+	snapshot := snapshotChatPreviewLocked(a.chat.chatPreview)
 	if snapshot == nil {
 		return nil
 	}
-	a.attachChatPreviewCatalogs(snapshot)
-	return a.buildChatPreviewFromSnapshot(snapshot, a.palette, width, height, imageScale, showHeader, false)
+	a.chat.attachChatPreviewCatalogs(snapshot)
+	return a.buildChatPreviewFromSnapshot(snapshot, a.appearance.palette, width, height, imageScale, showHeader, false)
 }
 
 // buildChatWindowTitleBar supplies conversation data and stable native callbacks to the view.
 func (a *App) buildChatWindowTitleBar(width float32, active bool, theme woxcomponent.Theme) woxwidget.Widget {
-	snapshot := snapshotChatPreviewLocked(a.chatPreview)
+	snapshot := snapshotChatPreviewLocked(a.chat.chatPreview)
 	var header *previewview.ChatHeaderProps
 	if snapshot != nil {
-		props := a.chatHeaderProps(snapshot, a.palette, width, launcherview.ChatWindowTitleBarHeight, false, false)
-		props.OnDrag = a.startChatWindowDrag
-		props.OnDoubleTap = a.toggleChatWindowMaximize
+		props := a.chatHeaderProps(snapshot, a.appearance.palette, width, launcherview.ChatWindowTitleBarHeight, false, false)
+		props.OnDrag = a.chatWindow.startChatWindowDrag
+		props.OnDoubleTap = a.chatWindow.toggleChatWindowMaximize
 		header = &props
 	}
 	return launcherview.ChatWindowTitleBar(launcherview.ChatWindowTitleBarProps{
-		Width: width, Platform: runtime.GOOS, Active: active, Maximized: a.chatWindowMaximized, Theme: theme, Header: header,
-		OnDrag: a.startChatWindowDrag, OnMinimize: a.minimizeChatWindow, OnMaximize: a.toggleChatWindowMaximize, OnClose: a.requestCloseChatWindow,
+		Width: width, Platform: runtime.GOOS, Active: active, Maximized: a.chatWindow.chatWindowMaximized, Theme: theme, Header: header,
+		OnDrag: a.chatWindow.startChatWindowDrag, OnMinimize: a.chatWindow.minimizeChatWindow, OnMaximize: a.chatWindow.toggleChatWindowMaximize, OnClose: a.chatWindow.requestCloseChatWindow,
 	})
 }
 
 // startChatWindowDrag hands the pointer to the dedicated chat window, not the launcher.
-func (a *App) startChatWindowDrag() {
+func (a *chatWindowController) startChatWindowDrag() {
 	if a.chatWindowMaximized {
 		a.restoreChatWindowFromMaximize()
 	}
@@ -332,7 +332,7 @@ func (a *App) startChatWindowDrag() {
 }
 
 // requestCloseChatWindow schedules native destruction outside the input callback.
-func (a *App) requestCloseChatWindow() {
+func (a *chatWindowController) requestCloseChatWindow() {
 	util.Go(a.lifecycleCtx, "close dedicated chat window", func() {
 		if err := a.closeChatWindow(); err != nil {
 			util.GetLogger().Warn(a.lifecycleCtx, fmt.Sprintf("close dedicated chat window: %v", err))
@@ -340,14 +340,14 @@ func (a *App) requestCloseChatWindow() {
 	})
 }
 
-func (a *App) minimizeChatWindow() {
+func (a *chatWindowController) minimizeChatWindow() {
 	if window := a.chatNativeWindow(); window != nil {
 		_ = window.Minimize()
 	}
 }
 
 // toggleChatWindowMaximize switches between the saved frame and the active display work area.
-func (a *App) toggleChatWindowMaximize() {
+func (a *chatWindowController) toggleChatWindowMaximize() {
 	if a.chatWindowMaximized {
 		a.restoreChatWindowFromMaximize()
 		return
@@ -355,12 +355,12 @@ func (a *App) toggleChatWindowMaximize() {
 	a.maximizeChatWindow()
 }
 
-func (a *App) maximizeChatWindow() {
+func (a *chatWindowController) maximizeChatWindow() {
 	a.maximizeChatWindowOn(a.chatNativeWindow())
 }
 
 // maximizeChatWindowOn saves logical placement before filling the window's display.
-func (a *App) maximizeChatWindowOn(window *woxui.Window) {
+func (a *chatWindowController) maximizeChatWindowOn(window *woxui.Window) {
 	if window == nil {
 		return
 	}
@@ -380,7 +380,7 @@ func (a *App) maximizeChatWindowOn(window *woxui.Window) {
 }
 
 // restoreChatWindowFromMaximize restores the saved logical frame with minimum-size constraints.
-func (a *App) restoreChatWindowFromMaximize() {
+func (a *chatWindowController) restoreChatWindowFromMaximize() {
 	window := a.chatNativeWindow()
 	if window == nil {
 		return
@@ -398,7 +398,7 @@ func (a *App) restoreChatWindowFromMaximize() {
 }
 
 // syncChatWindowMaximizedFromFrame recognizes native resizing after a custom maximize.
-func (a *App) syncChatWindowMaximizedFromFrame(size woxui.Size) {
+func (a *chatWindowController) syncChatWindowMaximizedFromFrame(size woxui.Size) {
 	if !a.chatWindowMaximized {
 		return
 	}

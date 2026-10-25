@@ -47,7 +47,7 @@ func (a *App) openAIMCPJSONImport() {
 
 // openFormTableMCPJSONImport shows the current MCP servers as editable mcpServers JSON.
 func (a *App) openFormTableMCPJSONImport() {
-	state := a.settingsTableEditor
+	state := a.settingsWindow.settingsTableEditor
 	if state == nil || state.definition.Value.Key != "AIMCPServers" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		return
 	}
@@ -110,7 +110,7 @@ func (a *App) importFormTableMCPJSON() {
 	syncFormFieldsEditorLocked(state.mcpJSONImport.fields)
 	raw := strings.TrimSpace(state.mcpJSONImport.fields.values["JSON"])
 	if raw == "" {
-		state.mcpJSONImport.error = a.translate("i18n:ui_ai_mcp_import_json_required")
+		state.mcpJSONImport.error = a.language.translate("i18n:ui_ai_mcp_import_json_required")
 		a.invalidateFormTableWindow()
 		return
 	}
@@ -130,7 +130,7 @@ func (a *App) importFormTableMCPJSON() {
 	state.target.values[state.definition.Value.Key] = string(encoded)
 	state.rows = mcpServerRowsFromConfigs(servers)
 	state.saving = true
-	a.settingSaving = true
+	a.settingsWindow.settingSaving = true
 	a.closeFormTableEditor()
 	a.saveSettingsTable(state, "AIMCPServers", string(encoded), previousValue)
 }
@@ -215,15 +215,15 @@ func (a *App) buildFormTableMCPJSONImportDialog(snapshot *formTableMCPJSONImport
 		onKey:      a.onFormTableKey,
 	}
 	theme := palette
-	cancelLabel := a.translate("i18n:ui_cancel")
-	saveLabel := a.translate("i18n:ui_ai_mcp_import_json_confirm")
+	cancelLabel := a.language.translate("i18n:ui_cancel")
+	saveLabel := a.language.translate("i18n:ui_ai_mcp_import_json_confirm")
 	fieldWidth := max(float32(0), min(float32(640), width-120))
 	definition := fields.definitions[0]
 	field := a.buildFormTableRowField(*fields, callbacks, palette, 0, definition, fieldWidth, a.formTableRowLabelWidth(fields.definitions), "")
 	return launcherview.FormTableMCPJSONImportDialog(launcherview.FormTableMCPJSONImportDialogProps{
 		Width: width, Height: height,
-		Title:       a.translate("i18n:ui_ai_mcp_import_json"),
-		Hint:        a.translate("i18n:ui_ai_mcp_import_json_hint"),
+		Title:       a.language.translate("i18n:ui_ai_mcp_import_json"),
+		Hint:        a.language.translate("i18n:ui_ai_mcp_import_json_hint"),
 		Error:       snapshot.error,
 		CancelLabel: cancelLabel, ImportLabel: saveLabel,
 		Field: field, FieldHeight: launcherview.FormTableRowFieldHeight(definition.Type, "", mcpJSONEditorMaxLines), Theme: theme,

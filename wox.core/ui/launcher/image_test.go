@@ -28,15 +28,19 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 	for _, shade := range []uint8{0, 255} {
 		t.Run(fmt.Sprint(shade), func(t *testing.T) {
 			applied := make(chan func(), 1)
-			app := &App{
-				palette: uiPalette{background: woxui.Color{R: shade, G: shade, B: shade, A: 255}},
-				images:  map[string]*woxui.Image{}, imageRequested: map[string]string{},
-				imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{},
+			app := bindTestApp(&App{
+				appearance: appearanceController{palette: uiPalette{background: woxui.Color{R: shade, G: shade, B: shade, A: 255}}},
+				imageStore: imageStore{
+					images:         map[string]*woxui.Image{},
+					imageRequested: map[string]string{},
+					imageLastUsed:  map[string]uint64{},
+					imageErrors:    map[string]string{},
+				},
 				uiCall: func(fn func()) error { applied <- fn; return nil },
-			}
-			source := app.filePreviewFor(path).Image
-			app.buildPreviewImage(source, source, app.palette, 400, 300)
-			revision := app.imagesRevision.Load()
+			})
+			source := app.filePreview.filePreviewFor(path).Image
+			app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
+			revision := app.imageStore.imagesRevision.Load()
 			select {
 			case apply := <-applied:
 				app.uiCall = nil
@@ -44,10 +48,10 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("SVG decode did not finish")
 			}
-			if app.imagesRevision.Load() == revision {
+			if app.imageStore.imagesRevision.Load() == revision {
 				t.Fatal("decode failure did not invalidate the cached preview")
 			}
-			view := app.buildPreviewImage(source, source, app.palette, 400, 300)
+			view := app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
 			container, ok := view.(woxwidget.Container)
 			if !ok {
 				t.Fatalf("preview = %T, want an error message", view)
@@ -61,12 +65,14 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 }
 
 func TestImageCacheConcurrentStoresAreSerialized(t *testing.T) {
-	app := &App{
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-	}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+	})
 	image := &woxui.Image{Width: 1, Height: 1}
 
 	var waitGroup sync.WaitGroup
@@ -76,14 +82,14 @@ func TestImageCacheConcurrentStoresAreSerialized(t *testing.T) {
 		go func() {
 			defer waitGroup.Done()
 			for index := 0; index < 128; index++ {
-				app.storeImage(fmt.Sprintf("image-%d-%d", worker, index), image)
+				app.imageStore.storeImage(fmt.Sprintf("image-%d-%d", worker, index), image)
 			}
 		}()
 	}
 	waitGroup.Wait()
 
-	if len(app.images) > launcherImageCacheLimit {
-		t.Fatalf("image cache size = %d, want at most %d", len(app.images), launcherImageCacheLimit)
+	if len(app.imageStore.images) > launcherImageCacheLimit {
+		t.Fatalf("image cache size = %d, want at most %d", len(app.imageStore.images), launcherImageCacheLimit)
 	}
 }
 
@@ -232,15 +238,17 @@ func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
 	oldKey := variantKey + "-svg-32"
 	newKey := variantKey + "-svg-48"
 	oldImage := &woxui.Image{Width: 32, Height: 32}
-	app := &App{
-		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
-		images:           map[string]*woxui.Image{oldKey: oldImage},
-		imageRequested:   map[string]string{newKey: source.ImageData},
-		imageVariants:    map[string]string{variantKey: oldKey},
-		imageVariantKeys: map[string]string{},
-		imageLastUsed:    map[string]uint64{},
-		imageErrors:      map[string]string{},
-	}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		imageStore: imageStore{
+			images:           map[string]*woxui.Image{oldKey: oldImage},
+			imageRequested:   map[string]string{newKey: source.ImageData},
+			imageVariants:    map[string]string{variantKey: oldKey},
+			imageVariantKeys: map[string]string{},
+			imageLastUsed:    map[string]uint64{},
+			imageErrors:      map[string]string{},
+		},
+	})
 
 	if got := app.imageForSize(source, 48); got != oldImage {
 		t.Fatalf("imageForSize returned %p, want cached image %p while new resolution loads", got, oldImage)
@@ -248,164 +256,208 @@ func TestImageForSizeKeepsPreviousResolutionWhileLoadingNewOne(t *testing.T) {
 }
 
 func TestImageCacheEvictsByItemAndByteBudget(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
 	for index := 0; index < 8; index++ {
-		app.imageUseSequence++
-		app.imageLastUsed[fmt.Sprintf("small-%d", index)] = app.imageUseSequence
-		app.insertImageLocked(fmt.Sprintf("small-%d", index), &woxui.Image{Width: 1, Height: 1})
+		app.imageStore.imageUseSequence++
+		app.imageStore.imageLastUsed[fmt.Sprintf("small-%d", index)] = app.imageStore.imageUseSequence
+		app.imageStore.insertImageLocked(fmt.Sprintf("small-%d", index), &woxui.Image{Width: 1, Height: 1})
 	}
-	if len(app.images) != 8 {
-		t.Fatalf("small cache size = %d, want 8", len(app.images))
+	if len(app.imageStore.images) != 8 {
+		t.Fatalf("small cache size = %d, want 8", len(app.imageStore.images))
 	}
 
-	app.imageUseSequence++
-	app.imageLastUsed["hot"] = app.imageUseSequence
-	app.insertImageLocked("hot", &woxui.Image{Width: 1, Height: 1})
+	app.imageStore.imageUseSequence++
+	app.imageStore.imageLastUsed["hot"] = app.imageStore.imageUseSequence
+	app.imageStore.insertImageLocked("hot", &woxui.Image{Width: 1, Height: 1})
 	wide := &woxui.Image{Width: 2048, Height: 2048}
-	app.imageUseSequence++
-	app.imageLastUsed["wide"] = app.imageUseSequence
-	app.insertImageLocked("wide", wide)
-	if _, ok := app.images["wide"]; !ok {
+	app.imageStore.imageUseSequence++
+	app.imageStore.imageLastUsed["wide"] = app.imageStore.imageUseSequence
+	app.imageStore.insertImageLocked("wide", wide)
+	if _, ok := app.imageStore.images["wide"]; !ok {
 		t.Fatal("expected the large in-use image to stay cached")
 	}
-	if app.imageCacheByteSizeLocked() > launcherImageCacheMaxBytes && len(app.images) != 1 {
-		t.Fatalf("over-budget cache = %d items / %d bytes, want eviction down to the in-use image", len(app.images), app.imageCacheByteSizeLocked())
+	if app.imageStore.imageCacheByteSizeLocked() > launcherImageCacheMaxBytes && len(app.imageStore.images) != 1 {
+		t.Fatalf("over-budget cache = %d items / %d bytes, want eviction down to the in-use image", len(app.imageStore.images), app.imageStore.imageCacheByteSizeLocked())
 	}
 }
 
 func TestImageCacheOversizeImageMonopolizesCache(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{"icon": {Width: 32, Height: 32}}, imageLastUsed: map[string]uint64{"icon": 1}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{"icon": {Width: 32, Height: 32}},
+			imageLastUsed: map[string]uint64{"icon": 1},
+		},
+	})
 	oversize := &woxui.Image{Width: 4096, Height: 4096}
-	app.imageLastUsed["preview"] = 2
-	app.insertImageLocked("preview", oversize)
-	if len(app.images) != 1 || app.images["preview"] != oversize {
-		t.Fatalf("oversize cache = %d items, want only the in-use preview", len(app.images))
+	app.imageStore.imageLastUsed["preview"] = 2
+	app.imageStore.insertImageLocked("preview", oversize)
+	if len(app.imageStore.images) != 1 || app.imageStore.images["preview"] != oversize {
+		t.Fatalf("oversize cache = %d items, want only the in-use preview", len(app.imageStore.images))
 	}
 }
 
 func TestImageCacheReplaceAppliesByteBudget(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
 	for index := 0; index < 8; index++ {
 		key := fmt.Sprintf("small-%d", index)
-		app.imageUseSequence++
-		app.imageLastUsed[key] = app.imageUseSequence
-		app.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
+		app.imageStore.imageUseSequence++
+		app.imageStore.imageLastUsed[key] = app.imageStore.imageUseSequence
+		app.imageStore.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
 	}
-	app.imageUseSequence++
-	app.imageLastUsed["photo"] = app.imageUseSequence
-	app.insertImageLocked("photo", &woxui.Image{Width: 1, Height: 1})
+	app.imageStore.imageUseSequence++
+	app.imageStore.imageLastUsed["photo"] = app.imageStore.imageUseSequence
+	app.imageStore.insertImageLocked("photo", &woxui.Image{Width: 1, Height: 1})
 	oversize := &woxui.Image{Width: 4096, Height: 4096}
-	app.insertImageLocked("photo", oversize)
-	if len(app.images) != 1 || app.images["photo"] != oversize {
-		t.Fatalf("replaced cache = %d items, want only the decoded photo", len(app.images))
+	app.imageStore.insertImageLocked("photo", oversize)
+	if len(app.imageStore.images) != 1 || app.imageStore.images["photo"] != oversize {
+		t.Fatalf("replaced cache = %d items, want only the decoded photo", len(app.imageStore.images))
 	}
 }
 
 func TestImageForViewportPinsUntilRelease(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ffffff"/></svg>`}
-	app := &App{
-		palette:          uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
-		images:           map[string]*woxui.Image{},
-		imageRequested:   map[string]string{},
-		imageVariants:    map[string]string{},
-		imageVariantKeys: map[string]string{},
-		imageLastUsed:    map[string]uint64{},
-		imageErrors:      map[string]string{},
-	}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		imageStore: imageStore{
+			images:           map[string]*woxui.Image{},
+			imageRequested:   map[string]string{},
+			imageVariants:    map[string]string{},
+			imageVariantKeys: map[string]string{},
+			imageLastUsed:    map[string]uint64{},
+			imageErrors:      map[string]string{},
+		},
+	})
 	key, _, _ := imageAppearanceCacheKey(source, nil, 32, 32, false, nil)
-	app.images[key] = &woxui.Image{Width: 32, Height: 32}
+	app.imageStore.images[key] = &woxui.Image{Width: 32, Height: 32}
 	if app.imageForViewport(source, 32) == nil {
 		t.Fatal("expected the cached viewport image")
 	}
-	if _, ok := app.imageViewport[key]; !ok {
+	if _, ok := app.imageStore.imageViewport[key]; !ok {
 		t.Fatalf("viewport pin missing for %s", key)
 	}
 	app.releaseViewportImage(source, 32)
-	if _, ok := app.imageViewport[key]; ok {
+	if _, ok := app.imageStore.imageViewport[key]; ok {
 		t.Fatal("release left the viewport pin in place")
 	}
 }
 
 func TestImageCacheKeepsViewportImagesWhenBudgetIsExceeded(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"shown": {}}}
-	app.imageLastUsed["shown"] = 1
-	app.insertImageLocked("shown", &woxui.Image{Width: 3000, Height: 3000})
-	app.imageViewport["also"] = struct{}{}
-	app.imageLastUsed["also"] = 2
-	app.insertImageLocked("also", &woxui.Image{Width: 3000, Height: 3000})
-	if _, ok := app.images["shown"]; !ok {
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+			imageViewport: map[string]struct{}{"shown": {}},
+		},
+	})
+	app.imageStore.imageLastUsed["shown"] = 1
+	app.imageStore.insertImageLocked("shown", &woxui.Image{Width: 3000, Height: 3000})
+	app.imageStore.imageViewport["also"] = struct{}{}
+	app.imageStore.imageLastUsed["also"] = 2
+	app.imageStore.insertImageLocked("also", &woxui.Image{Width: 3000, Height: 3000})
+	if _, ok := app.imageStore.images["shown"]; !ok {
 		t.Fatal("viewport image was discarded to store another viewport image")
 	}
-	if _, ok := app.images["also"]; !ok {
+	if _, ok := app.imageStore.images["also"]; !ok {
 		t.Fatal("incoming viewport image was discarded")
 	}
-	app.imageLastUsed["cold"] = 0
-	app.insertImageLocked("cold", &woxui.Image{Width: 8, Height: 8})
-	if _, ok := app.images["cold"]; !ok {
+	app.imageStore.imageLastUsed["cold"] = 0
+	app.imageStore.insertImageLocked("cold", &woxui.Image{Width: 8, Height: 8})
+	if _, ok := app.imageStore.images["cold"]; !ok {
 		t.Fatal("unpinned image was not stored")
 	}
-	if _, shown := app.images["shown"]; !shown {
+	if _, shown := app.imageStore.images["shown"]; !shown {
 		t.Fatal("storing an unpinned image discarded a viewport image")
 	}
-	if _, also := app.images["also"]; !also {
+	if _, also := app.imageStore.images["also"]; !also {
 		t.Fatal("storing an unpinned image discarded the other viewport image")
 	}
 }
 
 func TestImageCacheHiddenTrimEvictsSingleOversizeImage(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{"preview": 1}}
-	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{"preview": 1},
+		},
+	})
+	app.imageStore.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
 	app.trimIdleImageCache()
-	if len(app.images) != 0 || app.imageCacheByteSizeLocked() != 0 {
-		t.Fatalf("hidden oversize cache = %d items / %d bytes, want empty", len(app.images), app.imageCacheByteSizeLocked())
+	if len(app.imageStore.images) != 0 || app.imageStore.imageCacheByteSizeLocked() != 0 {
+		t.Fatalf("hidden oversize cache = %d items / %d bytes, want empty", len(app.imageStore.images), app.imageStore.imageCacheByteSizeLocked())
 	}
 }
 
 func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
 	for index := 0; index < 80; index++ {
 		key := fmt.Sprintf("icon-%d", index)
-		app.imageLastUsed[key] = uint64(index + 1)
-		app.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
+		app.imageStore.imageLastUsed[key] = uint64(index + 1)
+		app.imageStore.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
 	}
 	app.trimIdleImageCache()
-	if len(app.images) > hiddenImageCacheKeepCount {
-		t.Fatalf("hidden cache count = %d, want at most %d", len(app.images), hiddenImageCacheKeepCount)
+	if len(app.imageStore.images) > hiddenImageCacheKeepCount {
+		t.Fatalf("hidden cache count = %d, want at most %d", len(app.imageStore.images), hiddenImageCacheKeepCount)
 	}
-	if app.imageCacheByteSizeLocked() > hiddenImageCacheMaxBytes {
-		t.Fatalf("hidden cache bytes = %d, want at most %d", app.imageCacheByteSizeLocked(), hiddenImageCacheMaxBytes)
+	if app.imageStore.imageCacheByteSizeLocked() > hiddenImageCacheMaxBytes {
+		t.Fatalf("hidden cache bytes = %d, want at most %d", app.imageStore.imageCacheByteSizeLocked(), hiddenImageCacheMaxBytes)
 	}
-	if got := app.imageCacheByteSizeLocked(); got != len(app.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}) {
-		t.Fatalf("hidden cache byte counter = %d, want %d", got, len(app.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}))
+	if got := app.imageStore.imageCacheByteSizeLocked(); got != len(app.imageStore.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}) {
+		t.Fatalf("hidden cache byte counter = %d, want %d", got, len(app.imageStore.images)*imageCacheBytes(&woxui.Image{Width: 64, Height: 64}))
 	}
-	if _, ok := app.images["icon-79"]; !ok {
+	if _, ok := app.imageStore.images["icon-79"]; !ok {
 		t.Fatal("expected the most recently used hidden image to be kept")
 	}
 }
 
 func TestHiddenLauncherKeepsImagesUsedBySettings(t *testing.T) {
-	app := &App{settingsOpen: true, images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
+	app := bindTestApp(&App{
+		settingsWindow: settingsWindowController{settingsOpen: true},
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
 	for index := 0; index < hiddenImageCacheKeepCount+1; index++ {
 		key := fmt.Sprintf("settings-icon-%d", index)
-		app.imageLastUsed[key] = uint64(index + 1)
-		app.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
+		app.imageStore.imageLastUsed[key] = uint64(index + 1)
+		app.imageStore.insertImageLocked(key, &woxui.Image{Width: 64, Height: 64})
 	}
 	app.trimIdleImageCache()
-	if got := len(app.images); got != hiddenImageCacheKeepCount+1 {
+	if got := len(app.imageStore.images); got != hiddenImageCacheKeepCount+1 {
 		t.Fatalf("settings cache has %d images, want %d", got, hiddenImageCacheKeepCount+1)
 	}
-	app.settingsOpen = false
+	app.settingsWindow.settingsOpen = false
 	app.trimIdleImageCache()
-	if got := len(app.images); got != hiddenImageCacheKeepCount {
+	if got := len(app.imageStore.images); got != hiddenImageCacheKeepCount {
 		t.Fatalf("closed settings cache has %d images, want %d", got, hiddenImageCacheKeepCount)
 	}
 }
 
 func TestImageCacheCountsAnimatedFrames(t *testing.T) {
 	animated := decodeLauncherTestGIF(t)
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
-	app.insertImageLocked("gif", animated)
-	if got := app.imageCacheByteSizeLocked(); got != animated.PixelBytes() {
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
+	app.imageStore.insertImageLocked("gif", animated)
+	if got := app.imageStore.imageCacheByteSizeLocked(); got != animated.PixelBytes() {
 		t.Fatalf("animated cache bytes = %d, want %d", got, animated.PixelBytes())
 	}
 	if animated.PixelBytes() <= animated.Width*animated.Height*4 {
@@ -471,13 +523,18 @@ func TestIsLoadingIconMatchesSharedLoadingSVG(t *testing.T) {
 }
 
 func TestImageCacheReplaceUpdatesByteCounter(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}}
-	app.insertImageLocked("photo", &woxui.Image{Width: 10, Height: 10})
-	if got := app.imageCacheByteSizeLocked(); got != 400 {
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
+	app.imageStore.insertImageLocked("photo", &woxui.Image{Width: 10, Height: 10})
+	if got := app.imageStore.imageCacheByteSizeLocked(); got != 400 {
 		t.Fatalf("initial cache bytes = %d, want 400", got)
 	}
-	app.insertImageLocked("photo", &woxui.Image{Width: 20, Height: 20})
-	if got := app.imageCacheByteSizeLocked(); got != 1600 {
+	app.imageStore.insertImageLocked("photo", &woxui.Image{Width: 20, Height: 20})
+	if got := app.imageStore.imageCacheByteSizeLocked(); got != 1600 {
 		t.Fatalf("replaced cache bytes = %d, want 1600", got)
 	}
 }
@@ -579,12 +636,17 @@ func TestImageCacheSeparatesAppearance(t *testing.T) {
 	source := woxImage{ImageType: "svg", ImageData: `<svg fill="var(--wox-theme-icon-color)"/>`}
 	key := imageKey(source) + "-svg-18"
 	light, dark := &woxui.Image{}, &woxui.Image{}
-	app := &App{images: map[string]*woxui.Image{key: light, key + "-dark": dark}, imageLastUsed: map[string]uint64{}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{key: light, key + "-dark": dark},
+			imageLastUsed: map[string]uint64{},
+		},
+	})
 	for _, isDark := range []bool{false, true, false} {
-		app.palette.background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
+		app.appearance.palette.background = woxui.Color{R: 255, G: 255, B: 255, A: 255}
 		want := light
 		if isDark {
-			app.palette.background = woxui.Color{A: 255}
+			app.appearance.palette.background = woxui.Color{A: 255}
 			want = dark
 		}
 		if got := app.imageForSize(source, 18); got != want {
@@ -592,8 +654,8 @@ func TestImageCacheSeparatesAppearance(t *testing.T) {
 		}
 	}
 	// Image themes can have a transparent outer frame and an opaque light content panel.
-	app.palette.background = woxui.Color{}
-	app.palette.AppContentBackground = woxui.Color{R: 245, G: 241, B: 233, A: 255}
+	app.appearance.palette.background = woxui.Color{}
+	app.appearance.palette.AppContentBackground = woxui.Color{R: 245, G: 241, B: 233, A: 255}
 	if got := app.imageForSize(source, 18); got != light {
 		t.Fatal("light content inside a transparent frame reused the dark icon")
 	}
@@ -631,7 +693,15 @@ func TestResultIconColors(t *testing.T) {
 	palette := defaultPalette()
 	palette.resultTitle = woxui.Color{R: 40, G: 60, B: 80, A: 255}
 	palette.selectedTitle = woxui.Color{R: 255, G: 255, B: 255, A: 255}
-	app := &App{palette: palette, images: map[string]*woxui.Image{}, imageRequested: map[string]string{}, imageLastUsed: map[string]uint64{}, imageErrors: map[string]string{}}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: palette},
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+	})
 	for _, selected := range []bool{false, true, false} {
 		want := palette.resultTitle
 		if selected {
@@ -645,7 +715,7 @@ func TestResultIconColors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		app.images[key] = decoded
+		app.imageStore.images[key] = decoded
 		got := app.imageForResult(source, 20, palette, selected)
 		if got != decoded {
 			t.Fatal("result icon did not use its row-color cache entry")
@@ -690,16 +760,18 @@ func TestResultIconSelectionReusesRemoteBitmap(t *testing.T) {
 	palette := defaultPalette()
 	palette.resultTitle = woxui.Color{R: 40, G: 60, B: 80, A: 255}
 	palette.selectedTitle = woxui.Color{R: 255, G: 255, B: 255, A: 255}
-	app := &App{
-		palette:        palette,
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-	}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: palette},
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+	})
 	decoded := &woxui.Image{Width: 20, Height: 20}
 	key, _, _ := imageAppearanceCacheKey(source, nil, 20, 20, palette.isDark(), nil)
-	app.images[key] = decoded
+	app.imageStore.images[key] = decoded
 
 	if got := app.imageForResult(source, 20, palette, false); got != decoded {
 		t.Fatal("idle remote icon missed its cached bitmap")
@@ -707,14 +779,14 @@ func TestResultIconSelectionReusesRemoteBitmap(t *testing.T) {
 	if got := app.imageForResult(source, 20, palette, true); got != decoded {
 		t.Fatal("selecting a remote icon started a new decode")
 	}
-	if len(app.imageRequested) != 0 {
-		t.Fatalf("selection requested another image load: %+v", app.imageRequested)
+	if len(app.imageStore.imageRequested) != 0 {
+		t.Fatalf("selection requested another image load: %+v", app.imageStore.imageRequested)
 	}
 
 	plain := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path fill="#111111" d="M0 0h10v10H0z"/></svg>`}
 	plainKey, _, _ := imageAppearanceCacheKey(plain, nil, 20, 20, palette.isDark(), nil)
 	plainImage := &woxui.Image{Width: 20, Height: 20}
-	app.images[plainKey] = plainImage
+	app.imageStore.images[plainKey] = plainImage
 	if app.imageForResult(plain, 20, palette, true) != plainImage {
 		t.Fatal("fixed-color SVG was keyed by the selected row color")
 	}
@@ -726,7 +798,7 @@ func TestResultIconSelectionReusesRemoteBitmap(t *testing.T) {
 	fileIcon := woxImage{ImageType: "absolute", ImageData: path}
 	fileKey, _, _ := imageAppearanceCacheKey(fileIcon, nil, 20, 20, palette.isDark(), nil)
 	fileImage := &woxui.Image{Width: 20, Height: 20}
-	app.images[fileKey] = fileImage
+	app.imageStore.images[fileKey] = fileImage
 	if app.imageForResult(fileIcon, 20, palette, true) != fileImage {
 		t.Fatal("on-disk SVG without the theme variable was redecoded for selection")
 	}
@@ -736,26 +808,28 @@ func TestResultIconSelectionReusesRemoteBitmap(t *testing.T) {
 // UpdateResult icon swap does not blank the row before the new bitmap exists.
 func TestResultIconKeepsPreviousBitmapWhileReplacementDecodes(t *testing.T) {
 	palette := defaultPalette()
-	app := &App{
-		palette:        palette,
-		images:         map[string]*woxui.Image{},
-		imageRequested: map[string]string{},
-		imageLastUsed:  map[string]uint64{},
-		imageErrors:    map[string]string{},
-	}
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: palette},
+		imageStore: imageStore{
+			images:         map[string]*woxui.Image{},
+			imageRequested: map[string]string{},
+			imageLastUsed:  map[string]uint64{},
+			imageErrors:    map[string]string{},
+		},
+	})
 	current := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#111111"/></svg>`}
 	next := woxImage{ImageType: "svg", ImageData: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#222222"/></svg>`}
 	currentImage := &woxui.Image{Width: 20, Height: 20}
 	nextImage := &woxui.Image{Width: 20, Height: 20}
 	currentKey, _, _ := imageAppearanceCacheKey(current, nil, 20, 20, palette.isDark(), nil)
 	nextKey, _, _ := imageAppearanceCacheKey(next, nil, 20, 20, palette.isDark(), nil)
-	app.images[currentKey] = currentImage
+	app.imageStore.images[currentKey] = currentImage
 
 	if got := app.imageForResultRow("status", current, 20, palette, false); got != currentImage {
 		t.Fatal("decoded icon was not shown")
 	}
 	// The replacement is already in flight and has no bitmap yet.
-	app.imageRequested[nextKey] = next.ImageData
+	app.imageStore.imageRequested[nextKey] = next.ImageData
 	if got := app.imageForResultRow("status", next, 20, palette, false); got != currentImage {
 		t.Fatal("in-flight replacement cleared the visible icon")
 	}
@@ -765,82 +839,94 @@ func TestResultIconKeepsPreviousBitmapWhileReplacementDecodes(t *testing.T) {
 	if got := app.imageForResultRow("", next, 20, palette, false); got != nil {
 		t.Fatal("an empty result id reused a retained icon")
 	}
-	app.imageErrors[nextKey] = "decode failed"
+	app.imageStore.imageErrors[nextKey] = "decode failed"
 	if got := app.imageForResultRow("status", next, 20, palette, false); got != currentImage {
 		t.Fatal("decode failure cleared the visible icon")
 	}
 
-	app.images[nextKey] = nextImage
+	app.imageStore.images[nextKey] = nextImage
 	if got := app.imageForResultRow("status", next, 20, palette, false); got != nextImage {
 		t.Fatal("decoded replacement was not shown")
 	}
 	if got := app.imageForResultRow("status", woxImage{}, 20, palette, false); got != nil {
 		t.Fatal("cleared icon kept the previous bitmap")
 	}
-	delete(app.images, nextKey)
+	delete(app.imageStore.images, nextKey)
 	if got := app.imageForResultRow("status", next, 20, palette, false); got != nil {
 		t.Fatal("cleared icon was restored while its replacement was still decoding")
 	}
 
-	app.retainedResultIcons = map[string]*woxui.Image{"stay": currentImage, "gone": nextImage}
-	app.pruneRetainedResultIcons([]queryResult{{ID: "stay"}, {ID: "group", IsGroup: true}}, 1)
-	if app.retainedResultIcons["stay"] != currentImage {
+	app.resultList.retainedResultIcons = map[string]*woxui.Image{"stay": currentImage, "gone": nextImage}
+	app.resultList.pruneRetainedResultIcons([]queryResult{{ID: "stay"}, {ID: "group", IsGroup: true}}, 1)
+	if app.resultList.retainedResultIcons["stay"] != currentImage {
 		t.Fatal("prune dropped a result that is still listed")
 	}
-	if _, ok := app.retainedResultIcons["gone"]; ok {
+	if _, ok := app.resultList.retainedResultIcons["gone"]; ok {
 		t.Fatal("prune kept a result that left the list")
 	}
-	app.retainedResultIcons["later"] = nextImage
-	app.pruneRetainedResultIcons([]queryResult{{ID: "stay"}}, 1)
-	if app.retainedResultIcons["later"] != nextImage {
+	app.resultList.retainedResultIcons["later"] = nextImage
+	app.resultList.pruneRetainedResultIcons([]queryResult{{ID: "stay"}}, 1)
+	if app.resultList.retainedResultIcons["later"] != nextImage {
 		t.Fatal("prune scanned the same result revision again")
 	}
 }
 
 // TestPinnedPreviewDoesNotEvictChrome covers the repeated Glance/menu reload loop.
 func TestPinnedPreviewDoesNotEvictChrome(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}}}
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+			imageViewport: map[string]struct{}{"preview": {}},
+		},
+	})
 	icon := &woxui.Image{Width: 36, Height: 36}
-	app.insertImageLocked("glance", icon)
-	app.insertImageLocked("menu", icon)
-	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	app.imageStore.insertImageLocked("glance", icon)
+	app.imageStore.insertImageLocked("menu", icon)
+	app.imageStore.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
 	for round := 0; round < 3; round++ {
 		for _, key := range []string{"glance", "menu"} {
-			app.imageUseSequence++
-			app.imageLastUsed[key] = app.imageUseSequence
-			app.insertImageLocked(key, icon)
-			if app.images["glance"] != icon || app.images["menu"] != icon {
+			app.imageStore.imageUseSequence++
+			app.imageStore.imageLastUsed[key] = app.imageStore.imageUseSequence
+			app.imageStore.insertImageLocked(key, icon)
+			if app.imageStore.images["glance"] != icon || app.imageStore.images["menu"] != icon {
 				t.Fatalf("round %d: storing %s evicted static chrome", round, key)
 			}
 		}
 	}
-	app.releaseViewportImageKey("preview")
-	if app.images["preview"] != nil || len(app.imageViewport) != 0 {
+	app.imageStore.releaseViewportImageKey("preview")
+	if app.imageStore.images["preview"] != nil || len(app.imageStore.imageViewport) != 0 {
 		t.Fatal("inactive oversized preview remained cached or pinned")
 	}
-	if app.images["glance"] != icon || app.images["menu"] != icon || app.imageCacheSize != 2*imageCacheBytes(icon) {
+	if app.imageStore.images["glance"] != icon || app.imageStore.images["menu"] != icon || app.imageStore.imageCacheSize != 2*imageCacheBytes(icon) {
 		t.Fatal("releasing preview discarded chrome or miscounted bytes")
 	}
 }
 
 // TestPinnedPreviewKeepsOrdinaryCacheBounded ensures the budget exemption does not disable LRU limits.
 func TestPinnedPreviewKeepsOrdinaryCacheBounded(t *testing.T) {
-	app := &App{images: map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}}}
-	app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+	app := bindTestApp(&App{
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+			imageViewport: map[string]struct{}{"preview": {}},
+		},
+	})
+	app.imageStore.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
 	for i := 0; i < launcherImageCacheLimit+8; i++ {
 		key := fmt.Sprintf("icon-%d", i)
-		app.imageLastUsed[key] = uint64(i + 1)
-		app.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
+		app.imageStore.imageLastUsed[key] = uint64(i + 1)
+		app.imageStore.insertImageLocked(key, &woxui.Image{Width: 1, Height: 1})
 	}
-	if len(app.images) != launcherImageCacheLimit+1 || app.images["icon-0"] != nil || app.images["preview"] == nil {
+	if len(app.imageStore.images) != launcherImageCacheLimit+1 || app.imageStore.images["icon-0"] != nil || app.imageStore.images["preview"] == nil {
 		t.Fatal("ordinary item limit or pinned preview ownership was lost")
 	}
 	for i := 0; i < 4; i++ {
 		key := fmt.Sprintf("large-%d", i)
-		app.imageLastUsed[key] = uint64(launcherImageCacheLimit + 100 + i)
-		app.insertImageLocked(key, &woxui.Image{Width: 2048, Height: 2048})
+		app.imageStore.imageLastUsed[key] = uint64(launcherImageCacheLimit + 100 + i)
+		app.imageStore.insertImageLocked(key, &woxui.Image{Width: 2048, Height: 2048})
 	}
-	if got := app.imageCacheSize - imageCacheBytes(app.images["preview"]); got > launcherImageCacheMaxBytes {
+	if got := app.imageStore.imageCacheSize - imageCacheBytes(app.imageStore.images["preview"]); got > launcherImageCacheMaxBytes {
 		t.Fatalf("ordinary cache uses %d bytes, limit %d", got, launcherImageCacheMaxBytes)
 	}
 }
@@ -851,18 +937,23 @@ func TestPreviewImageRebuildKeepsOversizePin(t *testing.T) {
 	size := previewImageRequestSize(400, 300)
 	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, false, nil)
 	picture := &woxui.Image{Width: 4096, Height: 4096}
-	app := &App{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}, images: map[string]*woxui.Image{},
-		imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{key: {}},
-		pinnedPreview: viewportPreviewPin{source: source, size: size, key: key},
-	}
-	app.insertImageLocked(key, picture)
+	app := bindTestApp(&App{
+		appearance: appearanceController{palette: uiPalette{background: woxui.Color{R: 255, G: 255, B: 255, A: 255}}},
+		imageStore: imageStore{
+			images:        map[string]*woxui.Image{},
+			imageLastUsed: map[string]uint64{},
+			imageViewport: map[string]struct{}{key: {}},
+		},
+		previews: previewController{pinnedPreview: viewportPreviewPin{source: source, size: size, key: key}},
+	})
+	app.imageStore.insertImageLocked(key, picture)
 	for i := 0; i < 3; i++ {
-		app.buildPreviewImage(source, source, app.palette, 400, 300)
-		if app.images[key] != picture || !app.imageViewportPinned(key) {
+		app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
+		if app.imageStore.images[key] != picture || !app.imageStore.imageViewportPinned(key) {
 			t.Fatal("unchanged image was released during rebuild")
 		}
 	}
-	if len(app.imageRequested) != 0 {
+	if len(app.imageStore.imageRequested) != 0 {
 		t.Fatal("cached preview scheduled a duplicate decode")
 	}
 }

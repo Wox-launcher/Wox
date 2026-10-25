@@ -82,7 +82,7 @@ func detectOnboardingMigrations(ctx context.Context) []migrate.Installation {
 }
 
 func (a *App) prepareOnboardingMigration() {
-	state := &a.onboardingMigration
+	state := &a.onboarding.onboardingMigration
 	if state.importing || state.done {
 		return
 	}
@@ -106,9 +106,9 @@ func (a *App) loadOnboardingMigrationCatalog() {
 	if installation == nil {
 		return
 	}
-	a.onboardingMigration.loading = true
-	a.onboardingMigration.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingMigration.loading = true
+	a.onboarding.onboardingMigration.error = ""
+	a.onboarding.invalidateOnboardingWindow()
 	var generation uint64
 	if export, ok := installation.(migrate.ExportSource); ok {
 		generation = export.Generation()
@@ -124,7 +124,7 @@ func (a *App) loadOnboardingMigrationCatalog() {
 			if export, ok := installation.(migrate.ExportSource); ok && export.Generation() != generation {
 				return
 			}
-			state := &a.onboardingMigration
+			state := &a.onboarding.onboardingMigration
 			state.loading = false
 			state.loaded = err == nil
 			if err != nil {
@@ -134,7 +134,7 @@ func (a *App) loadOnboardingMigrationCatalog() {
 				state.error = ""
 				state.categories = onboardingMigrationCategories(installation, catalog)
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -163,33 +163,33 @@ func migrationItemChosen(item onboardingMigrationItem) bool {
 }
 
 func (a *App) chooseOnboardingMigration(id string) {
-	if a.onboardingMigration.importing {
+	if a.onboarding.onboardingMigration.importing {
 		return
 	}
 	if a.migrationInstallation(id) == nil {
 		return
 	}
 	a.releaseOnboardingMigrationSession()
-	a.onboardingMigration.selectedID = id
-	a.onboardingMigration.choosing = false
-	a.onboardingMigration.categories = nil
-	a.onboardingMigration.loaded = false
-	a.onboardingMigration.done = false
-	a.onboardingMigration.error = ""
+	a.onboarding.onboardingMigration.selectedID = id
+	a.onboarding.onboardingMigration.choosing = false
+	a.onboarding.onboardingMigration.categories = nil
+	a.onboarding.onboardingMigration.loaded = false
+	a.onboarding.onboardingMigration.done = false
+	a.onboarding.onboardingMigration.error = ""
 	if !a.migrationNeedsUnlock() {
 		a.loadOnboardingMigrationCatalog()
 	} else {
 		a.prefillOnboardingMigrationFile()
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
 func (a *App) toggleOnboardingMigrationItem(id string, selected bool) {
-	if a.onboardingMigration.importing || a.onboardingMigration.done {
+	if a.onboarding.onboardingMigration.importing || a.onboarding.onboardingMigration.done {
 		return
 	}
-	for categoryIndex := range a.onboardingMigration.categories {
-		items := a.onboardingMigration.categories[categoryIndex].items
+	for categoryIndex := range a.onboarding.onboardingMigration.categories {
+		items := a.onboarding.onboardingMigration.categories[categoryIndex].items
 		for index := range items {
 			item := &items[index]
 			if item.item.ID == id && item.item.Selectable && !item.item.Required {
@@ -197,12 +197,12 @@ func (a *App) toggleOnboardingMigrationItem(id string, selected bool) {
 			}
 		}
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
 // retreatOnboardingMigration returns to the launcher picker when several are installed.
 func (a *App) retreatOnboardingMigration() bool {
-	state := &a.onboardingMigration
+	state := &a.onboarding.onboardingMigration
 	if state.importing || state.done || state.choosing || len(state.installations) < 2 || state.selectedID == "" {
 		return false
 	}
@@ -213,12 +213,12 @@ func (a *App) retreatOnboardingMigration() bool {
 	state.loaded = false
 	state.loading = false
 	state.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 	return true
 }
 
 func (a *App) onboardingMigrationCanImport() bool {
-	state := &a.onboardingMigration
+	state := &a.onboarding.onboardingMigration
 	if state.done || state.choosing || state.importing || state.loading {
 		return false
 	}
@@ -241,23 +241,23 @@ func (a *App) importOnboardingMigration() {
 		return
 	}
 	var itemIDs []string
-	for _, category := range a.onboardingMigration.categories {
+	for _, category := range a.onboarding.onboardingMigration.categories {
 		for _, item := range category.items {
 			if migrationItemChosen(item) {
 				itemIDs = append(itemIDs, item.item.ID)
 			}
 		}
 	}
-	a.onboardingMigration.importing = true
-	a.onboardingMigration.activeID = itemIDs[0]
-	a.onboardingMigration.error = ""
+	a.onboarding.onboardingMigration.importing = true
+	a.onboarding.onboardingMigration.activeID = itemIDs[0]
+	a.onboarding.onboardingMigration.error = ""
 	session, sessionCancel := context.WithCancel(context.Background())
-	a.onboardingMigration.sessionCancel = sessionCancel
+	a.onboarding.onboardingMigration.sessionCancel = sessionCancel
 	kinds := map[string]string{}
 	for _, id := range itemIDs {
 		kinds[id] = a.migrationItemKind(id)
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "import onboarding migration", func() {
 		defer sessionCancel()
 		dataCtx, dataCancel := context.WithTimeout(session, 2*time.Minute)
@@ -280,12 +280,12 @@ func (a *App) importOnboardingMigration() {
 			}
 		}
 		_ = a.runOnUI("finish onboarding migration", func() {
-			state := &a.onboardingMigration
+			state := &a.onboarding.onboardingMigration
 			state.importing = false
 			state.activeID = ""
 			state.done = true
 			state.sessionCancel = nil
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -442,7 +442,7 @@ func (a *App) applyMigratedTheme(ctx context.Context, theme common.Theme) error 
 	}
 	a.rememberOnboardingMigrationSetting("ThemeId", theme.ThemeId)
 	_ = a.runOnUI("remember imported onboarding theme", func() {
-		a.onboardingMigration.themeImported = true
+		a.onboarding.onboardingMigration.themeImported = true
 	})
 	return nil
 }
@@ -476,19 +476,19 @@ func (a *App) importOnboardingMigrationPlugin(ctx context.Context, installation 
 
 func (a *App) showOnboardingMigrationItem(id string) {
 	_ = a.runOnUI("show onboarding migration item", func() {
-		a.onboardingMigration.activeID = id
-		a.invalidateOnboardingWindow()
+		a.onboarding.onboardingMigration.activeID = id
+		a.onboarding.invalidateOnboardingWindow()
 	})
 }
 
 func (a *App) finishOnboardingMigrationItem(id, itemErr, status string) {
 	_ = a.runOnUI("finish onboarding migration item", func() {
-		if a.onboardingMigration.activeID == id {
-			a.onboardingMigration.activeID = ""
+		if a.onboarding.onboardingMigration.activeID == id {
+			a.onboarding.onboardingMigration.activeID = ""
 		}
-		for categoryIndex := range a.onboardingMigration.categories {
-			for index := range a.onboardingMigration.categories[categoryIndex].items {
-				item := &a.onboardingMigration.categories[categoryIndex].items[index]
+		for categoryIndex := range a.onboarding.onboardingMigration.categories {
+			for index := range a.onboarding.onboardingMigration.categories[categoryIndex].items {
+				item := &a.onboarding.onboardingMigration.categories[categoryIndex].items[index]
 				if item.item.ID != id {
 					continue
 				}
@@ -503,7 +503,7 @@ func (a *App) finishOnboardingMigrationItem(id, itemErr, status string) {
 				}
 			}
 		}
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 	})
 }
 
@@ -513,7 +513,7 @@ func (a *App) stageMigratedMainHotkey(hotkey string) {
 	if hotkey == "" {
 		return
 	}
-	a.onboardingMigration.stagedMainHotkey = hotkey
+	a.onboarding.onboardingMigration.stagedMainHotkey = hotkey
 	a.rememberOnboardingMigrationSetting("MainHotkey", hotkey)
 }
 
@@ -521,36 +521,36 @@ func (a *App) stageMigratedMainHotkey(hotkey string) {
 // The imported chord is shown immediately. Registration can take a moment when another
 // program still holds it, and the page must not keep the previous Alt+Space until that returns.
 func (a *App) applyStagedMigrationHotkey() {
-	hotkey := strings.TrimSpace(a.onboardingMigration.stagedMainHotkey)
+	hotkey := strings.TrimSpace(a.onboarding.onboardingMigration.stagedMainHotkey)
 	if hotkey == "" {
 		return
 	}
 	a.presentStagedMigrationHotkey(hotkey)
-	if a.onboardingMigration.mainHotkeyApplyStarted || a.services == nil {
+	if a.onboarding.onboardingMigration.mainHotkeyApplyStarted || a.services == nil {
 		return
 	}
-	a.onboardingMigration.mainHotkeyApplyStarted = true
-	a.onboardingMigration.mainHotkeyPending = true
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingMigration.mainHotkeyApplyStarted = true
+	a.onboarding.onboardingMigration.mainHotkeyPending = true
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "register migrated main hotkey", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "MainHotkey", hotkey)
 		cancel()
 		_ = a.runOnUI("apply migrated main hotkey result", func() {
-			a.onboardingMigration.mainHotkeyPending = false
+			a.onboarding.onboardingMigration.mainHotkeyPending = false
 			if err != nil {
-				a.onboardingMigration.stagedMainHotkeyError = migrationHotkeyPageMessage(err)
+				a.onboarding.onboardingMigration.stagedMainHotkeyError = migrationHotkeyPageMessage(err)
 				if a.generalSettings != nil {
 					a.generalSettings.Update(func(data *settingsData) {
 						data.MainHotkey = hotkey
 						data.MainHotkeyRegistrationFailed = true
-						data.MainHotkeyRegistrationError = a.onboardingMigration.stagedMainHotkeyError
+						data.MainHotkeyRegistrationError = a.onboarding.onboardingMigration.stagedMainHotkeyError
 					})
 				}
 			} else {
 				// Persistence now matches the imported chord, so later reloads can read it directly.
-				a.onboardingMigration.stagedMainHotkey = ""
-				a.onboardingMigration.stagedMainHotkeyError = ""
+				a.onboarding.onboardingMigration.stagedMainHotkey = ""
+				a.onboarding.onboardingMigration.stagedMainHotkeyError = ""
 				if a.generalSettings != nil {
 					a.generalSettings.Update(func(data *settingsData) {
 						data.MainHotkey = hotkey
@@ -560,7 +560,7 @@ func (a *App) applyStagedMigrationHotkey() {
 				}
 			}
 			a.presentStagedMigrationHotkey(hotkey)
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -838,12 +838,12 @@ func (a *App) rememberOnboardingMigrationSetting(key, value string) {
 				form.values["QueryAliases"] = value
 			}
 		}
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 	})
 }
 
 func (a *App) onboardingMigrationView(imageScale float32, background woxui.Color, labels map[string]string) ([]launcherview.OnboardingMigrationSource, []launcherview.OnboardingMigrationCategory) {
-	state := a.onboardingMigration
+	state := a.onboarding.onboardingMigration
 	installations := state.installations
 	if !state.choosing && state.selectedID != "" {
 		if selected := a.migrationInstallation(state.selectedID); selected != nil {
@@ -860,7 +860,7 @@ func (a *App) onboardingMigrationView(imageScale float32, background woxui.Color
 	categories := make([]launcherview.OnboardingMigrationCategory, 0, len(state.categories))
 	for _, category := range state.categories {
 		viewCategory := launcherview.OnboardingMigrationCategory{
-			ID: category.id, Title: a.translate("i18n:onboarding_migrate_category_" + category.id),
+			ID: category.id, Title: a.language.translate("i18n:onboarding_migrate_category_" + category.id),
 			Items: make([]launcherview.OnboardingMigrationItem, len(category.items)),
 		}
 		for index, item := range category.items {
@@ -874,14 +874,14 @@ func (a *App) onboardingMigrationView(imageScale float32, background woxui.Color
 func (a *App) onboardingMigrationItemView(item onboardingMigrationItem, categoryID string, imageScale float32, background woxui.Color, labels map[string]string, activeID string) launcherview.OnboardingMigrationItem {
 	title := item.item.Title
 	if item.item.TitleKey != "" {
-		title = migrationNamedText(a.translate("i18n:onboarding_migrate_item_"+item.item.TitleKey), item.item.Detail)
+		title = migrationNamedText(a.language.translate("i18n:onboarding_migrate_item_"+item.item.TitleKey), item.item.Detail)
 	}
 	detail := item.item.Detail
 	detailLines := 1
 	if item.item.DetailKey == "raycast_clipboard_summary" {
 		detail = a.migrationClipboardSummary(item.item.Detail)
 	} else if item.item.DetailKey != "" {
-		translated := a.translate("i18n:onboarding_migrate_value_" + item.item.DetailKey)
+		translated := a.language.translate("i18n:onboarding_migrate_value_" + item.item.DetailKey)
 		if strings.Contains(translated, "{name}") {
 			detail = migrationNamedText(translated, item.item.Detail)
 		} else if item.item.Detail != "" {
@@ -901,7 +901,7 @@ func (a *App) onboardingMigrationItemView(item onboardingMigrationItem, category
 	}
 	reason := item.err
 	if reason == migrationHotkeyTaken {
-		reason = a.translate("i18n:onboarding_migrate_hotkey_taken")
+		reason = a.language.translate("i18n:onboarding_migrate_hotkey_taken")
 	} else if reason != "" {
 		reason = a.migrationExportMessage(reason)
 	}
@@ -922,7 +922,7 @@ func (a *App) onboardingMigrationItemView(item onboardingMigrationItem, category
 	}
 	option := ""
 	if item.item.OptionKey != "" {
-		option = a.translate("i18n:onboarding_migrate_option_" + item.item.OptionKey)
+		option = a.language.translate("i18n:onboarding_migrate_option_" + item.item.OptionKey)
 	}
 	return launcherview.OnboardingMigrationItem{
 		ID: item.item.ID, Title: title, Detail: detail, DetailLines: detailLines, Status: status, Error: reason, Icon: icon,
@@ -944,7 +944,7 @@ func (a *App) migrationClipboardSummary(raw string) string {
 	for len(parts) < 5 {
 		parts = append(parts, "0")
 	}
-	text := a.translate("i18n:onboarding_migrate_clipboard_summary")
+	text := a.language.translate("i18n:onboarding_migrate_clipboard_summary")
 	replacer := strings.NewReplacer(
 		"{importable}", parts[0], "{duplicate}", parts[1], "{expired}", parts[2], "{capacity}", parts[3], "{missing}", parts[4],
 	)
@@ -952,11 +952,11 @@ func (a *App) migrationClipboardSummary(raw string) string {
 }
 
 func (a *App) selectedMigrationInstallation() migrate.Installation {
-	return a.migrationInstallation(a.onboardingMigration.selectedID)
+	return a.migrationInstallation(a.onboarding.onboardingMigration.selectedID)
 }
 
 func (a *App) migrationInstallation(id string) migrate.Installation {
-	for _, installation := range a.onboardingMigration.installations {
+	for _, installation := range a.onboarding.onboardingMigration.installations {
 		if installation.ID() == id {
 			return installation
 		}
@@ -1112,7 +1112,7 @@ func migrationClipboard(items []migrate.ClipboardWrite) []contract.MigratedClipb
 }
 
 func (a *App) migrationItemKind(id string) string {
-	for _, category := range a.onboardingMigration.categories {
+	for _, category := range a.onboarding.onboardingMigration.categories {
 		for _, item := range category.items {
 			if item.item.ID != id {
 				continue
@@ -1130,7 +1130,7 @@ func (a *App) migrationItemKind(id string) string {
 
 func (a *App) migrationNeedsUnlock() bool {
 	export, ok := a.selectedMigrationInstallation().(migrate.ExportSource)
-	return ok && export != nil && !a.onboardingMigration.unlocked
+	return ok && export != nil && !a.onboarding.onboardingMigration.unlocked
 }
 
 func (a *App) selectedExportSource() migrate.ExportSource {
@@ -1139,7 +1139,7 @@ func (a *App) selectedExportSource() migrate.ExportSource {
 }
 
 func (a *App) prefillOnboardingMigrationFile() {
-	if !util.IsTestMode() || a.onboardingMigration.exportPath != "" {
+	if !util.IsTestMode() || a.onboarding.onboardingMigration.exportPath != "" {
 		return
 	}
 	path := strings.TrimSpace(os.Getenv(util.TestRaycastFileEnv))
@@ -1149,29 +1149,29 @@ func (a *App) prefillOnboardingMigrationFile() {
 	if _, err := os.Stat(path); err != nil {
 		return
 	}
-	a.onboardingMigration.exportPath = path
+	a.onboarding.onboardingMigration.exportPath = path
 }
 
 func (a *App) migrationPassphraseController() *woxwidget.TextEditingController {
-	if a.onboardingMigration.passphrase == nil {
-		a.onboardingMigration.passphrase = woxwidget.NewTextEditingController("")
+	if a.onboarding.onboardingMigration.passphrase == nil {
+		a.onboarding.onboardingMigration.passphrase = woxwidget.NewTextEditingController("")
 	}
-	return a.onboardingMigration.passphrase
+	return a.onboarding.onboardingMigration.passphrase
 }
 
 // releaseOnboardingMigrationSession drops decrypted export data and the passphrase.
 func (a *App) releaseOnboardingMigrationSession() {
-	if a.onboardingMigration.sessionCancel != nil {
-		a.onboardingMigration.sessionCancel()
-		a.onboardingMigration.sessionCancel = nil
+	if a.onboarding.onboardingMigration.sessionCancel != nil {
+		a.onboarding.onboardingMigration.sessionCancel()
+		a.onboarding.onboardingMigration.sessionCancel = nil
 	}
 	if export := a.selectedExportSource(); export != nil {
 		export.Reset()
 	}
-	if a.onboardingMigration.passphrase != nil {
-		a.onboardingMigration.passphrase.SetText("", false)
+	if a.onboarding.onboardingMigration.passphrase != nil {
+		a.onboarding.onboardingMigration.passphrase.SetText("", false)
 	}
-	state := &a.onboardingMigration
+	state := &a.onboarding.onboardingMigration
 	state.unlocked = false
 	state.exportPath = ""
 	state.categories = nil
@@ -1183,10 +1183,10 @@ func (a *App) releaseOnboardingMigrationSession() {
 }
 
 func (a *App) pickOnboardingMigrationFile() {
-	if a.onboardingMigration.importing {
+	if a.onboarding.onboardingMigration.importing {
 		return
 	}
-	window := a.onboardingNativeWindow()
+	window := a.onboarding.onboardingNativeWindow()
 	if window == nil {
 		return
 	}
@@ -1195,55 +1195,55 @@ func (a *App) pickOnboardingMigrationFile() {
 		return
 	}
 	a.releaseOnboardingMigrationSession()
-	a.onboardingMigration.exportPath = path
+	a.onboarding.onboardingMigration.exportPath = path
 	if export := a.selectedExportSource(); export != nil {
 		if ok, detail := export.Recognize(path); !ok {
-			a.onboardingMigration.error = a.migrationExportMessage(detail)
+			a.onboarding.onboardingMigration.error = a.migrationExportMessage(detail)
 		}
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
 func (a *App) unlockOnboardingMigration() {
 	export := a.selectedExportSource()
-	if export == nil || a.onboardingMigration.importing || a.onboardingMigration.loading {
+	if export == nil || a.onboarding.onboardingMigration.importing || a.onboarding.onboardingMigration.loading {
 		return
 	}
-	path := strings.TrimSpace(a.onboardingMigration.exportPath)
+	path := strings.TrimSpace(a.onboarding.onboardingMigration.exportPath)
 	if path == "" {
-		a.onboardingMigration.error = a.translate("i18n:onboarding_migrate_raycast_file")
-		a.invalidateOnboardingWindow()
+		a.onboarding.onboardingMigration.error = a.language.translate("i18n:onboarding_migrate_raycast_file")
+		a.onboarding.invalidateOnboardingWindow()
 		return
 	}
 	if ok, detail := export.Recognize(path); !ok {
-		a.onboardingMigration.error = a.migrationExportMessage(detail)
-		a.invalidateOnboardingWindow()
+		a.onboarding.onboardingMigration.error = a.migrationExportMessage(detail)
+		a.onboarding.invalidateOnboardingWindow()
 		return
 	}
 	passphrase := ""
-	if controller := a.onboardingMigration.passphrase; controller != nil {
+	if controller := a.onboarding.onboardingMigration.passphrase; controller != nil {
 		passphrase = controller.Text()
 		controller.SetText("", false)
 	}
 	before := export.Generation()
-	a.onboardingMigration.loading = true
-	a.onboardingMigration.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingMigration.loading = true
+	a.onboarding.onboardingMigration.error = ""
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "unlock onboarding migration", func() {
 		err := export.Unlock(context.Background(), path, passphrase)
 		_ = a.runOnUI("apply onboarding migration unlock", func() {
 			if export.Generation() != before+1 || a.selectedExportSource() == nil {
 				return
 			}
-			a.onboardingMigration.loading = false
+			a.onboarding.onboardingMigration.loading = false
 			if err != nil {
-				a.onboardingMigration.unlocked = false
-				a.onboardingMigration.error = a.migrationExportMessage(err.Error())
-				a.invalidateOnboardingWindow()
+				a.onboarding.onboardingMigration.unlocked = false
+				a.onboarding.onboardingMigration.error = a.migrationExportMessage(err.Error())
+				a.onboarding.invalidateOnboardingWindow()
 				return
 			}
-			a.onboardingMigration.unlocked = true
-			a.onboardingMigration.error = ""
+			a.onboarding.onboardingMigration.unlocked = true
+			a.onboarding.onboardingMigration.error = ""
 			a.loadOnboardingMigrationCatalog()
 		})
 	})
@@ -1264,9 +1264,9 @@ func (a *App) toggleOnboardingMigrationOption(id string, keep bool) {
 			fresh[item.ID] = item
 		}
 	}
-	for categoryIndex := range a.onboardingMigration.categories {
-		for index := range a.onboardingMigration.categories[categoryIndex].items {
-			item := &a.onboardingMigration.categories[categoryIndex].items[index]
+	for categoryIndex := range a.onboarding.onboardingMigration.categories {
+		for index := range a.onboarding.onboardingMigration.categories[categoryIndex].items {
+			item := &a.onboarding.onboardingMigration.categories[categoryIndex].items[index]
 			if item.item.ID != id {
 				continue
 			}
@@ -1277,42 +1277,42 @@ func (a *App) toggleOnboardingMigrationOption(id string, keep bool) {
 			}
 		}
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
 func (a *App) migrationExportMessage(code string) string {
 	switch code {
 	case "not_export":
-		return a.translate("i18n:onboarding_migrate_raycast_not_export")
+		return a.language.translate("i18n:onboarding_migrate_raycast_not_export")
 	case "unsupported_version":
-		return a.translate("i18n:onboarding_migrate_raycast_unsupported_version")
+		return a.language.translate("i18n:onboarding_migrate_raycast_unsupported_version")
 	case "corrupt":
-		return a.translate("i18n:onboarding_migrate_raycast_corrupt")
+		return a.language.translate("i18n:onboarding_migrate_raycast_corrupt")
 	case "auth":
-		return a.translate("i18n:onboarding_migrate_raycast_auth")
+		return a.language.translate("i18n:onboarding_migrate_raycast_auth")
 	case "limit":
-		return a.translate("i18n:onboarding_migrate_raycast_limit")
+		return a.language.translate("i18n:onboarding_migrate_raycast_limit")
 	case "export_required":
-		return a.translate("i18n:onboarding_migrate_raycast_export_required")
+		return a.language.translate("i18n:onboarding_migrate_raycast_export_required")
 	case "keyword_taken":
-		return a.translate("i18n:onboarding_migrate_value_raycast_keyword_taken")
+		return a.language.translate("i18n:onboarding_migrate_value_raycast_keyword_taken")
 	case "conflict":
-		return a.translate("i18n:onboarding_migrate_status_conflict")
+		return a.language.translate("i18n:onboarding_migrate_status_conflict")
 	case "missing":
-		return a.translate("i18n:onboarding_migrate_value_raycast_image_missing")
+		return a.language.translate("i18n:onboarding_migrate_value_raycast_image_missing")
 	case "expired":
-		return a.translate("i18n:onboarding_migrate_value_raycast_clipboard_expired")
+		return a.language.translate("i18n:onboarding_migrate_value_raycast_clipboard_expired")
 	case "capacity":
-		return a.translate("i18n:onboarding_migrate_value_raycast_clipboard_capacity")
+		return a.language.translate("i18n:onboarding_migrate_value_raycast_clipboard_capacity")
 	case "cancelled":
-		return a.translate("i18n:onboarding_migrate_status_cancelled")
+		return a.language.translate("i18n:onboarding_migrate_status_cancelled")
 	case "unavailable", "failed":
-		return a.translate("i18n:onboarding_migrate_status_failed")
+		return a.language.translate("i18n:onboarding_migrate_status_failed")
 	case "close_launcher":
-		return a.translate("i18n:onboarding_migrate_close_launcher_failed")
+		return a.language.translate("i18n:onboarding_migrate_close_launcher_failed")
 	default:
 		if strings.HasPrefix(code, "i18n:") {
-			return a.translate(code)
+			return a.language.translate(code)
 		}
 		return code
 	}

@@ -15,8 +15,8 @@ func newQuerySelectionTestApp(t *testing.T) *App {
 	a := New(false, nil)
 	a.uiCall = nil
 	t.Cleanup(func() {
-		a.resetQueryTransitionLocked()
-		a.resetQueryLoadingLocked()
+		a.querySession.resetQueryTransitionLocked()
+		a.querySession.resetQueryLoadingLocked()
 		a.cancel()
 	})
 	return a
@@ -61,40 +61,40 @@ func TestQueryUndoSelectionMatching(t *testing.T) {
 // TestQuerySelectionSnapshotRejectsStaleResults prevents transition frames from polluting undo history.
 func TestQuerySelectionSnapshotRejectsStaleResults(t *testing.T) {
 	a := newQuerySelectionTestApp(t)
-	a.query = newInputQuery("current")
-	a.results = []queryResult{{Title: "live", SubTitle: "detail"}, {IsGroup: true}}
-	a.resultsQueryID = a.query.QueryID
-	a.selected = 0
-	snapshot := a.captureQuerySnapshot()
+	a.querySession.query = newInputQuery("current")
+	a.resultList.results = []queryResult{{Title: "live", SubTitle: "detail"}, {IsGroup: true}}
+	a.resultList.resultsQueryID = a.querySession.query.QueryID
+	a.resultList.selected = 0
+	snapshot := a.querySession.captureQuerySnapshot()
 	if snapshot.resultSelection == nil || *snapshot.resultSelection != (queryResultSelection{title: "live", subTitle: "detail", index: 0}) {
 		t.Fatalf("live snapshot = %+v", snapshot.resultSelection)
 	}
-	a.appendQueryUndo(snapshot)
-	a.selected = 1
-	a.appendQueryUndo(a.captureQuerySnapshot())
-	if len(a.queryHintEditorState.undo) != 1 || a.queryHintEditorState.undo[0].resultSelection != nil {
+	a.querySession.appendQueryUndo(snapshot)
+	a.resultList.selected = 1
+	a.querySession.appendQueryUndo(a.querySession.captureQuerySnapshot())
+	if len(a.querySession.queryHintEditorState.undo) != 1 || a.querySession.queryHintEditorState.undo[0].resultSelection != nil {
 		t.Fatal("selection changes must update duplicate snapshots without adding undo steps")
 	}
 	for _, selected := range []int{-1, 1, 2} {
-		a.selected = selected
-		if a.captureQuerySnapshot().resultSelection != nil {
+		a.resultList.selected = selected
+		if a.querySession.captureQuerySnapshot().resultSelection != nil {
 			t.Fatalf("invalid selected index %d was captured", selected)
 		}
 	}
-	a.selected = 0
-	a.resultsQueryID = "previous"
-	if a.captureQuerySnapshot().resultSelection != nil {
+	a.resultList.selected = 0
+	a.resultList.resultsQueryID = "previous"
+	if a.querySession.captureQuerySnapshot().resultSelection != nil {
 		t.Fatal("stale results were captured for the new query")
 	}
 	target := queryResultSelection{title: "pending", index: 4}
-	a.pendingSelection = &pendingResultSelection{queryID: a.query.QueryID, querySnapshot: &target}
-	snapshot = a.captureQuerySnapshot()
+	a.resultList.pendingSelection = &pendingResultSelection{queryID: a.querySession.query.QueryID, querySnapshot: &target}
+	snapshot = a.querySession.captureQuerySnapshot()
 	target.index = 9
 	if snapshot.resultSelection == nil || snapshot.resultSelection.index != 4 {
 		t.Fatal("pending undo target must be captured without aliasing mutable state")
 	}
-	a.pendingSelection.queryID = "previous"
-	if a.captureQuerySnapshot().resultSelection != nil {
+	a.resultList.pendingSelection.queryID = "previous"
+	if a.querySession.captureQuerySnapshot().resultSelection != nil {
 		t.Fatal("stale pending selection was captured")
 	}
 }
@@ -103,13 +103,13 @@ func TestQuerySelectionSnapshotRejectsStaleResults(t *testing.T) {
 func TestChangeQueryUndoRedoSelection(t *testing.T) {
 	a := newQuerySelectionTestApp(t)
 	a.setQuery(newInputQuery("first"))
-	a.applyResults(a.query.QueryID, []queryResult{{Title: "other"}, {Title: "first target", SubTitle: "detail"}}, nil, nil, nil, 0, true)
+	a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "other"}, {Title: "first target", SubTitle: "detail"}}, nil, nil, nil, 0, true)
 	a.selectResult(1)
 	a.setQuery(newInputQuery("second"))
-	a.applyResults(a.query.QueryID, []queryResult{{Title: "second target"}, {Title: "other"}}, nil, nil, nil, 0, true)
+	a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "second target"}, {Title: "other"}}, nil, nil, nil, 0, true)
 	a.selectResult(0)
 	a.setQuery(newInputQuery("third"))
-	a.applyResults(a.query.QueryID, []queryResult{{Title: "other"}, {Title: "other"}, {Title: "third target"}}, nil, nil, nil, 0, true)
+	a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "other"}, {Title: "other"}, {Title: "third target"}}, nil, nil, nil, 0, true)
 	a.selectResult(2)
 	for _, step := range []struct{ key, query, target string }{
 		{"z", "second", "second target"},
@@ -119,16 +119,16 @@ func TestChangeQueryUndoRedoSelection(t *testing.T) {
 		{"z", "second", "second target"},
 		{"y", "third", "third target"},
 	} {
-		previousID := a.query.QueryID
-		if !a.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key(step.key), Modifiers: queryPrimaryModifier(), Down: true}) {
+		previousID := a.querySession.query.QueryID
+		if !a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key(step.key), Modifiers: queryPrimaryModifier(), Down: true}) {
 			t.Fatal("undo/redo key was not handled")
 		}
-		if a.query.QueryText != step.query || a.query.QueryID == previousID || a.pendingSelection == nil || a.pendingSelection.queryID != a.query.QueryID || a.pendingSelection.querySnapshot.title != step.target {
-			t.Fatalf("%s query=%+v pending=%+v, want query=%s target=%s", step.key, a.query, a.pendingSelection, step.query, step.target)
+		if a.querySession.query.QueryText != step.query || a.querySession.query.QueryID == previousID || a.resultList.pendingSelection == nil || a.resultList.pendingSelection.queryID != a.querySession.query.QueryID || a.resultList.pendingSelection.querySnapshot.title != step.target {
+			t.Fatalf("%s query=%+v pending=%+v, want query=%s target=%s", step.key, a.querySession.query, a.resultList.pendingSelection, step.query, step.target)
 		}
 	}
-	a.applyResults(a.query.QueryID, []queryResult{{Title: "third target"}, {Title: "other"}}, nil, nil, nil, 0, true)
-	if a.selected != 0 || a.pendingSelection != nil {
+	a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "third target"}, {Title: "other"}}, nil, nil, nil, 0, true)
+	if a.resultList.selected != 0 || a.resultList.pendingSelection != nil {
 		t.Fatal("completed redo must select the reordered target and clear pending state")
 	}
 }
@@ -160,9 +160,9 @@ func TestQueryUndoSelectionSynchronousResponse(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			a := newQuerySelectionTestApp(t)
 			a.services = immediateQuerySelectionServices{results: []plugin.QueryResultUI{{Title: "other"}, {Title: "target", SubTitle: "detail"}}}
-			a.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: test.target})
-			if a.selected != test.want || a.pendingSelection != nil || !a.queryComplete {
-				t.Fatalf("inline response selected=%d pending=%+v complete=%v", a.selected, a.pendingSelection, a.queryComplete)
+			a.querySession.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: test.target})
+			if a.resultList.selected != test.want || a.resultList.pendingSelection != nil || !a.querySession.queryComplete {
+				t.Fatalf("inline response selected=%d pending=%+v complete=%v", a.resultList.selected, a.resultList.pendingSelection, a.querySession.queryComplete)
 			}
 		})
 	}
@@ -177,14 +177,14 @@ func TestQueryUndoSelectionStreaming(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			a := newQuerySelectionTestApp(t)
-			a.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: &queryResultSelection{title: "target", subTitle: "detail", index: 3}})
-			queryID := a.query.QueryID
+			a.querySession.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: &queryResultSelection{title: "target", subTitle: "detail", index: 3}})
+			queryID := a.querySession.query.QueryID
 			a.applyResults(queryID, []queryResult{{Title: "other"}}, nil, nil, nil, 0, false)
-			if a.selected != 0 || a.pendingSelection == nil {
+			if a.resultList.selected != 0 || a.resultList.pendingSelection == nil {
 				t.Fatal("partial overflow must select the first result and retain the target")
 			}
 			a.applyResults("old", nil, nil, nil, nil, 0, true)
-			if appended, err := a.appendTypedResults("old", []queryResult{{Title: "target"}}); err != nil || appended || a.pendingSelection == nil {
+			if appended, err := a.appendTypedResults("old", []queryResult{{Title: "target"}}); err != nil || appended || a.resultList.pendingSelection == nil {
 				t.Fatal("stale results must not consume the target")
 			}
 			results := []queryResult{{Title: "target", SubTitle: "detail", Preview: queryPreview{PreviewType: "text", PreviewData: "target preview"}}}
@@ -196,11 +196,11 @@ func TestQueryUndoSelectionStreaming(t *testing.T) {
 			} else {
 				a.applyResults(queryID, append([]queryResult{{Title: "other"}}, results...), nil, nil, nil, 0, false)
 			}
-			if a.selected != 1 || a.pendingSelection == nil || a.results[a.selected].Preview.PreviewData != "target preview" {
+			if a.resultList.selected != 1 || a.resultList.pendingSelection == nil || a.resultList.results[a.resultList.selected].Preview.PreviewData != "target preview" {
 				t.Fatal("late results must restore the selected result and its preview")
 			}
-			a.applyResults(queryID, append([]queryResult(nil), a.results...), nil, nil, nil, 0, true)
-			if a.selected != 1 || a.pendingSelection != nil {
+			a.applyResults(queryID, append([]queryResult(nil), a.resultList.results...), nil, nil, nil, 0, true)
+			if a.resultList.selected != 1 || a.resultList.pendingSelection != nil {
 				t.Fatal("final results must restore the target and clear pending state")
 			}
 		})
@@ -216,24 +216,24 @@ func TestQueryUndoSelectionCancellation(t *testing.T) {
 	}{
 		{"new query", func(a *App) { a.setQuery(newInputQuery("new")) }, false},
 		{"reset", func(a *App) { a.resetQuery(newInputQuery("")) }, false},
-		{"edit", func(a *App) { a.queryHintChanged() }, false},
+		{"edit", func(a *App) { a.querySession.queryHintChanged() }, false},
 		{"click selected row", func(a *App) { a.selectResult(0) }, true},
 		{"arrow", func(a *App) { a.moveSelection(1) }, true},
 		{"group jump", func(a *App) { a.moveSelectionByGroup(1) }, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			a := newQuerySelectionTestApp(t)
-			a.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: &queryResultSelection{title: "target", index: 4}})
-			a.applyResults(a.query.QueryID, []queryResult{{ID: "other", Title: "other"}, {IsGroup: true}, {ID: "another", Title: "another"}}, nil, nil, nil, 0, false)
+			a.querySession.applyQuerySnapshot(queryHintSnapshot{text: "restored", resultSelection: &queryResultSelection{title: "target", index: 4}})
+			a.applyResults(a.querySession.query.QueryID, []queryResult{{ID: "other", Title: "other"}, {IsGroup: true}, {ID: "another", Title: "another"}}, nil, nil, nil, 0, false)
 			test.act(a)
-			if !test.manual && a.pendingSelection != nil || test.manual && (a.pendingSelection == nil || a.pendingSelection.querySnapshot != nil) {
+			if !test.manual && a.resultList.pendingSelection != nil || test.manual && (a.resultList.pendingSelection == nil || a.resultList.pendingSelection.querySnapshot != nil) {
 				t.Fatal("explicit input retained the pending undo target")
 			}
 			if test.manual {
-				selected := a.results[a.selected]
-				a.applyResults(a.query.QueryID, []queryResult{{Title: "target"}, selected}, nil, nil, nil, 0, false)
-				a.applyResults(a.query.QueryID, []queryResult{{Title: "target"}, selected}, nil, nil, nil, 0, true)
-				if a.selected != 1 || a.pendingSelection != nil {
+				selected := a.resultList.results[a.resultList.selected]
+				a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "target"}, selected}, nil, nil, nil, 0, false)
+				a.applyResults(a.querySession.query.QueryID, []queryResult{{Title: "target"}, selected}, nil, nil, nil, 0, true)
+				if a.resultList.selected != 1 || a.resultList.pendingSelection != nil {
 					t.Fatal("late matching results must not override explicit selection")
 				}
 			}

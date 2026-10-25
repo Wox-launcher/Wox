@@ -75,7 +75,10 @@ type pluginSettingsController struct {
 }
 
 func newPluginSettingsController(deps CommonDeps) *pluginSettingsController {
-	return &pluginSettingsController{deps: deps, settingSaveRevisions: make(map[string]uint64)}
+	return &pluginSettingsController{
+		deps:                 deps,
+		settingSaveRevisions: make(map[string]uint64),
+	}
 }
 
 func (c *pluginSettingsController) Plugins() []pluginSettingsPlugin {

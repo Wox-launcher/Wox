@@ -29,26 +29,27 @@ func (s *onboardingHotkeyTestServices) UpdateGeneralSetting(context.Context, str
 
 func TestOnboardingRetainsHotkeySaveFailureAfterRecorderCloses(t *testing.T) {
 	services := &onboardingHotkeyTestServices{err: fmt.Errorf("portal: %w", keyboard.ErrGlobalHotkeysUnavailable)}
-	app := &App{
-		services: services, onboardingOpen: true,
+	app := bindTestApp(&App{
+		services:        services,
+		onboarding:      onboardingController{onboardingOpen: true},
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
-		translations:    map[string]string{"ui_hotkey_registration_unsupported": "Registration unavailable"},
-	}
+		language:        languageCatalog{translations: map[string]string{"ui_hotkey_registration_unsupported": "Registration unavailable"}},
+	})
 	form := newFormFieldsState(nil, map[string]string{"MainHotkey": "Alt+K"}, true)
 	state := &hotkeyRecordingState{diagnosticCtx: context.Background(), target: &form, persistKey: "MainHotkey"}
 	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
-	if app.onboardingError != "Registration unavailable" || form.values["MainHotkey"] != "Ctrl+Space" {
-		t.Fatalf("failed save: error=%q hotkey=%q", app.onboardingError, form.values["MainHotkey"])
+	if app.onboarding.onboardingError != "Registration unavailable" || form.values["MainHotkey"] != "Ctrl+Space" {
+		t.Fatalf("failed save: error=%q hotkey=%q", app.onboarding.onboardingError, form.values["MainHotkey"])
 	}
 	services.err = nil
 	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
-	if app.onboardingError != "" || app.generalSettings.Data().MainHotkey != "Alt+K" {
-		t.Fatalf("successful retry: error=%q hotkey=%q", app.onboardingError, app.generalSettings.Data().MainHotkey)
+	if app.onboarding.onboardingError != "" || app.generalSettings.Data().MainHotkey != "Alt+K" {
+		t.Fatalf("successful retry: error=%q hotkey=%q", app.onboarding.onboardingError, app.generalSettings.Data().MainHotkey)
 	}
 }
 
 func TestOnboardingMigrationStepFollowsWelcome(t *testing.T) {
-	plain := (&App{}).onboardingSteps()
+	plain := (bindTestApp(&App{})).onboardingSteps()
 	for _, step := range plain {
 		if step.ID == "migrate" {
 			t.Fatal("migration step appears without a detected launcher")
@@ -57,10 +58,14 @@ func TestOnboardingMigrationStepFollowsWelcome(t *testing.T) {
 	if plain[len(plain)-1].ID != "finish" {
 		t.Fatalf("last step = %q", plain[len(plain)-1].ID)
 	}
-	app := &App{onboardingMigration: onboardingMigrationState{installations: []migrate.Installation{
-		onboardingMigrationStub{id: "flow", name: "Flow Launcher"},
-		onboardingMigrationStub{id: "other", name: "Other"},
-	}}}
+	app := bindTestApp(&App{
+		onboarding: onboardingController{
+			onboardingMigration: onboardingMigrationState{installations: []migrate.Installation{
+				onboardingMigrationStub{id: "flow", name: "Flow Launcher"},
+				onboardingMigrationStub{id: "other", name: "Other"},
+			}},
+		},
+	})
 	steps := app.onboardingSteps()
 	wantIndex := 1
 	if runtime.GOOS == "darwin" {
@@ -72,11 +77,11 @@ func TestOnboardingMigrationStepFollowsWelcome(t *testing.T) {
 	if steps[0].ID != "welcome" || steps[wantIndex].ID != "migrate" || steps[wantIndex+1].ID != "mainHotkey" {
 		t.Fatalf("steps start %#v", []string{steps[0].ID, steps[wantIndex].ID, steps[wantIndex+1].ID})
 	}
-	app.onboardingStep = wantIndex
-	app.onboardingMigration.selectedID = "flow"
+	app.onboarding.onboardingStep = wantIndex
+	app.onboarding.onboardingMigration.selectedID = "flow"
 	app.selectOnboardingStep(wantIndex - 1)
-	if app.onboardingStep != wantIndex || !app.onboardingMigration.choosing || app.onboardingMigration.selectedID != "" {
-		t.Fatalf("back from items step=%d choosing=%v selected=%q", app.onboardingStep, app.onboardingMigration.choosing, app.onboardingMigration.selectedID)
+	if app.onboarding.onboardingStep != wantIndex || !app.onboarding.onboardingMigration.choosing || app.onboarding.onboardingMigration.selectedID != "" {
+		t.Fatalf("back from items step=%d choosing=%v selected=%q", app.onboarding.onboardingStep, app.onboarding.onboardingMigration.choosing, app.onboarding.onboardingMigration.selectedID)
 	}
 }
 
@@ -136,7 +141,10 @@ func (s *pluginSettingMigrationWriter) UpdateGeneralSetting(_ context.Context, _
 
 func TestMigrationPluginSettingUsesThePluginStore(t *testing.T) {
 	services := &pluginSettingMigrationWriter{}
-	app := &App{services: services, sessionID: "session"}
+	app := bindTestApp(&App{
+		services:  services,
+		sessionID: "session",
+	})
 	err := app.applyOnboardingMigrationSetting(context.Background(), migrate.SettingWrite{
 		Key: "ignorePatterns", Value: `[{"Pattern":"**/AppData/**"}]`, PluginID: common.FileSearchPluginID,
 	})
@@ -164,10 +172,10 @@ func TestMigratedThemeIsInstalledAndSelected(t *testing.T) {
 		t.Fatal(err)
 	}
 	services := &migrationThemeInstaller{}
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
-	}
+	})
 	err := app.applyMigrationWriteGroup(context.Background(), &migrationWriteGroup{themes: []migrate.ThemeWrite{{
 		ItemIDs: []string{"setting:theme"},
 		Theme:   theme,
@@ -187,11 +195,11 @@ func TestMigratedThemeIsInstalledAndSelected(t *testing.T) {
 
 func TestImportedQueryHotkeysAreAppended(t *testing.T) {
 	services := &migrationSettingWriter{}
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
-	}
+	})
 	app.generalSettings.ApplyData(settingsData{QueryHotkeys: []queryHotkeySetting{{
 		Hotkey: "Ctrl+Shift+V", Query: "cb ", Position: "system_default",
 	}}})
@@ -220,10 +228,10 @@ func TestImportedQueryHotkeysAreAppended(t *testing.T) {
 
 func TestImportedQueryHotkeyKeepsTheExistingChord(t *testing.T) {
 	services := &migrationSettingWriter{}
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
-	}
+	})
 	app.generalSettings.ApplyData(settingsData{QueryHotkeys: []queryHotkeySetting{{
 		Hotkey: "Ctrl+Shift+E", Query: "keep",
 	}}})
@@ -245,10 +253,10 @@ func TestImportedQueryHotkeyKeepsTheExistingChord(t *testing.T) {
 
 func TestImportedQueryAliasesAreAppended(t *testing.T) {
 	services := &migrationSettingWriter{}
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
-	}
+	})
 	app.generalSettings.ApplyData(settingsData{QueryAliases: []queryAliasSetting{{
 		Alias: "hw", Query: "hello world",
 	}}})
@@ -279,14 +287,14 @@ func TestStagedMigrationHotkeyIsShownBeforeRegistration(t *testing.T) {
 	release := make(chan struct{})
 	services := &blockingMigrationHotkeyServices{started: started, release: release}
 	form := newFormFieldsState(nil, map[string]string{"MainHotkey": "alt+space"}, true)
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
 		lifecycleCtx:    context.Background(),
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
-	}
+	})
 	app.hotkeySettings.SetForm(&form)
-	app.onboardingMigration.stagedMainHotkey = "ctrl+shift+space"
+	app.onboarding.onboardingMigration.stagedMainHotkey = "ctrl+shift+space"
 	app.applyStagedMigrationHotkey()
 	if form.values["MainHotkey"] != "ctrl+shift+space" {
 		t.Fatalf("hotkey before registration = %q", form.values["MainHotkey"])
@@ -298,11 +306,11 @@ func TestStagedMigrationHotkeyIsShownBeforeRegistration(t *testing.T) {
 	}
 	close(release)
 	deadline := time.Now().Add(2 * time.Second)
-	for app.onboardingMigration.stagedMainHotkeyError == "" && time.Now().Before(deadline) {
+	for app.onboarding.onboardingMigration.stagedMainHotkeyError == "" && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if app.onboardingMigration.stagedMainHotkeyError == "" || form.values["MainHotkey"] != "ctrl+shift+space" {
-		t.Fatalf("after registration hotkey=%q error=%q", form.values["MainHotkey"], app.onboardingMigration.stagedMainHotkeyError)
+	if app.onboarding.onboardingMigration.stagedMainHotkeyError == "" || form.values["MainHotkey"] != "ctrl+shift+space" {
+		t.Fatalf("after registration hotkey=%q error=%q", form.values["MainHotkey"], app.onboarding.onboardingMigration.stagedMainHotkeyError)
 	}
 }
 
@@ -353,15 +361,15 @@ func TestRecordingTheCurrentMainHotkeyIsNotASelfConflict(t *testing.T) {
 		map[string]string{"MainHotkey": "ctrl+shift+space"},
 		true,
 	)
-	app := &App{
+	app := bindTestApp(&App{
 		services:        services,
-		onboardingOpen:  true,
+		onboarding:      onboardingController{onboardingOpen: true},
 		lifecycleCtx:    context.Background(),
 		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
 		pluginSettings:  newPluginSettingsController(CommonDeps{}),
-		translations:    map[string]string{"ui_hotkey_conflict_main": "used by the main hotkey"},
-	}
+		language:        languageCatalog{translations: map[string]string{"ui_hotkey_conflict_main": "used by the main hotkey"}},
+	})
 	app.generalSettings.ApplyData(settingsData{MainHotkey: "alt+space"})
 	app.hotkeySettings.SetForm(&form)
 	state := &hotkeyRecordingState{
@@ -432,10 +440,10 @@ func (s *exportInstallStub) SetKeepKeyword(string, bool) bool { return false }
 
 func TestLeavingMigrationReleasesTheExport(t *testing.T) {
 	source := &exportInstallStub{onboardingMigrationStub: onboardingMigrationStub{id: "raycast", name: "Raycast"}}
-	app := &App{
-		onboardingMigration: newOnboardingMigrationState([]migrate.Installation{source}),
-		hotkeySettings:      newHotkeySettingsController(CommonDeps{}),
-	}
+	app := bindTestApp(&App{
+		onboarding:     onboardingController{onboardingMigration: newOnboardingMigrationState([]migrate.Installation{source})},
+		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
+	})
 	migrateIndex := -1
 	for index, step := range app.onboardingSteps() {
 		if step.ID == "migrate" {
@@ -445,10 +453,10 @@ func TestLeavingMigrationReleasesTheExport(t *testing.T) {
 	if migrateIndex < 0 {
 		t.Fatal("migration step missing")
 	}
-	app.onboardingStep = migrateIndex
+	app.onboarding.onboardingStep = migrateIndex
 	app.selectOnboardingStep(migrateIndex + 1)
-	if source.resets != 1 || app.onboardingMigration.unlocked {
-		t.Fatalf("resets=%d unlocked=%v", source.resets, app.onboardingMigration.unlocked)
+	if source.resets != 1 || app.onboarding.onboardingMigration.unlocked {
+		t.Fatalf("resets=%d unlocked=%v", source.resets, app.onboarding.onboardingMigration.unlocked)
 	}
 	app.releaseOnboardingMigrationSession()
 	if source.resets != 2 {
@@ -521,30 +529,30 @@ func (s *orderedImportServices) UpdateGeneralSetting(context.Context, string, st
 func TestImportShowsEachRowBeforeWritingIt(t *testing.T) {
 	install := orderedImportInstall{onboardingMigrationStub: onboardingMigrationStub{id: "raycast", name: "Raycast"}}
 	services := &orderedImportServices{}
-	app := &App{
-		lifecycleCtx:        context.Background(),
-		services:            services,
-		onboardingMigration: newOnboardingMigrationState([]migrate.Installation{install}),
-		hotkeySettings:      newHotkeySettingsController(CommonDeps{}),
-	}
-	app.onboardingMigration.categories = []onboardingMigrationCategory{
+	app := bindTestApp(&App{
+		lifecycleCtx:   context.Background(),
+		services:       services,
+		onboarding:     onboardingController{onboardingMigration: newOnboardingMigrationState([]migrate.Installation{install})},
+		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
+	})
+	app.onboarding.onboardingMigration.categories = []onboardingMigrationCategory{
 		{id: "quicklinks", items: []onboardingMigrationItem{{item: migrate.Item{ID: "quicklink:1", Kind: migrate.ItemKindQuicklink, Selectable: true}, selected: true}}},
 		{id: "clipboard", items: []onboardingMigrationItem{{item: migrate.Item{ID: migrate.ClipboardSummaryID, Kind: migrate.ItemKindClipboard, Selectable: true}, selected: true}}},
 		{id: "general", items: []onboardingMigrationItem{{item: migrate.Item{ID: "setting:autostart", Kind: migrate.ItemKindSetting, Selectable: true}, selected: true}}},
 	}
-	services.active = func() string { return app.onboardingMigration.activeID }
+	services.active = func() string { return app.onboarding.onboardingMigration.activeID }
 	done := make(chan struct{})
 	var once sync.Once
 	app.uiCall = func(fn func()) error {
 		fn()
-		if app.onboardingMigration.done {
+		if app.onboarding.onboardingMigration.done {
 			once.Do(func() { close(done) })
 		}
 		return nil
 	}
 	app.importOnboardingMigration()
-	if app.onboardingMigration.activeID != "quicklink:1" || !app.onboardingMigration.importing {
-		t.Fatalf("click did not mark the first row active: %+v", app.onboardingMigration.activeID)
+	if app.onboarding.onboardingMigration.activeID != "quicklink:1" || !app.onboarding.onboardingMigration.importing {
+		t.Fatalf("click did not mark the first row active: %+v", app.onboarding.onboardingMigration.activeID)
 	}
 	select {
 	case <-done:
@@ -555,7 +563,7 @@ func TestImportShowsEachRowBeforeWritingIt(t *testing.T) {
 	if strings.Join(services.seen, ",") != strings.Join(want, ",") {
 		t.Fatalf("write order = %#v", services.seen)
 	}
-	for _, category := range app.onboardingMigration.categories {
+	for _, category := range app.onboarding.onboardingMigration.categories {
 		for _, item := range category.items {
 			if !item.copied {
 				t.Fatalf("row %s was not marked imported", item.item.ID)
@@ -575,7 +583,7 @@ func TestMigrationDisplayWaitStopsWhenCancelled(t *testing.T) {
 }
 
 func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testing.T) {
-	steps := (&App{}).onboardingSteps()
+	steps := (bindTestApp(&App{})).onboardingSteps()
 	want := []string{"welcome", "mainHotkey"}
 	if runtime.GOOS == "darwin" {
 		want = []string{"welcome", "permissions", "mainHotkey"}
@@ -624,7 +632,10 @@ func TestRemoveOnboardingQueryHotkeyPreservesOtherQueries(t *testing.T) {
 
 func TestRecordingConfiguredOnboardingQueryHotkeyPreservesReadyState(t *testing.T) {
 	state := &onboardingQueryHotkeyState{selected: true, ready: true, saved: true}
-	app := &App{onboardingQueryHotkey: state, hotkeySettings: newHotkeySettingsController(CommonDeps{})}
+	app := bindTestApp(&App{
+		onboarding:     onboardingController{onboardingQueryHotkey: state},
+		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
+	})
 
 	app.recordOnboardingQueryHotkey()
 
@@ -678,12 +689,12 @@ func TestOnboardingThemeSelectionFollowsCurrentSetting(t *testing.T) {
 		for _, imported := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/imported=%t", theme.Name, imported), func(t *testing.T) {
 				services := &migrationSettingWriter{}
-				app := &App{
+				app := bindTestApp(&App{
 					services:        services,
 					generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
 					themeSettings:   newThemeSettingsController(CommonDeps{}),
 					hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
-				}
+				})
 				app.generalSettings.Update(func(data *settingsData) { data.ThemeID = onboardingGlassID })
 				app.themeSettings.SetThemes(catalog)
 				app.loadOnboardingThemes()
@@ -716,11 +727,11 @@ func TestOnboardingThemeSelectionFollowsCurrentSetting(t *testing.T) {
 					if step.ID != "themeInstall" {
 						continue
 					}
-					app.onboardingStep = index
+					app.onboarding.onboardingStep = index
 					app.selectOnboardingStep(index)
 					assertSelection()
 					app.selectOnboardingStep(index + 1)
-					if app.onboardingStep != index+1 {
+					if app.onboarding.onboardingStep != index+1 {
 						t.Fatal("Continue did not advance from the theme page")
 					}
 					assertSelection()
@@ -753,15 +764,18 @@ func TestOnboardingUsesBundledGlassPalette(t *testing.T) {
 }
 
 func TestOnboardingCanContinueWhileThemeApplies(t *testing.T) {
-	app := &App{onboardingTheme: onboardingThemeState{applying: true}, hotkeySettings: newHotkeySettingsController(CommonDeps{})}
+	app := bindTestApp(&App{
+		onboarding:     onboardingController{onboardingTheme: onboardingThemeState{applying: true}},
+		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
+	})
 	for index, step := range app.onboardingSteps() {
 		if step.ID != "themeInstall" {
 			continue
 		}
-		app.onboardingStep = index
+		app.onboarding.onboardingStep = index
 		app.selectOnboardingStep(index + 1)
-		if app.onboardingStep != index+1 {
-			t.Fatalf("onboarding step = %d, want navigation to continue while the selected theme finishes applying", app.onboardingStep)
+		if app.onboarding.onboardingStep != index+1 {
+			t.Fatalf("onboarding step = %d, want navigation to continue while the selected theme finishes applying", app.onboarding.onboardingStep)
 		}
 		return
 	}

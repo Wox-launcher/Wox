@@ -47,8 +47,8 @@ func TestMentionCatalogInvalidationRejectsPendingResult(t *testing.T) {
 	c.LoadChatPluginMentions(t.Context(), &aiFakeService{mentions: []contract.AIPluginMention{{ID: "old", Name: "Old"}}}, "", func([]chatPluginMention) {
 		callbackCalled = true
 	})
-	app := &App{aiSettings: c}
-	app.reloadChatResourceName("mentions")
+	app := bindTestApp(&App{aiSettings: c})
+	app.chat.reloadChatResourceName("mentions")
 	if c.PluginMentionsLoaded() || c.PluginMentionsLoading() {
 		t.Fatal("invalidated catalog must allow a fresh request")
 	}

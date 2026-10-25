@@ -24,11 +24,18 @@ func (s *actionDamageServices) InvalidateRect(rect woxui.Rect) error { s.damage 
 
 // TestActionUpdatesRepaintOldAndNewPanelBounds covers typing, clearing, and selection without a native window.
 func TestActionUpdatesRepaintOldAndNewPanelBounds(t *testing.T) {
-	app := &App{generalSettings: &generalSettingsController{}, actionPanel: true, actionFilter: woxui.NewTextEditor(""), results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}, {ID: "copy", Name: "Copy"}}}}}
+	app := bindTestApp(&App{
+		generalSettings: &generalSettingsController{},
+		actions: actionPanelController{
+			actionPanel:  true,
+			actionFilter: woxui.NewTextEditor(""),
+		},
+		resultList: resultController{results: []queryResult{{Actions: []resultAction{{ID: "open", Name: "Open"}, {ID: "copy", Name: "Copy"}}}}},
+	})
 	services := &actionDamageServices{}
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		height := float32(200)
-		if app.actionFilter.State().Text != "" {
+		if app.actions.actionFilter.State().Text != "" {
 			height = 100
 		}
 		return woxwidget.Stack{Width: 800, Height: 600, Children: []woxwidget.StackChild{{
@@ -42,7 +49,7 @@ func TestActionUpdatesRepaintOldAndNewPanelBounds(t *testing.T) {
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, Scale: 1}
 	host.Frame(&woxui.DisplayList{}, frame)
 	previousDamage := woxui.Rect{}
-	for _, update := range []func(){func() { app.setActionFilterValue("missing") }, func() { app.setActionFilterValue("") }, func() { app.moveActionSelection(1) }, func() { app.selectAction(0) }} {
+	for _, update := range []func(){func() { app.actions.setActionFilterValue("missing") }, func() { app.actions.setActionFilterValue("") }, func() { app.actions.moveActionSelection(1) }, func() { app.actions.selectAction(0) }} {
 		services.damage, services.full = woxui.Rect{}, false
 		update()
 		if services.full || services.damage.Width <= 0 {
@@ -66,7 +73,7 @@ func TestActionUpdatesRepaintOldAndNewPanelBounds(t *testing.T) {
 			t.Fatalf("action damage = %+v, want old and new panel bounds %+v", got, want)
 		}
 		// A user can pause before clearing. Let both buffers forget the larger panel.
-		if app.actionFilter.State().Text != "" {
+		if app.actions.actionFilter.State().Text != "" {
 			frame.Damage = services.damage
 			frame.Damage.Y, frame.Damage.Height = 450, 100
 			previousDamage = frame.Damage
@@ -297,7 +304,7 @@ func TestActionPanelEntryForHotkeyIgnoresKeyUp(t *testing.T) {
 }
 
 func TestActionPanelHotkeyUsesConfiguredShortcut(t *testing.T) {
-	app := &App{generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState())}
+	app := bindTestApp(&App{generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState())})
 	if got := app.actionPanelHotkey(); got != setting.DefaultActionPanelHotkey() {
 		t.Fatalf("empty setting = %q, want default %q", got, setting.DefaultActionPanelHotkey())
 	}
@@ -315,8 +322,8 @@ func TestActionPanelHotkeyUsesConfiguredShortcut(t *testing.T) {
 }
 
 func TestOnActionKeyIgnoresKeyUp(t *testing.T) {
-	app := &App{actionPanel: true}
-	if app.onActionKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
+	app := bindTestApp(&App{actions: actionPanelController{actionPanel: true}})
+	if app.actions.onActionKey(woxui.KeyEvent{Key: woxui.KeyArrowDown}) {
 		t.Fatal("action panel handled key-up")
 	}
 }
@@ -464,33 +471,45 @@ func TestFilteredActionIndicesKeepsSystemActionsAfterPluginMatches(t *testing.T)
 }
 
 func TestOnResultActionHotkeyHandlesClosedPanel(t *testing.T) {
-	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}}}
-	if !app.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {
+	app := bindTestApp(&App{
+		resultList: resultController{
+			selected: 0,
+			results:  []queryResult{{ID: "selected", Actions: []resultAction{{ID: "delete", Type: "local", Hotkey: "cmd+d"}}}},
+		},
+	})
+	if !app.actions.onResultActionHotkey(woxui.KeyEvent{Key: "d", Modifiers: woxui.KeyModifierMeta, Down: true}) {
 		t.Fatal("closed action panel did not handle Cmd+D")
 	}
 }
 
 // TestShiftEnterResultActionPrecedesQueryNewline guards the directory-browsing shortcut against editor handling.
 func TestShiftEnterResultActionPrecedesQueryNewline(t *testing.T) {
-	app := &App{
-		editor:         woxui.NewTextEditor("f report"),
+	app := bindTestApp(&App{
+		querySession:   queryController{editor: woxui.NewTextEditor("f report")},
 		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
-		selected:       0,
-		results: []queryResult{{ID: "file", Actions: []resultAction{
-			{ID: "browse", Type: "local", Hotkey: "shift+enter", PreventHideAfterAction: true},
-		}}},
-	}
+		resultList: resultController{
+			selected: 0,
+			results: []queryResult{{ID: "file", Actions: []resultAction{
+				{ID: "browse", Type: "local", Hotkey: "shift+enter", PreventHideAfterAction: true},
+			}}},
+		},
+	})
 	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyEnter, Modifiers: woxui.KeyModifierShift, Down: true}) {
 		t.Fatal("Shift+Enter browse action was not handled")
 	}
-	if app.editor.State().Text != "f report" {
+	if app.querySession.editor.State().Text != "f report" {
 		t.Fatal("Shift+Enter inserted a newline instead of dispatching the result action")
 	}
 }
 
 func TestOnResultActionHotkeyLeavesDefaultEnterToLauncher(t *testing.T) {
-	app := &App{selected: 0, results: []queryResult{{ID: "selected", Actions: []resultAction{{ID: "default", Type: "local", Hotkey: "enter"}}}}}
-	if app.onResultActionHotkey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+	app := bindTestApp(&App{
+		resultList: resultController{
+			selected: 0,
+			results:  []queryResult{{ID: "selected", Actions: []resultAction{{ID: "default", Type: "local", Hotkey: "enter"}}}},
+		},
+	})
+	if app.actions.onResultActionHotkey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
 		t.Fatal("result hotkey intercepted the launcher's default Enter handling")
 	}
 }

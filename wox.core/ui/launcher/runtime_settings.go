@@ -35,7 +35,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			version = "v" + version
 		}
 		displayName := a.localizedRuntimeDisplayName(status.Runtime)
-		pluginLabel := strings.ReplaceAll(a.translate("i18n:ui_runtime_status_plugin_count"), "{count}", fmt.Sprintf("%d", status.LoadedPluginCount))
+		pluginLabel := strings.ReplaceAll(a.language.translate("i18n:ui_runtime_status_plugin_count"), "{count}", fmt.Sprintf("%d", status.LoadedPluginCount))
 		converted := launcherview.RuntimeStatus{
 			Runtime: status.Runtime, DisplayName: displayName, Mark: runtimeFallbackMark(status.Runtime), Icon: a.imageForSurface(runtimeIconSource(status.Runtime), physicalImageSize(22, imageScale), settingsPalette().Background), Version: version,
 			StatusCode: status.StatusCode, StatusLabel: a.localizedRuntimeStatusLabel(status), Detail: runtimeStatusDetail(status), PluginLabel: pluginLabel,
@@ -46,22 +46,22 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			if status.StatusCode == "unsupported_version" {
 				labelKey = "ui_runtime_upgrade_runtime"
 			}
-			converted.InstallLabel = strings.ReplaceAll(a.translate("i18n:"+labelKey), "{runtime}", displayName)
+			converted.InstallLabel = strings.ReplaceAll(a.language.translate("i18n:"+labelKey), "{runtime}", displayName)
 			converted.InstallIcon = a.imageForTint(settingControlIconSource("external"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnInstall = func() { a.openRuntimeInstallURL(status) }
 		}
 		if runtimeStatusRefreshable(status) {
-			converted.RefreshLabel = a.translate("i18n:ui_runtime_status_refresh")
+			converted.RefreshLabel = a.language.translate("i18n:ui_runtime_status_refresh")
 			if strings.EqualFold(snapshot.runtime.Refreshing, status.Runtime) {
-				converted.RefreshLabel = a.translate("i18n:ui_runtime_refreshing_host")
+				converted.RefreshLabel = a.language.translate("i18n:ui_runtime_refreshing_host")
 			}
 			converted.RefreshIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnRefresh = func() { a.refreshRuntimeHost(status.Runtime) }
 		}
 		if status.CanRestart {
-			converted.RestartLabel = a.translate("i18n:ui_runtime_restart_host")
+			converted.RestartLabel = a.language.translate("i18n:ui_runtime_restart_host")
 			if strings.EqualFold(snapshot.runtime.Restarting, status.Runtime) {
-				converted.RestartLabel = a.translate("i18n:ui_runtime_restarting_host")
+				converted.RestartLabel = a.language.translate("i18n:ui_runtime_restarting_host")
 			}
 			converted.RestartIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
 			converted.OnRestart = func() { a.restartRuntimeHost(status.Runtime) }
@@ -78,13 +78,13 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 		}
 		rows = append(rows, launcherview.RuntimeSettingRow{
 			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
-			State: state, Focused: focused, Disabled: snapshot.saving || snapshot.runtime.Restarting != "" || snapshot.runtime.Refreshing != "" || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsNativeWindow(),
+			State: state, Focused: focused, Disabled: snapshot.saving || snapshot.runtime.Restarting != "" || snapshot.runtime.Refreshing != "" || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsWindow.settingsNativeWindow(),
 			OnHover:   func() { a.selectSettingRow(index) },
 			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
 			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
 			OnSave: func() {
-				if a.generalSettings.EditKey() != item.key || a.settingSaving {
+				if a.generalSettings.EditKey() != item.key || a.settingsWindow.settingSaving {
 					return
 				}
 				// Leaving an unchanged path must not restart its runtime host.
@@ -108,14 +108,14 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 // runtimeSettingsLabels resolves Flutter-compatible page copy before entering the pure view layer.
 func (a *App) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
 	return launcherview.RuntimeSettingsLabels{
-		Title:             a.translate("i18n:ui_runtime_settings"),
-		Description:       a.translate("i18n:ui_runtime_settings_description"),
-		StatusSection:     a.translate("i18n:ui_runtime_status"),
-		ExecutableSection: a.translate("i18n:ui_runtime_executable_paths"),
-		ExecutableHelp:    a.translate("i18n:ui_runtime_executable_help"),
-		Browse:            a.translate("i18n:ui_runtime_browse"),
-		Clear:             a.translate("i18n:ui_runtime_clear"),
-		Empty:             a.translate("i18n:ui_runtime_status_empty"),
+		Title:             a.language.translate("i18n:ui_runtime_settings"),
+		Description:       a.language.translate("i18n:ui_runtime_settings_description"),
+		StatusSection:     a.language.translate("i18n:ui_runtime_status"),
+		ExecutableSection: a.language.translate("i18n:ui_runtime_executable_paths"),
+		ExecutableHelp:    a.language.translate("i18n:ui_runtime_executable_help"),
+		Browse:            a.language.translate("i18n:ui_runtime_browse"),
+		Clear:             a.language.translate("i18n:ui_runtime_clear"),
+		Empty:             a.language.translate("i18n:ui_runtime_status_empty"),
 	}
 }
 
@@ -139,7 +139,7 @@ func (a *App) localizedRuntimeDisplayName(runtime string) string {
 	if key == "" {
 		return runtime
 	}
-	return a.translate("i18n:" + key)
+	return a.language.translate("i18n:" + key)
 }
 
 // localizedRuntimeStatusLabel maps backend diagnosis codes to translated card pills.
@@ -155,19 +155,19 @@ func (a *App) localizedRuntimeStatusLabel(status runtimeStatus) string {
 	case "start_failed":
 		key = "ui_runtime_status_start_failed"
 	}
-	return a.translate("i18n:" + key)
+	return a.language.translate("i18n:" + key)
 }
 
 func (a *App) runtimeExecutablePlaceholder(key string) string {
 	if key == "CustomPythonPath" {
-		return a.translate("i18n:ui_runtime_python_path_placeholder")
+		return a.language.translate("i18n:ui_runtime_python_path_placeholder")
 	}
-	return a.translate("i18n:ui_runtime_nodejs_path_placeholder")
+	return a.language.translate("i18n:ui_runtime_nodejs_path_placeholder")
 }
 
 // browseRuntimeExecutable persists a selected executable immediately, matching Flutter's picker flow.
 func (a *App) browseRuntimeExecutable(item settingItem) {
-	window := a.settingsNativeWindow()
+	window := a.settingsWindow.settingsNativeWindow()
 	if window == nil {
 		return
 	}
@@ -183,15 +183,15 @@ func (a *App) browseRuntimeExecutable(item settingItem) {
 
 // saveRuntimeExecutablePath uses the backend validator as the final authority for picker and clear actions.
 func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
-	if a.settingSaving {
+	if a.settingsWindow.settingSaving {
 		return
 	}
 	a.generalSettings.EndEdit()
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	label := value
 	if label == "" {
-		label = a.translate("i18n:ui_runtime_clear")
+		label = a.language.translate("i18n:ui_runtime_clear")
 	}
 	a.startGeneralSettingSave("save runtime executable path", item, settingChoice{value: value, label: label})
 }
@@ -242,7 +242,7 @@ func (a *App) openRuntimeInstallURL(status runtimeStatus) {
 	if strings.TrimSpace(status.InstallURL) == "" {
 		return
 	}
-	if err := a.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
+	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
 		a.runtimeSettings.SetError("Could not open runtime website: " + err.Error())
 	}
 }

@@ -93,7 +93,7 @@ func TestAppearanceSpecificScreenAddsChooser(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.translations = map[string]string{
+	app.language.translations = map[string]string{
 		"ui_show_position_screen":        "Screen",
 		"ui_show_position_screen_tips":   "Choose the display Wox opens on",
 		"ui_show_position_choose_screen": "Choose screen",

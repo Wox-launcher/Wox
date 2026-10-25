@@ -247,7 +247,7 @@ func (a *App) loadFormTablePatternPreview(state *formTableEditorState, pattern s
 			}
 			preview.loading = false
 			if err != nil {
-				preview.errorText = a.translate("i18n:plugin_app_ignore_rule_preview_failed")
+				preview.errorText = a.language.translate("i18n:plugin_app_ignore_rule_preview_failed")
 				util.GetLogger().Warn(ctx, "failed to load ignore rule preview: "+err.Error())
 			} else {
 				for _, app := range loaded {
@@ -278,7 +278,7 @@ func (a *App) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
 	if !includeFuture && (preview.loading || preview.errorText != "") {
 		state.status = preview.errorText
 		if preview.loading {
-			state.status = a.translate("i18n:ui_hotkey_ignore_apps_loading")
+			state.status = a.language.translate("i18n:ui_hotkey_ignore_apps_loading")
 		}
 		a.invalidateFormTableWindow()
 		return false
@@ -286,7 +286,7 @@ func (a *App) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
 	matches := preview.matches
 	row, errKey := formTableIgnoreRuleSaveRow(pattern, includeFuture, state.patternPreview, matches)
 	if errKey != "" {
-		state.status = a.translate(errKey)
+		state.status = a.language.translate(errKey)
 		a.invalidateFormTableWindow()
 		return false
 	}

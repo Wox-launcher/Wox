@@ -9,11 +9,11 @@ import (
 func TestFilterableSettingChoiceLeavesPrintableKeysForTextInput(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(value string) string { return value }}
 	shared := newSharedEditState()
-	app := &App{
+	app := bindTestApp(&App{
 		generalSettings: newGeneralSettingsController(deps, shared),
 		aiSettings:      newAISettingsController(deps),
 		cloudSettings:   newCloudSettingsController(deps),
-	}
+	})
 	app.generalSettings.SetChoicePicker(&settingChoicePickerState{item: settingItem{filterable: true}})
 
 	if app.onSettingsKey(woxui.KeyEvent{Key: woxui.Key("p"), Down: true}) {
@@ -27,11 +27,11 @@ func TestFilterableSettingChoiceLeavesPrintableKeysForTextInput(t *testing.T) {
 func TestPlainSettingChoiceStillTrapsUnhandledKeys(t *testing.T) {
 	deps := CommonDeps{Invalidate: func() {}, Translate: func(value string) string { return value }}
 	shared := newSharedEditState()
-	app := &App{
+	app := bindTestApp(&App{
 		generalSettings: newGeneralSettingsController(deps, shared),
 		aiSettings:      newAISettingsController(deps),
 		cloudSettings:   newCloudSettingsController(deps),
-	}
+	})
 	app.generalSettings.SetChoicePicker(&settingChoicePickerState{item: settingItem{filterable: false}})
 
 	if !app.onSettingsKey(woxui.KeyEvent{Key: woxui.Key("p"), Down: true}) {

@@ -47,15 +47,15 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 	kind := automationSurfaceLauncher
 	_ = target.runOnUI("resolve automation surface", func() {
 		if target == a {
-			if a.onboardingOpen && a.onboardingHost != nil && a.onboardingView != nil {
-				host = a.onboardingHost
-				window = a.onboardingView.Window()
+			if a.onboarding.onboardingOpen && a.onboarding.onboardingHost != nil && a.onboarding.onboardingView != nil {
+				host = a.onboarding.onboardingHost
+				window = a.onboarding.onboardingView.Window()
 				kind = automationSurfaceOnboarding
 				return
 			}
-			if a.settingsOpen && a.settingsHost != nil && a.settingsView != nil {
-				host = a.settingsHost
-				window = a.settingsView.Window()
+			if a.settingsWindow.settingsOpen && a.settingsWindow.settingsHost != nil && a.settingsWindow.settingsView != nil {
+				host = a.settingsWindow.settingsHost
+				window = a.settingsWindow.settingsView.Window()
 				kind = automationSurfaceSettings
 				return
 			}
@@ -74,7 +74,7 @@ func (a *App) notesAutomationSurface() (*woxwidget.Host, *woxui.Window, bool) {
 		if strings.TrimSpace(a.automationFocusInstance) != "notes" {
 			return
 		}
-		controller := a.activeNotesController()
+		controller := a.notes.activeNotesController()
 		if controller == nil || controller.managed == nil {
 			return
 		}
@@ -255,7 +255,7 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 	}
 	return woxui.Call(func() {
 		host.Pointer(event)
-		if host == a.settingsHost {
+		if host == a.settingsWindow.settingsHost {
 			a.finishSettingsPointer(event)
 		}
 	})
@@ -316,10 +316,10 @@ func (a *App) ResetAutomationState() error {
 			return
 		}
 		a.resetQuery(plainQuery{})
-		a.queryHistories = nil
-		a.toolbarMsg = nil
-		a.toolbarFallbackMsg = nil
-		a.toolbarRevision++
+		a.querySession.queryHistories = nil
+		a.toolbar.toolbarMsg = nil
+		a.toolbar.toolbarFallbackMsg = nil
+		a.toolbar.toolbarRevision++
 		a.resetAutomationPerfCatalog()
 		resetErr = a.hideWindow(true)
 	}); err != nil {
@@ -427,7 +427,7 @@ func (a *App) SetAutomationFocusInstance(instanceName string) error {
 func (a *App) AutomationWindowState(instanceName string) (automation.WindowState, error) {
 	instanceName = strings.TrimSpace(instanceName)
 	if instanceName == "notes" {
-		controller := a.activeNotesController()
+		controller := a.notes.activeNotesController()
 		if controller == nil || controller.managed == nil {
 			return automation.WindowState{}, nil
 		}
@@ -527,7 +527,7 @@ func (a *App) HideAutomationWindow() error {
 		case automationSurfaceSettings:
 			actionErr = a.closeSettings()
 		case automationSurfaceNotes:
-			if controller := a.activeNotesController(); controller != nil {
+			if controller := a.notes.activeNotesController(); controller != nil {
 				controller.hide()
 			}
 		default:

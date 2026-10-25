@@ -32,9 +32,9 @@ func (a *App) openAICommandTemplatePicker(fieldIndex int) {
 	if !ok || form == nil || form.pluginID != aiCommandPluginID || fieldIndex < 0 || fieldIndex >= len(form.definitions) || form.definitions[fieldIndex].Value.Key != "commands" {
 		return
 	}
-	form.status = a.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
+	form.status = a.language.translate("i18n:ui_cloud_sync_plugin_exclusions_loading")
 	form.statusError = false
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "load AI command templates for plugin settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		templates, err := service.AICommandTemplates(ctx, a.sessionID)
@@ -46,15 +46,15 @@ func (a *App) openAICommandTemplatePicker(fieldIndex int) {
 				return
 			}
 			if err != nil {
-				current.status = strings.ReplaceAll(a.translate("i18n:ui_ai_command_template_load_failed"), "{error}", err.Error())
+				current.status = strings.ReplaceAll(a.language.translate("i18n:ui_ai_command_template_load_failed"), "{error}", err.Error())
 				current.statusError = true
-				a.invalidateSettingsWindow()
+				a.settingsWindow.invalidateSettingsWindow()
 				return
 			}
 			if len(templates) == 0 {
-				current.status = a.translate("i18n:ui_ai_command_template_empty")
+				current.status = a.language.translate("i18n:ui_ai_command_template_empty")
 				current.statusError = false
-				a.invalidateSettingsWindow()
+				a.settingsWindow.invalidateSettingsWindow()
 				return
 			}
 			a.showAICommandTemplateChoices(fieldIndex, templates, defaultModel)
@@ -82,9 +82,9 @@ func (a *App) showAICommandTemplateChoices(fieldIndex int, templates []contract.
 	}
 	if len(choices) == 0 {
 		if form := a.pluginSettings.Form(); form != nil {
-			form.status = a.translate("i18n:ui_ai_command_template_empty")
+			form.status = a.language.translate("i18n:ui_ai_command_template_empty")
 		}
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	if form := a.pluginSettings.Form(); form != nil {
@@ -93,7 +93,7 @@ func (a *App) showAICommandTemplateChoices(fieldIndex int, templates []contract.
 	}
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
 		item: settingItem{
-			key: "AICommandTemplate", title: a.translate("i18n:ui_ai_command_template_store"), filterable: true,
+			key: "AICommandTemplate", title: a.language.translate("i18n:ui_ai_command_template_store"), filterable: true,
 			choices: choices, trailers: trailers,
 		},
 		onChoose: func(choice settingChoice) {
@@ -104,7 +104,7 @@ func (a *App) showAICommandTemplateChoices(fieldIndex int, templates []contract.
 		},
 	})
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // beginAICommandTemplateRow opens the normal row editor with template values so
@@ -112,10 +112,10 @@ func (a *App) showAICommandTemplateChoices(fieldIndex int, templates []contract.
 func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AICommandTemplate, defaultModel contract.AIModel) {
 	if network.IsOffline() {
 		if form := a.pluginSettings.Form(); form != nil {
-			form.status = a.translate("i18n:ui_offline_unavailable")
+			form.status = a.language.translate("i18n:ui_offline_unavailable")
 			form.statusError = true
 		}
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	form := a.pluginSettings.Form()
@@ -124,7 +124,7 @@ func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AIComm
 	}
 	a.openPluginFormTable(fieldIndex)
 	a.beginAddFormTableRowDirect()
-	state := a.settingsTableEditor
+	state := a.settingsWindow.settingsTableEditor
 	if state == nil || state.rowForm == nil {
 		return
 	}

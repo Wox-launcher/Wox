@@ -145,7 +145,7 @@ func isBareEnterHotkey(hotkey string) bool {
 }
 
 // currentActionPanelEntries includes Hide Webpage only for cacheable full-preview windows.
-func (a *App) currentActionPanelEntries() []actionPanelEntry {
+func (a *actionPanelController) currentActionPanelEntries() []actionPanelEntry {
 	if a.actionPanelPurpose == actionPanelPurposeAbout {
 		return aboutMenuEntries(a.runningVersion())
 	}
@@ -154,7 +154,7 @@ func (a *App) currentActionPanelEntries() []actionPanelEntry {
 
 // resultActionPanelEntries is the right-hand Action Panel list, independent of About Menu.
 func (a *App) resultActionPanelEntries() []actionPanelEntry {
-	return unifiedActionPanelEntriesWithHide(a.results, a.selected, a.toolbarMsg, a.canHideWebViewPage())
+	return unifiedActionPanelEntriesWithHide(a.resultList.results, a.resultList.selected, a.toolbar.toolbarMsg, a.canHideWebViewPage())
 }
 
 // unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.
@@ -358,26 +358,26 @@ func (a *App) buildActionPanel(snapshot viewSnapshot, windowWidth, windowHeight,
 		}
 		icon, selectedIcon := a.actionPanelIcons(action, snapshot.palette, physicalImageSize(int(snapshot.densityMetrics.scaled(iconSize)), imageScale))
 		item := launcherview.ActionItem{
-			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.translate(action.Name), Icon: icon, SelectedIcon: selectedIcon, IconSize: paintedIconSize,
-			Tail: aboutMenuItemTail(action, a.translate), TailIcon: a.imageForSize(action.TailIcon, physicalImageSize(int(snapshot.densityMetrics.scaled(launcherview.ActionTailIconSize)), imageScale)),
+			Kind: launcherview.ActionItemKindAction, Index: index, ID: action.ID, Label: a.language.translate(action.Name), Icon: icon, SelectedIcon: selectedIcon, IconSize: paintedIconSize,
+			Tail: aboutMenuItemTail(action, a.language.translate), TailIcon: a.imageForSize(action.TailIcon, physicalImageSize(int(snapshot.densityMetrics.scaled(launcherview.ActionTailIconSize)), imageScale)),
 			HotkeyLabels: formatHotkeyLabels(action.Hotkey),
 		}
 		return item
 	})
 	return launcherview.ActionsBoundary(launcherview.ActionsProps{
-		Revision: snapshot.actionsRevision,
-		Window:   a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,
+		ResultsRevision: snapshot.resultsRevision, ToolbarRevision: snapshot.toolbarRevision,
+		Window: a.window, WindowWidth: windowWidth, WindowHeight: windowHeight, QueryHeight: queryHeight, ToolbarHeight: toolbarHeight, DensityScale: snapshot.densityMetrics.scale,
 		Theme: snapshot.palette.componentTheme(), ActionHeader: snapshot.palette.actionHeader,
 		ActionQueryBackground: snapshot.palette.actionQueryBackground, ActionQueryText: snapshot.palette.actionQueryText,
 		ResultTail: snapshot.palette.resultTail, SelectedTail: snapshot.palette.selectedTail,
 		ActionQueryRadius: snapshot.palette.actionQueryRadius,
 		ActionPadding:     snapshot.palette.actionPadding,
 		BottomOffset:      launcherview.ActionPanelBottomOffset(snapshot.palette.appPadding.Bottom),
-		HeaderLabel:       actionPanelHeaderLabel(snapshot, a.translate("i18n:ui_actions"), a.translate("i18n:ui_about")), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
+		HeaderLabel:       actionPanelHeaderLabel(snapshot, a.language.translate("i18n:ui_actions"), a.language.translate("i18n:ui_about")), NoMatchesLabel: a.language.translate("i18n:ui_no_matches"),
 		ListHeightLimit: actionPanelVisibleListHeight(snapshot.actionEntries, actionPanelUnfilteredIndices(snapshot.actionEntries)),
 		Items:           items, Selected: snapshot.actionSelected, Filter: snapshot.actionFilter,
-		OnSelect: a.selectAction, OnActivate: a.activateSelectedAction,
-		OnFilterChanged: a.setActionFilterValue, OnFilterKey: a.onActionKey,
+		OnSelect: a.actions.selectAction, OnActivate: a.actions.activateSelectedAction,
+		OnFilterChanged: a.actions.setActionFilterValue, OnFilterKey: a.actions.onActionKey,
 	})
 }
 
@@ -398,7 +398,7 @@ func actionPanelHeaderLabel(snapshot viewSnapshot, actionsLabel, aboutLabel stri
 	return actionsLabel
 }
 
-func (a *App) onActionKey(event woxui.KeyEvent) bool {
+func (a *actionPanelController) onActionKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
@@ -454,7 +454,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	entries := a.currentActionPanelEntries()
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.language.translationSnapshot(), a.usePinYin())
 	for _, index := range indices {
 		if hotkeyMatches(entries[index].Hotkey, event) {
 			a.actionSelected = index
@@ -467,7 +467,7 @@ func (a *App) onActionKey(event woxui.KeyEvent) bool {
 }
 
 // onResultActionHotkey executes a visible action without opening the action panel.
-func (a *App) onResultActionHotkey(event woxui.KeyEvent) bool {
+func (a *actionPanelController) onResultActionHotkey(event woxui.KeyEvent) bool {
 	if a.actionPanel {
 		return false
 	}
@@ -495,7 +495,7 @@ func actionPanelEntryForHotkey(entries []actionPanelEntry, event woxui.KeyEvent)
 	return actionPanelEntry{}, false
 }
 
-func (a *App) toggleActionPanel() {
+func (a *actionPanelController) toggleActionPanel() {
 	if a.actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout {
 		if len(a.resultActionPanelEntries()) == 0 {
 			return
@@ -514,11 +514,8 @@ func (a *App) toggleActionPanel() {
 }
 
 // openActionPanel switches the shared panel to one purpose and clears retained filter state.
-func (a *App) openActionPanel(purpose actionPanelPurpose) {
-	a.dismissAboutMenuTooltip()
-	a.stopQuickSelectLocked()
-	// Flutter dismisses a form action before transferring keyboard ownership to the action filter.
-	a.form = nil
+func (a *actionPanelController) openActionPanel(purpose actionPanelPurpose) {
+	a.beforeOpen()
 	a.actionPanel = true
 	a.actionPanelPurpose = purpose
 	a.aboutMenuError = ""
@@ -526,36 +523,36 @@ func (a *App) openActionPanel(purpose actionPanelPurpose) {
 	a.actionSelectionKey = ""
 	a.actionFilter = woxui.NewTextEditor("")
 	a.normalizeActionSelectionLocked()
-	if a.window != nil {
+	if a.window() != nil {
 		_ = a.applyWindowBounds()
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 }
 
 // openResultActionPanel selects the pointer target before opening its actions.
 func (a *App) openResultActionPanel(index int) {
 	a.selectResult(index)
-	if !a.actionPanel {
-		a.toggleActionPanel()
+	if !a.actions.actionPanel {
+		a.actions.toggleActionPanel()
 	}
 }
 
 // hideActionPanel clears filter state and returns keyboard ownership to the query editor.
-func (a *App) hideActionPanel() bool {
+func (a *actionPanelController) hideActionPanel() bool {
 	changed := a.resetActionPanelLocked()
 	if !changed {
 		return false
 	}
 	a.dismissAboutMenuTooltip()
-	if a.window != nil {
+	if a.window() != nil {
 		_ = a.applyWindowBounds()
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 	a.restoreQueryTextInput()
 	return true
 }
 
-func (a *App) resetActionPanelLocked() bool {
+func (a *actionPanelController) resetActionPanelLocked() bool {
 	if !a.actionPanel {
 		return false
 	}
@@ -564,7 +561,7 @@ func (a *App) resetActionPanelLocked() bool {
 }
 
 // clearActionPanelStateLocked drops both the open flag and the panel purpose.
-func (a *App) clearActionPanelStateLocked() {
+func (a *actionPanelController) clearActionPanelStateLocked() {
 	a.actionPanel = false
 	a.actionPanelPurpose = actionPanelPurposeResult
 	a.aboutMenuError = ""
@@ -575,16 +572,16 @@ func (a *App) clearActionPanelStateLocked() {
 
 // shouldSyncActionPanelWithResults is false while About Menu is open so result and
 // toolbar updates cannot close the panel or rewrite its selection.
-func (a *App) shouldSyncActionPanelWithResults() bool {
+func (a *actionPanelController) shouldSyncActionPanelWithResults() bool {
 	return a.actionPanel && a.actionPanelPurpose != actionPanelPurposeAbout
 }
 
-func (a *App) moveActionSelection(delta int) {
+func (a *actionPanelController) moveActionSelection(delta int) {
 	if !a.actionPanel || a.actionFilter == nil {
 		return
 	}
 	entries := a.currentActionPanelEntries()
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.language.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		return
 	}
@@ -601,12 +598,12 @@ func (a *App) moveActionSelection(delta int) {
 	a.invalidateActionPanel()
 }
 
-func (a *App) onActionTextInput(_ woxui.TextInputEvent) bool {
+func (a *actionPanelController) onActionTextInput(_ woxui.TextInputEvent) bool {
 	open := a.actionPanel
 	return open
 }
 
-func (a *App) setActionFilterValue(value string) {
+func (a *actionPanelController) setActionFilterValue(value string) {
 	if a.actionPanel && a.actionFilter != nil {
 		actionFilterChanged := a.actionFilter.State().Text != value
 		a.actionFilter.SetText(value, false)
@@ -619,22 +616,22 @@ func (a *App) setActionFilterValue(value string) {
 }
 
 // invalidateActionPanel covers both panel sizes when filtering changes its height.
-func (a *App) invalidateActionPanel() {
-	if a.host != nil && a.host.InvalidateKey("action-panel-surface") {
+func (a *actionPanelController) invalidateActionPanel() {
+	if a.host() != nil && a.host().InvalidateKey("action-panel-surface") {
 		return
 	}
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // normalizeActionSelectionLocked preserves the same unified action across live result and toolbar refreshes.
-func (a *App) normalizeActionSelectionLocked() {
+func (a *actionPanelController) normalizeActionSelectionLocked() {
 	if !a.actionPanel || a.actionFilter == nil {
 		return
 	}
 	entries := a.currentActionPanelEntries()
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.language.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""
@@ -659,9 +656,9 @@ func (a *App) normalizeActionSelectionLocked() {
 	a.actionSelectionKey = entries[a.actionSelected].Key
 }
 
-func (a *App) selectFirstFilteredActionLocked() {
+func (a *actionPanelController) selectFirstFilteredActionLocked() {
 	entries := a.currentActionPanelEntries()
-	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.translationSnapshot(), a.usePinYin())
+	indices := filteredActionIndices(entries, a.actionFilter.State().Text, a.language.translationSnapshot(), a.usePinYin())
 	if len(indices) == 0 {
 		a.actionSelected = -1
 		a.actionSelectionKey = ""
@@ -747,7 +744,7 @@ func translatedActionLabel(value string, translations map[string]string) string 
 	return strings.ReplaceAll(key, "_", " ")
 }
 
-func (a *App) selectAction(index int) {
+func (a *actionPanelController) selectAction(index int) {
 	entries := a.currentActionPanelEntries()
 	if a.actionPanel && index >= 0 && index < len(entries) {
 		a.actionSelected = index
@@ -756,7 +753,7 @@ func (a *App) selectAction(index int) {
 	a.invalidateActionPanel()
 }
 
-func (a *App) activateSelectedAction() {
+func (a *actionPanelController) activateSelectedAction() {
 	entries := a.currentActionPanelEntries()
 	selected := a.actionSelected
 	if selected < 0 || selected >= len(entries) {
@@ -772,7 +769,7 @@ func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
 		return
 	}
 	if entry.Source == actionPanelSourceToolbar {
-		a.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
+		a.toolbar.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
 		return
 	}
 	a.activateAction(entry.ResultIndex, entry.ActionIndex)
@@ -813,14 +810,14 @@ func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
 	if err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("execute local action %s: %v", entry.ID, err))
 	}
-	a.hideActionPanel()
+	a.actions.hideActionPanel()
 }
 
 // activateResultActionByID resolves preview-owned controls against the latest result snapshot.
 func (a *App) activateResultActionByID(queryID, resultID, actionID string) {
 	resultIndex := -1
 	actionIndex := -1
-	for index, result := range a.results {
+	for index, result := range a.resultList.results {
 		if result.QueryID != queryID || result.ID != resultID {
 			continue
 		}
@@ -839,23 +836,23 @@ func (a *App) activateResultActionByID(queryID, resultID, actionID string) {
 }
 
 func (a *App) activateAction(resultIndex, actionIndex int) {
-	if resultIndex < 0 || resultIndex >= len(a.results) || actionIndex < 0 || actionIndex >= len(a.results[resultIndex].Actions) || a.results[resultIndex].IsGroup {
+	if resultIndex < 0 || resultIndex >= len(a.resultList.results) || actionIndex < 0 || actionIndex >= len(a.resultList.results[resultIndex].Actions) || a.resultList.results[resultIndex].IsGroup {
 		return
 	}
-	result := a.results[resultIndex]
+	result := a.resultList.results[resultIndex]
 	action := result.Actions[actionIndex]
 	if action.ID == enterChatModeActionID {
-		a.hideActionPanel()
+		a.actions.hideActionPanel()
 		a.enterChatMode()
 		return
 	}
 	if action.ID == openWebViewPreviewActionID {
-		a.hideActionPanel()
+		a.actions.hideActionPanel()
 		a.enterWebViewPreviewMode(resultIndex, action.ContextData)
 		return
 	}
 	if action.Type == "form" {
-		a.openFormAction(result, action)
+		a.forms.openFormAction(result, action)
 		return
 	}
 	if action.Type == "local" {
@@ -868,7 +865,7 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 			return
 		}
 		if err := a.runOnUI("finish result action", func() {
-			a.hideActionPanel()
+			a.actions.hideActionPanel()
 			if !action.PreventHideAfterAction {
 				if err := a.hideWindow(true); err != nil {
 					log.Printf("hide launcher after action: %v", err)
@@ -885,24 +882,24 @@ func (a *App) onQueryFocusChanged(focused bool) {
 	if !focused {
 		return
 	}
-	if state := a.chatPreview; state != nil {
+	if state := a.chat.chatPreview; state != nil {
 		state.active = false
 	}
-	formVisible := a.form != nil
+	formVisible := a.forms.form != nil
 	if formVisible {
 		return
 	}
-	a.hideActionPanel()
-	a.queryFocusNotifiedInActiveWindow = true
+	a.actions.hideActionPanel()
+	a.querySession.queryFocusNotifiedInActiveWindow = true
 	a.notifyQueryBoxFocus()
 }
 
 // notifyQueryBoxFocusOnWindowActivation covers reactivation when Host retains logical query focus.
 func (a *App) notifyQueryBoxFocusOnWindowActivation() {
-	if !a.visible || a.queryFocusNotifiedInActiveWindow || a.host == nil || !a.queryCanFocus() || !a.host.HasFocus(launcherview.LauncherQueryInputKey) {
+	if !a.visible || a.querySession.queryFocusNotifiedInActiveWindow || a.host == nil || !a.queryCanFocus() || !a.host.HasFocus(launcherview.LauncherQueryInputKey) {
 		return
 	}
-	a.queryFocusNotifiedInActiveWindow = true
+	a.querySession.queryFocusNotifiedInActiveWindow = true
 	a.notifyQueryBoxFocus()
 }
 

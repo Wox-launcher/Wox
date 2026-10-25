@@ -55,15 +55,15 @@ func runNativeShortcutFlow(t *testing.T, services contract.Services, prepare fun
 func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 	runNativeShortcutFlow(t, nil, func(app *App) (func() error, error) {
 		draft := woxwidget.NewTextEditingController("unsaved settings draft")
-		app.settingTab = "plugins"
+		app.settingsWindow.settingTab = "plugins"
 		app.settingsSearch.SetEditor(draft)
-		app.settingsTableEditor = &formTableEditorState{}
-		tableDraft := app.settingsTableEditor
+		app.settingsWindow.settingsTableEditor = &formTableEditorState{}
+		tableDraft := app.settingsWindow.settingsTableEditor
 		consumed := 0
 		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 			return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{ID: "settings.draft", Width: 200, Height: 40, Controller: draft, OnKey: func(woxui.KeyEvent) bool { consumed++; return true }})
 		})
-		secondary := &App{primary: app}
+		secondary := bindTestApp(&App{primary: app})
 		managed, _, err := app.windows.Open(settingsWindowID, woxui.WindowOptions{Title: "Wox settings shortcut test", OnFrame: host.Frame, OnKey: func(event woxui.KeyEvent) bool {
 			return secondary.dispatchWindowKey(event, host, "", func() {}, func(woxui.KeyEvent) bool { return false })
 		}})
@@ -75,7 +75,7 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 		if !host.RequestFocus("settings.draft") {
 			return nil, errors.New("settings draft did not receive focus")
 		}
-		app.settingsView = managed
+		app.settingsWindow.settingsView = managed
 		visible := make(chan struct{}, 2)
 		app.windows.SubscribeLifecycle(func(event woxui.WindowLifecycleEvent) {
 			if event.ID == settingsWindowID && event.Current == woxui.WindowLifecycleVisible {
@@ -96,7 +96,7 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 			}
 			var stateErr error
 			if err := woxui.Call(func() {
-				if app.settingTab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.settingsTableEditor != tableDraft || consumed != 0 {
+				if app.settingsWindow.settingTab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.settingsWindow.settingsTableEditor != tableDraft || consumed != 0 {
 					stateErr = errors.New("settings shortcut reset a draft or reached the focused editor")
 				}
 			}); err != nil {
@@ -116,6 +116,8 @@ type shortcutNotesServices struct {
 	*notesWindowTestServices
 	saveAttempt chan struct{}
 }
+
+func (s *shortcutNotesServices) HideTooltip(context.Context, string, string) error { return nil }
 
 type shortcutWindowServices struct {
 	contract.Services
@@ -168,13 +170,13 @@ func (s *shortcutPluginSettingsServices) Plugins(context.Context, string, contra
 func TestPluginWindowSettingsShortcutRoutesAndKeepsDraft(t *testing.T) {
 	services := &shortcutPluginSettingsServices{shortcutWindowServices: &shortcutWindowServices{Services: &notesWindowTestServices{}}}
 	runNativeShortcutFlow(t, services, func(app *App) (func() error, error) {
-		note := newNotesWindowController(app, common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "note draft"}}}})
-		app.noteWindows["note"] = note
+		note := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "note draft"}}}})
+		app.notes.noteWindows["note"] = note
 		noteWindow, err := note.ensure()
 		if err != nil {
 			return nil, err
 		}
-		chatWindow, err := app.ensureChatWindow()
+		chatWindow, err := app.chatWindow.ensureChatWindow()
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +199,7 @@ func TestPluginWindowSettingsShortcutRoutesAndKeepsDraft(t *testing.T) {
 					return fmt.Errorf("plugin settings shortcut %d did not show Settings", index)
 				}
 				deadline := time.Now().Add(5 * time.Second)
-				for app.openingSettingsShortcut.Load() && time.Now().Before(deadline) {
+				for app.settingsWindow.openingSettingsShortcut.Load() && time.Now().Before(deadline) {
 					time.Sleep(time.Millisecond)
 				}
 				want := common.AIChatPluginID
@@ -207,13 +209,13 @@ func TestPluginWindowSettingsShortcutRoutesAndKeepsDraft(t *testing.T) {
 				var stateErr error
 				if err := woxui.Call(func() {
 					form := app.pluginSettings.Form()
-					if app.settingTab != "plugins" || app.pluginSettings.PluginsStore() || app.pluginSettings.DetailTab() != "settings" || form == nil || form.pluginID != want {
+					if app.settingsWindow.settingTab != "plugins" || app.pluginSettings.PluginsStore() || app.pluginSettings.DetailTab() != "settings" || form == nil || form.pluginID != want {
 						stateErr = fmt.Errorf("shortcut %d did not navigate to plugin %s", index, want)
 						return
 					}
 					if index == 0 {
-						settings = app.settingsView
-					} else if app.settingsView != settings {
+						settings = app.settingsWindow.settingsView
+					} else if app.settingsWindow.settingsView != settings {
 						stateErr = errors.New("plugin navigation replaced the Settings window")
 					}
 					if index == 1 {
@@ -243,7 +245,7 @@ func TestWindowShortcutRecordingPrecedesCommands(t *testing.T) {
 		form := newHotkeySettingsForm(settingsData{})
 		app.hotkeySettings.SetForm(&form)
 		app.hotkeySettings.SetRecording(&hotkeyRecordingState{target: &form, ready: true, raw: true, fallback: true, diagnosticCtx: context.Background()})
-		managed, err := app.ensureSettingsWindow()
+		managed, err := app.settingsWindow.ensureSettingsWindow()
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +318,7 @@ func TestChatCloseShortcutClosesOnlyDedicatedWindow(t *testing.T) {
 			return nil, err
 		}
 		app.launcher, app.window = launcher, launcher.Window()
-		chat, err := app.ensureChatWindow()
+		chat, err := app.chatWindow.ensureChatWindow()
 		if err != nil {
 			return nil, err
 		}
@@ -354,9 +356,9 @@ func (s *shortcutNotesServices) NotesSave(ctx context.Context, id, revision stri
 func TestNoteCloseShortcutPreservesFailedSaveAndOtherWindows(t *testing.T) {
 	services := &shortcutNotesServices{notesWindowTestServices: &notesWindowTestServices{saveErr: errors.New("disk full")}, saveAttempt: make(chan struct{}, 2)}
 	runNativeShortcutFlow(t, services, func(app *App) (func() error, error) {
-		first := newNotesWindowController(app, common.NoteRecord{ID: "first", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "unsaved note"}}}})
-		second := newNotesWindowController(app, common.NoteRecord{ID: "second", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "other note"}}}})
-		app.noteWindows["first"], app.noteWindows["second"] = first, second
+		first := newNotesWindowController(&app.notes, common.NoteRecord{ID: "first", Revision: "initial", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "unsaved note"}}}})
+		second := newNotesWindowController(&app.notes, common.NoteRecord{ID: "second", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "other note"}}}})
+		app.notes.noteWindows["first"], app.notes.noteWindows["second"] = first, second
 		first.dirty = true
 		firstWindow, err := first.ensure()
 		if err != nil {

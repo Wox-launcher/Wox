@@ -195,7 +195,7 @@ func optionalIntegerValidators(hasRange bool, min, max int, errorKey string) []f
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsOpen && a.settingTab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsTableEditor == nil
+	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsWindow.settingsTableEditor == nil
 	if !active {
 		return false
 	}
@@ -222,22 +222,22 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 		index = (index + delta + len(fields.definitions)) % len(fields.definitions)
 		if formDefinitionFocusable(fields.definitions[index]) {
 			setFormFieldsFocusLocked(fields, index)
-			a.settingRow = index
+			a.settingsWindow.settingRow = index
 			break
 		}
 	}
 	a.stopHotkeyRecordingForDifferentField(fields, index)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) focusHotkeySettingsField(index int) {
 	a.stopHotkeyRecordingForDifferentField(a.hotkeySettings.Form(), index)
 	if fields := a.hotkeySettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
-		a.settingRow = index
+		a.settingsWindow.settingRow = index
 		a.hotkeySettings.SetFocused(true)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) activateHotkeySettingsField() {
@@ -264,8 +264,8 @@ func (a *App) recordHotkeySettingsField(index int) {
 }
 
 func (a *App) openHotkeySettingsTable(index int) {
-	if form := a.hotkeySettings.Form(); a.settingsOpen && a.settingTab == "hotkey" && form != nil {
-		a.settingRow = index
+	if form := a.hotkeySettings.Form(); a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey" && form != nil {
+		a.settingsWindow.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
 	a.finishOpeningFormTable()
@@ -274,7 +274,7 @@ func (a *App) openHotkeySettingsTable(index int) {
 // onGeneralQuerySettingsKey routes navigation to the focused query table instead of a built-in row.
 func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
 	fields := a.generalSettings.Form()
-	if !a.settingsOpen || a.settingTab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.settingsTableEditor != nil {
+	if !a.settingsWindow.settingsOpen || a.settingsWindow.settingTab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.settingsWindow.settingsTableEditor != nil {
 		return false
 	}
 	switch event.Key {
@@ -294,16 +294,16 @@ func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
 func (a *App) focusGeneralQuerySettingsField(index int) {
 	if fields := a.generalSettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
-		a.settingRow = index
+		a.settingsWindow.settingRow = index
 		a.generalSettings.SetFormFocused(true)
 	}
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // openGeneralQuerySettingsTable opens a General query table when that page is current.
 func (a *App) openGeneralQuerySettingsTable(index int) {
-	if form := a.generalSettings.Form(); a.settingsOpen && a.settingTab == "general" && form != nil {
-		a.settingRow = index
+	if form := a.generalSettings.Form(); a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "general" && form != nil {
+		a.settingsWindow.settingRow = index
 		a.openFormTableLocked(form, index)
 	}
 	a.finishOpeningFormTable()
@@ -327,7 +327,7 @@ func trayQueryRowIndexFromParam(param string) (int, bool) {
 // mirroring the inline table's edit button flow.
 func (a *App) openTrayQueryEditor(rowIndex int) {
 	fields := a.generalSettings.Form()
-	if !a.settingsOpen || a.settingTab != "general" || fields == nil || rowIndex < 0 {
+	if !a.settingsWindow.settingsOpen || a.settingsWindow.settingTab != "general" || fields == nil || rowIndex < 0 {
 		return
 	}
 	index := -1

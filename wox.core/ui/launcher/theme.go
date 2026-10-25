@@ -488,7 +488,7 @@ func defaultPalette() uiPalette {
 }
 
 // reloadTheme pulls the platform-resolved theme from core before the next frame.
-func (a *App) reloadTheme() error {
+func (a *appearanceController) reloadTheme() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	loaded, err := a.services.CurrentTheme(ctx, a.sessionID)
@@ -504,12 +504,12 @@ func (a *App) applyTheme(theme themeData) {
 	palette := paletteForTheme(theme)
 	isDark := palette.isDark()
 	woxui.SetDefaultAppearance(isDark)
-	a.palette = palette
-	settingsView := a.settingsView
-	onboardingView := a.onboardingView
+	a.appearance.palette = palette
+	settingsView := a.settingsWindow.settingsView
+	onboardingView := a.onboarding.onboardingView
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
-		if err := a.window.SetWindowChrome(a.palette.AppWindowChrome, a.palette.AppBorderRadius, a.palette.background.A != 0); err != nil {
+		if err := a.window.SetWindowChrome(a.appearance.palette.AppWindowChrome, a.appearance.palette.AppBorderRadius, a.appearance.palette.background.A != 0); err != nil {
 			util.GetLogger().Error(context.Background(), fmt.Sprintf("apply theme window chrome: %v", err))
 		}
 		_ = a.applyWindowBounds()
@@ -521,18 +521,18 @@ func (a *App) applyTheme(theme themeData) {
 	if onboardingView != nil {
 		_ = onboardingView.Window().SetAppearance(true)
 	}
-	if chatWindow := a.chatNativeWindow(); chatWindow != nil {
+	if chatWindow := a.chatWindow.chatNativeWindow(); chatWindow != nil {
 		_ = chatWindow.SetAppearance(isDark)
 		_ = chatWindow.Invalidate()
 	}
-	for _, controller := range a.noteWindows {
+	for _, controller := range a.notes.noteWindows {
 		if controller.managed != nil {
 			_ = controller.managed.Window().SetAppearance(isDark)
 			_ = controller.managed.Window().Invalidate()
 		}
 	}
-	a.invalidateSettingsWindow()
-	a.invalidateOnboardingWindow()
+	a.settingsWindow.invalidateSettingsWindow()
+	a.onboarding.invalidateOnboardingWindow()
 	overlay.NotifyThemeChanged(isDark)
 }
 

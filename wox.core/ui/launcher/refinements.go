@@ -18,7 +18,7 @@ const (
 )
 
 func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageScale float32) launcherview.RefinementsProps {
-	fallback := a.translate("i18n:ui_query_refinement_filters")
+	fallback := a.language.translate("i18n:ui_query_refinement_filters")
 	if strings.HasPrefix(fallback, "ui query refinement") || fallback == "" {
 		fallback = "Filters"
 	}
@@ -36,7 +36,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		for _, option := range options {
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
-				Value: option.Value, Label: a.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(16)), imageScale)),
+				Value: option.Value, Label: a.language.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(16)), imageScale)),
 				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})
@@ -45,7 +45,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		if !strings.Contains(hotkey, "+") {
 			hotkey = ""
 		}
-		groups = append(groups, launcherview.RefinementGroup{Title: a.translate(refinement.Title), Hotkey: hotkey, Options: converted})
+		groups = append(groups, launcherview.RefinementGroup{Title: a.language.translate(refinement.Title), Hotkey: hotkey, Options: converted})
 	}
 	return launcherview.RefinementsProps{
 		Revision: snapshot.refinementsRevision,
@@ -59,7 +59,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 // refinementToggleTooltip advertises the same Ctrl/Cmd+F shortcut the launcher binds to the filter bar.
 func (a *App) refinementToggleTooltip() string {
 	hotkey := strings.Join(formatHotkeyLabels(primaryHotkey("f")), "+")
-	text := a.translate("i18n:ui_query_refinement_filters_tooltip")
+	text := a.language.translate("i18n:ui_query_refinement_filters_tooltip")
 	if strings.HasPrefix(text, "ui query refinement") || text == "" {
 		text = "Filter search results ({hotkey})"
 	}
@@ -68,7 +68,7 @@ func (a *App) refinementToggleTooltip() string {
 
 // setRefinementTooltip anchors filter-button help to the launcher query accessory.
 func (a *App) setRefinementTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.setNativeHoverTooltip(&a.refinementTooltipRevision, "go-ui-refinement", "update refinement tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
+	a.tooltips.setNativeHoverTooltip(&a.resultList.refinementTooltipRevision, "go-ui-refinement", "update refinement tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
 }
 
 func (a *App) buildRefinementToggle(snapshot viewSnapshot, imageScale float32) woxwidget.Widget {
@@ -96,7 +96,7 @@ func (a *App) refinementSummary(snapshot viewSnapshot, fallback string) string {
 		for _, value := range selected {
 			for _, option := range refinement.Options {
 				if option.Value == value {
-					labels = append(labels, a.translate(option.Title))
+					labels = append(labels, a.language.translate(option.Title))
 					break
 				}
 			}
@@ -135,64 +135,64 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 		if refinement.ID == "" || refinement.Type == "" {
 			continue
 		}
-		selected := splitRefinementValues(a.query.QueryRefinements[refinement.ID])
+		selected := splitRefinementValues(a.querySession.query.QueryRefinements[refinement.ID])
 		selected = normalizeRefinementValues(refinement, selected)
 		if len(selected) > 0 {
 			values[refinement.ID] = strings.Join(selected, ",")
 		}
 		valid = append(valid, refinement)
 	}
-	a.refinements = valid
-	a.refinementsSectionRevision++
-	a.query.QueryRefinements = values
-	a.refinementScope = a.queryScopeIdentityLocked(a.query.QueryText)
+	a.resultList.refinements = valid
+	a.resultList.refinementsSectionRevision++
+	a.querySession.query.QueryRefinements = values
+	a.resultList.refinementScope = a.querySession.queryScopeIdentityLocked(a.querySession.query.QueryText)
 	if len(valid) == 0 {
-		a.refinementOpen = false
+		a.resultList.refinementOpen = false
 	}
 }
 
 // applyQueryTextChangeLocked starts a new query while retaining controls only inside their plugin scope.
 func (a *App) applyQueryTextChangeLocked(text string) {
-	text = a.updateQueryHintText(text)
-	a.canRecallHistory = false
-	a.reuseCompletionHintLocked(text)
-	nextScope := a.queryScopeIdentityLocked(text)
+	text = a.querySession.updateQueryHintText(text)
+	a.querySession.canRecallHistory = false
+	a.querySession.reuseCompletionHintLocked(text)
+	nextScope := a.querySession.queryScopeIdentityLocked(text)
 	preservePluginLayout := a.shouldPreservePluginLayoutLocked(text)
-	if a.refinementScope != "" && nextScope != a.refinementScope {
-		a.refinements = nil
-		a.refinementsSectionRevision++
-		a.refinementOpen = false
-		a.refinementScope = ""
-		a.query.QueryRefinements = map[string]string{}
+	if a.resultList.refinementScope != "" && nextScope != a.resultList.refinementScope {
+		a.resultList.refinements = nil
+		a.resultList.refinementsSectionRevision++
+		a.resultList.refinementOpen = false
+		a.resultList.refinementScope = ""
+		a.querySession.query.QueryRefinements = map[string]string{}
 	}
-	if a.query.QueryText == "" {
-		a.attentionQueryWasGlobal = true
+	if a.querySession.query.QueryText == "" {
+		a.attention.attentionQueryWasGlobal = true
 	}
-	a.query.QueryText = text
+	a.querySession.query.QueryText = text
 	a.beginQueryGenerationLocked()
-	a.resultScrollDetached = false
-	a.beginQueryTransitionLocked(preservePluginLayout)
+	a.resultList.resultScrollDetached = false
+	a.querySession.beginQueryTransitionLocked(preservePluginLayout)
 	// Preserve the visible global accessory until the backend classifies the new query.
-	a.stopGlanceLocked(false)
-	a.clearActionPanelStateLocked()
-	a.chatFullscreen = false
-	a.clearWebViewPreviewModeLocked()
+	a.glance.stopGlanceLocked(false)
+	a.actions.clearActionPanelStateLocked()
+	a.chat.chatFullscreen = false
+	a.webView.clearWebViewPreviewModeLocked()
 }
 
 // shouldPreservePluginLayoutLocked keeps confirmed plugin chrome stable while the same scope remains active.
 func (a *App) shouldPreservePluginLayoutLocked(nextText string) bool {
-	if a.query.QueryType != "input" || !a.queryContextKnown || a.queryContext.IsGlobalQuery {
+	if a.querySession.query.QueryType != "input" || !a.querySession.queryContextKnown || a.querySession.queryContext.IsGlobalQuery {
 		return false
 	}
-	if len(a.query.QueryScope.Plugins) > 0 {
-		return a.queryScopeIdentityLocked(a.query.QueryText) == a.queryScopeIdentityLocked(nextText)
+	if len(a.querySession.query.QueryScope.Plugins) > 0 {
+		return a.querySession.queryScopeIdentityLocked(a.querySession.query.QueryText) == a.querySession.queryScopeIdentityLocked(nextText)
 	}
-	return a.queryContext.PluginID != "" &&
-		refinementQueryScope(a.query.QueryText) == refinementQueryScope(nextText)
+	return a.querySession.queryContext.PluginID != "" &&
+		refinementQueryScope(a.querySession.query.QueryText) == refinementQueryScope(nextText)
 }
 
 // queryScopeIdentityLocked returns the stable scope key for refinements and layout retention.
-func (a *App) queryScopeIdentityLocked(text string) string {
+func (a *queryController) queryScopeIdentityLocked(text string) string {
 	if len(a.query.QueryScope.Plugins) > 0 {
 		return toCoreQueryScope(a.query.QueryScope).Identity()
 	}
@@ -200,11 +200,11 @@ func (a *App) queryScopeIdentityLocked(text string) string {
 }
 
 // beginQueryTransitionLocked gives fast query responses time to replace the visible snapshot without an empty frame.
-func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
+func (a *queryController) beginQueryTransitionLocked(preservePluginLayout bool) {
 	a.releaseRefreshResultHoldLocked()
 	a.resetQueryTransitionLocked()
 	a.resetQueryLoadingLocked()
-	if a.visible && len(a.results) > 0 && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0 || a.show.StartPage == "mru") {
+	if a.visible() && len(a.resultList.results) > 0 && (a.query.QueryText != "" || len(a.query.QueryScope.Plugins) > 0 || a.startPage() == "mru") {
 		queryID := a.query.QueryID
 		a.queryTransitionTimer = time.AfterFunc(staleQueryResultsDuration, func() {
 			if err := a.runOnUI("show pending query results", func() {
@@ -214,18 +214,18 @@ func (a *App) beginQueryTransitionLocked(preservePluginLayout bool) {
 			}
 		})
 	} else {
-		a.results = nil
-		a.resultsSectionRevision++
-		a.resultsQueryID = ""
-		a.selected = -1
+		a.resultList.results = nil
+		a.resultList.resultsSectionRevision++
+		a.resultList.resultsQueryID = ""
+		a.resultList.selected = -1
 		if !preservePluginLayout {
-			a.layout = queryLayout{}
+			a.resultList.layout = queryLayout{}
 		}
 	}
 }
 
 // startQueryLoadingLocked starts Flutter's delay for every shared query entry point.
-func (a *App) startQueryLoadingLocked() {
+func (a *queryController) startQueryLoadingLocked() {
 	a.resetQueryLoadingLocked()
 	if a.query.QueryText == "" && len(a.query.QueryScope.Plugins) == 0 {
 		return
@@ -239,32 +239,32 @@ func (a *App) startQueryLoadingLocked() {
 }
 
 // resetQueryLoadingLocked cancels both the delayed trigger and any visible loading state.
-func (a *App) resetQueryLoadingLocked() {
+func (a *queryController) resetQueryLoadingLocked() {
 	if a.queryLoadingTimer != nil {
 		a.queryLoadingTimer.Stop()
 		a.queryLoadingTimer = nil
 	}
 	wasLoading := a.queryLoading
 	a.queryLoading = false
-	if wasLoading && a.host != nil {
-		a.host.InvalidateBoundary(launcherview.LauncherQueryLoadingBoundaryKey)
+	if wasLoading && a.host() != nil {
+		a.host().InvalidateBoundary(launcherview.LauncherQueryLoadingBoundaryKey)
 	}
 }
 
 // showQueryLoading exposes the spinner only while the same query still has no result snapshot.
-func (a *App) showQueryLoading(queryID string) {
-	queryReturned := a.resultsQueryID == queryID && (len(a.results) > 0 || a.queryComplete)
-	if a.destroyed.Load() || a.query.QueryID != queryID || queryReturned {
+func (a *queryController) showQueryLoading(queryID string) {
+	queryReturned := a.resultList.resultsQueryID == queryID && (len(a.resultList.results) > 0 || a.queryComplete)
+	if a.isDestroyed() || a.query.QueryID != queryID || queryReturned {
 		return
 	}
 	a.queryLoadingTimer = nil
 	a.queryLoading = true
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
-func (a *App) resetQueryTransitionLocked() {
+func (a *queryController) resetQueryTransitionLocked() {
 	if a.queryTransitionTimer != nil {
 		a.queryTransitionTimer.Stop()
 		a.queryTransitionTimer = nil
@@ -272,28 +272,28 @@ func (a *App) resetQueryTransitionLocked() {
 }
 
 // showPendingQueryResults clears stale content without shrinking the window while the current query is still waiting.
-func (a *App) showPendingQueryResults(queryID string, preservePluginLayout bool) {
-	if a.query.QueryID != queryID || a.resultsQueryID == queryID {
+func (a *queryController) showPendingQueryResults(queryID string, preservePluginLayout bool) {
+	if a.isDestroyed() || a.query.QueryID != queryID || a.resultList.resultsQueryID == queryID {
 		return
 	}
 	a.queryTransitionTimer = nil
-	a.results = nil
-	a.resultsSectionRevision++
-	a.resultsQueryID = ""
-	a.selected = -1
-	a.resultScrollDetached = false
+	a.resultList.results = nil
+	a.resultList.resultsSectionRevision++
+	a.resultList.resultsQueryID = ""
+	a.resultList.selected = -1
+	a.resultList.resultScrollDetached = false
 	if !preservePluginLayout {
-		a.layout = queryLayout{}
+		a.resultList.layout = queryLayout{}
 	}
 	a.reconcileSelectedPreview()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 func (a *App) toggleRefinementBar() bool {
-	if len(a.refinements) == 0 || a.show.HideQueryBox {
+	if len(a.resultList.refinements) == 0 || a.show.HideQueryBox {
 		return false
 	}
-	a.refinementOpen = !a.refinementOpen
+	a.resultList.refinementOpen = !a.resultList.refinementOpen
 	if err := a.applyWindowBounds(); err != nil {
 		log.Printf("resize launcher for query refinements: %v", err)
 	}
@@ -306,12 +306,12 @@ func (a *App) onRefinementHotkey(event woxui.KeyEvent) bool {
 	if a.show.HideQueryBox {
 		return false
 	}
-	for index := range a.refinements {
-		refinement := &a.refinements[index]
+	for index := range a.resultList.refinements {
+		refinement := &a.resultList.refinements[index]
 		if !hotkeyMatches(refinement.Hotkey, event) {
 			continue
 		}
-		a.updateRefinementSelection(refinement, nextRefinementHotkeyValues(*refinement, splitRefinementValues(a.query.QueryRefinements[refinement.ID])))
+		a.updateRefinementSelection(refinement, nextRefinementHotkeyValues(*refinement, splitRefinementValues(a.querySession.query.QueryRefinements[refinement.ID])))
 		return true
 	}
 	return false
@@ -375,16 +375,16 @@ func nextRefinementHotkeyValues(refinement queryRefinement, selected []string) [
 
 func (a *App) selectRefinementOption(refinementID, value string) {
 	var refinement *queryRefinement
-	for index := range a.refinements {
-		if a.refinements[index].ID == refinementID {
-			refinement = &a.refinements[index]
+	for index := range a.resultList.refinements {
+		if a.resultList.refinements[index].ID == refinementID {
+			refinement = &a.resultList.refinements[index]
 			break
 		}
 	}
 	if refinement == nil || value == "" {
 		return
 	}
-	selected := splitRefinementValues(a.query.QueryRefinements[refinementID])
+	selected := splitRefinementValues(a.querySession.query.QueryRefinements[refinementID])
 	switch refinement.Type {
 	case "multiSelect", "toggle":
 		if slices.Contains(selected, value) {
@@ -400,22 +400,22 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 
 // updateRefinementSelection routes keyboard and pointer changes through the same query refresh path.
 func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []string) {
-	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.query.QueryText)
+	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.querySession.query.QueryText)
 	selected = normalizeRefinementValues(*refinement, selected)
 	if len(selected) == 0 {
-		delete(a.query.QueryRefinements, refinement.ID)
+		delete(a.querySession.query.QueryRefinements, refinement.ID)
 	} else {
-		a.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
+		a.querySession.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
 	}
 	a.beginQueryGenerationLocked()
-	a.completionHint = nil
-	a.resultScrollDetached = false
-	a.beginQueryTransitionLocked(preservePluginLayout)
-	a.stopGlanceLocked(true)
-	a.clearActionPanelStateLocked()
-	a.chatFullscreen = false
-	a.clearWebViewPreviewModeLocked()
-	a.reconcileSelectedPreview()
+	a.querySession.completionHint = nil
+	a.resultList.resultScrollDetached = false
+	a.querySession.beginQueryTransitionLocked(preservePluginLayout)
+	a.glance.stopGlanceLocked(true)
+	a.actions.clearActionPanelStateLocked()
+	a.chat.chatFullscreen = false
+	a.webView.clearWebViewPreviewModeLocked()
+	a.previews.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after refinement change: %v", err)
 	}

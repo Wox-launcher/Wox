@@ -17,20 +17,22 @@ import (
 
 func newChatAttachmentTestApp(t *testing.T) *App {
 	t.Helper()
-	return &App{
-		sessionID:      "session",
-		lifecycleCtx:   context.Background(),
-		visible:        true,
-		chatFullscreen: true,
-		layout:         queryLayout{ChatMode: true},
-		chatPreview: &chatPreviewState{
-			key:         "preview",
-			chat:        chatData{ID: "chat-1", Model: aiModel{Name: "model"}},
-			editor:      woxui.NewTextEditor("keep this draft"),
-			attachments: []common.AIChatAttachment{{ID: "existing", Kind: common.AIChatAttachmentQuote, Text: "quoted"}},
-			active:      true,
+	return bindTestApp(&App{
+		sessionID:    "session",
+		lifecycleCtx: context.Background(),
+		visible:      true,
+		chat: chatController{
+			chatFullscreen: true,
+			chatPreview: &chatPreviewState{
+				key:         "preview",
+				chat:        chatData{ID: "chat-1", Model: aiModel{Name: "model"}},
+				editor:      woxui.NewTextEditor("keep this draft"),
+				attachments: []common.AIChatAttachment{{ID: "existing", Kind: common.AIChatAttachmentQuote, Text: "quoted"}},
+				active:      true,
+			},
 		},
-	}
+		resultList: resultController{layout: queryLayout{ChatMode: true}},
+	})
 }
 
 func waitUntil(t *testing.T, cond func() bool) {
@@ -68,10 +70,10 @@ func TestApplyImportedChatAttachmentsPreservesDraft(t *testing.T) {
 		t.Fatal("expected a launcher chat target")
 	}
 	first := []common.AIChatAttachment{{ID: "one", Kind: common.AIChatAttachmentFile, Name: "a.txt", URL: "a.txt"}}
-	app.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, first, nil)
+	app.chat.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, first, nil)
 	second := []common.AIChatAttachment{{ID: "two", Kind: common.AIChatAttachmentFile, Name: "b.txt", URL: "b.txt"}}
-	app.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, second, nil)
-	state := app.chatPreview
+	app.chat.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, second, nil)
+	state := app.chat.chatPreview
 	if state.chat.ID != "chat-1" || state.editor.State().Text != "keep this draft" {
 		t.Fatal("import changed the conversation or composer text")
 	}
@@ -83,11 +85,11 @@ func TestApplyImportedChatAttachmentsPreservesDraft(t *testing.T) {
 func TestFailedChatAttachmentBatchLeavesDraftUnchanged(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
 	target, _ := app.captureChatAttachmentImportTarget(false)
-	app.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "new"}}, os.ErrNotExist)
-	if len(app.chatPreview.attachments) != 1 || app.chatPreview.attachments[0].ID != "existing" {
+	app.chat.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "new"}}, os.ErrNotExist)
+	if len(app.chat.chatPreview.attachments) != 1 || app.chat.chatPreview.attachments[0].ID != "existing" {
 		t.Fatal("failed import mutated the existing draft")
 	}
-	if app.chatPreview.error == "" {
+	if app.chat.chatPreview.error == "" {
 		t.Fatal("failed import must surface an error")
 	}
 }
@@ -95,33 +97,33 @@ func TestFailedChatAttachmentBatchLeavesDraftUnchanged(t *testing.T) {
 func TestChatAttachmentImportIgnoresStaleTarget(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
 	target, _ := app.captureChatAttachmentImportTarget(false)
-	app.startNewChat()
-	app.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "late"}}, nil)
-	if len(app.chatPreview.attachments) != 0 {
+	app.chat.startNewChat()
+	app.chat.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "late"}}, nil)
+	if len(app.chat.chatPreview.attachments) != 0 {
 		t.Fatal("a finished import must not attach to a new chat")
 	}
 }
 
 func TestSendChatMessageBlockedWhileImporting(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
-	app.chatPreview.importing = true
-	app.sendChatMessage()
-	if app.chatPreview.sending || app.chatPreview.chat.IsStreaming || len(app.chatPreview.chat.Conversations) != 0 {
+	app.chat.chatPreview.importing = true
+	app.chat.sendChatMessage()
+	if app.chat.chatPreview.sending || app.chat.chatPreview.chat.IsStreaming || len(app.chat.chatPreview.chat.Conversations) != 0 {
 		t.Fatal("send must stay blocked while attachments are importing")
 	}
-	app.chatPreview.importing = false
-	app.chatPreview.editor.SetText("", false)
-	app.sendChatMessage()
-	if app.chatPreview.error == "" {
+	app.chat.chatPreview.importing = false
+	app.chat.chatPreview.editor.SetText("", false)
+	app.chat.sendChatMessage()
+	if app.chat.chatPreview.error == "" {
 		t.Fatal("send should run normal validation after import finishes")
 	}
 }
 
 func TestRetryChatMessageBlockedWhileImporting(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
-	app.chatPreview.importing = true
-	app.regenerateChatConversation("reply")
-	if app.chatPreview.revision != 0 || app.chatPreview.error != "" || !app.chatPreview.importing {
+	app.chat.chatPreview.importing = true
+	app.chat.regenerateChatConversation("reply")
+	if app.chat.chatPreview.revision != 0 || app.chat.chatPreview.error != "" || !app.chat.chatPreview.importing {
 		t.Fatal("retry must leave an importing draft untouched")
 	}
 }
@@ -130,9 +132,9 @@ func TestRetryChatMessageBlockedWhileImporting(t *testing.T) {
 func TestChatImportQueueReleasesPayloads(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
 	target, _ := app.captureChatAttachmentImportTarget(false)
-	app.chatPreview.importing = true
-	app.chatImportQueue = []chatAttachmentImportJob{{target: target, image: &clipboard.ImageSnapshot{}}}
-	backing := app.chatImportQueue
+	app.chat.chatPreview.importing = true
+	app.chat.chatImportQueue = []chatAttachmentImportJob{{target: target, image: &clipboard.ImageSnapshot{}}}
+	backing := app.chat.chatImportQueue
 	callbacks := make(chan func())
 	done := make(chan struct{})
 	defer close(done)
@@ -141,7 +143,7 @@ func TestChatImportQueueReleasesPayloads(t *testing.T) {
 		<-done
 		return nil
 	}
-	app.startNextChatImportIfIdle()
+	app.chat.startNextChatImportIfIdle()
 	if backing[0].image != nil {
 		t.Error("consumed queue slot retained the clipboard snapshot")
 	}
@@ -151,7 +153,7 @@ func TestChatImportQueueReleasesPayloads(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("import did not complete")
 	}
-	if app.chatImportQueue != nil || app.chatImportRunning || app.chatPreview.importing {
+	if app.chat.chatImportQueue != nil || app.chat.chatImportRunning || app.chat.chatPreview.importing {
 		t.Fatal("idle queue must release its backing array and restore send")
 	}
 }
@@ -164,12 +166,12 @@ func TestHandleFileDropAppendsToVisibleChatInsteadOfQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.handleFileDrop([]string{path})
-	waitUntil(t, func() bool { return !app.chatPreview.importing && len(app.chatPreview.attachments) == 2 })
-	if app.chatPreview.chat.ID != "chat-1" || app.chatPreview.editor.State().Text != "keep this draft" {
+	waitUntil(t, func() bool { return !app.chat.chatPreview.importing && len(app.chat.chatPreview.attachments) == 2 })
+	if app.chat.chatPreview.chat.ID != "chat-1" || app.chat.chatPreview.editor.State().Text != "keep this draft" {
 		t.Fatal("chat drop started a new conversation or replaced the draft")
 	}
-	if app.chatPreview.attachments[1].Kind != common.AIChatAttachmentFile || app.chatPreview.attachments[1].URL != path {
-		t.Fatalf("attached file = %+v", app.chatPreview.attachments[1])
+	if app.chat.chatPreview.attachments[1].Kind != common.AIChatAttachmentFile || app.chat.chatPreview.attachments[1].URL != path {
+		t.Fatalf("attached file = %+v", app.chat.chatPreview.attachments[1])
 	}
 }
 
@@ -180,8 +182,8 @@ func TestHiddenChatIsNotALauncherDropTarget(t *testing.T) {
 		t.Fatal("a hidden launcher must not treat background chat as the drop target")
 	}
 	app.visible = true
-	app.chatFullscreen = false
-	app.layout.ChatMode = false
+	app.chat.chatFullscreen = false
+	app.resultList.layout.ChatMode = false
 	if app.launcherPresentsChatInput() {
 		t.Fatal("a search result list must not inherit a background chat draft")
 	}
@@ -190,31 +192,31 @@ func TestHiddenChatIsNotALauncherDropTarget(t *testing.T) {
 func TestFailedChatAttachmentImportRestoresSend(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
 	app.handleFileDrop([]string{filepath.Join(t.TempDir(), "missing.bin")})
-	waitUntil(t, func() bool { return !app.chatPreview.importing && app.chatPreview.error != "" })
-	if len(app.chatPreview.attachments) != 1 || app.chatPreview.attachments[0].ID != "existing" {
+	waitUntil(t, func() bool { return !app.chat.chatPreview.importing && app.chat.chatPreview.error != "" })
+	if len(app.chat.chatPreview.attachments) != 1 || app.chat.chatPreview.attachments[0].ID != "existing" {
 		t.Fatal("a failed import must leave the existing draft attachments unchanged")
 	}
-	app.chatPreview.editor.SetText("", false)
-	app.sendChatMessage()
-	if app.chatPreview.sending || app.chatPreview.importing {
+	app.chat.chatPreview.editor.SetText("", false)
+	app.chat.sendChatMessage()
+	if app.chat.chatPreview.sending || app.chat.chatPreview.importing {
 		t.Fatal("send must run after a failed import instead of staying blocked")
 	}
-	if app.chatPreview.error == "" {
+	if app.chat.chatPreview.error == "" {
 		t.Fatal("send should run normal validation after import failure")
 	}
 }
 
 func TestClosingDedicatedChatWindowDiscardsImport(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
-	app.chatView = &woxui.ManagedWindow{}
-	app.chatWindowGeneration = 3
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	app.chatWindow.chatWindowGeneration = 3
 	target, ok := app.captureChatAttachmentImportTarget(true)
 	if !ok {
 		t.Fatal("expected a dedicated chat import target")
 	}
 	app.onChatWindowClosed()
-	app.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "late"}}, nil)
-	if len(app.chatPreview.attachments) != 1 || app.chatPreview.attachments[0].ID != "existing" {
+	app.chat.applyImportedChatAttachments(chatAttachmentImportJob{target: target}, []common.AIChatAttachment{{ID: "late"}}, nil)
+	if len(app.chat.chatPreview.attachments) != 1 || app.chat.chatPreview.attachments[0].ID != "existing" {
 		t.Fatal("closing the dedicated window must discard the in-flight import")
 	}
 }
@@ -222,19 +224,19 @@ func TestClosingDedicatedChatWindowDiscardsImport(t *testing.T) {
 func TestDedicatedChatDropDoesNotUseLauncherQuery(t *testing.T) {
 	app := newChatAttachmentTestApp(t)
 	app.visible = false
-	app.chatFullscreen = false
-	app.layout.ChatMode = false
-	app.chatView = &woxui.ManagedWindow{}
-	app.chatWindowGeneration = 3
+	app.chat.chatFullscreen = false
+	app.resultList.layout.ChatMode = false
+	app.chatWindow.chatView = &woxui.ManagedWindow{}
+	app.chatWindow.chatWindowGeneration = 3
 	directory := t.TempDir()
 	path := filepath.Join(directory, "clip.bin")
 	if err := os.WriteFile(path, []byte("bin"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	app.handleChatWindowFileDrop([]string{path})
-	waitUntil(t, func() bool { return !app.chatPreview.importing && len(app.chatPreview.attachments) == 2 })
-	if app.chatPreview.attachments[1].URL != path {
-		t.Fatalf("dedicated drop = %+v", app.chatPreview.attachments[1])
+	waitUntil(t, func() bool { return !app.chat.chatPreview.importing && len(app.chat.chatPreview.attachments) == 2 })
+	if app.chat.chatPreview.attachments[1].URL != path {
+		t.Fatalf("dedicated drop = %+v", app.chat.chatPreview.attachments[1])
 	}
 }
 

@@ -62,7 +62,7 @@ func (a *App) buildGlance(item glanceItem, hideIcon bool, palette uiPalette, wid
 	}
 	return launcherview.GlanceBoundary(launcherview.GlanceProps{
 		Text: item.Text, Tooltip: item.Tooltip, Width: width, Icon: icon, Theme: palette.componentTheme(), DensityScale: densityMetrics.scale,
-		OnTap: a.activateGlance, OnHover: a.setGlanceHover,
+		OnTap: a.glance.activateGlance, OnHover: a.glance.setGlanceHover,
 	})
 }
 
@@ -71,23 +71,23 @@ func (a *App) glanceEligibleLocked() bool {
 	if !a.visible || !a.generalSettings.Data().EnableGlance || primary.PluginID == "" || primary.GlanceID == "" {
 		return false
 	}
-	if a.query.QueryType != "input" || a.layout.Icon.ImageData != "" || len(a.layout.ScopeIcons) > 0 {
+	if a.querySession.query.QueryType != "input" || a.resultList.layout.Icon.ImageData != "" || len(a.resultList.layout.ScopeIcons) > 0 {
 		return false
 	}
-	if len(a.query.QueryScope.Plugins) > 0 {
+	if len(a.querySession.query.QueryScope.Plugins) > 0 {
 		return false
 	}
-	if a.query.QueryText == "" {
+	if a.querySession.query.QueryText == "" {
 		return true
 	}
-	return a.queryContextKnown && a.queryContext.IsGlobalQuery
+	return a.querySession.queryContextKnown && a.querySession.queryContext.IsGlobalQuery
 }
 
 // refreshGlance loads the selected global accessory and rejects replies for superseded query sessions.
-func (a *App) refreshGlance(reason, pluginID string, ids []string) {
+func (a *glanceController) refreshGlance(reason, pluginID string, ids []string) {
 	var request *glanceRefreshRequest
 	if err := a.runOnUI("prepare glance refresh", func() {
-		ref := a.generalSettings.Data().PrimaryGlance
+		ref := a.primaryGlance()
 		if pluginID != "" && (ref.PluginID != pluginID || (len(ids) > 0 && !slices.Contains(ids, ref.GlanceID))) {
 			return
 		}
@@ -102,7 +102,7 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 		a.cancelGlanceTimerLocked()
 		a.glanceRevision++
 		a.glanceLoading = true
-		request = &glanceRefreshRequest{ref: ref, reason: reason, revision: a.glanceRevision, queryID: a.query.QueryID}
+		request = &glanceRefreshRequest{ref: ref, reason: reason, revision: a.glanceRevision, queryID: a.queryID()}
 	}); err != nil {
 		log.Printf("dispatch glance refresh preparation: %v", err)
 		return
@@ -131,7 +131,7 @@ func (a *App) refreshGlance(reason, pluginID string, ids []string) {
 		}
 	}
 	if dispatchErr := a.runOnUI("apply glance refresh", func() {
-		if request.revision != a.glanceRevision || request.queryID != a.query.QueryID || request.ref != a.generalSettings.Data().PrimaryGlance || !a.glanceEligibleLocked() {
+		if request.revision != a.glanceRevision || request.queryID != a.queryID() || request.ref != a.primaryGlance() || !a.glanceEligibleLocked() {
 			return
 		}
 		a.glanceLoading = false
@@ -164,14 +164,14 @@ func glanceItemFromUI(item plugin.GlanceItemUI) glanceItem {
 	}
 }
 
-func (a *App) cancelGlanceTimerLocked() {
+func (a *glanceController) cancelGlanceTimerLocked() {
 	if a.glanceTimer != nil {
 		a.glanceTimer.Stop()
 		a.glanceTimer = nil
 	}
 }
 
-func (a *App) stopGlanceLocked(clear bool) {
+func (a *glanceController) stopGlanceLocked(clear bool) {
 	a.glanceRevision++
 	a.glanceLoading = false
 	a.cancelGlanceTimerLocked()
@@ -180,13 +180,13 @@ func (a *App) stopGlanceLocked(clear bool) {
 	}
 }
 
-func (a *App) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
-	a.setNativeHoverTooltip(&a.glanceTooltipRevision, "go-ui-glance", "update glance tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window })
+func (a *glanceController) setGlanceHover(inside bool, text string, anchor woxui.Rect) {
+	a.tooltips.setNativeHoverTooltip(&a.glanceTooltipRevision, "go-ui-glance", "update glance tooltip", inside, text, anchor, "top", func() *woxui.Window { return a.window() })
 }
 
-func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {
+func (a *glanceController) scheduleGlanceRefreshLocked(ref glanceRef) {
 	interval := 60 * time.Second
-	for _, item := range a.appearanceSettings.Snapshot().GlanceCatalog {
+	for _, item := range a.catalog() {
 		if item.Ref == ref && item.RefreshIntervalMs > 0 {
 			interval = time.Duration(item.RefreshIntervalMs) * time.Millisecond
 			break
@@ -206,10 +206,10 @@ func (a *App) scheduleGlanceRefreshLocked(ref glanceRef) {
 // glance refresh against the newly cached catalog without giving the controller a back-reference to *App.
 func (a *App) loadGlanceCatalog() {
 	a.appearanceSettings.ReloadGlanceCatalog(context.Background(), a.services, a.sessionID, func() {
-		if a.glanceItem != nil {
-			a.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
+		if a.glance.glanceItem != nil {
+			a.glance.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 		}
-		if a.settingsOpen || a.onboardingOpen {
+		if a.settingsWindow.settingsOpen || a.onboarding.onboardingOpen {
 			util.Go(a.lifecycleCtx, "load glance picker previews", a.loadGlancePickerPreviews)
 		}
 	})
@@ -220,7 +220,7 @@ func (a *App) loadGlancePickerPreviews() {
 }
 
 // activateGlance preserves plugin actions and refreshes informational items on demand.
-func (a *App) activateGlance() {
+func (a *glanceController) activateGlance() {
 	if a.glanceItem == nil {
 		return
 	}
@@ -233,7 +233,7 @@ func (a *App) activateGlance() {
 	})
 }
 
-func (a *App) executeGlanceAction() {
+func (a *glanceController) executeGlanceAction() {
 	item := a.glanceItem
 	if item == nil || item.Action == nil {
 		return
@@ -260,5 +260,5 @@ func (a *App) executeGlanceAction() {
 func (a *App) reloadGlanceCatalogFromCore() {
 	a.appearanceSettings.ResetGlanceCatalog()
 	a.loadGlanceCatalog()
-	a.refreshGlance("settingsChanged", "", nil)
+	a.glance.refreshGlance("settingsChanged", "", nil)
 }

@@ -46,7 +46,7 @@ func compactFormTableText(value string, maxRunes int) string {
 func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) string {
 	if column.Type == "ignoredApps" {
 		if formTableIgnoreRuleIncludeFuture(row) {
-			return a.translate("i18n:plugin_app_ignore_rule_all_matches")
+			return a.language.translate("i18n:plugin_app_ignore_rule_all_matches")
 		}
 		return ""
 	}
@@ -72,12 +72,12 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 	}
 	if column.Type == "aiSkillSource" {
 		if strings.EqualFold(value, "builtin") {
-			return a.translate("i18n:ui_ai_skill_type_builtin")
+			return a.language.translate("i18n:ui_ai_skill_type_builtin")
 		}
 		if strings.EqualFold(value, "remote") {
-			return a.translate("i18n:ui_ai_skill_type_remote")
+			return a.language.translate("i18n:ui_ai_skill_type_remote")
 		}
-		return a.translate("i18n:ui_ai_skill_type_local")
+		return a.language.translate("i18n:ui_ai_skill_type_local")
 	}
 	if column.Type == "checkbox" {
 		if value == "true" {
@@ -88,7 +88,7 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 	if column.Type == "select" {
 		for _, option := range column.SelectOptions {
 			if option.Value == value {
-				return a.translate(option.Label)
+				return a.language.translate(option.Label)
 			}
 		}
 	}
@@ -108,7 +108,7 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 		}
 	}
 	if strings.HasPrefix(value, "i18n:") {
-		return a.translate(value)
+		return a.language.translate(value)
 	}
 	return value
 }
@@ -119,7 +119,7 @@ func (a *App) formTableRowSummary(definition formDefinition, row map[string]any)
 		if column.HideInTable || formTableIsRowStatusColumn(column) {
 			continue
 		}
-		label := a.translate(column.Label)
+		label := a.language.translate(column.Label)
 		value := compactFormTableText(a.formTableDisplayValue(column, row), 28)
 		if value == "" {
 			continue
@@ -165,11 +165,11 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	columns := make([]launcherview.FormTableColumn, len(visibleColumns))
 	for columnIndex, column := range visibleColumns {
-		columns[columnIndex] = launcherview.FormTableColumn{Key: column.Key, Label: a.translate(column.Label), Tooltip: a.translate(column.Tooltip), Width: float32(column.Width)}
+		columns[columnIndex] = launcherview.FormTableColumn{Key: column.Key, Label: a.language.translate(column.Label), Tooltip: a.language.translate(column.Tooltip), Width: float32(column.Width)}
 	}
 	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
 	if isFileSearchRootsTable(callbacks.idPrefix, definition, a.selectedPluginID()) {
-		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), a.translate("i18n:plugin_file_setting_service_volume_tooltip"))
+		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), a.language.translate("i18n:plugin_file_setting_service_volume_tooltip"))
 		if len(volumeRows) > 0 {
 			viewRows = append(volumeRows, viewRows...)
 		}
@@ -205,11 +205,11 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		demoIcon = a.imageForTint(settingControlIconSource("demo"), &theme.Text, physicalImageSize(18, callbacks.imageScale))
 	}
 	if callbacks.idPrefix == "plugin-settings" && definition.Value.Key == "commands" && a.selectedPluginID() == aiCommandPluginID {
-		secondaryLabel = a.translate("i18n:ui_ai_command_template_add_from_store")
+		secondaryLabel = a.language.translate("i18n:ui_ai_command_template_add_from_store")
 		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
 		onSecondary = func() { a.openAICommandTemplatePicker(index) }
 		if network.IsOffline() {
-			secondaryLabel = a.translate("i18n:ui_offline_title") + " · " + a.translate("i18n:ui_offline_open_settings")
+			secondaryLabel = a.language.translate("i18n:ui_offline_title") + " · " + a.language.translate("i18n:ui_offline_open_settings")
 			onSecondary = func() { a.selectSettingTab("privacy") }
 		}
 	}
@@ -230,15 +230,15 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 		onAdd = nil
 	}
 	return launcherview.FormTableFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.translate(formTableTitle(definition)), Description: a.translate(definition.Value.Tooltip),
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.language.translate(formTableTitle(definition)), Description: a.language.translate(definition.Value.Tooltip),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil, Disabled: callbacks.serviceBusy,
 		HeaderWeight: formTableHeaderWeight(callbacks.idPrefix),
 		EnableSearch: definition.Value.EnableSearch, SearchColumnKey: definition.Value.SearchColumnKey, UsePinYin: a.usePinYin(),
 		StateKey:    callbacks.idPrefix + ":" + a.selectedPluginID() + ":" + definition.Value.Key,
-		SearchLabel: a.translate("i18n:ui_table_search"), SearchPlaceholder: a.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.translate("i18n:ui_no_matches"),
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsNativeWindow(),
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideAddAction: hideAddAction, HideCloneAction: hideCloneAction, AddLabel: a.translate("i18n:ui_add"), EditLabel: a.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.translate("i18n:ui_clone_row"), DeleteLabel: a.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.translate("i18n:ui_delete_row_confirm"),
-		OperationLabel: a.translate("i18n:ui_operation"),
+		SearchLabel: a.language.translate("i18n:ui_table_search"), SearchPlaceholder: a.language.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.language.translate("i18n:ui_no_matches"),
+		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsWindow.settingsNativeWindow(),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideAddAction: hideAddAction, HideCloneAction: hideCloneAction, AddLabel: a.language.translate("i18n:ui_add"), EditLabel: a.language.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.language.translate("i18n:ui_clone_row"), DeleteLabel: a.language.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.language.translate("i18n:ui_delete_row_confirm"),
+		OperationLabel: a.language.translate("i18n:ui_operation"),
 		InfoIcon:       a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
 		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
 		DisabledEditIcon: a.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: a.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: a.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
@@ -335,9 +335,9 @@ func (a *App) formTableRowStatus(columns []formTableColumn, row map[string]any) 
 			continue
 		}
 		if strings.TrimSpace(column.Label) != "" {
-			return a.translate(column.Label)
+			return a.language.translate(column.Label)
 		}
-		return a.translate("i18n:ui_disabled")
+		return a.language.translate("i18n:ui_disabled")
 	}
 	return ""
 }
@@ -349,7 +349,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		// Format only the visible label; raw text remains searchable and editable.
 		cell.Text = strings.Join(formatHotkeyLabels(text), " + ")
 		if strings.HasPrefix(strings.TrimSpace(text), "hold:") {
-			cell.Text = a.translate("i18n:ui_hotkey_hold_prefix") + " " + cell.Text
+			cell.Text = a.language.translate("i18n:ui_hotkey_hold_prefix") + " " + cell.Text
 		}
 		return cell
 	}
@@ -365,7 +365,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 	if column.Type == "checkbox" {
 		cell.Text = ""
 		if formTableColumnValue(column, row) == "true" {
-			cell.Text = a.translate("i18n:ui_disabled")
+			cell.Text = a.language.translate("i18n:ui_disabled")
 		}
 		return cell
 	}
@@ -408,7 +408,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 // formTableIgnoreRuleAppsCell shows All matches for dynamic rules, or up to six app icons.
 func (a *App) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32, background woxui.Color) launcherview.FormTableCell {
 	if formTableIgnoreRuleIncludeFuture(row) {
-		return launcherview.FormTableCell{Text: a.translate("i18n:plugin_app_ignore_rule_all_matches")}
+		return launcherview.FormTableCell{Text: a.language.translate("i18n:plugin_app_ignore_rule_all_matches")}
 	}
 	apps := formTableIgnoreRuleApps(row)
 	if len(apps) == 0 {
@@ -478,7 +478,7 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette w
 		body = a.buildFormTableList(snapshot, palette, innerWidth, bodyHeight)
 	}
 	overlay := launcherview.FormTableOverlay(launcherview.FormTableOverlayProps{
-		Width: width, Height: height, PanelWidth: panelWidth, PanelHeight: panelHeight, Title: a.translate(formTableTitle(snapshot.definition)), RowEditor: rowEditor,
+		Width: width, Height: height, PanelWidth: panelWidth, PanelHeight: panelHeight, Title: a.language.translate(formTableTitle(snapshot.definition)), RowEditor: rowEditor,
 		Subtitle: fmt.Sprintf("%d rows · shared Go table editor", len(snapshot.rows)), Body: body, Theme: palette,
 	})
 	layers := []woxwidget.StackChild{{Child: overlay}}
@@ -505,7 +505,7 @@ func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariable
 	choices := make([]launcherview.QueryVariableChoice, 0, len(options))
 	for _, option := range options {
 		choices = append(choices, launcherview.QueryVariableChoice{
-			Label: a.translate(option.label), Description: a.translate(option.description),
+			Label: a.language.translate(option.label), Description: a.language.translate(option.description),
 			Icon: a.imageForTint(settingControlIconSource(option.icon), &palette.Text, physicalImageSize(18, imageScale)),
 		})
 	}
@@ -522,8 +522,8 @@ func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariable
 
 func (a *App) buildFormTableDeleteDialog(palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	return launcherview.FormTableDeleteDialog(launcherview.FormTableDeleteDialogProps{
-		Width: width, Height: height, Message: a.translate("i18n:ui_delete_row_confirm"),
-		CancelLabel: a.translate("i18n:ui_cancel"), DeleteLabel: a.translate("i18n:ui_delete"),
+		Width: width, Height: height, Message: a.language.translate("i18n:ui_delete_row_confirm"),
+		CancelLabel: a.language.translate("i18n:ui_cancel"), DeleteLabel: a.language.translate("i18n:ui_delete"),
 		Theme: palette, OnCancel: a.cancelFormTableRowDelete, OnDelete: a.confirmFormTableRowDelete,
 	})
 }
@@ -537,7 +537,7 @@ func (a *App) formTableRowLabelWidth(definitions []formDefinition) float32 {
 	}
 	style := woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}
 	for _, definition := range definitions {
-		label := strings.TrimSpace(a.translate(definition.Value.Label))
+		label := strings.TrimSpace(a.language.translate(definition.Value.Label))
 		if label == "" {
 			continue
 		}
@@ -599,7 +599,7 @@ func (a *App) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot,
 			visible++
 			definition := field.Definition
 			markdown := formTableRowFieldMarkdown(definition)
-			height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), snapshot.fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+			height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), snapshot.fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
 		}
 	}
 	if visible > 1 {
@@ -616,7 +616,7 @@ func (a *App) formTableRowContentHeightForWidth(definitions []formDefinition, fi
 	for _, definition := range definitions {
 		visible++
 		markdown := formTableRowFieldMarkdown(definition)
-		height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+		height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
 	}
 	if visible > 1 {
 		height += float32(visible-1) * 10
@@ -642,7 +642,7 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxc
 	canAdd := !snapshot.invalid && !snapshot.saving
 	if snapshot.definition.Value.Key == "AISkills" {
 		// The skills list shares Flutter's tabbed local/remote add dialog.
-		addLabel = a.translate("i18n:ui_ai_skill_add")
+		addLabel = a.language.translate("i18n:ui_ai_skill_add")
 		onAdd = a.openFormTableSkillAdd
 	}
 	if snapshot.definition.Value.Key == "ResultBindings" {
@@ -651,7 +651,7 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxc
 	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
 		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
-		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.translate("i18n:ui_delete"), CloseLabel: a.translate("i18n:ui_close"),
+		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.language.translate("i18n:ui_delete"), CloseLabel: a.language.translate("i18n:ui_close"),
 		CanAdd: canAdd, CanEdit: canEdit, CanDelete: canDelete, Theme: palette,
 		OnSelect: a.selectFormTableRow,
 		OnAdd:    onAdd, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClose: a.closeFormTableEditor,
@@ -687,7 +687,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			groupKey := section.Group.Key
 			rows = append(rows, launcherview.FormTableRowGroupHeader(launcherview.FormTableRowGroupHeaderProps{
 				ID:    "form-table-row-group-" + groupKey,
-				Width: fieldWidth, Title: a.translate(section.Group.Title), Tooltip: a.translate(section.Group.Tooltip),
+				Width: fieldWidth, Title: a.language.translate(section.Group.Title), Tooltip: a.language.translate(section.Group.Tooltip),
 				Collapsed: section.Collapsed, Theme: palette,
 				OnTap: func() { a.toggleFormTableRowGroup(groupKey) },
 			}))
@@ -700,7 +700,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			definition := field.Definition
 			fieldError := snapshot.fieldErrors[definition.Value.Key]
 			markdown := formTableRowFieldMarkdown(definition)
-			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
+			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
 			if len(rows) > 0 {
 				contentHeight += 10
 			}
@@ -724,17 +724,17 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			}
 			previewApps = append(previewApps, previewApp)
 		}
-		emptyLabel := a.translate("i18n:plugin_app_ignore_rule_preview_empty")
+		emptyLabel := a.language.translate("i18n:plugin_app_ignore_rule_preview_empty")
 		if snapshot.patternPreview.Loading {
-			emptyLabel = a.translate("i18n:ui_hotkey_ignore_apps_loading")
+			emptyLabel = a.language.translate("i18n:ui_hotkey_ignore_apps_loading")
 		}
 		if snapshot.patternPreview.ErrorText != "" {
 			emptyLabel = snapshot.patternPreview.ErrorText
 		}
 		rows = append(rows, launcherview.FormTablePatternPreview(launcherview.FormTablePatternPreviewProps{
 			Width: fieldWidth, LabelWidth: labelWidth, Height: launcherview.FormTablePatternPreviewHeight,
-			Title:      a.translate("i18n:plugin_app_ignore_rule_apps"),
-			CountLabel: fmt.Sprintf(a.translate("i18n:plugin_app_ignore_rule_preview_count"), len(previewApps)),
+			Title:      a.language.translate("i18n:plugin_app_ignore_rule_apps"),
+			CountLabel: fmt.Sprintf(a.language.translate("i18n:plugin_app_ignore_rule_preview_count"), len(previewApps)),
 			EmptyLabel: emptyLabel,
 			Apps:       previewApps, Theme: palette,
 			OnToggle: a.toggleFormTablePatternPreviewApp,
@@ -742,25 +742,25 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 	}
 	title := ""
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
-		title = a.translate("i18n:ui_query_hotkeys_dialog_create_title")
+		title = a.language.translate("i18n:ui_query_hotkeys_dialog_create_title")
 		if snapshot.rowIndex >= 0 {
-			title = a.translate("i18n:ui_query_hotkeys_dialog_edit_title")
+			title = a.language.translate("i18n:ui_query_hotkeys_dialog_edit_title")
 		}
 	}
-	saveLabel := a.translate("i18n:ui_save")
+	saveLabel := a.language.translate("i18n:ui_save")
 	props := launcherview.FormTableRowEditorProps{
 		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: contentHeight, KeepVisible: keepVisible,
-		Status: snapshot.status, CancelLabel: a.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette,
+		Status: snapshot.status, CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette,
 		OnCancel: a.cancelFormTableRowEdit, OnSave: a.saveFormTableRowEdit,
 	}
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
 		demoIcon := a.imageForTint(settingControlIconSource("demo"), &palette.Text, physicalImageSize(15, imageScale))
 		props.HeaderHeight = 122
 		props.Header = launcherview.QueryHotkeyEditorHeader(launcherview.QueryHotkeyEditorHeaderProps{
-			Width: width, Title: title, Selected: string(snapshot.queryPreset), Description: a.translate("i18n:ui_query_hotkeys_preset_" + strings.ReplaceAll(string(snapshot.queryPreset), "-", "_") + "_description"),
-			NormalLabel: a.translate("i18n:ui_query_hotkeys_preset_normal"), WebPanelLabel: a.translate("i18n:ui_query_hotkeys_preset_web_panel"),
-			SilentLabel: a.translate("i18n:ui_query_hotkeys_preset_silent"), CustomLabel: a.translate("i18n:ui_query_hotkeys_preset_custom"),
-			DemoIcon: demoIcon, DemoLabel: a.translate("i18n:ui_demo_preview"), Theme: palette, OnSelect: a.applyQueryHotkeyPreset,
+			Width: width, Title: title, Selected: string(snapshot.queryPreset), Description: a.language.translate("i18n:ui_query_hotkeys_preset_" + strings.ReplaceAll(string(snapshot.queryPreset), "-", "_") + "_description"),
+			NormalLabel: a.language.translate("i18n:ui_query_hotkeys_preset_normal"), WebPanelLabel: a.language.translate("i18n:ui_query_hotkeys_preset_web_panel"),
+			SilentLabel: a.language.translate("i18n:ui_query_hotkeys_preset_silent"), CustomLabel: a.language.translate("i18n:ui_query_hotkeys_preset_custom"),
+			DemoIcon: demoIcon, DemoLabel: a.language.translate("i18n:ui_demo_preview"), Theme: palette, OnSelect: a.applyQueryHotkeyPreset,
 			OnOpenLink: a.openAboutLink,
 			OnDemoHover: func(preset string, inside bool, anchor woxui.Rect) {
 				a.setSettingsDemoHover("query-hotkey-preset-"+preset, inside, anchor)
@@ -784,13 +784,13 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	}
 	markdown := formTableRowFieldMarkdown(definition)
 	controlWidth := max(float32(0), width-labelWidth-10)
-	height := launcherview.FormTableRowFieldHeightFor(definition.Type, a.translate(value.Tooltip), fieldError, value.MaxLines, markdown, controlWidth)
+	height := launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(value.Tooltip), fieldError, value.MaxLines, markdown, controlWidth)
 	props := launcherview.FormTableRowFieldProps{
-		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.translate(value.Label), Description: a.translate(value.Tooltip),
+		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.language.translate(value.Label), Description: a.language.translate(value.Tooltip),
 		DescriptionMarkdown: markdown, Error: fieldError, Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
 		Controller: controller, MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette,
-		EmojiLabel: a.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.translate("i18n:ui_runtime_browse"),
-		SelectLabel: a.translate("i18n:ui_hotkey_ignore_apps_select"),
+		EmojiLabel: a.language.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.language.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.language.translate("i18n:ui_runtime_browse"),
+		SelectLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_select"),
 		OnFocus:     func() { callbacks.focus(index) },
 		OnFocusChange: func(focused bool) {
 			state := a.activeFormTableEditor()
@@ -820,7 +820,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	}
 	if formTableQueryVariableKind(definition) != "" {
 		props.TrailingLabel = "{}"
-		props.TrailingActionLabel = a.translate("i18n:ui_query_variable_picker_insert")
+		props.TrailingActionLabel = a.language.translate("i18n:ui_query_variable_picker_insert")
 		props.OnTrailingTap = func(anchor woxui.Rect) { a.openFormTableQueryVariablePicker(index, anchor) }
 		var editing queryVariableToken
 		if focused {
@@ -828,7 +828,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 				editing = editor.queryVariableEdit
 			}
 		}
-		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, a.formTableNativeWindow(), palette, a.translate)
+		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, a.formTableNativeWindow(), palette, a.language.translate)
 		props.OnDismissRun = func(start, end int) bool {
 			return a.dismissFormTableQueryVariable(index, start, end)
 		}
@@ -842,10 +842,10 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	if value.QueryTest {
 		actionTint := palette.TextSecondary
 		props.ActionIcon = a.imageForTint(settingControlIconSource("bolt"), &actionTint, physicalImageSize(18, callbacks.imageScale))
-		props.ActionLabel = a.translate("i18n:ui_query_hotkeys_test_query")
+		props.ActionLabel = a.language.translate("i18n:ui_query_hotkeys_test_query")
 		props.OnActionTap = func() { a.runFormTableQueryTest(index) }
 		props.OnActionHover = func(inside bool, anchor woxui.Rect) {
-			a.setSettingChoiceTooltip(inside, a.translate("i18n:ui_query_hotkeys_test_query"), anchor)
+			a.setSettingChoiceTooltip(inside, a.language.translate("i18n:ui_query_hotkeys_test_query"), anchor)
 		}
 	}
 	switch definition.Type {
@@ -860,7 +860,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		var selectedIcon woxImage
 		for _, option := range value.Options {
 			if option.Value == fieldValue {
-				selectedLabel = a.translate(option.Label)
+				selectedLabel = a.language.translate(option.Label)
 				selectedIcon = option.Icon
 				break
 			}
@@ -880,10 +880,10 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.RecordingStatus = presentation.Status
 		props.RecordingError = presentation.Error
 		props.Hold = strings.HasPrefix(strings.TrimSpace(fieldValue), "hold:")
-		props.HoldPrefix = a.translate("i18n:ui_hotkey_hold_prefix")
-		props.Placeholder = a.translate("i18n:ui_hotkey_click_to_set")
+		props.HoldPrefix = a.language.translate("i18n:ui_hotkey_hold_prefix")
+		props.Placeholder = a.language.translate("i18n:ui_hotkey_click_to_set")
 		if presentation.Active {
-			props.Placeholder = a.translate("i18n:ui_hotkey_recording")
+			props.Placeholder = a.language.translate("i18n:ui_hotkey_recording")
 		}
 		props.OnTap = func() {
 			callbacks.focus(index)
@@ -906,7 +906,7 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		_ = json.Unmarshal([]byte(fieldValue), &app)
 		props.Value = app.Name
 		if strings.TrimSpace(props.Value) == "" {
-			props.Value = a.translate("i18n:ui_hotkey_ignore_apps_app_placeholder")
+			props.Value = a.language.translate("i18n:ui_hotkey_ignore_apps_app_placeholder")
 		}
 		props.Detail = app.Path
 		if strings.TrimSpace(props.Detail) == "" {
@@ -930,10 +930,10 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
 		props.OnEmoji = func() { a.openFormTableEmojiPicker(index) }
 		props.OnUpload = func() { a.pickFormTableRowImage(index) }
-		props.URLLabel = a.translate("i18n:ui_image_editor_from_url")
+		props.URLLabel = a.language.translate("i18n:ui_image_editor_from_url")
 		props.OnURL = func() { a.openFormTableFavicon(index) }
 	case "label":
-		props.Value = a.translate(value.Content)
+		props.Value = a.language.translate(value.Content)
 	default:
 		props.OnTap = func() { callbacks.focus(index) }
 	}

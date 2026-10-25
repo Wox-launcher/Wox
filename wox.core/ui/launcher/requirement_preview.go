@@ -66,7 +66,7 @@ type aiModel struct {
 
 // buildRequirementPreview adapts requirement state and form rows to the pure preview view.
 func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	form, err := a.requirementFormSnapshotFor(result, preview)
+	form, err := a.requirements.requirementFormSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
@@ -75,9 +75,9 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 		errorMessage = "Unable to load AI models: " + form.modelsError
 	}
 	callbacks := formFieldCallbacks{
-		idPrefix: "requirement-form", focus: a.focusRequirementFormField, change: a.changeRequirementFormChoice,
-		setText: a.setRequirementFormText, onKey: a.onRequirementFormKey, openTable: a.openRequirementFormTable,
-		openLink: a.openRequirementFormLink, fieldErrors: form.fieldErrors,
+		idPrefix: "requirement-form", focus: a.requirements.focusRequirementFormField, change: a.requirements.changeRequirementFormChoice,
+		setText: a.requirements.setRequirementFormText, onKey: a.requirements.onRequirementFormKey, openTable: a.openRequirementFormTable,
+		openLink: a.requirements.openRequirementFormLink, fieldErrors: form.fieldErrors,
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
@@ -85,20 +85,20 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	}
 	return previewview.RequirementPreviewView(previewview.RequirementPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Title: form.title, Message: form.message, PluginName: form.pluginName,
-		Error: errorMessage, SaveLabel: requirementSaveLabel(a.translate), Saving: form.saving, Rows: rows,
+		Error: errorMessage, SaveLabel: requirementSaveLabel(a.language.translate), Saving: form.saving, Rows: rows,
 		KeepVisibleKey: formFieldsKeepVisibleKey("requirement-form", form.formFieldsSnapshot),
-		OnSubmit:       a.submitRequirementForm,
-		OnOpenLink:     a.openRequirementFormLink,
+		OnSubmit:       a.requirements.submitRequirementForm,
+		OnOpenLink:     a.requirements.openRequirementFormLink,
 		Window:         a.window,
 	})
 }
 
 // openRequirementFormLink opens Markdown links from query-requirement help text.
-func (a *App) openRequirementFormLink(target string) {
-	if a.window == nil {
+func (a *requirementController) openRequirementFormLink(target string) {
+	if a.window() == nil {
 		return
 	}
-	if err := a.window.OpenExternalURL(target); err != nil {
+	if err := a.window().OpenExternalURL(target); err != nil {
 		ctx := a.lifecycleCtx
 		if ctx == nil {
 			ctx = context.Background()
@@ -121,7 +121,7 @@ func requirementPreviewDataAndKey(result queryResult, preview queryPreview) (que
 }
 
 // activateRequirementPreview prepares form state and optional model data before rendering.
-func (a *App) activateRequirementPreview(result queryResult, preview queryPreview) error {
+func (a *requirementController) activateRequirementPreview(result queryResult, preview queryPreview) error {
 	data, key, err := requirementPreviewDataAndKey(result, preview)
 	if err != nil {
 		return err
@@ -142,12 +142,12 @@ func (a *App) activateRequirementPreview(result queryResult, preview queryPrevie
 			message:         data.Message,
 		}
 	}
-	if models := a.aiSettings.Models(); len(models) > 0 {
+	if models := a.aiSettings().Models(); len(models) > 0 {
 		applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, models)
 	}
-	requestModels := hasFormDefinitionType(a.requirementForm.definitions, "selectAIModel") && !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
+	requestModels := hasFormDefinitionType(a.requirementForm.definitions, "selectAIModel") && !a.aiSettings().ModelsLoaded() && !a.aiSettings().ModelsLoading()
 	if requestModels {
-		a.aiSettings.SetModelsLoading(true)
+		a.aiSettings().SetModelsLoading(true)
 	}
 
 	if requestModels {
@@ -157,7 +157,7 @@ func (a *App) activateRequirementPreview(result queryResult, preview queryPrevie
 }
 
 // requirementFormSnapshotFor returns only the state prepared by the lifecycle coordinator.
-func (a *App) requirementFormSnapshotFor(result queryResult, preview queryPreview) (*requirementFormSnapshot, error) {
+func (a *requirementController) requirementFormSnapshotFor(result queryResult, preview queryPreview) (*requirementFormSnapshot, error) {
 	_, key, err := requirementPreviewDataAndKey(result, preview)
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (a *App) requirementFormSnapshotFor(result queryResult, preview queryPrevie
 	if a.requirementForm == nil || a.requirementForm.key != key {
 		return nil, fmt.Errorf("requirement settings are not ready")
 	}
-	return snapshotRequirementFormLocked(a.requirementForm, a.aiSettings.ModelsError()), nil
+	return snapshotRequirementFormLocked(a.requirementForm, a.aiSettings().ModelsError()), nil
 }
 
 func snapshotRequirementFormLocked(state *requirementFormState, modelsError string) *requirementFormSnapshot {
@@ -207,29 +207,29 @@ func (a *App) loadAIModels() {
 			a.invalidateChatSurfaces()
 			return
 		}
-		if a.requirementForm != nil {
-			applyAIModelOptionsLocked(&a.requirementForm.formFieldsState, models)
+		if a.requirements.requirementForm != nil {
+			applyAIModelOptionsLocked(&a.requirements.requirementForm.formFieldsState, models)
 		}
 		if pluginForm := a.pluginSettings.Form(); pluginForm != nil {
 			applyAIModelOptionsLocked(&pluginForm.formFieldsState, models)
 		}
-		for _, tableEditor := range []*formTableEditorState{a.launcherTableEditor, a.settingsTableEditor} {
+		for _, tableEditor := range []*formTableEditorState{a.forms.launcherTableEditor, a.settingsWindow.settingsTableEditor} {
 			if tableEditor != nil && tableEditor.rowForm != nil {
 				applyAIModelOptionsLocked(tableEditor.rowForm, models)
 			}
 		}
-		if a.chatPreview != nil && (a.chatPreview.panel == "models" || a.chatPreview.panel == chatCommandPanel) {
-			a.chatPreview.panelSelected = 0
-			if a.chatPreview.panel == "models" {
+		if a.chat.chatPreview != nil && (a.chat.chatPreview.panel == "models" || a.chat.chatPreview.panel == chatCommandPanel) {
+			a.chat.chatPreview.panelSelected = 0
+			if a.chat.chatPreview.panel == "models" {
 				for index, model := range models {
-					if model == a.chatPreview.chat.Model {
-						a.chatPreview.panelSelected = index
+					if model == a.chat.chatPreview.chat.Model {
+						a.chat.chatPreview.panelSelected = index
 						break
 					}
 				}
 			}
-			a.chatPreview.panelScroll = 0
-			a.chatPreview.panelViewport = 0
+			a.chat.chatPreview.panelScroll = 0
+			a.chat.chatPreview.panelViewport = 0
 		}
 		a.invalidateChatSurfaces()
 	})
@@ -285,7 +285,7 @@ func requirementSaveLabel(translate func(string) string) string {
 }
 
 // onRequirementFormKey keeps navigation and editing inside the inline form while it owns focus.
-func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
+func (a *requirementController) onRequirementFormKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
@@ -380,13 +380,13 @@ func (a *App) onRequirementFormKey(event woxui.KeyEvent) bool {
 }
 
 // onRequirementFormTextInput forwards committed and composing input from every native backend.
-func (a *App) onRequirementFormTextInput(_ woxui.TextInputEvent) bool {
+func (a *requirementController) onRequirementFormTextInput(_ woxui.TextInputEvent) bool {
 	state := a.requirementForm
 	active := state != nil && state.active
 	return active
 }
 
-func (a *App) editRequirementFormKey(event woxui.KeyEvent) {
+func (a *requirementController) editRequirementFormKey(event woxui.KeyEvent) {
 	if state := a.requirementForm; state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
@@ -394,10 +394,10 @@ func (a *App) editRequirementFormKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) moveRequirementFormFocus(delta int) {
+func (a *requirementController) moveRequirementFormFocus(delta int) {
 	state := a.requirementForm
 	if state == nil || len(state.definitions) == 0 {
 		return
@@ -413,10 +413,10 @@ func (a *App) moveRequirementFormFocus(delta int) {
 	}
 	textInput := state.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) focusRequirementFormField(index int) {
+func (a *requirementController) focusRequirementFormField(index int) {
 	state := a.requirementForm
 	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) || state.saving {
 		return
@@ -426,10 +426,10 @@ func (a *App) focusRequirementFormField(index int) {
 	state.error = ""
 	textInput := state.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) changeRequirementFormChoice(index, delta int) {
+func (a *requirementController) changeRequirementFormChoice(index, delta int) {
 	state := a.requirementForm
 	if state == nil || !state.active || state.saving {
 		return
@@ -440,10 +440,10 @@ func (a *App) changeRequirementFormChoice(index, delta int) {
 		delete(state.fieldErrors, state.definitions[index].Value.Key)
 	}
 	a.updateFormTextInput(false)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) setRequirementFormText(index int, value string) {
+func (a *requirementController) setRequirementFormText(index int, value string) {
 	changed := a.requirementForm != nil && !a.requirementForm.saving && setFormFieldsTextLocked(&a.requirementForm.formFieldsState, index, value)
 	if changed {
 		a.requirementForm.error = ""
@@ -452,12 +452,12 @@ func (a *App) setRequirementFormText(index int, value string) {
 		}
 	}
 	if changed {
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 }
 
 // deactivateRequirementForm returns IME ownership to the launcher query without losing edits.
-func (a *App) deactivateRequirementForm() {
+func (a *requirementController) deactivateRequirementForm() {
 	wasActive := a.requirementForm != nil && a.requirementForm.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&a.requirementForm.formFieldsState)
@@ -467,7 +467,7 @@ func (a *App) deactivateRequirementForm() {
 		return
 	}
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // validateFormFieldErrors returns the first failing validator message for each field key.
@@ -584,7 +584,7 @@ func editableFormKeys(definitions []formDefinition) []string {
 }
 
 // submitRequirementForm validates and persists the compact form before issuing a fresh query ID.
-func (a *App) submitRequirementForm() {
+func (a *requirementController) submitRequirementForm() {
 	state := a.requirementForm
 	if state == nil || state.saving {
 		return
@@ -598,12 +598,12 @@ func (a *App) submitRequirementForm() {
 			if index := firstFormFieldErrorIndex(state.definitions, fieldErrors); index >= 0 {
 				// Keep the editor bound to the focused field before the next value sync.
 				a.focusRequirementFormField(index)
-				if a.host != nil {
-					a.host.RequestFocus(woxwidget.Key(fmt.Sprintf("requirement-form-field-%d", index)))
+				if a.host() != nil {
+					a.host().RequestFocus(woxwidget.Key(fmt.Sprintf("requirement-form-field-%d", index)))
 				}
 			}
 		}
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 		return
 	}
 	values := make(map[string]string, len(state.values))
@@ -620,7 +620,7 @@ func (a *App) submitRequirementForm() {
 	formKey := state.key
 	pluginID := state.pluginID
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 
 	util.Go(a.lifecycleCtx, "save query requirement settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -640,7 +640,7 @@ func (a *App) submitRequirementForm() {
 				}
 			}
 			if saveErr == nil {
-				query := a.query
+				query := a.querySession.query
 				query.QueryID = newID()
 				a.setQuery(query)
 				if err := a.applyWindowBounds(); err != nil {
@@ -649,7 +649,7 @@ func (a *App) submitRequirementForm() {
 				refreshQuery = true
 				return
 			}
-			_ = a.window.Invalidate()
+			_ = a.window().Invalidate()
 		}); dispatchErr != nil {
 			log.Printf("dispatch query requirement settings: %v", dispatchErr)
 			return

@@ -16,8 +16,8 @@ type queryCompletionHint struct {
 	DeletionReuseMinLength int    `json:"DeletionReuseMinLength"`
 }
 
-func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
-	if hint == nil || !a.generalSettings.Data().EnableQueryCompletionHint || a.query.QueryType != "input" || hint.InputPrefix != a.editor.State().Text || hint.Suffix == "" {
+func (a *queryController) completionHintValidLocked(hint *queryCompletionHint) bool {
+	if hint == nil || !a.completionEnabled() || a.query.QueryType != "input" || hint.InputPrefix != a.editor.State().Text || hint.Suffix == "" {
 		return false
 	}
 	state := a.editor.State()
@@ -25,7 +25,7 @@ func (a *App) completionHintValidLocked(hint *queryCompletionHint) bool {
 }
 
 // reuseCompletionHintLocked avoids blank frames while the next candidate is computed.
-func (a *App) reuseCompletionHintLocked(text string) {
+func (a *queryController) reuseCompletionHintLocked(text string) {
 	if a.completionHint == nil {
 		return
 	}
@@ -47,7 +47,7 @@ func (a *App) reuseCompletionHintLocked(text string) {
 	a.completionHint.Suffix = suffix
 }
 
-func (a *App) acceptQueryCompletionHint() bool {
+func (a *queryController) acceptQueryCompletionHint() bool {
 	if !a.completionHintValidLocked(a.completionHint) {
 		return false
 	}
@@ -63,16 +63,16 @@ func (a *App) acceptQueryCompletionHint() bool {
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send accepted query completion: %v", err)
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 	return true
 }
 
 // autoCompleteQueryFromSelectedResult mirrors Flutter's Shift+Tab title completion.
-func (a *App) autoCompleteQueryFromSelectedResult() {
-	if a.selected < 0 || a.selected >= len(a.results) || a.results[a.selected].IsGroup {
+func (a *queryController) autoCompleteQueryFromSelectedResult() {
+	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || a.resultList.results[a.resultList.selected].IsGroup {
 		return
 	}
-	title := a.results[a.selected].Title
+	title := a.resultList.results[a.resultList.selected].Title
 	if title == "" {
 		return
 	}
@@ -80,7 +80,7 @@ func (a *App) autoCompleteQueryFromSelectedResult() {
 	a.editor.SetText(title, false)
 	a.applyQueryTextChangeLocked(title)
 	a.reconcileSelectedPreview()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send selected result completion: %v", err)
 	}

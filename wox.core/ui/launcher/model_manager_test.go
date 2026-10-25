@@ -61,7 +61,7 @@ func TestAbandonedModelManagerRefreshCanStartAgain(t *testing.T) {
 
 func TestAbandonModelManagerClearsRefreshing(t *testing.T) {
 	state := &modelManagerState{kind: "dictationModel", refreshing: true}
-	app := &App{aiSettings: newAISettingsController(CommonDeps{})}
+	app := bindTestApp(&App{aiSettings: newAISettingsController(CommonDeps{})})
 	app.aiSettings.SetModelManager(state)
 	app.abandonModelManager()
 	if state.refreshing {

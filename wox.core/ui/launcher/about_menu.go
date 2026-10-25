@@ -149,7 +149,7 @@ func (a *App) currentLangCode() string {
 			return lang
 		}
 	}
-	return a.translationsLanguage
+	return a.language.translationsLanguage
 }
 
 // runningVersion reads the already-known core version without opening Settings.
@@ -170,11 +170,11 @@ func (a *App) runningVersion() string {
 
 // toggleAboutMenu opens or closes the left About Menu without using plugin results.
 func (a *App) toggleAboutMenu() {
-	if a.actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout {
-		a.hideActionPanel()
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeAbout {
+		a.actions.hideActionPanel()
 		return
 	}
-	a.openActionPanel(actionPanelPurposeAbout)
+	a.actions.openActionPanel(actionPanelPurposeAbout)
 }
 
 // activateAboutMenuEntry dispatches a stable menu ID without constructing plugin results.
@@ -199,7 +199,7 @@ func (a *App) openAboutMenuQuery(text string) {
 	if err := a.ChangeQuery(a.lifecycleCtx, common.PlainQuery{QueryType: "input", QueryText: text}); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("change query from about menu: %v", err))
 		if a.visible {
-			a.openActionPanel(actionPanelPurposeAbout)
+			a.actions.openActionPanel(actionPanelPurposeAbout)
 		}
 		a.notifyAboutMenuError("i18n:ui_about_menu_open_link_failed")
 	}
@@ -215,7 +215,7 @@ func (a *App) openAboutMenuURL(target string) {
 		a.notifyAboutMenuError("i18n:ui_about_menu_open_link_failed")
 		return
 	}
-	a.hideActionPanel()
+	a.actions.hideActionPanel()
 	if err := a.hideWindow(true); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide launcher after about menu url: %v", err))
 	}
@@ -224,14 +224,14 @@ func (a *App) openAboutMenuURL(target string) {
 // openAboutMenuSettings reuses the existing Settings window so About and Settings do not steal query focus.
 func (a *App) openAboutMenuSettings(path string) {
 	// Reset without restoring query focus so Settings can become the key window.
-	a.resetActionPanelLocked()
+	a.actions.resetActionPanelLocked()
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
 	if err := a.OpenSetting(context.Background(), common.SettingWindowContext{Path: path}); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open about menu settings %s: %v", path, err))
 		if a.visible {
-			a.openActionPanel(actionPanelPurposeAbout)
+			a.actions.openActionPanel(actionPanelPurposeAbout)
 		}
 		a.notifyAboutMenuError("i18n:ui_about_menu_open_settings_failed")
 	}
@@ -239,7 +239,7 @@ func (a *App) openAboutMenuSettings(path string) {
 
 // notifyAboutMenuError displays failures inside the menu; toolbar messages stay deferred.
 func (a *App) notifyAboutMenuError(key string) {
-	a.aboutMenuError = a.translate(key)
+	a.actions.aboutMenuError = a.language.translate(key)
 	if a.window != nil {
 		_ = a.window.Invalidate()
 	}
@@ -247,19 +247,19 @@ func (a *App) notifyAboutMenuError(key string) {
 
 // dismissAboutMenuTooltip clears the button hint so it cannot float over the open panel.
 func (a *App) dismissAboutMenuTooltip() {
-	a.aboutMenuTooltipRevision.Add(1)
-	a.hideNativeHoverTooltip(aboutMenuTooltipName, "hide about menu tooltip")
+	a.actions.aboutMenuTooltipRevision.Add(1)
+	a.tooltips.hideNativeHoverTooltip(aboutMenuTooltipName, "hide about menu tooltip")
 }
 
 // onAboutMenuHover shows the About Menu title and keycaps after the shared hover dwell.
 func (a *App) onAboutMenuHover(inside bool, bounds woxui.Rect) {
-	if a.actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout {
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeAbout {
 		a.dismissAboutMenuTooltip()
 		return
 	}
-	a.setNativeHoverTooltipWithHotkeys(
-		&a.aboutMenuTooltipRevision, aboutMenuTooltipName, "update about menu tooltip",
-		inside, a.translate("i18n:toolbar_about_menu"), formatHotkeyLabels(aboutMenuHotkey()), bounds, "top",
+	a.tooltips.setNativeHoverTooltipWithHotkeys(
+		&a.actions.aboutMenuTooltipRevision, aboutMenuTooltipName, "update about menu tooltip",
+		inside, a.language.translate("i18n:toolbar_about_menu"), formatHotkeyLabels(aboutMenuHotkey()), bounds, "top",
 		func() *woxui.Window { return a.window },
 	)
 }

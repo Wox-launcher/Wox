@@ -82,71 +82,76 @@ func TestQuickSelectModifierAndDigitHelpers(t *testing.T) {
 }
 
 func TestQuickSelectHoldShowsNumbersAndReleaseHidesThem(t *testing.T) {
-	app := &App{
-		results:      []queryResult{{ID: "one", Title: "One"}, {ID: "two", Title: "Two"}},
+	app := bindTestApp(&App{
+		resultList:   resultController{results: []queryResult{{ID: "one", Title: "One"}, {ID: "two", Title: "Two"}}},
 		lifecycleCtx: t.Context(),
-	}
+	})
 	event := quickSelectModifierEvent(true)
-	if !app.onQuickSelectKey(event) || app.quickSelectTimer == nil {
+	if !app.quickSelect.onQuickSelectKey(event) || app.quickSelect.quickSelectTimer == nil {
 		t.Fatal("holding the quick select modifier should start the delay timer")
 	}
-	app.quickSelectTimer.Stop()
-	app.quickSelectTimer = nil
-	app.activateQuickSelectModeLocked()
-	if !app.quickSelectMode {
+	app.quickSelect.quickSelectTimer.Stop()
+	app.quickSelect.quickSelectTimer = nil
+	app.quickSelect.activateQuickSelectModeLocked()
+	if !app.quickSelect.quickSelectMode {
 		t.Fatal("quick select mode should activate after the hold delay")
 	}
 
-	if !app.onQuickSelectKey(quickSelectModifierEvent(false)) || app.quickSelectMode {
+	if !app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(false)) || app.quickSelect.quickSelectMode {
 		t.Fatal("releasing the hold modifier should hide quick select numbers")
 	}
 }
 
 func TestQuickSelectNumberActivatesVisibleResult(t *testing.T) {
-	app := &App{
-		results: []queryResult{
-			{ID: "group", Title: "Group", IsGroup: true},
-			{ID: "one", Title: "One"},
+	app := bindTestApp(&App{
+		resultList: resultController{
+			results: []queryResult{
+				{ID: "group", Title: "Group", IsGroup: true},
+				{ID: "one", Title: "One"},
+			},
 		},
 		lifecycleCtx: t.Context(),
-	}
-	app.activateQuickSelectModeLocked()
-	if !app.onQuickSelectKey(woxui.KeyEvent{Key: woxui.Key("1"), Down: true}) {
+	})
+	app.quickSelect.activateQuickSelectModeLocked()
+	if !app.quickSelect.onQuickSelectKey(woxui.KeyEvent{Key: woxui.Key("1"), Down: true}) {
 		t.Fatal("digit 1 should activate the first visible non-group result")
 	}
-	if app.selected != 1 || app.quickSelectMode {
-		t.Fatalf("quick select activation = selected %d mode %v, want 1/false", app.selected, app.quickSelectMode)
+	if app.resultList.selected != 1 || app.quickSelect.quickSelectMode {
+		t.Fatalf("quick select activation = selected %d mode %v, want 1/false", app.resultList.selected, app.quickSelect.quickSelectMode)
 	}
 }
 
 func TestQuickSelectDoesNotStartWithoutResults(t *testing.T) {
-	app := &App{results: []queryResult{{ID: "g", IsGroup: true}}}
-	if app.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelectTimer != nil {
+	app := bindTestApp(&App{resultList: resultController{results: []queryResult{{ID: "g", IsGroup: true}}}})
+	if app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelect.quickSelectTimer != nil {
 		t.Fatal("quick select should not start when there is no selectable result")
 	}
 }
 
 func TestQuickSelectBlockedByActionPanel(t *testing.T) {
-	app := &App{
-		results:     []queryResult{{ID: "one", Title: "One"}},
-		actionPanel: true,
-	}
-	if app.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelectTimer != nil {
+	app := bindTestApp(&App{
+		resultList: resultController{results: []queryResult{{ID: "one", Title: "One"}}},
+		actions:    actionPanelController{actionPanel: true},
+	})
+	if app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelect.quickSelectTimer != nil {
 		t.Fatal("quick select should stay off while the action panel is open")
 	}
 }
 
 func TestQuickSelectHoldWaitsBeforeActivating(t *testing.T) {
-	app := &App{results: []queryResult{{ID: "one", Title: "One"}}, lifecycleCtx: t.Context()}
-	if !app.onQuickSelectKey(quickSelectModifierEvent(true)) {
+	app := bindTestApp(&App{
+		resultList:   resultController{results: []queryResult{{ID: "one", Title: "One"}}},
+		lifecycleCtx: t.Context(),
+	})
+	if !app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true)) {
 		t.Fatal("modifier hold should be consumed")
 	}
-	if app.quickSelectMode {
+	if app.quickSelect.quickSelectMode {
 		t.Fatal("quick select should wait for the hold delay before showing numbers")
 	}
-	if app.quickSelectTimer != nil {
-		app.quickSelectTimer.Stop()
-		app.quickSelectTimer = nil
+	if app.quickSelect.quickSelectTimer != nil {
+		app.quickSelect.quickSelectTimer.Stop()
+		app.quickSelect.quickSelectTimer = nil
 	}
 }
 
@@ -158,31 +163,34 @@ func quickSelectModifierEvent(down bool) woxui.KeyEvent {
 }
 
 func TestQuickSelectTimerCancelledOnOtherKey(t *testing.T) {
-	app := &App{results: []queryResult{{ID: "one", Title: "One"}}, lifecycleCtx: t.Context()}
-	if !app.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelectTimer == nil {
+	app := bindTestApp(&App{
+		resultList:   resultController{results: []queryResult{{ID: "one", Title: "One"}}},
+		lifecycleCtx: t.Context(),
+	})
+	if !app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelect.quickSelectTimer == nil {
 		t.Fatal("expected a pending quick select timer")
 	}
-	app.onQuickSelectKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true})
+	app.quickSelect.onQuickSelectKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true})
 	time.Sleep(10 * time.Millisecond)
-	if app.quickSelectKeyPressed || app.quickSelectMode {
+	if app.quickSelect.quickSelectKeyPressed || app.quickSelect.quickSelectMode {
 		t.Fatal("another key should cancel the pending quick select hold")
 	}
 }
 
 func TestQuickSelectTimerCancelledBeforeFormConsumesKey(t *testing.T) {
-	app := &App{
-		results:        []queryResult{{ID: "one", Title: "One"}},
+	app := bindTestApp(&App{
+		resultList:     resultController{results: []queryResult{{ID: "one", Title: "One"}}},
 		lifecycleCtx:   t.Context(),
 		hotkeySettings: newHotkeySettingsController(CommonDeps{}),
-	}
-	if !app.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelectTimer == nil {
+	})
+	if !app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true)) || app.quickSelect.quickSelectTimer == nil {
 		t.Fatal("expected a pending quick select timer")
 	}
-	app.form = &formState{}
+	app.forms.form = &formState{}
 	if !app.onKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
 		t.Fatal("the form should consume Enter")
 	}
-	if app.quickSelectKeyPressed || app.quickSelectTimer != nil {
+	if app.quickSelect.quickSelectKeyPressed || app.quickSelect.quickSelectTimer != nil {
 		t.Fatal("a feature-local key handler must not leave the quick select timer pending")
 	}
 }

@@ -8,29 +8,33 @@ import (
 )
 
 func TestSelectedPreviewForLifecycleRejectsStaleQueryResults(t *testing.T) {
-	app := &App{
-		visible:        true,
-		query:          plainQuery{QueryID: "current-query"},
-		resultsQueryID: "previous-query",
-		results:        []queryResult{{Preview: queryPreview{PreviewType: "text", PreviewData: "stale"}}},
-		selected:       0,
-	}
+	app := bindTestApp(&App{
+		visible:      true,
+		querySession: queryController{query: plainQuery{QueryID: "current-query"}},
+		resultList: resultController{
+			resultsQueryID: "previous-query",
+			results:        []queryResult{{Preview: queryPreview{PreviewType: "text", PreviewData: "stale"}}},
+			selected:       0,
+		},
+	})
 
-	if _, _, visible := app.selectedPreviewForLifecycle(); visible {
+	if _, _, visible := app.previews.selectedPreviewForLifecycle(); visible {
 		t.Fatal("stale query result kept its preview lifecycle active")
 	}
 }
 
 func TestSelectedPreviewForLifecycleRejectsPreviewlessResult(t *testing.T) {
-	app := &App{
-		visible:        true,
-		query:          plainQuery{QueryID: "current-query"},
-		resultsQueryID: "current-query",
-		results:        []queryResult{{Preview: queryPreview{PreviewType: "text"}}},
-		selected:       0,
-	}
+	app := bindTestApp(&App{
+		visible:      true,
+		querySession: queryController{query: plainQuery{QueryID: "current-query"}},
+		resultList: resultController{
+			resultsQueryID: "current-query",
+			results:        []queryResult{{Preview: queryPreview{PreviewType: "text"}}},
+			selected:       0,
+		},
+	})
 
-	if _, _, visible := app.selectedPreviewForLifecycle(); visible {
+	if _, _, visible := app.previews.selectedPreviewForLifecycle(); visible {
 		t.Fatal("result without preview data kept its preview lifecycle active")
 	}
 }
@@ -41,35 +45,40 @@ func TestWebViewPreviewSharesResultGracePeriod(t *testing.T) {
 	for _, kind := range []string{"webview", "remote", "file"} {
 		t.Run(kind, func(t *testing.T) {
 			preview := queryPreview{PreviewType: kind, PreviewData: html}
-			app := &App{
-				visible: true, query: plainQuery{QueryID: "new-query", QueryText: "random ip s"},
-				resultsQueryID: "old-query", selected: 0, webViewPreviewData: html,
-			}
+			app := bindTestApp(&App{
+				visible:      true,
+				querySession: queryController{query: plainQuery{QueryID: "new-query", QueryText: "random ip s"}},
+				resultList: resultController{
+					resultsQueryID: "old-query",
+					selected:       0,
+				},
+				webView: webViewPreviewController{webViewPreviewData: html},
+			})
 			if kind == "remote" {
 				preview.PreviewData = "/preview?id=old"
-				app.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: html}}
+				app.remotePreview.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: html}}
 			} else if kind == "file" {
 				preview.PreviewData = "preview.html"
-				app.filePreviews = map[string]filePreviewContent{preview.PreviewData: {Kind: "webview", WebViewData: html}}
+				app.filePreview.filePreviews = map[string]filePreviewContent{preview.PreviewData: {Kind: "webview", WebViewData: html}}
 			}
-			app.results = []queryResult{{Preview: preview}}
-			app.beginQueryTransitionLocked(true)
-			if app.queryTransitionTimer == nil {
+			app.resultList.results = []queryResult{{Preview: preview}}
+			app.querySession.beginQueryTransitionLocked(true)
+			if app.querySession.queryTransitionTimer == nil {
 				t.Fatal("result grace period was not scheduled")
 			}
 			// Drive the deadline explicitly without posting to a native UI event loop.
-			app.queryTransitionTimer.Stop()
-			defer app.resetQueryTransitionLocked()
-			if _, _, visible := app.selectedPreviewForLifecycle(); !visible {
+			app.querySession.queryTransitionTimer.Stop()
+			defer app.querySession.resetQueryTransitionLocked()
+			if _, _, visible := app.previews.selectedPreviewForLifecycle(); !visible {
 				t.Fatal("active WebView was hidden before retained results expired")
 			}
-			app.reconcileSelectedPreviewOnUI()
-			if app.webViewPreviewData != html {
+			app.previews.reconcileSelectedPreviewOnUI()
+			if app.webView.webViewPreviewData != html {
 				t.Fatal("query transition deactivated the retained WebView")
 			}
-			app.resetQueryTransitionLocked()
-			app.reconcileSelectedPreviewOnUI()
-			if app.webViewPreviewData != "" {
+			app.querySession.resetQueryTransitionLocked()
+			app.previews.reconcileSelectedPreviewOnUI()
+			if app.webView.webViewPreviewData != "" {
 				t.Fatal("WebView remained active after the result grace period")
 			}
 		})
@@ -81,34 +90,39 @@ func TestWebViewGracePeriodDoesNotKeepUnrenderedOrNewPreviews(t *testing.T) {
 	const html = `{"html":"<p>old</p>"}`
 	for _, change := range []string{"hidden", "destroyed", "different-preview", "error", "empty-results", "new-results", "no-preview-layout"} {
 		t.Run(change, func(t *testing.T) {
-			app := &App{
-				visible: true, query: plainQuery{QueryID: "new-query", QueryText: "random ip s"},
-				resultsQueryID: "old-query", selected: 0, webViewPreviewData: html,
-				results: []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: html}}},
-			}
-			app.beginQueryTransitionLocked(true)
-			app.queryTransitionTimer.Stop()
-			defer app.resetQueryTransitionLocked()
+			app := bindTestApp(&App{
+				visible:      true,
+				querySession: queryController{query: plainQuery{QueryID: "new-query", QueryText: "random ip s"}},
+				resultList: resultController{
+					resultsQueryID: "old-query",
+					selected:       0,
+					results:        []queryResult{{Preview: queryPreview{PreviewType: "webview", PreviewData: html}}},
+				},
+				webView: webViewPreviewController{webViewPreviewData: html},
+			})
+			app.querySession.beginQueryTransitionLocked(true)
+			app.querySession.queryTransitionTimer.Stop()
+			defer app.querySession.resetQueryTransitionLocked()
 			switch change {
 			case "hidden":
 				app.visible = false
 			case "destroyed":
 				app.destroyed.Store(true)
 			case "different-preview":
-				app.results[0].Preview.PreviewData = `{"html":"<p>different</p>"}`
+				app.resultList.results[0].Preview.PreviewData = `{"html":"<p>different</p>"}`
 			case "error":
-				app.webViewPreviewError = "load failed"
+				app.webView.webViewPreviewError = "load failed"
 			case "empty-results":
-				app.results = nil
+				app.resultList.results = nil
 			case "new-results":
-				app.resultsQueryID = app.query.QueryID
-				app.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "new result"}
+				app.resultList.resultsQueryID = app.querySession.query.QueryID
+				app.resultList.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "new result"}
 			case "no-preview-layout":
 				ratio := float64(1)
-				app.layout.ResultPreviewWidthRatio = &ratio
+				app.resultList.layout.ResultPreviewWidthRatio = &ratio
 			}
-			app.reconcileSelectedPreviewOnUI()
-			if app.webViewPreviewData != "" {
+			app.previews.reconcileSelectedPreviewOnUI()
+			if app.webView.webViewPreviewData != "" {
 				t.Fatal("unrendered WebView survived reconciliation")
 			}
 		})
@@ -116,64 +130,74 @@ func TestWebViewGracePeriodDoesNotKeepUnrenderedOrNewPreviews(t *testing.T) {
 }
 
 func TestNativeFilePreviewLifecycleAdvancesGeneration(t *testing.T) {
-	app := &App{}
-	changed := app.activateNativeFilePreview("first.docx")
-	if !changed || app.nativeFilePreviewGeneration != 1 {
-		t.Fatalf("first native preview activation = changed %v generation %d", changed, app.nativeFilePreviewGeneration)
+	app := bindTestApp(&App{})
+	changed := app.nativeFile.activateNativeFilePreview("first.docx")
+	if !changed || app.nativeFile.nativeFilePreviewGeneration != 1 {
+		t.Fatalf("first native preview activation = changed %v generation %d", changed, app.nativeFile.nativeFilePreviewGeneration)
 	}
 
-	app.deactivateNativeFilePreview()
-	if app.nativeFilePreviewGeneration != 2 {
-		t.Fatalf("native preview deactivation generation = %d, want 2", app.nativeFilePreviewGeneration)
+	app.nativeFile.deactivateNativeFilePreview()
+	if app.nativeFile.nativeFilePreviewGeneration != 2 {
+		t.Fatalf("native preview deactivation generation = %d, want 2", app.nativeFile.nativeFilePreviewGeneration)
 	}
-	changed = app.activateNativeFilePreview("second.docx")
-	if !changed || app.nativeFilePreviewGeneration != 3 {
-		t.Fatalf("second native preview activation = changed %v generation %d, want generation 3", changed, app.nativeFilePreviewGeneration)
+	changed = app.nativeFile.activateNativeFilePreview("second.docx")
+	if !changed || app.nativeFile.nativeFilePreviewGeneration != 3 {
+		t.Fatalf("second native preview activation = changed %v generation %d, want generation 3", changed, app.nativeFile.nativeFilePreviewGeneration)
 	}
 }
 
 func TestNativeFilePreviewIgnoresStaleErrors(t *testing.T) {
-	app := &App{nativeFilePreviewPath: "current.docx", nativeFilePreviewGeneration: 2}
-	app.setNativeFilePreviewError(1, errors.New("stale preview failure"))
-	if app.nativeFilePreviewError != "" || app.nativeFilePreviewGeneration != 2 {
-		t.Fatalf("stale native preview error changed state: error %q generation %d", app.nativeFilePreviewError, app.nativeFilePreviewGeneration)
+	app := bindTestApp(&App{
+		nativeFile: nativeFilePreviewController{
+			nativeFilePreviewPath:       "current.docx",
+			nativeFilePreviewGeneration: 2,
+		},
+	})
+	app.nativeFile.setNativeFilePreviewError(1, errors.New("stale preview failure"))
+	if app.nativeFile.nativeFilePreviewError != "" || app.nativeFile.nativeFilePreviewGeneration != 2 {
+		t.Fatalf("stale native preview error changed state: error %q generation %d", app.nativeFile.nativeFilePreviewError, app.nativeFile.nativeFilePreviewGeneration)
 	}
 }
 
 func TestNativeFilePreviewDelayedActivationRejectsObsoleteSelection(t *testing.T) {
-	app := &App{}
-	if !app.scheduleNativeFilePreview("first.docx") {
+	app := bindTestApp(&App{})
+	if !app.nativeFile.scheduleNativeFilePreview("first.docx") {
 		t.Fatal("initial native preview should schedule")
 	}
-	generation := app.nativeFilePreviewGeneration
-	if app.nativeFilePreviewPendingPath != "first.docx" || app.nativeFilePreviewTimer == nil {
+	generation := app.nativeFile.nativeFilePreviewGeneration
+	if app.nativeFile.nativeFilePreviewPendingPath != "first.docx" || app.nativeFile.nativeFilePreviewTimer == nil {
 		t.Fatal("scheduled native preview did not retain its cancellation state")
 	}
 
-	app.deactivateNativeFilePreview()
-	app.activateScheduledNativeFilePreview("first.docx", generation)
-	if app.nativeFilePreviewPath != "" {
-		t.Fatalf("obsolete delayed preview became active for %q", app.nativeFilePreviewPath)
+	app.nativeFile.deactivateNativeFilePreview()
+	app.nativeFile.activateScheduledNativeFilePreview("first.docx", generation)
+	if app.nativeFile.nativeFilePreviewPath != "" {
+		t.Fatalf("obsolete delayed preview became active for %q", app.nativeFile.nativeFilePreviewPath)
 	}
 }
 
 func TestNativeFilePreviewCoalescesPendingBounds(t *testing.T) {
-	app := &App{nativeFilePreviewPath: "document.docx", nativeFilePreviewGeneration: 3}
+	app := bindTestApp(&App{
+		nativeFile: nativeFilePreviewController{
+			nativeFilePreviewPath:       "document.docx",
+			nativeFilePreviewGeneration: 3,
+		},
+	})
 	first := woxui.Rect{X: 1, Y: 2, Width: 300, Height: 400}
 	latest := woxui.Rect{X: 2, Y: 3, Width: 320, Height: 420}
-	app.requestNativeFilePreviewBounds("document.docx", 3, first)
-	timer := app.nativeFilePreviewBoundsTimer
+	app.nativeFile.requestNativeFilePreviewBounds("document.docx", 3, first)
+	timer := app.nativeFile.nativeFilePreviewBoundsTimer
 	if timer == nil {
 		t.Fatal("first native preview bounds should schedule one deferred update")
 	}
-	app.requestNativeFilePreviewBounds("document.docx", 3, latest)
-	if app.nativeFilePreviewBoundsTimer != timer {
+	app.nativeFile.requestNativeFilePreviewBounds("document.docx", 3, latest)
+	if app.nativeFile.nativeFilePreviewBoundsTimer != timer {
 		t.Fatal("new bounds should update the pending request instead of scheduling another native operation")
 	}
-	if app.nativeFilePreviewBounds != latest {
-		t.Fatalf("pending native preview bounds = %+v, want %+v", app.nativeFilePreviewBounds, latest)
+	if app.nativeFile.nativeFilePreviewBounds != latest {
+		t.Fatalf("pending native preview bounds = %+v, want %+v", app.nativeFile.nativeFilePreviewBounds, latest)
 	}
-	app.stopNativeFilePreviewTimers()
+	app.nativeFile.stopNativeFilePreviewTimers()
 }
 
 // TestPreviewPinFollowsSelectedSurface covers transitions that never build another image body.
@@ -181,33 +205,43 @@ func TestPreviewPinFollowsSelectedSurface(t *testing.T) {
 	for _, transition := range []string{"same-image", "hidden", "empty-results", "no-preview", "text", "different-image", "no-preview-layout"} {
 		t.Run(transition, func(t *testing.T) {
 			source := woxImage{ImageType: "absolute", ImageData: "/tmp/preview.png"}
-			app := &App{visible: true, query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
-				results: []queryResult{{Preview: queryPreview{PreviewType: "image", PreviewData: "absolute:/tmp/preview.png"}}},
-				images:  map[string]*woxui.Image{}, imageLastUsed: map[string]uint64{}, imageViewport: map[string]struct{}{"preview": {}},
-				pinnedPreview: viewportPreviewPin{source: source, size: 2048, key: "preview"},
-			}
-			app.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
+			app := bindTestApp(&App{
+				visible:      true,
+				querySession: queryController{query: plainQuery{QueryID: "q"}},
+				resultList: resultController{
+					resultsQueryID: "q",
+					selected:       0,
+					results:        []queryResult{{Preview: queryPreview{PreviewType: "image", PreviewData: "absolute:/tmp/preview.png"}}},
+				},
+				imageStore: imageStore{
+					images:        map[string]*woxui.Image{},
+					imageLastUsed: map[string]uint64{},
+					imageViewport: map[string]struct{}{"preview": {}},
+				},
+				previews: previewController{pinnedPreview: viewportPreviewPin{source: source, size: 2048, key: "preview"}},
+			})
+			app.imageStore.insertImageLocked("preview", &woxui.Image{Width: 4096, Height: 4096})
 			switch transition {
 			case "hidden":
 				app.visible = false
 			case "empty-results":
-				app.results = nil
+				app.resultList.results = nil
 			case "no-preview":
-				app.results[0].Preview = queryPreview{}
+				app.resultList.results[0].Preview = queryPreview{}
 			case "text":
-				app.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "next"}
+				app.resultList.results[0].Preview = queryPreview{PreviewType: "text", PreviewData: "next"}
 			case "different-image":
-				app.results[0].Preview.PreviewData = "absolute:/tmp/next.png"
+				app.resultList.results[0].Preview.PreviewData = "absolute:/tmp/next.png"
 			case "no-preview-layout":
 				ratio := float64(1)
-				app.layout.ResultPreviewWidthRatio = &ratio
+				app.resultList.layout.ResultPreviewWidthRatio = &ratio
 			}
-			app.reconcileSelectedPreviewOnUI()
+			app.previews.reconcileSelectedPreviewOnUI()
 			if transition == "same-image" {
-				if app.images["preview"] == nil || app.pinnedPreview.key != "preview" {
+				if app.imageStore.images["preview"] == nil || app.previews.pinnedPreview.key != "preview" {
 					t.Fatal("unchanged preview lost its pin")
 				}
-			} else if len(app.imageViewport) != 0 || app.images["preview"] != nil || app.pinnedPreview.size != 0 {
+			} else if len(app.imageStore.imageViewport) != 0 || app.imageStore.images["preview"] != nil || app.previews.pinnedPreview.size != 0 {
 				t.Fatal("inactive preview retained its pin or oversized cache entry")
 			}
 		})
@@ -219,22 +253,30 @@ func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
 	for _, kind := range []string{"webview", "remote", "unresolved", "url", "hidden", "stale"} {
 		t.Run(kind, func(t *testing.T) {
 			preview := queryPreview{PreviewType: "webview", PreviewData: page}
-			app := &App{sessionID: "session", query: plainQuery{QueryID: "query"}, resultsQueryID: "query", selected: 0, results: []queryResult{{ID: "row"}}}
+			app := bindTestApp(&App{
+				sessionID:    "session",
+				querySession: queryController{query: plainQuery{QueryID: "query"}},
+				resultList: resultController{
+					resultsQueryID: "query",
+					selected:       0,
+					results:        []queryResult{{ID: "row"}},
+				},
+			})
 			if kind == "remote" || kind == "unresolved" {
 				preview = queryPreview{PreviewType: "remote", PreviewData: "/preview?id=row"}
 				if kind == "remote" {
-					app.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: page}}
+					app.remotePreview.remotePreviews = map[string]queryPreview{preview.PreviewData: {PreviewType: "webview", PreviewData: page}}
 				}
 			}
 			if kind == "url" {
 				preview.PreviewData = `{"url":"https://example.com"}`
 			}
 			if kind == "stale" {
-				app.query.QueryID = "next"
+				app.querySession.query.QueryID = "next"
 			}
 			for revision := 0; revision < 3; revision++ {
-				app.results[0].Revision++
-				key, html := app.inlineWebViewScriptTarget(preview, kind != "hidden")
+				app.resultList.results[0].Revision++
+				key, html := app.previews.inlineWebViewScriptTarget(preview, kind != "hidden")
 				if kind == "webview" || kind == "remote" {
 					if key != app.webViewDocumentKey() || html != "<p>initial state</p>" {
 						t.Fatalf("lost target: %q %q", key, html)
@@ -248,18 +290,24 @@ func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
 }
 
 func TestRestoreInlinePreviewRequiresFreshSnapshot(t *testing.T) {
-	app := &App{query: plainQuery{QueryID: "q"}, resultsQueryID: "q", selected: 0,
-		results:        []queryResult{{ID: "row", Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview"}}},
-		remotePreviews: map[string]queryPreview{"/preview": {PreviewType: "webview", PreviewData: `{"html":"<p>old progress</p>"}`}}}
-	if !app.hasInlinePreviewToRestore() {
+	app := bindTestApp(&App{
+		querySession: queryController{query: plainQuery{QueryID: "q"}},
+		resultList: resultController{
+			resultsQueryID: "q",
+			selected:       0,
+			results:        []queryResult{{ID: "row", Preview: queryPreview{PreviewType: "remote", PreviewData: "/preview"}}},
+		},
+		remotePreview: remotePreviewController{remotePreviews: map[string]queryPreview{"/preview": {PreviewType: "webview", PreviewData: `{"html":"<p>old progress</p>"}`}}},
+	})
+	if !app.previews.hasInlinePreviewToRestore() {
 		t.Fatal("hidden inline document must refresh even if task stopped publishing")
 	}
-	app.remotePreviews["/preview"] = queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com"}`}
-	if app.hasInlinePreviewToRestore() {
+	app.remotePreview.remotePreviews["/preview"] = queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com"}`}
+	if app.previews.hasInlinePreviewToRestore() {
 		t.Fatal("retained URL page must not refresh the query")
 	}
-	app.selected = -1
-	if app.hasInlinePreviewToRestore() {
+	app.resultList.selected = -1
+	if app.previews.hasInlinePreviewToRestore() {
 		t.Fatal("missing selection must not refresh")
 	}
 }

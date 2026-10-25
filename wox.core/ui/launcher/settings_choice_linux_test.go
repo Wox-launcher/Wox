@@ -14,7 +14,7 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	}
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsOpen = true
+	app.settingsWindow.settingsOpen = true
 	// settingsNativeWindow always hops through runOnUI. The real Linux dispatcher
 	// runs that inline when the caller is already the UI thread. A one-slot queue
 	// that does not reenter fills up inside invalidate and blocks the hide path.
@@ -31,7 +31,7 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 14, Height: 14}
 	app.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
-	if app.settingsInlineTooltip != nil {
+	if app.settingsWindow.settingsInlineTooltip != nil {
 		t.Fatal("inline tooltip must wait for the shared hover dwell")
 	}
 	// Apply queued UI work on the test thread, just like the native event loop.
@@ -43,17 +43,17 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	case <-time.After(nativeHoverTooltipDelay + time.Second):
 		t.Fatal("inline tooltip did not dispatch after dwell")
 	}
-	if app.settingsInlineTooltip == nil {
+	if app.settingsWindow.settingsInlineTooltip == nil {
 		t.Fatal("expected inline tooltip state on linux after the hover dwell")
 	}
-	if app.settingsInlineTooltip.Text != "tooltip content" {
-		t.Fatalf("tooltip text = %q, want trimmed content", app.settingsInlineTooltip.Text)
+	if app.settingsWindow.settingsInlineTooltip.Text != "tooltip content" {
+		t.Fatalf("tooltip text = %q, want trimmed content", app.settingsWindow.settingsInlineTooltip.Text)
 	}
-	if app.settingsInlineTooltip.Anchor != anchor {
-		t.Fatalf("tooltip anchor = %#v, want %#v", app.settingsInlineTooltip.Anchor, anchor)
+	if app.settingsWindow.settingsInlineTooltip.Anchor != anchor {
+		t.Fatalf("tooltip anchor = %#v, want %#v", app.settingsWindow.settingsInlineTooltip.Anchor, anchor)
 	}
-	if app.settingsInlineTooltip.Side != "top" {
-		t.Fatalf("tooltip side = %q, want top", app.settingsInlineTooltip.Side)
+	if app.settingsWindow.settingsInlineTooltip.Side != "top" {
+		t.Fatalf("tooltip side = %q, want top", app.settingsWindow.settingsInlineTooltip.Side)
 	}
 
 	app.setSettingChoiceTooltip(false, "", woxui.Rect{})
@@ -64,7 +64,7 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	default:
 	}
 	depth--
-	if app.settingsInlineTooltip != nil {
-		t.Fatalf("tooltip state = %#v, want nil after hide", app.settingsInlineTooltip)
+	if app.settingsWindow.settingsInlineTooltip != nil {
+		t.Fatalf("tooltip state = %#v, want nil after hide", app.settingsWindow.settingsInlineTooltip)
 	}
 }

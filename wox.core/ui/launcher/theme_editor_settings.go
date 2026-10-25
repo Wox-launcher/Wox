@@ -46,7 +46,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		resolvedColors = themeEditorResolvedColors(state.raw, state.values)
 	}
 	for _, group := range themeEditorGroups(state.raw) {
-		label := a.translate(group.label)
+		label := a.language.translate(group.label)
 		tokens := make([]launcherview.ThemeEditorColorToken, 0, len(group.tokens))
 		for _, token := range group.tokens {
 			value := state.values[token.key]
@@ -63,13 +63,13 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			if !ok {
 				color = palette.Error
 			}
-			tokenLabel := a.translate(token.label)
+			tokenLabel := a.language.translate(token.label)
 			fieldError := ""
 			if numeric && strings.TrimSpace(state.values[token.key]) != "" {
 				if !validThemeEditorNumber(token.key, strings.TrimSpace(state.values[token.key])) {
-					fieldError = a.translate("i18n:ui_theme_editor_invalid_geometry")
+					fieldError = a.language.translate("i18n:ui_theme_editor_invalid_geometry")
 					if _, material := common.ThemeMaterialFieldLimit(token.key); material {
-						fieldError = a.translate("i18n:ui_theme_editor_invalid_material")
+						fieldError = a.language.translate("i18n:ui_theme_editor_invalid_material")
 					}
 					// Numeric validation belongs to the field; keep save/service failures at page level.
 					if formError == fieldError {
@@ -86,7 +86,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 			}
 			tokens = append(tokens, launcherview.ThemeEditorColorToken{Key: token.key, Label: tokenLabel, Color: color,
 				Error:    fieldError,
-				Subgroup: a.translate(themeEditorTokenSection(token.key)),
+				Subgroup: a.language.translate(themeEditorTokenSection(token.key)),
 				Numeric:  numeric, NumericStep: step, NumericMax: upper, Value: state.values[token.key], Effective: value,
 				Optional: isV2Theme(state.raw) && !strings.HasPrefix(token.key, "Base"),
 			})
@@ -113,7 +113,7 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 	return launcherview.ThemeEditorSettingsView(launcherview.ThemeEditorSettingsProps{
 		Width: width, Height: height, Theme: palette, DraftTheme: draftPalette.componentTheme(),
 		Geometry:  geometry,
-		ModeLabel: a.translate("i18n:ui_theme_editor_properties"), AILabel: a.translate("i18n:ui_theme_editor_ai"),
+		ModeLabel: a.language.translate("i18n:ui_theme_editor_properties"), AILabel: a.language.translate("i18n:ui_theme_editor_ai"),
 		AIIcon: a.imageForTint(fromCoreImage(icons.Get(icons.ControlSparkles)), &palette.Text, physicalImageSize(16, imageScale)),
 		OnSelectAI: func(open bool) {
 			if current := a.themeSettings.ThemeEditor(); current != nil && current.ai.open != open {
@@ -123,24 +123,24 @@ func (a *App) buildThemeEditorSettingsSurface(state *themeEditorPreviewSnapshot,
 		AIAssistant: a.buildThemeEditorAI(state, palette, assistantWidth, assistantHeight, imageScale),
 		AIExpanded:  state.ai.open,
 		Key:         state.key, Title: state.sourceName,
-		DefaultLabel: a.translate("i18n:ui_theme_inherited"), ResetLabel: a.translate("i18n:ui_theme_restore_default"),
-		LinkPaddingLabel: a.translate("i18n:ui_theme_editor_link_padding"), PaddingLabel: a.translate("i18n:ui_theme_editor_padding"),
-		NoPropertiesLabel: a.translate("i18n:ui_theme_editor_no_properties"),
+		DefaultLabel: a.language.translate("i18n:ui_theme_inherited"), ResetLabel: a.language.translate("i18n:ui_theme_restore_default"),
+		LinkPaddingLabel: a.language.translate("i18n:ui_theme_editor_link_padding"), PaddingLabel: a.language.translate("i18n:ui_theme_editor_padding"),
+		NoPropertiesLabel: a.language.translate("i18n:ui_theme_editor_no_properties"),
 		ChromeHelp:        a.themeEditorChromeHelp(), ShowChromeHelp: isV2Theme(state.raw),
-		OpacityLabel:   a.translate("i18n:ui_theme_editor_background_opacity"),
+		OpacityLabel:   a.language.translate("i18n:ui_theme_editor_background_opacity"),
 		OnChangeToken:  a.changeThemeEditorToken,
 		OnChangeTokens: a.changeThemeEditorTokens,
 		Groups:         groups, ActiveGroup: state.activeGroup, Dirty: dirty, Saving: state.saving, AIBusy: state.ai.busy, CanOverwrite: !state.isSystem && !state.isAuto && state.sourceID != "", Error: formError,
 		Wallpaper: wallpaperImage, WallpaperBlurred: wallpaperBlurred,
 		FlashToken: state.flashToken, DialogToken: state.dialogToken,
 		LocateIcon: locateIcon, DiscardIcon: discardIcon, OverwriteIcon: overwriteIcon, SaveAsIcon: saveAsIcon,
-		LocateLabel:  a.translate("i18n:ui_theme_editor_locate_token"),
-		DiscardLabel: a.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.translate("i18n:ui_save"), SaveAsLabel: a.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.translate("i18n:ui_theme_editor_saving"),
-		PreviewResultTitle: a.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.translate("i18n:ui_theme_editor_preview_result_current"),
-		PropertyLabel: a.translate("i18n:ui_file_preview_property_size"),
+		LocateLabel:  a.language.translate("i18n:ui_theme_editor_locate_token"),
+		DiscardLabel: a.language.translate("i18n:ui_theme_editor_discard"), OverwriteLabel: a.language.translate("i18n:ui_save"), SaveAsLabel: a.language.translate("i18n:ui_theme_editor_save_as"), SavingLabel: a.language.translate("i18n:ui_theme_editor_saving"),
+		PreviewResultTitle: a.language.translate("i18n:ui_theme_editor_preview_result_theme"), PreviewResultState: a.language.translate("i18n:ui_theme_editor_preview_result_current"),
+		PropertyLabel: a.language.translate("i18n:ui_file_preview_property_size"),
 		Window:        a.themeEditorNativeWindow(),
-		QueryBoxLabel: a.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.translate("i18n:ui_theme_editor_group_results"),
-		ToolbarCopyLabel: a.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.translate("i18n:ui_theme_editor_toolbar_more"),
+		QueryBoxLabel: a.language.translate("i18n:ui_theme_editor_preview_result_query"), ResultsLabel: a.language.translate("i18n:ui_theme_editor_group_results"),
+		ToolbarCopyLabel: a.language.translate("i18n:ui_theme_editor_toolbar_copy"), ToolbarMoreLabel: a.language.translate("i18n:ui_theme_editor_toolbar_more"),
 		Dialog:        a.buildThemeEditorSettingsDialog(state, palette, width, height),
 		OnSelectGroup: a.selectThemeEditorGroup, OnEditToken: a.openThemeEditorTokenDialog, OnLocateToken: a.locateThemeEditorToken,
 		OnDiscard: a.discardThemeEditorDraft, OnOverwrite: a.overwriteThemeEditorDraft, OnSaveAs: a.openThemeEditorSaveAsDialog,
@@ -168,7 +168,7 @@ func (a *App) changeThemeEditorTokens(values map[string]string) {
 	}
 	state.error = ""
 	if _, err := themeEditorDraftTheme(state.raw, state.values); err != nil {
-		state.error = a.translate("i18n:ui_theme_editor_invalid_geometry")
+		state.error = a.language.translate("i18n:ui_theme_editor_invalid_geometry")
 	} else {
 		a.applySettingsThemeEditorDraft()
 	}
@@ -212,18 +212,18 @@ func (a *App) loadDemoWallpaper(loadID uint64, path string, includeBlurred bool)
 			return
 		}
 		a.themeSettings.SetThemeWallpaperLoading(false)
-		settingsOpen = a.settingsOpen
-		onboardingOpen = a.onboardingOpen
+		settingsOpen = a.settingsWindow.settingsOpen
+		onboardingOpen = a.onboarding.onboardingOpen
 		if err == nil && (settingsOpen || onboardingOpen) {
 			a.themeSettings.SetThemeWallpaperPath(path)
 			a.themeSettings.SetThemeWallpaperImage(wallpaperImage)
 			a.themeSettings.SetThemeWallpaperBlurred(wallpaperBlurred)
 		}
 		if err == nil && settingsOpen {
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		}
 		if err == nil && onboardingOpen {
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		}
 	})
 	if err != nil {
@@ -555,10 +555,10 @@ func (a *App) openThemeEditorSaveAsDialog() {
 	state.dialogMode = "save-as"
 	state.dialogToken = "ThemeName"
 	state.dialogOriginal = state.values["ThemeName"]
-	defaultName := a.translate("i18n:ui_theme_editor_default_theme_name")
+	defaultName := a.language.translate("i18n:ui_theme_editor_default_theme_name")
 	baseName := strings.TrimSpace(state.sourceName)
 	if baseName == "" {
-		baseName = a.translate("i18n:ui_theme_editor_default_theme")
+		baseName = a.language.translate("i18n:ui_theme_editor_default_theme")
 	}
 	state.values["ThemeName"] = strings.ReplaceAll(defaultName, "{name}", baseName)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
@@ -583,12 +583,12 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 	panelHeight := float32(176)
 	callbacks := formFieldCallbacks{idPrefix: "theme-editor-dialog", focus: a.focusThemeEditorField, setText: a.setThemeEditorText, onKey: a.onThemeEditorPreviewKey}
 	field := a.buildFormField(state.formFieldsSnapshot, callbacks, palette, index, state.definitions[index], panelWidth-32, 0)
-	title := a.translate("i18n:ui_theme_editor_save_as_title")
-	confirmLabel := a.translate("i18n:ui_theme_editor_save_as")
+	title := a.language.translate("i18n:ui_theme_editor_save_as_title")
+	confirmLabel := a.language.translate("i18n:ui_theme_editor_save_as")
 	if state.dialogMode == "token" {
 		panelHeight = 456
-		title = a.translate(state.definitions[index].Value.Label)
-		confirmLabel = a.translate("i18n:ui_ok")
+		title = a.language.translate(state.definitions[index].Value.Label)
+		confirmLabel = a.language.translate("i18n:ui_ok")
 		selectedColor, ok := decodeThemeColor(themeEditorColorValue(state.raw, state.values, state.dialogToken))
 		if !ok {
 			selectedColor = woxui.Color{A: 255}
@@ -610,17 +610,17 @@ func (a *App) buildThemeEditorSettingsDialog(state *themeEditorPreviewSnapshot, 
 		})
 		field = launcherview.ThemeEditorColorPicker(launcherview.ThemeEditorColorPickerProps{
 			Color: selectedColor, Hue: selectedHSV.hue, Saturation: selectedHSV.saturation, Brightness: selectedHSV.value, Opacity: selectedHSV.alpha,
-			BrightnessLabel: a.translate("i18n:ui_theme_editor_brightness"), OpacityLabel: a.translate("i18n:ui_theme_editor_opacity"),
+			BrightnessLabel: a.language.translate("i18n:ui_theme_editor_brightness"), OpacityLabel: a.language.translate("i18n:ui_theme_editor_opacity"),
 			ColorField: field, Theme: palette,
 			OnHueSaturation: a.setThemeEditorDialogHueSaturation, OnBrightnessChange: a.setThemeEditorDialogBrightness, OnOpacityChange: a.setThemeEditorDialogOpacity,
 		})
 	}
 	buttons := []woxwidget.Widget{
-		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.translate("i18n:ui_cancel"), Variant: woxcomponent.ButtonSecondary, OnTap: a.cancelThemeEditorDialog, Theme: palette}),
+		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-cancel", Label: a.language.translate("i18n:ui_cancel"), Variant: woxcomponent.ButtonSecondary, OnTap: a.cancelThemeEditorDialog, Theme: palette}),
 		woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-confirm", Label: confirmLabel, Variant: woxcomponent.ButtonPrimary, OnTap: a.confirmThemeEditorDialog, Theme: palette}),
 	}
 	if state.dialogMode == "token" && isV2Theme(state.raw) && !strings.HasPrefix(state.dialogToken, "Base") {
-		buttons = append([]woxwidget.Widget{woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-reset", Label: a.translate("i18n:ui_theme_restore_default"), Variant: woxcomponent.ButtonSecondary, OnTap: a.resetThemeEditorToken, Theme: palette})}, buttons...)
+		buttons = append([]woxwidget.Widget{woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "theme-editor-dialog-reset", Label: a.language.translate("i18n:ui_theme_restore_default"), Variant: woxcomponent.ButtonSecondary, OnTap: a.resetThemeEditorToken, Theme: palette})}, buttons...)
 	}
 	footer := woxwidget.Align{Width: panelWidth - 32, Height: 46, Horizontal: 1, Child: woxwidget.Container{Height: 46, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, Children: buttons}}}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
@@ -708,12 +708,12 @@ func (a *App) confirmThemeEditorDialog() {
 			valid = false
 		}
 		if !valid {
-			state.error = a.translate("i18n:ui_theme_editor_invalid_color")
+			state.error = a.language.translate("i18n:ui_theme_editor_invalid_color")
 			a.invalidateThemeEditorWindow()
 			return
 		}
 	} else if value == "" {
-		state.error = a.translate("i18n:ui_theme_editor_name_required")
+		state.error = a.language.translate("i18n:ui_theme_editor_name_required")
 		a.invalidateThemeEditorWindow()
 		return
 	}
@@ -760,7 +760,7 @@ func (a *App) overwriteThemeEditorDraft() {
 // themeEditorChromeHelp follows the native platform's custom-outline material policy.
 func (a *App) themeEditorChromeHelp() string {
 	if runtime.GOOS == "linux" {
-		return a.translate("i18n:ui_theme_editor_chrome_help_linux")
+		return a.language.translate("i18n:ui_theme_editor_chrome_help_linux")
 	}
-	return a.translate("i18n:ui_theme_editor_chrome_help")
+	return a.language.translate("i18n:ui_theme_editor_chrome_help")
 }

@@ -13,7 +13,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 	for index := range results {
 		results[index] = queryResult{ID: fmt.Sprintf("result-%d", index), Title: fmt.Sprintf("Result %d", index)}
 	}
-	app := &App{selected: -1}
+	app := bindTestApp(&App{resultList: resultController{selected: -1}})
 	built := app.buildResults(viewSnapshot{results: results, selected: -1}, 760, 500, 1, 0)
 	semantics := built.(woxwidget.Semantics)
 	retained := semantics.Child.(woxwidget.Container).Child.(woxwidget.Semantics).Child.(woxwidget.Stateful)
@@ -39,7 +39,7 @@ func TestBuildResultsOnlyBuildsViewportRows(t *testing.T) {
 // finished query stays observable when it produced nothing. Without the status node a
 // wait for completion cannot tell an empty result set from a query still in flight.
 func TestBuildContentReportsCompletionWithoutResults(t *testing.T) {
-	app := &App{selected: -1}
+	app := bindTestApp(&App{resultList: resultController{selected: -1}})
 	for _, complete := range []bool{false, true} {
 		built := app.buildContent(viewSnapshot{selected: -1, queryComplete: complete}, 760, 0, 1, 0)
 		semantics, ok := built.(woxwidget.Semantics)
@@ -125,13 +125,13 @@ func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 					rowHeight := density.resultRowHeight(palette)
 					height := float32(launcherResultAreaHeight(results, queryLayout{}, 760, 8, int(rowHeight), int(padding.Top), int(padding.Bottom), density.groupHeaderHeight()))
 					for _, selected := range []int{0, count - 1} {
-						app := &App{selected: selected}
+						app := bindTestApp(&App{resultList: resultController{selected: selected}})
 						snapshot := viewSnapshot{results: results, selected: selected, palette: palette, densityMetrics: density, show: show}
 						built := app.buildResults(snapshot, 760, height, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
 						if built.Height != height+40 {
 							t.Fatalf("padded result paint height=%v, want %v", built.Height, height+40)
 						}
-						scroll := app.resultScroll
+						scroll := app.resultList.resultScroll
 						if scroll.viewport != float32(min(count, 8))*rowHeight || scroll.content != float32(count)*rowHeight {
 							t.Fatalf("count=%d density=%s: scroll=%+v row=%v", count, densityName, scroll, rowHeight)
 						}
@@ -184,12 +184,12 @@ func TestFooterSamplingPreservesPaddingHeight(t *testing.T) {
 		for i := range results {
 			results[i].ID = fmt.Sprint(i)
 		}
-		app := &App{selected: -1}
+		app := bindTestApp(&App{resultList: resultController{selected: -1}})
 		built := app.buildResults(viewSnapshot{results: results, selected: -1, palette: palette}, 760, 416, 2, 40).(woxwidget.Semantics).Child.(woxwidget.Container)
 		props := built.Child.(woxwidget.Semantics).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 		wantGap, wantHeight := float32(8), float32(456)
-		if props.UnderlayHeight != wantGap+40 || built.Height != wantHeight || app.resultScroll.viewport != 400 {
-			t.Fatalf("border=%v extension=%v height=%v viewport=%v", border, props.UnderlayHeight, built.Height, app.resultScroll.viewport)
+		if props.UnderlayHeight != wantGap+40 || built.Height != wantHeight || app.resultList.resultScroll.viewport != 400 {
+			t.Fatalf("border=%v extension=%v height=%v viewport=%v", border, props.UnderlayHeight, built.Height, app.resultList.resultScroll.viewport)
 		}
 	}
 }

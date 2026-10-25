@@ -5,37 +5,37 @@ import (
 )
 
 // reconcileSelectedPreview keeps stateful preview resources aligned with the selected render target.
-func (a *App) reconcileSelectedPreview() {
+func (a *previewController) reconcileSelectedPreview() {
 	if err := a.runOnUI("reconcile selected preview", a.reconcileSelectedPreviewOnUI); err != nil {
 		log.Printf("dispatch selected preview reconciliation: %v", err)
 	}
 }
 
 // reconcileSelectedPreviewOnUI serializes resource transitions after native thread ownership is established.
-func (a *App) reconcileSelectedPreviewOnUI() {
+func (a *previewController) reconcileSelectedPreviewOnUI() {
 	a.reconcilePreviewVisibility()
 	result, preview, visible := a.selectedPreviewForLifecycle()
-	if a.window != nil {
+	if a.window() != nil {
 		key, html := a.inlineWebViewScriptTarget(preview, visible)
-		a.window.RetainWebViewScriptTarget(key, html)
+		a.window().RetainWebViewScriptTarget(key, html)
 	}
 
 	if !visible {
 		a.releasePinnedPreviewImage()
-		a.cancelScheduledFilePreview()
+		a.filePreview.cancelScheduledFilePreview()
 		hideWebView := a.deactivatePreviewTypes("")
 		if hideWebView {
-			a.hideWebView()
+			a.webView.hideWebView()
 		}
 		return
 	}
-	if a.resultsQueryID != a.query.QueryID {
+	if a.resultList.resultsQueryID != a.querySession.query.QueryID {
 		// The old WebView is still being painted with the retained results.
 		// Keep its surface and overlay without reactivating obsolete preview work.
 		return
 	}
-	a.prepareRemotePreview(preview)
-	preview = a.resolvePreview(preview)
+	a.remotePreview.prepareRemotePreview(preview)
+	preview = a.remotePreview.resolvePreview(preview)
 	// Release the old image even when the next surface bypasses buildPreviewBody.
 	var imageSource woxImage
 	if preview.PreviewType == "image" {
@@ -45,8 +45,8 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	nativeFilePath := ""
 	nativeFileAutoLoad := false
 	if preview.PreviewType == "file" {
-		a.prepareFilePreview(preview.PreviewData)
-		filePreview := a.filePreviewFor(preview.PreviewData)
+		a.filePreview.prepareFilePreview(preview.PreviewData)
+		filePreview := a.filePreview.filePreviewFor(preview.PreviewData)
 		if filePreview.Kind == "image" {
 			imageSource = filePreview.Image
 		}
@@ -58,7 +58,7 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 			nativeFileAutoLoad = filePreview.NativeFileAutoLoad
 		}
 	} else {
-		a.cancelScheduledFilePreview()
+		a.filePreview.cancelScheduledFilePreview()
 	}
 
 	if imageSource != a.pinnedPreview.source {
@@ -72,9 +72,9 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 	if nativeFilePath != "" {
 		previewType = "native_file"
 	}
-	if nativeFilePath != "" && a.nativeFilePreviewTargetPath() != "" && a.nativeFilePreviewTargetPath() != nativeFilePath {
+	if nativeFilePath != "" && a.nativeFile.nativeFilePreviewTargetPath() != "" && a.nativeFile.nativeFilePreviewTargetPath() != nativeFilePath {
 		// The native preview is an external child window, so replacing its controller path is not enough to remove the old HWND.
-		a.deactivateNativeFilePreview()
+		a.nativeFile.deactivateNativeFilePreview()
 	}
 	hideWebView := a.deactivatePreviewTypes(previewType)
 	resetWebView := false
@@ -88,51 +88,51 @@ func (a *App) reconcileSelectedPreviewOnUI() {
 			a.deactivateTriggerConflictPreview()
 		}
 	case "chat":
-		if a.activateChatPreview(result, preview) != nil {
-			a.deactivateChatPreview()
+		if a.chat.activateChatPreview(result, preview) != nil {
+			a.chat.deactivateChatPreview()
 		}
 	case "terminal":
-		a.activateTerminalPreview(preview)
+		a.terminal.activateTerminalPreview(preview)
 	case "dictation_history":
-		a.reconcileDictationAudioPreview(preview)
+		a.dictation.reconcileDictationAudioPreview(preview)
 	case "webview":
-		resetWebView = a.activateWebViewPreview(preview.PreviewData)
+		resetWebView = a.webView.activateWebViewPreview(preview.PreviewData)
 	}
 	if fileWebViewData != "" {
-		resetWebView = a.activateWebViewPreview(fileWebViewData)
+		resetWebView = a.webView.activateWebViewPreview(fileWebViewData)
 	}
 	if nativeFilePath != "" {
-		if nativeFileAutoLoad || a.nativeFilePreviewManualPath == nativeFilePath {
-			a.scheduleNativeFilePreview(nativeFilePath)
+		if nativeFileAutoLoad || a.nativeFile.nativeFilePreviewManualPath == nativeFilePath {
+			a.nativeFile.scheduleNativeFilePreview(nativeFilePath)
 		}
 	}
 	if resetWebView {
-		a.resetWebView()
+		a.webView.resetWebView()
 	} else if hideWebView {
-		a.hideWebView()
+		a.webView.hideWebView()
 	}
 }
 
 // selectedPreviewForLifecycle retains an already active WebView during the result grace period.
-func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
-	if a.destroyed.Load() || !a.visible || a.resultsQueryID == "" || a.selected < 0 || a.selected >= len(a.results) {
+func (a *previewController) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
+	if a.isDestroyed() || !a.visible() || a.resultList.resultsQueryID == "" || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
 		return queryResult{}, queryPreview{}, false
 	}
-	result := a.results[a.selected]
+	result := a.resultList.results[a.resultList.selected]
 	preview := result.Preview
 	if !launcherPreviewVisible(a.selectedPreviewLayout(), preview) {
 		return queryResult{}, queryPreview{}, false
 	}
-	if a.resultsQueryID != a.query.QueryID {
-		if a.queryTransitionTimer == nil || a.webViewPreviewData == "" || a.webViewPreviewError != "" {
+	if a.resultList.resultsQueryID != a.querySession.query.QueryID {
+		if a.querySession.queryTransitionTimer == nil || a.webView.webViewPreviewData == "" || a.webView.webViewPreviewError != "" {
 			return queryResult{}, queryPreview{}, false
 		}
-		retained := a.resolvePreview(preview)
+		retained := a.remotePreview.resolvePreview(preview)
 		if retained.PreviewType == "file" {
-			file := a.filePreviewFor(retained.PreviewData)
+			file := a.filePreview.filePreviewFor(retained.PreviewData)
 			retained = queryPreview{PreviewType: file.Kind, PreviewData: file.WebViewData}
 		}
-		if retained.PreviewType != "webview" || retained.PreviewData != a.webViewPreviewData {
+		if retained.PreviewType != "webview" || retained.PreviewData != a.webView.webViewPreviewData {
 			return queryResult{}, queryPreview{}, false
 		}
 	}
@@ -140,7 +140,7 @@ func (a *App) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
 }
 
 // deactivatePreviewTypes releases every stateful preview except the selected type.
-func (a *App) deactivatePreviewTypes(keep string) bool {
+func (a *previewController) deactivatePreviewTypes(keep string) bool {
 	if keep != "query_requirement_settings" {
 		a.deactivateRequirementForm()
 	}
@@ -148,23 +148,23 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 		a.deactivateTriggerConflictPreview()
 	}
 	if !a.keepChatPreview(keep) {
-		a.deactivateChatPreview()
+		a.chat.deactivateChatPreview()
 	}
 	if keep != "terminal" {
-		a.deactivateTerminalPreview()
+		a.terminal.deactivateTerminalPreview()
 	}
 	if keep != "dictation_history" {
-		a.deactivateDictationAudio()
+		a.dictation.deactivateDictationAudio()
 	}
 	if keep != "webview" {
-		hideWebView := a.deactivateWebViewPreview()
+		hideWebView := a.webView.deactivateWebViewPreview()
 		if keep != "native_file" {
-			a.deactivateNativeFilePreview()
+			a.nativeFile.deactivateNativeFilePreview()
 		}
 		return hideWebView
 	}
 	if keep != "native_file" {
-		a.deactivateNativeFilePreview()
+		a.nativeFile.deactivateNativeFilePreview()
 	}
 	return false
 }
@@ -172,21 +172,21 @@ func (a *App) deactivatePreviewTypes(keep string) bool {
 // keepChatPreview retains the chat surface when the selected preview is still an
 // unresolved remote wrapper. Chat JSON is often large enough to be deferred, and
 // tearing the surface down would drop fullscreen before the payload loads.
-func (a *App) keepChatPreview(keep string) bool {
+func (a *previewController) keepChatPreview(keep string) bool {
 	if keep == "chat" {
 		return true
 	}
-	return keep == "remote" && (a.layout.ChatMode || a.chatFullscreen)
+	return keep == "remote" && (a.resultList.layout.ChatMode || a.chat.chatFullscreen)
 }
 
 // inlineWebViewScriptTarget resolves core's remote preview envelope before checking
 // document identity. Treating that envelope as a different page reloads the initial
 // HTML on every ordinary result update and discards accepted scripts.
-func (a *App) inlineWebViewScriptTarget(preview queryPreview, visible bool) (string, string) {
-	if !visible || a.resultsQueryID != a.query.QueryID {
+func (a *previewController) inlineWebViewScriptTarget(preview queryPreview, visible bool) (string, string) {
+	if !visible || a.resultList.resultsQueryID != a.querySession.query.QueryID {
 		return "", ""
 	}
-	preview = a.resolvePreview(preview)
+	preview = a.remotePreview.resolvePreview(preview)
 	if preview.PreviewType == "webview" {
 		if data, err := decodeWebViewPreview(preview.PreviewData); err == nil && data.URL == "" && data.HTML != "" {
 			return a.webViewDocumentKey(), data.HTML
@@ -198,10 +198,10 @@ func (a *App) inlineWebViewScriptTarget(preview queryPreview, visible bool) (str
 // hasInlinePreviewToRestore asks plugins for a fresh snapshot after reopening.
 // Script updates deliberately do not replace the cached HTML, and the task may
 // have finished while hidden, so no later heartbeat is guaranteed to repair it.
-func (a *App) hasInlinePreviewToRestore() bool {
-	if a.selected < 0 || a.selected >= len(a.results) {
+func (a *previewController) hasInlinePreviewToRestore() bool {
+	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
 		return false
 	}
-	key, _ := a.inlineWebViewScriptTarget(a.results[a.selected].Preview, true)
+	key, _ := a.inlineWebViewScriptTarget(a.resultList.results[a.resultList.selected].Preview, true)
 	return key != ""
 }

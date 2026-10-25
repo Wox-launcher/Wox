@@ -9,7 +9,7 @@ import (
 func TestUsePinYinReadsGeneralController(t *testing.T) {
 	controller := newGeneralControllerForTest()
 	controller.ApplyData(settingsData{UsePinYin: true})
-	app := &App{generalSettings: controller}
+	app := bindTestApp(&App{generalSettings: controller})
 
 	if !app.usePinYin() {
 		t.Fatal("usePinYin() = false, want true")
@@ -21,7 +21,7 @@ func TestOpenSettingChoicePickerEndsEditBeforeOpeningPicker(t *testing.T) {
 	if !controller.StartEdit("CustomPythonPath", "/usr/bin/python3", -1) {
 		t.Fatal("StartEdit should claim the shared editor")
 	}
-	app := &App{generalSettings: controller}
+	app := bindTestApp(&App{generalSettings: controller})
 	item := settingItem{
 		key:        "LangCode",
 		title:      "Language",

@@ -36,14 +36,14 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 		}
 	}
 	theme := palette
-	cancelLabel := a.translate("i18n:ui_cancel")
-	confirmLabel := a.translate("i18n:ui_ok")
+	cancelLabel := a.language.translate("i18n:ui_cancel")
+	confirmLabel := a.language.translate("i18n:ui_ok")
 	appsError := a.hotkeySettings.AppsError()
 	appsLoading := a.hotkeySettings.AppsLoading() || (!a.hotkeySettings.AppsLoaded() && appsError == "")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
 		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
-		Title: a.translate("i18n:ui_hotkey_ignore_apps_dialog_title"), SearchPlaceholder: a.translate("i18n:ui_hotkey_ignore_apps_search"),
-		LoadingLabel: a.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.translate("i18n:ui_hotkey_ignore_apps_empty"),
+		Title: a.language.translate("i18n:ui_hotkey_ignore_apps_dialog_title"), SearchPlaceholder: a.language.translate("i18n:ui_hotkey_ignore_apps_search"),
+		LoadingLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
 		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: a.formTableButtonWidth(confirmLabel, 70),
 		Candidates: candidates, SelectedIdentity: snapshot.current.Identity, Loading: appsLoading, Error: appsError,
 		OnConfirm: func(index int) {

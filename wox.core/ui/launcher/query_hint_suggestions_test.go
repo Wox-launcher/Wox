@@ -50,7 +50,14 @@ func TestQueryHintSuggestionEditing(t *testing.T) {
 			{Id: "separator", Kind: "text", Text: " "}, {Id: "repo", Kind: "argument", Placeholder: "Repository"},
 		}}},
 	}}}
-	a := &App{editor: woxui.NewTextEditor(""), query: newInputQuery(""), lifecycleCtx: context.Background(), services: &queryHintRegressionServices{instance: instance}}
+	a := bindTestApp(&App{
+		querySession: queryController{
+			editor: woxui.NewTextEditor(""),
+			query:  newInputQuery(""),
+		},
+		lifecycleCtx: context.Background(),
+		services:     &queryHintRegressionServices{instance: instance},
+	})
 	a.host = woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.EditableText{Key: launcherview.LauncherQueryInputKey, Autofocus: true, Child: woxwidget.Container{Width: 300, Height: 40}}
 	})
@@ -58,60 +65,60 @@ func TestQueryHintSuggestionEditing(t *testing.T) {
 	t.Cleanup(a.host.Dispose)
 	a.host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 40}, Scale: 1})
 	typeText := func(text string) {
-		a.editor.InsertText(text)
-		a.query.QueryText = a.updateQueryHintText(a.editor.State().Text)
+		a.querySession.editor.InsertText(text)
+		a.querySession.query.QueryText = a.querySession.updateQueryHintText(a.querySession.editor.State().Text)
 	}
-	tab := func() { a.onQueryHintKey(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) }
+	tab := func() { a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.KeyTab, Down: true}) }
 	typeText("gh ")
 	typeText("is")
 	tab()
-	if a.query.QueryText != "gh issues " || a.editor.State().Selection.Focus != 10 {
-		t.Fatalf("command completion: %+v", a.editor.State())
+	if a.querySession.query.QueryText != "gh issues " || a.querySession.editor.State().Selection.Focus != 10 {
+		t.Fatalf("command completion: %+v", a.querySession.editor.State())
 	}
-	if a.query.QueryText != "gh issues " || a.query.QueryHint.Elements[1].Id != "filter" {
-		t.Fatalf("nested template: %+v", a.query)
+	if a.querySession.query.QueryText != "gh issues " || a.querySession.query.QueryHint.Elements[1].Id != "filter" {
+		t.Fatalf("nested template: %+v", a.querySession.query)
 	}
-	a.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: queryPrimaryModifier(), Down: true})
-	if a.query.QueryText != "gh is" || !a.query.QueryHint.CommandSuggestions {
-		t.Fatalf("command and space were not undone together: %+v", a.query)
+	a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: queryPrimaryModifier(), Down: true})
+	if a.querySession.query.QueryText != "gh is" || !a.querySession.query.QueryHint.CommandSuggestions {
+		t.Fatalf("command and space were not undone together: %+v", a.querySession.query)
 	}
 	tab()
 	typeText("cr")
 	tab()
-	if a.query.QueryText != "gh issues created" || a.editor.State().Selection.Focus != 17 {
-		t.Fatalf("argument completion: %+v", a.editor.State())
+	if a.querySession.query.QueryText != "gh issues created" || a.querySession.editor.State().Selection.Focus != 17 {
+		t.Fatalf("argument completion: %+v", a.querySession.editor.State())
 	}
-	a.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: queryPrimaryModifier(), Down: true})
-	if a.query.QueryText != "gh issues cr" {
-		t.Fatalf("undo: %q", a.query.QueryText)
+	a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("z"), Modifiers: queryPrimaryModifier(), Down: true})
+	if a.querySession.query.QueryText != "gh issues cr" {
+		t.Fatalf("undo: %q", a.querySession.query.QueryText)
 	}
-	a.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("y"), Modifiers: queryPrimaryModifier(), Down: true})
-	if a.query.QueryText != "gh issues created" {
-		t.Fatalf("redo: %q", a.query.QueryText)
+	a.querySession.onQueryHintKey(woxui.KeyEvent{Key: woxui.Key("y"), Modifiers: queryPrimaryModifier(), Down: true})
+	if a.querySession.query.QueryText != "gh issues created" {
+		t.Fatalf("redo: %q", a.querySession.query.QueryText)
 	}
 	tab()
 	typeText("owner/repo")
-	if a.query.QueryHint.Argument("repo") != "owner/repo" {
+	if a.querySession.query.QueryHint.Argument("repo") != "owner/repo" {
 		t.Fatal("second Tab failed to navigate")
 	}
 	// Complete an earlier argument without losing the following value.
-	a.editor.SetSelection(10, 17)
+	a.querySession.editor.SetSelection(10, 17)
 	typeText("as")
 	tab()
-	if a.query.QueryText != "gh issues assigned owner/repo" || a.editor.State().Selection.Focus != 18 {
-		t.Fatalf("middle completion: %+v", a.editor.State())
+	if a.querySession.query.QueryText != "gh issues assigned owner/repo" || a.querySession.editor.State().Selection.Focus != 18 {
+		t.Fatalf("middle completion: %+v", a.querySession.editor.State())
 	}
-	a.editor.SetSelection(10, 18)
+	a.querySession.editor.SetSelection(10, 18)
 	typeText("custom")
-	if a.query.QueryHint.Argument("filter") != "custom" {
+	if a.querySession.query.QueryHint.Argument("filter") != "custom" {
 		t.Fatal("free input was constrained")
 	}
 	instance.Metadata.Commands[0].QueryHint = nil
 	generated, _ := plugin.MatchQueryHint("gh ", []*plugin.Instance{instance})
-	a.installQueryHintTemplate(generated)
+	a.querySession.installQueryHintTemplate(generated)
 	tab()
-	if a.query.QueryText != "gh issues " || a.editor.State().Selection.Focus != 10 {
-		t.Fatalf("command without parameters did not get exactly one space: %+v", a.editor.State())
+	if a.querySession.query.QueryText != "gh issues " || a.querySession.editor.State().Selection.Focus != 10 {
+		t.Fatalf("command without parameters did not get exactly one space: %+v", a.querySession.editor.State())
 	}
 }
 
@@ -131,7 +138,7 @@ func TestQueryHintSoleCommandCompletion(t *testing.T) {
 			{Id: "operation", Kind: "argument", Suggestions: tc.choices},
 		}}
 		state := queryHintCaretAt(hint, 1)
-		props := queryHintViewProps(&App{}, viewSnapshot{hint: hint, editing: state, queryFocused: true, queryHintActive: 1})
+		props := queryHintViewProps(bindTestApp(&App{}), viewSnapshot{hint: hint, editing: state, queryFocused: true, queryHintActive: 1})
 		if props.TabHint.Visible != tc.completion || props.CompletionInsertion.Visible != tc.completion {
 			t.Fatalf("unexpected completion: %+v", props)
 		}
@@ -177,7 +184,7 @@ func TestQueryHintSuggestionsLabel(t *testing.T) {
 
 // Ghost chips become plain completion suffixes, including the sole/last argument.
 func TestQueryHintSuggestionView(t *testing.T) {
-	a := &App{}
+	a := bindTestApp(&App{})
 	hint := &common.QueryHint{Elements: []common.QueryElement{{Id: "command", Kind: "text", Text: "gh issues "}, {Id: "filter", Kind: "argument", Suggestions: []string{"created", "assigned", "search"}}}}
 	props := queryHintViewProps(a, viewSnapshot{hint: hint, editing: queryHintCaretAt(hint, 1), queryFocused: true, queryHintActive: 1})
 	if props.CompletionSuffix != "created / assigned / search" || len(props.CompletionChips) != 1 || props.TabHint.Visible {

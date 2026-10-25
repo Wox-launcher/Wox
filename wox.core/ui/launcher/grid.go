@@ -70,13 +70,13 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale,
 	cellWidth, cellHeight, visualWidth, visualHeight := gridCellMetrics(width, layout)
 	contentHeight := float32(gridResultsHeight(snapshot.results, width, snapshot.layout.GridLayout))
 	scroll := resolveResultScroll(snapshot.results, snapshot.layout.GridLayout, snapshot.selected, width, height, contentHeight, snapshot.resultScroll, snapshot.resultScrollDetached, snapshot.palette, snapshot.densityMetrics)
-	a.rememberQuickSelectViewport(quickSelectViewport{
+	a.quickSelect.rememberQuickSelectViewport(quickSelectViewport{
 		grid: true, offset: scroll.offset, height: height, columns: layout.Columns, cellHeight: cellHeight,
 	})
 	visible := visibleGridResults(snapshot.results, layout.Columns, cellHeight, scroll.offset, height+underlayHeight)
 	quickSelectVisible := []bool(nil)
 	if snapshot.quickSelectMode {
-		quickSelectVisible = a.quickSelectVisibleLocked()
+		quickSelectVisible = a.quickSelect.quickSelectVisibleLocked()
 	}
 	results := make([]launcherview.LauncherGridResult, 0, len(snapshot.results))
 	var groupSignature uint64
@@ -94,15 +94,15 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale,
 			} else if visible[index] {
 				item.Icon = a.imageForResultRow(result.ID, result.Icon, physicalImageSize(int(math.Ceil(float64(max(visualWidth, visualHeight)))), imageScale), snapshot.palette, index == snapshot.selected)
 			}
-			item.OnHover = func(inside bool) { a.hoverResult(index, inside) }
+			item.OnHover = func(inside bool) { a.resultList.hoverResult(index, inside) }
 			item.OnSelect = func() { a.selectResult(index) }
 			item.OnSecondaryTapDown = func() { a.openResultActionPanel(index) }
 			item.OnActivate = func() { a.activateResult(index) }
-			item.OnDragStart = func() { a.startResultDrag(index) }
+			item.OnDragStart = func() { a.resultDrag.startResultDrag(index) }
 		}
 		results = append(results, item)
 	}
-	a.rememberResolvedResultScroll(snapshot, scroll)
+	a.resultList.rememberResolvedResultScroll(snapshot, scroll)
 	return launcherview.LauncherGridView(launcherview.LauncherGridProps{
 		Width: width, Height: height, UnderlayHeight: underlayHeight, ContentHeight: contentHeight, Offset: scroll.offset, Columns: layout.Columns,
 		ItemPadding: float32(layout.ItemPadding), ItemMargin: float32(layout.ItemMargin), ShowTitle: layout.ShowTitle,
@@ -111,7 +111,7 @@ func (a *App) buildGridResults(snapshot viewSnapshot, width, height, imageScale,
 		Theme: snapshot.palette.componentTheme(), TailColor: snapshot.palette.resultTail, SelectedTailColor: snapshot.palette.selectedTail,
 		ScrollDetached: snapshot.resultScrollDetached, Complete: snapshot.queryComplete,
 		ExtentRevision: launcherGridExtentRevision(cellHeight, gridGroupHeaderHeight, width, layout.Columns, len(snapshot.results), groupSignature), Results: results,
-		OnScroll: func(delta float32) { a.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
+		OnScroll: func(delta float32) { a.resultList.scrollResultsFrom(snapshot.resultScrollDetached, scroll, delta) },
 	})
 }
 

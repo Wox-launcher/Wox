@@ -72,22 +72,22 @@ func chatClipboardTextOutranksImage(value string, img interface{ Bounds() image.
 
 // launcherPresentsChatInput is true only when the launcher window itself is the chat composer.
 func (a *App) launcherPresentsChatInput() bool {
-	if a == nil || !a.visible || a.chatPreview == nil || !a.chatPreview.active {
+	if a == nil || !a.visible || a.chat.chatPreview == nil || !a.chat.chatPreview.active {
 		return false
 	}
-	if a.chatFullscreen {
+	if a.chat.chatFullscreen {
 		return true
 	}
-	return a.layout.ChatMode
+	return a.resultList.layout.ChatMode
 }
 
 func (a *App) captureChatAttachmentImportTarget(dedicated bool) (chatAttachmentImportTarget, bool) {
-	state := a.chatPreview
+	state := a.chat.chatPreview
 	if state == nil {
 		return chatAttachmentImportTarget{}, false
 	}
 	if dedicated {
-		if !a.chatWindowOpen() {
+		if !a.chatWindow.chatWindowOpen() {
 			return chatAttachmentImportTarget{}, false
 		}
 	} else if !a.launcherPresentsChatInput() {
@@ -99,7 +99,7 @@ func (a *App) captureChatAttachmentImportTarget(dedicated bool) (chatAttachmentI
 		chatID:           state.chat.ID,
 		revision:         state.revision,
 		dedicated:        dedicated,
-		windowGeneration: a.chatWindowGeneration,
+		windowGeneration: a.chatWindow.chatWindowGeneration,
 	}, true
 }
 
@@ -107,17 +107,17 @@ func (a *App) chatAttachmentImportTargetValid(target chatAttachmentImportTarget)
 	if a == nil || a.sessionID != target.sessionID {
 		return false
 	}
-	state := a.chatPreview
+	state := a.chat.chatPreview
 	if state == nil || state.key != target.previewKey || state.chat.ID != target.chatID || state.revision != target.revision {
 		return false
 	}
 	if target.dedicated {
-		return a.chatWindowOpen() && a.chatWindowGeneration == target.windowGeneration
+		return a.chatWindow.chatWindowOpen() && a.chatWindow.chatWindowGeneration == target.windowGeneration
 	}
 	return a.launcherPresentsChatInput()
 }
 
-func (a *App) chatImportLifecycleCtx() context.Context {
+func (a *chatController) chatImportLifecycleCtx() context.Context {
 	if a != nil && a.lifecycleCtx != nil {
 		return a.lifecycleCtx
 	}
@@ -125,7 +125,7 @@ func (a *App) chatImportLifecycleCtx() context.Context {
 }
 
 // cancelChatAttachmentImports drops queued batches and invalidates the in-flight result.
-func (a *App) cancelChatAttachmentImports() {
+func (a *chatController) cancelChatAttachmentImports() {
 	a.chatImportEpoch++
 	a.chatImportQueue = nil
 	if state := a.chatPreview; state != nil {
@@ -134,13 +134,13 @@ func (a *App) cancelChatAttachmentImports() {
 }
 
 // attachChatComposerFile is the composer plus-button shortcut to the native file picker.
-func (a *App) attachChatComposerFile() {
+func (a *chatController) attachChatComposerFile() {
 	a.prepareChatComposerFilePick(false)
 	a.pickChatComposerAttachment(false)
 }
 
 // prepareChatComposerFilePick closes the @ overlay so the native dialog is not covered.
-func (a *App) prepareChatComposerFilePick(clearAtToken bool) {
+func (a *chatController) prepareChatComposerFilePick(clearAtToken bool) {
 	state := a.chatPreview
 	if state == nil {
 		return
@@ -158,7 +158,7 @@ func (a *App) prepareChatComposerFilePick(clearAtToken bool) {
 }
 
 // pickChatComposerAttachment opens the native file or folder picker and attaches the result.
-func (a *App) pickChatComposerAttachment(directory bool) {
+func (a *chatController) pickChatComposerAttachment(directory bool) {
 	if a == nil || a.chatPreview == nil {
 		return
 	}
@@ -178,10 +178,10 @@ func (a *App) pickChatComposerAttachment(directory bool) {
 	if strings.TrimSpace(path) == "" {
 		return
 	}
-	a.enqueueChatDraftAttachments([]string{path}, nil, a.chatWindowFocused)
+	a.enqueueChatDraftAttachments([]string{path}, nil, a.chatWindowFocused())
 }
 
-func (a *App) enqueueChatDraftAttachments(paths []string, img *clipboard.ImageSnapshot, dedicated bool) {
+func (a *chatController) enqueueChatDraftAttachments(paths []string, img *clipboard.ImageSnapshot, dedicated bool) {
 	cleaned := cleanFileDropPaths(paths)
 	if len(cleaned) == 0 && img == nil {
 		return
@@ -205,7 +205,7 @@ func (a *App) enqueueChatDraftAttachments(paths []string, img *clipboard.ImageSn
 	a.startNextChatImportIfIdle()
 }
 
-func (a *App) startNextChatImportIfIdle() {
+func (a *chatController) startNextChatImportIfIdle() {
 	if a.chatImportRunning {
 		return
 	}
@@ -255,7 +255,7 @@ func importChatAttachmentJob(job chatAttachmentImportJob) ([]common.AIChatAttach
 	return common.ImportChatAttachments(job.paths)
 }
 
-func (a *App) applyImportedChatAttachments(job chatAttachmentImportJob, attachments []common.AIChatAttachment, err error) {
+func (a *chatController) applyImportedChatAttachments(job chatAttachmentImportJob, attachments []common.AIChatAttachment, err error) {
 	if job.epoch != a.chatImportEpoch || !a.chatAttachmentImportTargetValid(job.target) {
 		common.RemoveImportedChatAttachments(attachments)
 		return
@@ -273,16 +273,16 @@ func (a *App) applyImportedChatAttachments(job chatAttachmentImportJob, attachme
 	a.invalidateChatSurfaces()
 }
 
-func (a *App) chatAttachmentImportError(err error) string {
+func (a *chatController) chatAttachmentImportError(err error) string {
 	name := common.ChatAttachmentErrorName(err)
 	if name == "" {
 		name = "file"
 	}
 	reason := err.Error()
 	if key := common.ChatAttachmentFailureReasonKey(err); key != "" {
-		reason = a.translate("i18n:" + key)
+		reason = a.language.translate("i18n:" + key)
 	}
-	message := a.translate("i18n:plugin_ai_chat_attachment_failed")
+	message := a.language.translate("i18n:plugin_ai_chat_attachment_failed")
 	if strings.Contains(message, "%s") {
 		return fmt.Sprintf(message, name, reason)
 	}
@@ -290,10 +290,10 @@ func (a *App) chatAttachmentImportError(err error) string {
 }
 
 // pasteChatComposer consumes file or bitmap clipboard payloads for the current draft.
-func (a *App) pasteChatComposer(value string) bool {
+func (a *chatController) pasteChatComposer(value string) bool {
 	if copied, err := clipboard.ReadFilePaths(); err == nil {
 		if paths := cleanFileDropPaths(copied); len(paths) > 0 {
-			a.enqueueChatDraftAttachments(paths, nil, a.chatWindowFocused)
+			a.enqueueChatDraftAttachments(paths, nil, a.chatWindowFocused())
 			return true
 		}
 	}
@@ -310,7 +310,7 @@ func (a *App) pasteChatComposer(value string) bool {
 		return true
 	}
 	if img != nil && classifyChatPaste(value, nil, img) == chatPasteImage {
-		a.enqueueChatDraftAttachments(nil, img, a.chatWindowFocused)
+		a.enqueueChatDraftAttachments(nil, img, a.chatWindowFocused())
 		return true
 	}
 	return false

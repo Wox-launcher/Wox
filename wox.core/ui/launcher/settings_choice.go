@@ -54,8 +54,8 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		SelectedValues: selectedValues,
-		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsNativeWindow(), Title: snapshot.item.title,
-		FilterHint: a.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
+		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsWindow.settingsNativeWindow(), Title: snapshot.item.title,
+		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
 	})
 }
 
@@ -90,7 +90,7 @@ func isBooleanSettingItem(item settingItem) bool {
 }
 
 func (a *App) openSettingChoicePicker(item settingItem) {
-	host := a.settingsHost
+	host := a.settingsWindow.settingsHost
 	anchor := woxui.Rect{}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(launcherview.SettingChoiceAnchorKey(item.key))
@@ -100,14 +100,14 @@ func (a *App) openSettingChoicePicker(item settingItem) {
 
 // openSettingChoicePickerAt anchors pointer-opened menus to the bounds from the exact hit-tested frame.
 func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
-	if a.settingSaving || item.disabled || len(item.choices) == 0 {
+	if a.settingsWindow.settingSaving || item.disabled || len(item.choices) == 0 {
 		return
 	}
 	a.generalSettings.EndEdit()
 	a.generalSettings.SetShowDisplayPicker(nil)
 	a.generalSettings.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) closeSettingChoicePicker() {
@@ -120,12 +120,12 @@ func (a *App) closeSettingChoicePicker() {
 		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	}
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 func (a *App) chooseSettingChoice(index int) {
 	state := a.generalSettings.ChoicePicker()
-	if state == nil || a.settingSaving {
+	if state == nil || a.settingsWindow.settingSaving {
 		return
 	}
 	if index < 0 || index >= len(state.item.choices) {
@@ -140,12 +140,12 @@ func (a *App) chooseSettingChoice(index int) {
 		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 		a.updateSettingsTextInput(false)
 		state.onChoose(choice)
-		a.invalidateSettingsWindow()
+		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
 	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	a.startGeneralSettingSave("save setting choice", item, choice)
 }
 
@@ -156,14 +156,14 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 // setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
 func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
 	if util.IsLinux() {
-		a.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
-			revision: &a.settingsInlineTooltipRevision, state: &a.settingsInlineTooltip,
-			open: a.settingsOpen, invalidate: a.invalidateSettingsWindow, job: "show settings inline tooltip",
+		a.tooltips.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
+			revision: &a.settingsWindow.settingsInlineTooltipRevision, state: &a.settingsWindow.settingsInlineTooltip,
+			open: a.settingsWindow.settingsOpen, invalidate: a.settingsWindow.invalidateSettingsWindow, job: "show settings inline tooltip",
 		}, inside, text, anchor, side)
 		return
 	}
 
-	a.setNativeHoverTooltip(&a.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, a.settingsNativeWindow)
+	a.tooltips.setNativeHoverTooltip(&a.settingsWindow.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, a.settingsWindow.settingsNativeWindow)
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.

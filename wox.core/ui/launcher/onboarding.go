@@ -84,19 +84,19 @@ func (a *App) openOnboarding() error {
 	var settingsView *woxui.ManagedWindow
 	installations := detectOnboardingMigrations(context.Background())
 	if err := a.runOnUI("prepare onboarding", func() {
-		wasSettings = a.settingsOpen
-		a.settingsOpen = false
-		a.onboardingOpen = true
-		a.onboardingStep = 0
-		a.onboardingChoice = ""
-		a.onboardingChoiceAnchor = woxui.Rect{}
-		a.onboardingError = ""
-		a.onboardingQueryHotkey = nil
-		a.onboardingPlugins = onboardingPluginState{}
-		a.onboardingTheme = onboardingThemeState{}
-		a.onboardingMigration = newOnboardingMigrationState(installations)
+		wasSettings = a.settingsWindow.settingsOpen
+		a.settingsWindow.settingsOpen = false
+		a.onboarding.onboardingOpen = true
+		a.onboarding.onboardingStep = 0
+		a.onboarding.onboardingChoice = ""
+		a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
+		a.onboarding.onboardingError = ""
+		a.onboarding.onboardingQueryHotkey = nil
+		a.onboarding.onboardingPlugins = onboardingPluginState{}
+		a.onboarding.onboardingTheme = onboardingThemeState{}
+		a.onboarding.onboardingMigration = newOnboardingMigrationState(installations)
 		a.stopHotkeyRecording()
-		settingsView = a.settingsView
+		settingsView = a.settingsWindow.settingsView
 		if form := a.hotkeySettings.Form(); form != nil {
 			form.active = true
 			setFormFieldsFocusLocked(form, 0)
@@ -115,7 +115,7 @@ func (a *App) openOnboarding() error {
 	if err := a.notifyOnboardingViewChanged(true); err != nil {
 		return err
 	}
-	onboardingView, err := a.ensureOnboardingWindow()
+	onboardingView, err := a.onboarding.ensureOnboardingWindow()
 	if err != nil {
 		return err
 	}
@@ -150,8 +150,8 @@ func (a *App) finishOnboarding() {
 		if err != nil {
 			cancel()
 			_ = a.runOnUI("show onboarding finish error", func() {
-				a.onboardingError = err.Error()
-				a.invalidateOnboardingWindow()
+				a.onboarding.onboardingError = err.Error()
+				a.onboarding.invalidateOnboardingWindow()
 			})
 			return
 		}
@@ -160,12 +160,12 @@ func (a *App) finishOnboarding() {
 		var onboardingView *woxui.ManagedWindow
 		_ = a.runOnUI("leave onboarding", func() {
 			a.releaseOnboardingMigrationSession()
-			a.onboardingOpen = false
-			a.onboardingChoice = ""
-			a.onboardingChoiceAnchor = woxui.Rect{}
+			a.onboarding.onboardingOpen = false
+			a.onboarding.onboardingChoice = ""
+			a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
 			a.stopHotkeyRecording()
 			a.releaseDemoWallpaperLocked()
-			onboardingView = a.onboardingView
+			onboardingView = a.onboarding.onboardingView
 		})
 		if err := a.notifyOnboardingViewChanged(false); err != nil {
 			log.Printf("notify Wox core after onboarding: %v", err)
@@ -184,38 +184,38 @@ func (a *App) finishOnboarding() {
 
 func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
-	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
+	snapshot.palette.DensityScale = a.appearance.densityMetrics.normalized().scale
 	steps := a.onboardingSteps()
 	for index := range steps {
 		steps[index].Accent = onboardingAccentColor
 	}
-	active := min(max(0, a.onboardingStep), len(steps)-1)
+	active := min(max(0, a.onboarding.onboardingStep), len(steps)-1)
 	step := steps[active]
 	labels := a.onboardingLabels()
-	labels["title"] = a.translate("i18n:onboarding_title")
-	labels["subtitle"] = a.translate("i18n:onboarding_subtitle")
-	labels["back"] = a.translate("i18n:onboarding_back")
-	labels["next"] = a.translate("i18n:onboarding_next")
-	labels["finish"] = a.translate("i18n:onboarding_finish")
-	labels["language"] = a.translate("i18n:ui_lang")
-	labels["permission.authorize"] = a.translate("i18n:onboarding_permission_authorize")
-	labels["permission.checking"] = a.translate("i18n:onboarding_permission_checking")
-	labels["glance.enable"] = a.translate("i18n:onboarding_glance_enable")
-	labels["glance.enable.body"] = a.translate("i18n:onboarding_glance_enable_tips")
-	labels["glance.primary"] = a.translate("i18n:ui_glance_primary")
-	labels["hotkey.available"] = a.translate("i18n:onboarding_hotkey_available")
-	labels["hotkey.change"] = a.translate("i18n:onboarding_hotkey_change")
-	labels["hotkey.preview"] = a.translate("i18n:onboarding_hotkey_preview")
-	if a.onboardingError != "" {
-		labels[step.ID+".body"] = a.onboardingError
+	labels["title"] = a.language.translate("i18n:onboarding_title")
+	labels["subtitle"] = a.language.translate("i18n:onboarding_subtitle")
+	labels["back"] = a.language.translate("i18n:onboarding_back")
+	labels["next"] = a.language.translate("i18n:onboarding_next")
+	labels["finish"] = a.language.translate("i18n:onboarding_finish")
+	labels["language"] = a.language.translate("i18n:ui_lang")
+	labels["permission.authorize"] = a.language.translate("i18n:onboarding_permission_authorize")
+	labels["permission.checking"] = a.language.translate("i18n:onboarding_permission_checking")
+	labels["glance.enable"] = a.language.translate("i18n:onboarding_glance_enable")
+	labels["glance.enable.body"] = a.language.translate("i18n:onboarding_glance_enable_tips")
+	labels["glance.primary"] = a.language.translate("i18n:ui_glance_primary")
+	labels["hotkey.available"] = a.language.translate("i18n:onboarding_hotkey_available")
+	labels["hotkey.change"] = a.language.translate("i18n:onboarding_hotkey_change")
+	labels["hotkey.preview"] = a.language.translate("i18n:onboarding_hotkey_preview")
+	if a.onboarding.onboardingError != "" {
+		labels[step.ID+".body"] = a.onboarding.onboardingError
 	}
-	if step.ID == "migrate" && a.onboardingMigration.choosing && len(a.onboardingMigration.installations) > 1 {
+	if step.ID == "migrate" && a.onboarding.onboardingMigration.choosing && len(a.onboarding.onboardingMigration.installations) > 1 {
 		labels["migrate.body"] = labels["migrate.choose"]
 	}
 
-	choices := a.onboardingChoices(snapshot, a.onboardingChoice, frame.Scale)
+	choices := a.onboardingChoices(snapshot, a.onboarding.onboardingChoice, frame.Scale)
 	choiceValue := ""
-	if a.onboardingChoice == "language" {
+	if a.onboarding.onboardingChoice == "language" {
 		choiceValue = snapshot.general.Data.LangCode
 	}
 	language := snapshot.general.Data.LangCode
@@ -225,11 +225,11 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			break
 		}
 	}
-	glanceLabel := a.translate("i18n:onboarding_glance_sample_time")
-	glanceValue := a.translate("i18n:onboarding_glance_sample_value")
+	glanceLabel := a.language.translate("i18n:onboarding_glance_sample_time")
+	glanceValue := a.language.translate("i18n:onboarding_glance_sample_value")
 	var glanceIcon *woxui.Image
 	currentGlance := snapshot.general.Data.PrimaryGlance
-	if a.onboardingChoice == "glance" {
+	if a.onboarding.onboardingChoice == "glance" {
 		choiceValue = glanceRefJSON(currentGlance)
 	}
 	for _, item := range snapshot.appearance.GlanceCatalog {
@@ -248,12 +248,12 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	permissions := []launcherview.OnboardingPermission{
 		{
-			ID: "accessibility", Title: a.translate("i18n:onboarding_permission_accessibility_title"),
-			Description: a.translate("i18n:onboarding_permission_accessibility_body"), Ready: a.onboardingPermission.Accessibility == "granted",
+			ID: "accessibility", Title: a.language.translate("i18n:onboarding_permission_accessibility_title"),
+			Description: a.language.translate("i18n:onboarding_permission_accessibility_body"), Ready: a.onboarding.onboardingPermission.Accessibility == "granted",
 		},
 		{
-			ID: "fullDiskAccess", Title: a.translate("i18n:onboarding_permission_disk_title"),
-			Description: a.translate("i18n:onboarding_permission_disk_body"), Ready: a.onboardingPermission.FullDiskAccess == "granted",
+			ID: "fullDiskAccess", Title: a.language.translate("i18n:onboarding_permission_disk_title"),
+			Description: a.language.translate("i18n:onboarding_permission_disk_body"), Ready: a.onboarding.onboardingPermission.FullDiskAccess == "granted",
 		},
 	}
 	var mainHotkeyLabels, selectionHotkeyLabels []string
@@ -271,7 +271,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			hotkeyBlocked = presentation.Error || (snapshot.general.Data.MainHotkeyRegistrationFailed && presentation.Value == snapshot.general.Data.MainHotkey)
 			hotkeyRecording = true
 		} else if hotkeyError {
-			hotkeyStatus = a.translate(firstNonEmpty(snapshot.general.Data.MainHotkeyRegistrationError, "i18n:ui_hotkey_registration_failed"))
+			hotkeyStatus = a.language.translate(firstNonEmpty(snapshot.general.Data.MainHotkeyRegistrationError, "i18n:ui_hotkey_registration_failed"))
 		}
 		mainHotkeyLabels = formatHotkeyLabels(mainHotkey)
 		selectionHotkeyLabels = formatHotkeyLabels(snapshot.hotkey.Form.values["SelectionHotkey"])
@@ -284,7 +284,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	queryHotkeyReady := false
 	queryHotkeySelected := false
 	queryHotkeyBusy := false
-	if state := a.onboardingQueryHotkey; state != nil {
+	if state := a.onboarding.onboardingQueryHotkey; state != nil {
 		queryHotkeyLabels = formatHotkeyLabels(state.form.values["Hotkey"])
 		queryHotkeyReady = state.ready
 		queryHotkeySelected = state.selected
@@ -306,46 +306,46 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	if step.ID == "queryHotkeys" {
 		nextDisabled = queryHotkeyBusy || queryHotkeyRecording || (queryHotkeySelected && !queryHotkeyReady)
 	}
-	plugins := make([]launcherview.OnboardingPlugin, len(a.onboardingPlugins.plugins))
-	for index, plugin := range a.onboardingPlugins.plugins {
+	plugins := make([]launcherview.OnboardingPlugin, len(a.onboarding.onboardingPlugins.plugins))
+	for index, plugin := range a.onboarding.onboardingPlugins.plugins {
 		plugins[index] = launcherview.OnboardingPlugin{
 			ID: plugin.ID, Name: plugin.Name, Description: plugin.Description,
 			Icon: a.imageForSurface(plugin.Icon, physicalImageSize(28, frame.Scale), snapshot.palette.Background), Installed: plugin.IsInstalled,
-			Installing: a.onboardingPlugins.operationID == plugin.ID,
-			Disabled:   a.onboardingPlugins.operationID != "",
+			Installing: a.onboarding.onboardingPlugins.operationID == plugin.ID,
+			Disabled:   a.onboarding.onboardingPlugins.operationID != "",
 		}
 	}
 	themes := onboardingThemeItems(snapshot.theme.Themes, snapshot.general.Data.ThemeID)
-	previewTexts := []string{a.translate("i18n:ui_theme_preview_text_1"), a.translate("i18n:ui_theme_preview_text_2")}
+	previewTexts := []string{a.language.translate("i18n:ui_theme_preview_text_1"), a.language.translate("i18n:ui_theme_preview_text_2")}
 	previewSubtitles := []string{
-		strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", "1"),
-		strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", "2"),
+		strings.ReplaceAll(a.language.translate("i18n:ui_theme_preview_subtitle"), "{index}", "1"),
+		strings.ReplaceAll(a.language.translate("i18n:ui_theme_preview_subtitle"), "{index}", "2"),
 	}
 	if step.ID == "themeInstall" {
-		nextDisabled = a.onboardingTheme.loading || len(themes) == 0
+		nextDisabled = a.onboarding.onboardingTheme.loading || len(themes) == 0
 	}
 	migrationSources, migrationCategories := a.onboardingMigrationView(frame.Scale, snapshot.palette.Background, labels)
 	nextLabel := ""
 	skipLabel := ""
 	var onSkip func()
 	if step.ID == "migrate" {
-		if a.onboardingMigration.importing || (a.onboardingMigration.loading && !a.onboardingMigration.loaded && !a.onboardingMigration.choosing) {
+		if a.onboarding.onboardingMigration.importing || (a.onboarding.onboardingMigration.loading && !a.onboarding.onboardingMigration.loaded && !a.onboarding.onboardingMigration.choosing) {
 			nextDisabled = true
 		}
-		if !a.onboardingMigration.done && (a.onboardingMigrationCanImport() || a.onboardingMigration.importing) {
+		if !a.onboarding.onboardingMigration.done && (a.onboardingMigrationCanImport() || a.onboarding.onboardingMigration.importing) {
 			nextLabel = labels["migrate.import"]
-			if a.onboardingMigration.importing {
+			if a.onboarding.onboardingMigration.importing {
 				nextLabel = labels["migrate.importing"]
 			}
-			if !a.onboardingMigration.importing {
+			if !a.onboarding.onboardingMigration.importing {
 				skipLabel = labels["migrate.skip"]
 				onSkip = func() { a.selectOnboardingStep(active + 1) }
 			}
-		} else if !a.onboardingMigration.done {
+		} else if !a.onboarding.onboardingMigration.done {
 			nextLabel = labels["migrate.skip"]
 		}
 	}
-	if step.ID == "mainHotkey" && a.onboardingMigration.mainHotkeyPending {
+	if step.ID == "mainHotkey" && a.onboarding.onboardingMigration.mainHotkeyPending {
 		nextDisabled = true
 	}
 	return launcherview.OnboardingView(launcherview.OnboardingProps{
@@ -357,26 +357,26 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		HotkeyStatus: hotkeyStatus, HotkeyError: hotkeyError, HotkeyRecording: hotkeyRecording,
 		QueryHotkeyLabels: queryHotkeyLabels, QueryHotkeyStatus: queryHotkeyStatus, QueryHotkeyError: queryHotkeyError,
 		QueryHotkeyRecording: queryHotkeyRecording, QueryHotkeyReady: queryHotkeyReady, QueryHotkeySelected: queryHotkeySelected, QueryHotkeyBusy: queryHotkeyBusy,
-		Plugins: plugins, PluginsLoading: a.onboardingPlugins.loading, PluginsError: a.onboardingPlugins.error,
-		Themes: themes, ThemesLoading: a.onboardingTheme.loading, ThemesApplying: a.onboardingTheme.applying, ThemesError: a.onboardingTheme.error,
-		MigrationChoosing: a.onboardingMigration.choosing, MigrationSources: migrationSources, MigrationCategories: migrationCategories,
-		MigrationLoading: a.onboardingMigration.loading, MigrationImporting: a.onboardingMigration.importing, MigrationDone: a.onboardingMigration.done,
-		MigrationActiveID: a.onboardingMigration.activeID, MigrationError: a.migrationExportMessage(a.onboardingMigration.error),
-		MigrationUnlock:     a.migrationNeedsUnlock() && !a.onboardingMigration.choosing,
-		MigrationExportPath: a.onboardingMigration.exportPath, MigrationPassphrase: a.migrationPassphraseController(),
-		ThemePreviewTitle: a.translate("i18n:ui_theme_preview_title"), ThemePreviewTexts: previewTexts,
-		ThemePreviewSubs: previewSubtitles, ThemePreviewOpen: a.translate("i18n:ui_theme_preview_open"),
-		Permissions: permissions, PermissionLoading: a.onboardingLoading,
-		ChoiceKind: a.onboardingChoice, ChoiceValue: choiceValue, ChoiceAnchor: a.onboardingChoiceAnchor, Choices: choices,
-		Window: a.onboardingNativeWindow(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
+		Plugins: plugins, PluginsLoading: a.onboarding.onboardingPlugins.loading, PluginsError: a.onboarding.onboardingPlugins.error,
+		Themes: themes, ThemesLoading: a.onboarding.onboardingTheme.loading, ThemesApplying: a.onboarding.onboardingTheme.applying, ThemesError: a.onboarding.onboardingTheme.error,
+		MigrationChoosing: a.onboarding.onboardingMigration.choosing, MigrationSources: migrationSources, MigrationCategories: migrationCategories,
+		MigrationLoading: a.onboarding.onboardingMigration.loading, MigrationImporting: a.onboarding.onboardingMigration.importing, MigrationDone: a.onboarding.onboardingMigration.done,
+		MigrationActiveID: a.onboarding.onboardingMigration.activeID, MigrationError: a.migrationExportMessage(a.onboarding.onboardingMigration.error),
+		MigrationUnlock:     a.migrationNeedsUnlock() && !a.onboarding.onboardingMigration.choosing,
+		MigrationExportPath: a.onboarding.onboardingMigration.exportPath, MigrationPassphrase: a.migrationPassphraseController(),
+		ThemePreviewTitle: a.language.translate("i18n:ui_theme_preview_title"), ThemePreviewTexts: previewTexts,
+		ThemePreviewSubs: previewSubtitles, ThemePreviewOpen: a.language.translate("i18n:ui_theme_preview_open"),
+		Permissions: permissions, PermissionLoading: a.onboarding.onboardingLoading,
+		ChoiceKind: a.onboarding.onboardingChoice, ChoiceValue: choiceValue, ChoiceAnchor: a.onboarding.onboardingChoiceAnchor, Choices: choices,
+		Window: a.onboarding.onboardingNativeWindow(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
 		OnDrag: func() {
-			if window := a.onboardingNativeWindow(); window != nil {
+			if window := a.onboarding.onboardingNativeWindow(); window != nil {
 				_ = window.StartDragging()
 			}
 		},
 		NextDisabled: nextDisabled, NextLabel: nextLabel, SkipLabel: skipLabel, OnSkip: onSkip,
 		OnStep: a.selectOnboardingStep, OnBack: func() { a.selectOnboardingStep(active - 1) }, OnNext: func() {
-			if step.ID == "migrate" && !a.onboardingMigration.done && a.onboardingMigrationCanImport() {
+			if step.ID == "migrate" && !a.onboarding.onboardingMigration.done && a.onboardingMigrationCanImport() {
 				a.importOnboardingMigration()
 				return
 			}
@@ -393,7 +393,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		OnPickMigrationFile:     a.pickOnboardingMigrationFile,
 		OnUnlockMigration:       a.unlockOnboardingMigration,
 		OnToggleMigrationOption: a.toggleOnboardingMigrationOption,
-		OnOpenChoice:            a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
+		OnOpenChoice:            a.onboarding.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
 	})
 }
 
@@ -407,7 +407,7 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 		specs = append(specs, onboardingStepSpec{"permissions", "onboarding_permissions_title", woxui.Color{R: 249, G: 115, B: 22, A: 255}})
 	}
 	// Migration is the next page, after permissions on macOS, so the hotkey pages can still adjust what was imported.
-	if len(a.onboardingMigration.installations) > 0 {
+	if len(a.onboarding.onboardingMigration.installations) > 0 {
 		specs = append(specs, onboardingStepSpec{"migrate", "onboarding_migrate_title", woxui.Color{R: 20, G: 184, B: 166, A: 255}})
 	}
 	specs = append(specs,
@@ -419,73 +419,73 @@ func (a *App) onboardingSteps() []launcherview.OnboardingStep {
 		onboardingStepSpec{"wpmInstall", "onboarding_wpm_install_title", woxui.Color{R: 56, G: 189, B: 248, A: 255}},
 	)
 	// The migration page already installed and selected a theme. Showing the bundled picker would replace it.
-	if !a.onboardingMigration.themeImported {
+	if !a.onboarding.onboardingMigration.themeImported {
 		specs = append(specs, onboardingStepSpec{"themeInstall", "onboarding_theme_install_title", woxui.Color{R: 232, G: 121, B: 249, A: 255}})
 	}
 	specs = append(specs, onboardingStepSpec{"finish", "onboarding_finish_title", woxui.Color{R: 45, G: 212, B: 191, A: 255}})
 	steps := make([]launcherview.OnboardingStep, len(specs))
 	for index, spec := range specs {
-		steps[index] = launcherview.OnboardingStep{ID: spec.id, Title: a.translate("i18n:" + spec.key), Accent: spec.accent}
+		steps[index] = launcherview.OnboardingStep{ID: spec.id, Title: a.language.translate("i18n:" + spec.key), Accent: spec.accent}
 	}
 	return steps
 }
 
 func (a *App) onboardingLabels() map[string]string {
 	labels := map[string]string{
-		"welcome.body":                  a.translate("i18n:onboarding_welcome_description"),
-		"welcome.apps":                  a.translate("i18n:onboarding_welcome_apps"),
-		"welcome.files":                 a.translate("i18n:onboarding_welcome_files"),
-		"welcome.plugins":               a.translate("i18n:onboarding_welcome_plugins"),
-		"welcome.ai":                    a.translate("i18n:onboarding_welcome_ai"),
-		"welcome.hint":                  a.translate("i18n:onboarding_welcome_hint"),
-		"permissions.body":              a.translate("i18n:onboarding_permissions_description"),
-		"mainHotkey.body":               a.translate("i18n:onboarding_main_hotkey_description"),
-		"selectionHotkey.body":          a.translate("i18n:onboarding_selection_hotkey_description"),
-		"glance.body":                   a.translate("i18n:onboarding_glance_description"),
-		"queryHotkeys.body":             a.translate("i18n:onboarding_query_hotkeys_body"),
-		"queryHotkeys.checking":         a.translate("i18n:onboarding_query_hotkeys_checking"),
-		"queryHotkeys.configured":       a.translate("i18n:onboarding_query_hotkeys_configured"),
-		"queryHotkeys.notConfigured":    a.translate("i18n:onboarding_query_hotkeys_not_configured"),
-		"queryHotkeys.status.title":     a.translate("i18n:onboarding_query_hotkeys_status_title"),
-		"queryHotkeys.status.body":      a.translate("i18n:onboarding_query_hotkeys_status_body"),
-		"queryHotkeys.clipboard":        a.translate("i18n:onboarding_query_hotkeys_clipboard"),
-		"queryHotkeys.shortcut":         a.translate("i18n:onboarding_query_hotkeys_shortcut"),
-		"plugins.loading":               a.translate("i18n:onboarding_plugins_loading"),
-		"plugins.install":               a.translate("i18n:ui_plugin_install"),
-		"plugins.installing":            a.translate("i18n:ui_plugin_installing"),
-		"plugins.installed":             a.translate("i18n:onboarding_plugin_installed"),
-		"plugins.more":                  a.translate("i18n:onboarding_plugins_more"),
-		"theme.loading":                 a.translate("i18n:onboarding_theme_loading"),
-		"queryAliases.body":             a.translate("i18n:onboarding_query_shortcuts_body"),
-		"queryAliases.title":            a.translate("i18n:ui_query_shortcuts"),
-		"trayQueries.body":              a.translate("i18n:onboarding_tray_queries_body"),
-		"wpmInstall.body":               a.translate("i18n:onboarding_wpm_install_body"),
-		"themeInstall.body":             a.translate("i18n:onboarding_theme_install_body"),
-		"migrate.body":                  a.translate("i18n:onboarding_migrate_body"),
-		"migrate.choose":                a.translate("i18n:onboarding_migrate_choose_body"),
-		"migrate.import":                a.translate("i18n:onboarding_migrate_import"),
-		"migrate.importing":             a.translate("i18n:onboarding_migrate_importing"),
-		"migrate.skip":                  a.translate("i18n:onboarding_migrate_skip"),
-		"migrate.empty":                 a.translate("i18n:onboarding_migrate_empty"),
-		"migrate.loading":               a.translate("i18n:onboarding_migrate_loading"),
-		"migrate.imported":              a.translate("i18n:onboarding_migrate_status_imported"),
-		"migrate.unsupported":           a.translate("i18n:onboarding_migrate_status_unsupported"),
-		"migrate.copying":               a.translate("i18n:onboarding_migrate_status_importing"),
-		"migrate.copied":                a.translate("i18n:onboarding_migrate_status_done"),
-		"migrate.failed":                a.translate("i18n:onboarding_migrate_status_failed"),
-		"migrate.conflict":              a.translate("i18n:onboarding_migrate_status_conflict"),
-		"migrate.cancelled":             a.translate("i18n:onboarding_migrate_status_cancelled"),
-		"migrate.help":                  a.translate("i18n:onboarding_migrate_raycast_help"),
-		"migrate.file":                  a.translate("i18n:onboarding_migrate_raycast_file"),
-		"migrate.passphrase":            a.translate("i18n:onboarding_migrate_raycast_passphrase"),
-		"migrate.continue":              a.translate("i18n:onboarding_migrate_raycast_continue"),
-		"migrate.unlocking":             a.translate("i18n:onboarding_migrate_raycast_unlocking"),
-		"migrate.python":                a.translate("i18n:onboarding_migrate_python"),
-		"finish.body":                   a.translate("i18n:onboarding_finish_card_body"),
-		"finish.hotkey":                 a.translate("i18n:onboarding_finish_summary_hotkey"),
-		"finish.glance":                 a.translate("i18n:onboarding_finish_summary_glance"),
-		"finish.plugins":                a.translate("i18n:onboarding_finish_summary_plugins"),
-		"finish.hint":                   a.translate("i18n:onboarding_finish_summary_hint"),
+		"welcome.body":                  a.language.translate("i18n:onboarding_welcome_description"),
+		"welcome.apps":                  a.language.translate("i18n:onboarding_welcome_apps"),
+		"welcome.files":                 a.language.translate("i18n:onboarding_welcome_files"),
+		"welcome.plugins":               a.language.translate("i18n:onboarding_welcome_plugins"),
+		"welcome.ai":                    a.language.translate("i18n:onboarding_welcome_ai"),
+		"welcome.hint":                  a.language.translate("i18n:onboarding_welcome_hint"),
+		"permissions.body":              a.language.translate("i18n:onboarding_permissions_description"),
+		"mainHotkey.body":               a.language.translate("i18n:onboarding_main_hotkey_description"),
+		"selectionHotkey.body":          a.language.translate("i18n:onboarding_selection_hotkey_description"),
+		"glance.body":                   a.language.translate("i18n:onboarding_glance_description"),
+		"queryHotkeys.body":             a.language.translate("i18n:onboarding_query_hotkeys_body"),
+		"queryHotkeys.checking":         a.language.translate("i18n:onboarding_query_hotkeys_checking"),
+		"queryHotkeys.configured":       a.language.translate("i18n:onboarding_query_hotkeys_configured"),
+		"queryHotkeys.notConfigured":    a.language.translate("i18n:onboarding_query_hotkeys_not_configured"),
+		"queryHotkeys.status.title":     a.language.translate("i18n:onboarding_query_hotkeys_status_title"),
+		"queryHotkeys.status.body":      a.language.translate("i18n:onboarding_query_hotkeys_status_body"),
+		"queryHotkeys.clipboard":        a.language.translate("i18n:onboarding_query_hotkeys_clipboard"),
+		"queryHotkeys.shortcut":         a.language.translate("i18n:onboarding_query_hotkeys_shortcut"),
+		"plugins.loading":               a.language.translate("i18n:onboarding_plugins_loading"),
+		"plugins.install":               a.language.translate("i18n:ui_plugin_install"),
+		"plugins.installing":            a.language.translate("i18n:ui_plugin_installing"),
+		"plugins.installed":             a.language.translate("i18n:onboarding_plugin_installed"),
+		"plugins.more":                  a.language.translate("i18n:onboarding_plugins_more"),
+		"theme.loading":                 a.language.translate("i18n:onboarding_theme_loading"),
+		"queryAliases.body":             a.language.translate("i18n:onboarding_query_shortcuts_body"),
+		"queryAliases.title":            a.language.translate("i18n:ui_query_shortcuts"),
+		"trayQueries.body":              a.language.translate("i18n:onboarding_tray_queries_body"),
+		"wpmInstall.body":               a.language.translate("i18n:onboarding_wpm_install_body"),
+		"themeInstall.body":             a.language.translate("i18n:onboarding_theme_install_body"),
+		"migrate.body":                  a.language.translate("i18n:onboarding_migrate_body"),
+		"migrate.choose":                a.language.translate("i18n:onboarding_migrate_choose_body"),
+		"migrate.import":                a.language.translate("i18n:onboarding_migrate_import"),
+		"migrate.importing":             a.language.translate("i18n:onboarding_migrate_importing"),
+		"migrate.skip":                  a.language.translate("i18n:onboarding_migrate_skip"),
+		"migrate.empty":                 a.language.translate("i18n:onboarding_migrate_empty"),
+		"migrate.loading":               a.language.translate("i18n:onboarding_migrate_loading"),
+		"migrate.imported":              a.language.translate("i18n:onboarding_migrate_status_imported"),
+		"migrate.unsupported":           a.language.translate("i18n:onboarding_migrate_status_unsupported"),
+		"migrate.copying":               a.language.translate("i18n:onboarding_migrate_status_importing"),
+		"migrate.copied":                a.language.translate("i18n:onboarding_migrate_status_done"),
+		"migrate.failed":                a.language.translate("i18n:onboarding_migrate_status_failed"),
+		"migrate.conflict":              a.language.translate("i18n:onboarding_migrate_status_conflict"),
+		"migrate.cancelled":             a.language.translate("i18n:onboarding_migrate_status_cancelled"),
+		"migrate.help":                  a.language.translate("i18n:onboarding_migrate_raycast_help"),
+		"migrate.file":                  a.language.translate("i18n:onboarding_migrate_raycast_file"),
+		"migrate.passphrase":            a.language.translate("i18n:onboarding_migrate_raycast_passphrase"),
+		"migrate.continue":              a.language.translate("i18n:onboarding_migrate_raycast_continue"),
+		"migrate.unlocking":             a.language.translate("i18n:onboarding_migrate_raycast_unlocking"),
+		"migrate.python":                a.language.translate("i18n:onboarding_migrate_python"),
+		"finish.body":                   a.language.translate("i18n:onboarding_finish_card_body"),
+		"finish.hotkey":                 a.language.translate("i18n:onboarding_finish_summary_hotkey"),
+		"finish.glance":                 a.language.translate("i18n:onboarding_finish_summary_glance"),
+		"finish.plugins":                a.language.translate("i18n:onboarding_finish_summary_plugins"),
+		"finish.hint":                   a.language.translate("i18n:onboarding_finish_summary_hint"),
 		"welcome.query":                 "wpm install everything",
 		"permissions.query":             "permissions",
 		"mainHotkey.query":              "apps",
@@ -496,32 +496,32 @@ func (a *App) onboardingLabels() map[string]string {
 		"wpmInstall.query":              "wpm install",
 		"themeInstall.query":            "theme",
 		"finish.query":                  "setting",
-		"preview.more":                  a.translate("i18n:onboarding_action_panel_title"),
-		"demo.concept.title":            a.translate("i18n:onboarding_query_concept_title"),
-		"demo.concept.trigger":          a.translate("i18n:onboarding_query_concept_trigger_keyword"),
-		"demo.concept.command":          a.translate("i18n:onboarding_query_concept_command"),
-		"demo.concept.search":           a.translate("i18n:onboarding_query_concept_search_term"),
-		"demo.concept.optional":         a.translate("i18n:onboarding_query_concept_optional"),
-		"demo.concept.result1.subtitle": a.translate("i18n:onboarding_query_concept_result1_subtitle"),
-		"demo.concept.result2.subtitle": a.translate("i18n:onboarding_query_concept_result2_subtitle"),
-		"demo.concept.result3.subtitle": a.translate("i18n:onboarding_query_concept_result3_subtitle"),
-		"demo.install":                  a.translate("i18n:plugin_wpm_install"),
-		"demo.installing":               a.translate("i18n:plugin_wpm_installing"),
-		"demo.installed":                a.translate("i18n:plugin_wpm_start_using"),
-		"demo.apply":                    a.translate("i18n:ui_setting_theme_apply"),
-		"demo.actions":                  a.translate("i18n:onboarding_action_panel_title"),
-		"demo.action.copy":              a.translate("i18n:onboarding_action_panel_copy"),
-		"demo.action.more":              a.translate("i18n:onboarding_action_panel_more"),
-		"demo.selection.preview":        a.translate("i18n:selection_preview"),
-		"demo.selection.copy_path":      a.translate("i18n:selection_copy_path"),
-		"demo.selection.open_folder":    a.translate("i18n:selection_open_containing_folder"),
-		"demo.glance.provider":          a.translate("i18n:onboarding_glance_sample_provider"),
-		"demo.glance.value":             a.translate("i18n:onboarding_glance_sample_time"),
-		"demo.permission.ready":         a.translate("i18n:onboarding_permission_ready"),
-		"demo.finish.title":             a.translate("i18n:onboarding_finish_card_title"),
-		"demo.finish.badge":             a.translate("i18n:onboarding_finish_badge"),
-		"demo.finish.settings":          a.translate("i18n:plugin_sys_open_wox_settings"),
-		"demo.finish.system_settings":   a.translate("i18n:plugin_sys_open_system_settings"),
+		"preview.more":                  a.language.translate("i18n:onboarding_action_panel_title"),
+		"demo.concept.title":            a.language.translate("i18n:onboarding_query_concept_title"),
+		"demo.concept.trigger":          a.language.translate("i18n:onboarding_query_concept_trigger_keyword"),
+		"demo.concept.command":          a.language.translate("i18n:onboarding_query_concept_command"),
+		"demo.concept.search":           a.language.translate("i18n:onboarding_query_concept_search_term"),
+		"demo.concept.optional":         a.language.translate("i18n:onboarding_query_concept_optional"),
+		"demo.concept.result1.subtitle": a.language.translate("i18n:onboarding_query_concept_result1_subtitle"),
+		"demo.concept.result2.subtitle": a.language.translate("i18n:onboarding_query_concept_result2_subtitle"),
+		"demo.concept.result3.subtitle": a.language.translate("i18n:onboarding_query_concept_result3_subtitle"),
+		"demo.install":                  a.language.translate("i18n:plugin_wpm_install"),
+		"demo.installing":               a.language.translate("i18n:plugin_wpm_installing"),
+		"demo.installed":                a.language.translate("i18n:plugin_wpm_start_using"),
+		"demo.apply":                    a.language.translate("i18n:ui_setting_theme_apply"),
+		"demo.actions":                  a.language.translate("i18n:onboarding_action_panel_title"),
+		"demo.action.copy":              a.language.translate("i18n:onboarding_action_panel_copy"),
+		"demo.action.more":              a.language.translate("i18n:onboarding_action_panel_more"),
+		"demo.selection.preview":        a.language.translate("i18n:selection_preview"),
+		"demo.selection.copy_path":      a.language.translate("i18n:selection_copy_path"),
+		"demo.selection.open_folder":    a.language.translate("i18n:selection_open_containing_folder"),
+		"demo.glance.provider":          a.language.translate("i18n:onboarding_glance_sample_provider"),
+		"demo.glance.value":             a.language.translate("i18n:onboarding_glance_sample_time"),
+		"demo.permission.ready":         a.language.translate("i18n:onboarding_permission_ready"),
+		"demo.finish.title":             a.language.translate("i18n:onboarding_finish_card_title"),
+		"demo.finish.badge":             a.language.translate("i18n:onboarding_finish_badge"),
+		"demo.finish.settings":          a.language.translate("i18n:plugin_sys_open_wox_settings"),
+		"demo.finish.system_settings":   a.language.translate("i18n:plugin_sys_open_system_settings"),
 	}
 	for _, step := range []string{"welcome", "permissions", "mainHotkey", "selectionHotkey", "glance", "queryHotkeys", "trayQueries", "wpmInstall", "themeInstall", "migrate", "finish"} {
 		labels[step+".preview"] = labels[step+".body"]
@@ -534,31 +534,31 @@ func (a *App) selectOnboardingStep(index int) {
 	if index < 0 || index >= len(steps) {
 		return
 	}
-	if a.onboardingStep >= 0 && a.onboardingStep < len(steps) && steps[a.onboardingStep].ID == "migrate" && index != a.onboardingStep {
-		if a.onboardingMigration.importing {
+	if a.onboarding.onboardingStep >= 0 && a.onboarding.onboardingStep < len(steps) && steps[a.onboarding.onboardingStep].ID == "migrate" && index != a.onboarding.onboardingStep {
+		if a.onboarding.onboardingMigration.importing {
 			return
 		}
-		if index == a.onboardingStep-1 && a.retreatOnboardingMigration() {
+		if index == a.onboarding.onboardingStep-1 && a.retreatOnboardingMigration() {
 			return
 		}
 		a.releaseOnboardingMigrationSession()
 	}
-	if index > a.onboardingStep && steps[a.onboardingStep].ID == "mainHotkey" {
+	if index > a.onboarding.onboardingStep && steps[a.onboarding.onboardingStep].ID == "mainHotkey" {
 		data := a.generalSettings.Data()
 		presentation := a.hotkeyRecordingFieldStatus("hotkey-settings", 0)
 		if (presentation.Active && presentation.Error) || (data.MainHotkeyRegistrationFailed && (!presentation.Active || presentation.Value == data.MainHotkey)) {
 			return
 		}
 	}
-	if index > a.onboardingStep && steps[a.onboardingStep].ID == "queryHotkeys" && (a.onboardingQueryHotkey == nil || (a.onboardingQueryHotkey.selected && !a.onboardingQueryHotkey.ready)) {
+	if index > a.onboarding.onboardingStep && steps[a.onboarding.onboardingStep].ID == "queryHotkeys" && (a.onboarding.onboardingQueryHotkey == nil || (a.onboarding.onboardingQueryHotkey.selected && !a.onboarding.onboardingQueryHotkey.ready)) {
 		return
 	}
-	if index != a.onboardingStep {
+	if index != a.onboarding.onboardingStep {
 		a.stopHotkeyRecording()
 	}
-	a.onboardingStep = index
-	a.onboardingChoice = ""
-	a.onboardingChoiceAnchor = woxui.Rect{}
+	a.onboarding.onboardingStep = index
+	a.onboarding.onboardingChoice = ""
+	a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
 	if form := a.hotkeySettings.Form(); form != nil {
 		form.active = true
 		if steps[index].ID == "mainHotkey" {
@@ -585,7 +585,7 @@ func (a *App) selectOnboardingStep(index int) {
 	if steps[index].ID == "migrate" {
 		a.prepareOnboardingMigration()
 	}
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
 func defaultOnboardingQueryHotkey() string {
@@ -596,13 +596,13 @@ func defaultOnboardingQueryHotkey() string {
 }
 
 func (a *App) prepareOnboardingQueryHotkey() {
-	if a.onboardingQueryHotkey != nil {
+	if a.onboarding.onboardingQueryHotkey != nil {
 		return
 	}
 	hotkey := defaultOnboardingQueryHotkey()
 	form := newFormFieldsState([]formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "Hotkey"}}}, map[string]string{"Hotkey": hotkey}, true)
 	state := &onboardingQueryHotkeyState{form: form, selected: true}
-	a.onboardingQueryHotkey = state
+	a.onboarding.onboardingQueryHotkey = state
 	for _, item := range a.generalSettings.Data().QueryHotkeys {
 		if !item.Disabled && strings.EqualFold(strings.TrimSpace(item.Query), "cb") {
 			state.form.values["Hotkey"] = item.Hotkey
@@ -616,7 +616,7 @@ func (a *App) prepareOnboardingQueryHotkey() {
 		availability, err := a.services.CheckHotkeyAvailability(ctx, a.sessionID, hotkey)
 		cancel()
 		_ = a.runOnUI("apply onboarding query hotkey availability", func() {
-			if a.onboardingQueryHotkey != state {
+			if a.onboarding.onboardingQueryHotkey != state {
 				return
 			}
 			if err != nil {
@@ -626,13 +626,13 @@ func (a *App) prepareOnboardingQueryHotkey() {
 			} else {
 				a.saveOnboardingQueryHotkey(hotkey)
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
 
 func (a *App) recordOnboardingQueryHotkey() {
-	state := a.onboardingQueryHotkey
+	state := a.onboarding.onboardingQueryHotkey
 	if state == nil || state.saving {
 		return
 	}
@@ -645,7 +645,7 @@ func (a *App) recordOnboardingQueryHotkey() {
 }
 
 func (a *App) saveOnboardingQueryHotkey(hotkey string) {
-	state := a.onboardingQueryHotkey
+	state := a.onboarding.onboardingQueryHotkey
 	if state == nil || state.saving {
 		return
 	}
@@ -666,7 +666,7 @@ func (a *App) saveOnboardingQueryHotkey(hotkey string) {
 			err = a.reloadSettings()
 		}
 		_ = a.runOnUI("apply onboarding query hotkey", func() {
-			if a.onboardingQueryHotkey != state {
+			if a.onboarding.onboardingQueryHotkey != state {
 				return
 			}
 			state.saving = false
@@ -679,20 +679,20 @@ func (a *App) saveOnboardingQueryHotkey(hotkey string) {
 				state.saved = true
 				state.error = ""
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
 
 func (a *App) toggleOnboardingQueryHotkey(enabled bool) {
-	state := a.onboardingQueryHotkey
+	state := a.onboarding.onboardingQueryHotkey
 	if state == nil || state.saving || state.selected == enabled {
 		return
 	}
 	if enabled {
-		a.onboardingQueryHotkey = nil
+		a.onboarding.onboardingQueryHotkey = nil
 		a.prepareOnboardingQueryHotkey()
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 		return
 	}
 	a.stopHotkeyRecording()
@@ -700,7 +700,7 @@ func (a *App) toggleOnboardingQueryHotkey(enabled bool) {
 	state.ready = false
 	state.error = ""
 	if !state.saved {
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 		return
 	}
 	state.saving = true
@@ -720,7 +720,7 @@ func (a *App) toggleOnboardingQueryHotkey(enabled bool) {
 			err = a.reloadSettings()
 		}
 		_ = a.runOnUI("apply removed onboarding query hotkey", func() {
-			if a.onboardingQueryHotkey != state {
+			if a.onboarding.onboardingQueryHotkey != state {
 				return
 			}
 			state.saving = false
@@ -731,7 +731,7 @@ func (a *App) toggleOnboardingQueryHotkey(enabled bool) {
 			} else {
 				state.saved = false
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -791,34 +791,34 @@ func onboardingRecommendedPlugins(plugins []pluginSettingsPlugin, goos string) [
 
 // loadOnboardingPlugins loads real localized metadata from the plugin store once per onboarding session.
 func (a *App) loadOnboardingPlugins() {
-	if a.onboardingPlugins.loading || len(a.onboardingPlugins.plugins) > 0 {
+	if a.onboarding.onboardingPlugins.loading || len(a.onboarding.onboardingPlugins.plugins) > 0 {
 		return
 	}
-	a.onboardingPlugins.loading = true
-	a.onboardingPlugins.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingPlugins.loading = true
+	a.onboarding.onboardingPlugins.error = ""
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding plugins", func() {
 		plugins, err := loadPluginSettingsPlugins(context.Background(), a.services, a.sessionID, true)
 		_ = a.runOnUI("apply onboarding plugins", func() {
-			a.onboardingPlugins.loading = false
+			a.onboarding.onboardingPlugins.loading = false
 			if err != nil {
-				a.onboardingPlugins.error = err.Error()
+				a.onboarding.onboardingPlugins.error = err.Error()
 			} else {
-				a.onboardingPlugins.plugins = onboardingRecommendedPlugins(plugins, runtime.GOOS)
-				a.onboardingPlugins.error = ""
+				a.onboarding.onboardingPlugins.plugins = onboardingRecommendedPlugins(plugins, runtime.GOOS)
+				a.onboarding.onboardingPlugins.error = ""
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
 
 // installOnboardingPlugin installs one recommendation through the shared plugin operation service.
 func (a *App) installOnboardingPlugin(pluginID string) {
-	if a.onboardingPlugins.operationID != "" {
+	if a.onboarding.onboardingPlugins.operationID != "" {
 		return
 	}
 	found := false
-	for _, plugin := range a.onboardingPlugins.plugins {
+	for _, plugin := range a.onboarding.onboardingPlugins.plugins {
 		if plugin.ID == pluginID && !plugin.IsInstalled {
 			found = true
 			break
@@ -827,9 +827,9 @@ func (a *App) installOnboardingPlugin(pluginID string) {
 	if !found {
 		return
 	}
-	a.onboardingPlugins.operationID = pluginID
-	a.onboardingPlugins.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingPlugins.operationID = pluginID
+	a.onboarding.onboardingPlugins.error = ""
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "install onboarding plugin", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		operationErr := a.services.OperatePlugin(ctx, a.sessionID, pluginID, contract.PluginOperationInstall)
@@ -840,26 +840,26 @@ func (a *App) installOnboardingPlugin(pluginID string) {
 			plugins, refreshErr = loadPluginSettingsPlugins(context.Background(), a.services, a.sessionID, true)
 		}
 		_ = a.runOnUI("apply onboarding plugin install", func() {
-			a.onboardingPlugins.operationID = ""
+			a.onboarding.onboardingPlugins.operationID = ""
 			if operationErr != nil {
-				a.onboardingPlugins.error = operationErr.Error()
+				a.onboarding.onboardingPlugins.error = operationErr.Error()
 			} else {
 				if refreshErr == nil {
-					a.onboardingPlugins.plugins = onboardingRecommendedPlugins(plugins, runtime.GOOS)
-					a.onboardingPlugins.error = ""
+					a.onboarding.onboardingPlugins.plugins = onboardingRecommendedPlugins(plugins, runtime.GOOS)
+					a.onboarding.onboardingPlugins.error = ""
 				} else {
-					for index := range a.onboardingPlugins.plugins {
-						if a.onboardingPlugins.plugins[index].ID == pluginID {
-							a.onboardingPlugins.plugins[index].IsInstalled = true
+					for index := range a.onboarding.onboardingPlugins.plugins {
+						if a.onboarding.onboardingPlugins.plugins[index].ID == pluginID {
+							a.onboarding.onboardingPlugins.plugins[index].IsInstalled = true
 						}
 					}
-					a.onboardingPlugins.error = refreshErr.Error()
+					a.onboarding.onboardingPlugins.error = refreshErr.Error()
 				}
 				a.pluginSettings.invalidateCachedPlugins(true)
 				a.pluginSettings.invalidateCachedPlugins(false)
 				a.settingsSearch.SetLoaded(false)
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -908,25 +908,25 @@ func onboardingThemeItems(catalog []themeSettingsTheme, currentID string) []laun
 
 // loadOnboardingThemes loads installed system themes through the shared theme catalog.
 func (a *App) loadOnboardingThemes() {
-	if a.onboardingTheme.loading || len(onboardingSystemThemes(a.themeSettings.Themes())) == 4 {
+	if a.onboarding.onboardingTheme.loading || len(onboardingSystemThemes(a.themeSettings.Themes())) == 4 {
 		return
 	}
-	a.onboardingTheme.loading = true
-	a.onboardingTheme.error = ""
+	a.onboarding.onboardingTheme.loading = true
+	a.onboarding.onboardingTheme.error = ""
 	themeID := a.currentThemeID()
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding themes", func() {
 		util.GetLogger().Info(a.lifecycleCtx, "loading onboarding system themes")
 		err := a.reloadThemes("installed", themeID)
 		if applyErr := a.runOnUI("apply onboarding themes", func() {
-			a.onboardingTheme.loading = false
+			a.onboarding.onboardingTheme.loading = false
 			if err != nil {
-				a.onboardingTheme.error = err.Error()
+				a.onboarding.onboardingTheme.error = err.Error()
 			} else {
-				a.onboardingTheme.error = ""
+				a.onboarding.onboardingTheme.error = ""
 			}
 			util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf("onboarding system themes loaded: count=%d error=%v", len(onboardingSystemThemes(a.themeSettings.Themes())), err))
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		}); applyErr != nil {
 			util.GetLogger().Error(a.lifecycleCtx, applyErr.Error())
 		}
@@ -935,7 +935,7 @@ func (a *App) loadOnboardingThemes() {
 
 // selectOnboardingTheme applies a bundled theme without changing the onboarding step.
 func (a *App) selectOnboardingTheme(themeID string) {
-	if a.onboardingTheme.loading || a.onboardingTheme.applying {
+	if a.onboarding.onboardingTheme.loading || a.onboarding.onboardingTheme.applying {
 		return
 	}
 	found := false
@@ -948,30 +948,30 @@ func (a *App) selectOnboardingTheme(themeID string) {
 	if !found {
 		return
 	}
-	a.onboardingTheme.error = ""
+	a.onboarding.onboardingTheme.error = ""
 	if a.currentThemeID() == themeID {
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 		return
 	}
-	a.onboardingTheme.applying = true
-	a.onboardingTheme.error = ""
-	a.invalidateOnboardingWindow()
+	a.onboarding.onboardingTheme.applying = true
+	a.onboarding.onboardingTheme.error = ""
+	a.onboarding.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "apply onboarding theme", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := a.services.OperateTheme(ctx, a.sessionID, themeID, contract.ThemeOperationApply)
 		cancel()
 		if err == nil {
-			err = a.reloadTheme()
+			err = a.appearance.reloadTheme()
 		}
 		_ = a.runOnUI("apply onboarding theme result", func() {
-			a.onboardingTheme.applying = false
+			a.onboarding.onboardingTheme.applying = false
 			if err != nil {
-				a.onboardingTheme.error = err.Error()
+				a.onboarding.onboardingTheme.error = err.Error()
 			} else {
 				a.generalSettings.Update(func(data *settingsData) { data.ThemeID = themeID })
-				a.onboardingTheme.error = ""
+				a.onboarding.onboardingTheme.error = ""
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -984,10 +984,10 @@ func (a *App) focusOnboardingHotkey(index int) {
 	form.active = true
 	setFormFieldsFocusLocked(form, index)
 	a.hotkeySettings.SetFocused(true)
-	a.invalidateOnboardingWindow()
+	a.onboarding.invalidateOnboardingWindow()
 }
 
-func (a *App) openOnboardingChoice(kind string) {
+func (a *onboardingController) openOnboardingChoice(kind string) {
 	if kind != "language" && kind != "glance" {
 		return
 	}
@@ -1038,9 +1038,9 @@ func (a *App) onboardingChoices(snapshot settingsSnapshot, kind string, imageSca
 }
 
 func (a *App) selectOnboardingChoice(value string) {
-	kind := a.onboardingChoice
-	a.onboardingChoice = ""
-	a.onboardingChoiceAnchor = woxui.Rect{}
+	kind := a.onboarding.onboardingChoice
+	a.onboarding.onboardingChoice = ""
+	a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
 	key := ""
 	switch kind {
 	case "language":
@@ -1070,14 +1070,14 @@ func (a *App) saveOnboardingSetting(key, value string) {
 		}
 		_ = a.runOnUI("apply onboarding setting", func() {
 			if err != nil {
-				a.onboardingError = err.Error()
+				a.onboarding.onboardingError = err.Error()
 			} else {
-				a.onboardingError = ""
+				a.onboarding.onboardingError = ""
 			}
 			if form := a.hotkeySettings.Form(); form != nil {
 				form.active = true
 			}
-			a.invalidateOnboardingWindow()
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	})
 }
@@ -1090,8 +1090,8 @@ func (a *App) loadOnboardingPermissionStatus() {
 func (a *App) loadOnboardingPermissionStatusWithLoading(showLoading bool) {
 	if showLoading {
 		_ = a.runOnUI("start onboarding permission check", func() {
-			a.onboardingLoading = true
-			a.invalidateOnboardingWindow()
+			a.onboarding.onboardingLoading = true
+			a.onboarding.invalidateOnboardingWindow()
 		})
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1104,20 +1104,20 @@ func (a *App) loadOnboardingPermissionStatusWithLoading(showLoading bool) {
 	}
 	var completedPermissionFlow permission.MacOSPermissionType
 	_ = a.runOnUI("apply onboarding permission status", func() {
-		a.onboardingLoading = false
+		a.onboarding.onboardingLoading = false
 		if err != nil {
-			a.onboardingError = err.Error()
+			a.onboarding.onboardingError = err.Error()
 		} else {
-			a.onboardingPermission = status
-			a.onboardingError = ""
-			if a.permissionFlowHost != nil {
-				permissionType := a.permissionFlowHost.permissionType
+			a.onboarding.onboardingPermission = status
+			a.onboarding.onboardingError = ""
+			if a.onboarding.permissionFlowHost != nil {
+				permissionType := a.onboarding.permissionFlowHost.permissionType
 				if macOSPermissionGranted(permissionType, status) {
 					completedPermissionFlow = permissionType
 				}
 			}
 		}
-		a.invalidateOnboardingWindow()
+		a.onboarding.invalidateOnboardingWindow()
 	})
 	if completedPermissionFlow != "" {
 		macospermission.Complete(completedPermissionFlow)
@@ -1128,8 +1128,8 @@ func (a *App) openOnboardingPermission(permissionType string) {
 	util.Go(a.lifecycleCtx, "open onboarding permission", func() {
 		if err := a.openMacOSPermissionFlow(permissionType); err != nil {
 			_ = a.runOnUI("show onboarding permission error", func() {
-				a.onboardingError = err.Error()
-				a.invalidateOnboardingWindow()
+				a.onboarding.onboardingError = err.Error()
+				a.onboarding.invalidateOnboardingWindow()
 			})
 		}
 	})
@@ -1142,18 +1142,18 @@ func (a *App) notifyOnboardingViewChanged(inOnboardingView bool) error {
 }
 
 func (a *App) onOnboardingKey(event woxui.KeyEvent) bool {
-	if !a.onboardingOpen {
+	if !a.onboarding.onboardingOpen {
 		return false
 	}
 	switch event.Key {
 	case woxui.KeyEscape:
-		a.onboardingChoice = ""
-		a.onboardingChoiceAnchor = woxui.Rect{}
-		a.invalidateOnboardingWindow()
+		a.onboarding.onboardingChoice = ""
+		a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
+		a.onboarding.invalidateOnboardingWindow()
 	case woxui.KeyArrowLeft:
-		a.selectOnboardingStep(a.onboardingStep - 1)
+		a.selectOnboardingStep(a.onboarding.onboardingStep - 1)
 	case woxui.KeyArrowRight:
-		a.selectOnboardingStep(a.onboardingStep + 1)
+		a.selectOnboardingStep(a.onboarding.onboardingStep + 1)
 	default:
 		return false
 	}
@@ -1161,7 +1161,7 @@ func (a *App) onOnboardingKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onOnboardingWindowFocus(event woxui.FocusEvent) {
-	if event.Active && a.onboardingOpen && runtime.GOOS == "darwin" {
+	if event.Active && a.onboarding.onboardingOpen && runtime.GOOS == "darwin" {
 		util.Go(a.lifecycleCtx, "refresh focused onboarding permission status", a.loadOnboardingPermissionStatus)
 	}
 }

@@ -34,7 +34,7 @@ func (a *App) buildMediaPreview(result queryResult, data mediaPreviewData, palet
 	return previewview.MediaPreviewView(previewview.MediaPreviewProps{
 		Width: width, Height: height, Title: title, Artist: artist, Album: strings.TrimSpace(data.Album), AppName: strings.TrimSpace(data.AppName), Artwork: artwork,
 		Position: position, Duration: duration, Playing: data.IsPlaying, Theme: palette.componentTheme(),
-		PreviousLabel: a.translate("i18n:plugin_mediaplayer_previous"), ToggleLabel: a.translate(toggleLabelKey), NextLabel: a.translate("i18n:plugin_mediaplayer_next"),
+		PreviousLabel: a.language.translate("i18n:plugin_mediaplayer_previous"), ToggleLabel: a.language.translate(toggleLabelKey), NextLabel: a.language.translate("i18n:plugin_mediaplayer_next"),
 		ActionIdentity: result.QueryID + "\x00" + result.ID,
 		Window:         a.window,
 		OnPrevious:     action("media-control-previous"), OnPlay: action("media-control-play"), OnPause: action("media-control-pause"), OnNext: action("media-control-next"),

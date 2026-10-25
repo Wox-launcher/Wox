@@ -54,11 +54,11 @@ type triggerConflictPreviewSnapshot struct {
 
 // buildTriggerConflictPreview adapts conflict state and form rows to the pure preview view.
 func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
-	state, err := a.triggerConflictPreviewSnapshotFor(result, preview)
+	state, err := a.conflicts.triggerConflictPreviewSnapshotFor(result, preview)
 	if err != nil {
 		return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{Width: width, Height: height, Theme: palette.componentTheme(), FatalError: err.Error()})
 	}
-	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.focusTriggerConflictField, setText: a.setTriggerConflictText, onKey: a.onTriggerConflictPreviewKey}
+	callbacks := formFieldCallbacks{idPrefix: "trigger-conflict", focus: a.conflicts.focusTriggerConflictField, setText: a.conflicts.setTriggerConflictText, onKey: a.conflicts.onTriggerConflictPreviewKey}
 	rows := make([]woxwidget.Widget, 0, len(state.definitions))
 	for index, definition := range state.definitions {
 		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("trigger-conflict", index), Child: a.buildFormField(state.formFieldsSnapshot, callbacks, palette.componentTheme().Controls, index, definition, width-36, 0)})
@@ -72,9 +72,9 @@ func (a *App) buildTriggerConflictPreview(result queryResult, preview queryPrevi
 	}
 	return previewview.TriggerConflictPreviewView(previewview.TriggerConflictPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Keyword: state.keyword, Title: state.title, Message: state.message,
-		Error: state.error, SaveLabel: a.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
+		Error: state.error, SaveLabel: a.language.translate("i18n:ui_save"), Dirty: dirty, Saving: state.saving,
 		Rows: rows, KeepVisibleKey: formFieldsKeepVisibleKey("trigger-conflict", state.formFieldsSnapshot),
-		OnSubmit: a.submitTriggerConflictPreview,
+		OnSubmit: a.conflicts.submitTriggerConflictPreview,
 	})
 }
 
@@ -92,7 +92,7 @@ func triggerConflictPreviewDataAndKey(result queryResult, preview queryPreview) 
 }
 
 // activateTriggerConflictPreview prepares the conflict form before rendering.
-func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPreview) error {
+func (a *triggerConflictController) activateTriggerConflictPreview(result queryResult, preview queryPreview) error {
 	data, key, err := triggerConflictPreviewDataAndKey(result, preview)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (a *App) activateTriggerConflictPreview(result queryResult, preview queryPr
 }
 
 // triggerConflictPreviewSnapshotFor returns prepared conflict form state.
-func (a *App) triggerConflictPreviewSnapshotFor(result queryResult, preview queryPreview) (*triggerConflictPreviewSnapshot, error) {
+func (a *triggerConflictController) triggerConflictPreviewSnapshotFor(result queryResult, preview queryPreview) (*triggerConflictPreviewSnapshot, error) {
 	_, key, err := triggerConflictPreviewDataAndKey(result, preview)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func parseTriggerKeywords(value string) []string {
 }
 
 // onTriggerConflictPreviewKey keeps editing portable and leaves query focus on Escape.
-func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
+func (a *triggerConflictController) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
@@ -216,13 +216,13 @@ func (a *App) onTriggerConflictPreviewKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func (a *App) onTriggerConflictPreviewTextInput(_ woxui.TextInputEvent) bool {
+func (a *triggerConflictController) onTriggerConflictPreviewTextInput(_ woxui.TextInputEvent) bool {
 	state := a.triggerConflict
 	active := state != nil && state.active
 	return active
 }
 
-func (a *App) editTriggerConflictKey(event woxui.KeyEvent) {
+func (a *triggerConflictController) editTriggerConflictKey(event woxui.KeyEvent) {
 	if state := a.triggerConflict; state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
@@ -230,10 +230,10 @@ func (a *App) editTriggerConflictKey(event woxui.KeyEvent) {
 			state.error = ""
 		}
 	}
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) moveTriggerConflictFocus(delta int) {
+func (a *triggerConflictController) moveTriggerConflictFocus(delta int) {
 	state := a.triggerConflict
 	if state == nil || len(state.definitions) == 0 {
 		return
@@ -249,10 +249,10 @@ func (a *App) moveTriggerConflictFocus(delta int) {
 	}
 	textInput := state.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) focusTriggerConflictField(index int) {
+func (a *triggerConflictController) focusTriggerConflictField(index int) {
 	state := a.triggerConflict
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) {
 		return
@@ -262,20 +262,20 @@ func (a *App) focusTriggerConflictField(index int) {
 	state.error = ""
 	textInput := state.editor != nil
 	a.updateFormTextInput(textInput)
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
-func (a *App) setTriggerConflictText(index int, value string) {
+func (a *triggerConflictController) setTriggerConflictText(index int, value string) {
 	changed := a.triggerConflict != nil && !a.triggerConflict.saving && setFormFieldsTextLocked(&a.triggerConflict.formFieldsState, index, value)
 	if changed {
 		a.triggerConflict.error = ""
 	}
 	if changed {
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 	}
 }
 
-func (a *App) deactivateTriggerConflictPreview() {
+func (a *triggerConflictController) deactivateTriggerConflictPreview() {
 	wasActive := a.triggerConflict != nil && a.triggerConflict.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&a.triggerConflict.formFieldsState)
@@ -285,11 +285,11 @@ func (a *App) deactivateTriggerConflictPreview() {
 		return
 	}
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 }
 
 // submitTriggerConflictPreview persists only changed plugins through the existing settings endpoint.
-func (a *App) submitTriggerConflictPreview() {
+func (a *triggerConflictController) submitTriggerConflictPreview() {
 	state := a.triggerConflict
 	if state == nil || state.saving {
 		return
@@ -301,7 +301,7 @@ func (a *App) submitTriggerConflictPreview() {
 		keywords := parseTriggerKeywords(value)
 		if len(keywords) == 0 {
 			state.error = "Trigger keywords cannot be empty."
-			_ = a.window.Invalidate()
+			_ = a.window().Invalidate()
 			return
 		}
 		normalized := strings.Join(keywords, ",")
@@ -312,7 +312,7 @@ func (a *App) submitTriggerConflictPreview() {
 	if len(changes) == 0 {
 		state.active = false
 		a.restoreQueryTextInput()
-		_ = a.window.Invalidate()
+		_ = a.window().Invalidate()
 		return
 	}
 	state.saving = true
@@ -323,7 +323,7 @@ func (a *App) submitTriggerConflictPreview() {
 	key := state.key
 	pluginIDs := append([]string(nil), state.pluginIDs...)
 	a.restoreQueryTextInput()
-	_ = a.window.Invalidate()
+	_ = a.window().Invalidate()
 
 	util.Go(a.lifecycleCtx, "save trigger keyword conflict", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -349,7 +349,7 @@ func (a *App) submitTriggerConflictPreview() {
 				}
 			}
 			if saveErr == nil {
-				query := a.query
+				query := a.querySession.query
 				query.QueryID = newID()
 				a.setQuery(query)
 				if err := a.applyWindowBounds(); err != nil {
@@ -358,7 +358,7 @@ func (a *App) submitTriggerConflictPreview() {
 				refreshQuery = true
 				return
 			}
-			_ = a.window.Invalidate()
+			_ = a.window().Invalidate()
 		}); dispatchErr != nil {
 			log.Printf("dispatch trigger keyword conflict: %v", dispatchErr)
 			return

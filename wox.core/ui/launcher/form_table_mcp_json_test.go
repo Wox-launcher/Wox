@@ -15,23 +15,25 @@ func mcpJSONTestApp(t *testing.T) *App {
 	deps := CommonDeps{}
 	ai := newAISettingsController(deps)
 	ai.SetForm(&form)
-	return &App{
-		settingsOpen:    true,
-		settingTab:      "ai",
+	return bindTestApp(&App{
+		settingsWindow: settingsWindowController{
+			settingsOpen: true,
+			settingTab:   "ai",
+		},
 		aiSettings:      ai,
 		pluginSettings:  newPluginSettingsController(deps),
 		hotkeySettings:  newHotkeySettingsController(deps),
 		generalSettings: newGeneralSettingsController(deps, newSharedEditState()),
 		services:        &skillAddTestServices{},
 		lifecycleCtx:    context.Background(),
-	}
+	})
 }
 
 func TestOpenFormTableMCPJSONPrefillsDocument(t *testing.T) {
 	app := mcpJSONTestApp(t)
 	app.openAIMCPJSONImport()
 
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state == nil || state.mcpJSONImport == nil {
 		t.Fatal("MCP JSON editor did not open")
 	}
@@ -50,7 +52,7 @@ func TestImportFormTableMCPJSONRequiresText(t *testing.T) {
 	app.setFormTableMCPJSONText(0, "")
 	app.importFormTableMCPJSON()
 
-	state := app.settingsTableEditor
+	state := app.settingsWindow.settingsTableEditor
 	if state == nil || state.mcpJSONImport == nil {
 		t.Fatal("dialog should stay open after an empty save")
 	}

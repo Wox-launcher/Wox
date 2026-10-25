@@ -21,12 +21,17 @@ func TestWebViewPreviewURLChanged(t *testing.T) {
 }
 
 func TestActivateWebViewPreviewReportsURLChange(t *testing.T) {
-	app := &App{webViewPreviewData: `{"url":"https://example.com/old"}`, webViewPreviewError: "stale error"}
-	if !app.activateWebViewPreview(`{"url":"https://example.com/new"}`) {
+	app := bindTestApp(&App{
+		webView: webViewPreviewController{
+			webViewPreviewData:  `{"url":"https://example.com/old"}`,
+			webViewPreviewError: "stale error",
+		},
+	})
+	if !app.webView.activateWebViewPreview(`{"url":"https://example.com/new"}`) {
 		t.Fatal("URL replacement was not reported")
 	}
-	if app.webViewPreviewError != "" {
-		t.Fatalf("WebView error was not cleared: %q", app.webViewPreviewError)
+	if app.webView.webViewPreviewError != "" {
+		t.Fatalf("WebView error was not cleared: %q", app.webView.webViewPreviewError)
 	}
 }
 
@@ -43,20 +48,20 @@ func TestWebViewPreviewContentPreservesUserAgent(t *testing.T) {
 func TestBuildWebViewPreviewExposesAutomationStatus(t *testing.T) {
 	const previewURL = "https://example.com/search?q=wox"
 	payload := `{"url":"` + previewURL + `"}`
-	app := &App{}
+	app := bindTestApp(&App{})
 
 	loading, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
 	if !ok || loading.AutomationID != webViewPreviewAutomationID || loading.Value != "loading" || loading.LiveRegion != woxui.AccessibilityLiveRegionPolite {
 		t.Fatalf("loading preview semantics = %#v", loading)
 	}
 
-	app.webViewPreviewData = payload
+	app.webView.webViewPreviewData = payload
 	ready, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
 	if !ok || ready.AutomationID != webViewPreviewAutomationID || ready.Value != previewURL {
 		t.Fatalf("ready preview semantics = %#v", ready)
 	}
 
-	app.webViewPreviewError = "webview missing"
+	app.webView.webViewPreviewError = "webview missing"
 	failed, ok := app.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
 	if !ok || failed.AutomationID != webViewPreviewAutomationID || !strings.HasPrefix(failed.Value, "error:") || !strings.Contains(failed.Value, "webview missing") {
 		t.Fatalf("error preview semantics = %#v", failed)
@@ -81,9 +86,9 @@ func TestWebViewURLFormValidation(t *testing.T) {
 }
 
 func TestSyncWebViewActionHotkeyNilSafe(t *testing.T) {
-	var app *App
-	app.syncWebViewActionHotkey()
-	(&App{}).syncWebViewActionHotkey()
+	var controller *webViewPreviewController
+	controller.syncWebViewActionHotkey()
+	(bindTestApp(&App{})).webView.syncWebViewActionHotkey()
 }
 
 // TestHTMLPreviewTransitionsKeepNativeCache leaves HTML expiry to the shared runtime.
@@ -93,7 +98,7 @@ func TestHTMLPreviewTransitionsKeepNativeCache(t *testing.T) {
 	if webViewPreviewURLChanged(html, url) || webViewPreviewURLChanged(url, html) {
 		t.Fatal("switching to or from HTML must not reset native URL and HTML sessions")
 	}
-	app := &App{webViewPreviewData: html}
+	app := bindTestApp(&App{webView: webViewPreviewController{webViewPreviewData: html}})
 	if !app.hasCacheableWebViewPreviewLocked() {
 		t.Fatal("HTML secondary window must survive hide until its temporary session expires")
 	}

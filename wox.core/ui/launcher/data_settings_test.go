@@ -9,14 +9,16 @@ import (
 func TestOpenDataLogLevelPickerUsesSharedChoiceState(t *testing.T) {
 	controller := newGeneralControllerForTest()
 	controller.ApplyData(settingsData{LogLevel: "DEBUG"})
-	app := &App{
+	app := bindTestApp(&App{
 		generalSettings: controller,
-		translations: map[string]string{
-			"ui_data_log_level_title": "Log Level",
-			"ui_data_log_level_info":  "INFO",
-			"ui_data_log_level_debug": "DEBUG",
+		language: languageCatalog{
+			translations: map[string]string{
+				"ui_data_log_level_title": "Log Level",
+				"ui_data_log_level_info":  "INFO",
+				"ui_data_log_level_debug": "DEBUG",
+			},
 		},
-	}
+	})
 	anchor := woxui.Rect{X: 10, Y: 20, Width: 280, Height: 34}
 
 	app.openDataLogLevelPicker(anchor)

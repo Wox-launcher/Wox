@@ -53,7 +53,8 @@ func Test002RaycastImport(t *testing.T) {
 		}
 		waitOnboardingSetting(t, ctx, "OnboardingFinished", "true")
 		smoke.ShowLauncher(t, ctx, client)
-		snapshot := smoke.ReplaceLauncherQuery(t, ctx, client, raycastSmokeKeyword)
+		// Trigger routing requires the delimiter; the bare keyword is a global search.
+		snapshot := smoke.ReplaceLauncherQuery(t, ctx, client, raycastSmokeKeyword+" ")
 		if !smoke.HasLauncherResultLabel(snapshot, raycastSmokeTitle) {
 			t.Fatalf("imported quicklink %q did not show %q", raycastSmokeKeyword, raycastSmokeTitle)
 		}

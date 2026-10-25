@@ -47,7 +47,7 @@ func (a *App) refreshShowDisplays() {
 		}
 		_ = a.runOnUI("apply show displays", func() {
 			a.generalSettings.ApplyShowDisplays(displays, err)
-			a.invalidateSettingsWindow()
+			a.settingsWindow.invalidateSettingsWindow()
 		})
 	})
 }
@@ -60,7 +60,7 @@ func (a *App) openShowDisplayPicker() {
 	a.generalSettings.SetChoicePicker(nil)
 	displays, loaded := a.generalSettings.ShowDisplays()
 	a.generalSettings.SetShowDisplayPicker(&showDisplayPickerState{loading: !loaded, displays: displays})
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	a.refreshShowDisplays()
 }
 
@@ -70,13 +70,13 @@ func (a *App) closeShowDisplayPicker() {
 		return
 	}
 	a.generalSettings.SetShowDisplayPicker(nil)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 }
 
 // chooseShowDisplay stores the clicked monitor and closes the map.
 func (a *App) chooseShowDisplay(index int) {
 	picker := a.generalSettings.ShowDisplayPicker()
-	if picker == nil || a.settingSaving || index < 0 || index >= len(picker.displays) {
+	if picker == nil || a.settingsWindow.settingSaving || index < 0 || index >= len(picker.displays) {
 		return
 	}
 	display := picker.displays[index]
@@ -89,7 +89,7 @@ func (a *App) chooseShowDisplay(index int) {
 	}
 	encoded, err := json.Marshal(target)
 	a.generalSettings.SetShowDisplayPicker(nil)
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	if err != nil {
 		return
 	}
@@ -105,14 +105,14 @@ func (a *App) retryShowDisplays() {
 	picker.loading = true
 	picker.error = ""
 	a.generalSettings.ClearShowDisplaysLoading()
-	a.invalidateSettingsWindow()
+	a.settingsWindow.invalidateSettingsWindow()
 	a.refreshShowDisplays()
 }
 
 func (a *App) buildShowDisplayRow(snapshot settingsSnapshot, width float32) woxwidget.Widget {
-	label := showDisplayButtonLabel(snapshot.general.Data.ShowDisplay, snapshot.general.ShowDisplays, snapshot.general.ShowDisplaysLoaded, !util.IsLinux(), a.translate)
+	label := showDisplayButtonLabel(snapshot.general.Data.ShowDisplay, snapshot.general.ShowDisplays, snapshot.general.ShowDisplaysLoaded, !util.IsLinux(), a.language.translate)
 	row := launcherview.SettingRow(launcherview.SettingRowProps{
-		ID: "ShowDisplay", Title: a.translate("i18n:ui_show_position_screen"), Description: a.translate("i18n:ui_show_position_screen_tips"),
+		ID: "ShowDisplay", Title: a.language.translate("i18n:ui_show_position_screen"), Description: a.language.translate("i18n:ui_show_position_screen_tips"),
 		Value: label, Width: width, Kind: "button", Theme: snapshot.palette, OnTap: a.openShowDisplayPicker,
 	})
 	return woxwidget.Keyed{Key: "setting-row-ShowDisplay", Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
@@ -147,15 +147,15 @@ func (a *App) buildShowDisplayPickerOverlay(snapshot settingsSnapshot, width, he
 	}
 	return launcherview.ShowDisplayPicker(launcherview.ShowDisplayPickerProps{
 		Width: width, Height: height,
-		Title:       a.translate("i18n:ui_show_position_screen_picker_title"),
-		Description: a.translate("i18n:ui_show_position_screen_tips"),
-		CancelLabel: a.translate("i18n:ui_cancel"),
+		Title:       a.language.translate("i18n:ui_show_position_screen_picker_title"),
+		Description: a.language.translate("i18n:ui_show_position_screen_tips"),
+		CancelLabel: a.language.translate("i18n:ui_cancel"),
 		Theme:       snapshot.palette, OnCancel: a.closeShowDisplayPicker,
 		Arrangement: launcherview.DisplayArrangementProps{
 			Loading: picker.Loading, Error: picker.Error, Tiles: tiles, Theme: snapshot.palette,
-			TileIDPrefix: "show-display", PrimaryLabel: a.translate("i18n:plugin_window_manager_group_display_primary"),
-			EmptyLabel: a.translate("i18n:plugin_window_manager_group_no_displays"),
-			RetryLabel: a.translate("i18n:plugin_window_manager_group_retry"),
+			TileIDPrefix: "show-display", PrimaryLabel: a.language.translate("i18n:plugin_window_manager_group_display_primary"),
+			EmptyLabel: a.language.translate("i18n:plugin_window_manager_group_no_displays"),
+			RetryLabel: a.language.translate("i18n:plugin_window_manager_group_retry"),
 			OnSelect:   a.chooseShowDisplay, OnRetry: a.retryShowDisplays,
 		},
 	})
