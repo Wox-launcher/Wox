@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.4.8 - 2026-10-25
+
+文件搜索更快，也更省内存。现在可以用 Ctrl/Cmd+Enter 打开应用新窗口，并自行选择截图保存位置。
+![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/filesearch.png)
+
+- Improve
+  - [`File Search`] 加快文件名和路径搜索，整理文件列表时更省内存。改进拼音匹配，匹配程度相同时优先显示较短名称，回收站中的文件排在最后。可设置不带 `f` 关键词搜索时显示的文件数量。
+  - [`App`] 支持用 Ctrl/Cmd+Enter 请求打开应用新窗口 [#4657](https://github.com/Wox-launcher/Wox/issues/4657)。Windows 上可搜索并打开控制面板项目和任务。减少扫描，同时保持应用列表及时更新。
+  - [`Folder`] 支持用 `cd` 或自定义的 Folder 关键词浏览文件夹，从文件搜索按 Shift+Enter 进入时也会沿用该关键词。预览默认收起，需要时再打开。
+  - [`Screenshot`] 可将截图保存到自选文件夹，包括 OneDrive 文件夹。已有截图会自动迁移，迁移期间仍可搜索。Windows 上支持使用通过 Scoop 安装的 FFmpeg 录制，且不会弹出控制台窗口。
+  - [`Preview`] 支持插件预览实时更新，同时保留滚动位置、选中文字和动画。重新唤起 Wox 时刷新预览内容。
+  - [`Settings`] 支持使用软件渲染来绕过显卡驱动问题，并提供「重启 Wox」按钮使更改生效。也可直接搜索「重启 Wox」命令 [#4637](https://github.com/Wox-launcher/Wox/issues/4637)。
+  - [`Feedback`] 可重启进入调试模式，收集更详细的崩溃和卡顿信息。开启时会显示调试模式标签。
+  - [`Linux`] 改善设置中输入和滚动时的响应速度。
+
+- Fix
+  - [`File Search`] 修复文件变化后结果缺失或未及时更新。macOS 系统最近文件列表为空或不可用时，改为显示最近修改的文件。
+  - [`Quick Jump`] 确保当前文件夹中的文件排在其他位置的匹配结果之前。
+  - [`Query`] 备用搜索始终排在普通匹配结果之后，即使经常使用也不会抢占前排。
+  - [`App`] 修复 Windows 应用图标缺失，以及快捷方式未显示自定义图标 [#4665](https://github.com/Wox-launcher/Wox/issues/4665)。Linux 上，修复其他应用启动项不可用时，新安装的应用迟迟不出现。
+  - [`Plugin`] 修复上级文件夹中的无关文件导致 Node.js 插件无法启动。启动失败时及时显示实际原因，避免长时间等待连接超时 [#4651](https://github.com/Wox-launcher/Wox/issues/4651)。
+  - [`Settings`] 修复插件多选设置丢失已有选项、插件提供的设置未显示，以及设置实时刷新时丢失编辑内容或按钮失效。 [#4644](https://github.com/Wox-launcher/Wox/pull/4644) [@stmluyuer](https://github.com/stmluyuer) [#4647](https://github.com/Wox-launcher/Wox/pull/4647) [@dragonish](https://github.com/dragonish)
+  - [`AI Chat`] 修复 Windows 上启动器隐藏时，对话窗口有时不显示回答 [#4646](https://github.com/Wox-launcher/Wox/issues/4646)。
+  - [`Windows`] 修复启用软件渲染时隐藏 Wox 导致卡死 [#4637](https://github.com/Wox-launcher/Wox/issues/4637)。修复长时间使用后窗口空白、图标缺失和文件选择器无法打开 [#4639](https://github.com/Wox-launcher/Wox/issues/4639)。
+
+- Store
+  - Plugin
+    - [端口生成器](https://github.com/dragonish/Wox.Plugin.PortGenerator) 检查端口占用 / 生成随机可用端口。 [#4635](https://github.com/Wox-launcher/Wox/pull/4635) [@dragonish](https://github.com/dragonish)
+    - [ASCII 艺术字生成器](https://github.com/dragonish/Wox.Plugin.ASCIIArtGenerator) 生成 ASCII 艺术字符串。 [#4655](https://github.com/Wox-launcher/Wox/pull/4655) [@dragonish](https://github.com/dragonish)
+    - [颜文字](https://github.com/dragonish/Wox.Plugin.Kaomoji) 搜索并复制颜文字。 [#4662](https://github.com/Wox-launcher/Wox/pull/4662) [@dragonish](https://github.com/dragonish)
+  - Theme
+    - [Dracula](https://gist.github.com/dragonish/c6118868fc93e7519ef1d11b2a5b0248) A dark theme inspired by the Dracula palette: near-black background, soft-white text, purple selection and cyan accents. Unofficial, not affiliated with Dracula Theme. [#4640](https://github.com/Wox-launcher/Wox/pull/4640) [@dragonish](https://github.com/dragonish)
+    - [墨分五色](https://gist.github.com/dragonish/2cf9d018af5fd48991be9de497128d81) 宣纸背景，配以五种墨色——焦墨、浓墨、重墨、淡墨和清墨——并以一枚朱砂印章作为点缀。 [#4641](https://github.com/Wox-launcher/Wox/pull/4641) [@dragonish](https://github.com/dragonish)
+    - [黛](https://gist.github.com/dragonish/9278791e2a2e09ee4281f97a45545730) 深邃的蓝黑色黛底，月白色的文字，矿物淡石青的点缀，以及一道朱砂印章笔触。 [#4642](https://github.com/Wox-launcher/Wox/pull/4642) [@dragonish](https://github.com/dragonish)
+
 ## v2.4.7 - 2026-10-15
 
 此版本带来离线模式，便携支持，并支持在 Windows 上从 Flow Launcher 导入快捷键、主题和插件。
