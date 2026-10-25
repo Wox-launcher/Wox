@@ -11,8 +11,8 @@ import (
 )
 
 // buildFormTableAppPicker resolves controller-owned image resources before delegating to the pure view.
-func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
-	apps := a.hotkeySettings.AppCandidates()
+func (c *formTableController) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+	apps := c.hotkeySettings().AppCandidates()
 	if identity := strings.TrimSpace(snapshot.current.Identity); identity != "" {
 		found := false
 		for _, candidate := range apps {
@@ -32,34 +32,34 @@ func (a *App) buildFormTableAppPicker(snapshot *formTableAppPickerSnapshot, pale
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), palette.Background),
+			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: c.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), palette.Background),
 		}
 	}
 	theme := palette
-	cancelLabel := a.language.translate("i18n:ui_cancel")
-	confirmLabel := a.language.translate("i18n:ui_ok")
-	appsError := a.hotkeySettings.AppsError()
-	appsLoading := a.hotkeySettings.AppsLoading() || (!a.hotkeySettings.AppsLoaded() && appsError == "")
+	cancelLabel := c.language.translate("i18n:ui_cancel")
+	confirmLabel := c.language.translate("i18n:ui_ok")
+	appsError := c.hotkeySettings().AppsError()
+	appsLoading := c.hotkeySettings().AppsLoading() || (!c.hotkeySettings().AppsLoaded() && appsError == "")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
-		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
-		Title: a.language.translate("i18n:ui_hotkey_ignore_apps_dialog_title"), SearchPlaceholder: a.language.translate("i18n:ui_hotkey_ignore_apps_search"),
-		LoadingLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
-		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: a.formTableButtonWidth(confirmLabel, 70),
+		OverlayWidth: width, OverlayHeight: height, Window: c.formTableNativeWindow(), Theme: theme,
+		Title: c.language.translate("i18n:ui_hotkey_ignore_apps_dialog_title"), SearchPlaceholder: c.language.translate("i18n:ui_hotkey_ignore_apps_search"),
+		LoadingLabel: c.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: c.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
+		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: c.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: c.formTableButtonWidth(confirmLabel, 70),
 		Candidates: candidates, SelectedIdentity: snapshot.current.Identity, Loading: appsLoading, Error: appsError,
 		OnConfirm: func(index int) {
 			if index < 0 || index >= len(apps) {
-				a.closeFormTableAppPicker()
+				c.closeFormTableAppPicker()
 				return
 			}
-			a.chooseFormTableAppCandidate(apps[index])
+			c.chooseFormTableAppCandidate(apps[index])
 		},
-		OnCancel: a.closeFormTableAppPicker,
+		OnCancel: c.closeFormTableAppPicker,
 	})
 }
 
 // openFormTableAppPicker opens the shared picker while the platform application catalog loads.
-func (a *App) openFormTableAppPicker(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) openFormTableAppPicker(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "app" {
 		return
 	}
@@ -67,27 +67,27 @@ func (a *App) openFormTableAppPicker(index int) {
 	_ = json.Unmarshal([]byte(state.rowForm.values[state.rowForm.definitions[index].Value.Key]), &current)
 	state.appPicker = &formTableAppPickerState{fieldIndex: index, current: current}
 	clearFormTableRowValidationLocked(state)
-	a.updateFormTableTextInput(true)
-	if !a.hotkeySettings.AppsLoaded() && !a.hotkeySettings.AppsLoading() {
-		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
+	c.updateFormTableTextInput(true)
+	if !c.hotkeySettings().AppsLoaded() && !c.hotkeySettings().AppsLoading() {
+		util.Go(c.lifecycleCtx, "load hotkey app candidates", c.loadHotkeyAppCandidates)
 	}
-	a.invalidateFormTableWindow()
+	c.invalidateFormTableWindow()
 }
 
-func (a *App) closeFormTableAppPicker() {
-	state := a.activeFormTableEditor()
+func (c *formTableController) closeFormTableAppPicker() {
+	state := c.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.appPicker != nil {
 		state.appPicker = nil
 		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
-	a.updateFormTableTextInput(textInput)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(textInput)
+	c.invalidateFormTableWindow()
 }
 
-func (a *App) chooseFormTableAppCandidate(candidate ignoredHotkeyApp) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) chooseFormTableAppCandidate(candidate ignoredHotkeyApp) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.appPicker == nil {
 		return
 	}
@@ -98,13 +98,13 @@ func (a *App) chooseFormTableAppCandidate(candidate ignoredHotkeyApp) {
 	encoded, err := json.Marshal(candidate)
 	if err != nil {
 		state.status = err.Error()
-		a.invalidateFormTableWindow()
+		c.invalidateFormTableWindow()
 		return
 	}
 	state.rowForm.values[state.rowForm.definitions[fieldIndex].Value.Key] = string(encoded)
 	state.appPicker = nil
 	clearFormTableRowValidationLocked(state)
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
 }

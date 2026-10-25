@@ -181,7 +181,7 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		}
 		return a.buildFormChoice(fields, callbacks, palette, index, definition, width, height, false, selectedLabel)
 	case "table":
-		return a.buildFormTableField(fields, callbacks, palette, index, definition, width, height)
+		return a.formTables.buildFormTableField(fields, callbacks, palette, index, definition, width, height)
 	case "dictationModel", "ocrModel":
 		return a.buildFormModelField(fields, callbacks, palette, index, definition, width, height)
 	default:

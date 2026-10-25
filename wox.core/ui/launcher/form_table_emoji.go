@@ -548,23 +548,23 @@ var formTableEmojiGroups = []formTableEmojiGroup{
 }
 
 // openFormTableEmojiPicker opens the shared emoji dialog for one woxImage row field.
-func (a *App) openFormTableEmojiPicker(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) openFormTableEmojiPicker(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
 		return
 	}
 	initialEmoji := strings.TrimSpace(state.rowForm.values[state.rowForm.definitions[index].Value.Key])
 	if initialEmoji != "" && !strings.HasPrefix(initialEmoji, "{") {
-		a.emojiCatalog.rememberFormTableEmoji(initialEmoji)
+		c.emoji.rememberFormTableEmoji(initialEmoji)
 	}
-	a.emojiCatalog.ensureFormTableEmojiSearchEntries()
+	c.emoji.ensureFormTableEmojiSearchEntries()
 	state.emojiPicker = &formTableEmojiPickerState{
 		fieldIndex:   index,
 		initialEmoji: initialEmoji,
 	}
 	clearFormTableRowValidationLocked(state)
-	a.updateFormTableTextInput(true)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(true)
+	c.invalidateFormTableWindow()
 }
 
 // ensureFormTableEmojiSearchEntries prepares the plugin catalog once outside the render path.
@@ -586,21 +586,21 @@ func (a *formTableEmojiCatalog) ensureFormTableEmojiSearchEntries() {
 	})
 }
 
-func (a *App) closeFormTableEmojiPicker() {
-	state := a.activeFormTableEditor()
+func (c *formTableController) closeFormTableEmojiPicker() {
+	state := c.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.emojiPicker != nil {
 		state.emojiPicker = nil
 		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
-	a.updateFormTableTextInput(textInput)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(textInput)
+	c.invalidateFormTableWindow()
 }
 
 // chooseFormTableEmoji commits one emoji to the focused woxImage row field.
-func (a *App) chooseFormTableEmoji(emoji string) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) chooseFormTableEmoji(emoji string) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.emojiPicker == nil || emoji == "" {
 		return
 	}
@@ -609,12 +609,12 @@ func (a *App) chooseFormTableEmoji(emoji string) {
 		return
 	}
 	state.rowForm.values[state.rowForm.definitions[fieldIndex].Value.Key] = emoji
-	a.emojiCatalog.rememberFormTableEmoji(emoji)
+	c.emoji.rememberFormTableEmoji(emoji)
 	state.emojiPicker = nil
 	clearFormTableRowValidationLocked(state)
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
 }
 
 // rememberFormTableEmoji keeps a small process-local MRU list for the picker.
@@ -634,24 +634,24 @@ func (a *formTableEmojiCatalog) rememberFormTableEmoji(emoji string) {
 }
 
 // buildFormTableEmojiPicker maps controller state onto the pure emoji dialog.
-func (a *App) buildFormTableEmojiPicker(snapshot *formTableEmojiPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableEmojiPicker(snapshot *formTableEmojiPickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	groups := make([]launcherview.FormTableEmojiGroup, 0, len(formTableEmojiGroups)+1)
-	if len(a.emojiCatalog.recentFormTableEmojis) > 0 {
+	if len(c.emoji.recentFormTableEmojis) > 0 {
 		groups = append(groups, launcherview.FormTableEmojiGroup{
-			Label: a.language.translate("i18n:ui_select_emoji_group_recent"), Marker: "🕘", Emojis: append([]string(nil), a.emojiCatalog.recentFormTableEmojis...),
+			Label: c.language.translate("i18n:ui_select_emoji_group_recent"), Marker: "🕘", Emojis: append([]string(nil), c.emoji.recentFormTableEmojis...),
 		})
 	}
 	for _, group := range formTableEmojiGroups {
-		groups = append(groups, launcherview.FormTableEmojiGroup{Label: a.language.translate("i18n:" + group.LabelKey), Marker: group.Marker, Emojis: append([]string(nil), group.Emojis...)})
+		groups = append(groups, launcherview.FormTableEmojiGroup{Label: c.language.translate("i18n:" + group.LabelKey), Marker: group.Marker, Emojis: append([]string(nil), group.Emojis...)})
 	}
 	theme := palette
 	iconTint := palette.TextSecondary
 	return launcherview.FormTableEmojiPicker(launcherview.FormTableEmojiPickerProps{
-		OverlayWidth: width, OverlayHeight: height, Window: a.formTableNativeWindow(), Theme: theme,
-		Title: a.language.translate("i18n:ui_select_emoji"), SearchLabel: a.language.translate("i18n:ui_select_emoji_search"),
-		SearchResultsLabel: a.language.translate("i18n:ui_select_emoji_search_results"), NoResultsLabel: a.language.translate("i18n:ui_select_emoji_no_results"),
-		CloseLabel: a.language.translate("i18n:ui_close"), SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)),
-		Groups: groups, SearchEntries: a.emojiCatalog.formTableEmojiSearchEntries, InitialEmoji: snapshot.initialEmoji,
-		OnChoose: a.chooseFormTableEmoji, OnCancel: a.closeFormTableEmojiPicker,
+		OverlayWidth: width, OverlayHeight: height, Window: c.formTableNativeWindow(), Theme: theme,
+		Title: c.language.translate("i18n:ui_select_emoji"), SearchLabel: c.language.translate("i18n:ui_select_emoji_search"),
+		SearchResultsLabel: c.language.translate("i18n:ui_select_emoji_search_results"), NoResultsLabel: c.language.translate("i18n:ui_select_emoji_no_results"),
+		CloseLabel: c.language.translate("i18n:ui_close"), SearchIcon: c.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)),
+		Groups: groups, SearchEntries: c.emoji.formTableEmojiSearchEntries, InitialEmoji: snapshot.initialEmoji,
+		OnChoose: c.chooseFormTableEmoji, OnCancel: c.closeFormTableEmojiPicker,
 	})
 }

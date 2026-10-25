@@ -195,7 +195,7 @@ func optionalIntegerValidators(hasRange bool, min, max int, errorKey string) []f
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
 func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.settingsWindow.tableEditor == nil
+	active := a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.formTables.settingsEditor == nil
 	if !active {
 		return false
 	}
@@ -266,15 +266,15 @@ func (a *App) recordHotkeySettingsField(index int) {
 func (a *App) openHotkeySettingsTable(index int) {
 	if form := a.hotkeySettings.Form(); a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && form != nil {
 		a.settingsWindow.row = index
-		a.openFormTableLocked(form, index)
+		a.formTables.openFormTableLocked(form, index)
 	}
-	a.finishOpeningFormTable()
+	a.formTables.finishOpeningFormTable()
 }
 
 // onGeneralQuerySettingsKey routes navigation to the focused query table instead of a built-in row.
 func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
 	fields := a.generalSettings.Form()
-	if !a.settingsWindow.open || a.settingsWindow.tab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.settingsWindow.tableEditor != nil {
+	if !a.settingsWindow.open || a.settingsWindow.tab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.formTables.settingsEditor != nil {
 		return false
 	}
 	switch event.Key {
@@ -304,9 +304,9 @@ func (a *App) focusGeneralQuerySettingsField(index int) {
 func (a *App) openGeneralQuerySettingsTable(index int) {
 	if form := a.generalSettings.Form(); a.settingsWindow.open && a.settingsWindow.tab == "general" && form != nil {
 		a.settingsWindow.row = index
-		a.openFormTableLocked(form, index)
+		a.formTables.openFormTableLocked(form, index)
 	}
-	a.finishOpeningFormTable()
+	a.formTables.finishOpeningFormTable()
 }
 
 // trayQueryRowIndexFromParam extracts a tray query row index from an open-settings param
@@ -344,12 +344,12 @@ func (a *App) openTrayQueryEditor(rowIndex int) {
 	// while the row editor opens, mirroring the inline table's edit button flow.
 	a.focusGeneralQuerySettingsField(index)
 	a.openGeneralQuerySettingsTable(index)
-	state := a.activeFormTableEditor()
+	state := a.formTables.activeFormTableEditor()
 	if state == nil || state.invalid || rowIndex >= len(state.rows) {
 		return
 	}
-	a.selectFormTableRow(rowIndex)
-	a.beginEditFormTableRowDirect()
+	a.formTables.selectFormTableRow(rowIndex)
+	a.formTables.beginEditFormTableRowDirect()
 }
 
 func (a *App) applyHotkeySettingsRawLocked(key, value string) {

@@ -123,8 +123,8 @@ func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AIComm
 		return
 	}
 	a.openPluginFormTable(fieldIndex)
-	a.beginAddFormTableRowDirect()
-	state := a.settingsWindow.tableEditor
+	a.formTables.beginAddFormTableRowDirect()
+	state := a.formTables.settingsEditor
 	if state == nil || state.rowForm == nil {
 		return
 	}
@@ -154,6 +154,6 @@ func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AIComm
 		}
 	}
 	state.status = ""
-	a.updateFormTableTextInput(state.rowForm.editor != nil)
-	a.invalidateFormTableWindow()
+	a.formTables.updateFormTableTextInput(state.rowForm.editor != nil)
+	a.formTables.invalidateFormTableWindow()
 }

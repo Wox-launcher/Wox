@@ -595,7 +595,7 @@ func (a *App) restoreQueryTextInput() {
 
 // queryCanFocus keeps modal editors from accepting query input without disabling normal focus switching.
 func (a *App) queryCanFocus() bool {
-	formTableActive := a.forms.launcherTableEditor != nil
+	formTableActive := a.formTables.launcherEditor != nil
 	return !a.show.HideQueryBox && !a.chat.chatFullscreen && !a.terminal.terminalFullscreen && a.forms.form == nil && !formTableActive && !a.actions.actionPanel &&
 		(a.requirements.requirementForm == nil || !a.requirements.requirementForm.active) && (a.conflicts.triggerConflict == nil || !a.conflicts.triggerConflict.active)
 }

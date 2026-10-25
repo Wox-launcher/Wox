@@ -30,7 +30,7 @@ func TestFormTableIgnoreRuleSaveDoesNotRestoreUncheckedSavedApp(t *testing.T) {
 func TestFormTableOrdinaryAppsColumnKeepsItsText(t *testing.T) {
 	app := bindTestApp(&App{})
 	column := formTableColumn{Key: "Apps", Type: "text"}
-	cell := app.formTableViewCell(column, map[string]any{"Apps": "ordinary plugin value"}, woxcomponent.ControlTheme{}, 1)
+	cell := app.formTables.formTableViewCell(column, map[string]any{"Apps": "ordinary plugin value"}, woxcomponent.ControlTheme{}, 1)
 	if cell.Text != "ordinary plugin value" || len(cell.Icons) != 0 {
 		t.Fatalf("ordinary Apps column was specialized: %+v", cell)
 	}
@@ -66,11 +66,11 @@ func TestFormTablePreviewRequestLifetime(t *testing.T) {
 		}
 	}
 	first := newEditor("old")
-	app.forms.launcherTableEditor = first
-	app.initFormTablePatternPreview(first)
+	app.formTables.launcherEditor = first
+	app.formTables.initFormTablePatternPreview(first)
 	oldResult := result()
 	first.rowForm.values["Pattern"] = "new"
-	app.refreshFormTablePatternPreview(first)
+	app.formTables.refreshFormTablePatternPreview(first)
 	newResult := result()
 	newResult()
 	oldResult()
@@ -78,8 +78,8 @@ func TestFormTablePreviewRequestLifetime(t *testing.T) {
 		t.Fatalf("stale result replaced current preview: %+v", first.patternPreview.apps)
 	}
 	second := newEditor("new")
-	app.forms.launcherTableEditor = second
-	app.initFormTablePatternPreview(second)
+	app.formTables.launcherEditor = second
+	app.formTables.initFormTablePatternPreview(second)
 	if !second.patternPreview.loading {
 		t.Fatal("reopening reused the previous editor's cache")
 	}
@@ -170,7 +170,7 @@ func TestFormTableIgnoreRuleAppPathTooltipPrefersPath(t *testing.T) {
 }
 
 func TestFormTableIgnoreRuleAppsCellShowsPathOnHover(t *testing.T) {
-	cell := (bindTestApp(&App{})).formTableIgnoreRuleAppsCell(map[string]any{
+	cell := bindTestApp(&App{}).formTables.formTableIgnoreRuleAppsCell(map[string]any{
 		"IncludeFuture": false,
 		"Apps": []map[string]any{
 			{"Name": "notepad", "Path": `C:\Windows\System32\notepad.exe`},

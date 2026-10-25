@@ -48,6 +48,7 @@ contract merely to reach another feature.
 | --- | --- |
 | `queryController`, `resultController` | Query editing, hints, history, generation timers; published rows, selection, refinements and scrolling |
 | `actionPanelController`, `formActionController` | Action filtering and selection; submitted action forms and their editor state |
+| `formTableController` | The shared table editor overlay: the Settings-hosted and launcher-hosted editor sessions, row editing, pickers and the emoji catalog. `App` decides which form currently owns a table; feature-specific rows (window-manager groups, AI providers, MCP servers, skills, plugin trigger keywords) are reached through callbacks to their owners |
 | `previewController` | Selected-preview visibility and resource transitions; Markdown and text-layout caches |
 | Remote, file, native-file, WebView, terminal and dictation controllers | Each preview's requests, caches, native/session state and cleanup |
 | `chatController`, `chatWindowController` | One chat session and attachment imports; the dedicated window presenting that session |

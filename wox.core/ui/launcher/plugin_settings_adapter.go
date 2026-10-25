@@ -245,7 +245,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 	editor.Metadata = &metadata
 	keywordDefinition := form.definitions[0]
 	innerWidth := max(float32(0), width-32)
-	keywordTable := a.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
+	keywordTable := a.formTables.formTableFieldProps(form.formFieldsSnapshot, callbacks, snapshot.palette, 0, keywordDefinition, innerWidth, 0)
 	keywordTable.Title = ""
 	keywordTable.Description = a.language.translate("i18n:ui_plugin_trigger_keywords_tip")
 	for index := range keywordTable.Rows {

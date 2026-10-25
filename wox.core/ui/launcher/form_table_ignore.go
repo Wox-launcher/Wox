@@ -138,7 +138,7 @@ func formTableIgnoreRuleAppPathTooltip(app ignoredHotkeyApp) string {
 }
 
 // initFormTablePatternPreview opens the live match list and defaults new rules to IncludeFuture.
-func (a *App) initFormTablePatternPreview(state *formTableEditorState) {
+func (c *formTableController) initFormTablePatternPreview(state *formTableEditorState) {
 	if state == nil || state.rowForm == nil {
 		return
 	}
@@ -151,14 +151,14 @@ func (a *App) initFormTablePatternPreview(state *formTableEditorState) {
 		preview.seedFromSaved = len(preview.savedApps) > 0
 	}
 	state.patternPreview = preview
-	a.refreshFormTablePatternPreview(state)
+	c.refreshFormTablePatternPreview(state)
 }
 
 func formTablePatternPreviewIncludeFuture(state *formTableEditorState) bool {
 	return state != nil && state.rowForm != nil && state.rowForm.values["IncludeFuture"] == "true"
 }
 
-func (a *App) refreshFormTablePatternPreview(state *formTableEditorState) {
+func (c *formTableController) refreshFormTablePatternPreview(state *formTableEditorState) {
 	if state == nil || state.patternPreview == nil || state.rowForm == nil {
 		return
 	}
@@ -166,7 +166,7 @@ func (a *App) refreshFormTablePatternPreview(state *formTableEditorState) {
 	includeFuture := formTablePatternPreviewIncludeFuture(state)
 	preview := state.patternPreview
 	if !preview.requested || preview.pattern != pattern {
-		a.loadFormTablePatternPreview(state, pattern)
+		c.loadFormTablePatternPreview(state, pattern)
 		return
 	}
 	matches := preview.matches
@@ -196,14 +196,14 @@ func (a *App) refreshFormTablePatternPreview(state *formTableEditorState) {
 	state.patternPreview.apps = apps
 }
 
-func (a *App) toggleFormTablePatternPreviewApp(key string, checked bool) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) toggleFormTablePatternPreviewApp(key string, checked bool) {
+	state := c.activeFormTableEditor()
 	if !formTablePatternPreviewToggle(state, key, checked) {
 		return
 	}
-	a.refreshFormTablePatternPreview(state)
+	c.refreshFormTablePatternPreview(state)
 	clearFormTableRowValidationLocked(state)
-	a.invalidateFormTableWindow()
+	c.invalidateFormTableWindow()
 }
 
 // formTablePatternPreviewToggle updates one preview checkbox. Unchecking any app
@@ -226,46 +226,46 @@ func formTablePatternPreviewToggle(state *formTableEditorState, key string, chec
 
 // loadFormTablePatternPreview asks core to match its complete search candidates.
 // Each editor owns its request; late results cannot overwrite a newer pattern or editor.
-func (a *App) loadFormTablePatternPreview(state *formTableEditorState, pattern string) {
+func (c *formTableController) loadFormTablePatternPreview(state *formTableEditorState, pattern string) {
 	preview := state.patternPreview
 	preview.request++
 	request := preview.request
 	preview.pattern, preview.requested = pattern, true
 	preview.matches, preview.apps = nil, nil
 	preview.errorText = ""
-	preview.loading = pattern != "" && a.services != nil
+	preview.loading = pattern != "" && c.services != nil
 	if !preview.loading {
 		return
 	}
-	util.Go(a.lifecycleCtx, "load ignore rule preview", func() {
-		ctx, cancel := context.WithTimeout(a.lifecycleCtx, 10*time.Second)
+	util.Go(c.lifecycleCtx, "load ignore rule preview", func() {
+		ctx, cancel := context.WithTimeout(c.lifecycleCtx, 10*time.Second)
 		defer cancel()
-		loaded, err := a.services.IndexedApps(ctx, a.sessionID, pattern)
-		_ = a.runOnUI("apply ignore rule preview", func() {
-			if a.activeFormTableEditor() != state || state.patternPreview != preview || preview.request != request {
+		loaded, err := c.services.IndexedApps(ctx, c.sessionID, pattern)
+		_ = c.runOnUI("apply ignore rule preview", func() {
+			if c.activeFormTableEditor() != state || state.patternPreview != preview || preview.request != request {
 				return
 			}
 			preview.loading = false
 			if err != nil {
-				preview.errorText = a.language.translate("i18n:plugin_app_ignore_rule_preview_failed")
+				preview.errorText = c.language.translate("i18n:plugin_app_ignore_rule_preview_failed")
 				util.GetLogger().Warn(ctx, "failed to load ignore rule preview: "+err.Error())
 			} else {
 				for _, app := range loaded {
 					preview.matches = append(preview.matches, ignoredHotkeyApp{Name: app.Name, Identity: app.Identity, Path: app.Path, Icon: woxImage{ImageType: app.Icon.ImageType, ImageData: app.Icon.ImageData}})
 				}
-				a.refreshFormTablePatternPreview(state)
+				c.refreshFormTablePatternPreview(state)
 			}
-			a.invalidateFormTableWindow()
+			c.invalidateFormTableWindow()
 		})
 	})
 }
 
-func (a *App) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
+func (c *formTableController) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
 	if state == nil || state.rowForm == nil {
 		return false
 	}
 	if !formTableHasPatternPreview(state.definition) {
-		a.replaceFormTableEditorRows(state, []map[string]any{formTableRowFromFields(state.definition, state.rowForm, state.rowBase)})
+		c.replaceFormTableEditorRows(state, []map[string]any{formTableRowFromFields(state.definition, state.rowForm, state.rowBase)})
 		return true
 	}
 
@@ -278,16 +278,16 @@ func (a *App) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
 	if !includeFuture && (preview.loading || preview.errorText != "") {
 		state.status = preview.errorText
 		if preview.loading {
-			state.status = a.language.translate("i18n:ui_hotkey_ignore_apps_loading")
+			state.status = c.language.translate("i18n:ui_hotkey_ignore_apps_loading")
 		}
-		a.invalidateFormTableWindow()
+		c.invalidateFormTableWindow()
 		return false
 	}
 	matches := preview.matches
 	row, errKey := formTableIgnoreRuleSaveRow(pattern, includeFuture, state.patternPreview, matches)
 	if errKey != "" {
-		state.status = a.language.translate(errKey)
-		a.invalidateFormTableWindow()
+		state.status = c.language.translate(errKey)
+		c.invalidateFormTableWindow()
 		return false
 	}
 	base := formTableRowFromFields(state.definition, state.rowForm, state.rowBase)
@@ -297,11 +297,11 @@ func (a *App) applyFormTableIgnoreRuleSave(state *formTableEditorState) bool {
 	if includeFuture {
 		delete(base, "Apps")
 	}
-	a.replaceFormTableEditorRows(state, []map[string]any{base})
+	c.replaceFormTableEditorRows(state, []map[string]any{base})
 	return true
 }
 
-func (a *App) replaceFormTableEditorRows(state *formTableEditorState, rows []map[string]any) {
+func (c *formTableController) replaceFormTableEditorRows(state *formTableEditorState, rows []map[string]any) {
 	if state.rowIndex >= 0 && state.rowIndex < len(state.rows) {
 		before := append([]map[string]any{}, state.rows[:state.rowIndex]...)
 		after := append([]map[string]any{}, state.rows[state.rowIndex+1:]...)

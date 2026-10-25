@@ -143,7 +143,7 @@ func containsString(values []string, target string) bool {
 
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
-	tableEditor := a.activeFormTableEditor()
+	tableEditor := a.formTables.activeFormTableEditor()
 	return target != nil && (((a.onboarding.isOpen() || (a.settingsWindow.open && a.settingsWindow.tab == "hotkey")) && target == a.hotkeySettings.Form()) ||
 		a.onboarding.ownsHotkeyTarget(target) ||
 		(tableEditor != nil && tableEditor.rowForm == target) ||
@@ -349,7 +349,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 	state.checking = false
 	state.status = state.hint
 	state.statusError = false
-	if editor := a.activeFormTableEditor(); editor != nil && editor.rowForm == state.target {
+	if editor := a.formTables.activeFormTableEditor(); editor != nil && editor.rowForm == state.target {
 		editor.status = ""
 	}
 	a.invalidateHotkeyWindows()
@@ -544,7 +544,7 @@ func isFunctionKeyEvent(key woxui.Key) bool {
 
 // recordFormTableRowHotkey starts recording for a specialized hotkey column in the shared table row editor.
 func (a *App) recordFormTableRowHotkey(index int) {
-	state := a.activeFormTableEditor()
+	state := a.formTables.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return
 	}
@@ -557,5 +557,5 @@ func (a *App) recordFormTableRowHotkey(index int) {
 			break
 		}
 	}
-	a.startHotkeyRecording("form-table-row", target, index, "", allowed, a.onFormTableKey)
+	a.startHotkeyRecording("form-table-row", target, index, "", allowed, a.formTables.onFormTableKey)
 }

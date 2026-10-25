@@ -10,7 +10,7 @@ type formActionServices interface {
 	SubmitFormAction(context.Context, string, string, string, string, map[string]string) error
 }
 
-// formActionController owns action-form editing and its launcher table session.
+// formActionController owns action-form editing.
 // Shared settings forms and native hotkey recording remain separate capabilities.
 type formActionController struct {
 	services                   formActionServices
@@ -26,7 +26,6 @@ type formActionController struct {
 	commitHotkeyRecordingValue func()
 	formFieldNativeWindow      func(string) *woxui.Window
 	form                       *formState
-	launcherTableEditor        *formTableEditorState
 }
 
 // bindForms connects form editing to shared input and table-editor capabilities.

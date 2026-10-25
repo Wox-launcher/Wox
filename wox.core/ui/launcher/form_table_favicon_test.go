@@ -29,12 +29,12 @@ func TestFormTableFaviconShowsURLHint(t *testing.T) {
 	app.language.translations = map[string]string{
 		"ui_image_editor_url_hint": "Paste an image URL or a website URL.",
 	}
-	app.openFormTableFavicon(0)
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.tableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
+	app.formTables.openFormTableFavicon(0)
+	if !formTableFaviconContainsText(app.formTables.buildFormTableFavicon(app.formTables.settingsEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
 		t.Fatal("idle dialog must explain image and website URLs")
 	}
-	app.settingsWindow.tableEditor.favicon.error = "bad url"
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.tableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
+	app.formTables.settingsEditor.favicon.error = "bad url"
+	if !formTableFaviconContainsText(app.formTables.buildFormTableFavicon(app.formTables.settingsEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
 		t.Fatal("errors must replace the URL hint")
 	}
 }
@@ -45,10 +45,10 @@ func TestFormTableURLFetchError(t *testing.T) {
 		"ui_image_editor_url_failed":      "generic-fail",
 		"ui_image_editor_url_unavailable": "expired-or-private",
 	}
-	if got := formTableURLFetchError(app, errors.New("network down")); got != "generic-fail" {
+	if got := formTableURLFetchError(&app.language, errors.New("network down")); got != "generic-fail" {
 		t.Fatalf("generic error = %q", got)
 	}
-	if got := formTableURLFetchError(app, &util.HTTPStatusError{StatusCode: 404, URL: "https://example.com/a.png"}); got != "expired-or-private" {
+	if got := formTableURLFetchError(&app.language, &util.HTTPStatusError{StatusCode: 404, URL: "https://example.com/a.png"}); got != "expired-or-private" {
 		t.Fatalf("404 error = %q", got)
 	}
 }
@@ -78,23 +78,24 @@ func TestFormTableFaviconLifecycle(t *testing.T) {
 				service.err = errors.New("network unavailable")
 			}
 			app.services = service
+			app.bindFormTables()
 			callbacks := make(chan func(), 1)
-			state := app.settingsWindow.tableEditor
+			state := app.formTables.settingsEditor
 			original := state.rowForm.values["Icon"]
-			app.openFormTableFavicon(1)
+			app.formTables.openFormTableFavicon(1)
 			if state.favicon != nil {
 				t.Fatal("opened for a non-image field")
 			}
-			app.openFormTableFavicon(0)
-			app.fetchFormTableFavicon()
+			app.formTables.openFormTableFavicon(0)
+			app.formTables.fetchFormTableFavicon()
 			if state.favicon.error == "" || state.favicon.loading {
 				t.Fatal("invalid URL must stay editable")
 			}
 			state.favicon.url = "example.com"
-			if app.onFormTableTextInput(woxui.TextInputEvent{}) {
+			if app.formTables.onFormTableTextInput(woxui.TextInputEvent{}) {
 				t.Fatal("dialog text must reach its native field")
 			}
-			app.fetchFormTableFavicon()
+			app.formTables.fetchFormTableFavicon()
 			if !state.favicon.loading {
 				t.Fatal("missing loading state")
 			}
@@ -105,10 +106,10 @@ func TestFormTableFaviconLifecycle(t *testing.T) {
 				app.uiCall = nil
 				switch outcome {
 				case "dismissed":
-					app.onFormTableKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true})
+					app.formTables.onFormTableKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true})
 				case "reopened":
-					app.closeFormTableFavicon()
-					app.openFormTableFavicon(0)
+					app.formTables.closeFormTableFavicon()
+					app.formTables.openFormTableFavicon(0)
 				case "different-row":
 					row := *state.rowForm
 					state.rowForm = &row

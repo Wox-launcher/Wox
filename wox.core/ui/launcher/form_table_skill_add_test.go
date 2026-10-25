@@ -75,9 +75,9 @@ func waitForSettingsUpdate(t *testing.T, services *skillAddTestServices, key str
 func TestOpenFormTableSkillAddDialog(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
+	app.formTables.openFormTableSkillAdd()
 
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state == nil || state.skillAdd == nil {
 		t.Fatal("add-skill dialog did not open over the skills table")
 	}
@@ -95,10 +95,10 @@ func TestOpenFormTableSkillAddDialog(t *testing.T) {
 func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
+	app.formTables.openFormTableSkillAdd()
 
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.tableEditor), settingsPalette(), 900, 700, 1)
+		return app.formTables.buildFormTableOverlay(snapshotFormTableEditorLocked(app.formTables.settingsEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
 	app.settingsWindow.host = host
@@ -119,10 +119,10 @@ func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
-	app.switchFormTableSkillAddTab(1)
+	app.formTables.openFormTableSkillAdd()
+	app.formTables.switchFormTableSkillAddTab(1)
 
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state.skillAdd.tab != 1 {
 		t.Fatalf("tab = %d, want remote", state.skillAdd.tab)
 	}
@@ -130,9 +130,9 @@ func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 		t.Fatalf("focused field = %d, want the SourceUrl field", state.skillAdd.fields.focused)
 	}
 
-	app.switchFormTableSkillAddTab(0)
-	if app.settingsWindow.tableEditor.skillAdd.tab != 0 {
-		t.Fatalf("switching back to local failed, tab = %d", app.settingsWindow.tableEditor.skillAdd.tab)
+	app.formTables.switchFormTableSkillAddTab(0)
+	if app.formTables.settingsEditor.skillAdd.tab != 0 {
+		t.Fatalf("switching back to local failed, tab = %d", app.formTables.settingsEditor.skillAdd.tab)
 	}
 }
 
@@ -140,11 +140,11 @@ func TestAddLocalSkillFromDialogAppendsAndSaves(t *testing.T) {
 	services := &skillAddTestServices{}
 	app := skillAddTestApp(t, services)
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
-	app.setFormTableSkillAddText(0, "/tmp/my-skill")
-	app.addFormTableSkill()
+	app.formTables.openFormTableSkillAdd()
+	app.formTables.setFormTableSkillAddText(0, "/tmp/my-skill")
+	app.formTables.addFormTableSkill()
 
-	if app.settingsWindow.tableEditor != nil {
+	if app.formTables.settingsEditor != nil {
 		t.Fatal("successful local skill add should close the dialog")
 	}
 	waitForSettingsUpdate(t, services, "AISkills")
@@ -156,10 +156,10 @@ func TestAddLocalSkillFromDialogAppendsAndSaves(t *testing.T) {
 func TestAddSkillDialogValidatesLocalPath(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
-	app.addFormTableSkill()
+	app.formTables.openFormTableSkillAdd()
+	app.formTables.addFormTableSkill()
 
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state == nil || state.skillAdd == nil {
 		t.Fatal("empty path must keep the dialog open")
 	}
@@ -178,13 +178,13 @@ func TestAddRemoteSkillFromDialogClonesAndSaves(t *testing.T) {
 	}}
 	app := skillAddTestApp(t, services)
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
-	app.switchFormTableSkillAddTab(1)
-	app.setFormTableSkillAddText(1, "https://github.com/user/repo")
-	app.addFormTableSkill()
+	app.formTables.openFormTableSkillAdd()
+	app.formTables.switchFormTableSkillAddTab(1)
+	app.formTables.setFormTableSkillAddText(1, "https://github.com/user/repo")
+	app.formTables.addFormTableSkill()
 
 	waitForSettingsUpdate(t, services, "AISkills")
-	if app.settingsWindow.tableEditor != nil {
+	if app.formTables.settingsEditor != nil {
 		t.Fatal("successful remote skill clone should close the dialog")
 	}
 	value := services.updated["AISkills"]
@@ -197,14 +197,14 @@ func TestAddRemoteSkillFromDialogKeepsOpenOnCloneError(t *testing.T) {
 	services := &skillAddTestServices{cloneErr: context.DeadlineExceeded}
 	app := skillAddTestApp(t, services)
 	app.openAISettingsTable(0)
-	app.openFormTableSkillAdd()
-	app.switchFormTableSkillAddTab(1)
-	app.setFormTableSkillAddText(1, "https://github.com/user/repo")
-	app.addFormTableSkill()
+	app.formTables.openFormTableSkillAdd()
+	app.formTables.switchFormTableSkillAddTab(1)
+	app.formTables.setFormTableSkillAddText(1, "https://github.com/user/repo")
+	app.formTables.addFormTableSkill()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		state := app.settingsWindow.tableEditor
+		state := app.formTables.settingsEditor
 		if state != nil && state.skillAdd != nil && !state.skillAdd.cloning && state.skillAdd.error != "" {
 			if len(state.rows) != 0 {
 				t.Fatal("clone failure must not append rows")
@@ -213,5 +213,5 @@ func TestAddRemoteSkillFromDialogKeepsOpenOnCloneError(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("clone failure should surface in the dialog and keep it open, editor=%v", app.settingsWindow.tableEditor)
+	t.Fatalf("clone failure should surface in the dialog and keep it open, editor=%v", app.formTables.settingsEditor)
 }

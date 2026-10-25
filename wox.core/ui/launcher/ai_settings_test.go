@@ -29,7 +29,7 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 	if providers.Columns[4].Key != "ApiKey" || providers.Columns[4].Type != "password" || !providers.Columns[4].HideInTable {
 		t.Fatalf("provider API key column should stay hidden in the table, got %+v", providers.Columns[4])
 	}
-	if shown := (bindTestApp(&App{})).formTableDisplayValue(providers.Columns[4], map[string]any{"ApiKey": "secret"}); shown != "••••••" {
+	if shown := bindTestApp(&App{}).formTables.formTableDisplayValue(providers.Columns[4], map[string]any{"ApiKey": "secret"}); shown != "••••••" {
 		t.Fatalf("provider API key display = %q, want masked text", shown)
 	}
 	if providers.Columns[1].Key != "Name" || !providers.Columns[1].Filterable {
@@ -102,7 +102,7 @@ func TestInstalledAIProviderFields(t *testing.T) {
 
 func TestBuiltinSkillViewRowIsReadOnly(t *testing.T) {
 	definition := newAISettingsForm(settingsData{}).definitions[3]
-	rows := (bindTestApp(&App{})).formTableViewRows(definition, nil, []map[string]any{
+	rows := bindTestApp(&App{}).formTables.formTableViewRows(definition, nil, []map[string]any{
 		{"Name": "wox-plugin-creator", "Builtin": true},
 		{"Name": "user-skill"},
 	}, woxcomponent.ControlTheme{}, 1)

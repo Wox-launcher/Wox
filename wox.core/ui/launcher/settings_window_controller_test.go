@@ -38,12 +38,11 @@ func TestSettingsWindowSessionTransitionsDropPageOverlays(t *testing.T) {
 
 	showOverlays()
 	c.saving = true
-	c.tableEditor = &formTableEditorState{}
 	c.flashLocked("built-in:MainHotkey")
 	if !c.endSessionLocked() {
 		t.Fatal("endSessionLocked must report the open session")
 	}
-	if c.open || c.saving || c.tableEditor != nil || c.flash != "" || c.flashTimer != nil {
+	if c.open || c.saving || c.flash != "" || c.flashTimer != nil {
 		t.Fatal("closing Settings must release session state")
 	}
 	if c.demo != nil || c.cloudPlanTooltip != nil || c.inlineTooltip != nil {

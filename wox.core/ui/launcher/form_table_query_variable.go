@@ -33,8 +33,8 @@ func formTableQueryVariableFieldDecorations(value string, editing queryVariableT
 }
 
 // dismissFormTableQueryVariable removes one {wox:...} placeholder after its chip close control is clicked.
-func (a *App) dismissFormTableQueryVariable(index, start, end int) bool {
-	state := a.activeFormTableEditor()
+func (c *formTableController) dismissFormTableQueryVariable(index, start, end int) bool {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return false
 	}
@@ -52,21 +52,21 @@ func (a *App) dismissFormTableQueryVariable(index, start, end int) bool {
 		state.rowForm.editor.SetText(next, false)
 		state.rowForm.editor.SetCaret(start)
 		state.queryVariableEdit = queryVariableToken{}
-		a.finishFormTableQueryVariableEditorChange()
+		c.finishFormTableQueryVariableEditorChange()
 		return true
 	}
-	a.setFormTableRowText(index, next)
+	c.setFormTableRowText(index, next)
 	return true
 }
 
 // editFormTableQueryVariable expands a parameter chip so its name can be renamed.
-func (a *App) editFormTableQueryVariable(index, start, end int) bool {
-	state := a.activeFormTableEditor()
+func (c *formTableController) editFormTableQueryVariable(index, start, end int) bool {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return false
 	}
 	if state.rowForm.focused != index || state.rowForm.editor == nil {
-		a.focusFormTableRowField(index)
+		c.focusFormTableRowField(index)
 	}
 	if state.rowForm.editor == nil {
 		return false
@@ -79,11 +79,11 @@ func (a *App) editFormTableQueryVariable(index, start, end int) bool {
 	state.queryVariableEdit = token
 	if nameStart, nameEnd, ok := queryVariableParameterNameRange(text, token); ok {
 		state.rowForm.editor.SetSelection(nameStart, nameEnd)
-		a.finishFormTableQueryVariableEditorMove()
+		c.finishFormTableQueryVariableEditorMove()
 		return true
 	}
 	state.rowForm.editor.SetCaret(start + 1)
-	a.finishFormTableQueryVariableEditorMove()
+	c.finishFormTableQueryVariableEditorMove()
 	return true
 }
 

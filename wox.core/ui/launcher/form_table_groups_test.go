@@ -84,18 +84,16 @@ func TestBeginFormTableRowEditCollapsesDefaultGroups(t *testing.T) {
 	}}
 	target := newFormFieldsState([]formDefinition{definition}, map[string]string{"webSearches": `[{"Keyword":"g"}]`}, true)
 	app := bindTestApp(&App{
-		forms: formActionController{
-			launcherTableEditor: &formTableEditorState{
-				target: &target, definition: definition, rows: []map[string]any{{"Keyword": "g"}}, selected: 0, rowIndex: -1, deletePending: -1,
-			},
-		},
+		formTables: formTableController{launcherEditor: &formTableEditorState{
+			target: &target, definition: definition, rows: []map[string]any{{"Keyword": "g"}}, selected: 0, rowIndex: -1, deletePending: -1,
+		}},
 	})
-	app.beginFormTableRowEdit(0, false, false)
-	if !app.forms.launcherTableEditor.collapsedGroups["webview"] {
-		t.Fatalf("collapsed = %#v", app.forms.launcherTableEditor.collapsedGroups)
+	app.formTables.beginFormTableRowEdit(0, false, false)
+	if !app.formTables.launcherEditor.collapsedGroups["webview"] {
+		t.Fatalf("collapsed = %#v", app.formTables.launcherEditor.collapsedGroups)
 	}
-	app.toggleFormTableRowGroup("webview")
-	if app.forms.launcherTableEditor.collapsedGroups["webview"] {
+	app.formTables.toggleFormTableRowGroup("webview")
+	if app.formTables.launcherEditor.collapsedGroups["webview"] {
 		t.Fatal("toggle should expand a collapsed group")
 	}
 }

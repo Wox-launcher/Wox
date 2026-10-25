@@ -31,15 +31,15 @@ type formTableSkillAddSnapshot struct {
 }
 
 // openFormTableSkillAdd opens the shared add-skill dialog on the local tab.
-func (a *App) openFormTableSkillAdd() {
-	a.openFormTableSkillAddTab(0)
+func (c *formTableController) openFormTableSkillAdd() {
+	c.openFormTableSkillAddTab(0)
 }
 
 // openFormTableSkillAddTab keeps the inline table and the list editor footer both
 // pointing at the same dialog, matching Flutter's single custom create dialog.
-func (a *App) openFormTableSkillAddTab(tab int) {
-	state := a.settingsWindow.tableEditor
-	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
+func (c *formTableController) openFormTableSkillAddTab(tab int) {
+	state := c.settingsEditor
+	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != c.aiSettings().Form() {
 		return
 	}
 	if tab != 1 {
@@ -54,21 +54,21 @@ func (a *App) openFormTableSkillAddTab(tab int) {
 	state.status = ""
 	state.deletePending = -1
 	state.deleteDirect = false
-	a.updateFormTableTextInput(true)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(true)
+	c.invalidateFormTableWindow()
 }
 
 // cancelFormTableSkillAdd dismisses the dialog and returns to the settings page.
-func (a *App) cancelFormTableSkillAdd() {
-	state := a.activeFormTableEditor()
+func (c *formTableController) cancelFormTableSkillAdd() {
+	state := c.activeFormTableEditor()
 	if state != nil && state.skillAdd != nil && !state.skillAdd.cloning {
-		a.closeFormTableEditor()
+		c.closeFormTableEditor()
 	}
 }
 
 // switchFormTableSkillAddTab changes the dialog between the local and remote inputs.
-func (a *App) switchFormTableSkillAddTab(tab int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) switchFormTableSkillAddTab(tab int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.skillAdd == nil || state.skillAdd.cloning {
 		return
 	}
@@ -78,12 +78,12 @@ func (a *App) switchFormTableSkillAddTab(tab int) {
 	state.skillAdd.tab = tab
 	state.skillAdd.error = ""
 	setFormFieldsFocusLocked(state.skillAdd.fields, tab)
-	a.updateFormTableTextInput(true)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(true)
+	c.invalidateFormTableWindow()
 }
 
-func (a *App) focusFormTableSkillAddField(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) focusFormTableSkillAddField(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.skillAdd == nil || index < 0 || index >= len(state.skillAdd.fields.definitions) || index != state.skillAdd.tab {
 		return
 	}
@@ -94,29 +94,29 @@ func (a *App) focusFormTableSkillAddField(index int) {
 		setFormFieldsFocusLocked(fields, index)
 	}
 	textInput := fields.editor != nil
-	a.updateFormTableTextInput(textInput)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(textInput)
+	c.invalidateFormTableWindow()
 }
 
-func (a *App) setFormTableSkillAddText(index int, value string) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) setFormTableSkillAddText(index int, value string) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.skillAdd == nil || !setFormFieldsTextLocked(state.skillAdd.fields, index, value) {
 		return
 	}
 	state.skillAdd.error = ""
-	a.invalidateFormTableWindow()
+	c.invalidateFormTableWindow()
 }
 
 // pickFormTableSkillAddDirectory fills the local path field from the platform picker.
-func (a *App) pickFormTableSkillAddDirectory(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) pickFormTableSkillAddDirectory(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.skillAdd == nil || index != 0 || index >= len(state.skillAdd.fields.definitions) || state.skillAdd.fields.definitions[index].Type != "dirPath" {
 		return
 	}
 	fields := state.skillAdd.fields
-	a.updateFormTableTextInput(false)
-	path, err := a.formTableNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
-	if a.activeFormTableEditor() != state || state.skillAdd == nil || state.skillAdd.fields != fields {
+	c.updateFormTableTextInput(false)
+	path, err := c.formTableNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
+	if c.activeFormTableEditor() != state || state.skillAdd == nil || state.skillAdd.fields != fields {
 		return
 	}
 	if err != nil {
@@ -128,14 +128,14 @@ func (a *App) pickFormTableSkillAddDirectory(index int) {
 		state.skillAdd.error = ""
 	}
 	textInput := fields.editor != nil
-	a.updateFormTableTextInput(textInput)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(textInput)
+	c.invalidateFormTableWindow()
 }
 
 // addFormTableSkill validates the active tab and either appends a local skill or
 // clones the remote repository, mirroring Flutter's add dialog confirm action.
-func (a *App) addFormTableSkill() {
-	state := a.activeFormTableEditor()
+func (c *formTableController) addFormTableSkill() {
+	state := c.activeFormTableEditor()
 	if state == nil || state.skillAdd == nil || state.skillAdd.cloning {
 		return
 	}
@@ -143,59 +143,59 @@ func (a *App) addFormTableSkill() {
 	if state.skillAdd.tab == 0 {
 		path := strings.TrimSpace(state.skillAdd.fields.values["Path"])
 		if path == "" {
-			state.skillAdd.error = a.language.translate("i18n:ui_ai_skill_add_path_required")
-			a.invalidateFormTableWindow()
+			state.skillAdd.error = c.language.translate("i18n:ui_ai_skill_add_path_required")
+			c.invalidateFormTableWindow()
 			return
 		}
-		a.addLocalSkill(state, path)
+		c.addLocalSkill(state, path)
 		return
 	}
 	url := strings.TrimSpace(state.skillAdd.fields.values["SourceUrl"])
 	if url == "" {
-		state.skillAdd.error = a.language.translate("i18n:ui_ai_skill_add_url_required")
-		a.invalidateFormTableWindow()
+		state.skillAdd.error = c.language.translate("i18n:ui_ai_skill_add_url_required")
+		c.invalidateFormTableWindow()
 		return
 	}
-	a.beginRemoteSkillClone(state, url)
+	c.beginRemoteSkillClone(state, url)
 }
 
 // addLocalSkill appends one Path row and persists it through the shared settings save.
-func (a *App) addLocalSkill(state *formTableEditorState, path string) {
+func (c *formTableController) addLocalSkill(state *formTableEditorState, path string) {
 	previousValue := state.target.values[state.definition.Value.Key]
 	state.rows = append(state.rows, map[string]any{"Path": path})
 	state.selected = len(state.rows) - 1
-	if err := a.commitFormTableRowsLocked(state); err != nil {
+	if err := c.commitFormTableRowsLocked(state); err != nil {
 		state.skillAdd.error = err.Error()
-		a.invalidateFormTableWindow()
+		c.invalidateFormTableWindow()
 		return
 	}
 	key := state.definition.Value.Key
 	value := state.target.values[key]
 	state.saving = true
-	a.settingsWindow.saving = true
-	a.closeFormTableEditor()
-	util.Go(a.lifecycleCtx, "save settings table after local skill add", func() {
-		a.saveSettingsTable(state, key, value, previousValue)
+	c.settings.saving = true
+	c.closeFormTableEditor()
+	util.Go(c.lifecycleCtx, "save settings table after local skill add", func() {
+		c.saveSettingsTable(state, key, value, previousValue)
 	})
 }
 
 // beginRemoteSkillClone shows the cloning indicator while the repository is fetched.
-func (a *App) beginRemoteSkillClone(state *formTableEditorState, url string) {
+func (c *formTableController) beginRemoteSkillClone(state *formTableEditorState, url string) {
 	previousValue := state.target.values[state.definition.Value.Key]
 	state.skillAdd.cloning = true
 	state.skillAdd.error = ""
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
-	util.Go(a.lifecycleCtx, "clone AI skills from add dialog", func() {
-		a.cloneRemoteSkillsForDialog(state, url, previousValue)
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
+	util.Go(c.lifecycleCtx, "clone AI skills from add dialog", func() {
+		c.cloneRemoteSkillsForDialog(state, url, previousValue)
 	})
 }
 
 // cloneRemoteSkillsForDialog discovers repository skills, appends them atomically,
 // and persists the combined setting, keeping the dialog open on failure.
-func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previousValue string) {
+func (c *formTableController) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previousValue string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	loaded, err := a.services.CloneAISkills(ctx, a.sessionID, url)
+	loaded, err := c.services.CloneAISkills(ctx, c.sessionID, url)
 	cancel()
 	skills := make([]map[string]any, len(loaded))
 	for index, skill := range loaded {
@@ -210,61 +210,61 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 
 	var value string
 	save := false
-	_ = a.runOnUI("apply cloned AI skills to add dialog", func() {
-		if a.settingsWindow.tableEditor != state || state.skillAdd == nil {
+	_ = c.runOnUI("apply cloned AI skills to add dialog", func() {
+		if c.settingsEditor != state || state.skillAdd == nil {
 			return
 		}
 		state.skillAdd.cloning = false
 		if err != nil {
 			state.skillAdd.error = err.Error()
-			a.updateFormTableTextInput(true)
-			a.invalidateFormTableWindow()
+			c.updateFormTableTextInput(true)
+			c.invalidateFormTableWindow()
 			return
 		}
 		state.rows = append(state.rows, cloneFormTableRows(skills)...)
 		state.selected = len(state.rows) - 1
-		if commitErr := a.commitFormTableRowsLocked(state); commitErr != nil {
+		if commitErr := c.commitFormTableRowsLocked(state); commitErr != nil {
 			state.skillAdd.error = commitErr.Error()
-			a.updateFormTableTextInput(true)
-			a.invalidateFormTableWindow()
+			c.updateFormTableTextInput(true)
+			c.invalidateFormTableWindow()
 			return
 		}
 		value = state.target.values[state.definition.Value.Key]
 		save = true
 		state.saving = true
-		a.settingsWindow.saving = true
-		a.closeFormTableEditor()
+		c.settings.saving = true
+		c.closeFormTableEditor()
 	})
 	if save {
-		a.saveSettingsTable(state, "AISkills", value, previousValue)
+		c.saveSettingsTable(state, "AISkills", value, previousValue)
 	}
 }
 
 // buildFormTableSkillAddDialog maps the add-skill state onto the shared dialog surface.
-func (a *App) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableSkillAddDialog(snapshot *formTableSkillAddSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	fields := snapshot.fields
 	callbacks := formFieldCallbacks{
 		idPrefix:   "form-table-skill-add",
 		imageScale: imageScale,
-		focus:      a.focusFormTableSkillAddField,
-		setText:    a.setFormTableSkillAddText,
-		onKey:      a.onFormTableKey,
-		pickDir:    a.pickFormTableSkillAddDirectory,
+		focus:      c.focusFormTableSkillAddField,
+		setText:    c.setFormTableSkillAddText,
+		onKey:      c.onFormTableKey,
+		pickDir:    c.pickFormTableSkillAddDirectory,
 	}
 	theme := palette
-	cancelLabel := a.language.translate("i18n:ui_cancel")
-	addLabel := a.language.translate("i18n:ui_add")
+	cancelLabel := c.language.translate("i18n:ui_cancel")
+	addLabel := c.language.translate("i18n:ui_add")
 	fieldWidth := max(float32(0), min(float32(480), width-140))
 	definition := fields.definitions[snapshot.tab]
-	field := a.buildFormTableRowField(*fields, callbacks, palette, snapshot.tab, definition, fieldWidth, a.formTableRowLabelWidth(fields.definitions), "")
+	field := c.buildFormTableRowField(*fields, callbacks, palette, snapshot.tab, definition, fieldWidth, c.formTableRowLabelWidth(fields.definitions), "")
 	return launcherview.FormTableSkillAddDialog(launcherview.FormTableSkillAddDialogProps{
 		Width: width, Height: height,
-		Title:      a.language.translate("i18n:ui_ai_skill_add"),
-		LocalLabel: a.language.translate("i18n:ui_ai_skill_add_local"), RemoteLabel: a.language.translate("i18n:ui_ai_skill_add_remote"),
-		LocalHint: a.language.translate("i18n:ui_ai_skill_add_local_hint"), RemoteHint: a.language.translate("i18n:ui_ai_skill_add_remote_hint"),
-		Tab: snapshot.tab, Error: snapshot.error, Cloning: snapshot.cloning, CloningLabel: a.language.translate("i18n:ui_ai_skill_cloning"),
-		CancelLabel: cancelLabel, AddLabel: addLabel, CancelWidth: a.formTableButtonWidth(cancelLabel, 80), AddWidth: a.formTableButtonWidth(addLabel, 80),
+		Title:      c.language.translate("i18n:ui_ai_skill_add"),
+		LocalLabel: c.language.translate("i18n:ui_ai_skill_add_local"), RemoteLabel: c.language.translate("i18n:ui_ai_skill_add_remote"),
+		LocalHint: c.language.translate("i18n:ui_ai_skill_add_local_hint"), RemoteHint: c.language.translate("i18n:ui_ai_skill_add_remote_hint"),
+		Tab: snapshot.tab, Error: snapshot.error, Cloning: snapshot.cloning, CloningLabel: c.language.translate("i18n:ui_ai_skill_cloning"),
+		CancelLabel: cancelLabel, AddLabel: addLabel, CancelWidth: c.formTableButtonWidth(cancelLabel, 80), AddWidth: c.formTableButtonWidth(addLabel, 80),
 		Field: field, FieldHeight: launcherview.FormTableRowFieldHeight(definition.Type, "", 1), Theme: theme,
-		OnTab: a.switchFormTableSkillAddTab, OnCancel: a.cancelFormTableSkillAdd, OnAdd: a.addFormTableSkill,
+		OnTab: c.switchFormTableSkillAddTab, OnCancel: c.cancelFormTableSkillAdd, OnAdd: c.addFormTableSkill,
 	})
 }

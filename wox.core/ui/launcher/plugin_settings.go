@@ -646,7 +646,7 @@ func (a *App) setPluginSelectionLocked(index int) {
 	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		refreshFormDisplayDefinitions(&form.formFieldsState, pluginSettingsFormDefinitions(plugin))
-		if editor := a.settingsWindow.tableEditor; editor != nil && editor.target == &form.formFieldsState {
+		if editor := a.formTables.settingsEditor; editor != nil && editor.target == &form.formFieldsState {
 			// A post-save definition refresh rebuilds this form. The settings overlay
 			// is published only while settingsTableEditor.target matches the live form
 			// pointer, so replacing it here would hide an in-flight row editor.
@@ -1422,7 +1422,7 @@ func (a *App) validatePluginFormField(form *pluginSettingsFormState, index int) 
 	if key == "" {
 		return
 	}
-	errors := a.translateFormTableFieldErrors(validateFormFieldErrors([]formDefinition{form.definitions[index]}, form.values))
+	errors := a.formTables.translateFormTableFieldErrors(validateFormFieldErrors([]formDefinition{form.definitions[index]}, form.values))
 	if form.fieldErrors == nil {
 		form.fieldErrors = map[string]string{}
 	}
@@ -1959,7 +1959,7 @@ func (a *App) submitPluginSettings() {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	if fieldErrors := a.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
+	if fieldErrors := a.formTables.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
 		pluginID := state.pluginID
 		if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
 			form.fieldErrors = fieldErrors

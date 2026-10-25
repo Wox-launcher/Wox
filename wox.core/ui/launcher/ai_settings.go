@@ -41,7 +41,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 	contentWidth := launcherview.SettingsPageContentWidth(width)
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
-		field := a.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
+		field := a.formTables.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
 		switch definition.Value.Key {
 		case "AIBuiltinTools":
 			field.ReadOnly = true
@@ -53,7 +53,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 			field.SecondaryLabel = a.language.translate("i18n:ui_ai_mcp_import_json")
 			mcpIconColor := snapshot.palette.Text
 			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
-			field.OnSecondary = a.openAIMCPJSONImport
+			field.OnSecondary = a.formTables.openAIMCPJSONImport
 		case "AISkills":
 			for columnIndex := range field.Columns {
 				if field.Columns[columnIndex].Key == "Description" {
@@ -324,7 +324,7 @@ func (a *App) loadAIProviderCatalog() {
 		if form := a.aiSettings.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
 		}
-		if state := a.settingsWindow.tableEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
+		if state := a.formTables.settingsEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
 			state.definition = state.target.definitions[state.fieldIndex]
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
@@ -439,7 +439,7 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
 func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.open && a.settingsWindow.tab == "ai" && a.aiSettings.Form() != nil && a.settingsWindow.tableEditor == nil
+	active := a.settingsWindow.open && a.settingsWindow.tab == "ai" && a.aiSettings.Form() != nil && a.formTables.settingsEditor == nil
 	if !active {
 		return false
 	}
@@ -484,9 +484,9 @@ func (a *App) openAISettingsTable(index int) {
 	form := a.aiSettings.Form()
 	if a.settingsWindow.open && a.settingsWindow.tab == "ai" && form != nil {
 		a.settingsWindow.row = index
-		a.openFormTableLocked(form, index)
+		a.formTables.openFormTableLocked(form, index)
 	}
-	a.finishOpeningFormTable()
+	a.formTables.finishOpeningFormTable()
 }
 
 // addAISettingsTableRow opens the shared editor directly at its create flow. The
@@ -502,10 +502,10 @@ func (a *App) addAISettingsTableRow(index int) {
 	}
 	a.openAISettingsTable(index)
 	if key == "AISkills" {
-		a.openFormTableSkillAdd()
+		a.formTables.openFormTableSkillAdd()
 		return
 	}
-	a.beginAddFormTableRowDirect()
+	a.formTables.beginAddFormTableRowDirect()
 }
 
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
@@ -513,17 +513,15 @@ func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
 	form := a.aiSettings.Form()
 	if a.settingsWindow.open && a.settingsWindow.tab == "ai" && form != nil {
 		a.settingsWindow.row = tableIndex
-		a.openFormTableLocked(form, tableIndex)
-		if a.settingsWindow.tableEditor != nil && rowIndex >= 0 && rowIndex < len(a.settingsWindow.tableEditor.rows) {
-			a.settingsWindow.tableEditor.selected = rowIndex
-		}
+		a.formTables.openFormTableLocked(form, tableIndex)
+		a.formTables.selectFormTableRow(rowIndex)
 	}
-	a.finishOpeningFormTable()
+	a.formTables.finishOpeningFormTable()
 	if tableIndex < 0 || form == nil || tableIndex >= len(form.definitions) {
 		return
 	}
 	if key := form.definitions[tableIndex].Value.Key; key != "AISkills" && key != "AIBuiltinTools" {
-		a.beginEditFormTableRowDirect()
+		a.formTables.beginEditFormTableRowDirect()
 	}
 }
 
@@ -559,7 +557,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			_ = a.runOnUI("apply invalid settings table value", func() {
 				a.settingsWindow.saving = false
 				state.target.values[key] = previousValue
-				if a.settingsWindow.tableEditor == state {
+				if a.formTables.settingsEditor == state {
 					state.saving = false
 					state.status = "Could not save: " + err.Error()
 				}
@@ -576,7 +574,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 		a.settingsWindow.saving = false
 		if err != nil {
 			state.target.values[key] = previousValue
-			if a.settingsWindow.tableEditor == state {
+			if a.formTables.settingsEditor == state {
 				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
 					state.rows = rows
 					state.selected = min(state.selected, len(rows)-1)
@@ -590,7 +588,7 @@ func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previou
 			} else if state.target == a.hotkeySettings.Form() || state.target == a.generalQuerySettingsForm() {
 				a.applyHotkeySettingsRawLocked(key, coreValue)
 			}
-			if a.settingsWindow.tableEditor == state {
+			if a.formTables.settingsEditor == state {
 				state.saving = false
 				state.status = ""
 			}
@@ -606,7 +604,7 @@ func (a *App) refreshAIMCPServerToolsLocked() {
 		return
 	}
 	form.values["AIMCPServers"] = attachMCPServerToolNames(form.values["AIMCPServers"])
-	if state := a.settingsWindow.tableEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
+	if state := a.formTables.settingsEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
 		if rows, err := decodeFormTableRows(form.values["AIMCPServers"]); err == nil {
 			overlayMCPServerToolNames(rows)
 			state.rows = rows

@@ -31,9 +31,9 @@ func mcpJSONTestApp(t *testing.T) *App {
 
 func TestOpenFormTableMCPJSONPrefillsDocument(t *testing.T) {
 	app := mcpJSONTestApp(t)
-	app.openAIMCPJSONImport()
+	app.formTables.openAIMCPJSONImport()
 
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state == nil || state.mcpJSONImport == nil {
 		t.Fatal("MCP JSON editor did not open")
 	}
@@ -48,11 +48,11 @@ func TestOpenFormTableMCPJSONPrefillsDocument(t *testing.T) {
 
 func TestImportFormTableMCPJSONRequiresText(t *testing.T) {
 	app := mcpJSONTestApp(t)
-	app.openAIMCPJSONImport()
-	app.setFormTableMCPJSONText(0, "")
-	app.importFormTableMCPJSON()
+	app.formTables.openAIMCPJSONImport()
+	app.formTables.setFormTableMCPJSONText(0, "")
+	app.formTables.importFormTableMCPJSON()
 
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state == nil || state.mcpJSONImport == nil {
 		t.Fatal("dialog should stay open after an empty save")
 	}
@@ -74,13 +74,13 @@ func TestAttachMCPServerToolNamesUsesCache(t *testing.T) {
 
 func TestImportFormTableMCPJSONReplacesDocument(t *testing.T) {
 	app := mcpJSONTestApp(t)
-	app.openAIMCPJSONImport()
-	app.setFormTableMCPJSONText(0, `{
+	app.formTables.openAIMCPJSONImport()
+	app.formTables.setFormTableMCPJSONText(0, `{
 		"mcpServers": {
 			"local": {"command": "uvx", "args": ["duckduckgo-mcp-server"]}
 		}
 	}`)
-	app.importFormTableMCPJSON()
+	app.formTables.importFormTableMCPJSON()
 
 	form := app.aiSettings.Form()
 	if form == nil {

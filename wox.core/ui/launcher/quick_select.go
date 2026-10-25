@@ -58,7 +58,7 @@ func (a *quickSelectController) onQuickSelectKey(event woxui.KeyEvent) bool {
 
 // quickSelectBlocked keeps overlays and empty result sets from entering hold-to-number mode.
 func (a *App) quickSelectBlocked() bool {
-	if a.actions.actionPanel || a.forms.form != nil || a.requirements.requirementForm != nil || a.forms.launcherTableEditor != nil {
+	if a.actions.actionPanel || a.forms.form != nil || a.requirements.requirementForm != nil || a.formTables.launcherEditor != nil {
 		return true
 	}
 	return !hasQuickSelectResult(a.resultList.results)

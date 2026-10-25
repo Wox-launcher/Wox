@@ -415,7 +415,6 @@ type formValidatorValue struct {
 // Feature controllers own their state and receive only the capabilities they need.
 type App struct {
 	attention      attentionController
-	emojiCatalog   formTableEmojiCatalog
 	resultDrag     resultDragController
 	appearance     appearanceController
 	requirements   requirementController
@@ -424,6 +423,7 @@ type App struct {
 	previews       previewController
 	notes          notesController
 	forms          formActionController
+	formTables     formTableController
 	glance         glanceController
 	toolbar        toolbarController
 	settingsWindow settingsWindowController
@@ -1817,8 +1817,8 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if !a.formTableUsesSettingsWindow() && a.forms.launcherTableEditor != nil {
-		return a.onFormTableKey(event)
+	if !a.formTables.formTableUsesSettingsWindow() && a.formTables.launcherEditor != nil {
+		return a.formTables.onFormTableKey(event)
 	}
 	// Handle the hold state before feature-local handlers can consume the key.
 	if a.quickSelect.onQuickSelectKey(event) {
@@ -2061,7 +2061,7 @@ func (a *App) onTextInput(event woxui.TextInputEvent) {
 	if a.actions.onActionTextInput(event) {
 		return
 	}
-	if !a.formTableUsesSettingsWindow() && a.onFormTableTextInput(event) {
+	if !a.formTables.formTableUsesSettingsWindow() && a.formTables.onFormTableTextInput(event) {
 		return
 	}
 	if a.forms.onFormTextInput(event) {

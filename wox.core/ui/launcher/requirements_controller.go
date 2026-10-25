@@ -46,7 +46,7 @@ func (a *App) bindRequirements() {
 	c.aiSettings = func() *aiSettingsController { return a.aiSettings }
 	c.loadAIModels = a.loadAIModels
 	c.openRequirementFormTable = a.openRequirementFormTable
-	c.translateFormTableFieldErrors = a.translateFormTableFieldErrors
+	c.translateFormTableFieldErrors = a.formTables.translateFormTableFieldErrors
 }
 
 // pluginSettingsWriter is the shared save capability used by query guidance forms.

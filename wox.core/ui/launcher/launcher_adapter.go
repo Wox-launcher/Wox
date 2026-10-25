@@ -114,8 +114,8 @@ type viewSnapshot struct {
 // snapshot prepares one UI-thread-only render view; collection references are consumed before buildLauncher returns.
 func (a *App) snapshot() viewSnapshot {
 	var tableEditor *formTableEditorSnapshot
-	if a.forms.launcherTableEditor != nil && a.formTableTargetCurrentLocked(a.forms.launcherTableEditor.target) {
-		tableEditor = snapshotFormTableEditorLocked(a.forms.launcherTableEditor)
+	if a.formTables.launcherEditor != nil && a.formTableTargetCurrentLocked(a.formTables.launcherEditor.target) {
+		tableEditor = snapshotFormTableEditorLocked(a.formTables.launcherEditor)
 	}
 	var completionHint *queryCompletionHint
 	if a.querySession.completionHint != nil {
@@ -296,7 +296,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 	}
 	var overlay woxwidget.Widget
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, a.formControlTheme(snapshot), width, height, frame.Scale)
+		overlay = a.formTables.buildFormTableOverlay(snapshot.tableEditor, a.formControlTheme(snapshot), width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: a.launcherTableOverlaySectionSignature(snapshot, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
 		nativePreviewOcclusion = woxui.Rect{Width: width, Height: height}
 	}

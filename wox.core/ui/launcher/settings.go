@@ -352,7 +352,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.cloudSettings.SetPluginDialog(nil)
 		a.forms.form = nil
 		a.requirements.requirementForm = nil
-		a.forms.launcherTableEditor = nil
+		a.formTables.discardLauncherEditor()
 		a.conflicts.triggerConflict = nil
 		// A live draft must survive reopening Settings together with its applied preview.
 		if editor := a.themeSettings.ThemeEditor(); editor == nil || (!editor.saving && !themeEditorDirtyLocked(editor)) {
@@ -812,8 +812,8 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	generalForm := a.generalQuerySettingsForm()
 
 	var tableEditor *formTableEditorSnapshot
-	if a.settingsWindow.tableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsWindow.tableEditor.target, pluginForm, aiForm, hotkeyForm, generalForm) {
-		tableEditor = snapshotFormTableEditorLocked(a.settingsWindow.tableEditor)
+	if a.formTables.settingsEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.formTables.settingsEditor.target, pluginForm, aiForm, hotkeyForm, generalForm) {
+		tableEditor = snapshotFormTableEditorLocked(a.formTables.settingsEditor)
 	}
 	return settingsSnapshot{
 		isDev:        a.isDev,

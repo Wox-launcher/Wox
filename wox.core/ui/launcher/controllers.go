@@ -25,6 +25,7 @@ func (app *App) bindControllers() {
 	app.bindGlance()
 	app.bindToolbar()
 	app.bindForms()
+	app.bindFormTables()
 	app.bindNotes()
 	app.bindPreviews()
 	app.bindRequirements()
@@ -33,7 +34,6 @@ func (app *App) bindControllers() {
 	app.bindAppearance()
 	app.bindResultDrag()
 	app.bindAttention()
-	app.emojiCatalog.lifecycleCtx = app.lifecycleCtx
 }
 
 // disposeControllers runs on the UI thread at final instance destruction, never

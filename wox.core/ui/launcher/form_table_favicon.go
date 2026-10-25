@@ -22,25 +22,25 @@ type formTableFaviconState struct {
 }
 
 // openFormTableFavicon opens a nested dialog without replacing the row draft.
-func (a *App) openFormTableFavicon(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) openFormTableFavicon(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "woxImage" {
 		return
 	}
 	syncFormFieldsEditorLocked(state.rowForm)
 	state.rowForm.active = false
 	state.favicon = &formTableFaviconState{fieldIndex: index}
-	a.updateFormTableTextInput(true)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(true)
+	c.invalidateFormTableWindow()
 }
 
 // closeFormTableFavicon discards the dialog; any outstanding result becomes stale.
-func (a *App) closeFormTableFavicon() {
-	if state := a.activeFormTableEditor(); state != nil {
+func (c *formTableController) closeFormTableFavicon() {
+	if state := c.activeFormTableEditor(); state != nil {
 		state.favicon = nil
 	}
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
 }
 
 // normalizeFaviconURL accepts ordinary website and image addresses, excluding non-web schemes and credentials.
@@ -61,24 +61,24 @@ func normalizeFaviconURL(value string) string {
 }
 
 // fetchFormTableFavicon loads a pasted image URL or website favicon off the UI thread.
-func (a *App) fetchFormTableFavicon() {
-	state := a.activeFormTableEditor()
+func (c *formTableController) fetchFormTableFavicon() {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.favicon == nil || state.favicon.loading {
 		return
 	}
 	picker, row := state.favicon, state.rowForm
 	websiteURL := normalizeFaviconURL(picker.url)
 	if websiteURL == "" {
-		picker.error = a.language.translate("i18n:ui_image_editor_url_invalid")
-		a.invalidateFormTableWindow()
+		picker.error = c.language.translate("i18n:ui_image_editor_url_invalid")
+		c.invalidateFormTableWindow()
 		return
 	}
 	picker.loading, picker.error = true, ""
-	a.invalidateFormTableWindow()
-	util.Go(a.lifecycleCtx, "fetch settings favicon", func() {
+	c.invalidateFormTableWindow()
+	util.Go(c.lifecycleCtx, "fetch settings favicon", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		icon, err := a.services.FetchWebsiteIcon(ctx, a.sessionID, websiteURL)
+		icon, err := c.services.FetchWebsiteIcon(ctx, c.sessionID, websiteURL)
 		var encoded []byte
 		if err == nil {
 			encoded, err = json.Marshal(icon)
@@ -86,72 +86,72 @@ func (a *App) fetchFormTableFavicon() {
 		if err != nil {
 			util.GetLogger().Warn(ctx, "fetch settings favicon: "+err.Error())
 		}
-		_ = a.runOnUI("apply settings favicon", func() {
-			if a.activeFormTableEditor() != state || state.rowForm != row || state.favicon != picker {
+		_ = c.runOnUI("apply settings favicon", func() {
+			if c.activeFormTableEditor() != state || state.rowForm != row || state.favicon != picker {
 				return
 			}
 			picker.loading = false
 			if err != nil {
-				picker.error = formTableURLFetchError(a, err)
+				picker.error = formTableURLFetchError(c.language, err)
 			} else {
 				row.values[row.definitions[picker.fieldIndex].Value.Key] = string(encoded)
 				clearFormTableRowValidationLocked(state)
-				a.closeFormTableFavicon()
+				c.closeFormTableFavicon()
 			}
-			a.invalidateFormTableWindow()
+			c.invalidateFormTableWindow()
 		})
 	})
 }
 
 // formTableURLFetchError maps download failures onto a user-facing settings message.
-func formTableURLFetchError(a *App, err error) string {
+func formTableURLFetchError(language *languageCatalog, err error) string {
 	var status *util.HTTPStatusError
 	if errors.As(err, &status) && (status.StatusCode == 401 || status.StatusCode == 403 || status.StatusCode == 404 || status.StatusCode == 410) {
-		return a.language.translate("i18n:ui_image_editor_url_unavailable")
+		return language.translate("i18n:ui_image_editor_url_unavailable")
 	}
-	return a.language.translate("i18n:ui_image_editor_url_failed")
+	return language.translate("i18n:ui_image_editor_url_failed")
 }
 
 // buildFormTableFavicon composes standard controls from a frame snapshot inside a modal focus scope.
-func (a *App) buildFormTableFavicon(snapshot *formTableFaviconState, theme woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableFavicon(snapshot *formTableFaviconState, theme woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	dialogWidth := min(float32(460), width-32)
 	contentWidth := dialogWidth - 40
-	title := a.language.translate("i18n:ui_image_editor_from_url")
-	status, color := a.language.translate("i18n:ui_image_editor_url_hint"), theme.TextSecondary
-	confirm := a.language.translate("i18n:ui_image_editor_url_confirm")
+	title := c.language.translate("i18n:ui_image_editor_from_url")
+	status, color := c.language.translate("i18n:ui_image_editor_url_hint"), theme.TextSecondary
+	confirm := c.language.translate("i18n:ui_image_editor_url_confirm")
 	if snapshot.error != "" {
 		status, color = snapshot.error, theme.Error
 	}
 	if snapshot.loading {
-		status, color = a.language.translate("i18n:ui_hotkey_ignore_apps_loading"), theme.TextSecondary
+		status, color = c.language.translate("i18n:ui_hotkey_ignore_apps_loading"), theme.TextSecondary
 	}
 	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
 		ID: "form-table-favicon", Label: title, Width: dialogWidth, Height: 204,
 		OverlayWidth: width, OverlayHeight: height, Padding: woxwidget.Insets{Left: 20, Right: 20, Top: 20, Bottom: 20},
-		InitialFocus: "form-table-favicon-url", OnEscape: a.closeFormTableFavicon, Theme: theme,
+		InitialFocus: "form-table-favicon-url", OnEscape: c.closeFormTableFavicon, Theme: theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: title, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
 			woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 				ID: "form-table-favicon-url", Label: "URL", Hint: "https://example.com", Width: contentWidth,
-				Value: snapshot.url, Disabled: snapshot.loading, Window: a.formTableNativeWindow(), Theme: theme,
+				Value: snapshot.url, Disabled: snapshot.loading, Window: c.formTableNativeWindow(), Theme: theme,
 				OnKey: func(event woxui.KeyEvent) bool {
 					if event.Down && !event.Composing && event.Key == woxui.KeyEnter {
-						a.fetchFormTableFavicon()
+						c.fetchFormTableFavicon()
 						return true
 					}
-					return a.onFormTableKey(event)
+					return c.onFormTableKey(event)
 				},
 				OnChanged: func(value string) {
-					if state := a.activeFormTableEditor(); state != nil && state.favicon != nil && !state.favicon.loading {
+					if state := c.activeFormTableEditor(); state != nil && state.favicon != nil && !state.favicon.loading {
 						state.favicon.url, state.favicon.error = value, ""
-						a.invalidateFormTableWindow()
+						c.invalidateFormTableWindow()
 					}
 				},
 			}),
 			woxwidget.TextBlock{Value: status, Width: contentWidth, Height: 32, MaxLines: 2, LineHeight: theme.Scaled(16), Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: color},
 			woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisEnd, Gap: 8, Children: []woxwidget.Widget{
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-cancel", Label: a.language.translate("i18n:ui_cancel"), OnTap: a.closeFormTableFavicon, Theme: theme}),
-				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-confirm", Label: confirm, Disabled: snapshot.loading, Variant: woxcomponent.ButtonPrimary, OnTap: a.fetchFormTableFavicon, Theme: theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-cancel", Label: c.language.translate("i18n:ui_cancel"), OnTap: c.closeFormTableFavicon, Theme: theme}),
+				woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "form-table-favicon-confirm", Label: confirm, Disabled: snapshot.loading, Variant: woxcomponent.ButtonPrimary, OnTap: c.fetchFormTableFavicon, Theme: theme}),
 			}},
 		}},
 	})

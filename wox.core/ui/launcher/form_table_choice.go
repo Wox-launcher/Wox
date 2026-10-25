@@ -10,52 +10,49 @@ import (
 )
 
 // buildFormTableChoicePicker adapts one table select field to the shared Flutter-style anchored menu.
-func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.options))
 	for index, option := range snapshot.options {
-		label := a.language.translate(option.Label)
+		label := c.language.translate(option.Label)
 		if label == "" {
 			label = option.Value
 		}
 		choice := launcherview.SettingsChoice{Value: option.Value, Label: label}
 		if option.Group != "" {
-			choice.Group = a.language.translate(option.Group)
-			choice.GroupTooltip = a.language.translate(option.GroupTooltip)
+			choice.Group = c.language.translate(option.Group)
+			choice.GroupTooltip = c.language.translate(option.GroupTooltip)
 		}
 		if option.Icon.ImageType != "" {
-			choice.Leading = a.imageForSurface(option.Icon, physicalImageSize(18, imageScale), palette.Background)
+			choice.Leading = c.imageForSurface(option.Icon, physicalImageSize(18, imageScale), palette.Background)
 		}
 		choices[index] = choice
 	}
-	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
-	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.TextSecondary, physicalImageSize(14, imageScale))
+	searchIcon := c.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
+	infoIcon := c.imageForTint(settingNavIconSource("about"), &palette.TextSecondary, physicalImageSize(14, imageScale))
 	var onTooltip func(bool, string, woxui.Rect)
-	if a.settingsWindow.tableEditor != nil {
-		onTooltip = a.setSettingChoiceTooltip
+	if c.settingsEditor != nil {
+		onTooltip = c.setSettingChoiceTooltip
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
-		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette, Window: a.formTableNativeWindow(), Title: a.language.translate(snapshot.title),
-		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: a.chooseFormTableChoice, OnCancel: a.closeFormTableChoicePicker,
+		ID: "form-table-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.filterable, Theme: palette, Window: c.formTableNativeWindow(), Title: c.language.translate(snapshot.title),
+		FilterHint: c.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, InfoIcon: infoIcon, OnTooltip: onTooltip, CurrentValue: snapshot.currentValue, Choices: choices, OnChoose: c.chooseFormTableChoice, OnCancel: c.closeFormTableChoicePicker,
 	})
 }
 
 // openFocusedFormTableRowChoice resolves the focused field bounds for keyboard-opened menus.
-func (a *App) openFocusedFormTableRowChoice(index int) {
+func (c *formTableController) openFocusedFormTableRowChoice(index int) {
 	anchor := woxui.Rect{}
-	host := a.host
-	if a.settingsWindow.tableEditor != nil {
-		host = a.settingsWindow.host
-	}
+	host := c.formTableHost()
 	if host != nil {
 		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
 	}
-	a.openFormTableRowChoice(index, anchor)
+	c.openFormTableRowChoice(index, anchor)
 }
 
 // openFormTableRowChoice opens the menu at the exact field bounds captured by pointer hit testing.
-func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
-	a.stopHotkeyRecording()
-	state := a.activeFormTableEditor()
+func (c *formTableController) openFormTableRowChoice(index int, anchor woxui.Rect) {
+	c.stopHotkeyRecording()
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return
 	}
@@ -68,8 +65,8 @@ func (a *App) openFormTableRowChoice(index int, anchor woxui.Rect) {
 	state.appPicker = nil
 	state.choicePicker = &formTableChoicePickerState{fieldIndex: index, anchor: anchor}
 	clearFormTableRowValidationLocked(state)
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
 }
 
 // formTableChoicePickerFilterable reports whether the open select menu owns a search field.
@@ -85,22 +82,22 @@ func formTableChoicePickerFilterable(state *formTableEditorState) bool {
 }
 
 // closeFormTableChoicePicker dismisses the menu and restores the row editor's input ownership.
-func (a *App) closeFormTableChoicePicker() {
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
-	state := a.activeFormTableEditor()
+func (c *formTableController) closeFormTableChoicePicker() {
+	c.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	state := c.activeFormTableEditor()
 	textInput := false
 	if state != nil && state.choicePicker != nil {
 		state.choicePicker = nil
 		clearFormTableRowValidationLocked(state)
 		textInput = state.rowForm != nil && state.rowForm.editor != nil
 	}
-	a.updateFormTableTextInput(textInput)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(textInput)
+	c.invalidateFormTableWindow()
 }
 
 // chooseFormTableChoice commits one option while preserving table-specific dependent defaults.
-func (a *App) chooseFormTableChoice(index int) {
-	state := a.activeFormTableEditor()
+func (c *formTableController) chooseFormTableChoice(index int) {
+	state := c.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || state.choicePicker == nil || index < 0 {
 		return
 	}
@@ -112,17 +109,17 @@ func (a *App) chooseFormTableChoice(index int) {
 	if index >= len(definition.Value.Options) {
 		return
 	}
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	c.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	state.rowForm.values[definition.Value.Key] = definition.Value.Options[index].Value
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	if definition.Value.Key == "Name" {
-		applyAIProviderDefaultHostLocked(state, true, a.aiSettings.ProviderCatalog())
+		applyAIProviderDefaultHostLocked(state, true, c.aiSettings().ProviderCatalog())
 	}
 	if formTableRowDependsOnField(state.definition, definition.Value.Key) {
 		applyFormTableRowVisibleFieldsLocked(state)
 	}
 	state.choicePicker = nil
 	clearFormTableRowValidationLocked(state)
-	a.updateFormTableTextInput(false)
-	a.invalidateFormTableWindow()
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
 }

@@ -43,10 +43,10 @@ func compactFormTableText(value string, maxRunes int) string {
 	return string(runes[:max(0, maxRunes-1)]) + "…"
 }
 
-func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) string {
+func (c *formTableController) formTableDisplayValue(column formTableColumn, row map[string]any) string {
 	if column.Type == "ignoredApps" {
 		if formTableIgnoreRuleIncludeFuture(row) {
-			return a.language.translate("i18n:plugin_app_ignore_rule_all_matches")
+			return c.language.translate("i18n:plugin_app_ignore_rule_all_matches")
 		}
 		return ""
 	}
@@ -72,12 +72,12 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 	}
 	if column.Type == "aiSkillSource" {
 		if strings.EqualFold(value, "builtin") {
-			return a.language.translate("i18n:ui_ai_skill_type_builtin")
+			return c.language.translate("i18n:ui_ai_skill_type_builtin")
 		}
 		if strings.EqualFold(value, "remote") {
-			return a.language.translate("i18n:ui_ai_skill_type_remote")
+			return c.language.translate("i18n:ui_ai_skill_type_remote")
 		}
-		return a.language.translate("i18n:ui_ai_skill_type_local")
+		return c.language.translate("i18n:ui_ai_skill_type_local")
 	}
 	if column.Type == "checkbox" {
 		if value == "true" {
@@ -88,7 +88,7 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 	if column.Type == "select" {
 		for _, option := range column.SelectOptions {
 			if option.Value == value {
-				return a.language.translate(option.Label)
+				return c.language.translate(option.Label)
 			}
 		}
 	}
@@ -108,19 +108,19 @@ func (a *App) formTableDisplayValue(column formTableColumn, row map[string]any) 
 		}
 	}
 	if strings.HasPrefix(value, "i18n:") {
-		return a.language.translate(value)
+		return c.language.translate(value)
 	}
 	return value
 }
 
-func (a *App) formTableRowSummary(definition formDefinition, row map[string]any) string {
+func (c *formTableController) formTableRowSummary(definition formDefinition, row map[string]any) string {
 	parts := make([]string, 0, 3)
 	for _, column := range definition.Value.Columns {
 		if column.HideInTable || formTableIsRowStatusColumn(column) {
 			continue
 		}
-		label := a.language.translate(column.Label)
-		value := compactFormTableText(a.formTableDisplayValue(column, row), 28)
+		label := c.language.translate(column.Label)
+		value := compactFormTableText(c.formTableDisplayValue(column, row), 28)
 		if value == "" {
 			continue
 		}
@@ -139,12 +139,12 @@ func (a *App) formTableRowSummary(definition formDefinition, row map[string]any)
 	return strings.Join(parts, "   ·   ")
 }
 
-func (a *App) buildFormTableField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
-	return launcherview.FormTableField(a.formTableFieldProps(fields, callbacks, palette, index, definition, width, height))
+func (c *formTableController) buildFormTableField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
+	return launcherview.FormTableField(c.formTableFieldProps(fields, callbacks, palette, index, definition, width, height))
 }
 
 // formTableFieldProps maps one portable table definition into the shared Flutter-style table surface.
-func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) launcherview.FormTableFieldProps {
+func (c *formTableController) formTableFieldProps(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) launcherview.FormTableFieldProps {
 	rows, err := decodeFormTableRows(fields.values[definition.Value.Key])
 	if err != nil {
 		rows = nil
@@ -165,18 +165,18 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	columns := make([]launcherview.FormTableColumn, len(visibleColumns))
 	for columnIndex, column := range visibleColumns {
-		columns[columnIndex] = launcherview.FormTableColumn{Key: column.Key, Label: a.language.translate(column.Label), Tooltip: a.language.translate(column.Tooltip), Width: float32(column.Width)}
+		columns[columnIndex] = launcherview.FormTableColumn{Key: column.Key, Label: c.language.translate(column.Label), Tooltip: c.language.translate(column.Tooltip), Width: float32(column.Width)}
 	}
-	viewRows := a.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
-	if isFileSearchRootsTable(callbacks.idPrefix, definition, a.selectedPluginID()) {
-		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), a.language.translate("i18n:plugin_file_setting_service_volume_tooltip"))
+	viewRows := c.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
+	if isFileSearchRootsTable(callbacks.idPrefix, definition, c.selectedPluginID()) {
+		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), c.language.translate("i18n:plugin_file_setting_service_volume_tooltip"))
 		if len(volumeRows) > 0 {
 			viewRows = append(volumeRows, viewRows...)
 		}
 	}
 	onTooltip := (func(bool, string, woxui.Rect))(nil)
 	if callbacks.idPrefix == "hotkey-settings" || callbacks.idPrefix == "general-settings" || callbacks.idPrefix == "plugin-settings" || callbacks.idPrefix == "ai-settings" {
-		onTooltip = a.setSettingChoiceTooltip
+		onTooltip = c.setSettingChoiceTooltip
 	}
 	openTable := func() {
 		if callbacks.focus != nil {
@@ -202,20 +202,20 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	var demoIcon *woxui.Image
 	if demoKind != "" {
-		demoIcon = a.imageForTint(settingControlIconSource("demo"), &theme.Text, physicalImageSize(18, callbacks.imageScale))
+		demoIcon = c.imageForTint(settingControlIconSource("demo"), &theme.Text, physicalImageSize(18, callbacks.imageScale))
 	}
-	if callbacks.idPrefix == "plugin-settings" && definition.Value.Key == "commands" && a.selectedPluginID() == aiCommandPluginID {
-		secondaryLabel = a.language.translate("i18n:ui_ai_command_template_add_from_store")
-		secondaryIcon = a.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
-		onSecondary = func() { a.openAICommandTemplatePicker(index) }
+	if callbacks.idPrefix == "plugin-settings" && definition.Value.Key == "commands" && c.selectedPluginID() == aiCommandPluginID {
+		secondaryLabel = c.language.translate("i18n:ui_ai_command_template_add_from_store")
+		secondaryIcon = c.imageForTint(settingControlIconSource("store"), &foreground, headerIconRasterSize)
+		onSecondary = func() { c.openAICommandTemplatePicker(index) }
 		if network.IsOffline() {
-			secondaryLabel = a.language.translate("i18n:ui_offline_title") + " · " + a.language.translate("i18n:ui_offline_open_settings")
-			onSecondary = func() { a.selectSettingTab("privacy") }
+			secondaryLabel = c.language.translate("i18n:ui_offline_title") + " · " + c.language.translate("i18n:ui_offline_open_settings")
+			onSecondary = func() { c.selectSettingTab("privacy") }
 		}
 	}
 	hideCloneAction := false
 	hideAddAction := false
-	if callbacks.idPrefix == "plugin-settings" && isWindowManagerGroupsTable(definition) && a.selectedPluginID() == windowManagerPluginID {
+	if callbacks.idPrefix == "plugin-settings" && isWindowManagerGroupsTable(definition) && c.selectedPluginID() == windowManagerPluginID {
 		hideCloneAction = true
 	}
 	if definition.Value.Key == "ResultBindings" {
@@ -224,50 +224,50 @@ func (a *App) formTableFieldProps(fields formFieldsSnapshot, callbacks formField
 	}
 	onAdd := func() {
 		openTable()
-		a.beginAddFormTableRowDirect()
+		c.beginAddFormTableRowDirect()
 	}
 	if hideAddAction {
 		onAdd = nil
 	}
 	return launcherview.FormTableFieldProps{
-		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: a.language.translate(formTableTitle(definition)), Description: a.language.translate(definition.Value.Tooltip),
+		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Title: c.language.translate(formTableTitle(definition)), Description: c.language.translate(definition.Value.Tooltip),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, MaxHeight: definition.Value.MaxHeight, InlineTitle: definition.Value.InlineTable, Invalid: err != nil, Disabled: callbacks.serviceBusy,
 		HeaderWeight: formTableHeaderWeight(callbacks.idPrefix),
-		EnableSearch: definition.Value.EnableSearch, SearchColumnKey: definition.Value.SearchColumnKey, UsePinYin: a.usePinYin(),
-		StateKey:    callbacks.idPrefix + ":" + a.selectedPluginID() + ":" + definition.Value.Key,
-		SearchLabel: a.language.translate("i18n:ui_table_search"), SearchPlaceholder: a.language.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: a.language.translate("i18n:ui_no_matches"),
-		SearchIcon: a.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: a.settingsWindow.settingsNativeWindow(),
-		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideAddAction: hideAddAction, HideCloneAction: hideCloneAction, AddLabel: a.language.translate("i18n:ui_add"), EditLabel: a.language.translate("i18n:ui_setting_theme_edit"), CloneLabel: a.language.translate("i18n:ui_clone_row"), DeleteLabel: a.language.translate("i18n:ui_delete"), ConfirmDeleteLabel: a.language.translate("i18n:ui_delete_row_confirm"),
-		OperationLabel: a.language.translate("i18n:ui_operation"),
-		InfoIcon:       a.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: a.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
-		EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: a.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
-		DisabledEditIcon: a.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: a.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: a.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
-		EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
-		Theme:     theme, OnTooltip: onTooltip, OnDemoHover: a.setSettingsDemoHover, OnSecondary: onSecondary,
+		EnableSearch: definition.Value.EnableSearch, SearchColumnKey: definition.Value.SearchColumnKey, UsePinYin: c.usePinYin(),
+		StateKey:    callbacks.idPrefix + ":" + c.selectedPluginID() + ":" + definition.Value.Key,
+		SearchLabel: c.language.translate("i18n:ui_table_search"), SearchPlaceholder: c.language.translate("i18n:ui_filter_placeholder"), NoMatchesLabel: c.language.translate("i18n:ui_no_matches"),
+		SearchIcon: c.imageForTint(settingControlIconSource("search"), &foreground, headerIconRasterSize), SearchWindow: c.settings.settingsNativeWindow(),
+		Columns: columns, Rows: viewRows, SecondaryLabel: secondaryLabel, HideAddAction: hideAddAction, HideCloneAction: hideCloneAction, AddLabel: c.language.translate("i18n:ui_add"), EditLabel: c.language.translate("i18n:ui_setting_theme_edit"), CloneLabel: c.language.translate("i18n:ui_clone_row"), DeleteLabel: c.language.translate("i18n:ui_delete"), ConfirmDeleteLabel: c.language.translate("i18n:ui_delete_row_confirm"),
+		OperationLabel: c.language.translate("i18n:ui_operation"),
+		InfoIcon:       c.imageForTint(settingNavIconSource("about"), &foreground, infoIconRasterSize), DemoIcon: demoIcon, DemoKind: demoKind, SecondaryIcon: secondaryIcon, AddIcon: c.imageForTint(settingControlIconSource("add"), &foreground, headerIconRasterSize),
+		EditIcon: c.imageForTint(settingControlIconSource("edit"), &foreground, rowIconRasterSize), CloneIcon: c.imageForTint(settingControlIconSource("copy"), &foreground, rowIconRasterSize), DeleteIcon: c.imageForTint(settingControlIconSource("delete"), &foreground, rowIconRasterSize),
+		DisabledEditIcon: c.imageForTint(settingControlIconSource("edit"), &disabledForeground, rowIconRasterSize), DisabledCloneIcon: c.imageForTint(settingControlIconSource("copy"), &disabledForeground, rowIconRasterSize), DisabledDeleteIcon: c.imageForTint(settingControlIconSource("delete"), &disabledForeground, rowIconRasterSize),
+		EmptyIcon: c.imageForTint(settingControlIconSource("inbox"), &foreground, emptyIconRasterSize),
+		Theme:     theme, OnTooltip: onTooltip, OnDemoHover: c.setSettingsDemoHover, OnSecondary: onSecondary,
 		OnAdd: onAdd,
 		OnOpenRow: func(rowIndex int) {
 			if rowIndex < 0 || rowIndex >= len(rows) {
 				return
 			}
 			openTable()
-			a.selectFormTableRow(rowIndex)
-			a.beginEditFormTableRowDirect()
+			c.selectFormTableRow(rowIndex)
+			c.beginEditFormTableRowDirect()
 		},
 		OnCloneRow: func(rowIndex int) {
 			if rowIndex < 0 || rowIndex >= len(rows) {
 				return
 			}
 			openTable()
-			a.selectFormTableRow(rowIndex)
-			a.beginCloneFormTableRowDirect()
+			c.selectFormTableRow(rowIndex)
+			c.beginCloneFormTableRowDirect()
 		},
 		OnDeleteRow: func(rowIndex int) {
 			if rowIndex < 0 || rowIndex >= len(rows) || formTableSkillRowReadOnly(definition, rows[rowIndex]) {
 				return
 			}
 			openTable()
-			a.selectFormTableRow(rowIndex)
-			a.beginDeleteFormTableRowDirect()
+			c.selectFormTableRow(rowIndex)
+			c.beginDeleteFormTableRowDirect()
 		},
 	}
 }
@@ -281,7 +281,7 @@ func hasMCPServerToolsColumn(columns []formTableColumn) bool {
 	return false
 }
 
-func (a *App) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.ControlTheme, imageScale float32) []launcherview.FormTableRow {
+func (c *formTableController) formTableViewRows(definition formDefinition, columns []formTableColumn, rows []map[string]any, theme woxcomponent.ControlTheme, imageScale float32) []launcherview.FormTableRow {
 	type indexedRow struct {
 		index int
 		row   map[string]any
@@ -307,9 +307,9 @@ func (a *App) formTableViewRows(definition formDefinition, columns []formTableCo
 	for _, current := range ordered {
 		cells := make([]launcherview.FormTableCell, len(columns))
 		for columnIndex, column := range columns {
-			cells[columnIndex] = a.formTableViewCell(column, current.row, theme, imageScale)
+			cells[columnIndex] = c.formTableViewCell(column, current.row, theme, imageScale)
 		}
-		status := a.formTableRowStatus(definition.Value.Columns, current.row)
+		status := c.formTableRowStatus(definition.Value.Columns, current.row)
 		if status != "" && len(cells) > 0 {
 			if cells[0].SearchText != "" {
 				cells[0].SearchText += " " + status
@@ -329,32 +329,32 @@ func formTableIsRowStatusColumn(column formTableColumn) bool {
 }
 
 // formTableRowStatus returns the quiet Disabled label when that checkbox is on.
-func (a *App) formTableRowStatus(columns []formTableColumn, row map[string]any) string {
+func (c *formTableController) formTableRowStatus(columns []formTableColumn, row map[string]any) string {
 	for _, column := range columns {
 		if !formTableIsRowStatusColumn(column) || formTableColumnValue(column, row) != "true" {
 			continue
 		}
 		if strings.TrimSpace(column.Label) != "" {
-			return a.language.translate(column.Label)
+			return c.language.translate(column.Label)
 		}
-		return a.language.translate("i18n:ui_disabled")
+		return c.language.translate("i18n:ui_disabled")
 	}
 	return ""
 }
 
-func (a *App) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.ControlTheme, imageScale float32) launcherview.FormTableCell {
-	text := a.formTableDisplayValue(column, row)
+func (c *formTableController) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.ControlTheme, imageScale float32) launcherview.FormTableCell {
+	text := c.formTableDisplayValue(column, row)
 	cell := launcherview.FormTableCell{Text: compactFormTableText(text, 80), SearchText: text}
 	if column.Type == "hotkey" || column.Type == "dictationHotkey" {
 		// Format only the visible label; raw text remains searchable and editable.
 		cell.Text = strings.Join(formatHotkeyLabels(text), " + ")
 		if strings.HasPrefix(strings.TrimSpace(text), "hold:") {
-			cell.Text = a.language.translate("i18n:ui_hotkey_hold_prefix") + " " + cell.Text
+			cell.Text = c.language.translate("i18n:ui_hotkey_hold_prefix") + " " + cell.Text
 		}
 		return cell
 	}
 	if column.Type == "ignoredApps" {
-		return a.formTableIgnoreRuleAppsCell(row, imageScale, theme.Background)
+		return c.formTableIgnoreRuleAppsCell(row, imageScale, theme.Background)
 	}
 	if column.Type == "aiModelStatus" {
 		statusColor := woxui.Color{R: 69, G: 184, B: 88, A: 255}
@@ -365,7 +365,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 	if column.Type == "checkbox" {
 		cell.Text = ""
 		if formTableColumnValue(column, row) == "true" {
-			cell.Text = a.language.translate("i18n:ui_disabled")
+			cell.Text = c.language.translate("i18n:ui_disabled")
 		}
 		return cell
 	}
@@ -374,7 +374,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		for _, option := range column.SelectOptions {
 			if option.Value == value && option.Icon.ImageType != "" {
 				cell.IconSize = 18
-				cell.Icon = a.imageForSurface(option.Icon, physicalImageSize(18, imageScale), theme.Background)
+				cell.Icon = c.imageForSurface(option.Icon, physicalImageSize(18, imageScale), theme.Background)
 				break
 			}
 		}
@@ -388,7 +388,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 			if cell.Text == "" {
 				cell.Text = app.Identity
 			}
-			cell.Icon = a.imageForSurface(app.Icon, 256, theme.Background)
+			cell.Icon = c.imageForSurface(app.Icon, 256, theme.Background)
 		}
 		return cell
 	}
@@ -398,7 +398,7 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 		encoded, _ := json.Marshal(row[column.Key])
 		var icon woxImage
 		if json.Unmarshal(encoded, &icon) == nil {
-			cell.Icon = a.imageForSurface(icon, physicalImageSize(24, imageScale), theme.Background)
+			cell.Icon = c.imageForSurface(icon, physicalImageSize(24, imageScale), theme.Background)
 		}
 		return cell
 	}
@@ -406,9 +406,9 @@ func (a *App) formTableViewCell(column formTableColumn, row map[string]any, them
 }
 
 // formTableIgnoreRuleAppsCell shows All matches for dynamic rules, or up to six app icons.
-func (a *App) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32, background woxui.Color) launcherview.FormTableCell {
+func (c *formTableController) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32, background woxui.Color) launcherview.FormTableCell {
 	if formTableIgnoreRuleIncludeFuture(row) {
-		return launcherview.FormTableCell{Text: a.language.translate("i18n:plugin_app_ignore_rule_all_matches")}
+		return launcherview.FormTableCell{Text: c.language.translate("i18n:plugin_app_ignore_rule_all_matches")}
 	}
 	apps := formTableIgnoreRuleApps(row)
 	if len(apps) == 0 {
@@ -423,7 +423,7 @@ func (a *App) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32
 	for _, app := range visible {
 		item := launcherview.FormTableCellIcon{Tooltip: formTableIgnoreRuleAppPathTooltip(app)}
 		if app.Icon.ImageType != "" {
-			item.Source = a.imageForSurface(app.Icon, physicalImageSize(18, imageScale), background)
+			item.Source = c.imageForSurface(app.Icon, physicalImageSize(18, imageScale), background)
 		}
 		icons = append(icons, item)
 	}
@@ -431,18 +431,18 @@ func (a *App) formTableIgnoreRuleAppsCell(row map[string]any, imageScale float32
 }
 
 // buildFormTableOverlay maps table editor state into the shared modal view.
-func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot.skillAdd != nil {
-		return a.buildFormTableSkillAddDialog(snapshot.skillAdd, palette, width, height, imageScale)
+		return c.buildFormTableSkillAddDialog(snapshot.skillAdd, palette, width, height, imageScale)
 	}
 	if snapshot.mcpJSONImport != nil {
-		return a.buildFormTableMCPJSONImportDialog(snapshot.mcpJSONImport, palette, width, height, imageScale)
+		return c.buildFormTableMCPJSONImportDialog(snapshot.mcpJSONImport, palette, width, height, imageScale)
 	}
 	if snapshot.windowGroupEditor != nil {
-		return a.buildWindowManagerGroupEditor(snapshot.windowGroupEditor, palette, width, height, imageScale)
+		return c.buildWindowManagerGroupEditor(snapshot.windowGroupEditor, palette, width, height, imageScale)
 	}
 	if snapshot.appPicker != nil {
-		return a.buildFormTableAppPicker(snapshot.appPicker, palette, width, height, imageScale)
+		return c.buildFormTableAppPicker(snapshot.appPicker, palette, width, height, imageScale)
 	}
 	panelWidth := max(float32(0), min(float32(760), width-28))
 	panelHeight := max(float32(0), min(float32(640), height-28))
@@ -450,11 +450,11 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette w
 	bodyHeight := max(float32(120), panelHeight-84)
 	rowEditor := snapshot.rowForm != nil
 	if rowEditor {
-		labelWidth := a.formTableRowLabelWidth(snapshot.rowForm.definitions)
-		contentWidth := a.formTableRowEditorContentWidth(snapshot.definition, labelWidth)
+		labelWidth := c.formTableRowLabelWidth(snapshot.rowForm.definitions)
+		contentWidth := c.formTableRowEditorContentWidth(snapshot.definition, labelWidth)
 		panelWidth = max(float32(0), min(contentWidth+48, width-64))
 		innerWidth = max(float32(0), panelWidth-48)
-		contentHeight := a.formTableRowEditorContentHeight(snapshot, max(float32(0), innerWidth-20), labelWidth)
+		contentHeight := c.formTableRowEditorContentHeight(snapshot, max(float32(0), innerWidth-20), labelWidth)
 		if snapshot.patternPreview != nil {
 			contentWidth = max(contentWidth, 640)
 			panelWidth = max(float32(0), min(contentWidth+48, width-64))
@@ -473,71 +473,71 @@ func (a *App) buildFormTableOverlay(snapshot *formTableEditorSnapshot, palette w
 	}
 	var body woxwidget.Widget
 	if snapshot.rowForm != nil {
-		body = a.buildFormTableRowEditor(snapshot, palette, innerWidth, bodyHeight, imageScale)
+		body = c.buildFormTableRowEditor(snapshot, palette, innerWidth, bodyHeight, imageScale)
 	} else {
-		body = a.buildFormTableList(snapshot, palette, innerWidth, bodyHeight)
+		body = c.buildFormTableList(snapshot, palette, innerWidth, bodyHeight)
 	}
 	overlay := launcherview.FormTableOverlay(launcherview.FormTableOverlayProps{
-		Width: width, Height: height, PanelWidth: panelWidth, PanelHeight: panelHeight, Title: a.language.translate(formTableTitle(snapshot.definition)), RowEditor: rowEditor,
+		Width: width, Height: height, PanelWidth: panelWidth, PanelHeight: panelHeight, Title: c.language.translate(formTableTitle(snapshot.definition)), RowEditor: rowEditor,
 		Subtitle: fmt.Sprintf("%d rows · shared Go table editor", len(snapshot.rows)), Body: body, Theme: palette,
 	})
 	layers := []woxwidget.StackChild{{Child: overlay}}
 	if snapshot.deletePending >= 0 {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableDeleteDialog(palette, width, height)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildFormTableDeleteDialog(palette, width, height)})
 	}
 	if snapshot.choicePicker != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height, imageScale)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildFormTableChoicePicker(snapshot.choicePicker, palette, width, height, imageScale)})
 	}
 	if snapshot.favicon != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableFavicon(snapshot.favicon, palette, width, height)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildFormTableFavicon(snapshot.favicon, palette, width, height)})
 	}
 	if snapshot.emojiPicker != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height, imageScale)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildFormTableEmojiPicker(snapshot.emojiPicker, palette, width, height, imageScale)})
 	}
 	if snapshot.queryVariable != nil {
-		layers = append(layers, woxwidget.StackChild{Child: a.buildFormTableQueryVariablePicker(snapshot.queryVariable, palette, width, height, imageScale)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildFormTableQueryVariablePicker(snapshot.queryVariable, palette, width, height, imageScale)})
 	}
 	return woxwidget.Stack{Width: width, Height: height, Children: layers}
 }
 
-func (a *App) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariablePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
-	options := a.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query)
+func (c *formTableController) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariablePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+	options := c.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query)
 	choices := make([]launcherview.QueryVariableChoice, 0, len(options))
 	for _, option := range options {
 		choices = append(choices, launcherview.QueryVariableChoice{
-			Label: a.language.translate(option.label), Description: a.language.translate(option.description),
-			Icon: a.imageForTint(settingControlIconSource(option.icon), &palette.Text, physicalImageSize(18, imageScale)),
+			Label: c.language.translate(option.label), Description: c.language.translate(option.description),
+			Icon: c.imageForTint(settingControlIconSource(option.icon), &palette.Text, physicalImageSize(18, imageScale)),
 		})
 	}
 	return launcherview.QueryVariablePicker(launcherview.QueryVariablePickerProps{
 		Width: width, Height: height, Anchor: snapshot.anchor, Choices: choices, Selected: min(snapshot.selected, len(choices)-1), Theme: palette,
-		OnChoose: a.chooseFormTableQueryVariable, OnHover: func(index int) {
-			if state := a.activeFormTableEditor(); state != nil && state.queryVariable != nil && state.queryVariable.selected != index {
+		OnChoose: c.chooseFormTableQueryVariable, OnHover: func(index int) {
+			if state := c.activeFormTableEditor(); state != nil && state.queryVariable != nil && state.queryVariable.selected != index {
 				state.queryVariable.selected = index
-				a.invalidateFormTableWindow()
+				c.invalidateFormTableWindow()
 			}
-		}, OnCancel: a.closeFormTableQueryVariablePicker,
+		}, OnCancel: c.closeFormTableQueryVariablePicker,
 	})
 }
 
-func (a *App) buildFormTableDeleteDialog(palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableDeleteDialog(palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	return launcherview.FormTableDeleteDialog(launcherview.FormTableDeleteDialogProps{
-		Width: width, Height: height, Message: a.language.translate("i18n:ui_delete_row_confirm"),
-		CancelLabel: a.language.translate("i18n:ui_cancel"), DeleteLabel: a.language.translate("i18n:ui_delete"),
-		Theme: palette, OnCancel: a.cancelFormTableRowDelete, OnDelete: a.confirmFormTableRowDelete,
+		Width: width, Height: height, Message: c.language.translate("i18n:ui_delete_row_confirm"),
+		CancelLabel: c.language.translate("i18n:ui_cancel"), DeleteLabel: c.language.translate("i18n:ui_delete"),
+		Theme: palette, OnCancel: c.cancelFormTableRowDelete, OnDelete: c.confirmFormTableRowDelete,
 	})
 }
 
 // formTableRowLabelWidth mirrors Flutter's measured and bounded label column.
-func (a *App) formTableRowLabelWidth(definitions []formDefinition) float32 {
+func (c *formTableController) formTableRowLabelWidth(definitions []formDefinition) float32 {
 	width := float32(60)
-	window := a.formTableNativeWindow()
+	window := c.formTableNativeWindow()
 	if window == nil {
 		return width
 	}
 	style := woxui.TextStyle{Size: 14, Weight: woxui.FontWeightSemibold}
 	for _, definition := range definitions {
-		label := strings.TrimSpace(a.language.translate(definition.Value.Label))
+		label := strings.TrimSpace(c.language.translate(definition.Value.Label))
 		if label == "" {
 			continue
 		}
@@ -549,7 +549,7 @@ func (a *App) formTableRowLabelWidth(definitions []formDefinition) float32 {
 }
 
 // formTableRowEditorContentWidth preserves the table override while keeping Flutter's adaptive default.
-func (a *App) formTableRowEditorContentWidth(definition formDefinition, labelWidth float32) float32 {
+func (c *formTableController) formTableRowEditorContentWidth(definition formDefinition, labelWidth float32) float32 {
 	if definition.Value.UpdateDialogWidth > 0 {
 		return float32(definition.Value.UpdateDialogWidth)
 	}
@@ -560,11 +560,11 @@ func (a *App) formTableRowEditorContentWidth(definition formDefinition, labelWid
 	return max(float32(600), labelWidth+max(float32(320), maxColumnWidth))
 }
 
-func (a *App) formTableRowContentHeight(definitions []formDefinition, fieldErrors map[string]string) float32 {
-	return a.formTableRowContentHeightForWidth(definitions, fieldErrors, 0, 0)
+func (c *formTableController) formTableRowContentHeight(definitions []formDefinition, fieldErrors map[string]string) float32 {
+	return c.formTableRowContentHeightForWidth(definitions, fieldErrors, 0, 0)
 }
 
-func (a *App) formTableRowEditorVisible(snapshot *formTableEditorSnapshot) func(formDefinition) bool {
+func (c *formTableController) formTableRowEditorVisible(snapshot *formTableEditorSnapshot) func(formDefinition) bool {
 	if snapshot == nil || snapshot.definition.Value.Key != "QueryHotkeys" {
 		return nil
 	}
@@ -575,19 +575,19 @@ func (a *App) formTableRowEditorVisible(snapshot *formTableEditorSnapshot) func(
 	}
 }
 
-func (a *App) formTableRowEditorSections(snapshot *formTableEditorSnapshot) []formTableRowEditorSection {
+func (c *formTableController) formTableRowEditorSections(snapshot *formTableEditorSnapshot) []formTableRowEditorSection {
 	if snapshot == nil || snapshot.rowForm == nil {
 		return nil
 	}
-	return formTableRowEditorSections(snapshot.definition, snapshot.rowForm.definitions, snapshot.collapsedGroups, a.formTableRowEditorVisible(snapshot))
+	return formTableRowEditorSections(snapshot.definition, snapshot.rowForm.definitions, snapshot.collapsedGroups, c.formTableRowEditorVisible(snapshot))
 }
 
 // formTableRowEditorContentHeight sizes headers and visible fields, including collapsed groups.
-func (a *App) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot, fieldWidth, labelWidth float32) float32 {
+func (c *formTableController) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot, fieldWidth, labelWidth float32) float32 {
 	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	height := float32(0)
 	visible := 0
-	for _, section := range a.formTableRowEditorSections(snapshot) {
+	for _, section := range c.formTableRowEditorSections(snapshot) {
 		if section.Group.Key != "" {
 			visible++
 			height += launcherview.FormTableRowGroupHeaderHeight
@@ -599,7 +599,7 @@ func (a *App) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot,
 			visible++
 			definition := field.Definition
 			markdown := formTableRowFieldMarkdown(definition)
-			height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), snapshot.fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+			height += launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(definition.Value.Tooltip), snapshot.fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
 		}
 	}
 	if visible > 1 {
@@ -609,14 +609,14 @@ func (a *App) formTableRowEditorContentHeight(snapshot *formTableEditorSnapshot,
 }
 
 // formTableRowContentHeightForWidth sizes the scroll content with Flutter's field gap and wrapped markdown tips.
-func (a *App) formTableRowContentHeightForWidth(definitions []formDefinition, fieldErrors map[string]string, fieldWidth, labelWidth float32) float32 {
+func (c *formTableController) formTableRowContentHeightForWidth(definitions []formDefinition, fieldErrors map[string]string, fieldWidth, labelWidth float32) float32 {
 	height := float32(0)
 	visible := 0
 	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	for _, definition := range definitions {
 		visible++
 		markdown := formTableRowFieldMarkdown(definition)
-		height += launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
+		height += launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(definition.Value.Tooltip), fieldErrors[definition.Value.Key], definition.Value.MaxLines, markdown, controlWidth)
 	}
 	if visible > 1 {
 		height += float32(visible-1) * 10
@@ -629,21 +629,21 @@ func formTableRowFieldMarkdown(definition formDefinition) bool {
 	return definition.Value.Tooltip == "i18n:ui_query_hotkeys_query_tooltip"
 }
 
-func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height float32) woxwidget.Widget {
 	rows := make([]string, 0, len(snapshot.rows))
 	for _, row := range snapshot.rows {
-		rows = append(rows, a.formTableRowSummary(snapshot.definition, row))
+		rows = append(rows, c.formTableRowSummary(snapshot.definition, row))
 	}
 	selectedReadOnly := snapshot.selected >= 0 && snapshot.selected < len(snapshot.rows) && formTableSkillRowReadOnly(snapshot.definition, snapshot.rows[snapshot.selected])
 	canEdit := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && snapshot.definition.Value.Key != "AISkills" && !selectedReadOnly
 	canDelete := !snapshot.invalid && !snapshot.saving && snapshot.selected >= 0 && !selectedReadOnly
 	addLabel := "Add row"
-	onAdd := a.beginAddFormTableRow
+	onAdd := c.beginAddFormTableRow
 	canAdd := !snapshot.invalid && !snapshot.saving
 	if snapshot.definition.Value.Key == "AISkills" {
 		// The skills list shares Flutter's tabbed local/remote add dialog.
-		addLabel = a.language.translate("i18n:ui_ai_skill_add")
-		onAdd = a.openFormTableSkillAdd
+		addLabel = c.language.translate("i18n:ui_ai_skill_add")
+		onAdd = c.openFormTableSkillAdd
 	}
 	if snapshot.definition.Value.Key == "ResultBindings" {
 		canAdd = false
@@ -651,16 +651,16 @@ func (a *App) buildFormTableList(snapshot *formTableEditorSnapshot, palette woxc
 	}
 	return launcherview.FormTableList(launcherview.FormTableListProps{
 		Width: width, Height: height, Rows: rows, Selected: snapshot.selected,
-		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: a.language.translate("i18n:ui_delete"), CloseLabel: a.language.translate("i18n:ui_close"),
+		Status: snapshot.status, StatusError: snapshot.invalid, AddLabel: addLabel, DeleteLabel: c.language.translate("i18n:ui_delete"), CloseLabel: c.language.translate("i18n:ui_close"),
 		CanAdd: canAdd, CanEdit: canEdit, CanDelete: canDelete, Theme: palette,
-		OnSelect: a.selectFormTableRow,
-		OnAdd:    onAdd, OnEdit: a.beginEditFormTableRow, OnDelete: a.deleteFormTableRow, OnClose: a.closeFormTableEditor,
+		OnSelect: c.selectFormTableRow,
+		OnAdd:    onAdd, OnEdit: c.beginEditFormTableRow, OnDelete: c.deleteFormTableRow, OnClose: c.closeFormTableEditor,
 	})
 }
 
-func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	rowForm := snapshot.rowForm
-	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: a.focusFormTableRowField, change: a.changeFormTableRowChoice, setText: a.setFormTableRowText, onKey: a.onFormTableKey, openChoice: a.openFormTableRowChoice, pickDir: a.pickFormTableRowDirectory, pickApp: a.openFormTableAppPicker, recordKey: a.recordFormTableRowHotkey}
+	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: c.focusFormTableRowField, change: c.changeFormTableRowChoice, setText: c.setFormTableRowText, onKey: c.onFormTableKey, openChoice: c.openFormTableRowChoice, pickDir: c.pickFormTableRowDirectory, pickApp: c.openFormTableAppPicker, recordKey: c.recordFormTableRowHotkey}
 	definitions := rowForm.definitions
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
 		visible := make([]formDefinition, 0, len(definitions))
@@ -671,13 +671,13 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		}
 		definitions = visible
 	}
-	labelWidth := a.formTableRowLabelWidth(definitions)
+	labelWidth := c.formTableRowLabelWidth(definitions)
 	fieldWidth := max(float32(0), width-20)
 	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
 	contentHeight := float32(0)
 	var keepVisible *woxwidget.ScrollRange
-	for _, section := range a.formTableRowEditorSections(snapshot) {
+	for _, section := range c.formTableRowEditorSections(snapshot) {
 		if section.Group.Key != "" {
 			if len(rows) > 0 {
 				contentHeight += 10
@@ -687,9 +687,9 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			groupKey := section.Group.Key
 			rows = append(rows, launcherview.FormTableRowGroupHeader(launcherview.FormTableRowGroupHeaderProps{
 				ID:    "form-table-row-group-" + groupKey,
-				Width: fieldWidth, Title: a.language.translate(section.Group.Title), Tooltip: a.language.translate(section.Group.Tooltip),
+				Width: fieldWidth, Title: c.language.translate(section.Group.Title), Tooltip: c.language.translate(section.Group.Tooltip),
 				Collapsed: section.Collapsed, Theme: palette,
-				OnTap: func() { a.toggleFormTableRowGroup(groupKey) },
+				OnTap: func() { c.toggleFormTableRowGroup(groupKey) },
 			}))
 			if section.Collapsed {
 				continue
@@ -700,7 +700,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 			definition := field.Definition
 			fieldError := snapshot.fieldErrors[definition.Value.Key]
 			markdown := formTableRowFieldMarkdown(definition)
-			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
+			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
 			if len(rows) > 0 {
 				contentHeight += 10
 			}
@@ -708,7 +708,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
 			}
 			contentHeight += fieldHeight
-			rows = append(rows, a.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
+			rows = append(rows, c.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
 		}
 	}
 	if snapshot.patternPreview != nil {
@@ -720,50 +720,50 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 		for _, app := range snapshot.patternPreview.Apps {
 			previewApp := launcherview.FormTablePatternPreviewApp{Key: app.Key, Name: app.Name, Path: app.Path, Checked: app.Checked}
 			if app.Icon.ImageType != "" {
-				previewApp.Icon = a.imageForSurface(app.Icon, 256, palette.Background)
+				previewApp.Icon = c.imageForSurface(app.Icon, 256, palette.Background)
 			}
 			previewApps = append(previewApps, previewApp)
 		}
-		emptyLabel := a.language.translate("i18n:plugin_app_ignore_rule_preview_empty")
+		emptyLabel := c.language.translate("i18n:plugin_app_ignore_rule_preview_empty")
 		if snapshot.patternPreview.Loading {
-			emptyLabel = a.language.translate("i18n:ui_hotkey_ignore_apps_loading")
+			emptyLabel = c.language.translate("i18n:ui_hotkey_ignore_apps_loading")
 		}
 		if snapshot.patternPreview.ErrorText != "" {
 			emptyLabel = snapshot.patternPreview.ErrorText
 		}
 		rows = append(rows, launcherview.FormTablePatternPreview(launcherview.FormTablePatternPreviewProps{
 			Width: fieldWidth, LabelWidth: labelWidth, Height: launcherview.FormTablePatternPreviewHeight,
-			Title:      a.language.translate("i18n:plugin_app_ignore_rule_apps"),
-			CountLabel: fmt.Sprintf(a.language.translate("i18n:plugin_app_ignore_rule_preview_count"), len(previewApps)),
+			Title:      c.language.translate("i18n:plugin_app_ignore_rule_apps"),
+			CountLabel: fmt.Sprintf(c.language.translate("i18n:plugin_app_ignore_rule_preview_count"), len(previewApps)),
 			EmptyLabel: emptyLabel,
 			Apps:       previewApps, Theme: palette,
-			OnToggle: a.toggleFormTablePatternPreviewApp,
+			OnToggle: c.toggleFormTablePatternPreviewApp,
 		}))
 	}
 	title := ""
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
-		title = a.language.translate("i18n:ui_query_hotkeys_dialog_create_title")
+		title = c.language.translate("i18n:ui_query_hotkeys_dialog_create_title")
 		if snapshot.rowIndex >= 0 {
-			title = a.language.translate("i18n:ui_query_hotkeys_dialog_edit_title")
+			title = c.language.translate("i18n:ui_query_hotkeys_dialog_edit_title")
 		}
 	}
-	saveLabel := a.language.translate("i18n:ui_save")
+	saveLabel := c.language.translate("i18n:ui_save")
 	props := launcherview.FormTableRowEditorProps{
 		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: contentHeight, KeepVisible: keepVisible,
-		Status: snapshot.status, CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette,
-		OnCancel: a.cancelFormTableRowEdit, OnSave: a.saveFormTableRowEdit,
+		Status: snapshot.status, CancelLabel: c.language.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette,
+		OnCancel: c.cancelFormTableRowEdit, OnSave: c.saveFormTableRowEdit,
 	}
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
-		demoIcon := a.imageForTint(settingControlIconSource("demo"), &palette.Text, physicalImageSize(15, imageScale))
+		demoIcon := c.imageForTint(settingControlIconSource("demo"), &palette.Text, physicalImageSize(15, imageScale))
 		props.HeaderHeight = 122
 		props.Header = launcherview.QueryHotkeyEditorHeader(launcherview.QueryHotkeyEditorHeaderProps{
-			Width: width, Title: title, Selected: string(snapshot.queryPreset), Description: a.language.translate("i18n:ui_query_hotkeys_preset_" + strings.ReplaceAll(string(snapshot.queryPreset), "-", "_") + "_description"),
-			NormalLabel: a.language.translate("i18n:ui_query_hotkeys_preset_normal"), WebPanelLabel: a.language.translate("i18n:ui_query_hotkeys_preset_web_panel"),
-			SilentLabel: a.language.translate("i18n:ui_query_hotkeys_preset_silent"), CustomLabel: a.language.translate("i18n:ui_query_hotkeys_preset_custom"),
-			DemoIcon: demoIcon, DemoLabel: a.language.translate("i18n:ui_demo_preview"), Theme: palette, OnSelect: a.applyQueryHotkeyPreset,
-			OnOpenLink: a.openAboutLink,
+			Width: width, Title: title, Selected: string(snapshot.queryPreset), Description: c.language.translate("i18n:ui_query_hotkeys_preset_" + strings.ReplaceAll(string(snapshot.queryPreset), "-", "_") + "_description"),
+			NormalLabel: c.language.translate("i18n:ui_query_hotkeys_preset_normal"), WebPanelLabel: c.language.translate("i18n:ui_query_hotkeys_preset_web_panel"),
+			SilentLabel: c.language.translate("i18n:ui_query_hotkeys_preset_silent"), CustomLabel: c.language.translate("i18n:ui_query_hotkeys_preset_custom"),
+			DemoIcon: demoIcon, DemoLabel: c.language.translate("i18n:ui_demo_preview"), Theme: palette, OnSelect: c.applyQueryHotkeyPreset,
+			OnOpenLink: c.openAboutLink,
 			OnDemoHover: func(preset string, inside bool, anchor woxui.Rect) {
-				a.setSettingsDemoHover("query-hotkey-preset-"+preset, inside, anchor)
+				c.setSettingsDemoHover("query-hotkey-preset-"+preset, inside, anchor)
 			},
 		})
 	}
@@ -771,7 +771,7 @@ func (a *App) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette
 }
 
 // buildFormTableRowField maps the portable field definition onto the compact table-editor controls.
-func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, labelWidth float32, fieldError string) woxwidget.Widget {
+func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, labelWidth float32, fieldError string) woxwidget.Widget {
 	value := definition.Value
 	fieldValue := fields.values[value.Key]
 	focused := fields.active && fields.focused == index
@@ -784,23 +784,23 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	}
 	markdown := formTableRowFieldMarkdown(definition)
 	controlWidth := max(float32(0), width-labelWidth-10)
-	height := launcherview.FormTableRowFieldHeightFor(definition.Type, a.language.translate(value.Tooltip), fieldError, value.MaxLines, markdown, controlWidth)
+	height := launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(value.Tooltip), fieldError, value.MaxLines, markdown, controlWidth)
 	props := launcherview.FormTableRowFieldProps{
-		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: a.language.translate(value.Label), Description: a.language.translate(value.Tooltip),
+		ID: fmt.Sprintf("form-table-row-field-%d", index), Kind: definition.Type, Label: c.language.translate(value.Label), Description: c.language.translate(value.Tooltip),
 		DescriptionMarkdown: markdown, Error: fieldError, Value: fieldValue, Width: width, Height: height, LabelWidth: labelWidth, State: state, Focused: focused, Protected: definition.Type == "password",
-		Controller: controller, MaxLines: max(1, value.MaxLines), Window: a.formTableNativeWindow(), Theme: palette,
-		EmojiLabel: a.language.translate("i18n:ui_image_editor_emoji"), UploadLabel: a.language.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: a.language.translate("i18n:ui_runtime_browse"),
-		SelectLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_select"),
+		Controller: controller, MaxLines: max(1, value.MaxLines), Window: c.formTableNativeWindow(), Theme: palette,
+		EmojiLabel: c.language.translate("i18n:ui_image_editor_emoji"), UploadLabel: c.language.translate("i18n:ui_image_editor_upload_image"), BrowseLabel: c.language.translate("i18n:ui_runtime_browse"),
+		SelectLabel: c.language.translate("i18n:ui_hotkey_ignore_apps_select"),
 		OnFocus:     func() { callbacks.focus(index) },
 		OnFocusChange: func(focused bool) {
-			state := a.activeFormTableEditor()
+			state := c.activeFormTableEditor()
 			if focused || state == nil || state.rowForm == nil || !state.rowForm.active || state.rowForm.focused != index {
 				return
 			}
 			syncFormFieldsEditorLocked(state.rowForm)
 			state.rowForm.active = false
-			a.updateFormTableTextInput(false)
-			a.invalidateFormTableWindow()
+			c.updateFormTableTextInput(false)
+			c.invalidateFormTableWindow()
 		},
 		OnChanged: func(value string) {
 			if callbacks.setText != nil {
@@ -808,11 +808,11 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 			}
 		},
 		OnSelectionChanged: func(selection woxui.TextSelection) {
-			if state := a.activeFormTableEditor(); state != nil && state.rowForm != nil && state.rowForm.focused == index && state.rowForm.editor != nil {
+			if state := c.activeFormTableEditor(); state != nil && state.rowForm != nil && state.rowForm.focused == index && state.rowForm.editor != nil {
 				state.rowForm.editor.SetSelection(selection.Anchor, selection.Focus)
 				if formTableQueryVariableKindForField(state, index) != "" {
-					a.snapFormTableQueryVariableSelection()
-					a.updateFormTableQueryVariableTrigger(index)
+					c.snapFormTableQueryVariableSelection()
+					c.updateFormTableQueryVariableTrigger(index)
 				}
 			}
 		},
@@ -820,32 +820,32 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 	}
 	if formTableQueryVariableKind(definition) != "" {
 		props.TrailingLabel = "{}"
-		props.TrailingActionLabel = a.language.translate("i18n:ui_query_variable_picker_insert")
-		props.OnTrailingTap = func(anchor woxui.Rect) { a.openFormTableQueryVariablePicker(index, anchor) }
+		props.TrailingActionLabel = c.language.translate("i18n:ui_query_variable_picker_insert")
+		props.OnTrailingTap = func(anchor woxui.Rect) { c.openFormTableQueryVariablePicker(index, anchor) }
 		var editing queryVariableToken
 		if focused {
-			if editor := a.activeFormTableEditor(); editor != nil {
+			if editor := c.activeFormTableEditor(); editor != nil {
 				editing = editor.queryVariableEdit
 			}
 		}
-		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, a.formTableNativeWindow(), palette, a.language.translate)
+		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, c.formTableNativeWindow(), palette, c.language.translate)
 		props.OnDismissRun = func(start, end int) bool {
-			return a.dismissFormTableQueryVariable(index, start, end)
+			return c.dismissFormTableQueryVariable(index, start, end)
 		}
 		props.OnEditRun = func(start, end int) bool {
-			return a.editFormTableQueryVariable(index, start, end)
+			return c.editFormTableQueryVariable(index, start, end)
 		}
 	}
 	if markdown {
-		props.OnOpenLink = a.openAboutLink
+		props.OnOpenLink = c.openAboutLink
 	}
 	if value.QueryTest {
 		actionTint := palette.TextSecondary
-		props.ActionIcon = a.imageForTint(settingControlIconSource("bolt"), &actionTint, physicalImageSize(18, callbacks.imageScale))
-		props.ActionLabel = a.language.translate("i18n:ui_query_hotkeys_test_query")
-		props.OnActionTap = func() { a.runFormTableQueryTest(index) }
+		props.ActionIcon = c.imageForTint(settingControlIconSource("bolt"), &actionTint, physicalImageSize(18, callbacks.imageScale))
+		props.ActionLabel = c.language.translate("i18n:ui_query_hotkeys_test_query")
+		props.OnActionTap = func() { c.runFormTableQueryTest(index) }
 		props.OnActionHover = func(inside bool, anchor woxui.Rect) {
-			a.setSettingChoiceTooltip(inside, a.language.translate("i18n:ui_query_hotkeys_test_query"), anchor)
+			c.setSettingChoiceTooltip(inside, c.language.translate("i18n:ui_query_hotkeys_test_query"), anchor)
 		}
 	}
 	switch definition.Type {
@@ -860,18 +860,18 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		var selectedIcon woxImage
 		for _, option := range value.Options {
 			if option.Value == fieldValue {
-				selectedLabel = a.language.translate(option.Label)
+				selectedLabel = c.language.translate(option.Label)
 				selectedIcon = option.Icon
 				break
 			}
 		}
 		props.Value = selectedLabel
 		if selectedIcon.ImageType != "" {
-			props.SelectIcon = a.imageForSurface(selectedIcon, physicalImageSize(18, callbacks.imageScale), palette.Background)
+			props.SelectIcon = c.imageForSurface(selectedIcon, physicalImageSize(18, callbacks.imageScale), palette.Background)
 		}
 		props.OnChoiceTap = func(anchor woxui.Rect) { callbacks.openChoice(index, anchor) }
 	case "hotkey", "dictationHotkey":
-		presentation := a.hotkeyRecordingFieldStatus("form-table-row", index)
+		presentation := c.hotkeyRecordingFieldStatus("form-table-row", index)
 		if presentation.Active {
 			fieldValue = presentation.Value
 		}
@@ -880,10 +880,10 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		props.RecordingStatus = presentation.Status
 		props.RecordingError = presentation.Error
 		props.Hold = strings.HasPrefix(strings.TrimSpace(fieldValue), "hold:")
-		props.HoldPrefix = a.language.translate("i18n:ui_hotkey_hold_prefix")
-		props.Placeholder = a.language.translate("i18n:ui_hotkey_click_to_set")
+		props.HoldPrefix = c.language.translate("i18n:ui_hotkey_hold_prefix")
+		props.Placeholder = c.language.translate("i18n:ui_hotkey_click_to_set")
 		if presentation.Active {
-			props.Placeholder = a.language.translate("i18n:ui_hotkey_recording")
+			props.Placeholder = c.language.translate("i18n:ui_hotkey_recording")
 		}
 		props.OnTap = func() {
 			callbacks.focus(index)
@@ -895,8 +895,8 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 				callbacks.recordKey(index)
 				return
 			}
-			if a.hotkeyRecordingFieldStatus("form-table-row", index).Active {
-				a.stopHotkeyRecording()
+			if c.hotkeyRecordingFieldStatus("form-table-row", index).Active {
+				c.stopHotkeyRecording()
 			}
 		}
 	case "dirPath":
@@ -906,14 +906,14 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		_ = json.Unmarshal([]byte(fieldValue), &app)
 		props.Value = app.Name
 		if strings.TrimSpace(props.Value) == "" {
-			props.Value = a.language.translate("i18n:ui_hotkey_ignore_apps_app_placeholder")
+			props.Value = c.language.translate("i18n:ui_hotkey_ignore_apps_app_placeholder")
 		}
 		props.Detail = app.Path
 		if strings.TrimSpace(props.Detail) == "" {
 			props.Detail = app.Identity
 		}
-		props.Image = a.imageForSurface(app.Icon, physicalImageSize(24, callbacks.imageScale), palette.Background)
-		props.SelectWidth = a.formTableButtonWidth(props.SelectLabel, 98)
+		props.Image = c.imageForSurface(app.Icon, physicalImageSize(24, callbacks.imageScale), palette.Background)
+		props.SelectWidth = c.formTableButtonWidth(props.SelectLabel, 98)
 		props.OnTap = func() {
 			callbacks.focus(index)
 			callbacks.pickApp(index)
@@ -923,17 +923,17 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 		if emoji != "" {
 			props.ImageEmoji = emoji
 		} else if image.ImageType != "" {
-			props.Image = a.imageForSurface(image, 256, palette.Background)
+			props.Image = c.imageForSurface(image, 256, palette.Background)
 		}
 		iconTint := palette.Text
-		props.EmojiIcon = a.imageForTint(settingControlIconSource("emoji"), &iconTint, physicalImageSize(16, callbacks.imageScale))
-		props.UploadIcon = a.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
-		props.OnEmoji = func() { a.openFormTableEmojiPicker(index) }
-		props.OnUpload = func() { a.pickFormTableRowImage(index) }
-		props.URLLabel = a.language.translate("i18n:ui_image_editor_from_url")
-		props.OnURL = func() { a.openFormTableFavicon(index) }
+		props.EmojiIcon = c.imageForTint(settingControlIconSource("emoji"), &iconTint, physicalImageSize(16, callbacks.imageScale))
+		props.UploadIcon = c.imageForTint(settingControlIconSource("upload"), &iconTint, physicalImageSize(16, callbacks.imageScale))
+		props.OnEmoji = func() { c.openFormTableEmojiPicker(index) }
+		props.OnUpload = func() { c.pickFormTableRowImage(index) }
+		props.URLLabel = c.language.translate("i18n:ui_image_editor_from_url")
+		props.OnURL = func() { c.openFormTableFavicon(index) }
 	case "label":
-		props.Value = a.language.translate(value.Content)
+		props.Value = c.language.translate(value.Content)
 	default:
 		props.OnTap = func() { callbacks.focus(index) }
 	}
@@ -941,8 +941,8 @@ func (a *App) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFi
 }
 
 // formTableButtonWidth preserves Flutter's intrinsic translated button width.
-func (a *App) formTableButtonWidth(label string, minimum float32) float32 {
-	window := a.formTableNativeWindow()
+func (c *formTableController) formTableButtonWidth(label string, minimum float32) float32 {
+	window := c.formTableNativeWindow()
 	if window == nil {
 		return minimum
 	}
@@ -954,8 +954,8 @@ func (a *App) formTableButtonWidth(label string, minimum float32) float32 {
 }
 
 // formTableImageButtonWidth keeps translated labels readable without widening compact Chinese buttons.
-func (a *App) formTableImageButtonWidth(label string) float32 {
-	window := a.formTableNativeWindow()
+func (c *formTableController) formTableImageButtonWidth(label string) float32 {
+	window := c.formTableNativeWindow()
 	if window == nil {
 		return 98
 	}

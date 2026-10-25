@@ -50,7 +50,6 @@ type settingsWindowController struct {
 	demo                     *settingsDemoState
 	demoRevision             atomic.Uint64
 	choiceTooltipRevision    atomic.Uint64
-	tableEditor              *formTableEditorState
 	nativePluginID           string
 }
 
@@ -104,7 +103,6 @@ func (c *settingsWindowController) endSessionLocked() bool {
 	c.view = nil
 	c.host = nil
 	c.saving = false
-	c.tableEditor = nil
 	c.clearFlashLocked()
 	c.clearOverlaysLocked()
 	return wasOpen

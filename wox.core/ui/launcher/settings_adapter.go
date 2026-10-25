@@ -58,7 +58,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlayLeft float32
 	var overlayTop float32
 	if snapshot.tableEditor != nil {
-		overlay = a.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
+		overlay = a.formTables.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.ai.ModelManager != nil {
 		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.general.ShowDisplayPicker != nil {

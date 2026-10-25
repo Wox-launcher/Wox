@@ -10,9 +10,9 @@ import (
 
 func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 
-	app.openFormTableEmojiPicker(0)
+	app.formTables.openFormTableEmojiPicker(0)
 	if state.emojiPicker == nil {
 		t.Fatal("emoji picker did not open for the icon field")
 	}
@@ -22,16 +22,16 @@ func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 	if state.emojiPicker.initialEmoji != "📋" {
 		t.Fatalf("emoji picker initial emoji = %q, want 📋", state.emojiPicker.initialEmoji)
 	}
-	if len(app.emojiCatalog.formTableEmojiSearchEntries) < 5000 {
-		t.Fatalf("emoji picker search catalog count = %d, want at least 5000", len(app.emojiCatalog.formTableEmojiSearchEntries))
+	if len(app.formTables.emoji.formTableEmojiSearchEntries) < 5000 {
+		t.Fatalf("emoji picker search catalog count = %d, want at least 5000", len(app.formTables.emoji.formTableEmojiSearchEntries))
 	}
 
-	app.closeFormTableEmojiPicker()
+	app.formTables.closeFormTableEmojiPicker()
 	if state.emojiPicker != nil {
 		t.Fatal("emoji picker should close")
 	}
 
-	app.openFormTableEmojiPicker(1)
+	app.formTables.openFormTableEmojiPicker(1)
 	if state.emojiPicker != nil {
 		t.Fatal("emoji picker must not open for a non-woxImage field")
 	}
@@ -39,10 +39,10 @@ func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 
 func TestChooseFormTableEmojiCommitsAndCloses(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.tableEditor
-	app.openFormTableEmojiPicker(0)
+	state := app.formTables.settingsEditor
+	app.formTables.openFormTableEmojiPicker(0)
 
-	app.chooseFormTableEmoji("🤖")
+	app.formTables.chooseFormTableEmoji("🤖")
 	if state.emojiPicker != nil {
 		t.Fatal("emoji picker should close after choosing")
 	}
@@ -50,8 +50,8 @@ func TestChooseFormTableEmojiCommitsAndCloses(t *testing.T) {
 		t.Fatalf("icon after choosing = %q, want 🤖", value)
 	}
 
-	app.openFormTableEmojiPicker(0)
-	app.chooseFormTableEmoji("")
+	app.formTables.openFormTableEmojiPicker(0)
+	app.formTables.chooseFormTableEmoji("")
 	if state.emojiPicker == nil {
 		t.Fatal("empty emoji should not commit")
 	}
@@ -65,7 +65,7 @@ func TestWoxImageRowFieldIsNotTextEditable(t *testing.T) {
 
 func TestTrayQueryRowEditorFocusesQueryNotIcon(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.tableEditor
+	state := app.formTables.settingsEditor
 	if state.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
@@ -101,17 +101,17 @@ func TestFormTableEmojiCatalogIncludesExpandedGroups(t *testing.T) {
 func TestRememberFormTableEmojiMaintainsUniqueMRU(t *testing.T) {
 	app := bindTestApp(&App{})
 	for index := 0; index < 30; index++ {
-		app.emojiCatalog.rememberFormTableEmoji(string(rune('A' + index)))
+		app.formTables.emoji.rememberFormTableEmoji(string(rune('A' + index)))
 	}
-	if len(app.emojiCatalog.recentFormTableEmojis) != 24 {
-		t.Fatalf("recent emoji count = %d, want 24", len(app.emojiCatalog.recentFormTableEmojis))
+	if len(app.formTables.emoji.recentFormTableEmojis) != 24 {
+		t.Fatalf("recent emoji count = %d, want 24", len(app.formTables.emoji.recentFormTableEmojis))
 	}
-	app.emojiCatalog.rememberFormTableEmoji("Z")
-	if app.emojiCatalog.recentFormTableEmojis[0] != "Z" || len(app.emojiCatalog.recentFormTableEmojis) != 24 {
-		t.Fatalf("recent emojis after reuse = %v", app.emojiCatalog.recentFormTableEmojis)
+	app.formTables.emoji.rememberFormTableEmoji("Z")
+	if app.formTables.emoji.recentFormTableEmojis[0] != "Z" || len(app.formTables.emoji.recentFormTableEmojis) != 24 {
+		t.Fatalf("recent emojis after reuse = %v", app.formTables.emoji.recentFormTableEmojis)
 	}
-	seen := make(map[string]struct{}, len(app.emojiCatalog.recentFormTableEmojis))
-	for _, emoji := range app.emojiCatalog.recentFormTableEmojis {
+	seen := make(map[string]struct{}, len(app.formTables.emoji.recentFormTableEmojis))
+	for _, emoji := range app.formTables.emoji.recentFormTableEmojis {
 		if _, exists := seen[emoji]; exists {
 			t.Fatalf("recent emojis contain duplicate %q", emoji)
 		}
@@ -121,9 +121,9 @@ func TestRememberFormTableEmojiMaintainsUniqueMRU(t *testing.T) {
 
 func TestFormTableEmojiPickerSearchAcceptsCommittedText(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	app.openFormTableEmojiPicker(0)
+	app.formTables.openFormTableEmojiPicker(0)
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.tableEditor), settingsPalette(), 900, 700, 1)
+		return app.formTables.buildFormTableOverlay(snapshotFormTableEditorLocked(app.formTables.settingsEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
 	app.settingsWindow.host = host
@@ -186,7 +186,7 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 		},
 	})
 	app.openTrayQueryEditor(0)
-	if app.settingsWindow.tableEditor == nil || app.settingsWindow.tableEditor.rowForm == nil {
+	if app.formTables.settingsEditor == nil || app.formTables.settingsEditor.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
 	return app

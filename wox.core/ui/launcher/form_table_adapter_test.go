@@ -28,7 +28,7 @@ func TestFormTableHotkeysFormatOnlyTheVisibleLabel(t *testing.T) {
 		{"shift+ctrl+l", "Shift + Ctrl + L"}, {"", ""},
 	} {
 		row := map[string]any{"Hotkey": tc.raw}
-		cell := a.formTableViewCell(formTableColumn{Key: "Hotkey", Type: "hotkey"}, row, woxcomponent.ControlTheme{}, 1)
+		cell := a.formTables.formTableViewCell(formTableColumn{Key: "Hotkey", Type: "hotkey"}, row, woxcomponent.ControlTheme{}, 1)
 		if cell.Text != tc.want || cell.SearchText != tc.raw || row["Hotkey"] != tc.raw {
 			t.Fatalf("hotkey %q: cell=%#v row=%v", tc.raw, cell, row)
 		}

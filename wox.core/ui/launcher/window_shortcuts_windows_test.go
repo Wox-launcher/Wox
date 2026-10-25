@@ -57,8 +57,8 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 		draft := woxwidget.NewTextEditingController("unsaved settings draft")
 		app.settingsWindow.tab = "plugins"
 		app.settingsSearch.SetEditor(draft)
-		app.settingsWindow.tableEditor = &formTableEditorState{}
-		tableDraft := app.settingsWindow.tableEditor
+		app.formTables.settingsEditor = &formTableEditorState{}
+		tableDraft := app.formTables.settingsEditor
 		consumed := 0
 		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 			return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{ID: "settings.draft", Width: 200, Height: 40, Controller: draft, OnKey: func(woxui.KeyEvent) bool { consumed++; return true }})
@@ -96,7 +96,7 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 			}
 			var stateErr error
 			if err := woxui.Call(func() {
-				if app.settingsWindow.tab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.settingsWindow.tableEditor != tableDraft || consumed != 0 {
+				if app.settingsWindow.tab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.formTables.settingsEditor != tableDraft || consumed != 0 {
 					stateErr = errors.New("settings shortcut reset a draft or reached the focused editor")
 				}
 			}); err != nil {

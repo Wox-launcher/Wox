@@ -269,43 +269,13 @@ func (a *App) restoreThemeEditorTextInput() {
 	a.updateSettingsTextInput(false)
 }
 
-func (a *App) formTableUsesSettingsWindow() bool {
-	return a.settingsWindow.tableEditor != nil
-}
-
-func (a *App) formTableTargetUsesSettingsLocked(target *formFieldsState) bool {
-	pluginForm := a.pluginSettings.Form()
-	return target != nil && ((pluginForm != nil && target == &pluginForm.formFieldsState) || target == a.aiSettings.Form() || target == a.hotkeySettings.Form() || target == a.generalQuerySettingsForm())
-}
-
-func (a *App) formTableNativeWindow() *woxui.Window {
-	if a.formTableUsesSettingsWindow() {
-		return a.settingsWindow.settingsNativeWindow()
-	}
-	return a.window
-}
-
-func (a *App) invalidateFormTableWindow() {
-	if window := a.formTableNativeWindow(); window != nil {
-		_ = window.Invalidate()
-	}
-}
-
-func (a *App) updateFormTableTextInput(enabled bool) {
-	if a.formTableUsesSettingsWindow() {
-		a.updateSettingsTextInput(enabled)
-		return
-	}
-	a.updateFormTextInput(enabled)
-}
-
 func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 	state := a.hotkeySettings.Recording()
 	usesSettings := false
 	if state != nil {
 		pluginForm := a.pluginSettings.Form()
 		usesSettings = (!a.onboarding.isOpen() && state.target == a.hotkeySettings.Form()) || (pluginForm != nil && state.target == &pluginForm.formFieldsState)
-		if !usesSettings && a.settingsWindow.tableEditor != nil && a.settingsWindow.tableEditor.rowForm == state.target {
+		if !usesSettings && a.formTables.settingsEditor != nil && a.formTables.settingsEditor.rowForm == state.target {
 			usesSettings = true
 		}
 	}
@@ -343,7 +313,7 @@ func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
 	case "theme-editor", "theme-editor-dialog":
 		return a.themeEditorNativeWindow()
 	case "form-table-row":
-		return a.formTableNativeWindow()
+		return a.formTables.formTableNativeWindow()
 	default:
 		return a.window
 	}
@@ -366,14 +336,14 @@ func (a *App) onSettingsWindowKey(event woxui.KeyEvent) bool {
 	if a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
 		return true
 	}
-	if a.formTableUsesSettingsWindow() {
-		return a.onFormTableKey(event)
+	if a.formTables.formTableUsesSettingsWindow() {
+		return a.formTables.onFormTableKey(event)
 	}
 	return a.onSettingsKey(event)
 }
 
 func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
-	if a.formTableUsesSettingsWindow() && a.onFormTableTextInput(event) {
+	if a.formTables.formTableUsesSettingsWindow() && a.formTables.onFormTableTextInput(event) {
 		return
 	}
 	if a.onPluginSearchTextInput(event) {
@@ -431,6 +401,7 @@ func (a *App) onLauncherWindowClosed() {
 func (a *App) onSettingsWindowClosed() {
 	wasRecording := a.hotkeyRecordingUsesSettingsWindow()
 	wasOpen := a.settingsWindow.endSessionLocked()
+	a.formTables.discardSettingsEditor()
 	a.generalSettings.EndEdit()
 	a.settingsSearch.ReleaseWindowMemory()
 	a.pluginSettings.ReleaseWindowMemory()
