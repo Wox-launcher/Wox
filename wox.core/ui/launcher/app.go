@@ -38,6 +38,380 @@ const (
 	chatWindowID       woxui.WindowID = "wox.chat"
 )
 
+// pendingResultSelection restores the highlight after RefreshQuery or query undo/redo.
+// resultID follows one result when the plugin rebuilds it with the same id.
+// preserveIndex keeps the old row when resultID is empty or that result is gone.
+type pendingResultSelection struct {
+	queryID       string
+	index         int
+	resultID      string
+	preserveIndex bool
+	// querySnapshot uses text matching and first-row overflow fallback only for undo/redo.
+	querySnapshot *queryResultSelection
+}
+
+type plainQuery struct {
+	QueryHint        *common.QueryHint `json:"QueryHint,omitempty"`
+	QueryID          string            `json:"QueryId"`
+	QueryType        string            `json:"QueryType"`
+	QueryText        string            `json:"QueryText"`
+	QuerySelection   selection         `json:"QuerySelection"`
+	QueryScope       queryScope        `json:"QueryScope"`
+	QueryRefinements map[string]string `json:"QueryRefinements"`
+	ContextData      map[string]string `json:"ContextData"`
+}
+
+type queryScope struct {
+	Plugins []queryScopePlugin `json:"Plugins,omitempty"`
+}
+
+type queryScopePlugin struct {
+	PluginID string `json:"PluginId"`
+	Command  string `json:"Command,omitempty"`
+}
+
+type selection struct {
+	Type      string   `json:"Type"`
+	Text      string   `json:"Text"`
+	FilePaths []string `json:"FilePaths"`
+}
+
+func newInputQuery(text string) plainQuery {
+	return plainQuery{
+		QueryID:          newID(),
+		QueryType:        "input",
+		QueryText:        text,
+		QuerySelection:   selection{FilePaths: []string{}},
+		QueryScope:       queryScope{},
+		QueryRefinements: map[string]string{},
+		ContextData:      map[string]string{},
+	}
+}
+
+type showAppParams struct {
+	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
+	ShowPreviewTitleBar bool                         `json:"-"`
+	SelectAll           bool                         `json:"SelectAll"`
+	Position            position                     `json:"Position"`
+	PositionHeight      int                          `json:"PositionHeight"`
+	WindowWidth         int                          `json:"WindowWidth"`
+	MaxResultCount      int                          `json:"MaxResultCount"`
+	QueryHistories      []plainQuery                 `json:"QueryHistories"`
+	LaunchMode          string                       `json:"LaunchMode"`
+	StartPage           string                       `json:"StartPage"`
+	HideQueryBox        bool                         `json:"HideQueryBox"`
+	HideToolbar         bool                         `json:"HideToolbar"`
+	QueryBoxAtBottom    bool                         `json:"QueryBoxAtBottom"`
+	HideOnBlur          bool                         `json:"HideOnBlur"`
+	RememberPosition    bool                         `json:"-"`
+	ShowSource          string                       `json:"ShowSource"`
+	RestoreWindow       *common.ActiveWindowSnapshot `json:"-"`
+}
+
+type position struct {
+	Type string `json:"Type"`
+	X    int    `json:"X"`
+	Y    int    `json:"Y"`
+}
+
+type queryResponse struct {
+	QueryID             string              `json:"QueryId"`
+	Results             []queryResult       `json:"Results"`
+	Refinements         []queryRefinement   `json:"Refinements"`
+	Layout              queryLayout         `json:"Layout"`
+	Context             queryContext        `json:"Context"`
+	IsFinal             bool                `json:"IsFinal"`
+	QueryStartTimestamp int64               `json:"QueryStartTimestamp"`
+	ActionIconRefs      map[string]woxImage `json:"ActionIconRefs"`
+}
+
+// resolveActionIconRefs restores response-local action icons before shared widgets see the result batch.
+func resolveActionIconRefs(results []queryResult, refs map[string]woxImage) {
+	for resultIndex := range results {
+		for actionIndex := range results[resultIndex].Actions {
+			icon := &results[resultIndex].Actions[actionIndex].Icon
+			if icon.ImageType != "iconref" {
+				continue
+			}
+			if resolved, ok := refs[icon.ImageData]; ok {
+				*icon = resolved
+			}
+		}
+	}
+}
+
+type queryContext struct {
+	IsGlobalQuery bool   `json:"IsGlobalQuery"`
+	PluginID      string `json:"PluginId"`
+}
+
+type queryLayout struct {
+	Icon                    woxImage    `json:"Icon"`
+	ScopeIcons              []woxImage  `json:"ScopeIcons,omitempty"`
+	ResultPreviewWidthRatio *float64    `json:"ResultPreviewWidthRatio"`
+	GridLayout              *gridLayout `json:"GridLayout"`
+	ChatMode                bool        `json:"ChatMode"`
+}
+
+type gridLayout struct {
+	Columns     int      `json:"Columns"`
+	ShowTitle   bool     `json:"ShowTitle"`
+	ItemPadding int      `json:"ItemPadding"`
+	ItemMargin  int      `json:"ItemMargin"`
+	AspectRatio float64  `json:"AspectRatio"`
+	Commands    []string `json:"Commands"`
+}
+
+type queryRefinement struct {
+	ID           string                  `json:"Id"`
+	Title        string                  `json:"Title"`
+	Type         string                  `json:"Type"`
+	Options      []queryRefinementOption `json:"Options"`
+	DefaultValue []string                `json:"DefaultValue"`
+	Hotkey       string                  `json:"Hotkey"`
+	Persist      bool                    `json:"Persist"`
+}
+
+type queryRefinementOption struct {
+	Value    string   `json:"Value"`
+	Title    string   `json:"Title"`
+	Icon     woxImage `json:"Icon"`
+	Keywords []string `json:"Keywords"`
+	Count    *int     `json:"Count"`
+}
+
+type queryResult struct {
+	QueryID           string               `json:"QueryId"`
+	ID                string               `json:"Id"`
+	Title             string               `json:"Title"`
+	SubTitle          string               `json:"SubTitle"`
+	Icon              woxImage             `json:"Icon"`
+	IconShowContainer bool                 `json:"IconShowContainer"`
+	Preview           queryPreview         `json:"Preview"`
+	TitleTags         []resultTitleTag     `json:"TitleTags"`
+	Tails             []resultTail         `json:"Tails"`
+	Actions           []resultAction       `json:"Actions"`
+	DragData          *queryResultDragData `json:"DragData"`
+	IsGroup           bool                 `json:"IsGroup"`
+	Revision          uint64               `json:"-"`
+}
+
+type queryResultDragData struct {
+	Type                 string   `json:"Type"`
+	Files                []string `json:"Files"`
+	PreventHideAfterDrag bool     `json:"PreventHideAfterDrag"`
+}
+
+func (d *queryResultDragData) isFiles() bool {
+	return d != nil && d.Type == "files" && len(d.Files) > 0
+}
+
+type resultTitleTag struct {
+	Text    string   `json:"Text"`
+	Kind    string   `json:"Kind"`
+	Labels  []string `json:"Labels"`
+	Tooltip string   `json:"Tooltip"`
+}
+
+type resultTail struct {
+	Type         string            `json:"Type"`
+	Text         string            `json:"Text"`
+	TextCategory string            `json:"TextCategory"`
+	Image        woxImage          `json:"Image"`
+	ImageWidth   *float64          `json:"ImageWidth"`
+	ImageHeight  *float64          `json:"ImageHeight"`
+	Tooltip      string            `json:"Tooltip"`
+	ContextData  map[string]string `json:"ContextData"`
+}
+
+const uiReceivedTailTooltip = "onReceivedQueryResults elapsed since Go UI query request"
+
+// appendUIReceivedTails replaces the UI-owned timing tail while preserving core and plugin tails.
+func appendUIReceivedTails(results []queryResult, elapsed int64) {
+	for index := range results {
+		if results[index].IsGroup {
+			continue
+		}
+		tails := results[index].Tails[:0]
+		for _, tail := range results[index].Tails {
+			if tail.Tooltip != uiReceivedTailTooltip {
+				tails = append(tails, tail)
+			}
+		}
+		results[index].Tails = append(tails, resultTail{Type: "text", Text: fmt.Sprintf("%dms", elapsed), TextCategory: "default", Tooltip: uiReceivedTailTooltip})
+	}
+}
+
+type queryPreview struct {
+	DefaultHidden      bool              `json:"DefaultHidden"`
+	PreviewType        string            `json:"PreviewType"`
+	PreviewData        string            `json:"PreviewData"`
+	PreviewOverlayData string            `json:"PreviewOverlayData"`
+	PreviewTags        []previewTag      `json:"PreviewTags"`
+	PreviewProperties  map[string]string `json:"PreviewProperties"`
+	ScrollPosition     string            `json:"ScrollPosition"`
+}
+
+type previewTag struct {
+	Label   string `json:"Label"`
+	Tooltip string `json:"Tooltip"`
+}
+
+type resultAction struct {
+	ID                     string            `json:"Id"`
+	Type                   string            `json:"Type"`
+	Name                   string            `json:"Name"`
+	SearchAliases          []string          `json:"SearchAliases"`
+	Icon                   woxImage          `json:"Icon"`
+	IsDefault              bool              `json:"IsDefault"`
+	PreventHideAfterAction bool              `json:"PreventHideAfterAction"`
+	ShowInToolbar          bool              `json:"ShowInToolbar"`
+	Hotkey                 string            `json:"Hotkey"`
+	Form                   []formDefinition  `json:"Form"`
+	IsSystemAction         bool              `json:"IsSystemAction"`
+	Tail                   string            `json:"Tail"`
+	TailIcon               woxImage          `json:"TailIcon"`
+	ContextData            map[string]string `json:"ContextData"`
+}
+
+type formDefinition struct {
+	Type          string              `json:"Type"`
+	Value         formDefinitionValue `json:"Value"`
+	SearchAliases []string            `json:"SearchAliases"`
+}
+
+type formDefinitionValue struct {
+	Key          string `json:"Key"`
+	Label        string `json:"Label"`
+	Title        string `json:"Title"`
+	Suffix       string `json:"Suffix"`
+	DefaultValue string `json:"DefaultValue"`
+	Tooltip      string `json:"Tooltip"`
+	// Filterable shows a search field in a select dropdown.
+	Filterable bool `json:"Filterable,omitempty"`
+	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
+	ColumnType string `json:"ColumnType"`
+	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
+	QueryVariableKind string `json:"QueryVariableKind"`
+	// QueryTest shows the test button that runs this field's value as a launcher query.
+	QueryTest         bool              `json:"QueryTest"`
+	Content           string            `json:"Content"`
+	MaxLines          int               `json:"MaxLines"`
+	IsMulti           bool              `json:"IsMulti"`
+	Options           []formOption      `json:"Options"`
+	Validators        []formValidator   `json:"Validators"`
+	Columns           []formTableColumn `json:"Columns"`
+	SortColumnKey     string            `json:"SortColumnKey"`
+	SortOrder         string            `json:"SortOrder"`
+	MaxHeight         int               `json:"MaxHeight"`
+	InlineTable       bool              `json:"InlineTable"`
+	MinimumRowCount   int               `json:"MinimumRowCount"`
+	MinimumRowMessage string            `json:"MinimumRowMessage"`
+	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
+	EnableSearch      bool              `json:"EnableSearch"`
+	SearchColumnKey   string            `json:"SearchColumnKey"`
+	Groups            []formTableGroup  `json:"Groups"`
+	// Group is the row-editor section this field belongs to after a table column is mapped.
+	Group       string              `json:"Group"`
+	Rows        []formStatsRow      `json:"Rows"`
+	Description string              `json:"Description"`
+	Status      string              `json:"Status"`
+	Detail      string              `json:"Detail"`
+	Actions     []formServiceAction `json:"Actions"`
+}
+
+type formServiceAction struct {
+	ID      string `json:"ID"`
+	Label   string `json:"Label"`
+	Primary bool   `json:"Primary"`
+	Danger  bool   `json:"Danger"`
+	Enabled bool   `json:"Enabled"`
+}
+
+type formStatsRow struct {
+	Label string `json:"Label"`
+	Value string `json:"Value"`
+}
+
+type formTableColumn struct {
+	Key           string          `json:"Key"`
+	Label         string          `json:"Label"`
+	Tooltip       string          `json:"Tooltip"`
+	Width         int             `json:"Width"`
+	Type          string          `json:"Type"`
+	Validators    []formValidator `json:"Validators"`
+	SelectOptions []formOption    `json:"SelectOptions"`
+	// Filterable shows a search field in this column's select dropdown.
+	Filterable         bool     `json:"Filterable,omitempty"`
+	TextMaxLines       int      `json:"TextMaxLines"`
+	HideInTable        bool     `json:"HideInTable"`
+	HideInUpdate       bool     `json:"HideInUpdate"`
+	AllowedHotkeyKinds []string `json:"AllowedHotkeyKinds"`
+	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
+	EmptyAsZero bool `json:"EmptyAsZero"`
+	// VisibleWhen hides the column in the add/edit dialog unless another field matches.
+	VisibleWhen formTableColumnVisibleWhen `json:"VisibleWhen"`
+	// PreviewMatchedApps shows a live indexed-app list under this text column.
+	PreviewMatchedApps bool `json:"PreviewMatchedApps"`
+	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
+	QueryVariableKind string `json:"QueryVariableKind"`
+	// QueryTest shows the test button that runs this column's value as a launcher query.
+	QueryTest bool `json:"QueryTest"`
+	// Group is a formTableGroup.Key. Empty keeps the field ungrouped at the top.
+	Group string `json:"Group"`
+}
+
+// formTableGroup names a collapsible section in the add/edit row dialog.
+type formTableGroup struct {
+	Key                string `json:"Key"`
+	Title              string `json:"Title"`
+	Tooltip            string `json:"Tooltip"`
+	CollapsedByDefault bool   `json:"CollapsedByDefault"`
+}
+
+// formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.
+type formTableColumnVisibleWhen struct {
+	Key    string   `json:"Key"`
+	Values []string `json:"Values"`
+	Not    bool     `json:"Not,omitempty"`
+}
+
+type formOption struct {
+	Label string   `json:"Label"`
+	Value string   `json:"Value"`
+	Icon  woxImage `json:"Icon"`
+	// IsSelectAll stores only this option and clears every other selection.
+	IsSelectAll bool `json:"IsSelectAll,omitempty"`
+	// Group is a translated or i18n section label shown above this option.
+	Group            string `json:"Group,omitempty"`
+	GroupTooltip     string `json:"GroupTooltip,omitempty"`
+	ID               string `json:"ID"`
+	DisplayName      string `json:"DisplayName"`
+	Description      string `json:"Description"`
+	Languages        string `json:"Languages"`
+	Recommended      bool   `json:"Recommended"`
+	Available        bool   `json:"Available"`
+	Status           string `json:"Status"`
+	DownloadProgress int    `json:"DownloadProgress"`
+	SizeMB           int    `json:"SizeMB"`
+	Error            string `json:"Error"`
+}
+
+type formValidator struct {
+	Type  string             `json:"Type"`
+	Value formValidatorValue `json:"Value"`
+}
+
+type formValidatorValue struct {
+	IsInteger bool   `json:"IsInteger"`
+	IsFloat   bool   `json:"IsFloat"`
+	Optional  bool   `json:"Optional"`
+	HasRange  bool   `json:"HasRange"`
+	Min       int    `json:"Min"`
+	Max       int    `json:"Max"`
+	ErrorKey  string `json:"ErrorKey"`
+}
+
 // App owns one launcher window and its typed core service boundary.
 type App struct {
 	queryHintEditorState queryHintEditor
@@ -2296,378 +2670,4 @@ func (a *App) cancelQuerySelectionRestore(index int) {
 			queryID: a.query.QueryID, index: index, resultID: a.results[index].ID, preserveIndex: true,
 		}
 	}
-}
-
-// pendingResultSelection restores the highlight after RefreshQuery or query undo/redo.
-// resultID follows one result when the plugin rebuilds it with the same id.
-// preserveIndex keeps the old row when resultID is empty or that result is gone.
-type pendingResultSelection struct {
-	queryID       string
-	index         int
-	resultID      string
-	preserveIndex bool
-	// querySnapshot uses text matching and first-row overflow fallback only for undo/redo.
-	querySnapshot *queryResultSelection
-}
-
-type plainQuery struct {
-	QueryHint        *common.QueryHint `json:"QueryHint,omitempty"`
-	QueryID          string            `json:"QueryId"`
-	QueryType        string            `json:"QueryType"`
-	QueryText        string            `json:"QueryText"`
-	QuerySelection   selection         `json:"QuerySelection"`
-	QueryScope       queryScope        `json:"QueryScope"`
-	QueryRefinements map[string]string `json:"QueryRefinements"`
-	ContextData      map[string]string `json:"ContextData"`
-}
-
-type queryScope struct {
-	Plugins []queryScopePlugin `json:"Plugins,omitempty"`
-}
-
-type queryScopePlugin struct {
-	PluginID string `json:"PluginId"`
-	Command  string `json:"Command,omitempty"`
-}
-
-type selection struct {
-	Type      string   `json:"Type"`
-	Text      string   `json:"Text"`
-	FilePaths []string `json:"FilePaths"`
-}
-
-func newInputQuery(text string) plainQuery {
-	return plainQuery{
-		QueryID:          newID(),
-		QueryType:        "input",
-		QueryText:        text,
-		QuerySelection:   selection{FilePaths: []string{}},
-		QueryScope:       queryScope{},
-		QueryRefinements: map[string]string{},
-		ContextData:      map[string]string{},
-	}
-}
-
-type showAppParams struct {
-	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
-	ShowPreviewTitleBar bool                         `json:"-"`
-	SelectAll           bool                         `json:"SelectAll"`
-	Position            position                     `json:"Position"`
-	PositionHeight      int                          `json:"PositionHeight"`
-	WindowWidth         int                          `json:"WindowWidth"`
-	MaxResultCount      int                          `json:"MaxResultCount"`
-	QueryHistories      []plainQuery                 `json:"QueryHistories"`
-	LaunchMode          string                       `json:"LaunchMode"`
-	StartPage           string                       `json:"StartPage"`
-	HideQueryBox        bool                         `json:"HideQueryBox"`
-	HideToolbar         bool                         `json:"HideToolbar"`
-	QueryBoxAtBottom    bool                         `json:"QueryBoxAtBottom"`
-	HideOnBlur          bool                         `json:"HideOnBlur"`
-	RememberPosition    bool                         `json:"-"`
-	ShowSource          string                       `json:"ShowSource"`
-	RestoreWindow       *common.ActiveWindowSnapshot `json:"-"`
-}
-
-type position struct {
-	Type string `json:"Type"`
-	X    int    `json:"X"`
-	Y    int    `json:"Y"`
-}
-
-type queryResponse struct {
-	QueryID             string              `json:"QueryId"`
-	Results             []queryResult       `json:"Results"`
-	Refinements         []queryRefinement   `json:"Refinements"`
-	Layout              queryLayout         `json:"Layout"`
-	Context             queryContext        `json:"Context"`
-	IsFinal             bool                `json:"IsFinal"`
-	QueryStartTimestamp int64               `json:"QueryStartTimestamp"`
-	ActionIconRefs      map[string]woxImage `json:"ActionIconRefs"`
-}
-
-// resolveActionIconRefs restores response-local action icons before shared widgets see the result batch.
-func resolveActionIconRefs(results []queryResult, refs map[string]woxImage) {
-	for resultIndex := range results {
-		for actionIndex := range results[resultIndex].Actions {
-			icon := &results[resultIndex].Actions[actionIndex].Icon
-			if icon.ImageType != "iconref" {
-				continue
-			}
-			if resolved, ok := refs[icon.ImageData]; ok {
-				*icon = resolved
-			}
-		}
-	}
-}
-
-type queryContext struct {
-	IsGlobalQuery bool   `json:"IsGlobalQuery"`
-	PluginID      string `json:"PluginId"`
-}
-
-type queryLayout struct {
-	Icon                    woxImage    `json:"Icon"`
-	ScopeIcons              []woxImage  `json:"ScopeIcons,omitempty"`
-	ResultPreviewWidthRatio *float64    `json:"ResultPreviewWidthRatio"`
-	GridLayout              *gridLayout `json:"GridLayout"`
-	ChatMode                bool        `json:"ChatMode"`
-}
-
-type gridLayout struct {
-	Columns     int      `json:"Columns"`
-	ShowTitle   bool     `json:"ShowTitle"`
-	ItemPadding int      `json:"ItemPadding"`
-	ItemMargin  int      `json:"ItemMargin"`
-	AspectRatio float64  `json:"AspectRatio"`
-	Commands    []string `json:"Commands"`
-}
-
-type queryRefinement struct {
-	ID           string                  `json:"Id"`
-	Title        string                  `json:"Title"`
-	Type         string                  `json:"Type"`
-	Options      []queryRefinementOption `json:"Options"`
-	DefaultValue []string                `json:"DefaultValue"`
-	Hotkey       string                  `json:"Hotkey"`
-	Persist      bool                    `json:"Persist"`
-}
-
-type queryRefinementOption struct {
-	Value    string   `json:"Value"`
-	Title    string   `json:"Title"`
-	Icon     woxImage `json:"Icon"`
-	Keywords []string `json:"Keywords"`
-	Count    *int     `json:"Count"`
-}
-
-type queryResult struct {
-	QueryID           string               `json:"QueryId"`
-	ID                string               `json:"Id"`
-	Title             string               `json:"Title"`
-	SubTitle          string               `json:"SubTitle"`
-	Icon              woxImage             `json:"Icon"`
-	IconShowContainer bool                 `json:"IconShowContainer"`
-	Preview           queryPreview         `json:"Preview"`
-	TitleTags         []resultTitleTag     `json:"TitleTags"`
-	Tails             []resultTail         `json:"Tails"`
-	Actions           []resultAction       `json:"Actions"`
-	DragData          *queryResultDragData `json:"DragData"`
-	IsGroup           bool                 `json:"IsGroup"`
-	Revision          uint64               `json:"-"`
-}
-
-type queryResultDragData struct {
-	Type                 string   `json:"Type"`
-	Files                []string `json:"Files"`
-	PreventHideAfterDrag bool     `json:"PreventHideAfterDrag"`
-}
-
-func (d *queryResultDragData) isFiles() bool {
-	return d != nil && d.Type == "files" && len(d.Files) > 0
-}
-
-type resultTitleTag struct {
-	Text    string   `json:"Text"`
-	Kind    string   `json:"Kind"`
-	Labels  []string `json:"Labels"`
-	Tooltip string   `json:"Tooltip"`
-}
-
-type resultTail struct {
-	Type         string            `json:"Type"`
-	Text         string            `json:"Text"`
-	TextCategory string            `json:"TextCategory"`
-	Image        woxImage          `json:"Image"`
-	ImageWidth   *float64          `json:"ImageWidth"`
-	ImageHeight  *float64          `json:"ImageHeight"`
-	Tooltip      string            `json:"Tooltip"`
-	ContextData  map[string]string `json:"ContextData"`
-}
-
-const uiReceivedTailTooltip = "onReceivedQueryResults elapsed since Go UI query request"
-
-// appendUIReceivedTails replaces the UI-owned timing tail while preserving core and plugin tails.
-func appendUIReceivedTails(results []queryResult, elapsed int64) {
-	for index := range results {
-		if results[index].IsGroup {
-			continue
-		}
-		tails := results[index].Tails[:0]
-		for _, tail := range results[index].Tails {
-			if tail.Tooltip != uiReceivedTailTooltip {
-				tails = append(tails, tail)
-			}
-		}
-		results[index].Tails = append(tails, resultTail{Type: "text", Text: fmt.Sprintf("%dms", elapsed), TextCategory: "default", Tooltip: uiReceivedTailTooltip})
-	}
-}
-
-type queryPreview struct {
-	DefaultHidden      bool              `json:"DefaultHidden"`
-	PreviewType        string            `json:"PreviewType"`
-	PreviewData        string            `json:"PreviewData"`
-	PreviewOverlayData string            `json:"PreviewOverlayData"`
-	PreviewTags        []previewTag      `json:"PreviewTags"`
-	PreviewProperties  map[string]string `json:"PreviewProperties"`
-	ScrollPosition     string            `json:"ScrollPosition"`
-}
-
-type previewTag struct {
-	Label   string `json:"Label"`
-	Tooltip string `json:"Tooltip"`
-}
-
-type resultAction struct {
-	ID                     string            `json:"Id"`
-	Type                   string            `json:"Type"`
-	Name                   string            `json:"Name"`
-	SearchAliases          []string          `json:"SearchAliases"`
-	Icon                   woxImage          `json:"Icon"`
-	IsDefault              bool              `json:"IsDefault"`
-	PreventHideAfterAction bool              `json:"PreventHideAfterAction"`
-	ShowInToolbar          bool              `json:"ShowInToolbar"`
-	Hotkey                 string            `json:"Hotkey"`
-	Form                   []formDefinition  `json:"Form"`
-	IsSystemAction         bool              `json:"IsSystemAction"`
-	Tail                   string            `json:"Tail"`
-	TailIcon               woxImage          `json:"TailIcon"`
-	ContextData            map[string]string `json:"ContextData"`
-}
-
-type formDefinition struct {
-	Type          string              `json:"Type"`
-	Value         formDefinitionValue `json:"Value"`
-	SearchAliases []string            `json:"SearchAliases"`
-}
-
-type formDefinitionValue struct {
-	Key          string `json:"Key"`
-	Label        string `json:"Label"`
-	Title        string `json:"Title"`
-	Suffix       string `json:"Suffix"`
-	DefaultValue string `json:"DefaultValue"`
-	Tooltip      string `json:"Tooltip"`
-	// Filterable shows a search field in a select dropdown.
-	Filterable bool `json:"Filterable,omitempty"`
-	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
-	ColumnType string `json:"ColumnType"`
-	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
-	QueryVariableKind string `json:"QueryVariableKind"`
-	// QueryTest shows the test button that runs this field's value as a launcher query.
-	QueryTest         bool              `json:"QueryTest"`
-	Content           string            `json:"Content"`
-	MaxLines          int               `json:"MaxLines"`
-	IsMulti           bool              `json:"IsMulti"`
-	Options           []formOption      `json:"Options"`
-	Validators        []formValidator   `json:"Validators"`
-	Columns           []formTableColumn `json:"Columns"`
-	SortColumnKey     string            `json:"SortColumnKey"`
-	SortOrder         string            `json:"SortOrder"`
-	MaxHeight         int               `json:"MaxHeight"`
-	InlineTable       bool              `json:"InlineTable"`
-	MinimumRowCount   int               `json:"MinimumRowCount"`
-	MinimumRowMessage string            `json:"MinimumRowMessage"`
-	UpdateDialogWidth int               `json:"UpdateDialogWidth"`
-	EnableSearch      bool              `json:"EnableSearch"`
-	SearchColumnKey   string            `json:"SearchColumnKey"`
-	Groups            []formTableGroup  `json:"Groups"`
-	// Group is the row-editor section this field belongs to after a table column is mapped.
-	Group       string              `json:"Group"`
-	Rows        []formStatsRow      `json:"Rows"`
-	Description string              `json:"Description"`
-	Status      string              `json:"Status"`
-	Detail      string              `json:"Detail"`
-	Actions     []formServiceAction `json:"Actions"`
-}
-
-type formServiceAction struct {
-	ID      string `json:"ID"`
-	Label   string `json:"Label"`
-	Primary bool   `json:"Primary"`
-	Danger  bool   `json:"Danger"`
-	Enabled bool   `json:"Enabled"`
-}
-
-type formStatsRow struct {
-	Label string `json:"Label"`
-	Value string `json:"Value"`
-}
-
-type formTableColumn struct {
-	Key           string          `json:"Key"`
-	Label         string          `json:"Label"`
-	Tooltip       string          `json:"Tooltip"`
-	Width         int             `json:"Width"`
-	Type          string          `json:"Type"`
-	Validators    []formValidator `json:"Validators"`
-	SelectOptions []formOption    `json:"SelectOptions"`
-	// Filterable shows a search field in this column's select dropdown.
-	Filterable         bool     `json:"Filterable,omitempty"`
-	TextMaxLines       int      `json:"TextMaxLines"`
-	HideInTable        bool     `json:"HideInTable"`
-	HideInUpdate       bool     `json:"HideInUpdate"`
-	AllowedHotkeyKinds []string `json:"AllowedHotkeyKinds"`
-	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
-	EmptyAsZero bool `json:"EmptyAsZero"`
-	// VisibleWhen hides the column in the add/edit dialog unless another field matches.
-	VisibleWhen formTableColumnVisibleWhen `json:"VisibleWhen"`
-	// PreviewMatchedApps shows a live indexed-app list under this text column.
-	PreviewMatchedApps bool `json:"PreviewMatchedApps"`
-	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
-	QueryVariableKind string `json:"QueryVariableKind"`
-	// QueryTest shows the test button that runs this column's value as a launcher query.
-	QueryTest bool `json:"QueryTest"`
-	// Group is a formTableGroup.Key. Empty keeps the field ungrouped at the top.
-	Group string `json:"Group"`
-}
-
-// formTableGroup names a collapsible section in the add/edit row dialog.
-type formTableGroup struct {
-	Key                string `json:"Key"`
-	Title              string `json:"Title"`
-	Tooltip            string `json:"Tooltip"`
-	CollapsedByDefault bool   `json:"CollapsedByDefault"`
-}
-
-// formTableColumnVisibleWhen shows a row-editor field only when another field has one of Values.
-type formTableColumnVisibleWhen struct {
-	Key    string   `json:"Key"`
-	Values []string `json:"Values"`
-	Not    bool     `json:"Not,omitempty"`
-}
-
-type formOption struct {
-	Label string   `json:"Label"`
-	Value string   `json:"Value"`
-	Icon  woxImage `json:"Icon"`
-	// IsSelectAll stores only this option and clears every other selection.
-	IsSelectAll bool `json:"IsSelectAll,omitempty"`
-	// Group is a translated or i18n section label shown above this option.
-	Group            string `json:"Group,omitempty"`
-	GroupTooltip     string `json:"GroupTooltip,omitempty"`
-	ID               string `json:"ID"`
-	DisplayName      string `json:"DisplayName"`
-	Description      string `json:"Description"`
-	Languages        string `json:"Languages"`
-	Recommended      bool   `json:"Recommended"`
-	Available        bool   `json:"Available"`
-	Status           string `json:"Status"`
-	DownloadProgress int    `json:"DownloadProgress"`
-	SizeMB           int    `json:"SizeMB"`
-	Error            string `json:"Error"`
-}
-
-type formValidator struct {
-	Type  string             `json:"Type"`
-	Value formValidatorValue `json:"Value"`
-}
-
-type formValidatorValue struct {
-	IsInteger bool   `json:"IsInteger"`
-	IsFloat   bool   `json:"IsFloat"`
-	Optional  bool   `json:"Optional"`
-	HasRange  bool   `json:"HasRange"`
-	Min       int    `json:"Min"`
-	Max       int    `json:"Max"`
-	ErrorKey  string `json:"ErrorKey"`
 }
