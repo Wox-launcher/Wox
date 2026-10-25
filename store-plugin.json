@@ -1880,5 +1880,29 @@
         "plugin_desc": "搜索并复制颜文字。"
       }
     }
+  },
+  {
+    "Id": "c2d3f97d-ff20-4e27-8813-54f2c2192c6d",
+    "Name": "Asyntai AI Chatbot",
+    "Author": "Asyntai",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "python",
+    "Description": "Read your website chats, leads and tickets, and ask your Asyntai AI chatbot, right from Wox.",
+    "IconUrl": "https://raw.githubusercontent.com/asyntai/Wox.Plugin.AsyntaiAIChatbot/main/images/app.svg",
+    "Website": "https://asyntai.com/documentation/integrations/wox/",
+    "DownloadUrl": "https://github.com/asyntai/Wox.Plugin.AsyntaiAIChatbot/releases/latest/download/Wox.Plugin.AsyntaiAIChatbot.py",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/asyntai/Wox.Plugin.AsyntaiAIChatbot/main/images/screenshot-transcript.png",
+      "https://raw.githubusercontent.com/asyntai/Wox.Plugin.AsyntaiAIChatbot/main/images/screenshot-chats.png",
+      "https://raw.githubusercontent.com/asyntai/Wox.Plugin.AsyntaiAIChatbot/main/images/screenshot-menu.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-25 15:43:51",
+    "DateUpdated": "2026-10-25 15:43:51"
   }
 ]
