@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"wox/common"
 	"wox/util"
@@ -25,11 +26,40 @@ const (
 
 	// CategoryHotkeys, CategoryQueries, CategoryGeneral, CategoryThemes, and CategoryPlugins
 	// are the stable group ids onboarding translates. A launcher omits a group that has no items.
-	CategoryHotkeys = "hotkeys"
-	CategoryQueries = "queries"
-	CategoryGeneral = "general"
-	CategoryThemes  = "themes"
-	CategoryPlugins = "plugins"
+	CategoryHotkeys    = "hotkeys"
+	CategoryQueries    = "queries"
+	CategoryGeneral    = "general"
+	CategoryFileSearch = "file_search"
+	CategoryThemes     = "themes"
+	CategoryPlugins    = "plugins"
+	CategoryQuicklinks = "quicklinks"
+	CategoryShortcuts  = "shortcuts"
+	CategorySnippets   = "snippets"
+	CategoryNotes      = "notes"
+	CategoryClipboard  = "clipboard"
+	// CategoryPrepare is the locked first group. It quits the source launcher before hotkeys are registered.
+	CategoryPrepare = "prepare"
+
+	ItemKindSetting       = "setting"
+	ItemKindPlugin        = "plugin"
+	ItemKindQuicklink     = "quicklink"
+	ItemKindFavorite      = "favorite"
+	ItemKindNote          = "note"
+	ItemKindClipboard     = "clipboard"
+	ItemKindResultBinding = "result_binding"
+	// ItemKindCloseLauncher quits the source launcher before the rest of the import.
+	ItemKindCloseLauncher = "close_launcher"
+
+	// ClipboardSummaryID is the single catalog row for a clipboard history import.
+	ClipboardSummaryID = "clipboard:summary"
+	// CloseLauncherItemID is the locked row that quits the source launcher.
+	CloseLauncherItemID = "prepare:close_launcher"
+
+	// StatusConflict means the same identity already points at different Wox content.
+	StatusConflict = "conflict"
+
+	// CodeExportRequired means Catalog was called before an encrypted export was unlocked.
+	CodeExportRequired = "export_required"
 
 	// ValueOn and the other value ids are stable labels for a setting's current choice.
 	ValueOn             = "on"
@@ -66,10 +96,40 @@ type Installation interface {
 	Import(ctx context.Context, itemIDs []string) (ImportResult, error)
 }
 
+// RunningLauncher can release the global hotkeys it still owns by exiting.
+// Onboarding quits it before registering the imported shortcuts.
+type RunningLauncher interface {
+	// CloseRunning stops the launcher process. A nil error means it is no longer running.
+	CloseRunning(ctx context.Context) error
+}
+
+// ExportSource is an installation whose rows stay hidden until the user unlocks an export file.
+type ExportSource interface {
+	Installation
+	// Recognize checks the signature without decrypting the file.
+	Recognize(path string) (ok bool, detail string)
+	// Unlock retains mapped data for Catalog and Import until Reset.
+	Unlock(ctx context.Context, path, passphrase string) error
+	// Reset cancels session work and releases retained export data. It is safe to call more than once.
+	Reset()
+	// Generation changes on every Unlock and Reset so a late result can be dropped.
+	Generation() uint64
+	// SetKeepKeyword changes one snippet's body option inside the unlocked session.
+	SetKeepKeyword(itemID string, keep bool) bool
+}
+
 // Category is one group of migration choices, such as hotkeys or plugins.
 type Category struct {
 	ID    string
 	Items []Item
+}
+
+// CloseLauncherCategory is the locked first group. Detail carries the launcher name for {name}.
+func CloseLauncherCategory(name string) Category {
+	return Category{ID: CategoryPrepare, Items: []Item{{
+		ID: CloseLauncherItemID, Kind: ItemKindCloseLauncher, TitleKey: "close_launcher",
+		DetailKey: "close_launcher", Detail: name, Required: true,
+	}}}
 }
 
 // Item is one setting or plugin the user can include or leave behind.
@@ -84,6 +144,13 @@ type Item struct {
 	Icon       common.WoxImage
 	Selectable bool
 	Status     string
+	// Kind selects how onboarding applies the row. Empty keeps the older setting-prefix rule.
+	Kind string
+	// Required stays selected. The user cannot clear it, because the import depends on it.
+	Required bool
+	// OptionKey is an extra checkbox, such as keeping a snippet keyword in the note body.
+	OptionKey string
+	OptionOn  bool
 }
 
 // Plugin is one candidate shown before import.
@@ -103,9 +170,31 @@ type Plugin struct {
 // One SettingWrite can cover several items when Wox stores them as a single list.
 // Themes are new Wox themes mapped from the source. The caller installs each one and selects it.
 type ImportResult struct {
-	Plugins  []PluginResult
-	Settings []SettingWrite
-	Themes   []ThemeWrite
+	Plugins        []PluginResult
+	Settings       []SettingWrite
+	Themes         []ThemeWrite
+	Quicklinks     []QuicklinkWrite
+	Favorites      []FavoriteWrite
+	Notes          []NoteWrite
+	Clipboard      []ClipboardWrite
+	ResultBindings []ResultBindingWrite
+	Results        []ItemResult
+}
+
+// ResultBindingWrite hangs an alias and hotkey on one result found by a plugin query.
+type ResultBindingWrite struct {
+	ItemID              string
+	PluginID            string
+	Search              string
+	Command             string
+	TriggerKeyword      string
+	IdentityKey         string
+	Path                string
+	Title               string
+	Keyword             string
+	RequireSettingsPath bool
+	Alias               string
+	Hotkey              string
 }
 
 // ThemeWrite is one Wox theme produced by mapping a source launcher theme.
@@ -118,16 +207,63 @@ type ThemeWrite struct {
 // SettingWrite is one Wox setting value produced by the selected items.
 // QueryHotkeys and QueryAliases contain only the selected rows. Callers add those
 // rows to the stored table and leave existing rows in place. Other keys replace the current value.
+// PluginID selects a plugin setting store. Empty writes a Wox general setting.
 type SettingWrite struct {
-	ItemIDs []string
-	Key     string
-	Value   string
+	ItemIDs  []string
+	Key      string
+	Value    string
+	PluginID string
 }
 
 // PluginResult records whether one requested plugin was copied.
 type PluginResult struct {
 	ID    string
 	Error string
+}
+
+// QuicklinkWrite is one Web Search row mapped from a link quicklink.
+type QuicklinkWrite struct {
+	ItemID  string
+	Title   string
+	Keyword string
+	URL     string
+	Browser string
+}
+
+// FavoriteWrite is one file or folder quicklink mapped onto a Folder favorite.
+type FavoriteWrite struct {
+	ItemID string
+	Name   string
+	Path   string
+}
+
+// NoteWrite is one note mapped from a Raycast snippet or note.
+// Document is set for a Raycast note. Snippets leave it empty and use Title and Body.
+type NoteWrite struct {
+	ItemID      string
+	SourceID    string
+	Fingerprint string
+	Title       string
+	Body        string
+	Document    common.NoteDocument
+}
+
+// ClipboardWrite is mapped clipboard content. The clipboard package copies images and commits records.
+type ClipboardWrite struct {
+	ItemID    string
+	Text      string
+	ImagePath string
+	FilePaths []string
+	OCRText   string
+	CreatedAt time.Time
+	Pinned    bool
+}
+
+// ItemResult is one non-plugin import outcome.
+type ItemResult struct {
+	ID        string
+	Status    string
+	ErrorCode string
 }
 
 var (

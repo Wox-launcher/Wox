@@ -19,6 +19,7 @@ import (
 	"wox/plugin/thirdparty/migrate"
 	"wox/setting"
 	"wox/util"
+	"wox/util/shell"
 )
 
 const flowMigrationID = "flow"
@@ -30,7 +31,7 @@ func (flowMigrationSource) ID() string { return flowMigrationID }
 // Detect reads Flow's data directory. Scoop and other portable installs keep it
 // beside the app; the roaming directory is the fallback.
 func (flowMigrationSource) Detect(ctx context.Context) (migrate.Installation, error) {
-	root := flowUserDataRoot()
+	root, version := flowUserDataRoot()
 	if root == "" {
 		return nil, nil
 	}
@@ -45,20 +46,26 @@ func (flowMigrationSource) Detect(ctx context.Context) (migrate.Installation, er
 	if err != nil {
 		return nil, err
 	}
-	return flowInstallation{root: root, settings: settings}, nil
+	return flowInstallation{root: root, version: version, settings: settings}, nil
 }
 
 type flowInstallation struct {
 	root     string
+	version  string
 	settings flowLauncherSettings
 }
 
 func (f flowInstallation) ID() string            { return flowMigrationID }
 func (f flowInstallation) Name() string          { return "Flow Launcher" }
-func (f flowInstallation) Version() string       { return "" }
+func (f flowInstallation) Version() string       { return f.version }
 func (f flowInstallation) Location() string      { return f.root }
 func (f flowInstallation) Icon() common.WoxImage { return brand.Image() }
 func (f flowInstallation) Hotkey() string        { return strings.TrimSpace(f.settings.Hotkey) }
+
+// CloseRunning quits Flow Launcher so the global shortcuts being imported can be registered.
+func (f flowInstallation) CloseRunning(ctx context.Context) error {
+	return shell.CloseNamedProcesses(ctx, "Flow.Launcher.exe")
+}
 
 func (f flowInstallation) Plugins(ctx context.Context) ([]migrate.Plugin, error) {
 	entries, err := os.ReadDir(filepath.Join(f.root, "Plugins"))
@@ -312,16 +319,16 @@ func flowPythonMissing(ctx context.Context) bool {
 // The roaming directory is used only when no portable UserData is present.
 // A test-mode override replaces both so a smoke process does not import the
 // developer's real installation. An empty override means Flow is not installed.
-func flowUserDataRoot() string {
+func flowUserDataRoot() (string, string) {
 	if util.IsTestMode() {
 		if root := strings.TrimSpace(os.Getenv(util.TestFlowUserDataEnv)); root != "" {
-			return flowSettingsRoot(root)
+			return flowSettingsRoot(root), ""
 		}
 	}
-	if root := flowPortableUserData(); root != "" {
-		return root
+	if root, version := flowPortableUserData(); root != "" {
+		return root, version
 	}
-	return flowSettingsRoot(filepath.Join(strings.TrimSpace(os.Getenv("APPDATA")), "FlowLauncher"))
+	return flowSettingsRoot(filepath.Join(strings.TrimSpace(os.Getenv("APPDATA")), "FlowLauncher")), ""
 }
 
 func flowSettingsRoot(root string) string {
@@ -335,7 +342,7 @@ func flowSettingsRoot(root string) string {
 	return root
 }
 
-func flowPortableUserData() string {
+func flowPortableUserData() (string, string) {
 	var parents []string
 	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
 		parents = append(parents, filepath.Join(home, "scoop", "apps", "flow-launcher", "current"))
@@ -350,7 +357,10 @@ func flowPortableUserData() string {
 		if userData == "" {
 			return
 		}
-		version := flowAppVersion(appDir)
+		version := ""
+		if base := filepath.Base(appDir); len(base) > 4 && strings.EqualFold(base[:4], "app-") {
+			version = base[4:]
+		}
 		if best == "" || flowVersionLess(bestVersion, version) {
 			best = userData
 			bestVersion = version
@@ -368,7 +378,7 @@ func flowPortableUserData() string {
 			}
 		}
 	}
-	return best
+	return best, bestVersion
 }
 
 func flowAppVersion(appDir string) string {

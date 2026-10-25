@@ -103,7 +103,7 @@ func TestFlowMigrationDetectsScoopPortableUserData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if installation == nil || installation.Location() != userData || installation.Hotkey() != "Alt + Space" {
+	if installation == nil || installation.Location() != userData || installation.Version() != "2.1.4" || installation.Hotkey() != "Alt + Space" {
 		t.Fatalf("installation %#v", installation)
 	}
 	plugins, err := installation.Plugins(context.Background())

@@ -2,6 +2,7 @@ package component
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"wox/common"
 	woxui "wox/ui/runtime"
@@ -145,16 +146,83 @@ func TestNoteTaskDropAndNudgeDest(t *testing.T) {
 	}
 }
 
-func TestProjectNoteDocumentRendersEmptyParagraphsAsBlankLines(t *testing.T) {
+func TestProjectNoteDocumentShrinksASingleParagraphSeparator(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{Type: common.NoteBlockParagraph, Text: "first"},
 		{Type: common.NoteBlockParagraph},
 		{Type: common.NoteBlockParagraph, Text: "second"},
 	}}
-	value, _, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
+	value, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
 	if value != "first\n\nsecond" {
-		t.Fatalf("projection = %q, want a visible blank line between paragraphs", value)
+		t.Fatalf("projection = %q, want the separator block to stay in the text", value)
 	}
+	lines := textFieldRichLines(value, nil, woxui.TextStyle{Size: 14}, 400, true, NoteFieldRuns(runs))
+	layout := textFieldLayoutLines(lines, 24)
+	if layout.box(1) != noteParagraphGap || layout.top(2) != 24+noteParagraphGap {
+		t.Fatalf("separator line box %v top %v, want a %v gap instead of a full line", layout.box(1), layout.top(2), noteParagraphGap)
+	}
+}
+
+func TestProjectNoteDocumentKeepsExtraBlankLinesFullHeight(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockParagraph, Text: "first"},
+		{Type: common.NoteBlockParagraph},
+		{Type: common.NoteBlockParagraph},
+		{Type: common.NoteBlockParagraph, Text: "second"},
+	}}
+	value, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
+	lines := textFieldRichLines(value, nil, woxui.TextStyle{Size: 14}, 400, true, NoteFieldRuns(runs))
+	layout := textFieldLayoutLines(lines, 24)
+	if layout.top(len(lines)-1) != 24*3 {
+		t.Fatalf("tops end at %v across %d lines, want two full blank lines", layout.top(len(lines)-1), len(lines))
+	}
+}
+
+func TestProjectNoteDocumentSpacesAdjacentParagraphs(t *testing.T) {
+	document := common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockParagraph, Text: "first"},
+		{Type: common.NoteBlockHeading2, Text: "Title"},
+		{Type: common.NoteBlockBullet, Text: "item"},
+		{Type: common.NoteBlockBullet, Text: "next"},
+		{Type: common.NoteBlockParagraph, Text: "second"},
+	}}
+	value, runs, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 14}, ControlTheme{})
+	if value != "first\nTitle\n• item\n• next\nsecond" {
+		t.Fatalf("projection = %q", value)
+	}
+	if gap := noteRunGap(runs, utf8.RuneCountInString("first")); gap != noteParagraphGap {
+		t.Fatalf("paragraph gap = %v, want %v", gap, noteParagraphGap)
+	}
+	if gap := noteRunGap(runs, utf8.RuneCountInString("first\nTitle")); gap != noteParagraphGap {
+		t.Fatalf("heading gap = %v, want %v", gap, noteParagraphGap)
+	}
+	if gap := noteRunGap(runs, utf8.RuneCountInString("first\nTitle\n• item")); gap != 0 {
+		t.Fatalf("list item gap = %v, want list items to stay compact", gap)
+	}
+	if gap := noteRunGap(runs, utf8.RuneCountInString(value)); gap != 0 {
+		t.Fatalf("last block gap = %v, want 0", gap)
+	}
+	_, zoomed, _ := ProjectNoteDocument(document, woxui.TextStyle{Size: 28}, ControlTheme{})
+	if gap := noteRunGap(zoomed, utf8.RuneCountInString("first")); gap != noteParagraphGap*2 {
+		t.Fatalf("zoomed paragraph gap = %v, want %v", gap, noteParagraphGap*2)
+	}
+	fields := NoteFieldRuns(runs)
+	lines := textFieldRichLines(value, nil, woxui.TextStyle{Size: 14}, 400, true, fields)
+	layout := textFieldLayoutLines(lines, 24)
+	// first, Title, two list lines, second. Gaps follow the paragraph and the heading only.
+	if layout.top(1) != 24+noteParagraphGap || layout.top(2) != 24+noteParagraphGap+24+noteParagraphGap {
+		t.Fatalf("paragraph tops = %v %v, want space only between prose blocks", layout.top(1), layout.top(2))
+	}
+}
+
+func noteRunGap(runs []NoteTextRun, end int) float32 {
+	gap := float32(0)
+	for _, run := range runs {
+		if run.End == end && run.BlockGap > gap {
+			gap = run.BlockGap
+		}
+	}
+	return gap
 }
 
 func TestProjectNoteDocumentUsesSharedListGutters(t *testing.T) {

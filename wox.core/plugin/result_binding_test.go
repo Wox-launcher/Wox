@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/setting"
 	"wox/util"
 )
@@ -247,5 +248,57 @@ func TestResultBindingAcceptsExternalExecuteBeforePolish(t *testing.T) {
 	result.Actions[0].Type = QueryResultActionTypeForm
 	if canBindResultHotkey(instance, result) {
 		t.Fatal("form action was accepted as a silent hotkey")
+	}
+}
+
+func TestSelectQueryResultMatchesPathBeforeTitle(t *testing.T) {
+	target := QueryResult{Title: "Other", IdentityKey: `C:\Apps\Notes.exe`, Actions: []QueryResultAction{{
+		IsDefault: true, ContextData: common.ContextData{"path": `C:\Apps\Notes.exe`},
+	}}}
+	picked, ok := SelectQueryResult([]QueryResult{
+		{Title: "Notes", IdentityKey: `C:\Apps\Other.exe`},
+		target,
+	}, ResultBindingSelector{Path: `c:\apps\notes.exe`})
+	if !ok || picked.IdentityKey != target.IdentityKey {
+		t.Fatalf("picked = %+v ok=%v", picked, ok)
+	}
+	settings, ok := SelectQueryResult([]QueryResult{
+		{Title: "Display", IdentityKey: "ms-settings:display"},
+		{Title: "Magnifier", IdentityKey: "ms-settings:easeofaccess-magnifier"},
+	}, ResultBindingSelector{Title: "Display", RequireSettingsPath: true})
+	if !ok || settings.IdentityKey != "ms-settings:display" {
+		t.Fatalf("settings = %+v ok=%v", settings, ok)
+	}
+}
+
+func TestUpsertResultBindingKeepsTheOtherField(t *testing.T) {
+	manager := &Manager{}
+	manager.appendPluginInstance(&Instance{Metadata: Metadata{Id: "app", Features: []MetadataFeature{{Name: MetadataFeatureMRU}}}})
+	var saved []setting.ResultBinding
+	currentResultBindingsForTest = func() []setting.ResultBinding { return saved }
+	t.Cleanup(func() { currentResultBindingsForTest = nil })
+	manager.applyResultBindings = func(_ context.Context, bindings []setting.ResultBinding) error {
+		saved = setting.CloneResultBindings(bindings)
+		return nil
+	}
+	result := QueryResult{
+		Title: "Notes", SubTitle: `C:\Apps\Notes.exe`, IdentityKey: `C:\Apps\Notes.exe`,
+		Actions: []QueryResultAction{{
+			Name: "Open", IsDefault: true, ContextData: common.ContextData{"path": `C:\Apps\Notes.exe`},
+			Action: func(context.Context, ActionContext) {},
+		}},
+	}
+	query := ResultBindingQuery{Search: "Notes"}.PluginQuery()
+	status, err := manager.UpsertResultBinding(context.Background(), "app", query, result, "nt", "")
+	if err != nil || status != "imported" || len(saved) != 1 || saved[0].Alias != "nt" || saved[0].ContextData["path"] != `C:\Apps\Notes.exe` {
+		t.Fatalf("first = %s %v %+v", status, err, saved)
+	}
+	status, err = manager.UpsertResultBinding(context.Background(), "app", query, result, "", "alt+n")
+	if err != nil || status != "imported" || saved[0].Alias != "nt" || saved[0].Hotkey != "alt+n" {
+		t.Fatalf("second = %s %v %+v", status, err, saved)
+	}
+	status, err = manager.UpsertResultBinding(context.Background(), "app", query, result, "nt", "alt+n")
+	if err != nil || status != "exists" {
+		t.Fatalf("repeat = %s %v", status, err)
 	}
 }

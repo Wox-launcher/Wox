@@ -13,6 +13,7 @@ import "C"
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
@@ -38,8 +39,17 @@ func pickFileNative(owner uintptr, options FileDialogOptions) (string, error) {
 	if options.Directory {
 		directory = 1
 	}
+	var filter *C.wchar_t
+	pattern := strings.TrimSpace(options.Filter)
+	if pattern != "" {
+		nativeFilter, err := syscall.UTF16FromString(pattern)
+		if err != nil {
+			return "", err
+		}
+		filter = (*C.wchar_t)(unsafe.Pointer(&nativeFilter[0]))
+	}
 	var path *C.char
-	result := C.wox_windows_pick_file(C.uintptr_t(owner), directory, &path)
+	result := C.wox_windows_pick_file(C.uintptr_t(owner), directory, filter, &path)
 	if result == 1 {
 		return "", nil
 	}

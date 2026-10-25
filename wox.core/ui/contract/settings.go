@@ -561,6 +561,7 @@ type SettingsServices interface {
 	ThemeOperationSettingsServices
 	PluginCatalogSettingsServices
 	PluginOperationSettingsServices
+	MigrationImportServices
 	CloudSettingsServices
 	CloudAccountOperationSettingsServices
 	CloudSyncOperationSettingsServices

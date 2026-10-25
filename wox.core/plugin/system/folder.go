@@ -15,6 +15,7 @@ import (
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/system/migrateapply"
 	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -49,6 +50,7 @@ const (
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &FolderPlugin{})
+	migrateapply.ImportFavorites = importMigratedFavorites
 }
 
 type FolderPlugin struct {
@@ -251,7 +253,7 @@ func (p *FolderPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	})
 }
 
-// queryFavorites searches configured folder favorites by their saved name.
+// queryFavorites searches saved file and folder favorites by their name.
 func (p *FolderPlugin) queryFavorites(ctx context.Context, search string) []plugin.QueryResult {
 	search = strings.TrimSpace(search)
 	if search == "" {
@@ -272,12 +274,12 @@ func (p *FolderPlugin) queryFavorites(ctx context.Context, search string) []plug
 			continue
 		}
 
-		resolvedPath, ok := p.resolveFavoritePath(ctx, path, false)
+		resolvedPath, isDir, ok := p.resolveFavoritePath(ctx, path, false)
 		if !ok {
 			continue
 		}
 
-		results = append(results, p.buildFavoriteResult(name, resolvedPath, favoriteIndex, int64(len(favorites)-favoriteIndex)))
+		results = append(results, p.buildFavoriteResult(name, resolvedPath, isDir, favoriteIndex, int64(len(favorites)-favoriteIndex)))
 	}
 
 	return results
@@ -324,10 +326,7 @@ func (p *FolderPlugin) queryChildren(ctx context.Context, folderPath string, nam
 		}
 
 		fullPath := filepath.Join(folderPath, entry.Name())
-		var favoriteMatch *folderFavoriteMatch
-		if entry.IsDir() {
-			favoriteMatch = p.findFavoriteByPath(ctx, fullPath, favorites)
-		}
+		favoriteMatch := p.findFavoriteByPath(ctx, fullPath, favorites)
 		score := int64(0)
 		if namePrefix != "" {
 			score = folderResultScore
@@ -449,8 +448,8 @@ func (p *FolderPlugin) buildPathResult(path string, title string, isDir bool, sc
 	}
 }
 
-// buildFavoriteResult creates a saved-folder result with actions for opening, navigating, and maintaining the favorite.
-func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteIndex int, scoreBoost int64) plugin.QueryResult {
+// buildFavoriteResult creates a saved file or folder result. Enter opens it; Shift+Enter browses its directory.
+func (p *FolderPlugin) buildFavoriteResult(name string, path string, isDir bool, favoriteIndex int, scoreBoost int64) plugin.QueryResult {
 	return plugin.QueryResult{
 		Title:       name,
 		SubTitle:    path,
@@ -509,8 +508,8 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 	return actions
 }
 
-// buildFavoriteActions adds setting maintenance actions to saved folder results.
-func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIndex int) []plugin.QueryResultAction {
+// buildFavoriteActions adds setting maintenance actions to a saved file or folder.
+func (p *FolderPlugin) buildFavoriteActions(name string, path string, isDir bool, favoriteIndex int) []plugin.QueryResultAction {
 	actions := []plugin.QueryResultAction{
 		{
 			Id:        folderOpenActionID,
@@ -521,13 +520,27 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, favoriteIn
 				_ = shell.Open(path)
 			},
 		},
-		p.buildBrowseAction(path, true),
+		p.buildBrowseAction(path, isDir),
+	}
+	if !isDir {
+		actions = append(actions, plugin.QueryResultAction{
+			Id:   folderOpenContainingFolderActionID,
+			Name: "i18n:plugin_folder_open_containing_folder",
+			Icon: icons.Get(icons.ActionOpenContainingFolder),
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
+					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
+				}
+			},
+		})
+	}
+	actions = append(actions,
 		p.buildCopyPathAction(path),
 		p.buildCopyNameAction(name, path),
-		p.buildExecuteCommandAtLocationAction(path, true),
+		p.buildExecuteCommandAtLocationAction(path, isDir),
 		p.buildEditFavoriteAction(name, path, favoriteIndex),
 		p.buildDeleteFavoriteAction(name, path, favoriteIndex),
-	}
+	)
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
 	return actions
@@ -649,7 +662,7 @@ func (p *FolderPlugin) buildAddFavoriteAction(name string, path string) plugin.Q
 			if favorite.Path == "" {
 				favorite.Path = actionPath
 			}
-			if resolvedPath, ok := p.resolveFavoritePath(ctx, favorite.Path, true); ok {
+			if resolvedPath, _, ok := p.resolveFavoritePath(ctx, favorite.Path, true); ok {
 				favorite.Path = resolvedPath
 			} else {
 				return
@@ -681,7 +694,7 @@ func (p *FolderPlugin) buildEditFavoriteAction(name string, path string, favorit
 				Name: strings.TrimSpace(actionContext.Values[folderFavoriteFormNameKey]),
 				Path: strings.TrimSpace(actionContext.Values[folderFavoriteFormPathKey]),
 			}
-			if resolvedPath, ok := p.resolveFavoritePath(ctx, favorite.Path, true); ok {
+			if resolvedPath, _, ok := p.resolveFavoritePath(ctx, favorite.Path, true); ok {
 				favorite.Path = resolvedPath
 			} else {
 				return
@@ -771,7 +784,7 @@ func (p *FolderPlugin) loadFavorites(ctx context.Context) []folderFavorite {
 	return favorites
 }
 
-// findFavoriteByPath returns the saved favorite that points at the displayed folder path.
+// findFavoriteByPath returns the saved favorite that points at this file or folder.
 func (p *FolderPlugin) findFavoriteByPath(ctx context.Context, path string, favorites []folderFavorite) *folderFavoriteMatch {
 	normalizedPath, normalizeErr := normalizeFolderFavoritePath(path)
 	if normalizeErr != nil {
@@ -881,26 +894,27 @@ func validateFolderFavorites(ctx context.Context, favorites []folderFavorite) er
 	return nil
 }
 
-func (p *FolderPlugin) resolveFavoritePath(ctx context.Context, path string, notify bool) (string, bool) {
+// resolveFavoritePath accepts an existing file or folder. A missing path is skipped.
+func (p *FolderPlugin) resolveFavoritePath(ctx context.Context, path string, notify bool) (string, bool, bool) {
 	cleanedPath, err := normalizeFolderFavoritePath(path)
 	if err != nil {
 		if notify && p.api != nil {
 			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_required"))
 		}
-		return "", false
+		return "", false, false
 	}
 
 	info, statErr := os.Stat(cleanedPath)
-	if statErr != nil || !info.IsDir() {
+	if statErr != nil {
 		if notify && p.api != nil {
 			p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_invalid"), cleanedPath))
 		} else if p.api != nil {
-			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Skipping invalid folder favorite path: path=%q err=%v", cleanedPath, statErr))
+			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Skipping missing favorite path: path=%q err=%v", cleanedPath, statErr))
 		}
-		return "", false
+		return "", false, false
 	}
 
-	return cleanedPath, true
+	return cleanedPath, info.IsDir(), true
 }
 
 func normalizeFolderFavoritePath(path string) (string, error) {
@@ -969,8 +983,8 @@ func (p *FolderPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUD
 		return nil, fmt.Errorf("path no longer exists: %s", path)
 	}
 	name := strings.TrimSpace(mruData.ContextData[folderFavoriteContextNameKey])
-	if name != "" && info.IsDir() {
-		result := p.buildFavoriteResult(name, path, -1, 0)
+	if name != "" {
+		result := p.buildFavoriteResult(name, path, info.IsDir(), -1, 0)
 		return &result, nil
 	}
 	result := p.buildPathResult(path, filepath.Base(path), info.IsDir(), folderResultScore, nil)

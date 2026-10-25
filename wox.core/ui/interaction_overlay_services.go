@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"net/url"
 	"strings"
 
 	aitool "wox/ai/builtintool/wox"
 	"wox/common"
 	"wox/plugin"
 	"wox/ui/contract"
-	"wox/util"
 	"wox/util/emojiimage"
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
@@ -216,26 +214,5 @@ func (s *CoreServices) AnswerAIQuestion(ctx context.Context, sessionID string, q
 
 // FetchWebsiteIcon embeds a direct image URL or website favicon so saved settings survive cache cleanup and sync.
 func (s *CoreServices) FetchWebsiteIcon(ctx context.Context, sessionID string, websiteURL string) (common.WoxImage, error) {
-	parsed, err := url.Parse(websiteURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
-		return common.WoxImage{}, errors.New("invalid URL")
-	}
-	ctx = uiServiceContext(ctx, sessionID)
-	icon, err := websiteicon.FetchDirectImage(ctx, websiteURL)
-	if err == nil {
-		return icon, nil
-	}
-	util.GetLogger().Debug(ctx, "fetch settings icon: direct image failed: "+err.Error())
-	if !errors.Is(err, websiteicon.ErrNotAnImage) && websiteicon.IsDirectImageURL(websiteURL) {
-		return common.WoxImage{}, err
-	}
-	icon, err = websiteicon.Fetch(ctx, websiteURL)
-	if err != nil {
-		return common.WoxImage{}, err
-	}
-	decoded, err := icon.ToImageWithContext(ctx)
-	if err != nil {
-		return common.WoxImage{}, err
-	}
-	return common.NewWoxImage(decoded)
+	return websiteicon.FetchEmbedded(uiServiceContext(ctx, sessionID), websiteURL)
 }

@@ -165,7 +165,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 		background = withAlpha(props.Theme.BodyText, 12)
 	}
 	focused := props.Focused && props.FocusRow == row && props.FocusCol == column
-	runs := NoteFieldRuns(noteTableCellRuns(cell, woxui.TextStyle{Size: props.Style.Size, Weight: weight, Family: props.Style.Family}, props.Theme))
+	runs := NoteFieldRuns(noteTableCellRuns(cell, woxui.TextStyle{Size: props.Style.Size, Weight: weight, Family: props.Style.Family}))
 	rowIndex, colIndex := row, column
 	cellHeight := noteTableRowHeight(props.Zoom)
 	lineHeight := noteTableLineHeight(props.Zoom)
@@ -221,7 +221,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 	})
 }
 
-func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme ControlTheme) []NoteTextRun {
+func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle) []NoteTextRun {
 	styles := noteBlockStyles(common.NoteBlock{Text: cell.Text, Spans: cell.Spans}, cell.Text)
 	runs := make([]NoteTextRun, 0)
 	for offset := 0; offset < len(styles); {
@@ -240,7 +240,7 @@ func noteTableCellRuns(cell common.NoteTableCell, base woxui.TextStyle, theme Co
 		}
 		color := woxui.Color{}
 		if NoteOpenableLink(inline.link) != "" {
-			color = theme.Focus
+			color = DocumentListMarkerColor
 		}
 		runs = append(runs, NoteTextRun{
 			Start: offset, End: end, Style: style, Color: color,

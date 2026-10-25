@@ -16,6 +16,11 @@ const (
 	// TestFlowUserDataEnv points launcher import at one fixture directory.
 	// Smoke sets it so onboarding does not read a developer's real Flow install.
 	TestFlowUserDataEnv = "WOX_TEST_FLOW_USER_DATA"
+	// TestRaycastInstallEnv points Raycast migration at a fake install marker.
+	// Smoke sets it so onboarding does not scan a developer's real Raycast install.
+	TestRaycastInstallEnv = "WOX_TEST_RAYCAST_INSTALL"
+	// TestRaycastFileEnv is an optional .rayconfig path the onboarding unlock step can prefill.
+	TestRaycastFileEnv = "WOX_TEST_RAYCAST_FILE"
 )
 
 func GetTestWoxDataDirectoryOverride() string {

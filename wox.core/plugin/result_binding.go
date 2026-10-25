@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"wox/common"
 	"wox/common/icons"
+	"wox/database"
 	"wox/i18n"
 	"wox/setting"
 	"wox/setting/definition"
@@ -131,7 +133,16 @@ func canBindResultHotkey(instance *Instance, result QueryResult) bool {
 }
 
 // currentResultBindings reads the active platform binding snapshot.
+// currentResultBindingsForTest replaces the saved binding list when tests have no settings database.
+var currentResultBindingsForTest func() []setting.ResultBinding
+
 func currentResultBindings() []setting.ResultBinding {
+	if currentResultBindingsForTest != nil {
+		return currentResultBindingsForTest()
+	}
+	if database.GetDB() == nil {
+		return nil
+	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(context.Background())
 	if woxSetting == nil || woxSetting.ResultBindings == nil {
 		return nil
@@ -263,6 +274,194 @@ func (m *Manager) newSetResultAliasAction(pluginInstance *Instance, result Query
 			m.submitResultBindingField(ctx, pluginInstance, result, hash, resultBindingFormAliasKey, actionContext.Values[resultBindingFormAliasKey], actionContext.ResultId)
 		},
 	}
+}
+
+// ResultBindingQuery is the plugin query used to find one imported shortcut target.
+type ResultBindingQuery struct {
+	Search         string
+	Command        string
+	TriggerKeyword string
+}
+
+// PluginQuery builds the input query a system plugin already understands.
+func (q ResultBindingQuery) PluginQuery() Query {
+	search := strings.TrimSpace(q.Search)
+	command := strings.TrimSpace(q.Command)
+	trigger := strings.TrimSpace(q.TriggerKeyword)
+	raw := search
+	if trigger != "" {
+		raw = trigger
+		if search != "" {
+			raw += " " + search
+		}
+	} else if raw == "" {
+		raw = command
+	}
+	return Query{Type: QueryTypeInput, RawQuery: raw, Search: search, Command: command, TriggerKeyword: trigger}
+}
+
+// ResultBindingSelector picks one query result. Path and identity use the result's own fields.
+type ResultBindingSelector struct {
+	IdentityKey         string
+	Path                string
+	Title               string
+	Keyword             string
+	RequireSettingsPath bool
+}
+
+// QueryPlugin asks one loaded plugin for results. A missing plugin returns no rows.
+func (m *Manager) QueryPlugin(ctx context.Context, pluginID string, query Query) (results []QueryResult, err error) {
+	if m == nil {
+		return nil, fmt.Errorf("plugin manager is unavailable")
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			results = nil
+			err = fmt.Errorf("plugin query failed")
+		}
+	}()
+	instance := m.getPluginInstance(pluginID)
+	if instance == nil || instance.Plugin == nil {
+		return nil, fmt.Errorf("plugin %s is unavailable", pluginID)
+	}
+	return instance.Plugin.Query(ctx, query).Results, nil
+}
+
+// SelectQueryResult returns the first result that matches the selector.
+func SelectQueryResult(results []QueryResult, selector ResultBindingSelector) (QueryResult, bool) {
+	for _, result := range results {
+		path := resultContextValue(result, "path")
+		if selector.IdentityKey != "" && sameResultBindingToken(result.IdentityKey, selector.IdentityKey) {
+			return result, true
+		}
+		if selector.Path != "" && (sameResultBindingToken(path, selector.Path) || sameResultBindingToken(result.IdentityKey, selector.Path)) {
+			return result, true
+		}
+		if selector.Keyword != "" && sameResultBindingToken(resultContextValue(result, "keyword"), selector.Keyword) {
+			return result, true
+		}
+		if selector.Title != "" && strings.EqualFold(strings.TrimSpace(result.Title), strings.TrimSpace(selector.Title)) {
+			if !selector.RequireSettingsPath || strings.HasPrefix(strings.ToLower(path), "ms-settings:") || strings.HasPrefix(strings.ToLower(result.IdentityKey), "ms-settings:") {
+				return result, true
+			}
+		}
+	}
+	return QueryResult{}, false
+}
+
+func resultContextValue(result QueryResult, key string) string {
+	action := defaultPluginAction(result)
+	if action == nil || action.ContextData == nil {
+		return ""
+	}
+	return strings.TrimSpace(action.ContextData[key])
+}
+
+func sameResultBindingToken(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return false
+	}
+	if strings.EqualFold(left, right) {
+		return true
+	}
+	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+}
+
+// UpsertResultBinding stores an alias and hotkey on one query result and registers the hotkey.
+// An empty alias or hotkey keeps the value already stored for that result.
+func (m *Manager) UpsertResultBinding(ctx context.Context, pluginID string, query Query, result QueryResult, alias, hotkey string) (string, error) {
+	status, bindings, err := m.stageResultBinding(ctx, pluginID, query, result, alias, hotkey)
+	if err != nil || status == "exists" {
+		return status, err
+	}
+	if m == nil || m.applyResultBindings == nil {
+		return "failed", fmt.Errorf("result binding applier is not initialized")
+	}
+	if err = m.applyResultBindings(ctx, bindings); err != nil {
+		if strings.Contains(err.Error(), "conflict") {
+			return "conflict", err
+		}
+		return "failed", err
+	}
+	return "imported", nil
+}
+
+// PreviewResultBinding reports whether a binding can be saved without writing it.
+func (m *Manager) PreviewResultBinding(ctx context.Context, pluginID string, query Query, result QueryResult, alias, hotkey string) (string, error) {
+	status, _, err := m.stageResultBinding(ctx, pluginID, query, result, alias, hotkey)
+	return status, err
+}
+
+// stageResultBinding merges one shortcut onto the current result-binding list.
+func (m *Manager) stageResultBinding(ctx context.Context, pluginID string, query Query, result QueryResult, alias, hotkey string) (string, []setting.ResultBinding, error) {
+	if m == nil {
+		return "failed", nil, fmt.Errorf("plugin manager is unavailable")
+	}
+	instance := m.getPluginInstance(pluginID)
+	if instance == nil {
+		return "failed", nil, fmt.Errorf("plugin %s is unavailable", pluginID)
+	}
+	alias = strings.TrimSpace(alias)
+	hotkey = strings.TrimSpace(hotkey)
+	if alias == "" && hotkey == "" {
+		return "unsupported", nil, fmt.Errorf("i18n:plugin_manager_result_binding_invalid")
+	}
+	if alias != "" && !setting.IsSingleWordResultAlias(alias) {
+		return "unsupported", nil, fmt.Errorf("i18n:plugin_manager_result_alias_invalid")
+	}
+	if hotkey != "" && !canBindResultHotkey(instance, result) {
+		return "unsupported", nil, fmt.Errorf("i18n:plugin_manager_result_hotkey_not_executable")
+	}
+	hash := m.resultBindingHash(ctx, instance, query, result, "")
+	if hash == "" {
+		return "unsupported", nil, fmt.Errorf("i18n:plugin_manager_result_binding_invalid")
+	}
+	bindings := setting.CloneResultBindings(currentResultBindings())
+	previous := setting.ResultBinding{}
+	existed := false
+	index := -1
+	for i, binding := range bindings {
+		if binding.Hash == hash {
+			index = i
+			previous = binding
+			existed = true
+			break
+		}
+	}
+	if !existed {
+		contextData := common.ContextData{}
+		if action := defaultPluginAction(result); action != nil {
+			contextData = maps.Clone(action.ContextData)
+		}
+		bindings = append(bindings, setting.ResultBinding{
+			Hash: hash, PluginID: instance.Metadata.Id,
+			Title: m.translatePlugin(ctx, instance, result.Title), SubTitle: m.translatePlugin(ctx, instance, result.SubTitle),
+			Icon: result.Icon, ContextData: contextData,
+		})
+		index = len(bindings) - 1
+	}
+	next := bindings[index]
+	if alias != "" {
+		next.Alias = alias
+	}
+	if hotkey != "" {
+		next.Hotkey = hotkey
+	}
+	if existed && next.Alias == previous.Alias && next.Hotkey == previous.Hotkey {
+		return "exists", nil, nil
+	}
+	bindings[index] = next
+	if database.GetDB() != nil {
+		if err := m.ValidateResultBindings(ctx, bindings); err != nil {
+			if strings.Contains(err.Error(), "conflict") {
+				return "conflict", nil, err
+			}
+			return "unsupported", nil, err
+		}
+	}
+	return "ready", bindings, nil
 }
 
 // submitResultBindingField merges a form edit with the latest saved binding.

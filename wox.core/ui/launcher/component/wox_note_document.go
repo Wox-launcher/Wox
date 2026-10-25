@@ -40,6 +40,10 @@ type NoteTextRun struct {
 	HangingIndent  bool
 	// ListMarker replaces the backing prefix with the shared fixed-width list gutter.
 	ListMarker string
+	// BlockGap is extra space after the visual line that ends this run.
+	BlockGap float32
+	// LineBox, when set, replaces the field line height for the empty line this run covers.
+	LineBox float32
 }
 
 type noteInlineStyle struct {
@@ -73,11 +77,17 @@ var noteInlineRules = []struct {
 
 var noteOrderedPrefix = regexp.MustCompile(`^\d+\. `)
 
+// noteParagraphGap is the extra space after a prose block in the rich note view.
+// Four units is a slight separation on the 24-unit line box, not a blank line.
+// An explicit empty paragraph still renders as that full empty line.
+const noteParagraphGap = float32(8)
+
 // FieldRun converts a Notes decoration into a generic text-field run.
 func (run NoteTextRun) FieldRun() TextFieldRichRun {
 	field := TextFieldRichRun{
 		Start: run.Start, End: run.End, Style: run.Style, Color: run.Color,
 		Underline: run.Underline, Strike: run.Strike, Background: run.Background,
+		BlockGap: run.BlockGap, LineBox: run.LineBox,
 	}
 	if run.Checkbox {
 		size, color, checked := run.Style.Size, run.Color, run.Checked
@@ -223,7 +233,7 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			}
 			link := NoteOpenableLink(inline.link)
 			if link != "" && color == (woxui.Color{}) {
-				color = theme.Focus
+				color = DocumentListMarkerColor
 			}
 			runs = append(runs, NoteTextRun{
 				Start: textStart + offset, End: textStart + end, Style: style,
@@ -232,8 +242,79 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			})
 			offset = end
 		}
+		if noteParagraphSeparates(document.Blocks, index) {
+			noteMarkParagraphGap(runs, textEnd, noteParagraphGapSize(base))
+		}
+		if noteSeparatorParagraph(document.Blocks, index) {
+			// A markdown blank line is the paragraph break. Keep the block so editing
+			// can still land here, but draw it as the slight gap instead of a full line.
+			runs = append(runs, NoteTextRun{Start: textStart, End: textEnd, LineBox: noteParagraphGapSize(base)})
+		}
 	}
 	return output.String(), runs, ranges
+}
+
+// noteParagraphGapSize tracks note zoom, which is already baked into the editor font size.
+func noteParagraphGapSize(base woxui.TextStyle) float32 {
+	scale := base.Size / 14
+	if scale <= 0 {
+		scale = 1
+	}
+	return noteParagraphGap * scale
+}
+
+// noteParagraphSeparates reports whether this prose block should open space before the next one.
+// A following empty paragraph already is that space, so another gap would stack on the blank line.
+func noteParagraphSeparates(blocks []common.NoteBlock, index int) bool {
+	if index < 0 || index+1 >= len(blocks) {
+		return false
+	}
+	block := blocks[index]
+	if strings.TrimSpace(block.Text) == "" {
+		return false
+	}
+	switch block.Type {
+	case common.NoteBlockParagraph, common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3:
+	default:
+		return false
+	}
+	next := blocks[index+1]
+	return next.Type != common.NoteBlockParagraph || strings.TrimSpace(next.Text) != ""
+}
+
+// noteSeparatorParagraph reports an empty paragraph that only separates two prose blocks.
+// Extra blank lines and the caret gaps around images stay full height.
+func noteSeparatorParagraph(blocks []common.NoteBlock, index int) bool {
+	if index <= 0 || index+1 >= len(blocks) {
+		return false
+	}
+	block := blocks[index]
+	if block.Type != common.NoteBlockParagraph || strings.TrimSpace(block.Text) != "" {
+		return false
+	}
+	return noteProseBlock(blocks[index-1]) && noteProseBlock(blocks[index+1])
+}
+
+func noteProseBlock(block common.NoteBlock) bool {
+	if strings.TrimSpace(block.Text) == "" {
+		return false
+	}
+	switch block.Type {
+	case common.NoteBlockParagraph, common.NoteBlockHeading1, common.NoteBlockHeading2, common.NoteBlockHeading3:
+		return true
+	default:
+		return false
+	}
+}
+
+// noteMarkParagraphGap attaches the gap to the run that finishes the block.
+func noteMarkParagraphGap(runs []NoteTextRun, textEnd int, gap float32) {
+	for index := len(runs) - 1; index >= 0; index-- {
+		if runs[index].End == textEnd && runs[index].Start < runs[index].End {
+			runs[index].BlockGap = gap
+			return
+		}
+	}
 }
 
 func noteBlockPrefix(block common.NoteBlock, ordered int) string {
@@ -1087,7 +1168,13 @@ func noteRangeContentSpan(ranges []NoteBlockRange, lines []textFieldLine, lineHe
 	if first < 0 {
 		return 0, 0, false
 	}
-	return float32(first) * lineHeight, float32(last+1) * lineHeight, true
+	layout := textFieldLayoutLines(lines, lineHeight)
+	top := layout.top(first)
+	bottom := layout.top(last) + layout.box(last)
+	if last+1 < layout.count {
+		bottom = layout.top(last + 1)
+	}
+	return top, bottom, true
 }
 
 func noteBlockRangeByIndex(ranges []NoteBlockRange, block int) (NoteBlockRange, bool) {
@@ -1108,7 +1195,7 @@ func noteTaskInsertLineY(document common.NoteDocument, ranges []NoteBlockRange, 
 		return 0, true
 	}
 	if dest >= len(document.Blocks) {
-		return float32(len(lines)) * lineHeight, true
+		return textFieldLayoutLines(lines, lineHeight).total, true
 	}
 	top, _, ok := noteRangeContentSpan(ranges, lines, lineHeight, dest)
 	return top, ok

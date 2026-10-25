@@ -17,7 +17,12 @@ func (c *notesWindowController) noteVisualCaret(source string, offset int, sourc
 	if window == nil || width <= 0 || !noteSourceLooksWrapped(source, offset) {
 		return 0, false
 	}
-	lineHeight := 24 * c.zoom
+	// Paragraph spacing exists only in the rich preview, so a raw Y from one view
+	// does not identify the same line in the other.
+	if noteRunsHaveParagraphGap(sourceRuns) != noteRunsHaveParagraphGap(destRuns) {
+		return 0, false
+	}
+	lineHeight := notesEditorLineHeight * c.zoom
 	style := c.editorStyle()
 	layout, ok := woxcomponent.TextFieldCaretLayoutAt(source, offset, window, style, width, lineHeight, sourceRuns)
 	if !ok || !layout.AtLineEnd || layout.LineWidth >= width*0.7 {
@@ -43,6 +48,15 @@ func (c *notesWindowController) noteMeasureWindow() *woxui.Window {
 		return nil
 	}
 	return c.managed.Window()
+}
+
+func noteRunsHaveParagraphGap(runs []woxcomponent.TextFieldRichRun) bool {
+	for _, run := range runs {
+		if run.BlockGap > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // noteSourceLooksWrapped is a mid-block hard wrap, not a paragraph gap.

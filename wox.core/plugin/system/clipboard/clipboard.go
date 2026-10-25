@@ -22,6 +22,7 @@ import (
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system"
+	"wox/plugin/system/migrateapply"
 	notesplugin "wox/plugin/system/notes"
 	shellplugin "wox/plugin/system/shell"
 	"wox/setting/definition"
@@ -92,6 +93,7 @@ const (
 )
 
 func init() {
+	migrateapply.ImportClipboardItems = importMigratedClipboard
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ClipboardPlugin{
 		maxHistoryCount:       5000,
 		imageCache:            util.NewHashMap[string, *ImageCacheEntry](),
@@ -204,7 +206,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 		Icon:          clipboardIcon.String(),
 		Entry:         "",
 		TriggerKeywords: []string{
-			"cb",
+			"cb", "clipboard",
 		},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDisableAutoCommandHint},

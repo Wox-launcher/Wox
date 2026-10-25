@@ -2,6 +2,7 @@ package view
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -1110,10 +1111,57 @@ func TestOnboardingGlanceUsesCompactInlineSettings(t *testing.T) {
 	}
 }
 
+func TestOnboardingMigrationUnlockShowsOnlyTheVersion(t *testing.T) {
+	panel := onboardingMigrationUnlock(OnboardingProps{
+		MigrationSources: []OnboardingMigrationSource{{
+			ID: "raycast", Name: "Raycast", Version: "2.8.2.0", Location: `C:\Program Files\Raycast\Raycast.exe`,
+		}},
+		Labels: map[string]string{
+			"migrate.help": "Export", "migrate.file": "Choose", "migrate.passphrase": "Passphrase", "migrate.continue": "Continue",
+		},
+		MigrationPassphrase: woxwidget.NewTextEditingController(""),
+		Theme:               woxcomponent.ControlTheme{},
+	}, 640).(woxwidget.Flex)
+	title := panel.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	version := title.Children[1].(woxwidget.TextBlock)
+	if version.Value != "v2.8.2.0" || strings.Contains(version.Value, `Program`) {
+		t.Fatalf("version = %q", version.Value)
+	}
+}
+
+func TestOnboardingMigrationUnlockShowsBusyState(t *testing.T) {
+	panel := onboardingMigrationUnlock(OnboardingProps{
+		MigrationLoading: true,
+		MigrationSources: []OnboardingMigrationSource{{ID: "raycast", Name: "Raycast", Version: "2.8.2.0"}},
+		Labels: map[string]string{
+			"migrate.help": "Export", "migrate.file": "Choose", "migrate.passphrase": "Passphrase",
+			"migrate.continue": "Continue", "migrate.unlocking": "Decrypting…",
+		},
+		MigrationPassphrase: woxwidget.NewTextEditingController(""),
+		Theme: woxcomponent.ControlTheme{
+			Text:          woxui.Color{R: 245, G: 245, B: 247, A: 255},
+			TextSecondary: woxui.Color{R: 168, G: 168, B: 179, A: 255},
+		},
+	}, 640).(woxwidget.Flex)
+	field := panel.Children[3].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+	if !field.Disabled || field.Autofocus || field.Background.A == 0 || field.TextColor.A == 0 {
+		t.Fatalf("field disabled=%v autofocus=%v background=%v text=%v", field.Disabled, field.Autofocus, field.Background, field.TextColor)
+	}
+	button := panel.Children[4].(woxwidget.Semantics)
+	if button.AutomationID != "onboarding-migrate-unlock" || button.Label != "Decrypting…" || !button.Disabled {
+		t.Fatalf("button = %#v", button)
+	}
+	file := panel.Children[2].(woxwidget.Semantics)
+	if !file.Disabled {
+		t.Fatalf("file button stays enabled while unlocking")
+	}
+}
+
 func TestOnboardingMigrationChooserListsLaunchers(t *testing.T) {
 	chosen := ""
 	chooser := onboardingMigrationChooser(OnboardingProps{
-		MigrationSources: []OnboardingMigrationSource{{ID: "flow", Name: "Flow Launcher", Location: `C:\Flow`}, {ID: "other", Name: "Other"}},
+		MigrationSources: []OnboardingMigrationSource{{ID: "flow", Name: "Flow Launcher", Version: "2.1.4", Location: `C:\Flow`}, {ID: "other", Name: "Other", Location: `C:\Other`}},
+		Labels:           map[string]string{"migrate.import": "Import"},
 		Theme:            woxcomponent.ControlTheme{}, OnChooseMigration: func(id string) { chosen = id },
 	}, 640).(woxwidget.Container)
 	rows := chooser.Child.(woxwidget.Flex)
@@ -1121,8 +1169,26 @@ func TestOnboardingMigrationChooserListsLaunchers(t *testing.T) {
 	if first.AutomationID != "onboarding-migrate-source-flow" || first.Label != "Flow Launcher" {
 		t.Fatalf("source row = %#v", first)
 	}
+	title := first.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	version := title.Children[1].(woxwidget.TextBlock)
+	if version.Value != "v2.1.4" || strings.Contains(version.Value, `C:\`) {
+		t.Fatalf("version = %q", version.Value)
+	}
+	button := first.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Semantics)
+	if button.AutomationID != "onboarding-migrate-import-flow" || button.Label != "Import" || button.Role != woxui.AccessibilityRoleButton {
+		t.Fatalf("import button = %#v", button)
+	}
 	if err := first.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || chosen != "flow" {
 		t.Fatalf("choose = %q err=%v", chosen, err)
+	}
+	secondRow := rows.Children[1].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	secondTitle := secondRow.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
+	if len(secondTitle.Children) != 1 {
+		t.Fatalf("launcher without a version shows %d lines", len(secondTitle.Children))
+	}
+	second := secondRow.Children[2].(woxwidget.Semantics)
+	if second.AutomationID != "onboarding-migrate-import-other" || second.Label != "Import" {
+		t.Fatalf("second import button = %#v", second)
 	}
 }
 
@@ -1159,6 +1225,36 @@ func TestOnboardingMigrationItemRowUsesCheckboxUntilImported(t *testing.T) {
 	unsupported := rows[2].(woxwidget.Keyed).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Text)
 	if unsupported.Value != "Not supported" {
 		t.Fatalf("status = %q", unsupported.Value)
+	}
+}
+
+func TestOnboardingMigrationCloseLauncherStaysChecked(t *testing.T) {
+	toggled := false
+	rows := onboardingMigrationRows(OnboardingProps{
+		MigrationCategories: []OnboardingMigrationCategory{{
+			ID: "prepare", Title: "Before import",
+			Items: []OnboardingMigrationItem{{
+				ID: "prepare:close_launcher", Title: "Quit Raycast",
+				Detail:      "Raycast is holding the global shortcuts in this import.",
+				DetailLines: 2, Selected: true, Required: true,
+			}},
+		}},
+		Theme: woxcomponent.ControlTheme{}, OnToggleMigrationItem: func(string, bool) { toggled = true },
+	}, 640)
+	row := rows[1].(woxwidget.Keyed).Child.(woxwidget.Container)
+	if row.Height != 88 {
+		t.Fatalf("height = %v", row.Height)
+	}
+	checkbox := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if !checkbox.Checked || !checkbox.Disabled || len(checkbox.Actions) != 0 {
+		t.Fatalf("checkbox = %#v", checkbox)
+	}
+	if err := checkbox.OnAction(woxui.AccessibilityActionToggle, ""); err != nil || toggled {
+		t.Fatalf("toggle = %v err=%v", toggled, err)
+	}
+	detail := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex).Children[1].(woxwidget.TextBlock)
+	if detail.MaxLines != 2 {
+		t.Fatalf("lines = %d", detail.MaxLines)
 	}
 }
 

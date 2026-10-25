@@ -70,10 +70,9 @@ type onboardingPluginState struct {
 
 // onboardingThemeState tracks the theme being applied from the onboarding catalog.
 type onboardingThemeState struct {
-	selectedID string
-	loading    bool
-	applying   bool
-	error      string
+	loading  bool
+	applying bool
+	error    string
 }
 
 // openOnboarding presents the first-run guide in its dedicated window.
@@ -94,7 +93,7 @@ func (a *App) openOnboarding() error {
 		a.onboardingError = ""
 		a.onboardingQueryHotkey = nil
 		a.onboardingPlugins = onboardingPluginState{}
-		a.onboardingTheme = onboardingThemeState{selectedID: onboardingGlassID}
+		a.onboardingTheme = onboardingThemeState{}
 		a.onboardingMigration = newOnboardingMigrationState(installations)
 		a.stopHotkeyRecording()
 		settingsView = a.settingsView
@@ -160,6 +159,7 @@ func (a *App) finishOnboarding() {
 		cancel()
 		var onboardingView *woxui.ManagedWindow
 		_ = a.runOnUI("leave onboarding", func() {
+			a.releaseOnboardingMigrationSession()
 			a.onboardingOpen = false
 			a.onboardingChoice = ""
 			a.onboardingChoiceAnchor = woxui.Rect{}
@@ -186,7 +186,6 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 	snapshot := a.settingsSnapshot()
 	snapshot.palette.DensityScale = a.densityMetrics.normalized().scale
 	steps := a.onboardingSteps()
-	systemThemes := onboardingSystemThemes(snapshot.theme.Themes)
 	for index := range steps {
 		steps[index].Accent = onboardingAccentColor
 	}
@@ -316,20 +315,7 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			Disabled:   a.onboardingPlugins.operationID != "",
 		}
 	}
-	themes := make([]launcherview.OnboardingTheme, len(systemThemes))
-	for index, theme := range systemThemes {
-		preview := paletteForTheme(theme.previewTheme).componentTheme()
-		lightPreview := preview
-		darkPreview := preview
-		if theme.IsAuto {
-			lightPreview = themeVariantPreview(snapshot.theme.Themes, theme.LightThemeID, true)
-			darkPreview = themeVariantPreview(snapshot.theme.Themes, theme.DarkThemeID, false)
-		}
-		themes[index] = launcherview.OnboardingTheme{
-			ID: theme.ID, Name: theme.Name, Selected: theme.ID == a.onboardingTheme.selectedID, IsAuto: theme.IsAuto,
-			PreviewTheme: preview, LightPreviewTheme: lightPreview, DarkPreviewTheme: darkPreview,
-		}
-	}
+	themes := onboardingThemeItems(snapshot.theme.Themes, snapshot.general.Data.ThemeID)
 	previewTexts := []string{a.translate("i18n:ui_theme_preview_text_1"), a.translate("i18n:ui_theme_preview_text_2")}
 	previewSubtitles := []string{
 		strings.ReplaceAll(a.translate("i18n:ui_theme_preview_subtitle"), "{index}", "1"),
@@ -348,6 +334,9 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		}
 		if !a.onboardingMigration.done && (a.onboardingMigrationCanImport() || a.onboardingMigration.importing) {
 			nextLabel = labels["migrate.import"]
+			if a.onboardingMigration.importing {
+				nextLabel = labels["migrate.importing"]
+			}
 			if !a.onboardingMigration.importing {
 				skipLabel = labels["migrate.skip"]
 				onSkip = func() { a.selectOnboardingStep(active + 1) }
@@ -372,7 +361,9 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 		Themes: themes, ThemesLoading: a.onboardingTheme.loading, ThemesApplying: a.onboardingTheme.applying, ThemesError: a.onboardingTheme.error,
 		MigrationChoosing: a.onboardingMigration.choosing, MigrationSources: migrationSources, MigrationCategories: migrationCategories,
 		MigrationLoading: a.onboardingMigration.loading, MigrationImporting: a.onboardingMigration.importing, MigrationDone: a.onboardingMigration.done,
-		MigrationActiveID: a.onboardingMigration.activeID, MigrationError: a.onboardingMigration.error,
+		MigrationActiveID: a.onboardingMigration.activeID, MigrationError: a.migrationExportMessage(a.onboardingMigration.error),
+		MigrationUnlock:     a.migrationNeedsUnlock() && !a.onboardingMigration.choosing,
+		MigrationExportPath: a.onboardingMigration.exportPath, MigrationPassphrase: a.migrationPassphraseController(),
 		ThemePreviewTitle: a.translate("i18n:ui_theme_preview_title"), ThemePreviewTexts: previewTexts,
 		ThemePreviewSubs: previewSubtitles, ThemePreviewOpen: a.translate("i18n:ui_theme_preview_open"),
 		Permissions: permissions, PermissionLoading: a.onboardingLoading,
@@ -392,14 +383,17 @@ func (a *App) buildOnboarding(frame woxui.FrameInfo) woxwidget.Widget {
 			a.selectOnboardingStep(active + 1)
 		},
 		OnFinish: a.finishOnboarding, OnToggleGlance: a.setOnboardingGlanceEnabled,
-		OnRecordHotkey:        func() { a.focusOnboardingHotkey(0); a.recordHotkeySettingsField(0) },
-		OnRecordQueryHotkey:   a.recordOnboardingQueryHotkey,
-		OnToggleQueryHotkey:   a.toggleOnboardingQueryHotkey,
-		OnInstallPlugin:       a.installOnboardingPlugin,
-		OnSelectTheme:         a.selectOnboardingTheme,
-		OnChooseMigration:     a.chooseOnboardingMigration,
-		OnToggleMigrationItem: a.toggleOnboardingMigrationItem,
-		OnOpenChoice:          a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
+		OnRecordHotkey:          func() { a.focusOnboardingHotkey(0); a.recordHotkeySettingsField(0) },
+		OnRecordQueryHotkey:     a.recordOnboardingQueryHotkey,
+		OnToggleQueryHotkey:     a.toggleOnboardingQueryHotkey,
+		OnInstallPlugin:         a.installOnboardingPlugin,
+		OnSelectTheme:           a.selectOnboardingTheme,
+		OnChooseMigration:       a.chooseOnboardingMigration,
+		OnToggleMigrationItem:   a.toggleOnboardingMigrationItem,
+		OnPickMigrationFile:     a.pickOnboardingMigrationFile,
+		OnUnlockMigration:       a.unlockOnboardingMigration,
+		OnToggleMigrationOption: a.toggleOnboardingMigrationOption,
+		OnOpenChoice:            a.openOnboardingChoice, OnSelectChoice: a.selectOnboardingChoice, OnPermission: a.openOnboardingPermission,
 	})
 }
 
@@ -470,6 +464,7 @@ func (a *App) onboardingLabels() map[string]string {
 		"migrate.body":                  a.translate("i18n:onboarding_migrate_body"),
 		"migrate.choose":                a.translate("i18n:onboarding_migrate_choose_body"),
 		"migrate.import":                a.translate("i18n:onboarding_migrate_import"),
+		"migrate.importing":             a.translate("i18n:onboarding_migrate_importing"),
 		"migrate.skip":                  a.translate("i18n:onboarding_migrate_skip"),
 		"migrate.empty":                 a.translate("i18n:onboarding_migrate_empty"),
 		"migrate.loading":               a.translate("i18n:onboarding_migrate_loading"),
@@ -478,6 +473,13 @@ func (a *App) onboardingLabels() map[string]string {
 		"migrate.copying":               a.translate("i18n:onboarding_migrate_status_importing"),
 		"migrate.copied":                a.translate("i18n:onboarding_migrate_status_done"),
 		"migrate.failed":                a.translate("i18n:onboarding_migrate_status_failed"),
+		"migrate.conflict":              a.translate("i18n:onboarding_migrate_status_conflict"),
+		"migrate.cancelled":             a.translate("i18n:onboarding_migrate_status_cancelled"),
+		"migrate.help":                  a.translate("i18n:onboarding_migrate_raycast_help"),
+		"migrate.file":                  a.translate("i18n:onboarding_migrate_raycast_file"),
+		"migrate.passphrase":            a.translate("i18n:onboarding_migrate_raycast_passphrase"),
+		"migrate.continue":              a.translate("i18n:onboarding_migrate_raycast_continue"),
+		"migrate.unlocking":             a.translate("i18n:onboarding_migrate_raycast_unlocking"),
 		"migrate.python":                a.translate("i18n:onboarding_migrate_python"),
 		"finish.body":                   a.translate("i18n:onboarding_finish_card_body"),
 		"finish.hotkey":                 a.translate("i18n:onboarding_finish_summary_hotkey"),
@@ -539,6 +541,7 @@ func (a *App) selectOnboardingStep(index int) {
 		if index == a.onboardingStep-1 && a.retreatOnboardingMigration() {
 			return
 		}
+		a.releaseOnboardingMigrationSession()
 	}
 	if index > a.onboardingStep && steps[a.onboardingStep].ID == "mainHotkey" {
 		data := a.generalSettings.Data()
@@ -882,6 +885,27 @@ func onboardingSystemThemes(themes []themeSettingsTheme) []themeSettingsTheme {
 	return result
 }
 
+// onboardingThemeItems derives the checked card from the active setting so imports
+// and failed theme changes cannot leave a separate onboarding selection stale.
+func onboardingThemeItems(catalog []themeSettingsTheme, currentID string) []launcherview.OnboardingTheme {
+	systemThemes := onboardingSystemThemes(catalog)
+	themes := make([]launcherview.OnboardingTheme, len(systemThemes))
+	for index, theme := range systemThemes {
+		preview := paletteForTheme(theme.previewTheme).componentTheme()
+		lightPreview := preview
+		darkPreview := preview
+		if theme.IsAuto {
+			lightPreview = themeVariantPreview(catalog, theme.LightThemeID, true)
+			darkPreview = themeVariantPreview(catalog, theme.DarkThemeID, false)
+		}
+		themes[index] = launcherview.OnboardingTheme{
+			ID: theme.ID, Name: theme.Name, Selected: theme.ID == currentID, IsAuto: theme.IsAuto,
+			PreviewTheme: preview, LightPreviewTheme: lightPreview, DarkPreviewTheme: darkPreview,
+		}
+	}
+	return themes
+}
+
 // loadOnboardingThemes loads installed system themes through the shared theme catalog.
 func (a *App) loadOnboardingThemes() {
 	if a.onboardingTheme.loading || len(onboardingSystemThemes(a.themeSettings.Themes())) == 4 {
@@ -889,24 +913,17 @@ func (a *App) loadOnboardingThemes() {
 	}
 	a.onboardingTheme.loading = true
 	a.onboardingTheme.error = ""
+	themeID := a.currentThemeID()
 	a.invalidateOnboardingWindow()
 	util.Go(a.lifecycleCtx, "load onboarding themes", func() {
 		util.GetLogger().Info(a.lifecycleCtx, "loading onboarding system themes")
-		err := a.reloadThemes("installed", onboardingGlassID)
+		err := a.reloadThemes("installed", themeID)
 		if applyErr := a.runOnUI("apply onboarding themes", func() {
 			a.onboardingTheme.loading = false
 			if err != nil {
 				a.onboardingTheme.error = err.Error()
 			} else {
 				a.onboardingTheme.error = ""
-				themes := onboardingSystemThemes(a.themeSettings.Themes())
-				found := false
-				for _, theme := range themes {
-					found = found || theme.ID == a.onboardingTheme.selectedID
-				}
-				if !found && len(themes) > 0 {
-					a.onboardingTheme.selectedID = themes[0].ID
-				}
 			}
 			util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf("onboarding system themes loaded: count=%d error=%v", len(onboardingSystemThemes(a.themeSettings.Themes())), err))
 			a.invalidateOnboardingWindow()
@@ -921,19 +938,6 @@ func (a *App) selectOnboardingTheme(themeID string) {
 	if a.onboardingTheme.loading || a.onboardingTheme.applying {
 		return
 	}
-	for _, theme := range onboardingSystemThemes(a.themeSettings.Themes()) {
-		if theme.ID == themeID {
-			a.onboardingTheme.selectedID = themeID
-			a.onboardingTheme.error = ""
-			a.applyOnboardingTheme()
-			return
-		}
-	}
-}
-
-// applyOnboardingTheme applies the selected bundled theme immediately.
-func (a *App) applyOnboardingTheme() {
-	themeID := a.onboardingTheme.selectedID
 	found := false
 	for _, theme := range onboardingSystemThemes(a.themeSettings.Themes()) {
 		if theme.ID == themeID {
@@ -944,6 +948,7 @@ func (a *App) applyOnboardingTheme() {
 	if !found {
 		return
 	}
+	a.onboardingTheme.error = ""
 	if a.currentThemeID() == themeID {
 		a.invalidateOnboardingWindow()
 		return

@@ -1,9 +1,25 @@
 package mediaplayer
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"wox/common"
+	"wox/plugin"
 )
+
+func TestPlayPauseQueryStaysAvailableWithoutMedia(t *testing.T) {
+	player := &MediaPlayerPlugin{}
+	results := player.Query(context.Background(), plugin.Query{Type: plugin.QueryTypeInput, RawQuery: "playpause", Search: "playpause"}).Results
+	if len(results) != 1 || results[0].IdentityKey != common.MediaPlayerToggleIdentity {
+		t.Fatalf("results = %+v", results)
+	}
+	restored, err := player.handleMRURestore(context.Background(), plugin.MRUData{ContextData: map[string]string{"command": "toggle"}})
+	if err != nil || restored == nil || restored.IdentityKey != common.MediaPlayerToggleIdentity {
+		t.Fatalf("restore = %+v %v", restored, err)
+	}
+}
 
 func TestCloneMediaInfoCopiesArtwork(t *testing.T) {
 	original := &MediaInfo{Title: "song", Artwork: []byte{1, 2, 3}}

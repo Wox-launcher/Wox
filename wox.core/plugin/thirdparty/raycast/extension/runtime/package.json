@@ -1,0 +1,17 @@
+{
+  "name": "wox-raycast-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "license": "GPL-3.0",
+  "scripts": {
+    "build": "node build.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-reconciler": "0.32.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
