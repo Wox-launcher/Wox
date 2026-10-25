@@ -5,6 +5,7 @@ package quickjump
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerTransitionInvalidatedCallbackCGO();
+extern void fileManagerSourceActivatedCallbackCGO(int pid, uintptr_t windowId);
 extern void fileExplorerLogCallbackCGO(char* msg);
 int refreshFileExplorerMonitorState();
 int refreshFileExplorerMonitorStateForRawKey(int allowDesktop);
@@ -168,6 +169,20 @@ func fileExplorerTransitionInvalidatedCallbackCGO() {
 	foregroundTransition.Deactivate()
 	stateMu.Unlock()
 	logFromMonitor("go transition: invalidated by Wox foreground")
+}
+
+// fileManagerSourceActivatedCallbackCGO records a third-party file manager (Directory Opus)
+// as the Quick Switch source only. Native code has already deactivated any Explorer or
+// dialog state, and currentState stays stateNone so Explorer overlays and type-to-search
+// never run inside it.
+//
+//export fileManagerSourceActivatedCallbackCGO
+func fileManagerSourceActivatedCallbackCGO(pid C.int, windowId C.uintptr_t) {
+	windowID := formatExplorerWindowID(uintptr(windowId))
+	stateMu.Lock()
+	foregroundTransition.ActivateExplorer(ExplorerWindowRef{Pid: int(pid), WindowID: windowID})
+	stateMu.Unlock()
+	logFromMonitor(fmt.Sprintf("go file manager source: pid=%d windowId=%s", int(pid), windowID))
 }
 
 func checkUpdateMonitorState() error {

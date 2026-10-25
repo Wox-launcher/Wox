@@ -39,6 +39,7 @@ static UINT getDpiForWindowMonitor(HWND hwnd)
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerTransitionInvalidatedCallbackCGO();
+extern void fileManagerSourceActivatedCallbackCGO(int pid, uintptr_t windowId);
 extern void fileExplorerLogCallbackCGO(char *msg);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
@@ -56,7 +57,10 @@ enum ForegroundState
 {
     stateNone = 0,
     stateExplorer = 1,
-    stateDialog = 2
+    stateDialog = 2,
+    // A third-party file manager that may only be a Quick Switch source. It never
+    // enters stateExplorer, so Explorer-only behavior such as type-to-search stays out.
+    stateFileManagerSource = 3
 };
 static enum ForegroundState currentState = stateNone;
 
@@ -460,6 +464,18 @@ static int classifyExplorerWindow(HWND hwnd)
     return 0;
 }
 
+static int isDirectoryOpusLister(HWND hwnd, DWORD pid)
+{
+    WCHAR className[64];
+    if (pid == 0 || GetClassNameW(hwnd, className, 64) == 0 || _wcsicmp(className, L"dopus.lister") != 0)
+    {
+        return 0;
+    }
+    char processName[256];
+    getProcessImageBaseNameUtf8(pid, processName, sizeof(processName));
+    return _stricmp(processName, "dopus.exe") == 0;
+}
+
 static void updateHooksForExplorer(int isExplorerActive)
 {
     (void)isExplorerActive;
@@ -655,6 +671,19 @@ static void CALLBACK foregroundChangedProc(
     if (pid == GetCurrentProcessId() && !resolveOpenSaveDialogWindow(hwnd))
     {
         fileExplorerTransitionInvalidatedCallbackCGO();
+        return;
+    }
+
+    if (isDirectoryOpusLister(hwnd, pid))
+    {
+        // Leaving Explorer or a dialog for Opus must still close their overlays and
+        // clear the old source before Opus becomes the only Quick Switch source.
+        deactivateTrackedWindow("directory opus lister");
+        gLastExplorerPid = pid;
+        gLastExplorerHwnd = hwnd;
+        currentState = stateFileManagerSource;
+        logMessage("foregroundChangedProc: directory opus lister hwnd=0x%p pid=%lu", hwnd, pid);
+        fileManagerSourceActivatedCallbackCGO((int)pid, (uintptr_t)hwnd);
         return;
     }
 

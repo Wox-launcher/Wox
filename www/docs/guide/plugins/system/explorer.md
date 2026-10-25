@@ -44,6 +44,8 @@ jump add
 
 When a file manager and an open/save dialog are both available, Quick Jump can switch between them so you land in the folder you were already browsing.
 
+Supported file managers are File Explorer and Finder. On Windows, Directory Opus also works as a source: the dialog follows the folder in the focused pane of the lister you switched from.
+
 ## Notes
 
 - Results stay quiet when no supported context is active.
