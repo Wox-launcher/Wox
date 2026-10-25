@@ -389,7 +389,7 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 			if scriptErr != nil || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || a.resultList.results[a.resultList.selected].ID != result.Id {
 				return
 			}
-			if !a.window.UpdateWebViewScript(a.webViewDocumentKey(), script) {
+			if !a.window.UpdateWebViewScript(a.webView.webViewDocumentKey(), script) {
 				return
 			}
 			result.Preview = nil

@@ -114,7 +114,7 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		ShowExit:         showExit && launcherChromeHidden(a.show, a.chat.chatFullscreen), ExitLabel: exitLabel,
 		ShowOpenWindow: showOpenWindow, OpenWindowLabel: openWindowLabel,
 		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
-		OnHistory: func() { a.chat.toggleChatPanel("history") }, OnHistoryHover: a.setPreviewTooltip, OnDebug: func() bool {
+		OnHistory: func() { a.chat.toggleChatPanel("history") }, OnHistoryHover: a.previews.setPreviewTooltip, OnDebug: func() bool {
 			value := formatChatDebugTrace(snapshot.chat.DebugTrace)
 			return a.chat.copyChatText(value)
 		},
@@ -122,7 +122,7 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 			if err := a.window.StartDragging(); err != nil {
 				log.Printf("start chat preview window drag: %v", err)
 			}
-		}, OnExitHover: a.setPreviewTooltip, OnOpenWindowHover: a.setPreviewTooltip,
+		}, OnExitHover: a.previews.setPreviewTooltip, OnOpenWindowHover: a.previews.setPreviewTooltip,
 	}
 }
 
@@ -839,7 +839,7 @@ func (a *App) chatMessageProps(window *woxui.Window, key string, index int, conv
 		Key: fmt.Sprintf("%s-%d", key, index), DensityScale: scale, Role: conversation.Role, ShowMeta: showMeta, Theme: palette.componentTheme(),
 		CopyLabel: a.language.translate("i18n:ui_ai_chat_copy_message"), CopiedLabel: a.language.translate("i18n:ui_ai_chat_message_copied"),
 		EditLabel: a.language.translate("i18n:ui_ai_chat_edit_message"), RetryLabel: a.language.translate("i18n:ui_ai_chat_regenerate_response"),
-		OnTooltip: a.setPreviewTooltip,
+		OnTooltip: a.previews.setPreviewTooltip,
 	}
 	if conversation.Timestamp > 0 {
 		props.Timestamp = time.UnixMilli(conversation.Timestamp).Local().Format("15:04")
@@ -1148,7 +1148,7 @@ func (a *App) prepareChatMessage(props previewview.ChatMessageProps, window *wox
 	}
 	if props.Role == "assistant" && props.Text != "" {
 		innerWidth := previewview.ChatMessageTextWidth(width, props.Role)
-		markdown := a.markdownPropsWithDocument("chat-markdown-"+props.Key, woxcomponent.MarkdownDocument{}, "", uiPalette{}, innerWidth, imageScale)
+		markdown := a.previews.markdownPropsWithDocument("chat-markdown-"+props.Key, woxcomponent.MarkdownDocument{}, "", uiPalette{}, innerWidth, imageScale)
 		markdown.Theme, markdown.Window, markdown.FontSize = props.Theme.Controls, window, previewview.ChatMessageFontSize(props.DensityScale)
 		markdown.InlineTrailing = props.TextTrailing
 		font := ""

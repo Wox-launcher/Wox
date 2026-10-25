@@ -644,21 +644,21 @@ func (a *chatController) chatPreviewSnapshotFor(result queryResult, preview quer
 // prefetchChatCatalogs starts a one-shot model and skill fetch when chat becomes visible
 // and the shared catalogs are still empty. The picker then reuses the cache instead of
 // flashing a loading row every time it opens.
-func (a *App) prefetchChatCatalogs() {
-	if a == nil || a.aiSettings == nil || a.services == nil {
+func (a *chatController) prefetchChatCatalogs() {
+	if a == nil || a.aiSettings == nil || a.aiSettings() == nil || a.services == nil {
 		return
 	}
-	requestModels := !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading()
-	requestSkills := !a.aiSettings.SkillsLoaded() && !a.aiSettings.SkillsLoading()
-	requestPlugins := !a.aiSettings.PluginMentionsLoaded() && !a.aiSettings.PluginMentionsLoading()
+	requestModels := !a.aiSettings().ModelsLoaded() && !a.aiSettings().ModelsLoading()
+	requestSkills := !a.aiSettings().SkillsLoaded() && !a.aiSettings().SkillsLoading()
+	requestPlugins := !a.aiSettings().PluginMentionsLoaded() && !a.aiSettings().PluginMentionsLoading()
 	if requestModels {
-		a.aiSettings.SetModelsLoading(true)
+		a.aiSettings().SetModelsLoading(true)
 	}
 	if requestSkills {
-		a.aiSettings.SetSkillsLoading(true)
+		a.aiSettings().SetSkillsLoading(true)
 	}
 	if requestPlugins {
-		a.aiSettings.SetPluginMentionsLoading(true)
+		a.aiSettings().SetPluginMentionsLoading(true)
 	}
 	if requestModels {
 		util.Go(a.lifecycleCtx, "load AI models for chat", a.loadAIModels)
@@ -891,34 +891,34 @@ func (a *chatController) reloadChatResourceName(resource string) {
 }
 
 // loadAISkills shares the enabled skill catalog with chat composition.
-func (a *App) loadAISkills() {
-	a.aiSettings.LoadAISkills(context.Background(), a.services, a.sessionID, func(skills []chatSkill) {
+func (a *chatController) loadAISkills() {
+	a.aiSettings().LoadAISkills(context.Background(), a.services, a.sessionID, func(skills []chatSkill) {
 		if skills == nil {
 			log.Printf("load AI skills: see controller error")
 			a.invalidateChatSurfaces()
 			return
 		}
-		if a.chat.chatPreview != nil && (a.chat.chatPreview.panel == "skills" || a.chat.chatPreview.panel == chatCommandPanel) {
-			a.chat.chatPreview.panelSelected = 0
-			a.chat.chatPreview.panelScroll = 0
-			a.chat.chatPreview.panelViewport = 0
+		if a.chatPreview != nil && (a.chatPreview.panel == "skills" || a.chatPreview.panel == chatCommandPanel) {
+			a.chatPreview.panelSelected = 0
+			a.chatPreview.panelScroll = 0
+			a.chatPreview.panelViewport = 0
 		}
 		a.invalidateChatSurfaces()
 	})
 }
 
 // loadChatPluginMentions refreshes the mention overlay after the shared catalog is loaded.
-func (a *App) loadChatPluginMentions() {
-	a.aiSettings.LoadChatPluginMentions(context.Background(), a.services, a.sessionID, func(mentions []chatPluginMention) {
+func (a *chatController) loadChatPluginMentions() {
+	a.aiSettings().LoadChatPluginMentions(context.Background(), a.services, a.sessionID, func(mentions []chatPluginMention) {
 		if mentions == nil {
-			util.GetLogger().Error(context.Background(), "load chat plugin mentions: "+a.aiSettings.PluginMentionsError())
+			util.GetLogger().Error(context.Background(), "load chat plugin mentions: "+a.aiSettings().PluginMentionsError())
 			a.invalidateChatSurfaces()
 			return
 		}
-		if a.chat.chatPreview != nil && a.chat.chatPreview.panel == chatMentionPanel {
-			a.chat.chatPreview.panelSelected = 0
-			a.chat.chatPreview.panelScroll = 0
-			a.chat.chatPreview.panelViewport = 0
+		if a.chatPreview != nil && a.chatPreview.panel == chatMentionPanel {
+			a.chatPreview.panelSelected = 0
+			a.chatPreview.panelScroll = 0
+			a.chatPreview.panelViewport = 0
 		}
 		a.invalidateChatSurfaces()
 	})
@@ -1853,12 +1853,11 @@ func (a *chatController) regenerateChatConversation(messageID string) {
 }
 
 // launcherChatInputActive excludes ordinary searches when a separate chat stays active.
-func (a *App) launcherChatInputActive() bool {
-	if !a.chatWindow.chatWindowOpen() || a.chat.chatFullscreen {
+func (a *chatController) launcherChatInputActive() bool {
+	if !a.chatWindowOpen() || a.chatFullscreen {
 		return true
 	}
-	_, preview, visible := a.previews.selectedPreviewForLifecycle()
-	return visible && preview.PreviewType == "chat"
+	return a.chatPreviewSelected()
 }
 
 // onChatPreviewKey routes only the launcher's visible chat surface.
@@ -2095,26 +2094,26 @@ func (a *chatController) setAIQuestionText(value string) {
 }
 
 // enterChatMode hides launcher chrome while retaining the same native window and shared preview state.
-func (a *App) enterChatMode() {
-	a.chat.chatFullscreen = true
-	if state := a.chat.chatPreview; state != nil {
+func (a *chatController) enterChatMode() {
+	a.chatFullscreen = true
+	if state := a.chatPreview; state != nil {
 		state.active = true
 	}
 	a.prefetchChatCatalogs()
-	a.chat.updateChatTextInput(true)
+	a.updateChatTextInput(true)
 	_ = a.applyWindowBounds()
 	a.invalidateChatSurfaces()
 }
 
 // exitChatMode restores query ownership without destroying the in-progress conversation.
-func (a *App) exitChatMode() {
-	a.chat.chatFullscreen = false
-	if state := a.chat.chatPreview; state != nil {
-		state.active = a.chatWindow.chatWindowOpen()
+func (a *chatController) exitChatMode() {
+	a.chatFullscreen = false
+	if state := a.chatPreview; state != nil {
+		state.active = a.chatWindowOpen()
 	}
 	a.restoreQueryTextInput()
 	// Returning from chat selects the whole query so a new search starts with a clean slate.
-	a.querySession.selectEntireQuery()
+	a.selectEntireQuery()
 	_ = a.applyWindowBounds()
 	a.invalidateChatSurfaces()
 }

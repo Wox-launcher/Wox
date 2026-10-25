@@ -56,14 +56,14 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 		}
 		return a.buildUpdatePreview(scrollKey, data, palette, width, height, imageScale)
 	}
-	tags := append(a.previewTags(preview.PreviewTags), a.previewTags(a.previewBodyTags(preview))...)
+	tags := append(a.previews.previewTags(preview.PreviewTags), a.previews.previewTags(a.previews.previewBodyTags(preview))...)
 	if preview.PreviewType == "terminal" {
 		return a.buildTerminalPreview(a.terminal.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
 	}
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme())
 	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
 	return previewview.PreviewView(previewview.PreviewProps{
-		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.setPreviewTooltip,
+		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.previews.setPreviewTooltip,
 	})
 }
 
@@ -72,14 +72,14 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
 		}
-		return a.buildScrollablePreviewText(scrollKey, value, color, preview.ScrollPosition, width, height, palette.componentTheme())
+		return a.previews.buildScrollablePreviewText(scrollKey, value, color, preview.ScrollPosition, width, height, palette.componentTheme())
 	}
 	errorText := palette.componentTheme().ErrorText
 	switch preview.PreviewType {
 	case "text":
-		return a.buildTextPreview(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, width, height)
+		return a.previews.buildTextPreview(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, width, height)
 	case "markdown":
-		return a.buildMarkdownPreview(scrollKey, preview.PreviewData, "", preview.ScrollPosition, palette, width, height, imageScale)
+		return a.previews.buildMarkdownPreview(scrollKey, preview.PreviewData, "", preview.ScrollPosition, palette, width, height, imageScale)
 	case "image":
 		source, ok := parsePreviewImage(preview.PreviewData)
 		if !ok {
@@ -89,18 +89,18 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if candidate, valid := parsePreviewImage(preview.PreviewOverlayData); valid {
 			overlay = candidate
 		}
-		return a.buildPreviewImage(source, overlay, palette, width, height)
+		return a.previews.buildPreviewImage(source, overlay, palette, width, height)
 	case "file":
 		file := a.filePreview.filePreviewFor(preview.PreviewData)
 		switch file.Kind {
 		case "image":
-			return a.buildPreviewImage(file.Image, file.Image, palette, width, height)
+			return a.previews.buildPreviewImage(file.Image, file.Image, palette, width, height)
 		case "error":
 			return content(file.Text, errorText)
 		case "loading":
 			return previewview.PreviewLoading(width, height, palette.componentTheme().PreviewText)
 		case "markdown":
-			return a.buildMarkdownPreview(scrollKey, a.filePreviewDisplayText(file), filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
+			return a.previews.buildMarkdownPreview(scrollKey, a.previews.filePreviewDisplayText(file), filepath.Dir(preview.PreviewData), preview.ScrollPosition, palette, width, height, imageScale)
 		case "code":
 			note := ""
 			if file.Limited {
@@ -115,23 +115,23 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 				Width: width, Height: height, InitialOffset: offset, Window: a.window, Theme: palette.componentTheme(),
 			})
 		case "webview":
-			return a.buildWebViewPreview(file.WebViewData, palette, width, height)
+			return a.webView.buildWebViewPreview(file.WebViewData, palette, width, height)
 		case "native_file":
 			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
 		case "large", "too_large":
-			return a.buildLargeFilePreview(file, palette, width, height)
+			return a.previews.buildLargeFilePreview(file, palette, width, height)
 		case "folder":
-			return a.buildFolderPreview(file, palette, width, height, imageScale)
+			return a.previews.buildFolderPreview(file, palette, width, height, imageScale)
 		default:
 			// File contents are structured reader data, so keep them top-left aligned instead of using the centered quote treatment for standalone text previews.
-			return content(a.filePreviewDisplayText(file), previewColorWithOpacity(palette.previewText, 0.86))
+			return content(a.previews.filePreviewDisplayText(file), previewColorWithOpacity(palette.previewText, 0.86))
 		}
 	case "list":
 		data, err := decodePreviewList(preview.PreviewData)
 		if err != nil {
 			return content(fmt.Sprintf("Invalid list preview data: %v", err), errorText)
 		}
-		return a.buildListPreview(data, palette, width, height)
+		return a.previews.buildListPreview(data, palette, width, height)
 	case "plugin_detail":
 		data, err := decodeStructuredPreview[pluginDetailPreviewData](preview.PreviewData)
 		if err != nil {
@@ -149,7 +149,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 		if err != nil {
 			return content(fmt.Sprintf("Invalid dictation history preview: %v", err), errorText)
 		}
-		return a.buildDictationHistoryPreview(scrollKey, data, palette, width, height)
+		return a.dictation.buildDictationHistoryPreview(scrollKey, data, palette, width, height)
 	case "hotkey_overview":
 		data, err := decodeStructuredPreview[hotkeyOverviewPreviewData](preview.PreviewData)
 		if err != nil {
@@ -159,32 +159,32 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
 	case "webview":
-		return a.buildWebViewPreview(preview.PreviewData, palette, width, height)
+		return a.webView.buildWebViewPreview(preview.PreviewData, palette, width, height)
 	default:
 		return content(preview.PreviewData, palette.previewText)
 	}
 }
 
 // buildMarkdownPreview injects launcher-owned image and external-link actions into the shared native component.
-func (a *App) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPosition string, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *previewController) buildMarkdownPreview(scrollKey, value, baseDirectory, scrollPosition string, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	initialOffset := float32(0)
 	if scrollPosition == "bottom" {
 		initialOffset = float32(math.MaxFloat32)
 	}
 	markdown := a.markdownProps(scrollKey, value, baseDirectory, palette, max(float32(0), width-40), imageScale)
 	return previewview.MarkdownPreviewView(previewview.MarkdownPreviewProps{
-		ID: scrollKey, Document: markdown.Document, Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window,
+		ID: scrollKey, Document: markdown.Document, Width: width, Height: height, InitialOffset: initialOffset, Theme: palette.componentTheme(), Window: a.window(),
 		ResolveImage: markdown.ResolveImage, ReleaseImage: markdown.ReleaseImage, OnOpenImage: markdown.OnOpenImage, OnOpenLink: markdown.OnOpenLink,
 	})
 }
 
 // markdownProps centralizes the image and link actions shared by generic and structured Markdown previews.
-func (a *App) markdownProps(id, value, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
-	return a.markdownPropsWithDocument(id, a.previews.markdownDocument(value), baseDirectory, palette, width, imageScale)
+func (a *previewController) markdownProps(id, value, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
+	return a.markdownPropsWithDocument(id, a.markdownDocument(value), baseDirectory, palette, width, imageScale)
 }
 
 // markdownPropsWithDocument shares actions without reparsing a chat's retained document.
-func (a *App) markdownPropsWithDocument(id string, document woxcomponent.MarkdownDocument, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
+func (a *previewController) markdownPropsWithDocument(id string, document woxcomponent.MarkdownDocument, baseDirectory string, palette uiPalette, width, imageScale float32) woxcomponent.MarkdownProps {
 	resolveSource := func(source string) (woxImage, bool) {
 		trimmed := strings.TrimSpace(source)
 		if trimmed == "" {
@@ -213,7 +213,7 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 		return woxImage{}, false
 	}
 	return woxcomponent.MarkdownProps{
-		ID: id, Document: document, Width: width, Theme: palette.componentTheme().Controls, Window: a.window,
+		ID: id, Document: document, Width: width, Theme: palette.componentTheme().Controls, Window: a.window(),
 		ResolveImage: func(source string) (*woxui.Image, string) {
 			imageSource, ok := resolveSource(source)
 			if !ok {
@@ -235,7 +235,7 @@ func (a *App) markdownPropsWithDocument(id string, document woxcomponent.Markdow
 			}
 		},
 		OnOpenLink: func(target string) {
-			if err := a.window.OpenExternalURL(target); err != nil {
+			if err := a.window().OpenExternalURL(target); err != nil {
 				log.Printf("open Markdown preview link: %v", err)
 			}
 		},
@@ -263,7 +263,7 @@ func (a *previewController) markdownDocument(value string) woxcomponent.Markdown
 }
 
 // filePreviewDisplayText appends the Flutter-era limited-preview note after a bounded read.
-func (a *App) filePreviewDisplayText(file filePreviewContent) string {
+func (a *previewController) filePreviewDisplayText(file filePreviewContent) string {
 	text := file.Text
 	if !file.Limited {
 		return text
@@ -276,7 +276,7 @@ func (a *App) filePreviewDisplayText(file filePreviewContent) string {
 }
 
 // buildLargeFilePreview restores Flutter's details-first gate for expensive file previews.
-func (a *App) buildLargeFilePreview(file filePreviewContent, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *previewController) buildLargeFilePreview(file filePreviewContent, palette uiPalette, width, height float32) woxwidget.Widget {
 	sizeLabel := formatFileSize(file.Size)
 	title := a.language.translate("i18n:ui_file_preview_large_file_title")
 	message := strings.ReplaceAll(a.language.translate("i18n:ui_file_preview_large_file_message"), "{size}", sizeLabel)
@@ -308,7 +308,7 @@ func (a *App) buildLargeFilePreview(file filePreviewContent, palette uiPalette, 
 }
 
 // buildFolderPreview maps inspected directory metadata into the dedicated folder preview.
-func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *previewController) buildFolderPreview(file filePreviewContent, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
 	folder := file.Folder
 	entries := make([]previewview.FolderPreviewEntry, 0, len(folder.Entries))
 	for _, entry := range folder.Entries {
@@ -339,7 +339,7 @@ func (a *App) buildFolderPreview(file filePreviewContent, palette uiPalette, wid
 }
 
 // folderPreviewTags shows separate shallow counts; incomplete scans remain lower bounds.
-func (a *App) folderPreviewTags(folder folderPreviewContent) []previewTag {
+func (a *previewController) folderPreviewTags(folder folderPreviewContent) []previewTag {
 	if folder.Error != "" {
 		return nil
 	}
@@ -355,7 +355,7 @@ func (a *App) folderPreviewTags(folder folderPreviewContent) []previewTag {
 }
 
 // previewBodyTags resolves metadata before the body is built at its final tagged height.
-func (a *App) previewBodyTags(preview queryPreview) []previewTag {
+func (a *previewController) previewBodyTags(preview queryPreview) []previewTag {
 	switch preview.PreviewType {
 	case "file":
 		file := a.filePreview.filePreviewFor(preview.PreviewData)
@@ -372,47 +372,7 @@ func (a *App) previewBodyTags(preview queryPreview) []previewTag {
 	return nil
 }
 
-// buildDictationHistoryPreview prepares portable text layout before composing the pure comparison view.
-func (a *App) buildDictationHistoryPreview(scrollKey string, data dictationHistoryPreviewData, palette uiPalette, width, height float32) woxwidget.Widget {
-	scale := a.appearance.densityMetrics.normalized().scale
-	scaled := func(value float32) float32 { return a.appearance.densityMetrics.scaled(value) }
-	innerWidth := max(float32(0), width-scaled(52))
-	refinedWidth := max(float32(0), innerWidth-scaled(16))
-	refinedStyle := woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}
-	originalStyle := woxui.TextStyle{Size: scaled(14)}
-	refinedLayout := a.previews.previewTextLayout(a.window, scrollKey+"|dictation-refined", data.RefinedText, refinedStyle, refinedWidth, scaled(28))
-	originalLayout := a.previews.previewTextLayout(a.window, scrollKey+"|dictation-original", data.OriginalText, originalStyle, innerWidth, scaled(22))
-	statusWidth := float32(0)
-	if status := strings.TrimSpace(data.StatusLabel); status != "" {
-		metrics, _ := a.window.MeasureText(status, woxui.TextStyle{Size: scaled(11)})
-		statusWidth = scaled(17) + metrics.Size.Width
-	}
-	props := previewview.DictationHistoryPreviewProps{
-		ID: scrollKey, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(),
-		RefinedText: data.RefinedText, OriginalText: data.OriginalText, RefinedLabel: data.RefinedLabel, OriginalLabel: data.OriginalLabel,
-		StatusLabel: data.StatusLabel, IsChanged: data.IsChanged, RefinedLayout: refinedLayout, OriginalLayout: originalLayout, StatusWidth: statusWidth,
-		AudioLabel: data.AudioLabel, RawAudioLabel: data.RawAudioLabel, RawAudioPath: data.RawAudioPath,
-		ProcessedAudioLabel: data.ProcessedAudioLabel, ProcessedAudioPath: data.ProcessedAudioPath,
-		RawPlayback: dictationPlaybackProps(a.dictation.dictationAudioSnapshot(data.RawAudioPath)), ProcessedPlayback: dictationPlaybackProps(a.dictation.dictationAudioSnapshot(data.ProcessedAudioPath)),
-		PlayLabel: a.language.translate("i18n:plugin_mediaplayer_play"), PauseLabel: a.language.translate("i18n:plugin_mediaplayer_pause"), OnPlayDiagnosticAudio: a.dictation.toggleDictationAudio,
-	}
-	if a.isDev && strings.TrimSpace(data.RawAudioPath) != "" && strings.TrimSpace(data.ProcessedAudioPath) != "" {
-		compare := a.dictation.ensureDictationModelCompare(data.RawAudioPath)
-		compareTextWidth := max(float32(0), innerWidth-scaled(28))
-		props.CompareLabel = a.language.translate("i18n:plugin_dictation_history_model_compare")
-		props.CompareAllLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_run_all")
-		props.CompareRunLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_run")
-		props.CompareRunningLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_running")
-		props.CompareEmptyLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_empty")
-		props.CompareModels = a.dictationModelCompareProps(compare, scrollKey, a.language.translate("i18n:plugin_dictation_history_model_compare_empty_result"), originalStyle, compareTextWidth, scaled(22))
-		props.CompareBusy = compare.busy
-		props.OnCompareModel = a.dictation.compareDictationModel
-		props.OnCompareAll = a.dictation.compareAllDictationModels
-	}
-	return previewview.DictationHistoryPreviewView(props)
-}
-
-func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
+func (a *previewController) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
 	fontSize := a.appearance.densityMetrics.scaled(woxcomponent.PreviewBodyFontSize)
 	lineHeight := a.appearance.densityMetrics.scaled(22)
 	initialOffset := float32(0)
@@ -421,11 +381,11 @@ func (a *App) buildScrollablePreviewText(scrollKey, value string, color woxui.Co
 	}
 	return previewview.ScrollablePreviewText(previewview.ScrollablePreviewTextProps{
 		ID: scrollKey, Value: value, Color: color, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, InitialOffset: initialOffset,
-		Window: a.window, Theme: theme,
+		Window: a.window(), Theme: theme,
 	})
 }
 
-func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *previewController) buildTextPreview(scrollKey, value, scrollPosition string, palette uiPalette, width, height float32) woxwidget.Widget {
 	if strings.TrimSpace(value) == "" {
 		value = "No preview available"
 	}
@@ -433,11 +393,11 @@ func (a *App) buildTextPreview(scrollKey, value, scrollPosition string, palette 
 	lineHeight := a.appearance.densityMetrics.scaled(25)
 	style := woxui.TextStyle{Size: fontSize}
 	theme := palette.componentTheme()
-	if !previewview.TextPreviewFits(value, a.window, style, width, height, lineHeight) {
+	if !previewview.TextPreviewFits(value, a.window(), style, width, height, lineHeight) {
 		return a.buildScrollablePreviewText(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height, theme)
 	}
 	return previewview.TextPreview(previewview.TextPreviewProps{
-		ID: scrollKey, Value: value, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Theme: theme, Window: a.window,
+		ID: scrollKey, Value: value, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Theme: theme, Window: a.window(),
 	})
 }
 
@@ -475,13 +435,13 @@ func (a *previewController) releasePinnedPreviewImage() {
 	a.pinnedPreview = viewportPreviewPin{}
 }
 
-func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *previewController) buildPreviewImage(source, overlay woxImage, palette uiPalette, width, height float32) woxwidget.Widget {
 	size := previewImageRequestSize(width, height)
 	key, _, _ := imageAppearanceCacheKey(source, nil, size, size, a.appearance.palette.isDark(), nil)
-	if a.previews.pinnedPreview.key != key {
-		a.previews.releasePinnedPreviewImage()
+	if a.pinnedPreview.key != key {
+		a.releasePinnedPreviewImage()
 	}
-	a.previews.pinnedPreview = viewportPreviewPin{source: source, size: size, key: key}
+	a.pinnedPreview = viewportPreviewPin{source: source, size: size, key: key}
 	image := a.imageForViewport(source, size)
 	theme := palette.componentTheme()
 	message := ""
@@ -491,7 +451,7 @@ func (a *App) buildPreviewImage(source, overlay woxImage, palette uiPalette, wid
 		}
 	}
 	var onTap func()
-	if previewImageOverlayAllowed(a.show) {
+	if previewImageOverlayAllowed(a.show()) {
 		onTap = func() { a.openPreviewImageOverlay(overlay) }
 	}
 	return previewview.PreviewImage(previewview.PreviewImageProps{
@@ -506,7 +466,7 @@ func previewImageOverlayAllowed(show showAppParams) bool {
 	return !(show.ShowPreviewTitleBar && show.HideQueryBox && show.HideToolbar)
 }
 
-func (a *App) openPreviewImageOverlay(image woxImage) {
+func (a *previewController) openPreviewImageOverlay(image woxImage) {
 	util.Go(a.lifecycleCtx, "open preview image overlay", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -516,7 +476,7 @@ func (a *App) openPreviewImageOverlay(image woxImage) {
 	})
 }
 
-func (a *App) buildListPreview(data previewListData, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *previewController) buildListPreview(data previewListData, palette uiPalette, width, height float32) woxwidget.Widget {
 	items := make([]previewview.PreviewListItem, 0, len(data.Items))
 	for index, item := range data.Items {
 		tail := ""
@@ -534,7 +494,7 @@ func (a *App) buildListPreview(data previewListData, palette uiPalette, width, h
 	return previewview.PreviewList(previewview.PreviewListProps{Width: width, Height: height, Items: items, Theme: palette.componentTheme()})
 }
 
-func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
+func (a *previewController) previewTags(tags []previewTag) []previewview.PreviewTag {
 	resolved := make([]previewview.PreviewTag, 0, len(tags))
 	for _, tag := range tags {
 		label := strings.TrimSpace(a.language.translate(tag.Label))
@@ -550,16 +510,16 @@ func (a *App) previewTags(tags []previewTag) []previewview.PreviewTag {
 }
 
 // setPreviewTooltip anchors preview and chat chrome help to the window that owns the hover.
-func (a *App) setPreviewTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.tooltips.setNativeHoverTooltip(&a.previews.previewTooltipRevision, "go-ui-preview-tag", "update preview tag tooltip", inside, text, anchor, "top", a.previewTooltipWindow)
+func (a *previewController) setPreviewTooltip(inside bool, text string, anchor woxui.Rect) {
+	a.tooltips.setNativeHoverTooltip(&a.previewTooltipRevision, "go-ui-preview-tag", "update preview tag tooltip", inside, text, anchor, "top", a.previewTooltipWindow)
 }
 
 // previewTooltipWindow keeps dedicated-chat hover anchors on that window instead of the hidden launcher.
-func (a *App) previewTooltipWindow() *woxui.Window {
-	if window := a.chatWindow.chatNativeWindow(); window != nil && (a.chatWindow.chatWindowFocused || !a.visible) {
+func (a *previewController) previewTooltipWindow() *woxui.Window {
+	if window := a.chatWindow.chatNativeWindow(); window != nil && (a.chatWindow.chatWindowFocused || !a.visible()) {
 		return window
 	}
-	return a.window
+	return a.window()
 }
 
 func previewColorWithOpacity(color woxui.Color, opacity float32) woxui.Color {

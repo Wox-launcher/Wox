@@ -79,15 +79,16 @@ func (a *App) bindRuntimeSettings() {
 	c.imageForSurface = a.imageForSurface
 	c.updateSettingsText = a.updateSettingsTextInput
 	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
-	c.localizedSettingItem = a.localizedSettingItem
-	c.startGeneralSettingSave = a.startGeneralSettingSave
-
-	c.selectSettingRow = a.selectSettingRow
-	c.startBuiltInSettingEdit = a.startBuiltInSettingEdit
-	c.setBuiltInSettingEditValue = a.setBuiltInSettingEditValue
-	c.submitBuiltInSettingEdit = a.submitBuiltInSettingEdit
-	c.cancelBuiltInSettingEdit = a.cancelBuiltInSettingEdit
-	c.onBuiltInSettingsEditorKey = a.onBuiltInSettingsEditorKey
+	c.localizedSettingItem = func(item settingItem) settingItem { return a.generalSettings.localizedSettingItem(item) }
+	c.startGeneralSettingSave = func(job string, item settingItem, choice settingChoice) {
+		a.generalSettings.startGeneralSettingSave(job, item, choice)
+	}
+	c.selectSettingRow = func(index int) { a.generalSettings.selectSettingRow(index) }
+	c.startBuiltInSettingEdit = func(item settingItem, caret int) { a.generalSettings.startBuiltInSettingEdit(item, caret) }
+	c.setBuiltInSettingEditValue = func(item settingItem, value string) { a.generalSettings.setBuiltInSettingEditValue(item, value) }
+	c.submitBuiltInSettingEdit = func() { a.generalSettings.submitBuiltInSettingEdit() }
+	c.cancelBuiltInSettingEdit = func() { a.generalSettings.cancelBuiltInSettingEdit() }
+	c.onBuiltInSettingsEditorKey = func(event woxui.KeyEvent) bool { return a.generalSettings.onBuiltInSettingsEditorKey(event) }
 }
 
 // Reload fetches runtime statuses; ignores responses superseded by a newer refresh.

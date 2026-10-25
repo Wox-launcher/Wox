@@ -29,7 +29,7 @@ func TestOpenSettingChoicePickerEndsEditBeforeOpeningPicker(t *testing.T) {
 		choices:    []settingChoice{{value: "en", label: "English"}},
 	}
 
-	app.openSettingChoicePickerAt(item, woxui.Rect{X: 10, Y: 20, Width: 100, Height: 24})
+	app.generalSettings.openSettingChoicePickerAt(item, woxui.Rect{X: 10, Y: 20, Width: 100, Height: 24})
 
 	if got := controller.EditKey(); got != "" {
 		t.Fatalf("EditKey() = %q, want empty after opening choice picker", got)

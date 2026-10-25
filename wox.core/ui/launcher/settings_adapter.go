@@ -64,7 +64,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.general.ShowDisplayPicker != nil {
 		overlay = a.buildShowDisplayPickerOverlay(snapshot, width, height)
 	} else if snapshot.general.ChoicePicker != nil {
-		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
+		overlay = a.generalSettings.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.PluginDialog != nil {
 		overlay = a.cloudSettings.buildCloudPluginExclusionOverlay(snapshot.cloud.PluginDialog, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.Form != nil {
@@ -314,11 +314,11 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 	var networkRows []woxwidget.Widget
 	currentSection := ""
 	for index, item := range items {
-		item = a.localizedSettingItem(item)
+		item = a.generalSettings.localizedSettingItem(item)
 		if index == snapshot.row {
 			keepVisibleKey = woxwidget.Key("setting-row-" + item.key)
 		}
-		row := a.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
+		row := a.generalSettings.buildSettingRow(snapshot, item, index, contentWidth, woxui.Color{}, imageScale)
 		target := woxwidget.Keyed{Key: woxwidget.Key("setting-row-" + item.key), Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
 		})}
@@ -468,7 +468,7 @@ func (a *App) settingsSectionLabel(tab, key string) string {
 	return ""
 }
 
-func (a *App) localizedSettingItem(item settingItem) settingItem {
+func (c *generalSettingsController) localizedSettingItem(item settingItem) settingItem {
 	keys := map[string][2]string{
 		"UseSoftwareRendering": {"ui_software_rendering", "ui_software_rendering_tips"},
 		"EnableAutostart":      {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
@@ -491,21 +491,21 @@ func (a *App) localizedSettingItem(item settingItem) settingItem {
 		"EnableAutoUpdate":  {"ui_enable_auto_update", "ui_enable_auto_update_tips"}, "ReleaseChannel": {"ui_release_channel", "ui_release_channel_tips"},
 	}
 	if pair, ok := keys[item.key]; ok {
-		item.title = a.language.translate("i18n:" + pair[0])
+		item.title = c.language.translate("i18n:" + pair[0])
 		if pair[1] != "" {
-			item.description = a.language.translate("i18n:" + pair[1])
+			item.description = c.language.translate("i18n:" + pair[1])
 		}
 	}
 	if item.key == "IgnoreHotkeysOnFullscreen" && item.disabled {
-		item.description = a.language.translate("i18n:ui_hotkey_ignore_fullscreen_unavailable")
+		item.description = c.language.translate("i18n:ui_hotkey_ignore_fullscreen_unavailable")
 	}
 	for index := range item.choices {
-		item.choices[index].label = a.localizedSettingChoiceLabel(item.key, item.choices[index])
+		item.choices[index].label = c.localizedSettingChoiceLabel(item.key, item.choices[index])
 	}
 	return item
 }
 
-func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) string {
+func (c *generalSettingsController) localizedSettingChoiceLabel(key string, choice settingChoice) string {
 	choiceKeys := map[string]map[string]string{
 		"LaunchMode":         {"fresh": "ui_launch_mode_fresh", "continue": "ui_launch_mode_continue"},
 		"StartPage":          {"blank": "ui_start_page_blank", "mru": "ui_start_page_mru"},
@@ -517,13 +517,13 @@ func (a *App) localizedSettingChoiceLabel(key string, choice settingChoice) stri
 	}
 	if valueKeys := choiceKeys[key]; valueKeys != nil {
 		if labelKey := valueKeys[choice.value]; labelKey != "" {
-			return a.language.translate("i18n:" + labelKey)
+			return c.language.translate("i18n:" + labelKey)
 		}
 	}
 	return choice.label
 }
 
-func (a *App) localizedSettingChoiceTooltip(key string, choice settingChoice) string {
+func (c *generalSettingsController) localizedSettingChoiceTooltip(key string, choice settingChoice) string {
 	tooltipKeys := map[string]map[string]string{
 		"LaunchMode":     {"fresh": "ui_launch_mode_fresh_tips", "continue": "ui_launch_mode_continue_tips"},
 		"StartPage":      {"blank": "ui_start_page_blank_tips", "mru": "ui_start_page_mru_tips"},
@@ -531,18 +531,18 @@ func (a *App) localizedSettingChoiceTooltip(key string, choice settingChoice) st
 	}
 	if valueKeys := tooltipKeys[key]; valueKeys != nil {
 		if tooltipKey := valueKeys[choice.value]; tooltipKey != "" {
-			return a.language.translate("i18n:" + tooltipKey)
+			return c.language.translate("i18n:" + tooltipKey)
 		}
 	}
 	return ""
 }
 
-func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index int, width float32, background woxui.Color, imageScale float32) woxwidget.Widget {
+func (c *generalSettingsController) buildSettingRow(snapshot settingsSnapshot, item settingItem, index int, width float32, background woxui.Color, imageScale float32) woxwidget.Widget {
 	offlinePaused := snapshot.general.Data.EnableOfflineMode && item.key == "EnableAutoUpdate"
 	if offlinePaused {
 		item.disabled = true
 		item.value = "false"
-		item.description = a.language.translate("i18n:ui_offline_paused")
+		item.description = c.language.translate("i18n:ui_offline_paused")
 	}
 	kind := "choice"
 	value := settingValueLabel(item)
@@ -561,17 +561,17 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	var valueLeading *woxui.Image
 	if source := item.icons[item.value]; source.ImageData != "" {
 		if item.preserveIconColor {
-			valueLeading = a.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
+			valueLeading = c.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
 		} else {
-			valueLeading = a.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale))
+			valueLeading = c.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale))
 		}
 	}
 	var controlAction woxwidget.Widget
 	if item.key == "UseSoftwareRendering" && snapshot.general.Data.SoftwareRenderingRestartRequired {
 		controlAction = woxcomponent.WoxButton(woxcomponent.ButtonProps{
-			ID: "settings-restart-wox", Label: a.language.translate("i18n:ui_restart_wox"),
+			ID: "settings-restart-wox", Label: c.language.translate("i18n:ui_restart_wox"),
 			Variant: woxcomponent.ButtonSecondary, Disabled: snapshot.saving || snapshot.restarting,
-			OnTap: a.restartFromSettings, Theme: snapshot.palette,
+			OnTap: c.restartFromSettings, Theme: snapshot.palette,
 		})
 		if snapshot.restartError != "" {
 			item.description += "\n" + snapshot.restartError
@@ -581,12 +581,12 @@ func (a *App) buildSettingRow(snapshot settingsSnapshot, item settingItem, index
 	return launcherview.SettingRow(launcherview.SettingRowProps{
 		ID: item.key, Title: item.title, Description: item.description, Value: value, ControlAction: controlAction, ValueTrailing: item.trailers[item.value], ValueLeading: valueLeading,
 		Width: width, Background: background, Disabled: item.disabled, PreserveLabelColor: offlinePaused,
-		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: a.settingsWindow.settingsNativeWindow(), Theme: snapshot.palette,
-		OnTap:       func() { a.selectSettingRow(index); a.openOrActivateSetting() },
-		OnChoiceTap: func(anchor woxui.Rect) { a.selectSettingRow(index); a.openSettingChoicePickerAt(item, anchor) },
-		OnFocus:     func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
-		OnBlur:      func() { a.blurBuiltInSettingEdit(item) },
-		OnChanged:   func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
-		OnBrowse: func() { a.selectSettingRow(index); a.browseBuiltInSettingFile(item) },
+		Kind: kind, ControlWidth: item.controlWidth, BrowseFile: item.browseFile, Editing: state, Focused: focused, Window: c.settings.settingsNativeWindow(), Theme: snapshot.palette,
+		OnTap:       func() { c.selectSettingRow(index); c.openOrActivateSetting() },
+		OnChoiceTap: func(anchor woxui.Rect) { c.selectSettingRow(index); c.openSettingChoicePickerAt(item, anchor) },
+		OnFocus:     func() { c.selectSettingRow(index); c.startBuiltInSettingEdit(item, -1) },
+		OnBlur:      func() { c.blurBuiltInSettingEdit(item) },
+		OnChanged:   func(value string) { c.setBuiltInSettingEditValue(item, value) }, OnKey: c.onBuiltInSettingsEditorKey,
+		OnBrowse: func() { c.selectSettingRow(index); c.browseBuiltInSettingFile(item) },
 	})
 }

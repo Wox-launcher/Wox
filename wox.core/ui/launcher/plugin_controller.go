@@ -164,9 +164,9 @@ func (a *App) bindPluginSettings() {
 	c.measureFormLabelWidth = a.measureFormLabelWidth
 	c.localizedRuntimeDisplayName = func(runtime string) string { return a.runtimeSettings.localizedRuntimeDisplayName(runtime) }
 	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
-	c.closeSettingChoicePicker = a.closeSettingChoicePicker
+	c.closeSettingChoicePicker = func() { a.generalSettings.closeSettingChoicePicker() }
 	c.selectSettingTab = a.selectSettingTab
-	c.openPreviewImage = a.openPreviewImageOverlay
+	c.openPreviewImage = a.previews.openPreviewImageOverlay
 	c.runQueryTest = a.runLauncherQueryTest
 
 	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording

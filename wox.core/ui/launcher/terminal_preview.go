@@ -120,7 +120,7 @@ func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiP
 		OnSetSearch: a.terminal.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.terminal.setTerminalSearchQuery(value) },
 		OnSearchKey:  a.terminal.onTerminalPreviewKey,
 		OnMoveSearch: a.terminal.moveTerminalSearch, OnToggleSearchCase: a.terminal.toggleTerminalSearchCase, OnCloseSearch: a.terminal.closeTerminalSearch,
-		OnToggleFullscreen: a.terminal.toggleTerminalFullscreen, OnTagHover: a.setPreviewTooltip,
+		OnToggleFullscreen: a.terminal.toggleTerminalFullscreen, OnTagHover: a.previews.setPreviewTooltip,
 		SelectionAnchor: snapshot.SelectionAnchor, SelectionFocus: snapshot.SelectionFocus,
 		OnSelectionStart: a.terminal.startTerminalSelection, OnSelectionExtend: a.terminal.extendTerminalSelection,
 		OnSelectWord: a.terminal.selectTerminalWord, OnSelectLine: a.terminal.selectTerminalLine,

@@ -117,12 +117,12 @@ func TestFolderPreviewTagsUseSeparateCounts(t *testing.T) {
 		{folderPreviewContent{CountedAll: true}, "0 folders", "0 files"},
 		{folderPreviewContent{FileCount: 3, CountedAll: true}, "0 folders", "3 files"},
 	} {
-		tags := app.folderPreviewTags(test.folder)
+		tags := app.previews.folderPreviewTags(test.folder)
 		if len(tags) != 2 || tags[0].Label != test.folders || tags[1].Label != test.files {
 			t.Fatalf("tags = %#v, want %q and %q", tags, test.folders, test.files)
 		}
 	}
-	if tags := app.folderPreviewTags(folderPreviewContent{Error: "permission denied"}); len(tags) != 0 {
+	if tags := app.previews.folderPreviewTags(folderPreviewContent{Error: "permission denied"}); len(tags) != 0 {
 		t.Fatalf("unreadable folder must not show counts: %#v", tags)
 	}
 }

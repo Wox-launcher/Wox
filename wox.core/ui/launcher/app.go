@@ -1354,7 +1354,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	}
 	a.previews.reconcileSelectedPreview()
 	if enterChatMode {
-		a.enterChatMode()
+		a.chat.enterChatMode()
 	}
 	if closedActionPanel {
 		a.restoreQueryTextInput()
@@ -1834,7 +1834,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.chat.onChatPreviewKey(event) {
 		return true
 	}
-	if a.onWebViewPreviewModeKey(event) {
+	if a.webView.onWebViewPreviewModeKey(event) {
 		return true
 	}
 	if a.terminal.onTerminalPreviewKey(event) {

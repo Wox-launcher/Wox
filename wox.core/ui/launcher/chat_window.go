@@ -114,7 +114,7 @@ func (a *App) openDedicatedChatWindowLocked() error {
 	}
 	a.chat.chatPreview.active = true
 	a.chat.chatFullscreen = false
-	a.prefetchChatCatalogs()
+	a.chat.prefetchChatCatalogs()
 	a.chat.updateChatTextInput(true)
 	if _, err := managed.Show(); err != nil {
 		return err
@@ -264,7 +264,7 @@ func (a *App) onChatWindowClosed() {
 	if a.destroyed.Load() {
 		return
 	}
-	a.setPreviewTooltip(false, "", woxui.Rect{})
+	a.previews.setPreviewTooltip(false, "", woxui.Rect{})
 	if a.visible && a.chat.chatFullscreen {
 		// Closing one entrance must not discard the conversation still open in the other.
 		a.invalidateChatSurfaces()

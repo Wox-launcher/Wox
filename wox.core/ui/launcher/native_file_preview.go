@@ -47,7 +47,7 @@ func (a *App) buildManualNativeFilePreview(path string, palette uiPalette, width
 	if file.Kind == "" {
 		file.Kind = "large"
 	}
-	return a.buildLargeFilePreview(file, palette, width, height)
+	return a.previews.buildLargeFilePreview(file, palette, width, height)
 }
 
 // requestManualNativeFilePreview records an explicit large-file request before scheduling the handler.

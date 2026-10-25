@@ -841,14 +841,14 @@ func TestPrefetchChatCatalogsLoadsOnceWhenUncached(t *testing.T) {
 		services:     service,
 	})
 
-	app.prefetchChatCatalogs()
+	app.chat.prefetchChatCatalogs()
 	waitChatCatalogPrefetch(t, service.modelsStarted)
 	waitChatCatalogPrefetch(t, service.skillsStarted)
 	if !ai.ModelsLoading() || !ai.SkillsLoading() {
 		t.Fatal("uncached chat entry should start model and skill loads")
 	}
 
-	app.prefetchChatCatalogs()
+	app.chat.prefetchChatCatalogs()
 	if service.modelCalls.Load() != 1 || service.skillCalls.Load() != 1 {
 		t.Fatalf("in-flight prefetch started another load: models=%d skills=%d", service.modelCalls.Load(), service.skillCalls.Load())
 	}
@@ -869,7 +869,7 @@ func TestPrefetchChatCatalogsSkipsCachedCatalogs(t *testing.T) {
 		services:     service,
 	})
 
-	app.prefetchChatCatalogs()
+	app.chat.prefetchChatCatalogs()
 	if ai.ModelsLoading() || ai.SkillsLoading() {
 		t.Fatal("cached catalogs should not start another load")
 	}
@@ -893,7 +893,7 @@ func TestEnterChatModePrefetchesUncachedCatalogs(t *testing.T) {
 		chat:         chatController{chatPreview: &chatPreviewState{editor: woxui.NewTextEditor("")}},
 	})
 
-	app.enterChatMode()
+	app.chat.enterChatMode()
 	waitChatCatalogPrefetch(t, service.modelsStarted)
 	waitChatCatalogPrefetch(t, service.skillsStarted)
 	if !ai.ModelsLoading() || !ai.SkillsLoading() {

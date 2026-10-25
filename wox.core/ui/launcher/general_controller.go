@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"context"
 	"sync"
 
 	woxui "wox/ui/runtime"
@@ -31,9 +32,32 @@ type generalSettingsSnapshot struct {
 // sharedEditState. The full settingsData struct lives on this controller; other
 // controllers that need their slice read it through ApplyData called from
 // App.reloadSettings.
+//
+// It also drives the built-in setting rows shown on the General, Appearance, Hotkey,
+// Runtime, Debug, Updates and Privacy pages: row selection and activation, inline text
+// editing, the shared choice picker, row rendering and starting a save. Persisting a
+// saved value and reacting to it across features stays with App's saveSetting callback.
 type generalSettingsController struct {
 	deps   CommonDeps
 	shared *sharedEditState
+
+	services     generalSettingWriter
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+
+	settingsSearch      func() *settingsSearchController
+	hotkeySettings      func() *hotkeySettingsController
+	settingsSnapshot    func() settingsSnapshot
+	updateSettingsText  func(active bool)
+	imageForTint        func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface     func(woxImage, int, woxui.Color) *woxui.Image
+	reloadUsageStats    func(period string)
+	restartFromSettings func()
+	// saveSetting persists one built-in value and applies its cross-feature effects.
+	saveSetting func(item settingItem, choice settingChoice)
 	// Background query, glance, and cloud work read the immutable settings snapshot.
 	dataMu    sync.RWMutex
 	data      settingsData
@@ -56,6 +80,34 @@ func newGeneralSettingsController(deps CommonDeps, shared *sharedEditState) *gen
 		deps:   deps,
 		shared: shared,
 	}
+}
+
+// generalSettingWriter writes one general setting without reloading the settings snapshot.
+type generalSettingWriter interface {
+	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
+}
+
+// bindGeneralSettings wires the built-in setting rows to the Settings window and App's save pipeline.
+func (a *App) bindGeneralSettings() {
+	c := a.generalSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+	c.settingsSearch = func() *settingsSearchController { return a.settingsSearch }
+	c.hotkeySettings = func() *hotkeySettingsController { return a.hotkeySettings }
+	c.settingsSnapshot = a.settingsSnapshot
+	c.updateSettingsText = a.updateSettingsTextInput
+	c.imageForTint = a.imageForTint
+	c.imageForSurface = a.imageForSurface
+	c.reloadUsageStats = a.reloadUsageStats
+	c.restartFromSettings = a.restartFromSettings
+	c.saveSetting = a.saveSetting
 }
 
 // ApplyData replaces the full settingsData owned by the general controller. Called by

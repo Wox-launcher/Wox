@@ -197,7 +197,7 @@ func TestGeneralQueryTablesKeyboardNavigation(t *testing.T) {
 		t.Fatal("Enter did not open the focused query table")
 	}
 	app.formTables.settingsEditor = nil
-	app.selectSettingRow(0)
+	app.generalSettings.selectSettingRow(0)
 	if app.generalSettings.FormFocused() || app.hotkeySettings.onGeneralQuerySettingsKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) {
 		t.Fatal("query table retained keyboard ownership after selecting a built-in row")
 	}

@@ -22,19 +22,19 @@ func (a *App) buildPrivacySettingsPage(snapshot settingsSnapshot, width, height 
 		PrivateModeTitle: a.language.translate("i18n:ui_privacy_mode_title"), PrivateModeDescription: a.language.translate("i18n:ui_privacy_mode_description"),
 		PrivateModeEnabled: snapshot.general.Data.EnablePrivacyMode,
 		OfflineTitle:       a.language.translate("i18n:ui_offline_title"), OfflineDescription: a.language.translate("i18n:ui_offline_description"), OfflineEnabled: snapshot.general.Data.EnableOfflineMode, OfflineReason: a.language.translate("i18n:ui_offline_paused"),
-		OnToggleOffline: func() { a.selectSettingRow(1); a.activateSetting(1) },
+		OnToggleOffline: func() { a.generalSettings.selectSettingRow(1); a.generalSettings.activateSetting(1) },
 		TelemetryTitle:  a.language.translate("i18n:ui_privacy_anonymous_stats_title"), TelemetryDescription: a.language.translate("i18n:ui_privacy_anonymous_stats_description"),
 		TelemetryEnabled: snapshot.general.Data.EnableAnonymousUsageStats, ViewSampleLabel: a.language.translate("i18n:ui_privacy_view_sample"), Error: snapshot.privacy.Error,
 		OnTogglePrivateMode: func() {
-			a.selectSettingRow(0)
-			a.activateSetting(1)
+			a.generalSettings.selectSettingRow(0)
+			a.generalSettings.activateSetting(1)
 		},
 		OnToggleTelemetry: func() {
 			if snapshot.general.Data.EnableOfflineMode {
 				return
 			}
-			a.selectSettingRow(2)
-			a.activateSetting(1)
+			a.generalSettings.selectSettingRow(2)
+			a.generalSettings.activateSetting(1)
 		},
 		OnViewSample: a.togglePrivacySample,
 	})

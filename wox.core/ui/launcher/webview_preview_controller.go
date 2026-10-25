@@ -1,26 +1,43 @@
 package launcher
 
 import (
+	"context"
+
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
 
-// webViewPreviewController owns the native document, navigation, and focus handoff state.
-// Query transitions and result replacement remain explicit coordinator operations.
+// webViewPreviewController owns the native document, navigation, and focus handoff state,
+// renders the WebView preview, and drives its fullscreen mode and page commands (close,
+// hide, open in browser). Query, window and result-list changes go through launcher
+// collaborators injected by bindWebViewPreview.
 type webViewPreviewController struct {
-	isDestroyed                       func() bool
-	window                            func() *woxui.Window
-	host                              func() *woxwidget.Host
-	isGlobalWebViewPreview            func() bool
-	restoreQueryTextInput             func()
-	restoreWebViewPreviewResultLocked func()
-	actionPanelHotkey                 func() string
-	webViewPreviewData                string
-	webViewPreviewError               string
-	webViewNavigation                 woxui.WebViewNavigationState
-	webViewFullscreen                 bool
-	webViewFullscreenResultID         string
-	webViewFullscreenRestore          queryPreview
+	sessionID                        string
+	lifecycleCtx                     context.Context
+	language                         *languageCatalog
+	resultList                       *resultController
+	querySession                     *queryController
+	previews                         *previewController
+	actions                          *actionPanelController
+	show                             *showAppParams
+	isDestroyed                      func() bool
+	window                           func() *woxui.Window
+	host                             func() *woxwidget.Host
+	restoreQueryTextInput            func()
+	restoreQueryFocusAfterShow       func() bool
+	queryCanFocus                    func() bool
+	setQuery                         func(query plainQuery)
+	sendCurrentQuery                 func() error
+	applyWindowBounds                func() error
+	hideWindow                       func(notify bool) error
+	hasCacheableWebViewPreviewLocked func() bool
+	actionPanelHotkey                func() string
+	webViewPreviewData               string
+	webViewPreviewError              string
+	webViewNavigation                woxui.WebViewNavigationState
+	webViewFullscreen                bool
+	webViewFullscreenResultID        string
+	webViewFullscreenRestore         queryPreview
 	// webViewPreviewWidth and webViewPreviewHeight temporarily size the launcher
 	// window in logical pixels for an in-launcher WebView preview.
 	webViewPreviewWidth  int
@@ -37,9 +54,28 @@ func (a *App) bindWebViewPreview() {
 	a.webView.isDestroyed = a.isDestroyed
 	a.webView.window = func() *woxui.Window { return a.window }
 	a.webView.host = func() *woxwidget.Host { return a.host }
-	a.webView.isGlobalWebViewPreview = a.isGlobalWebViewPreview
+	a.webView.sessionID = a.sessionID
+	a.webView.lifecycleCtx = a.lifecycleCtx
+	a.webView.language = &a.language
+	a.webView.resultList = &a.resultList
+	a.webView.querySession = &a.querySession
+	a.webView.previews = &a.previews
+	a.webView.actions = &a.actions
+	a.webView.show = &a.show
 	a.webView.restoreQueryTextInput = a.restoreQueryTextInput
-	a.webView.restoreWebViewPreviewResultLocked = a.restoreWebViewPreviewResultLocked
+	a.webView.restoreQueryFocusAfterShow = a.restoreQueryFocusAfterShow
+	a.webView.queryCanFocus = a.queryCanFocus
+	a.webView.setQuery = a.setQuery
+	// Closing a WebView page re-queries the WebView plugin only when core is connected.
+	a.webView.sendCurrentQuery = func() error {
+		if a.services == nil {
+			return nil
+		}
+		return a.sendCurrentQuery()
+	}
+	a.webView.applyWindowBounds = a.applyWindowBounds
+	a.webView.hideWindow = a.hideWindow
+	a.webView.hasCacheableWebViewPreviewLocked = a.hasCacheableWebViewPreviewLocked
 	a.webView.actionPanelHotkey = a.actionPanelHotkey
 }
 

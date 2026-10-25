@@ -131,7 +131,7 @@ func (a *App) bindThemeSettings() {
 	c.imageForSurface = a.imageForSurface
 	c.updateSettingsText = a.updateSettingsTextInput
 	c.buildFormField = a.buildFormField
-	c.openPreviewImage = a.openPreviewImageOverlay
+	c.openPreviewImage = a.previews.openPreviewImageOverlay
 	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
 	c.setSettingsHoverTooltip = a.settingsWindow.setSettingsHoverTooltip
 

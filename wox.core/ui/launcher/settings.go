@@ -734,7 +734,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	choicePicker := a.generalSettings.ChoicePicker()
 	if choicePicker != nil {
 		if event.Key == woxui.KeyEscape {
-			a.closeSettingChoicePicker()
+			a.generalSettings.closeSettingChoicePicker()
 			return true
 		}
 		// Printable keys must reach the native text-input path while the filter field owns focus.
@@ -763,20 +763,20 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.aiSettings.onAISettingsKey(event) {
 		return true
 	}
-	if a.onBuiltInSettingsEditorKey(event) {
+	if a.generalSettings.onBuiltInSettingsEditorKey(event) {
 		return true
 	}
 	switch event.Key {
 	case woxui.KeyArrowUp:
-		a.moveSettingRow(-1)
+		a.generalSettings.moveSettingRow(-1)
 	case woxui.KeyArrowDown:
-		a.moveSettingRow(1)
+		a.generalSettings.moveSettingRow(1)
 	case woxui.KeyArrowLeft:
-		a.activateSetting(-1)
+		a.generalSettings.activateSetting(-1)
 	case woxui.KeyArrowRight:
-		a.activateSetting(1)
+		a.generalSettings.activateSetting(1)
 	case woxui.KeyEnter, woxui.KeySpace:
-		a.openOrActivateSetting()
+		a.generalSettings.openOrActivateSetting()
 	default:
 		return false
 	}
@@ -1064,40 +1064,40 @@ func (a *App) moveSettingTab(delta int) {
 	a.selectSettingTab(tabs[index].id)
 }
 
-func (a *App) moveSettingRow(delta int) {
-	snapshot := a.settingsSnapshot()
+func (c *generalSettingsController) moveSettingRow(delta int) {
+	snapshot := c.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if len(items) == 0 {
 		return
 	}
-	a.settingsWindow.row = (a.settingsWindow.row + delta + len(items)) % len(items)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.row = (c.settings.row + delta + len(items)) % len(items)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) selectSettingRow(index int) {
-	a.settingsSearch.blurSettingsSearch()
-	snapshot := a.settingsSnapshot()
+func (c *generalSettingsController) selectSettingRow(index int) {
+	c.settingsSearch().blurSettingsSearch()
+	snapshot := c.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if index < 0 || index >= len(items) {
 		return
 	}
-	if a.generalSettings.EditKey() != "" {
-		if a.settingsWindow.row != index {
+	if c.EditKey() != "" {
+		if c.settings.row != index {
 			return
 		}
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
-	a.settingsWindow.row = index
-	a.generalSettings.SetFormFocused(false)
-	a.hotkeySettings.SetFocused(false)
+	c.settings.row = index
+	c.SetFormFocused(false)
+	c.hotkeySettings().SetFocused(false)
 	// Pointer-selected rows are already visible; moving the viewport here would invalidate popup anchors captured by the same click.
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) activateSetting(direction int) {
-	snapshot := a.settingsSnapshot()
+func (c *generalSettingsController) activateSetting(direction int) {
+	snapshot := c.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if snapshot.saving || snapshot.row < 0 || snapshot.row >= len(items) {
 		return
@@ -1112,53 +1112,53 @@ func (a *App) activateSetting(direction int) {
 	if item.key == "UsagePeriod" {
 		next, ok := nextSettingChoice(item, direction)
 		if ok {
-			util.Go(a.lifecycleCtx, "reload usage stats", func() {
-				a.reloadUsageStats(next.value)
+			util.Go(c.lifecycleCtx, "reload usage stats", func() {
+				c.reloadUsageStats(next.value)
 			})
 		}
 		return
 	}
 	if item.text {
-		a.startBuiltInSettingEdit(item, -1)
+		c.startBuiltInSettingEdit(item, -1)
 		return
 	}
 	next, ok := nextSettingChoice(item, direction)
 	if !ok {
 		return
 	}
-	a.settingsWindow.invalidateSettingsWindow()
-	a.startGeneralSettingSave("save setting choice", item, next)
+	c.settings.invalidateSettingsWindow()
+	c.startGeneralSettingSave("save setting choice", item, next)
 }
 
 // startBuiltInSettingEdit gives a core-backed text value shared editor and native IME ownership.
-func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
+func (c *generalSettingsController) startBuiltInSettingEdit(item settingItem, caret int) {
 	if !item.text {
 		return
 	}
-	if a.settingsWindow.saving {
+	if c.settings.saving {
 		return
 	}
-	if a.generalSettings.EditKey() != item.key || a.generalSettings.Editor() == nil {
-		if !a.generalSettings.StartEdit(item.key, item.value, caret) {
+	if c.EditKey() != item.key || c.Editor() == nil {
+		if !c.StartEdit(item.key, item.value, caret) {
 			return
 		}
 	} else if caret >= 0 {
-		a.generalSettings.Editor().SetCaret(caret)
+		c.Editor().SetCaret(caret)
 	}
-	a.updateSettingsTextInput(true)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(true)
+	c.settings.invalidateSettingsWindow()
 }
 
 // cancelBuiltInSettingEdit discards an unsaved text value without mutating the loaded settings snapshot.
-func (a *App) cancelBuiltInSettingEdit() {
-	a.generalSettings.EndEdit()
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+func (c *generalSettingsController) cancelBuiltInSettingEdit() {
+	c.EndEdit()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 // submitBuiltInSettingEdit persists the active text row through the shared general settings service.
-func (a *App) submitBuiltInSettingEdit() {
-	snapshot := a.settingsSnapshot()
+func (c *generalSettingsController) submitBuiltInSettingEdit() {
+	snapshot := c.settingsSnapshot()
 	if snapshot.general.EditKey == "" || snapshot.saving {
 		return
 	}
@@ -1171,52 +1171,52 @@ func (a *App) submitBuiltInSettingEdit() {
 		}
 	}
 	if index < 0 {
-		a.cancelBuiltInSettingEdit()
+		c.cancelBuiltInSettingEdit()
 		return
 	}
 	item := items[index]
 	value := snapshot.general.Editing.Text
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
-	a.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
+	c.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
 }
 
 // blurBuiltInSettingEdit ends a built-in text session when its field loses focus.
 // A press blurs the field on pointer-down and activates the clicked control on pointer-up,
 // so a changed value waits for that click and is written with it when the click saves another setting.
-func (a *App) blurBuiltInSettingEdit(item settingItem) {
-	if !item.text || a.settingsWindow.saving || a.generalSettings.EditKey() != item.key {
+func (c *generalSettingsController) blurBuiltInSettingEdit(item settingItem) {
+	if !item.text || c.settings.saving || c.EditKey() != item.key {
 		return
 	}
 	value := item.value
-	if editor := a.generalSettings.Editor(); editor != nil {
+	if editor := c.Editor(); editor != nil {
 		value = editor.State().Text
 	}
-	a.cancelBuiltInSettingEdit()
+	c.cancelBuiltInSettingEdit()
 	if value == item.value {
 		return
 	}
-	if a.settingsWindow.host != nil && a.settingsWindow.host.DispatchingPointer() {
-		a.settingsWindow.pendingBuiltInText = &pendingBuiltInText{key: item.key, value: value}
+	if c.settings.host != nil && c.settings.host.DispatchingPointer() {
+		c.settings.pendingBuiltInText = &pendingBuiltInText{key: item.key, value: value}
 		return
 	}
-	a.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
+	c.startGeneralSettingSave("save setting text value", item, settingChoice{value: value, label: value})
 }
 
 // finishSettingsPointer writes a blurred text value when the click that left the field did not save one itself.
-func (a *App) finishSettingsPointer(event woxui.PointerEvent) {
-	if event.Kind != woxui.PointerUp || event.Button != woxui.PointerButtonPrimary || a.settingsWindow.saving || a.settingsWindow.pendingBuiltInText == nil {
+func (c *generalSettingsController) finishSettingsPointer(event woxui.PointerEvent) {
+	if event.Kind != woxui.PointerUp || event.Button != woxui.PointerButtonPrimary || c.settings.saving || c.settings.pendingBuiltInText == nil {
 		return
 	}
-	pending := *a.settingsWindow.pendingBuiltInText
-	a.startGeneralSettingSave("save setting text value", settingItem{key: pending.key, text: true}, settingChoice{value: pending.value, label: pending.value})
-	a.settingsWindow.invalidateSettingsWindow()
+	pending := *c.settings.pendingBuiltInText
+	c.startGeneralSettingSave("save setting text value", settingItem{key: pending.key, text: true}, settingChoice{value: pending.value, label: pending.value})
+	c.settings.invalidateSettingsWindow()
 }
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
-func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.open && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
-	saving := a.settingsWindow.saving
+func (c *generalSettingsController) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
+	active := c.settings.open && c.EditKey() != "" && c.Editor() != nil
+	saving := c.settings.saving
 	if !active {
 		return false
 	}
@@ -1224,40 +1224,40 @@ func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 		return true
 	}
 	if event.Key == woxui.KeyEscape {
-		a.cancelBuiltInSettingEdit()
+		c.cancelBuiltInSettingEdit()
 		return true
 	}
 	if event.Key == woxui.KeyEnter || (event.Modifiers.HasPrimary() && event.Key == woxui.Key("s")) {
-		a.submitBuiltInSettingEdit()
+		c.submitBuiltInSettingEdit()
 		return true
 	}
 	return false
 }
 
 // setBuiltInSettingEditValue keeps only the committed business value in launcher state.
-func (a *App) setBuiltInSettingEditValue(item settingItem, value string) {
-	if a.settingsWindow.open && a.generalSettings.EditKey() == item.key {
-		a.generalSettings.SetEditText(item.key, value)
+func (c *generalSettingsController) setBuiltInSettingEditValue(item settingItem, value string) {
+	if c.settings.open && c.EditKey() == item.key {
+		c.SetEditText(item.key, value)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // onBuiltInSettingsTextInput commits native text and IME events into the active settings editor.
-func (a *App) onBuiltInSettingsTextInput(_ woxui.TextInputEvent) bool {
-	choicePickerOpen := a.generalSettings.ChoicePicker() != nil
+func (c *generalSettingsController) onBuiltInSettingsTextInput(_ woxui.TextInputEvent) bool {
+	choicePickerOpen := c.ChoicePicker() != nil
 	if choicePickerOpen {
 		return true
 	}
-	active := a.settingsWindow.open && !a.settingsWindow.saving && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
+	active := c.settings.open && !c.settings.saving && c.EditKey() != "" && c.Editor() != nil
 	return active
 }
 
 // browseBuiltInSettingFile uses the common Window picker and leaves persistence on explicit Enter.
-func (a *App) browseBuiltInSettingFile(item settingItem) {
+func (c *generalSettingsController) browseBuiltInSettingFile(item settingItem) {
 	if !item.text || !item.browseFile {
 		return
 	}
-	settingsWindow := a.settingsWindow.settingsNativeWindow()
+	settingsWindow := c.settings.settingsNativeWindow()
 	if settingsWindow == nil {
 		return
 	}
@@ -1269,9 +1269,9 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 	if path == "" {
 		return
 	}
-	a.startBuiltInSettingEdit(item, -1)
-	a.generalSettings.SetEditText(item.key, path)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.startBuiltInSettingEdit(item, -1)
+	c.SetEditText(item.key, path)
+	c.settings.invalidateSettingsWindow()
 }
 
 func (a *settingsWindowController) beginSettingSave() {
@@ -1285,41 +1285,41 @@ type pendingBuiltInText struct {
 }
 
 // startGeneralSettingSave writes one setting and, when a blurred text value is still waiting, writes that first.
-func (a *App) startGeneralSettingSave(job string, item settingItem, choice settingChoice) {
+func (c *generalSettingsController) startGeneralSettingSave(job string, item settingItem, choice settingChoice) {
 	leadingKey, leadingValue := "", ""
-	if a.settingsWindow.pendingBuiltInText != nil && a.settingsWindow.pendingBuiltInText.key != item.key {
-		leadingKey = a.settingsWindow.pendingBuiltInText.key
-		leadingValue = a.settingsWindow.pendingBuiltInText.value
+	if c.settings.pendingBuiltInText != nil && c.settings.pendingBuiltInText.key != item.key {
+		leadingKey = c.settings.pendingBuiltInText.key
+		leadingValue = c.settings.pendingBuiltInText.value
 	}
-	a.settingsWindow.pendingBuiltInText = nil
-	a.settingsWindow.beginSettingSave()
-	util.Go(a.lifecycleCtx, job, func() {
+	c.settings.pendingBuiltInText = nil
+	c.settings.beginSettingSave()
+	util.Go(c.lifecycleCtx, job, func() {
 		if leadingKey != "" {
-			if err := a.writeGeneralSetting(leadingKey, leadingValue); err != nil {
-				a.saveSettingFailed(leadingKey, err)
+			if err := c.writeGeneralSetting(leadingKey, leadingValue); err != nil {
+				c.saveSettingFailed(leadingKey, err)
 				return
 			}
 		}
-		a.saveSetting(item, choice)
+		c.saveSetting(item, choice)
 	})
 }
 
 // writeGeneralSetting persists one key without reloading the settings snapshot.
-func (a *App) writeGeneralSetting(key, value string) error {
-	if a.services == nil {
+func (c *generalSettingsController) writeGeneralSetting(key, value string) error {
+	if c.services == nil {
 		return fmt.Errorf("settings services are unavailable")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	return a.services.UpdateGeneralSetting(ctx, a.sessionID, key, value)
+	return c.services.UpdateGeneralSetting(ctx, c.sessionID, key, value)
 }
 
 // saveSettingFailed releases the saving flag when a leading write fails before the main save.
-func (a *App) saveSettingFailed(key string, err error) {
-	_ = a.runOnUI("apply general setting save", func() {
-		a.settingsWindow.saving = false
+func (c *generalSettingsController) saveSettingFailed(key string, err error) {
+	_ = c.runOnUI("apply general setting save", func() {
+		c.settings.saving = false
 		log.Printf("save setting %s: %v", key, err)
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 	})
 }
 

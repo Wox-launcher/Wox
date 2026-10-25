@@ -29,7 +29,7 @@ func (a *App) buildPluginDetailPreview(data pluginDetailPreviewData, palette uiP
 	if len(data.ScreenshotURLs) > 0 && height > headerHeight+20 {
 		screenshotHeight := max(float32(0), height-headerHeight-10)
 		source := woxImage{ImageType: "url", ImageData: data.ScreenshotURLs[0]}
-		screenshot = a.buildPreviewImage(source, source, palette, width, screenshotHeight)
+		screenshot = a.previews.buildPreviewImage(source, source, palette, width, screenshotHeight)
 	}
 	return previewview.PluginDetailPreviewView(previewview.PluginDetailPreviewProps{
 		Width: width, Height: height, Theme: palette.componentTheme(), Name: data.Name, Description: data.Description,
@@ -161,7 +161,7 @@ func (a *App) buildUpdatePreview(id string, data updatePreviewData, palette uiPa
 			return metrics.Size.Width
 		},
 		RenderMarkdown: func(markdownID, value string, markdownWidth float32) woxwidget.Widget {
-			return woxcomponent.WoxMarkdown(a.markdownProps(markdownID, value, "", palette, markdownWidth, imageScale))
+			return woxcomponent.WoxMarkdown(a.previews.markdownProps(markdownID, value, "", palette, markdownWidth, imageScale))
 		},
 	})
 }

@@ -26,6 +26,7 @@ func (app *App) bindControllers() {
 	app.bindToolbar()
 	app.bindForms()
 	app.bindFormTables()
+	app.bindGeneralSettings()
 	app.bindHotkeyRecording()
 	app.bindWindowGroupEditor()
 	app.bindPluginSettings()

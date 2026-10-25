@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"wox/common"
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -15,6 +16,7 @@ type chatServices interface {
 	DeleteChat(context.Context, string, string) error
 	StopChat(context.Context, string, string) (bool, error)
 	AnswerAIQuestion(context.Context, string, string, string) error
+	contract.AICatalogSettingsServices
 }
 
 // chatController owns the shared conversation and attachment import lifetime.
@@ -33,17 +35,15 @@ type chatController struct {
 	chatWindowFocused                 func() bool
 	chatSurfaceVisible                func() bool
 	chatTextInputWindow               func() *woxui.Window
-	launcherChatInputActive           func() bool
+	chatPreviewSelected               func() bool
 	selectedChatVisible               func(string) bool
 	captureChatAttachmentImportTarget func(bool) (chatAttachmentImportTarget, bool)
 	chatAttachmentImportTargetValid   func(chatAttachmentImportTarget) bool
 	invalidateChatSurfaces            func()
-	prefetchChatCatalogs              func()
 	loadAIModels                      func()
-	loadAISkills                      func()
-	loadChatPluginMentions            func()
 	refreshAIMCPServerToolsLocked     func()
-	exitChatMode                      func()
+	applyWindowBounds                 func() error
+	selectEntireQuery                 func()
 	closePreviewWindow                func()
 	restoreQueryTextInput             func()
 	chatPreview                       *chatPreviewState
@@ -70,7 +70,11 @@ func (a *App) bindChat() {
 	c.chatWindowFocused = func() bool { return a.chatWindow.chatWindowFocused }
 	c.chatSurfaceVisible = a.chatSurfaceVisible
 	c.chatTextInputWindow = a.chatTextInputWindow
-	c.launcherChatInputActive = a.launcherChatInputActive
+	// chatPreviewSelected reports whether the launcher's selected result shows the chat preview.
+	c.chatPreviewSelected = func() bool {
+		_, preview, visible := a.previews.selectedPreviewForLifecycle()
+		return visible && preview.PreviewType == "chat"
+	}
 	c.selectedChatVisible = func(resultID string) bool {
 		index := a.resultList.selected
 		return index >= 0 && index < len(a.resultList.results) && a.resultList.results[index].Preview.PreviewType == "chat" && a.resultList.results[index].ID == resultID
@@ -78,12 +82,10 @@ func (a *App) bindChat() {
 	c.captureChatAttachmentImportTarget = a.captureChatAttachmentImportTarget
 	c.chatAttachmentImportTargetValid = a.chatAttachmentImportTargetValid
 	c.invalidateChatSurfaces = a.invalidateChatSurfaces
-	c.prefetchChatCatalogs = a.prefetchChatCatalogs
 	c.loadAIModels = a.loadAIModels
-	c.loadAISkills = a.loadAISkills
-	c.loadChatPluginMentions = a.loadChatPluginMentions
 	c.refreshAIMCPServerToolsLocked = func() { a.aiSettings.refreshAIMCPServerToolsLocked() }
-	c.exitChatMode = a.exitChatMode
+	c.applyWindowBounds = a.applyWindowBounds
+	c.selectEntireQuery = a.querySession.selectEntireQuery
 	c.closePreviewWindow = a.closePreviewWindow
 	c.restoreQueryTextInput = a.restoreQueryTextInput
 }

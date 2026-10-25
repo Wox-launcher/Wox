@@ -41,7 +41,7 @@ func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 		t.Fatalf("fullscreen preview ratio = %v, want 0", got)
 	}
 
-	app.handleWebViewFallbackEscape()
+	app.webView.handleWebViewFallbackEscape()
 	if app.webView.webViewFullscreen || app.webView.webViewWantKeyboardFocus || app.resultList.results[0].Preview.PreviewType != "" || !app.queryCanFocus() {
 		t.Fatalf("escape restored fullscreen:%v pageFocusPending:%v preview:%+v queryFocus:%v", app.webView.webViewFullscreen, app.webView.webViewWantKeyboardFocus, app.resultList.results[0].Preview, app.queryCanFocus())
 	}
@@ -75,7 +75,7 @@ func TestActivateOpenWebViewPreviewActionAppliesPerSearchChrome(t *testing.T) {
 	if app.webView.webViewPreviewWidth != 640 || app.webView.webViewPreviewHeight != 720 {
 		t.Fatalf("preview size = %dx%d", app.webView.webViewPreviewWidth, app.webView.webViewPreviewHeight)
 	}
-	app.handleWebViewFallbackEscape()
+	app.webView.handleWebViewFallbackEscape()
 	if app.webView.webViewPreviewWidth != 0 || app.webView.webViewPreviewHeight != 0 {
 		t.Fatalf("escape should restore the previous window size, got %dx%d", app.webView.webViewPreviewWidth, app.webView.webViewPreviewHeight)
 	}
@@ -166,10 +166,10 @@ func TestOnWebViewPreviewModeKeyLeavesOnEscape(t *testing.T) {
 	app.webView.webViewFullscreen = true
 	app.webView.webViewFullscreenResultID = "search"
 	app.webView.webViewFullscreenRestore = app.resultList.results[0].Preview
-	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webView.webViewFullscreen {
+	if !app.webView.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || !app.webView.webViewFullscreen {
 		t.Fatal("launcher keys should stay consumed while webview fullscreen is active")
 	}
-	if !app.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.webView.webViewFullscreen {
+	if !app.webView.onWebViewPreviewModeKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.webView.webViewFullscreen {
 		t.Fatal("escape should consume the key and exit webview fullscreen")
 	}
 }

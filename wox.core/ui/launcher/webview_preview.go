@@ -70,7 +70,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, UserAgent: d.UserAgent, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
 
-func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *webViewPreviewController) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
 	theme := palette.componentTheme()
 	if network.IsOffline() {
 		return webViewPreviewSemantics("offline", previewview.WebViewPreviewMessage(a.language.translate("i18n:ui_offline_unavailable"), theme.PreviewText, theme, width, height))
@@ -79,10 +79,10 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	if err != nil {
 		return webViewPreviewSemantics("error: "+err.Error(), previewview.WebViewPreviewMessage(fmt.Sprintf("Invalid WebView preview: %v", err), theme.ErrorText, theme, width, height))
 	}
-	active := a.webView.webViewPreviewData == previewData
+	active := a.webViewPreviewData == previewData
 	webViewError := ""
 	if active {
-		webViewError = a.webView.webViewPreviewError
+		webViewError = a.webViewPreviewError
 	}
 	if webViewError != "" {
 		return webViewPreviewSemantics("error: "+webViewError, previewview.WebViewPreviewMessage(webViewError, theme.ErrorText, theme, width, height))
@@ -93,16 +93,16 @@ func (a *App) buildWebViewPreview(previewData string, palette uiPalette, width, 
 	content := data.content()
 	content.DocumentKey = a.webViewDocumentKey()
 	content.CornerRadius = previewview.WebViewPreviewCornerRadius
-	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window.ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
-		if a.isDestroyed() || network.IsOffline() || a.webView.webViewPreviewData != previewData || a.webView.webViewPreviewError != "" || content.DocumentKey != a.webViewDocumentKey() {
+	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window().ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
+		if a.isDestroyed() || network.IsOffline() || a.webViewPreviewData != previewData || a.webViewPreviewError != "" || content.DocumentKey != a.webViewDocumentKey() {
 			return
 		}
-		a.webView.syncWebViewActionHotkey()
-		if err := a.window.ShowWebView(content, bounds); err != nil {
-			a.webView.setWebViewPreviewError(err)
+		a.syncWebViewActionHotkey()
+		if err := a.window().ShowWebView(content, bounds); err != nil {
+			a.setWebViewPreviewError(err)
 			return
 		}
-		a.webView.requestWebViewKeyboardFocus()
+		a.requestWebViewKeyboardFocus()
 	}}))
 }
 
@@ -126,26 +126,26 @@ func webViewPreviewReadyValue(data webViewPreviewData) string {
 }
 
 // handleWebViewFallbackEscape leaves browser focus before applying the launcher's outer Escape behavior.
-func (a *App) handleWebViewFallbackEscape() {
-	if a.webView.webViewFullscreen {
+func (a *webViewPreviewController) handleWebViewFallbackEscape() {
+	if a.webViewFullscreen {
 		a.exitWebViewPreviewMode()
 		return
 	}
-	a.webView.webViewWantKeyboardFocus = false
+	a.webViewWantKeyboardFocus = false
 	queryVisible := !a.show.HideQueryBox
 	queryCanFocus := a.queryCanFocus()
 	focusedKeyBefore := woxwidget.Key("")
-	if a.host != nil {
-		focusedKeyBefore = a.host.FocusedKey()
+	if a.host() != nil {
+		focusedKeyBefore = a.host().FocusedKey()
 	}
-	webViewFocusedBefore := a.host != nil && a.host.HasFocus(previewview.WebViewPreviewFocusKey)
-	queryFocusedBefore := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
-	requested := queryVisible && a.host != nil && a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	webViewFocusedBefore := a.host() != nil && a.host().HasFocus(previewview.WebViewPreviewFocusKey)
+	queryFocusedBefore := a.host() != nil && a.host().HasFocus(launcherview.LauncherQueryInputKey)
+	requested := queryVisible && a.host() != nil && a.host().RequestFocus(launcherview.LauncherQueryInputKey)
 	focusedKeyAfter := woxwidget.Key("")
-	if a.host != nil {
-		focusedKeyAfter = a.host.FocusedKey()
+	if a.host() != nil {
+		focusedKeyAfter = a.host().FocusedKey()
 	}
-	queryFocusedAfter := a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey)
+	queryFocusedAfter := a.host() != nil && a.host().HasFocus(launcherview.LauncherQueryInputKey)
 	util.GetLogger().Info(a.lifecycleCtx, fmt.Sprintf(
 		"webview escape launcher focus transfer: queryVisible=%t queryCanFocus=%t focusedKeyBefore=%q webViewFocusedBefore=%t queryFocusedBefore=%t requestFocus=%t focusedKeyAfter=%q queryFocusedAfter=%t",
 		queryVisible,
@@ -255,8 +255,8 @@ func (a *App) isPreviewFullscreen() bool {
 
 // onWebViewPreviewModeKey keeps result-list navigation from tearing down the
 // preview. Typing in the query box still reaches the editor; Escape leaves.
-func (a *App) onWebViewPreviewModeKey(event woxui.KeyEvent) bool {
-	if !a.webView.webViewFullscreen {
+func (a *webViewPreviewController) onWebViewPreviewModeKey(event woxui.KeyEvent) bool {
+	if !a.webViewFullscreen {
 		return false
 	}
 	if event.Down && !event.Repeat && event.Modifiers == 0 && event.Key == woxui.KeyEscape {
@@ -267,7 +267,7 @@ func (a *App) onWebViewPreviewModeKey(event woxui.KeyEvent) bool {
 	if webViewPreviewBlocksResultNavigation(event) {
 		return true
 	}
-	if a.host != nil && a.host.HasFocus(launcherview.LauncherQueryInputKey) {
+	if a.host() != nil && a.host().HasFocus(launcherview.LauncherQueryInputKey) {
 		return false
 	}
 	// Page focus swallows ordinary launcher keys, but reserved WebView
@@ -288,7 +288,7 @@ func webViewPreviewBlocksResultNavigation(event woxui.KeyEvent) bool {
 }
 
 // enterWebViewPreviewMode replaces the result area with a WebView and leaves the query box visible.
-func (a *App) enterWebViewPreviewMode(resultIndex int, contextData map[string]string) {
+func (a *webViewPreviewController) enterWebViewPreviewMode(resultIndex int, contextData map[string]string) {
 	previewURL := strings.TrimSpace(contextData[webViewPreviewURLContextKey])
 	if resultIndex < 0 || resultIndex >= len(a.resultList.results) || !isWebViewPreviewURL(previewURL) {
 		return
@@ -302,23 +302,23 @@ func (a *App) enterWebViewPreviewMode(resultIndex int, contextData map[string]st
 		return
 	}
 	result := &a.resultList.results[resultIndex]
-	a.webView.beginMode(*result, parseOptionalPositiveInt(contextData[webViewPreviewWidthContextKey]), parseOptionalPositiveInt(contextData[webViewPreviewHeightContextKey]))
+	a.beginMode(*result, parseOptionalPositiveInt(contextData[webViewPreviewWidthContextKey]), parseOptionalPositiveInt(contextData[webViewPreviewHeightContextKey]))
 	result.Preview.PreviewType = "webview"
 	result.Preview.PreviewData = string(payload)
 	a.resultList.selected = resultIndex
 	a.restoreQueryTextInput()
 	a.previews.reconcileSelectedPreview()
 	_ = a.applyWindowBounds()
-	a.webView.beginWebViewKeyboardFocus()
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	a.beginWebViewKeyboardFocus()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
 // isGlobalWebViewPreview reports a result-owned WebView page, such as `webview g`
 // or Web Search's in-launcher preview. File previews that happen to render as a
 // WebView stay on the query box.
-func (a *App) isGlobalWebViewPreview() bool {
+func (a *webViewPreviewController) isGlobalWebViewPreview() bool {
 	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
 		return false
 	}
@@ -371,23 +371,23 @@ func (a *webViewPreviewController) requestWebViewKeyboardFocus() {
 }
 
 // exitWebViewPreviewMode restores the query box without destroying the current search.
-func (a *App) exitWebViewPreviewMode() {
-	if !a.webView.webViewFullscreen {
+func (a *webViewPreviewController) exitWebViewPreviewMode() {
+	if !a.webViewFullscreen {
 		return
 	}
-	a.webView.clearWebViewPreviewModeLocked()
+	a.clearWebViewPreviewModeLocked()
 	a.previews.reconcileSelectedPreview()
 	// Fullscreen search preview is ephemeral: hide would keep a cached document at its
 	// last scroll position, so the next Ctrl+Enter must not reuse that session.
-	a.webView.resetWebView()
+	a.resetWebView()
 	a.restoreQueryTextInput()
 	a.querySession.selectEntireQuery()
 	_ = a.applyWindowBounds()
-	if a.host != nil {
-		a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	if a.host() != nil {
+		a.host().RequestFocus(launcherview.LauncherQueryInputKey)
 	}
-	if a.window != nil {
-		_ = a.window.Invalidate()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
 	}
 }
 
@@ -404,36 +404,36 @@ func (a *webViewPreviewController) clearWebViewPreviewModeLocked() {
 
 // restoreWebViewPreviewResultLocked puts back the result's original preview so leaving
 // fullscreen does not leave a split WebView pane behind.
-func (a *App) restoreWebViewPreviewResultLocked() {
-	if a.webView.webViewFullscreenResultID == "" {
+func (a *webViewPreviewController) restoreWebViewPreviewResultLocked() {
+	if a.webViewFullscreenResultID == "" {
 		return
 	}
 	for index := range a.resultList.results {
-		if a.resultList.results[index].ID == a.webView.webViewFullscreenResultID {
-			a.resultList.results[index].Preview = a.webView.webViewFullscreenRestore
+		if a.resultList.results[index].ID == a.webViewFullscreenResultID {
+			a.resultList.results[index].Preview = a.webViewFullscreenRestore
 			return
 		}
 	}
 }
 
 // isWebViewFullPreviewWindow reports a query-hotkey preview panel with no query box.
-func (a *App) isWebViewFullPreviewWindow() bool {
+func (a *webViewPreviewController) isWebViewFullPreviewWindow() bool {
 	return a.show.ShowPreviewTitleBar && a.show.HideQueryBox && a.show.HideToolbar
 }
 
 // canHideWebViewPage reports a full-preview window that opted into Run in background.
-func (a *App) canHideWebViewPage() bool {
+func (a *webViewPreviewController) canHideWebViewPage() bool {
 	return a.isWebViewFullPreviewWindow() && a.hasCacheableWebViewPreviewLocked()
 }
 
 // closeWebViewPage restores search previews to their owner rather than switching every browser to the WebView plugin.
-func (a *App) closeWebViewPage() {
-	if a.webView.webViewFullscreen {
+func (a *webViewPreviewController) closeWebViewPage() {
+	if a.webViewFullscreen {
 		a.exitWebViewPreviewMode()
 		return
 	}
-	a.webView.resetWebView()
-	a.webView.deactivateWebViewPreview()
+	a.resetWebView()
+	a.deactivateWebViewPreview()
 	if a.isWebViewFullPreviewWindow() || (a.querySession.queryContext.PluginID != common.WebViewPluginID && launcherPreviewRatio(a.resultList.layout, false) == 0) {
 		if err := a.hideWindow(true); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("close full-preview webview page: %v", err))
@@ -450,8 +450,8 @@ func (a *App) closeWebViewPage() {
 		a.restoreQueryFocusAfterShow()
 		a.restoreQueryTextInput()
 		_ = a.applyWindowBounds()
-		if a.window != nil {
-			_ = a.window.Invalidate()
+		if a.window() != nil {
+			_ = a.window().Invalidate()
 		}
 		return
 	}
@@ -459,37 +459,35 @@ func (a *App) closeWebViewPage() {
 	a.show.HideToolbar = false
 	a.show.ShowPreviewTitleBar = false
 	a.setQuery(newInputQuery(webViewPluginQuery))
-	if a.host != nil {
-		a.host.RequestFocus(launcherview.LauncherQueryInputKey)
+	if a.host() != nil {
+		a.host().RequestFocus(launcherview.LauncherQueryInputKey)
 	}
-	if a.services != nil {
-		if err := a.sendCurrentQuery(); err != nil {
-			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("query webview after close page: %v", err))
-		}
+	if err := a.sendCurrentQuery(); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("query webview after close page: %v", err))
 	}
 	_ = a.applyWindowBounds()
 }
 
 // hideWebViewPage hides a cacheable full-preview window without destroying the page.
-func (a *App) hideWebViewPage() {
+func (a *webViewPreviewController) hideWebViewPage() {
 	if err := a.hideWindow(true); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide webview page: %v", err))
 	}
 }
 
 // openWebViewInSystemBrowser opens the current page in the OS browser and hides Wox.
-func (a *App) openWebViewInSystemBrowser() {
-	if a.window == nil {
+func (a *webViewPreviewController) openWebViewInSystemBrowser() {
+	if a.window() == nil {
 		return
 	}
-	if err := a.window.WebViewOpenInBrowser(); err != nil {
+	if err := a.window().WebViewOpenInBrowser(); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open webview in browser: %v", err))
 		a.actions.hideActionPanel()
 		return
 	}
 	// Opening the system browser leaves this preview; drop the session so the next
 	// Ctrl+Enter cannot resume the same scroll position after Hide.
-	a.webView.resetWebView()
+	a.resetWebView()
 	if err := a.hideWindow(true); err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("hide launcher after open webview in browser: %v", err))
 	}
@@ -512,7 +510,7 @@ func isWebViewPreviewURL(rawURL string) bool {
 }
 
 // webViewDocumentKey scopes native inline documents to one query result.
-func (a *App) webViewDocumentKey() string {
+func (a *webViewPreviewController) webViewDocumentKey() string {
 	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
 		return ""
 	}

@@ -70,7 +70,7 @@ func (a *App) bindSettingsWindow() {
 	c.window = func() *woxui.Window { return a.window }
 	c.buildSettings = a.buildSettings
 	c.settingsWindowTitle = a.settingsWindowTitle
-	c.finishSettingsPointer = a.finishSettingsPointer
+	c.finishSettingsPointer = func(event woxui.PointerEvent) { a.generalSettings.finishSettingsPointer(event) }
 	c.hotkeyRecordingUsesSettingsWindow = a.hotkeyRecordingUsesSettingsWindow
 	c.onSettingsWindowKey = a.onSettingsWindowKey
 	c.dispatchWindowKey = a.dispatchWindowKey

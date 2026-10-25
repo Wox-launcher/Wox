@@ -278,7 +278,7 @@ func TestInlineWebViewScriptTargetResolvesRemoteEnvelope(t *testing.T) {
 				app.resultList.results[0].Revision++
 				key, html := app.previews.inlineWebViewScriptTarget(preview, kind != "hidden")
 				if kind == "webview" || kind == "remote" {
-					if key != app.webViewDocumentKey() || html != "<p>initial state</p>" {
+					if key != app.webView.webViewDocumentKey() || html != "<p>initial state</p>" {
 						t.Fatalf("lost target: %q %q", key, html)
 					}
 				} else if key != "" || html != "" {

@@ -27,7 +27,7 @@ func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
 		form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"providers": "a"}, true)}
 		a.pluginSettings.SetForm(form)
 		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
-		a.chooseSettingChoice(1)
+		a.generalSettings.chooseSettingChoice(1)
 		want := "b"
 		if multi {
 			want = "a,b"
@@ -39,12 +39,12 @@ func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
 			continue
 		}
 		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
-		a.chooseSettingChoice(0)
+		a.generalSettings.chooseSettingChoice(0)
 		if got := form.values["providers"]; got != "b" {
 			t.Fatalf("deselect: %q", got)
 		}
 		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
-		a.chooseSettingChoice(1)
+		a.generalSettings.chooseSettingChoice(1)
 		if got := form.values["providers"]; got != "" {
 			t.Fatalf("clear: %q", got)
 		}
@@ -69,7 +69,7 @@ func TestPluginMultiChoiceSelectAllIsExclusive(t *testing.T) {
 	a.pluginSettings.SetForm(form)
 	choose := func(index int) {
 		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
-		a.chooseSettingChoice(index)
+		a.generalSettings.chooseSettingChoice(index)
 	}
 	choose(1)
 	if got := form.values["browsers"]; got != "chrome" {

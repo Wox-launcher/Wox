@@ -39,7 +39,7 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 				uiCall: func(fn func()) error { applied <- fn; return nil },
 			})
 			source := app.filePreview.filePreviewFor(path).Image
-			app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
+			app.previews.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
 			revision := app.imageStore.imagesRevision.Load()
 			select {
 			case apply := <-applied:
@@ -51,7 +51,7 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 			if app.imageStore.imagesRevision.Load() == revision {
 				t.Fatal("decode failure did not invalidate the cached preview")
 			}
-			view := app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
+			view := app.previews.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
 			container, ok := view.(woxwidget.Container)
 			if !ok {
 				t.Fatalf("preview = %T, want an error message", view)
@@ -948,7 +948,7 @@ func TestPreviewImageRebuildKeepsOversizePin(t *testing.T) {
 	})
 	app.imageStore.insertImageLocked(key, picture)
 	for i := 0; i < 3; i++ {
-		app.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
+		app.previews.buildPreviewImage(source, source, app.appearance.palette, 400, 300)
 		if app.imageStore.images[key] != picture || !app.imageStore.imageViewportPinned(key) {
 			t.Fatal("unchanged image was released during rebuild")
 		}

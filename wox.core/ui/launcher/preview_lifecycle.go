@@ -189,7 +189,7 @@ func (a *previewController) inlineWebViewScriptTarget(preview queryPreview, visi
 	preview = a.remotePreview.resolvePreview(preview)
 	if preview.PreviewType == "webview" {
 		if data, err := decodeWebViewPreview(preview.PreviewData); err == nil && data.URL == "" && data.HTML != "" {
-			return a.webViewDocumentKey(), data.HTML
+			return a.webView.webViewDocumentKey(), data.HTML
 		}
 	}
 	return "", ""

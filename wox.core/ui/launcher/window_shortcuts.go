@@ -81,7 +81,7 @@ func (a *App) requestLauncherShortcutClose() {
 		closePage := func() {
 			// A query change or an earlier close may have replaced this page while the callback was queued.
 			if !a.destroyed.Load() && a.querySession.query.QueryID == queryID && a.webView.webViewPreviewData == previewData {
-				a.closeWebViewPage()
+				a.webView.closeWebViewPage()
 			}
 		}
 		if a.uiPost == nil {

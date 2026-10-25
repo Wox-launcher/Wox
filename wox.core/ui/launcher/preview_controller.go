@@ -1,15 +1,37 @@
 package launcher
 
 import (
+	"context"
 	"sync/atomic"
+
+	"wox/common"
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 )
 
-// previewController coordinates preview resources for the currently published selection.
-// It preserves an active WebView during typed-query grace without starting stale work.
+// previewImageServices opens a preview picture in core's full-size image overlay.
+type previewImageServices interface {
+	ShowPreviewImage(ctx context.Context, sessionID string, image common.WoxImage) error
+}
+
+// previewController coordinates preview resources for the currently published selection
+// and renders the generic preview bodies (text, Markdown, images, lists, files and folders)
+// and their tags. It preserves an active WebView during typed-query grace without starting stale work.
 type previewController struct {
+	services                         previewImageServices
+	sessionID                        string
+	lifecycleCtx                     context.Context
+	language                         *languageCatalog
+	appearance                       *appearanceController
+	tooltips                         *tooltipController
+	chatWindow                       *chatWindowController
+	show                             func() showAppParams
+	imageFor                         func(source woxImage) *woxui.Image
+	imageForSize                     func(source woxImage, size int) *woxui.Image
+	imageForViewport                 func(source woxImage, size int) *woxui.Image
+	releaseViewportImage             func(source woxImage, size int)
+	imageErrorFor                    func(source woxImage, size int) string
 	resultList                       *resultController
 	querySession                     *queryController
 	imageStore                       *imageStore
@@ -30,7 +52,6 @@ type previewController struct {
 	deactivateRequirementForm        func()
 	activateTriggerConflictPreview   func(queryResult, queryPreview) error
 	deactivateTriggerConflictPreview func()
-	webViewDocumentKey               func() string
 	previewTooltipRevision           atomic.Uint64
 	// pinnedPreview is the full-bleed preview image currently on screen.
 	pinnedPreview     viewportPreviewPin
@@ -42,6 +63,19 @@ type previewController struct {
 // bindPreviews supplies selected-result state and each preview owner's lifecycle API.
 func (a *App) bindPreviews() {
 	c := &a.previews
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.language = &a.language
+	c.appearance = &a.appearance
+	c.tooltips = &a.tooltips
+	c.chatWindow = &a.chatWindow
+	c.show = func() showAppParams { return a.show }
+	c.imageFor = a.imageFor
+	c.imageForSize = a.imageForSize
+	c.imageForViewport = a.imageForViewport
+	c.releaseViewportImage = a.releaseViewportImage
+	c.imageErrorFor = a.imageErrorFor
 	c.resultList = &a.resultList
 	c.querySession = &a.querySession
 	c.imageStore = &a.imageStore
@@ -67,5 +101,4 @@ func (a *App) bindPreviews() {
 	c.deactivateRequirementForm = a.requirements.deactivateRequirementForm
 	c.activateTriggerConflictPreview = a.conflicts.activateTriggerConflictPreview
 	c.deactivateTriggerConflictPreview = a.conflicts.deactivateTriggerConflictPreview
-	c.webViewDocumentKey = a.webViewDocumentKey
 }

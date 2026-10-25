@@ -386,7 +386,7 @@ func TestBuildPreviewImageKeepsOverlayTapInSidebarPreview(t *testing.T) {
 }
 
 func builtPreviewImageGesture(app *App, source woxImage, width, height float32) woxwidget.Gesture {
-	view := app.buildPreviewImage(source, source, defaultPalette(), width, height).(woxwidget.Stateful)
+	view := app.previews.buildPreviewImage(source, source, defaultPalette(), width, height).(woxwidget.Stateful)
 	return view.CreateState().Build(woxwidget.StateContext{}, view.Widget).(woxwidget.Gesture)
 }
 
@@ -469,7 +469,7 @@ func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
 		},
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`},
 	})
-	app.closeWebViewPage()
+	app.webView.closeWebViewPage()
 	if app.webView.webViewPreviewData != "" {
 		t.Fatal("close must drop the cached preview session")
 	}
@@ -496,7 +496,7 @@ func TestCloseWebViewPageDestroysFullPreviewWithoutRewritingQuery(t *testing.T) 
 		show:    showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
 	})
 	app.destroyOnce.Do(func() {})
-	app.closeWebViewPage()
+	app.webView.closeWebViewPage()
 	if app.webView.webViewPreviewData != "" {
 		t.Fatal("full-preview close must destroy the page")
 	}
@@ -512,10 +512,10 @@ func TestHideWebViewPageKeepsCacheableFullPreview(t *testing.T) {
 		webView:   webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`},
 		show:      showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
 	})
-	if !app.canHideWebViewPage() {
+	if !app.webView.canHideWebViewPage() {
 		t.Fatal("Run in background full-preview windows must offer Hide Webpage")
 	}
-	app.hideWebViewPage()
+	app.webView.hideWebViewPage()
 	if app.webView.webViewPreviewData == "" || app.destroyed.Load() {
 		t.Fatal("hide must keep the page and the secondary window")
 	}
@@ -523,14 +523,14 @@ func TestHideWebViewPageKeepsCacheableFullPreview(t *testing.T) {
 
 func TestCanHideWebViewPageRequiresBackgroundFullPreview(t *testing.T) {
 	inline := bindTestApp(&App{webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`}})
-	if inline.canHideWebViewPage() {
+	if inline.webView.canHideWebViewPage() {
 		t.Fatal("typed WebView queries should not offer Hide Webpage")
 	}
 	disabled := bindTestApp(&App{
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":true}`},
 		show:    showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
 	})
-	if disabled.canHideWebViewPage() {
+	if disabled.webView.canHideWebViewPage() {
 		t.Fatal("Hide Webpage requires Run in background")
 	}
 }

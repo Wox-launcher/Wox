@@ -154,7 +154,7 @@ func (a *actionPanelController) currentActionPanelEntries() []actionPanelEntry {
 
 // resultActionPanelEntries is the right-hand Action Panel list, independent of About Menu.
 func (a *App) resultActionPanelEntries() []actionPanelEntry {
-	return unifiedActionPanelEntriesWithHide(a.resultList.results, a.resultList.selected, a.toolbar.toolbarMsg, a.canHideWebViewPage())
+	return unifiedActionPanelEntriesWithHide(a.resultList.results, a.resultList.selected, a.toolbar.toolbarMsg, a.webView.canHideWebViewPage())
 }
 
 // unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.
@@ -781,11 +781,11 @@ func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
 		return
 	}
 	if entry.ID == localActionWebViewClosePageID {
-		a.closeWebViewPage()
+		a.webView.closeWebViewPage()
 		return
 	}
 	if entry.ID == localActionWebViewHidePageID {
-		a.hideWebViewPage()
+		a.webView.hideWebViewPage()
 		return
 	}
 	if a.window == nil {
@@ -800,7 +800,7 @@ func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
 	case localActionWebViewGoForwardID:
 		err = a.window.WebViewGoForward()
 	case localActionWebViewOpenInBrowserID:
-		a.openWebViewInSystemBrowser()
+		a.webView.openWebViewInSystemBrowser()
 		return
 	case localActionWebViewOpenDevToolsID:
 		err = a.window.WebViewOpenDevTools()
@@ -843,12 +843,12 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	action := result.Actions[actionIndex]
 	if action.ID == enterChatModeActionID {
 		a.actions.hideActionPanel()
-		a.enterChatMode()
+		a.chat.enterChatMode()
 		return
 	}
 	if action.ID == openWebViewPreviewActionID {
 		a.actions.hideActionPanel()
-		a.enterWebViewPreviewMode(resultIndex, action.ContextData)
+		a.webView.enterWebViewPreviewMode(resultIndex, action.ContextData)
 		return
 	}
 	if action.Type == "form" {

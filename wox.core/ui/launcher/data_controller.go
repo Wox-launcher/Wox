@@ -101,8 +101,10 @@ func (a *App) bindDataSettings() {
 	c.language = &a.language
 	c.settings = &a.settingsWindow
 	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
-	c.openSettingChoicePickerAt = a.openSettingChoicePickerAt
-	c.startGeneralSettingSave = a.startGeneralSettingSave
+	c.openSettingChoicePickerAt = func(item settingItem, anchor woxui.Rect) { a.generalSettings.openSettingChoicePickerAt(item, anchor) }
+	c.startGeneralSettingSave = func(job string, item settingItem, choice settingChoice) {
+		a.generalSettings.startGeneralSettingSave(job, item, choice)
+	}
 	c.BindCrossDomain(
 		a.reloadSettings,
 		func() (string, error) {

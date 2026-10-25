@@ -176,16 +176,16 @@ func TestPreviewTooltipWindowStaysOnLauncherUntilChatWindowIsFocused(t *testing.
 			chatWindowFocused: false,
 		},
 	})
-	if app.previewTooltipWindow() != launcher {
+	if app.previews.previewTooltipWindow() != launcher {
 		t.Fatal("unfocused dedicated chat must keep preview tooltips on the launcher")
 	}
 	app.chatWindow.chatWindowFocused = true
-	if app.previewTooltipWindow() != launcher {
+	if app.previews.previewTooltipWindow() != launcher {
 		t.Fatal("a focused chat window without a live native surface must fall back to the launcher")
 	}
 	app.chatWindow.chatWindowFocused = false
 	app.visible = false
-	if app.previewTooltipWindow() != launcher {
+	if app.previews.previewTooltipWindow() != launcher {
 		t.Fatal("a hidden launcher without a live chat surface must fall back to the launcher window")
 	}
 }

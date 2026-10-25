@@ -76,7 +76,7 @@ func TestLocalizedLanguageSettingIncludesDescription(t *testing.T) {
 			},
 		},
 	})
-	item := app.localizedSettingItem(settingItem{key: "LangCode", title: "Language", description: "Language used by Wox"})
+	item := app.generalSettings.localizedSettingItem(settingItem{key: "LangCode", title: "Language", description: "Language used by Wox"})
 
 	if item.title != "语言" || item.description != "Wox 使用的界面语言" {
 		t.Fatalf("localized language item = %#v", item)
@@ -93,7 +93,7 @@ func TestLocalizedAppFontFamilySystemDefault(t *testing.T) {
 			},
 		},
 	})
-	item := app.localizedSettingItem(systemFontSettingItem(settingsSnapshot{
+	item := app.generalSettings.localizedSettingItem(systemFontSettingItem(settingsSnapshot{
 		appearance: appearanceSettingsSnapshot{FontFamilies: []string{"Arial", "Bahnschrift"}},
 	}))
 
@@ -141,7 +141,7 @@ func TestLocalizedDebugSettings(t *testing.T) {
 	wantTitles := []string{"同步服务地址", "显示分数尾标", "显示性能尾标", "批次", "插件执行时间", "后端准备发送时间", "UI 收到结果时间"}
 	wantDescriptions := []string{"切换后退出当前同步账户", "显示排序分数", "显示查询耗时", "显示批次", "显示插件耗时", "显示后端耗时", "显示 UI 接收耗时"}
 	for index := range items {
-		items[index] = app.localizedSettingItem(items[index])
+		items[index] = app.generalSettings.localizedSettingItem(items[index])
 		if items[index].title != wantTitles[index] || items[index].description != wantDescriptions[index] {
 			t.Fatalf("localized debug item %d = %#v", index, items[index])
 		}

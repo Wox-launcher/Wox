@@ -13,7 +13,7 @@ func TestBuiltInTextBlurDropsAnUnchangedEdit(t *testing.T) {
 		t.Fatal("StartEdit should claim the proxy URL")
 	}
 
-	app.blurBuiltInSettingEdit(settingItem{key: "HttpProxyUrl", value: "http://localhost:7890", text: true})
+	app.generalSettings.blurBuiltInSettingEdit(settingItem{key: "HttpProxyUrl", value: "http://localhost:7890", text: true})
 
 	if app.generalSettings.EditKey() != "" || app.settingsWindow.pendingBuiltInText != nil || app.settingsWindow.saving {
 		t.Fatalf("edit = %q pending = %+v saving = %v, want an unchanged blur to only leave the session", app.generalSettings.EditKey(), app.settingsWindow.pendingBuiltInText, app.settingsWindow.saving)
@@ -31,7 +31,7 @@ func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			woxwidget.Focusable{Key: "url", OnFocusChange: func(focused bool) {
 				if !focused {
-					app.blurBuiltInSettingEdit(item)
+					app.generalSettings.blurBuiltInSettingEdit(item)
 				}
 			}, Child: woxwidget.Container{Width: 40, Height: 20}},
 			woxwidget.Focusable{Key: "proxy", Child: woxwidget.Gesture{ID: "proxy", OnTap: func() {

@@ -65,7 +65,7 @@ func TestCloseFullscreenWebSearchRestoresSearch(t *testing.T) {
 	original := queryPreview{PreviewType: "text", PreviewData: "Search details"}
 	app.resultList.results = []queryResult{{ID: "search", Title: "Wox", Preview: original}}
 	app.resultList.selected = 0
-	app.enterWebViewPreviewMode(0, map[string]string{webViewPreviewURLContextKey: "https://example.com/search?q=wox"})
+	app.webView.enterWebViewPreviewMode(0, map[string]string{webViewPreviewURLContextKey: "https://example.com/search?q=wox"})
 	if !app.webView.webViewFullscreen || app.webView.webViewPreviewData == "" {
 		t.Fatal("fixture did not activate a fullscreen search browser")
 	}

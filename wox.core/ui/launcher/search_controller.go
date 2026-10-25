@@ -32,7 +32,7 @@ func (a *App) bindSettingsSearch() {
 	c.themeSettings = func() *themeSettingsController { return a.themeSettings }
 
 	c.settingsSnapshot = a.settingsSnapshot
-	c.localizedSettingItem = a.localizedSettingItem
+	c.localizedSettingItem = func(item settingItem) settingItem { return a.generalSettings.localizedSettingItem(item) }
 	c.settingNavLabel = a.settingNavLabel
 	c.selectSettingsNavItem = a.selectSettingsNavItem
 	c.selectSettingTab = a.selectSettingTab

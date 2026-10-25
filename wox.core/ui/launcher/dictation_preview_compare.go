@@ -8,6 +8,7 @@ import (
 
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/speech"
 )
@@ -56,7 +57,7 @@ func (a *dictationPreviewController) ensureDictationModelCompare(rawPath string)
 	return state
 }
 
-func (a *App) dictationModelCompareProps(state *dictationModelCompareState, scrollKey, emptyResult string, style woxui.TextStyle, width, lineHeight float32) []previewview.DictationModelCompareResult {
+func (a *dictationPreviewController) dictationModelCompareProps(state *dictationModelCompareState, scrollKey, emptyResult string, style woxui.TextStyle, width, lineHeight float32) []previewview.DictationModelCompareResult {
 	if state == nil {
 		return nil
 	}
@@ -69,7 +70,7 @@ func (a *App) dictationModelCompareProps(state *dictationModelCompareState, scro
 		results = append(results, previewview.DictationModelCompareResult{
 			ID: model.ID, Name: model.Name, Status: model.Status, Error: model.Error,
 			Text: text, Duration: formatDictationCompareDuration(model.Elapsed),
-			Layout: a.previews.previewTextLayout(a.window, scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
+			Layout: a.textLayout(a.window(), scrollKey+"|compare|"+model.ID, text, style, width, lineHeight),
 		})
 	}
 	return results
@@ -177,4 +178,44 @@ func (a *dictationPreviewController) compareAllDictationModels() {
 		ids = append(ids, model.ID)
 	}
 	a.startDictationModelCompare(ids)
+}
+
+// buildDictationHistoryPreview prepares portable text layout before composing the pure comparison view.
+func (a *dictationPreviewController) buildDictationHistoryPreview(scrollKey string, data dictationHistoryPreviewData, palette uiPalette, width, height float32) woxwidget.Widget {
+	scale := a.appearance.densityMetrics.normalized().scale
+	scaled := func(value float32) float32 { return a.appearance.densityMetrics.scaled(value) }
+	innerWidth := max(float32(0), width-scaled(52))
+	refinedWidth := max(float32(0), innerWidth-scaled(16))
+	refinedStyle := woxui.TextStyle{Size: scaled(18), Weight: woxui.FontWeightSemibold}
+	originalStyle := woxui.TextStyle{Size: scaled(14)}
+	refinedLayout := a.textLayout(a.window(), scrollKey+"|dictation-refined", data.RefinedText, refinedStyle, refinedWidth, scaled(28))
+	originalLayout := a.textLayout(a.window(), scrollKey+"|dictation-original", data.OriginalText, originalStyle, innerWidth, scaled(22))
+	statusWidth := float32(0)
+	if status := strings.TrimSpace(data.StatusLabel); status != "" {
+		metrics, _ := a.window().MeasureText(status, woxui.TextStyle{Size: scaled(11)})
+		statusWidth = scaled(17) + metrics.Size.Width
+	}
+	props := previewview.DictationHistoryPreviewProps{
+		ID: scrollKey, Width: width, Height: height, Scale: scale, Theme: palette.componentTheme(),
+		RefinedText: data.RefinedText, OriginalText: data.OriginalText, RefinedLabel: data.RefinedLabel, OriginalLabel: data.OriginalLabel,
+		StatusLabel: data.StatusLabel, IsChanged: data.IsChanged, RefinedLayout: refinedLayout, OriginalLayout: originalLayout, StatusWidth: statusWidth,
+		AudioLabel: data.AudioLabel, RawAudioLabel: data.RawAudioLabel, RawAudioPath: data.RawAudioPath,
+		ProcessedAudioLabel: data.ProcessedAudioLabel, ProcessedAudioPath: data.ProcessedAudioPath,
+		RawPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.RawAudioPath)), ProcessedPlayback: dictationPlaybackProps(a.dictationAudioSnapshot(data.ProcessedAudioPath)),
+		PlayLabel: a.language.translate("i18n:plugin_mediaplayer_play"), PauseLabel: a.language.translate("i18n:plugin_mediaplayer_pause"), OnPlayDiagnosticAudio: a.toggleDictationAudio,
+	}
+	if a.isDev && strings.TrimSpace(data.RawAudioPath) != "" && strings.TrimSpace(data.ProcessedAudioPath) != "" {
+		compare := a.ensureDictationModelCompare(data.RawAudioPath)
+		compareTextWidth := max(float32(0), innerWidth-scaled(28))
+		props.CompareLabel = a.language.translate("i18n:plugin_dictation_history_model_compare")
+		props.CompareAllLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_run_all")
+		props.CompareRunLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_run")
+		props.CompareRunningLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_running")
+		props.CompareEmptyLabel = a.language.translate("i18n:plugin_dictation_history_model_compare_empty")
+		props.CompareModels = a.dictationModelCompareProps(compare, scrollKey, a.language.translate("i18n:plugin_dictation_history_model_compare_empty_result"), originalStyle, compareTextWidth, scaled(22))
+		props.CompareBusy = compare.busy
+		props.OnCompareModel = a.compareDictationModel
+		props.OnCompareAll = a.compareAllDictationModels
+	}
+	return previewview.DictationHistoryPreviewView(props)
 }

@@ -93,7 +93,7 @@ func (a *App) chooseShowDisplay(index int) {
 	if err != nil {
 		return
 	}
-	a.startGeneralSettingSave("save show display", settingItem{key: "ShowDisplay"}, settingChoice{value: string(encoded)})
+	a.generalSettings.startGeneralSettingSave("save show display", settingItem{key: "ShowDisplay"}, settingChoice{value: string(encoded)})
 }
 
 // retryShowDisplays reloads the map after an enumeration failure.

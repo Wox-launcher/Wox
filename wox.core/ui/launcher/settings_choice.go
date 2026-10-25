@@ -24,23 +24,23 @@ type settingChoicePickerSnapshot struct {
 }
 
 // buildSettingChoicePickerOverlay adapts controller state to the package-independent choice picker view.
-func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *generalSettingsController) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
 	for index, choice := range snapshot.item.choices {
 		var leading *woxui.Image
 		if source := snapshot.item.icons[choice.value]; source.ImageData != "" {
 			if snapshot.item.preserveIconColor {
-				leading = a.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
+				leading = c.imageForSurface(source, physicalImageSize(18, imageScale), settingsPalette().Background)
 			} else {
-				leading = a.imageForTint(source, &palette.Text, physicalImageSize(18, imageScale))
+				leading = c.imageForTint(source, &palette.Text, physicalImageSize(18, imageScale))
 			}
 		}
 		choices[index] = launcherview.SettingsChoice{
 			Value: choice.value, Label: choice.label, Leading: leading, Trailing: snapshot.item.trailers[choice.value],
-			Tooltip: a.localizedSettingChoiceTooltip(snapshot.item.key, choice),
+			Tooltip: c.localizedSettingChoiceTooltip(snapshot.item.key, choice),
 		}
 	}
-	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
+	searchIcon := c.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
 	var selectedValues []string
 	if snapshot.multi {
 		// A non-nil slice selects multi-select mode even when nothing is chosen.
@@ -53,8 +53,8 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		SelectedValues: selectedValues,
-		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsWindow.settingsNativeWindow(), Title: snapshot.item.title,
-		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.settingsWindow.setSettingChoiceTooltip,
+		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: c.settings.settingsNativeWindow(), Title: snapshot.item.title,
+		FilterHint: c.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: c.chooseSettingChoice, OnCancel: c.closeSettingChoicePicker, OnTooltip: c.settings.setSettingChoiceTooltip,
 	})
 }
 
@@ -67,64 +67,64 @@ func snapshotSettingChoicePickerLocked(state *settingChoicePickerState) *setting
 	return &settingChoicePickerSnapshot{item: item, anchor: state.anchor, multi: state.multi}
 }
 
-func (a *App) openOrActivateSetting() {
-	snapshot := a.settingsSnapshot()
+func (c *generalSettingsController) openOrActivateSetting() {
+	snapshot := c.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if snapshot.saving || snapshot.row < 0 || snapshot.row >= len(items) {
 		return
 	}
-	item := a.localizedSettingItem(items[snapshot.row])
+	item := c.localizedSettingItem(items[snapshot.row])
 	if item.disabled {
 		return
 	}
 	if item.text || isBooleanSettingItem(item) {
-		a.activateSetting(1)
+		c.activateSetting(1)
 		return
 	}
-	a.openSettingChoicePicker(item)
+	c.openSettingChoicePicker(item)
 }
 
 func isBooleanSettingItem(item settingItem) bool {
 	return len(item.choices) == 2 && item.choices[0].value == "false" && item.choices[1].value == "true"
 }
 
-func (a *App) openSettingChoicePicker(item settingItem) {
-	host := a.settingsWindow.host
+func (c *generalSettingsController) openSettingChoicePicker(item settingItem) {
+	host := c.settings.host
 	anchor := woxui.Rect{}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(launcherview.SettingChoiceAnchorKey(item.key))
 	}
-	a.openSettingChoicePickerAt(item, anchor)
+	c.openSettingChoicePickerAt(item, anchor)
 }
 
 // openSettingChoicePickerAt anchors pointer-opened menus to the bounds from the exact hit-tested frame.
-func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
-	if a.settingsWindow.saving || item.disabled || len(item.choices) == 0 {
+func (c *generalSettingsController) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
+	if c.settings.saving || item.disabled || len(item.choices) == 0 {
 		return
 	}
-	a.generalSettings.EndEdit()
-	a.generalSettings.SetShowDisplayPicker(nil)
-	a.generalSettings.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.EndEdit()
+	c.SetShowDisplayPicker(nil)
+	c.SetChoicePicker(&settingChoicePickerState{item: item, anchor: anchor})
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) closeSettingChoicePicker() {
+func (c *generalSettingsController) closeSettingChoicePicker() {
 	closed := false
-	if a.generalSettings.ChoicePicker() != nil {
-		a.generalSettings.SetChoicePicker(nil)
+	if c.ChoicePicker() != nil {
+		c.SetChoicePicker(nil)
 		closed = true
 	}
 	if closed {
-		a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
+		c.settings.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	}
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) chooseSettingChoice(index int) {
-	state := a.generalSettings.ChoicePicker()
-	if state == nil || a.settingsWindow.saving {
+func (c *generalSettingsController) chooseSettingChoice(index int) {
+	state := c.ChoicePicker()
+	if state == nil || c.settings.saving {
 		return
 	}
 	if index < 0 || index >= len(state.item.choices) {
@@ -133,19 +133,19 @@ func (a *App) chooseSettingChoice(index int) {
 	item := state.item
 	choice := state.item.choices[index]
 	if !state.multi {
-		a.generalSettings.SetChoicePicker(nil)
+		c.SetChoicePicker(nil)
 	}
 	if state.onChoose != nil {
-		a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
-		a.updateSettingsTextInput(false)
+		c.settings.setSettingChoiceTooltip(false, "", woxui.Rect{})
+		c.updateSettingsText(false)
 		state.onChoose(choice)
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
-	a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
-	a.startGeneralSettingSave("save setting choice", item, choice)
+	c.settings.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
+	c.startGeneralSettingSave("save setting choice", item, choice)
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.

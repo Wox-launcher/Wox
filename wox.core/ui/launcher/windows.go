@@ -353,7 +353,7 @@ func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
 	if a.cloudSettings.onCloudFormTextInput(event) {
 		return
 	}
-	if a.onBuiltInSettingsTextInput(event) {
+	if a.generalSettings.onBuiltInSettingsTextInput(event) {
 		return
 	}
 	a.pluginSettings.onPluginSettingsTextInput(event)

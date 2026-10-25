@@ -363,7 +363,7 @@ func (a *App) buildPreviewTitleBar(snapshot viewSnapshot, width float32, windowF
 					_ = a.window.WebViewReload()
 				}
 			},
-			OnOpenInBrowser: a.openWebViewInSystemBrowser,
+			OnOpenInBrowser: a.webView.openWebViewInSystemBrowser,
 		})
 	}
 	preview := a.remotePreview.resolvePreview(snapshot.results[snapshot.selected].Preview)
@@ -1002,7 +1002,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 				label = "Close"
 			}
 			return launcherview.PreviewHoverClose(launcherview.PreviewHoverCloseProps{
-				Width: width, Height: height, Child: preview, Label: label, Theme: snapshot.palette.componentTheme(), OnTooltip: a.setPreviewTooltip,
+				Width: width, Height: height, Child: preview, Label: label, Theme: snapshot.palette.componentTheme(), OnTooltip: a.previews.setPreviewTooltip,
 				OnClose: a.closePreviewWindow,
 			})
 		}
@@ -1429,7 +1429,7 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 		}
 	}
 	actions := make([]launcherview.LauncherToolbarAction, 0)
-	entries := unifiedActionPanelEntriesWithHide(snapshot.results, snapshot.selected, snapshot.toolbarMsg, a.canHideWebViewPage())
+	entries := unifiedActionPanelEntriesWithHide(snapshot.results, snapshot.selected, snapshot.toolbarMsg, a.webView.canHideWebViewPage())
 	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
 		label := a.language.translate(entry.Name)
 		if strings.TrimSpace(label) == "" {
