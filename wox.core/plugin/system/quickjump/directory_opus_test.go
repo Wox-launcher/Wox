@@ -20,6 +20,18 @@ func TestSelectDirectoryOpusSourcePathUsesSourceTabRealPath(t *testing.T) {
 	}
 }
 
+func TestSelectDirectoryOpusSourcePathSupportsSinglePaneLister(t *testing.T) {
+	// Single-pane listers report side="0"; the visible tab is still the tab_state=1 source.
+	output := `<?xml version="1.0"?>
+<results command="paths" result="1">
+	<path active_lister="1" display_path="D:\btsync_book_war" lister="0x91032" side="0" tab="0x150de8">D:\btsync_book_war</path>
+	<path active_lister="1" active_tab="1" display_path="E:\M" lister="0x91032" side="0" tab="0xd1414" tab_state="1">E:\M</path>
+</results>`
+	if got := selectDirectoryOpusSourcePath([]byte(output), 0x91032); got != `E:\M` {
+		t.Fatalf("source path = %q, want the visible tab of the single pane", got)
+	}
+}
+
 func TestSelectDirectoryOpusSourcePathDecodesUTF8Paths(t *testing.T) {
 	// dopusrt writes UTF-8 without a BOM or an encoding declaration.
 	output := `<?xml version="1.0"?>
