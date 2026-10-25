@@ -51,7 +51,8 @@ contract merely to reach another feature.
 | `previewController` | Selected-preview visibility and resource transitions; Markdown and text-layout caches |
 | Remote, file, native-file, WebView, terminal and dictation controllers | Each preview's requests, caches, native/session state and cleanup |
 | `chatController`, `chatWindowController` | One chat session and attachment imports; the dedicated window presenting that session |
-| `settingsWindowController`, `onboardingController` | Window lifecycle, hosts and surface state; existing settings-domain controllers retain editing and persistence policies |
+| `settingsWindowController` | Settings window lifecycle and session state shared by all pages: route, saving and restart status, hover overlays and the search highlight. Session begin, tab switch and close go through its methods; settings-domain controllers retain page editing and persistence policies |
+| `onboardingController` | The first-run guide: its window, pages, setup actions and launcher migration. Settings-domain controllers are read through getters because they are created after binding. `App` keeps the cross-window transitions: switching between the guide and Settings, hotkey-recorder routing and the macOS permission flow |
 | `notesController` | Note-window registry and the capabilities used by individual note editors |
 | Glance, Attention, toolbar, quick-select and result-drag controllers | Accessory refresh and inbox visibility, message expiry, modifier-hold selection and drag lifecycle |
 | `imageStore`, `languageCatalog`, `formTableEmojiCatalog`, `tooltipController`, `appearanceController` | Decoded-image budget and request deduplication, published translations, table-editor emoji search/recent choices, tooltip lifecycle and launcher appearance |

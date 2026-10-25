@@ -10,7 +10,7 @@ import (
 
 func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.settingsTableEditor
+	state := app.settingsWindow.tableEditor
 
 	app.openFormTableEmojiPicker(0)
 	if state.emojiPicker == nil {
@@ -39,7 +39,7 @@ func TestOpenFormTableEmojiPickerTargetsIconField(t *testing.T) {
 
 func TestChooseFormTableEmojiCommitsAndCloses(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.settingsTableEditor
+	state := app.settingsWindow.tableEditor
 	app.openFormTableEmojiPicker(0)
 
 	app.chooseFormTableEmoji("🤖")
@@ -65,7 +65,7 @@ func TestWoxImageRowFieldIsNotTextEditable(t *testing.T) {
 
 func TestTrayQueryRowEditorFocusesQueryNotIcon(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
-	state := app.settingsWindow.settingsTableEditor
+	state := app.settingsWindow.tableEditor
 	if state.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
@@ -123,10 +123,10 @@ func TestFormTableEmojiPickerSearchAcceptsCommittedText(t *testing.T) {
 	app := trayQueryEditorTestApp(t)
 	app.openFormTableEmojiPicker(0)
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.settingsTableEditor), settingsPalette(), 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.tableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsWindow.settingsHost = host
+	app.settingsWindow.host = host
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
 	displayList := woxui.DisplayList{}
 	host.Frame(&displayList, frame)
@@ -168,8 +168,8 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 	general.SetForm(&form)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "general",
+			open: true,
+			tab:  "general",
 		},
 		generalSettings: general,
 		hotkeySettings:  newHotkeySettingsController(deps),
@@ -186,7 +186,7 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 		},
 	})
 	app.openTrayQueryEditor(0)
-	if app.settingsWindow.settingsTableEditor == nil || app.settingsWindow.settingsTableEditor.rowForm == nil {
+	if app.settingsWindow.tableEditor == nil || app.settingsWindow.tableEditor.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}
 	return app

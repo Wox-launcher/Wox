@@ -397,8 +397,8 @@ func (a *App) settingsOwnedTableTarget(target *formFieldsState) bool {
 
 // activeFormTableEditor returns the settings flow first because its modal state remains independent when the launcher is activated.
 func (a *App) activeFormTableEditor() *formTableEditorState {
-	if a.settingsWindow.settingsTableEditor != nil {
-		return a.settingsWindow.settingsTableEditor
+	if a.settingsWindow.tableEditor != nil {
+		return a.settingsWindow.tableEditor
 	}
 	return a.forms.launcherTableEditor
 }
@@ -408,9 +408,9 @@ func (a *App) formTableTargetCurrentWithFormsLocked(target *formFieldsState, plu
 	return target != nil && ((a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
 		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
 		(pluginForm != nil && target == &pluginForm.formFieldsState) ||
-		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai" && target == aiForm) ||
-		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey" && target == hotkeyForm) ||
-		(a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "general" && target == generalForm))
+		(a.settingsWindow.open && a.settingsWindow.tab == "ai" && target == aiForm) ||
+		(a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && target == hotkeyForm) ||
+		(a.settingsWindow.open && a.settingsWindow.tab == "general" && target == generalForm))
 }
 
 func (a *App) openActionFormTable(index int) {
@@ -460,7 +460,7 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 		state.status = "Invalid table JSON. Close this editor without saving to preserve the original value."
 	}
 	if a.formTableTargetUsesSettingsLocked(target) {
-		a.settingsWindow.settingsTableEditor = state
+		a.settingsWindow.tableEditor = state
 	} else {
 		a.forms.launcherTableEditor = state
 	}
@@ -470,8 +470,8 @@ func (a *App) openFormTableLocked(target *formFieldsState, index int) {
 func (a *App) closeFormTableEditor() {
 	a.stopHotkeyRecording()
 	state := a.activeFormTableEditor()
-	if state == a.settingsWindow.settingsTableEditor {
-		a.settingsWindow.settingsTableEditor = nil
+	if state == a.settingsWindow.tableEditor {
+		a.settingsWindow.tableEditor = nil
 	} else if state == a.forms.launcherTableEditor {
 		a.forms.launcherTableEditor = nil
 	}
@@ -1187,7 +1187,7 @@ func (a *App) saveFormTableRowEdit() {
 	clearFormTableRowValidationLocked(state)
 	if persist {
 		state.saving = true
-		a.settingsWindow.settingSaving = true
+		a.settingsWindow.saving = true
 	}
 	if closeEditor {
 		a.closeFormTableEditor()
@@ -1301,7 +1301,7 @@ func (a *App) confirmFormTableRowDelete() {
 		value = state.target.values[key]
 		if persist {
 			state.saving = true
-			a.settingsWindow.settingSaving = true
+			a.settingsWindow.saving = true
 		}
 	}
 	if direct {
@@ -1427,7 +1427,7 @@ func (a *App) moveFormTableRowFocus(delta int) {
 	}
 	host := a.host
 	if a.formTableUsesSettingsWindow() {
-		host = a.settingsWindow.settingsHost
+		host = a.settingsWindow.host
 	}
 	if host != nil {
 		host.RequestFocus(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
@@ -1916,8 +1916,8 @@ func (a *App) updateFormTableQueryVariableTrigger(index int) {
 		anchor = state.queryVariable.anchor
 	} else {
 		host := a.host
-		if a.settingsWindow.settingsTableEditor != nil {
-			host = a.settingsWindow.settingsHost
+		if a.settingsWindow.tableEditor != nil {
+			host = a.settingsWindow.host
 		}
 		if host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
@@ -1957,8 +1957,8 @@ func (a *App) openFormTableQueryVariablePicker(index int, anchor woxui.Rect) {
 	state.choicePicker = nil
 	state.status = ""
 	host := a.host
-	if a.settingsWindow.settingsTableEditor != nil {
-		host = a.settingsWindow.settingsHost
+	if a.settingsWindow.tableEditor != nil {
+		host = a.settingsWindow.host
 	}
 	if host != nil {
 		if bounds, ok := host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d-trailing", index))); ok {

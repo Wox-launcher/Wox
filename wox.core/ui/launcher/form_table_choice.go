@@ -30,7 +30,7 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 	searchIcon := a.imageForTint(settingControlIconSource("search"), &palette.TextSecondary, physicalImageSize(16, imageScale))
 	infoIcon := a.imageForTint(settingNavIconSource("about"), &palette.TextSecondary, physicalImageSize(14, imageScale))
 	var onTooltip func(bool, string, woxui.Rect)
-	if a.settingsWindow.settingsTableEditor != nil {
+	if a.settingsWindow.tableEditor != nil {
 		onTooltip = a.setSettingChoiceTooltip
 	}
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
@@ -43,8 +43,8 @@ func (a *App) buildFormTableChoicePicker(snapshot *formTableChoicePickerSnapshot
 func (a *App) openFocusedFormTableRowChoice(index int) {
 	anchor := woxui.Rect{}
 	host := a.host
-	if a.settingsWindow.settingsTableEditor != nil {
-		host = a.settingsWindow.settingsHost
+	if a.settingsWindow.tableEditor != nil {
+		host = a.settingsWindow.host
 	}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))

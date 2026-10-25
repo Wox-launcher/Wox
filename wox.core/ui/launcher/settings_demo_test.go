@@ -35,7 +35,7 @@ func TestDelayedOverlaysDoNotApplyAfterDispatchFailure(t *testing.T) {
 			if !dispatched.Load() {
 				t.Fatal("delayed overlay did not attempt UI dispatch")
 			}
-			if app.settingsWindow.settingsDemo != nil || app.settingsWindow.cloudPlanTooltip != nil || inline != nil {
+			if app.settingsWindow.demo != nil || app.settingsWindow.cloudPlanTooltip != nil || inline != nil {
 				t.Fatal("failed UI dispatch applied overlay state on the worker")
 			}
 		})
@@ -52,7 +52,7 @@ func TestSetSettingsDemoHoverWaitsForDwell(t *testing.T) {
 
 	anchor := woxui.Rect{X: 240, Y: 120, Width: 18, Height: 18}
 	app.setSettingsDemoHover("query-hotkeys", true, anchor)
-	if app.settingsWindow.settingsDemo != nil {
+	if app.settingsWindow.demo != nil {
 		t.Fatal("settings demo must wait for the shared hover dwell")
 	}
 
@@ -63,11 +63,11 @@ func TestSetSettingsDemoHoverWaitsForDwell(t *testing.T) {
 	case <-time.After(nativeHoverTooltipDelay + time.Second):
 		t.Fatal("settings demo did not dispatch after dwell")
 	}
-	if app.settingsWindow.settingsDemo == nil {
+	if app.settingsWindow.demo == nil {
 		t.Fatal("expected settings demo after the hover dwell")
 	}
-	if app.settingsWindow.settingsDemo.kind != "query-hotkeys" || app.settingsWindow.settingsDemo.anchor != anchor {
-		t.Fatalf("settings demo = %+v, want query-hotkeys at %+v", app.settingsWindow.settingsDemo, anchor)
+	if app.settingsWindow.demo.kind != "query-hotkeys" || app.settingsWindow.demo.anchor != anchor {
+		t.Fatalf("settings demo = %+v, want query-hotkeys at %+v", app.settingsWindow.demo, anchor)
 	}
 }
 
@@ -78,8 +78,8 @@ func TestSetSettingsDemoHoverCancelBeforeDwell(t *testing.T) {
 	app.setSettingsDemoHover("query-hotkeys", true, woxui.Rect{X: 240, Y: 120, Width: 18, Height: 18})
 	app.setSettingsDemoHover("query-hotkeys", false, woxui.Rect{})
 	time.Sleep(nativeHoverTooltipDelay + 80*time.Millisecond)
-	if app.settingsWindow.settingsDemo != nil {
-		t.Fatalf("settings demo = %+v, want nil after leaving before the dwell", app.settingsWindow.settingsDemo)
+	if app.settingsWindow.demo != nil {
+		t.Fatalf("settings demo = %+v, want nil after leaving before the dwell", app.settingsWindow.demo)
 	}
 }
 

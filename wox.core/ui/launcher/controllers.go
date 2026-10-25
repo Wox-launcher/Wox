@@ -50,7 +50,7 @@ func (a *App) disposeControllers() {
 	a.imageStore.dispose()
 	a.nativeFile.dispose()
 	a.webView.dispose()
-	a.clearSettingsSearchHighlight()
+	a.settingsWindow.clearFlashLocked()
 	a.notes.dispose()
 	a.tooltips.disposeOnUI()
 	a.dictation.dispose()

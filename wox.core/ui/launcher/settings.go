@@ -290,17 +290,11 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	wasOnboarding := false
 	var onboardingView *woxui.ManagedWindow
 	if err := a.runOnUI("leave onboarding for settings", func() {
-		wasOnboarding = a.onboarding.onboardingOpen
-		if wasOnboarding {
-			a.releaseOnboardingMigrationSession()
-		}
-		a.onboarding.onboardingOpen = false
-		a.onboarding.onboardingChoice = ""
-		a.onboarding.onboardingChoiceAnchor = woxui.Rect{}
+		wasOnboarding = a.onboarding.leaveLocked()
 		if wasOnboarding {
 			a.releaseDemoWallpaperLocked()
 		}
-		onboardingView = a.onboarding.onboardingView
+		onboardingView = a.onboarding.view
 	}); err != nil {
 		return err
 	}
@@ -308,7 +302,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		if onboardingView != nil {
 			_ = onboardingView.Hide()
 		}
-		if err := a.notifyOnboardingViewChanged(false); err != nil {
+		if err := a.onboarding.notifyOnboardingViewChanged(false); err != nil {
 			return err
 		}
 	}
@@ -338,11 +332,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}
 	}
 	if err := a.runOnUI("open settings state", func() {
-		a.settingsWindow.settingsOpen = true
-		a.settingsWindow.settingsCtx = windowContext
-		a.settingsWindow.settingTab = tab
-		a.settingsWindow.settingRow = 0
-		a.settingsWindow.settingSaving = false
+		a.settingsWindow.beginSessionLocked(tab)
 		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 		a.settingsSearch.SetFocused(tab != "plugins")
 		a.settingsSearch.SetPanel(false)
@@ -358,10 +348,6 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		a.hotkeySettings.SetFocused(false)
 		a.abandonModelManager()
 		a.cloudSettings.SetForm(nil)
-		a.settingsWindow.cloudPlanTooltip = nil
-		a.settingsWindow.cloudPlanTooltipRevision.Add(1)
-		a.settingsWindow.settingsDemo = nil
-		a.settingsWindow.settingsDemoRevision.Add(1)
 		a.cloudSettings.SetActionMenu("")
 		a.cloudSettings.SetPluginDialog(nil)
 		a.forms.form = nil
@@ -454,7 +440,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	settingsView, err := a.settingsWindow.ensureSettingsWindow()
 	if err != nil {
 		_ = a.runOnUI("rollback settings open", func() {
-			a.settingsWindow.settingsOpen = false
+			a.settingsWindow.open = false
 			a.releaseDemoWallpaperLocked()
 		})
 		return err
@@ -543,17 +529,15 @@ func (a *App) reloadSettingsWithForms(forceForms bool) error {
 	densityChanged := false
 	if err := a.runOnUI("apply general settings snapshot", func() {
 		// A reload still returns the shortcut that was registered before import.
-		if a.onboarding.onboardingOpen {
-			data = overlayStagedMigrationHotkey(data, a.onboarding.onboardingMigration)
-		}
-		if forceForms || a.settingsWindow.settingsOpen || a.onboarding.onboardingOpen {
+		data = a.onboarding.applyStagedHotkey(data)
+		if forceForms || a.settingsWindow.open || a.onboarding.isOpen() {
 			aiForm := newAISettingsForm(data)
 			hotkeyForm := newHotkeySettingsForm(data)
 			generalForm := newGeneralQuerySettingsForm(data)
 			applyAIProviderCatalogLocked(&aiForm, a.aiSettings.ProviderCatalog())
-			aiForm.active = a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "ai"
-			hotkeyForm.active = a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey"
-			generalForm.active = a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "general"
+			aiForm.active = a.settingsWindow.open && a.settingsWindow.tab == "ai"
+			hotkeyForm.active = a.settingsWindow.open && a.settingsWindow.tab == "hotkey"
+			generalForm.active = a.settingsWindow.open && a.settingsWindow.tab == "general"
 			a.aiSettings.SetForm(&aiForm)
 			a.hotkeySettings.SetForm(&hotkeyForm)
 			a.generalSettings.SetForm(&generalForm)
@@ -574,18 +558,16 @@ func (a *App) reloadSettingsWithForms(forceForms bool) error {
 			}
 			_ = a.window.Invalidate()
 		}
-		if a.settingsWindow.settingsView != nil {
-			if err := a.settingsWindow.settingsView.Window().SetFontFamily(data.AppFontFamily); err != nil {
+		if a.settingsWindow.view != nil {
+			if err := a.settingsWindow.view.Window().SetFontFamily(data.AppFontFamily); err != nil {
 				applyErr = fmt.Errorf("apply Wox settings UI font: %w", err)
 			}
 			if densityChanged {
-				_ = a.settingsWindow.settingsView.Window().Invalidate()
+				_ = a.settingsWindow.view.Window().Invalidate()
 			}
 		}
-		if a.onboarding.onboardingView != nil {
-			if err := a.onboarding.onboardingView.Window().SetFontFamily(data.AppFontFamily); err != nil {
-				applyErr = fmt.Errorf("apply Wox onboarding UI font: %w", err)
-			}
+		if err := a.onboarding.setFontFamily(data.AppFontFamily); err != nil {
+			applyErr = fmt.Errorf("apply Wox onboarding UI font: %w", err)
 		}
 		if window := a.chatWindow.chatNativeWindow(); window != nil {
 			if err := window.SetFontFamily(data.AppFontFamily); err != nil {
@@ -723,7 +705,7 @@ func (a *App) closeSettings() error {
 				a.submitPluginSettings()
 			}
 		}
-		settingsView = a.settingsWindow.settingsView
+		settingsView = a.settingsWindow.view
 	}); err != nil {
 		return err
 	}
@@ -774,7 +756,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onThemeSettingsKey(event) {
 		return true
 	}
-	themeTab := a.settingsWindow.settingTab == "theme"
+	themeTab := a.settingsWindow.tab == "theme"
 	if themeTab && a.onThemeEditorPreviewKey(event) {
 		return true
 	}
@@ -818,7 +800,7 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	cloud := a.cloudSettings.Snapshot()
 	general := a.generalSettings.Snapshot()
 	var tooltip *settingsInlineTooltipSnapshot
-	if current := a.settingsWindow.settingsInlineTooltip; current != nil {
+	if current := a.settingsWindow.inlineTooltip; current != nil {
 		copy := *current
 		tooltip = &settingsInlineTooltipSnapshot{Text: copy.Text, Side: copy.Side, Anchor: copy.Anchor}
 	}
@@ -830,17 +812,17 @@ func (a *App) settingsSnapshot() settingsSnapshot {
 	generalForm := a.generalQuerySettingsForm()
 
 	var tableEditor *formTableEditorSnapshot
-	if a.settingsWindow.settingsTableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsWindow.settingsTableEditor.target, pluginForm, aiForm, hotkeyForm, generalForm) {
-		tableEditor = snapshotFormTableEditorLocked(a.settingsWindow.settingsTableEditor)
+	if a.settingsWindow.tableEditor != nil && a.formTableTargetCurrentWithFormsLocked(a.settingsWindow.tableEditor.target, pluginForm, aiForm, hotkeyForm, generalForm) {
+		tableEditor = snapshotFormTableEditorLocked(a.settingsWindow.tableEditor)
 	}
 	return settingsSnapshot{
 		isDev:        a.isDev,
-		tab:          a.settingsWindow.settingTab,
-		row:          a.settingsWindow.settingRow,
-		saving:       a.settingsWindow.settingSaving,
-		restarting:   a.settingsWindow.settingRestarting,
-		restartError: a.settingsWindow.settingRestartError,
-		highlight:    a.settingsWindow.settingFlash,
+		tab:          a.settingsWindow.tab,
+		row:          a.settingsWindow.row,
+		saving:       a.settingsWindow.saving,
+		restarting:   a.settingsWindow.restarting,
+		restartError: a.settingsWindow.restartError,
+		highlight:    a.settingsWindow.flash,
 		tooltip:      tooltip,
 		search:       search,
 		update:       update,
@@ -892,7 +874,7 @@ func (a *App) selectSettingTab(tab string) {
 	} else {
 		a.pluginSettings.SetSearchFocused(false)
 	}
-	if a.settingsWindow.settingTab != tab {
+	if a.settingsWindow.tab != tab {
 		if form := a.pluginSettings.Form(); form != nil {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			form.active = false
@@ -900,17 +882,10 @@ func (a *App) selectSettingTab(tab string) {
 				a.submitPluginSettings()
 			}
 		}
-		a.settingsWindow.settingTab = tab
-		a.settingsWindow.settingRow = 0
+		a.settingsWindow.selectTabLocked(tab)
 		a.generalSettings.EndEdit()
 		a.cloudSettings.SetForm(nil)
 		a.cloudSettings.SetPluginDialog(nil)
-		a.settingsWindow.cloudPlanTooltip = nil
-		a.settingsWindow.cloudPlanTooltipRevision.Add(1)
-		a.settingsWindow.settingsInlineTooltip = nil
-		a.settingsWindow.settingsInlineTooltipRevision.Add(1)
-		a.settingsWindow.settingsDemo = nil
-		a.settingsWindow.settingsDemoRevision.Add(1)
 		if tab != "plugins" {
 			a.abandonModelManager()
 		}
@@ -1035,7 +1010,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 	if item.parent || item.tab == "" {
 		return
 	}
-	currentTab := a.settingsWindow.settingTab
+	currentTab := a.settingsWindow.tab
 	if item.tab == "plugins" {
 		store := item.mode == "store"
 		if currentTab == "plugins" {
@@ -1076,7 +1051,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 }
 
 func (a *App) moveSettingTab(delta int) {
-	current := a.settingsWindow.settingTab
+	current := a.settingsWindow.tab
 	index := 0
 	tabs := settingTabs(a.isDev)
 	for candidate, tab := range tabs {
@@ -1095,7 +1070,7 @@ func (a *App) moveSettingRow(delta int) {
 	if len(items) == 0 {
 		return
 	}
-	a.settingsWindow.settingRow = (a.settingsWindow.settingRow + delta + len(items)) % len(items)
+	a.settingsWindow.row = (a.settingsWindow.row + delta + len(items)) % len(items)
 	a.settingsWindow.invalidateSettingsWindow()
 }
 
@@ -1107,13 +1082,13 @@ func (a *App) selectSettingRow(index int) {
 		return
 	}
 	if a.generalSettings.EditKey() != "" {
-		if a.settingsWindow.settingRow != index {
+		if a.settingsWindow.row != index {
 			return
 		}
 		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
-	a.settingsWindow.settingRow = index
+	a.settingsWindow.row = index
 	a.generalSettings.SetFormFocused(false)
 	a.hotkeySettings.SetFocused(false)
 	// Pointer-selected rows are already visible; moving the viewport here would invalidate popup anchors captured by the same click.
@@ -1160,7 +1135,7 @@ func (a *App) startBuiltInSettingEdit(item settingItem, caret int) {
 	if !item.text {
 		return
 	}
-	if a.settingsWindow.settingSaving {
+	if a.settingsWindow.saving {
 		return
 	}
 	if a.generalSettings.EditKey() != item.key || a.generalSettings.Editor() == nil {
@@ -1210,7 +1185,7 @@ func (a *App) submitBuiltInSettingEdit() {
 // A press blurs the field on pointer-down and activates the clicked control on pointer-up,
 // so a changed value waits for that click and is written with it when the click saves another setting.
 func (a *App) blurBuiltInSettingEdit(item settingItem) {
-	if !item.text || a.settingsWindow.settingSaving || a.generalSettings.EditKey() != item.key {
+	if !item.text || a.settingsWindow.saving || a.generalSettings.EditKey() != item.key {
 		return
 	}
 	value := item.value
@@ -1221,7 +1196,7 @@ func (a *App) blurBuiltInSettingEdit(item settingItem) {
 	if value == item.value {
 		return
 	}
-	if a.settingsWindow.settingsHost != nil && a.settingsWindow.settingsHost.DispatchingPointer() {
+	if a.settingsWindow.host != nil && a.settingsWindow.host.DispatchingPointer() {
 		a.settingsWindow.pendingBuiltInText = &pendingBuiltInText{key: item.key, value: value}
 		return
 	}
@@ -1230,7 +1205,7 @@ func (a *App) blurBuiltInSettingEdit(item settingItem) {
 
 // finishSettingsPointer writes a blurred text value when the click that left the field did not save one itself.
 func (a *App) finishSettingsPointer(event woxui.PointerEvent) {
-	if event.Kind != woxui.PointerUp || event.Button != woxui.PointerButtonPrimary || a.settingsWindow.settingSaving || a.settingsWindow.pendingBuiltInText == nil {
+	if event.Kind != woxui.PointerUp || event.Button != woxui.PointerButtonPrimary || a.settingsWindow.saving || a.settingsWindow.pendingBuiltInText == nil {
 		return
 	}
 	pending := *a.settingsWindow.pendingBuiltInText
@@ -1240,8 +1215,8 @@ func (a *App) finishSettingsPointer(event woxui.PointerEvent) {
 
 // onBuiltInSettingsEditorKey keeps text editing separate from rail and choice navigation.
 func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.settingsOpen && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
-	saving := a.settingsWindow.settingSaving
+	active := a.settingsWindow.open && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
+	saving := a.settingsWindow.saving
 	if !active {
 		return false
 	}
@@ -1261,7 +1236,7 @@ func (a *App) onBuiltInSettingsEditorKey(event woxui.KeyEvent) bool {
 
 // setBuiltInSettingEditValue keeps only the committed business value in launcher state.
 func (a *App) setBuiltInSettingEditValue(item settingItem, value string) {
-	if a.settingsWindow.settingsOpen && a.generalSettings.EditKey() == item.key {
+	if a.settingsWindow.open && a.generalSettings.EditKey() == item.key {
 		a.generalSettings.SetEditText(item.key, value)
 	}
 	a.settingsWindow.invalidateSettingsWindow()
@@ -1273,7 +1248,7 @@ func (a *App) onBuiltInSettingsTextInput(_ woxui.TextInputEvent) bool {
 	if choicePickerOpen {
 		return true
 	}
-	active := a.settingsWindow.settingsOpen && !a.settingsWindow.settingSaving && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
+	active := a.settingsWindow.open && !a.settingsWindow.saving && a.generalSettings.EditKey() != "" && a.generalSettings.Editor() != nil
 	return active
 }
 
@@ -1300,7 +1275,7 @@ func (a *App) browseBuiltInSettingFile(item settingItem) {
 }
 
 func (a *settingsWindowController) beginSettingSave() {
-	a.settingSaving = true
+	a.saving = true
 }
 
 // pendingBuiltInText is one blurred text value waiting to be written with the click that left the field.
@@ -1342,7 +1317,7 @@ func (a *App) writeGeneralSetting(key, value string) error {
 // saveSettingFailed releases the saving flag when a leading write fails before the main save.
 func (a *App) saveSettingFailed(key string, err error) {
 	_ = a.runOnUI("apply general setting save", func() {
-		a.settingsWindow.settingSaving = false
+		a.settingsWindow.saving = false
 		log.Printf("save setting %s: %v", key, err)
 		a.settingsWindow.invalidateSettingsWindow()
 	})
@@ -1378,7 +1353,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 	refreshGlance := false
 	reloadGlanceCatalog := false
 	_ = a.runOnUI("apply general setting save", func() {
-		a.settingsWindow.settingSaving = false
+		a.settingsWindow.saving = false
 		if a.generalSettings.EditKey() == item.key {
 			if err == nil {
 				a.generalSettings.EndEdit()
@@ -1673,11 +1648,11 @@ func settingValueLabel(item settingItem) string {
 
 // restartFromSettings keeps repeated clicks from launching multiple replacement processes.
 func (a *App) restartFromSettings() {
-	if a.settingsWindow.settingRestarting || a.settingsWindow.settingSaving {
+	if a.settingsWindow.restarting || a.settingsWindow.saving {
 		return
 	}
-	a.settingsWindow.settingRestarting = true
-	a.settingsWindow.settingRestartError = ""
+	a.settingsWindow.restarting = true
+	a.settingsWindow.restartError = ""
 	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "restart Wox from settings", func() {
 		err := a.services.RestartWox(context.Background(), a.sessionID)
@@ -1685,9 +1660,9 @@ func (a *App) restartFromSettings() {
 			util.GetLogger().Error(context.Background(), fmt.Sprintf("restart Wox from settings: %v", err))
 		}
 		_ = a.runOnUI("restart Wox result", func() {
-			a.settingsWindow.settingRestarting = false
+			a.settingsWindow.restarting = false
 			if err != nil {
-				a.settingsWindow.settingRestartError = fmt.Sprintf(a.language.translate("i18n:ui_restart_wox_failed"), err.Error())
+				a.settingsWindow.restartError = fmt.Sprintf(a.language.translate("i18n:ui_restart_wox_failed"), err.Error())
 			}
 			a.settingsWindow.invalidateSettingsWindow()
 		})

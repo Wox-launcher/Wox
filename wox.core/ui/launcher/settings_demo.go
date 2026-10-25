@@ -18,19 +18,19 @@ type settingsDemoState struct {
 // and delays dismissal while the pointer crosses into it.
 func (a *App) setSettingsDemoHover(kind string, inside bool, anchor woxui.Rect) {
 	if inside {
-		revision := a.settingsWindow.settingsDemoRevision.Add(1)
+		revision := a.settingsWindow.demoRevision.Add(1)
 		util.Go(a.lifecycleCtx, "show settings demo after dwell", func() {
-			if !a.tooltips.waitHoverTooltipDelay(&a.settingsWindow.settingsDemoRevision, revision) {
+			if !a.tooltips.waitHoverTooltipDelay(&a.settingsWindow.demoRevision, revision) {
 				return
 			}
 			apply := func() {
-				if revision != a.settingsWindow.settingsDemoRevision.Load() {
+				if revision != a.settingsWindow.demoRevision.Load() {
 					return
 				}
-				if current := a.settingsWindow.settingsDemo; current != nil && current.kind == kind && current.anchor == anchor {
+				if current := a.settingsWindow.demo; current != nil && current.kind == kind && current.anchor == anchor {
 					return
 				}
-				a.settingsWindow.settingsDemo = &settingsDemoState{kind: kind, anchor: anchor}
+				a.settingsWindow.demo = &settingsDemoState{kind: kind, anchor: anchor}
 				a.preloadDemoWallpaper(true)
 				a.settingsWindow.invalidateSettingsWindow()
 			}
@@ -45,7 +45,7 @@ func (a *App) setSettingsDemoHover(kind string, inside bool, anchor woxui.Rect) 
 
 // scheduleSettingsDemoHide leaves time for the pointer to cross the popover gap.
 func (a *App) scheduleSettingsDemoHide(kind string) {
-	revision := a.settingsWindow.settingsDemoRevision.Add(1)
+	revision := a.settingsWindow.demoRevision.Add(1)
 	util.Go(a.lifecycleCtx, "hide settings demo", func() {
 		timer := time.NewTimer(160 * time.Millisecond)
 		defer timer.Stop()
@@ -55,10 +55,10 @@ func (a *App) scheduleSettingsDemoHide(kind string) {
 		case <-timer.C:
 		}
 		_ = a.runOnUI("hide settings demo", func() {
-			if revision != a.settingsWindow.settingsDemoRevision.Load() || a.settingsWindow.settingsDemo == nil || a.settingsWindow.settingsDemo.kind != kind {
+			if revision != a.settingsWindow.demoRevision.Load() || a.settingsWindow.demo == nil || a.settingsWindow.demo.kind != kind {
 				return
 			}
-			a.settingsWindow.settingsDemo = nil
+			a.settingsWindow.demo = nil
 			a.settingsWindow.invalidateSettingsWindow()
 		})
 	})
@@ -67,7 +67,7 @@ func (a *App) scheduleSettingsDemoHide(kind string) {
 // keepSettingsDemoHover cancels target-exit dismissal while the preview owns the pointer.
 func (a *App) keepSettingsDemoHover(kind string, inside bool) {
 	if inside {
-		a.settingsWindow.settingsDemoRevision.Add(1)
+		a.settingsWindow.demoRevision.Add(1)
 		return
 	}
 	a.scheduleSettingsDemoHide(kind)
@@ -75,11 +75,11 @@ func (a *App) keepSettingsDemoHover(kind string, inside bool) {
 
 // buildSettingsDemoOverlay maps each title affordance to the shared onboarding demo component.
 func (a *App) buildSettingsDemoOverlay(snapshot settingsSnapshot, width, height float32) (woxwidget.Widget, float32, float32) {
-	if a.settingsWindow.settingsDemo == nil {
+	if a.settingsWindow.demo == nil {
 		return nil, 0, 0
 	}
 	step := launcherview.OnboardingStep{ID: "queryHotkeys", Title: a.language.translate("i18n:ui_query_hotkeys"), Accent: woxui.Color{R: 244, G: 63, B: 94, A: 255}}
-	switch a.settingsWindow.settingsDemo.kind {
+	switch a.settingsWindow.demo.kind {
 	case "query-hotkey-preset-normal":
 		step = launcherview.OnboardingStep{ID: "queryHotkeysNormal", Title: a.language.translate("i18n:ui_query_hotkeys_preset_normal"), Accent: woxui.Color{R: 59, G: 130, B: 246, A: 255}}
 	case "query-hotkey-preset-web-panel":
@@ -93,10 +93,10 @@ func (a *App) buildSettingsDemoOverlay(snapshot settingsSnapshot, width, height 
 	}
 	props := launcherview.OnboardingProps{
 		Wallpaper: snapshot.theme.ThemeWallpaperImage, WallpaperBlurred: snapshot.theme.ThemeWallpaperBlurred,
-		Labels: a.onboardingLabels(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
+		Labels: a.onboarding.onboardingLabels(), Theme: snapshot.palette, PreviewTheme: onboardingPreviewTheme,
 	}
-	kind := a.settingsWindow.settingsDemo.kind
-	return launcherview.SettingsDemoOverlay(props, step, a.settingsWindow.settingsDemo.anchor, width, height, snapshot.palette, func(inside bool) {
+	kind := a.settingsWindow.demo.kind
+	return launcherview.SettingsDemoOverlay(props, step, a.settingsWindow.demo.anchor, width, height, snapshot.palette, func(inside bool) {
 		a.keepSettingsDemoHover(kind, inside)
 	})
 }

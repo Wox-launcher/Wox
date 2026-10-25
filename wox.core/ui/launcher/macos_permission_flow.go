@@ -45,8 +45,8 @@ func (a *App) openMacOSPermissionFlow(permissionType string) error {
 	var launcherWasVisible bool
 	if err := a.runOnUI("hide host for macOS permission flow", func() {
 		a.hideHostForMacOSPermissionFlow(targetPermission)
-		if a.onboarding.permissionFlowHost != nil {
-			launcherWasVisible = a.onboarding.permissionFlowHost.launcherWasVisible
+		if a.permissionFlow != nil {
+			launcherWasVisible = a.permissionFlow.launcherWasVisible
 		}
 	}); err != nil {
 		return err
@@ -84,26 +84,26 @@ func (a *App) refreshMacOSPermissionFlowStatus() {
 		return
 	}
 	util.Go(a.lifecycleCtx, "refresh macOS permission flow status", func() {
-		a.loadOnboardingPermissionStatusWithLoading(false)
+		a.onboarding.loadOnboardingPermissionStatusWithLoading(false)
 	})
 }
 
 // hideHostForMacOSPermissionFlow conceals Wox windows so the System Settings list stays droppable.
 func (a *App) hideHostForMacOSPermissionFlow(permissionType permission.MacOSPermissionType) {
-	if a.onboarding.permissionFlowHost != nil {
-		a.onboarding.permissionFlowHost.permissionType = permissionType
+	if a.permissionFlow != nil {
+		a.permissionFlow.permissionType = permissionType
 		return
 	}
 	host := &macOSPermissionFlowHost{permissionType: permissionType}
-	if a.onboarding.onboardingOpen && a.onboarding.onboardingView != nil && a.onboarding.onboardingView.Lifecycle() == woxui.WindowLifecycleVisible {
-		host.onboarding = a.onboarding.onboardingView
-		if err := a.onboarding.onboardingView.Hide(); err != nil {
+	if onboardingView := a.onboarding.visibleWindow(); onboardingView != nil {
+		host.onboarding = onboardingView
+		if err := onboardingView.Hide(); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("hide onboarding for macOS permission flow: %v", err))
 		}
 	}
-	if a.settingsWindow.settingsOpen && a.settingsWindow.settingsView != nil && a.settingsWindow.settingsView.Lifecycle() == woxui.WindowLifecycleVisible {
-		host.settings = a.settingsWindow.settingsView
-		if err := a.settingsWindow.settingsView.Hide(); err != nil {
+	if a.settingsWindow.open && a.settingsWindow.view != nil && a.settingsWindow.view.Lifecycle() == woxui.WindowLifecycleVisible {
+		host.settings = a.settingsWindow.view
+		if err := a.settingsWindow.view.Hide(); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("hide settings for macOS permission flow: %v", err))
 		}
 	}
@@ -111,7 +111,7 @@ func (a *App) hideHostForMacOSPermissionFlow(permissionType permission.MacOSPerm
 		host.launcherWasVisible = true
 		host.show = a.show
 	}
-	a.onboarding.permissionFlowHost = host
+	a.permissionFlow = host
 }
 
 // macOSPermissionGranted reports whether the permission targeted by the active guide is ready.
@@ -128,17 +128,17 @@ func macOSPermissionGranted(permissionType permission.MacOSPermissionType, statu
 
 // restoreHostAfterMacOSPermissionFlow brings back the windows this flow hid, then refreshes Doctor if needed.
 func (a *App) restoreHostAfterMacOSPermissionFlow() {
-	host := a.onboarding.permissionFlowHost
-	a.onboarding.permissionFlowHost = nil
+	host := a.permissionFlow
+	a.permissionFlow = nil
 	if host == nil {
 		return
 	}
-	if host.onboarding != nil && a.onboarding.onboardingOpen {
+	if host.onboarding != nil && a.onboarding.isOpen() {
 		if _, err := host.onboarding.Show(); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("restore onboarding after macOS permission flow: %v", err))
 		}
 	}
-	if host.settings != nil && a.settingsWindow.settingsOpen {
+	if host.settings != nil && a.settingsWindow.open {
 		if _, err := host.settings.Show(); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("restore settings after macOS permission flow: %v", err))
 		}

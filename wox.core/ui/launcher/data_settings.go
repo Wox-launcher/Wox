@@ -117,7 +117,7 @@ func (a *App) confirmDataLocationChange() {
 // toggleDataAutoBackup reuses the regular key-value settings save and rollback behavior.
 // Stays on App because it operates on the general-domain EnableAutoBackup setting.
 func (a *App) toggleDataAutoBackup() {
-	if a.settingsWindow.settingSaving {
+	if a.settingsWindow.saving {
 		return
 	}
 	next := !a.generalSettings.Data().EnableAutoBackup

@@ -426,7 +426,7 @@ func TestImageCacheHiddenTrimUsesCountAndByteBudget(t *testing.T) {
 
 func TestHiddenLauncherKeepsImagesUsedBySettings(t *testing.T) {
 	app := bindTestApp(&App{
-		settingsWindow: settingsWindowController{settingsOpen: true},
+		settingsWindow: settingsWindowController{open: true},
 		imageStore: imageStore{
 			images:        map[string]*woxui.Image{},
 			imageLastUsed: map[string]uint64{},
@@ -441,7 +441,7 @@ func TestHiddenLauncherKeepsImagesUsedBySettings(t *testing.T) {
 	if got := len(app.imageStore.images); got != hiddenImageCacheKeepCount+1 {
 		t.Fatalf("settings cache has %d images, want %d", got, hiddenImageCacheKeepCount+1)
 	}
-	app.settingsWindow.settingsOpen = false
+	app.settingsWindow.open = false
 	app.trimIdleImageCache()
 	if got := len(app.imageStore.images); got != hiddenImageCacheKeepCount {
 		t.Fatalf("closed settings cache has %d images, want %d", got, hiddenImageCacheKeepCount)

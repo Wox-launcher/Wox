@@ -514,7 +514,7 @@ func (a *imageStore) insertImageLocked(key string, image *woxui.Image) {
 // trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
 // Must run on the UI thread like every other access to the image maps.
 func (a *App) trimIdleImageCache() {
-	if a.settingsWindow.settingsOpen || a.onboarding.onboardingOpen {
+	if a.settingsWindow.open || a.onboarding.isOpen() {
 		return
 	}
 	a.imageStore.trimIdle()

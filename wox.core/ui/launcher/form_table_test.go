@@ -934,9 +934,9 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 	hotkeys.SetForm(&target)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen:        true,
-			settingTab:          "hotkey",
-			settingsTableEditor: &formTableEditorState{target: &target, definition: definition, rowForm: &fields, rowIndex: -1, deletePending: -1, queryPreset: queryHotkeyPresetNormal},
+			open:        true,
+			tab:         "hotkey",
+			tableEditor: &formTableEditorState{target: &target, definition: definition, rowForm: &fields, rowIndex: -1, deletePending: -1, queryPreset: queryHotkeyPresetNormal},
 		},
 		hotkeySettings: hotkeys,
 		aiSettings:     newAISettingsController(deps),
@@ -950,10 +950,10 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 		},
 	})
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.settingsTableEditor), settingsPalette(), 900, 700, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.tableEditor), settingsPalette(), 900, 700, 1)
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsWindow.settingsHost = host
+	app.settingsWindow.host = host
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 900, Height: 700}, PixelSize: woxui.PixelSize{Width: 900, Height: 700}, Scale: 1}
 	displayList := woxui.DisplayList{}
 	host.Frame(&displayList, frame)
@@ -996,12 +996,12 @@ func TestQueryHotkeyVariablePickerEnterUsesFocusedHost(t *testing.T) {
 		host.Frame(&displayList, frame)
 	}
 	click("query-hotkey-preset-web-panel")
-	if app.settingsWindow.settingsTableEditor.queryPreset != queryHotkeyPresetWebPanel {
-		t.Fatalf("web-panel preset click selected %q", app.settingsWindow.settingsTableEditor.queryPreset)
+	if app.settingsWindow.tableEditor.queryPreset != queryHotkeyPresetWebPanel {
+		t.Fatalf("web-panel preset click selected %q", app.settingsWindow.tableEditor.queryPreset)
 	}
 	click("query-hotkey-preset-normal")
-	if app.settingsWindow.settingsTableEditor.queryPreset != queryHotkeyPresetNormal {
-		t.Fatalf("normal preset click selected %q", app.settingsWindow.settingsTableEditor.queryPreset)
+	if app.settingsWindow.tableEditor.queryPreset != queryHotkeyPresetNormal {
+		t.Fatalf("normal preset click selected %q", app.settingsWindow.tableEditor.queryPreset)
 	}
 	if !host.HasFocus("query-hotkey-preset-normal") {
 		t.Fatalf("normal preset should own Host focus before query click, query=%v", host.HasFocus(queryKey))
@@ -1088,8 +1088,8 @@ func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
 	plugins.SetForm(&pluginSettingsFormState{formFieldsState: target})
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "plugins",
+			open: true,
+			tab:  "plugins",
 		},
 		pluginSettings: plugins,
 		aiSettings:     newAISettingsController(deps),
@@ -1098,10 +1098,10 @@ func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
 	app.openFormTableLocked(&plugins.Form().formFieldsState, 0)
 	app.beginAddFormTableRowDirect()
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.settingsTableEditor), settingsPalette(), 800, 600, 1)
+		return app.buildFormTableOverlay(snapshotFormTableEditorLocked(app.settingsWindow.tableEditor), settingsPalette(), 800, 600, 1)
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsWindow.settingsHost = host
+	app.settingsWindow.host = host
 	displayList := woxui.DisplayList{}
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 600}, PixelSize: woxui.PixelSize{Width: 800, Height: 600}, Scale: 1}
 	host.Frame(&displayList, frame)
@@ -1117,16 +1117,16 @@ func TestPluginTriggerKeywordRowAcceptsTextInput(t *testing.T) {
 	if !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "chat"}) {
 		t.Fatal("trigger keyword input did not handle committed text")
 	}
-	if got := app.settingsWindow.settingsTableEditor.rowForm.values["keyword"]; got != "chat" {
+	if got := app.settingsWindow.tableEditor.rowForm.values["keyword"]; got != "chat" {
 		t.Fatalf("trigger keyword = %q, want committed input", got)
 	}
-	app.settingsWindow.settingsTableEditor.fieldErrors = map[string]string{"keyword": "duplicate keyword"}
+	app.settingsWindow.tableEditor.fieldErrors = map[string]string{"keyword": "duplicate keyword"}
 	app.focusFormTableRowField(0)
-	if got := app.settingsWindow.settingsTableEditor.fieldErrors["keyword"]; got != "duplicate keyword" {
+	if got := app.settingsWindow.tableEditor.fieldErrors["keyword"]; got != "duplicate keyword" {
 		t.Fatalf("validation field error = %q after refocus, want it preserved", got)
 	}
 	app.setFormTableRowText(0, "chat2")
-	if got := app.settingsWindow.settingsTableEditor.fieldErrors["keyword"]; got != "" {
+	if got := app.settingsWindow.tableEditor.fieldErrors["keyword"]; got != "" {
 		t.Fatalf("validation field error = %q after changing text, want it cleared", got)
 	}
 }
@@ -1152,9 +1152,9 @@ func TestSaveFormTableRowEditSurfacesFieldErrorsInline(t *testing.T) {
 	}, map[string]string{"Keyword": "", "Url": "https://example.com"}, true)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "plugins",
-			settingsTableEditor: &formTableEditorState{
+			open: true,
+			tab:  "plugins",
+			tableEditor: &formTableEditorState{
 				target: &plugins.Form().formFieldsState, definition: definition, rows: nil, rowForm: &rowForm, rowIndex: -1, deletePending: -1,
 			},
 		},
@@ -1166,16 +1166,16 @@ func TestSaveFormTableRowEditSurfacesFieldErrorsInline(t *testing.T) {
 
 	app.saveFormTableRowEdit()
 
-	if got := app.settingsWindow.settingsTableEditor.status; got != "" {
+	if got := app.settingsWindow.tableEditor.status; got != "" {
 		t.Fatalf("dialog status = %q, want field-level errors only", got)
 	}
-	if got := app.settingsWindow.settingsTableEditor.fieldErrors["Keyword"]; got != "Value cannot be empty" {
+	if got := app.settingsWindow.tableEditor.fieldErrors["Keyword"]; got != "Value cannot be empty" {
 		t.Fatalf("Keyword field error = %q", got)
 	}
-	if _, exists := app.settingsWindow.settingsTableEditor.fieldErrors["Url"]; exists {
-		t.Fatalf("Url should not have a field error, got %#v", app.settingsWindow.settingsTableEditor.fieldErrors)
+	if _, exists := app.settingsWindow.tableEditor.fieldErrors["Url"]; exists {
+		t.Fatalf("Url should not have a field error, got %#v", app.settingsWindow.tableEditor.fieldErrors)
 	}
-	if app.settingsWindow.settingsTableEditor.rowForm == nil {
+	if app.settingsWindow.tableEditor.rowForm == nil {
 		t.Fatal("invalid save should keep the row editor open")
 	}
 }
@@ -1199,7 +1199,7 @@ func TestBeginCloneFormTableRowDirectPrefillsNewRow(t *testing.T) {
 		aiSettings:     newAISettingsController(deps),
 		pluginSettings: newPluginSettingsController(deps),
 		hotkeySettings: hotkeys,
-		settingsWindow: settingsWindowController{settingsTableEditor: &formTableEditorState{target: &target, definition: definition, rows: []map[string]any{{"Name": "Clipboard", "Query": "cb"}}, selected: 0, rowIndex: -1}},
+		settingsWindow: settingsWindowController{tableEditor: &formTableEditorState{target: &target, definition: definition, rows: []map[string]any{{"Name": "Clipboard", "Query": "cb"}}, selected: 0, rowIndex: -1}},
 		settingsSearch: newSettingsSearchController(deps),
 		themeSettings:  newThemeSettingsController(deps),
 		sharedEdit:     newSharedEditState(),
@@ -1207,23 +1207,23 @@ func TestBeginCloneFormTableRowDirectPrefillsNewRow(t *testing.T) {
 
 	app.beginCloneFormTableRowDirect()
 
-	if app.settingsWindow.settingsTableEditor.rowForm == nil {
+	if app.settingsWindow.tableEditor.rowForm == nil {
 		t.Fatal("clone action did not open a row editor")
 	}
-	if app.settingsWindow.settingsTableEditor.rowIndex != -1 {
-		t.Fatalf("clone row index = %d, want -1 so saving appends a new row", app.settingsWindow.settingsTableEditor.rowIndex)
+	if app.settingsWindow.tableEditor.rowIndex != -1 {
+		t.Fatalf("clone row index = %d, want -1 so saving appends a new row", app.settingsWindow.tableEditor.rowIndex)
 	}
-	if !app.settingsWindow.settingsTableEditor.rowEditorOnly {
+	if !app.settingsWindow.tableEditor.rowEditorOnly {
 		t.Fatal("inline clone should close the direct row editor after saving")
 	}
-	if value := app.settingsWindow.settingsTableEditor.rowForm.values["Name"]; value != "Clipboard" {
+	if value := app.settingsWindow.tableEditor.rowForm.values["Name"]; value != "Clipboard" {
 		t.Fatalf("cloned Name = %q, want source value", value)
 	}
-	if value := app.settingsWindow.settingsTableEditor.rowForm.values["Query"]; value != "cb" {
+	if value := app.settingsWindow.tableEditor.rowForm.values["Query"]; value != "cb" {
 		t.Fatalf("cloned Query = %q, want source value", value)
 	}
-	app.settingsWindow.settingsTableEditor.rowBase["Name"] = "Changed"
-	if source := app.settingsWindow.settingsTableEditor.rows[0]["Name"]; source != "Clipboard" {
+	app.settingsWindow.tableEditor.rowBase["Name"] = "Changed"
+	if source := app.settingsWindow.tableEditor.rows[0]["Name"]; source != "Clipboard" {
 		t.Fatalf("cloned row shares source map; source Name changed to %v", source)
 	}
 }
@@ -1283,9 +1283,9 @@ func TestDirectFormTableDeleteRemovesRowImmediately(t *testing.T) {
 	hotkeys.SetForm(&target)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "hotkey",
-			settingsTableEditor: &formTableEditorState{
+			open: true,
+			tab:  "hotkey",
+			tableEditor: &formTableEditorState{
 				target: &target, definition: definition,
 				rows: []map[string]any{{"Name": "First"}, {"Name": "Second"}}, selected: 0, rowIndex: -1, deletePending: -1,
 			},
@@ -1299,7 +1299,7 @@ func TestDirectFormTableDeleteRemovesRowImmediately(t *testing.T) {
 
 	app.beginDeleteFormTableRowDirect()
 
-	if app.settingsWindow.settingsTableEditor != nil {
+	if app.settingsWindow.tableEditor != nil {
 		t.Fatal("direct delete should close the overlay after removing the row")
 	}
 	if value := target.values["Commands"]; value != `[{"Name":"Second"}]` {
@@ -1325,16 +1325,16 @@ func TestOpenFormTableKeepsWindowOwnedEditorStateSeparate(t *testing.T) {
 	})
 
 	app.openFormTableLocked(&settingsForm, 0)
-	if app.settingsWindow.settingsTableEditor == nil || app.forms.launcherTableEditor != nil {
+	if app.settingsWindow.tableEditor == nil || app.forms.launcherTableEditor != nil {
 		t.Fatal("settings table editor leaked into launcher-owned state")
 	}
 	if app.snapshot().tableEditor != nil {
 		t.Fatal("launcher snapshot rendered the settings-owned table editor")
 	}
 
-	app.settingsWindow.settingsTableEditor = nil
+	app.settingsWindow.tableEditor = nil
 	app.openFormTableLocked(&launcherForm.formFieldsState, 0)
-	if app.forms.launcherTableEditor == nil || app.settingsWindow.settingsTableEditor != nil {
+	if app.forms.launcherTableEditor == nil || app.settingsWindow.tableEditor != nil {
 		t.Fatal("launcher table editor leaked into settings-owned state")
 	}
 }
@@ -1352,8 +1352,8 @@ func TestAISkillsDirectDeleteAllowsReadOnlyDiscoveredSkill(t *testing.T) {
 	ai.SetForm(&aiForm)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "ai",
+			open: true,
+			tab:  "ai",
 		},
 		aiSettings:     ai,
 		pluginSettings: newPluginSettingsController(deps),
@@ -1366,7 +1366,7 @@ func TestAISkillsDirectDeleteAllowsReadOnlyDiscoveredSkill(t *testing.T) {
 	app.selectFormTableRow(0)
 	app.beginDeleteFormTableRowDirect()
 
-	if app.settingsWindow.settingsTableEditor != nil {
+	if app.settingsWindow.tableEditor != nil {
 		t.Fatal("discovered skill delete should close the overlay after removal")
 	}
 	if value := aiForm.values["AISkills"]; value != `[]` {
@@ -1387,8 +1387,8 @@ func TestAISkillsDirectDeleteBlocksBuiltinRow(t *testing.T) {
 	ai.SetForm(&aiForm)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "ai",
+			open: true,
+			tab:  "ai",
 		},
 		aiSettings:     ai,
 		pluginSettings: newPluginSettingsController(deps),
@@ -1401,11 +1401,11 @@ func TestAISkillsDirectDeleteBlocksBuiltinRow(t *testing.T) {
 
 	// A built-in skill must not start a delete. The inline path guards these
 	// rows before mutating the table.
-	if app.settingsWindow.settingsTableEditor == nil {
+	if app.settingsWindow.tableEditor == nil {
 		t.Fatal("expected the table editor to be open")
 	}
-	if app.settingsWindow.settingsTableEditor.deletePending >= 0 || app.settingsWindow.settingsTableEditor.deleteDirect {
-		t.Fatalf("built-in skill direct delete = pending %d, direct %v, want no delete started", app.settingsWindow.settingsTableEditor.deletePending, app.settingsWindow.settingsTableEditor.deleteDirect)
+	if app.settingsWindow.tableEditor.deletePending >= 0 || app.settingsWindow.tableEditor.deleteDirect {
+		t.Fatalf("built-in skill direct delete = pending %d, direct %v, want no delete started", app.settingsWindow.tableEditor.deletePending, app.settingsWindow.tableEditor.deleteDirect)
 	}
 	if value := aiForm.values["AISkills"]; value != `[{"Name":"BuiltinSkill","Source":"local","ReadOnly":true,"Builtin":true}]` {
 		t.Fatalf("built-in skill table = %s, want the row preserved", value)
@@ -1425,8 +1425,8 @@ func TestAISkillsDirectDeleteDoesNotRenderOverlay(t *testing.T) {
 	ai.SetForm(&aiForm)
 	app := bindTestApp(&App{
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "ai",
+			open: true,
+			tab:  "ai",
 		},
 		aiSettings:     ai,
 		pluginSettings: newPluginSettingsController(deps),
@@ -1445,7 +1445,7 @@ func TestAISkillsDirectDeleteDoesNotRenderOverlay(t *testing.T) {
 	app.selectFormTableRow(0)
 	app.beginDeleteFormTableRowDirect()
 
-	if app.settingsWindow.settingsTableEditor != nil {
+	if app.settingsWindow.tableEditor != nil {
 		t.Fatal("direct delete must close the overlay instead of showing a confirmation dialog")
 	}
 	if value := aiForm.values["AISkills"]; value != `[]` {

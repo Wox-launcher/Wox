@@ -47,7 +47,7 @@ func (a *App) openAIMCPJSONImport() {
 
 // openFormTableMCPJSONImport shows the current MCP servers as editable mcpServers JSON.
 func (a *App) openFormTableMCPJSONImport() {
-	state := a.settingsWindow.settingsTableEditor
+	state := a.settingsWindow.tableEditor
 	if state == nil || state.definition.Value.Key != "AIMCPServers" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		return
 	}
@@ -130,7 +130,7 @@ func (a *App) importFormTableMCPJSON() {
 	state.target.values[state.definition.Value.Key] = string(encoded)
 	state.rows = mcpServerRowsFromConfigs(servers)
 	state.saving = true
-	a.settingsWindow.settingSaving = true
+	a.settingsWindow.saving = true
 	a.closeFormTableEditor()
 	a.saveSettingsTable(state, "AIMCPServers", string(encoded), previousValue)
 }

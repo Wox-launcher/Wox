@@ -282,7 +282,7 @@ func (a *App) pluginDetailProps(snapshot settingsSnapshot, width, height, imageS
 			ID: "plugin-native-settings-field", Label: a.language.translate("i18n:ui_plugin_native_settings_title"),
 			Description: a.language.translate("i18n:ui_plugin_native_settings_description"),
 			ButtonID:    "plugin-native-settings", ButtonLabel: a.language.translate("i18n:ui_plugin_native_settings_open"),
-			Disabled: a.settingsWindow.nativeSettingsPluginID == pluginID, Width: innerWidth, LabelWidth: callbacks.labelWidth, Theme: snapshot.palette,
+			Disabled: a.settingsWindow.nativePluginID == pluginID, Width: innerWidth, LabelWidth: callbacks.labelWidth, Theme: snapshot.palette,
 			OnTap: func() { a.openNativePluginSettings(pluginID) },
 		})
 		rows = append([]woxwidget.Widget{woxwidget.Keyed{Key: "plugin-native-settings-row", Child: field}}, rows...)

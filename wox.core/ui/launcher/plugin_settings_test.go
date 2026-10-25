@@ -404,7 +404,7 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 	plugins := newPluginSettingsController(deps)
 	plugins.SetForm(&pluginSettingsFormState{formFieldsState: fields})
 	app := bindTestApp(&App{
-		settingsWindow: settingsWindowController{settingTab: "plugins"},
+		settingsWindow: settingsWindowController{tab: "plugins"},
 		pluginSettings: plugins,
 		hotkeySettings: newHotkeySettingsController(deps),
 	})
@@ -421,7 +421,7 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 		}}
 	})
 	host.AttachServices(formTableHostServices{})
-	app.settingsWindow.settingsHost = host
+	app.settingsWindow.host = host
 	displayList := woxui.DisplayList{}
 	host.Frame(&displayList, woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 120}, PixelSize: woxui.PixelSize{Width: 100, Height: 120}, Scale: 1})
 	host.RequestFocus("plugin-settings-field-0")

@@ -375,8 +375,8 @@ func TestRecordedHotkeyWithoutParentHookStaysACandidate(t *testing.T) {
 		hotkeySettings: controller,
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
 		settingsWindow: settingsWindowController{
-			settingsOpen: true,
-			settingTab:   "hotkey",
+			open: true,
+			tab:  "hotkey",
 		},
 		services:     &actionRecordingTestServices{},
 		lifecycleCtx: context.Background(),
@@ -394,8 +394,8 @@ func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsWindow.settingsOpen = true
-	app.settingsWindow.settingTab = "hotkey"
+	app.settingsWindow.open = true
+	app.settingsWindow.tab = "hotkey"
 	form := newHotkeySettingsForm(settingsData{})
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {
@@ -420,8 +420,8 @@ func TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows(t *testing.T) {
 	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
 	app := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsWindow.settingsOpen = true
-	app.settingsWindow.settingTab = "hotkey"
+	app.settingsWindow.open = true
+	app.settingsWindow.tab = "hotkey"
 	form := newHotkeySettingsForm(settingsData{})
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {

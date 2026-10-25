@@ -28,7 +28,7 @@ func (a *App) reloadTranslations() error {
 			a.settingsSearch.SetLoaded(false)
 			a.settingsSearch.SetLoading(false)
 			a.chat.reloadChatResourceName("mentions")
-			reload = a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "plugins"
+			reload = a.settingsWindow.open && a.settingsWindow.tab == "plugins"
 			store = a.pluginSettings.PluginsStore()
 		}); err != nil {
 			return err

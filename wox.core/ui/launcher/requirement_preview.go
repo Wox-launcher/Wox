@@ -213,7 +213,7 @@ func (a *App) loadAIModels() {
 		if pluginForm := a.pluginSettings.Form(); pluginForm != nil {
 			applyAIModelOptionsLocked(&pluginForm.formFieldsState, models)
 		}
-		for _, tableEditor := range []*formTableEditorState{a.forms.launcherTableEditor, a.settingsWindow.settingsTableEditor} {
+		for _, tableEditor := range []*formTableEditorState{a.forms.launcherTableEditor, a.settingsWindow.tableEditor} {
 			if tableEditor != nil && tableEditor.rowForm != nil {
 				applyAIModelOptionsLocked(tableEditor.rowForm, models)
 			}

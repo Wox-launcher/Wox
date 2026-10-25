@@ -47,15 +47,15 @@ func (a *App) automationSurface() (*woxwidget.Host, *woxui.Window, automationSur
 	kind := automationSurfaceLauncher
 	_ = target.runOnUI("resolve automation surface", func() {
 		if target == a {
-			if a.onboarding.onboardingOpen && a.onboarding.onboardingHost != nil && a.onboarding.onboardingView != nil {
-				host = a.onboarding.onboardingHost
-				window = a.onboarding.onboardingView.Window()
+			if a.onboarding.isOpen() && a.onboarding.host != nil && a.onboarding.view != nil {
+				host = a.onboarding.host
+				window = a.onboarding.view.Window()
 				kind = automationSurfaceOnboarding
 				return
 			}
-			if a.settingsWindow.settingsOpen && a.settingsWindow.settingsHost != nil && a.settingsWindow.settingsView != nil {
-				host = a.settingsWindow.settingsHost
-				window = a.settingsWindow.settingsView.Window()
+			if a.settingsWindow.open && a.settingsWindow.host != nil && a.settingsWindow.view != nil {
+				host = a.settingsWindow.host
+				window = a.settingsWindow.view.Window()
 				kind = automationSurfaceSettings
 				return
 			}
@@ -255,7 +255,7 @@ func (a *App) DispatchAutomationPointer(event woxui.PointerEvent) error {
 	}
 	return woxui.Call(func() {
 		host.Pointer(event)
-		if host == a.settingsWindow.settingsHost {
+		if host == a.settingsWindow.host {
 			a.finishSettingsPointer(event)
 		}
 	})
@@ -523,7 +523,7 @@ func (a *App) HideAutomationWindow() error {
 	err := woxui.Call(func() {
 		switch kind {
 		case automationSurfaceOnboarding:
-			a.finishOnboarding()
+			a.onboarding.finishOnboarding()
 		case automationSurfaceSettings:
 			actionErr = a.closeSettings()
 		case automationSurfaceNotes:

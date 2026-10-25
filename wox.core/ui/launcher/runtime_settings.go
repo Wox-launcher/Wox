@@ -84,7 +84,7 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
 			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
 			OnSave: func() {
-				if a.generalSettings.EditKey() != item.key || a.settingsWindow.settingSaving {
+				if a.generalSettings.EditKey() != item.key || a.settingsWindow.saving {
 					return
 				}
 				// Leaving an unchanged path must not restart its runtime host.
@@ -183,7 +183,7 @@ func (a *App) browseRuntimeExecutable(item settingItem) {
 
 // saveRuntimeExecutablePath uses the backend validator as the final authority for picker and clear actions.
 func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
-	if a.settingsWindow.settingSaving {
+	if a.settingsWindow.saving {
 		return
 	}
 	a.generalSettings.EndEdit()

@@ -52,8 +52,8 @@ func (a *App) buildPrivacySampleOverlay(snapshot settingsSnapshot, width, height
 
 // onPrivacySettingsKey keeps the modal sample dialog from driving settings behind it.
 func (a *App) onPrivacySettingsKey(event woxui.KeyEvent) bool {
-	settingsOpen := a.settingsWindow.settingsOpen
-	tab := a.settingsWindow.settingTab
+	settingsOpen := a.settingsWindow.open
+	tab := a.settingsWindow.tab
 	if !settingsOpen || tab != "privacy" || !a.privacySettings.SampleVisible() {
 		return false
 	}

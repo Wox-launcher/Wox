@@ -33,8 +33,8 @@ func TestSettingsSearchPrimaryFSelectsExistingText(t *testing.T) {
 func TestSettingsSearchKeepsPrintableKeysAfterOCRModelManagerCloses(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
-	app.settingsWindow.settingsOpen = true
-	app.settingsWindow.settingTab = "plugins"
+	app.settingsWindow.open = true
+	app.settingsWindow.tab = "plugins"
 	app.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
 	fields := newFormFieldsState([]formDefinition{{Type: "ocrModel"}}, nil, true)
 	setFormFieldsFocusLocked(&fields, 0)
@@ -99,7 +99,7 @@ func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 		runtimeSettings:    newRuntimeSettingsController(deps),
 		updateSettings:     newUpdateSettingsController(deps),
 		sharedEdit:         shared,
-		settingsWindow:     settingsWindowController{settingTab: "general"},
+		settingsWindow:     settingsWindowController{tab: "general"},
 	})
 	app.themeSettings.SetThemeEditor(&themeEditorPreviewState{key: "settings-theme|test"})
 	app.themeSettings.SetThemeWallpaperLoading(true)
@@ -107,8 +107,8 @@ func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 	app.activateSettingsSearchResult(settingsSearchResult{
 		kind: settingsSearchSection, title: "Theme Editor", tab: "theme", mode: "editor", navID: "themes.edit",
 	})
-	if app.settingsWindow.settingTab != "theme" || app.themeSettings.ThemesMode() != "editor" {
-		t.Fatalf("activated destination = %s/%s, want theme/editor", app.settingsWindow.settingTab, app.themeSettings.ThemesMode())
+	if app.settingsWindow.tab != "theme" || app.themeSettings.ThemesMode() != "editor" {
+		t.Fatalf("activated destination = %s/%s, want theme/editor", app.settingsWindow.tab, app.themeSettings.ThemesMode())
 	}
 }
 
@@ -199,15 +199,15 @@ func TestSettingsSearchHighlightTargetsMatchDestinationKinds(t *testing.T) {
 
 func TestStartSettingsSearchHighlightReplacesPreviousCue(t *testing.T) {
 	app := bindTestApp(&App{})
-	app.startSettingsSearchHighlight("built-in:MainHotkey")
-	defer app.clearSettingsSearchHighlight()
-	firstTimer := app.settingsWindow.settingFlashTimer
+	app.settingsWindow.flashLocked("built-in:MainHotkey")
+	defer app.settingsWindow.clearFlashLocked()
+	firstTimer := app.settingsWindow.flashTimer
 
-	app.startSettingsSearchHighlight("plugin:clipboard")
-	if app.settingsWindow.settingFlash != "plugin:clipboard" {
-		t.Fatalf("highlight target = %q, want latest destination", app.settingsWindow.settingFlash)
+	app.settingsWindow.flashLocked("plugin:clipboard")
+	if app.settingsWindow.flash != "plugin:clipboard" {
+		t.Fatalf("highlight target = %q, want latest destination", app.settingsWindow.flash)
 	}
-	if app.settingsWindow.settingFlashTimer == nil || app.settingsWindow.settingFlashTimer == firstTimer {
+	if app.settingsWindow.flashTimer == nil || app.settingsWindow.flashTimer == firstTimer {
 		t.Fatal("highlight timer was not replaced")
 	}
 }

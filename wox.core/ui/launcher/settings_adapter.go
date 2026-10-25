@@ -73,12 +73,12 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	} else if snapshot.tab == "theme" && snapshot.theme.AutoEditor != nil {
 		overlay = a.buildAutoThemeEditorOverlay(snapshot, width, height, frame.Scale)
-	} else if a.settingsWindow.settingsDemo != nil {
+	} else if a.settingsWindow.demo != nil {
 		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
 	} else if snapshot.tab == "cloud" && a.settingsWindow.cloudPlanTooltip != nil {
 		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.settingsWindow.cloudPlanTooltip.anchor, width, height, snapshot.palette)
 	}
-	if snapshot.tableEditor != nil && a.settingsWindow.settingsDemo != nil {
+	if snapshot.tableEditor != nil && a.settingsWindow.demo != nil {
 		demo, left, top := a.buildSettingsDemoOverlay(snapshot, width, height)
 		overlay = woxwidget.Stack{Width: width, Height: height, Children: []woxwidget.StackChild{
 			{Child: overlay},

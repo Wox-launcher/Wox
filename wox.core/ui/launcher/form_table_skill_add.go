@@ -38,7 +38,7 @@ func (a *App) openFormTableSkillAdd() {
 // openFormTableSkillAddTab keeps the inline table and the list editor footer both
 // pointing at the same dialog, matching Flutter's single custom create dialog.
 func (a *App) openFormTableSkillAddTab(tab int) {
-	state := a.settingsWindow.settingsTableEditor
+	state := a.settingsWindow.tableEditor
 	if state == nil || state.definition.Value.Key != "AISkills" || state.invalid || state.saving || state.rowForm != nil || state.target != a.aiSettings.Form() {
 		return
 	}
@@ -172,7 +172,7 @@ func (a *App) addLocalSkill(state *formTableEditorState, path string) {
 	key := state.definition.Value.Key
 	value := state.target.values[key]
 	state.saving = true
-	a.settingsWindow.settingSaving = true
+	a.settingsWindow.saving = true
 	a.closeFormTableEditor()
 	util.Go(a.lifecycleCtx, "save settings table after local skill add", func() {
 		a.saveSettingsTable(state, key, value, previousValue)
@@ -211,7 +211,7 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 	var value string
 	save := false
 	_ = a.runOnUI("apply cloned AI skills to add dialog", func() {
-		if a.settingsWindow.settingsTableEditor != state || state.skillAdd == nil {
+		if a.settingsWindow.tableEditor != state || state.skillAdd == nil {
 			return
 		}
 		state.skillAdd.cloning = false
@@ -232,7 +232,7 @@ func (a *App) cloneRemoteSkillsForDialog(state *formTableEditorState, url, previ
 		value = state.target.values[state.definition.Value.Key]
 		save = true
 		state.saving = true
-		a.settingsWindow.settingSaving = true
+		a.settingsWindow.saving = true
 		a.closeFormTableEditor()
 	})
 	if save {

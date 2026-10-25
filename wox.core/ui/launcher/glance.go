@@ -209,7 +209,7 @@ func (a *App) loadGlanceCatalog() {
 		if a.glance.glanceItem != nil {
 			a.glance.scheduleGlanceRefreshLocked(a.generalSettings.Data().PrimaryGlance)
 		}
-		if a.settingsWindow.settingsOpen || a.onboarding.onboardingOpen {
+		if a.settingsWindow.open || a.onboarding.isOpen() {
 			util.Go(a.lifecycleCtx, "load glance picker previews", a.loadGlancePickerPreviews)
 		}
 	})

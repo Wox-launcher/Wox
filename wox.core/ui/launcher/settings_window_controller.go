@@ -8,10 +8,13 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// settingsWindowController owns Settings host and transient editing state.
+// settingsWindowController owns the Settings window and the session state shared by
+// every Settings page: the active route, saving and restart status, hover overlays and
+// the search highlight. Page content lives in the settings domain controllers.
 type settingsWindowController struct {
 	windows                           *woxui.WindowManager
 	runOnUI                           func(string, func()) error
+	isDestroyed                       func() bool
 	fontFamily                        func() string
 	primaryOwner                      func() *settingsWindowController
 	window                            func() *woxui.Window
@@ -24,30 +27,31 @@ type settingsWindowController struct {
 	requestSettingsClose              func()
 	onSettingsWindowTextInput         func(woxui.TextInputEvent)
 	onSettingsWindowClosed            func()
-	openingSettingsShortcut           atomic.Bool
-	settingsView                      *woxui.ManagedWindow
-	settingsHost                      *woxwidget.Host
-	settingsOpen                      bool
-	settingsCtx                       settingWindowContext
-	settingTab                        string
-	settingRow                        int
-	settingSaving                     bool
-	settingRestarting                 bool
-	settingRestartError               string
+
+	openingShortcut atomic.Bool
+	view            *woxui.ManagedWindow
+	host            *woxwidget.Host
+	open            bool
+	tab             string
+	row             int
+	saving          bool
+	restarting      bool
+	restartError    string
 	// pendingBuiltInText is a text value whose field already lost focus. It is held
 	// until the pointer click that caused the blur either saves another setting or releases.
-	pendingBuiltInText            *pendingBuiltInText
-	settingFlash                  string
-	settingFlashTimer             *time.Timer
-	settingsInlineTooltip         *settingsInlineTooltipState
-	settingsInlineTooltipRevision atomic.Uint64
-	cloudPlanTooltip              *cloudPlanTooltipState
-	cloudPlanTooltipRevision      atomic.Uint64
-	settingsDemo                  *settingsDemoState
-	settingsDemoRevision          atomic.Uint64
-	choiceTooltipRevision         atomic.Uint64
-	settingsTableEditor           *formTableEditorState
-	nativeSettingsPluginID        string
+	pendingBuiltInText *pendingBuiltInText
+	// flash names the row highlighted after search navigation until flashTimer clears it.
+	flash                    string
+	flashTimer               *time.Timer
+	inlineTooltip            *settingsInlineTooltipState
+	inlineTooltipRevision    atomic.Uint64
+	cloudPlanTooltip         *cloudPlanTooltipState
+	cloudPlanTooltipRevision atomic.Uint64
+	demo                     *settingsDemoState
+	demoRevision             atomic.Uint64
+	choiceTooltipRevision    atomic.Uint64
+	tableEditor              *formTableEditorState
+	nativePluginID           string
 }
 
 // bindSettingsWindow supplies rendering and feature handoffs to the native window owner.
@@ -55,6 +59,7 @@ func (a *App) bindSettingsWindow() {
 	c := &a.settingsWindow
 	c.windows = a.windows
 	c.runOnUI = a.runOnUI
+	c.isDestroyed = a.isDestroyed
 	c.fontFamily = func() string { return a.generalSettings.Data().AppFontFamily }
 	c.primaryOwner = func() *settingsWindowController {
 		if !a.isPrimary && a.primary != nil {
@@ -72,4 +77,76 @@ func (a *App) bindSettingsWindow() {
 	c.requestSettingsClose = a.requestSettingsClose
 	c.onSettingsWindowTextInput = a.onSettingsWindowTextInput
 	c.onSettingsWindowClosed = a.onSettingsWindowClosed
+}
+
+// beginSessionLocked opens Settings on a tab. Reopening an already open window behaves
+// like a tab switch, so hover overlays anchored to the previous page are dropped.
+func (c *settingsWindowController) beginSessionLocked(tab string) {
+	c.open = true
+	c.tab = tab
+	c.row = 0
+	c.saving = false
+	c.clearOverlaysLocked()
+}
+
+// selectTabLocked moves the session to another tab; overlays anchored to the old page go away.
+func (c *settingsWindowController) selectTabLocked(tab string) {
+	c.tab = tab
+	c.row = 0
+	c.clearOverlaysLocked()
+}
+
+// endSessionLocked releases window-owned session state after the native window closed and
+// reports whether Settings was open.
+func (c *settingsWindowController) endSessionLocked() bool {
+	wasOpen := c.open
+	c.open = false
+	c.view = nil
+	c.host = nil
+	c.saving = false
+	c.tableEditor = nil
+	c.clearFlashLocked()
+	c.clearOverlaysLocked()
+	return wasOpen
+}
+
+// clearOverlaysLocked hides hover overlays and bumps their revisions so pending delayed
+// shows are discarded.
+func (c *settingsWindowController) clearOverlaysLocked() {
+	c.cloudPlanTooltip = nil
+	c.cloudPlanTooltipRevision.Add(1)
+	c.inlineTooltip = nil
+	c.inlineTooltipRevision.Add(1)
+	c.demo = nil
+	c.demoRevision.Add(1)
+}
+
+// flashLocked highlights a search destination and replaces any older highlight.
+func (c *settingsWindowController) flashLocked(target string) {
+	if c.isDestroyed() || target == "" {
+		return
+	}
+	if c.flashTimer != nil {
+		c.flashTimer.Stop()
+	}
+	c.flash = target
+	c.flashTimer = time.AfterFunc(settingsSearchHighlightDuration, func() {
+		_ = c.runOnUI("clear settings search highlight", func() {
+			if c.isDestroyed() || c.flash != target {
+				return
+			}
+			c.flash = ""
+			c.flashTimer = nil
+			c.invalidateSettingsWindow()
+		})
+	})
+	c.invalidateSettingsWindow()
+}
+
+func (c *settingsWindowController) clearFlashLocked() {
+	if c.flashTimer != nil {
+		c.flashTimer.Stop()
+		c.flashTimer = nil
+	}
+	c.flash = ""
 }

@@ -291,7 +291,7 @@ func (a *App) focusSettingsSearch(selectAll bool) {
 		queryText = strings.TrimSpace(editor.State().Text)
 	}
 	a.settingsSearch.SetPanel(queryText != "")
-	host := a.settingsWindow.settingsHost
+	host := a.settingsWindow.host
 	if host != nil {
 		host.RequestFocus(woxwidget.Key("settings-search-field"))
 	}
@@ -352,7 +352,7 @@ func (a *App) blurSettingsSearch() {
 	}
 	a.settingsSearch.SetFocused(false)
 	a.settingsSearch.SetPanel(false)
-	host := a.settingsWindow.settingsHost
+	host := a.settingsWindow.host
 	if host != nil {
 		host.ClearFocus()
 	}
@@ -452,7 +452,7 @@ func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
 	a.selectSettingTab(result.tab)
 	if result.settingKey != "" {
 		a.focusBuiltInSettingsSearchTarget(result.tab, result.settingKey)
-		a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
+		a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
 	}
 	a.settingsWindow.invalidateSettingsWindow()
 }
@@ -462,7 +462,7 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	items := settingItemsForSnapshot(snapshot)
 	for index, item := range items {
 		if item.key == settingKey {
-			a.settingsWindow.settingRow = index
+			a.settingsWindow.row = index
 			if tab == "general" {
 				a.generalSettings.SetFormFocused(false)
 			}
@@ -499,7 +499,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 		for index, plugin := range plugins {
 			if plugin.ID == result.pluginID {
 				a.selectPlugin(index)
-				a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
+				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 				return
 			}
@@ -523,7 +523,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	util.Go(a.lifecycleCtx, "open plugin setting search result", func() {
 		if err := a.reloadPlugins(false, result.pluginID); err == nil {
 			if dispatchErr := a.runOnUI("focus plugin setting search target", func() {
-				a.startSettingsSearchHighlight(settingsSearchHighlightTarget(result))
+				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 			}); dispatchErr != nil {
 				return
@@ -562,34 +562,4 @@ func settingsSearchHighlightTarget(result settingsSearchResult) string {
 		}
 		return ""
 	}
-}
-
-// startSettingsSearchHighlight flashes the destination after search navigation and replaces any older cue.
-func (a *App) startSettingsSearchHighlight(target string) {
-	if a.isDestroyed() || target == "" {
-		return
-	}
-	if a.settingsWindow.settingFlashTimer != nil {
-		a.settingsWindow.settingFlashTimer.Stop()
-	}
-	a.settingsWindow.settingFlash = target
-	a.settingsWindow.settingFlashTimer = time.AfterFunc(settingsSearchHighlightDuration, func() {
-		_ = a.runOnUI("clear settings search highlight", func() {
-			if a.isDestroyed() || a.settingsWindow.settingFlash != target {
-				return
-			}
-			a.settingsWindow.settingFlash = ""
-			a.settingsWindow.settingFlashTimer = nil
-			a.settingsWindow.invalidateSettingsWindow()
-		})
-	})
-	a.settingsWindow.invalidateSettingsWindow()
-}
-
-func (a *App) clearSettingsSearchHighlight() {
-	if a.settingsWindow.settingFlashTimer != nil {
-		a.settingsWindow.settingFlashTimer.Stop()
-		a.settingsWindow.settingFlashTimer = nil
-	}
-	a.settingsWindow.settingFlash = ""
 }

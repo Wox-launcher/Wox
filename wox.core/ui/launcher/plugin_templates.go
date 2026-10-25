@@ -124,7 +124,7 @@ func (a *App) beginAICommandTemplateRow(fieldIndex int, template contract.AIComm
 	}
 	a.openPluginFormTable(fieldIndex)
 	a.beginAddFormTableRowDirect()
-	state := a.settingsWindow.settingsTableEditor
+	state := a.settingsWindow.tableEditor
 	if state == nil || state.rowForm == nil {
 		return
 	}

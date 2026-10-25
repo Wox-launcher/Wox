@@ -13,10 +13,10 @@ import (
 func TestThemeEditorFieldsUseSettingsWindow(t *testing.T) {
 	app := bindTestApp(&App{
 		window:         &woxui.Window{},
-		settingsWindow: settingsWindowController{settingsView: &woxui.ManagedWindow{}},
+		settingsWindow: settingsWindowController{view: &woxui.ManagedWindow{}},
 	})
 	for _, prefix := range []string{"theme-editor", "theme-editor-dialog"} {
-		if got := app.formFieldNativeWindow(prefix); got != app.settingsWindow.settingsView.Window() {
+		if got := app.formFieldNativeWindow(prefix); got != app.settingsWindow.view.Window() {
 			t.Fatalf("%s uses the launcher window instead of its settings window", prefix)
 		}
 	}

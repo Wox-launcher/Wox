@@ -212,8 +212,8 @@ func (a *App) loadDemoWallpaper(loadID uint64, path string, includeBlurred bool)
 			return
 		}
 		a.themeSettings.SetThemeWallpaperLoading(false)
-		settingsOpen = a.settingsWindow.settingsOpen
-		onboardingOpen = a.onboarding.onboardingOpen
+		settingsOpen = a.settingsWindow.open
+		onboardingOpen = a.onboarding.isOpen()
 		if err == nil && (settingsOpen || onboardingOpen) {
 			a.themeSettings.SetThemeWallpaperPath(path)
 			a.themeSettings.SetThemeWallpaperImage(wallpaperImage)

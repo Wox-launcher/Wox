@@ -646,7 +646,7 @@ func (a *App) setPluginSelectionLocked(index int) {
 	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		refreshFormDisplayDefinitions(&form.formFieldsState, pluginSettingsFormDefinitions(plugin))
-		if editor := a.settingsWindow.settingsTableEditor; editor != nil && editor.target == &form.formFieldsState {
+		if editor := a.settingsWindow.tableEditor; editor != nil && editor.target == &form.formFieldsState {
 			// A post-save definition refresh rebuilds this form. The settings overlay
 			// is published only while settingsTableEditor.target matches the live form
 			// pointer, so replacing it here would hide an in-flight row editor.
@@ -965,7 +965,7 @@ func (a *App) openPluginFilterChoice(id string, anchor woxui.Rect) {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.settingsHost; host != nil {
+		if host := a.settingsWindow.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key("setting-choice-anchor-plugin-filter-" + id))
 		}
 	}
@@ -1036,7 +1036,7 @@ func (a *App) applyPluginFilters(filters pluginFilterState) {
 
 func (a *App) blurPluginSearch() {
 	a.pluginSettings.SetSearchFocused(false)
-	host := a.settingsWindow.settingsHost
+	host := a.settingsWindow.host
 	if host != nil {
 		host.ClearFocus()
 	}
@@ -1073,7 +1073,7 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
+	active := a.settingsWindow.open && a.settingsWindow.tab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
 	if !active {
 		return false
 	}
@@ -1093,7 +1093,7 @@ func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onPluginSearchTextInput(_ woxui.TextInputEvent) bool {
-	return a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
+	return a.settingsWindow.open && a.settingsWindow.tab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
 }
 
 // selectPluginDetailTab changes detail content without discarding staged plugin settings.
@@ -1129,7 +1129,7 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if a.settingsWindow.settingTab != "plugins" {
+	if a.settingsWindow.tab != "plugins" {
 		return false
 	}
 	state := a.pluginSettings.Form()
@@ -1239,7 +1239,7 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 			a.openPluginFormTable(focused)
 		} else if fieldType == "dictationModel" || fieldType == "ocrModel" {
 			anchor := woxui.Rect{}
-			if host := a.settingsWindow.settingsHost; host != nil {
+			if host := a.settingsWindow.host; host != nil {
 				anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", focused)))
 			}
 			a.openPluginModelManager(focused, anchor)
@@ -1273,10 +1273,10 @@ func (a *App) runFocusedPluginServiceAction(index int) {
 // The button stays disabled until that window closes and the plugin reloads.
 func (a *App) openNativePluginSettings(pluginID string) {
 	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" || a.services == nil || a.settingsWindow.nativeSettingsPluginID != "" {
+	if pluginID == "" || a.services == nil || a.settingsWindow.nativePluginID != "" {
 		return
 	}
-	a.settingsWindow.nativeSettingsPluginID = pluginID
+	a.settingsWindow.nativePluginID = pluginID
 	a.settingsWindow.invalidateSettingsWindow()
 	util.Go(a.lifecycleCtx, "open native plugin settings", func() {
 		err := a.services.OpenNativePluginSettings(context.Background(), a.sessionID, pluginID)
@@ -1288,8 +1288,8 @@ func (a *App) openNativePluginSettings(pluginID string) {
 			reloadErr = a.reloadPlugins(false, pluginID)
 		}
 		_ = a.runOnUI("finish native plugin settings", func() {
-			if a.settingsWindow.nativeSettingsPluginID == pluginID {
-				a.settingsWindow.nativeSettingsPluginID = ""
+			if a.settingsWindow.nativePluginID == pluginID {
+				a.settingsWindow.nativePluginID = ""
 			}
 			if current := a.pluginSettings.Form(); current != nil && current.pluginID == pluginID {
 				if err != nil {
@@ -1460,7 +1460,7 @@ func (a *App) movePluginFormFocus(delta int) {
 			break
 		}
 	}
-	if host := a.settingsWindow.settingsHost; host != nil {
+	if host := a.settingsWindow.host; host != nil {
 		host.RequestFocus(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
 	}
 	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
@@ -1490,7 +1490,7 @@ func (a *App) changePluginFormChoice(index, delta int) {
 // openFocusedPluginFormChoice resolves the retained field bounds for keyboard-opened menus.
 func (a *App) openFocusedPluginFormChoice(index int) {
 	anchor := woxui.Rect{}
-	if host := a.settingsWindow.settingsHost; host != nil {
+	if host := a.settingsWindow.host; host != nil {
 		key := fmt.Sprintf("plugin-settings-field-%d", index)
 		if form := a.pluginSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) && form.definitions[index].Type == "selectAIModel" {
 			key += "-model"
@@ -1515,7 +1515,7 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.settingsHost; host != nil {
+		if host := a.settingsWindow.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
 		}
 	}
@@ -1655,7 +1655,7 @@ func (a *App) openPluginAIModelEmptyChoice(index int, anchor woxui.Rect) {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.settingsHost; host != nil {
+		if host := a.settingsWindow.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d-provider", index)))
 		}
 	}
@@ -1847,7 +1847,7 @@ func (a *App) editPluginFormKey(event woxui.KeyEvent) {
 // onPluginSettingsTextInput commits native IME events only while a plugin textbox owns focus.
 func (a *App) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
 	state := a.pluginSettings.Form()
-	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "plugins" && state != nil && state.active
+	active := a.settingsWindow.open && a.settingsWindow.tab == "plugins" && state != nil && state.active
 	return active
 }
 

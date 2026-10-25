@@ -90,7 +90,7 @@ func isBooleanSettingItem(item settingItem) bool {
 }
 
 func (a *App) openSettingChoicePicker(item settingItem) {
-	host := a.settingsWindow.settingsHost
+	host := a.settingsWindow.host
 	anchor := woxui.Rect{}
 	if host != nil {
 		anchor, _ = host.BoundsForKey(launcherview.SettingChoiceAnchorKey(item.key))
@@ -100,7 +100,7 @@ func (a *App) openSettingChoicePicker(item settingItem) {
 
 // openSettingChoicePickerAt anchors pointer-opened menus to the bounds from the exact hit-tested frame.
 func (a *App) openSettingChoicePickerAt(item settingItem, anchor woxui.Rect) {
-	if a.settingsWindow.settingSaving || item.disabled || len(item.choices) == 0 {
+	if a.settingsWindow.saving || item.disabled || len(item.choices) == 0 {
 		return
 	}
 	a.generalSettings.EndEdit()
@@ -125,7 +125,7 @@ func (a *App) closeSettingChoicePicker() {
 
 func (a *App) chooseSettingChoice(index int) {
 	state := a.generalSettings.ChoicePicker()
-	if state == nil || a.settingsWindow.settingSaving {
+	if state == nil || a.settingsWindow.saving {
 		return
 	}
 	if index < 0 || index >= len(state.item.choices) {
@@ -157,8 +157,8 @@ func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rec
 func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
 	if util.IsLinux() {
 		a.tooltips.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
-			revision: &a.settingsWindow.settingsInlineTooltipRevision, state: &a.settingsWindow.settingsInlineTooltip,
-			open: a.settingsWindow.settingsOpen, invalidate: a.settingsWindow.invalidateSettingsWindow, job: "show settings inline tooltip",
+			revision: &a.settingsWindow.inlineTooltipRevision, state: &a.settingsWindow.inlineTooltip,
+			open: a.settingsWindow.open, invalidate: a.settingsWindow.invalidateSettingsWindow, job: "show settings inline tooltip",
 		}, inside, text, anchor, side)
 		return
 	}

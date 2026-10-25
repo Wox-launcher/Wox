@@ -30,11 +30,11 @@ func TestFormTableFaviconShowsURLHint(t *testing.T) {
 		"ui_image_editor_url_hint": "Paste an image URL or a website URL.",
 	}
 	app.openFormTableFavicon(0)
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.tableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "Paste an image URL or a website URL.") {
 		t.Fatal("idle dialog must explain image and website URLs")
 	}
-	app.settingsWindow.settingsTableEditor.favicon.error = "bad url"
-	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.settingsTableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
+	app.settingsWindow.tableEditor.favicon.error = "bad url"
+	if !formTableFaviconContainsText(app.buildFormTableFavicon(app.settingsWindow.tableEditor.favicon, woxcomponent.ControlTheme{}, 800, 600), "bad url") {
 		t.Fatal("errors must replace the URL hint")
 	}
 }
@@ -79,7 +79,7 @@ func TestFormTableFaviconLifecycle(t *testing.T) {
 			}
 			app.services = service
 			callbacks := make(chan func(), 1)
-			state := app.settingsWindow.settingsTableEditor
+			state := app.settingsWindow.tableEditor
 			original := state.rowForm.values["Icon"]
 			app.openFormTableFavicon(1)
 			if state.favicon != nil {

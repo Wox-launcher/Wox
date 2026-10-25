@@ -181,7 +181,7 @@ func (a *App) FocusSetting(_ context.Context) error {
 	}
 	var settingsView *woxui.ManagedWindow
 	if err := a.runOnUI("resolve settings window for focus", func() {
-		settingsView = a.settingsWindow.settingsView
+		settingsView = a.settingsWindow.view
 	}); err != nil {
 		return err
 	}
@@ -800,7 +800,7 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 		// Reloading then would fetch and keep the whole installed plugin catalog for a
 		// page nobody is looking at, so mark the snapshot stale and let the cloud tab
 		// reload it on its next open.
-		if !a.settingsWindow.settingsOpen {
+		if !a.settingsWindow.open {
 			a.cloudSettings.SetLoaded(false)
 			return
 		}

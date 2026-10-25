@@ -15,8 +15,8 @@ func TestBuiltInTextBlurDropsAnUnchangedEdit(t *testing.T) {
 
 	app.blurBuiltInSettingEdit(settingItem{key: "HttpProxyUrl", value: "http://localhost:7890", text: true})
 
-	if app.generalSettings.EditKey() != "" || app.settingsWindow.pendingBuiltInText != nil || app.settingsWindow.settingSaving {
-		t.Fatalf("edit = %q pending = %+v saving = %v, want an unchanged blur to only leave the session", app.generalSettings.EditKey(), app.settingsWindow.pendingBuiltInText, app.settingsWindow.settingSaving)
+	if app.generalSettings.EditKey() != "" || app.settingsWindow.pendingBuiltInText != nil || app.settingsWindow.saving {
+		t.Fatalf("edit = %q pending = %+v saving = %v, want an unchanged blur to only leave the session", app.generalSettings.EditKey(), app.settingsWindow.pendingBuiltInText, app.settingsWindow.saving)
 	}
 }
 
@@ -48,7 +48,7 @@ func TestBuiltInTextBlurDuringClickKeepsTheSwitchTap(t *testing.T) {
 	})
 	host.AttachServices(formTableHostServices{})
 	defer host.Dispose()
-	app.settingsWindow.settingsHost = host
+	app.settingsWindow.host = host
 
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 80, Height: 20}, PixelSize: woxui.PixelSize{Width: 80, Height: 20}, Scale: 1}
 	host.Frame(&woxui.DisplayList{}, frame)

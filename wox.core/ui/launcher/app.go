@@ -468,6 +468,9 @@ type App struct {
 
 	visible bool
 	show    showAppParams
+	// permissionFlow remembers which Wox windows the macOS permission guide hid so
+	// they can be restored when System Settings is closed.
+	permissionFlow *macOSPermissionFlowHost
 	// bottomAnchorY keeps QueryBoxAtBottom windows from drifting when DPI
 	// round-trips make Bounds().Height slightly larger than the logical height
 	// we last requested.
@@ -547,7 +550,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 			selected:      -1,
 			hoveredResult: -1,
 		},
-		settingsWindow: settingsWindowController{settingTab: "general"},
+		settingsWindow: settingsWindowController{tab: "general"},
 		appearance: appearanceController{
 			palette:        defaultPalette(),
 			densityMetrics: launcherDensityMetricsFor(""),

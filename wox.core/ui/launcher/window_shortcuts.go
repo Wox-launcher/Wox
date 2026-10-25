@@ -42,15 +42,15 @@ func (a *App) requestSettingsFromShortcut(pluginID string) {
 		a.primary.requestSettingsFromShortcut(pluginID)
 		return
 	}
-	if !a.settingsWindow.openingSettingsShortcut.CompareAndSwap(false, true) {
+	if !a.settingsWindow.openingShortcut.CompareAndSwap(false, true) {
 		return
 	}
 	util.Go(a.lifecycleCtx, "open settings from shortcut", func() {
-		defer a.settingsWindow.openingSettingsShortcut.Store(false)
+		defer a.settingsWindow.openingShortcut.Store(false)
 		var existing *woxui.ManagedWindow
 		err := a.runOnUI("resolve settings shortcut target", func() {
-			if a.settingsWindow.settingsView != nil && a.settingsWindow.settingsView.Lifecycle() != woxui.WindowLifecycleClosed {
-				existing = a.settingsWindow.settingsView
+			if a.settingsWindow.view != nil && a.settingsWindow.view.Lifecycle() != woxui.WindowLifecycleClosed {
+				existing = a.settingsWindow.view
 				if pluginID != "" {
 					a.activateSettingsSearchResult(settingsSearchResult{kind: settingsSearchPlugin, pluginID: pluginID})
 					a.pluginSettings.SetDetailTab("settings")

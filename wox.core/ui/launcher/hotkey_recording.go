@@ -144,8 +144,8 @@ func containsString(values []string, target string) bool {
 func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
 	pluginForm := a.pluginSettings.Form()
 	tableEditor := a.activeFormTableEditor()
-	return target != nil && (((a.onboarding.onboardingOpen || (a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "hotkey")) && target == a.hotkeySettings.Form()) ||
-		(a.onboarding.onboardingOpen && a.onboarding.onboardingQueryHotkey != nil && target == &a.onboarding.onboardingQueryHotkey.form) ||
+	return target != nil && (((a.onboarding.isOpen() || (a.settingsWindow.open && a.settingsWindow.tab == "hotkey")) && target == a.hotkeySettings.Form()) ||
+		a.onboarding.ownsHotkeyTarget(target) ||
 		(tableEditor != nil && tableEditor.rowForm == target) ||
 		(a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
 		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
@@ -353,8 +353,8 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		editor.status = ""
 	}
 	a.invalidateHotkeyWindows()
-	if a.onboarding.onboardingOpen && state.idPrefix == "onboarding-query-hotkey" {
-		a.saveOnboardingQueryHotkey(value)
+	if a.onboarding.isOpen() && state.idPrefix == "onboarding-query-hotkey" {
+		a.onboarding.saveOnboardingQueryHotkey(value)
 		a.stopHotkeyRecording()
 		return
 	}
@@ -367,7 +367,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		})
 	}
 	// Onboarding treats one valid combination as completion; Settings keeps recording for rapid edits.
-	if a.onboarding.onboardingOpen && state.idPrefix == "hotkey-settings" {
+	if a.onboarding.isOpen() && state.idPrefix == "hotkey-settings" {
 		a.stopHotkeyRecording()
 	}
 }
@@ -390,12 +390,12 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			}
 			// Onboarding closes the recorder before the asynchronous save finishes.
 			// Keep its error on the page instead of losing it with the recorder state.
-			if a.onboarding.onboardingOpen && state.persistKey == "MainHotkey" {
-				a.onboarding.onboardingError = state.status
+			if state.persistKey == "MainHotkey" {
+				a.onboarding.showPageError(state.status)
 			}
 		} else {
-			if a.onboarding.onboardingOpen && state.persistKey == "MainHotkey" {
-				a.onboarding.onboardingError = ""
+			if state.persistKey == "MainHotkey" {
+				a.onboarding.showPageError("")
 			}
 			switch state.persistKey {
 			case "MainHotkey":
@@ -404,8 +404,7 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 					d.MainHotkeyRegistrationFailed = false
 					d.MainHotkeyRegistrationError = ""
 				})
-				a.onboarding.onboardingMigration.stagedMainHotkey = ""
-				a.onboarding.onboardingMigration.stagedMainHotkeyError = ""
+				a.onboarding.clearStagedMainHotkey()
 			case "SelectionHotkey":
 				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
 			case "ActionPanelHotkey":

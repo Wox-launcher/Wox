@@ -290,7 +290,7 @@ func (a *App) openPluginModelManager(index int, anchor woxui.Rect) {
 
 func (a *App) modelManagerCurrentLocked(state *modelManagerState) bool {
 	pluginForm := a.pluginSettings.Form()
-	return state != nil && a.aiSettings.ModelManager() == state && a.settingsWindow.settingTab == "plugins" && pluginForm != nil && state.target == &pluginForm.formFieldsState
+	return state != nil && a.aiSettings.ModelManager() == state && a.settingsWindow.tab == "plugins" && pluginForm != nil && state.target == &pluginForm.formFieldsState
 }
 
 // refreshModelManager merges runtime-only progress into translated definition metadata.

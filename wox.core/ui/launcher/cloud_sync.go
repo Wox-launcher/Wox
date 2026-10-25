@@ -629,7 +629,7 @@ func (a *App) moveCloudFormFocus(delta int) {
 
 // onCloudSettingsKey gives the active account/bootstrap modal exclusive keyboard ownership.
 func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
-	pluginDialog := a.settingsWindow.settingsOpen && a.cloudSettings.PluginDialog() != nil
+	pluginDialog := a.settingsWindow.open && a.cloudSettings.PluginDialog() != nil
 	if pluginDialog {
 		if event.Key == woxui.KeyEscape {
 			state := a.cloudSettings.PluginDialog()
@@ -643,9 +643,9 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 		}
 		return true
 	}
-	menuActive := a.settingsWindow.settingsOpen && a.cloudSettings.ActionMenu() != ""
+	menuActive := a.settingsWindow.open && a.cloudSettings.ActionMenu() != ""
 	form := a.cloudSettings.Form()
-	active := a.settingsWindow.settingsOpen && form != nil
+	active := a.settingsWindow.open && form != nil
 	saving := active && form.saving
 	if menuActive && !active {
 		if event.Key == woxui.KeyEscape {
@@ -695,7 +695,7 @@ func (a *App) onCloudSettingsKey(event woxui.KeyEvent) bool {
 
 // onCloudFormTextInput blocks fallback routing while retained text fields own cloud modal input.
 func (a *App) onCloudFormTextInput(_ woxui.TextInputEvent) bool {
-	return a.settingsWindow.settingsOpen && a.cloudSettings.Form() != nil
+	return a.settingsWindow.open && a.cloudSettings.Form() != nil
 }
 
 // submitCloudForm validates local invariants before sending credentials or recovery data to core.

@@ -76,7 +76,7 @@ func (a *App) closeShowDisplayPicker() {
 // chooseShowDisplay stores the clicked monitor and closes the map.
 func (a *App) chooseShowDisplay(index int) {
 	picker := a.generalSettings.ShowDisplayPicker()
-	if picker == nil || a.settingsWindow.settingSaving || index < 0 || index >= len(picker.displays) {
+	if picker == nil || a.settingsWindow.saving || index < 0 || index >= len(picker.displays) {
 		return
 	}
 	display := picker.displays[index]

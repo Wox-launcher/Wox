@@ -505,8 +505,8 @@ func (a *App) applyTheme(theme themeData) {
 	isDark := palette.isDark()
 	woxui.SetDefaultAppearance(isDark)
 	a.appearance.palette = palette
-	settingsView := a.settingsWindow.settingsView
-	onboardingView := a.onboarding.onboardingView
+	settingsView := a.settingsWindow.view
+	onboardingView := a.onboarding.view
 	if a.window != nil {
 		_ = a.window.SetAppearance(isDark)
 		if err := a.window.SetWindowChrome(a.appearance.palette.AppWindowChrome, a.appearance.palette.AppBorderRadius, a.appearance.palette.background.A != 0); err != nil {

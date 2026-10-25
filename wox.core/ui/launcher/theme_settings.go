@@ -447,7 +447,7 @@ func (a *App) setThemeSearchValue(value string) error {
 }
 
 func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
+	active := a.settingsWindow.open && a.settingsWindow.tab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
 	if !active {
 		return false
 	}
@@ -458,7 +458,7 @@ func (a *App) onThemeSearchKey(event woxui.KeyEvent) bool {
 }
 
 func (a *App) onThemeSearchTextInput(_ woxui.TextInputEvent) bool {
-	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
+	active := a.settingsWindow.open && a.settingsWindow.tab == "theme" && a.themeSettings.ThemesMode() != "editor" && a.themeSettings.ThemeSearchFocused() && a.themeSettings.ThemeSearchEditor() != nil
 	return active
 }
 
@@ -517,7 +517,7 @@ func (a *App) onThemeSettingsKey(event woxui.KeyEvent) bool {
 	if editor := a.themeSettings.AutoEditor(); editor != nil && editor.active {
 		return false
 	}
-	active := a.settingsWindow.settingsOpen && a.settingsWindow.settingTab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemeSearchFocused()
+	active := a.settingsWindow.open && a.settingsWindow.tab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemeSearchFocused()
 	themes := a.themeSettings.Themes()
 	filtered := filterThemes(themes, a.themeSearchQueryLocked())
 	if !active || len(filtered) == 0 {

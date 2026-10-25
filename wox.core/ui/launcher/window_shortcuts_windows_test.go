@@ -55,10 +55,10 @@ func runNativeShortcutFlow(t *testing.T, services contract.Services, prepare fun
 func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 	runNativeShortcutFlow(t, nil, func(app *App) (func() error, error) {
 		draft := woxwidget.NewTextEditingController("unsaved settings draft")
-		app.settingsWindow.settingTab = "plugins"
+		app.settingsWindow.tab = "plugins"
 		app.settingsSearch.SetEditor(draft)
-		app.settingsWindow.settingsTableEditor = &formTableEditorState{}
-		tableDraft := app.settingsWindow.settingsTableEditor
+		app.settingsWindow.tableEditor = &formTableEditorState{}
+		tableDraft := app.settingsWindow.tableEditor
 		consumed := 0
 		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 			return woxcomponent.WoxTextField(woxcomponent.TextFieldProps{ID: "settings.draft", Width: 200, Height: 40, Controller: draft, OnKey: func(woxui.KeyEvent) bool { consumed++; return true }})
@@ -75,7 +75,7 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 		if !host.RequestFocus("settings.draft") {
 			return nil, errors.New("settings draft did not receive focus")
 		}
-		app.settingsWindow.settingsView = managed
+		app.settingsWindow.view = managed
 		visible := make(chan struct{}, 2)
 		app.windows.SubscribeLifecycle(func(event woxui.WindowLifecycleEvent) {
 			if event.ID == settingsWindowID && event.Current == woxui.WindowLifecycleVisible {
@@ -96,7 +96,7 @@ func TestSettingsShortcutKeepsExistingDraft(t *testing.T) {
 			}
 			var stateErr error
 			if err := woxui.Call(func() {
-				if app.settingsWindow.settingTab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.settingsWindow.settingsTableEditor != tableDraft || consumed != 0 {
+				if app.settingsWindow.tab != "plugins" || app.settingsSearch.Editor() != draft || draft.Text() != "unsaved settings draft" || app.settingsWindow.tableEditor != tableDraft || consumed != 0 {
 					stateErr = errors.New("settings shortcut reset a draft or reached the focused editor")
 				}
 			}); err != nil {
@@ -199,7 +199,7 @@ func TestPluginWindowSettingsShortcutRoutesAndKeepsDraft(t *testing.T) {
 					return fmt.Errorf("plugin settings shortcut %d did not show Settings", index)
 				}
 				deadline := time.Now().Add(5 * time.Second)
-				for app.settingsWindow.openingSettingsShortcut.Load() && time.Now().Before(deadline) {
+				for app.settingsWindow.openingShortcut.Load() && time.Now().Before(deadline) {
 					time.Sleep(time.Millisecond)
 				}
 				want := common.AIChatPluginID
@@ -209,13 +209,13 @@ func TestPluginWindowSettingsShortcutRoutesAndKeepsDraft(t *testing.T) {
 				var stateErr error
 				if err := woxui.Call(func() {
 					form := app.pluginSettings.Form()
-					if app.settingsWindow.settingTab != "plugins" || app.pluginSettings.PluginsStore() || app.pluginSettings.DetailTab() != "settings" || form == nil || form.pluginID != want {
+					if app.settingsWindow.tab != "plugins" || app.pluginSettings.PluginsStore() || app.pluginSettings.DetailTab() != "settings" || form == nil || form.pluginID != want {
 						stateErr = fmt.Errorf("shortcut %d did not navigate to plugin %s", index, want)
 						return
 					}
 					if index == 0 {
-						settings = app.settingsWindow.settingsView
-					} else if app.settingsWindow.settingsView != settings {
+						settings = app.settingsWindow.view
+					} else if app.settingsWindow.view != settings {
 						stateErr = errors.New("plugin navigation replaced the Settings window")
 					}
 					if index == 1 {
