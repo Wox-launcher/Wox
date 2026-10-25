@@ -181,13 +181,13 @@ func newThemeEditorState(key string, raw map[string]any) *themeEditorPreviewStat
 }
 
 // loadSettingsThemeEditor opens the applied theme as the Settings theme editor draft.
-func (a *App) loadSettingsThemeEditor() error {
+func (c *themeSettingsController) loadSettingsThemeEditor() error {
 	retained := false
-	if err := a.runOnUI("resume settings theme editor", func() {
-		state := a.themeSettings.ThemeEditor()
+	if err := c.runOnUI("resume settings theme editor", func() {
+		state := c.ThemeEditor()
 		retained = state != nil && (state.saving || themeEditorDirtyLocked(state))
 		if retained {
-			a.preloadThemeEditorModels()
+			c.preloadThemeEditorModels()
 		}
 	}); err != nil {
 		return err
@@ -198,7 +198,7 @@ func (a *App) loadSettingsThemeEditor() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	theme, err := a.services.CurrentTheme(ctx, a.sessionID)
+	theme, err := c.services.CurrentTheme(ctx, c.sessionID)
 	if err != nil {
 		return fmt.Errorf("load active theme: %w", err)
 	}
@@ -215,12 +215,12 @@ func (a *App) loadSettingsThemeEditor() error {
 	}
 	encoded, _ = json.Marshal(raw)
 	hash := sha256.Sum256(encoded)
-	return a.runOnUI("apply settings theme editor", func() {
-		a.themeSettings.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
-		a.themeSettings.ThemeEditor().surfaces = fromCoreTheme(theme).Surfaces
-		a.preloadThemeEditorModels()
-		a.preloadDemoWallpaper(true)
-		a.invalidateThemeEditorWindow()
+	return c.runOnUI("apply settings theme editor", func() {
+		c.SetThemeEditor(newThemeEditorState(fmt.Sprintf("settings-theme|%x", hash[:8]), raw))
+		c.ThemeEditor().surfaces = fromCoreTheme(theme).Surfaces
+		c.preloadThemeEditorModels()
+		c.preloadDemoWallpaper(true)
+		c.invalidateThemeEditorWindow()
 	})
 }
 
@@ -291,35 +291,35 @@ func themeEditorDraftTheme(raw map[string]any, values map[string]string, surface
 }
 
 // applySettingsThemeEditorDraft previews a valid draft on theme-aware windows; Settings chrome stays fixed.
-func (a *App) applySettingsThemeEditorDraft() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) applySettingsThemeEditorDraft() {
+	state := c.ThemeEditor()
 	if state == nil || !strings.HasPrefix(state.key, "settings-theme|") {
 		return
 	}
 	theme, err := themeEditorDraftTheme(state.raw, state.values, state.surfaces)
 	if err == nil {
-		a.applyTheme(theme)
+		c.applyTheme(theme)
 	}
 }
 
 // onThemeEditorPreviewKey gives the draft form keyboard ownership only after a field is focused.
-func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
+	state := c.ThemeEditor()
 	active := state != nil && state.active
 	dialogOpen := state != nil && state.dialogMode != ""
 	if !active {
 		return false
 	}
 	if dialogOpen && event.Key == woxui.KeyEscape {
-		a.cancelThemeEditorDialog()
+		c.cancelThemeEditorDialog()
 		return true
 	}
 	if dialogOpen && event.Key == woxui.KeyEnter && !event.Modifiers.HasPrimary() {
-		a.confirmThemeEditorDialog()
+		c.confirmThemeEditorDialog()
 		return true
 	}
 	if event.Key == woxui.KeyEscape {
-		a.deactivateThemeEditorPreview()
+		c.deactivateThemeEditorPreview()
 		return true
 	}
 	switch event.Key {
@@ -328,9 +328,9 @@ func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
 		if event.Key == woxui.KeyTab && event.Modifiers&woxui.KeyModifierShift != 0 {
 			delta = -1
 		}
-		a.moveThemeEditorFocus(delta)
+		c.moveThemeEditorFocus(delta)
 	case woxui.KeyArrowUp:
-		a.moveThemeEditorFocus(-1)
+		c.moveThemeEditorFocus(-1)
 	case woxui.KeyEnter:
 		return true
 	default:
@@ -339,27 +339,27 @@ func (a *App) onThemeEditorPreviewKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-func (a *App) onThemeEditorPreviewTextInput(_ woxui.TextInputEvent) bool {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) onThemeEditorPreviewTextInput(_ woxui.TextInputEvent) bool {
+	state := c.ThemeEditor()
 	active := state != nil && state.active
 	return active
 }
 
-func (a *App) editThemeEditorKey(event woxui.KeyEvent) {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) editThemeEditorKey(event woxui.KeyEvent) {
+	state := c.ThemeEditor()
 	if state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
 			syncFormFieldsEditorLocked(&state.formFieldsState)
 			state.error = ""
-			a.applySettingsThemeEditorDraft()
+			c.applySettingsThemeEditorDraft()
 		}
 	}
-	a.invalidateThemeEditorWindow()
+	c.invalidateThemeEditorWindow()
 }
 
-func (a *App) moveThemeEditorFocus(delta int) {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) moveThemeEditorFocus(delta int) {
+	state := c.ThemeEditor()
 	if state == nil || len(state.definitions) == 0 {
 		return
 	}
@@ -373,12 +373,12 @@ func (a *App) moveThemeEditorFocus(delta int) {
 		}
 	}
 	textInput := state.editor != nil
-	a.updateThemeEditorTextInput(textInput)
-	a.invalidateThemeEditorWindow()
+	c.updateThemeEditorTextInput(textInput)
+	c.invalidateThemeEditorWindow()
 }
 
-func (a *App) focusThemeEditorField(index int) {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) focusThemeEditorField(index int) {
+	state := c.ThemeEditor()
 	if state == nil || state.saving || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
 		return
 	}
@@ -386,22 +386,22 @@ func (a *App) focusThemeEditorField(index int) {
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.error = ""
 	textInput := state.editor != nil
-	a.updateThemeEditorTextInput(textInput)
-	a.invalidateThemeEditorWindow()
+	c.updateThemeEditorTextInput(textInput)
+	c.invalidateThemeEditorWindow()
 }
 
-func (a *App) setThemeEditorText(index int, value string) {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) setThemeEditorText(index int, value string) {
+	state := c.ThemeEditor()
 	changed := state != nil && !state.saving && setFormFieldsTextLocked(&state.formFieldsState, index, value)
 	if changed {
 		state.error = ""
-		a.applySettingsThemeEditorDraft()
-		a.invalidateThemeEditorWindow()
+		c.applySettingsThemeEditorDraft()
+		c.invalidateThemeEditorWindow()
 	}
 }
 
-func (a *App) deactivateThemeEditorPreview() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) deactivateThemeEditorPreview() {
+	state := c.ThemeEditor()
 	wasActive := state != nil && state.active
 	if wasActive {
 		syncFormFieldsEditorLocked(&state.formFieldsState)
@@ -410,8 +410,8 @@ func (a *App) deactivateThemeEditorPreview() {
 	if !wasActive {
 		return
 	}
-	a.restoreThemeEditorTextInput()
-	a.invalidateThemeEditorWindow()
+	c.restoreThemeEditorTextInput()
+	c.invalidateThemeEditorWindow()
 }
 
 func validateThemeEditorValues(values map[string]string) string {
@@ -427,8 +427,8 @@ func validateThemeEditorValues(values map[string]string) string {
 }
 
 // saveThemeEditorDraft preserves non-color theme fields while saving through the shared theme service.
-func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) saveThemeEditorDraft(name string, overwrite bool) {
+	state := c.ThemeEditor()
 	if state == nil || state.saving {
 		return
 	}
@@ -442,7 +442,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	}
 	if validationError != "" {
 		state.error = validationError
-		a.invalidateThemeEditorWindow()
+		c.invalidateThemeEditorWindow()
 		return
 	}
 	values := copyStringMap(state.values)
@@ -457,7 +457,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	}
 	if overwrite && (state.isSystem || state.isAuto || state.sourceID == "") {
 		state.error = "This theme cannot be overwritten."
-		a.invalidateThemeEditorWindow()
+		c.invalidateThemeEditorWindow()
 		return
 	}
 	state.saving = true
@@ -469,10 +469,10 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 	state.revision++
 	revision := state.revision
 	key := state.key
-	a.restoreThemeEditorTextInput()
-	a.invalidateThemeEditorWindow()
+	c.restoreThemeEditorTextInput()
+	c.invalidateThemeEditorWindow()
 
-	util.Go(a.lifecycleCtx, "save theme editor draft", func() {
+	util.Go(c.lifecycleCtx, "save theme editor draft", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		encodedDraft, err := json.Marshal(draft)
@@ -484,7 +484,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 		var applied themeData
 		if err == nil {
 			var savedTheme common.Theme
-			savedTheme, err = a.services.SaveTheme(ctx, a.sessionID, name, theme, overwrite)
+			savedTheme, err = c.services.SaveTheme(ctx, c.sessionID, name, theme, overwrite)
 			if err == nil {
 				resolved, resolveErr := savedTheme.ResolveForTarget(util.GetCurrentPlatform(), osvariant.GetCurrentPlatformVariant(), woxui.ThemeCapabilities()...)
 				if resolveErr != nil {
@@ -502,12 +502,12 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 			}
 		}
 
-		_ = a.runOnUI("apply saved theme editor draft", func() {
+		_ = c.runOnUI("apply saved theme editor draft", func() {
 			if err == nil {
-				a.applyTheme(applied)
-				a.generalSettings.Update(func(d *settingsData) { d.ThemeID = themeMapString(saved, "ThemeId") })
+				c.applyTheme(applied)
+				c.generalSettings().Update(func(d *settingsData) { d.ThemeID = themeMapString(saved, "ThemeId") })
 			}
-			current := a.themeSettings.ThemeEditor()
+			current := c.ThemeEditor()
 			if current != nil && current.key == key && current.revision == revision {
 				current.saving = false
 				if err != nil {
@@ -525,7 +525,7 @@ func (a *App) saveThemeEditorDraft(name string, overwrite bool) {
 					current.error = ""
 				}
 			}
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		})
 		if err != nil {
 			log.Printf("save theme editor draft: %v", err)

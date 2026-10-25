@@ -31,7 +31,7 @@ func (a *App) setSettingsDemoHover(kind string, inside bool, anchor woxui.Rect) 
 					return
 				}
 				a.settingsWindow.demo = &settingsDemoState{kind: kind, anchor: anchor}
-				a.preloadDemoWallpaper(true)
+				a.themeSettings.preloadDemoWallpaper(true)
 				a.settingsWindow.invalidateSettingsWindow()
 			}
 			if err := a.runOnUI("show settings demo", apply); err != nil {

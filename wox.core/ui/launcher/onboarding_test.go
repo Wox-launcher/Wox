@@ -719,8 +719,8 @@ func TestOnboardingThemeSelectionFollowsCurrentSetting(t *testing.T) {
 					if theme.ID != "custom" {
 						want = []string{theme.ID}
 					}
-					if !reflect.DeepEqual(selected, want) || app.currentThemeID() != theme.ID {
-						t.Fatalf("selected = %v, active = %s; want %v, %s", selected, app.currentThemeID(), want, theme.ID)
+					if !reflect.DeepEqual(selected, want) || app.themeSettings.currentThemeID() != theme.ID {
+						t.Fatalf("selected = %v, active = %s; want %v, %s", selected, app.themeSettings.currentThemeID(), want, theme.ID)
 					}
 				}
 				for index, step := range app.onboarding.onboardingSteps() {

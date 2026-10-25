@@ -215,8 +215,8 @@ func themeEditorColorValue(raw map[string]any, values map[string]string, key str
 }
 
 // resetThemeEditorToken restores a v2 optional color to inheritance.
-func (a *App) resetThemeEditorToken() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) resetThemeEditorToken() {
+	state := c.ThemeEditor()
 	if state == nil || !isV2Theme(state.raw) || strings.HasPrefix(state.dialogToken, "Base") {
 		return
 	}
@@ -224,8 +224,8 @@ func (a *App) resetThemeEditorToken() {
 	if index < 0 {
 		return
 	}
-	a.setThemeEditorText(index, "")
-	a.confirmThemeEditorDialog()
+	c.setThemeEditorText(index, "")
+	c.confirmThemeEditorDialog()
 }
 
 // themeEditorUsesMaterialFeatures examines only style layers, including inactive desktops.

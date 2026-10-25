@@ -42,9 +42,9 @@ func TestThemeEditorAIUndoPreservesOtherEdits(t *testing.T) {
 	controller.SetThemeEditor(state)
 	app := bindTestApp(&App{themeSettings: controller})
 	old := state.values["AppBorderRadius"]
-	app.changeThemeEditorTokens(map[string]string{"AppBorderRadius": "24", "QueryBoxBorderRadius": "7"})
+	app.themeSettings.changeThemeEditorTokens(map[string]string{"AppBorderRadius": "24", "QueryBoxBorderRadius": "7"})
 	state.ai.undo = map[string]string{"AppBorderRadius": old}
-	app.undoThemeEditorAI()
+	app.themeSettings.undoThemeEditorAI()
 	if state.values["AppBorderRadius"] != old || state.values["QueryBoxBorderRadius"] != "7" {
 		t.Fatal("AI undo changed unrelated edits")
 	}
@@ -52,7 +52,7 @@ func TestThemeEditorAIUndoPreservesOtherEdits(t *testing.T) {
 	state.ai.cancel = func() { cancelled = true }
 	state.ai.busy = true
 	request := state.ai.request
-	app.cancelThemeEditorAI()
+	app.themeSettings.cancelThemeEditorAI()
 	if !cancelled || state.ai.busy || state.ai.request == request {
 		t.Fatal("cancel did not invalidate late AI responses")
 	}
@@ -99,7 +99,7 @@ func TestThemeEditorAIRequestUpdatesDraftOnly(t *testing.T) {
 		}
 		return nil
 	}
-	app.sendThemeEditorAI()
+	app.themeSettings.sendThemeEditorAI()
 	if state.ai.prompt != "" || !state.ai.busy || len(state.ai.history) != 2 || state.ai.history[0].Text != "Round the window corners" {
 		close(release)
 		t.Fatal("accepted request must clear the composer and retain the user message before the response")
@@ -194,17 +194,17 @@ func TestThemeEditorAIStopContinueRetainsReasoning(t *testing.T) {
 			return interruptedThemeRequest{}
 		}
 	}
-	app.sendThemeEditorAI()
+	app.themeSettings.sendThemeEditorAI()
 	first := next()
 	for state.ai.history[1].Reasoning == "" {
 		step()
 	}
-	app.cancelThemeEditorAI()
+	app.themeSettings.cancelThemeEditorAI()
 	if state.ai.history[1].Reasoning != "Keep the pastel palette." || state.ai.history[1].Text != "" {
 		t.Fatalf("stopping lost reasoning or marked an incomplete patch as applied: %+v", state.ai.history)
 	}
 	state.ai.prompt = "Continue"
-	app.sendThemeEditorAI()
+	app.themeSettings.sendThemeEditorAI()
 	second := next()
 	if second.conversations[2].Reasoning != "Keep the pastel palette." {
 		t.Fatal("continuation omitted the interrupted assistant turn")

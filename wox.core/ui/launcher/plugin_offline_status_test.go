@@ -13,7 +13,7 @@ func TestPluginOfflineStatusAfterStartup(t *testing.T) {
 	app := bindTestApp(&App{})
 	for _, disabled := range []bool{false, true} {
 		plugin := pluginSettingsPlugin{ID: "offline-plugin", IsInstalled: true, IsDisable: disabled}
-		actions := app.pluginManagementActions(settingsSnapshot{}, plugin)
+		actions := app.pluginSettings.pluginManagementActions(settingsSnapshot{}, plugin)
 		found := false
 		for _, action := range actions {
 			if action.ID == "plugin-enable" || action.ID == "plugin-disable" {
@@ -31,7 +31,7 @@ func TestPluginOfflineStatusAfterStartup(t *testing.T) {
 		}
 	}
 	network.Default.SetOffline(false)
-	for _, action := range app.pluginManagementActions(settingsSnapshot{}, pluginSettingsPlugin{IsInstalled: true}) {
+	for _, action := range app.pluginSettings.pluginManagementActions(settingsSnapshot{}, pluginSettingsPlugin{IsInstalled: true}) {
 		if action.ID == "plugin-disable" && !action.Enabled {
 			t.Fatal("online lifecycle action remained disabled")
 		}

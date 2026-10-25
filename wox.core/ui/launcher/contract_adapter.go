@@ -362,7 +362,7 @@ func (a *App) CloudSyncProgressChanged(_ context.Context, progress cloudsync.Clo
 
 // RefreshAccountStatus reloads the authoritative account and sync snapshot.
 func (a *App) RefreshAccountStatus(_ context.Context) error {
-	util.Go(a.lifecycleCtx, "refresh account status", a.reloadCloudSync)
+	util.Go(a.lifecycleCtx, "refresh account status", a.cloudSettings.reloadCloudSync)
 	return nil
 }
 
@@ -804,7 +804,7 @@ func (a *App) applyTypedCloudSyncProgress(progress cloudsync.CloudSyncProgress) 
 			a.cloudSettings.SetLoaded(false)
 			return
 		}
-		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.reloadCloudSyncSilently)
+		util.Go(a.lifecycleCtx, "reload cloud sync after progress", a.cloudSettings.reloadCloudSyncSilently)
 	}
 }
 

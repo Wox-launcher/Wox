@@ -498,7 +498,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 		a.selectSettingTab("plugins")
 		for index, plugin := range plugins {
 			if plugin.ID == result.pluginID {
-				a.selectPlugin(index)
+				a.pluginSettings.selectPlugin(index)
 				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 				return
@@ -510,7 +510,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			a.pluginSettings.submitPluginSettings()
 		}
 	}
 	a.pluginSettings.SetPluginsStore(false)
@@ -521,7 +521,7 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	a.pluginSettings.SetForm(nil)
 	a.selectSettingTab("plugins")
 	util.Go(a.lifecycleCtx, "open plugin setting search result", func() {
-		if err := a.reloadPlugins(false, result.pluginID); err == nil {
+		if err := a.pluginSettings.reloadPlugins(false, result.pluginID); err == nil {
 			if dispatchErr := a.runOnUI("focus plugin setting search target", func() {
 				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
 				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)

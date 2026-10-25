@@ -26,7 +26,7 @@ func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
 		// Suppress async saves; this test checks selection state.
 		form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"providers": "a"}, true)}
 		a.pluginSettings.SetForm(form)
-		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
 		a.chooseSettingChoice(1)
 		want := "b"
 		if multi {
@@ -38,12 +38,12 @@ func TestPluginMultiChoiceRetainsSelections(t *testing.T) {
 		if !multi {
 			continue
 		}
-		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
 		a.chooseSettingChoice(0)
 		if got := form.values["providers"]; got != "b" {
 			t.Fatalf("deselect: %q", got)
 		}
-		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
 		a.chooseSettingChoice(1)
 		if got := form.values["providers"]; got != "" {
 			t.Fatalf("clear: %q", got)
@@ -68,7 +68,7 @@ func TestPluginMultiChoiceSelectAllIsExclusive(t *testing.T) {
 	form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{field}, map[string]string{"browsers": "everything"}, true)}
 	a.pluginSettings.SetForm(form)
 	choose := func(index int) {
-		a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+		a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
 		a.chooseSettingChoice(index)
 	}
 	choose(1)
@@ -119,7 +119,7 @@ func TestPluginChoiceSearch(t *testing.T) {
 					pluginID:        "test",
 					formFieldsState: newFormFieldsState([]formDefinition{converted}, map[string]string{"currency": "USD"}, true),
 				})
-				a.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
+				a.pluginSettings.openPluginFormChoice(0, woxui.Rect{Width: 200, Height: 32})
 				picker := a.generalSettings.ChoicePicker()
 				if picker == nil || picker.item.filterable != want {
 					t.Fatal("wrong search state")
@@ -229,7 +229,7 @@ func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
 		pluginType:    pluginFilterThirdParty,
 		runtime:       pluginFilterRuntimePython,
 	})
-	app.resetPluginFilters()
+	app.pluginSettings.resetPluginFilters()
 	if got := app.pluginSettings.Filters(); got != (pluginFilterState{}) {
 		t.Fatalf("reset filters = %+v, want empty All values", got)
 	}
@@ -370,11 +370,11 @@ func TestValidatePluginTriggerKeywordTableRowAllowsGlobalAndRejectsInstalledConf
 		rowIndex:   -1,
 	}
 
-	if got := a.validatePluginTriggerKeywordTableRow(state); got != "Clipboard conflict" {
+	if got := a.pluginSettings.validatePluginTriggerKeywordTableRow(state); got != "Clipboard conflict" {
 		t.Fatalf("cross-plugin validation = %q, want named conflict", got)
 	}
 	state.rowForm.values["keyword"] = "*"
-	if got := a.validatePluginTriggerKeywordTableRow(state); got != "" {
+	if got := a.pluginSettings.validatePluginTriggerKeywordTableRow(state); got != "" {
 		t.Fatalf("global trigger validation = %q, want shared global trigger", got)
 	}
 }
@@ -410,11 +410,11 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 	})
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
-			woxwidget.Focusable{Key: "plugin-settings-field-0", OnKey: app.onPluginSettingsKey, Child: woxwidget.Container{Width: 100, Height: 30}},
+			woxwidget.Focusable{Key: "plugin-settings-field-0", OnKey: app.pluginSettings.onPluginSettingsKey, Child: woxwidget.Container{Width: 100, Height: 30}},
 			woxwidget.Focusable{Key: "plugin-settings-field-1", Child: woxwidget.Container{Width: 100, Height: 30}},
-			woxwidget.Focusable{Key: "plugin-settings-field-2", OnKey: app.onPluginSettingsKey, OnFocusChange: func(focused bool) {
+			woxwidget.Focusable{Key: "plugin-settings-field-2", OnKey: app.pluginSettings.onPluginSettingsKey, OnFocusChange: func(focused bool) {
 				if focused {
-					app.focusPluginFormField(2)
+					app.pluginSettings.focusPluginFormField(2)
 				}
 			}, Child: woxwidget.Container{Width: 100, Height: 30}},
 			woxwidget.Focusable{Key: "plugin-settings-field-3", Child: woxwidget.Container{Width: 100, Height: 30}},
@@ -456,6 +456,7 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":         "Command help",
 		"ui_plugin_command_name_column":  "Name",
@@ -467,7 +468,7 @@ func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 		"ui_plugin_tab_trigger_keywords": "Keywords",
 		"ui_plugin_tab_privacy":          "Privacy",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 
 	if props.Editor == nil || props.Editor.Form == nil || props.Editor.Keywords == nil || props.Editor.Metadata == nil || props.Editor.DescriptionDetail == nil {
 		t.Fatal("all installed plugin sections must be built regardless of the previous tab selection")
@@ -519,6 +520,7 @@ func TestPluginInstalledToolsUseReadonlyTable(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_tools_tip":            "Tool help",
 		"ui_plugin_tool_name_column":     "Name",
@@ -529,7 +531,7 @@ func TestPluginInstalledToolsUseReadonlyTable(t *testing.T) {
 		"ui_plugin_tab_trigger_keywords": "Keywords",
 		"ui_plugin_tab_privacy":          "Privacy",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Tools == nil || props.Editor.Tools.Intro != "" || len(props.Editor.Tools.Rows) != 1 {
 		t.Fatalf("tool form = %#v, want one readonly table", props.Editor)
 	}
@@ -569,12 +571,13 @@ func TestPluginOmitsToolsSectionWhenEmpty(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":         "Settings",
 		"ui_plugin_tab_trigger_keywords": "Keywords",
 		"ui_plugin_tab_privacy":          "Privacy",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Tools != nil {
 		t.Fatalf("empty tools must omit the section, got %#v", props.Editor.Tools)
 	}
@@ -616,6 +619,7 @@ func TestPluginInstalledTablesOfferQueryTest(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":           "Command help",
 		"ui_plugin_command_name_column":    "Name",
@@ -636,7 +640,7 @@ func TestPluginInstalledTablesOfferQueryTest(t *testing.T) {
 		"ui_clone_row":                     "Clone",
 		"ui_delete":                        "Delete",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Keywords == nil || props.Editor.Commands == nil {
 		t.Fatal("installed plugin detail should include keyword and command tables")
 	}
@@ -672,6 +676,7 @@ func TestPluginGlobalTriggerKeywordOmitsQueryTest(t *testing.T) {
 		return nil
 	}
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_tab_trigger_keywords":   "Keywords",
 		"ui_plugin_tab_settings":           "Settings",
@@ -688,7 +693,7 @@ func TestPluginGlobalTriggerKeywordOmitsQueryTest(t *testing.T) {
 		"ui_delete":                        "Delete",
 		"ui_operation":                     "Operation",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Keywords == nil {
 		t.Fatal("installed plugin detail should include the keyword table")
 	}
@@ -714,6 +719,7 @@ func TestPluginStoreTablesOmitQueryTest(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_commands_tip":            "Command help",
 		"ui_plugin_command_name_column":     "Name",
@@ -725,7 +731,7 @@ func TestPluginStoreTablesOmitQueryTest(t *testing.T) {
 		"ui_plugin_trigger_keyword_tooltip": "Keyword tip",
 		"ui_plugin_no_trigger_keywords":     "No keywords",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Store == nil || props.Store.Keywords == nil || props.Store.Commands == nil {
 		t.Fatal("store plugin detail should include keyword and command tables")
 	}
@@ -850,18 +856,18 @@ func TestSelectPluginRevertsInvalidRequiredSetting(t *testing.T) {
 		},
 		{ID: "other", Name: "Other"},
 	})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	form := a.pluginSettings.Form()
 	if form == nil {
 		t.Fatal("youtube form should be built")
 	}
 	form.values["api_key"] = ""
 
-	a.selectPlugin(1)
+	a.pluginSettings.selectPlugin(1)
 	if a.pluginSettings.Selected() != 1 {
 		t.Fatalf("selected = %d, want to leave YouTube even when the empty key cannot be saved", a.pluginSettings.Selected())
 	}
-	a.selectPlugin(0)
+	a.pluginSettings.selectPlugin(0)
 	form = a.pluginSettings.Form()
 	if form == nil || form.values["api_key"] != "secret" {
 		t.Fatalf("api_key after return = %q, want the last saved value", form.values["api_key"])
@@ -878,14 +884,14 @@ func TestPluginSettingSaveReconcileRebuildsFormReplacedDuringSave(t *testing.T) 
 		}}},
 		Setting: pluginSettingsData{Settings: map[string]string{}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	replaced := a.pluginSettings.Form()
 	if replaced == nil || replaced.values["accessKey"] != "" {
 		t.Fatal("switch-back should first rebuild from the settings saved before this request")
 	}
 	submitted := &pluginSettingsFormState{pluginID: "app"}
 
-	resubmit := a.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	resubmit := a.pluginSettings.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
 	form := a.pluginSettings.Form()
 	if resubmit || form == nil || form == replaced || form.values["accessKey"] != "saved-key" || len(form.fieldErrors) != 0 {
 		t.Fatalf("reconciled form = %v resubmit=%v value=%q errors=%v", form == replaced, resubmit, formValue(form, "accessKey"), formErrors(form))
@@ -901,12 +907,12 @@ func TestPluginSettingSaveReconcileKeepsEditOnReplacementForm(t *testing.T) {
 		SettingDefinitions: []formDefinition{definition},
 		Setting:            pluginSettingsData{Settings: map[string]string{"accessKey": "saved-key"}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	form := a.pluginSettings.Form()
 	form.values["accessKey"] = "typed-during-save"
 	submitted := &pluginSettingsFormState{pluginID: "app"}
 
-	resubmit := a.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	resubmit := a.pluginSettings.reconcilePluginSettingSave(submitted, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
 	if resubmit || a.pluginSettings.Form() != form || form.values["accessKey"] != "typed-during-save" {
 		t.Fatalf("replacement edit = %q resubmit=%v same=%v", form.values["accessKey"], resubmit, a.pluginSettings.Form() == form)
 	}
@@ -921,12 +927,12 @@ func TestPluginSettingSaveReconcileResubmitsEditOnOriginalForm(t *testing.T) {
 		SettingDefinitions: []formDefinition{definition},
 		Setting:            pluginSettingsData{Settings: map[string]string{}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	form := a.pluginSettings.Form()
 	form.saving = true
 	form.values["accessKey"] = "typed-during-save"
 
-	resubmit := a.reconcilePluginSettingSave(form, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
+	resubmit := a.pluginSettings.reconcilePluginSettingSave(form, "app", map[string]string{"accessKey": "saved-key"}, map[string]string{"accessKey": "saved-key"}, nil)
 	if !resubmit || form.saving || form.initial["accessKey"] != "saved-key" || form.values["accessKey"] != "typed-during-save" {
 		t.Fatalf("original form resubmit=%v saving=%v initial=%q value=%q", resubmit, form.saving, form.initial["accessKey"], form.values["accessKey"])
 	}
@@ -942,13 +948,13 @@ func TestPluginSelectionRefreshSkipsFormWhileSaveInFlight(t *testing.T) {
 		}}},
 		Setting: pluginSettingsData{Settings: map[string]string{"accessKey": "temporary-key"}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	form := a.pluginSettings.Form()
 	form.saving = true
 	form.initial["accessKey"] = ""
 	form.values["accessKey"] = ""
 
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	if a.pluginSettings.Form() != form || form.values["accessKey"] != "" {
 		t.Fatalf("in-flight refresh replaced the cleared field with %q", formValue(a.pluginSettings.Form(), "accessKey"))
 	}
@@ -980,7 +986,7 @@ func TestPluginSelectionRefreshPreservesEditsAndUpdatesDisplayFields(t *testing.
 				Setting: pluginSettingsData{Settings: map[string]string{"directory": "saved"}},
 			}
 			a.pluginSettings.SetPlugins([]pluginSettingsPlugin{item})
-			a.setPluginSelectionLocked(0)
+			a.pluginSettings.setPluginSelectionLocked(0)
 			form := a.pluginSettings.Form()
 			form.saving = test.saving
 			wantValue := "saved"
@@ -997,7 +1003,7 @@ func TestPluginSelectionRefreshPreservesEditsAndUpdatesDisplayFields(t *testing.
 			}
 			a.pluginSettings.SetPlugins([]pluginSettingsPlugin{item})
 
-			a.setPluginSelectionLocked(0)
+			a.pluginSettings.setPluginSelectionLocked(0)
 
 			if a.pluginSettings.Form() != form || form.values["directory"] != wantValue || form.initial["directory"] != "saved" || form.saving != test.saving {
 				t.Fatal("service refresh replaced the retained form or changed its edits/save state")
@@ -1039,10 +1045,11 @@ func TestPluginSettingActionDoesNotOwnFormSaveState(t *testing.T) {
 			defer a.cancel()
 			release := make(chan struct{})
 			a.services = pluginSettingActionTestServices{actionErr: actionErr, release: release}
+			a.bindPluginSettings()
 			a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{ID: "file", SettingDefinitions: []formDefinition{{
 				Type: "fileIndexService", Value: formDefinitionValue{Key: "service", Status: "Update required"},
 			}}}})
-			a.setPluginSelectionLocked(0)
+			a.pluginSettings.setPluginSelectionLocked(0)
 			original := a.pluginSettings.Form()
 			original.status = "existing form status"
 			finished := make(chan struct{}, 1)
@@ -1058,11 +1065,11 @@ func TestPluginSettingActionDoesNotOwnFormSaveState(t *testing.T) {
 				}
 				return nil
 			}
-			a.runPluginServiceAction("start")
+			a.pluginSettings.runPluginServiceAction("start")
 			if original.saving || original.status != "existing form status" || a.pluginSettings.Snapshot().PluginSettingAction.actionID != "start" {
 				t.Fatal("service progress must be independent of editable values and their save status")
 			}
-			a.setPluginSelectionLocked(0)
+			a.pluginSettings.setPluginSelectionLocked(0)
 			if a.pluginSettings.Form() == original || a.pluginSettings.settingAction.actionID != "start" {
 				t.Fatal("form replacement must not discard action progress")
 			}
@@ -1112,8 +1119,8 @@ func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
 		initial:         map[string]string{"api_key": "secret"},
 	})
 
-	a.setPluginFormText(0, "")
-	a.blurPluginFormField(0)
+	a.pluginSettings.setPluginFormText(0, "")
+	a.pluginSettings.blurPluginFormField(0)
 	form := a.pluginSettings.Form()
 	if form == nil {
 		t.Fatal("plugin form should still be open")
@@ -1122,7 +1129,7 @@ func TestBlurPluginFormFieldShowsNotEmptyError(t *testing.T) {
 		t.Fatalf("api_key error = %q, want the not_empty message under the field", got)
 	}
 
-	a.setPluginFormText(0, "new-key")
+	a.pluginSettings.setPluginFormText(0, "new-key")
 	if _, exists := a.pluginSettings.Form().fieldErrors["api_key"]; exists {
 		t.Fatal("editing the field should clear its validation error")
 	}
@@ -1139,7 +1146,7 @@ func TestDeactivatePluginFormShowsNotEmptyError(t *testing.T) {
 		initial:         map[string]string{"api_key": "secret"},
 	})
 
-	a.deactivatePluginForm()
+	a.pluginSettings.deactivatePluginForm()
 	form := a.pluginSettings.Form()
 	if form == nil {
 		t.Fatal("plugin form should still be open")
@@ -1167,6 +1174,7 @@ func TestPluginDetailRendersRequiredSettingErrorUnderField(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":         "Settings",
 		"ui_plugin_tab_commands":         "Commands",
@@ -1176,7 +1184,7 @@ func TestPluginDetailRendersRequiredSettingErrorUnderField(t *testing.T) {
 		"ui_plugin_no_settings":          "No settings",
 		"ui_plugin_no_settings_subtitle": "This plugin has no settings",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Form == nil || len(props.Editor.Form.Rows) == 0 {
 		t.Fatal("plugin settings form should include the API Key field")
 	}
@@ -1227,6 +1235,7 @@ func TestPluginDetailShowsNativeSettingsButton(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings = plugins
+	a.bindPluginSettings()
 	a.language.translations = map[string]string{
 		"ui_plugin_tab_settings":                "Settings",
 		"ui_plugin_tab_commands":                "Commands",
@@ -1237,7 +1246,7 @@ func TestPluginDetailShowsNativeSettingsButton(t *testing.T) {
 		"ui_plugin_native_settings_description": "This plugin opens its settings in its own window.",
 		"ui_plugin_native_settings_open":        "Open settings",
 	}
-	props := a.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: plugins.Snapshot()}, 800, 600, 1)
 	if props.Editor == nil || props.Editor.Form == nil || len(props.Editor.Form.Rows) == 0 {
 		t.Fatal("native settings should add a settings row")
 	}
@@ -1254,16 +1263,16 @@ func TestPluginSelectionRefreshKeepsDetailTabForSamePlugin(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
 	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{ID: "app", Name: "Apps"}, {ID: "sys", Name: "System"}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	a.pluginSettings.SetDetailTab("keywords")
 
 	// Saving a trigger keyword refreshes the same plugin's form; the tab must survive.
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	if tab := a.pluginSettings.DetailTab(); tab != "keywords" {
 		t.Fatalf("detail tab after same-plugin refresh = %q, want keywords", tab)
 	}
 
-	a.setPluginSelectionLocked(1)
+	a.pluginSettings.setPluginSelectionLocked(1)
 	if tab := a.pluginSettings.DetailTab(); tab != "settings" {
 		t.Fatalf("detail tab after selecting another plugin = %q, want settings", tab)
 	}
@@ -1280,13 +1289,13 @@ func TestPluginSelectionRefreshPreservesUnsavedField(t *testing.T) {
 		}}},
 		Setting: pluginSettingsData{Settings: map[string]string{"accessKey": "temporary-key"}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	form := a.pluginSettings.Form()
-	a.focusPluginFormField(1)
-	a.setPluginFormText(1, "")
-	a.blurPluginFormField(1)
+	a.pluginSettings.focusPluginFormField(1)
+	a.pluginSettings.setPluginFormText(1, "")
+	a.pluginSettings.blurPluginFormField(1)
 
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	if a.pluginSettings.Form() != form || form.values["accessKey"] != "" || form.fieldErrors["accessKey"] == "" {
 		t.Fatalf("same-plugin refresh discarded the dirty required field: value=%q errors=%v", form.values["accessKey"], form.fieldErrors)
 	}
@@ -1305,7 +1314,7 @@ func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
 			dictationActionsKey: `[{"id":"default","type":"default","name":"default","hotkey":"","output":"input","aiRefineEnabled":true}]`,
 		}},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 
 	form := a.pluginSettings.Form()
 	if form == nil {
@@ -1345,7 +1354,7 @@ func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 	})
 
 	a.aiSettings.SetModels([]aiModel{{Name: "deepseek-chat", Provider: "deepseek"}})
-	a.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
+	a.pluginSettings.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
 	picker := a.generalSettings.ChoicePicker()
 	if picker == nil || len(picker.item.choices) != 1 || picker.item.choices[0].label != "deepseek" {
 		t.Fatalf("cached catalog picker = %#v, want one deepseek provider", picker)
@@ -1354,7 +1363,7 @@ func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 	a.generalSettings.SetChoicePicker(nil)
 	a.aiSettings.SetModels(nil)
 	a.pluginSettings.Form().definitions[0].Value.Options = nil
-	a.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
+	a.pluginSettings.openPluginAIModelChoice(0, true, woxui.Rect{Width: 40, Height: 24})
 	picker = a.generalSettings.ChoicePicker()
 	if picker == nil || len(picker.item.choices) != 1 || picker.item.choices[0].value != pluginAIModelOpenSettingsValue {
 		t.Fatalf("empty picker = %#v, want an Open AI settings action", picker)
@@ -1414,7 +1423,7 @@ func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
 		{"https://example.com/github.com", "Website"},
 		{"", ""},
 	} {
-		props := a.pluginStoreDetailProps(settingsSnapshot{}, pluginSettingsPlugin{Website: test.website}, 600, 1)
+		props := a.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, pluginSettingsPlugin{Website: test.website}, 600, 1)
 		if props.WebsiteChipLabel != test.label {
 			t.Fatalf("website %q label = %q, want %q", test.website, props.WebsiteChipLabel, test.label)
 		}

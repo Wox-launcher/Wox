@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 // pluginSettingsSnapshot is the immutable Plugin tab state consumed by the view layer.
@@ -43,11 +45,60 @@ type pluginSettingActionState struct {
 	errorText string
 }
 
-// pluginSettingsController owns plugin catalogs, selection, search, filters,
-// detail tabs, operation state, and editable settings forms. App coordinates
-// cross-domain work through UI-thread transactions.
+// pluginSettingsServices is the Core surface used by the Plugins settings page.
+type pluginSettingsServices interface {
+	contract.PluginCatalogSettingsServices
+	contract.PluginOperationSettingsServices
+	OpenPath(ctx context.Context, sessionID string, path string) error
+}
+
+// pluginSettingsController owns the Plugins settings page: catalogs, selection, search,
+// filters, detail tabs, lifecycle operations, the editable settings form and its
+// auto-save. The page renders in the Settings window and shares that window's choice
+// picker, search index, AI model catalog and table editor with other pages; those
+// collaborators and the App-owned flows it starts are injected by bindPluginSettings.
 type pluginSettingsController struct {
 	deps CommonDeps
+
+	services     pluginSettingsServices
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+	formTables   *formTableController
+
+	generalSettings func() *generalSettingsController
+	themeSettings   func() *themeSettingsController
+	aiSettings      func() *aiSettingsController
+	settingsSearch  func() *settingsSearchController
+
+	imageForTint                func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface             func(woxImage, int, woxui.Color) *woxui.Image
+	imagesReady                 func() bool
+	usePinYin                   func() bool
+	updateSettingsText          func(bool)
+	buildFormField              func(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget
+	measureFormLabelWidth       func(definitions []formDefinition, window *woxui.Window, minimum, maximum float32) float32
+	localizedRuntimeDisplayName func(runtime string) string
+	setSettingChoiceTooltip     func(inside bool, text string, anchor woxui.Rect)
+	closeSettingChoicePicker    func()
+	selectSettingTab            func(tab string)
+	openPreviewImage            func(image woxImage)
+	runQueryTest                func(query plainQuery)
+
+	stopHotkeyRecording                  func()
+	stopHotkeyRecordingForDifferentField func(target *formFieldsState, index int)
+	startHotkeyRecording                 func(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool)
+
+	loadAIModels          func()
+	loadAIProviderCatalog func()
+	abandonModelManager   func()
+	openFormTable         func(index int)
+	openModelManager      func(index int, anchor woxui.Rect)
+
+	// nativeSettingsPluginID disables the native settings button while that plugin's own window is open.
+	nativeSettingsPluginID string
 
 	plugins              []pluginSettingsPlugin
 	installedPlugins     []pluginSettingsPlugin
@@ -79,6 +130,51 @@ func newPluginSettingsController(deps CommonDeps) *pluginSettingsController {
 		deps:                 deps,
 		settingSaveRevisions: make(map[string]uint64),
 	}
+}
+
+// bindPluginSettings wires the Plugins page to Core, the Settings window and the
+// App-owned flows it opens (table editor, model manager, hotkey recording).
+func (a *App) bindPluginSettings() {
+	c := a.pluginSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+	c.formTables = &a.formTables
+
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.themeSettings = func() *themeSettingsController { return a.themeSettings }
+	c.aiSettings = func() *aiSettingsController { return a.aiSettings }
+	c.settingsSearch = func() *settingsSearchController { return a.settingsSearch }
+
+	c.imageForTint = a.imageForTint
+	c.imageForSurface = a.imageForSurface
+	c.imagesReady = func() bool { return a.imageStore.imageLastUsed != nil }
+	c.usePinYin = a.usePinYin
+	c.updateSettingsText = a.updateSettingsTextInput
+	c.buildFormField = a.buildFormField
+	c.measureFormLabelWidth = a.measureFormLabelWidth
+	c.localizedRuntimeDisplayName = a.localizedRuntimeDisplayName
+	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.closeSettingChoicePicker = a.closeSettingChoicePicker
+	c.selectSettingTab = a.selectSettingTab
+	c.openPreviewImage = a.openPreviewImageOverlay
+	c.runQueryTest = a.runLauncherQueryTest
+
+	c.stopHotkeyRecording = a.stopHotkeyRecording
+	c.stopHotkeyRecordingForDifferentField = a.stopHotkeyRecordingForDifferentField
+	c.startHotkeyRecording = a.startHotkeyRecording
+
+	c.loadAIModels = a.loadAIModels
+	c.loadAIProviderCatalog = a.loadAIProviderCatalog
+	c.abandonModelManager = a.abandonModelManager
+	c.openFormTable = a.openPluginFormTable
+	c.openModelManager = a.openPluginModelManager
 }
 
 func (c *pluginSettingsController) Plugins() []pluginSettingsPlugin {
@@ -197,8 +293,8 @@ func (c *pluginSettingsController) Form() *pluginSettingsFormState {
 }
 
 // SetForm installs the plugin settings inline form. Passing nil clears it. The form is
-// built by the App from the selected plugin's SettingDefinitions + persisted values and
-// then handed to the controller so the view layer can read it through the snapshot.
+// built by setPluginSelectionLocked from the selected plugin's SettingDefinitions and
+// persisted values, and the view layer reads it through the snapshot.
 func (c *pluginSettingsController) SetForm(form *pluginSettingsFormState) {
 	c.pluginForm = form
 }
@@ -409,10 +505,8 @@ func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pl
 	return plugins, nil
 }
 
-// finishPluginLoadError is the shared error path when the App needs to mark a
-// reload failed after the controller's ReloadPlugins already ran (e.g. when
-// the App's post-reload form rebuild fails). Kept here so all plugin load
-// error state stays in the controller.
+// finishPluginLoadError records a failed catalog load unless Settings memory was
+// released while the request was in flight.
 func (c *pluginSettingsController) finishPluginLoadError(err error, revision uint64) {
 	c.deps.OnUI("apply plugin catalog error", func() {
 		if revision != c.memoryRevision {

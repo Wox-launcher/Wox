@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"wox/account"
@@ -45,12 +46,31 @@ type cloudPluginExclusionDialogSnapshot struct {
 	ChoiceAnchor woxui.Rect
 }
 
-// cloudSettingsController owns the Cloud tab state (account, sync, billing plan,
-// devices, plugins, loading flags, busy/error, form, action menu, plugin dialog). All 13 fields
-// that used to live on App are held here; App methods became thin wrappers that call
-// the controller's getters/setters while coordinating cross-domain state on the UI thread.
+// cloudSettingsController owns the Cloud settings page: account, sync, billing plan,
+// devices, plugin exclusions, the account form and action menu, plus the page's view
+// props. The page renders in the Settings window and reads general settings and the
+// installed plugin catalog from their owners; those collaborators are injected by
+// bindCloudSettings.
 type cloudSettingsController struct {
 	deps CommonDeps
+
+	services     cloudSettingsServices
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+
+	generalSettings func() *generalSettingsController
+	pluginSettings  func() *pluginSettingsController
+
+	imageForTint            func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface         func(woxImage, int, woxui.Color) *woxui.Image
+	updateSettingsText      func(bool)
+	setSettingChoiceTooltip func(inside bool, text string, anchor woxui.Rect)
+	waitHoverTooltipDelay   func(revision *atomic.Uint64, revisionID uint64) bool
+	// reloadSettings refreshes every Settings page after a cloud bootstrap replaces local data.
+	reloadSettings func() error
 
 	account       cloudAccountStatus
 	sync          cloudSyncStatus
@@ -73,8 +93,41 @@ type cloudReloadServices interface {
 	contract.PluginCatalogSettingsServices
 }
 
+// cloudSettingsServices is the Core surface used by the Cloud settings page.
+type cloudSettingsServices interface {
+	cloudReloadServices
+	contract.CloudAccountOperationSettingsServices
+	contract.CloudSyncOperationSettingsServices
+	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
+}
+
 func newCloudSettingsController(deps CommonDeps) *cloudSettingsController {
 	return &cloudSettingsController{deps: deps}
+}
+
+// bindCloudSettings wires the Cloud page to Core, the Settings window and the
+// settings pages it reads from.
+func (a *App) bindCloudSettings() {
+	c := a.cloudSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.pluginSettings = func() *pluginSettingsController { return a.pluginSettings }
+
+	c.imageForTint = a.imageForTint
+	c.imageForSurface = a.imageForSurface
+	c.updateSettingsText = a.updateSettingsTextInput
+	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.waitHoverTooltipDelay = a.tooltips.waitHoverTooltipDelay
+	c.reloadSettings = a.reloadSettings
 }
 
 func (c *cloudSettingsController) Account() cloudAccountStatus {
@@ -235,8 +288,8 @@ func (c *cloudSettingsController) SetPlugins(plugins []pluginSettingsPlugin) {
 
 // ReloadCloudSync refreshes account, sync, devices, and plugins as one revisioned
 // settings snapshot. onNeedBilling is called (outside the controller lock) when the
-// billing plan has not been loaded yet, so the App can kick off a billing reload
-// without coupling the controller to the billing reload path. Responses from
+// billing plan has not been loaded yet, so the caller can start a billing reload.
+// Responses from
 // superseded refreshes are discarded via the revision guard.
 func (c *cloudSettingsController) ReloadCloudSync(ctx context.Context, service cloudReloadServices, sessionID string, onNeedBilling func(), showLoading bool) {
 	var revision uint64

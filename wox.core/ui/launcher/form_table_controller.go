@@ -132,8 +132,10 @@ func (a *App) bindFormTables() {
 	c.loadHotkeyAppCandidates = a.loadHotkeyAppCandidates
 
 	c.selectedPluginID = a.selectedPluginID
-	c.submitPluginSettings = a.submitPluginSettings
-	c.validatePluginTriggerKeywordTableRow = a.validatePluginTriggerKeywordTableRow
+	c.submitPluginSettings = func() { a.pluginSettings.submitPluginSettings() }
+	c.validatePluginTriggerKeywordTableRow = func(state *formTableEditorState) string {
+		return a.pluginSettings.validatePluginTriggerKeywordTableRow(state)
+	}
 	c.openAICommandTemplatePicker = a.openAICommandTemplatePicker
 
 	c.openAISettingsTable = a.openAISettingsTable

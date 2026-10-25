@@ -12,6 +12,15 @@ func bindTestApp(app *App) *App {
 	if app.appearanceSettings == nil {
 		app.appearanceSettings = newAppearanceSettingsController(CommonDeps{})
 	}
+	if app.pluginSettings == nil {
+		app.pluginSettings = newPluginSettingsController(CommonDeps{})
+	}
+	if app.cloudSettings == nil {
+		app.cloudSettings = newCloudSettingsController(CommonDeps{})
+	}
+	if app.themeSettings == nil {
+		app.themeSettings = newThemeSettingsController(CommonDeps{})
+	}
 	app.bindControllers()
 	return app
 }

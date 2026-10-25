@@ -584,22 +584,7 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 			StartPage:      "mru",
 		},
 	}
-	app.bindControllers()
-	app.terminal.terminalDesired.Store("")
-	app.unsubscribersMu.Lock()
-	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
-	app.unsubscribers = append(app.unsubscribers, network.Subscribe(func(enabled bool) {
-		_ = app.runOnUI("apply offline mode", func() {
-			if enabled {
-				app.webView.resetWebView()
-			} else {
-				app.imageStore.retryErrors()
-			}
-			_ = app.window.Invalidate()
-			app.settingsWindow.invalidateSettingsWindow()
-		})
-	}))
-	app.unsubscribersMu.Unlock()
+	// Settings controllers exist before binding so feature bindings can wire them.
 	deps := CommonDeps{
 		Invalidate: app.settingsWindow.invalidateSettingsWindow,
 		Translate:  app.language.translate,
@@ -634,6 +619,22 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.aboutSettings = newAboutSettingsController(deps)
 	app.hotkeySettings = newHotkeySettingsController(deps)
 	app.settingsSearch = newSettingsSearchController(deps)
+	app.bindControllers()
+	app.terminal.terminalDesired.Store("")
+	app.unsubscribersMu.Lock()
+	app.unsubscribers = append(app.unsubscribers, app.windows.SubscribeMessages(app.windowID, settingsChangedTopic, app.onSharedSettingsChanged))
+	app.unsubscribers = append(app.unsubscribers, network.Subscribe(func(enabled bool) {
+		_ = app.runOnUI("apply offline mode", func() {
+			if enabled {
+				app.webView.resetWebView()
+			} else {
+				app.imageStore.retryErrors()
+			}
+			_ = app.window.Invalidate()
+			app.settingsWindow.invalidateSettingsWindow()
+		})
+	}))
+	app.unsubscribersMu.Unlock()
 	return app
 }
 

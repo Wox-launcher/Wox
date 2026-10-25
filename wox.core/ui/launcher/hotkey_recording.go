@@ -359,7 +359,7 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 		return
 	}
 	if state.idPrefix == "plugin-settings" {
-		a.submitPluginSettings()
+		a.pluginSettings.submitPluginSettings()
 	}
 	if state.persistKey != "" {
 		util.Go(a.lifecycleCtx, "save recorded hotkey setting", func() {

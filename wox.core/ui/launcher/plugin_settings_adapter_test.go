@@ -19,7 +19,7 @@ func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
 			},
 		},
 	})
-	installed := app.pluginListEntries(settingsSnapshot{
+	installed := app.pluginSettings.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{
 			Plugins: []pluginSettingsPlugin{
 				{ID: "off", Name: "Off", Version: "1.0.0", Author: "A", IsDisable: true, IsUpgradable: true},
@@ -47,7 +47,7 @@ func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
 		t.Fatalf("disabled status = %q, want Update prefix without Disabled", installed[3].Item.Status)
 	}
 
-	store := app.pluginListEntries(settingsSnapshot{
+	store := app.pluginSettings.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{
 			PluginsStore: true,
 			Plugins: []pluginSettingsPlugin{
@@ -88,7 +88,7 @@ func TestPluginListEntriesGroupInstalledAndStoreCatalogs(t *testing.T) {
 
 func TestPluginListEntriesOmitHeaderWhenOneStoreRemains(t *testing.T) {
 	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{"ui_plugin_store_wox": "Wox Store"}}})
-	entries := app.pluginListEntries(settingsSnapshot{
+	entries := app.pluginSettings.pluginListEntries(settingsSnapshot{
 		plugins: pluginSettingsSnapshot{PluginsStore: true},
 	}, []filteredPlugin{
 		{index: 0, plugin: pluginSettingsPlugin{ID: "wox-z", Name: "Zinc", Store: "wox"}},
@@ -113,7 +113,7 @@ func TestPluginListEntriesOmitScriptBadge(t *testing.T) {
 		},
 	})
 	for _, store := range []bool{false, true} {
-		entries := app.pluginListEntries(settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: store}}, []filteredPlugin{
+		entries := app.pluginSettings.pluginListEntries(settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: store}}, []filteredPlugin{
 			{plugin: pluginSettingsPlugin{ID: "script", Runtime: "Script"}},
 			{plugin: pluginSettingsPlugin{ID: "system", IsSystem: true}},
 			{plugin: pluginSettingsPlugin{ID: "dev", Runtime: "Script", IsDev: true}},

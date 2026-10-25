@@ -37,7 +37,7 @@ func TestPluginDefinitionRefreshPreservesNewerSave(t *testing.T) {
 			TriggerKeywords: []string{"*"}, Settings: map[string]string{"precision": "10"},
 		},
 	}})
-	a.setPluginSelectionLocked(0)
+	a.pluginSettings.setPluginSelectionLocked(0)
 	a.services = pluginDefinitionRefreshServices{
 		plugins: []contract.PluginCatalogItem{{
 			ID: "calculator",
@@ -46,13 +46,14 @@ func TestPluginDefinitionRefreshPreservesNewerSave(t *testing.T) {
 			},
 		}},
 		duringLoad: func() {
-			a.reconcilePluginSettingSave(&pluginSettingsFormState{pluginID: "calculator"}, "calculator", map[string]string{
+			a.pluginSettings.reconcilePluginSettingSave(&pluginSettingsFormState{pluginID: "calculator"}, "calculator", map[string]string{
 				"TriggerKeywords": encodePluginTriggerKeywordRows([]string{"*", "calculator"}), "precision": "20",
 			}, map[string]string{"TriggerKeywords": "*,calculator", "precision": "20"}, nil)
 		},
 	}
 
-	a.refreshPluginFormDefinitions("calculator", a.pluginSettings.settingSaveRevisions["calculator"])
+	a.bindPluginSettings()
+	a.pluginSettings.refreshPluginFormDefinitions("calculator", a.pluginSettings.settingSaveRevisions["calculator"])
 
 	keywords, err := decodePluginTriggerKeywordRows(a.pluginSettings.Form().values["TriggerKeywords"])
 	if err != nil || !reflect.DeepEqual(keywords, []string{"*", "calculator"}) {
@@ -75,7 +76,7 @@ func TestPluginDefinitionRefreshAppliesCurrentSave(t *testing.T) {
 			defer a.cancel()
 			a.uiCall = nil
 			a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{ID: "calculator", TriggerKeywords: []string{"*"}}})
-			a.setPluginSelectionLocked(0)
+			a.pluginSettings.setPluginSelectionLocked(0)
 			a.services = pluginDefinitionRefreshServices{
 				plugins: []contract.PluginCatalogItem{{
 					ID: "calculator",
@@ -89,12 +90,13 @@ func TestPluginDefinitionRefreshAppliesCurrentSave(t *testing.T) {
 				}},
 				duringLoad: func() {
 					if otherPluginSave {
-						a.reconcilePluginSettingSave(&pluginSettingsFormState{pluginID: "other"}, "other", nil, nil, nil)
+						a.pluginSettings.reconcilePluginSettingSave(&pluginSettingsFormState{pluginID: "other"}, "other", nil, nil, nil)
 					}
 				},
 			}
 
-			a.refreshPluginFormDefinitions("calculator", a.pluginSettings.settingSaveRevisions["calculator"])
+			a.bindPluginSettings()
+			a.pluginSettings.refreshPluginFormDefinitions("calculator", a.pluginSettings.settingSaveRevisions["calculator"])
 
 			form := a.pluginSettings.Form()
 			if len(form.definitions) != 2 || form.definitions[1].Value.Label != "Precision" || form.values["precision"] != "20" {

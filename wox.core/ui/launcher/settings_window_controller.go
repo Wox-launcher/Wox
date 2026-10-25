@@ -50,7 +50,6 @@ type settingsWindowController struct {
 	demo                     *settingsDemoState
 	demoRevision             atomic.Uint64
 	choiceTooltipRevision    atomic.Uint64
-	nativePluginID           string
 }
 
 // bindSettingsWindow supplies rendering and feature handoffs to the native window owner.

@@ -10,7 +10,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/ui/contract"
-	c "wox/ui/launcher/component"
+	woxcomponent "wox/ui/launcher/component"
 	chat "wox/ui/launcher/view/preview"
 	r "wox/ui/runtime"
 	w "wox/ui/widget"
@@ -34,41 +34,41 @@ type themeEditorAIState struct {
 }
 
 // buildThemeEditorAI adapts the draft conversation to the same composer, model catalog and messages as AI Chat.
-func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c.ControlTheme, width, height, imageScale float32) w.Widget {
+func (c *themeSettingsController) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) w.Widget {
 	state := snapshot.ai
 	if !state.open {
 		return nil
 	}
-	theme := c.Theme{Controls: palette, QueryBackground: palette.InputBackground, QueryText: palette.Text, PreviewText: palette.Text, ResultTitle: palette.Text, ResultSubtitle: palette.TextSecondary, SelectedBackground: palette.SelectionBackground, SelectedTitle: palette.Text, ActionBackground: r.Color{R: 30, G: 30, B: 34, A: 255}, ActionText: palette.Text, ActionHeader: palette.TextSecondary, Cursor: palette.Focus}
-	window := a.themeEditorNativeWindow()
-	modelName := a.language.translate("i18n:ui_ai_chat_select_model")
+	theme := woxcomponent.Theme{Controls: palette, QueryBackground: palette.InputBackground, QueryText: palette.Text, PreviewText: palette.Text, ResultTitle: palette.Text, ResultSubtitle: palette.TextSecondary, SelectedBackground: palette.SelectionBackground, SelectedTitle: palette.Text, ActionBackground: r.Color{R: 30, G: 30, B: 34, A: 255}, ActionText: palette.Text, ActionHeader: palette.TextSecondary, Cursor: palette.Focus}
+	window := c.themeEditorNativeWindow()
+	modelName := c.language.translate("i18n:ui_ai_chat_select_model")
 	if state.selected >= 0 && state.selected < len(state.models) {
 		modelName = state.models[state.selected].Name
 	}
 	choose := func() {
-		if current := a.themeSettings.ThemeEditor(); current != nil && !current.ai.busy {
+		if current := c.ThemeEditor(); current != nil && !current.ai.busy {
 			current.ai.choosing = !current.ai.choosing
 			current.ai.modelScroll = 0
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		}
 	}
 	dismiss := func() {
-		if current := a.themeSettings.ThemeEditor(); current != nil {
+		if current := c.ThemeEditor(); current != nil {
 			current.ai.choosing = false
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		}
 	}
 	changed := func(value string) {
-		if current := a.themeSettings.ThemeEditor(); current != nil && !current.ai.busy {
+		if current := c.ThemeEditor(); current != nil && !current.ai.busy {
 			current.ai.prompt = value
 			current.ai.choosing = strings.HasPrefix(value, "/")
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		}
 	}
 	onKey := func(event r.KeyEvent) bool {
 		if state.choosing {
 			return chat.ChatCatalogKey(event, func(step int) {
-				current := a.themeSettings.ThemeEditor()
+				current := c.ThemeEditor()
 				if current == nil {
 					return
 				}
@@ -85,18 +85,18 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 						break
 					}
 				}
-				a.invalidateThemeEditorWindow()
+				c.invalidateThemeEditorWindow()
 			}, func() {
 				dismiss()
-				if current := a.themeSettings.ThemeEditor(); current != nil && strings.HasPrefix(current.ai.prompt, "/") {
+				if current := c.ThemeEditor(); current != nil && strings.HasPrefix(current.ai.prompt, "/") {
 					current.ai.prompt = ""
 				}
 			}, dismiss)
 		}
 		return false
 	}
-	scale := a.chatDensityScale()
-	input := chat.ChatInputProps{Key: "theme-editor-ai", DensityScale: scale, Disabled: state.busy, Editing: r.TextEditingState{Text: state.prompt}, Hint: a.language.translate("i18n:ui_theme_editor_ai_hint"), Window: window, Model: modelName, SendLabel: a.language.translate("i18n:ui_ai_chat_send"), StopLabel: a.language.translate("i18n:ui_ai_chat_stop"), OnStop: a.cancelThemeEditorAI, Sending: state.busy, Importing: !state.busy && (strings.TrimSpace(state.prompt) == "" || len(state.models) == 0 || snapshot.saving), Theme: theme, OnChanged: changed, OnModels: choose, OnSend: a.sendThemeEditorAI, OnKey: onKey}
+	scale := c.chatDensityScale()
+	input := chat.ChatInputProps{Key: "theme-editor-ai", DensityScale: scale, Disabled: state.busy, Editing: r.TextEditingState{Text: state.prompt}, Hint: c.language.translate("i18n:ui_theme_editor_ai_hint"), Window: window, Model: modelName, SendLabel: c.language.translate("i18n:ui_ai_chat_send"), StopLabel: c.language.translate("i18n:ui_ai_chat_stop"), OnStop: c.cancelThemeEditorAI, Sending: state.busy, Importing: !state.busy && (strings.TrimSpace(state.prompt) == "" || len(state.models) == 0 || snapshot.saving), Theme: theme, OnChanged: changed, OnModels: choose, OnSend: c.sendThemeEditorAI, OnKey: onKey}
 	latestApplied := ""
 	conversations := make([]chatConversation, 0, len(state.history))
 	for _, entry := range state.history {
@@ -106,7 +106,7 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 			text = display
 			if len(patch) > 0 {
 				latestApplied = entry.Id
-				text = strings.TrimSpace(text + "\n\n" + a.language.translate("i18n:ui_theme_editor_ai_done"))
+				text = strings.TrimSpace(text + "\n\n" + c.language.translate("i18n:ui_theme_editor_ai_done"))
 			}
 		}
 		conversations = append(conversations, chatConversation{ID: entry.Id, Role: string(entry.Role), Text: text, Reasoning: entry.Reasoning, Timestamp: entry.Timestamp})
@@ -115,15 +115,15 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 	for _, item := range chatRenderItems(conversations, state.busy, state.expandedRounds) {
 		if item.kind == "round" {
 			id := item.roundID
-			messages = append(messages, a.chatRoundProps(item, theme, func() {
-				if current := a.themeSettings.ThemeEditor(); current != nil {
+			messages = append(messages, c.chatRoundProps(item, theme, func() {
+				if current := c.ThemeEditor(); current != nil {
 					expanded := make(map[string]bool, len(current.ai.expandedRounds)+1)
 					for key, value := range current.ai.expandedRounds {
 						expanded[key] = value
 					}
 					expanded[id] = !expanded[id]
 					current.ai.expandedRounds = expanded
-					a.invalidateThemeEditorWindow()
+					c.invalidateThemeEditorWindow()
 				}
 			}))
 			continue
@@ -137,23 +137,23 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 		}
 		var undo w.Widget
 		if entry.ID == latestApplied && entry.Text != "" && state.undo != nil {
-			label := a.language.translate("i18n:ui_theme_editor_ai_undo")
-			icon := a.imageForTint(fromCoreImage(icons.Get(icons.ControlUndo)), &palette.TextSecondary, physicalImageSize(16, imageScale))
-			undo = c.WoxIconButton(c.IconButtonProps{ID: "theme-editor-ai-undo", Label: label, Icon: w.Image{Source: icon, Width: 16, Height: 16}, Width: 32, Height: 32, Disabled: state.busy || snapshot.saving, FocusRingColor: palette.Focus, HoverBackground: palette.SelectionBackground, OnTap: a.undoThemeEditorAI, OnHoverAt: func(inside bool, bounds r.Rect) { a.setSettingsHoverTooltip(inside, label, bounds, "top") }})
+			label := c.language.translate("i18n:ui_theme_editor_ai_undo")
+			icon := c.imageForTint(fromCoreImage(icons.Get(icons.ControlUndo)), &palette.TextSecondary, physicalImageSize(16, imageScale))
+			undo = woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{ID: "theme-editor-ai-undo", Label: label, Icon: w.Image{Source: icon, Width: 16, Height: 16}, Width: 32, Height: 32, Disabled: state.busy || snapshot.saving, FocusRingColor: palette.Focus, HoverBackground: palette.SelectionBackground, OnTap: c.undoThemeEditorAI, OnHoverAt: func(inside bool, bounds r.Rect) { c.setSettingsHoverTooltip(inside, label, bounds, "top") }})
 		}
 		key := entry.ID
 		if item.hideReasoning {
 			key += "-final"
 		}
-		messages = append(messages, a.prepareChatMessage(chat.ChatMessageProps{Key: key, Role: entry.Role, Text: entry.Text, TextTrailing: undo, Reasoning: entry.Reasoning, Theme: theme}, window, width, imageScale))
+		messages = append(messages, c.prepareChatMessage(chat.ChatMessageProps{Key: key, Role: entry.Role, Text: entry.Text, TextTrailing: undo, Reasoning: entry.Reasoning, Theme: theme}, window, width, imageScale))
 	}
 	if state.status != "" {
 		messages = append(messages, chat.ChatMessageProps{Key: "theme-ai-status", DensityScale: scale, Role: "assistant", Text: state.status, Theme: theme})
 	}
-	messageProps := chat.ChatMessagesProps{DensityScale: scale, EmptyTextStyle: r.TextStyle{Size: 14}, EmptyLineHeight: 22, EmptyMessage: a.language.translate("i18n:ui_theme_editor_ai_empty"), Key: "theme-editor-ai", Messages: messages, Scroll: state.messageScroll, Theme: theme, OnScroll: func(delta, limit float32) {
-		if current := a.themeSettings.ThemeEditor(); current != nil {
+	messageProps := chat.ChatMessagesProps{DensityScale: scale, EmptyTextStyle: r.TextStyle{Size: 14}, EmptyLineHeight: 22, EmptyMessage: c.language.translate("i18n:ui_theme_editor_ai_empty"), Key: "theme-editor-ai", Messages: messages, Scroll: state.messageScroll, Theme: theme, OnScroll: func(delta, limit float32) {
+		if current := c.ThemeEditor(); current != nil {
 			current.ai.messageScroll.Scroll(delta, limit)
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		}
 	}}
 	var catalog *chat.ChatCatalogProps
@@ -168,20 +168,20 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 				continue
 			}
 			items = append(items, chat.ChatCatalogItemProps{SelectID: fmt.Sprintf("theme-ai-model-%d", i), Kind: "model", Title: m.Name, Subtitle: m.Provider + " " + m.ProviderAlias, Current: i == state.selected, Selected: i == state.selected, OnSelect: func() {
-				if current := a.themeSettings.ThemeEditor(); current != nil {
+				if current := c.ThemeEditor(); current != nil {
 					current.ai.selected = i
 					current.ai.choosing = false
 					if strings.HasPrefix(current.ai.prompt, "/") {
 						current.ai.prompt = ""
 					}
-					a.invalidateThemeEditorWindow()
+					c.invalidateThemeEditorWindow()
 				}
 			}})
 		}
-		catalog = &chat.ChatCatalogProps{Key: "theme-editor-ai-models", DensityScale: scale, Label: a.language.translate("i18n:ui_ai_chat_select_model_title"), Items: items, EmptyMessage: a.language.translate("i18n:ui_theme_editor_ai_no_models"), ContentHeight: float32(len(items)) * 38, Scroll: state.modelScroll, Theme: theme, OnScroll: func(delta float32) {
-			if current := a.themeSettings.ThemeEditor(); current != nil {
+		catalog = &chat.ChatCatalogProps{Key: "theme-editor-ai-models", DensityScale: scale, Label: c.language.translate("i18n:ui_ai_chat_select_model_title"), Items: items, EmptyMessage: c.language.translate("i18n:ui_theme_editor_ai_no_models"), ContentHeight: float32(len(items)) * 38, Scroll: state.modelScroll, Theme: theme, OnScroll: func(delta float32) {
+			if current := c.ThemeEditor(); current != nil {
 				current.ai.modelScroll = max(float32(0), current.ai.modelScroll+delta)
-				a.invalidateThemeEditorWindow()
+				c.invalidateThemeEditorWindow()
 			}
 		}}
 	}
@@ -189,33 +189,33 @@ func (a *App) buildThemeEditorAI(snapshot *themeEditorPreviewSnapshot, palette c
 }
 
 // toggleThemeEditorAI loads provider models only when the user opens assistance.
-func (a *App) toggleThemeEditorAI() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) toggleThemeEditorAI() {
+	state := c.ThemeEditor()
 	if state == nil {
 		return
 	}
 	state.ai.open = !state.ai.open
 	if !state.ai.open {
-		a.cancelThemeEditorAI()
+		c.cancelThemeEditorAI()
 		return
 	}
-	a.invalidateThemeEditorWindow()
-	a.preloadThemeEditorModels()
+	c.invalidateThemeEditorWindow()
+	c.preloadThemeEditorModels()
 }
 
 // preloadThemeEditorModels fetches model metadata without marking the draft as generating.
-func (a *App) preloadThemeEditorModels() {
-	state := a.themeSettings.ThemeEditor()
-	if state == nil || a.services == nil || state.ai.loadingModels || len(state.ai.models) > 0 {
+func (c *themeSettingsController) preloadThemeEditorModels() {
+	state := c.ThemeEditor()
+	if state == nil || c.services == nil || state.ai.loadingModels || len(state.ai.models) > 0 {
 		return
 	}
 	state.ai.loadingModels = true
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	util.Go(ctx, "load theme assistant models", func() {
 		defer cancel()
-		models, err := a.services.AIModels(ctx, a.sessionID)
-		_ = a.runOnUI("load theme assistant models", func() {
-			if a.themeSettings.ThemeEditor() != state {
+		models, err := c.services.AIModels(ctx, c.sessionID)
+		_ = c.runOnUI("load theme assistant models", func() {
+			if c.ThemeEditor() != state {
 				return
 			}
 			state.ai.loadingModels = false
@@ -225,17 +225,17 @@ func (a *App) preloadThemeEditorModels() {
 				state.ai.models = models
 				state.ai.status = ""
 				if len(models) == 0 {
-					state.ai.status = a.language.translate("i18n:ui_theme_editor_ai_no_models")
+					state.ai.status = c.language.translate("i18n:ui_theme_editor_ai_no_models")
 				}
 			}
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		})
 	})
 }
 
 // cancelThemeEditorAI invalidates late responses without changing the current draft.
-func (a *App) cancelThemeEditorAI() {
-	if state := a.themeSettings.ThemeEditor(); state != nil {
+func (c *themeSettingsController) cancelThemeEditorAI() {
+	if state := c.ThemeEditor(); state != nil {
 		if state.ai.cancel != nil {
 			state.ai.cancel()
 		}
@@ -247,31 +247,31 @@ func (a *App) cancelThemeEditorAI() {
 		state.ai.busy = false
 		state.ai.request++
 		state.ai.status = ""
-		a.invalidateThemeEditorWindow()
+		c.invalidateThemeEditorWindow()
 	}
 }
 
 // sendThemeEditorAI snapshots the editable values and applies a complete validated patch atomically.
-func (a *App) sendThemeEditorAI() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) sendThemeEditorAI() {
+	state := c.ThemeEditor()
 	if state == nil {
 		return
 	}
-	chat.SubmitChatMessage(state.ai.prompt, a.submitThemeEditorAI, func() {
+	chat.SubmitChatMessage(state.ai.prompt, c.submitThemeEditorAI, func() {
 		state.ai.prompt = ""
-		a.invalidateThemeEditorWindow()
+		c.invalidateThemeEditorWindow()
 	})
 }
 
 // submitThemeEditorAI accepts a user turn before starting the asynchronous request.
-func (a *App) submitThemeEditorAI(prompt string) bool {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) submitThemeEditorAI(prompt string) bool {
+	state := c.ThemeEditor()
 	if state == nil || state.ai.busy || state.saving || prompt == "" || state.ai.selected < 0 || state.ai.selected >= len(state.ai.models) {
 		return false
 	}
 	if _, err := themeEditorDraftTheme(state.raw, state.values); err != nil {
-		state.ai.status = a.language.translate("i18n:ui_theme_editor_invalid_geometry")
-		a.invalidateThemeEditorWindow()
+		state.ai.status = c.language.translate("i18n:ui_theme_editor_invalid_geometry")
+		c.invalidateThemeEditorWindow()
 		return false
 	}
 	current := map[string]string{}
@@ -302,16 +302,16 @@ func (a *App) submitThemeEditorAI(prompt string) bool {
 	request := state.ai.request
 	// Stream directly into this turn so stop, failure and subsequent requests retain it.
 	replyIndex := len(state.ai.history) - 1
-	state.ai.status = a.language.translate("i18n:ui_theme_editor_ai_working")
+	state.ai.status = c.language.translate("i18n:ui_theme_editor_ai_working")
 	state.ai.choosing = false
 	state.ai.messageScroll.FollowLatest()
-	a.invalidateThemeEditorWindow()
+	c.invalidateThemeEditorWindow()
 	util.Go(ctx, "theme assistant", func() {
 		defer cancel()
-		response, err := a.services.SuggestThemeEdits(ctx, a.sessionID, common.Model{Name: model.Name, Provider: common.ProviderName(model.Provider), ProviderAlias: model.ProviderAlias}, conversations, func(chunk common.ChatStreamData) {
-			_ = a.runOnUI("stream theme assistant reasoning", func() {
+		response, err := c.services.SuggestThemeEdits(ctx, c.sessionID, common.Model{Name: model.Name, Provider: common.ProviderName(model.Provider), ProviderAlias: model.ProviderAlias}, conversations, func(chunk common.ChatStreamData) {
+			_ = c.runOnUI("stream theme assistant reasoning", func() {
 				// A cancelled or replaced draft must never receive a late streaming update.
-				if a.themeSettings.ThemeEditor() != state || state.ai.request != request || ctx.Err() != nil {
+				if c.ThemeEditor() != state || state.ai.request != request || ctx.Err() != nil {
 					return
 				}
 				// Show conversational text while keeping an unfinished patch out of the transcript.
@@ -320,18 +320,18 @@ func (a *App) submitThemeEditorAI(prompt string) bool {
 					state.ai.history = slices.Clone(state.ai.history)
 					state.ai.history[replyIndex].Text = strings.TrimSpace(text)
 					state.ai.status = ""
-					a.invalidateThemeEditorWindow()
+					c.invalidateThemeEditorWindow()
 				}
 				if chunk.Reasoning != "" && chunk.Reasoning != state.ai.history[replyIndex].Reasoning {
 					state.ai.history = slices.Clone(state.ai.history)
 					state.ai.history[replyIndex].Reasoning = chunk.Reasoning
 					state.ai.status = ""
-					a.invalidateThemeEditorWindow()
+					c.invalidateThemeEditorWindow()
 				}
 			})
 		})
-		_ = a.runOnUI("apply theme assistant suggestion", func() {
-			if a.themeSettings.ThemeEditor() != state || state.ai.request != request {
+		_ = c.runOnUI("apply theme assistant suggestion", func() {
+			if c.ThemeEditor() != state || state.ai.request != request {
 				return
 			}
 			state.ai.history = slices.Clone(state.ai.history)
@@ -343,8 +343,8 @@ func (a *App) submitThemeEditorAI(prompt string) bool {
 				_, patch, err = parseThemeEditorAIResponse(state.raw, state.values, response)
 			}
 			if err != nil {
-				state.ai.status = a.language.translate("i18n:ui_theme_editor_ai_failed") + " " + err.Error()
-				a.invalidateThemeEditorWindow()
+				state.ai.status = c.language.translate("i18n:ui_theme_editor_ai_failed") + " " + err.Error()
+				c.invalidateThemeEditorWindow()
 				return
 			}
 			if len(patch) > 0 {
@@ -352,12 +352,12 @@ func (a *App) submitThemeEditorAI(prompt string) bool {
 				for key := range patch {
 					state.ai.undo[key] = state.values[key]
 				}
-				a.changeThemeEditorTokens(patch)
+				c.changeThemeEditorTokens(patch)
 			}
 			state.ai.history = slices.Clone(state.ai.history)
 			state.ai.history[replyIndex].Text = response
 			state.ai.status = ""
-			a.invalidateThemeEditorWindow()
+			c.invalidateThemeEditorWindow()
 		})
 	})
 	return true
@@ -448,13 +448,13 @@ func validateThemeEditorAIPatch(raw map[string]any, values map[string]string, re
 }
 
 // undoThemeEditorAI restores the draft immediately before the last successful AI request.
-func (a *App) undoThemeEditorAI() {
-	state := a.themeSettings.ThemeEditor()
+func (c *themeSettingsController) undoThemeEditorAI() {
+	state := c.ThemeEditor()
 	if state == nil || state.ai.busy || state.ai.undo == nil || state.saving {
 		return
 	}
 	previous := state.ai.undo
 	state.ai.undo = nil
 	state.ai.history = nil
-	a.changeThemeEditorTokens(previous)
+	c.changeThemeEditorTokens(previous)
 }

@@ -9,7 +9,10 @@ import (
 
 	"wox/common"
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 // themeSettingsSnapshot is the immutable Theme tab state consumed by the view layer.
@@ -33,12 +36,42 @@ type themeSettingsSnapshot struct {
 	AutoEditor            *autoThemeEditorSnapshot
 }
 
-// themeSettingsController owns the Theme tab state: catalog list, selection, search,
-// install/apply operation, wallpaper loading, and the live editor draft. All 17 fields
-// that used to live on App are now held here; App methods became thin wrappers that call
-// the controller's getters/setters while coordinating cross-domain state on the UI thread.
+// themeSettingsController owns the Theme settings page and the theme editor: catalog
+// list, selection, search, install/apply operations, auto-theme editing, wallpaper
+// loading, the live editor draft with its color dialog and AI assistant, and their view
+// props. Applying a theme to every window stays with App through applyTheme; the other
+// collaborators are injected by bindThemeSettings.
 type themeSettingsController struct {
 	deps CommonDeps
+
+	services     themeSettingsServices
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+	// onboarding shares the demo wallpaper with the first-run appearance page.
+	onboarding *onboardingController
+
+	generalSettings func() *generalSettingsController
+	pluginSettings  func() *pluginSettingsController
+	settingsSearch  func() *settingsSearchController
+
+	reloadTheme             func() error
+	applyTheme              func(theme themeData)
+	reloadSettings          func() error
+	imageForTint            func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface         func(woxImage, int, woxui.Color) *woxui.Image
+	updateSettingsText      func(bool)
+	buildFormField          func(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget
+	openPreviewImage        func(image woxImage)
+	setSettingChoiceTooltip func(inside bool, text string, anchor woxui.Rect)
+	setSettingsHoverTooltip func(inside bool, text string, anchor woxui.Rect, side string)
+
+	// The editor's AI assistant renders its conversation with the AI Chat message views.
+	chatDensityScale   func() float32
+	chatRoundProps     func(item chatRenderItem, theme woxcomponent.Theme, toggle func()) previewview.ChatMessageProps
+	prepareChatMessage func(props previewview.ChatMessageProps, window *woxui.Window, width, imageScale float32) previewview.ChatMessageProps
 
 	themes                []themeSettingsTheme
 	themesMode            string
@@ -60,8 +93,70 @@ type themeSettingsController struct {
 	autoEditor            *autoThemeEditorState
 }
 
+// themeSettingsServices is the Core surface used by the Theme page and theme editor.
+type themeSettingsServices interface {
+	contract.ThemeCatalogSettingsServices
+	contract.ThemeCurrentSettingsServices
+	contract.ThemeOperationSettingsServices
+	AIModels(ctx context.Context, sessionID string) ([]contract.AIModel, error)
+}
+
 func newThemeSettingsController(deps CommonDeps) *themeSettingsController {
 	return &themeSettingsController{deps: deps}
+}
+
+// bindThemeSettings wires the Theme page to Core, the Settings window, the first-run
+// guide and the App-wide theme application.
+func (a *App) bindThemeSettings() {
+	c := a.themeSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+	c.onboarding = &a.onboarding
+
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.pluginSettings = func() *pluginSettingsController { return a.pluginSettings }
+	c.settingsSearch = func() *settingsSearchController { return a.settingsSearch }
+
+	c.reloadTheme = a.appearance.reloadTheme
+	c.applyTheme = a.applyTheme
+	c.reloadSettings = a.reloadSettings
+	c.imageForTint = a.imageForTint
+	c.imageForSurface = a.imageForSurface
+	c.updateSettingsText = a.updateSettingsTextInput
+	c.buildFormField = a.buildFormField
+	c.openPreviewImage = a.openPreviewImageOverlay
+	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.setSettingsHoverTooltip = a.setSettingsHoverTooltip
+
+	c.chatDensityScale = a.chatDensityScale
+	c.chatRoundProps = a.chatRoundProps
+	c.prepareChatMessage = a.prepareChatMessage
+}
+
+// themeEditorNativeWindow is the Settings window, which hosts the theme editor.
+func (c *themeSettingsController) themeEditorNativeWindow() *woxui.Window {
+	return c.settings.settingsNativeWindow()
+}
+
+func (c *themeSettingsController) invalidateThemeEditorWindow() {
+	if window := c.themeEditorNativeWindow(); window != nil {
+		_ = window.Invalidate()
+	}
+}
+
+func (c *themeSettingsController) updateThemeEditorTextInput(enabled bool) {
+	c.updateSettingsText(enabled)
+}
+
+func (c *themeSettingsController) restoreThemeEditorTextInput() {
+	c.updateSettingsText(false)
 }
 
 func (c *themeSettingsController) Themes() []themeSettingsTheme {

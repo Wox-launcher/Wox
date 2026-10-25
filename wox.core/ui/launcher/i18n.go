@@ -34,7 +34,7 @@ func (a *App) reloadTranslations() error {
 			return err
 		}
 		if reload {
-			if err := a.reloadPlugins(store, ""); err != nil {
+			if err := a.pluginSettings.reloadPlugins(store, ""); err != nil {
 				return err
 			}
 		}

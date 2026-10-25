@@ -115,8 +115,8 @@ func (a *App) bindOnboarding() {
 	c.imageForSurface = a.imageForSurface
 	c.reloadSettings = a.reloadSettings
 	c.reloadTranslations = a.reloadTranslations
-	c.reloadThemes = a.reloadThemes
-	c.currentThemeID = a.currentThemeID
+	c.reloadThemes = func(mode, preferredID string) error { return a.themeSettings.reloadThemes(mode, preferredID) }
+	c.currentThemeID = func() string { return a.themeSettings.currentThemeID() }
 	c.loadGlanceCatalog = a.loadGlanceCatalog
 	c.showLauncher = a.showWindow
 
@@ -125,7 +125,7 @@ func (a *App) bindOnboarding() {
 	c.hotkeyRecordingFieldStatus = a.hotkeyRecordingFieldStatus
 	c.recordHotkeySettingsField = a.recordHotkeySettingsField
 	c.hotkeyConflictMessage = a.hotkeyConflictMessage
-	c.releaseDemoWallpaperLocked = a.releaseDemoWallpaperLocked
+	c.releaseDemoWallpaperLocked = func() { a.themeSettings.releaseDemoWallpaperLocked() }
 	c.openMacOSPermissionFlow = a.openMacOSPermissionFlow
 	c.permissionFlowTarget = func() permission.MacOSPermissionType {
 		if a.permissionFlow == nil {

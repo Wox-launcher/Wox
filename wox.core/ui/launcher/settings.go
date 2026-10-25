@@ -292,7 +292,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err := a.runOnUI("leave onboarding for settings", func() {
 		wasOnboarding = a.onboarding.leaveLocked()
 		if wasOnboarding {
-			a.releaseDemoWallpaperLocked()
+			a.themeSettings.releaseDemoWallpaperLocked()
 		}
 		onboardingView = a.onboarding.view
 	}); err != nil {
@@ -327,7 +327,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}); err != nil {
 			return err
 		}
-		if err := a.reloadPlugins(store, windowContext.Param); err != nil {
+		if err := a.pluginSettings.reloadPlugins(store, windowContext.Param); err != nil {
 			log.Printf("load settings plugins: %v", err)
 		}
 	}
@@ -393,16 +393,16 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		return err
 	}
 	if tab == "theme" && themeMode == "editor" {
-		a.preloadDemoWallpaper(true)
-		if err := a.loadSettingsThemeEditor(); err != nil {
+		a.themeSettings.preloadDemoWallpaper(true)
+		if err := a.themeSettings.loadSettingsThemeEditor(); err != nil {
 			_ = a.runOnUI("apply theme editor load error", func() {
 				a.themeSettings.SetThemesError(err.Error())
 			})
 		}
 	}
 	if tab == "theme" && themeMode != "editor" {
-		a.preloadDemoWallpaper(true)
-		if err := a.reloadThemes(themeMode, ""); err != nil {
+		a.themeSettings.preloadDemoWallpaper(true)
+		if err := a.themeSettings.reloadThemes(themeMode, ""); err != nil {
 			_ = a.runOnUI("apply theme catalog load error", func() {
 				a.themeSettings.SetThemesError(err.Error())
 			})
@@ -424,7 +424,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		util.Go(a.lifecycleCtx, "reload data settings", a.reloadDataSettings)
 	}
 	if tab == "cloud" {
-		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
+		util.Go(a.lifecycleCtx, "reload cloud sync", a.cloudSettings.reloadCloudSync)
 	}
 	if tab == "runtime" {
 		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
@@ -441,7 +441,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	if err != nil {
 		_ = a.runOnUI("rollback settings open", func() {
 			a.settingsWindow.open = false
-			a.releaseDemoWallpaperLocked()
+			a.themeSettings.releaseDemoWallpaperLocked()
 		})
 		return err
 	}
@@ -702,7 +702,7 @@ func (a *App) closeSettings() error {
 		if form := a.pluginSettings.Form(); form != nil {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			if pluginFormDirty(form.definitions, form.values, form.initial) {
-				a.submitPluginSettings()
+				a.pluginSettings.submitPluginSettings()
 			}
 		}
 		settingsView = a.settingsWindow.view
@@ -722,7 +722,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onModelManagerKey(event) {
 		return true
 	}
-	if a.onCloudSettingsKey(event) {
+	if a.cloudSettings.onCloudSettingsKey(event) {
 		return true
 	}
 	if a.generalSettings.ShowDisplayPicker() != nil {
@@ -747,17 +747,17 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.settingsSearch.Focused() {
 		return false
 	}
-	if a.onPluginSettingsKey(event) {
+	if a.pluginSettings.onPluginSettingsKey(event) {
 		return true
 	}
 	if a.onHotkeySettingsKey(event) || a.onGeneralQuerySettingsKey(event) {
 		return true
 	}
-	if a.onThemeSettingsKey(event) {
+	if a.themeSettings.onThemeSettingsKey(event) {
 		return true
 	}
 	themeTab := a.settingsWindow.tab == "theme"
-	if themeTab && a.onThemeEditorPreviewKey(event) {
+	if themeTab && a.themeSettings.onThemeEditorPreviewKey(event) {
 		return true
 	}
 	if a.onAISettingsKey(event) {
@@ -879,7 +879,7 @@ func (a *App) selectSettingTab(tab string) {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			form.active = false
 			if pluginFormDirty(form.definitions, form.values, form.initial) {
-				a.submitPluginSettings()
+				a.pluginSettings.submitPluginSettings()
 			}
 		}
 		a.settingsWindow.selectTabLocked(tab)
@@ -924,7 +924,7 @@ func (a *App) selectSettingTab(tab string) {
 	loadTheme = tab == "theme" && a.themeSettings.ThemesMode() == "editor" && (themeEditor == nil || !strings.HasPrefix(themeEditor.key, "settings-theme|"))
 	loadThemes = tab == "theme" && a.themeSettings.ThemesMode() != "editor" && !a.themeSettings.ThemesLoaded() && !a.themeSettings.ThemesLoading()
 	if tab == "theme" {
-		a.preloadDemoWallpaper(true)
+		a.themeSettings.preloadDemoWallpaper(true)
 	}
 	usageSnap := a.usageSettings.Snapshot()
 	loadUsage = tab == "usage" && !usageSnap.Loaded && !usageSnap.Loading
@@ -947,14 +947,14 @@ func (a *App) selectSettingTab(tab string) {
 	a.updateSettingsTextInput(false)
 	if loadPlugins {
 		util.Go(a.lifecycleCtx, "reload settings plugins", func() {
-			if err := a.reloadPlugins(pluginStore, ""); err != nil {
+			if err := a.pluginSettings.reloadPlugins(pluginStore, ""); err != nil {
 				log.Printf("load plugins: %v", err)
 			}
 		})
 	}
 	if loadTheme {
 		util.Go(a.lifecycleCtx, "load settings theme editor", func() {
-			if err := a.loadSettingsThemeEditor(); err != nil {
+			if err := a.themeSettings.loadSettingsThemeEditor(); err != nil {
 				_ = a.runOnUI("apply theme editor load error", func() {
 					a.themeSettings.SetThemesError(err.Error())
 					a.settingsWindow.invalidateSettingsWindow()
@@ -965,7 +965,7 @@ func (a *App) selectSettingTab(tab string) {
 	if loadThemes {
 		mode := a.themeSettings.ThemesMode()
 		util.Go(a.lifecycleCtx, "reload settings themes", func() {
-			if err := a.reloadThemes(mode, ""); err != nil {
+			if err := a.themeSettings.reloadThemes(mode, ""); err != nil {
 				log.Printf("load themes: %v", err)
 			}
 		})
@@ -994,10 +994,10 @@ func (a *App) selectSettingTab(tab string) {
 		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
 	}
 	if loadCloud {
-		util.Go(a.lifecycleCtx, "reload cloud sync", a.reloadCloudSync)
+		util.Go(a.lifecycleCtx, "reload cloud sync", a.cloudSettings.reloadCloudSync)
 	} else if loadBilling {
 		// Sync status can become loaded via silent progress refresh without prices.
-		a.ensureCloudBillingPlan()
+		a.cloudSettings.ensureCloudBillingPlan()
 	}
 	if loadUpdateChannels {
 		util.Go(a.lifecycleCtx, "reload update channel versions", a.reloadUpdateChannelVersions)
@@ -1014,7 +1014,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 	if item.tab == "plugins" {
 		store := item.mode == "store"
 		if currentTab == "plugins" {
-			a.switchPluginList(store)
+			a.pluginSettings.switchPluginList(store)
 			return
 		}
 		if a.pluginSettings.PluginsStore() != store {
@@ -1031,7 +1031,7 @@ func (a *App) selectSettingsNavItem(item settingNavSpec) {
 	if item.tab == "theme" {
 		mode := item.mode
 		if currentTab == "theme" {
-			a.switchThemeSettingsMode(mode)
+			a.themeSettings.switchThemeSettingsMode(mode)
 			return
 		}
 		if a.themeSettings.ThemesMode() != mode {

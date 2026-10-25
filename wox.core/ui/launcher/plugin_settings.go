@@ -383,35 +383,34 @@ type pluginSettingsFormSnapshot struct {
 	dirty       bool
 }
 
-// reloadPlugins fetches either the store or installed catalog through the controller.
-// The controller owns loading/error state; the App keeps the post-load side effects that
-// touch cross-domain state (settingSearchPlugins mirror, AI model loading, form rebuild
-// via setPluginSelectionLocked) in one UI-thread transaction.
-func (a *App) reloadPlugins(store bool, preferredID string) error {
-	if err := a.pluginSettings.ReloadPlugins(context.Background(), a.services, a.sessionID, store, preferredID); err != nil {
+// reloadPlugins fetches either the store or installed catalog, then applies the side
+// effects on other Settings state (settings search mirror, AI model loading, form
+// rebuild via setPluginSelectionLocked) in one UI-thread transaction.
+func (c *pluginSettingsController) reloadPlugins(store bool, preferredID string) error {
+	if err := c.ReloadPlugins(context.Background(), c.services, c.sessionID, store, preferredID); err != nil {
 		return err
 	}
 
 	requestModels := false
 	requestProviders := false
-	if err := a.runOnUI("apply loaded plugin catalog", func() {
-		plugins := a.pluginSettings.Plugins()
+	if err := c.runOnUI("apply loaded plugin catalog", func() {
+		plugins := c.Plugins()
 		if !store {
-			a.settingsSearch.SetPlugins(plugins)
-			a.settingsSearch.SetLoading(false)
-			a.settingsSearch.SetLoaded(true)
-			a.settingsSearch.SetError("")
+			c.settingsSearch().SetPlugins(plugins)
+			c.settingsSearch().SetLoading(false)
+			c.settingsSearch().SetLoaded(true)
+			c.settingsSearch().SetError("")
 		}
-		selected := a.pluginSettings.Selected()
+		selected := c.Selected()
 		if selected >= 0 && selected < len(plugins) {
-			a.setPluginSelectionLocked(selected)
+			c.setPluginSelectionLocked(selected)
 		}
-		requestModels, requestProviders = a.queuePluginFormAIModelsLocked()
-		a.settingsWindow.invalidateSettingsWindow()
+		requestModels, requestProviders = c.queuePluginFormAIModelsLocked()
+		c.settings.invalidateSettingsWindow()
 	}); err != nil {
 		return err
 	}
-	a.startPluginFormAIModelLoads(requestModels, requestProviders)
+	c.startPluginFormAIModelLoads(requestModels, requestProviders)
 	return nil
 }
 
@@ -421,72 +420,72 @@ func pluginSettingsPathIsStore(path string) bool {
 }
 
 // switchPluginList swaps the shared list between installed and store data without duplicating its UI state.
-func (a *App) switchPluginList(store bool) {
-	form := a.pluginSettings.Form()
-	if a.pluginSettings.Operation() != "" || a.pluginSettings.PluginsLoading() || (a.pluginSettings.PluginsStore() == store && a.pluginSettings.PluginsLoaded()) {
+func (c *pluginSettingsController) switchPluginList(store bool) {
+	form := c.Form()
+	if c.Operation() != "" || c.PluginsLoading() || (c.PluginsStore() == store && c.PluginsLoaded()) {
 		return
 	}
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			c.submitPluginSettings()
 		}
 	}
-	plugins, loaded := a.pluginSettings.CachedPlugins(store)
-	if !loaded && !store && a.settingsSearch.Loaded() {
-		plugins = a.settingsSearch.Plugins()
-		a.pluginSettings.cachePlugins(false, plugins)
+	plugins, loaded := c.CachedPlugins(store)
+	if !loaded && !store && c.settingsSearch().Loaded() {
+		plugins = c.settingsSearch().Plugins()
+		c.cachePlugins(false, plugins)
 		loaded = true
 	}
-	a.pluginSettings.SetPluginsStore(store)
-	a.pluginSettings.SetPlugins(plugins)
-	a.pluginSettings.SetPluginsLoaded(loaded)
-	a.pluginSettings.SetPluginsLoading(!loaded)
-	a.pluginSettings.SetPluginsError("")
-	a.pluginSettings.SetSelected(-1)
-	a.pluginSettings.SetForm(nil)
-	a.pluginSettings.SetUninstallArmed("")
-	a.pluginSettings.SetOperationError("")
-	a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
-	a.pluginSettings.SetSearchFocused(true)
-	a.settingsSearch.SetFocused(false)
-	a.settingsSearch.SetPanel(false)
-	a.pluginSettings.SetFilters(pluginFilterState{})
-	a.pluginSettings.SetFilterOpen(false)
+	c.SetPluginsStore(store)
+	c.SetPlugins(plugins)
+	c.SetPluginsLoaded(loaded)
+	c.SetPluginsLoading(!loaded)
+	c.SetPluginsError("")
+	c.SetSelected(-1)
+	c.SetForm(nil)
+	c.SetUninstallArmed("")
+	c.SetOperationError("")
+	c.SetSearchEditor(woxui.NewTextEditor(""))
+	c.SetSearchFocused(true)
+	c.settingsSearch().SetFocused(false)
+	c.settingsSearch().SetPanel(false)
+	c.SetFilters(pluginFilterState{})
+	c.SetFilterOpen(false)
 	if store {
-		a.pluginSettings.SetDetailTab("description")
+		c.SetDetailTab("description")
 	} else {
-		a.pluginSettings.SetDetailTab("settings")
+		c.SetDetailTab("settings")
 	}
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 	if loaded {
 		if len(plugins) > 0 {
-			a.setPluginSelectionLocked(0)
+			c.setPluginSelectionLocked(0)
 		}
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
-	util.Go(a.lifecycleCtx, "switch plugin list", func() {
-		if err := a.reloadPlugins(store, ""); err != nil {
+	util.Go(c.lifecycleCtx, "switch plugin list", func() {
+		if err := c.reloadPlugins(store, ""); err != nil {
 			log.Printf("switch plugin list: %v", err)
 		}
 	})
 }
 
 // runPluginOperation uses the same core install operation for fresh installs and upgrades.
-func (a *App) runPluginOperation(kind string) {
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
-	form := a.pluginSettings.Form()
-	if a.pluginSettings.Operation() != "" || selected < 0 || selected >= len(plugins) {
+func (c *pluginSettingsController) runPluginOperation(kind string) {
+	plugins := c.Plugins()
+	selected := c.Selected()
+	form := c.Form()
+	if c.Operation() != "" || selected < 0 || selected >= len(plugins) {
 		return
 	}
 	plugin := plugins[selected]
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			c.submitPluginSettings()
 		}
 	}
 	switch kind {
@@ -502,9 +501,9 @@ func (a *App) runPluginOperation(kind string) {
 		if !plugin.IsInstalled || plugin.IsSystem {
 			return
 		}
-		if a.pluginSettings.UninstallArmed() != plugin.ID {
-			a.pluginSettings.SetUninstallArmed(plugin.ID)
-			a.settingsWindow.invalidateSettingsWindow()
+		if c.UninstallArmed() != plugin.ID {
+			c.SetUninstallArmed(plugin.ID)
+			c.settings.invalidateSettingsWindow()
 			return
 		}
 	case "enable":
@@ -518,53 +517,53 @@ func (a *App) runPluginOperation(kind string) {
 	default:
 		return
 	}
-	a.pluginSettings.SetUninstallArmed("")
-	a.pluginSettings.SetOperationError("")
-	a.pluginSettings.SetOperation(kind + ":" + plugin.ID)
-	store := a.pluginSettings.PluginsStore()
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetUninstallArmed("")
+	c.SetOperationError("")
+	c.SetOperation(kind + ":" + plugin.ID)
+	store := c.PluginsStore()
+	c.settings.invalidateSettingsWindow()
 
-	util.Go(a.lifecycleCtx, kind+" plugin", func() {
+	util.Go(c.lifecycleCtx, kind+" plugin", func() {
 		operation := contract.PluginOperation(kind)
 		if kind == "upgrade" {
 			operation = contract.PluginOperationInstall
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		err := a.services.OperatePlugin(ctx, a.sessionID, plugin.ID, operation)
+		err := c.services.OperatePlugin(ctx, c.sessionID, plugin.ID, operation)
 		cancel()
 		if err == nil {
-			err = a.reloadPlugins(store, plugin.ID)
+			err = c.reloadPlugins(store, plugin.ID)
 		}
 		if err == nil {
-			_ = a.runOnUI("invalidate related plugin catalog", func() {
-				a.pluginSettings.invalidateCachedPlugins(!store)
+			_ = c.runOnUI("invalidate related plugin catalog", func() {
+				c.invalidateCachedPlugins(!store)
 				if store {
-					a.settingsSearch.SetLoaded(false)
+					c.settingsSearch().SetLoaded(false)
 				}
 			})
-			util.Go(a.lifecycleCtx, "refresh related plugin catalog", func() {
-				if preloadErr := a.pluginSettings.PreloadPlugins(a.lifecycleCtx, a.services, a.sessionID, !store); preloadErr != nil {
+			util.Go(c.lifecycleCtx, "refresh related plugin catalog", func() {
+				if preloadErr := c.PreloadPlugins(c.lifecycleCtx, c.services, c.sessionID, !store); preloadErr != nil {
 					log.Printf("refresh related plugin catalog: %v", preloadErr)
 					return
 				}
 				if store {
-					_ = a.runOnUI("refresh installed plugin search cache", func() {
-						plugins, _ := a.pluginSettings.CachedPlugins(false)
-						a.settingsSearch.SetPlugins(plugins)
-						a.settingsSearch.SetLoaded(true)
-						a.settingsSearch.SetError("")
+					_ = c.runOnUI("refresh installed plugin search cache", func() {
+						plugins, _ := c.CachedPlugins(false)
+						c.settingsSearch().SetPlugins(plugins)
+						c.settingsSearch().SetLoaded(true)
+						c.settingsSearch().SetError("")
 					})
 				}
 			})
 		}
-		_ = a.runOnUI("apply plugin operation", func() {
-			a.pluginSettings.SetOperation("")
+		_ = c.runOnUI("apply plugin operation", func() {
+			c.SetOperation("")
 			if err != nil {
-				a.pluginSettings.SetOperationError(err.Error())
+				c.SetOperationError(err.Error())
 			} else {
-				a.pluginSettings.SetOperationError("")
+				c.SetOperationError("")
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		})
 		if err != nil {
 			log.Printf("%s plugin %s: %v", kind, plugin.ID, err)
@@ -573,9 +572,9 @@ func (a *App) runPluginOperation(kind string) {
 }
 
 // openSelectedPluginWebsite keeps browser dispatch behind the portable Window capability.
-func (a *App) openSelectedPluginWebsite() {
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
+func (c *pluginSettingsController) openSelectedPluginWebsite() {
+	plugins := c.Plugins()
+	selected := c.Selected()
 	if selected < 0 || selected >= len(plugins) {
 		return
 	}
@@ -583,16 +582,16 @@ func (a *App) openSelectedPluginWebsite() {
 	if target == "" {
 		return
 	}
-	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL(target); err != nil {
-		a.pluginSettings.SetOperationError(err.Error())
-		a.settingsWindow.invalidateSettingsWindow()
+	if err := c.settings.settingsNativeWindow().OpenExternalURL(target); err != nil {
+		c.SetOperationError(err.Error())
+		c.settings.invalidateSettingsWindow()
 	}
 }
 
 // openSelectedPluginDirectory delegates reveal behavior to core's cross-platform shell adapter.
-func (a *App) openSelectedPluginDirectory() {
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
+func (c *pluginSettingsController) openSelectedPluginDirectory() {
+	plugins := c.Plugins()
+	selected := c.Selected()
 	if selected < 0 || selected >= len(plugins) {
 		return
 	}
@@ -601,81 +600,81 @@ func (a *App) openSelectedPluginDirectory() {
 	if directory == "" {
 		return
 	}
-	util.Go(a.lifecycleCtx, "open selected plugin directory", func() {
+	util.Go(c.lifecycleCtx, "open selected plugin directory", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		var err error
 		if plugin.IsSingleFilePluginDirectory(directory) && strings.TrimSpace(target.Entry) != "" {
 			err = shell.OpenFileInFolder(filepath.Join(directory, target.Entry))
 		} else {
-			err = a.services.OpenPath(ctx, a.sessionID, directory)
+			err = c.services.OpenPath(ctx, c.sessionID, directory)
 		}
 		cancel()
 		if err != nil {
-			_ = a.runOnUI("apply plugin directory error", func() {
-				a.pluginSettings.SetOperationError(err.Error())
-				a.settingsWindow.invalidateSettingsWindow()
+			_ = c.runOnUI("apply plugin directory error", func() {
+				c.SetOperationError(err.Error())
+				c.settings.invalidateSettingsWindow()
 			})
 		}
 	})
 }
 
 // runSelectedPluginPrimaryOperation gives keyboard users the same install or upgrade action as the detail button.
-func (a *App) runSelectedPluginPrimaryOperation() {
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
+func (c *pluginSettingsController) runSelectedPluginPrimaryOperation() {
+	plugins := c.Plugins()
+	selected := c.Selected()
 	if selected < 0 || selected >= len(plugins) {
 		return
 	}
 	plugin := plugins[selected]
 	if !plugin.IsInstalled {
-		a.runPluginOperation("install")
+		c.runPluginOperation("install")
 	} else if plugin.IsUpgradable {
-		a.runPluginOperation("upgrade")
+		c.runPluginOperation("upgrade")
 	}
 }
 
 // setPluginSelectionLocked replaces the editor state with one plugin's current persisted values.
 // The controller's Form/Selected are swapped together on the UI thread so cross-domain readers
 // (model_manager, form_table) observing the same form pointer stay in sync.
-func (a *App) setPluginSelectionLocked(index int) {
-	plugins := a.pluginSettings.Plugins()
+func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
+	plugins := c.Plugins()
 	if index < 0 || index >= len(plugins) {
 		return
 	}
 	plugin := plugins[index]
-	if form := a.pluginSettings.Form(); form != nil && form.pluginID == plugin.ID {
+	if form := c.Form(); form != nil && form.pluginID == plugin.ID {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		refreshFormDisplayDefinitions(&form.formFieldsState, pluginSettingsFormDefinitions(plugin))
-		if editor := a.formTables.settingsEditor; editor != nil && editor.target == &form.formFieldsState {
+		if editor := c.formTables.settingsEditor; editor != nil && editor.target == &form.formFieldsState {
 			// A post-save definition refresh rebuilds this form. The settings overlay
 			// is published only while settingsTableEditor.target matches the live form
 			// pointer, so replacing it here would hide an in-flight row editor.
-			a.pluginSettings.SetSelected(index)
+			c.SetSelected(index)
 			return
 		}
 		// Refresh can arrive while a save is still in flight, before initial moves
 		// forward. An edit that matches the previous initial then looks clean, and
 		// replacing the form would drop it. A dirty form is kept for the same reason.
 		if form.saving || pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.pluginSettings.SetSelected(index)
+			c.SetSelected(index)
 			return
 		}
 	}
-	a.abandonModelManager()
+	c.abandonModelManager()
 	// Only a change of plugin resets the detail tab. Catalog reloads and post-save
 	// definition refreshes re-run this for the already selected plugin, and jumping
 	// back to Settings there loses the Trigger Keywords tab the user just edited in.
-	previous := a.pluginSettings.Selected()
+	previous := c.Selected()
 	samePlugin := previous >= 0 && previous < len(plugins) && plugins[previous].ID == plugin.ID
 	if !samePlugin {
-		a.pluginSettings.SetDetailTab("settings")
-		if a.pluginSettings.PluginsStore() {
-			a.pluginSettings.SetDetailTab("description")
+		c.SetDetailTab("settings")
+		if c.PluginsStore() {
+			c.SetDetailTab("description")
 		}
 	}
-	if a.pluginSettings.PluginsStore() {
-		a.pluginSettings.SetSelected(index)
-		a.pluginSettings.SetForm(nil)
+	if c.PluginsStore() {
+		c.SetSelected(index)
+		c.SetForm(nil)
 		return
 	}
 	definitions := pluginSettingsFormDefinitions(plugin)
@@ -691,15 +690,15 @@ func (a *App) setPluginSelectionLocked(index int) {
 	applyDictationFormCompatibility(plugin, values)
 	fields := newFormFieldsState(definitions, values, false)
 	preserveDictationCompatibilityValues(plugin.ID, fields.values, values)
-	if models := a.aiSettings.Models(); len(models) > 0 {
+	if models := c.aiSettings().Models(); len(models) > 0 {
 		applyAIModelOptionsLocked(&fields, models)
 	}
 	initial := make(map[string]string, len(fields.values))
 	for key, value := range fields.values {
 		initial[key] = value
 	}
-	a.pluginSettings.SetSelected(index)
-	a.pluginSettings.SetForm(&pluginSettingsFormState{formFieldsState: fields, pluginID: plugin.ID, initial: initial})
+	c.SetSelected(index)
+	c.SetForm(&pluginSettingsFormState{formFieldsState: fields, pluginID: plugin.ID, initial: initial})
 }
 
 // pluginSettingsFormDefinitions separates plugin metadata controls from the
@@ -837,40 +836,40 @@ func pluginFormDirty(definitions []formDefinition, values, initial map[string]st
 }
 
 // selectPlugin changes the detail editor without coupling selection to a platform list control.
-func (a *App) selectPlugin(index int) {
-	plugins := a.pluginSettings.Plugins()
-	current := a.pluginSettings.Selected()
+func (c *pluginSettingsController) selectPlugin(index int) {
+	plugins := c.Plugins()
+	current := c.Selected()
 	if index < 0 || index >= len(plugins) || index == current {
 		return
 	}
-	a.pluginSettings.SetSearchFocused(false)
-	form := a.pluginSettings.Form()
+	c.SetSearchFocused(false)
+	form := c.Form()
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			c.submitPluginSettings()
 		}
 	}
-	a.setPluginSelectionLocked(index)
-	requestModels, requestProviders := a.queuePluginFormAIModelsLocked()
-	a.updateSettingsTextInput(false)
-	a.startPluginFormAIModelLoads(requestModels, requestProviders)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.setPluginSelectionLocked(index)
+	requestModels, requestProviders := c.queuePluginFormAIModelsLocked()
+	c.updateSettingsText(false)
+	c.startPluginFormAIModelLoads(requestModels, requestProviders)
+	c.settings.invalidateSettingsWindow()
 }
 
 // queuePluginFormAIModelsLocked applies any cached catalog to selectAIModel fields
 // and reports whether a fetch is still needed. Callers start the async load after
 // finishing other UI-thread work so the helper stays free of goroutine launches.
-func (a *App) queuePluginFormAIModelsLocked() (requestModels, requestProviders bool) {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) queuePluginFormAIModelsLocked() (requestModels, requestProviders bool) {
+	form := c.Form()
 	if form == nil || !hasFormDefinitionType(form.definitions, "selectAIModel") {
 		return false, false
 	}
-	if models := a.aiSettings.Models(); len(models) > 0 {
+	if models := c.aiSettings().Models(); len(models) > 0 {
 		applyAIModelOptionsLocked(&form.formFieldsState, models)
 	}
-	if !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading() {
-		a.aiSettings.SetModelsLoading(true)
+	if !c.aiSettings().ModelsLoaded() && !c.aiSettings().ModelsLoading() {
+		c.aiSettings().SetModelsLoading(true)
 		requestModels = true
 	}
 	return requestModels, true
@@ -878,112 +877,112 @@ func (a *App) queuePluginFormAIModelsLocked() (requestModels, requestProviders b
 
 // startPluginFormAIModelLoads fetches the shared model catalog and provider icons
 // after a plugin form that contains selectAIModel has been built or rebuilt.
-func (a *App) startPluginFormAIModelLoads(requestModels, requestProviders bool) {
+func (c *pluginSettingsController) startPluginFormAIModelLoads(requestModels, requestProviders bool) {
 	if requestModels {
-		util.Go(a.lifecycleCtx, "load AI models for plugin settings", a.loadAIModels)
+		util.Go(c.lifecycleCtx, "load AI models for plugin settings", c.loadAIModels)
 	}
 	if requestProviders {
-		util.Go(a.lifecycleCtx, "load AI provider icons for plugin settings", a.loadAIProviderCatalog)
+		util.Go(c.lifecycleCtx, "load AI provider icons for plugin settings", c.loadAIProviderCatalog)
 	}
 }
 
-func (a *App) movePluginSelection(delta int) {
-	count := len(a.pluginSettings.Plugins())
-	selected := a.pluginSettings.Selected()
+func (c *pluginSettingsController) movePluginSelection(delta int) {
+	count := len(c.Plugins())
+	selected := c.Selected()
 	if count == 0 {
 		return
 	}
 	selected = (selected + delta + count) % count
-	a.selectPlugin(selected)
+	c.selectPlugin(selected)
 }
 
 // setPluginSearchFocused keeps plugin input routing aligned with retained focus changes.
-func (a *App) setPluginSearchFocused(focused bool) {
-	if a.pluginSettings.SearchEditor() == nil {
-		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
+func (c *pluginSettingsController) setPluginSearchFocused(focused bool) {
+	if c.SearchEditor() == nil {
+		c.SetSearchEditor(woxui.NewTextEditor(""))
 	}
-	a.pluginSettings.SetSearchFocused(focused)
+	c.SetSearchFocused(focused)
 	if focused {
-		a.settingsSearch.SetFocused(false)
-		a.settingsSearch.SetPanel(false)
-		a.themeSettings.SetThemeSearchFocused(false)
-		if form := a.pluginSettings.Form(); form != nil {
+		c.settingsSearch().SetFocused(false)
+		c.settingsSearch().SetPanel(false)
+		c.themeSettings().SetThemeSearchFocused(false)
+		if form := c.Form(); form != nil {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			form.active = false
 		}
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // setPluginSearchValue applies accessibility value changes and resets the filtered viewport.
-func (a *App) setPluginSearchValue(value string) error {
-	editor := a.pluginSettings.SearchEditor()
+func (c *pluginSettingsController) setPluginSearchValue(value string) error {
+	editor := c.SearchEditor()
 	if editor == nil {
-		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(value))
+		c.SetSearchEditor(woxui.NewTextEditor(value))
 	} else {
 		editor.SetText(value, false)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 	return nil
 }
 
-func (a *App) clearPluginSearch() {
-	editor := a.pluginSettings.SearchEditor()
+func (c *pluginSettingsController) clearPluginSearch() {
+	editor := c.SearchEditor()
 	if editor == nil {
-		a.pluginSettings.SetSearchEditor(woxui.NewTextEditor(""))
+		c.SetSearchEditor(woxui.NewTextEditor(""))
 	} else {
 		editor.SetText("", false)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // togglePluginFilterPanel shows or hides the catalog's anchored advanced filters.
-func (a *App) togglePluginFilterPanel() {
-	if a.pluginSettings.FilterOpen() {
-		a.closePluginFilterPanel()
+func (c *pluginSettingsController) togglePluginFilterPanel() {
+	if c.FilterOpen() {
+		c.closePluginFilterPanel()
 		return
 	}
-	a.pluginSettings.SetFilterOpen(true)
-	a.pluginSettings.SetSearchFocused(false)
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetFilterOpen(true)
+	c.SetSearchFocused(false)
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) closePluginFilterPanel() {
-	a.pluginSettings.SetFilterOpen(false)
-	if picker := a.generalSettings.ChoicePicker(); picker != nil && strings.HasPrefix(picker.item.key, "plugin-filter-") {
-		a.closeSettingChoicePicker()
+func (c *pluginSettingsController) closePluginFilterPanel() {
+	c.SetFilterOpen(false)
+	if picker := c.generalSettings().ChoicePicker(); picker != nil && strings.HasPrefix(picker.item.key, "plugin-filter-") {
+		c.closeSettingChoicePicker()
 		return
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // openPluginFilterChoice opens the shared settings dropdown for one catalog filter field.
-func (a *App) openPluginFilterChoice(id string, anchor woxui.Rect) {
-	item := a.pluginFilterChoiceItem(id)
+func (c *pluginSettingsController) openPluginFilterChoice(id string, anchor woxui.Rect) {
+	item := c.pluginFilterChoiceItem(id)
 	if len(item.choices) == 0 {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.host; host != nil {
+		if host := c.settings.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key("setting-choice-anchor-plugin-filter-" + id))
 		}
 	}
-	a.generalSettings.EndEdit()
-	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+	c.generalSettings().EndEdit()
+	c.generalSettings().SetChoicePicker(&settingChoicePickerState{
 		item: item, anchor: anchor,
-		onChoose: func(choice settingChoice) { a.setPluginFilter(id, choice.value) },
+		onChoose: func(choice settingChoice) { c.setPluginFilter(id, choice.value) },
 	})
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 // setPluginFilter writes one exclusive dropdown value and keeps the current detail selected when it still matches.
-func (a *App) setPluginFilter(id, value string) {
+func (c *pluginSettingsController) setPluginFilter(id, value string) {
 	if value == pluginFilterAll {
 		value = ""
 	}
-	filters := a.pluginSettings.Filters()
+	filters := c.Filters()
 	switch id {
 	case "enabled":
 		filters.enabledStatus = value
@@ -998,29 +997,29 @@ func (a *App) setPluginFilter(id, value string) {
 	default:
 		return
 	}
-	a.applyPluginFilters(filters)
+	c.applyPluginFilters(filters)
 }
 
 // resetPluginFilters restores every catalog dropdown to All.
-func (a *App) resetPluginFilters() {
-	a.applyPluginFilters(pluginFilterState{})
+func (c *pluginSettingsController) resetPluginFilters() {
+	c.applyPluginFilters(pluginFilterState{})
 }
 
 // filteredPluginCatalog applies search and dropdowns to the visible catalog.
-func (a *App) filteredPluginCatalog() []filteredPlugin {
+func (c *pluginSettingsController) filteredPluginCatalog() []filteredPlugin {
 	query := ""
-	if editor := a.pluginSettings.SearchEditor(); editor != nil {
+	if editor := c.SearchEditor(); editor != nil {
 		query = editor.State().Text
 	}
-	store := a.pluginSettings.PluginsStore()
-	return filterPlugins(a.pluginSettings.Plugins(), query, a.pluginSettings.Filters(), store, a.usePinYin())
+	store := c.PluginsStore()
+	return filterPlugins(c.Plugins(), query, c.Filters(), store, c.usePinYin())
 }
 
 // applyPluginFilters commits catalog filters and keeps the current plugin selected when it still matches.
-func (a *App) applyPluginFilters(filters pluginFilterState) {
-	a.pluginSettings.SetFilters(filters)
-	selected := a.pluginSettings.Selected()
-	filtered := a.filteredPluginCatalog()
+func (c *pluginSettingsController) applyPluginFilters(filters pluginFilterState) {
+	c.SetFilters(filters)
+	selected := c.Selected()
+	filtered := c.filteredPluginCatalog()
 	selectedVisible := false
 	for _, entry := range filtered {
 		if entry.index == selected {
@@ -1029,23 +1028,23 @@ func (a *App) applyPluginFilters(filters pluginFilterState) {
 		}
 	}
 	if !selectedVisible && len(filtered) > 0 {
-		a.setPluginSelectionLocked(filtered[0].index)
+		c.setPluginSelectionLocked(filtered[0].index)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) blurPluginSearch() {
-	a.pluginSettings.SetSearchFocused(false)
-	host := a.settingsWindow.host
+func (c *pluginSettingsController) blurPluginSearch() {
+	c.SetSearchFocused(false)
+	host := c.settings.host
 	if host != nil {
 		host.ClearFocus()
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) moveFilteredPluginSelection(delta int) {
-	selected := a.pluginSettings.Selected()
-	filtered := a.filteredPluginCatalog()
+func (c *pluginSettingsController) moveFilteredPluginSelection(delta int) {
+	selected := c.Selected()
+	filtered := c.filteredPluginCatalog()
 	if len(filtered) == 0 {
 		return
 	}
@@ -1065,75 +1064,75 @@ func (a *App) moveFilteredPluginSelection(delta int) {
 	} else {
 		position = (position + delta + len(filtered)) % len(filtered)
 	}
-	a.selectPlugin(filtered[position].index)
+	c.selectPlugin(filtered[position].index)
 }
 
-func (a *App) onPluginSearchKey(event woxui.KeyEvent) bool {
+func (c *pluginSettingsController) onPluginSearchKey(event woxui.KeyEvent) bool {
 	// Key releases must not repeat list navigation, and composing keys belong to native text input.
 	if !event.Down || event.Composing {
 		return false
 	}
-	active := a.settingsWindow.open && a.settingsWindow.tab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
+	active := c.settings.open && c.settings.tab == "plugins" && c.SearchFocused() && c.SearchEditor() != nil
 	if !active {
 		return false
 	}
 	switch event.Key {
 	case woxui.KeyEscape:
-		a.blurPluginSearch()
+		c.blurPluginSearch()
 	case woxui.KeyArrowUp:
-		a.moveFilteredPluginSelection(-1)
+		c.moveFilteredPluginSelection(-1)
 	case woxui.KeyArrowDown:
-		a.moveFilteredPluginSelection(1)
+		c.moveFilteredPluginSelection(1)
 	case woxui.KeyEnter, woxui.KeyTab:
-		a.blurPluginSearch()
+		c.blurPluginSearch()
 	default:
 		return false
 	}
 	return true
 }
 
-func (a *App) onPluginSearchTextInput(_ woxui.TextInputEvent) bool {
-	return a.settingsWindow.open && a.settingsWindow.tab == "plugins" && a.pluginSettings.SearchFocused() && a.pluginSettings.SearchEditor() != nil
+func (c *pluginSettingsController) onPluginSearchTextInput(_ woxui.TextInputEvent) bool {
+	return c.settings.open && c.settings.tab == "plugins" && c.SearchFocused() && c.SearchEditor() != nil
 }
 
 // selectPluginDetailTab changes detail content without discarding staged plugin settings.
-func (a *App) selectPluginDetailTab(tab string) {
+func (c *pluginSettingsController) selectPluginDetailTab(tab string) {
 	switch tab {
 	case "settings", "description", "keywords", "commands", "privacy":
 	default:
 		return
 	}
-	a.stopHotkeyRecording()
-	a.pluginSettings.SetDetailTab(tab)
-	if form := a.pluginSettings.Form(); form != nil {
+	c.stopHotkeyRecording()
+	c.SetDetailTab(tab)
+	if form := c.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		form.active = false
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			c.submitPluginSettings()
 		}
 	}
-	a.pluginSettings.SetSearchFocused(false)
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetSearchFocused(false)
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 // onPluginSettingsKey routes keys either to list navigation or the active shared field editor.
-func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
-	if event.Down && !event.Composing && event.Key == woxui.KeyEscape && a.pluginSettings.FilterOpen() {
-		a.closePluginFilterPanel()
+func (c *pluginSettingsController) onPluginSettingsKey(event woxui.KeyEvent) bool {
+	if event.Down && !event.Composing && event.Key == woxui.KeyEscape && c.FilterOpen() {
+		c.closePluginFilterPanel()
 		return true
 	}
-	if a.onPluginSearchKey(event) {
+	if c.onPluginSearchKey(event) {
 		return true
 	}
 	if !event.Down || event.Composing {
 		return false
 	}
-	if a.settingsWindow.tab != "plugins" {
+	if c.settings.tab != "plugins" {
 		return false
 	}
-	state := a.pluginSettings.Form()
-	store := a.pluginSettings.PluginsStore()
+	state := c.Form()
+	store := c.PluginsStore()
 	active := state != nil && state.active
 	focused := -1
 	fieldType := ""
@@ -1148,32 +1147,32 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	if !active {
 		switch event.Key {
 		case woxui.KeyArrowUp:
-			a.movePluginSelection(-1)
+			c.movePluginSelection(-1)
 			return true
 		case woxui.KeyArrowDown:
-			a.movePluginSelection(1)
+			c.movePluginSelection(1)
 			return true
 		case woxui.KeyEnter:
 			if store && state == nil {
-				a.runSelectedPluginPrimaryOperation()
+				c.runSelectedPluginPrimaryOperation()
 			} else {
-				a.activatePluginForm()
+				c.activatePluginForm()
 			}
 			return true
 		case woxui.KeySpace:
 			if store {
-				a.runSelectedPluginPrimaryOperation()
+				c.runSelectedPluginPrimaryOperation()
 			}
 			return true
 		case woxui.KeyTab:
-			a.activatePluginForm()
+			c.activatePluginForm()
 			return true
 		default:
 			return false
 		}
 	}
 	if event.Key == woxui.KeyEscape {
-		a.deactivatePluginForm()
+		c.deactivatePluginForm()
 		return true
 	}
 	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
@@ -1184,16 +1183,16 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 			if event.Modifiers&woxui.KeyModifierShift != 0 {
 				delta = -1
 			}
-			a.movePluginFormFocus(delta)
+			c.movePluginFormFocus(delta)
 			return true
 		case woxui.KeyArrowDown:
 			if !multiline {
-				a.movePluginFormFocus(1)
+				c.movePluginFormFocus(1)
 				return true
 			}
 		case woxui.KeyArrowUp:
 			if !multiline {
-				a.movePluginFormFocus(-1)
+				c.movePluginFormFocus(-1)
 				return true
 			}
 		case woxui.KeyEnter:
@@ -1204,66 +1203,66 @@ func (a *App) onPluginSettingsKey(event woxui.KeyEvent) bool {
 	switch event.Key {
 	case woxui.KeyTab, woxui.KeyArrowDown:
 		if event.Key == woxui.KeyArrowDown && multiline {
-			a.editPluginFormKey(event)
+			c.editPluginFormKey(event)
 			break
 		}
 		delta := 1
 		if event.Key == woxui.KeyTab && event.Modifiers&woxui.KeyModifierShift != 0 {
 			delta = -1
 		}
-		a.movePluginFormFocus(delta)
+		c.movePluginFormFocus(delta)
 	case woxui.KeyArrowUp:
 		if multiline {
-			a.editPluginFormKey(event)
+			c.editPluginFormKey(event)
 		} else {
-			a.movePluginFormFocus(-1)
+			c.movePluginFormFocus(-1)
 		}
 	case woxui.KeyArrowLeft:
 		if fieldType == "select" || fieldType == "selectAIModel" {
-			a.changePluginFormChoice(focused, -1)
+			c.changePluginFormChoice(focused, -1)
 		} else {
-			a.editPluginFormKey(event)
+			c.editPluginFormKey(event)
 		}
 	case woxui.KeyArrowRight:
 		if fieldType == "select" || fieldType == "selectAIModel" {
-			a.changePluginFormChoice(focused, 1)
+			c.changePluginFormChoice(focused, 1)
 		} else {
-			a.editPluginFormKey(event)
+			c.editPluginFormKey(event)
 		}
 	case woxui.KeySpace, woxui.KeyEnter:
 		if event.Key == woxui.KeyEnter && multiline {
-			a.editPluginFormKey(event)
+			c.editPluginFormKey(event)
 		} else if fieldType == "fileIndexService" {
-			a.runFocusedPluginServiceAction(focused)
+			c.runFocusedPluginServiceAction(focused)
 		} else if fieldType == "table" {
-			a.openPluginFormTable(focused)
+			c.openFormTable(focused)
 		} else if fieldType == "dictationModel" || fieldType == "ocrModel" {
 			anchor := woxui.Rect{}
-			if host := a.settingsWindow.host; host != nil {
+			if host := c.settings.host; host != nil {
 				anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", focused)))
 			}
-			a.openPluginModelManager(focused, anchor)
+			c.openModelManager(focused, anchor)
 		} else if fieldType == "dictationHotkey" {
-			a.recordPluginFormHotkey(focused)
+			c.recordPluginFormHotkey(focused)
 		} else if fieldType == "select" || fieldType == "selectAIModel" {
-			a.openFocusedPluginFormChoice(focused)
+			c.openFocusedPluginFormChoice(focused)
 		} else if fieldType == "checkbox" {
-			a.changePluginFormChoice(focused, 1)
+			c.changePluginFormChoice(focused, 1)
 		}
 	default:
-		a.editPluginFormKey(event)
+		c.editPluginFormKey(event)
 	}
 	return true
 }
 
-func (a *App) runFocusedPluginServiceAction(index int) {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) runFocusedPluginServiceAction(index int) {
+	form := c.Form()
 	if form == nil || index < 0 || index >= len(form.definitions) {
 		return
 	}
 	for _, action := range form.definitions[index].Value.Actions {
 		if action.Primary && action.Enabled {
-			a.runPluginServiceAction(action.ID)
+			c.runPluginServiceAction(action.ID)
 			return
 		}
 	}
@@ -1271,27 +1270,27 @@ func (a *App) runFocusedPluginServiceAction(index int) {
 
 // openNativePluginSettings shows the plugin host's own settings window.
 // The button stays disabled until that window closes and the plugin reloads.
-func (a *App) openNativePluginSettings(pluginID string) {
+func (c *pluginSettingsController) openNativePluginSettings(pluginID string) {
 	pluginID = strings.TrimSpace(pluginID)
-	if pluginID == "" || a.services == nil || a.settingsWindow.nativePluginID != "" {
+	if pluginID == "" || c.services == nil || c.nativeSettingsPluginID != "" {
 		return
 	}
-	a.settingsWindow.nativePluginID = pluginID
-	a.settingsWindow.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "open native plugin settings", func() {
-		err := a.services.OpenNativePluginSettings(context.Background(), a.sessionID, pluginID)
+	c.nativeSettingsPluginID = pluginID
+	c.settings.invalidateSettingsWindow()
+	util.Go(c.lifecycleCtx, "open native plugin settings", func() {
+		err := c.services.OpenNativePluginSettings(context.Background(), c.sessionID, pluginID)
 		if err != nil {
-			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open native plugin settings: %v", err))
+			util.GetLogger().Error(c.lifecycleCtx, fmt.Sprintf("open native plugin settings: %v", err))
 		}
 		var reloadErr error
 		if err == nil {
-			reloadErr = a.reloadPlugins(false, pluginID)
+			reloadErr = c.reloadPlugins(false, pluginID)
 		}
-		_ = a.runOnUI("finish native plugin settings", func() {
-			if a.settingsWindow.nativePluginID == pluginID {
-				a.settingsWindow.nativePluginID = ""
+		_ = c.runOnUI("finish native plugin settings", func() {
+			if c.nativeSettingsPluginID == pluginID {
+				c.nativeSettingsPluginID = ""
 			}
-			if current := a.pluginSettings.Form(); current != nil && current.pluginID == pluginID {
+			if current := c.Form(); current != nil && current.pluginID == pluginID {
 				if err != nil {
 					current.status = err.Error()
 					current.statusError = true
@@ -1300,50 +1299,50 @@ func (a *App) openNativePluginSettings(pluginID string) {
 					current.statusError = true
 				}
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		})
 	})
 }
 
 // runPluginServiceAction executes one service lifecycle operation and reloads its dynamic state.
-func (a *App) runPluginServiceAction(actionID string) {
-	form := a.pluginSettings.Form()
-	if form == nil || a.pluginSettings.settingAction.actionID != "" || actionID == "" {
+func (c *pluginSettingsController) runPluginServiceAction(actionID string) {
+	form := c.Form()
+	if form == nil || c.settingAction.actionID != "" || actionID == "" {
 		return
 	}
 	pluginID := form.pluginID
-	a.pluginSettings.settingAction = pluginSettingActionState{pluginID: pluginID, actionID: actionID}
-	a.settingsWindow.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "run plugin service action", func() {
+	c.settingAction = pluginSettingActionState{pluginID: pluginID, actionID: actionID}
+	c.settings.invalidateSettingsWindow()
+	util.Go(c.lifecycleCtx, "run plugin service action", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		err := a.services.ExecutePluginSettingAction(ctx, a.sessionID, pluginID, actionID)
+		err := c.services.ExecutePluginSettingAction(ctx, c.sessionID, pluginID, actionID)
 		cancel()
 		if err == nil {
-			err = a.reloadPlugins(false, pluginID)
+			err = c.reloadPlugins(false, pluginID)
 		}
-		_ = a.runOnUI("finish plugin service action", func() {
-			a.pluginSettings.settingAction.actionID = ""
+		_ = c.runOnUI("finish plugin service action", func() {
+			c.settingAction.actionID = ""
 			if err != nil {
-				a.pluginSettings.settingAction.errorText = err.Error()
+				c.settingAction.errorText = err.Error()
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		})
 	})
 }
 
 // recordPluginFormHotkey reuses core's dictation-aware recorder while keeping the value staged with other plugin changes.
-func (a *App) recordPluginFormHotkey(index int) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) recordPluginFormHotkey(index int) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) || state.definitions[index].Type != "dictationHotkey" {
 		return
 	}
 	target := &state.formFieldsState
-	a.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds, nil)
+	c.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds, nil)
 }
 
 // activatePluginForm transfers keyboard and IME ownership from the plugin list to its first field.
-func (a *App) activatePluginForm() {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) activatePluginForm() {
+	state := c.Form()
 	if state == nil || len(state.definitions) == 0 {
 		return
 	}
@@ -1361,60 +1360,60 @@ func (a *App) activatePluginForm() {
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	textInput := state.editor != nil
-	a.updateSettingsTextInput(textInput)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(textInput)
+	c.settings.invalidateSettingsWindow()
 }
 
 // deactivatePluginForm returns keyboard ownership to the settings page while preserving edits.
-func (a *App) deactivatePluginForm() {
-	a.stopHotkeyRecording()
-	if form := a.pluginSettings.Form(); form != nil {
+func (c *pluginSettingsController) deactivatePluginForm() {
+	c.stopHotkeyRecording()
+	if form := c.Form(); form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		focused := form.focused
 		form.active = false
-		a.validatePluginFormField(form, focused)
+		c.validatePluginFormField(form, focused)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.submitPluginSettings()
+			c.submitPluginSettings()
 		}
 	}
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) focusPluginFormField(index int) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) focusPluginFormField(index int) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) || !formDefinitionFocusable(state.definitions[index]) {
 		return
 	}
-	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
+	c.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	previousFocused := state.focused
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	if previousFocused != index {
-		a.validatePluginFormField(state, previousFocused)
+		c.validatePluginFormField(state, previousFocused)
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.status = ""
 	textInput := state.editor != nil
-	a.updateSettingsTextInput(textInput)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(textInput)
+	c.settings.invalidateSettingsWindow()
 	if previousFocused != index && pluginFormDirty(state.definitions, state.values, state.initial) {
-		a.submitPluginSettings()
+		c.submitPluginSettings()
 	}
 }
 
 // blurPluginFormField shows validator messages under a plugin setting after it loses focus.
-func (a *App) blurPluginFormField(index int) {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) blurPluginFormField(index int) {
+	form := c.Form()
 	if form == nil || form.saving {
 		return
 	}
 	syncFormFieldsEditorLocked(&form.formFieldsState)
-	a.validatePluginFormField(form, index)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.validatePluginFormField(form, index)
+	c.settings.invalidateSettingsWindow()
 }
 
 // validatePluginFormField records the first failing validator for one setting under that field.
-func (a *App) validatePluginFormField(form *pluginSettingsFormState, index int) {
+func (c *pluginSettingsController) validatePluginFormField(form *pluginSettingsFormState, index int) {
 	if form == nil || index < 0 || index >= len(form.definitions) {
 		return
 	}
@@ -1422,7 +1421,7 @@ func (a *App) validatePluginFormField(form *pluginSettingsFormState, index int) 
 	if key == "" {
 		return
 	}
-	errors := a.formTables.translateFormTableFieldErrors(validateFormFieldErrors([]formDefinition{form.definitions[index]}, form.values))
+	errors := c.formTables.translateFormTableFieldErrors(validateFormFieldErrors([]formDefinition{form.definitions[index]}, form.values))
 	if form.fieldErrors == nil {
 		form.fieldErrors = map[string]string{}
 	}
@@ -1446,8 +1445,8 @@ func clearPluginFormFieldError(form *pluginSettingsFormState, index int) {
 	}
 }
 
-func (a *App) movePluginFormFocus(delta int) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) movePluginFormFocus(delta int) {
+	state := c.Form()
 	if state == nil || len(state.definitions) == 0 {
 		return
 	}
@@ -1460,62 +1459,62 @@ func (a *App) movePluginFormFocus(delta int) {
 			break
 		}
 	}
-	if host := a.settingsWindow.host; host != nil {
+	if host := c.settings.host; host != nil {
 		host.RequestFocus(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
 	}
-	a.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
+	c.stopHotkeyRecordingForDifferentField(&state.formFieldsState, index)
 	textInput := state.editor != nil
-	a.updateSettingsTextInput(textInput)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(textInput)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) changePluginFormChoice(index, delta int) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) changePluginFormChoice(index, delta int) {
+	state := c.Form()
 	if state == nil || !state.active {
 		return
 	}
 	if index >= 0 && index < len(state.definitions) && state.definitions[index].Type == "select" && state.definitions[index].Value.IsMulti {
 		// Left/right must not replace the selected set with a single option.
-		a.openFocusedPluginFormChoice(index)
+		c.openFocusedPluginFormChoice(index)
 		return
 	}
 	changeFormFieldsChoiceLocked(&state.formFieldsState, index, delta)
 	state.status = ""
 	clearPluginFormFieldError(state, index)
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
-	a.submitPluginSettings()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
+	c.submitPluginSettings()
 }
 
 // openFocusedPluginFormChoice resolves the retained field bounds for keyboard-opened menus.
-func (a *App) openFocusedPluginFormChoice(index int) {
+func (c *pluginSettingsController) openFocusedPluginFormChoice(index int) {
 	anchor := woxui.Rect{}
-	if host := a.settingsWindow.host; host != nil {
+	if host := c.settings.host; host != nil {
 		key := fmt.Sprintf("plugin-settings-field-%d", index)
-		if form := a.pluginSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) && form.definitions[index].Type == "selectAIModel" {
+		if form := c.Form(); form != nil && index >= 0 && index < len(form.definitions) && form.definitions[index].Type == "selectAIModel" {
 			key += "-model"
 		}
 		anchor, _ = host.BoundsForKey(woxwidget.Key(key))
 	}
-	a.openPluginFormChoice(index, anchor)
+	c.openPluginFormChoice(index, anchor)
 }
 
 // openPluginFormChoice presents the shared anchored dropdown for a plugin select field.
-func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) openPluginFormChoice(index int, anchor woxui.Rect) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
 	definition := state.definitions[index]
 	if definition.Type == "selectAIModel" {
-		a.openPluginAIModelChoice(index, false, anchor)
+		c.openPluginAIModelChoice(index, false, anchor)
 		return
 	}
 	if definition.Type != "select" || len(definition.Value.Options) == 0 {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.host; host != nil {
+		if host := c.settings.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", index)))
 		}
 	}
@@ -1523,25 +1522,25 @@ func (a *App) openPluginFormChoice(index int, anchor woxui.Rect) {
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	choices := make([]settingChoice, len(definition.Value.Options))
 	for optionIndex, option := range definition.Value.Options {
-		label := a.language.translate(option.Label)
+		label := c.language.translate(option.Label)
 		if strings.TrimSpace(label) == "" {
 			label = option.Value
 		}
 		choices[optionIndex] = settingChoice{value: option.Value, label: label}
 	}
 	item := settingItem{
-		key: "plugin:" + state.pluginID + ":" + definition.Value.Key, title: a.language.translate(definition.Value.Label),
+		key: "plugin:" + state.pluginID + ":" + definition.Value.Key, title: c.language.translate(definition.Value.Label),
 		value: state.values[definition.Value.Key], choices: choices,
 		filterable: definition.Value.Filterable,
 	}
-	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+	c.generalSettings().SetChoicePicker(&settingChoicePickerState{
 		item: item, anchor: anchor,
 		multi:    definition.Value.IsMulti,
-		onChoose: func(choice settingChoice) { a.setPluginFormChoice(index, choice.value) },
+		onChoose: func(choice settingChoice) { c.setPluginFormChoice(index, choice.value) },
 	})
 	state.status = ""
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 func aiModelProviderKey(model aiModel) string {
@@ -1549,8 +1548,8 @@ func aiModelProviderKey(model aiModel) string {
 }
 
 // openPluginAIModelChoice opens the provider or filterable model menu for one AI model field.
-func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor woxui.Rect) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) openPluginAIModelChoice(index int, providerChoice bool, anchor woxui.Rect) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
@@ -1560,13 +1559,13 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 	}
 	models := aiModelsFromOptions(definition.Value.Options)
 	if len(models) == 0 {
-		if cached := a.aiSettings.Models(); len(cached) > 0 {
+		if cached := c.aiSettings().Models(); len(cached) > 0 {
 			applyAIModelOptionsLocked(&state.formFieldsState, cached)
 			models = aiModelsFromOptions(state.definitions[index].Value.Options)
 		}
 	}
 	if len(models) == 0 {
-		a.openPluginAIModelEmptyChoice(index, anchor)
+		c.openPluginAIModelEmptyChoice(index, anchor)
 		return
 	}
 	var selected aiModel
@@ -1588,7 +1587,7 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 			}
 			choices = append(choices, settingChoice{value: key, label: label})
 		}
-		for _, provider := range a.aiSettings.ProviderCatalog() {
+		for _, provider := range c.aiSettings().ProviderCatalog() {
 			for _, choice := range choices {
 				providerName, _, _ := strings.Cut(choice.value, "\x00")
 				if provider.Name == providerName {
@@ -1609,7 +1608,7 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 		if len(choices) == 0 && selected.Name != "" {
 			choices = append(choices, settingChoice{value: state.values[definition.Value.Key], label: selected.Name})
 		}
-		for _, provider := range a.aiSettings.ProviderCatalog() {
+		for _, provider := range c.aiSettings().ProviderCatalog() {
 			if provider.Name != selected.Provider {
 				continue
 			}
@@ -1627,70 +1626,70 @@ func (a *App) openPluginAIModelChoice(index int, providerChoice bool, anchor wox
 	if providerChoice {
 		currentValue = selectedProvider
 	}
-	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+	c.generalSettings().SetChoicePicker(&settingChoicePickerState{
 		item: settingItem{
-			key: "plugin-ai-model:" + definition.Value.Key, title: a.language.translate(definition.Value.Label), value: currentValue,
+			key: "plugin-ai-model:" + definition.Value.Key, title: c.language.translate(definition.Value.Label), value: currentValue,
 			choices: choices, icons: icons, preserveIconColor: true, filterable: !providerChoice,
 		},
 		anchor: anchor,
 		onChoose: func(choice settingChoice) {
 			if providerChoice {
-				a.setPluginAIModelProvider(index, choice.value)
+				c.setPluginAIModelProvider(index, choice.value)
 			} else {
-				a.setPluginFormChoice(index, choice.value)
+				c.setPluginFormChoice(index, choice.value)
 			}
 		},
 	})
 	state.status = ""
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 const pluginAIModelOpenSettingsValue = "open-ai-settings"
 
 // openPluginAIModelEmptyChoice keeps an empty picker usable by offering a jump to AI settings.
-func (a *App) openPluginAIModelEmptyChoice(index int, anchor woxui.Rect) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) openPluginAIModelEmptyChoice(index int, anchor woxui.Rect) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
 	if anchor.Width <= 0 || anchor.Height <= 0 {
-		if host := a.settingsWindow.host; host != nil {
+		if host := c.settings.host; host != nil {
 			anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d-provider", index)))
 		}
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
-	a.generalSettings.SetChoicePicker(&settingChoicePickerState{
+	c.generalSettings().SetChoicePicker(&settingChoicePickerState{
 		item: settingItem{
 			key:   "plugin-ai-model-empty:" + state.definitions[index].Value.Key,
-			title: a.language.translate("i18n:ui_ai_model_selector_no_models_title"),
+			title: c.language.translate("i18n:ui_ai_model_selector_no_models_title"),
 			choices: []settingChoice{{
 				value: pluginAIModelOpenSettingsValue,
-				label: a.language.translate("i18n:ui_ai_model_selector_open_ai_settings"),
+				label: c.language.translate("i18n:ui_ai_model_selector_open_ai_settings"),
 			}},
 		},
 		anchor:   anchor,
-		onChoose: func(settingChoice) { a.openPluginAISettings() },
+		onChoose: func(settingChoice) { c.openPluginAISettings() },
 	})
-	state.status = a.language.translate("i18n:ui_ai_model_selector_no_models_desc")
+	state.status = c.language.translate("i18n:ui_ai_model_selector_no_models_desc")
 	state.statusError = false
-	if !a.aiSettings.ModelsLoaded() && !a.aiSettings.ModelsLoading() {
-		a.aiSettings.SetModelsLoading(true)
-		util.Go(a.lifecycleCtx, "load AI models for empty plugin picker", a.loadAIModels)
+	if !c.aiSettings().ModelsLoaded() && !c.aiSettings().ModelsLoading() {
+		c.aiSettings().SetModelsLoading(true)
+		util.Go(c.lifecycleCtx, "load AI models for empty plugin picker", c.loadAIModels)
 	}
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 }
 
 // openPluginAISettings leaves the plugin form so the user can add a provider.
-func (a *App) openPluginAISettings() {
-	a.generalSettings.SetChoicePicker(nil)
-	a.selectSettingTab("ai")
+func (c *pluginSettingsController) openPluginAISettings() {
+	c.generalSettings().SetChoicePicker(nil)
+	c.selectSettingTab("ai")
 }
 
-func (a *App) setPluginAIModelProvider(index int, providerKey string) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) setPluginAIModelProvider(index int, providerKey string) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
@@ -1698,15 +1697,15 @@ func (a *App) setPluginAIModelProvider(index int, providerKey string) {
 		if aiModelProviderKey(model) == providerKey {
 			encoded, err := json.Marshal(model)
 			if err == nil {
-				a.setPluginFormChoice(index, string(encoded))
+				c.setPluginFormChoice(index, string(encoded))
 			}
 			return
 		}
 	}
 }
 
-func (a *App) setPluginAIModelName(index int, name string) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) setPluginAIModelName(index int, name string) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) || strings.TrimSpace(name) == "" {
 		return
 	}
@@ -1723,12 +1722,12 @@ func (a *App) setPluginAIModelName(index int, name string) {
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
 	state.values[definition.Value.Key] = string(encoded)
 	state.status = ""
-	a.settingsWindow.invalidateSettingsWindow()
-	a.submitPluginSettings()
+	c.settings.invalidateSettingsWindow()
+	c.submitPluginSettings()
 }
 
-func (a *App) finishPluginAIModelEdit(index int, name string) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) finishPluginAIModelEdit(index int, name string) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
@@ -1740,7 +1739,7 @@ func (a *App) finishPluginAIModelEdit(index int, name string) {
 		if aiModelProviderKey(model) == aiModelProviderKey(selected) && model.Name == name {
 			encoded, err := json.Marshal(model)
 			if err == nil {
-				a.setPluginFormChoice(index, string(encoded))
+				c.setPluginFormChoice(index, string(encoded))
 			}
 			return
 		}
@@ -1749,7 +1748,7 @@ func (a *App) finishPluginAIModelEdit(index int, name string) {
 		if aiModelProviderKey(model) == aiModelProviderKey(selected) {
 			encoded, err := json.Marshal(model)
 			if err == nil {
-				a.setPluginFormChoice(index, string(encoded))
+				c.setPluginFormChoice(index, string(encoded))
 			}
 			return
 		}
@@ -1800,8 +1799,8 @@ func togglePluginMultiChoice(options []formOption, current, value string) string
 }
 
 // setPluginFormChoice stages one exact dropdown value without depending on option ordering.
-func (a *App) setPluginFormChoice(index int, value string) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) setPluginFormChoice(index int, value string) {
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
@@ -1818,7 +1817,7 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	}
 	if definition.Type == "select" && definition.Value.IsMulti {
 		value = togglePluginMultiChoice(definition.Value.Options, state.values[definition.Value.Key], value)
-		if picker := a.generalSettings.ChoicePicker(); picker != nil && picker.multi {
+		if picker := c.generalSettings().ChoicePicker(); picker != nil && picker.multi {
 			picker.item.value = value
 		}
 	}
@@ -1826,13 +1825,13 @@ func (a *App) setPluginFormChoice(index int, value string) {
 	state.values[definition.Value.Key] = value
 	state.status = ""
 	clearPluginFormFieldError(state, index)
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
-	a.submitPluginSettings()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
+	c.submitPluginSettings()
 }
 
-func (a *App) editPluginFormKey(event woxui.KeyEvent) {
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) editPluginFormKey(event woxui.KeyEvent) {
+	state := c.Form()
 	if state != nil && state.active && state.editor != nil && state.focused >= 0 && state.focused < len(state.definitions) {
 		_, changed := handleFormEditorKey(state.editor, state.definitions[state.focused], event)
 		if changed {
@@ -1841,53 +1840,53 @@ func (a *App) editPluginFormKey(event woxui.KeyEvent) {
 			clearPluginFormFieldError(state, state.focused)
 		}
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // onPluginSettingsTextInput commits native IME events only while a plugin textbox owns focus.
-func (a *App) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
-	state := a.pluginSettings.Form()
-	active := a.settingsWindow.open && a.settingsWindow.tab == "plugins" && state != nil && state.active
+func (c *pluginSettingsController) onPluginSettingsTextInput(_ woxui.TextInputEvent) bool {
+	state := c.Form()
+	active := c.settings.open && c.settings.tab == "plugins" && state != nil && state.active
 	return active
 }
 
-func (a *App) setPluginFormText(index int, value string) {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) setPluginFormText(index int, value string) {
+	form := c.Form()
 	changed := form != nil && setFormFieldsTextLocked(&form.formFieldsState, index, value)
 	if !changed {
 		return
 	}
 	form.status = ""
 	clearPluginFormFieldError(form, index)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 	// dirPath is a completed folder, like a select: persist immediately so the next
 	// launcher query does not keep using the previous directory.
 	if form.definitions[index].Type == "dirPath" {
-		a.submitPluginSettings()
+		c.submitPluginSettings()
 	}
 }
 
 // pickPluginFormDirectory fills a plugin dirPath setting from the native folder picker.
-func (a *App) pickPluginFormDirectory(index int) {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) pickPluginFormDirectory(index int) {
+	form := c.Form()
 	if form == nil || index < 0 || index >= len(form.definitions) || form.definitions[index].Type != "dirPath" {
 		return
 	}
-	window := a.settingsWindow.settingsNativeWindow()
+	window := c.settings.settingsNativeWindow()
 	if window == nil {
 		return
 	}
 	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
-	if a.pluginSettings.Form() != form {
+	if c.Form() != form {
 		return
 	}
 	if err != nil {
 		form.status = err.Error()
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
 	if path != "" {
-		a.setPluginFormText(index, path)
+		c.setPluginFormText(index, path)
 	}
 }
 
@@ -1917,7 +1916,7 @@ func preparePluginSettingSaveValues(state *pluginSettingsFormState) (map[string]
 }
 
 // validatePluginTriggerKeywordTableRow prevents installed plugins from claiming the same non-global route.
-func (a *App) validatePluginTriggerKeywordTableRow(state *formTableEditorState) string {
+func (c *pluginSettingsController) validatePluginTriggerKeywordTableRow(state *formTableEditorState) string {
 	if state == nil || state.definition.Value.Key != "TriggerKeywords" || state.rowForm == nil {
 		return ""
 	}
@@ -1928,14 +1927,14 @@ func (a *App) validatePluginTriggerKeywordTableRow(state *formTableEditorState) 
 	}
 	for index, row := range state.rows {
 		if index != state.rowIndex && strings.TrimSpace(fmt.Sprint(row["keyword"])) == keyword {
-			return a.language.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_plugin")
+			return c.language.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_plugin")
 		}
 	}
-	pluginForm := a.pluginSettings.Form()
+	pluginForm := c.Form()
 	if pluginForm == nil {
 		return ""
 	}
-	for _, plugin := range a.pluginSettings.Plugins() {
+	for _, plugin := range c.Plugins() {
 		if plugin.ID == pluginForm.pluginID {
 			continue
 		}
@@ -1945,7 +1944,7 @@ func (a *App) validatePluginTriggerKeywordTableRow(state *formTableEditorState) 
 				if name == "" {
 					name = plugin.ID
 				}
-				return fmt.Sprintf(a.language.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_other_plugin"), name)
+				return fmt.Sprintf(c.language.translate("i18n:ui_plugin_trigger_keyword_duplicate_in_other_plugin"), name)
 			}
 		}
 	}
@@ -1953,25 +1952,25 @@ func (a *App) validatePluginTriggerKeywordTableRow(state *formTableEditorState) 
 }
 
 // submitPluginSettings serializes auto-saves while retaining edits made during an in-flight request.
-func (a *App) submitPluginSettings() {
-	state := a.pluginSettings.Form()
-	if state == nil || state.saving || a.pluginSettings.Operation() != "" {
+func (c *pluginSettingsController) submitPluginSettings() {
+	state := c.Form()
+	if state == nil || state.saving || c.Operation() != "" {
 		return
 	}
 	syncFormFieldsEditorLocked(&state.formFieldsState)
-	if fieldErrors := a.formTables.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
+	if fieldErrors := c.formTables.translateFormTableFieldErrors(validateFormFieldErrors(state.definitions, state.values)); len(fieldErrors) > 0 {
 		pluginID := state.pluginID
-		if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
+		if form := c.Form(); form != nil && form.pluginID == pluginID {
 			form.fieldErrors = fieldErrors
 		}
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
 	submittedValues, persistedValues, err := preparePluginSettingSaveValues(state)
 	if err != nil {
 		state.status = "Could not prepare dictation actions: " + err.Error()
 		state.statusError = true
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
 	if len(persistedValues) == 0 {
@@ -1984,27 +1983,27 @@ func (a *App) submitPluginSettings() {
 	state.revision++
 	pluginID := state.pluginID
 	submitted := state
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 
-	util.Go(a.lifecycleCtx, "save plugin settings", func() {
+	util.Go(c.lifecycleCtx, "save plugin settings", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		saveErr := a.services.UpdatePluginSettings(ctx, a.sessionID, pluginID, persistedValues)
+		saveErr := c.services.UpdatePluginSettings(ctx, c.sessionID, pluginID, persistedValues)
 		var saveRevision uint64
-		_ = a.runOnUI("apply plugin settings save", func() {
-			resubmit := a.reconcilePluginSettingSave(submitted, pluginID, submittedValues, persistedValues, saveErr)
-			saveRevision = a.pluginSettings.settingSaveRevisions[pluginID]
+		_ = c.runOnUI("apply plugin settings save", func() {
+			resubmit := c.reconcilePluginSettingSave(submitted, pluginID, submittedValues, persistedValues, saveErr)
+			saveRevision = c.settingSaveRevisions[pluginID]
 			if resubmit {
-				a.submitPluginSettings()
+				c.submitPluginSettings()
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		})
 		if saveErr != nil {
 			log.Printf("save plugin settings: %v", saveErr)
 			return
 		}
 		// Dynamic settings may depend on any saved value, so always resolve them again.
-		a.refreshPluginFormDefinitions(pluginID, saveRevision)
+		c.refreshPluginFormDefinitions(pluginID, saveRevision)
 	})
 }
 
@@ -2017,8 +2016,8 @@ func (a *App) submitPluginSettings() {
 // A later form is left alone when it already has edits; a clean one is rebuilt
 // from the catalog so the saved value shows up. It returns true when the original
 // form still has unsaved edits.
-func (a *App) reconcilePluginSettingSave(submitted *pluginSettingsFormState, pluginID string, submittedValues, persistedValues map[string]string, saveErr error) bool {
-	form := a.pluginSettings.Form()
+func (c *pluginSettingsController) reconcilePluginSettingSave(submitted *pluginSettingsFormState, pluginID string, submittedValues, persistedValues map[string]string, saveErr error) bool {
+	form := c.Form()
 	sameForm := form != nil && form == submitted
 	if sameForm {
 		form.saving = false
@@ -2036,39 +2035,39 @@ func (a *App) reconcilePluginSettingSave(submitted *pluginSettingsFormState, plu
 	if saveErr != nil {
 		return false
 	}
-	a.pluginSettings.settingSaveRevisions[pluginID]++
-	a.applySavedPluginSettingValues(pluginID, persistedValues)
+	c.settingSaveRevisions[pluginID]++
+	c.applySavedPluginSettingValues(pluginID, persistedValues)
 	if sameForm {
 		return pluginFormDirty(form.definitions, form.values, form.initial)
 	}
 	if form == nil || form.pluginID != pluginID || pluginFormDirty(form.definitions, form.values, form.initial) {
 		return false
 	}
-	plugins := a.pluginSettings.Plugins()
-	selected := a.pluginSettings.Selected()
+	plugins := c.Plugins()
+	selected := c.Selected()
 	if selected < 0 || selected >= len(plugins) || plugins[selected].ID != pluginID {
 		return false
 	}
-	a.setPluginSelectionLocked(selected)
+	c.setPluginSelectionLocked(selected)
 	return false
 }
 
 // refreshPluginFormDefinitions reloads one installed plugin's setting definitions without flashing the catalog.
-func (a *App) refreshPluginFormDefinitions(pluginID string, saveRevision uint64) {
-	plugins, err := loadPluginSettingsPlugins(a.lifecycleCtx, a.services, a.sessionID, false)
+func (c *pluginSettingsController) refreshPluginFormDefinitions(pluginID string, saveRevision uint64) {
+	plugins, err := loadPluginSettingsPlugins(c.lifecycleCtx, c.services, c.sessionID, false)
 	if err != nil {
 		log.Printf("refresh plugin form definitions: %v", err)
 		return
 	}
 	requestModels := false
 	requestProviders := false
-	_ = a.runOnUI("refresh plugin form definitions", func() {
+	_ = c.runOnUI("refresh plugin form definitions", func() {
 		// Catalog reads include setting values as well as dynamic definitions. A
 		// slower earlier read must not overwrite values committed by a later save.
-		if saveRevision != a.pluginSettings.settingSaveRevisions[pluginID] {
+		if saveRevision != c.settingSaveRevisions[pluginID] {
 			return
 		}
-		current := a.pluginSettings.Plugins()
+		current := c.Plugins()
 		for index := range current {
 			if current[index].ID != pluginID {
 				continue
@@ -2081,23 +2080,23 @@ func (a *App) refreshPluginFormDefinitions(pluginID string, saveRevision uint64)
 				current[index].Setting = updated.Setting
 				break
 			}
-			a.pluginSettings.SetPlugins(current)
-			a.pluginSettings.cachePlugins(false, current)
-			a.settingsSearch.SetPlugins(current)
-			if form := a.pluginSettings.Form(); form != nil && form.pluginID == pluginID {
-				a.setPluginSelectionLocked(a.pluginSettings.Selected())
-				requestModels, requestProviders = a.queuePluginFormAIModelsLocked()
+			c.SetPlugins(current)
+			c.cachePlugins(false, current)
+			c.settingsSearch().SetPlugins(current)
+			if form := c.Form(); form != nil && form.pluginID == pluginID {
+				c.setPluginSelectionLocked(c.Selected())
+				requestModels, requestProviders = c.queuePluginFormAIModelsLocked()
 			}
 			break
 		}
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 	})
-	a.startPluginFormAIModelLoads(requestModels, requestProviders)
+	c.startPluginFormAIModelLoads(requestModels, requestProviders)
 }
 
 // applySavedPluginSettingValues keeps the local catalog consistent until its next normal refresh.
-func (a *App) applySavedPluginSettingValues(pluginID string, values map[string]string) {
-	plugins := a.pluginSettings.Plugins()
+func (c *pluginSettingsController) applySavedPluginSettingValues(pluginID string, values map[string]string) {
+	plugins := c.Plugins()
 	for index := range plugins {
 		if plugins[index].ID != pluginID {
 			continue
@@ -2116,9 +2115,9 @@ func (a *App) applySavedPluginSettingValues(pluginID string, values map[string]s
 		}
 		break
 	}
-	a.pluginSettings.SetPlugins(plugins)
-	a.pluginSettings.cachePlugins(a.pluginSettings.PluginsStore(), plugins)
-	a.settingsSearch.SetPlugins(plugins)
+	c.SetPlugins(plugins)
+	c.cachePlugins(c.PluginsStore(), plugins)
+	c.settingsSearch().SetPlugins(plugins)
 }
 
 // splitPluginTriggerKeywords normalizes the comma-separated core representation.

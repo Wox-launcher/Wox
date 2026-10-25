@@ -408,7 +408,7 @@ func (a *App) saveWindowManagerGroupEdit() {
 	} else {
 		a.formTables.invalidateFormTableWindow()
 	}
-	a.submitPluginSettings()
+	a.pluginSettings.submitPluginSettings()
 }
 
 func (a *App) setWindowManagerGroupName(value string) {

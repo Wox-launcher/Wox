@@ -60,7 +60,7 @@ func TestSettingsThemeEditorAppliesAndCancelsLiveColor(t *testing.T) {
 	controller.SetThemeEditor(state)
 	app := bindTestApp(&App{themeSettings: controller})
 
-	app.updateThemeEditorDialogColor(func(color themeColorHSV) themeColorHSV {
+	app.themeSettings.updateThemeEditorDialogColor(func(color themeColorHSV) themeColorHSV {
 		color.hue = 0
 		color.saturation = 1
 		color.value = 1
@@ -70,7 +70,7 @@ func TestSettingsThemeEditorAppliesAndCancelsLiveColor(t *testing.T) {
 		t.Fatalf("live background = %#v, want red", app.appearance.palette.background)
 	}
 
-	app.cancelThemeEditorDialog()
+	app.themeSettings.cancelThemeEditorDialog()
 	if app.appearance.palette.background != (woxui.Color{A: 255}) {
 		t.Fatalf("cancelled background = %#v, want black", app.appearance.palette.background)
 	}
@@ -86,15 +86,15 @@ func TestThemeEditorReloadKeepsLiveDraft(t *testing.T) {
 	controller := newThemeSettingsController(CommonDeps{})
 	controller.SetThemeEditor(state)
 	app := bindTestApp(&App{themeSettings: controller})
-	app.changeThemeEditorToken("AppBackgroundColor", "#FF0000")
+	app.themeSettings.changeThemeEditorToken("AppBackgroundColor", "#FF0000")
 	state.active = false
-	if err := app.loadSettingsThemeEditor(); err != nil {
+	if err := app.themeSettings.loadSettingsThemeEditor(); err != nil {
 		t.Fatal(err)
 	}
 	if controller.ThemeEditor() != state || state.values["AppBackgroundColor"] != "#FF0000" || !themeEditorDirtyLocked(state) || app.appearance.palette.background != (woxui.Color{R: 255, A: 255}) {
 		t.Fatal("reopening lost the draft or its live preview")
 	}
-	app.discardThemeEditorDraft()
+	app.themeSettings.discardThemeEditorDraft()
 	if themeEditorDirtyLocked(state) || app.appearance.palette.background != (woxui.Color{A: 255}) {
 		t.Fatal("discard did not restore the original theme after reopening")
 	}

@@ -34,7 +34,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	if network.IsOffline() && (snapshot.tab == "cloud" || (snapshot.tab == "plugins" && snapshot.plugins.PluginsStore) || (snapshot.tab == "theme" && snapshot.theme.ThemesMode == "store")) {
 		page = launcherview.OfflineSettingsView(launcherview.OfflineSettingsProps{Width: width - railWidth, Height: pageHeight, Theme: snapshot.palette, Icon: a.imageForTint(fromCoreImage(icons.Get(icons.StatusOffline)), &snapshot.palette.TextSecondary, physicalImageSize(48, frame.Scale*snapshot.palette.Scaled(1))), Window: a.settingsWindow.settingsNativeWindow(), Title: a.language.translate("i18n:ui_offline_title"), Description: a.language.translate("i18n:ui_offline_unavailable"), SettingsLabel: a.language.translate("i18n:ui_offline_open_settings"), OnSettings: func() { a.selectSettingTab("privacy") }})
 	} else if snapshot.tab == "plugins" {
-		page = a.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
+		page = a.pluginSettings.buildPluginSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "theme" {
 		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "ai" {
@@ -42,7 +42,7 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.tab == "data" {
 		page = a.buildDataSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "cloud" {
-		page = a.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
+		page = a.cloudSettings.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "runtime" {
 		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "usage" {
@@ -66,17 +66,17 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.general.ChoicePicker != nil {
 		overlay = a.buildSettingChoicePickerOverlay(snapshot.general.ChoicePicker, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.PluginDialog != nil {
-		overlay = a.buildCloudPluginExclusionOverlay(snapshot.cloud.PluginDialog, snapshot.palette, width, height, frame.Scale)
+		overlay = a.cloudSettings.buildCloudPluginExclusionOverlay(snapshot.cloud.PluginDialog, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.cloud.Form != nil {
-		overlay = a.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
+		overlay = a.cloudSettings.buildCloudFormOverlay(snapshot.cloud.Form, snapshot.palette, width, height)
 	} else if snapshot.privacy.Sample != "" {
 		overlay = a.buildPrivacySampleOverlay(snapshot, width, height)
 	} else if snapshot.tab == "theme" && snapshot.theme.AutoEditor != nil {
-		overlay = a.buildAutoThemeEditorOverlay(snapshot, width, height, frame.Scale)
+		overlay = a.themeSettings.buildAutoThemeEditorOverlay(snapshot, width, height, frame.Scale)
 	} else if a.settingsWindow.demo != nil {
 		overlay, overlayLeft, overlayTop = a.buildSettingsDemoOverlay(snapshot, width, height)
 	} else if snapshot.tab == "cloud" && a.settingsWindow.cloudPlanTooltip != nil {
-		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudIntroViewProps(snapshot, frame.Scale), a.settingsWindow.cloudPlanTooltip.anchor, width, height, snapshot.palette)
+		overlay, overlayLeft, overlayTop = launcherview.CloudPlanTooltipOverlay(a.cloudSettings.cloudIntroViewProps(snapshot, frame.Scale), a.settingsWindow.cloudPlanTooltip.anchor, width, height, snapshot.palette)
 	}
 	if snapshot.tableEditor != nil && a.settingsWindow.demo != nil {
 		demo, left, top := a.buildSettingsDemoOverlay(snapshot, width, height)
@@ -160,7 +160,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, i
 	bodyHeight := max(float32(0), height-40)
 	var body woxwidget.Widget
 	if snapshot.theme.ThemesMode != "editor" {
-		body = a.buildThemeCatalog(snapshot, innerWidth, bodyHeight, imageScale)
+		body = a.themeSettings.buildThemeCatalog(snapshot, innerWidth, bodyHeight, imageScale)
 	} else {
 		theme := snapshot.theme.ThemeEditor
 		if theme == nil {
@@ -169,7 +169,7 @@ func (a *App) buildSettingsThemePage(snapshot settingsSnapshot, width, height, i
 				body = launcherview.SettingsMessage(snapshot.theme.ThemesError, innerWidth, bodyHeight, snapshot.palette)
 			}
 		} else {
-			body = a.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight, imageScale)
+			body = a.themeSettings.buildThemeEditorSettingsSurface(theme, snapshot.palette, innerWidth, bodyHeight, imageScale)
 		}
 	}
 	return launcherview.SettingsThemePage(launcherview.SettingsThemePageProps{

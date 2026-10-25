@@ -44,7 +44,7 @@ func TestCloudSyncPresentationShowsUnknownTotalProgress(t *testing.T) {
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
 	})
-	_, detail, _, _ := app.cloudSyncPresentation(settingsSnapshot{
+	_, detail, _, _ := app.cloudSettings.cloudSyncPresentation(settingsSnapshot{
 		cloud: cloudSettingsSnapshot{
 			Sync: cloudSyncStatus{
 				Progress: &cloudSyncProgress{
@@ -61,7 +61,7 @@ func TestCloudSyncPresentationShowsUnknownTotalProgress(t *testing.T) {
 		t.Fatalf("restore detail = %q, want %q", detail, "Restoring plugin plugin-deepl (17 items processed)")
 	}
 
-	label, detail, _, _ := app.cloudSyncPresentation(settingsSnapshot{cloud: cloudSettingsSnapshot{Busy: "sync"}})
+	label, detail, _, _ := app.cloudSettings.cloudSyncPresentation(settingsSnapshot{cloud: cloudSettingsSnapshot{Busy: "sync"}})
 	if label != "Syncing..." || detail != "Preparing sync..." {
 		t.Fatalf("busy sync presentation = %q / %q, want Syncing... / Preparing sync...", label, detail)
 	}
@@ -118,13 +118,13 @@ func TestCloudBillingPriceWithTrial(t *testing.T) {
 	})
 	price := cloudBillingPlanPrice{Formatted: "$1.99/month"}
 	monthTrial := &cloudBillingPlanTrial{Days: 30, Interval: "month", IntervalCount: 1, Formatted: "1 month free"}
-	if got := cloudBillingPriceWithTrial(app, price, monthTrial, true); got != "$1.99/month · 1 month free trial" {
+	if got := cloudBillingPriceWithTrial(&app.language, price, monthTrial, true); got != "$1.99/month · 1 month free trial" {
 		t.Fatalf("month trial = %q", got)
 	}
-	if got := cloudBillingPriceWithTrial(app, price, nil, true); got != "$1.99/month" {
+	if got := cloudBillingPriceWithTrial(&app.language, price, nil, true); got != "$1.99/month" {
 		t.Fatalf("no trial = %q", got)
 	}
-	if got := cloudBillingPriceWithTrial(app, cloudBillingPlanPrice{}, nil, false); got != "Loading..." {
+	if got := cloudBillingPriceWithTrial(&app.language, cloudBillingPlanPrice{}, nil, false); got != "Loading..." {
 		t.Fatalf("loading price = %q", got)
 	}
 }
@@ -144,7 +144,7 @@ func TestFormatCloudSyncProgressUsesCachedPluginName(t *testing.T) {
 		ID:   "ea521bb8-4414-44be-bf42-4b2851ae32ad",
 		Name: "DeepL",
 	}})
-	detail := app.formatCloudSyncProgress(&cloudSyncProgress{
+	detail := app.cloudSettings.formatCloudSyncProgress(&cloudSyncProgress{
 		Active:     true,
 		Operation:  cloudsync.CloudSyncProgressOperationRestore,
 		EntityType: cloudsync.EntityInstalledPlugin,
@@ -167,7 +167,7 @@ func TestFormatCloudSyncProgressUsesPushTargetAndTotal(t *testing.T) {
 		},
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
 	})
-	detail := app.formatCloudSyncProgress(&cloudSyncProgress{
+	detail := app.cloudSettings.formatCloudSyncProgress(&cloudSyncProgress{
 		Active:     true,
 		Operation:  cloudsync.CloudSyncProgressOperationPush,
 		EntityType: cloudsync.EntityWoxSetting,
@@ -219,11 +219,11 @@ func TestCloudActivityTime(t *testing.T) {
 		{now.Add(-time.Hour), "01-01 23:30"},
 		{now.Add(-48 * time.Hour), "2025-12-31 00:30"},
 	} {
-		if got := app.formatCloudActivityTime(test.date.UnixMilli(), now); got != test.want {
+		if got := app.cloudSettings.formatCloudActivityTime(test.date.UnixMilli(), now); got != test.want {
 			t.Errorf("time = %q, want %q", got, test.want)
 		}
 	}
-	if got := app.formatCloudActivityTime(0, now); got != "Never" {
+	if got := app.cloudSettings.formatCloudActivityTime(0, now); got != "Never" {
 		t.Fatalf("unset activity = %q", got)
 	}
 }
@@ -242,7 +242,7 @@ func TestCloudSyncStatusIcons(t *testing.T) {
 		{cloudSettingsSnapshot{Error: "Network unavailable"}, icons.ControlError},
 		{cloudSettingsSnapshot{}, icons.SettingsDataCloudsync},
 	} {
-		_, _, _, got := app.cloudSyncPresentation(settingsSnapshot{cloud: test.state})
+		_, _, _, got := app.cloudSettings.cloudSyncPresentation(settingsSnapshot{cloud: test.state})
 		if got != test.icon {
 			t.Errorf("state %+v icon = %q, want %q", test.state, got, test.icon)
 		}

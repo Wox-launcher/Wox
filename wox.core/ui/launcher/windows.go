@@ -251,24 +251,6 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 	_ = window.SetTextInputState(state)
 }
 
-func (a *App) themeEditorNativeWindow() *woxui.Window {
-	return a.settingsWindow.settingsNativeWindow()
-}
-
-func (a *App) invalidateThemeEditorWindow() {
-	if window := a.themeEditorNativeWindow(); window != nil {
-		_ = window.Invalidate()
-	}
-}
-
-func (a *App) updateThemeEditorTextInput(enabled bool) {
-	a.updateSettingsTextInput(enabled)
-}
-
-func (a *App) restoreThemeEditorTextInput() {
-	a.updateSettingsTextInput(false)
-}
-
 func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 	state := a.hotkeySettings.Recording()
 	usesSettings := false
@@ -311,7 +293,7 @@ func (a *App) formFieldNativeWindow(idPrefix string) *woxui.Window {
 	case "plugin-settings", "ai-settings", "cloud-form":
 		return a.settingsWindow.settingsNativeWindow()
 	case "theme-editor", "theme-editor-dialog":
-		return a.themeEditorNativeWindow()
+		return a.themeSettings.themeEditorNativeWindow()
 	case "form-table-row":
 		return a.formTables.formTableNativeWindow()
 	default:
@@ -346,22 +328,22 @@ func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
 	if a.formTables.formTableUsesSettingsWindow() && a.formTables.onFormTableTextInput(event) {
 		return
 	}
-	if a.onPluginSearchTextInput(event) {
+	if a.pluginSettings.onPluginSearchTextInput(event) {
 		return
 	}
 	if a.onSettingsSearchTextInput(event) {
 		return
 	}
-	if a.onThemeEditorPreviewTextInput(event) {
+	if a.themeSettings.onThemeEditorPreviewTextInput(event) {
 		return
 	}
-	if a.onCloudFormTextInput(event) {
+	if a.cloudSettings.onCloudFormTextInput(event) {
 		return
 	}
 	if a.onBuiltInSettingsTextInput(event) {
 		return
 	}
-	a.onPluginSettingsTextInput(event)
+	a.pluginSettings.onPluginSettingsTextInput(event)
 }
 
 func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
@@ -408,7 +390,7 @@ func (a *App) onSettingsWindowClosed() {
 	a.themeSettings.SetThemeSearchEditor(nil)
 	a.themeSettings.SetThemeSearchFocused(false)
 	a.themeSettings.SetThemeDetailTab("preview")
-	a.releaseDemoWallpaperLocked()
+	a.themeSettings.releaseDemoWallpaperLocked()
 	a.generalSettings.SetChoicePicker(nil)
 	a.generalSettings.SetShowDisplayPicker(nil)
 	a.generalSettings.ClearShowDisplays()
@@ -500,7 +482,7 @@ func (a *App) openOnboarding() error {
 func (a *App) onOnboardingWindowClosed() {
 	wasRecording := a.hotkeyRecordingUsesOnboardingWindow()
 	wasOpen := a.onboarding.leaveLocked()
-	a.releaseDemoWallpaperLocked()
+	a.themeSettings.releaseDemoWallpaperLocked()
 	if wasRecording {
 		a.hotkeySettings.ClearRecording()
 		a.postHotkeyRecordingStopped()

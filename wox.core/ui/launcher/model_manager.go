@@ -467,7 +467,7 @@ func (a *App) chooseManagedModel(index int) {
 	pluginTarget := pluginForm != nil && state.target == &pluginForm.formFieldsState
 	a.closeModelManager()
 	if pluginTarget {
-		a.submitPluginSettings()
+		a.pluginSettings.submitPluginSettings()
 	}
 }
 
