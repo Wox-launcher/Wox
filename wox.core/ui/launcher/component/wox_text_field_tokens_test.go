@@ -114,19 +114,19 @@ func TestTokenChipHoverRevealsCloseAffordance(t *testing.T) {
 	if !run.Dismissible {
 		t.Fatal("query variable chips should be dismissible")
 	}
-	if got := withDismissibleChipHover([]TextFieldRichRun{run}, 0, theme, 0); len(got) != 1 || got[0].Advance != run.Advance {
+	if got := withDismissibleChipHover([]TextFieldRichRun{run}, 0, nil, theme, 0); len(got) != 1 || got[0].Advance != run.Advance {
 		t.Fatalf("idle hover progress should keep the chip width, got %#v", got)
 	}
-	mid := withDismissibleChipHover([]TextFieldRichRun{run}, 0, theme, 0.5)
+	mid := withDismissibleChipHover([]TextFieldRichRun{run}, 0, nil, theme, 0.5)
 	if len(mid) != 1 || mid[0].Advance != run.Advance+tokenChipCloseSlot*0.5 {
 		t.Fatalf("mid hover advance = %#v, want a half close slot", mid)
 	}
-	hovered := withDismissibleChipHover([]TextFieldRichRun{run}, 0, theme, 1)
+	hovered := withDismissibleChipHover([]TextFieldRichRun{run}, 0, nil, theme, 1)
 	if len(hovered) != 1 || hovered[0].Advance != run.Advance+tokenChipCloseSlot {
 		t.Fatalf("hovered chip advance = %#v, want %+v extra close slot", hovered, tokenChipCloseSlot)
 	}
 	editable := run.WithChipEdit()
-	edited := withDismissibleChipHover([]TextFieldRichRun{editable}, 0, theme, 1)
+	edited := withDismissibleChipHover([]TextFieldRichRun{editable}, 0, nil, theme, 1)
 	if len(edited) != 1 || edited[0].Advance != editable.Advance+tokenChipCloseSlot+tokenChipEditSlot {
 		t.Fatalf("editable hovered chip advance = %#v, want edit and close slots", edited)
 	}
@@ -145,12 +145,52 @@ func TestTokenChipHoverRevealsCloseAffordance(t *testing.T) {
 	}
 }
 
+type tokenChipFontMeasurer struct{}
+
+func (tokenChipFontMeasurer) MeasureText(string, woxui.TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: woxui.Size{Width: 35, Height: 15}}, nil
+}
+
+// TestTokenChipHoverKeepsLabelPosition covers font line boxes taller than their nominal size.
+func TestTokenChipHoverKeepsLabelPosition(t *testing.T) {
+	measurer := tokenChipFontMeasurer{}
+	theme := ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}}
+	for _, editable := range []bool{false, true} {
+		run := NewTokenChipRun(0, 20, "query", measurer, theme).WithDismissible()
+		if editable {
+			run = run.WithChipEdit()
+		}
+		for _, progress := range []float32{0, 0.25, 1, 0.5, 0} {
+			hovered := withDismissibleChipHover([]TextFieldRichRun{run}, 0, measurer, theme, progress)[0]
+			actual := &woxui.DisplayList{}
+			hovered.Paint(actual, woxui.Rect{X: 10, Y: 20, Width: hovered.Advance, Height: 20})
+
+			want := &woxui.DisplayList{}
+			chip := woxui.Rect{X: 10, Y: 21, Width: hovered.Advance, Height: 18}
+			fill := theme.TextSecondary
+			fill.A = uint8(float32(fill.A) * (0.16 + 0.08*progress))
+			want.FillRoundedRect(chip, tokenChipRadius, fill)
+			// Hover changes only the trailing action space, never the measured label bounds.
+			want.DrawText("query", woxui.Rect{X: 16, Y: 22.5, Width: 35, Height: 15}, woxui.TextStyle{Size: tokenChipFontSize}, theme.Text)
+			if progress > 0 {
+				if editable {
+					paintTokenChipEdit(want, chip, theme, progress)
+				}
+				paintTokenChipClose(want, chip, theme, progress)
+			}
+			if err := actual.Compare(want); err != nil {
+				t.Fatalf("editable=%t progress=%g: chip label moved: %v", editable, progress, err)
+			}
+		}
+	}
+}
+
 func TestTextFieldDismissibleHitFindsCloseRegion(t *testing.T) {
 	theme := ControlTheme{Text: woxui.Color{A: 255}, TextSecondary: woxui.Color{A: 200}}
 	value := "{wox:parameter?name=query}"
 	end := len([]rune(value))
 	run := NewTokenChipRun(0, end, "query", nil, theme).WithDismissible()
-	hovered := withDismissibleChipHover([]TextFieldRichRun{run}, 0, theme, 1)
+	hovered := withDismissibleChipHover([]TextFieldRichRun{run}, 0, nil, theme, 1)
 	state := woxui.TextEditingState{Text: value}
 	style := woxui.TextStyle{Size: 13}
 	start, stop, action, ok := textFieldDismissibleHit(state, nil, style, hovered, 1, textFieldLineHeight, 0, 400, false, false, woxui.Point{X: hovered[0].Advance - 2, Y: 10}, 1, 0)
@@ -165,12 +205,12 @@ func TestTextFieldDismissibleHitFindsCloseRegion(t *testing.T) {
 	if !ok || action != tokenChipActionBody {
 		t.Fatalf("unhovered chip should not treat its trailing edge as close, action %d ok %v", action, ok)
 	}
-	mid := withDismissibleChipHover([]TextFieldRichRun{run}, 0, theme, 0.4)
+	mid := withDismissibleChipHover([]TextFieldRichRun{run}, 0, nil, theme, 0.4)
 	_, _, action, ok = textFieldDismissibleHit(state, nil, style, mid, 1, textFieldLineHeight, 0, 400, false, false, woxui.Point{X: mid[0].Advance - 2, Y: 10}, 0.4, 0)
 	if !ok || action != tokenChipActionBody {
 		t.Fatalf("a still-opening close control should not dismiss, action %d ok %v", action, ok)
 	}
-	editable := withDismissibleChipHover([]TextFieldRichRun{run.WithChipEdit()}, 0, theme, 1)
+	editable := withDismissibleChipHover([]TextFieldRichRun{run.WithChipEdit()}, 0, nil, theme, 1)
 	_, _, action, ok = textFieldDismissibleHit(state, nil, style, editable, 1, textFieldLineHeight, 0, 400, false, false, woxui.Point{X: editable[0].Advance - tokenChipCloseSlot - 2, Y: 10}, 1, 0)
 	if !ok || action != tokenChipActionEdit {
 		t.Fatalf("edit hit = action %d ok %v", action, ok)

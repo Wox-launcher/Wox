@@ -897,7 +897,7 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 		Duration: tokenChipDismissMs * time.Millisecond, Curve: woxwidget.AnimationEaseInOutCubic,
 		Builder: func(progress float32) woxwidget.Widget {
 			animated := props
-			animated.RichRuns = withDismissibleChipHover(baseRuns, s.hoveredDismissStart, animated.Theme, progress)
+			animated.RichRuns = withDismissibleChipHover(baseRuns, s.hoveredDismissStart, animated.Window, animated.Theme, progress)
 			animated.dismissHoverProgress = progress
 			return buildWoxTextField(animated, realState, copySelection, cutSelection, pasteClipboard, runContextAction)
 		},

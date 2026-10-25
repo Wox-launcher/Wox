@@ -190,7 +190,7 @@ func (run TextFieldRichRun) WithChipEdit() TextFieldRichRun {
 }
 
 // withDismissibleChipHover widens one chip by progress and paints its hover actions.
-func withDismissibleChipHover(runs []TextFieldRichRun, start int, theme ControlTheme, progress float32) []TextFieldRichRun {
+func withDismissibleChipHover(runs []TextFieldRichRun, start int, window textFieldMeasurer, theme ControlTheme, progress float32) []TextFieldRichRun {
 	if progress <= 0 {
 		return runs
 	}
@@ -207,7 +207,8 @@ func withDismissibleChipHover(runs []TextFieldRichRun, start int, theme ControlT
 		editable := next[index].ChipEditable
 		next[index].Advance += tokenChipHoverExtra(next[index]) * progress
 		next[index].Paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			paintTokenChip(displayList, bounds, label, icon, nil, theme, progress, editable)
+			// Preserve measured font height so revealing actions cannot shift the label vertically.
+			paintTokenChip(displayList, bounds, label, icon, window, theme, progress, editable)
 		}
 		return next
 	}
