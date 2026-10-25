@@ -7,16 +7,7 @@ import (
 
 	"wox/common"
 	"wox/setting"
-	"wox/util"
 )
-
-func TestGetQueryFirstFlushDeadlineMsSkipsAliasRestoreJob(t *testing.T) {
-	m := &Manager{pluginResultDeliveryLatency: util.NewHashMap[string, *util.EWMA]()}
-	deadline := m.getQueryFirstFlushDeadlineMs([]queryPluginJob{{aliasRestore: true}}, 0)
-	if deadline != 20 {
-		t.Fatalf("deadline = %d, want the no-history first-flush bound", deadline)
-	}
-}
 
 func TestQueryResultToUICopiesTitleTags(t *testing.T) {
 	result := QueryResult{

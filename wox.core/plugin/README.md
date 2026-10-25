@@ -1,7 +1,35 @@
-# Plugin result processing
+# Plugin queries and result processing
 
-The manager retains plugin lifecycle and query scheduling. Its internal
+The manager retains plugin lifecycle, query planning and business processing.
+Its internal `queryScheduler` owns execution timing and completion, while
 `queryResultStore` owns session/query result maps and deferred image tokens.
+These responsibilities remain in the plugin package.
+
+## Query scheduling
+
+`query_scheduler.go` owns the plugin-wide debounce timers, per-query executions,
+fallback/final completion counters, result delivery latency and first-flush
+deadline calculation. Manager selects eligible plugins and supplies three
+callbacks: execute a plugin query, observe its response for history, and restore
+result aliases. Neither execution nor scheduler holds a Manager reference.
+Alias matching, restoration and polishing stay in `result_binding.go`; their
+goroutine, delivery and completion are owned by the scheduler.
+
+All jobs are counted before any starts. Debounced jobs count toward `Done` but
+do not block fallback; stopping a replaced timer completes its old job. Timer
+keys remain plugin IDs across sessions. Ordinary plugin responses are delivered
+before completion even when their context was canceled; alias restoration keeps
+its cancellation checks and cancellable send. The public `QueryExecution`
+channels, buffering, completion ordering and 12-20 ms first-flush policy are
+unchanged. This extraction adds no cancellation on window hide, session teardown
+or Manager stop, and does not change timer synchronization or panic recovery.
+
+The existing alias-job deadline test lives in `query_scheduler_test.go`.
+Query planning, fallback, result binding and UI smoke coverage continue to
+exercise the Manager entry point.
+
+## Result processing
+
 Result presentation is organized within the same package:
 
 - `result_polish.go` owns initial result processing, ranking, remote preview

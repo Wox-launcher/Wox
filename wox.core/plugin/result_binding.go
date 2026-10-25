@@ -814,55 +814,49 @@ func (m *Manager) restoreResultBinding(ctx context.Context, pluginInstance *Inst
 	}
 }
 
-// runResultAliasJob restores matches independently of ordinary plugin queries.
-func (m *Manager) runResultAliasJob(e *queryExecution, job queryPluginJob) {
-	util.Go(e.ctx, "result alias restore", func() {
-		defer e.tracker.finishJob(job.blocksFallback)
-		if !e.query.IsGlobalQuery() || strings.TrimSpace(e.query.Search) == "" {
-			return
+// restoreResultAliases resolves and polishes alias matches independently of ordinary queries.
+// Scheduling, channel delivery, and completion belong to queryScheduler.
+func (m *Manager) restoreResultAliases(ctx context.Context, query Query) QueryResponse {
+	if !query.IsGlobalQuery() || strings.TrimSpace(query.Search) == "" {
+		return QueryResponse{}
+	}
+
+	var results []QueryResult
+	for _, binding := range currentResultBindings() {
+		match := aliasMatchForQuery(ctx, binding.Alias, query.Search)
+		if match == aliasMatchNone {
+			continue
+		}
+		if ctx.Err() != nil {
+			return QueryResponse{}
 		}
 
-		var results []QueryResult
-		for _, binding := range currentResultBindings() {
-			match := aliasMatchForQuery(e.ctx, binding.Alias, e.query.Search)
-			if match == aliasMatchNone {
-				continue
-			}
-			if e.ctx.Err() != nil {
-				return
-			}
-
-			pluginInstance := m.getPluginInstance(binding.PluginID)
-			if pluginInstance == nil || pluginInstanceDisabled(pluginInstance) || !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) || len(pluginInstance.MRURestoreCallbacks) == 0 {
-				continue
-			}
-
-			restored := m.restoreResultBinding(e.ctx, pluginInstance, binding, e.query.Env)
-			if e.ctx.Err() != nil {
-				return
-			}
-
-			if restored == nil {
-				util.GetLogger().Debug(e.ctx, fmt.Sprintf("result alias restore skipped: hash=%s plugin=%s", binding.Hash, binding.PluginID))
-				continue
-			}
-			if restored.Id == "" {
-				restored.Id = resultAliasResultIDPrefix + binding.Hash
-			}
-			restored.Actions = append(restored.Actions, m.newResultBindingActions(e.ctx, pluginInstance, e.query, *restored, binding.Hash)...)
-			polished := m.polishResultWithSource(e.ctx, pluginInstance, e.query, QueryLayout{}, *restored, binding.Hash, match)
-			results = append(results, polished)
+		pluginInstance := m.getPluginInstance(binding.PluginID)
+		if pluginInstance == nil || pluginInstanceDisabled(pluginInstance) || !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) || len(pluginInstance.MRURestoreCallbacks) == 0 {
+			continue
 		}
-		if len(results) == 0 || e.ctx.Err() != nil {
-			return
+
+		restored := m.restoreResultBinding(ctx, pluginInstance, binding, query.Env)
+		if ctx.Err() != nil {
+			return QueryResponse{}
 		}
-		util.GetLogger().Debug(e.ctx, fmt.Sprintf("result alias restore injected %d results for %q", len(results), e.query.Search))
-		response := QueryResponse{Results: results}
-		select {
-		case e.resultsChan <- response.ToUI():
-		case <-e.ctx.Done():
+
+		if restored == nil {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("result alias restore skipped: hash=%s plugin=%s", binding.Hash, binding.PluginID))
+			continue
 		}
-	})
+		if restored.Id == "" {
+			restored.Id = resultAliasResultIDPrefix + binding.Hash
+		}
+		restored.Actions = append(restored.Actions, m.newResultBindingActions(ctx, pluginInstance, query, *restored, binding.Hash)...)
+		polished := m.polishResultWithSource(ctx, pluginInstance, query, QueryLayout{}, *restored, binding.Hash, match)
+		results = append(results, polished)
+	}
+	if len(results) == 0 || ctx.Err() != nil {
+		return QueryResponse{}
+	}
+	util.GetLogger().Debug(ctx, fmt.Sprintf("result alias restore injected %d results for %q", len(results), query.Search))
+	return QueryResponse{Results: results}
 }
 
 // aliasMatchForQuery distinguishes exact matches from fuzzy matches for display order.
