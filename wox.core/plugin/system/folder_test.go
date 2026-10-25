@@ -275,7 +275,7 @@ func TestFolderResultsKeepFilePreviewHidden(t *testing.T) {
 	}
 	assertFolderPreviewHidden(t, notes, child)
 	assertFolderPreviewHidden(t, p.buildPathResult(root, "root", true, 0, nil), root)
-	assertFolderPreviewHidden(t, p.buildFavoriteResult("Root", root, 0, 0), root)
+	assertFolderPreviewHidden(t, p.buildFavoriteResult("Root", root, true, 0, 0), root)
 }
 
 func TestFolderBrowseActionsUseSharedTriggerQuery(t *testing.T) {

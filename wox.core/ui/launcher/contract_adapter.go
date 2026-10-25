@@ -111,18 +111,11 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions) error {
 	if err := a.runOnUI("refresh query", func() {
 		selected := a.resultList.selected
-		if a.querySession.queryContextKnown {
-			a.attention.attentionQueryWasGlobal = a.querySession.queryContext.IsGlobalQuery
-		}
-		a.querySession.query.QueryID = newInputQuery("").QueryID
-		a.querySession.queryComplete = false
-		a.querySession.queryContext = queryContext{}
-		a.querySession.queryContextKnown = false
+		a.beginQueryGenerationLocked()
 		a.querySession.completionHint = nil
 		// Keep the visible glance through the refresh. Clearing it blanks the query accessory until results return.
 		a.glance.stopGlanceLocked(false)
 		if options.SelectedResultId == "" && !options.PreserveSelectedIndex {
-			a.resultList.pendingSelection = nil
 			a.resultList.selected = -1
 			a.resultList.resultScrollDetached = false
 		} else {
@@ -897,13 +890,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	a.querySession.resetQueryTransitionLocked()
 	a.querySession.releaseRefreshResultHoldLocked()
 	if a.resultList.resultsQueryID != queryID {
-		a.resultList.results = nil
-		a.resultList.resultsSectionRevision++
-		a.resultList.selected = -1
-		a.resultList.hoveredResult = -1
-		a.resultList.resultScroll.reset()
-		a.resultList.resultScrollDetached = false
-		a.resultList.layout = queryLayout{}
+		a.resultList.clearRows()
 	}
 	a.resultList.resultsQueryID = queryID
 	for index := range results {

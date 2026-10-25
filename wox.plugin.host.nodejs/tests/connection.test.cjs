@@ -67,3 +67,25 @@ test("closing the current connection fails a waiting call", async () => {
   assert.equal(Object.keys(connection.waitingForResponse).length, 0)
   await assert.rejects(api.invokeMethod(context(), "HideApp", {}), /host websocket is not connected/)
 })
+
+test("an error response rejects the waiting call", async () => {
+  const ws = openSocket()
+  connection.setCurrentConnection(ws)
+  const api = new PluginAPI(ws, "tasknotes", "TaskNotes")
+  const pending = api.invokeMethod(context(), "GetSetting", {})
+  await Promise.resolve()
+  const id = ws.sent[0].Id
+  assert.equal(connection.settleResponse({ Id: id, Error: 'missing required parameter "Key"', Result: null }), true)
+  await assert.rejects(pending, /missing required parameter "Key"/)
+  assert.equal(connection.settleResponse({ Id: id, Result: null }), false)
+})
+
+test("a successful response resolves with its result", async () => {
+  const ws = openSocket()
+  connection.setCurrentConnection(ws)
+  const api = new PluginAPI(ws, "tasknotes", "TaskNotes")
+  const pending = api.invokeMethod(context(), "GetSetting", { Key: "k" })
+  await Promise.resolve()
+  connection.settleResponse({ Id: ws.sent[0].Id, Result: "value" })
+  assert.equal(await pending, "value")
+})

@@ -83,6 +83,39 @@ func (a *App) bindQuery() {
 	c.applyResults = a.applyResults
 }
 
+// startNewGeneration gives the current query a new identity. The context and completion
+// state described the previous generation's results, so they are returned and cleared.
+func (a *queryController) startNewGeneration() (previous queryContext, known bool) {
+	previous, known = a.queryContext, a.queryContextKnown
+	a.query.QueryID = newID()
+	a.queryContext = queryContext{}
+	a.queryContextKnown = false
+	a.queryComplete = false
+	return previous, known
+}
+
+// resetToGlobalInputLocked replaces the query with an empty global input query and starts
+// a transition so the visible rows stay until the new results arrive.
+func (a *queryController) resetToGlobalInputLocked() {
+	a.query = newInputQuery("")
+	a.queryContext = queryContext{IsGlobalQuery: true}
+	a.queryContextKnown = true
+	a.editor.SetText("", false)
+	a.beginQueryTransitionLocked(false)
+}
+
+// armHistoryRecall installs the show-time history snapshot. Up recalls history only when the
+// shown query is an input query; continued shows skip the newest entry, which is the current query.
+func (a *queryController) armHistoryRecall(histories []plainQuery, continued bool) {
+	a.queryHistories = append(a.queryHistories[:0], histories...)
+	a.canRecallHistory = a.query.QueryType == "input"
+	if continued {
+		a.queryHistoryIndex = 0
+	} else {
+		a.queryHistoryIndex = -1
+	}
+}
+
 // previousQueryHistory advances through the show-time history snapshot while history recall remains active.
 func (a *queryController) previousQueryHistory() (*plainQuery, bool) {
 	if !a.canRecallHistory {

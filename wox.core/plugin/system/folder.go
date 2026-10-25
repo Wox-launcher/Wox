@@ -453,7 +453,7 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, isDir bool,
 	return plugin.QueryResult{
 		Title:       name,
 		SubTitle:    path,
-		Icon:        getFolderPluginPathIcon(path, true),
+		Icon:        getFolderPluginPathIcon(path, isDir),
 		Score:       folderResultScore + scoreBoost,
 		IdentityKey: path,
 		Group:       "i18n:plugin_folder_favorites",

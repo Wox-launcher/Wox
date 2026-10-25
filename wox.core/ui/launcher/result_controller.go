@@ -62,6 +62,26 @@ func (a *resultController) publishRows(queryID string, results []queryResult) {
 	a.hoveredResult = -1
 }
 
+// clearRows drops every published row together with the selection, scroll position and
+// layout that described them.
+func (a *resultController) clearRows() {
+	a.results = nil
+	a.resultsSectionRevision++
+	a.resultsQueryID = ""
+	a.selected = -1
+	a.hoveredResult = -1
+	a.resultScroll.reset()
+	a.resultScrollDetached = false
+	a.layout = queryLayout{}
+}
+
+func (a *resultController) clearRefinements() {
+	a.refinements = nil
+	a.refinementsSectionRevision++
+	a.refinementOpen = false
+	a.refinementScope = ""
+}
+
 // restoreSelection retains a requested row across partial refresh snapshots.
 func (a *resultController) restoreSelection(queryID string, complete bool) {
 	selected, preserved, pending := restoreRefreshSelection(a.results, a.pendingSelection, queryID, complete)

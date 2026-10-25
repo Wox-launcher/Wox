@@ -808,28 +808,17 @@ func (a *App) showWindow(params showAppParams) error {
 		a.resultDrag.releaseResultFileDragHold()
 		wasVisible = a.visible
 		a.show = params
-		a.querySession.queryHistories = append(a.querySession.queryHistories[:0], params.QueryHistories...)
 		// A selection query on the primary launcher is always transient (Space Quick
 		// Look preview or a selection-bearing query hotkey). Reopening through the
 		// main hotkey must start fresh; otherwise the stale selection context keeps
 		// every keystroke pinned to the previous selection query.
 		if params.ShowSource == string(common.ShowSourceDefault) && a.querySession.query.QueryType == "selection" {
-			a.querySession.query = newInputQuery("")
 			a.querySession.queryHintEditorState = queryHintEditor{}
-			a.querySession.queryContext = queryContext{IsGlobalQuery: true}
-			a.querySession.queryContextKnown = true
-			a.querySession.editor.SetText("", false)
-			a.querySession.beginQueryTransitionLocked(false)
+			a.querySession.resetToGlobalInputLocked()
 		}
 		preserveQuery = a.applyLaunchModeOnShowLocked()
 		refreshInlinePreview = !wasVisible && a.previews.hasInlinePreviewToRestore()
-		a.querySession.canRecallHistory = a.querySession.query.QueryType == "input"
-		if params.LaunchMode == "continue" {
-			// The newest history is the current continued query, so the first Up recalls the entry before it.
-			a.querySession.queryHistoryIndex = 0
-		} else {
-			a.querySession.queryHistoryIndex = -1
-		}
+		a.querySession.armHistoryRecall(params.QueryHistories, params.LaunchMode == "continue")
 		if params.SelectAll {
 			a.querySession.selectEntireQuery()
 		}
@@ -1157,14 +1146,23 @@ func (a *App) notifySettingViewChanged(inSettingView bool) error {
 // Callers that replace the whole query, such as setQuery, own this bookkeeping already.
 func (a *App) beginQueryGenerationLocked() {
 	a.querySession.releaseRefreshResultHoldLocked()
-	if a.querySession.queryContextKnown {
-		a.attention.attentionQueryWasGlobal = a.querySession.queryContext.IsGlobalQuery
+	if previous, known := a.querySession.startNewGeneration(); known {
+		a.attention.attentionQueryWasGlobal = previous.IsGlobalQuery
 	}
-	a.querySession.query.QueryID = newID()
 	a.resultList.pendingSelection = nil
-	a.querySession.queryContext = queryContext{}
-	a.querySession.queryContextKnown = false
-	a.querySession.queryComplete = false
+}
+
+// clearQueryAccessoriesLocked drops the controls and previews that belonged to a replaced query.
+func (a *App) clearQueryAccessoriesLocked() {
+	a.resultList.clearRefinements()
+	a.querySession.completionHint = nil
+	a.actions.clearActionPanelStateLocked()
+	a.forms.form = nil
+	a.previews.reconcileSelectedPreview()
+	a.requirements.requirementForm = nil
+	a.conflicts.triggerConflict = nil
+	a.chat.resetChatPreview()
+	a.webView.clearWebViewPreviewModeLocked()
 }
 
 func (a *App) setQuery(query plainQuery) {
@@ -1210,28 +1208,10 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 	a.querySession.resetQueryTransitionLocked()
 	a.querySession.releaseRefreshResultHoldLocked()
 	a.querySession.resetQueryLoadingLocked()
-	a.resultList.results = nil
-	a.resultList.resultsSectionRevision++
-	a.resultList.resultsQueryID = ""
 	a.querySession.queryComplete = false
-	a.resultList.selected = -1
-	a.resultList.hoveredResult = -1
-	a.resultList.resultScroll.reset()
-	a.resultList.resultScrollDetached = false
-	a.resultList.layout = queryLayout{}
+	a.resultList.clearRows()
 	a.glance.stopGlanceLocked(true)
-	a.resultList.refinements = nil
-	a.resultList.refinementsSectionRevision++
-	a.resultList.refinementOpen = false
-	a.resultList.refinementScope = ""
-	a.querySession.completionHint = nil
-	a.actions.clearActionPanelStateLocked()
-	a.forms.form = nil
-	a.previews.reconcileSelectedPreview()
-	a.requirements.requirementForm = nil
-	a.conflicts.triggerConflict = nil
-	a.chat.resetChatPreview()
-	a.webView.clearWebViewPreviewModeLocked()
+	a.clearQueryAccessoriesLocked()
 	a.restoreQueryTextInput()
 	if rememberPrevious {
 		a.querySession.queryHintEditorState.undo = previousUndo
@@ -1307,31 +1287,16 @@ func (a *App) requestMRU() error {
 	queryID := ""
 	if err := a.runOnUI("prepare MRU query", func() {
 		previousQueryID := a.querySession.query.QueryID
-		a.querySession.query = newInputQuery("")
+		a.querySession.queryComplete = false
+		a.querySession.resetToGlobalInputLocked()
+		queryID = a.querySession.query.QueryID
 		// MRU replaces the refresh generation; carry its selection into the actual response.
 		if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == previousQueryID {
-			a.resultList.pendingSelection.queryID = a.querySession.query.QueryID
+			a.resultList.pendingSelection.queryID = queryID
 		}
-		a.querySession.queryContext = queryContext{IsGlobalQuery: true}
-		a.querySession.queryContextKnown = true
-		a.querySession.editor.SetText("", false)
-		queryID = a.querySession.query.QueryID
-		a.querySession.queryComplete = false
-		a.querySession.beginQueryTransitionLocked(false)
 		// MRU only replaces query results; the window-shown path owns the Glance refresh.
 		a.glance.stopGlanceLocked(false)
-		a.resultList.refinements = nil
-		a.resultList.refinementsSectionRevision++
-		a.resultList.refinementOpen = false
-		a.resultList.refinementScope = ""
-		a.querySession.completionHint = nil
-		a.actions.clearActionPanelStateLocked()
-		a.forms.form = nil
-		a.previews.reconcileSelectedPreview()
-		a.requirements.requirementForm = nil
-		a.conflicts.triggerConflict = nil
-		a.chat.resetChatPreview()
-		a.webView.clearWebViewPreviewModeLocked()
+		a.clearQueryAccessoriesLocked()
 	}); err != nil {
 		return err
 	}
@@ -2059,17 +2024,13 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	default:
 		return false
 	}
-	return false
 }
 
 // clearQueryScopeLocked exits plugin-scoped query mode on the primary launcher.
 func (a *App) clearQueryScopeLocked() {
 	a.querySession.query.QueryScope = queryScope{}
 	a.querySession.query.QueryRefinements = map[string]string{}
-	a.resultList.refinements = nil
-	a.resultList.refinementsSectionRevision++
-	a.resultList.refinementOpen = false
-	a.resultList.refinementScope = ""
+	a.resultList.clearRefinements()
 	a.resultList.layout = queryLayout{}
 	a.beginQueryGenerationLocked()
 	a.querySession.beginQueryTransitionLocked(false)

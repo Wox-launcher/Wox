@@ -159,10 +159,7 @@ func (a *App) applyQueryTextChangeLocked(text string) {
 	nextScope := a.querySession.queryScopeIdentityLocked(text)
 	preservePluginLayout := a.shouldPreservePluginLayoutLocked(text)
 	if a.resultList.refinementScope != "" && nextScope != a.resultList.refinementScope {
-		a.resultList.refinements = nil
-		a.resultList.refinementsSectionRevision++
-		a.resultList.refinementOpen = false
-		a.resultList.refinementScope = ""
+		a.resultList.clearRefinements()
 		a.querySession.query.QueryRefinements = map[string]string{}
 	}
 	if a.querySession.query.QueryText == "" {

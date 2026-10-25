@@ -56,7 +56,9 @@ async def handle_message(ws: ServerConnection, message: str) -> None:
 
         ctx = Context.new_with_value("TraceId", trace_id)
 
-        if PLUGIN_JSONRPC_TYPE_RESPONSE in message:
+        # Route by the envelope type: params or results may contain the type names as text.
+        message_type = msg_data.get("Type")
+        if message_type == PLUGIN_JSONRPC_TYPE_RESPONSE:
             # Handle response from Wox
             request_id = msg_data.get("Id")
             if not request_id:
@@ -68,7 +70,7 @@ async def handle_message(ws: ServerConnection, message: str) -> None:
                     deferred.set_exception(Exception(msg_data["Error"]))
                 else:
                     deferred.set_result(msg_data.get("Result"))
-        elif PLUGIN_JSONRPC_TYPE_REQUEST in message:
+        elif message_type == PLUGIN_JSONRPC_TYPE_REQUEST:
             # Handle request from Wox
             try:
                 result = await handle_request_from_wox(ctx, msg_data, ws)

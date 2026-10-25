@@ -1,7 +1,7 @@
 import "winston-daily-rotate-file"
 import { WebSocketServer } from "ws"
-import { closeCurrentConnection, setCurrentConnection, waitingForResponse } from "./connection"
-import { handleRequestFromWox,PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
+import { closeCurrentConnection, setCurrentConnection, settleResponse } from "./connection"
+import { handleRequestFromWox, PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
 import { logger } from "./logger"
 import * as crypto from "crypto"
 import { NewTraceContext, TraceIdKey } from "./trace"
@@ -64,36 +64,30 @@ wss.on("connection", function connection(ws) {
   })
 
   ws.on("message", function message(data) {
+    const msg = `${data}`
     try {
-      const msg = `${data}`
-      // logger.debug(crypto.randomUUID(), `receive message: ${msg}`)
+      let envelope: { Type?: string } | null
+      try {
+        envelope = JSON.parse(msg)
+      } catch (e) {
+        logger.error(NewTraceContext(), `error parsing json: ${e}, data: ${msg}`)
+        return
+      }
 
-      if (msg.indexOf(PluginJsonRpcTypeResponse) >= 0) {
-        handleResponseFromWox(msg)
-      } else if (msg.indexOf(PluginJsonRpcTypeRequest) >= 0) {
-        handleRequest(msg)
+      // Route by the envelope type: params or results may contain the type names as text.
+      if (envelope?.Type === PluginJsonRpcTypeResponse) {
+        handleResponseFromWox(envelope as PluginJsonRpcResponse)
+      } else if (envelope?.Type === PluginJsonRpcTypeRequest) {
+        handleRequest(envelope as PluginJsonRpcRequest)
       } else {
         logger.error(NewTraceContext(), `unknown message type: ${msg}`)
       }
     } catch (e) {
-      logger.error(NewTraceContext(), `receive and handle msg error: ${data}, err: ${e}`)
+      logger.error(NewTraceContext(), `receive and handle msg error: ${msg}, err: ${e}`)
     }
   })
 
-  function handleRequest(msg: string) {
-    let jsonRpcRequest: PluginJsonRpcRequest
-    try {
-      jsonRpcRequest = JSON.parse(msg) as PluginJsonRpcRequest
-    } catch (e) {
-      logger.error(NewTraceContext(), `error parsing json: ${e}, data: ${msg}`)
-      return
-    }
-
-    if (jsonRpcRequest === undefined) {
-      logger.error(NewTraceContext(), `jsonRpcRequest is undefined`)
-      return
-    }
-
+  function handleRequest(jsonRpcRequest: PluginJsonRpcRequest) {
     const ctx = NewContextWithValue(TraceIdKey, jsonRpcRequest.TraceId)
 
     logger.debug(ctx, `receive request from wox, plugin:${jsonRpcRequest.PluginName}, method: ${jsonRpcRequest.Method}`)
@@ -133,34 +127,15 @@ wss.on("connection", function connection(ws) {
       })
   }
 
-  function handleResponseFromWox(msg: string) {
-    let pluginJsonRpcResponse: PluginJsonRpcResponse
-    try {
-      pluginJsonRpcResponse = JSON.parse(msg) as PluginJsonRpcResponse
-    } catch (e) {
-      logger.error(NewTraceContext(), `error parsing response json: ${e}, data: ${msg}`)
-      return
-    }
-
-    if (pluginJsonRpcResponse === undefined) {
-      logger.error(NewTraceContext(), `pluginJsonRpcResponse is undefined`)
-      return
-    }
-
+  function handleResponseFromWox(pluginJsonRpcResponse: PluginJsonRpcResponse) {
     if (pluginJsonRpcResponse.Id === undefined) {
       logger.error(NewTraceContext(), `pluginJsonRpcResponse.Id is undefined`)
       return
     }
 
-    const ctx = NewContextWithValue(TraceIdKey, pluginJsonRpcResponse.TraceId)
-
-    const promiseInstance = waitingForResponse[pluginJsonRpcResponse.Id]
-    if (promiseInstance === undefined) {
+    if (!settleResponse(pluginJsonRpcResponse)) {
+      const ctx = NewContextWithValue(TraceIdKey, pluginJsonRpcResponse.TraceId)
       logger.error(ctx, `waitingForResponse[${pluginJsonRpcResponse.Id}] is undefined`)
-      return
     }
-
-    delete waitingForResponse[pluginJsonRpcResponse.Id]
-    promiseInstance.resolve(pluginJsonRpcResponse.Result)
   }
 })
