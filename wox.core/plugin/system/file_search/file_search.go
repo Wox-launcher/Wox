@@ -1310,10 +1310,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 		Hotkey:                 "shift+enter",
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			c.api.ChangeQuery(ctx, common.PlainQuery{
-				QueryType: plugin.QueryTypeInput,
-				QueryText: ensureFileSearchFolderBrowseQuery(browsePath),
-			})
+			c.api.ChangeQuery(ctx, plugin.FolderBrowseQuery(browsePath))
 		},
 	})
 	if !item.IsDir {
@@ -1462,13 +1459,6 @@ func fileSearchCopyName(item filesearch.SearchResult) string {
 // buildExecuteCommandAtLocationAction hands the selected filesystem location to Shell without exposing it in the visible query.
 func (c *FileSearchPlugin) buildExecuteCommandAtLocationAction(item filesearch.SearchResult) plugin.QueryResultAction {
 	return shellplugin.OpenAtDirectoryAction(c.api, item.Path, item.IsDir)
-}
-
-func ensureFileSearchFolderBrowseQuery(folderPath string) string {
-	if strings.HasSuffix(folderPath, "/") || strings.HasSuffix(folderPath, `\`) {
-		return folderPath
-	}
-	return folderPath + string(os.PathSeparator)
 }
 
 func (c *FileSearchPlugin) buildIndexFilesAction() plugin.QueryResultAction {

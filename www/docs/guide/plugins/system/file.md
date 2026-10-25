@@ -39,7 +39,7 @@ For a short overview of what File Search is for, see [File search launcher](/fea
 | Action | Use |
 | --- | --- |
 | Open | Open the file or folder with the default app |
-| Enter folder / Browse folder | Press `Shift+Enter` to browse the selected folder or a file's containing folder inside Wox |
+| Enter folder / Browse folder | Press `Shift+Enter` to browse the selected folder or a file's containing folder inside Folder, using Folder's current trigger keyword |
 | Open containing folder | Reveal the result in the file manager |
 | Delete | Move the item to trash |
 | Show context menu | Use the platform file menu when available |

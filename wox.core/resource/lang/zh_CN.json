@@ -1501,7 +1501,7 @@
   "plugin_window_manager_command_minimize": "最小化",
   "plugin_window_manager_command_restore": "还原",
   "plugin_folder_plugin_name": "文件夹",
-  "plugin_folder_plugin_description": "输入准确的文件夹路径来浏览文件夹",
+  "plugin_folder_plugin_description": "输入准确的文件夹路径，或使用触发关键词浏览文件夹",
   "plugin_folder_tool_browse_path": "在指定路径打开文件夹浏览。",
   "plugin_notes_plugin_name": "笔记",
   "plugin_notes_plugin_description": "支持富文本和云同步的轻量浮动笔记",

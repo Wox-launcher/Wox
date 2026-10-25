@@ -1430,7 +1430,7 @@
   "plugin_window_manager_command_minimize": "Свернуть",
   "plugin_window_manager_command_restore": "Восстановить",
   "plugin_folder_plugin_name": "Папка",
-  "plugin_folder_plugin_description": "Просмотр папок по точному пути",
+  "plugin_folder_plugin_description": "Просмотр папок по точному пути или ключевому слову запуска",
   "plugin_folder_tool_browse_path": "Открыть просмотр папки по пути в файловой системе.",
   "plugin_notes_plugin_name": "Заметки",
   "plugin_notes_plugin_description": "Быстрые плавающие заметки с форматированием и облачной синхронизацией",

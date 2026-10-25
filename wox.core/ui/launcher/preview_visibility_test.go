@@ -7,6 +7,22 @@ import (
 	woxui "wox/ui/runtime"
 )
 
+// TestQueryResultKeepsDefaultHidden prevents the launcher conversion from opening a collapsed preview.
+func TestQueryResultKeepsDefaultHidden(t *testing.T) {
+	result := plugin.QueryResult{Preview: plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeFile, PreviewData: "/tmp", DefaultHidden: true}}
+	converted := fromCoreQueryResult(result.ToUI())
+	if !converted.Preview.DefaultHidden {
+		t.Fatal("default-hidden preview was lost between plugin and launcher")
+	}
+	app := &App{
+		query: plainQuery{QueryID: "query"}, resultsQueryID: "query", selected: 0,
+		results: []queryResult{converted},
+	}
+	if launcherPreviewVisible(app.selectedPreviewLayout(), app.results[0].Preview) {
+		t.Fatal("default-hidden file preview opened on selection")
+	}
+}
+
 // TestPreviewVisibilityLifetime covers result defaults, query-wide manual input, live updates, and query replacement.
 func TestPreviewVisibilityLifetime(t *testing.T) {
 	app := &App{

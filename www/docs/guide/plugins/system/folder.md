@@ -1,12 +1,15 @@
 # Folder Plugin
 
-Folder completes directory paths as you type. It listens globally, so a path such as `~/Documents` or `%LOCALAPPDATA%` can become a folder result without a keyword.
+Folder completes directory paths as you type. It listens globally, so a path such as `~/Documents` or `%LOCALAPPDATA%` can become a folder result without a keyword. The default keyword is `cd`, and it can be renamed or removed in plugin settings.
+
+Browse actions use the keyword configured for Folder at that moment. This includes `Shift+Enter` inside Folder and File Search. A keyword query keeps the file preview available, collapsed until you open it. If every concrete keyword has been removed, browsing falls back to a global path query, which does not carry a preview.
 
 ![The Folder plugin](/images/guide/plugin_folder.png)
 
 ## Quick Start
 
 ```text
+cd ~/Documents
 ~/Documents
 C:\Users
 %LOCALAPPDATA%

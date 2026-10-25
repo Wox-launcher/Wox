@@ -53,8 +53,9 @@ func TestFileSearchShiftEnterBrowsesFilesAndFolders(t *testing.T) {
 					action.Action(t.Context(), plugin.ActionContext{})
 				}
 			}
-			if browseCount != 1 || api.query.QueryType != plugin.QueryTypeInput || api.query.QueryText != root+string(os.PathSeparator) {
-				t.Fatalf("browse count=%d query=%+v, want containing folder", browseCount, api.query)
+			want := plugin.FolderBrowseQuery(root)
+			if browseCount != 1 || api.query.QueryType != want.QueryType || api.query.QueryText != want.QueryText {
+				t.Fatalf("browse count=%d query=%+v, want %+v", browseCount, api.query, want)
 			}
 			if !item.IsDir && !revealFound {
 				t.Fatal("file results must retain the system file manager shortcut")

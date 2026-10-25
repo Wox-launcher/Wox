@@ -195,10 +195,6 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 			ContextData:  cloneStringMap(result.Tails[index].ContextData),
 		}
 	}
-	tags := make([]previewTag, len(result.Preview.PreviewTags))
-	for index := range result.Preview.PreviewTags {
-		tags[index] = previewTag{Label: result.Preview.PreviewTags[index].Label, Tooltip: result.Preview.PreviewTags[index].Tooltip}
-	}
 	titleTags := make([]resultTitleTag, len(result.TitleTags))
 	for index := range result.TitleTags {
 		titleTags[index] = fromCoreTitleTag(result.TitleTags[index])
@@ -210,17 +206,10 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 		SubTitle:          result.SubTitle,
 		Icon:              fromCoreImage(result.Icon),
 		IconShowContainer: result.IconShowContainer,
-		Preview: queryPreview{
-			PreviewType:        result.Preview.PreviewType,
-			PreviewData:        result.Preview.PreviewData,
-			PreviewOverlayData: result.Preview.PreviewOverlayData,
-			PreviewTags:        tags,
-			PreviewProperties:  cloneStringMap(result.Preview.PreviewProperties),
-			ScrollPosition:     result.Preview.ScrollPosition,
-		},
-		TitleTags: titleTags,
-		Tails:     tails,
-		Actions:   actions,
+		Preview:           fromCorePreview(result.Preview),
+		TitleTags:         titleTags,
+		Tails:             tails,
+		Actions:           actions,
 		DragData: func() *queryResultDragData {
 			if result.DragData == nil {
 				return nil

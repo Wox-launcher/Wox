@@ -1501,7 +1501,7 @@
   "plugin_window_manager_command_minimize": "最小化",
   "plugin_window_manager_command_restore": "復元",
   "plugin_folder_plugin_name": "フォルダー",
-  "plugin_folder_plugin_description": "フォルダーパスを直接入力してフォルダーを参照",
+  "plugin_folder_plugin_description": "正確なフォルダーパス、またはトリガーキーワードでフォルダーを参照します",
   "plugin_folder_tool_browse_path": "指定したパスでフォルダー参照を開きます。",
   "plugin_notes_plugin_name": "ノート",
   "plugin_notes_plugin_description": "リッチテキストとクラウド同期を備えた高速フローティングノート",

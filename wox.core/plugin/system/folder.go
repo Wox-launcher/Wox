@@ -82,6 +82,7 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 		Entry:         "",
 		TriggerKeywords: []string{
 			"*",
+			"cd",
 		},
 		SupportedOS: []string{
 			"Windows",
@@ -170,10 +171,7 @@ func (p *FolderPlugin) browsePathTool(ctx context.Context, option plugin.InvokeP
 		return plugin.InvokePluginToolHandlerResult{Error: &plugin.PluginToolError{Code: plugin.PluginToolErrorPluginUnavailable, Message: "folder plugin is not initialized"}}
 	}
 
-	p.api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType: plugin.QueryTypeInput,
-		QueryText: pathquery.EnsureTrailingSeparator(browsePath),
-	})
+	p.api.ChangeQuery(ctx, plugin.FolderBrowseQuery(browsePath))
 	return plugin.InvokePluginToolHandlerResult{Output: map[string]any{}}
 }
 
@@ -219,9 +217,10 @@ func resolveFolderBrowsePath(path string) (string, error) {
 	return cleaned, nil
 }
 
-// Query handles global input that points to an existing folder path.
+// Query handles a direct path and the same path after the Folder trigger keyword.
+// "cd /tmp/" is plugin context, so its file preview survives. A bare path stays global.
 func (p *FolderPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	if query.Type != plugin.QueryTypeInput || !query.IsGlobalQuery() {
+	if query.Type != plugin.QueryTypeInput {
 		return plugin.QueryResponse{}
 	}
 
@@ -362,6 +361,16 @@ func folderParentPath(folderPath string) (string, bool) {
 	return parent, true
 }
 
+// folderPathPreview keeps the file preview available without opening the panel on selection.
+// Folder browsing changes the selected path often, so the preview stays collapsed until the user opens it.
+func folderPathPreview(path string) plugin.WoxPreview {
+	return plugin.WoxPreview{
+		PreviewType:   plugin.WoxPreviewTypeFile,
+		PreviewData:   path,
+		DefaultHidden: true,
+	}
+}
+
 // buildParentDirectoryResult is the first browsing row, like ".." in file navigation.
 // Enter returns to the parent listing inside Wox.
 func (p *FolderPlugin) buildParentDirectoryResult(parentPath string, favoriteMatch *folderFavoriteMatch) plugin.QueryResult {
@@ -372,12 +381,9 @@ func (p *FolderPlugin) buildParentDirectoryResult(parentPath string, favoriteMat
 		Score:          folderResultScore,
 		RankAboveUsage: true,
 		IdentityKey:    parentPath,
-		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeFile,
-			PreviewData: parentPath,
-		},
-		Tails:   buildFolderFavoriteTails(favoriteMatch),
-		Actions: attachFolderMRUContext(p.buildParentDirectoryActions(parentPath, favoriteMatch), parentPath),
+		Preview:        folderPathPreview(parentPath),
+		Tails:          buildFolderFavoriteTails(favoriteMatch),
+		Actions:        attachFolderMRUContext(p.buildParentDirectoryActions(parentPath, favoriteMatch), parentPath),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{parentPath},
@@ -396,10 +402,7 @@ func (p *FolderPlugin) buildParentDirectoryActions(parentPath string, favoriteMa
 			PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if p.api != nil {
-					p.api.ChangeQuery(ctx, common.PlainQuery{
-						QueryType: plugin.QueryTypeInput,
-						QueryText: pathquery.EnsureTrailingSeparator(parentPath),
-					})
+					p.api.ChangeQuery(ctx, plugin.FolderBrowseQuery(parentPath))
 				}
 			},
 		},
@@ -436,12 +439,9 @@ func (p *FolderPlugin) buildPathResult(path string, title string, isDir bool, sc
 		Icon:        getFolderPluginPathIcon(path, isDir),
 		Score:       score,
 		IdentityKey: path,
-		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeFile,
-			PreviewData: path,
-		},
-		Tails:   buildFolderFavoriteTails(favoriteMatch),
-		Actions: attachFolderMRUContext(p.buildPathActions(path, isDir, favoriteMatch), path),
+		Preview:     folderPathPreview(path),
+		Tails:       buildFolderFavoriteTails(favoriteMatch),
+		Actions:     attachFolderMRUContext(p.buildPathActions(path, isDir, favoriteMatch), path),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{path},
@@ -458,11 +458,8 @@ func (p *FolderPlugin) buildFavoriteResult(name string, path string, favoriteInd
 		Score:       folderResultScore + scoreBoost,
 		IdentityKey: path,
 		Group:       "i18n:plugin_folder_favorites",
-		Preview: plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeFile,
-			PreviewData: path,
-		},
-		Actions: attachFolderMRUContext(p.buildFavoriteActions(name, path, favoriteIndex), path),
+		Preview:     folderPathPreview(path),
+		Actions:     attachFolderMRUContext(p.buildFavoriteActions(name, path, favoriteIndex), path),
 		DragData: &plugin.QueryResultDragData{
 			Type:  plugin.QueryResultDragDataTypeFiles,
 			Files: []string{path},
@@ -553,10 +550,7 @@ func (p *FolderPlugin) buildBrowseAction(path string, isDir bool) plugin.QueryRe
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if p.api != nil {
-				p.api.ChangeQuery(ctx, common.PlainQuery{
-					QueryType: plugin.QueryTypeInput,
-					QueryText: pathquery.EnsureTrailingSeparator(path),
-				})
+				p.api.ChangeQuery(ctx, plugin.FolderBrowseQuery(path))
 			}
 		},
 	}

@@ -231,6 +231,78 @@ func TestFolderQueryListsParentDirectoryFirst(t *testing.T) {
 	}
 }
 
+func TestFolderResultsKeepFilePreviewHidden(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "notes.txt")
+	if err := os.WriteFile(child, []byte("notes"), 0o644); err != nil {
+		t.Fatalf("write notes: %v", err)
+	}
+
+	p := &FolderPlugin{}
+	listed := p.Query(t.Context(), plugin.Query{
+		Type:   plugin.QueryTypeInput,
+		Search: root + string(os.PathSeparator),
+	})
+	parentPath, ok := folderParentPath(root)
+	if !ok || len(listed.Results) < 2 || listed.Results[0].Title != ".." {
+		t.Fatalf("results = %#v, want parent %q then notes.txt", listed.Results, parentPath)
+	}
+	assertFolderPreviewHidden(t, listed.Results[0], parentPath)
+	var notes plugin.QueryResult
+	for _, result := range listed.Results[1:] {
+		if result.Title == "notes.txt" {
+			notes = result
+			break
+		}
+	}
+	if notes.Title == "" {
+		t.Fatalf("results = %#v, want notes.txt", listed.Results)
+	}
+	assertFolderPreviewHidden(t, notes, child)
+	assertFolderPreviewHidden(t, p.buildPathResult(root, "root", true, 0, nil), root)
+	assertFolderPreviewHidden(t, p.buildFavoriteResult("Root", root, 0, 0), root)
+}
+
+func TestFolderBrowseActionsUseSharedTriggerQuery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "projects")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	api := &chatTestAPI{}
+	p := &FolderPlugin{api: api}
+	p.buildBrowseAction(path, true).Action(t.Context(), plugin.ActionContext{})
+	if api.changed.QueryType != plugin.FolderBrowseQuery(path).QueryType || api.changed.QueryText != plugin.FolderBrowseQuery(path).QueryText {
+		t.Fatalf("browse query = %+v, want %+v", api.changed, plugin.FolderBrowseQuery(path))
+	}
+
+	parent, ok := folderParentPath(path)
+	if !ok {
+		t.Fatal("browse path should have a parent")
+	}
+	api.changed = common.PlainQuery{}
+	p.buildParentDirectoryActions(parent, nil)[0].Action(t.Context(), plugin.ActionContext{})
+	if api.changed.QueryType != plugin.FolderBrowseQuery(parent).QueryType || api.changed.QueryText != plugin.FolderBrowseQuery(parent).QueryText {
+		t.Fatalf("parent query = %+v, want %+v", api.changed, plugin.FolderBrowseQuery(parent))
+	}
+
+	api.changed = common.PlainQuery{}
+	toolResult := p.browsePathTool(t.Context(), plugin.InvokePluginToolHandlerOption{Arguments: map[string]any{"path": path}})
+	if toolResult.Error != nil || api.changed.QueryText != plugin.FolderBrowseQuery(path).QueryText {
+		t.Fatalf("tool query = %+v, result = %+v", api.changed, toolResult)
+	}
+
+	response := p.Query(t.Context(), plugin.Query{
+		Type:           plugin.QueryTypeInput,
+		TriggerKeyword: "dir",
+		Search:         path + string(os.PathSeparator),
+	})
+	if len(response.Results) == 0 || response.Results[0].Title != ".." {
+		t.Fatalf("triggered listing = %#v", response.Results)
+	}
+	assertFolderPreviewHidden(t, response.Results[0], parent)
+}
+
 func TestFolderParentPathStopsAtRoot(t *testing.T) {
 	if _, ok := folderParentPath(string(os.PathSeparator)); ok {
 		t.Fatal("filesystem root should not have a parent row")
@@ -271,6 +343,9 @@ func TestFolderMetadataEnablesMRU(t *testing.T) {
 	if !metadata.IsSupportFeature(plugin.MetadataFeatureMRU) {
 		t.Fatal("folder plugin must declare the MRU feature")
 	}
+	if len(metadata.TriggerKeywords) != 2 || metadata.TriggerKeywords[0] != "*" || metadata.TriggerKeywords[1] != "cd" {
+		t.Fatalf("trigger keywords = %#v, want * and cd", metadata.TriggerKeywords)
+	}
 }
 
 func TestFolderMRURestoreRebuildsExistingPath(t *testing.T) {
@@ -295,6 +370,14 @@ func TestFolderMRURestoreRebuildsExistingPath(t *testing.T) {
 		ContextData: common.ContextData{folderMRUPathKey: filepath.Join(dir, "missing")},
 	}); err == nil {
 		t.Fatal("missing path should fail restore")
+	}
+}
+
+func assertFolderPreviewHidden(t *testing.T, result plugin.QueryResult, path string) {
+	t.Helper()
+	preview := result.Preview
+	if preview.PreviewType != plugin.WoxPreviewTypeFile || preview.PreviewData != path || !preview.DefaultHidden {
+		t.Fatalf("preview = %#v, want hidden file preview for %q", preview, path)
 	}
 }
 

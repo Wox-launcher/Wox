@@ -15,7 +15,7 @@ import (
 
 // Test001LauncherFolderBrowse verifies that an exact folder result can enter one-level browsing.
 // Flow: query an exact temporary folder -> invoke Enter folder -> wait for its immediate children.
-// Evidence: the query gains a trailing separator, leads with the parent directory, and exposes the folder and two files while omitting the hidden file.
+// Evidence: the query enters Folder through its default cd keyword, leads with the parent directory, and exposes the folder and two files while omitting the hidden file.
 func Test001LauncherFolderBrowse(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		root := t.TempDir()
@@ -35,7 +35,7 @@ func Test001LauncherFolderBrowse(t *testing.T) {
 		}
 
 		smoke.ActivateSelectedResultAction(t, ctx, client, "action-result-enter_folder-")
-		expectedQuery := root + string(os.PathSeparator)
+		expectedQuery := "cd " + root + string(os.PathSeparator)
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
 			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")

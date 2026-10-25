@@ -1501,7 +1501,7 @@
   "plugin_window_manager_command_minimize": "최소화",
   "plugin_window_manager_command_restore": "복원",
   "plugin_folder_plugin_name": "폴더",
-  "plugin_folder_plugin_description": "정확한 폴더 경로를 입력하여 폴더를 탐색합니다",
+  "plugin_folder_plugin_description": "정확한 폴더 경로나 트리거 키워드로 폴더를 탐색합니다",
   "plugin_folder_tool_browse_path": "지정한 경로에서 폴더 탐색을 엽니다.",
   "plugin_notes_plugin_name": "메모",
   "plugin_notes_plugin_description": "리치 텍스트와 클라우드 동기화를 지원하는 빠른 플로팅 메모입니다",
