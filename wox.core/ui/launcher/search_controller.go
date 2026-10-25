@@ -11,6 +11,33 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// bindSettingsSearch wires the search panel to Core, the Settings window and the pages
+// whose fields it indexes and opens.
+func (a *App) bindSettingsSearch() {
+	c := a.settingsSearch
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+
+	c.aiSettings = func() *aiSettingsController { return a.aiSettings }
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.hotkeySettings = func() *hotkeySettingsController { return a.hotkeySettings }
+	c.pluginSettings = func() *pluginSettingsController { return a.pluginSettings }
+	c.themeSettings = func() *themeSettingsController { return a.themeSettings }
+
+	c.settingsSnapshot = a.settingsSnapshot
+	c.localizedSettingItem = a.localizedSettingItem
+	c.settingNavLabel = a.settingNavLabel
+	c.selectSettingsNavItem = a.selectSettingsNavItem
+	c.selectSettingTab = a.selectSettingTab
+}
+
 // settingsSearchSnapshot is the immutable Settings-search state consumed by the view layer.
 // Mirrors the flat fields that previously lived on settingsSnapshot (searchQuery, searchFocused,
 // searchPanel, searchSelected, searchPlugins, searchLoading, searchError). searchLoaded is
@@ -30,12 +57,32 @@ type settingsSearchSnapshot struct {
 // focus/panel flags, selection within the result palette, the installed-plugin mirror used
 // as the search index, and loading/loaded/error flags for the background plugin fetch.
 //
-// All 8 fields that used to live on App are held here. App methods coordinate cross-domain
-// focus routing on the UI thread. The rich settingsSearchResults aggregation stays on App
-// because it reads from every settings controller snapshot; Run() below provides the narrow
-// Searchable-aggregation path exercised by tests and by the Searchable contract.
+// It also builds results from the Settings snapshot, moves focus between the search
+// field and other Settings pages, and opens the chosen page, plugin or field. Those
+// pages are reached through the getters and callbacks wired by bindSettingsSearch.
+// Run() below provides the narrow Searchable-aggregation path exercised by tests and by
+// the Searchable contract.
 type settingsSearchController struct {
 	deps CommonDeps
+
+	services     contract.PluginCatalogSettingsServices
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+
+	aiSettings      func() *aiSettingsController
+	generalSettings func() *generalSettingsController
+	hotkeySettings  func() *hotkeySettingsController
+	pluginSettings  func() *pluginSettingsController
+	themeSettings   func() *themeSettingsController
+
+	settingsSnapshot      func() settingsSnapshot
+	localizedSettingItem  func(item settingItem) settingItem
+	settingNavLabel       func(spec settingNavSpec) string
+	selectSettingsNavItem func(item settingNavSpec)
+	selectSettingTab      func(tab string)
 
 	editor   *woxwidget.TextEditingController
 	focused  bool

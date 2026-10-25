@@ -307,9 +307,9 @@ func windowManagerGroupDisplayValue(column formTableColumn, row map[string]any) 
 	}
 }
 
-func (a *App) beginWindowManagerGroupEdit(rowIndex int, rowEditorOnly bool) bool {
-	state := a.formTables.activeFormTableEditor()
-	if !isWindowManagerGroupsEditor(a.pluginSettings.Form(), state) {
+func (c *windowGroupEditorController) beginWindowManagerGroupEdit(rowIndex int, rowEditorOnly bool) bool {
+	state := c.formTables.activeFormTableEditor()
+	if !isWindowManagerGroupsEditor(c.pluginSettings().Form(), state) {
 		return false
 	}
 	group := windowManagerGroupUI{Id: uuid.NewString(), Name: "", Screens: []windowManagerGroupScreenUI{}}
@@ -325,16 +325,16 @@ func (a *App) beginWindowManagerGroupEdit(rowIndex int, rowEditorOnly bool) bool
 	state.rowEditorOnly = rowEditorOnly
 	state.rowForm = nil
 	state.windowGroupEditor = &windowGroupEditorState{group: group, editing: editing, loadingDisplays: true}
-	a.loadWindowManagerDisplays(state)
-	a.formTables.invalidateFormTableWindow()
+	c.loadWindowManagerDisplays(state)
+	c.formTables.invalidateFormTableWindow()
 	return true
 }
 
-func (a *App) loadWindowManagerDisplays(state *formTableEditorState) {
-	util.Go(a.lifecycleCtx, "load window manager displays", func() {
+func (c *windowGroupEditorController) loadWindowManagerDisplays(state *formTableEditorState) {
+	util.Go(c.lifecycleCtx, "load window manager displays", func() {
 		displays, err := utilwindow.ListDisplays()
-		_ = a.runOnUI("apply window manager displays", func() {
-			current := a.formTables.activeFormTableEditor()
+		_ = c.runOnUI("apply window manager displays", func() {
+			current := c.formTables.activeFormTableEditor()
 			if current != state || current.windowGroupEditor == nil {
 				return
 			}
@@ -342,7 +342,7 @@ func (a *App) loadWindowManagerDisplays(state *formTableEditorState) {
 			editor.loadingDisplays = false
 			if err != nil {
 				editor.displaysError = err.Error()
-				a.formTables.invalidateFormTableWindow()
+				c.formTables.invalidateFormTableWindow()
 				return
 			}
 			utilwindow.SortDisplays(displays)
@@ -351,13 +351,13 @@ func (a *App) loadWindowManagerDisplays(state *formTableEditorState) {
 			if editor.selectedDisplay >= len(displays) {
 				editor.selectedDisplay = 0
 			}
-			a.formTables.invalidateFormTableWindow()
+			c.formTables.invalidateFormTableWindow()
 		})
 	})
 }
 
-func (a *App) cancelWindowManagerGroupEdit() {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) cancelWindowManagerGroupEdit() {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
@@ -366,22 +366,22 @@ func (a *App) cancelWindowManagerGroupEdit() {
 	state.rowIndex = -1
 	state.rowEditorOnly = false
 	if closeEditor {
-		a.formTables.closeFormTableEditor()
+		c.formTables.closeFormTableEditor()
 		return
 	}
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) saveWindowManagerGroupEdit() {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) saveWindowManagerGroupEdit() {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil || state.invalid || state.saving {
 		return
 	}
 	editor := state.windowGroupEditor
 	name := strings.TrimSpace(editor.group.Name)
 	if name == "" {
-		editor.nameError = a.language.translate("i18n:plugin_window_manager_group_name_required")
-		a.formTables.invalidateFormTableWindow()
+		editor.nameError = c.language.translate("i18n:plugin_window_manager_group_name_required")
+		c.formTables.invalidateFormTableWindow()
 		return
 	}
 	editor.group.Name = name
@@ -393,9 +393,9 @@ func (a *App) saveWindowManagerGroupEdit() {
 		state.rows = append(state.rows, row)
 		state.selected = len(state.rows) - 1
 	}
-	if err := a.formTables.commitFormTableRowsLocked(state); err != nil {
+	if err := c.formTables.commitFormTableRowsLocked(state); err != nil {
 		state.status = err.Error()
-		a.formTables.invalidateFormTableWindow()
+		c.formTables.invalidateFormTableWindow()
 		return
 	}
 	closeEditor := state.rowEditorOnly
@@ -404,15 +404,15 @@ func (a *App) saveWindowManagerGroupEdit() {
 	state.rowEditorOnly = false
 	state.status = ""
 	if closeEditor {
-		a.formTables.closeFormTableEditor()
+		c.formTables.closeFormTableEditor()
 	} else {
-		a.formTables.invalidateFormTableWindow()
+		c.formTables.invalidateFormTableWindow()
 	}
-	a.pluginSettings.submitPluginSettings()
+	c.pluginSettings().submitPluginSettings()
 }
 
-func (a *App) setWindowManagerGroupName(value string) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) setWindowManagerGroupName(value string) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
@@ -422,21 +422,21 @@ func (a *App) setWindowManagerGroupName(value string) {
 		state.windowGroupEditor.nameError = ""
 	}
 	if hadError && state.windowGroupEditor.nameError == "" {
-		a.formTables.invalidateFormTableWindow()
+		c.formTables.invalidateFormTableWindow()
 	}
 }
 
-func (a *App) selectWindowManagerGroupDisplay(index int) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) selectWindowManagerGroupDisplay(index int) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil || index < 0 || index >= len(state.windowGroupEditor.displays) {
 		return
 	}
 	state.windowGroupEditor.selectedDisplay = index
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) setWindowManagerGroupLayout(layoutID string) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) setWindowManagerGroupLayout(layoutID string) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
@@ -457,23 +457,23 @@ func (a *App) setWindowManagerGroupLayout(layoutID string) {
 		}
 	}
 	screen.Assignments = filtered
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) openWindowManagerGroupAppPicker(slotID string) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) openWindowManagerGroupAppPicker(slotID string) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
 	state.windowGroupEditor.appPickerSlot = slotID
-	if !a.hotkeySettings.AppsLoaded() && !a.hotkeySettings.AppsLoading() {
-		util.Go(a.lifecycleCtx, "load hotkey app candidates", a.loadHotkeyAppCandidates)
+	if !c.hotkeySettings().AppsLoaded() && !c.hotkeySettings().AppsLoading() {
+		util.Go(c.lifecycleCtx, "load hotkey app candidates", c.hotkeySettings().loadHotkeyAppCandidates)
 	}
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) chooseWindowManagerGroupApp(candidate ignoredHotkeyApp) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) chooseWindowManagerGroupApp(candidate ignoredHotkeyApp) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil || state.windowGroupEditor.appPickerSlot == "" {
 		return
 	}
@@ -509,48 +509,48 @@ func (a *App) chooseWindowManagerGroupApp(candidate ignoredHotkeyApp) {
 		screen.Assignments = append(screen.Assignments, windowManagerGroupAssignmentUI{Slot: slotID, App: candidate, Urls: preserved})
 	}
 	state.windowGroupEditor.appPickerSlot = ""
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) closeWindowManagerGroupAppPicker() {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) closeWindowManagerGroupAppPicker() {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
 	state.windowGroupEditor.appPickerSlot = ""
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) openWindowManagerGroupUrlEditor(slotID string) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) openWindowManagerGroupUrlEditor(slotID string) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
 	state.windowGroupEditor.urlEditorSlot = slotID
 	state.windowGroupEditor.extensionChecking = true
 	state.windowGroupEditor.extensionConnected = false
-	a.loadWindowManagerExtensionStatus(state)
-	a.formTables.invalidateFormTableWindow()
+	c.loadWindowManagerExtensionStatus(state)
+	c.formTables.invalidateFormTableWindow()
 }
 
 // loadWindowManagerExtensionStatus resolves browser integration outside the retained build pass.
-func (a *App) loadWindowManagerExtensionStatus(state *formTableEditorState) {
-	util.Go(a.lifecycleCtx, "load browser extension status", func() {
-		connected, _ := a.services.BrowserExtensionConnected(a.lifecycleCtx, a.sessionID)
-		_ = a.runOnUI("apply browser extension status", func() {
-			current := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) loadWindowManagerExtensionStatus(state *formTableEditorState) {
+	util.Go(c.lifecycleCtx, "load browser extension status", func() {
+		connected, _ := c.services.BrowserExtensionConnected(c.lifecycleCtx, c.sessionID)
+		_ = c.runOnUI("apply browser extension status", func() {
+			current := c.formTables.activeFormTableEditor()
 			if current != state || current.windowGroupEditor == nil || current.windowGroupEditor.urlEditorSlot == "" {
 				return
 			}
 			current.windowGroupEditor.extensionChecking = false
 			current.windowGroupEditor.extensionConnected = connected
-			a.formTables.invalidateFormTableWindow()
+			c.formTables.invalidateFormTableWindow()
 		})
 	})
 }
 
-func (a *App) saveWindowManagerGroupUrls(urls []string) {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) saveWindowManagerGroupUrls(urls []string) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil || state.windowGroupEditor.urlEditorSlot == "" {
 		return
 	}
@@ -562,7 +562,7 @@ func (a *App) saveWindowManagerGroupUrls(urls []string) {
 	assignment := screen.assignmentFor(slotID)
 	if assignment == nil {
 		state.windowGroupEditor.urlEditorSlot = ""
-		a.formTables.invalidateFormTableWindow()
+		c.formTables.invalidateFormTableWindow()
 		return
 	}
 	filtered := make([]string, 0, len(urls))
@@ -582,22 +582,22 @@ func (a *App) saveWindowManagerGroupUrls(urls []string) {
 	}
 	screen.Assignments = filteredAssignments
 	state.windowGroupEditor.urlEditorSlot = ""
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
-func (a *App) openWindowManagerExtensionStore() {
-	if window := a.formTables.formTableNativeWindow(); window != nil {
+func (c *windowGroupEditorController) openWindowManagerExtensionStore() {
+	if window := c.formTables.formTableNativeWindow(); window != nil {
 		_ = window.OpenExternalURL(windowManagerExtensionStoreURL)
 	}
 }
 
-func (a *App) cancelWindowManagerGroupUrlEditor() {
-	state := a.formTables.activeFormTableEditor()
+func (c *windowGroupEditorController) cancelWindowManagerGroupUrlEditor() {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.windowGroupEditor == nil {
 		return
 	}
 	state.windowGroupEditor.urlEditorSlot = ""
-	a.formTables.invalidateFormTableWindow()
+	c.formTables.invalidateFormTableWindow()
 }
 
 func isBrowserApp(app ignoredHotkeyApp) bool {
@@ -619,7 +619,7 @@ func isBrowserApp(app ignoredHotkeyApp) bool {
 	return linux[id]
 }
 
-func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *windowGroupEditorController) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	if snapshot == nil {
 		return woxwidget.Container{}
 	}
@@ -630,31 +630,31 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 	props := launcherview.WindowGroupEditorProps{
 		Width: width, Height: height, GroupName: editor.group.Name, NameError: editor.nameError,
 		LoadingDisplays: editor.loadingDisplays, DisplaysError: editor.displaysError, Editing: editor.editing,
-		SelectedDisplay: editor.selectedDisplay, Theme: palette, Window: a.formTables.formTableNativeWindow(),
-		CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: a.language.translate("i18n:ui_save"),
-		SelectDisplayLabel:   a.language.translate("i18n:plugin_window_manager_group_select_display"),
-		NoDisplaysLabel:      a.language.translate("i18n:plugin_window_manager_group_no_displays"),
-		PrimaryDisplayLabel:  a.language.translate("i18n:plugin_window_manager_group_display_primary"),
-		LayoutsLabel:         a.language.translate("i18n:plugin_window_manager_group_layouts"),
-		LayoutsDescription:   a.language.translate("i18n:plugin_window_manager_group_layouts_description"),
-		ChooseAppLabel:       a.language.translate("i18n:plugin_window_manager_group_slot_choose_app"),
-		ChangeAppLabel:       a.language.translate("i18n:plugin_window_manager_group_slot_change_app"),
-		BrowserUrlsLabel:     a.language.translate("i18n:plugin_window_manager_group_browser_urls"),
+		SelectedDisplay: editor.selectedDisplay, Theme: palette, Window: c.formTables.formTableNativeWindow(),
+		CancelLabel: c.language.translate("i18n:ui_cancel"), SaveLabel: c.language.translate("i18n:ui_save"),
+		SelectDisplayLabel:   c.language.translate("i18n:plugin_window_manager_group_select_display"),
+		NoDisplaysLabel:      c.language.translate("i18n:plugin_window_manager_group_no_displays"),
+		PrimaryDisplayLabel:  c.language.translate("i18n:plugin_window_manager_group_display_primary"),
+		LayoutsLabel:         c.language.translate("i18n:plugin_window_manager_group_layouts"),
+		LayoutsDescription:   c.language.translate("i18n:plugin_window_manager_group_layouts_description"),
+		ChooseAppLabel:       c.language.translate("i18n:plugin_window_manager_group_slot_choose_app"),
+		ChangeAppLabel:       c.language.translate("i18n:plugin_window_manager_group_slot_change_app"),
+		BrowserUrlsLabel:     c.language.translate("i18n:plugin_window_manager_group_browser_urls"),
 		BrowserUrlEmptyLabel: "URL",
-		RetryLabel:           a.language.translate("i18n:plugin_window_manager_group_retry"),
-		AddSlotIcon:          a.imageForTint(settingControlIconSource("add-circle"), &addIconTint, physicalImageSize(15, imageScale)),
-		AppsIcon:             a.imageForTint(usageIconSource("apps"), &iconTint, physicalImageSize(18, imageScale)),
-		LinkIcon:             a.imageForTint(settingControlIconSource("link"), &linkTint, physicalImageSize(13, imageScale)),
-		OnCancel:             a.cancelWindowManagerGroupEdit, OnSave: a.saveWindowManagerGroupEdit, OnNameChanged: a.setWindowManagerGroupName,
-		OnSelectDisplay: a.selectWindowManagerGroupDisplay, OnSelectLayout: a.setWindowManagerGroupLayout,
-		OnOpenAppPicker: a.openWindowManagerGroupAppPicker, OnOpenUrlEditor: a.openWindowManagerGroupUrlEditor,
+		RetryLabel:           c.language.translate("i18n:plugin_window_manager_group_retry"),
+		AddSlotIcon:          c.imageForTint(settingControlIconSource("add-circle"), &addIconTint, physicalImageSize(15, imageScale)),
+		AppsIcon:             c.imageForTint(usageIconSource("apps"), &iconTint, physicalImageSize(18, imageScale)),
+		LinkIcon:             c.imageForTint(settingControlIconSource("link"), &linkTint, physicalImageSize(13, imageScale)),
+		OnCancel:             c.cancelWindowManagerGroupEdit, OnSave: c.saveWindowManagerGroupEdit, OnNameChanged: c.setWindowManagerGroupName,
+		OnSelectDisplay: c.selectWindowManagerGroupDisplay, OnSelectLayout: c.setWindowManagerGroupLayout,
+		OnOpenAppPicker: c.openWindowManagerGroupAppPicker, OnOpenUrlEditor: c.openWindowManagerGroupUrlEditor,
 	}
 	if editor.editing {
-		props.Title = a.language.translate("i18n:plugin_window_manager_group_edit_dialog_title")
+		props.Title = c.language.translate("i18n:plugin_window_manager_group_edit_dialog_title")
 	} else {
-		props.Title = a.language.translate("i18n:plugin_window_manager_group_create_dialog_title")
+		props.Title = c.language.translate("i18n:plugin_window_manager_group_create_dialog_title")
 	}
-	props.NamePlaceholder = a.language.translate("i18n:plugin_window_manager_group_name")
+	props.NamePlaceholder = c.language.translate("i18n:plugin_window_manager_group_name")
 	for _, display := range editor.displays {
 		props.Displays = append(props.Displays, launcherview.WindowGroupDisplayProps{
 			Id: display.Id, Bounds: display.Bounds, WorkArea: display.WorkArea, IsPrimary: display.IsPrimary,
@@ -671,11 +671,11 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 		if len(layouts) == 0 {
 			continue
 		}
-		slotLabel := strings.ReplaceAll(a.language.translate("i18n:plugin_window_manager_group_slot_count"), "{count}", strconv.Itoa(slotCount))
+		slotLabel := strings.ReplaceAll(c.language.translate("i18n:plugin_window_manager_group_slot_count"), "{count}", strconv.Itoa(slotCount))
 		group := launcherview.WindowGroupLayoutGroupProps{SlotCountLabel: slotLabel}
 		for _, layout := range layouts {
 			option := launcherview.WindowGroupLayoutOptionProps{
-				ID: layout.Id, Label: a.language.translate("i18n:" + layout.TitleKey), Selected: layout.Id == selectedLayout.Id,
+				ID: layout.Id, Label: c.language.translate("i18n:" + layout.TitleKey), Selected: layout.Id == selectedLayout.Id,
 			}
 			for _, slot := range layout.Slots {
 				option.Slots = append(option.Slots, launcherview.WindowGroupSlotProps{
@@ -707,7 +707,7 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 					if slotTile.AppName == "" {
 						slotTile.AppName = assignment.App.Identity
 					}
-					slotTile.AppIcon = a.imageForSurface(assignment.App.Icon, 256, settingsPalette().Background)
+					slotTile.AppIcon = c.imageForSurface(assignment.App.Icon, 256, settingsPalette().Background)
 					slotTile.IsBrowser = isBrowserApp(assignment.App)
 					for _, url := range assignment.Urls {
 						if strings.TrimSpace(url) != "" {
@@ -722,11 +722,11 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 	}
 	if editor.displaysError != "" {
 		props.OnRetryDisplays = func() {
-			if current := a.formTables.activeFormTableEditor(); current != nil && current.windowGroupEditor != nil {
+			if current := c.formTables.activeFormTableEditor(); current != nil && current.windowGroupEditor != nil {
 				current.windowGroupEditor.loadingDisplays = true
 				current.windowGroupEditor.displaysError = ""
-				a.loadWindowManagerDisplays(current)
-				a.formTables.invalidateFormTableWindow()
+				c.loadWindowManagerDisplays(current)
+				c.formTables.invalidateFormTableWindow()
 			}
 		}
 	}
@@ -738,11 +738,11 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 				current = assignment.App
 			}
 		}
-		layers = append(layers, woxwidget.StackChild{Child: a.buildWindowManagerGroupAppPicker(current, palette, width, height, imageScale)})
+		layers = append(layers, woxwidget.StackChild{Child: c.buildWindowManagerGroupAppPicker(current, palette, width, height, imageScale)})
 	}
 	if editor.urlEditorSlot != "" && selectedScreen != nil {
 		if assignment := selectedScreen.assignmentFor(editor.urlEditorSlot); assignment != nil {
-			layers = append(layers, woxwidget.StackChild{Child: a.buildWindowManagerGroupUrlEditor(assignment.Urls, editor, palette, width, height, imageScale)})
+			layers = append(layers, woxwidget.StackChild{Child: c.buildWindowManagerGroupUrlEditor(assignment.Urls, editor, palette, width, height, imageScale)})
 		}
 	}
 	if len(layers) == 1 {
@@ -751,8 +751,8 @@ func (a *App) buildWindowManagerGroupEditor(snapshot *windowGroupEditorSnapshot,
 	return woxwidget.Stack{Width: width, Height: height, Children: layers}
 }
 
-func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
-	apps := a.hotkeySettings.AppCandidates()
+func (c *windowGroupEditorController) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+	apps := c.hotkeySettings().AppCandidates()
 	if identity := strings.TrimSpace(current.Identity); identity != "" {
 		found := false
 		for _, candidate := range apps {
@@ -772,50 +772,50 @@ func (a *App) buildWindowManagerGroupAppPicker(current ignoredHotkeyApp, palette
 			detail = candidate.Identity
 		}
 		candidates[index] = launcherview.FormAppCandidate{
-			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: a.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), settingsPalette().Background),
+			Name: candidate.Name, Identity: candidate.Identity, Detail: detail, Icon: c.imageForSurface(candidate.Icon, physicalImageSize(28, imageScale), settingsPalette().Background),
 		}
 	}
 	theme := palette
-	cancelLabel := a.language.translate("i18n:ui_cancel")
-	confirmLabel := a.language.translate("i18n:ui_ok")
+	cancelLabel := c.language.translate("i18n:ui_cancel")
+	confirmLabel := c.language.translate("i18n:ui_ok")
 	return launcherview.FormAppPickerView(launcherview.FormAppPickerProps{
-		OverlayWidth: width, OverlayHeight: height, Window: a.formTables.formTableNativeWindow(), Theme: theme,
-		Title:             a.language.translate("i18n:plugin_window_manager_group_app_selector_title"),
-		SearchPlaceholder: a.language.translate("i18n:ui_hotkey_ignore_apps_search"),
-		LoadingLabel:      a.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: a.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
-		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: a.formTables.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: a.formTables.formTableButtonWidth(confirmLabel, 70),
+		OverlayWidth: width, OverlayHeight: height, Window: c.formTables.formTableNativeWindow(), Theme: theme,
+		Title:             c.language.translate("i18n:plugin_window_manager_group_app_selector_title"),
+		SearchPlaceholder: c.language.translate("i18n:ui_hotkey_ignore_apps_search"),
+		LoadingLabel:      c.language.translate("i18n:ui_hotkey_ignore_apps_loading"), EmptyLabel: c.language.translate("i18n:ui_hotkey_ignore_apps_empty"),
+		CancelLabel: cancelLabel, ConfirmLabel: confirmLabel, CancelWidth: c.formTables.formTableButtonWidth(cancelLabel, 70), ConfirmWidth: c.formTables.formTableButtonWidth(confirmLabel, 70),
 		Candidates: candidates, SelectedIdentity: current.Identity,
-		Loading: a.hotkeySettings.AppsLoading() || (!a.hotkeySettings.AppsLoaded() && a.hotkeySettings.AppsError() == ""),
-		Error:   a.hotkeySettings.AppsError(),
+		Loading: c.hotkeySettings().AppsLoading() || (!c.hotkeySettings().AppsLoaded() && c.hotkeySettings().AppsError() == ""),
+		Error:   c.hotkeySettings().AppsError(),
 		OnConfirm: func(index int) {
 			if index < 0 || index >= len(apps) {
-				a.closeWindowManagerGroupAppPicker()
+				c.closeWindowManagerGroupAppPicker()
 				return
 			}
-			a.chooseWindowManagerGroupApp(apps[index])
+			c.chooseWindowManagerGroupApp(apps[index])
 		},
-		OnCancel: a.closeWindowManagerGroupAppPicker,
+		OnCancel: c.closeWindowManagerGroupAppPicker,
 	})
 }
 
-func (a *App) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *windowGroupEditorController) buildWindowManagerGroupUrlEditor(urls []string, editor *windowGroupEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	theme := palette
 	foreground := theme.TextSecondary
 
 	return launcherview.WindowGroupUrlEditor(launcherview.WindowGroupUrlEditorProps{
-		Width: width, Height: height, URLs: urls, Window: a.formTables.formTableNativeWindow(), Theme: theme,
-		Title: a.language.translate("i18n:plugin_window_manager_group_browser_urls"), Description: a.language.translate("i18n:plugin_window_manager_group_browser_urls_description"),
-		CancelLabel: a.language.translate("i18n:ui_cancel"), SaveLabel: a.language.translate("i18n:ui_save"), AddLabel: a.language.translate("i18n:ui_add"), EditLabel: a.language.translate("i18n:ui_setting_theme_edit"),
-		DeleteLabel: a.language.translate("i18n:ui_delete"), OperationLabel: a.language.translate("i18n:ui_operation"), DeleteConfirmation: a.language.translate("i18n:ui_delete_row_confirm"), RequiredLabel: a.language.translate("i18n:ui_validator_value_can_not_be_empty"),
+		Width: width, Height: height, URLs: urls, Window: c.formTables.formTableNativeWindow(), Theme: theme,
+		Title: c.language.translate("i18n:plugin_window_manager_group_browser_urls"), Description: c.language.translate("i18n:plugin_window_manager_group_browser_urls_description"),
+		CancelLabel: c.language.translate("i18n:ui_cancel"), SaveLabel: c.language.translate("i18n:ui_save"), AddLabel: c.language.translate("i18n:ui_add"), EditLabel: c.language.translate("i18n:ui_setting_theme_edit"),
+		DeleteLabel: c.language.translate("i18n:ui_delete"), OperationLabel: c.language.translate("i18n:ui_operation"), DeleteConfirmation: c.language.translate("i18n:ui_delete_row_confirm"), RequiredLabel: c.language.translate("i18n:ui_validator_value_can_not_be_empty"),
 		ExtensionChecking: editor.extensionChecking, ExtensionConnected: editor.extensionConnected,
-		ExtensionConnectedLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_connected"), ExtensionDisconnectedLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_not_connected"),
-		ExtensionInstallLabel: a.language.translate("i18n:plugin_window_manager_group_browser_extension_install"),
-		AddIcon:               a.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)), EditIcon: a.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(16, imageScale)),
-		DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)), EmptyIcon: a.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
-		ExtensionLoadingIcon: a.imageForTint(settingControlIconSource("loading"), &foreground, physicalImageSize(14, imageScale)), ExtensionConnectedIcon: a.imageForTint(settingControlIconSource("check-circle"), &palette.Success, physicalImageSize(14, imageScale)),
-		ExtensionDisconnectedIcon: a.imageForTint(settingControlIconSource("warning"), &palette.Warning, physicalImageSize(14, imageScale)), ExtensionExternalIcon: a.imageForTint(settingControlIconSource("external"), &palette.Warning, physicalImageSize(11, imageScale)),
+		ExtensionConnectedLabel: c.language.translate("i18n:plugin_window_manager_group_browser_extension_connected"), ExtensionDisconnectedLabel: c.language.translate("i18n:plugin_window_manager_group_browser_extension_not_connected"),
+		ExtensionInstallLabel: c.language.translate("i18n:plugin_window_manager_group_browser_extension_install"),
+		AddIcon:               c.imageForTint(settingControlIconSource("add"), &foreground, physicalImageSize(15, imageScale)), EditIcon: c.imageForTint(settingControlIconSource("edit"), &foreground, physicalImageSize(16, imageScale)),
+		DeleteIcon: c.imageForTint(settingControlIconSource("delete"), &foreground, physicalImageSize(16, imageScale)), EmptyIcon: c.imageForTint(settingControlIconSource("inbox"), &foreground, physicalImageSize(24, imageScale)),
+		ExtensionLoadingIcon: c.imageForTint(settingControlIconSource("loading"), &foreground, physicalImageSize(14, imageScale)), ExtensionConnectedIcon: c.imageForTint(settingControlIconSource("check-circle"), &palette.Success, physicalImageSize(14, imageScale)),
+		ExtensionDisconnectedIcon: c.imageForTint(settingControlIconSource("warning"), &palette.Warning, physicalImageSize(14, imageScale)), ExtensionExternalIcon: c.imageForTint(settingControlIconSource("external"), &palette.Warning, physicalImageSize(11, imageScale)),
 		ExtensionConnectedAccent: palette.Success, ExtensionDisconnectedAccent: palette.Warning,
-		OnCancel: a.cancelWindowManagerGroupUrlEditor,
-		OnSave:   a.saveWindowManagerGroupUrls, OnOpenExtensionStore: a.openWindowManagerExtensionStore,
+		OnCancel: c.cancelWindowManagerGroupUrlEditor,
+		OnSave:   c.saveWindowManagerGroupUrls, OnOpenExtensionStore: c.openWindowManagerExtensionStore,
 	})
 }

@@ -132,8 +132,8 @@ func (a *App) bindThemeSettings() {
 	c.updateSettingsText = a.updateSettingsTextInput
 	c.buildFormField = a.buildFormField
 	c.openPreviewImage = a.openPreviewImageOverlay
-	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
-	c.setSettingsHoverTooltip = a.setSettingsHoverTooltip
+	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
+	c.setSettingsHoverTooltip = a.settingsWindow.setSettingsHoverTooltip
 
 	c.chatDensityScale = a.chatDensityScale
 	c.chatRoundProps = a.chatRoundProps

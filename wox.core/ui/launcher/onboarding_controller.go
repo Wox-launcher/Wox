@@ -120,11 +120,11 @@ func (a *App) bindOnboarding() {
 	c.loadGlanceCatalog = a.loadGlanceCatalog
 	c.showLauncher = a.showWindow
 
-	c.startHotkeyRecording = a.startHotkeyRecording
-	c.stopHotkeyRecording = a.stopHotkeyRecording
-	c.hotkeyRecordingFieldStatus = a.hotkeyRecordingFieldStatus
-	c.recordHotkeySettingsField = a.recordHotkeySettingsField
-	c.hotkeyConflictMessage = a.hotkeyConflictMessage
+	c.startHotkeyRecording = a.hotkeyRecording.startHotkeyRecording
+	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording
+	c.hotkeyRecordingFieldStatus = a.hotkeyRecording.hotkeyRecordingFieldStatus
+	c.recordHotkeySettingsField = func(index int) { a.hotkeySettings.recordHotkeySettingsField(index) }
+	c.hotkeyConflictMessage = a.hotkeyRecording.hotkeyConflictMessage
 	c.releaseDemoWallpaperLocked = func() { a.themeSettings.releaseDemoWallpaperLocked() }
 	c.openMacOSPermissionFlow = a.openMacOSPermissionFlow
 	c.permissionFlowTarget = func() permission.MacOSPermissionType {

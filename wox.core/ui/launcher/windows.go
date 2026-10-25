@@ -251,8 +251,21 @@ func (a *App) updateSettingsTextInput(enabled bool) {
 	_ = window.SetTextInputState(state)
 }
 
+// hotkeyRecordingTargetCurrentLocked reports whether a recording target still belongs to a form
+// that is on screen, so late recorder results for closed forms are dropped.
+func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
+	pluginForm := a.pluginSettings.Form()
+	tableEditor := a.formTables.activeFormTableEditor()
+	return target != nil && (((a.onboarding.isOpen() || (a.settingsWindow.open && a.settingsWindow.tab == "hotkey")) && target == a.hotkeySettings.Form()) ||
+		a.onboarding.ownsHotkeyTarget(target) ||
+		(tableEditor != nil && tableEditor.rowForm == target) ||
+		(a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
+		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
+		(pluginForm != nil && target == &pluginForm.formFieldsState))
+}
+
 func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
-	state := a.hotkeySettings.Recording()
+	state := a.hotkeyRecording.Recording()
 	usesSettings := false
 	if state != nil {
 		pluginForm := a.pluginSettings.Form()
@@ -265,7 +278,7 @@ func (a *App) hotkeyRecordingUsesSettingsWindow() bool {
 }
 
 func (a *App) hotkeyRecordingUsesOnboardingWindow() bool {
-	state := a.hotkeySettings.Recording()
+	state := a.hotkeyRecording.Recording()
 	return state != nil && a.onboarding.isOpen() && (state.target == a.hotkeySettings.Form() || a.onboarding.ownsHotkeyTarget(state.target))
 }
 
@@ -315,7 +328,7 @@ func (a *App) onSettingsWindowKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
+	if a.hotkeyRecordingUsesSettingsWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 		return true
 	}
 	if a.formTables.formTableUsesSettingsWindow() {
@@ -331,7 +344,7 @@ func (a *App) onSettingsWindowTextInput(event woxui.TextInputEvent) {
 	if a.pluginSettings.onPluginSearchTextInput(event) {
 		return
 	}
-	if a.onSettingsSearchTextInput(event) {
+	if a.settingsSearch.onSettingsSearchTextInput(event) {
 		return
 	}
 	if a.themeSettings.onThemeEditorPreviewTextInput(event) {
@@ -350,7 +363,7 @@ func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
 	}
-	if a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
+	if a.hotkeyRecordingUsesOnboardingWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 		return true
 	}
 	return a.onboarding.onOnboardingKey(event)
@@ -402,13 +415,13 @@ func (a *App) onSettingsWindowClosed() {
 	a.cloudSettings.SetPlugins(nil)
 	a.cloudSettings.SetLoaded(false)
 	a.aiSettings.SetForm(nil)
-	a.abandonModelManager()
+	a.pluginSettings.abandonModelManager()
 	a.generalSettings.SetForm(nil)
+	a.hotkeyRecording.ClearRecording()
 	if !a.onboarding.isOpen() {
 		a.hotkeySettings.ReleaseWindowMemory()
 	} else {
 		a.hotkeySettings.SetForm(nil)
-		a.hotkeySettings.ClearRecording()
 		a.hotkeySettings.SetFocused(false)
 	}
 	if form := a.pluginSettings.Form(); form != nil {
@@ -426,10 +439,10 @@ func (a *App) onSettingsWindowClosed() {
 		themeEditor.active = false
 	}
 	launcherVisible := a.visible
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 
 	if wasRecording {
-		a.postHotkeyRecordingStopped()
+		a.hotkeyRecording.postHotkeyRecordingStopped()
 	}
 	if wasOpen {
 		if err := a.notifySettingViewChanged(false); err != nil {
@@ -459,7 +472,7 @@ func (a *App) openOnboarding() error {
 		wasSettings = a.settingsWindow.open
 		a.settingsWindow.open = false
 		a.onboarding.beginSessionLocked(installations)
-		a.stopHotkeyRecording()
+		a.hotkeyRecording.stopHotkeyRecording()
 		settingsView = a.settingsWindow.view
 		if form := a.hotkeySettings.Form(); form != nil {
 			form.active = true
@@ -484,8 +497,8 @@ func (a *App) onOnboardingWindowClosed() {
 	wasOpen := a.onboarding.leaveLocked()
 	a.themeSettings.releaseDemoWallpaperLocked()
 	if wasRecording {
-		a.hotkeySettings.ClearRecording()
-		a.postHotkeyRecordingStopped()
+		a.hotkeyRecording.ClearRecording()
+		a.hotkeyRecording.postHotkeyRecordingStopped()
 	}
 	if wasOpen {
 		if err := a.onboarding.notifyOnboardingViewChanged(false); err != nil {

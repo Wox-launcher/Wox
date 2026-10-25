@@ -147,7 +147,7 @@ func (a *App) RefreshGlance(_ context.Context, pluginID string, ids []string) er
 func (a *App) RecordHotkey(_ context.Context, hotkey string, kind string) error {
 	var applyErr error
 	if err := a.runOnUI("record hotkey", func() {
-		applyErr = a.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: hotkey, Kind: kind})
+		applyErr = a.hotkeyRecording.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: hotkey, Kind: kind})
 	}); err != nil {
 		return err
 	}

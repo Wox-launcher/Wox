@@ -297,7 +297,7 @@ func (a *App) buildFormApp(fields formFieldsSnapshot, callbacks formFieldCallbac
 
 func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget {
 	value := fields.values[definition.Value.Key]
-	presentation := a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
+	presentation := a.hotkeyRecording.hotkeyRecordingFieldStatus(callbacks.idPrefix, index)
 	if !presentation.Active && callbacks.hotkeyError != "" {
 		presentation.Status = callbacks.hotkeyError
 		presentation.Error = true
@@ -336,8 +336,8 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 				}
 				return
 			}
-			if a.hotkeyRecordingFieldStatus(callbacks.idPrefix, index).Active {
-				a.stopHotkeyRecording()
+			if a.hotkeyRecording.hotkeyRecordingFieldStatus(callbacks.idPrefix, index).Active {
+				a.hotkeyRecording.stopHotkeyRecording()
 			}
 		},
 	})

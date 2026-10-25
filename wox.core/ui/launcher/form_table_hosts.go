@@ -1,7 +1,9 @@
 package launcher
 
 import (
+	"context"
 	"strings"
+	"time"
 
 	"wox/common"
 	woxui "wox/ui/runtime"
@@ -82,7 +84,7 @@ func (a *App) runLauncherQueryTest(query plainQuery) {
 	if strings.TrimSpace(query.QueryText) == "" && len(query.QueryScope.Plugins) == 0 {
 		return
 	}
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 
 	params := a.show
 	params.SelectAll = false
@@ -103,5 +105,55 @@ func (a *App) runLauncherQueryTest(query plainQuery) {
 		if err := a.sendCurrentQuery(); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, "send query test: "+err.Error())
 		}
+	})
+}
+
+// saveSettingsTable persists one settings-owned table and rolls the editor back if core rejects it.
+func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previousValue string) {
+	coreValue := value
+	if key == "IgnoredHotkeyApps" {
+		var err error
+		coreValue, err = settingsIgnoredHotkeyAppsCoreJSON(value)
+		if err != nil {
+			_ = a.runOnUI("apply invalid settings table value", func() {
+				a.settingsWindow.saving = false
+				state.target.values[key] = previousValue
+				if a.formTables.settingsEditor == state {
+					state.saving = false
+					state.status = "Could not save: " + err.Error()
+				}
+				a.settingsWindow.invalidateSettingsWindow()
+			})
+			return
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, key, coreValue)
+	cancel()
+
+	_ = a.runOnUI("apply settings table save", func() {
+		a.settingsWindow.saving = false
+		if err != nil {
+			state.target.values[key] = previousValue
+			if a.formTables.settingsEditor == state {
+				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
+					state.rows = rows
+					state.selected = min(state.selected, len(rows)-1)
+				}
+				state.saving = false
+				state.status = "Could not save: " + err.Error()
+			}
+		} else {
+			if state.target == a.aiSettings.Form() {
+				a.aiSettings.applyAISettingsRawLocked(key, value)
+			} else if state.target == a.hotkeySettings.Form() || state.target == a.generalQuerySettingsForm() {
+				a.hotkeySettings.applyHotkeySettingsRawLocked(key, coreValue)
+			}
+			if a.formTables.settingsEditor == state {
+				state.saving = false
+				state.status = ""
+			}
+		}
+		a.settingsWindow.invalidateSettingsWindow()
 	})
 }

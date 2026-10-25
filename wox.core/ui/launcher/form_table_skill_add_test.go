@@ -74,7 +74,7 @@ func waitForSettingsUpdate(t *testing.T, services *skillAddTestServices, key str
 
 func TestOpenFormTableSkillAddDialog(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 
 	state := app.formTables.settingsEditor
@@ -94,7 +94,7 @@ func TestOpenFormTableSkillAddDialog(t *testing.T) {
 
 func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
@@ -118,7 +118,7 @@ func TestSkillAddDialogRendersTabsFieldAndActions(t *testing.T) {
 
 func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 	app.formTables.switchFormTableSkillAddTab(1)
 
@@ -139,7 +139,7 @@ func TestSwitchSkillAddTabFocusesMatchingField(t *testing.T) {
 func TestAddLocalSkillFromDialogAppendsAndSaves(t *testing.T) {
 	services := &skillAddTestServices{}
 	app := skillAddTestApp(t, services)
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 	app.formTables.setFormTableSkillAddText(0, "/tmp/my-skill")
 	app.formTables.addFormTableSkill()
@@ -155,7 +155,7 @@ func TestAddLocalSkillFromDialogAppendsAndSaves(t *testing.T) {
 
 func TestAddSkillDialogValidatesLocalPath(t *testing.T) {
 	app := skillAddTestApp(t, &skillAddTestServices{})
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 	app.formTables.addFormTableSkill()
 
@@ -177,7 +177,7 @@ func TestAddRemoteSkillFromDialogClonesAndSaves(t *testing.T) {
 		{Name: "repo-skill-b", Source: "remote", SourceName: "Remote", Path: "/cache/b", Enabled: true},
 	}}
 	app := skillAddTestApp(t, services)
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 	app.formTables.switchFormTableSkillAddTab(1)
 	app.formTables.setFormTableSkillAddText(1, "https://github.com/user/repo")
@@ -196,7 +196,7 @@ func TestAddRemoteSkillFromDialogClonesAndSaves(t *testing.T) {
 func TestAddRemoteSkillFromDialogKeepsOpenOnCloneError(t *testing.T) {
 	services := &skillAddTestServices{cloneErr: context.DeadlineExceeded}
 	app := skillAddTestApp(t, services)
-	app.openAISettingsTable(0)
+	app.aiSettings.openAISettingsTable(0)
 	app.formTables.openFormTableSkillAdd()
 	app.formTables.switchFormTableSkillAddTab(1)
 	app.formTables.setFormTableSkillAddText(1, "https://github.com/user/repo")

@@ -30,7 +30,7 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 	}
 
 	anchor := woxui.Rect{X: 320, Y: 180, Width: 14, Height: 14}
-	app.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
+	app.settingsWindow.setSettingChoiceTooltip(true, "  tooltip content  ", anchor)
 	if app.settingsWindow.inlineTooltip != nil {
 		t.Fatal("inline tooltip must wait for the shared hover dwell")
 	}
@@ -56,7 +56,7 @@ func TestSetSettingChoiceTooltipUsesInlineFallbackOnLinux(t *testing.T) {
 		t.Fatalf("tooltip side = %q, want top", app.settingsWindow.inlineTooltip.Side)
 	}
 
-	app.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	app.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	depth++
 	select {
 	case apply := <-queued:

@@ -39,8 +39,8 @@ func (a *App) bindForms() {
 	c.updateFormTextInput = a.updateFormTextInput
 	c.restoreQueryTextInput = a.restoreQueryTextInput
 	c.openActionFormTable = a.openActionFormTable
-	c.startHotkeyRecording = a.startHotkeyRecording
-	c.stopHotkeyRecording = a.stopHotkeyRecording
-	c.commitHotkeyRecordingValue = a.commitHotkeyRecordingValue
+	c.startHotkeyRecording = a.hotkeyRecording.startHotkeyRecording
+	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording
+	c.commitHotkeyRecordingValue = a.hotkeyRecording.commitHotkeyRecordingValue
 	c.formFieldNativeWindow = a.formFieldNativeWindow
 }

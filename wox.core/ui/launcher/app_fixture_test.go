@@ -21,6 +21,18 @@ func bindTestApp(app *App) *App {
 	if app.themeSettings == nil {
 		app.themeSettings = newThemeSettingsController(CommonDeps{})
 	}
+	if app.settingsSearch == nil {
+		app.settingsSearch = newSettingsSearchController(CommonDeps{})
+	}
+	if app.dataSettings == nil {
+		app.dataSettings = newDataSettingsController(CommonDeps{})
+	}
+	if app.runtimeSettings == nil {
+		app.runtimeSettings = newRuntimeSettingsController(CommonDeps{})
+	}
+	if app.aiSettings == nil {
+		app.aiSettings = newAISettingsController(CommonDeps{})
+	}
 	app.bindControllers()
 	return app
 }

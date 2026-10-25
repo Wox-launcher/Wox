@@ -125,7 +125,7 @@ func (a *App) bindCloudSettings() {
 	c.imageForTint = a.imageForTint
 	c.imageForSurface = a.imageForSurface
 	c.updateSettingsText = a.updateSettingsTextInput
-	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
 	c.waitHoverTooltipDelay = a.tooltips.waitHoverTooltipDelay
 	c.reloadSettings = a.reloadSettings
 }

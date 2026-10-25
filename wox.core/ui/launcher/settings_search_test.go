@@ -21,7 +21,7 @@ func TestSettingsSearchPrimaryFSelectsExistingText(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		modifier = woxui.KeyModifierMeta
 	}
-	if !app.onSettingsSearchKey(woxui.KeyEvent{Key: "f", Modifiers: modifier, Down: true}) {
+	if !app.settingsSearch.onSettingsSearchKey(woxui.KeyEvent{Key: "f", Modifiers: modifier, Down: true}) {
 		t.Fatal("primary+F was not handled")
 	}
 	state := app.settingsSearch.Editor().State()
@@ -49,7 +49,7 @@ func TestSettingsSearchKeepsPrintableKeysAfterOCRModelManagerCloses(t *testing.T
 func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 	icon := woxImage{ImageType: "emoji", ImageData: "P"}
 	app := bindTestApp(&App{})
-	results := app.settingsSearchResults(settingsSnapshot{
+	results := app.settingsSearch.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{
 			Query:   woxui.TextEditingState{Text: "UniqueIconPlugin"},
 			Plugins: []pluginSettingsPlugin{{ID: "unique-icon-plugin", Name: "UniqueIconPlugin", Icon: icon}},
@@ -66,7 +66,7 @@ func TestSettingsSearchPluginResultKeepsPluginIcon(t *testing.T) {
 
 func TestSettingsSearchMatchesPluginEnglishName(t *testing.T) {
 	app := bindTestApp(&App{})
-	results := app.settingsSearchResults(settingsSnapshot{
+	results := app.settingsSearch.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{
 			Query:   woxui.TextEditingState{Text: "File Search"},
 			Plugins: []pluginSettingsPlugin{{ID: "file-search", Name: "文件搜索", NameEn: "File Search"}},
@@ -104,7 +104,7 @@ func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 	app.themeSettings.SetThemeEditor(&themeEditorPreviewState{key: "settings-theme|test"})
 	app.themeSettings.SetThemeWallpaperLoading(true)
 
-	app.activateSettingsSearchResult(settingsSearchResult{
+	app.settingsSearch.activateSettingsSearchResult(settingsSearchResult{
 		kind: settingsSearchSection, title: "Theme Editor", tab: "theme", mode: "editor", navID: "themes.edit",
 	})
 	if app.settingsWindow.tab != "theme" || app.themeSettings.ThemesMode() != "editor" {
@@ -115,7 +115,7 @@ func TestSettingsSearchActivatesThemeEditor(t *testing.T) {
 func TestSettingsSearchMatchesThemeEditor(t *testing.T) {
 	app := bindTestApp(&App{})
 	for _, query := range []string{"Theme Editor", "themeeditor"} {
-		results := app.settingsSearchResults(settingsSnapshot{
+		results := app.settingsSearch.settingsSearchResults(settingsSnapshot{
 			search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: query}},
 		})
 		found := false
@@ -147,7 +147,7 @@ func TestSettingsSearchMatchesLocalizedBuiltInSetting(t *testing.T) {
 			},
 		},
 	})
-	results := app.settingsSearchResults(settingsSnapshot{
+	results := app.settingsSearch.settingsSearchResults(settingsSnapshot{
 		search: settingsSearchSnapshot{Query: woxui.TextEditingState{Text: "语言"}},
 	})
 

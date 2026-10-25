@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxcomponent "wox/ui/launcher/component"
+	woxwidget "wox/ui/widget"
 )
 
 // hotkeySettingsSnapshot is the immutable Hotkey tab state consumed by the view layer.
 // It carries the inline-settings form snapshot, the hotkey-focus flag used by the general
 // tab key handler, the ignored-app picker candidates, and the candidate load status.
-// Recording state is intentionally omitted: it is pure runtime UI state consumed through
-// dedicated accessors (Recording/ClearRecording) by hotkey_recording.go, not through snapshots.
 type hotkeySettingsSnapshot struct {
 	Form          *formFieldsSnapshot
 	Focused       bool
@@ -24,13 +24,20 @@ type hotkeySettingsSnapshot struct {
 
 // hotkeySettingsController owns the Hotkey tab state: the inline hotkey settings form
 // (main/selection hotkeys, ignored apps, query hotkeys), the focus flag used by the
-// hotkey-tab key handler, the active hotkey recording state machine, and the
-// ignored-app picker candidate catalog. The controller is free of any
-// *App back-dependency; callers wire App-side side effects through the deps.Invalidate
-// callback. Cross-domain readers (hotkeyRecordingTargetCurrentLocked, form_table helpers)
+// hotkey-tab key handler, and the ignored-app picker candidate catalog. It also builds the
+// Hotkey page and the general tab's query hotkey fields; collaborators are injected by
+// bindHotkeySettings. Cross-domain readers (hotkeyRecordingTargetCurrentLocked, form_table helpers)
 // read the live form pointer through Form().
 type hotkeySettingsController struct {
 	deps CommonDeps
+
+	services        contract.HotkeySettingsServices
+	sessionID       string
+	settings        *settingsWindowController
+	formTables      *formTableController
+	hotkeyRecording *hotkeyRecordingController
+	generalSettings func() *generalSettingsController
+	buildFormField  func(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, height float32) woxwidget.Widget
 
 	// Inline form state for the hotkey settings tab. Built by the App from loaded
 	// settingsData and handed to the controller via SetForm. The active flag is mutated
@@ -39,11 +46,6 @@ type hotkeySettingsController struct {
 
 	// Focus flag for the hotkey form fields, toggled by the general-tab key handler.
 	focused bool
-
-	// Active hotkey recording state machine. Owned here because it is started/stopped
-	// from the hotkey settings fields and from the shared table row editor, but its
-	// lifecycle is managed by hotkey_recording.go through Recording/SetRecording/ClearRecording.
-	recording *hotkeyRecordingState
 
 	// Ignored-app picker candidates loaded once from core; feeds the app picker used by
 	// the IgnoredHotkeyApps table and any app-type form fields.
@@ -56,6 +58,21 @@ type hotkeySettingsController struct {
 
 func newHotkeySettingsController(deps CommonDeps) *hotkeySettingsController {
 	return &hotkeySettingsController{deps: deps}
+}
+
+// bindHotkeySettings wires the Hotkey page to core services, the Settings window and the recorder.
+func (a *App) bindHotkeySettings() {
+	c := a.hotkeySettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.settings = &a.settingsWindow
+	c.formTables = &a.formTables
+	c.hotkeyRecording = &a.hotkeyRecording
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.buildFormField = a.buildFormField
 }
 
 // SetForm installs the hotkey settings inline form. Passing nil clears it. The form is
@@ -83,24 +100,6 @@ func (c *hotkeySettingsController) Focused() bool {
 // key handler and selectSettingTab when entering/leaving the general tab.
 func (c *hotkeySettingsController) SetFocused(focused bool) {
 	c.focused = focused
-}
-
-// Recording returns the active UI-owned hotkey recording state, or nil when no recording is in flight.
-func (c *hotkeySettingsController) Recording() *hotkeyRecordingState {
-	return c.recording
-}
-
-// SetRecording installs the hotkey recording state. Used by startHotkeyRecording to publish
-// a freshly created recording state, and by stopHotkeyRecording/acceptRecordedHotkey to
-// clear it.
-func (c *hotkeySettingsController) SetRecording(state *hotkeyRecordingState) {
-	c.recording = state
-}
-
-// ClearRecording clears the active hotkey recording state. Equivalent to SetRecording(nil)
-// but named for clarity at call sites that are ending a recording.
-func (c *hotkeySettingsController) ClearRecording() {
-	c.recording = nil
 }
 
 // AppCandidates returns a copy of the cached ignored-app candidates. The app picker uses
@@ -149,7 +148,6 @@ func (c *hotkeySettingsController) SetAppsError(msg string) {
 func (c *hotkeySettingsController) ReleaseWindowMemory() {
 	c.form = nil
 	c.focused = false
-	c.recording = nil
 	c.appCandidates = nil
 	c.appsLoading = false
 	c.appsLoaded = false
@@ -214,9 +212,7 @@ func (c *hotkeySettingsController) ReloadAppCandidates(ctx context.Context, serv
 	})
 }
 
-// Snapshot returns a copy of the hotkey tab state for the view layer. Recording state is
-// not included: it is pure runtime UI state read through Recording() by hotkey_recording.go
-// and rendered through hotkeyRecordingFieldStatus, not through the settings snapshot.
+// Snapshot returns a copy of the hotkey tab state for the view layer.
 func (c *hotkeySettingsController) Snapshot() hotkeySettingsSnapshot {
 	var form *formFieldsSnapshot
 	if c.form != nil {

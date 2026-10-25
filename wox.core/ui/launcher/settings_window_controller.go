@@ -6,6 +6,7 @@ import (
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // settingsWindowController owns the Settings window and the session state shared by
@@ -27,6 +28,7 @@ type settingsWindowController struct {
 	requestSettingsClose              func()
 	onSettingsWindowTextInput         func(woxui.TextInputEvent)
 	onSettingsWindowClosed            func()
+	tooltips                          *tooltipController
 
 	openingShortcut atomic.Bool
 	view            *woxui.ManagedWindow
@@ -75,6 +77,25 @@ func (a *App) bindSettingsWindow() {
 	c.requestSettingsClose = a.requestSettingsClose
 	c.onSettingsWindowTextInput = a.onSettingsWindowTextInput
 	c.onSettingsWindowClosed = a.onSettingsWindowClosed
+	c.tooltips = &a.tooltips
+}
+
+func (c *settingsWindowController) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
+	c.setSettingsHoverTooltip(inside, text, anchor, "top")
+}
+
+// setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
+// Linux draws it inside the window; other platforms use a native tooltip window.
+func (c *settingsWindowController) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
+	if util.IsLinux() {
+		c.tooltips.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
+			revision: &c.inlineTooltipRevision, state: &c.inlineTooltip,
+			open: c.open, invalidate: c.invalidateSettingsWindow, job: "show settings inline tooltip",
+		}, inside, text, anchor, side)
+		return
+	}
+
+	c.tooltips.setNativeHoverTooltip(&c.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, c.settingsNativeWindow)
 }
 
 // beginSessionLocked opens Settings on a tab. Reopening an already open window behaves

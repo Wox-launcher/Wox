@@ -38,13 +38,13 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	} else if snapshot.tab == "theme" {
 		page = a.buildSettingsThemePage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "ai" {
-		page = a.buildAISettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
+		page = a.aiSettings.buildAISettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "data" {
-		page = a.buildDataSettingsPage(snapshot, width-railWidth, pageHeight)
+		page = a.dataSettings.buildDataSettingsPage(snapshot, width-railWidth, pageHeight)
 	} else if snapshot.tab == "cloud" {
 		page = a.cloudSettings.buildCloudSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "runtime" {
-		page = a.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight, frame.Scale)
+		page = a.runtimeSettings.buildRuntimeSettingsPage(snapshot, items, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "usage" {
 		page = a.buildUsageSettingsPage(snapshot, width-railWidth, pageHeight, frame.Scale)
 	} else if snapshot.tab == "about" {
@@ -59,8 +59,8 @@ func (a *App) buildSettings(frame woxui.FrameInfo) woxwidget.Widget {
 	var overlayTop float32
 	if snapshot.tableEditor != nil {
 		overlay = a.formTables.buildFormTableOverlay(snapshot.tableEditor, snapshot.palette, width, height, frame.Scale)
-	} else if snapshot.ai.ModelManager != nil {
-		overlay = a.buildModelManagerOverlay(snapshot.ai.ModelManager, snapshot.palette, width, height, frame.Scale)
+	} else if snapshot.plugins.ModelManager != nil {
+		overlay = a.pluginSettings.buildModelManagerOverlay(snapshot.plugins.ModelManager, snapshot.palette, width, height, frame.Scale)
 	} else if snapshot.general.ShowDisplayPicker != nil {
 		overlay = a.buildShowDisplayPickerOverlay(snapshot, width, height)
 	} else if snapshot.general.ChoicePicker != nil {
@@ -237,14 +237,14 @@ func (a *App) buildSettingsSearchBox(snapshot settingsSnapshot, width, imageScal
 	return launcherview.SettingsSearchBox(launcherview.SettingsSearchBoxProps{
 		Width: width, Placeholder: placeholder, State: snapshot.search.Query, Focused: snapshot.search.Focused, Controller: a.settingsSearch.Editor(),
 		SearchIcon: a.imageForTint(settingControlIconSource("search"), &iconTint, physicalImageSize(18, imageScale)), Window: a.settingsWindow.settingsNativeWindow(), Theme: snapshot.palette,
-		OnFocus: func() { a.focusSettingsSearch(false) }, OnClear: a.clearSettingsSearch,
-		OnKey: a.onSettingsSearchKey, OnFocusChange: a.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.setSettingsSearchValue(value) }, OnSetValue: a.setSettingsSearchValue,
+		OnFocus: func() { a.settingsSearch.focusSettingsSearch(false) }, OnClear: a.settingsSearch.clearSettingsSearch,
+		OnKey: a.settingsSearch.onSettingsSearchKey, OnFocusChange: a.settingsSearch.setSettingsSearchFocused, OnChanged: func(value string) { _ = a.settingsSearch.setSettingsSearchValue(value) }, OnSetValue: a.settingsSearch.setSettingsSearchValue,
 	})
 }
 
 // buildSettingsSearchResultPanel overlays navigation without shifting the rail while the query changes.
 func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, availableHeight, imageScale float32) woxwidget.Widget {
-	results := a.settingsSearchResults(snapshot)
+	results := a.settingsSearch.settingsSearchResults(snapshot)
 	items := make([]launcherview.SettingsSearchResult, 0, len(results))
 	for index, result := range results {
 		iconTint := snapshot.palette.TextSecondary
@@ -259,7 +259,7 @@ func (a *App) buildSettingsSearchResultPanel(snapshot settingsSnapshot, width, a
 		}
 		items = append(items, launcherview.SettingsSearchResult{
 			Title: result.title, Subtitle: a.settingsSearchResultTypeLabel(result.kind) + " · " + result.subtitle, Icon: icon,
-			OnHover: func() { a.selectSettingsSearchResult(index) }, OnTap: func() { a.activateSettingsSearchResult(result) },
+			OnHover: func() { a.settingsSearch.selectSettingsSearchResult(index) }, OnTap: func() { a.settingsSearch.activateSettingsSearchResult(result) },
 		})
 	}
 	emptyMessage := a.language.translate("i18n:ui_setting_search_empty")
@@ -351,7 +351,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
 			idPrefix: "hotkey-settings", labelWidth: 550, settingsLayout: true, imageScale: imageScale,
-			focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
+			focus: a.hotkeySettings.focusHotkeySettingsField, openTable: a.hotkeySettings.openHotkeySettingsTable, recordKey: a.hotkeySettings.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
 			// On Wayland the app-exclusion table is absent; keep the switch before
@@ -380,7 +380,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		generalForm.active = snapshot.general.FormFocused
 		callbacks := formFieldCallbacks{
 			idPrefix: "general-settings", labelWidth: 550, settingsLayout: true, imageScale: imageScale,
-			focus: a.focusGeneralQuerySettingsField, openTable: a.openGeneralQuerySettingsTable,
+			focus: a.hotkeySettings.focusGeneralQuerySettingsField, openTable: a.hotkeySettings.openGeneralQuerySettingsTable,
 		}
 		for index, definition := range generalForm.definitions {
 			if generalForm.active && index == generalForm.focused {

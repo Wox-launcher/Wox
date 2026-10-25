@@ -27,18 +27,18 @@ type runtimeStatus struct {
 const runtimeSettingRowHeight = float32(72)
 
 // buildRuntimeSettingsPage prepares runtime status and setting rows for the pure page view.
-func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height, imageScale float32) woxwidget.Widget {
+func (c *runtimeSettingsController) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height, imageScale float32) woxwidget.Widget {
 	statuses := make([]launcherview.RuntimeStatus, 0, len(snapshot.runtime.Statuses))
 	for _, status := range snapshot.runtime.Statuses {
 		version := strings.TrimSpace(status.HostVersion)
 		if version != "" && !strings.HasPrefix(strings.ToLower(version), "v") {
 			version = "v" + version
 		}
-		displayName := a.localizedRuntimeDisplayName(status.Runtime)
-		pluginLabel := strings.ReplaceAll(a.language.translate("i18n:ui_runtime_status_plugin_count"), "{count}", fmt.Sprintf("%d", status.LoadedPluginCount))
+		displayName := c.localizedRuntimeDisplayName(status.Runtime)
+		pluginLabel := strings.ReplaceAll(c.language.translate("i18n:ui_runtime_status_plugin_count"), "{count}", fmt.Sprintf("%d", status.LoadedPluginCount))
 		converted := launcherview.RuntimeStatus{
-			Runtime: status.Runtime, DisplayName: displayName, Mark: runtimeFallbackMark(status.Runtime), Icon: a.imageForSurface(runtimeIconSource(status.Runtime), physicalImageSize(22, imageScale), settingsPalette().Background), Version: version,
-			StatusCode: status.StatusCode, StatusLabel: a.localizedRuntimeStatusLabel(status), Detail: runtimeStatusDetail(status), PluginLabel: pluginLabel,
+			Runtime: status.Runtime, DisplayName: displayName, Mark: runtimeFallbackMark(status.Runtime), Icon: c.imageForSurface(runtimeIconSource(status.Runtime), physicalImageSize(22, imageScale), settingsPalette().Background), Version: version,
+			StatusCode: status.StatusCode, StatusLabel: c.localizedRuntimeStatusLabel(status), Detail: runtimeStatusDetail(status), PluginLabel: pluginLabel,
 			Actionable: runtimeStatusActionable(status),
 		}
 		if status.InstallURL != "" && (status.StatusCode == "executable_missing" || status.StatusCode == "unsupported_version") {
@@ -46,81 +46,81 @@ func (a *App) buildRuntimeSettingsPage(snapshot settingsSnapshot, items []settin
 			if status.StatusCode == "unsupported_version" {
 				labelKey = "ui_runtime_upgrade_runtime"
 			}
-			converted.InstallLabel = strings.ReplaceAll(a.language.translate("i18n:"+labelKey), "{runtime}", displayName)
-			converted.InstallIcon = a.imageForTint(settingControlIconSource("external"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
-			converted.OnInstall = func() { a.openRuntimeInstallURL(status) }
+			converted.InstallLabel = strings.ReplaceAll(c.language.translate("i18n:"+labelKey), "{runtime}", displayName)
+			converted.InstallIcon = c.imageForTint(settingControlIconSource("external"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
+			converted.OnInstall = func() { c.openRuntimeInstallURL(status) }
 		}
 		if runtimeStatusRefreshable(status) {
-			converted.RefreshLabel = a.language.translate("i18n:ui_runtime_status_refresh")
+			converted.RefreshLabel = c.language.translate("i18n:ui_runtime_status_refresh")
 			if strings.EqualFold(snapshot.runtime.Refreshing, status.Runtime) {
-				converted.RefreshLabel = a.language.translate("i18n:ui_runtime_refreshing_host")
+				converted.RefreshLabel = c.language.translate("i18n:ui_runtime_refreshing_host")
 			}
-			converted.RefreshIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
-			converted.OnRefresh = func() { a.refreshRuntimeHost(status.Runtime) }
+			converted.RefreshIcon = c.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
+			converted.OnRefresh = func() { c.refreshRuntimeHost(status.Runtime) }
 		}
 		if status.CanRestart {
-			converted.RestartLabel = a.language.translate("i18n:ui_runtime_restart_host")
+			converted.RestartLabel = c.language.translate("i18n:ui_runtime_restart_host")
 			if strings.EqualFold(snapshot.runtime.Restarting, status.Runtime) {
-				converted.RestartLabel = a.language.translate("i18n:ui_runtime_restarting_host")
+				converted.RestartLabel = c.language.translate("i18n:ui_runtime_restarting_host")
 			}
-			converted.RestartIcon = a.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
-			converted.OnRestart = func() { a.restartRuntimeHost(status.Runtime) }
+			converted.RestartIcon = c.imageForTint(settingControlIconSource("refresh"), &snapshot.palette.Text, physicalImageSize(14, imageScale))
+			converted.OnRestart = func() { c.restartRuntimeHost(status.Runtime) }
 		}
 		statuses = append(statuses, converted)
 	}
 	rows := make([]launcherview.RuntimeSettingRow, 0, len(items))
 	for index, item := range items {
-		item := a.localizedSettingItem(item)
+		item := c.localizedSettingItem(item)
 		state := woxui.TextEditingState{Text: item.value}
 		focused := snapshot.general.EditKey == item.key
 		if focused {
 			state = snapshot.general.Editing
 		}
 		rows = append(rows, launcherview.RuntimeSettingRow{
-			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: a.runtimeExecutablePlaceholder(item.key),
-			State: state, Focused: focused, Disabled: snapshot.saving || snapshot.runtime.Restarting != "" || snapshot.runtime.Refreshing != "" || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: a.settingsWindow.settingsNativeWindow(),
-			OnHover:   func() { a.selectSettingRow(index) },
-			OnFocus:   func() { a.selectSettingRow(index); a.startBuiltInSettingEdit(item, -1) },
-			OnChanged: func(value string) { a.setBuiltInSettingEditValue(item, value) }, OnKey: a.onBuiltInSettingsEditorKey,
-			OnBrowse: func() { a.selectSettingRow(index); a.browseRuntimeExecutable(item) },
+			ID: "runtime-setting-" + item.key, Title: item.title, Description: item.description, Placeholder: c.runtimeExecutablePlaceholder(item.key),
+			State: state, Focused: focused, Disabled: snapshot.saving || snapshot.runtime.Restarting != "" || snapshot.runtime.Refreshing != "" || item.disabled, Highlighted: snapshot.highlight == "built-in:"+item.key, Window: c.settings.settingsNativeWindow(),
+			OnHover:   func() { c.selectSettingRow(index) },
+			OnFocus:   func() { c.selectSettingRow(index); c.startBuiltInSettingEdit(item, -1) },
+			OnChanged: func(value string) { c.setBuiltInSettingEditValue(item, value) }, OnKey: c.onBuiltInSettingsEditorKey,
+			OnBrowse: func() { c.selectSettingRow(index); c.browseRuntimeExecutable(item) },
 			OnSave: func() {
-				if a.generalSettings.EditKey() != item.key || a.settingsWindow.saving {
+				if c.generalSettings().EditKey() != item.key || c.settings.saving {
 					return
 				}
 				// Leaving an unchanged path must not restart its runtime host.
-				if a.generalSettings.Editor().State().Text == item.value {
-					a.cancelBuiltInSettingEdit()
+				if c.generalSettings().Editor().State().Text == item.value {
+					c.cancelBuiltInSettingEdit()
 					return
 				}
-				a.submitBuiltInSettingEdit()
+				c.submitBuiltInSettingEdit()
 			},
-			OnClear: func() { a.selectSettingRow(index); a.saveRuntimeExecutablePath(item, "") },
+			OnClear: func() { c.selectSettingRow(index); c.saveRuntimeExecutablePath(item, "") },
 		})
 	}
 	return launcherview.RuntimeSettingsView(launcherview.RuntimeSettingsProps{
-		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette, Labels: a.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
+		Width: width, Height: height, SettingRowHeight: runtimeSettingRowHeight, Theme: snapshot.palette, Labels: c.runtimeSettingsLabels(), Loading: snapshot.runtime.Loading,
 		Restarting: snapshot.runtime.Restarting != "", Refreshing: snapshot.runtime.Refreshing != "", Error: snapshot.runtime.Error,
-		Editing: snapshot.general.EditKey != "", Saving: snapshot.saving, OnTooltip: a.setSettingChoiceTooltip,
+		Editing: snapshot.general.EditKey != "", Saving: snapshot.saving, OnTooltip: c.setSettingChoiceTooltip,
 		Selected: snapshot.row, Statuses: statuses, Settings: rows,
 	})
 }
 
 // runtimeSettingsLabels resolves Flutter-compatible page copy before entering the pure view layer.
-func (a *App) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
+func (c *runtimeSettingsController) runtimeSettingsLabels() launcherview.RuntimeSettingsLabels {
 	return launcherview.RuntimeSettingsLabels{
-		Title:             a.language.translate("i18n:ui_runtime_settings"),
-		Description:       a.language.translate("i18n:ui_runtime_settings_description"),
-		StatusSection:     a.language.translate("i18n:ui_runtime_status"),
-		ExecutableSection: a.language.translate("i18n:ui_runtime_executable_paths"),
-		ExecutableHelp:    a.language.translate("i18n:ui_runtime_executable_help"),
-		Browse:            a.language.translate("i18n:ui_runtime_browse"),
-		Clear:             a.language.translate("i18n:ui_runtime_clear"),
-		Empty:             a.language.translate("i18n:ui_runtime_status_empty"),
+		Title:             c.language.translate("i18n:ui_runtime_settings"),
+		Description:       c.language.translate("i18n:ui_runtime_settings_description"),
+		StatusSection:     c.language.translate("i18n:ui_runtime_status"),
+		ExecutableSection: c.language.translate("i18n:ui_runtime_executable_paths"),
+		ExecutableHelp:    c.language.translate("i18n:ui_runtime_executable_help"),
+		Browse:            c.language.translate("i18n:ui_runtime_browse"),
+		Clear:             c.language.translate("i18n:ui_runtime_clear"),
+		Empty:             c.language.translate("i18n:ui_runtime_status_empty"),
 	}
 }
 
 // localizedRuntimeDisplayName keeps card names consistent with the former Flutter page.
-func (a *App) localizedRuntimeDisplayName(runtime string) string {
+func (c *runtimeSettingsController) localizedRuntimeDisplayName(runtime string) string {
 	key := ""
 	switch strings.ToUpper(runtime) {
 	case "NODEJS":
@@ -139,11 +139,11 @@ func (a *App) localizedRuntimeDisplayName(runtime string) string {
 	if key == "" {
 		return runtime
 	}
-	return a.language.translate("i18n:" + key)
+	return c.language.translate("i18n:" + key)
 }
 
 // localizedRuntimeStatusLabel maps backend diagnosis codes to translated card pills.
-func (a *App) localizedRuntimeStatusLabel(status runtimeStatus) string {
+func (c *runtimeSettingsController) localizedRuntimeStatusLabel(status runtimeStatus) string {
 	key := "ui_runtime_status_stopped"
 	switch status.StatusCode {
 	case "running":
@@ -155,45 +155,45 @@ func (a *App) localizedRuntimeStatusLabel(status runtimeStatus) string {
 	case "start_failed":
 		key = "ui_runtime_status_start_failed"
 	}
-	return a.language.translate("i18n:" + key)
+	return c.language.translate("i18n:" + key)
 }
 
-func (a *App) runtimeExecutablePlaceholder(key string) string {
+func (c *runtimeSettingsController) runtimeExecutablePlaceholder(key string) string {
 	if key == "CustomPythonPath" {
-		return a.language.translate("i18n:ui_runtime_python_path_placeholder")
+		return c.language.translate("i18n:ui_runtime_python_path_placeholder")
 	}
-	return a.language.translate("i18n:ui_runtime_nodejs_path_placeholder")
+	return c.language.translate("i18n:ui_runtime_nodejs_path_placeholder")
 }
 
 // browseRuntimeExecutable persists a selected executable immediately, matching Flutter's picker flow.
-func (a *App) browseRuntimeExecutable(item settingItem) {
-	window := a.settingsWindow.settingsNativeWindow()
+func (c *runtimeSettingsController) browseRuntimeExecutable(item settingItem) {
+	window := c.settings.settingsNativeWindow()
 	if window == nil {
 		return
 	}
 	path, err := window.PickFile(woxui.FileDialogOptions{})
 	if err != nil {
-		a.runtimeSettings.SetError("Could not select " + item.title + ": " + err.Error())
+		c.SetError("Could not select " + item.title + ": " + err.Error())
 		return
 	}
 	if path != "" {
-		a.saveRuntimeExecutablePath(item, path)
+		c.saveRuntimeExecutablePath(item, path)
 	}
 }
 
 // saveRuntimeExecutablePath uses the backend validator as the final authority for picker and clear actions.
-func (a *App) saveRuntimeExecutablePath(item settingItem, value string) {
-	if a.settingsWindow.saving {
+func (c *runtimeSettingsController) saveRuntimeExecutablePath(item settingItem, value string) {
+	if c.settings.saving {
 		return
 	}
-	a.generalSettings.EndEdit()
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.generalSettings().EndEdit()
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
 	label := value
 	if label == "" {
-		label = a.language.translate("i18n:ui_runtime_clear")
+		label = c.language.translate("i18n:ui_runtime_clear")
 	}
-	a.startGeneralSettingSave("save runtime executable path", item, settingChoice{value: value, label: label})
+	c.startGeneralSettingSave("save runtime executable path", item, settingChoice{value: value, label: label})
 }
 
 // runtimeFallbackMark remains visible during the first asynchronous SVG decode.
@@ -223,27 +223,27 @@ func cloneRuntimeStatuses(statuses []runtimeStatus) []runtimeStatus {
 }
 
 // reloadRuntimeStatuses refreshes the runtime inventory via the runtime controller.
-func (a *App) reloadRuntimeStatuses() {
-	a.runtimeSettings.Reload(context.Background(), a.services, a.sessionID)
+func (c *runtimeSettingsController) reloadRuntimeStatuses() {
+	c.Reload(context.Background(), c.services, c.sessionID)
 }
 
 // restartRuntimeHost restarts a recoverable Node.js or Python host and then reloads the authoritative status.
-func (a *App) restartRuntimeHost(runtime string) {
-	a.runtimeSettings.Restart(context.Background(), a.services, a.sessionID, runtime, a.reloadRuntimeStatuses)
+func (c *runtimeSettingsController) restartRuntimeHost(runtime string) {
+	c.Restart(context.Background(), c.services, c.sessionID, runtime, c.reloadRuntimeStatuses)
 }
 
 // refreshRuntimeHost re-detects a Node.js or Python interpreter after the user installs it.
-func (a *App) refreshRuntimeHost(runtime string) {
-	a.runtimeSettings.Refresh(context.Background(), a.services, a.sessionID, runtime, nil)
+func (c *runtimeSettingsController) refreshRuntimeHost(runtime string) {
+	c.Refresh(context.Background(), c.services, c.sessionID, runtime, nil)
 }
 
 // openRuntimeInstallURL delegates installation guidance to the platform browser without owning platform code in the page.
-func (a *App) openRuntimeInstallURL(status runtimeStatus) {
+func (c *runtimeSettingsController) openRuntimeInstallURL(status runtimeStatus) {
 	if strings.TrimSpace(status.InstallURL) == "" {
 		return
 	}
-	if err := a.settingsWindow.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
-		a.runtimeSettings.SetError("Could not open runtime website: " + err.Error())
+	if err := c.settings.settingsNativeWindow().OpenExternalURL(status.InstallURL); err != nil {
+		c.SetError("Could not open runtime website: " + err.Error())
 	}
 }
 

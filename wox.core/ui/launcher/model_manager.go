@@ -61,18 +61,18 @@ type modelManagerOptionAction struct {
 }
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
-func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
+func (c *pluginSettingsController) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	title := "Dictation models"
-	downloadLabel := a.language.translate("i18n:plugin_dictation_model_download")
-	retryLabel := a.language.translate("i18n:plugin_dictation_model_retry")
-	deleteLabel := a.language.translate("i18n:plugin_dictation_model_delete")
-	extractingLabel := a.language.translate("i18n:plugin_dictation_model_extracting")
-	finalizingLabel := a.language.translate("i18n:plugin_dictation_model_finalizing")
-	recommendedLabel := a.language.translate("i18n:plugin_dictation_model_recommended")
+	downloadLabel := c.language.translate("i18n:plugin_dictation_model_download")
+	retryLabel := c.language.translate("i18n:plugin_dictation_model_retry")
+	deleteLabel := c.language.translate("i18n:plugin_dictation_model_delete")
+	extractingLabel := c.language.translate("i18n:plugin_dictation_model_extracting")
+	finalizingLabel := c.language.translate("i18n:plugin_dictation_model_finalizing")
+	recommendedLabel := c.language.translate("i18n:plugin_dictation_model_recommended")
 	if snapshot.kind == "ocrModel" {
 		title = "OCR models"
-		downloadLabel = a.language.translate("i18n:plugin_ocr_model_download")
-		retryLabel = a.language.translate("i18n:plugin_ocr_model_retry")
+		downloadLabel = c.language.translate("i18n:plugin_ocr_model_download")
+		retryLabel = c.language.translate("i18n:plugin_ocr_model_retry")
 		deleteLabel = "Delete"
 	}
 	engineLabel := "Checking inference engine…"
@@ -100,7 +100,7 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 	}
 	if network.IsOffline() && !snapshot.engine.Ready {
 		engineEnabled = false
-		engineLabel = a.language.translate("i18n:ui_offline_paused")
+		engineLabel = c.language.translate("i18n:ui_offline_paused")
 	}
 	options := make([]launcherview.ModelManagerOption, 0, len(snapshot.options))
 	for index, option := range snapshot.options {
@@ -109,11 +109,11 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 		actionState := resolveModelManagerOptionAction(snapshot.kind, option, selected, snapshot.busy != "", downloadLabel, retryLabel, extractingLabel, finalizingLabel)
 		if network.IsOffline() && !usable {
 			actionState.enabled = false
-			actionState.label = a.language.translate("i18n:ui_offline_title")
+			actionState.label = c.language.translate("i18n:ui_offline_title")
 		}
-		action := func() { a.runModelManagerAction(actionState.operation, index) }
+		action := func() { c.runModelManagerAction(actionState.operation, index) }
 		if actionState.operation == "select" {
-			action = func() { a.chooseManagedModel(index) }
+			action = func() { c.chooseManagedModel(index) }
 		}
 		detail := strings.TrimSpace(option.Description)
 		if option.Languages != "" {
@@ -129,13 +129,13 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 		converted := launcherview.ModelManagerOption{
 			Name: name, Detail: detail, Status: modelStatusLabel(option), State: option.Status, Progress: option.DownloadProgress, Languages: option.Languages, Description: option.Description, SizeMB: option.SizeMB, Recommended: option.Recommended, SelectedRow: index == snapshot.selectedRow,
 			PrimaryAction: usable, ActionLabel: actionState.label, ActionEnabled: actionState.enabled, OnAction: action,
-			OnSelect: func() { a.selectModelManagerRow(index) },
+			OnSelect: func() { c.selectModelManagerRow(index) },
 		}
 		if usable {
-			converted.OnChoose = func() { a.chooseManagedModel(index) }
+			converted.OnChoose = func() { c.chooseManagedModel(index) }
 		}
 		if snapshot.kind == "dictationModel" && option.Status == "downloaded" {
-			converted.OnDelete = func() { a.runModelManagerAction("delete", index) }
+			converted.OnDelete = func() { c.runModelManagerAction("delete", index) }
 		}
 		options = append(options, converted)
 	}
@@ -147,17 +147,17 @@ func (a *App) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette w
 		Loading: snapshot.loading, Busy: snapshot.busy != "", Error: snapshot.error,
 		EngineLabel: engineLabel, EngineButtonLabel: engineButtonLabel, EngineEnabled: engineEnabled, EngineKnown: snapshot.engine.Known, EngineReady: snapshot.engine.Ready,
 		RecommendedLabel: recommendedLabel, DeleteLabel: deleteLabel,
-		DownloadIcon: a.imageForTint(settingControlIconSource("download"), &iconTint, physicalImageSize(14, imageScale)), DeleteIcon: a.imageForTint(settingControlIconSource("delete"), &iconTint, physicalImageSize(16, imageScale)), ErrorIcon: a.imageForTint(settingControlIconSource("error"), &errorTint, physicalImageSize(14, imageScale)), Options: options,
-		OnEngine: func() { a.runModelManagerAction("engine", -1) },
+		DownloadIcon: c.imageForTint(settingControlIconSource("download"), &iconTint, physicalImageSize(14, imageScale)), DeleteIcon: c.imageForTint(settingControlIconSource("delete"), &iconTint, physicalImageSize(16, imageScale)), ErrorIcon: c.imageForTint(settingControlIconSource("error"), &errorTint, physicalImageSize(14, imageScale)), Options: options,
+		OnEngine: func() { c.runModelManagerAction("engine", -1) },
 		OnRefresh: func() {
-			state := a.aiSettings.ModelManager()
+			state := c.ModelManager()
 			if state != nil {
-				util.Go(a.lifecycleCtx, "refresh model manager", func() {
-					a.refreshModelManager(state)
+				util.Go(c.lifecycleCtx, "refresh model manager", func() {
+					c.refreshModelManager(state)
 				})
 			}
 		},
-		OnClose: a.closeModelManager,
+		OnClose: c.closeModelManager,
 	})
 }
 
@@ -257,9 +257,9 @@ func modelManagerNeedsPoll(state *modelManagerState) bool {
 }
 
 // openPluginModelManager binds the overlay to the current plugin form without exposing model routes to widgets.
-func (a *App) openPluginModelManager(index int, anchor woxui.Rect) {
-	a.stopHotkeyRecording()
-	state := a.pluginSettings.Form()
+func (c *pluginSettingsController) openPluginModelManager(index int, anchor woxui.Rect) {
+	c.stopHotkeyRecording()
+	state := c.Form()
 	if state == nil || index < 0 || index >= len(state.definitions) {
 		return
 	}
@@ -280,25 +280,25 @@ func (a *App) openPluginModelManager(index int, anchor woxui.Rect) {
 		kind: definition.Type, target: &state.formFieldsState, fieldIndex: index, options: append([]formOption(nil), definition.Value.Options...),
 		selected: selected, selectedRow: selectedRow, anchor: anchor, anchored: true,
 	}
-	a.aiSettings.SetModelManager(manager)
-	a.updateSettingsTextInput(false)
-	a.settingsWindow.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "open model manager", func() {
-		a.refreshModelManager(manager)
+	c.SetModelManager(manager)
+	c.updateSettingsText(false)
+	c.settings.invalidateSettingsWindow()
+	util.Go(c.lifecycleCtx, "open model manager", func() {
+		c.refreshModelManager(manager)
 	})
 }
 
-func (a *App) modelManagerCurrentLocked(state *modelManagerState) bool {
-	pluginForm := a.pluginSettings.Form()
-	return state != nil && a.aiSettings.ModelManager() == state && a.settingsWindow.tab == "plugins" && pluginForm != nil && state.target == &pluginForm.formFieldsState
+func (c *pluginSettingsController) modelManagerCurrentLocked(state *modelManagerState) bool {
+	pluginForm := c.Form()
+	return state != nil && c.ModelManager() == state && c.settings.tab == "plugins" && pluginForm != nil && state.target == &pluginForm.formFieldsState
 }
 
 // refreshModelManager merges runtime-only progress into translated definition metadata.
-func (a *App) refreshModelManager(state *modelManagerState) {
+func (c *pluginSettingsController) refreshModelManager(state *modelManagerState) {
 	shouldLoad := false
 	kind := ""
-	if err := a.runOnUI("start refreshing model manager", func() {
-		if !a.modelManagerCurrentLocked(state) || !beginModelManagerRefresh(state) {
+	if err := c.runOnUI("start refreshing model manager", func() {
+		if !c.modelManagerCurrentLocked(state) || !beginModelManagerRefresh(state) {
 			return
 		}
 		kind = state.kind
@@ -312,7 +312,7 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 		modelKind = contract.ManagedModelOCR
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	loadedStatuses, statusErr := a.services.ManagedModelStatuses(ctx, a.sessionID, modelKind)
+	loadedStatuses, statusErr := c.services.ManagedModelStatuses(ctx, c.sessionID, modelKind)
 	statuses := make([]formOption, len(loadedStatuses))
 	for index, status := range loadedStatuses {
 		statuses[index] = formOption{
@@ -320,18 +320,18 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 			Recommended: status.Recommended, Status: status.Status, DownloadProgress: status.DownloadProgress, SizeMB: status.SizeMB, Error: status.Error,
 		}
 	}
-	loadedEngine, engineErr := a.services.ManagedModelEngineStatus(ctx, a.sessionID, modelKind)
+	loadedEngine, engineErr := c.services.ManagedModelEngineStatus(ctx, c.sessionID, modelKind)
 	engine := modelEngineStatus{
 		State: loadedEngine.State, Progress: loadedEngine.Progress, Error: loadedEngine.Error, Ready: loadedEngine.Ready,
 	}
 	cancel()
 	engine.Known = engineErr == nil
 
-	_ = a.runOnUI("apply model manager refresh", func() {
+	_ = c.runOnUI("apply model manager refresh", func() {
 		// Always drop the latch, even when the user left Plugins mid-fetch.
 		// Otherwise later Refresh clicks see refreshing=true and do nothing.
 		finishModelManagerRefresh(state)
-		if !a.modelManagerCurrentLocked(state) {
+		if !c.modelManagerCurrentLocked(state) {
 			return
 		}
 		changed := false
@@ -368,13 +368,13 @@ func (a *App) refreshModelManager(state *modelManagerState) {
 		}
 		if changed {
 			state.target.definitions[state.fieldIndex].Value.Options = append([]formOption(nil), state.options...)
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		}
 		poll := modelManagerNeedsPoll(state)
 		if poll {
 			time.AfterFunc(time.Second, func() {
-				util.Go(a.lifecycleCtx, "poll model manager", func() {
-					a.refreshModelManager(state)
+				util.Go(c.lifecycleCtx, "poll model manager", func() {
+					c.refreshModelManager(state)
 				})
 			})
 		}
@@ -418,44 +418,44 @@ func finishModelManagerRefresh(state *modelManagerState) {
 	}
 }
 
-func (a *App) closeModelManager() {
-	state := a.aiSettings.ModelManager()
+func (c *pluginSettingsController) closeModelManager() {
+	state := c.ModelManager()
 	if state == nil {
 		return
 	}
 	finishModelManagerRefresh(state)
-	pluginForm := a.pluginSettings.Form()
+	pluginForm := c.Form()
 	if pluginForm != nil && state.target == &pluginForm.formFieldsState {
 		pluginForm.active = true
 		setFormFieldsFocusLocked(&pluginForm.formFieldsState, state.fieldIndex)
 	}
-	a.aiSettings.SetModelManager(nil)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetModelManager(nil)
+	c.settings.invalidateSettingsWindow()
 }
 
 // abandonModelManager closes the overlay and clears an in-flight refresh latch
 // so leaving Plugins cannot permanently disable Refresh.
-func (a *App) abandonModelManager() {
-	if a.aiSettings == nil {
+func (c *pluginSettingsController) abandonModelManager() {
+	if c == nil {
 		return
 	}
-	if state := a.aiSettings.ModelManager(); state != nil {
+	if state := c.ModelManager(); state != nil {
 		finishModelManagerRefresh(state)
-		a.aiSettings.SetModelManager(nil)
+		c.SetModelManager(nil)
 	}
 }
 
-func (a *App) selectModelManagerRow(index int) {
-	state := a.aiSettings.ModelManager()
+func (c *pluginSettingsController) selectModelManagerRow(index int) {
+	state := c.ModelManager()
 	if state == nil || index < 0 || index >= len(state.options) {
 		return
 	}
 	state.selectedRow = index
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) chooseManagedModel(index int) {
-	state := a.aiSettings.ModelManager()
+func (c *pluginSettingsController) chooseManagedModel(index int) {
+	state := c.ModelManager()
 	if state == nil || state.busy != "" || index < 0 || index >= len(state.options) || !modelOptionUsable(state.kind, state.options[index]) {
 		return
 	}
@@ -463,17 +463,17 @@ func (a *App) chooseManagedModel(index int) {
 	key := state.target.definitions[state.fieldIndex].Value.Key
 	state.target.values[key] = modelOptionID(option)
 	state.selected = modelOptionID(option)
-	pluginForm := a.pluginSettings.Form()
+	pluginForm := c.Form()
 	pluginTarget := pluginForm != nil && state.target == &pluginForm.formFieldsState
-	a.closeModelManager()
+	c.closeModelManager()
 	if pluginTarget {
-		a.pluginSettings.submitPluginSettings()
+		c.submitPluginSettings()
 	}
 }
 
 // runModelManagerAction starts core-owned downloads or deletion and leaves progress polling in the shared overlay.
-func (a *App) runModelManagerAction(action string, index int) {
-	state := a.aiSettings.ModelManager()
+func (c *pluginSettingsController) runModelManagerAction(action string, index int) {
+	state := c.ModelManager()
 	if state == nil || state.busy != "" {
 		return
 	}
@@ -487,9 +487,9 @@ func (a *App) runModelManagerAction(action string, index int) {
 	state.busy = action + ":" + modelID
 	state.error = ""
 	kind := state.kind
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 
-	util.Go(a.lifecycleCtx, "run model manager action", func() {
+	util.Go(c.lifecycleCtx, "run model manager action", func() {
 		modelKind := contract.ManagedModelDictation
 		if kind == "ocrModel" {
 			modelKind = contract.ManagedModelOCR
@@ -501,10 +501,10 @@ func (a *App) runModelManagerAction(action string, index int) {
 			operation = contract.ManagedModelOperationDownloadEngine
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := a.services.OperateManagedModel(ctx, a.sessionID, modelKind, operation, modelID)
+		err := c.services.OperateManagedModel(ctx, c.sessionID, modelKind, operation, modelID)
 		cancel()
-		_ = a.runOnUI("apply model manager action", func() {
-			if !a.modelManagerCurrentLocked(state) {
+		_ = c.runOnUI("apply model manager action", func() {
+			if !c.modelManagerCurrentLocked(state) {
 				state.busy = ""
 				return
 			}
@@ -522,15 +522,15 @@ func (a *App) runModelManagerAction(action string, index int) {
 				key := state.target.definitions[state.fieldIndex].Value.Key
 				state.target.values[key] = ""
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 			if err == nil {
 				delay := time.Duration(0)
 				if action == "download" || action == "engine" {
 					delay = 500 * time.Millisecond
 				}
 				time.AfterFunc(delay, func() {
-					util.Go(a.lifecycleCtx, "refresh model manager after action", func() {
-						a.refreshModelManager(state)
+					util.Go(c.lifecycleCtx, "refresh model manager after action", func() {
+						c.refreshModelManager(state)
 					})
 				})
 			}
@@ -538,8 +538,8 @@ func (a *App) runModelManagerAction(action string, index int) {
 	})
 }
 
-func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
-	state := a.aiSettings.ModelManager()
+func (c *pluginSettingsController) onModelManagerKey(event woxui.KeyEvent) bool {
+	state := c.ModelManager()
 	selected := -1
 	count := 0
 	if state != nil {
@@ -551,35 +551,35 @@ func (a *App) onModelManagerKey(event woxui.KeyEvent) bool {
 	}
 	switch event.Key {
 	case woxui.KeyEscape:
-		a.closeModelManager()
+		c.closeModelManager()
 	case woxui.KeyArrowUp, woxui.KeyArrowDown:
 		if count > 0 {
 			delta := 1
 			if event.Key == woxui.KeyArrowUp {
 				delta = -1
 			}
-			a.selectModelManagerRow((selected + delta + count) % count)
+			c.selectModelManagerRow((selected + delta + count) % count)
 		}
 	case woxui.KeyEnter, woxui.KeySpace:
-		if a.aiSettings.ModelManager() == state && selected >= 0 && selected < len(state.options) {
+		if c.ModelManager() == state && selected >= 0 && selected < len(state.options) {
 			option := state.options[selected]
 			usable := modelOptionUsable(state.kind, option)
 			status := option.Status
 			if usable {
-				a.chooseManagedModel(selected)
+				c.chooseManagedModel(selected)
 			} else if status == "not_downloaded" || status == "failed" || status == "" {
-				a.runModelManagerAction("download", selected)
+				c.runModelManagerAction("download", selected)
 			}
 		}
 	case woxui.KeyDelete:
-		canDelete := a.aiSettings.ModelManager() == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
+		canDelete := c.ModelManager() == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
 		if canDelete {
-			a.runModelManagerAction("delete", selected)
+			c.runModelManagerAction("delete", selected)
 		}
 	default:
 		if event.Modifiers.HasPrimary() && event.Key == woxui.Key("r") {
-			util.Go(a.lifecycleCtx, "refresh model manager from keyboard", func() {
-				a.refreshModelManager(state)
+			util.Go(c.lifecycleCtx, "refresh model manager from keyboard", func() {
+				c.refreshModelManager(state)
 			})
 			return true
 		}

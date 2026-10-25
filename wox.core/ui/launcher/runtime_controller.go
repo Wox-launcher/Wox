@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/util"
 )
 
@@ -21,10 +22,33 @@ type runtimeSettingsSnapshot struct {
 	Revision   uint64
 }
 
-// runtimeSettingsController owns the Runtime tab state (statuses, loading, restarting).
-// Reload is revision-guarded so responses from superseded refreshes are discarded.
+// runtimeSettingsController owns the Runtime tab (statuses, loading, restarting,
+// executable paths) and its view props. Reload is revision-guarded so responses from
+// superseded refreshes are discarded. Executable paths are edited with the shared
+// built-in setting editor, reached through the callbacks wired by bindRuntimeSettings.
 type runtimeSettingsController struct {
-	deps       CommonDeps
+	deps CommonDeps
+
+	services  contract.RuntimeSettingsServices
+	sessionID string
+	language  *languageCatalog
+	settings  *settingsWindowController
+
+	generalSettings         func() *generalSettingsController
+	imageForTint            func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface         func(woxImage, int, woxui.Color) *woxui.Image
+	updateSettingsText      func(bool)
+	setSettingChoiceTooltip func(inside bool, text string, anchor woxui.Rect)
+	localizedSettingItem    func(item settingItem) settingItem
+	startGeneralSettingSave func(job string, item settingItem, choice settingChoice)
+
+	selectSettingRow           func(index int)
+	startBuiltInSettingEdit    func(item settingItem, caret int)
+	setBuiltInSettingEditValue func(item settingItem, value string)
+	submitBuiltInSettingEdit   func()
+	cancelBuiltInSettingEdit   func()
+	onBuiltInSettingsEditorKey func(event woxui.KeyEvent) bool
+
 	statuses   []runtimeStatus
 	loading    bool
 	loaded     bool
@@ -36,6 +60,34 @@ type runtimeSettingsController struct {
 
 func newRuntimeSettingsController(deps CommonDeps) *runtimeSettingsController {
 	return &runtimeSettingsController{deps: deps}
+}
+
+// bindRuntimeSettings wires the Runtime page to Core, the Settings window and the
+// shared built-in setting editor.
+func (a *App) bindRuntimeSettings() {
+	c := a.runtimeSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.imageForTint = a.imageForTint
+	c.imageForSurface = a.imageForSurface
+	c.updateSettingsText = a.updateSettingsTextInput
+	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
+	c.localizedSettingItem = a.localizedSettingItem
+	c.startGeneralSettingSave = a.startGeneralSettingSave
+
+	c.selectSettingRow = a.selectSettingRow
+	c.startBuiltInSettingEdit = a.startBuiltInSettingEdit
+	c.setBuiltInSettingEditValue = a.setBuiltInSettingEditValue
+	c.submitBuiltInSettingEdit = a.submitBuiltInSettingEdit
+	c.cancelBuiltInSettingEdit = a.cancelBuiltInSettingEdit
+	c.onBuiltInSettingsEditorKey = a.onBuiltInSettingsEditorKey
 }
 
 // Reload fetches runtime statuses; ignores responses superseded by a newer refresh.

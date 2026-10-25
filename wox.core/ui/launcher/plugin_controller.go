@@ -36,6 +36,7 @@ type pluginSettingsSnapshot struct {
 	PluginOperationError string
 	PluginUninstallArmed string
 	PluginSettingAction  pluginSettingActionState
+	ModelManager         *modelManagerSnapshot
 }
 
 // pluginSettingActionState belongs to the operation, so form refreshes cannot discard its progress or error.
@@ -49,6 +50,7 @@ type pluginSettingActionState struct {
 type pluginSettingsServices interface {
 	contract.PluginCatalogSettingsServices
 	contract.PluginOperationSettingsServices
+	contract.ModelManagementSettingsServices
 	OpenPath(ctx context.Context, sessionID string, path string) error
 }
 
@@ -93,9 +95,10 @@ type pluginSettingsController struct {
 
 	loadAIModels          func()
 	loadAIProviderCatalog func()
-	abandonModelManager   func()
 	openFormTable         func(index int)
-	openModelManager      func(index int, anchor woxui.Rect)
+
+	// modelManager is the modal download manager opened from dictation and OCR model fields.
+	modelManager *modelManagerState
 
 	// nativeSettingsPluginID disables the native settings button while that plugin's own window is open.
 	nativeSettingsPluginID string
@@ -159,22 +162,20 @@ func (a *App) bindPluginSettings() {
 	c.updateSettingsText = a.updateSettingsTextInput
 	c.buildFormField = a.buildFormField
 	c.measureFormLabelWidth = a.measureFormLabelWidth
-	c.localizedRuntimeDisplayName = a.localizedRuntimeDisplayName
-	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.localizedRuntimeDisplayName = func(runtime string) string { return a.runtimeSettings.localizedRuntimeDisplayName(runtime) }
+	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
 	c.closeSettingChoicePicker = a.closeSettingChoicePicker
 	c.selectSettingTab = a.selectSettingTab
 	c.openPreviewImage = a.openPreviewImageOverlay
 	c.runQueryTest = a.runLauncherQueryTest
 
-	c.stopHotkeyRecording = a.stopHotkeyRecording
-	c.stopHotkeyRecordingForDifferentField = a.stopHotkeyRecordingForDifferentField
-	c.startHotkeyRecording = a.startHotkeyRecording
+	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording
+	c.stopHotkeyRecordingForDifferentField = a.hotkeyRecording.stopHotkeyRecordingForDifferentField
+	c.startHotkeyRecording = a.hotkeyRecording.startHotkeyRecording
 
 	c.loadAIModels = a.loadAIModels
-	c.loadAIProviderCatalog = a.loadAIProviderCatalog
-	c.abandonModelManager = a.abandonModelManager
+	c.loadAIProviderCatalog = func() { a.aiSettings.loadAIProviderCatalog() }
 	c.openFormTable = a.openPluginFormTable
-	c.openModelManager = a.openPluginModelManager
 }
 
 func (c *pluginSettingsController) Plugins() []pluginSettingsPlugin {
@@ -329,6 +330,16 @@ func (c *pluginSettingsController) UninstallArmed() string {
 
 func (c *pluginSettingsController) SetUninstallArmed(id string) {
 	c.pluginUninstallArmed = id
+}
+
+// ModelManager returns the live model-manager overlay state; Snapshot copies it for the view layer.
+func (c *pluginSettingsController) ModelManager() *modelManagerState {
+	return c.modelManager
+}
+
+// SetModelManager installs (or clears, when nil) the model-manager overlay state.
+func (c *pluginSettingsController) SetModelManager(state *modelManagerState) {
+	c.modelManager = state
 }
 
 // ReleaseWindowMemory drops catalogs and interaction state owned only by Settings.
@@ -544,5 +555,6 @@ func (c *pluginSettingsController) Snapshot() pluginSettingsSnapshot {
 		PluginOperationError: c.pluginOperationError,
 		PluginUninstallArmed: c.pluginUninstallArmed,
 		PluginSettingAction:  c.settingAction,
+		ModelManager:         snapshotModelManagerLocked(c.modelManager),
 	}
 }

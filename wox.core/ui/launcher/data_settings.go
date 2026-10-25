@@ -19,114 +19,114 @@ type backupInfo struct {
 }
 
 // buildDataSettingsPage adapts controller state to the package-independent data settings view.
-func (a *App) buildDataSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (c *dataSettingsController) buildDataSettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	backups := make([]launcherview.DataBackup, len(snapshot.dataState.Backups))
 	for index, backup := range snapshot.dataState.Backups {
 		backups[index] = launcherview.DataBackup{ID: backup.ID, Timestamp: backup.Timestamp, Type: backup.Type, Path: backup.Path}
 	}
 	return launcherview.DataSettingsView(launcherview.DataSettingsProps{
-		Width: width, Height: height, Theme: snapshot.palette, Labels: a.dataSettingsLabels(),
+		Width: width, Height: height, Theme: snapshot.palette, Labels: c.dataSettingsLabels(),
 		Location: snapshot.dataState.Location, PendingLocation: snapshot.dataState.PendingLocation, AutoBackup: snapshot.general.Data.EnableAutoBackup,
 		Backups: backups, BackupRunning: snapshot.dataState.BackupRunning || snapshot.dataState.Busy == "backup",
 		DeletingBackupID: snapshot.dataState.DeletingBackupID,
 		LogLevel:         snapshot.general.Data.LogLevel, ClearLogsArmed: snapshot.dataState.ClearLogsArmed,
 		Error: snapshot.dataState.Error, ErrorSection: snapshot.dataState.ErrorSection,
-		OnOpenPath: a.openDataPath, OnChooseLocation: a.chooseDataLocation, OnCancelLocation: a.cancelDataLocationChange,
-		OnConfirmLocation: a.confirmDataLocationChange, OnToggleAutoBackup: a.toggleDataAutoBackup, OnCreateBackup: a.createDataBackup,
-		OnRestoreBackup: a.restoreDataBackup, OnDeleteBackup: a.deleteDataBackup, OnOpenLogLevel: a.openDataLogLevelPicker, OnClearLogs: a.clearDataLogs, OnOpenLog: a.openDataLog,
+		OnOpenPath: c.openDataPath, OnChooseLocation: c.chooseDataLocation, OnCancelLocation: c.cancelDataLocationChange,
+		OnConfirmLocation: c.confirmDataLocationChange, OnToggleAutoBackup: c.toggleDataAutoBackup, OnCreateBackup: c.createDataBackup,
+		OnRestoreBackup: c.restoreDataBackup, OnDeleteBackup: c.deleteDataBackup, OnOpenLogLevel: c.openDataLogLevelPicker, OnClearLogs: c.clearDataLogs, OnOpenLog: c.openDataLog,
 	})
 }
 
 // dataSettingsLabels resolves all user-facing copy before entering the view layer.
-func (a *App) dataSettingsLabels() launcherview.DataSettingsLabels {
+func (c *dataSettingsController) dataSettingsLabels() launcherview.DataSettingsLabels {
 	return launcherview.DataSettingsLabels{
-		Title:                 a.language.translate("i18n:ui_data"),
-		Description:           a.language.translate("i18n:ui_data_description"),
-		StorageSection:        a.language.translate("i18n:ui_data_section_storage"),
-		BackupSection:         a.language.translate("i18n:ui_data_section_backup"),
-		LogsSection:           a.language.translate("i18n:ui_data_section_logs"),
-		Open:                  a.language.translate("i18n:plugin_file_open"),
-		Cancel:                a.language.translate("i18n:ui_cancel"),
-		LocationChange:        a.language.translate("i18n:ui_data_config_location_change"),
-		LocationChangeConfirm: a.language.translate("i18n:ui_data_config_location_change_confirm_button"),
-		LocationTitle:         a.language.translate("i18n:ui_data_config_location"),
-		LocationDescription:   a.language.translate("i18n:ui_data_config_location_tips"),
-		AutoBackupTitle:       a.language.translate("i18n:ui_data_backup_auto_title"),
-		AutoBackupDescription: a.language.translate("i18n:ui_data_backup_auto_tips"),
-		BackupListTitle:       a.language.translate("i18n:ui_data_backup_list_title"),
-		BackupNow:             a.language.translate("i18n:ui_data_backup_now"),
-		BackupInProgress:      a.language.translate("i18n:ui_data_backup_in_progress"),
-		BackupEmpty:           a.language.translate("i18n:ui_data_backup_empty"),
-		BackupDate:            a.language.translate("i18n:ui_data_backup_date"),
-		BackupType:            a.language.translate("i18n:ui_data_backup_type"),
-		BackupOperation:       a.language.translate("i18n:ui_operation"),
-		BackupTypeManual:      a.language.translate("i18n:ui_data_backup_type_manual"),
-		BackupTypeAuto:        a.language.translate("i18n:ui_data_backup_type_auto"),
-		BackupRestore:         a.language.translate("i18n:ui_data_backup_restore"),
-		BackupRestoreConfirm:  a.language.translate("i18n:ui_data_backup_restore_confirm"),
-		BackupDelete:          a.language.translate("i18n:ui_delete"),
-		BackupDeleteConfirm:   a.language.translate("i18n:ui_data_backup_restore_confirm"),
-		BackupDeleting:        a.language.translate("i18n:ui_data_backup_deleting"),
-		LogLevelTitle:         a.language.translate("i18n:ui_data_log_level_title"),
-		LogLevelDescription:   a.language.translate("i18n:ui_data_log_level_tips"),
-		LogLevelInfo:          a.language.translate("i18n:ui_data_log_level_info"),
-		LogLevelDebug:         a.language.translate("i18n:ui_data_log_level_debug"),
-		LogClearButton:        a.language.translate("i18n:ui_data_log_clear_button"),
-		LogClearConfirm:       a.language.translate("i18n:ui_data_log_clear_confirm"),
-		LogClearTitle:         a.language.translate("i18n:ui_data_log_clear_title"),
-		LogClearDescription:   a.language.translate("i18n:ui_data_log_clear_tips"),
-		LogOpenButton:         a.language.translate("i18n:ui_data_log_open_button"),
+		Title:                 c.language.translate("i18n:ui_data"),
+		Description:           c.language.translate("i18n:ui_data_description"),
+		StorageSection:        c.language.translate("i18n:ui_data_section_storage"),
+		BackupSection:         c.language.translate("i18n:ui_data_section_backup"),
+		LogsSection:           c.language.translate("i18n:ui_data_section_logs"),
+		Open:                  c.language.translate("i18n:plugin_file_open"),
+		Cancel:                c.language.translate("i18n:ui_cancel"),
+		LocationChange:        c.language.translate("i18n:ui_data_config_location_change"),
+		LocationChangeConfirm: c.language.translate("i18n:ui_data_config_location_change_confirm_button"),
+		LocationTitle:         c.language.translate("i18n:ui_data_config_location"),
+		LocationDescription:   c.language.translate("i18n:ui_data_config_location_tips"),
+		AutoBackupTitle:       c.language.translate("i18n:ui_data_backup_auto_title"),
+		AutoBackupDescription: c.language.translate("i18n:ui_data_backup_auto_tips"),
+		BackupListTitle:       c.language.translate("i18n:ui_data_backup_list_title"),
+		BackupNow:             c.language.translate("i18n:ui_data_backup_now"),
+		BackupInProgress:      c.language.translate("i18n:ui_data_backup_in_progress"),
+		BackupEmpty:           c.language.translate("i18n:ui_data_backup_empty"),
+		BackupDate:            c.language.translate("i18n:ui_data_backup_date"),
+		BackupType:            c.language.translate("i18n:ui_data_backup_type"),
+		BackupOperation:       c.language.translate("i18n:ui_operation"),
+		BackupTypeManual:      c.language.translate("i18n:ui_data_backup_type_manual"),
+		BackupTypeAuto:        c.language.translate("i18n:ui_data_backup_type_auto"),
+		BackupRestore:         c.language.translate("i18n:ui_data_backup_restore"),
+		BackupRestoreConfirm:  c.language.translate("i18n:ui_data_backup_restore_confirm"),
+		BackupDelete:          c.language.translate("i18n:ui_delete"),
+		BackupDeleteConfirm:   c.language.translate("i18n:ui_data_backup_restore_confirm"),
+		BackupDeleting:        c.language.translate("i18n:ui_data_backup_deleting"),
+		LogLevelTitle:         c.language.translate("i18n:ui_data_log_level_title"),
+		LogLevelDescription:   c.language.translate("i18n:ui_data_log_level_tips"),
+		LogLevelInfo:          c.language.translate("i18n:ui_data_log_level_info"),
+		LogLevelDebug:         c.language.translate("i18n:ui_data_log_level_debug"),
+		LogClearButton:        c.language.translate("i18n:ui_data_log_clear_button"),
+		LogClearConfirm:       c.language.translate("i18n:ui_data_log_clear_confirm"),
+		LogClearTitle:         c.language.translate("i18n:ui_data_log_clear_title"),
+		LogClearDescription:   c.language.translate("i18n:ui_data_log_clear_tips"),
+		LogOpenButton:         c.language.translate("i18n:ui_data_log_open_button"),
 	}
 }
 
 // reloadDataSettings delegates to dataSettingsController so App no longer holds data state directly.
-func (a *App) reloadDataSettings() {
-	a.dataSettings.Reload(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) reloadDataSettings() {
+	c.Reload(context.Background(), c.services, c.sessionID)
 }
 
 // createDataBackup delegates to dataSettingsController.
-func (a *App) createDataBackup() {
-	a.dataSettings.CreateBackup(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) createDataBackup() {
+	c.CreateBackup(context.Background(), c.services, c.sessionID)
 }
 
 // restoreDataBackup delegates to dataSettingsController.
-func (a *App) restoreDataBackup(id string) {
-	a.dataSettings.RestoreBackup(context.Background(), a.services, a.sessionID, id)
+func (c *dataSettingsController) restoreDataBackup(id string) {
+	c.RestoreBackup(context.Background(), c.services, c.sessionID, id)
 }
 
 // deleteDataBackup delegates to dataSettingsController.
-func (a *App) deleteDataBackup(id string) {
-	a.dataSettings.DeleteBackup(context.Background(), a.services, a.sessionID, id)
+func (c *dataSettingsController) deleteDataBackup(id string) {
+	c.DeleteBackup(context.Background(), c.services, c.sessionID, id)
 }
 
 // chooseDataLocation delegates to dataSettingsController, which uses the injected
 // native directory picker.
-func (a *App) chooseDataLocation() {
-	a.dataSettings.ChooseLocation()
+func (c *dataSettingsController) chooseDataLocation() {
+	c.ChooseLocation()
 }
 
-func (a *App) cancelDataLocationChange() {
-	a.dataSettings.CancelLocationChange()
+func (c *dataSettingsController) cancelDataLocationChange() {
+	c.CancelLocationChange()
 }
 
 // confirmDataLocationChange delegates to dataSettingsController.
-func (a *App) confirmDataLocationChange() {
-	a.dataSettings.ConfirmLocationChange(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) confirmDataLocationChange() {
+	c.ConfirmLocationChange(context.Background(), c.services, c.sessionID)
 }
 
 // toggleDataAutoBackup reuses the regular key-value settings save and rollback behavior.
 // Stays on App because it operates on the general-domain EnableAutoBackup setting.
-func (a *App) toggleDataAutoBackup() {
-	if a.settingsWindow.saving {
+func (c *dataSettingsController) toggleDataAutoBackup() {
+	if c.settings.saving {
 		return
 	}
-	next := !a.generalSettings.Data().EnableAutoBackup
+	next := !c.generalSettings().Data().EnableAutoBackup
 	label := "Off"
 	if next {
 		label = "On"
 	}
-	a.settingsWindow.invalidateSettingsWindow()
-	a.startGeneralSettingSave(
+	c.settings.invalidateSettingsWindow()
+	c.startGeneralSettingSave(
 		"save automatic backup setting",
 		settingItem{key: "EnableAutoBackup", title: "Automatic backup", value: fmt.Sprintf("%t", !next), choices: boolChoices},
 		settingChoice{value: fmt.Sprintf("%t", next), label: label},
@@ -134,36 +134,36 @@ func (a *App) toggleDataAutoBackup() {
 }
 
 // openDataLogLevelPicker uses the same anchored choice menu as other settings dropdowns.
-func (a *App) openDataLogLevelPicker(anchor woxui.Rect) {
-	current := a.generalSettings.Data().LogLevel
+func (c *dataSettingsController) openDataLogLevelPicker(anchor woxui.Rect) {
+	current := c.generalSettings().Data().LogLevel
 	if !strings.EqualFold(current, "DEBUG") {
 		current = "INFO"
 	} else {
 		current = "DEBUG"
 	}
-	labels := a.dataSettingsLabels()
-	a.openSettingChoicePickerAt(settingItem{
+	labels := c.dataSettingsLabels()
+	c.openSettingChoicePickerAt(settingItem{
 		key: "LogLevel", title: labels.LogLevelTitle, value: current,
 		choices: []settingChoice{{value: "INFO", label: labels.LogLevelInfo}, {value: "DEBUG", label: labels.LogLevelDebug}},
 	}, anchor)
 }
 
 // clearDataLogs delegates to dataSettingsController.
-func (a *App) clearDataLogs() {
-	a.dataSettings.ClearLogs(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) clearDataLogs() {
+	c.ClearLogs(context.Background(), c.services, c.sessionID)
 }
 
 // openDataPath delegates to dataSettingsController.
-func (a *App) openDataPath(path, section string) {
-	a.dataSettings.OpenPath(context.Background(), a.services, a.sessionID, path, section)
+func (c *dataSettingsController) openDataPath(path, section string) {
+	c.OpenPath(context.Background(), c.services, c.sessionID, path, section)
 }
 
 // openDataBackupFolder delegates to dataSettingsController.
-func (a *App) openDataBackupFolder() {
-	a.dataSettings.OpenBackupFolder(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) openDataBackupFolder() {
+	c.OpenBackupFolder(context.Background(), c.services, c.sessionID)
 }
 
 // openDataLog delegates to dataSettingsController.
-func (a *App) openDataLog() {
-	a.dataSettings.OpenLog(context.Background(), a.services, a.sessionID)
+func (c *dataSettingsController) openDataLog() {
+	c.OpenLog(context.Background(), c.services, c.sessionID)
 }

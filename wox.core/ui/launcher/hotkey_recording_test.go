@@ -33,13 +33,11 @@ func TestModifierOnlyHotkeysSkipAvailabilityCheck(t *testing.T) {
 }
 
 func TestHotkeyRecordingPresentationKeepsConflictCandidate(t *testing.T) {
-	controller := newHotkeySettingsController(CommonDeps{})
-	controller.SetRecording(&hotkeyRecordingState{
+	app := bindTestApp(&App{hotkeyRecording: hotkeyRecordingController{recording: &hotkeyRecordingState{
 		idPrefix: "plugin-settings", fieldIndex: 2, display: "cmd+a", status: "conflict", statusError: true,
-	})
-	app := bindTestApp(&App{hotkeySettings: controller})
+	}}})
 
-	presentation := app.hotkeyRecordingFieldStatus("plugin-settings", 2)
+	presentation := app.hotkeyRecording.hotkeyRecordingFieldStatus("plugin-settings", 2)
 	if !presentation.Active || presentation.Value != "cmd+a" || presentation.Status != "conflict" || !presentation.Error {
 		t.Fatalf("recording presentation = %+v", presentation)
 	}
@@ -119,16 +117,14 @@ func (s *localHotkeyTestServices) SubmitHotkeyRecordingCandidate(_ context.Conte
 // functioning event tap and ensures the local candidate still reaches core.
 func TestHotkeyLocalFallbackWithRawAvailable(t *testing.T) {
 	services := &localHotkeyTestServices{candidates: make(chan string, 1)}
-	controller := newHotkeySettingsController(CommonDeps{})
-	controller.SetRecording(&hotkeyRecordingState{
-		ready: true, raw: true, fallback: true, diagnosticCtx: context.Background(),
-	})
 	app := bindTestApp(&App{
-		hotkeySettings: controller,
-		services:       services,
-		lifecycleCtx:   context.Background(),
+		hotkeyRecording: hotkeyRecordingController{recording: &hotkeyRecordingState{
+			ready: true, raw: true, fallback: true, diagnosticCtx: context.Background(),
+		}},
+		services:     services,
+		lifecycleCtx: context.Background(),
 	})
-	if !app.onHotkeyRecordingKey(woxui.KeyEvent{Key: woxui.Key("a"), Down: true, Modifiers: woxui.KeyModifierControl}) {
+	if !app.hotkeyRecording.onHotkeyRecordingKey(woxui.KeyEvent{Key: woxui.Key("a"), Down: true, Modifiers: woxui.KeyModifierControl}) {
 		t.Fatal("recording did not consume the local key")
 	}
 	select {
@@ -201,7 +197,7 @@ func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
 		ID:   "__system_set_result_hotkey__",
 		Form: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
 	})
-	recording := app.hotkeySettings.Recording()
+	recording := app.hotkeyRecording.Recording()
 	if recording == nil || recording.idPrefix != "action-form" || recording.fieldIndex != 0 {
 		t.Fatalf("recording = %+v, want action-form field 0", recording)
 	}
@@ -211,7 +207,7 @@ func TestOpenFormActionStartsHotkeyRecording(t *testing.T) {
 		t.Fatal("opening a hotkey form did not start the recorder")
 	}
 	app.forms.closeFormAction()
-	if app.hotkeySettings.Recording() != nil {
+	if app.hotkeyRecording.Recording() != nil {
 		t.Fatal("closing the form must stop recording")
 	}
 }
@@ -224,7 +220,7 @@ func TestOpenFormActionSkipsRecordingForTextFields(t *testing.T) {
 		ID:   "__system_set_result_alias__",
 		Form: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "alias"}}},
 	})
-	if app.hotkeySettings.Recording() != nil {
+	if app.hotkeyRecording.Recording() != nil {
 		t.Fatal("alias form must not start the hotkey recorder")
 	}
 	select {
@@ -252,16 +248,16 @@ func TestActionFormEscapeAndEnterStopRecordingOnce(t *testing.T) {
 		}
 		formSnapshot := viewSnapshot{form: snapshotFormLocked(app.forms.form), palette: app.appearance.palette, densityMetrics: app.appearance.densityMetrics}
 		recordingSignature := app.launcherFormSectionSignature(formSnapshot, 400)
-		if !app.onHotkeyRecordingKey(woxui.KeyEvent{Key: key, Down: true}) {
+		if !app.hotkeyRecording.onHotkeyRecordingKey(woxui.KeyEvent{Key: key, Down: true}) {
 			t.Fatalf("%s should stop the action-form recorder", key)
 		}
-		if app.hotkeySettings.Recording() != nil {
+		if app.hotkeyRecording.Recording() != nil {
 			t.Fatalf("%s left the action-form recorder active", key)
 		}
 		if app.launcherFormSectionSignature(formSnapshot, 400) == recordingSignature {
 			t.Fatalf("%s stopped recording but the form section cache would still show Recording...", key)
 		}
-		if app.forms.onFormKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) && app.hotkeySettings.Recording() != nil {
+		if app.forms.onFormKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) && app.hotkeyRecording.Recording() != nil {
 			t.Fatalf("a follow-up Enter after %s restarted recording", key)
 		}
 	}
@@ -295,10 +291,10 @@ func TestApplyRecordedHotkeyShowsCandidateBeforeAvailability(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("opening a hotkey form did not start the recorder")
 	}
-	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "ctrl+shift+p", Kind: "normalCombo"}); err != nil {
+	if err := app.hotkeyRecording.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "ctrl+shift+p", Kind: "normalCombo"}); err != nil {
 		t.Fatal(err)
 	}
-	state := app.hotkeySettings.Recording()
+	state := app.hotkeyRecording.Recording()
 	if state == nil || state.display != "ctrl+shift+p" || state.statusError || !state.checking {
 		t.Fatalf("recording display = %+v, want keycaps before the availability probe finishes", state)
 	}
@@ -337,20 +333,20 @@ func TestActionFormPrimaryEnterSavesWhileRecording(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("opening a hotkey form did not start the recorder")
 	}
-	recording := app.hotkeySettings.Recording()
+	recording := app.hotkeyRecording.Recording()
 	recording.display = "ctrl+shift+,"
 	recording.checking = true
 	saveHotkey := "ctrl+enter"
 	if runtime.GOOS == "darwin" {
 		saveHotkey = "command+enter"
 	}
-	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: saveHotkey, Kind: "normalCombo"}); err != nil {
+	if err := app.hotkeyRecording.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: saveHotkey, Kind: "normalCombo"}); err != nil {
 		t.Fatal(err)
 	}
 	if app.forms.form != nil {
 		t.Fatal("Ctrl/Cmd+Enter left the action form open")
 	}
-	if app.hotkeySettings.Recording() != nil {
+	if app.hotkeyRecording.Recording() != nil {
 		t.Fatal("Ctrl/Cmd+Enter left the action-form recorder active")
 	}
 	select {
@@ -367,11 +363,11 @@ func TestRecordedHotkeyWithoutParentHookStaysACandidate(t *testing.T) {
 	fields := newFormFieldsState([]formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey"}}}, nil, true)
 	controller := newHotkeySettingsController(CommonDeps{})
 	controller.SetForm(&fields)
-	controller.SetRecording(&hotkeyRecordingState{
-		target: &fields, fieldIndex: 0, idPrefix: "hotkey-settings", allowed: map[string]bool{"normalCombo": true},
-		diagnosticCtx: context.Background(),
-	})
 	app := bindTestApp(&App{
+		hotkeyRecording: hotkeyRecordingController{recording: &hotkeyRecordingState{
+			target: &fields, fieldIndex: 0, idPrefix: "hotkey-settings", allowed: map[string]bool{"normalCombo": true},
+			diagnosticCtx: context.Background(),
+		}},
 		hotkeySettings: controller,
 		pluginSettings: newPluginSettingsController(CommonDeps{}),
 		settingsWindow: settingsWindowController{
@@ -381,10 +377,10 @@ func TestRecordedHotkeyWithoutParentHookStaysACandidate(t *testing.T) {
 		services:     &actionRecordingTestServices{},
 		lifecycleCtx: context.Background(),
 	})
-	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "ctrl+enter", Kind: "normalCombo"}); err != nil {
+	if err := app.hotkeyRecording.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "ctrl+enter", Kind: "normalCombo"}); err != nil {
 		t.Fatal(err)
 	}
-	state := app.hotkeySettings.Recording()
+	state := app.hotkeyRecording.Recording()
 	if state == nil || state.display != "ctrl+enter" {
 		t.Fatalf("settings recording display = %+v, want ctrl+enter kept as a candidate", state)
 	}
@@ -400,7 +396,7 @@ func TestActionHotkeyRecordingOnlyAllowsNormalCombos(t *testing.T) {
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {
 		if definition.Value.Key == "ActionPanelHotkey" {
-			app.recordHotkeySettingsField(index)
+			app.hotkeySettings.recordHotkeySettingsField(index)
 			break
 		}
 	}
@@ -426,7 +422,7 @@ func TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows(t *testing.T) {
 	app.hotkeySettings.SetForm(&form)
 	for index, definition := range form.definitions {
 		if definition.Value.Key == "MainHotkey" {
-			app.recordHotkeySettingsField(index)
+			app.hotkeySettings.recordHotkeySettingsField(index)
 			break
 		}
 	}
@@ -438,10 +434,10 @@ func TestMainHotkeyRecordingAllowsWindowsKeyOnlyOnWindows(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("recorder did not start")
 	}
-	if err := app.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "left_ctrl", Kind: "pressModifier"}); err != nil {
+	if err := app.hotkeyRecording.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: "left_ctrl", Kind: "pressModifier"}); err != nil {
 		t.Fatal(err)
 	}
-	if app.hotkeySettings.Recording().display == "left_ctrl" {
+	if app.hotkeyRecording.Recording().display == "left_ctrl" {
 		t.Fatal("main shortcut must not accept other single modifiers")
 	}
 }

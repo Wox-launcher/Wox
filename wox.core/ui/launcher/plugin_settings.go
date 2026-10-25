@@ -1241,7 +1241,7 @@ func (c *pluginSettingsController) onPluginSettingsKey(event woxui.KeyEvent) boo
 			if host := c.settings.host; host != nil {
 				anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", focused)))
 			}
-			c.openModelManager(focused, anchor)
+			c.openPluginModelManager(focused, anchor)
 		} else if fieldType == "dictationHotkey" {
 			c.recordPluginFormHotkey(focused)
 		} else if fieldType == "select" || fieldType == "selectAIModel" {

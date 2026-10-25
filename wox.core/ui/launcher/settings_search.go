@@ -61,18 +61,18 @@ var builtInSettingSearchAliases = map[string][]string{
 // loadSettingsSearchPlugins keeps the search index independent from the installed/store plugin page state.
 // The controller owns the loading/loaded/error/plugins state and the load guard; the App still drives
 // the call so it can invalidate the settings window at the right lifecycle points.
-func (a *App) loadSettingsSearchPlugins() {
-	a.settingsWindow.invalidateSettingsWindow()
-	if err := a.settingsSearch.ReloadPlugins(a.lifecycleCtx, a.services, a.sessionID); err != nil {
+func (c *settingsSearchController) loadSettingsSearchPlugins() {
+	c.settings.invalidateSettingsWindow()
+	if err := c.ReloadPlugins(c.lifecycleCtx, c.services, c.sessionID); err != nil {
 		return
 	}
-	_ = a.runOnUI("cache installed plugin catalog", func() {
-		a.pluginSettings.cachePlugins(false, a.settingsSearch.Plugins())
+	_ = c.runOnUI("cache installed plugin catalog", func() {
+		c.pluginSettings().cachePlugins(false, c.Plugins())
 	})
 }
 
 // settingsSearchResults builds one ranked index across built-in controls, sections, plugins, and plugin settings.
-func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchResult {
+func (c *settingsSearchController) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchResult {
 	query := strings.TrimSpace(snapshot.search.Query.Text)
 	if query == "" {
 		return nil
@@ -84,8 +84,8 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 		if spec.parent || spec.tab == "" {
 			continue
 		}
-		title := a.settingNavLabel(spec)
-		subtitle := a.settingsSearchNavSubtitle(spec, navSpecs)
+		title := c.settingNavLabel(spec)
+		subtitle := c.settingsSearchNavSubtitle(spec, navSpecs)
 		texts := []string{spec.id, spec.fallback, title, subtitle, compactSettingsSearchText(spec.fallback), compactSettingsSearchText(title)}
 		candidates = append(candidates, settingsSearchResult{
 			kind: settingsSearchSection, title: title, subtitle: subtitle, tab: spec.tab, mode: spec.mode, navID: spec.id,
@@ -93,11 +93,11 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 		})
 	}
 	for _, tab := range settingTabs(snapshot.isDev) {
-		tabLabel := a.settingsSearchTabLabel(tab, snapshot.isDev)
+		tabLabel := c.settingsSearchTabLabel(tab, snapshot.isDev)
 		tabSnapshot := snapshot
 		tabSnapshot.tab = tab.id
 		for _, item := range settingItemsForSnapshot(tabSnapshot) {
-			item = a.localizedSettingItem(item)
+			item = c.localizedSettingItem(item)
 			texts := []string{item.key, item.title, tabLabel}
 			texts = append(texts, builtInSettingSearchAliases[item.key]...)
 			candidates = append(candidates, settingsSearchResult{
@@ -105,9 +105,9 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 			})
 		}
 	}
-	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.hotkey.Form, "hotkey", "Hotkey")...)
-	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.general.Form, "general", "General")...)
-	candidates = append(candidates, a.settingsFormSearchCandidates(snapshot.ai.Form, "ai", "AI")...)
+	candidates = append(candidates, c.settingsFormSearchCandidates(snapshot.hotkey.Form, "hotkey", "Hotkey")...)
+	candidates = append(candidates, c.settingsFormSearchCandidates(snapshot.general.Form, "general", "General")...)
+	candidates = append(candidates, c.settingsFormSearchCandidates(snapshot.ai.Form, "ai", "AI")...)
 
 	plugins := snapshot.search.Plugins
 	if len(plugins) == 0 && !snapshot.plugins.PluginsStore {
@@ -124,13 +124,13 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 		})
 		for _, definition := range plugin.SettingDefinitions {
 			key := strings.TrimSpace(definition.Value.Key)
-			title := a.formDefinitionSearchTitle(definition)
+			title := c.formDefinitionSearchTitle(definition)
 			if key == "" || title == "" {
 				continue
 			}
 			texts := []string{key, title}
 			for _, alias := range definition.SearchAliases {
-				texts = append(texts, a.language.translate(alias))
+				texts = append(texts, c.language.translate(alias))
 			}
 			candidates = append(candidates, settingsSearchResult{
 				kind: settingsSearchPluginSetting, title: title, subtitle: pluginTitle, icon: plugin.Icon, tab: "plugins", pluginID: plugin.ID, settingKey: key,
@@ -162,17 +162,17 @@ func (a *App) settingsSearchResults(snapshot settingsSnapshot) []settingsSearchR
 }
 
 // settingsSearchTabLabel uses the same localized navigation label shown by the destination page.
-func (a *App) settingsSearchTabLabel(tab settingTab, isDev bool) string {
+func (c *settingsSearchController) settingsSearchTabLabel(tab settingTab, isDev bool) string {
 	for _, spec := range settingNavSpecs(isDev) {
 		if spec.tab == tab.id {
-			return a.settingNavLabel(spec)
+			return c.settingNavLabel(spec)
 		}
 	}
 	return tab.label
 }
 
 // settingsSearchNavSubtitle uses the parent group for nested pages so Theme Editor ranks under Themes.
-func (a *App) settingsSearchNavSubtitle(spec settingNavSpec, specs []settingNavSpec) string {
+func (c *settingsSearchController) settingsSearchNavSubtitle(spec settingNavSpec, specs []settingNavSpec) string {
 	if spec.depth == 0 {
 		return "Settings section"
 	}
@@ -182,7 +182,7 @@ func (a *App) settingsSearchNavSubtitle(spec settingNavSpec, specs []settingNavS
 	}
 	for _, candidate := range specs {
 		if candidate.id == parentID {
-			return a.settingNavLabel(candidate)
+			return c.settingNavLabel(candidate)
 		}
 	}
 	return "Settings section"
@@ -206,21 +206,21 @@ func compactSettingsSearchText(value string) string {
 	return builder.String()
 }
 
-func (a *App) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtitle string) []settingsSearchResult {
+func (c *settingsSearchController) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtitle string) []settingsSearchResult {
 	if form == nil {
 		return nil
 	}
 	results := make([]settingsSearchResult, 0, len(form.definitions))
 	for _, definition := range form.definitions {
 		key := strings.TrimSpace(definition.Value.Key)
-		title := a.formDefinitionSearchTitle(definition)
+		title := c.formDefinitionSearchTitle(definition)
 		if key == "" || title == "" {
 			continue
 		}
 		texts := []string{key, title, subtitle}
 		texts = append(texts, builtInSettingSearchAliases[key]...)
 		for _, alias := range definition.SearchAliases {
-			texts = append(texts, a.language.translate(alias))
+			texts = append(texts, c.language.translate(alias))
 		}
 		results = append(results, settingsSearchResult{
 			kind: settingsSearchSetting, title: title, subtitle: subtitle, tab: tab, settingKey: key, searchTexts: normalizeSettingsSearchTexts(texts),
@@ -229,12 +229,12 @@ func (a *App) settingsFormSearchCandidates(form *formFieldsSnapshot, tab, subtit
 	return results
 }
 
-func (a *App) formDefinitionSearchTitle(definition formDefinition) string {
+func (c *settingsSearchController) formDefinitionSearchTitle(definition formDefinition) string {
 	title := definition.Value.Title
 	if title == "" {
 		title = definition.Value.Label
 	}
-	return strings.TrimSpace(a.language.translate(title))
+	return strings.TrimSpace(c.language.translate(title))
 }
 
 func normalizeSettingsSearchTexts(texts []string) []string {
@@ -275,104 +275,104 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func (a *App) focusSettingsSearch(selectAll bool) {
-	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
+func (c *settingsSearchController) focusSettingsSearch(selectAll bool) {
+	if c.Editor() == nil {
+		c.SetEditor(woxwidget.NewTextEditingController(""))
 	}
-	if selectAll && a.settingsSearch.Editor() != nil {
-		editor := a.settingsSearch.Editor()
+	if selectAll && c.Editor() != nil {
+		editor := c.Editor()
 		editor.SetText(editor.Text(), true)
 	}
-	a.settingsSearch.SetFocused(true)
-	a.pluginSettings.SetSearchFocused(false)
-	a.themeSettings.SetThemeSearchFocused(false)
+	c.SetFocused(true)
+	c.pluginSettings().SetSearchFocused(false)
+	c.themeSettings().SetThemeSearchFocused(false)
 	queryText := ""
-	if editor := a.settingsSearch.Editor(); editor != nil {
+	if editor := c.Editor(); editor != nil {
 		queryText = strings.TrimSpace(editor.State().Text)
 	}
-	a.settingsSearch.SetPanel(queryText != "")
-	host := a.settingsWindow.host
+	c.SetPanel(queryText != "")
+	host := c.settings.host
 	if host != nil {
 		host.RequestFocus(woxwidget.Key("settings-search-field"))
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // setSettingsSearchFocused keeps controller routing aligned with the retained text-field focus.
-func (a *App) setSettingsSearchFocused(focused bool) {
-	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
+func (c *settingsSearchController) setSettingsSearchFocused(focused bool) {
+	if c.Editor() == nil {
+		c.SetEditor(woxwidget.NewTextEditingController(""))
 	}
-	a.settingsSearch.SetFocused(focused)
+	c.SetFocused(focused)
 	if focused {
-		a.pluginSettings.SetSearchFocused(false)
-		a.themeSettings.SetThemeSearchFocused(false)
+		c.pluginSettings().SetSearchFocused(false)
+		c.themeSettings().SetThemeSearchFocused(false)
 		queryText := ""
-		if editor := a.settingsSearch.Editor(); editor != nil {
+		if editor := c.Editor(); editor != nil {
 			queryText = strings.TrimSpace(editor.State().Text)
 		}
-		a.settingsSearch.SetPanel(queryText != "")
+		c.SetPanel(queryText != "")
 	} else {
-		a.settingsSearch.SetPanel(false)
+		c.SetPanel(false)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // setSettingsSearchValue applies accessibility value changes through the same search state.
-func (a *App) setSettingsSearchValue(value string) error {
-	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(value))
+func (c *settingsSearchController) setSettingsSearchValue(value string) error {
+	if c.Editor() == nil {
+		c.SetEditor(woxwidget.NewTextEditingController(value))
 	} else {
-		editor := a.settingsSearch.Editor()
+		editor := c.Editor()
 		if editor.Text() != value {
 			editor.SetText(value, false)
 		}
 	}
-	a.settingsSearch.SetPanel(strings.TrimSpace(value) != "")
-	a.settingsSearch.SetSelected(0)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetPanel(strings.TrimSpace(value) != "")
+	c.SetSelected(0)
+	c.settings.invalidateSettingsWindow()
 	return nil
 }
 
-func (a *App) clearSettingsSearch() {
-	if a.settingsSearch.Editor() == nil {
-		a.settingsSearch.SetEditor(woxwidget.NewTextEditingController(""))
+func (c *settingsSearchController) clearSettingsSearch() {
+	if c.Editor() == nil {
+		c.SetEditor(woxwidget.NewTextEditingController(""))
 	} else {
-		editor := a.settingsSearch.Editor()
+		editor := c.Editor()
 		editor.SetText("", false)
 	}
-	a.settingsSearch.SetPanel(false)
-	a.settingsSearch.SetSelected(0)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetPanel(false)
+	c.SetSelected(0)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) blurSettingsSearch() {
-	if !a.settingsSearch.Focused() {
+func (c *settingsSearchController) blurSettingsSearch() {
+	if !c.Focused() {
 		return
 	}
-	a.settingsSearch.SetFocused(false)
-	a.settingsSearch.SetPanel(false)
-	host := a.settingsWindow.host
+	c.SetFocused(false)
+	c.SetPanel(false)
+	host := c.settings.host
 	if host != nil {
 		host.ClearFocus()
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // onSettingsSearchKey gives the floating result palette first ownership of search navigation keys.
-func (a *App) onSettingsSearchKey(event woxui.KeyEvent) bool {
+func (c *settingsSearchController) onSettingsSearchKey(event woxui.KeyEvent) bool {
 	if event.Down && !event.Composing && event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() {
-		a.focusSettingsSearch(true)
+		c.focusSettingsSearch(true)
 		return true
 	}
 	// Key releases must not repeat palette navigation, and composing keys belong to native text input.
 	if !event.Down || event.Composing {
 		return false
 	}
-	focused := a.settingsSearch.Focused() && a.settingsSearch.Editor() != nil
-	panel := a.settingsSearch.Panel()
+	focused := c.Focused() && c.Editor() != nil
+	panel := c.Panel()
 	query := ""
-	if editor := a.settingsSearch.Editor(); editor != nil {
+	if editor := c.Editor(); editor != nil {
 		query = strings.TrimSpace(editor.State().Text)
 	}
 	if !focused {
@@ -381,101 +381,101 @@ func (a *App) onSettingsSearchKey(event woxui.KeyEvent) bool {
 	if panel && query != "" {
 		switch event.Key {
 		case woxui.KeyArrowDown:
-			a.moveSettingsSearchSelection(1)
+			c.moveSettingsSearchSelection(1)
 			return true
 		case woxui.KeyArrowUp:
-			a.moveSettingsSearchSelection(-1)
+			c.moveSettingsSearchSelection(-1)
 			return true
 		case woxui.KeyEnter:
-			a.activateSelectedSettingsSearchResult()
+			c.activateSelectedSettingsSearchResult()
 			return true
 		case woxui.KeyEscape:
-			a.clearSettingsSearch()
+			c.clearSettingsSearch()
 			return true
 		}
 	}
 	if event.Key == woxui.KeyEscape && query == "" {
-		a.blurSettingsSearch()
+		c.blurSettingsSearch()
 		return false
 	}
 	return false
 }
 
-func (a *App) onSettingsSearchTextInput(_ woxui.TextInputEvent) bool {
-	return a.settingsSearch.Focused() && a.settingsSearch.Editor() != nil
+func (c *settingsSearchController) onSettingsSearchTextInput(_ woxui.TextInputEvent) bool {
+	return c.Focused() && c.Editor() != nil
 }
 
-func (a *App) moveSettingsSearchSelection(delta int) {
-	snapshot := a.settingsSnapshot()
-	results := a.settingsSearchResults(snapshot)
+func (c *settingsSearchController) moveSettingsSearchSelection(delta int) {
+	snapshot := c.settingsSnapshot()
+	results := c.settingsSearchResults(snapshot)
 	if len(results) == 0 {
-		a.settingsSearch.SetSelected(0)
+		c.SetSelected(0)
 	} else {
-		a.settingsSearch.SetSelected(min(max(0, a.settingsSearch.Selected()+delta), len(results)-1))
+		c.SetSelected(min(max(0, c.Selected()+delta), len(results)-1))
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) selectSettingsSearchResult(index int) {
-	snapshot := a.settingsSnapshot()
-	results := a.settingsSearchResults(snapshot)
+func (c *settingsSearchController) selectSettingsSearchResult(index int) {
+	snapshot := c.settingsSnapshot()
+	results := c.settingsSearchResults(snapshot)
 	if index < 0 || index >= len(results) {
 		return
 	}
-	a.settingsSearch.SetSelected(index)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.SetSelected(index)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) activateSelectedSettingsSearchResult() {
-	snapshot := a.settingsSnapshot()
-	results := a.settingsSearchResults(snapshot)
+func (c *settingsSearchController) activateSelectedSettingsSearchResult() {
+	snapshot := c.settingsSnapshot()
+	results := c.settingsSearchResults(snapshot)
 	if len(results) == 0 {
 		return
 	}
 	index := min(max(0, snapshot.search.Selected), len(results)-1)
-	a.activateSettingsSearchResult(results[index])
+	c.activateSettingsSearchResult(results[index])
 }
 
 // activateSettingsSearchResult closes the palette and routes to the result's owning settings surface.
-func (a *App) activateSettingsSearchResult(result settingsSearchResult) {
-	a.settingsSearch.SetPanel(false)
+func (c *settingsSearchController) activateSettingsSearchResult(result settingsSearchResult) {
+	c.SetPanel(false)
 	if result.kind == settingsSearchPlugin || result.kind == settingsSearchPluginSetting {
-		a.activateSettingsPluginSearchResult(result)
+		c.activateSettingsPluginSearchResult(result)
 		return
 	}
 	if result.kind == settingsSearchSection {
-		a.selectSettingsNavItem(settingsSearchNavItem(result))
-		a.settingsWindow.invalidateSettingsWindow()
+		c.selectSettingsNavItem(settingsSearchNavItem(result))
+		c.settings.invalidateSettingsWindow()
 		return
 	}
 
-	a.selectSettingTab(result.tab)
+	c.selectSettingTab(result.tab)
 	if result.settingKey != "" {
-		a.focusBuiltInSettingsSearchTarget(result.tab, result.settingKey)
-		a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
+		c.focusBuiltInSettingsSearchTarget(result.tab, result.settingKey)
+		c.settings.flashLocked(settingsSearchHighlightTarget(result))
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
-	snapshot := a.settingsSnapshot()
+func (c *settingsSearchController) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
+	snapshot := c.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	for index, item := range items {
 		if item.key == settingKey {
-			a.settingsWindow.row = index
+			c.settings.row = index
 			if tab == "general" {
-				a.generalSettings.SetFormFocused(false)
+				c.generalSettings().SetFormFocused(false)
 			}
 			return
 		}
 	}
 	var fields *formFieldsState
 	if tab == "hotkey" {
-		fields = a.hotkeySettings.Form()
+		fields = c.hotkeySettings().Form()
 	} else if tab == "ai" {
-		fields = a.aiSettings.Form()
+		fields = c.aiSettings().Form()
 	} else if tab == "general" {
-		fields = a.generalSettings.Form()
+		fields = c.generalSettings().Form()
 	}
 	if fields == nil {
 		return
@@ -483,48 +483,48 @@ func (a *App) focusBuiltInSettingsSearchTarget(tab, settingKey string) {
 	for index, definition := range fields.definitions {
 		if definition.Value.Key == settingKey {
 			fields.focused = index
-			a.hotkeySettings.SetFocused(tab == "hotkey")
-			a.generalSettings.SetFormFocused(tab == "general")
+			c.hotkeySettings().SetFocused(tab == "hotkey")
+			c.generalSettings().SetFormFocused(tab == "general")
 			return
 		}
 	}
 }
 
 // activateSettingsPluginSearchResult preserves the plugin page's dirty-state guard while loading an installed destination.
-func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
-	installedReady := !a.pluginSettings.PluginsStore() && a.pluginSettings.PluginsLoaded() && !a.pluginSettings.PluginsLoading()
-	plugins := append([]pluginSettingsPlugin(nil), a.pluginSettings.Plugins()...)
+func (c *settingsSearchController) activateSettingsPluginSearchResult(result settingsSearchResult) {
+	installedReady := !c.pluginSettings().PluginsStore() && c.pluginSettings().PluginsLoaded() && !c.pluginSettings().PluginsLoading()
+	plugins := append([]pluginSettingsPlugin(nil), c.pluginSettings().Plugins()...)
 	if installedReady {
-		a.selectSettingTab("plugins")
+		c.selectSettingTab("plugins")
 		for index, plugin := range plugins {
 			if plugin.ID == result.pluginID {
-				a.pluginSettings.selectPlugin(index)
-				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
-				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
+				c.pluginSettings().selectPlugin(index)
+				c.settings.flashLocked(settingsSearchHighlightTarget(result))
+				c.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 				return
 			}
 		}
 	}
 
-	form := a.pluginSettings.Form()
+	form := c.pluginSettings().Form()
 	if form != nil {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		if pluginFormDirty(form.definitions, form.values, form.initial) {
-			a.pluginSettings.submitPluginSettings()
+			c.pluginSettings().submitPluginSettings()
 		}
 	}
-	a.pluginSettings.SetPluginsStore(false)
-	a.pluginSettings.SetPluginsLoaded(false)
-	a.pluginSettings.SetPluginsLoading(true)
-	a.pluginSettings.SetPluginsError("")
-	a.pluginSettings.SetSelected(-1)
-	a.pluginSettings.SetForm(nil)
-	a.selectSettingTab("plugins")
-	util.Go(a.lifecycleCtx, "open plugin setting search result", func() {
-		if err := a.pluginSettings.reloadPlugins(false, result.pluginID); err == nil {
-			if dispatchErr := a.runOnUI("focus plugin setting search target", func() {
-				a.settingsWindow.flashLocked(settingsSearchHighlightTarget(result))
-				a.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
+	c.pluginSettings().SetPluginsStore(false)
+	c.pluginSettings().SetPluginsLoaded(false)
+	c.pluginSettings().SetPluginsLoading(true)
+	c.pluginSettings().SetPluginsError("")
+	c.pluginSettings().SetSelected(-1)
+	c.pluginSettings().SetForm(nil)
+	c.selectSettingTab("plugins")
+	util.Go(c.lifecycleCtx, "open plugin setting search result", func() {
+		if err := c.pluginSettings().reloadPlugins(false, result.pluginID); err == nil {
+			if dispatchErr := c.runOnUI("focus plugin setting search target", func() {
+				c.settings.flashLocked(settingsSearchHighlightTarget(result))
+				c.focusPluginSettingsSearchTarget(result.pluginID, result.settingKey)
 			}); dispatchErr != nil {
 				return
 			}
@@ -532,14 +532,14 @@ func (a *App) activateSettingsPluginSearchResult(result settingsSearchResult) {
 	})
 }
 
-func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
+func (c *settingsSearchController) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 	if settingKey == "" {
-		a.settingsWindow.invalidateSettingsWindow()
+		c.settings.invalidateSettingsWindow()
 		return
 	}
-	form := a.pluginSettings.Form()
+	form := c.pluginSettings().Form()
 	if form != nil && form.pluginID == pluginID {
-		a.pluginSettings.SetDetailTab("settings")
+		c.pluginSettings().SetDetailTab("settings")
 		for index, definition := range form.definitions {
 			if definition.Value.Key == settingKey {
 				form.focused = index
@@ -547,7 +547,7 @@ func (a *App) focusPluginSettingsSearchTarget(pluginID, settingKey string) {
 			}
 		}
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 func settingsSearchHighlightTarget(result settingsSearchResult) string {

@@ -346,7 +346,7 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 			a.pluginSettings.SetSearchFocused(false)
 		}
 		a.hotkeySettings.SetFocused(false)
-		a.abandonModelManager()
+		a.pluginSettings.abandonModelManager()
 		a.cloudSettings.SetForm(nil)
 		a.cloudSettings.SetActionMenu("")
 		a.cloudSettings.SetPluginDialog(nil)
@@ -414,20 +414,20 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		})
 	}
 	if tab == "ai" {
-		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
+		util.Go(a.lifecycleCtx, "load AI provider catalog", a.aiSettings.loadAIProviderCatalog)
 	}
 	if tab == "appearance" {
 		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
 		util.Go(a.lifecycleCtx, "load system font families", a.loadSystemFontFamilies)
 	}
 	if tab == "data" {
-		util.Go(a.lifecycleCtx, "reload data settings", a.reloadDataSettings)
+		util.Go(a.lifecycleCtx, "reload data settings", a.dataSettings.reloadDataSettings)
 	}
 	if tab == "cloud" {
 		util.Go(a.lifecycleCtx, "reload cloud sync", a.cloudSettings.reloadCloudSync)
 	}
 	if tab == "runtime" {
-		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
+		util.Go(a.lifecycleCtx, "reload runtime statuses", a.runtimeSettings.reloadRuntimeStatuses)
 	}
 	if tab == "about" {
 		util.Go(a.lifecycleCtx, "reload about version", a.reloadAboutVersion)
@@ -463,10 +463,10 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		return err
 	}
 	a.updateSettingsTextInput(false)
-	util.Go(a.lifecycleCtx, "load settings search plugins", a.loadSettingsSearchPlugins)
+	util.Go(a.lifecycleCtx, "load settings search plugins", a.settingsSearch.loadSettingsSearchPlugins)
 	if rowIndex, ok := trayQueryRowIndexFromParam(windowContext.Param); ok {
 		if err := a.runOnUI("open tray query editor", func() {
-			a.openTrayQueryEditor(rowIndex)
+			a.hotkeySettings.openTrayQueryEditor(rowIndex)
 		}); err != nil {
 			return err
 		}
@@ -698,7 +698,7 @@ func aiBuiltinToolInfosFromContract(tools []common.AIConfigurableBuiltinTool) []
 func (a *App) closeSettings() error {
 	var settingsView *woxui.ManagedWindow
 	if err := a.runOnUI("prepare settings close", func() {
-		a.stopHotkeyRecording()
+		a.hotkeyRecording.stopHotkeyRecording()
 		if form := a.pluginSettings.Form(); form != nil {
 			syncFormFieldsEditorLocked(&form.formFieldsState)
 			if pluginFormDirty(form.definitions, form.values, form.initial) {
@@ -719,7 +719,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.onPrivacySettingsKey(event) {
 		return true
 	}
-	if a.onModelManagerKey(event) {
+	if a.pluginSettings.onModelManagerKey(event) {
 		return true
 	}
 	if a.cloudSettings.onCloudSettingsKey(event) {
@@ -740,7 +740,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 		// Printable keys must reach the native text-input path while the filter field owns focus.
 		return !choicePicker.item.filterable
 	}
-	if a.onSettingsSearchKey(event) {
+	if a.settingsSearch.onSettingsSearchKey(event) {
 		return true
 	}
 	// A focused search field owns printable keys; stale page editors must not consume them.
@@ -750,7 +750,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if a.pluginSettings.onPluginSettingsKey(event) {
 		return true
 	}
-	if a.onHotkeySettingsKey(event) || a.onGeneralQuerySettingsKey(event) {
+	if a.hotkeySettings.onHotkeySettingsKey(event) || a.hotkeySettings.onGeneralQuerySettingsKey(event) {
 		return true
 	}
 	if a.themeSettings.onThemeSettingsKey(event) {
@@ -760,7 +760,7 @@ func (a *App) onSettingsKey(event woxui.KeyEvent) bool {
 	if themeTab && a.themeSettings.onThemeEditorPreviewKey(event) {
 		return true
 	}
-	if a.onAISettingsKey(event) {
+	if a.aiSettings.onAISettingsKey(event) {
 		return true
 	}
 	if a.onBuiltInSettingsEditorKey(event) {
@@ -848,8 +848,8 @@ func (a *App) selectSettingTab(tab string) {
 	if tab == "debug" && !a.isDev {
 		return
 	}
-	a.blurSettingsSearch()
-	a.stopHotkeyRecording()
+	a.settingsSearch.blurSettingsSearch()
+	a.hotkeyRecording.stopHotkeyRecording()
 	loadPlugins := false
 	loadTheme := false
 	loadThemes := false
@@ -887,7 +887,7 @@ func (a *App) selectSettingTab(tab string) {
 		a.cloudSettings.SetForm(nil)
 		a.cloudSettings.SetPluginDialog(nil)
 		if tab != "plugins" {
-			a.abandonModelManager()
+			a.pluginSettings.abandonModelManager()
 		}
 		if themeEditor := a.themeSettings.ThemeEditor(); themeEditor != nil {
 			themeEditor.active = false
@@ -979,7 +979,7 @@ func (a *App) selectSettingTab(tab string) {
 		util.Go(a.lifecycleCtx, "reload about version", a.reloadAboutVersion)
 	}
 	if loadAIProviders {
-		util.Go(a.lifecycleCtx, "load AI provider catalog", a.loadAIProviderCatalog)
+		util.Go(a.lifecycleCtx, "load AI provider catalog", a.aiSettings.loadAIProviderCatalog)
 	}
 	if loadGlanceCatalog {
 		util.Go(a.lifecycleCtx, "load glance catalog", a.loadGlanceCatalog)
@@ -988,10 +988,10 @@ func (a *App) selectSettingTab(tab string) {
 		util.Go(a.lifecycleCtx, "load system font families", a.loadSystemFontFamilies)
 	}
 	if loadData {
-		util.Go(a.lifecycleCtx, "reload data settings", a.reloadDataSettings)
+		util.Go(a.lifecycleCtx, "reload data settings", a.dataSettings.reloadDataSettings)
 	}
 	if loadRuntime {
-		util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
+		util.Go(a.lifecycleCtx, "reload runtime statuses", a.runtimeSettings.reloadRuntimeStatuses)
 	}
 	if loadCloud {
 		util.Go(a.lifecycleCtx, "reload cloud sync", a.cloudSettings.reloadCloudSync)
@@ -1075,7 +1075,7 @@ func (a *App) moveSettingRow(delta int) {
 }
 
 func (a *App) selectSettingRow(index int) {
-	a.blurSettingsSearch()
+	a.settingsSearch.blurSettingsSearch()
 	snapshot := a.settingsSnapshot()
 	items := settingItemsForSnapshot(snapshot)
 	if index < 0 || index >= len(items) {
@@ -1395,7 +1395,7 @@ func (a *App) saveSetting(item settingItem, choice settingChoice) {
 			a.runtimeSettings.SetError(err.Error())
 		} else {
 			a.runtimeSettings.SetError("")
-			util.Go(a.lifecycleCtx, "reload runtime statuses", a.reloadRuntimeStatuses)
+			util.Go(a.lifecycleCtx, "reload runtime statuses", a.runtimeSettings.reloadRuntimeStatuses)
 		}
 	}
 	a.publishSettingsChanged(item.key)

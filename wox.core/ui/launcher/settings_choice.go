@@ -8,7 +8,6 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
-	"wox/util"
 )
 
 type settingChoicePickerState struct {
@@ -55,7 +54,7 @@ func (a *App) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnaps
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		SelectedValues: selectedValues,
 		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: a.settingsWindow.settingsNativeWindow(), Title: snapshot.item.title,
-		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.setSettingChoiceTooltip,
+		FilterHint: a.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: a.chooseSettingChoice, OnCancel: a.closeSettingChoicePicker, OnTooltip: a.settingsWindow.setSettingChoiceTooltip,
 	})
 }
 
@@ -117,7 +116,7 @@ func (a *App) closeSettingChoicePicker() {
 		closed = true
 	}
 	if closed {
-		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+		a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	}
 	a.updateSettingsTextInput(false)
 	a.settingsWindow.invalidateSettingsWindow()
@@ -137,33 +136,16 @@ func (a *App) chooseSettingChoice(index int) {
 		a.generalSettings.SetChoicePicker(nil)
 	}
 	if state.onChoose != nil {
-		a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+		a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 		a.updateSettingsTextInput(false)
 		state.onChoose(choice)
 		a.settingsWindow.invalidateSettingsWindow()
 		return
 	}
-	a.setSettingChoiceTooltip(false, "", woxui.Rect{})
+	a.settingsWindow.setSettingChoiceTooltip(false, "", woxui.Rect{})
 	a.updateSettingsTextInput(false)
 	a.settingsWindow.invalidateSettingsWindow()
 	a.startGeneralSettingSave("save setting choice", item, choice)
-}
-
-func (a *App) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
-	a.setSettingsHoverTooltip(inside, text, anchor, "top")
-}
-
-// setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
-func (a *App) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {
-	if util.IsLinux() {
-		a.tooltips.scheduleLinuxInlineTooltip(linuxInlineTooltipTarget{
-			revision: &a.settingsWindow.inlineTooltipRevision, state: &a.settingsWindow.inlineTooltip,
-			open: a.settingsWindow.open, invalidate: a.settingsWindow.invalidateSettingsWindow, job: "show settings inline tooltip",
-		}, inside, text, anchor, side)
-		return
-	}
-
-	a.tooltips.setNativeHoverTooltip(&a.settingsWindow.choiceTooltipRevision, "go-ui-setting-choice", "update setting choice tooltip", inside, text, anchor, side, a.settingsWindow.settingsNativeWindow)
 }
 
 // loadSystemFontFamilies keeps enumeration in core while the framework only consumes portable family names.

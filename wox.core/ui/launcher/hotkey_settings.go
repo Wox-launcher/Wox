@@ -22,17 +22,17 @@ type ignoredHotkeyApp struct {
 }
 
 // buildHotkeySettingsPage prepares shared form fields for the pure settings page.
-func (a *App) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
+func (c *hotkeySettingsController) buildHotkeySettingsPage(snapshot settingsSnapshot, width, height float32) woxwidget.Widget {
 	if snapshot.hotkey.Form == nil {
 		return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{Width: width, Height: height, Theme: snapshot.palette})
 	}
 	innerWidth := max(float32(0), width-72)
 	callbacks := formFieldCallbacks{
-		idPrefix: "hotkey-settings", focus: a.focusHotkeySettingsField, openTable: a.openHotkeySettingsTable, recordKey: a.recordHotkeySettingsField,
+		idPrefix: "hotkey-settings", focus: c.focusHotkeySettingsField, openTable: c.openHotkeySettingsTable, recordKey: c.recordHotkeySettingsField,
 	}
 	rows := make([]woxwidget.Widget, 0, len(snapshot.hotkey.Form.definitions))
 	for index, definition := range snapshot.hotkey.Form.definitions {
-		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("hotkey-settings", index), Child: a.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, 0)})
+		rows = append(rows, woxwidget.Keyed{Key: formFieldRowKey("hotkey-settings", index), Child: c.buildFormField(*snapshot.hotkey.Form, callbacks, snapshot.palette, index, definition, innerWidth, 0)})
 	}
 	return launcherview.HotkeySettingsView(launcherview.HotkeySettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Available: true,
@@ -156,8 +156,8 @@ func settingsIgnoredHotkeyAppsCoreJSON(value string) (string, error) {
 
 // loadHotkeyAppCandidates asks core for platform-specific identities and keeps the picker itself platform-neutral.
 // Delegates to the hotkey controller which owns the candidate cache and load status.
-func (a *App) loadHotkeyAppCandidates() {
-	a.hotkeySettings.ReloadAppCandidates(context.Background(), a.services, a.sessionID)
+func (c *hotkeySettingsController) loadHotkeyAppCandidates() {
+	c.ReloadAppCandidates(context.Background(), c.services, c.sessionID)
 }
 
 func settingsRowsJSON(value any) string {
@@ -194,26 +194,26 @@ func optionalIntegerValidators(hasRange bool, min, max int, errorKey string) []f
 }
 
 // onHotkeySettingsKey moves between shared fields without stealing keys from an active recorder.
-func (a *App) onHotkeySettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && a.hotkeySettings.Focused() && a.hotkeySettings.Form() != nil && a.formTables.settingsEditor == nil
+func (c *hotkeySettingsController) onHotkeySettingsKey(event woxui.KeyEvent) bool {
+	active := c.settings.open && c.settings.tab == "hotkey" && c.Focused() && c.Form() != nil && c.formTables.settingsEditor == nil
 	if !active {
 		return false
 	}
 	switch event.Key {
 	case woxui.KeyArrowUp:
-		a.moveHotkeySettingsFocus(-1)
+		c.moveHotkeySettingsFocus(-1)
 	case woxui.KeyArrowDown:
-		a.moveHotkeySettingsFocus(1)
+		c.moveHotkeySettingsFocus(1)
 	case woxui.KeyEnter, woxui.KeySpace, woxui.KeyArrowRight:
-		a.activateHotkeySettingsField()
+		c.activateHotkeySettingsField()
 	default:
 		return false
 	}
 	return true
 }
 
-func (a *App) moveHotkeySettingsFocus(delta int) {
-	fields := a.hotkeySettings.Form()
+func (c *hotkeySettingsController) moveHotkeySettingsFocus(delta int) {
+	fields := c.Form()
 	if fields == nil || len(fields.definitions) == 0 {
 		return
 	}
@@ -222,68 +222,68 @@ func (a *App) moveHotkeySettingsFocus(delta int) {
 		index = (index + delta + len(fields.definitions)) % len(fields.definitions)
 		if formDefinitionFocusable(fields.definitions[index]) {
 			setFormFieldsFocusLocked(fields, index)
-			a.settingsWindow.row = index
+			c.settings.row = index
 			break
 		}
 	}
-	a.stopHotkeyRecordingForDifferentField(fields, index)
-	a.settingsWindow.invalidateSettingsWindow()
+	c.hotkeyRecording.stopHotkeyRecordingForDifferentField(fields, index)
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) focusHotkeySettingsField(index int) {
-	a.stopHotkeyRecordingForDifferentField(a.hotkeySettings.Form(), index)
-	if fields := a.hotkeySettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
+func (c *hotkeySettingsController) focusHotkeySettingsField(index int) {
+	c.hotkeyRecording.stopHotkeyRecordingForDifferentField(c.Form(), index)
+	if fields := c.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
-		a.settingsWindow.row = index
-		a.hotkeySettings.SetFocused(true)
+		c.settings.row = index
+		c.SetFocused(true)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) activateHotkeySettingsField() {
-	fields := a.hotkeySettings.Form()
+func (c *hotkeySettingsController) activateHotkeySettingsField() {
+	fields := c.Form()
 	if fields == nil || fields.focused < 0 || fields.focused >= len(fields.definitions) {
 		return
 	}
 	index := fields.focused
 	typeName := fields.definitions[index].Type
 	if typeName == "hotkey" {
-		a.recordHotkeySettingsField(index)
+		c.recordHotkeySettingsField(index)
 	} else if typeName == "table" {
-		a.openHotkeySettingsTable(index)
+		c.openHotkeySettingsTable(index)
 	}
 }
 
-func (a *App) recordHotkeySettingsField(index int) {
-	fields := a.hotkeySettings.Form()
+func (c *hotkeySettingsController) recordHotkeySettingsField(index int) {
+	fields := c.Form()
 	if fields == nil || index < 0 || index >= len(fields.definitions) {
 		return
 	}
 	key := fields.definitions[index].Value.Key
-	a.startHotkeyRecording("hotkey-settings", fields, index, key, nil, nil)
+	c.hotkeyRecording.startHotkeyRecording("hotkey-settings", fields, index, key, nil, nil)
 }
 
-func (a *App) openHotkeySettingsTable(index int) {
-	if form := a.hotkeySettings.Form(); a.settingsWindow.open && a.settingsWindow.tab == "hotkey" && form != nil {
-		a.settingsWindow.row = index
-		a.formTables.openFormTableLocked(form, index)
+func (c *hotkeySettingsController) openHotkeySettingsTable(index int) {
+	if form := c.Form(); c.settings.open && c.settings.tab == "hotkey" && form != nil {
+		c.settings.row = index
+		c.formTables.openFormTableLocked(form, index)
 	}
-	a.formTables.finishOpeningFormTable()
+	c.formTables.finishOpeningFormTable()
 }
 
 // onGeneralQuerySettingsKey routes navigation to the focused query table instead of a built-in row.
-func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
-	fields := a.generalSettings.Form()
-	if !a.settingsWindow.open || a.settingsWindow.tab != "general" || !a.generalSettings.FormFocused() || fields == nil || len(fields.definitions) == 0 || a.formTables.settingsEditor != nil {
+func (c *hotkeySettingsController) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
+	fields := c.generalSettings().Form()
+	if !c.settings.open || c.settings.tab != "general" || !c.generalSettings().FormFocused() || fields == nil || len(fields.definitions) == 0 || c.formTables.settingsEditor != nil {
 		return false
 	}
 	switch event.Key {
 	case woxui.KeyArrowUp:
-		a.focusGeneralQuerySettingsField((fields.focused - 1 + len(fields.definitions)) % len(fields.definitions))
+		c.focusGeneralQuerySettingsField((fields.focused - 1 + len(fields.definitions)) % len(fields.definitions))
 	case woxui.KeyArrowDown:
-		a.focusGeneralQuerySettingsField((fields.focused + 1) % len(fields.definitions))
+		c.focusGeneralQuerySettingsField((fields.focused + 1) % len(fields.definitions))
 	case woxui.KeyEnter, woxui.KeySpace, woxui.KeyArrowRight:
-		a.openGeneralQuerySettingsTable(fields.focused)
+		c.openGeneralQuerySettingsTable(fields.focused)
 	default:
 		return false
 	}
@@ -291,22 +291,22 @@ func (a *App) onGeneralQuerySettingsKey(event woxui.KeyEvent) bool {
 }
 
 // focusGeneralQuerySettingsField keeps one General query table visible for search and tray edit.
-func (a *App) focusGeneralQuerySettingsField(index int) {
-	if fields := a.generalSettings.Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
+func (c *hotkeySettingsController) focusGeneralQuerySettingsField(index int) {
+	if fields := c.generalSettings().Form(); fields != nil && index >= 0 && index < len(fields.definitions) && formDefinitionFocusable(fields.definitions[index]) {
 		setFormFieldsFocusLocked(fields, index)
-		a.settingsWindow.row = index
-		a.generalSettings.SetFormFocused(true)
+		c.settings.row = index
+		c.generalSettings().SetFormFocused(true)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // openGeneralQuerySettingsTable opens a General query table when that page is current.
-func (a *App) openGeneralQuerySettingsTable(index int) {
-	if form := a.generalSettings.Form(); a.settingsWindow.open && a.settingsWindow.tab == "general" && form != nil {
-		a.settingsWindow.row = index
-		a.formTables.openFormTableLocked(form, index)
+func (c *hotkeySettingsController) openGeneralQuerySettingsTable(index int) {
+	if form := c.generalSettings().Form(); c.settings.open && c.settings.tab == "general" && form != nil {
+		c.settings.row = index
+		c.formTables.openFormTableLocked(form, index)
 	}
-	a.formTables.finishOpeningFormTable()
+	c.formTables.finishOpeningFormTable()
 }
 
 // trayQueryRowIndexFromParam extracts a tray query row index from an open-settings param
@@ -325,9 +325,9 @@ func trayQueryRowIndexFromParam(param string) (int, bool) {
 
 // openTrayQueryEditor opens the settings form table and starts editing one tray query row,
 // mirroring the inline table's edit button flow.
-func (a *App) openTrayQueryEditor(rowIndex int) {
-	fields := a.generalSettings.Form()
-	if !a.settingsWindow.open || a.settingsWindow.tab != "general" || fields == nil || rowIndex < 0 {
+func (c *hotkeySettingsController) openTrayQueryEditor(rowIndex int) {
+	fields := c.generalSettings().Form()
+	if !c.settings.open || c.settings.tab != "general" || fields == nil || rowIndex < 0 {
 		return
 	}
 	index := -1
@@ -342,28 +342,28 @@ func (a *App) openTrayQueryEditor(rowIndex int) {
 	}
 	// Focus the field first so the settings page keeps the TrayQueries table visible
 	// while the row editor opens, mirroring the inline table's edit button flow.
-	a.focusGeneralQuerySettingsField(index)
-	a.openGeneralQuerySettingsTable(index)
-	state := a.formTables.activeFormTableEditor()
+	c.focusGeneralQuerySettingsField(index)
+	c.openGeneralQuerySettingsTable(index)
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.invalid || rowIndex >= len(state.rows) {
 		return
 	}
-	a.formTables.selectFormTableRow(rowIndex)
-	a.formTables.beginEditFormTableRowDirect()
+	c.formTables.selectFormTableRow(rowIndex)
+	c.formTables.beginEditFormTableRowDirect()
 }
 
-func (a *App) applyHotkeySettingsRawLocked(key, value string) {
+func (c *hotkeySettingsController) applyHotkeySettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
 	switch key {
 	case "QueryHotkeys":
-		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryHotkeys) })
+		c.generalSettings().Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryHotkeys) })
 	case "ResultBindings":
-		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.ResultBindings) })
+		c.generalSettings().Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.ResultBindings) })
 	case "IgnoredHotkeyApps":
-		a.generalSettings.Update(func(d *settingsData) { d.IgnoredHotkeyApps = raw })
+		c.generalSettings().Update(func(d *settingsData) { d.IgnoredHotkeyApps = raw })
 	case "QueryAliases":
-		a.generalSettings.Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryAliases) })
+		c.generalSettings().Update(func(d *settingsData) { _ = json.Unmarshal(raw, &d.QueryAliases) })
 	case "TrayQueries":
-		a.generalSettings.Update(func(d *settingsData) { d.TrayQueries = raw })
+		c.generalSettings().Update(func(d *settingsData) { d.TrayQueries = raw })
 	}
 }

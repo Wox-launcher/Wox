@@ -62,12 +62,12 @@ func TestAbandonedModelManagerRefreshCanStartAgain(t *testing.T) {
 func TestAbandonModelManagerClearsRefreshing(t *testing.T) {
 	state := &modelManagerState{kind: "dictationModel", refreshing: true}
 	app := bindTestApp(&App{aiSettings: newAISettingsController(CommonDeps{})})
-	app.aiSettings.SetModelManager(state)
-	app.abandonModelManager()
+	app.pluginSettings.SetModelManager(state)
+	app.pluginSettings.abandonModelManager()
 	if state.refreshing {
 		t.Fatal("switching away from Plugins must clear refreshing")
 	}
-	if app.aiSettings.ModelManager() != nil {
+	if app.pluginSettings.ModelManager() != nil {
 		t.Fatal("abandon must close the overlay")
 	}
 }

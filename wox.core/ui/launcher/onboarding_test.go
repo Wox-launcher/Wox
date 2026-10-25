@@ -37,12 +37,12 @@ func TestOnboardingRetainsHotkeySaveFailureAfterRecorderCloses(t *testing.T) {
 	})
 	form := newFormFieldsState(nil, map[string]string{"MainHotkey": "Alt+K"}, true)
 	state := &hotkeyRecordingState{diagnosticCtx: context.Background(), target: &form, persistKey: "MainHotkey"}
-	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
+	app.hotkeyRecording.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
 	if app.onboarding.pageError != "Registration unavailable" || form.values["MainHotkey"] != "Ctrl+Space" {
 		t.Fatalf("failed save: error=%q hotkey=%q", app.onboarding.pageError, form.values["MainHotkey"])
 	}
 	services.err = nil
-	app.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
+	app.hotkeyRecording.saveRecordedHotkeySetting(state, "MainHotkey", "Alt+K", "Ctrl+Space")
 	if app.onboarding.pageError != "" || app.generalSettings.Data().MainHotkey != "Alt+K" {
 		t.Fatalf("successful retry: error=%q hotkey=%q", app.onboarding.pageError, app.generalSettings.Data().MainHotkey)
 	}
@@ -375,8 +375,8 @@ func TestRecordingTheCurrentMainHotkeyIsNotASelfConflict(t *testing.T) {
 	state := &hotkeyRecordingState{
 		diagnosticCtx: context.Background(), target: app.hotkeySettings.Form(), persistKey: "MainHotkey",
 	}
-	app.hotkeySettings.SetRecording(state)
-	app.checkRecordedHotkey(state, "alt+space")
+	app.hotkeyRecording.SetRecording(state)
+	app.hotkeyRecording.checkRecordedHotkey(state, "alt+space")
 	if form.values["MainHotkey"] != "alt+space" || state.statusError || state.status == "used by the main hotkey" {
 		t.Fatalf("value=%q error=%v status=%q", form.values["MainHotkey"], state.statusError, state.status)
 	}

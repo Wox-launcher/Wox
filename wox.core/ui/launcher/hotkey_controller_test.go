@@ -55,9 +55,8 @@ func TestHotkeyControllerForm(t *testing.T) {
 	}
 }
 
-func TestHotkeyControllerRecording(t *testing.T) {
-	deps, _ := newHotkeyDeps()
-	c := newHotkeySettingsController(deps)
+func TestHotkeyRecordingControllerState(t *testing.T) {
+	c := &hotkeyRecordingController{}
 	if c.Recording() != nil {
 		t.Fatalf("Recording should be nil initially")
 	}

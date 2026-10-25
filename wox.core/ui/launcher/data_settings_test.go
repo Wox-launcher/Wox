@@ -21,7 +21,7 @@ func TestOpenDataLogLevelPickerUsesSharedChoiceState(t *testing.T) {
 	})
 	anchor := woxui.Rect{X: 10, Y: 20, Width: 280, Height: 34}
 
-	app.openDataLogLevelPicker(anchor)
+	app.dataSettings.openDataLogLevelPicker(anchor)
 
 	picker := controller.ChoicePicker()
 	if picker == nil {

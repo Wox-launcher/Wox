@@ -24,11 +24,11 @@ type aiProviderInfo struct {
 }
 
 // buildAISettingsPage converts core-backed table values into the pure settings view.
-func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
+func (c *aiSettingsController) buildAISettingsPage(snapshot settingsSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	aiForm := snapshot.ai.Form
 	props := launcherview.AISettingsProps{
 		Width: width, Height: height, Theme: snapshot.palette, Available: aiForm != nil,
-		Title: a.language.translate("i18n:ui_ai"), Description: a.language.translate("i18n:ui_ai_description"),
+		Title: c.language.translate("i18n:ui_ai"), Description: c.language.translate("i18n:ui_ai_description"),
 	}
 	if aiForm == nil {
 		return launcherview.AISettingsView(props)
@@ -37,23 +37,23 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 	if aiForm.active {
 		props.Selected = aiForm.focused
 	}
-	callbacks := formFieldCallbacks{idPrefix: "ai-settings", imageScale: imageScale, focus: a.selectAISettingsTable, openTable: a.openAISettingsTable}
+	callbacks := formFieldCallbacks{idPrefix: "ai-settings", imageScale: imageScale, focus: c.selectAISettingsTable, openTable: c.openAISettingsTable}
 	contentWidth := launcherview.SettingsPageContentWidth(width)
 	props.Tables = make([]launcherview.AISettingsTable, 0, len(aiForm.definitions))
 	for index, definition := range aiForm.definitions {
-		field := a.formTables.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
+		field := c.formTables.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
 		switch definition.Value.Key {
 		case "AIBuiltinTools":
 			field.ReadOnly = true
 			field.OnAdd = nil
-			a.addAIBuiltinToolSwitches(&field, definition, aiForm.values[definition.Value.Key], snapshot.palette)
+			c.addAIBuiltinToolSwitches(&field, definition, aiForm.values[definition.Value.Key], snapshot.palette)
 		case "AIMCPServers":
-			field.EmptyLabel = a.language.translate("i18n:ui_ai_mcp_empty")
-			field.OnAdd = func() { a.addAISettingsTableRow(index) }
-			field.SecondaryLabel = a.language.translate("i18n:ui_ai_mcp_import_json")
+			field.EmptyLabel = c.language.translate("i18n:ui_ai_mcp_empty")
+			field.OnAdd = func() { c.addAISettingsTableRow(index) }
+			field.SecondaryLabel = c.language.translate("i18n:ui_ai_mcp_import_json")
 			mcpIconColor := snapshot.palette.Text
-			field.SecondaryIcon = a.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
-			field.OnSecondary = a.formTables.openAIMCPJSONImport
+			field.SecondaryIcon = c.imageForTint(settingControlIconSource("code"), &mcpIconColor, physicalImageSize(15, imageScale))
+			field.OnSecondary = c.formTables.openAIMCPJSONImport
 		case "AISkills":
 			for columnIndex := range field.Columns {
 				if field.Columns[columnIndex].Key == "Description" {
@@ -63,12 +63,12 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 					}
 				}
 			}
-			field.OnAdd = func() { a.addAISettingsTableRow(index) }
+			field.OnAdd = func() { c.addAISettingsTableRow(index) }
 			field.HideEditAction = true
 			field.HideCloneAction = true
-			a.addAISkillTableActions(&field, aiForm.values[definition.Value.Key], imageScale)
+			c.addAISkillTableActions(&field, aiForm.values[definition.Value.Key], imageScale)
 		default:
-			field.OnAdd = func() { a.addAISettingsTableRow(index) }
+			field.OnAdd = func() { c.addAISettingsTableRow(index) }
 		}
 		props.Tables = append(props.Tables, launcherview.AISettingsTable{
 			Index: index, Field: field, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key,
@@ -81,7 +81,7 @@ func (a *App) buildAISettingsPage(snapshot settingsSnapshot, width, height, imag
 }
 
 // addAIBuiltinToolSwitches replaces the Enabled column with an inline switch.
-func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, definition formDefinition, value string, palette woxcomponent.ControlTheme) {
+func (c *aiSettingsController) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, definition formDefinition, value string, palette woxcomponent.ControlTheme) {
 	rows, err := decodeFormTableRows(value)
 	if err != nil {
 		return
@@ -115,18 +115,18 @@ func (a *App) addAIBuiltinToolSwitches(field *launcherview.FormTableFieldProps, 
 		toolName := name
 		field.Rows[viewIndex].Cells[enabledColumn] = launcherview.FormTableCell{Child: woxcomponent.WoxSwitch(woxcomponent.SwitchProps{
 			ID: fmt.Sprintf("ai-builtin-tool-%s", toolName), Label: toolName, Value: enabled, Theme: theme,
-			OnChange: func(next bool) { a.setAIBuiltinToolEnabled(toolName, next) },
+			OnChange: func(next bool) { c.setAIBuiltinToolEnabled(toolName, next) },
 		})}
 	}
 }
 
 // setAIBuiltinToolEnabled persists the disable list without opening the table editor.
-func (a *App) setAIBuiltinToolEnabled(name string, enabled bool) {
+func (c *aiSettingsController) setAIBuiltinToolEnabled(name string, enabled bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return
 	}
-	disabled := append([]string(nil), a.generalSettings.Snapshot().Data.AIDisabledBuiltinTools...)
+	disabled := append([]string(nil), c.generalSettings().Snapshot().Data.AIDisabledBuiltinTools...)
 	next := make([]string, 0, len(disabled)+1)
 	seen := map[string]bool{}
 	for _, current := range disabled {
@@ -144,38 +144,38 @@ func (a *App) setAIBuiltinToolEnabled(name string, enabled bool) {
 	if err != nil {
 		return
 	}
-	catalog := a.generalSettings.Snapshot().Data.AIConfigurableBuiltinTools
-	previousDisabled := append([]string(nil), a.generalSettings.Snapshot().Data.AIDisabledBuiltinTools...)
-	if form := a.aiSettings.Form(); form != nil {
+	catalog := c.generalSettings().Snapshot().Data.AIConfigurableBuiltinTools
+	previousDisabled := append([]string(nil), c.generalSettings().Snapshot().Data.AIDisabledBuiltinTools...)
+	if form := c.Form(); form != nil {
 		form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, next)
 	}
-	a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = next })
-	a.settingsWindow.invalidateSettingsWindow()
-	util.Go(a.lifecycleCtx, "save AI builtin tool enabled", func() {
+	c.generalSettings().Update(func(d *settingsData) { d.AIDisabledBuiltinTools = next })
+	c.settings.invalidateSettingsWindow()
+	util.Go(c.lifecycleCtx, "save AI builtin tool enabled", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err := a.services.UpdateGeneralSetting(ctx, a.sessionID, "AIDisabledBuiltinTools", string(encoded))
+		err := c.services.UpdateGeneralSetting(ctx, c.sessionID, "AIDisabledBuiltinTools", string(encoded))
 		cancel()
 		if err == nil {
 			return
 		}
-		_ = a.runOnUI("restore AI builtin tool enabled", func() {
-			a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = previousDisabled })
-			if form := a.aiSettings.Form(); form != nil {
+		_ = c.runOnUI("restore AI builtin tool enabled", func() {
+			c.generalSettings().Update(func(d *settingsData) { d.AIDisabledBuiltinTools = previousDisabled })
+			if form := c.Form(); form != nil {
 				form.values["AIBuiltinTools"] = builtinToolRowsJSON(catalog, previousDisabled)
 			}
-			a.settingsWindow.invalidateSettingsWindow()
+			c.settings.invalidateSettingsWindow()
 		})
 	})
 }
 
 // addAISkillTableActions adds Flutter's folder action after the standard delete action.
-func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, value string, imageScale float32) {
+func (c *aiSettingsController) addAISkillTableActions(field *launcherview.FormTableFieldProps, value string, imageScale float32) {
 	rows, err := decodeFormTableRows(value)
 	if err != nil {
 		return
 	}
 	iconTint := field.Theme.TextSecondary
-	folderIcon := a.imageForTint(settingControlIconSource("folder-open"), &iconTint, physicalImageSize(16, imageScale))
+	folderIcon := c.imageForTint(settingControlIconSource("folder-open"), &iconTint, physicalImageSize(16, imageScale))
 	for viewIndex := range field.Rows {
 		sourceIndex := field.Rows[viewIndex].Index
 		if sourceIndex < 0 || sourceIndex >= len(rows) {
@@ -186,21 +186,21 @@ func (a *App) addAISkillTableActions(field *launcherview.FormTableFieldProps, va
 			continue
 		}
 		field.Rows[viewIndex].TrailingActions = append(field.Rows[viewIndex].TrailingActions, launcherview.FormTableRowAction{
-			ID: "open-folder", Label: a.language.translate("i18n:plugin_file_open"), Icon: folderIcon,
-			OnTap: func() { a.openAISkillPath(skillPath) },
+			ID: "open-folder", Label: c.language.translate("i18n:plugin_file_open"), Icon: folderIcon,
+			OnTap: func() { c.openAISkillPath(skillPath) },
 		})
 	}
 }
 
 // openAISkillPath delegates folder opening to the same cross-platform service used by Flutter.
-func (a *App) openAISkillPath(path string) {
+func (c *aiSettingsController) openAISkillPath(path string) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return
 	}
-	util.Go(a.lifecycleCtx, "open AI skill path", func() {
+	util.Go(c.lifecycleCtx, "open AI skill path", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		err := a.services.OpenPath(ctx, a.sessionID, path)
+		err := c.services.OpenPath(ctx, c.sessionID, path)
 		cancel()
 		if err != nil {
 			log.Printf("open AI skill path: %v", err)
@@ -316,15 +316,13 @@ func settingsJSONArray(value json.RawMessage) string {
 }
 
 // loadAIProviderCatalog hydrates provider choices without coupling the widget package to core types.
-// Delegates the fetch+cache to the AI settings controller and applies the App-side side effects
-// (refreshing the AI settings form dropdown and any open AIProviders row editor) through the
-// onLoaded callback so the controller stays free of *App references.
-func (a *App) loadAIProviderCatalog() {
-	a.aiSettings.ReloadProviders(context.Background(), a.services, a.sessionID, func(providers []aiProviderInfo) {
-		if form := a.aiSettings.Form(); form != nil {
+// After the fetch it refreshes the AI settings form dropdown and any open AIProviders row editor.
+func (c *aiSettingsController) loadAIProviderCatalog() {
+	c.ReloadProviders(context.Background(), c.services, c.sessionID, func(providers []aiProviderInfo) {
+		if form := c.Form(); form != nil {
 			applyAIProviderCatalogLocked(form, providers)
 		}
-		if state := a.formTables.settingsEditor; state != nil && state.target == a.aiSettings.Form() && state.definition.Value.Key == "AIProviders" {
+		if state := c.formTables.settingsEditor; state != nil && state.target == c.Form() && state.definition.Value.Key == "AIProviders" {
 			state.definition = state.target.definitions[state.fieldIndex]
 			applyAIProviderOptionsToRowFormLocked(state.rowForm, state.definition)
 			applyAIProviderDefaultHostLocked(state, false, providers)
@@ -438,18 +436,18 @@ func applyAIProviderDefaultHostLocked(state *formTableEditorState, overwrite boo
 }
 
 // onAISettingsKey keeps table selection portable while the modal editor owns row-level input.
-func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
-	active := a.settingsWindow.open && a.settingsWindow.tab == "ai" && a.aiSettings.Form() != nil && a.formTables.settingsEditor == nil
+func (c *aiSettingsController) onAISettingsKey(event woxui.KeyEvent) bool {
+	active := c.settings.open && c.settings.tab == "ai" && c.Form() != nil && c.formTables.settingsEditor == nil
 	if !active {
 		return false
 	}
 	switch event.Key {
 	case woxui.KeyArrowUp:
-		a.moveAISettingsTable(-1)
+		c.moveAISettingsTable(-1)
 	case woxui.KeyArrowDown:
-		a.moveAISettingsTable(1)
+		c.moveAISettingsTable(1)
 	case woxui.KeyEnter, woxui.KeySpace, woxui.KeyArrowRight:
-		a.openSelectedAISettingsTable()
+		c.openSelectedAISettingsTable()
 	default:
 		return false
 	}
@@ -457,42 +455,42 @@ func (a *App) onAISettingsKey(event woxui.KeyEvent) bool {
 }
 
 // selectAISettingsTable moves keyboard focus between the AI table cards.
-func (a *App) selectAISettingsTable(index int) {
-	if form := a.aiSettings.Form(); form != nil && index >= 0 && index < len(form.definitions) {
-		a.settingsWindow.row = index
+func (c *aiSettingsController) selectAISettingsTable(index int) {
+	if form := c.Form(); form != nil && index >= 0 && index < len(form.definitions) {
+		c.settings.row = index
 		setFormFieldsFocusLocked(form, index)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // moveAISettingsTable wraps table-card selection without entering the modal editor.
-func (a *App) moveAISettingsTable(delta int) {
-	if form := a.aiSettings.Form(); form != nil && len(form.definitions) > 0 {
-		a.settingsWindow.row = (a.settingsWindow.row + delta + len(form.definitions)) % len(form.definitions)
-		setFormFieldsFocusLocked(form, a.settingsWindow.row)
+func (c *aiSettingsController) moveAISettingsTable(delta int) {
+	if form := c.Form(); form != nil && len(form.definitions) > 0 {
+		c.settings.row = (c.settings.row + delta + len(form.definitions)) % len(form.definitions)
+		setFormFieldsFocusLocked(form, c.settings.row)
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
-func (a *App) openSelectedAISettingsTable() {
-	index := a.settingsWindow.row
-	a.openAISettingsTable(index)
+func (c *aiSettingsController) openSelectedAISettingsTable() {
+	index := c.settings.row
+	c.openAISettingsTable(index)
 }
 
 // openAISettingsTable opens a settings-owned target in the same modal table editor used by plugin forms.
-func (a *App) openAISettingsTable(index int) {
-	form := a.aiSettings.Form()
-	if a.settingsWindow.open && a.settingsWindow.tab == "ai" && form != nil {
-		a.settingsWindow.row = index
-		a.formTables.openFormTableLocked(form, index)
+func (c *aiSettingsController) openAISettingsTable(index int) {
+	form := c.Form()
+	if c.settings.open && c.settings.tab == "ai" && form != nil {
+		c.settings.row = index
+		c.formTables.openFormTableLocked(form, index)
 	}
-	a.formTables.finishOpeningFormTable()
+	c.formTables.finishOpeningFormTable()
 }
 
 // addAISettingsTableRow opens the shared editor directly at its create flow. The
 // skills table uses Flutter's tabbed add dialog instead of the generic row editor.
-func (a *App) addAISettingsTableRow(index int) {
-	form := a.aiSettings.Form()
+func (c *aiSettingsController) addAISettingsTableRow(index int) {
+	form := c.Form()
 	if form == nil || index < 0 || index >= len(form.definitions) {
 		return
 	}
@@ -500,28 +498,28 @@ func (a *App) addAISettingsTableRow(index int) {
 	if key == "AIBuiltinTools" {
 		return
 	}
-	a.openAISettingsTable(index)
+	c.openAISettingsTable(index)
 	if key == "AISkills" {
-		a.formTables.openFormTableSkillAdd()
+		c.formTables.openFormTableSkillAdd()
 		return
 	}
-	a.formTables.beginAddFormTableRowDirect()
+	c.formTables.beginAddFormTableRowDirect()
 }
 
 // openAISettingsTableRow carries the inline row selection into the shared table editor.
-func (a *App) openAISettingsTableRow(tableIndex, rowIndex int) {
-	form := a.aiSettings.Form()
-	if a.settingsWindow.open && a.settingsWindow.tab == "ai" && form != nil {
-		a.settingsWindow.row = tableIndex
-		a.formTables.openFormTableLocked(form, tableIndex)
-		a.formTables.selectFormTableRow(rowIndex)
+func (c *aiSettingsController) openAISettingsTableRow(tableIndex, rowIndex int) {
+	form := c.Form()
+	if c.settings.open && c.settings.tab == "ai" && form != nil {
+		c.settings.row = tableIndex
+		c.formTables.openFormTableLocked(form, tableIndex)
+		c.formTables.selectFormTableRow(rowIndex)
 	}
-	a.formTables.finishOpeningFormTable()
+	c.formTables.finishOpeningFormTable()
 	if tableIndex < 0 || form == nil || tableIndex >= len(form.definitions) {
 		return
 	}
 	if key := form.definitions[tableIndex].Value.Key; key != "AISkills" && key != "AIBuiltinTools" {
-		a.formTables.beginEditFormTableRowDirect()
+		c.formTables.beginEditFormTableRowDirect()
 	}
 }
 
@@ -547,95 +545,45 @@ func validateAISettingsTableRow(definition formDefinition, fields *formFieldsSta
 	return nil
 }
 
-// saveSettingsTable persists one settings-owned table and rolls the editor back if core rejects it.
-func (a *App) saveSettingsTable(state *formTableEditorState, key, value, previousValue string) {
-	coreValue := value
-	if key == "IgnoredHotkeyApps" {
-		var err error
-		coreValue, err = settingsIgnoredHotkeyAppsCoreJSON(value)
-		if err != nil {
-			_ = a.runOnUI("apply invalid settings table value", func() {
-				a.settingsWindow.saving = false
-				state.target.values[key] = previousValue
-				if a.formTables.settingsEditor == state {
-					state.saving = false
-					state.status = "Could not save: " + err.Error()
-				}
-				a.settingsWindow.invalidateSettingsWindow()
-			})
-			return
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, key, coreValue)
-	cancel()
-
-	_ = a.runOnUI("apply settings table save", func() {
-		a.settingsWindow.saving = false
-		if err != nil {
-			state.target.values[key] = previousValue
-			if a.formTables.settingsEditor == state {
-				if rows, decodeErr := decodeFormTableRows(previousValue); decodeErr == nil {
-					state.rows = rows
-					state.selected = min(state.selected, len(rows)-1)
-				}
-				state.saving = false
-				state.status = "Could not save: " + err.Error()
-			}
-		} else {
-			if state.target == a.aiSettings.Form() {
-				a.applyAISettingsRawLocked(key, value)
-			} else if state.target == a.hotkeySettings.Form() || state.target == a.generalQuerySettingsForm() {
-				a.applyHotkeySettingsRawLocked(key, coreValue)
-			}
-			if a.formTables.settingsEditor == state {
-				state.saving = false
-				state.status = ""
-			}
-		}
-		a.settingsWindow.invalidateSettingsWindow()
-	})
-}
-
 // refreshAIMCPServerToolsLocked copies discovered MCP tool names onto the settings table.
-func (a *App) refreshAIMCPServerToolsLocked() {
-	form := a.aiSettings.Form()
+func (c *aiSettingsController) refreshAIMCPServerToolsLocked() {
+	form := c.Form()
 	if form == nil {
 		return
 	}
 	form.values["AIMCPServers"] = attachMCPServerToolNames(form.values["AIMCPServers"])
-	if state := a.formTables.settingsEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
+	if state := c.formTables.settingsEditor; state != nil && state.target == form && state.definition.Value.Key == "AIMCPServers" {
 		if rows, err := decodeFormTableRows(form.values["AIMCPServers"]); err == nil {
 			overlayMCPServerToolNames(rows)
 			state.rows = rows
 		}
 	}
-	a.settingsWindow.invalidateSettingsWindow()
+	c.settings.invalidateSettingsWindow()
 }
 
 // applyAISettingsRawLocked keeps the settings snapshot and dependent chat catalogs coherent after a save.
-func (a *App) applyAISettingsRawLocked(key, value string) {
+func (c *aiSettingsController) applyAISettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
 	switch key {
 	case "AIProviders":
-		a.generalSettings.Update(func(d *settingsData) { d.AIProviders = raw })
-		a.aiSettings.ResetModels()
+		c.generalSettings().Update(func(d *settingsData) { d.AIProviders = raw })
+		c.ResetModels()
 	case "AIMCPServers":
-		a.generalSettings.Update(func(d *settingsData) { d.AIMCPServers = raw })
-		if form := a.aiSettings.Form(); form != nil {
+		c.generalSettings().Update(func(d *settingsData) { d.AIMCPServers = raw })
+		if form := c.Form(); form != nil {
 			form.values["AIMCPServers"] = attachMCPServerToolNames(value)
 		}
 	case "AIDisabledBuiltinTools":
 		var names []string
 		if json.Unmarshal([]byte(value), &names) == nil {
-			a.generalSettings.Update(func(d *settingsData) { d.AIDisabledBuiltinTools = names })
-			if form := a.aiSettings.Form(); form != nil {
-				form.values["AIBuiltinTools"] = builtinToolRowsJSON(a.generalSettings.Snapshot().Data.AIConfigurableBuiltinTools, names)
+			c.generalSettings().Update(func(d *settingsData) { d.AIDisabledBuiltinTools = names })
+			if form := c.Form(); form != nil {
+				form.values["AIBuiltinTools"] = builtinToolRowsJSON(c.generalSettings().Snapshot().Data.AIConfigurableBuiltinTools, names)
 			}
 		}
 	case "AISkills":
-		a.generalSettings.Update(func(d *settingsData) { d.AISkills = raw })
-		a.aiSettings.ResetSkills()
+		c.generalSettings().Update(func(d *settingsData) { d.AISkills = raw })
+		c.ResetSkills()
 	}
 }
 

@@ -51,7 +51,7 @@ type recordedHotkeyPayload struct {
 
 // startHotkeyRecording asks core for the strongest recorder available on the current platform.
 // onKey, when set, is asked before a captured combo is stored.
-func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool) {
+func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool) {
 	// Action panel shortcuts are local key events, so global special triggers cannot fire them.
 	if persistKey == "ActionPanelHotkey" {
 		allowedKinds = []string{"normalCombo"}
@@ -66,16 +66,16 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 	for _, kind := range allowedKinds {
 		allowed[kind] = true
 	}
-	if rec := a.hotkeySettings.Recording(); rec != nil && rec.target == target && rec.fieldIndex == index && !rec.statusError {
+	if rec := c.Recording(); rec != nil && rec.target == target && rec.fieldIndex == index && !rec.statusError {
 		return
 	}
-	if target == nil || index < 0 || index >= len(target.definitions) || (target.definitions[index].Type != "hotkey" && target.definitions[index].Type != "dictationHotkey") || !a.hotkeyRecordingTargetCurrentLocked(target) {
+	if target == nil || index < 0 || index >= len(target.definitions) || (target.definitions[index].Type != "hotkey" && target.definitions[index].Type != "dictationHotkey") || !c.targetCurrent(target) {
 		return
 	}
 	setFormFieldsFocusLocked(target, index)
-	hint := a.hotkeyRecordingHint(target.definitions[index], allowedKinds)
+	hint := c.hotkeyRecordingHint(target.definitions[index], allowedKinds)
 	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
-		hint = a.language.translate("i18n:ui_hotkey_windows_key_hint")
+		hint = c.language.translate("i18n:ui_hotkey_windows_key_hint")
 	}
 	key := target.definitions[index].Value.Key
 	state := &hotkeyRecordingState{
@@ -83,24 +83,24 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 		target:        target, fieldIndex: index, idPrefix: idPrefix, persistKey: persistKey, allowed: allowed,
 		status: hint, hint: hint, display: target.values[key], onKey: onKey,
 	}
-	a.hotkeySettings.SetRecording(state)
-	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI start: session=%s target=%s field=%d persistKey=%s allowed=%v", a.sessionID, idPrefix, index, persistKey, allowedKinds))
-	_ = a.hotkeyRecordingNativeWindow().SetTextInputState(woxui.TextInputState{})
-	a.invalidateHotkeyWindows()
+	c.SetRecording(state)
+	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI start: session=%s target=%s field=%d persistKey=%s allowed=%v", c.sessionID, idPrefix, index, persistKey, allowedKinds))
+	_ = c.nativeWindow().SetTextInputState(woxui.TextInputState{})
+	c.invalidate()
 
 	purpose := "normal"
 	if target.definitions[index].Type == "dictationHotkey" {
 		purpose = "dictation"
 	}
-	util.Go(a.lifecycleCtx, "start hotkey recording", func() {
+	util.Go(c.lifecycleCtx, "start hotkey recording", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		capability, err := a.services.StartHotkeyRecording(ctx, a.sessionID, purpose, allowedKinds)
+		capability, err := c.services.StartHotkeyRecording(ctx, c.sessionID, purpose, allowedKinds)
 		cancel()
-		_ = a.runOnUI("apply hotkey recording capability", func() {
-			util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI capability: current=%t raw=%t fallback=%v unavailable=%s error=%v", a.hotkeySettings.Recording() == state, capability.RawRecorderAvailable, capability.FallbackAllowedKinds, capability.UnavailableReason, err))
-			if a.hotkeySettings.Recording() == state {
+		_ = c.runOnUI("apply hotkey recording capability", func() {
+			util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI capability: current=%t raw=%t fallback=%v unavailable=%s error=%v", c.Recording() == state, capability.RawRecorderAvailable, capability.FallbackAllowedKinds, capability.UnavailableReason, err))
+			if c.Recording() == state {
 				if err != nil {
-					state.status = a.language.translate(err.Error())
+					state.status = c.language.translate(err.Error())
 					state.statusError = true
 				} else {
 					state.raw = capability.RawRecorderAvailable
@@ -111,25 +111,25 @@ func (a *App) startHotkeyRecording(idPrefix string, target *formFieldsState, ind
 					if !state.raw && !state.fallback {
 						state.status = strings.TrimSpace(capability.UnavailableReason)
 						if state.status == "" {
-							state.status = a.language.translate("i18n:ui_hotkey_raw_recorder_unavailable")
+							state.status = c.language.translate("i18n:ui_hotkey_raw_recorder_unavailable")
 						}
 						state.statusError = true
 					}
 				}
 			}
-			a.invalidateHotkeyWindows()
+			c.invalidate()
 		})
 	})
 }
 
-func (a *App) hotkeyRecordingHint(definition formDefinition, allowedKinds []string) string {
+func (c *hotkeyRecordingController) hotkeyRecordingHint(definition formDefinition, allowedKinds []string) string {
 	if definition.Type == "dictationHotkey" {
-		return a.language.translate("i18n:ui_hotkey_dictation_press_hint")
+		return c.language.translate("i18n:ui_hotkey_dictation_press_hint")
 	}
 	if containsString(allowedKinds, "pressModifier") {
-		return a.language.translate("i18n:ui_hotkey_modifier_press_hint")
+		return c.language.translate("i18n:ui_hotkey_modifier_press_hint")
 	}
-	return a.language.translate("i18n:ui_hotkey_press_hint")
+	return c.language.translate("i18n:ui_hotkey_press_hint")
 }
 
 func containsString(values []string, target string) bool {
@@ -141,19 +141,8 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
-func (a *App) hotkeyRecordingTargetCurrentLocked(target *formFieldsState) bool {
-	pluginForm := a.pluginSettings.Form()
-	tableEditor := a.formTables.activeFormTableEditor()
-	return target != nil && (((a.onboarding.isOpen() || (a.settingsWindow.open && a.settingsWindow.tab == "hotkey")) && target == a.hotkeySettings.Form()) ||
-		a.onboarding.ownsHotkeyTarget(target) ||
-		(tableEditor != nil && tableEditor.rowForm == target) ||
-		(a.forms.form != nil && target == &a.forms.form.formFieldsState) ||
-		(a.requirements.requirementForm != nil && target == &a.requirements.requirementForm.formFieldsState) ||
-		(pluginForm != nil && target == &pluginForm.formFieldsState))
-}
-
-func (a *App) hotkeyRecordingFieldStatus(idPrefix string, index int) hotkeyRecordingPresentation {
-	state := a.hotkeySettings.Recording()
+func (c *hotkeyRecordingController) hotkeyRecordingFieldStatus(idPrefix string, index int) hotkeyRecordingPresentation {
+	state := c.Recording()
 	if state == nil || state.idPrefix != idPrefix || state.fieldIndex != index {
 		return hotkeyRecordingPresentation{}
 	}
@@ -163,8 +152,8 @@ func (a *App) hotkeyRecordingFieldStatus(idPrefix string, index int) hotkeyRecor
 // hotkeyRecordingSectionSignature is part of launcher form/table Boundary keys.
 // Recording lives outside the form snapshot, so omitting it keeps the cached
 // "Recording..." tree after Escape/Enter have already stopped capture.
-func (a *App) hotkeyRecordingSectionSignature() any {
-	state := a.hotkeySettings.Recording()
+func (c *hotkeyRecordingController) hotkeyRecordingSectionSignature() any {
+	state := c.Recording()
 	if state == nil {
 		return ""
 	}
@@ -179,19 +168,19 @@ func (a *App) hotkeyRecordingSectionSignature() any {
 	}{state.idPrefix, state.fieldIndex, state.display, state.status, state.statusError, state.ready, state.checking}
 }
 
-func (a *App) stopHotkeyRecordingForDifferentField(target *formFieldsState, index int) {
-	state := a.hotkeySettings.Recording()
+func (c *hotkeyRecordingController) stopHotkeyRecordingForDifferentField(target *formFieldsState, index int) {
+	state := c.Recording()
 	stop := state != nil && (state.target != target || state.fieldIndex != index)
 	if stop {
-		a.stopHotkeyRecording()
+		c.stopHotkeyRecording()
 	}
 }
 
 // commitHotkeyRecordingValue copies the last shown combo into the field before Save.
 // Availability still lives on recording.display until accept, so submitting without
 // this flush would persist the previous value.
-func (a *App) commitHotkeyRecordingValue() {
-	state := a.hotkeySettings.Recording()
+func (c *hotkeyRecordingController) commitHotkeyRecordingValue() {
+	state := c.Recording()
 	if state == nil || state.target == nil || state.fieldIndex < 0 || state.fieldIndex >= len(state.target.definitions) {
 		return
 	}
@@ -204,39 +193,39 @@ func (a *App) commitHotkeyRecordingValue() {
 }
 
 // stopHotkeyRecording releases both the local field and core's process-wide raw recorder.
-func (a *App) stopHotkeyRecording() {
-	if state := a.hotkeySettings.Recording(); state != nil {
+func (c *hotkeyRecordingController) stopHotkeyRecording() {
+	if state := c.Recording(); state != nil {
 		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI stop: localEvents=%d checking=%t statusError=%t", state.localEventCount, state.checking, state.statusError))
 	}
-	active := a.hotkeySettings.Recording() != nil
-	a.hotkeySettings.ClearRecording()
+	active := c.Recording() != nil
+	c.ClearRecording()
 	if !active {
 		return
 	}
-	a.postHotkeyRecordingStopped()
-	a.invalidateHotkeyWindows()
+	c.postHotkeyRecordingStopped()
+	c.invalidate()
 }
 
-func (a *App) postHotkeyRecordingStopped() {
-	util.Go(a.lifecycleCtx, "stop hotkey recording", func() {
+func (c *hotkeyRecordingController) postHotkeyRecordingStopped() {
+	util.Go(c.lifecycleCtx, "stop hotkey recording", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = a.services.StopHotkeyRecording(ctx, a.sessionID)
+		_ = c.services.StopHotkeyRecording(ctx, c.sessionID)
 		cancel()
 	})
 }
 
-func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
+func (c *hotkeyRecordingController) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 	payload.Hotkey = strings.TrimSpace(payload.Hotkey)
 	if payload.Hotkey == "" {
 		return nil
 	}
-	state := a.hotkeySettings.Recording()
+	state := c.Recording()
 	if state == nil {
-		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hotkey UI candidate ignored: session=%s reason=no_active_recorder kind=%s", a.sessionID, payload.Kind))
+		util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf("hotkey UI candidate ignored: session=%s reason=no_active_recorder kind=%s", c.sessionID, payload.Kind))
 		return nil
 	}
-	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI candidate: hotkey=%s kind=%s checking=%t kindAllowed=%t targetCurrent=%t", payload.Hotkey, payload.Kind, state.checking, payload.Kind == "" || state.allowed[payload.Kind], a.hotkeyRecordingTargetCurrentLocked(state.target)))
-	if !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI candidate: hotkey=%s kind=%s checking=%t kindAllowed=%t targetCurrent=%t", payload.Hotkey, payload.Kind, state.checking, payload.Kind == "" || state.allowed[payload.Kind], c.targetCurrent(state.target)))
+	if !c.targetCurrent(state.target) {
 		return nil
 	}
 	canonical := canonicalRecordedHotkey(payload)
@@ -255,7 +244,7 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 		return nil
 	}
 	if hotkeyKindSkipsAvailability(payload.Kind) && state.persistKey != "MainHotkey" {
-		a.acceptRecordedHotkey(state, canonical)
+		c.acceptRecordedHotkey(state, canonical)
 		return nil
 	}
 	// Show the combination immediately. Availability probes a real OS
@@ -265,9 +254,9 @@ func (a *App) applyRecordedHotkey(payload recordedHotkeyPayload) error {
 	state.status = state.hint
 	state.statusError = false
 	state.checking = true
-	a.invalidateHotkeyWindows()
-	util.Go(a.lifecycleCtx, "check recorded hotkey", func() {
-		a.checkRecordedHotkey(state, canonical)
+	c.invalidate()
+	util.Go(c.lifecycleCtx, "check recorded hotkey", func() {
+		c.checkRecordedHotkey(state, canonical)
 	})
 	return nil
 }
@@ -284,13 +273,13 @@ func hotkeyKindSkipsAvailability(kind string) bool {
 	return kind == "holdModifier" || kind == "pressModifier"
 }
 
-func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
+func (c *hotkeyRecordingController) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	availability, err := a.services.CheckHotkeyAvailability(ctx, a.sessionID, hotkey)
+	availability, err := c.services.CheckHotkeyAvailability(ctx, c.sessionID, hotkey)
 	cancel()
 	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI availability: hotkey=%s available=%t conflictType=%s error=%v", hotkey, availability.Available, availability.ConflictType, err))
-	_ = a.runOnUI("apply recorded hotkey availability", func() {
-		if a.hotkeySettings.Recording() != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+	_ = c.runOnUI("apply recorded hotkey availability", func() {
+		if c.Recording() != state || !c.targetCurrent(state.target) {
 			util.GetLogger().Info(state.diagnosticCtx, "hotkey UI availability ignored: reason=stale_target")
 			return
 		}
@@ -298,47 +287,47 @@ func (a *App) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
 		if err != nil {
 			state.status = state.hint
 			state.statusError = false
-			a.invalidateHotkeyWindows()
+			c.invalidate()
 			return
 		}
 		if !availability.Available {
 			// Re-selecting the shortcut Wox already registered is not a conflict with itself.
 			// The availability check reports that chord as the current main hotkey.
 			if state.persistKey == "MainHotkey" && availability.ConflictType == "main" {
-				a.acceptRecordedHotkey(state, hotkey)
+				c.acceptRecordedHotkey(state, hotkey)
 				return
 			}
 			state.display = hotkey
-			state.status = a.hotkeyConflictMessage(availability.ConflictType, availability.ConflictValue)
+			state.status = c.hotkeyConflictMessage(availability.ConflictType, availability.ConflictValue)
 			state.statusError = true
-			a.invalidateHotkeyWindows()
+			c.invalidate()
 			return
 		}
-		a.acceptRecordedHotkey(state, hotkey)
+		c.acceptRecordedHotkey(state, hotkey)
 	})
 }
 
-func (a *App) hotkeyConflictMessage(kind, value string) string {
+func (c *hotkeyRecordingController) hotkeyConflictMessage(kind, value string) string {
 	switch kind {
 	case "unsupported":
-		return a.language.translate("i18n:ui_hotkey_registration_unsupported")
+		return c.language.translate("i18n:ui_hotkey_registration_unsupported")
 	case "registration_failed":
-		return a.language.translate("i18n:ui_hotkey_registration_failed")
+		return c.language.translate("i18n:ui_hotkey_registration_failed")
 	case "main":
-		return a.language.translate("i18n:ui_hotkey_conflict_main")
+		return c.language.translate("i18n:ui_hotkey_conflict_main")
 	case "selection":
-		return a.language.translate("i18n:ui_hotkey_conflict_selection")
+		return c.language.translate("i18n:ui_hotkey_conflict_selection")
 	case "query":
-		return strings.ReplaceAll(a.language.translate("i18n:ui_hotkey_conflict_query"), "{query}", value)
+		return strings.ReplaceAll(c.language.translate("i18n:ui_hotkey_conflict_query"), "{query}", value)
 	case "system":
-		return a.language.translate("i18n:ui_hotkey_conflict_system")
+		return c.language.translate("i18n:ui_hotkey_conflict_system")
 	default:
-		return a.language.translate("i18n:ui_hotkey_unavailable")
+		return c.language.translate("i18n:ui_hotkey_unavailable")
 	}
 }
 
-func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
-	if a.hotkeySettings.Recording() != state || !a.hotkeyRecordingTargetCurrentLocked(state.target) {
+func (c *hotkeyRecordingController) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
+	if c.Recording() != state || !c.targetCurrent(state.target) {
 		return
 	}
 	key := state.target.definitions[state.fieldIndex].Value.Key
@@ -349,35 +338,35 @@ func (a *App) acceptRecordedHotkey(state *hotkeyRecordingState, value string) {
 	state.checking = false
 	state.status = state.hint
 	state.statusError = false
-	if editor := a.formTables.activeFormTableEditor(); editor != nil && editor.rowForm == state.target {
+	if editor := c.formTables.activeFormTableEditor(); editor != nil && editor.rowForm == state.target {
 		editor.status = ""
 	}
-	a.invalidateHotkeyWindows()
-	if a.onboarding.isOpen() && state.idPrefix == "onboarding-query-hotkey" {
-		a.onboarding.saveOnboardingQueryHotkey(value)
-		a.stopHotkeyRecording()
+	c.invalidate()
+	if c.onboarding.isOpen() && state.idPrefix == "onboarding-query-hotkey" {
+		c.onboarding.saveOnboardingQueryHotkey(value)
+		c.stopHotkeyRecording()
 		return
 	}
 	if state.idPrefix == "plugin-settings" {
-		a.pluginSettings.submitPluginSettings()
+		c.pluginSettings().submitPluginSettings()
 	}
 	if state.persistKey != "" {
-		util.Go(a.lifecycleCtx, "save recorded hotkey setting", func() {
-			a.saveRecordedHotkeySetting(state, key, value, previous)
+		util.Go(c.lifecycleCtx, "save recorded hotkey setting", func() {
+			c.saveRecordedHotkeySetting(state, key, value, previous)
 		})
 	}
 	// Onboarding treats one valid combination as completion; Settings keeps recording for rapid edits.
-	if a.onboarding.isOpen() && state.idPrefix == "hotkey-settings" {
-		a.stopHotkeyRecording()
+	if c.onboarding.isOpen() && state.idPrefix == "hotkey-settings" {
+		c.stopHotkeyRecording()
 	}
 }
 
-func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value, previous string) {
+func (c *hotkeyRecordingController) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value, previous string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	err := a.services.UpdateGeneralSetting(ctx, a.sessionID, state.persistKey, value)
+	err := c.services.UpdateGeneralSetting(ctx, c.sessionID, state.persistKey, value)
 	cancel()
 	util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI save: key=%s hotkey=%s error=%v", state.persistKey, value, err))
-	_ = a.runOnUI("apply recorded hotkey setting", func() {
+	_ = c.runOnUI("apply recorded hotkey setting", func() {
 		if err != nil {
 			if state.target != nil {
 				state.target.values[key] = previous
@@ -386,33 +375,33 @@ func (a *App) saveRecordedHotkeySetting(state *hotkeyRecordingState, key, value,
 			state.status = err.Error()
 			state.statusError = true
 			if state.persistKey == "MainHotkey" || state.persistKey == "SelectionHotkey" {
-				state.status = a.language.translate(corehotkey.RegistrationErrorKey(err))
+				state.status = c.language.translate(corehotkey.RegistrationErrorKey(err))
 			}
 			// Onboarding closes the recorder before the asynchronous save finishes.
 			// Keep its error on the page instead of losing it with the recorder state.
 			if state.persistKey == "MainHotkey" {
-				a.onboarding.showPageError(state.status)
+				c.onboarding.showPageError(state.status)
 			}
 		} else {
 			if state.persistKey == "MainHotkey" {
-				a.onboarding.showPageError("")
+				c.onboarding.showPageError("")
 			}
 			switch state.persistKey {
 			case "MainHotkey":
-				a.generalSettings.Update(func(d *settingsData) {
+				c.generalSettings().Update(func(d *settingsData) {
 					d.MainHotkey = value
 					d.MainHotkeyRegistrationFailed = false
 					d.MainHotkeyRegistrationError = ""
 				})
-				a.onboarding.clearStagedMainHotkey()
+				c.onboarding.clearStagedMainHotkey()
 			case "SelectionHotkey":
-				a.generalSettings.Update(func(d *settingsData) { d.SelectionHotkey = value })
+				c.generalSettings().Update(func(d *settingsData) { d.SelectionHotkey = value })
 			case "ActionPanelHotkey":
-				a.generalSettings.Update(func(d *settingsData) { d.ActionPanelHotkey = value })
-				a.webView.syncWebViewActionHotkey()
+				c.generalSettings().Update(func(d *settingsData) { d.ActionPanelHotkey = value })
+				c.syncWebViewActionHotkey()
 			}
 		}
-		a.invalidateHotkeyWindows()
+		c.invalidate()
 	})
 }
 
@@ -426,8 +415,8 @@ func recordedHotkeyEvent(hotkey string) (woxui.KeyEvent, bool) {
 }
 
 // onHotkeyRecordingKey supplements raw recording with local normal-combo candidates.
-func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
-	state := a.hotkeySettings.Recording()
+func (c *hotkeyRecordingController) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
+	state := c.Recording()
 	if state == nil {
 		return false
 	}
@@ -436,11 +425,11 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI local event: index=%d down=%t repeat=%t modifiers=%d unknownKey=%t ready=%t raw=%t fallback=%t checking=%t stop=%t clear=%t", state.localEventCount, event.Down, event.Repeat, event.Modifiers, event.Key == woxui.KeyUnknown, state.ready, state.raw, state.fallback, state.checking, hotkeyRecordingStops(event), event.Key == woxui.KeyBackspace && event.Modifiers == 0))
 	}
 	if event.Key == woxui.KeyBackspace && event.Modifiers == 0 {
-		a.acceptRecordedHotkey(state, "")
+		c.acceptRecordedHotkey(state, "")
 		return true
 	}
 	if hotkeyRecordingStops(event) {
-		a.stopHotkeyRecording()
+		c.stopHotkeyRecording()
 		return true
 	}
 	if event.Down && !event.Repeat && state.onKey != nil && state.onKey(event) {
@@ -453,18 +442,18 @@ func (a *App) onHotkeyRecordingKey(event woxui.KeyEvent) bool {
 	if hotkey == "" {
 		return true
 	}
-	util.Go(a.lifecycleCtx, "submit fallback hotkey candidate", func() {
+	util.Go(c.lifecycleCtx, "submit fallback hotkey candidate", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := a.services.SubmitHotkeyRecordingCandidate(ctx, a.sessionID, hotkey)
+		err := c.services.SubmitHotkeyRecordingCandidate(ctx, c.sessionID, hotkey)
 		cancel()
 		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI fallback submitted: hotkey=%s error=%v", hotkey, err))
 		if err != nil {
-			_ = a.runOnUI("apply fallback hotkey candidate error", func() {
-				if a.hotkeySettings.Recording() == state {
+			_ = c.runOnUI("apply fallback hotkey candidate error", func() {
+				if c.Recording() == state {
 					state.status = state.hint
 					state.statusError = false
 				}
-				a.invalidateHotkeyWindows()
+				c.invalidate()
 			})
 		}
 	})
@@ -543,8 +532,8 @@ func isFunctionKeyEvent(key woxui.Key) bool {
 }
 
 // recordFormTableRowHotkey starts recording for a specialized hotkey column in the shared table row editor.
-func (a *App) recordFormTableRowHotkey(index int) {
-	state := a.formTables.activeFormTableEditor()
+func (c *hotkeyRecordingController) recordFormTableRowHotkey(index int) {
+	state := c.formTables.activeFormTableEditor()
 	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
 		return
 	}
@@ -557,5 +546,5 @@ func (a *App) recordFormTableRowHotkey(index int) {
 			break
 		}
 	}
-	a.startHotkeyRecording("form-table-row", target, index, "", allowed, a.formTables.onFormTableKey)
+	c.startHotkeyRecording("form-table-row", target, index, "", allowed, c.formTables.onFormTableKey)
 }

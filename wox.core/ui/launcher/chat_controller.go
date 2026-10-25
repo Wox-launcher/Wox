@@ -82,7 +82,7 @@ func (a *App) bindChat() {
 	c.loadAIModels = a.loadAIModels
 	c.loadAISkills = a.loadAISkills
 	c.loadChatPluginMentions = a.loadChatPluginMentions
-	c.refreshAIMCPServerToolsLocked = a.refreshAIMCPServerToolsLocked
+	c.refreshAIMCPServerToolsLocked = func() { a.aiSettings.refreshAIMCPServerToolsLocked() }
 	c.exitChatMode = a.exitChatMode
 	c.closePreviewWindow = a.closePreviewWindow
 	c.restoreQueryTextInput = a.restoreQueryTextInput

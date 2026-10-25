@@ -185,7 +185,7 @@ func trayQueryEditorTestApp(t *testing.T) *App {
 			imageErrors:    map[string]string{},
 		},
 	})
-	app.openTrayQueryEditor(0)
+	app.hotkeySettings.openTrayQueryEditor(0)
 	if app.formTables.settingsEditor == nil || app.formTables.settingsEditor.rowForm == nil {
 		t.Fatal("tray query row editor did not open")
 	}

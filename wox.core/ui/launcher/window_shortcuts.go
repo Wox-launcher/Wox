@@ -52,7 +52,7 @@ func (a *App) requestSettingsFromShortcut(pluginID string) {
 			if a.settingsWindow.view != nil && a.settingsWindow.view.Lifecycle() != woxui.WindowLifecycleClosed {
 				existing = a.settingsWindow.view
 				if pluginID != "" {
-					a.activateSettingsSearchResult(settingsSearchResult{kind: settingsSearchPlugin, pluginID: pluginID})
+					a.settingsSearch.activateSettingsSearchResult(settingsSearchResult{kind: settingsSearchPlugin, pluginID: pluginID})
 					a.pluginSettings.SetDetailTab("settings")
 				}
 			}

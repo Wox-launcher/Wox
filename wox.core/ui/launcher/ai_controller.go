@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 )
 
 // aiSettingsSnapshot is the immutable AI tab state consumed by the view layer.
 // It carries the inline-settings form snapshot plus the provider catalog load
-// status, the shared model/skill catalogs used by chat preview and plugin/requirement
-// forms, and the modal model-manager overlay snapshot.
+// status, and the shared model/skill catalogs used by chat preview and plugin/requirement
+// forms.
 type aiSettingsSnapshot struct {
 	Form                  *formFieldsSnapshot
 	ProviderCatalog       []aiProviderInfo
@@ -31,17 +32,26 @@ type aiSettingsSnapshot struct {
 	PluginMentionsLoading bool
 	PluginMentionsLoaded  bool
 	PluginMentionsError   string
-	ModelManager          *modelManagerSnapshot
 }
 
 // aiSettingsController owns the AI tab state: the inline AI settings form (providers,
 // MCP servers, skills), the provider catalog that feeds provider-name dropdowns, the
 // shared AI model and skill catalogs consumed by chat preview and by plugin/requirement
-// forms with selectAIModel fields, and the modal model-manager overlay used by plugin
-// dictation/OCR model fields. The controller is free of any *App back-dependency;
-// callers wire App-side side effects through callbacks passed to Reload methods.
+// forms with selectAIModel fields. It also builds the AI settings page and opens its
+// tables in the shared form table editor. Collaborators are injected by bindAISettings.
 type aiSettingsController struct {
 	deps CommonDeps
+
+	services     aiSettingsServices
+	sessionID    string
+	lifecycleCtx context.Context
+	runOnUI      func(string, func()) error
+	language     *languageCatalog
+	settings     *settingsWindowController
+	formTables   *formTableController
+
+	generalSettings func() *generalSettingsController
+	imageForTint    func(woxImage, *woxui.Color, int) *woxui.Image
 
 	// Inline form state for the AI settings tab (providers / MCP servers / skills tables).
 	form *formFieldsState
@@ -73,14 +83,35 @@ type aiSettingsController struct {
 	pluginMentionsLoaded   bool
 	pluginMentionsError    string
 	pluginMentionsRevision uint64
+}
 
-	// Modal model-manager overlay state. Owned here because it is opened from plugin
-	// settings and rendered in the settings window, but is a self-contained modal flow.
-	modelManager *modelManagerState
+// aiSettingsServices is the core surface the AI settings page needs: catalogs plus the
+// general-setting writes and path opening used by built-in tool switches and skill rows.
+type aiSettingsServices interface {
+	contract.AICatalogSettingsServices
+	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
+	OpenPath(ctx context.Context, sessionID string, path string) error
 }
 
 func newAISettingsController(deps CommonDeps) *aiSettingsController {
 	return &aiSettingsController{deps: deps}
+}
+
+// bindAISettings wires the AI settings controller to App-owned services and shared controllers.
+func (a *App) bindAISettings() {
+	c := a.aiSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.lifecycleCtx = a.lifecycleCtx
+	c.runOnUI = a.runOnUI
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+	c.formTables = &a.formTables
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.imageForTint = a.imageForTint
 }
 
 // SetForm installs the AI settings inline form. Passing nil clears it. The form is
@@ -463,16 +494,6 @@ func (c *aiSettingsController) LoadChatPluginMentions(ctx context.Context, servi
 	})
 }
 
-// ModelManager returns the live UI-owned model-manager overlay state; Snapshot copies it for the view layer.
-func (c *aiSettingsController) ModelManager() *modelManagerState {
-	return c.modelManager
-}
-
-// SetModelManager installs (or clears, when nil) the model-manager overlay state.
-func (c *aiSettingsController) SetModelManager(state *modelManagerState) {
-	c.modelManager = state
-}
-
 // Snapshot returns a copy of the AI state for the view layer.
 func (c *aiSettingsController) Snapshot() aiSettingsSnapshot {
 	var form *formFieldsSnapshot
@@ -498,6 +519,5 @@ func (c *aiSettingsController) Snapshot() aiSettingsSnapshot {
 		PluginMentionsLoading: c.pluginMentionsLoading,
 		PluginMentionsLoaded:  c.pluginMentionsLoaded,
 		PluginMentionsError:   c.pluginMentionsError,
-		ModelManager:          snapshotModelManagerLocked(c.modelManager),
 	}
 }

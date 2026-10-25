@@ -46,11 +46,11 @@ func launcherSectionSignature(values ...any) string {
 }
 
 func (a *App) launcherFormSectionSignature(snapshot viewSnapshot, panelWidth float32) string {
-	return launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth, a.hotkeyRecordingSectionSignature())
+	return launcherSectionSignature(snapshot.form, snapshot.palette, snapshot.densityMetrics, panelWidth, a.hotkeyRecording.hotkeyRecordingSectionSignature())
 }
 
 func (a *App) launcherTableOverlaySectionSignature(snapshot viewSnapshot, width, height, scale float32) string {
-	return launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, scale, a.hotkeyRecordingSectionSignature())
+	return launcherSectionSignature(snapshot.tableEditor, snapshot.palette, width, height, scale, a.hotkeyRecording.hotkeyRecordingSectionSignature())
 }
 
 var resultColors = []woxui.Color{

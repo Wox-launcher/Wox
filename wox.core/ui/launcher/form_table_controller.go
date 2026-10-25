@@ -119,17 +119,17 @@ func (a *App) bindFormTables() {
 	c.runQueryTest = a.runLauncherQueryTest
 
 	c.saveSettingsTable = a.saveSettingsTable
-	c.setSettingChoiceTooltip = a.setSettingChoiceTooltip
+	c.setSettingChoiceTooltip = a.settingsWindow.setSettingChoiceTooltip
 	c.setSettingsDemoHover = a.setSettingsDemoHover
 	c.selectSettingTab = a.selectSettingTab
 	c.openAboutLink = a.openAboutLink
 
-	c.stopHotkeyRecording = a.stopHotkeyRecording
-	c.stopHotkeyRecordingForDifferentField = a.stopHotkeyRecordingForDifferentField
-	c.commitHotkeyRecordingValue = a.commitHotkeyRecordingValue
-	c.recordFormTableRowHotkey = a.recordFormTableRowHotkey
-	c.hotkeyRecordingFieldStatus = a.hotkeyRecordingFieldStatus
-	c.loadHotkeyAppCandidates = a.loadHotkeyAppCandidates
+	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording
+	c.stopHotkeyRecordingForDifferentField = a.hotkeyRecording.stopHotkeyRecordingForDifferentField
+	c.commitHotkeyRecordingValue = a.hotkeyRecording.commitHotkeyRecordingValue
+	c.recordFormTableRowHotkey = a.hotkeyRecording.recordFormTableRowHotkey
+	c.hotkeyRecordingFieldStatus = a.hotkeyRecording.hotkeyRecordingFieldStatus
+	c.loadHotkeyAppCandidates = func() { a.hotkeySettings.loadHotkeyAppCandidates() }
 
 	c.selectedPluginID = a.selectedPluginID
 	c.submitPluginSettings = func() { a.pluginSettings.submitPluginSettings() }
@@ -138,14 +138,14 @@ func (a *App) bindFormTables() {
 	}
 	c.openAICommandTemplatePicker = a.openAICommandTemplatePicker
 
-	c.openAISettingsTable = a.openAISettingsTable
+	c.openAISettingsTable = func(index int) { a.aiSettings.openAISettingsTable(index) }
 	c.loadAIModels = a.loadAIModels
 
-	c.beginWindowManagerGroupEdit = a.beginWindowManagerGroupEdit
-	c.buildWindowManagerGroupEditor = a.buildWindowManagerGroupEditor
-	c.cancelWindowManagerGroupEdit = a.cancelWindowManagerGroupEdit
-	c.cancelWindowManagerGroupUrlEditor = a.cancelWindowManagerGroupUrlEditor
-	c.closeWindowManagerGroupAppPicker = a.closeWindowManagerGroupAppPicker
+	c.beginWindowManagerGroupEdit = a.windowGroups.beginWindowManagerGroupEdit
+	c.buildWindowManagerGroupEditor = a.windowGroups.buildWindowManagerGroupEditor
+	c.cancelWindowManagerGroupEdit = a.windowGroups.cancelWindowManagerGroupEdit
+	c.cancelWindowManagerGroupUrlEditor = a.windowGroups.cancelWindowManagerGroupUrlEditor
+	c.closeWindowManagerGroupAppPicker = a.windowGroups.closeWindowManagerGroupAppPicker
 }
 
 // activeFormTableEditor returns the Settings editor first because its modal state

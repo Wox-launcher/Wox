@@ -414,34 +414,37 @@ type formValidatorValue struct {
 // App composes one launcher instance and coordinates cross-feature transitions.
 // Feature controllers own their state and receive only the capabilities they need.
 type App struct {
-	attention      attentionController
-	resultDrag     resultDragController
-	appearance     appearanceController
-	requirements   requirementController
-	conflicts      triggerConflictController
-	quickSelect    quickSelectController
-	previews       previewController
-	notes          notesController
-	forms          formActionController
-	formTables     formTableController
-	glance         glanceController
-	toolbar        toolbarController
-	settingsWindow settingsWindowController
-	onboarding     onboardingController
-	chatWindow     chatWindowController
-	chat           chatController
-	querySession   queryController
-	resultList     resultController
-	actions        actionPanelController
-	dictation      dictationPreviewController
-	terminal       terminalController
-	webView        webViewPreviewController
-	nativeFile     nativeFilePreviewController
-	remotePreview  remotePreviewController
-	filePreview    filePreviewController
-	language       languageCatalog
-	tooltips       tooltipController
-	imageStore     imageStore
+	attention    attentionController
+	resultDrag   resultDragController
+	appearance   appearanceController
+	requirements requirementController
+	conflicts    triggerConflictController
+	quickSelect  quickSelectController
+	previews     previewController
+	notes        notesController
+	forms        formActionController
+	formTables   formTableController
+	// hotkeyRecording is shared by Settings, onboarding and launcher forms; only one field records at a time.
+	hotkeyRecording hotkeyRecordingController
+	windowGroups    windowGroupEditorController
+	glance          glanceController
+	toolbar         toolbarController
+	settingsWindow  settingsWindowController
+	onboarding      onboardingController
+	chatWindow      chatWindowController
+	chat            chatController
+	querySession    queryController
+	resultList      resultController
+	actions         actionPanelController
+	dictation       dictationPreviewController
+	terminal        terminalController
+	webView         webViewPreviewController
+	nativeFile      nativeFilePreviewController
+	remotePreview   remotePreviewController
+	filePreview     filePreviewController
+	language        languageCatalog
+	tooltips        tooltipController
+	imageStore      imageStore
 
 	unsubscribersMu sync.Mutex
 
@@ -596,18 +599,6 @@ func newApp(isDev bool, services contract.Services, windows *woxui.WindowManager
 	app.appearanceSettings = newAppearanceSettingsController(deps)
 	app.networkSettings = newNetworkSettingsController(deps)
 	app.dataSettings = newDataSettingsController(deps)
-	// Wire cross-domain helpers the controller needs without giving it a back-reference to *App.
-	// reloadSettings refreshes all settings after a restore; pickDirectory opens the native directory picker.
-	app.dataSettings.BindCrossDomain(
-		app.reloadSettings,
-		func() (string, error) {
-			window := app.settingsWindow.settingsNativeWindow()
-			if window == nil {
-				return "", fmt.Errorf("settings window not ready")
-			}
-			return window.PickFile(woxui.FileDialogOptions{Directory: true})
-		},
-	)
 	app.cloudSettings = newCloudSettingsController(deps)
 	app.runtimeSettings = newRuntimeSettingsController(deps)
 	app.themeSettings = newThemeSettingsController(deps)
@@ -688,7 +679,7 @@ func (a *App) start() error {
 			if event.Down {
 				a.resultDrag.releaseResultFileDragHold()
 			}
-			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.onHotkeyRecordingKey(event) {
+			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 				return true
 			}
 			settingsPluginID := ""
@@ -1815,7 +1806,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if !event.Down {
 		return a.quickSelect.onQuickSelectKey(event)
 	}
-	if !a.hotkeyRecordingUsesSettingsWindow() && a.onHotkeyRecordingKey(event) {
+	if !a.hotkeyRecordingUsesSettingsWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 		return true
 	}
 	if !a.formTables.formTableUsesSettingsWindow() && a.formTables.launcherEditor != nil {

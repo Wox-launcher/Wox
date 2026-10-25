@@ -244,13 +244,13 @@ func TestWindowShortcutRecordingPrecedesCommands(t *testing.T) {
 	runNativeShortcutFlow(t, services, func(app *App) (func() error, error) {
 		form := newHotkeySettingsForm(settingsData{})
 		app.hotkeySettings.SetForm(&form)
-		app.hotkeySettings.SetRecording(&hotkeyRecordingState{target: &form, ready: true, raw: true, fallback: true, diagnosticCtx: context.Background()})
+		app.hotkeyRecording.SetRecording(&hotkeyRecordingState{target: &form, ready: true, raw: true, fallback: true, diagnosticCtx: context.Background()})
 		managed, err := app.settingsWindow.ensureSettingsWindow()
 		if err != nil {
 			return nil, err
 		}
 		return func() error {
-			defer woxui.Call(func() { app.hotkeySettings.ClearRecording() })
+			defer woxui.Call(func() { app.hotkeyRecording.ClearRecording() })
 			for _, key := range []woxui.Key{",", "w"} {
 				if handled, err := managed.Window().DispatchKey(woxui.KeyEvent{Key: key, Modifiers: woxui.KeyModifierControl, Down: true}); err != nil || !handled {
 					return fmt.Errorf("record shortcut %q: handled=%t err=%v", key, handled, err)

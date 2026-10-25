@@ -3,11 +3,13 @@ package launcher
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"wox/ui/contract"
+	woxui "wox/ui/runtime"
 	"wox/util"
 )
 
@@ -26,11 +28,20 @@ type dataSettingsSnapshot struct {
 	ClearLogsArmed   bool
 }
 
-// dataSettingsController owns the Data tab state (backups, location, restore, logs).
-// Cross-domain needs (reloading all settings after a restore and picking a native
-// directory) are injected via BindCrossDomain so the controller never depends on App.
+// dataSettingsController owns the Data tab (backups, location, restore, logs) and its
+// view props. Reloading all settings after a restore and picking a native directory are
+// injected via BindCrossDomain; the remaining collaborators come from bindDataSettings.
 type dataSettingsController struct {
 	deps CommonDeps
+
+	services  contract.DataSettingsServices
+	sessionID string
+	language  *languageCatalog
+	settings  *settingsWindowController
+
+	generalSettings           func() *generalSettingsController
+	openSettingChoicePickerAt func(item settingItem, anchor woxui.Rect)
+	startGeneralSettingSave   func(job string, item settingItem, choice settingChoice)
 
 	backups          []backupInfo
 	location         string
@@ -72,11 +83,36 @@ func (c *dataSettingsController) clearError() {
 	c.errSection = ""
 }
 
-// BindCrossDomain wires App-owned helpers used by data operations. Called by newApp
-// after both the controller and App are constructed.
+// BindCrossDomain wires the helpers used by restore and location changes.
 func (c *dataSettingsController) BindCrossDomain(reloadSettings func() error, pickDirectory func() (string, error)) {
 	c.reloadSettings = reloadSettings
 	c.pickDirectory = pickDirectory
+}
+
+// bindDataSettings wires the Data page to Core, the Settings window and the general
+// settings it saves through.
+func (a *App) bindDataSettings() {
+	c := a.dataSettings
+	if c == nil {
+		return
+	}
+	c.services = a.services
+	c.sessionID = a.sessionID
+	c.language = &a.language
+	c.settings = &a.settingsWindow
+	c.generalSettings = func() *generalSettingsController { return a.generalSettings }
+	c.openSettingChoicePickerAt = a.openSettingChoicePickerAt
+	c.startGeneralSettingSave = a.startGeneralSettingSave
+	c.BindCrossDomain(
+		a.reloadSettings,
+		func() (string, error) {
+			window := a.settingsWindow.settingsNativeWindow()
+			if window == nil {
+				return "", fmt.Errorf("settings window not ready")
+			}
+			return window.PickFile(woxui.FileDialogOptions{Directory: true})
+		},
+	)
 }
 
 // Reload fetches the storage location and backup catalog. It is a no-op if a reload
