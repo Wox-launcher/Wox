@@ -36,7 +36,7 @@ const (
 	aboutMenuGithubTail          = "Wox-Launcher/Wox"
 	aboutMenuRedditTail          = "r/WoxLauncher"
 	// aboutMenuDiscordUserCount is the advertised Discord size. Raise it by hand as the community grows.
-	aboutMenuDiscordUserCount = 6
+	aboutMenuDiscordUserCount = 10
 
 	aboutMenuTooltipName = "go-ui-about-menu"
 )
