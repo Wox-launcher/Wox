@@ -91,6 +91,9 @@ func (a *attentionActionTestAPI) RefreshGlance(ctx context.Context, ids []string
 }
 func (a *attentionActionTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 }
+
+func (a *attentionActionTestAPI) TypeText(ctx context.Context, params plugin.TypeTextParams) {
+}
 func (a *attentionActionTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

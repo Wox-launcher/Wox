@@ -871,3 +871,25 @@ class CopyParams:
                 "woxImage": self.wox_image,
             }
         )
+
+
+@dataclass
+class TypeTextParams:
+    """
+    Parameters for typing text into the currently focused application.
+
+    Used with `api.type_text()` to inject text via the platform input system.
+    The clipboard is not touched. Hide the launcher first so focus returns to
+    the target window.
+
+    Example usage:
+        # Type text into the focused window
+        await api.type_text(ctx, TypeTextParams(
+            text="Hello, World!"
+        ))
+    """
+
+    text: str = field(default="")
+    """
+    The text to type into the focused application.
+    """

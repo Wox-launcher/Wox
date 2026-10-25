@@ -14,7 +14,7 @@ from .models.attention import PushAttentionRequest
 from .models.context import Context
 from .models.log import LogLevel
 from .models.mru import MRUData
-from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam
+from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam, TypeTextParams
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 from .models.toolbar_msg import ToolbarMsg
@@ -170,7 +170,7 @@ class PublicAPI(Protocol):
         - MRU: on_mru_restore
         - Callbacks: on_unload, on_deep_link
         - Commands: register_query_commands
-        - Clipboard: copy
+        - Clipboard: copy, type_text
         - Screenshot: screenshot
         - Cache: get_cache_folder
         - Theme: get_theme_colors
@@ -842,6 +842,25 @@ class PublicAPI(Protocol):
             await api.copy(ctx, CopyParams(
                 type=CopyType.IMAGE,
                 wox_image=WoxImage.new_absolute("/path/to/image.png").to_dict()
+            ))
+        """
+        ...
+
+    async def type_text(self, ctx: Context, params: TypeTextParams) -> None:
+        """
+        Type text into the currently focused application without touching the clipboard.
+
+        The text is injected via the platform input system. Hide the launcher
+        first so focus returns to the target window before calling this.
+
+        Args:
+            ctx: Context
+            params: TypeTextParams with the text to type
+
+        Example:
+            # Type text into the focused window
+            await api.type_text(ctx, TypeTextParams(
+                text="Hello, World!"
             ))
         """
         ...

@@ -110,6 +110,8 @@ func (a fileSearchToolbarTestAPI) RefreshQuery(ctx context.Context, param plugin
 func (a fileSearchToolbarTestAPI) RefreshGlance(ctx context.Context, ids []string) {}
 func (a fileSearchToolbarTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 }
+func (a fileSearchToolbarTestAPI) TypeText(ctx context.Context, params plugin.TypeTextParams) {
+}
 func (a fileSearchToolbarTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

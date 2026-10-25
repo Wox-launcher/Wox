@@ -85,6 +85,7 @@ All methods are async and require `ctx`.
 - `notify(ctx, message)`: Show notification.
 - `log(ctx, level, msg)`: Write log. Levels: `"Info"`, `"Error"`.
 - `copy(ctx, params: CopyParams)`: Copy text/image.
+- `type_text(ctx, params: TypeTextParams)`: Type text into the focused input of the active window without touching the clipboard. Hide the launcher first; requires accessibility permission on macOS/Windows.
 - `is_visible(ctx)`: Check visibility.
 
 ### Cache

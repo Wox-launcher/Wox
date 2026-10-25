@@ -1476,6 +1476,13 @@ export interface CopyParams {
   woxImage?: WoxImage
 }
 
+export interface TypeTextParams {
+  /**
+   * Text to type into the currently focused application. The clipboard is not touched.
+   */
+  text: string
+}
+
 export type AttentionActionType = "change_query" | "open_plugin_settings"
 
 /**
@@ -1833,6 +1840,14 @@ export interface PublicAPI {
    * @param params CopyParams
    */
   Copy: (ctx: Context, params: CopyParams) => Promise<void>
+
+  /**
+   * Type text into the currently focused application without touching the clipboard.
+   * The caller should hide the launcher first so focus returns to the target window.
+   * @param ctx Context
+   * @param params TypeTextParams
+   */
+  TypeText: (ctx: Context, params: TypeTextParams) => Promise<void>
 
   /**
    * Start the built-in screenshot workflow.

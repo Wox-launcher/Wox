@@ -133,6 +133,8 @@ func (emptyChatAPI) RefreshQuery(context.Context, plugin.RefreshQueryParam) {
 }
 func (emptyChatAPI) RefreshGlance(context.Context, []string) {}
 func (emptyChatAPI) Copy(context.Context, plugin.CopyParams) {}
+
+func (emptyChatAPI) TypeText(context.Context, plugin.TypeTextParams) {}
 func (emptyChatAPI) Screenshot(context.Context, plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

@@ -117,6 +117,7 @@ The `ctx` object is required for all API calls.
 - `Notify(ctx, message)`: Display a system notification.
 - `Log(ctx, level, msg)`: Write to plugin logs. Levels: `"Info"`, `"Error"`, `"Debug"`, `"Warning"`.
 - `Copy(ctx, params: CopyParams)`: Copy text or image to clipboard.
+- `TypeText(ctx, params: TypeTextParams)`: Type text into the focused input of the active window without touching the clipboard. Hide the launcher first so focus returns to the target window; requires accessibility permission on macOS/Windows.
 - `IsVisible(ctx)`: Check if Wox window is visible.
 
 ### Cache

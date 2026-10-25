@@ -115,6 +115,8 @@ func (s *stubAPI) RefreshGlance(ctx context.Context, ids []string) {}
 
 func (s *stubAPI) Copy(ctx context.Context, params plugin.CopyParams) {}
 
+func (s *stubAPI) TypeText(ctx context.Context, params plugin.TypeTextParams) {}
+
 func (s *stubAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

@@ -643,6 +643,11 @@ func (w *WebsocketHost) handleRequestFromPlugin(ctx context.Context, request Jso
 
 		pluginInstance.API.Copy(ctx, params)
 		w.sendResponseToHost(ctx, request, "")
+	case "TypeText":
+		pluginInstance.API.TypeText(ctx, plugin.TypeTextParams{
+			Text: request.Params["text"],
+		})
+		w.sendResponseToHost(ctx, request, "")
 	case "Screenshot":
 		var option plugin.ScreenshotOption
 		if optionStr, exists := request.Params["option"]; exists && strings.TrimSpace(optionStr) != "" {

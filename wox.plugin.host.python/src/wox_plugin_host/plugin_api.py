@@ -496,6 +496,16 @@ class PluginAPI(PublicAPI):
             },
         )
 
+    async def type_text(self, ctx: Context, params: Any) -> None:
+        """Type text into the currently focused application without touching the clipboard"""
+        await self.invoke_method(
+            ctx,
+            "TypeText",
+            {
+                "text": params.text,
+            },
+        )
+
     async def screenshot(self, ctx: Context, option: ScreenshotOption) -> ScreenshotResult:
         """Start the built-in screenshot workflow."""
         # The Python SDK exposes snake_case dataclass fields, while core accepts the public JSON

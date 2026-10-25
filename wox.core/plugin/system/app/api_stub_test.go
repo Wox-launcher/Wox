@@ -122,6 +122,9 @@ func (e emptyAPIImpl) RefreshGlance(ctx context.Context, ids []string) {
 func (e emptyAPIImpl) Copy(ctx context.Context, params plugin.CopyParams) {
 }
 
+func (e emptyAPIImpl) TypeText(ctx context.Context, params plugin.TypeTextParams) {
+}
+
 func (e emptyAPIImpl) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

@@ -63,7 +63,7 @@ Methods for interacting with Wox:
 - **MRU**: `on_mru_restore()`
 - **Callbacks**: `on_unload()`, `on_deep_link()`
 - **Commands**: `register_query_commands()`
-- **Clipboard**: `copy()`
+- **Clipboard**: `copy()`, `type_text()`
 - **Screenshot**: `screenshot()`
 - **Cache**: `get_cache_folder()`
 - **Theme**: `get_theme_colors()`
@@ -79,6 +79,7 @@ Methods for interacting with Wox:
 - `ChangeQueryParam`: Parameters to change the query
 - `RefreshQueryParam`: Parameters to refresh the query
 - `CopyParams`: Parameters for clipboard operations
+- `TypeTextParams`: Parameters for typing text into the focused application
 - `ScreenshotOption`: Options for the screenshot workflow
 - `ScreenshotResult`: Result returned by the screenshot workflow
 - `GetThemeColorsOption`: Options for reading the current launcher palette
@@ -258,6 +259,7 @@ from .models.query import (
     MetadataCommand,
     Query,
     QueryEnv,
+    TypeTextParams,
     QueryType,
     RefreshQueryParam,
     Selection,
@@ -430,6 +432,7 @@ __all__: List[str] = [
     "SelectionType",
     "CopyParams",
     "CopyType",
+    "TypeTextParams",
     # Exceptions
     "WoxPluginError",
     "InvalidQueryError",

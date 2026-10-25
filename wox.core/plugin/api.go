@@ -11,6 +11,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/keyboard"
 
 	"github.com/samber/lo"
 )
@@ -267,6 +268,12 @@ type API interface {
 	// Supports text, image, or both simultaneously.
 	Copy(ctx context.Context, params CopyParams)
 
+	// TypeText types text into the currently focused application via the platform
+	// input system, without touching the clipboard. The caller is responsible for
+	// hiding the launcher first so focus returns to the target window; Wox waits
+	// briefly before injecting to let that focus switch settle.
+	TypeText(ctx context.Context, params TypeTextParams)
+
 	// Screenshot captures a user-selected screen area and returns the saved image path.
 	Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult
 
@@ -287,6 +294,11 @@ type CopyParams struct {
 	Type     CopyType
 	Text     string
 	WoxImage *common.WoxImage
+}
+
+// TypeTextParams carries the text injected into the focused application.
+type TypeTextParams struct {
+	Text string
 }
 
 // ScreenshotOption controls optional screenshot behavior.
@@ -1194,6 +1206,15 @@ func (a *APIImpl) Copy(ctx context.Context, params CopyParams) {
 			a.Log(ctx, LogLevelError, fmt.Sprintf("failed to copy image to clipboard: %v", err))
 		}
 		return
+	}
+}
+
+func (a *APIImpl) TypeText(ctx context.Context, params TypeTextParams) {
+	// Same settle delay as pasteToActiveWindow: the launcher just hid and the
+	// OS needs a moment to hand focus back to the target window.
+	time.Sleep(time.Millisecond * 150)
+	if err := keyboard.SimulateType(params.Text); err != nil {
+		a.Log(ctx, LogLevelError, fmt.Sprintf("failed to type text into active window: %v", err))
 	}
 }
 

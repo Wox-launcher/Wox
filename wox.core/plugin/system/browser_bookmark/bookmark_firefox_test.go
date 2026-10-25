@@ -151,6 +151,9 @@ func (m *mockAPI) RefreshGlance(ctx context.Context, ids []string) {
 func (m *mockAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 }
 
+func (m *mockAPI) TypeText(ctx context.Context, params plugin.TypeTextParams) {
+}
+
 func (m *mockAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

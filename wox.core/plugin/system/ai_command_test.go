@@ -166,6 +166,9 @@ func (a *aiCommandTestAPI) RefreshGlance(ctx context.Context, ids []string) {
 }
 func (a *aiCommandTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
 }
+
+func (a *aiCommandTestAPI) TypeText(ctx context.Context, params plugin.TypeTextParams) {
+}
 func (a *aiCommandTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	return plugin.ScreenshotResult{}
 }

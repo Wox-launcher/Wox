@@ -13,6 +13,7 @@ import {
   ScreenshotResult,
   GetThemeColorsOption,
   GetThemeColorsResult,
+  TypeTextParams,
   RegisterTriggerKeywordOption,
   RegisterTriggerKeywordResult,
   DragOutEvent,
@@ -503,6 +504,12 @@ export class PluginAPI implements PublicAPI {
       type: params.type,
       text: params.text,
       woxImage: params.woxImage ? JSON.stringify(params.woxImage) : ""
+    })
+  }
+
+  async TypeText(ctx: Context, params: TypeTextParams): Promise<void> {
+    await this.invokeMethod(ctx, "TypeText", {
+      text: params.text
     })
   }
 
