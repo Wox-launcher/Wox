@@ -375,7 +375,7 @@ func (l *pluginLifecycle) clearRuntimeCallbacks(pluginInstance *Instance) {
 	pluginInstance.EnterPluginQueryCallbacks = nil
 	pluginInstance.LeavePluginQueryCallbacks = nil
 	pluginInstance.DragOutCallbacks = nil
-	pluginInstance.RuntimeQueryCommands = nil
+	pluginInstance.setRuntimeQueryCommands(nil)
 	pluginInstance.setRuntimeTriggerKeywords(nil)
 }
 

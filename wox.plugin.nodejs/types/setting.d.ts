@@ -121,6 +121,8 @@ export interface PluginSettingDefinitionItem {
  * ```
  */
 export interface MetadataCommand {
+  /** Input-query debounce in milliseconds. Omit to inherit the trigger/plugin default; 0 runs immediately. */
+  DebounceMs?: number
   Aliases?: string[]
   /** Suffix template: Wox inserts the matched command prefix. */
   QueryHint?: import("./index.js").QueryHint

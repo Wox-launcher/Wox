@@ -153,11 +153,11 @@ func TestWebSearchLegacyFallback(t *testing.T) {
 	if got := p.QueryFallback(ctx, query); len(got) != 1 || got[0].Title != "hello world" {
 		t.Fatalf("fallback=%v", got)
 	}
-	if got := p.querySelection(ctx, query); len(got) != 1 || got[0].Title != "chosen words" {
+	if got := p.querySelection(ctx, query).Results; len(got) != 1 || got[0].Title != "chosen words" {
 		t.Fatalf("selection=%v", got)
 	}
 	query.Selection.Type = selection.SelectionTypeFile
-	if len(p.querySelection(ctx, query)) != 0 {
+	if len(p.querySelection(ctx, query).Results) != 0 {
 		t.Fatal("file selection accepted")
 	}
 	search := webSearch{Title: "{wox:clipboard_text} {wox:selected_text}", Urls: []string{"https://example.com/?q={wox:parameter?name=q}"}}

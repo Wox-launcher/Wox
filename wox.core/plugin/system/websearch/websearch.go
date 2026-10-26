@@ -31,13 +31,15 @@ const (
 	webSearchBrowserSystem     = "system"  // follow the system default browser
 	webSearchBrowserUseDefault = "default" // follow the default browser setting of the plugin, which is webSearchBrowserSystem or a specific browser
 
-	// webSearchOpenWebViewActionID is intercepted by the launcher, matching AI Chat's
-	// enter-chat action: the plugin callback is empty and the UI owns fullscreen state.
+	// webSearchOpenWebViewActionID is intercepted by visible launchers; its callback
+	// opens a separate preview window when execution originates from a global hotkey.
 	webSearchOpenWebViewActionID     = "__wox_internal_open_webview_preview__"
 	webSearchOpenWebViewURLKey       = "url"
 	webSearchOpenWebViewInjectCSSKey = "injectCss"
 	webSearchOpenWebViewWidthKey     = "width"
 	webSearchOpenWebViewHeightKey    = "height"
+	webSearchOpenWebViewUserAgentKey = "userAgent"
+	webSearchOpenWebViewKeepKey      = "keepInBackground"
 	webSearchTableGroupAdvanced      = "advanced"
 	webSearchTableGroupWebView       = "webview"
 
@@ -61,6 +63,7 @@ type webSearch struct {
 	Title             string
 	Keyword           string
 	Browser           string
+	OpenInWebView     bool
 	OpenInPrivate     bool // open the resolved browser's private/incognito window when supported
 	IsFallback        bool //if true, this search will be used when no other search is matched
 	Icon              common.WoxImage
@@ -68,6 +71,8 @@ type webSearch struct {
 	WebViewWidth      int
 	WebViewHeight     int
 	InjectCSS         string
+	UserAgent         string
+	KeepInBackground  bool
 	triggerRegistered bool
 }
 
@@ -240,6 +245,14 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							Group:       webSearchTableGroupAdvanced,
 						},
 						{
+							Key:         "OpenInWebView",
+							Label:       "i18n:plugin_websearch_default_webview",
+							Tooltip:     "i18n:plugin_websearch_default_webview_tooltip",
+							HideInTable: true,
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							Group:       webSearchTableGroupWebView,
+						},
+						{
 							Key:         "WebViewWidth",
 							Label:       "i18n:plugin_websearch_webview_width",
 							Tooltip:     "i18n:plugin_websearch_webview_width_tooltip",
@@ -265,6 +278,23 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 							TextMaxLines: 8,
 							HideInTable:  true,
 							Group:        webSearchTableGroupWebView,
+						},
+						{
+							Key:           "UserAgent",
+							Label:         "i18n:plugin_websearch_user_agent",
+							Tooltip:       "i18n:plugin_websearch_user_agent_tooltip",
+							Type:          definition.PluginSettingValueTableColumnTypeSelect,
+							SelectOptions: getWebviewUserAgentOptions(),
+							HideInTable:   true,
+							Group:         webSearchTableGroupWebView,
+						},
+						{
+							Key:         "KeepInBackground",
+							Label:       "i18n:plugin_websearch_keep_in_background",
+							Tooltip:     "i18n:plugin_websearch_keep_in_background_tooltip",
+							Type:        definition.PluginSettingValueTableColumnTypeCheckbox,
+							HideInTable: true,
+							Group:       webSearchTableGroupWebView,
 						},
 					},
 				},
@@ -341,6 +371,7 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 	var keywords []string
 	parameterSets := make(map[string][]string)
 	variableSets := make(map[string][]plugin.QueryVariable)
+	debounceIntervals := make(map[string]int)
 	for i := range r.webSearches {
 		search := &r.webSearches[i]
 		search.triggerRegistered = false
@@ -361,8 +392,13 @@ func (r *WebSearchPlugin) registerTriggerKeywords(ctx context.Context) {
 					variableSets[search.Keyword] = append(variableSets[search.Keyword], variable)
 				}
 			}
+			if search.OpenInWebView && len(names) > 0 {
+				debounceIntervals[search.Keyword] = 500
+			}
+			debounceMs := debounceIntervals[search.Keyword]
 			search.triggerRegistered = r.api.RegisterTriggerKeyword(ctx, plugin.RegisterTriggerKeywordOption{
 				Keyword: search.Keyword, QueryHint: search.queryHint(names), QueryVariables: variableSets[search.Keyword],
+				DebounceMs: &debounceMs,
 			}).Success
 			if search.triggerRegistered {
 				keywords = append(keywords, search.Keyword)
@@ -491,12 +527,16 @@ func (r *WebSearchPlugin) loadWebSearches(ctx context.Context) (webSearches []we
 // Query reads named slots without splitting their text values into words.
 func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.Type == plugin.QueryTypeSelection {
-		return plugin.NewQueryResponse(r.querySelection(ctx, query))
+		return r.querySelection(ctx, query)
 	}
 	var results []plugin.QueryResult
+	var resultSearch webSearch
 	for _, search := range r.searchesForKeyword(ctx, query.TriggerKeyword) {
 		if search.Disabled || !search.triggerRegistered || query.TriggerKeyword != search.Keyword {
 			continue
+		}
+		if query.ContextData[webSearchPreviewContextKey] == "true" {
+			return r.queryWebViewPreview(ctx, search, query.ContextData)
 		}
 		names, err := search.parameters()
 		if err != nil {
@@ -526,25 +566,27 @@ func (r *WebSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 			continue
 		}
 		results = append(results, r.searchResult(ctx, search, values, query.QueryVariables, nil))
+		resultSearch = search
 	}
-	return plugin.NewQueryResponse(results)
+	return webSearchResponse(results, resultSearch)
 }
 
 // QueryFallback only maps a complete raw query to an unambiguous single input.
 func (r *WebSearchPlugin) QueryFallback(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	return r.singleParameterResults(ctx, query.RawQuery, query.QueryVariables, nil)
+	return r.singleParameterResponse(ctx, query.RawQuery, query.QueryVariables, nil).Results
 }
 
-func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+func (r *WebSearchPlugin) querySelection(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.Selection.Type != selection.SelectionTypeText {
-		return nil
+		return plugin.QueryResponse{}
 	}
-	return r.singleParameterResults(ctx, query.Selection.Text, query.QueryVariables, &query.Selection.Text)
+	return r.singleParameterResponse(ctx, query.Selection.Text, query.QueryVariables, &query.Selection.Text)
 }
 
-// singleParameterResults applies the same eligibility rule to fallback and text selection.
-func (r *WebSearchPlugin) singleParameterResults(ctx context.Context, text string, environment map[string]string, selectedText *string) []plugin.QueryResult {
+// singleParameterResponse applies the same eligibility rule to fallback and text selection.
+func (r *WebSearchPlugin) singleParameterResponse(ctx context.Context, text string, environment map[string]string, selectedText *string) plugin.QueryResponse {
 	var results []plugin.QueryResult
+	var resultSearch webSearch
 	for _, search := range r.cloneSearches() {
 		if search.Disabled || !search.IsFallback {
 			continue
@@ -555,8 +597,9 @@ func (r *WebSearchPlugin) singleParameterResults(ctx context.Context, text strin
 		}
 		values := map[string]string{plugin.ParameterQueryVariable(names[0]): text}
 		results = append(results, r.searchResult(ctx, search, values, environment, selectedText))
+		resultSearch = search
 	}
-	return results
+	return webSearchResponse(results, resultSearch)
 }
 
 // searchResult binds preview and execution to the same immutable environment values.
@@ -575,6 +618,7 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 		}
 	}
 	mruContext := webSearchMRUContext(search, values)
+	var preview plugin.WoxPreview
 	actions := []plugin.QueryResultAction{{
 		Name: "i18n:plugin_websearch_search", Icon: icons.Get(icons.ActionSearch), IsDefault: true,
 		ContextData: mruContext,
@@ -582,7 +626,7 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 			util.Go(ctx, "open web search urls", func() { r.openSearchUrls(ctx, search, values) })
 		},
 	}}
-	if previewURL := firstWebViewSearchURL(search, values); previewURL != "" && supportsWebViewPreview() {
+	if previewURL := firstWebViewSearchURL(search, values); previewURL != "" {
 		previewContext := webViewPreviewContextData(search, previewURL)
 		for key, value := range mruContext {
 			previewContext[key] = value
@@ -591,14 +635,24 @@ func (r *WebSearchPlugin) searchResult(ctx context.Context, search webSearch, va
 			Id: webSearchOpenWebViewActionID, Name: "i18n:plugin_websearch_open_in_webview",
 			Icon: icons.Get(icons.ActionPreview), Hotkey: util.PrimaryHotkey("enter"),
 			PreventHideAfterAction: true, ContextData: previewContext,
-			Action: func(context.Context, plugin.ActionContext) {
-				// UI handles this internal action locally because opening the
-				// in-launcher WebView preview is UI-only state.
+			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+				// Visible launchers intercept this action; silent/result hotkeys need
+				// their own window and must keep the already captured variable values.
+				plugin.GetPluginManager().GetUI().OpenWoxInstance(actionCtx, webSearchPreviewRequest(search, values))
 			},
 		})
+		if search.OpenInWebView {
+			preview = webSearchAutomaticPreview(search, previewURL)
+			actions[0].IsDefault = false
+			actions[0].Name = "i18n:plugin_websearch_open_in_browser"
+			actions[1].IsDefault = true
+			actions[1].Name = "i18n:plugin_websearch_focus_webview"
+			actions[1].Hotkey = "enter"
+			actions[0], actions[1] = actions[1], actions[0]
+		}
 	}
 	return plugin.QueryResult{
-		Title: renderWebSearchTemplate(search.Title, values, false), IdentityKey: webSearchIdentityKey(search.Keyword, values), Score: 100, Icon: search.Icon, Actions: actions,
+		Title: renderWebSearchTemplate(search.Title, values, false), IdentityKey: webSearchIdentityKey(search.Keyword, values), Score: 100, Icon: search.Icon, Actions: actions, Preview: preview,
 	}
 }
 
@@ -624,13 +678,15 @@ func webSearchIdentityKey(keyword string, values map[string]string) string {
 	return identity.String()
 }
 
-func supportsWebViewPreview() bool {
-	return util.IsWindows() || util.IsMacOS()
-}
-
 // webViewPreviewContextData carries the first URL plus optional per-search preview chrome.
 func webViewPreviewContextData(search webSearch, previewURL string) map[string]string {
 	data := map[string]string{webSearchOpenWebViewURLKey: previewURL}
+	if userAgent := resolveWebviewUserAgent(search.UserAgent); userAgent != "" {
+		data[webSearchOpenWebViewUserAgentKey] = userAgent
+	}
+	if search.KeepInBackground {
+		data[webSearchOpenWebViewKeepKey] = "true"
+	}
 	if css := strings.TrimSpace(search.InjectCSS); css != "" {
 		data[webSearchOpenWebViewInjectCSSKey] = css
 	}
@@ -742,9 +798,6 @@ func (r *WebSearchPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 			return nil, fmt.Errorf("invalid web search values in context data: %w", err)
 		}
 	}
-	if len(values) == 0 {
-		return nil, fmt.Errorf("empty web search values in context data")
-	}
 
 	var found webSearch
 	matched := false
@@ -758,7 +811,16 @@ func (r *WebSearchPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 	if !matched {
 		return nil, fmt.Errorf("web search no longer exists: %s", keyword)
 	}
-	result := r.searchResult(ctx, found, values, nil, nil)
+	names, err := found.parameters()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range names {
+		if strings.TrimSpace(values[plugin.ParameterQueryVariable(name)]) == "" {
+			return nil, fmt.Errorf("missing web search parameter: %s", name)
+		}
+	}
+	result := r.searchResult(ctx, found, values, values, nil)
 	if result.Title == "i18n:plugin_websearch_missing_context" {
 		return nil, fmt.Errorf("web search is missing required context: %s", keyword)
 	}

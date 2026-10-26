@@ -150,6 +150,8 @@ type queryLayout struct {
 	ResultPreviewWidthRatio *float64    `json:"ResultPreviewWidthRatio"`
 	GridLayout              *gridLayout `json:"GridLayout"`
 	ChatMode                bool        `json:"ChatMode"`
+	WindowWidth             int         `json:"-"`
+	WindowHeight            int         `json:"-"`
 }
 
 type gridLayout struct {
@@ -686,7 +688,7 @@ func (a *App) start() error {
 			if a.chat.chatFullscreen {
 				settingsPluginID = common.AIChatPluginID
 			} else if a.webView.webViewPreviewData != "" {
-				settingsPluginID = firstNonEmpty(a.querySession.queryContext.PluginID, common.WebViewPluginID)
+				settingsPluginID = firstNonEmpty(a.querySession.queryContext.PluginID, common.WebSearchPluginID)
 			}
 			return a.dispatchWindowKey(event, host, settingsPluginID, a.requestLauncherShortcutClose, a.onKey)
 		},
@@ -874,6 +876,11 @@ func (a *App) showWindow(params showAppParams) error {
 
 // restoreQueryFocusAfterShow resets retained preview focus once the visible query tree is mounted.
 func (a *App) restoreQueryFocusAfterShow() bool {
+	if a.webView.isWebViewFullPreviewWindow() && a.webView.isGlobalWebViewPreview() {
+		// A hotkey query can finish before Show; keep its pending page-focus handoff.
+		a.webView.beginWebViewKeyboardFocus()
+		return false
+	}
 	// A restored WebView must not retry page focus after the query box is selected.
 	a.webView.webViewWantKeyboardFocus = false
 	if a.host == nil || !a.queryCanFocus() {
@@ -1321,10 +1328,13 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.querySession.resetQueryLoadingLocked()
 	}
 	a.querySession.resetQueryTransitionLocked()
+	// Restore temporary manual content before publishing a replacement with the same result ID.
+	if a.webView.webViewFullscreen {
+		a.webView.clearWebViewPreviewModeLocked()
+	}
 	a.resultList.publishRows(queryID, results)
 	a.querySession.queryComplete = complete
 	enterChatMode := layout != nil && layout.ChatMode
-	a.webView.clearWebViewPreviewModeLocked()
 	if layout != nil {
 		a.resultList.layout = *layout
 		if !layout.ChatMode {
@@ -1395,6 +1405,9 @@ func (a *App) resultAreaHeightLocked(results []queryResult, layout queryLayout) 
 	width := a.show.WindowWidth
 	if width <= 0 {
 		width = defaultWidth
+	}
+	if layout.WindowWidth > 0 {
+		width = layout.WindowWidth
 	}
 	if a.webView.webViewFullscreen && a.webView.webViewPreviewWidth > 0 {
 		width = a.webView.webViewPreviewWidth
@@ -1482,6 +1495,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	width := params.WindowWidth
 	if width <= 0 {
 		width = defaultWidth
+	}
+	if layout.WindowWidth > 0 {
+		width = layout.WindowWidth
 	}
 	maxResults := params.MaxResultCount
 	if maxResults <= 0 {
@@ -1611,9 +1627,13 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	height += int(2 * palette.AppContentInset)
 	minimumHeight += int(2 * palette.AppContentInset)
+	requestedHeight := layout.WindowHeight
 	if a.webView.webViewFullscreen && a.webView.webViewPreviewHeight > 0 {
+		requestedHeight = a.webView.webViewPreviewHeight
+	}
+	if requestedHeight > 0 {
 		// Width is the launcher window width; height uses the same logical-pixel window size.
-		height = max(a.webView.webViewPreviewHeight, minimumHeight)
+		height = max(requestedHeight, minimumHeight)
 	}
 	current, err := a.window.Bounds()
 	if err != nil {

@@ -259,6 +259,12 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 	if responseLayout.ChatMode {
 		merged.ChatMode = true
 	}
+	if responseLayout.WindowWidth > 0 {
+		merged.WindowWidth = responseLayout.WindowWidth
+	}
+	if responseLayout.WindowHeight > 0 {
+		merged.WindowHeight = responseLayout.WindowHeight
+	}
 
 	return merged
 }
@@ -1483,16 +1489,22 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 		}
 
 		supportsDebounce := pluginInstance.Metadata.IsSupportFeature(MetadataFeatureDebounce)
-		job := queryPluginJob{pluginInstance: pluginInstance, blocksFallback: !supportsDebounce}
+		job := queryPluginJob{pluginInstance: pluginInstance}
 		if supportsDebounce {
 			debounceParams, err := pluginInstance.Metadata.GetFeatureParamsForDebounce()
 			if err != nil {
 				logger.Error(ctx, fmt.Sprintf("[%s] %s, query directly", pluginInstance.GetName(ctx), err))
 			} else {
-				job.debounced = true
+				job.debounced = debounceParams.IntervalMs > 0
 				job.intervalMs = debounceParams.IntervalMs
 			}
 		}
+
+		if interval, overridden := pluginInstance.queryDebounceOverride(m.applyScopeForPlugin(query, pluginInstance)); overridden {
+			job.debounced = interval > 0
+			job.intervalMs = interval
+		}
+		job.blocksFallback = !job.debounced
 
 		if job.debounced {
 			debouncedCount++

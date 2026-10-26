@@ -173,6 +173,10 @@ type QueryLayout struct {
 	Icon                    *common.WoxImage                 `json:"Icon,omitempty"`
 	ResultPreviewWidthRatio *float64                         `json:"ResultPreviewWidthRatio,omitempty"`
 	GridLayout              *MetadataFeatureParamsGridLayout `json:"GridLayout,omitempty"`
+	// Window dimensions are internal logical-unit hints, excluded from the plugin wire contract.
+	// Non-positive values keep the launcher's normal sizing.
+	WindowWidth  int `json:"-"`
+	WindowHeight int `json:"-"`
 	// ChatMode is an internal UI hint used by the built-in chat plugin.
 	ChatMode bool `json:"ChatMode,omitempty"`
 }

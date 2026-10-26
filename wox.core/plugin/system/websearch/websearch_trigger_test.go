@@ -11,6 +11,7 @@ import (
 type webSearchTriggerTestAPI struct {
 	plugin.API
 	keywords []string
+	debounce map[string]int
 }
 
 func (a *webSearchTriggerTestAPI) RegisterTriggerKeyword(_ context.Context, option plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
@@ -21,7 +22,32 @@ func (a *webSearchTriggerTestAPI) RegisterTriggerKeyword(_ context.Context, opti
 	if !slices.Contains(a.keywords, keyword) {
 		a.keywords = append(a.keywords, keyword)
 	}
+	if option.DebounceMs != nil {
+		if a.debounce == nil {
+			a.debounce = make(map[string]int)
+		}
+		a.debounce[keyword] = *option.DebounceMs
+	}
 	return plugin.RegisterTriggerKeywordResult{Success: true}
+}
+
+// TestWebSearchQueryDebounce keeps browser searches immediate and updates the keyword policy with settings.
+func TestWebSearchQueryDebounce(t *testing.T) {
+	api := &webSearchTriggerTestAPI{}
+	p := &WebSearchPlugin{api: api, webSearches: []webSearch{
+		{Keyword: "web", OpenInWebView: true, Urls: []string{"https://example.com/?q={wox:parameter?name=query}"}},
+		{Keyword: "site", OpenInWebView: true, Urls: []string{"https://example.com"}},
+		{Keyword: "browser"},
+	}}
+	p.registerTriggerKeywords(context.Background())
+	if api.debounce["web"] != 500 || api.debounce["browser"] != 0 || api.debounce["site"] != 0 {
+		t.Fatalf("delays = %v", api.debounce)
+	}
+	p.webSearches[0].OpenInWebView = false
+	p.registerTriggerKeywords(context.Background())
+	if api.debounce["web"] != 0 {
+		t.Fatal("disabling automatic WebView should clear its query delay")
+	}
 }
 
 func (a *webSearchTriggerTestAPI) UnregisterTriggerKeyword(_ context.Context, option plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {

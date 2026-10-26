@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"reflect"
 	"testing"
 	"wox/plugin"
 
@@ -9,6 +10,33 @@ import (
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
+
+// TestManualWebViewPreviewClosesWhenTyping keeps Ctrl+Enter previews on the existing keystroke behavior.
+func TestManualWebViewPreviewClosesWhenTyping(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	app.visible = true
+	app.querySession.query = newInputQuery("g wox")
+	defer app.cancel()
+	defer app.querySession.resetQueryTransitionLocked()
+
+	app.resultList.results = []queryResult{{
+		ID: "search",
+		Actions: []resultAction{{
+			ID:          openWebViewPreviewActionID,
+			ContextData: map[string]string{webViewPreviewURLContextKey: "https://example.com/?q=wox"},
+		}},
+	}}
+	app.resultList.selected = 0
+	app.activateAction(0, 0)
+	if !app.webView.webViewFullscreen {
+		t.Fatal("manual preview did not open")
+	}
+	app.applyQueryTextChangeLocked("g woxx")
+	if app.webView.webViewFullscreen {
+		t.Fatal("manual webview preview stayed open while typing")
+	}
+}
 
 func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 	app := New(false, nil)
@@ -21,12 +49,13 @@ func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 		ID: "search",
 		Actions: []resultAction{{
 			ID:                     openWebViewPreviewActionID,
+			IsDefault:              true,
 			PreventHideAfterAction: true,
 			ContextData:            map[string]string{webViewPreviewURLContextKey: "https://www.google.com/search?q=wox"},
 		}},
 	}}
 	app.resultList.selected = 0
-	app.activateAction(0, 0)
+	app.activateResult(0)
 	if !app.webView.webViewFullscreen || !app.webView.webViewWantKeyboardFocus || !app.queryCanFocus() || app.resultList.results[0].Preview.PreviewType != "webview" {
 		t.Fatalf("webview mode = fullscreen:%v pageFocusPending:%v queryFocus:%v preview:%+v", app.webView.webViewFullscreen, app.webView.webViewWantKeyboardFocus, app.queryCanFocus(), app.resultList.results[0].Preview)
 	}
@@ -44,6 +73,69 @@ func TestActivateOpenWebViewPreviewActionEntersFullscreen(t *testing.T) {
 	app.webView.handleWebViewFallbackEscape()
 	if app.webView.webViewFullscreen || app.webView.webViewWantKeyboardFocus || app.resultList.results[0].Preview.PreviewType != "" || !app.queryCanFocus() {
 		t.Fatalf("escape restored fullscreen:%v pageFocusPending:%v preview:%+v queryFocus:%v", app.webView.webViewFullscreen, app.webView.webViewWantKeyboardFocus, app.resultList.results[0].Preview, app.queryCanFocus())
+	}
+}
+
+// TestManualWebViewPreviewPreservesSiteOptions keeps manual opening consistent with automatic previews.
+func TestManualWebViewPreviewPreservesSiteOptions(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	defer app.cancel()
+	app.visible = true
+	app.querySession.query = newInputQuery("site ")
+	app.resultList.publishRows(app.querySession.query.QueryID, []queryResult{{ID: "site"}})
+	app.webView.enterWebViewPreviewMode(0, map[string]string{
+		webViewPreviewURLContextKey: "https://example.com", webViewPreviewUserAgentContextKey: "Custom/1",
+		webViewPreviewKeepContextKey: "true",
+	})
+	data, err := decodeWebViewPreview(app.resultList.results[0].Preview.PreviewData)
+	if err != nil || data.CacheDisabled || data.UserAgent != "Custom/1" || !app.hasCacheableWebViewPreviewLocked() {
+		t.Fatalf("manual site options = %+v, err=%v", data, err)
+	}
+}
+
+// TestDefaultWebViewActionFocusesExistingPreview preserves query ownership and native page state.
+func TestDefaultWebViewActionFocusesExistingPreview(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	defer app.cancel()
+	app.visible = true
+	app.querySession.query = newInputQuery("g wox")
+	ratio := 0.0
+	preview := queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com","cacheDisabled":true}`}
+	result := queryResult{ID: "search", Preview: preview, Actions: []resultAction{{
+		ID: openWebViewPreviewActionID, IsDefault: true, Hotkey: "enter", PreventHideAfterAction: true,
+		ContextData: map[string]string{webViewPreviewURLContextKey: "https://example.com"},
+	}}}
+	app.applyResults(app.querySession.query.QueryID, []queryResult{result}, &queryLayout{ResultPreviewWidthRatio: &ratio}, nil, nil, 0, true)
+	app.webView.webViewNavigation.URL = "https://example.com/navigated"
+	app.activateResult(0)
+	if !app.webView.webViewWantKeyboardFocus || app.webView.webViewFullscreen || !app.visible {
+		t.Fatal("default action must focus the existing page without entering manual mode or hiding Wox")
+	}
+	if app.webView.webViewPreviewData != preview.PreviewData || !reflect.DeepEqual(app.resultList.results[0].Preview, preview) ||
+		app.webView.webViewNavigation.URL != "https://example.com/navigated" {
+		t.Fatal("focusing the page replaced its content or navigation state")
+	}
+}
+
+// TestCloseAutomaticSiteAfterManualOpen prevents restoring the same page immediately after close.
+func TestCloseAutomaticSiteAfterManualOpen(t *testing.T) {
+	app := New(false, nil)
+	app.uiCall = nil
+	defer app.cancel()
+	app.visible = true
+	app.querySession.query = newInputQuery("site ")
+	ratio := 0.0
+	preview := queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com","cacheDisabled":false}`}
+	app.applyResults(app.querySession.query.QueryID, []queryResult{{ID: "site", Preview: preview}},
+		&queryLayout{ResultPreviewWidthRatio: &ratio}, nil, nil, 0, true)
+	app.webView.enterWebViewPreviewMode(0, map[string]string{
+		webViewPreviewURLContextKey: "https://example.com", webViewPreviewKeepContextKey: "true",
+	})
+	app.webView.closeWebViewPage()
+	if app.visible || app.webView.webViewFullscreen || app.webView.webViewPreviewData != "" {
+		t.Fatal("closing a query-owned full preview reopened its page")
 	}
 }
 

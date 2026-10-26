@@ -42,6 +42,9 @@ func (l *pluginLifecycle) ParseMetadata(ctx context.Context, pluginDirectory str
 	}
 
 	metadata.Directory = pluginDirectory
+	if err := metadata.ValidateDebounce(); err != nil {
+		return Metadata{}, fmt.Errorf("invalid debounce in plugin.json (%s): %w", pluginDirectory, err)
+	}
 	metadata.LoadPluginI18nFromDirectory(ctx)
 
 	return metadata, nil
@@ -49,6 +52,9 @@ func (l *pluginLifecycle) ParseMetadata(ctx context.Context, pluginDirectory str
 
 // validateAndSetScriptMetadataDefaults validates required fields and sets default values
 func (l *pluginLifecycle) validateAndSetScriptMetadataDefaults(metadata Metadata) (Metadata, error) {
+	if err := metadata.ValidateDebounce(); err != nil {
+		return Metadata{}, err
+	}
 	// Validate required fields
 	if metadata.Id == "" {
 		return Metadata{}, fmt.Errorf("missing required field: Id")

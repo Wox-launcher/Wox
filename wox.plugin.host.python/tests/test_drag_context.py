@@ -15,13 +15,24 @@ package = importlib.util.module_from_spec(spec)
 package.__path__ = [str(package_path)]
 sys.modules.setdefault("wox_plugin_host", package)
 
-from wox_plugin import Context
+from wox_plugin import Context, MetadataCommand
 from wox_plugin_host import jsonrpc
 from wox_plugin_host.plugin_api import PluginAPI
 from wox_plugin_host.plugin_manager import waiting_for_response
 
 
 class DragContextTest(unittest.IsolatedAsyncioTestCase):
+    async def test_command_registration_preserves_debounce_wire_fields(self):
+        api = PluginAPI(AsyncMock(), "search", "Search")
+        api.invoke_method = AsyncMock()
+        await api.register_query_commands(
+            Context.new(), [MetadataCommand("search", "Search", debounce_ms=500), MetadataCommand("now", "Now", debounce_ms=0)]
+        )
+        wire = json.loads(api.invoke_method.call_args.args[2]["commands"])
+        self.assertEqual(wire[0]["Command"], "search")
+        self.assertEqual(wire[0]["DebounceMs"], 500)
+        self.assertEqual(wire[1]["DebounceMs"], 0)
+
     async def test_callback_api_preserves_source_window(self):
         sent = []
 

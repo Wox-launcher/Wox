@@ -40,7 +40,6 @@ const (
 	UpdatePluginID            = "2a9e9f06-6ff1-49c9-9f75-9db7f7a0b7b7"
 	URLPluginID               = "1af58721-6c97-4901-b291-620daf08d9c9"
 	WebSearchPluginID         = "c1e350a7-c521-4dc3-b4ff-509f720fde86"
-	WebViewPluginID           = "2ac1b5cf-bf55-41f0-8c34-421c323be780"
 	WindowManagerPluginID     = "5b7d9f22-4d87-4c0f-a2c1-8e2b50c8bca0"
 	WoxMemoryPluginID         = "8a81b2cd-0d43-4085-a7e6-05806a309e5a"
 )

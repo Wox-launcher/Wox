@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 	"wox/common"
 	"wox/i18n"
 	"wox/setting/definition"
@@ -27,8 +28,9 @@ const (
 	// enable this to handle QueryTypeSelection, by default Wox will only pass QueryTypeInput to plugin
 	MetadataFeatureQuerySelection MetadataFeatureName = "querySelection"
 
-	// enable this feature to let Wox debounce queries between user input
-	// params see MetadataFeatureParamsDebounce
+	// Plugin-wide query debounce default; input queries may override it through
+	// TriggerDebounceMs, RegisterTriggerKeywordOption or MetadataCommand.DebounceMs.
+	// Params: MetadataFeatureParamsDebounce.
 	MetadataFeatureDebounce MetadataFeatureName = "debounce"
 
 	// enable this feature to let Wox don't auto score results
@@ -67,18 +69,21 @@ const (
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
 // All properties are immutable after initialization
 type Metadata struct {
-	Id                 string
-	Name               common.I18nString // support i18n: prefix, so don't use "name" directly
-	Author             string
-	Version            string
-	MinWoxVersion      string
-	Runtime            string
-	Description        common.I18nString // support i18n: prefix, so don't use "description" directly
-	Icon               string            // should be WoxImage.String()
-	Website            string
-	Entry              string
-	TriggerKeywords    []string                     //User can add/update/delete trigger keywords
-	TriggerQueryHints  map[string]*common.QueryHint `json:",omitempty"`
+	Id                string
+	Name              common.I18nString // support i18n: prefix, so don't use "name" directly
+	Author            string
+	Version           string
+	MinWoxVersion     string
+	Runtime           string
+	Description       common.I18nString // support i18n: prefix, so don't use "description" directly
+	Icon              string            // should be WoxImage.String()
+	Website           string
+	Entry             string
+	TriggerKeywords   []string                     //User can add/update/delete trigger keywords
+	TriggerQueryHints map[string]*common.QueryHint `json:",omitempty"`
+	// TriggerDebounceMs overrides plugin-wide debounce for exact input trigger keywords.
+	// Missing entries inherit the plugin default; zero executes immediately.
+	TriggerDebounceMs  map[string]int `json:",omitempty"`
 	Commands           []MetadataCommand
 	SupportedOS        []string
 	Features           []MetadataFeature
@@ -228,6 +233,9 @@ func (m *Metadata) GetFeatureParamsForDebounce() (MetadataFeatureParamsDebounce,
 				intervalMs, err := parseFeatureIntParam(v)
 				if err != nil {
 					return MetadataFeatureParamsDebounce{}, fmt.Errorf("debounce feature IntervalMs param is not a valid number: %s", err.Error())
+				}
+				if intervalMs < 0 {
+					return MetadataFeatureParamsDebounce{}, errors.New("debounce feature IntervalMs must be non-negative")
 				}
 				return MetadataFeatureParamsDebounce{
 					IntervalMs: intervalMs,
@@ -414,6 +422,28 @@ type MetadataCommand struct {
 	QueryHint   *common.QueryHint `json:",omitempty"`
 	Command     string
 	Description common.I18nString // support i18n: prefix
+	// DebounceMs overrides trigger and plugin defaults for this input command.
+	DebounceMs *int `json:",omitempty"`
+}
+
+// ValidateDebounce rejects invalid overrides before plugin metadata becomes active.
+func (m *Metadata) ValidateDebounce() error {
+	for keyword, interval := range m.TriggerDebounceMs {
+		if keyword == "" || keyword == "*" || strings.ContainsFunc(keyword, unicode.IsSpace) || interval < 0 {
+			return fmt.Errorf("invalid TriggerDebounceMs entry %q: expected a concrete keyword and non-negative milliseconds", keyword)
+		}
+	}
+	return validateCommandDebounce(m.Commands)
+}
+
+// validateCommandDebounce also guards commands registered after plugin initialization.
+func validateCommandDebounce(commands []MetadataCommand) error {
+	for _, command := range commands {
+		if command.DebounceMs != nil && *command.DebounceMs < 0 {
+			return fmt.Errorf("command %q DebounceMs must be non-negative", command.Command)
+		}
+	}
+	return nil
 }
 
 // MetadataGlance declares one plugin-local Global Glance candidate. The UI stores

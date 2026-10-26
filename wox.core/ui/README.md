@@ -237,7 +237,7 @@ What is left after these changes is mostly native: about 10 MB of committed-but-
 
 The 30-second stage destroys the whole Windows renderer: swap chains, Direct2D targets and device, and this window's reference to the shared D3D device, which is released when no other window holds it. The native WebView host keeps a raw pointer to the renderer's composition visuals, so the renderer can only be released after the WebView. Pages opened with caching enabled, such as sites with "keep in background" turned on, intentionally survive hiding; while one exists, the stage is skipped and the renderer stays resident. Every other page is already discarded on hide, so the stage closes the idle WebView controller and then releases the renderer. The stage used to be skipped whenever a controller existed, and the controller outlives every hide, so a single ordinary web preview kept the renderer resident for the rest of the hidden period.
 
-On the same Windows machine (October 10, 2026; `sqlite_fts5,wox_automation` build, isolated data directory, one `webview x` preview, then hidden), the private working set 45 seconds after hide was:
+On the same Windows machine (October 10, 2026; `sqlite_fts5,wox_automation` build, isolated data directory, one embedded website preview, then hidden), the private working set 45 seconds after hide was:
 
 | Build | Hidden + 5 s | Hidden + 45 s | Commit at 45 s |
 | --- | ---: | ---: | ---: |

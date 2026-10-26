@@ -14,7 +14,7 @@ import (
 // queryScheduler owns cross-query timing state, while queryExecution owns each run.
 // Business callbacks do not receive scheduler channels or completion counters.
 type queryScheduler struct {
-	debounceQueryTimer *util.HashMap[string, *debounceTimer]
+	debounceQueryTimer *util.HashMap[queryDebounceKey, *debounceTimer]
 	// Learn from result-producing jobs through channel delivery, not just plugin execution.
 	pluginResultDeliveryLatency *util.HashMap[string, *util.EWMA]
 }
@@ -30,7 +30,7 @@ type queryExecutionCallbacks struct {
 // newQueryScheduler initializes the state shared by all executions of one Manager.
 func newQueryScheduler() *queryScheduler {
 	return &queryScheduler{
-		debounceQueryTimer:          util.NewHashMap[string, *debounceTimer](),
+		debounceQueryTimer:          util.NewHashMap[queryDebounceKey, *debounceTimer](),
 		pluginResultDeliveryLatency: util.NewHashMap[string, *util.EWMA](),
 	}
 }
@@ -38,6 +38,12 @@ func newQueryScheduler() *queryScheduler {
 type debounceTimer struct {
 	timer  *time.Timer
 	onStop func()
+}
+
+// queryDebounceKey keeps independent launcher windows from cancelling one another's searches.
+type queryDebounceKey struct {
+	sessionID string
+	pluginID  string
 }
 
 // queryPluginJob is the scheduler's normalized decision for one plugin.
@@ -114,7 +120,9 @@ func (s *queryScheduler) start(ctx context.Context, query Query, jobs []queryPlu
 		tracker:     newQueryTracker(immediateDoneChan, doneChan),
 		jobs:        jobs,
 	}
-	go execution.start()
+	// Install pending timers before returning so consecutive calls cannot replace
+	// a newer query with an older one merely because their setup goroutines raced.
+	execution.start()
 	return QueryExecution{
 		Results:              resultsChan,
 		ImmediateDone:        immediateDoneChan,
@@ -155,11 +163,17 @@ func (e *queryExecution) startPluginJob(job queryPluginJob) {
 		e.replaceDebouncedJob(job)
 		return
 	}
+	e.scheduler.debounceQueryTimer.Compute(queryDebounceKey{e.query.SessionId, job.pluginInstance.Metadata.Id}, func(pending *debounceTimer, _ bool) (*debounceTimer, bool) {
+		if pending != nil && pending.timer.Stop() {
+			pending.onStop()
+		}
+		return nil, false
+	})
 	e.runPluginJob(job)
 }
 
 // replaceDebouncedJob completes a stopped job before installing its replacement.
-// Keys intentionally remain plugin-wide, including across UI sessions.
+// Timer replacement is atomic within a session and plugin.
 func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 	pluginInstance := job.pluginInstance
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
@@ -170,37 +184,38 @@ func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 		tracker.SetInt("intervalMs", job.intervalMs)
 		tracker.Log(e.ctx)
 	}
-	if v, ok := e.scheduler.debounceQueryTimer.Load(pluginInstance.Metadata.Id); ok {
-		if v.timer.Stop() {
-			v.onStop()
+	key := queryDebounceKey{e.query.SessionId, pluginInstance.Metadata.Id}
+	e.scheduler.debounceQueryTimer.Compute(key, func(previous *debounceTimer, _ bool) (*debounceTimer, bool) {
+		if previous != nil && previous.timer.Stop() {
+			previous.onStop()
 		}
-	}
-
-	debounceScheduledAt := util.GetSystemTimestamp()
-	timer := time.AfterFunc(time.Duration(job.intervalMs)*time.Millisecond, func() {
-		if tracker := timetracking.New("debounce_fire"); tracker.Enabled() {
-			tracker.SetRawString("queryId", e.query.Id)
-			tracker.SetRawString("plugin", pluginLabel)
-			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
-			tracker.Log(e.ctx)
+		pending := &debounceTimer{}
+		debounceScheduledAt := util.GetSystemTimestamp()
+		pending.timer = time.AfterFunc(time.Duration(job.intervalMs)*time.Millisecond, func() {
+			e.scheduler.debounceQueryTimer.Compute(key, func(current *debounceTimer, exists bool) (*debounceTimer, bool) {
+				return current, exists && current != pending
+			})
+			if tracker := timetracking.New("debounce_fire"); tracker.Enabled() {
+				tracker.SetRawString("queryId", e.query.Id)
+				tracker.SetRawString("plugin", pluginLabel)
+				tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+				tracker.Log(e.ctx)
+			}
+			e.runPluginJob(job)
+		})
+		pending.onStop = func() {
+			// A newer query replaced this debounced run before it started. Mark this
+			// job as finished for the current query lifecycle so counters do not hang.
+			util.GetLogger().Debug(e.ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(e.ctx)))
+			if tracker := timetracking.New("debounce_cancel"); tracker.Enabled() {
+				tracker.SetRawString("queryId", e.query.Id)
+				tracker.SetRawString("plugin", pluginLabel)
+				tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
+				tracker.Log(e.ctx)
+			}
+			e.tracker.finishJob(job.blocksFallback)
 		}
-		e.runPluginJob(job)
-	})
-	onStop := func() {
-		// A newer query replaced this debounced run before it started. Mark this
-		// job as finished for the current query lifecycle so counters do not hang.
-		util.GetLogger().Debug(e.ctx, fmt.Sprintf("[%s] previous debounced query cancelled", pluginInstance.GetName(e.ctx)))
-		if tracker := timetracking.New("debounce_cancel"); tracker.Enabled() {
-			tracker.SetRawString("queryId", e.query.Id)
-			tracker.SetRawString("plugin", pluginLabel)
-			tracker.SetInt64("waitedMs", util.GetSystemTimestamp()-debounceScheduledAt)
-			tracker.Log(e.ctx)
-		}
-		e.tracker.finishJob(job.blocksFallback)
-	}
-	e.scheduler.debounceQueryTimer.Store(pluginInstance.Metadata.Id, &debounceTimer{
-		timer:  timer,
-		onStop: onStop,
+		return pending, true
 	})
 }
 

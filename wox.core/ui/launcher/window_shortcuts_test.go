@@ -67,9 +67,9 @@ func TestWindowCloseShortcutClosesWebViewBeforeLauncher(t *testing.T) {
 	app := bindTestApp(&App{
 		visible: true,
 		querySession: queryController{
-			editor:       woxui.NewTextEditor("webview example"),
-			query:        newInputQuery("webview example"),
-			queryContext: queryContext{PluginID: common.WebViewPluginID},
+			editor:       woxui.NewTextEditor("example "),
+			query:        newInputQuery("example "),
+			queryContext: queryContext{PluginID: common.WebSearchPluginID},
 		},
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://example.com","cacheDisabled":false}`},
 	})
@@ -82,7 +82,7 @@ func TestWindowCloseShortcutClosesWebViewBeforeLauncher(t *testing.T) {
 		fallbackCalled = true
 		return true
 	})
-	if !handled || fallbackCalled || !app.visible || app.webView.webViewPreviewData != "" || app.querySession.query.QueryText != webViewPluginQuery || app.querySession.editor.State().Text != webViewPluginQuery {
+	if !handled || fallbackCalled || !app.visible || app.webView.webViewPreviewData != "" || app.querySession.query.QueryText != "example " || app.querySession.editor.State().Text != "example " {
 		t.Fatal("WebView close shortcut did not dismiss the page before the launcher or custom action")
 	}
 }
@@ -92,20 +92,20 @@ func TestWindowCloseShortcutDefersWebViewTeardown(t *testing.T) {
 	app := bindTestApp(&App{
 		visible: true,
 		querySession: queryController{
-			editor:       woxui.NewTextEditor("webview example"),
-			query:        newInputQuery("webview example"),
-			queryContext: queryContext{PluginID: common.WebViewPluginID},
+			editor:       woxui.NewTextEditor("example "),
+			query:        newInputQuery("example "),
+			queryContext: queryContext{PluginID: common.WebSearchPluginID},
 		},
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://example.com"}`},
 	})
 	var pending func()
 	app.uiPost = func(fn func()) error { pending = fn; return nil }
 	app.requestLauncherShortcutClose()
-	if pending == nil || app.webView.webViewPreviewData == "" || app.querySession.query.QueryText != "webview example" {
+	if pending == nil || app.webView.webViewPreviewData == "" || app.querySession.query.QueryText != "example " {
 		t.Fatal("browser close ran before the native key callback returned")
 	}
 	pending()
-	if app.webView.webViewPreviewData != "" || app.querySession.query.QueryText != webViewPluginQuery || !app.visible {
+	if app.webView.webViewPreviewData != "" || app.querySession.query.QueryText != "example " || !app.visible {
 		t.Fatal("queued close did not dismiss the plugin page")
 	}
 }

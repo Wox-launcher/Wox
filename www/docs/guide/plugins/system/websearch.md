@@ -27,6 +27,9 @@ The default configuration includes Google with the `g` keyword. Add more engines
 | Preview Width | Optional launcher width in pixels for **Open in WebView**. Grouped under WebView. |
 | Preview Height | Optional launcher height in pixels for **Open in WebView**. Grouped under WebView. |
 | Inject CSS | Optional CSS injected into that search's in-launcher WebView. Grouped under WebView. |
+| Open in WebView by default | Display a single completed search directly inside Wox. Grouped under WebView. |
+| User Agent | Desktop/mobile browser preset for the embedded page. Auto uses the native engine default. |
+| Run in background | Keep the embedded page loaded after hiding Wox. Off by default. |
 
 ## URL Variables
 
@@ -45,7 +48,15 @@ https://www.google.com/search?q={wox:parameter?name=query}
 
 If an engine has multiple URLs, Wox opens each URL in order.
 
-On Windows and macOS, a completed search also offers **Open in WebView**. Enter still opens the browser. `Ctrl+Enter` (`Cmd+Enter` on macOS) replaces the result list with an in-launcher preview of the first URL and keeps the query box. Escape returns focus to the query and destroys that preview. The preview action panel includes Refresh (`Ctrl+R` / `Cmd+R`), Go Back (`Ctrl+[` / `Cmd+[`), Go Forward (`Ctrl+]` / `Cmd+]`), and Open in Browser (`Ctrl+O` / `Cmd+O`), which hides Wox. Each search can set its own preview width, height, and injected CSS in the collapsed WebView group of the row editor. Linux does not include this action because Wox has no WebView preview there yet.
+Enable **Open in WebView by default** to display a single search result directly inside Wox. The default **Focus Web Page** action uses Enter to move keyboard focus to the displayed page without reloading it. Otherwise, Enter opens the browser and `Ctrl+Enter` (`Cmd+Enter` on macOS) opens the first URL in an embedded preview. Windows, macOS and Linux support WebView; Linux needs WebKitGTK 4.1 or 4.0 installed.
+
+The preview action panel includes Refresh, Go Back, Go Forward, Open in Browser and Close Webpage. **Run in background** retains the page when Wox is hidden; explicitly closing the page releases it. Preview-only query-hotkey panels also offer **Hide Webpage** when background retention is enabled.
+
+## Fixed Websites
+
+URLs do not need parameters. For example, add keyword `x`, title `X`, URL `https://x.com`, and enable **Open in WebView by default**. Type `x` followed by a space to open the site. Fixed sites focus the page immediately; searches with parameter slots keep focus in the query box.
+
+To open a site directly from a Query Hotkey, use its WebSearch trigger followed by a space. See [Hotkeys](../../usage/hotkeys.md).
 
 Existing `{query}`, `{lower_query}` and `{upper_query}` placeholders in URLs
 and titles migrate automatically to `{wox:parameter?name=query}` and

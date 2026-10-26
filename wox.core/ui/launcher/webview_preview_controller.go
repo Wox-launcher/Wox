@@ -26,8 +26,6 @@ type webViewPreviewController struct {
 	restoreQueryTextInput            func()
 	restoreQueryFocusAfterShow       func() bool
 	queryCanFocus                    func() bool
-	setQuery                         func(query plainQuery)
-	sendCurrentQuery                 func() error
 	applyWindowBounds                func() error
 	hideWindow                       func(notify bool) error
 	hasCacheableWebViewPreviewLocked func() bool
@@ -65,14 +63,6 @@ func (a *App) bindWebViewPreview() {
 	a.webView.restoreQueryTextInput = a.restoreQueryTextInput
 	a.webView.restoreQueryFocusAfterShow = a.restoreQueryFocusAfterShow
 	a.webView.queryCanFocus = a.queryCanFocus
-	a.webView.setQuery = a.setQuery
-	// Closing a WebView page re-queries the WebView plugin only when core is connected.
-	a.webView.sendCurrentQuery = func() error {
-		if a.services == nil {
-			return nil
-		}
-		return a.sendCurrentQuery()
-	}
 	a.webView.applyWindowBounds = a.applyWindowBounds
 	a.webView.hideWindow = a.hideWindow
 	a.webView.hasCacheableWebViewPreviewLocked = a.hasCacheableWebViewPreviewLocked

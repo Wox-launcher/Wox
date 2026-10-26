@@ -23,8 +23,9 @@ const (
 	webViewPreviewInjectCSSContextKey = "injectCss"
 	webViewPreviewWidthContextKey     = "width"
 	webViewPreviewHeightContextKey    = "height"
+	webViewPreviewUserAgentContextKey = "userAgent"
+	webViewPreviewKeepContextKey      = "keepInBackground"
 	webViewPreviewAutomationID        = "launcher.preview.webview"
-	webViewPluginQuery                = "webview"
 )
 
 type webViewPreviewData struct {
@@ -187,11 +188,29 @@ func (a *webViewPreviewController) activateWebViewPreview(previewData string) bo
 		a.webViewPreviewData = previewData
 		a.webViewPreviewError = ""
 		a.webViewNavigation = woxui.WebViewNavigationState{}
-		if a.isGlobalWebViewPreview() && !a.keepQueryFocusOnWebViewActivate {
+		// Query-owned full previews keep typing in the visible query box.
+		// Fixed WebSearch URLs are page launchers; searches with argument slots keep query focus.
+		keepQueryFocus := launcherPreviewRatio(a.resultList.layout, false) == 0 &&
+			!a.show.HideQueryBox && !a.webViewFullscreen
+		if a.querySession.queryContext.PluginID == common.WebSearchPluginID {
+			hasArguments := false
+			if hint := a.querySession.query.QueryHint; hint != nil {
+				for _, element := range hint.Elements {
+					hasArguments = hasArguments || element.Kind == common.QueryElementArgument
+				}
+			}
+			keepQueryFocus = keepQueryFocus && hasArguments
+		}
+		if a.isGlobalWebViewPreview() && !a.keepQueryFocusOnWebViewActivate && !keepQueryFocus {
 			// HTML previews change while typing or selecting results; taking focus
 			// here would send subsequent arrow keys to the page instead of the list.
 			if data, err := decodeWebViewPreview(previewData); err == nil && data.HTML == "" {
-				a.beginWebViewKeyboardFocus()
+				// URL replacement detaches the old native page after this call.
+				// Defer its focus handoff until the new page is attached by OnBounds.
+				a.webViewWantKeyboardFocus = true
+				if !urlChanged {
+					a.requestWebViewKeyboardFocus()
+				}
 			}
 		}
 	}
@@ -293,9 +312,22 @@ func (a *webViewPreviewController) enterWebViewPreviewMode(resultIndex int, cont
 	if resultIndex < 0 || resultIndex >= len(a.resultList.results) || !isWebViewPreviewURL(previewURL) {
 		return
 	}
-	// Escape destroys this surface; caching by URL would restore the old scroll position.
+	_, currentPreview, visible := a.previews.selectedPreviewForLifecycle()
+	if visible && a.resultList.selected == resultIndex && currentPreview.PreviewType == "webview" && currentPreview.PreviewData == a.webViewPreviewData {
+		if current, err := decodeWebViewPreview(currentPreview.PreviewData); err == nil && current.URL == previewURL {
+			// Automatic previews already own the page; entering manual mode would replace
+			// that ownership and could discard navigation or scroll state on Escape.
+			a.beginWebViewKeyboardFocus()
+			if a.window() != nil {
+				_ = a.window().Invalidate()
+			}
+			return
+		}
+	}
 	payload, err := json.Marshal(webViewPreviewData{
-		URL: previewURL, InjectCSS: strings.TrimSpace(contextData[webViewPreviewInjectCSSContextKey]), CacheDisabled: true,
+		URL: previewURL, InjectCSS: strings.TrimSpace(contextData[webViewPreviewInjectCSSContextKey]),
+		UserAgent:     strings.TrimSpace(contextData[webViewPreviewUserAgentContextKey]),
+		CacheDisabled: contextData[webViewPreviewKeepContextKey] != "true",
 	})
 	if err != nil {
 		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("marshal webview preview: %v", err))
@@ -315,8 +347,8 @@ func (a *webViewPreviewController) enterWebViewPreviewMode(resultIndex int, cont
 	}
 }
 
-// isGlobalWebViewPreview reports a result-owned WebView page, such as `webview g`
-// or Web Search's in-launcher preview. File previews that happen to render as a
+// isGlobalWebViewPreview reports a result-owned WebView page, such as a WebSearch site.
+// File previews that happen to render as a
 // WebView stay on the query box.
 func (a *webViewPreviewController) isGlobalWebViewPreview() bool {
 	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
@@ -342,8 +374,7 @@ func parseOptionalPositiveInt(value string) int {
 // requestWebViewKeyboardFocus moves keyboard input onto the native page. Host
 // RequestFocus takes the query-box caret; composition WebView2 and WKWebView
 // still need a separate native handoff, and the first Show may still be creating
-// the controller. OnBounds retries until both succeed so plugin pages such as
-// `webview g` match Web Search's Ctrl+Enter focus.
+// the controller. OnBounds retries until both succeed.
 func (a *webViewPreviewController) requestWebViewKeyboardFocus() {
 	if !a.webViewWantKeyboardFocus {
 		return
@@ -375,11 +406,19 @@ func (a *webViewPreviewController) exitWebViewPreviewMode() {
 	if !a.webViewFullscreen {
 		return
 	}
+	if a.isWebViewFullPreviewWindow() {
+		// A hotkey panel has no query box to return to after closing its page.
+		if err := a.hideWindow(true); err != nil {
+			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("close web search preview panel: %v", err))
+		}
+		return
+	}
+	keepInBackground := a.hasCacheableWebViewPreviewLocked()
 	a.clearWebViewPreviewModeLocked()
 	a.previews.reconcileSelectedPreview()
-	// Fullscreen search preview is ephemeral: hide would keep a cached document at its
-	// last scroll position, so the next Ctrl+Enter must not reuse that session.
-	a.resetWebView()
+	if !keepInBackground {
+		a.resetWebView()
+	}
 	a.restoreQueryTextInput()
 	a.querySession.selectEntireQuery()
 	_ = a.applyWindowBounds()
@@ -426,46 +465,36 @@ func (a *webViewPreviewController) canHideWebViewPage() bool {
 	return a.isWebViewFullPreviewWindow() && a.hasCacheableWebViewPreviewLocked()
 }
 
-// closeWebViewPage restores search previews to their owner rather than switching every browser to the WebView plugin.
+// closeWebViewPage closes preview-only windows or hides the owning result's split preview.
 func (a *webViewPreviewController) closeWebViewPage() {
-	if a.webViewFullscreen {
+	fullPreview := a.isWebViewFullPreviewWindow() || launcherPreviewRatio(a.resultList.layout, false) == 0
+	if a.webViewFullscreen && !fullPreview {
+		// Explicit close releases a cached page too; Escape may keep it in the background.
+		a.resetWebView()
 		a.exitWebViewPreviewMode()
 		return
 	}
+	// Restoring a query-owned full preview would immediately reopen the page being closed.
+	a.clearWebViewPreviewModeLocked()
 	a.resetWebView()
 	a.deactivateWebViewPreview()
-	if a.isWebViewFullPreviewWindow() || (a.querySession.queryContext.PluginID != common.WebViewPluginID && launcherPreviewRatio(a.resultList.layout, false) == 0) {
+	if fullPreview {
 		if err := a.hideWindow(true); err != nil {
 			util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("close full-preview webview page: %v", err))
 		}
 		return
 	}
-	if a.querySession.queryContext.PluginID != common.WebViewPluginID {
-		// HTML and media file previews share the native browser. Suppress the pane
-		// until manual reopening or the next query so reconciliation cannot reload it.
-		a.previews.reconcilePreviewVisibility()
-		visible := false
-		a.previews.previewVisibility.visible = &visible
-		a.previews.reconcileSelectedPreview()
-		a.restoreQueryFocusAfterShow()
-		a.restoreQueryTextInput()
-		_ = a.applyWindowBounds()
-		if a.window() != nil {
-			_ = a.window().Invalidate()
-		}
-		return
-	}
-	a.show.HideQueryBox = false
-	a.show.HideToolbar = false
-	a.show.ShowPreviewTitleBar = false
-	a.setQuery(newInputQuery(webViewPluginQuery))
-	if a.host() != nil {
-		a.host().RequestFocus(launcherview.LauncherQueryInputKey)
-	}
-	if err := a.sendCurrentQuery(); err != nil {
-		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("query webview after close page: %v", err))
-	}
+	// Suppress the pane until manual reopening or the next query.
+	a.previews.reconcilePreviewVisibility()
+	visible := false
+	a.previews.previewVisibility.visible = &visible
+	a.previews.reconcileSelectedPreview()
+	a.restoreQueryFocusAfterShow()
+	a.restoreQueryTextInput()
 	_ = a.applyWindowBounds()
+	if a.window() != nil {
+		_ = a.window().Invalidate()
+	}
 }
 
 // hideWebViewPage hides a cacheable full-preview window without destroying the page.

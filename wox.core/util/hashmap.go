@@ -76,6 +76,21 @@ func (h *HashMap[K, V]) LoadOrStore(k K, v V) (actual V, loaded bool) {
 	return v, false
 }
 
+// Compute atomically reads and updates one entry. Returning keep=false removes it.
+// The callback runs under the map's write lock: keep it short and never call this
+// map's methods from it. Use this for compound operations instead of external locks.
+func (h *HashMap[K, V]) Compute(k K, update func(value V, exists bool) (next V, keep bool)) {
+	h.rw.Lock()
+	defer h.rw.Unlock()
+	value, exists := h.inner[k]
+	next, keep := update(value, exists)
+	if keep {
+		h.inner[k] = next
+	} else {
+		delete(h.inner, k)
+	}
+}
+
 func (h *HashMap[K, V]) Keys() []K {
 	h.rw.RLock()
 	defer h.rw.RUnlock()

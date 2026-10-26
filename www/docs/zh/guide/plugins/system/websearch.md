@@ -27,6 +27,9 @@ g Wox Launcher
 | 预览宽度 | 可选。**在 WebView 中打开** 时启动器窗口的像素宽度。放在 WebView 分组。 |
 | 预览高度 | 可选。**在 WebView 中打开** 时启动器窗口的像素高度。放在 WebView 分组。 |
 | 注入 CSS | 可选，注入到该搜索应用内 WebView 预览。放在 WebView 分组。 |
+| 默认使用 WebView | 单个搜索结果直接在 Wox 中展示。放在 WebView 分组。 |
+| User Agent | 内嵌网页使用的桌面或移动浏览器预设。自动模式使用原生引擎默认值。 |
+| 后台运行 | 隐藏 Wox 后保留已加载的网页。默认关闭。 |
 
 ## URL 变量
 
@@ -45,7 +48,15 @@ https://www.google.com/search?q={wox:parameter?name=query}
 
 如果一个搜索引擎配置了多个 URL，Wox 会按顺序打开。
 
-在 Windows 和 macOS 上，完整的搜索结果还会提供 **在 WebView 中打开**。Enter 仍然打开浏览器。`Ctrl+Enter`（macOS 上为 `Cmd+Enter`）会把结果列表替换成第一条 URL 的应用内预览，并保留查询框。按 Escape 把焦点交回查询框并销毁这次预览。预览的操作面板包含刷新（`Ctrl+R` / `Cmd+R`）、后退（`Ctrl+[` / `Cmd+[`）、前进（`Ctrl+]` / `Cmd+]`）和在系统浏览器中打开（`Ctrl+O` / `Cmd+O`，打开后隐藏 Wox）。每条搜索都可以在行编辑器默认折叠的 WebView 分组里单独设置预览宽度、高度和注入 CSS。Linux 目前没有 WebView 预览，因此不会显示这个操作。
+启用 **默认使用 WebView** 后，单个搜索结果直接在 Wox 内展示。默认操作为 **聚焦网页**，按 Enter 将键盘焦点交给当前页面，不重新加载。未启用时，Enter 打开浏览器，`Ctrl+Enter`（macOS 上为 `Cmd+Enter`）打开第一条 URL 的内嵌预览。Windows、macOS 和 Linux 均支持 WebView；Linux 需要安装 WebKitGTK 4.1 或 4.0。
+
+预览操作面板提供刷新、后退、前进、在浏览器中打开和关闭网页。启用 **后台运行** 后，隐藏 Wox 会保留页面；显式关闭网页会释放它。通过快捷键打开的全预览面板在启用后台运行时还提供 **隐藏网页**。
+
+## 固定网站
+
+URL 不必包含参数。例如添加关键词 `x`、标题 `X`、URL `https://x.com`，并启用 **默认使用 WebView**。输入 `x` 后加一个空格即可打开。固定网站直接聚焦网页；带参数槽位的搜索继续保留查询框焦点。
+
+要通过快捷键查询直接打开网站，使用网页搜索的触发关键词加空格即可。参见[快捷键](../../usage/hotkeys.md)。
 
 已有标题和 URL 中的 `{query}`、`{lower_query}`、`{upper_query}` 会自动迁移为
 `{wox:parameter?name=query}` 以及带 `case=lower` / `case=upper` 的形式。

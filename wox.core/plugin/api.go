@@ -20,6 +20,9 @@ type LogLevel = string
 type RegisterTriggerKeywordOption struct {
 	Keyword   string
 	QueryHint *common.QueryHint
+	// DebounceMs overrides plugin-wide debounce for input queries using this keyword.
+	// Nil inherits the metadata trigger policy, then the plugin default; zero executes immediately.
+	DebounceMs *int
 	// QueryVariables is core-only context requested by built-in searches before launcher activation.
 	QueryVariables []QueryVariable `json:"-"`
 }
@@ -583,7 +586,11 @@ func (a *APIImpl) OnDragOut(ctx context.Context, option DragOutListenOption) Dra
 }
 
 func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []MetadataCommand) {
-	a.pluginInstance.RuntimeQueryCommands = append([]MetadataCommand(nil), commands...)
+	if err := validateCommandDebounce(commands); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("register query commands: %v", err))
+		return
+	}
+	a.pluginInstance.setRuntimeQueryCommands(commands)
 }
 
 func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult {

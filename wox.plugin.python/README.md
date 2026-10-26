@@ -19,6 +19,14 @@ uv add wox-plugin
 
 ## Usage
 
+Query debounce can be declared in `plugin.json` at plugin, trigger and command
+levels. Command `DebounceMs` overrides `TriggerDebounceMs[keyword]`, which overrides
+the `debounce` feature's `IntervalMs`. Omit a value to inherit, or use `0` to run
+immediately. For runtime registration, pass `debounce_ms` to
+`RegisterTriggerKeywordOption` or `MetadataCommand`; `None` inherits the next level.
+Trigger/command overrides apply to input queries only.
+See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
+
 Use `WoxPreview(..., default_hidden=True)` to keep a result's preview collapsed initially.
 Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
 applies to all results in the current query, including live updates. A new query restores

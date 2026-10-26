@@ -220,6 +220,9 @@ func validateSingleFilePluginMetadata(_ context.Context, filePath string, parsed
 	if err := metadata.ValidateGlances(); err != nil {
 		return Metadata{}, fmt.Errorf("invalid glances: %w", err)
 	}
+	if err := metadata.ValidateDebounce(); err != nil {
+		return Metadata{}, err
+	}
 
 	metadata.Entry = filepath.Base(filePath)
 	metadata.Directory = util.GetLocation().GetUserSingleFilePluginsDirectory()

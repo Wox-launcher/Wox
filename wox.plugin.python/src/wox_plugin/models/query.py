@@ -111,6 +111,8 @@ class MetadataCommand:
 
     aliases: list[str] = field(default_factory=list)
     query_hint: Optional[QueryHint] = None
+    # None inherits the trigger/plugin default; zero runs immediately.
+    debounce_ms: Optional[int] = None
 
     def to_json(self) -> str:
         """
@@ -125,6 +127,7 @@ class MetadataCommand:
                 "Description": self.description,
                 "Aliases": self.aliases,
                 "QueryHint": self.query_hint.to_dict() if self.query_hint else None,
+                "DebounceMs": self.debounce_ms,
             }
         )
 
@@ -143,6 +146,9 @@ class MetadataCommand:
         return cls(
             command=data.get("Command", ""),
             description=data.get("Description", ""),
+            aliases=data.get("Aliases", []),
+            query_hint=QueryHint.from_value(data.get("QueryHint")),
+            debounce_ms=data.get("DebounceMs"),
         )
 
 

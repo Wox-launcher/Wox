@@ -17,6 +17,9 @@ import (
 // registerTriggerKeyword serializes ownership checks and registration so concurrent plugins cannot both claim a keyword.
 func (m *Manager) registerTriggerKeyword(instance *Instance, option RegisterTriggerKeywordOption) bool {
 	keyword := option.Keyword
+	if option.DebounceMs != nil && *option.DebounceMs < 0 {
+		return false
+	}
 	if keyword == "" || keyword == "*" || strings.ContainsFunc(keyword, unicode.IsSpace) {
 		return false
 	}
@@ -55,6 +58,10 @@ func (m *Manager) registerTriggerKeyword(instance *Instance, option RegisterTrig
 	}
 	option.QueryHint = option.QueryHint.Clone()
 	option.QueryVariables = slices.Clone(option.QueryVariables)
+	if option.DebounceMs != nil {
+		interval := *option.DebounceMs
+		option.DebounceMs = &interval
+	}
 	instance.runtimeTriggerOptions[keyword] = option
 	return true
 }

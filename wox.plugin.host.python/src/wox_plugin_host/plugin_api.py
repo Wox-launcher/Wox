@@ -269,7 +269,7 @@ class PluginAPI(PublicAPI):
         await self.invoke_method(
             ctx,
             "RegisterQueryCommands",
-            {"commands": json.dumps([command.__dict__ for command in commands])},
+            {"commands": json.dumps([json.loads(command.to_json()) for command in commands])},
         )
 
     async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:

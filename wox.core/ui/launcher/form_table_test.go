@@ -827,7 +827,7 @@ func TestReplaceQueryHotkeyVariablesForTestUsesSampleValues(t *testing.T) {
 	if got != want {
 		t.Fatalf("test query = %q, want %q", got, want)
 	}
-	if got := replaceQueryHotkeyVariablesForTest("webview x "); got != "webview x " {
+	if got := replaceQueryHotkeyVariablesForTest("x "); got != "x " {
 		t.Fatalf("trailing spaces must stay intact for query tests, got %q", got)
 	}
 }

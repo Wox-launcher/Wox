@@ -14,18 +14,19 @@ type Instance struct {
 	imageMu          sync.RWMutex
 	imageCacheClosed bool
 
-	Plugin               Plugin                 // plugin implementation
-	API                  API                    // APIs exposed to plugin
-	Metadata             Metadata               // metadata parsed from plugin.json
-	IsSystemPlugin       bool                   // is system plugin, see `plugin.md` for more detail
-	RuntimeLoaded        bool                   // host runtime has loaded this plugin
-	Initialized          bool                   // plugin Init has run and runtime callbacks may be registered
-	IsDevPlugin          bool                   // plugins loaded from `local plugin directories` which defined in wpm settings
-	DevPluginDirectory   string                 // absolute path to dev plugin directory defined in wpm settings
-	PluginDirectory      string                 // absolute path to plugin directory
-	Host                 Host                   // plugin host to run this plugin
-	Setting              *setting.PluginSetting // setting for this plugin
-	RuntimeQueryCommands []MetadataCommand      // query commands registered at runtime
+	Plugin                 Plugin                 // plugin implementation
+	API                    API                    // APIs exposed to plugin
+	Metadata               Metadata               // metadata parsed from plugin.json
+	IsSystemPlugin         bool                   // is system plugin, see `plugin.md` for more detail
+	RuntimeLoaded          bool                   // host runtime has loaded this plugin
+	Initialized            bool                   // plugin Init has run and runtime callbacks may be registered
+	IsDevPlugin            bool                   // plugins loaded from `local plugin directories` which defined in wpm settings
+	DevPluginDirectory     string                 // absolute path to dev plugin directory defined in wpm settings
+	PluginDirectory        string                 // absolute path to plugin directory
+	Host                   Host                   // plugin host to run this plugin
+	Setting                *setting.PluginSetting // setting for this plugin
+	RuntimeQueryCommands   []MetadataCommand      // query commands registered at runtime
+	runtimeQueryCommandsMu sync.RWMutex
 
 	runtimeTriggerKeywords   []string
 	runtimeTriggerOptions    map[string]RegisterTriggerKeywordOption
@@ -206,6 +207,47 @@ func (i *Instance) triggerQueryHint(keyword string) *common.QueryHint {
 	return i.Metadata.TriggerQueryHints[keyword].Clone()
 }
 
+// queryDebounceOverride applies the most specific input policy: command, runtime trigger, metadata trigger.
+func (i *Instance) queryDebounceOverride(query Query) (int, bool) {
+	if query.Type != QueryTypeInput {
+		return 0, false
+	}
+	if query.Command != "" {
+		for _, command := range i.GetQueryCommands() {
+			if command.Command == query.Command && command.DebounceMs != nil {
+				return *command.DebounceMs, true
+			}
+		}
+	}
+	if query.TriggerKeyword == "" {
+		return 0, false
+	}
+	i.runtimeTriggerKeywordsMu.RLock()
+	defer i.runtimeTriggerKeywordsMu.RUnlock()
+	option := i.runtimeTriggerOptions[query.TriggerKeyword]
+	if option.DebounceMs != nil {
+		return *option.DebounceMs, true
+	}
+	interval, exists := i.Metadata.TriggerDebounceMs[query.TriggerKeyword]
+	return interval, exists
+}
+
+// setRuntimeQueryCommands takes ownership of mutable command data before publishing it to query readers.
+func (i *Instance) setRuntimeQueryCommands(commands []MetadataCommand) {
+	snapshot := slices.Clone(commands)
+	for index := range snapshot {
+		snapshot[index].Aliases = slices.Clone(snapshot[index].Aliases)
+		snapshot[index].QueryHint = snapshot[index].QueryHint.Clone()
+		if snapshot[index].DebounceMs != nil {
+			interval := *snapshot[index].DebounceMs
+			snapshot[index].DebounceMs = &interval
+		}
+	}
+	i.runtimeQueryCommandsMu.Lock()
+	defer i.runtimeQueryCommandsMu.Unlock()
+	i.RuntimeQueryCommands = snapshot
+}
+
 // PrimaryTriggerKeyword returns the first non-global ("*") trigger keyword.
 // Scoped queries must not use GetTriggerKeywords()[0] because "*" often comes first.
 func (i *Instance) PrimaryTriggerKeyword() string {
@@ -219,6 +261,8 @@ func (i *Instance) PrimaryTriggerKeyword() string {
 
 // query commands to query this plugin. Commands come from plugin metadata and runtime registration only.
 func (i *Instance) GetQueryCommands() []MetadataCommand {
+	i.runtimeQueryCommandsMu.RLock()
+	defer i.runtimeQueryCommandsMu.RUnlock()
 	commands := make([]MetadataCommand, 0, len(i.Metadata.Commands)+len(i.RuntimeQueryCommands))
 	seen := make(map[string]struct{}, len(i.Metadata.Commands)+len(i.RuntimeQueryCommands))
 	translateCtx := context.Background()

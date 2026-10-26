@@ -26,7 +26,7 @@ This suppresses Wox actions without unregistering the shortcuts, so it does not 
 
 ## Query Hotkeys
 
-A Query Hotkey binds a shortcut to a query. Instead of opening Wox and typing `webview x` or `window group Work`, the shortcut does that in one step.
+A Query Hotkey binds a shortcut to a query. Instead of opening Wox and typing `x ` or `window group Work`, the shortcut does that in one step.
 
 Open **Settings -> General -> Query Hotkeys**, add a row, and start from a preset:
 
@@ -46,9 +46,11 @@ Settings also include a **Query Test** button so you can try a hotkey, shortcut,
 | Query | What the hotkey does |
 | --- | --- |
 | `app launchpad` | Open the app grid |
-| `webview x` | Open a compact X panel |
+| `x ` | Open a compact X panel |
 | `window group Work` | Restore a saved workspace |
 | `ai translate {wox:selected_text}` | Translate the current selection |
+
+For the X example, configure a fixed URL in WebSearch, enable **Open in WebView by default**, and include a trailing space after its keyword.
 
 Silent translation is the same pattern: create an AI Command, then bind a Query Hotkey with the **Silent Run** preset. See [AI Commands](../ai/commands.md).
 

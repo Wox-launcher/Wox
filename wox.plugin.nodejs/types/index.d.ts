@@ -7,6 +7,8 @@ export * from "./ai.js"
 export interface RegisterTriggerKeywordOption {
   Keyword: string
   QueryHint?: QueryHint
+  /** Input-query debounce in milliseconds. Omit to inherit the metadata trigger/plugin default; 0 runs immediately. */
+  DebounceMs?: number
 }
 
 export interface RegisterTriggerKeywordResult {

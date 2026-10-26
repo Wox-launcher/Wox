@@ -57,7 +57,7 @@ To recover something you copied earlier, open [clipboard history](/guide/plugins
 
 Wox also includes screenshot capture and annotation, short video recording, notes, and countdown timers. Dictation can run locally after downloading an offline model. For AI Chat and AI Commands, you configure your own model provider and API key. One use is to [translate selected text and replace it in place](/blog/did-you-know-ai-command-silent-translation-query-hotkey). Any model-service charges come from that provider.
 
-I also often use a shortcut to open X in a small window, take a look, and close it again. That combines the [WebView plugin](/guide/plugins/system/webview) with a Query Hotkey, currently on Windows and macOS. The WebView displays the website; the launcher interface itself remains native.
+I also often use a shortcut to open X in a small window, take a look, and close it again. That combines the [WebSearch WebView option](/guide/plugins/system/websearch) with a Query Hotkey, currently on Windows and macOS. The WebView displays the website; the launcher interface itself remains native.
 
 If you repeatedly arrange an editor, browser, and terminal in the same positions, you can save a [workspace layout](/blog/did-you-know-wox-workspace-layouts) and restore it with a shortcut.
 

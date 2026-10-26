@@ -4,6 +4,14 @@ TypeScript type definitions and SDK for developing Wox plugins in TypeScript/Jav
 
 ## Quick Start
 
+Query debounce can be declared in `plugin.json` at plugin, trigger and command
+levels. Command `DebounceMs` overrides `TriggerDebounceMs[keyword]`, which overrides
+the `debounce` feature's `IntervalMs`. Omit a value to inherit, or use `0` to run
+immediately. Runtime `RegisterTriggerKeyword({ Keyword, DebounceMs })` overrides
+the static trigger setting, and `RegisterQueryCommands` accepts `DebounceMs` on
+each `MetadataCommand`. Trigger/command overrides apply to input queries only.
+See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
+
 Set `Preview.DefaultHidden: true` on a result to keep its preview collapsed initially.
 Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
 applies to all results in the current query, including live updates. A new query restores

@@ -57,7 +57,7 @@ Wox 曾经是很多 Windows 用户认识启动器的起点。后来维护逐渐�
 
 截图标注、短视频录制、笔记和倒计时，现在也都能在 Wox 里完成。语音输入可以下载模型后在本地离线运行。AI 聊天和 AI 命令则由你配置自己的模型提供商和 API Key；例如，把选中的一段话[翻译后替换回原处](/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey)。模型服务的费用由对应提供商收取。
 
-我自己也经常用快捷键打开一个 X 的小窗口，看一下就关掉。这是 [WebView 插件](/zh/guide/plugins/system/webview)配合查询热键的用法，目前支持 Windows 和 macOS。这里的 WebView 用来显示网页内容，启动器界面仍然是原生的。
+我自己也经常用快捷键打开一个 X 的小窗口，看一下就关掉。这是 [网页搜索的 WebView 选项](/zh/guide/plugins/system/websearch)配合查询热键的用法，目前支持 Windows 和 macOS。这里的 WebView 用来显示网页内容，启动器界面仍然是原生的。
 
 如果每天都要把编辑器、浏览器和终端摆回同样的位置，还可以保存一套[工作区布局](/zh/blog/did-you-know-wox-workspace-layouts)，下次一键恢复。
 

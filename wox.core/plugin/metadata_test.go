@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"wox/common"
@@ -73,6 +74,33 @@ func TestGetFeatureParamsForDebounceParsesJSONNumbers(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 200, params.IntervalMs)
+}
+
+// TestValidateDebounce rejects malformed scoped settings without requiring the plugin-wide feature.
+func TestValidateDebounce(t *testing.T) {
+	for _, test := range []struct {
+		payload string
+		valid   bool
+	}{
+		{`{}`, true},
+		{`{"TriggerDebounceMs":{"web":500,"fast":0},"Commands":[{"Command":"run","DebounceMs":0}]}`, true},
+		{`{"Commands":[{"Command":"run","DebounceMs":null}]}`, true},
+		{`{"TriggerDebounceMs":{"web":-1}}`, false},
+		{`{"TriggerDebounceMs":{"*":100}}`, false},
+		{`{"TriggerDebounceMs":{"two words":100}}`, false},
+		{`{"TriggerDebounceMs":{"web":1.5}}`, false},
+		{`{"Commands":[{"Command":"run","DebounceMs":-1}]}`, false},
+		{`{"Commands":[{"Command":"run","DebounceMs":1.5}]}`, false},
+	} {
+		var metadata Metadata
+		err := json.Unmarshal([]byte(test.payload), &metadata)
+		if err == nil {
+			err = metadata.ValidateDebounce()
+		}
+		if (err == nil) != test.valid {
+			t.Fatalf("%s: err=%v", test.payload, err)
+		}
+	}
 }
 
 func TestGetFeatureParamsForQueryEnvParsesFolderOnlyRequirement(t *testing.T) {

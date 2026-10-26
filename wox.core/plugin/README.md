@@ -41,7 +41,7 @@ no real plugin process or native window is needed for these regressions.
 
 ## Query scheduling
 
-`query_scheduler.go` owns the plugin-wide debounce timers, per-query executions,
+`query_scheduler.go` owns session/plugin debounce timers, per-query executions,
 fallback/final completion counters, result delivery latency and first-flush
 deadline calculation. Manager selects eligible plugins and supplies three
 callbacks: execute a plugin query, observe its response for history, and restore
@@ -51,12 +51,54 @@ goroutine, delivery and completion are owned by the scheduler.
 
 All jobs are counted before any starts. Debounced jobs count toward `Done` but
 do not block fallback; stopping a replaced timer completes its old job. Timer
-keys remain plugin IDs across sessions. Ordinary plugin responses are delivered
+keys include session and plugin IDs so separate windows do not cancel each other.
+Replacing a delayed query with an immediate query also stops its pending timer.
+Shared maps must use `util.HashMap` rather than a feature-local mutex plus map.
+Timer replacement and conditional removal use `HashMap.Compute` to keep each
+compound operation atomic; separate thread-safe map calls do not provide that
+guarantee. Extend the shared utility when an atomic operation is missing.
+Finished timers are removed. Ordinary plugin responses are delivered
 before completion even when their context was canceled; alias restoration keeps
 its cancellation checks and cancellable send. The public `QueryExecution`
 channels, buffering, completion ordering and 12-20 ms first-flush policy are
 unchanged. This extraction adds no cancellation on window hide, session teardown
-or Manager stop, and does not change timer synchronization or panic recovery.
+or Manager stop, and does not change panic recovery.
+
+Input queries resolve debounce from the most specific declaration:
+`Commands[].DebounceMs`, then runtime `RegisterTriggerKeywordOption.DebounceMs`,
+then `TriggerDebounceMs[keyword]`, then plugin-wide `Features.debounce.IntervalMs`.
+Omission inherits the next level; zero runs immediately; positive milliseconds
+wait for idle input. Trigger and command overrides do not require the plugin-wide
+feature. Selection queries and unscoped global input retain the plugin default.
+Scoped input uses the resolved command and primary trigger. A command override
+starts only after the query parser recognizes the command, not while typing its prefix.
+
+For example, these fields can be included in `plugin.json` or inline metadata:
+
+```json
+{
+  "TriggerKeywords": ["web", "local"],
+  "Features": [{"Name": "debounce", "Params": {"IntervalMs": 200}}],
+  "TriggerDebounceMs": {"web": 500, "local": 0},
+  "Commands": [
+    {"Command": "remote", "Description": "Search online", "DebounceMs": 800},
+    {"Command": "now", "Description": "Run immediately", "DebounceMs": 0},
+    {"Command": "default", "Description": "Use the trigger default"}
+  ]
+}
+```
+
+`web words` waits 500 ms; `local words` runs immediately; `web remote words`
+waits 800 ms; `web now words` runs immediately. Trigger keys are exact concrete
+keywords, not `*`; changing a keyword requires updating its map entry.
+
+Python and Node SDKs expose optional command debounce on `MetadataCommand`
+(`debounce_ms` in Python), including `RegisterQueryCommands`. Existing duplicate
+command precedence is unchanged: metadata commands win over runtime commands.
+Runtime trigger omission or unregistration restores the static trigger policy.
+Negative scoped values reject metadata loading or registration; rejected command
+registration retains the previous command list and logs the error. Runtime commands
+and their debounce values are copied before publication and read under a shared lock.
 
 The existing alias-job deadline test lives in `query_scheduler_test.go`.
 Query planning, fallback, result binding and UI smoke coverage continue to

@@ -77,7 +77,7 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 		a.nativeFile.deactivateNativeFilePreview()
 	}
 	hideWebView := a.deactivatePreviewTypes(previewType)
-	resetWebView := false
+	webViewURLChanged := false
 	switch preview.PreviewType {
 	case "query_requirement_settings":
 		if a.activateRequirementPreview(result, preview) != nil {
@@ -96,19 +96,19 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 	case "dictation_history":
 		a.dictation.reconcileDictationAudioPreview(preview)
 	case "webview":
-		resetWebView = a.webView.activateWebViewPreview(preview.PreviewData)
+		webViewURLChanged = a.webView.activateWebViewPreview(preview.PreviewData)
 	}
 	if fileWebViewData != "" {
-		resetWebView = a.webView.activateWebViewPreview(fileWebViewData)
+		webViewURLChanged = a.webView.activateWebViewPreview(fileWebViewData)
 	}
 	if nativeFilePath != "" {
 		if nativeFileAutoLoad || a.nativeFile.nativeFilePreviewManualPath == nativeFilePath {
 			a.nativeFile.scheduleNativeFilePreview(nativeFilePath)
 		}
 	}
-	if resetWebView {
-		a.webView.resetWebView()
-	} else if hideWebView {
+	if webViewURLChanged || hideWebView {
+		// Detach before switching URLs: native Hide releases ephemeral pages but
+		// preserves sessions explicitly configured to run in the background.
 		a.webView.hideWebView()
 	}
 }

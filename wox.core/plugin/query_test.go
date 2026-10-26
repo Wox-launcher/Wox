@@ -32,6 +32,22 @@ func TestQueryResponseAutoRecordQueryHistoryStaysInsideCore(t *testing.T) {
 	assert.False(t, response.AutoRecordQueryHistory)
 }
 
+// TestQueryLayoutWindowSizeStaysInsideCore guards the internal sizing contract in both directions.
+func TestQueryLayoutWindowSizeStaysInsideCore(t *testing.T) {
+	layout := QueryLayout{WindowWidth: 640, WindowHeight: 720}
+	merged := (&Manager{}).mergeQueryLayouts(QueryLayout{}, layout)
+	assert.Equal(t, layout, merged)
+
+	data, err := json.Marshal(QueryResponse{Layout: merged})
+	assert.NoError(t, err)
+	assert.NotContains(t, string(data), "WindowWidth")
+	assert.NotContains(t, string(data), "WindowHeight")
+	var response QueryResponse
+	assert.NoError(t, json.Unmarshal([]byte(`{"Layout":{"WindowWidth":640,"WindowHeight":720}}`), &response))
+	assert.Zero(t, response.Layout.WindowWidth)
+	assert.Zero(t, response.Layout.WindowHeight)
+}
+
 func getFakePluginInstances() []*Instance {
 	return []*Instance{
 		{

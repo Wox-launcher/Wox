@@ -4,8 +4,57 @@ import (
 	"fmt"
 	"testing"
 
+	"wox/plugin"
 	woxui "wox/ui/runtime"
 )
+
+// TestQueryPreviewWindowSize exercises automatic sizing and restoration through native window bounds.
+func TestQueryPreviewWindowSize(t *testing.T) {
+	err := woxui.Run(func() error {
+		window, err := woxui.Open(woxui.WindowOptions{Title: "Wox preview bounds test", Size: woxui.Size{Width: 800, Height: 300}})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		app := New(false, nil)
+		defer app.cancel()
+		app.window = window
+		app.uiCall = nil
+		app.show.WindowWidth = 800
+		app.querySession.query = newInputQuery("g wox")
+		plain := []queryResult{{ID: "plain"}}
+		app.applyResults(app.querySession.query.QueryID, plain, &queryLayout{}, nil, nil, 0, true)
+		normal, err := window.Bounds()
+		if err != nil {
+			return err
+		}
+		ratio := 0.0
+		layout := fromCoreQueryLayout(plugin.QueryLayout{ResultPreviewWidthRatio: &ratio, WindowWidth: 640, WindowHeight: 300})
+		results := []queryResult{{ID: "page", Preview: queryPreview{PreviewType: "webview", PreviewData: `{"url":"https://example.com"}`}}}
+		for _, complete := range []bool{false, true} {
+			app.applyResults(app.querySession.query.QueryID, results, &layout, nil, nil, 0, complete)
+			bounds, err := window.Bounds()
+			if err != nil {
+				return err
+			}
+			if absFloat32(bounds.Width-640) >= 1 || absFloat32(bounds.Height-300) >= 1 || app.webView.webViewFullscreen {
+				return fmt.Errorf("automatic preview size: complete=%v bounds=%+v manual=%v", complete, bounds, app.webView.webViewFullscreen)
+			}
+		}
+		app.applyResults(app.querySession.query.QueryID, plain, &queryLayout{}, nil, nil, 0, true)
+		restored, err := window.Bounds()
+		if err != nil {
+			return err
+		}
+		if !launcherBoundsEffectivelyEqual(normal, restored) {
+			return fmt.Errorf("normal size not restored: before=%+v after=%+v", normal, restored)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 // TestLauncherBoundsKeepsNewerPreview reproduces a result arriving before the hotkey caller resumes.
 func TestLauncherBoundsKeepsNewerPreview(t *testing.T) {

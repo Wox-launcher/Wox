@@ -33,6 +33,9 @@ class QueryHintTest(unittest.TestCase):
         self.assertEqual(payload["Keyword"], "g")
         self.assertEqual(payload["QueryHint"]["Elements"][0]["Id"], "input")
         self.assertIsNone(RegisterTriggerKeywordOption("g").to_dict()["QueryHint"])
+        self.assertIsNone(RegisterTriggerKeywordOption("g").to_dict()["DebounceMs"])
+        self.assertEqual(RegisterTriggerKeywordOption("g", debounce_ms=500).to_dict()["DebounceMs"], 500)
+        self.assertEqual(RegisterTriggerKeywordOption("g", debounce_ms=0).to_dict()["DebounceMs"], 0)
         self.assertEqual(UnregisterTriggerKeywordOption("g").to_dict(), {"Keyword": "g"})
         self.assertFalse(RegisterTriggerKeywordResult().success)
         self.assertFalse(UnregisterTriggerKeywordResult().success)
@@ -47,6 +50,13 @@ class QueryHintTest(unittest.TestCase):
         query = Query.from_json(json.dumps({"Type": "input", "QueryHint": json.dumps(structure.to_dict())}))
         self.assertEqual(query.query_hint.elements[0].id, "volume")
         self.assertIsNone(Query.from_json('{"Type":"input"}').query_hint)
+
+    def test_command_debounce_round_trip(self):
+        for delay in (None, 0, 500):
+            command = MetadataCommand("search", "Search", debounce_ms=delay)
+            self.assertEqual(json.loads(command.to_json())["DebounceMs"], delay)
+            self.assertEqual(MetadataCommand.from_json(command.to_json()).debounce_ms, delay)
+        self.assertIsNone(MetadataCommand.from_json('{"Command":"search"}').debounce_ms)
 
     def test_change_query_requires_real_content(self):
         with self.assertRaises(ValueError):

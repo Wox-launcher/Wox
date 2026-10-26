@@ -50,7 +50,7 @@ const plugins: SystemPlugin[] = [
     key: "websearch",
     href: "/guide/plugins/system/websearch.html",
     title: { en: "Web Search", zh: "网页搜索" },
-    description: { en: "Search the web from Wox.", zh: "从 Wox 搜索网页。" },
+    description: { en: "Search the web and open sites inside Wox.", zh: "搜索网页并在 Wox 内打开网站。" },
   },
   {
     key: "folder",
@@ -129,12 +129,6 @@ const plugins: SystemPlugin[] = [
     href: "/guide/plugins/system/mediaplayer.html",
     title: { en: "Media Player", zh: "媒体播放器" },
     description: { en: "Control what's playing now.", zh: "控制当前播放的媒体。" },
-  },
-  {
-    key: "webview",
-    href: "/guide/plugins/system/webview.html",
-    title: { en: "WebView", zh: "网页预览" },
-    description: { en: "Preview sites inside Wox.", zh: "在 Wox 内预览网页。" },
   },
   {
     key: "chat",

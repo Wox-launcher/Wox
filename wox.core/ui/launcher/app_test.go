@@ -459,13 +459,13 @@ func TestHasCacheableWebViewPreviewIgnoresDisabledCache(t *testing.T) {
 	}
 }
 
-func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
+func TestCloseWebViewPageKeepsOwningQueryAndLauncherVisible(t *testing.T) {
 	app := bindTestApp(&App{
 		visible: true,
 		querySession: queryController{
-			editor:       woxui.NewTextEditor("webview ig"),
-			query:        newInputQuery("webview ig"),
-			queryContext: queryContext{PluginID: common.WebViewPluginID},
+			editor:       woxui.NewTextEditor("ig "),
+			query:        newInputQuery("ig "),
+			queryContext: queryContext{PluginID: common.WebSearchPluginID},
 		},
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://www.instagram.com","cacheDisabled":false}`},
 	})
@@ -476,8 +476,8 @@ func TestCloseWebViewPageReplacesQueryAndKeepsLauncherVisible(t *testing.T) {
 	if app.hasCacheableWebViewPreviewLocked() {
 		t.Fatal("closed WebView must not stay retained in the background")
 	}
-	if app.querySession.query.QueryText != webViewPluginQuery || app.querySession.editor.State().Text != webViewPluginQuery {
-		t.Fatalf("query = %q editor = %q, want %q so the next show cannot reload the site", app.querySession.query.QueryText, app.querySession.editor.State().Text, webViewPluginQuery)
+	if app.querySession.query.QueryText != "ig " || app.querySession.editor.State().Text != "ig " {
+		t.Fatalf("query = %q editor = %q, want %q to preserve the owning search", app.querySession.query.QueryText, app.querySession.editor.State().Text, "ig ")
 	}
 	if !app.visible {
 		t.Fatal("close must keep Wox visible after destroying the page")
@@ -489,8 +489,8 @@ func TestCloseWebViewPageDestroysFullPreviewWithoutRewritingQuery(t *testing.T) 
 		isPrimary: false,
 		visible:   true,
 		querySession: queryController{
-			editor: woxui.NewTextEditor("webview x"),
-			query:  newInputQuery("webview x"),
+			editor: woxui.NewTextEditor("x "),
+			query:  newInputQuery("x "),
 		},
 		webView: webViewPreviewController{webViewPreviewData: `{"url":"https://x.com","cacheDisabled":false}`},
 		show:    showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true},
@@ -500,7 +500,7 @@ func TestCloseWebViewPageDestroysFullPreviewWithoutRewritingQuery(t *testing.T) 
 	if app.webView.webViewPreviewData != "" {
 		t.Fatal("full-preview close must destroy the page")
 	}
-	if app.querySession.query.QueryText != "webview x" || app.querySession.editor.State().Text != "webview x" {
+	if app.querySession.query.QueryText != "x " || app.querySession.editor.State().Text != "x " {
 		t.Fatalf("full-preview query = %q editor = %q, want the original hotkey query", app.querySession.query.QueryText, app.querySession.editor.State().Text)
 	}
 }

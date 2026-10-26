@@ -247,7 +247,10 @@ func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
 }
 
 func fromCoreQueryLayout(layout plugin.QueryLayout) queryLayout {
-	converted := queryLayout{ResultPreviewWidthRatio: layout.ResultPreviewWidthRatio, ChatMode: layout.ChatMode}
+	converted := queryLayout{
+		ResultPreviewWidthRatio: layout.ResultPreviewWidthRatio, ChatMode: layout.ChatMode,
+		WindowWidth: layout.WindowWidth, WindowHeight: layout.WindowHeight,
+	}
 	if layout.Icon != nil {
 		converted.Icon = fromCoreImage(*layout.Icon)
 	}
