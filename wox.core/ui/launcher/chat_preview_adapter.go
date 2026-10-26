@@ -73,7 +73,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 			if panel != "models" && panel != "skills" && panel != chatCommandPanel && panel != chatMentionPanel {
 				return nil
 			}
-			props := a.chatCatalogProps(snapshot, palette, width, chatCatalogPanelHeight(snapshot, available))
+			props := a.chatCatalogProps(snapshot, palette, width, available)
 			return &props
 		},
 		ChatPreviewProps: previewview.ChatPreviewProps{
@@ -132,20 +132,18 @@ func chatCatalogPanelHeight(snapshot *chatPreviewSnapshot, available float32) fl
 		return 0
 	}
 	if snapshot.panel == chatMentionPanel {
-		items := chatMentionPaletteItems(snapshot.mentions, snapshot.panelQuery, snapshot.usePinYin)
+		items := chatMentionPaletteItems(snapshot.mentions, snapshot.panelQuery, snapshot.usePinYin, snapshot.panelFilter)
 		contentHeight := chatCommandContentHeight(items)
-		contentHeight += chatMentionStatusHeight(items, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError)
-		return previewview.ChatCatalogHeight(contentHeight, false, available)
+		if snapshot.panelFilter != chatMentionKindFiles {
+			contentHeight += chatMentionStatusHeight(items, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError)
+		}
+		return previewview.ChatPickerHeight(contentHeight, 1, available)
 	}
 	if snapshot.panel == "models" || snapshot.panel == "skills" || snapshot.panel == chatCommandPanel {
-		items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
-		loadingHeight := chatCommandPaletteLoadingHeight(items, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
-		contentHeight := float32(len(items)) * chatCatalogRowHeight
-		if snapshot.panel == chatCommandPanel {
-			contentHeight = chatCommandContentHeight(items)
-		}
-		contentHeight += loadingHeight
-		return previewview.ChatCatalogHeight(contentHeight, snapshot.panel != chatCommandPanel, available)
+		items := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, chatCommandFilter(snapshot.panel, snapshot.panelFilter))
+		filter := chatCommandFilter(snapshot.panel, snapshot.panelFilter)
+		loadingHeight := chatCommandPaletteLoadingHeight(items, filter, snapshot.modelsLoading, snapshot.skillsLoading)
+		return previewview.ChatPickerHeight(chatCommandContentHeight(items)+loadingHeight, 1, available)
 	}
 	return min(float32(270), max(float32(150), available*0.44))
 }
@@ -159,17 +157,15 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 		return a.chatMentionCatalogProps(snapshot, palette, width, height)
 	}
 	grouped := snapshot.panel == chatCommandPanel
-	viewportHeight := max(float32(40), height-44)
-	if grouped {
-		viewportHeight = max(float32(40), height-14)
-	}
-	count := len(snapshot.chats)
-	label := a.language.translate("i18n:ui_ai_chat_new_chat")
-	commands := []chatCommandPaletteItem(nil)
-	if snapshot.panel != "history" {
-		commands = chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, snapshot.panel)
-		count = len(commands)
-	}
+	scale := a.chatDensityScale()
+	filter := chatCommandFilter(snapshot.panel, snapshot.panelFilter)
+	commands := chatCommandPaletteItems(snapshot.models, snapshot.skills, snapshot.chat.Model, snapshot.panelQuery, filter)
+	loadingHeight := chatCommandPaletteLoadingHeight(commands, filter, snapshot.modelsLoading, snapshot.skillsLoading, scale)
+	baseContentHeight := chatCommandContentHeight(commands, scale) + loadingHeight
+	height = previewview.ChatPickerHeight(baseContentHeight, scale, height)
+	viewportHeight := max(float32(0), height-previewview.ChatPickerChromeHeight(scale))
+	count := len(commands)
+	label := ""
 	if snapshot.panel == "models" {
 		label = a.language.translate("i18n:ui_ai_chat_select_model_title")
 	} else if snapshot.panel == "skills" {
@@ -177,73 +173,87 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 	} else if grouped {
 		label = ""
 	}
-	showModelLoading := chatCommandPaletteShowsGroup(snapshot.panel, "models") && chatCommandPaletteShowsLoading(commands, "models", snapshot.modelsLoading)
-	showSkillLoading := chatCommandPaletteShowsGroup(snapshot.panel, "skills") && chatCommandPaletteShowsLoading(commands, "skills", snapshot.skillsLoading)
-	loadingHeight := chatCommandPaletteLoadingHeight(commands, snapshot.panel, snapshot.modelsLoading, snapshot.skillsLoading)
-	contentHeight := float32(count) * chatCatalogRowHeight
-	if grouped {
-		contentHeight = chatCommandContentHeight(commands)
-	}
+	showModelLoading := chatCommandPaletteShowsGroup(filter, "models") && chatCommandPaletteShowsLoading(commands, "models", snapshot.modelsLoading)
+	showSkillLoading := chatCommandPaletteShowsGroup(filter, "skills") && chatCommandPaletteShowsLoading(commands, "skills", snapshot.skillsLoading)
+	contentHeight := chatCommandContentHeight(commands, scale)
 	contentHeight += loadingHeight
 	contentHeight = max(viewportHeight, contentHeight)
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
 	if count > 0 && snapshot.panelViewport <= 0 {
 		selected := min(max(0, snapshot.panelSelected), count-1)
-		rowTop := float32(selected) * chatCatalogRowHeight
-		if grouped {
-			rowTop = chatCommandItemOffset(commands, selected)
-		}
+		rowTop := chatCommandItemOffset(commands, selected, scale)
 		if showModelLoading {
-			rowTop += chatCatalogGroupHeaderHeight + chatCatalogRowHeight
+			rowTop += previewview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight) + previewview.ChatScaledSize(scale, chatCatalogRowHeight) + previewview.ChatScaledSize(scale, previewview.ChatPickerSectionGap)
 		}
-		rowBottom := rowTop + chatCatalogRowHeight
+		rowBottom := rowTop + previewview.ChatScaledSize(scale, chatCommandItemHeight(commands[selected]))
 		if rowTop < offset {
 			offset = rowTop
 		} else if rowBottom > offset+viewportHeight {
 			offset = rowBottom - viewportHeight
 		}
 	}
+	if state := a.chat.chatPreview; state != nil {
+		state.panelDensityScale = scale
+		state.panelLoadingHeight = loadingHeight
+		state.panelLeadingHeight = 0
+		if showModelLoading {
+			state.panelLeadingHeight = previewview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight) + previewview.ChatScaledSize(scale, chatCatalogRowHeight)
+			if count > 0 {
+				state.panelLeadingHeight += previewview.ChatScaledSize(scale, previewview.ChatPickerSectionGap)
+			}
+		}
+	}
 	a.chat.setChatPanelViewport(viewportHeight)
 
 	items := make([]previewview.ChatCatalogItemProps, 0, count+2)
 	if showModelLoading {
-		items = append(items, a.chatCatalogLoadingItem(snapshot, "models", grouped))
+		items = append(items, a.chatCatalogLoadingItem(snapshot, "models", true))
 	}
 	for index, command := range commands {
-		groupLabel := ""
-		if grouped {
-			if command.group == "models" {
+		sectionLabel := a.language.translate("i18n:ui_ai_skills")
+		groupLabel := sectionLabel
+		var groupIcon *woxui.Image
+		if command.group == "models" {
+			sectionLabel = a.language.translate("i18n:ui_ai_chat_models")
+			groupLabel = command.subtitle
+			if groupLabel == "" {
 				groupLabel = a.language.translate("i18n:ui_ai_chat_select_model_title")
-			} else {
-				groupLabel = a.language.translate("i18n:ui_ai_skills")
+			}
+			if a.aiSettings != nil {
+				for _, provider := range a.aiSettings.ProviderCatalog() {
+					if provider.Name == snapshot.models[command.sourceIndex].Provider {
+						groupIcon = a.imageForSurface(provider.Icon, 64, palette.background)
+						break
+					}
+				}
 			}
 		}
 		items = append(items, previewview.ChatCatalogItemProps{
-			SelectID: fmt.Sprintf("chat-%s-row-%s-%d", command.group, snapshot.key, index), GroupLabel: groupLabel,
-			Kind: command.group, Title: command.title, Subtitle: command.subtitle, Selected: index == snapshot.panelSelected, Current: command.current,
+			SelectID: fmt.Sprintf("chat-%s-row-%s-%d", command.group, snapshot.key, index), GroupLabel: groupLabel, GroupIcon: groupIcon,
+			SectionLabel: sectionLabel,
+			Picker:       true, RowHeight: chatCommandItemHeight(command), Kind: command.group, Title: command.title, Subtitle: command.subtitle, Selected: index == snapshot.panelSelected, Current: command.current,
 			OnSelect: func() {
 				if command.group == "models" {
 					a.chat.selectChatModel(command.sourceIndex)
 				} else {
 					a.chat.insertChatSkill(command.sourceIndex)
 				}
+				a.focusChatCatalogComposer(snapshot.key)
 			},
 		})
 	}
 	if showSkillLoading {
-		items = append(items, a.chatCatalogLoadingItem(snapshot, "skills", grouped))
+		items = append(items, a.chatCatalogLoadingItem(snapshot, "skills", true))
 	}
-	emptyMessage := "No saved conversations"
-	if snapshot.panel == "models" {
-		emptyMessage = "No AI models configured"
+	emptyMessage := a.language.translate("i18n:ui_no_data")
+	if filter == "models" {
 		if snapshot.modelsLoading {
 			emptyMessage = a.language.translate("i18n:ui_ai_chat_loading_models")
 		} else if snapshot.modelsError != "" {
 			emptyMessage = snapshot.modelsError
 		}
-	} else if snapshot.panel == "skills" {
-		emptyMessage = "No enabled skills"
+	} else if filter == "skills" {
 		if snapshot.skillsLoading {
 			emptyMessage = a.language.translate("i18n:ui_ai_chat_loading_skills")
 		} else if snapshot.skillsError != "" {
@@ -261,24 +271,82 @@ func (a *App) chatCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette,
 			emptyMessage = snapshot.skillsError
 		}
 	}
-	return previewview.ChatCatalogProps{
-		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
-		Scroll: offset, ContentHeight: contentHeight, ShowNew: snapshot.panel == "history", NewLabel: a.language.translate("i18n:ui_ai_chat_new_chat"), Theme: palette.componentTheme(),
-		OnScroll: a.chat.scrollChatPanel, OnNew: a.chat.startNewChat,
+	props := previewview.ChatCatalogProps{
+		Width: width, Height: height, DensityScale: scale, Key: snapshot.key, Label: label, Items: items, EmptyMessage: emptyMessage,
+		Picker: true, Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(),
+		OnScroll: a.chat.scrollChatPanel,
+	}
+	for i := range props.Items {
+		if props.Items[i].Placeholder {
+			props.Items[i].RowHeight = chatCatalogRowHeight
+			props.Items[i].SectionLabel = props.Items[i].GroupLabel
+			props.Items[i].GroupLabel = ""
+			if props.Items[i].Kind == "models" {
+				props.Items[i].SectionLabel = a.language.translate("i18n:ui_ai_chat_models")
+			}
+		}
+	}
+	if grouped {
+		props.Filters = a.chatCatalogFilters(snapshot)
+	} else {
+		props.Search = &woxcomponent.TextFieldProps{
+			ID: "chat-model-search-" + snapshot.key, Value: snapshot.panelQuery,
+			Hint: a.language.translate("i18n:ui_ai_chat_search_models"), Theme: props.Theme.Controls,
+			Window: a.chat.chatTextInputWindow(), Focused: true, OnChanged: a.chat.setChatCatalogQuery,
+			OnKey: func(event woxui.KeyEvent) bool {
+				return previewview.ChatCatalogKey(event, a.chat.moveChatPanelSelection, a.chat.activateChatPanelSelection, a.chat.closeChatPanel)
+			},
+		}
+	}
+	return props
+}
+
+// chatCatalogFilters gives both token pickers the same category callbacks and focus behavior.
+func (a *App) chatCatalogFilters(snapshot *chatPreviewSnapshot) []previewview.ChatCatalogFilter {
+	var filters []previewview.ChatCatalogFilter
+	for _, category := range chatCatalogCategories(snapshot.panel) {
+		filters = append(filters, previewview.ChatCatalogFilter{
+			ID: "chat-filter-" + category.id + "-" + snapshot.key, Label: a.language.translate("i18n:" + category.key),
+			Selected: snapshot.panelFilter == category.id, OnSelect: func() {
+				a.chat.setChatCatalogFilter(category.id)
+				a.focusChatCatalogComposer(snapshot.key)
+			},
+		})
+	}
+	return filters
+}
+
+// focusChatCatalogComposer returns typing to the presenting host after a pointer selection.
+func (a *App) focusChatCatalogComposer(key string) {
+	host := a.host
+	if a.chat.chatTextInputWindow() != a.window {
+		host = a.chatWindow.chatHost
+	}
+	if host != nil {
+		host.RequestFocus(woxwidget.Key("chat-input-" + key))
 	}
 }
 
 func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
-	viewportHeight := max(float32(40), height-14)
-	commands := a.chat.filteredChatMentionItems(snapshot.mentions, snapshot.panelQuery)
-	statusHeight := chatMentionStatusHeight(commands, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError)
-	contentHeight := chatCommandContentHeight(commands) + statusHeight
+	scale := a.chatDensityScale()
+	commands := chatMentionPaletteItems(snapshot.mentions, snapshot.panelQuery, snapshot.usePinYin, snapshot.panelFilter)
+	statusHeight := chatMentionStatusHeight(commands, snapshot.pluginMentionsLoading, snapshot.pluginMentionsError, scale)
+	if snapshot.panelFilter == chatMentionKindFiles {
+		statusHeight = 0
+	}
+	contentHeight := chatCommandContentHeight(commands, scale) + statusHeight
+	height = previewview.ChatPickerHeight(contentHeight, scale, height)
+	if state := a.chat.chatPreview; state != nil {
+		state.panelLoadingHeight, state.panelLeadingHeight = statusHeight, 0
+		state.panelDensityScale = scale
+	}
+	viewportHeight := max(float32(0), height-previewview.ChatPickerChromeHeight(scale))
 	maxOffset := max(float32(0), contentHeight-viewportHeight)
 	offset := min(max(float32(0), snapshot.panelScroll), maxOffset)
 	if len(commands) > 0 && snapshot.panelViewport <= 0 {
 		selected := min(max(0, snapshot.panelSelected), len(commands)-1)
-		rowTop := chatCommandItemOffset(commands, selected)
-		rowBottom := rowTop + chatCatalogRowHeight
+		rowTop := chatCommandItemOffset(commands, selected, scale)
+		rowBottom := rowTop + previewview.ChatScaledSize(scale, chatCatalogRowHeight)
 		if rowTop < offset {
 			offset = rowTop
 		} else if rowBottom > offset+viewportHeight {
@@ -293,12 +361,14 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 		rows = append(rows, previewview.ChatCatalogItemProps{
 			SelectID:   fmt.Sprintf("chat-mention-row-%s-%s-%d", item.group, snapshot.key, index),
 			GroupLabel: a.chatMentionGroupLabel(item.group), Kind: item.group, Title: item.title, Selected: index == snapshot.panelSelected,
+			SectionLabel: a.chatMentionGroupLabel(item.group), Picker: true, RowHeight: chatCatalogRowHeight,
 			Icon:     a.imageForSurface(mention.Icon, 256, palette.background),
 			OnSelect: func() { a.chat.insertChatMention(item) },
 		})
 	}
 	if statusHeight > 0 {
 		status := a.chatCatalogLoadingItem(snapshot, chatMentionKindPlugin, true)
+		status.Picker, status.RowHeight, status.SectionLabel = true, chatCatalogRowHeight, a.chatMentionGroupLabel(chatMentionKindPlugin)
 		if !snapshot.pluginMentionsLoading {
 			status.SelectID = "chat-plugins-error-" + snapshot.key
 			status.Title = snapshot.pluginMentionsError
@@ -308,6 +378,7 @@ func (a *App) chatMentionCatalogProps(snapshot *chatPreviewSnapshot, palette uiP
 	emptyMessage := a.language.translate("i18n:ui_no_data")
 	return previewview.ChatCatalogProps{
 		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Items: rows, EmptyMessage: emptyMessage,
+		Picker: true, Filters: a.chatCatalogFilters(snapshot),
 		Scroll: offset, ContentHeight: contentHeight, Theme: palette.componentTheme(),
 		OnScroll: a.chat.scrollChatPanel,
 	}
@@ -997,7 +1068,7 @@ func (a *App) chatInputProps(snapshot *chatPreviewSnapshot, palette uiPalette, w
 	})
 	return previewview.ChatInputProps{
 		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Editing: snapshot.editing,
-		Focused: snapshot.active && snapshot.question == nil, Hint: hint, Window: window,
+		Focused: snapshot.active && snapshot.question == nil && snapshot.panel != "models" && snapshot.panel != "skills", Hint: hint, Window: window,
 		Model: model, Status: status, StatusColor: statusColor, SendLabel: a.language.translate("i18n:ui_ai_chat_send"), StopLabel: a.language.translate("i18n:ui_ai_chat_stop"), OnStop: a.chat.stopChatMessage, Sending: streaming, Importing: snapshot.importing, Theme: theme,
 		Attachments: a.chatAttachmentProps(snapshot.attachments, quoteLabel), QuoteDismissLabel: quoteDismiss,
 		RichRuns: richRuns, AtomicTokens: atomicTokens,

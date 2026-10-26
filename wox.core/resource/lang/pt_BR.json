@@ -1,4 +1,6 @@
 {
+  "ui_ai_chat_models": "Modelos",
+  "ui_ai_chat_search_models": "Buscar modelos ou provedores",
   "plugin_websearch_default_webview": "Abrir por padrão",
   "plugin_websearch_default_webview_tooltip": "Ao ativar, a página abre no WebView por padrão.",
   "plugin_websearch_open_in_browser": "Abrir no navegador",

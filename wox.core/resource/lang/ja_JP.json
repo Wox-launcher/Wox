@@ -1,4 +1,6 @@
 {
+  "ui_ai_chat_models": "モデル",
+  "ui_ai_chat_search_models": "モデルまたはプロバイダーを検索",
   "plugin_websearch_default_webview": "既定で開く",
   "plugin_websearch_default_webview_tooltip": "有効にすると、既定で WebView にページを表示します。",
   "plugin_websearch_open_in_browser": "ブラウザーで開く",

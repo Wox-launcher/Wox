@@ -659,7 +659,7 @@ func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 	}
 	plainCard := plain.Child.(woxwidget.Container)
 	if len(plainCard.Child.(woxwidget.Flex).Children) != 3 {
-		t.Fatalf("plain composer children = %d, want editor, divider, toolbar", len(plainCard.Child.(woxwidget.Flex).Children))
+		t.Fatalf("plain composer children = %d, want editor, gap, toolbar", len(plainCard.Child.(woxwidget.Flex).Children))
 	}
 
 	quoted := ChatInput(ChatInputProps{
@@ -669,7 +669,7 @@ func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 	quotedCard := quoted.Child.(woxwidget.Container)
 	children := quotedCard.Child.(woxwidget.Flex).Children
 	if len(children) != 4 {
-		t.Fatalf("quoted composer children = %d, want quote, editor, divider, toolbar", len(children))
+		t.Fatalf("quoted composer children = %d, want quote, editor, gap, toolbar", len(children))
 	}
 	quote := children[0].(woxwidget.Semantics)
 	if quote.AutomationID != "chat-quote-quoted" || quote.Role != woxui.AccessibilityRoleGroup {

@@ -195,9 +195,14 @@ type chatPreviewState struct {
 	remoteVersion uint64
 	panel         string
 	panelQuery    string
+	panelFilter   string
 	panelSelected int
 	panelScroll   float32
 	panelViewport float32
+	// Loading rows affect scrolling but never enter the selectable command list.
+	panelLoadingHeight float32
+	panelLeadingHeight float32
+	panelDensityScale  float32
 	// sidebarOpen keeps the conversation drawer visible while a slash/model overlay is open.
 	sidebarOpen      bool
 	sidebarSelected  int
@@ -236,6 +241,7 @@ type chatPreviewSnapshot struct {
 	usePinYin             bool
 	panel                 string
 	panelQuery            string
+	panelFilter           string
 	panelSelected         int
 	panelScroll           float32
 	panelViewport         float32
@@ -327,7 +333,7 @@ func findChatAtToken(editing woxui.TextEditingState) (chatSlashToken, bool) {
 	return chatSlashToken{start: start, end: end, query: strings.TrimSpace(string(runes[start+1 : end]))}, true
 }
 
-// chatCommandPaletteItems mirrors Flutter's case-insensitive model and skill filtering.
+// chatCommandPaletteItems filters the complete catalog and keeps provider instances together.
 func chatCommandPaletteItems(models []aiModel, skills []chatSkill, current aiModel, query, filterGroup string) []chatCommandPaletteItem {
 	query = strings.ToLower(strings.TrimSpace(query))
 	items := make([]chatCommandPaletteItem, 0, len(models)+len(skills))
@@ -343,6 +349,16 @@ func chatCommandPaletteItems(models []aiModel, skills []chatSkill, current aiMod
 				items = append(items, item)
 			}
 		}
+		// Keep configured provider instances together without changing their source indices.
+		providers := make(map[string]int)
+		for _, item := range items {
+			if _, exists := providers[item.subtitle]; !exists {
+				providers[item.subtitle] = len(providers)
+			}
+		}
+		slices.SortStableFunc(items, func(a, b chatCommandPaletteItem) int {
+			return providers[a.subtitle] - providers[b.subtitle]
+		})
 	}
 	if filterGroup == "" || filterGroup == chatCommandPanel || filterGroup == "skills" {
 		for index, skill := range skills {
@@ -367,27 +383,62 @@ func chatCommandPaletteItems(models []aiModel, skills []chatSkill, current aiMod
 }
 
 // chatCommandItemOffset includes each visible group header before the target row.
-func chatCommandItemOffset(items []chatCommandPaletteItem, target int) float32 {
+func chatCommandItemOffset(items []chatCommandPaletteItem, target int, density ...float32) float32 {
+	scale := float32(1)
+	if len(density) > 0 {
+		scale = density[0]
+	}
 	offset := float32(0)
 	group := ""
 	for index, item := range items {
-		if item.group != group {
-			group = item.group
-			offset += chatCatalogGroupHeaderHeight
+		if chatCommandItemGroup(item) != group {
+			if group == "" && item.group == "models" {
+				offset += chatview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight)
+			}
+			if group != "" {
+				offset += chatview.ChatScaledSize(scale, chatview.ChatPickerSectionGap)
+			}
+			group = chatCommandItemGroup(item)
+			offset += chatview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight)
 		}
 		if index == target {
 			return offset
 		}
-		offset += chatCatalogRowHeight
+		offset += chatview.ChatScaledSize(scale, chatCommandItemHeight(item))
 	}
 	return offset
 }
 
-func chatCommandContentHeight(items []chatCommandPaletteItem) float32 {
+func chatCommandContentHeight(items []chatCommandPaletteItem, density ...float32) float32 {
 	if len(items) == 0 {
 		return 0
 	}
-	return chatCommandItemOffset(items, len(items)-1) + chatCatalogRowHeight
+	scale := float32(1)
+	if len(density) > 0 {
+		scale = density[0]
+	}
+	return chatCommandItemOffset(items, len(items)-1, scale) + chatview.ChatScaledSize(scale, chatCommandItemHeight(items[len(items)-1]))
+}
+
+func chatCommandItemGroup(item chatCommandPaletteItem) string {
+	if item.group == "models" {
+		return item.group + ":" + item.subtitle
+	}
+	return item.group
+}
+
+func chatCommandItemHeight(item chatCommandPaletteItem) float32 {
+	if item.group == "skills" {
+		return 50
+	}
+	return chatCatalogRowHeight
+}
+
+func chatCommandFilter(panel, filter string) string {
+	if panel == chatCommandPanel && filter != "" {
+		return filter
+	}
+	return panel
 }
 
 // chatCommandPaletteShowsLoading keeps a group visible while its catalog is still in flight.
@@ -408,19 +459,23 @@ func chatCommandPaletteShowsGroup(filterGroup, group string) bool {
 }
 
 // chatCommandPaletteLoadingHeight reserves the Models/Skills header and row shown while a catalog loads.
-func chatCommandPaletteLoadingHeight(items []chatCommandPaletteItem, filterGroup string, modelsLoading, skillsLoading bool) float32 {
+func chatCommandPaletteLoadingHeight(items []chatCommandPaletteItem, filterGroup string, modelsLoading, skillsLoading bool, density ...float32) float32 {
+	scale := float32(1)
+	if len(density) > 0 {
+		scale = density[0]
+	}
 	height := float32(0)
 	if chatCommandPaletteShowsGroup(filterGroup, "models") && chatCommandPaletteShowsLoading(items, "models", modelsLoading) {
-		if filterGroup == "" || filterGroup == chatCommandPanel {
-			height += chatCatalogGroupHeaderHeight
+		height += chatview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight) + chatview.ChatScaledSize(scale, chatCatalogRowHeight)
+		if len(items) > 0 {
+			height += chatview.ChatScaledSize(scale, chatview.ChatPickerSectionGap)
 		}
-		height += chatCatalogRowHeight
 	}
 	if chatCommandPaletteShowsGroup(filterGroup, "skills") && chatCommandPaletteShowsLoading(items, "skills", skillsLoading) {
-		if filterGroup == "" || filterGroup == chatCommandPanel {
-			height += chatCatalogGroupHeaderHeight
+		if len(items) > 0 || height > 0 {
+			height += chatview.ChatScaledSize(scale, chatview.ChatPickerSectionGap)
 		}
-		height += chatCatalogRowHeight
+		height += chatview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight) + chatview.ChatScaledSize(scale, chatCatalogRowHeight)
 	}
 	return height
 }
@@ -518,6 +573,7 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 		chats:            append([]chatData(nil), state.chats...),
 		panel:            state.panel,
 		panelQuery:       state.panelQuery,
+		panelFilter:      state.panelFilter,
 		panelSelected:    state.panelSelected,
 		panelScroll:      state.panelScroll,
 		panelViewport:    state.panelViewport,
@@ -641,12 +697,20 @@ func (a *chatController) chatPreviewSnapshotFor(result queryResult, preview quer
 	return snapshot, nil
 }
 
-// prefetchChatCatalogs starts a one-shot model and skill fetch when chat becomes visible
+// prefetchChatCatalogs starts a one-shot provider, model and skill fetch when chat becomes visible
 // and the shared catalogs are still empty. The picker then reuses the cache instead of
 // flashing a loading row every time it opens.
 func (a *chatController) prefetchChatCatalogs() {
 	if a == nil || a.aiSettings == nil || a.aiSettings() == nil || a.services == nil {
 		return
+	}
+	ai := a.aiSettings()
+	if !ai.providersLoaded && !ai.providersLoading {
+		util.Go(a.lifecycleCtx, "load AI provider icons for chat", func() {
+			ai.ReloadProviders(a.lifecycleCtx, a.services, a.sessionID, func([]aiProviderInfo) {
+				a.invalidateChatSurfaces()
+			})
+		})
 	}
 	requestModels := !a.aiSettings().ModelsLoaded() && !a.aiSettings().ModelsLoading()
 	requestSkills := !a.aiSettings().SkillsLoaded() && !a.aiSettings().SkillsLoading()
@@ -794,6 +858,7 @@ func (a *chatController) toggleChatPanel(panel string) {
 			rememberChatHistorySidebarLocked(state)
 		}
 		state.panel = panel
+		state.panelFilter = ""
 		state.panelQuery = ""
 		state.panelScroll = 0
 		state.panelViewport = 0
@@ -809,8 +874,8 @@ func (a *chatController) toggleChatPanel(panel string) {
 			}
 		}
 		if panel == "models" || panel == chatCommandPanel {
-			for index, model := range a.aiSettings().Models() {
-				if model == state.chat.Model {
+			for index, item := range chatCommandPaletteItems(a.aiSettings().Models(), nil, state.chat.Model, "", "models") {
+				if item.current {
 					state.panelSelected = index
 					break
 				}
@@ -1327,7 +1392,7 @@ func (a *chatController) moveChatPanelSelection(delta int) {
 		commands = a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
 		count = len(commands)
 	} else if state.panel != "history" {
-		commands = chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, state.panel)
+		commands = chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, chatCommandFilter(state.panel, state.panelFilter))
 		count = len(commands)
 	}
 	if count > 0 {
@@ -1338,6 +1403,37 @@ func (a *chatController) moveChatPanelSelection(delta int) {
 			ensureChatCommandSelectionVisibleLocked(state, commands)
 		}
 	}
+	a.invalidateChatSurfaces()
+}
+
+// chatCatalogCategories defines the shared tab order for rendering and keyboard cycling.
+func chatCatalogCategories(panel string) []struct{ id, key string } {
+	if panel == chatMentionPanel {
+		return []struct{ id, key string }{{"", "ui_all"}, {chatMentionKindFiles, "ui_ai_chat_mention_files"}, {chatMentionKindPlugin, "ui_ai_chat_mention_plugins"}}
+	}
+	return []struct{ id, key string }{{"", "ui_all"}, {"models", "ui_ai_chat_models"}, {"skills", "ui_ai_skills"}}
+}
+
+// setChatCatalogFilter preserves the input token and resets navigation in the new category.
+func (a *chatController) setChatCatalogFilter(filter string) {
+	state := a.chatPreview
+	if state == nil || (state.panel != chatCommandPanel && state.panel != chatMentionPanel) {
+		return
+	}
+	state.panelFilter = filter
+	state.panelSelected, state.panelScroll, state.panelViewport = 0, 0, 0
+	a.updateChatTextInput(true)
+	a.invalidateChatSurfaces()
+}
+
+// setChatCatalogQuery filters the button-opened picker without editing the message draft.
+func (a *chatController) setChatCatalogQuery(query string) {
+	state := a.chatPreview
+	if state == nil || state.panel != "models" && state.panel != "skills" {
+		return
+	}
+	state.panelQuery = query
+	state.panelSelected, state.panelScroll, state.panelViewport = 0, 0, 0
 	a.invalidateChatSurfaces()
 }
 
@@ -1362,7 +1458,7 @@ func (a *chatController) activateChatPanelSelection() {
 		}
 		a.insertChatMention(items[selected])
 	} else {
-		items := chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, panel)
+		items := chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, chatCommandFilter(panel, state.panelFilter))
 		if selected < 0 || selected >= len(items) {
 			return
 		}
@@ -1409,7 +1505,7 @@ func (a *chatController) setChatPanelViewport(height float32) {
 			commands = a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
 			count = len(commands)
 		} else if state.panel != "history" {
-			commands = chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, state.panel)
+			commands = chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, chatCommandFilter(state.panel, state.panelFilter))
 			count = len(commands)
 		}
 		if initialize {
@@ -1421,7 +1517,8 @@ func (a *chatController) setChatPanelViewport(height float32) {
 		} else {
 			contentHeight := chatHistoryContentHeight(state.chats, time.Now())
 			if state.panel != "history" {
-				contentHeight = chatCommandContentHeight(commands)
+				contentHeight = chatCommandContentHeight(commands, state.panelDensityScale)
+				contentHeight += state.panelLoadingHeight
 			}
 			maxOffset := max(float32(0), contentHeight-state.panelViewport)
 			state.panelScroll = min(max(float32(0), state.panelScroll), maxOffset)
@@ -1452,14 +1549,27 @@ func ensureChatCommandSelectionVisibleLocked(state *chatPreviewState, items []ch
 		return
 	}
 	state.panelSelected = min(max(0, state.panelSelected), len(items)-1)
-	rowTop := chatCommandItemOffset(items, state.panelSelected)
-	rowBottom := rowTop + chatCatalogRowHeight
-	if rowTop < state.panelScroll {
-		state.panelScroll = rowTop
+	rowTop := chatCommandItemOffset(items, state.panelSelected, state.panelDensityScale) + state.panelLeadingHeight
+	rowBottom := rowTop + chatview.ChatScaledSize(state.panelDensityScale, chatCommandItemHeight(items[state.panelSelected]))
+	revealTop := rowTop
+	item := items[state.panelSelected]
+	if item.group == "models" || item.group == "skills" || state.panel == chatMentionPanel {
+		if state.panelSelected == 0 || chatCommandItemGroup(items[state.panelSelected-1]) != chatCommandItemGroup(item) {
+			// Reveal the first row's context too; row-only scrolling hides non-selectable headers.
+			revealTop -= chatview.ChatScaledSize(state.panelDensityScale, chatCatalogGroupHeaderHeight)
+			if state.panelSelected == 0 && item.group == "models" {
+				revealTop -= chatview.ChatScaledSize(state.panelDensityScale, chatCatalogGroupHeaderHeight)
+			}
+			// Keep the selected row visible when the viewport cannot fit its headers as well.
+			revealTop = max(revealTop, rowBottom-state.panelViewport)
+		}
+	}
+	if revealTop < state.panelScroll {
+		state.panelScroll = revealTop
 	} else if rowBottom > state.panelScroll+state.panelViewport {
 		state.panelScroll = rowBottom - state.panelViewport
 	}
-	maxOffset := max(float32(0), chatCommandContentHeight(items)-state.panelViewport)
+	maxOffset := max(float32(0), chatCommandContentHeight(items, state.panelDensityScale)+state.panelLoadingHeight-state.panelViewport)
 	state.panelScroll = min(max(float32(0), state.panelScroll), maxOffset)
 }
 
@@ -1472,13 +1582,14 @@ func (a *chatController) scrollChatPanel(delta float32) {
 	contentHeight := chatHistoryContentHeight(state.chats, time.Now())
 	if state.panel == chatMentionPanel {
 		items := a.filteredChatMentionItems(a.chatMentionCatalog(), state.panelQuery)
-		contentHeight = chatCommandContentHeight(items)
-		if a.aiSettings() != nil {
-			contentHeight += chatMentionStatusHeight(items, a.aiSettings().PluginMentionsLoading(), a.aiSettings().PluginMentionsError())
+		contentHeight = chatCommandContentHeight(items, state.panelDensityScale)
+		if a.aiSettings() != nil && state.panelFilter != chatMentionKindFiles {
+			contentHeight += chatMentionStatusHeight(items, a.aiSettings().PluginMentionsLoading(), a.aiSettings().PluginMentionsError(), state.panelDensityScale)
 		}
 	} else if state.panel != "history" {
-		items := chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, state.panel)
-		contentHeight = chatCommandContentHeight(items)
+		items := chatCommandPaletteItems(a.aiSettings().Models(), a.aiSettings().Skills(), state.chat.Model, state.panelQuery, chatCommandFilter(state.panel, state.panelFilter))
+		contentHeight = chatCommandContentHeight(items, state.panelDensityScale)
+		contentHeight += state.panelLoadingHeight
 	}
 	maxOffset := max(float32(0), contentHeight-state.panelViewport)
 	state.panelScroll = min(max(float32(0), state.panelScroll+delta), maxOffset)
@@ -1896,6 +2007,17 @@ func (a *chatController) handleChatKey(event woxui.KeyEvent, dedicated bool) boo
 		a.toggleChatPanel("history")
 		return true
 	}
+	// Both pickers own Tab so category cycling keeps focus in the composer.
+	if (panel == chatCommandPanel || panel == chatMentionPanel) && event.Key == woxui.KeyTab {
+		categories := chatCatalogCategories(panel)
+		index := slices.IndexFunc(categories, func(category struct{ id, key string }) bool { return category.id == state.panelFilter })
+		step := 1
+		if event.Modifiers&woxui.KeyModifierShift != 0 {
+			step = -1
+		}
+		a.setChatCatalogFilter(categories[(index+step+len(categories))%len(categories)].id)
+		return true
+	}
 	// A persistent history drawer does not own composer keys. Its rows and
 	// delete buttons handle activation through their own retained focus nodes.
 	if panel != "" && panel != "history" {
@@ -2029,6 +2151,9 @@ func (a *chatController) setChatText(value string) {
 		atToken, hasAt := findChatAtToken(state.editor.State())
 		if hasSlash {
 			queryChanged := state.panel != chatCommandPanel || state.panelQuery != slashToken.query
+			if state.panel != chatCommandPanel {
+				state.panelFilter = ""
+			}
 			if state.panel == "history" {
 				rememberChatHistorySidebarLocked(state)
 			}
@@ -2052,6 +2177,9 @@ func (a *chatController) setChatText(value string) {
 			}
 		} else if hasAt {
 			queryChanged := state.panel != chatMentionPanel || state.panelQuery != atToken.query
+			if state.panel != chatMentionPanel {
+				state.panelFilter = ""
+			}
 			if state.panel == "history" {
 				rememberChatHistorySidebarLocked(state)
 			}

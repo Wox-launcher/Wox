@@ -1,4 +1,6 @@
 {
+  "ui_ai_chat_models": "模型",
+  "ui_ai_chat_search_models": "搜索模型或 Provider",
   "plugin_websearch_default_webview": "默认打开",
   "plugin_websearch_default_webview_tooltip": "启用后默认使用 WebView 展开网页。",
   "plugin_websearch_open_in_browser": "在浏览器中打开",

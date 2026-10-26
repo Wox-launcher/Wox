@@ -22,16 +22,17 @@ const (
 	chatMessageLineHeight = float32(19)
 
 	// The composer starts at one line and grows with typed or wrapped lines.
-	chatComposerMinLines            = 1
-	chatComposerMaxLines            = 5
-	chatComposerLineHeight          = float32(20)
-	chatComposerEditorPaddingTop    = float32(8)
-	chatComposerEditorPaddingBottom = float32(7)
+	chatComposerMinLines   = 1
+	chatComposerMaxLines   = 5
+	chatComposerLineHeight = float32(20)
+	// Favor the outer inset; the centered toolbar already supplies space below the editor.
+	chatComposerEditorPaddingTop    = float32(12)
+	chatComposerEditorPaddingBottom = float32(3)
 	chatComposerEditorPaddingX      = float32(14)
 	chatComposerToolbarHeight       = float32(42)
 	chatComposerAttachButtonSize    = float32(20)
 	chatComposerAttachButtonGap     = float32(4)
-	chatComposerDividerHeight       = float32(1)
+	chatComposerToolbarGap          = float32(1)
 	chatComposerOuterPaddingY       = float32(14)
 	chatQuoteCardHeight             = float32(56)
 	// File and image drafts share one compact tile strip instead of stacked rows.
@@ -120,7 +121,7 @@ func chatComposerBaseHeight(lineCount int) float32 {
 }
 
 func chatComposerBaseHeightFor(lineCount int, scale float32) float32 {
-	return chatComposerOuterPaddingY + chatComposerEditorHeightFor(lineCount, scale) + chatComposerToolbarHeight + chatComposerDividerHeight
+	return chatComposerOuterPaddingY + chatComposerEditorHeightFor(lineCount, scale) + chatComposerToolbarHeight + chatComposerToolbarGap
 }
 
 func chatComposerAttachmentsExtent(attachments []ChatAttachmentProps) float32 {
@@ -207,6 +208,9 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 		contentInnerWidth := max(float32(0), contentWidth-2*inset)
 		contentInnerHeight := max(float32(0), props.Height-14)
 		left := inset + (contentInnerWidth-overlay.Width)/2
+		if overlay.Picker {
+			left = inset
+		}
 		top := 6 + max(headerHeight, contentInnerHeight-inputHeight-overlay.Height-6)
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
 			ChatCatalog(*history),
@@ -221,6 +225,9 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 	if overlay != nil {
 		layers = append(layers, woxwidget.StackChild{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + props.Key, OnTap: props.OnDismiss, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}})
 		left := inset + (innerWidth-overlay.Width)/2
+		if overlay.Picker {
+			left = inset
+		}
 		top := 6 + max(headerHeight, innerHeight-inputHeight-overlay.Height-6)
 		layers = append(layers, woxwidget.StackChild{Left: left, Top: top, Child: ChatCatalog(*overlay)})
 	}
@@ -382,10 +389,14 @@ type ChatCatalogItemProps struct {
 	Kind         string
 	Title        string
 	Subtitle     string
+	Picker       bool
+	RowHeight    float32
 	DeleteLabel  string
 	// ConfirmDeleteLabel describes the destructive second activation for assistive technology.
 	ConfirmDeleteLabel string
 	GroupLabel         string
+	SectionLabel       string
+	GroupIcon          *woxui.Image
 	Selected           bool
 	Current            bool
 	// Placeholder is a non-interactive loading row and must not take keyboard selection.
@@ -413,12 +424,18 @@ type ChatCatalogProps struct {
 	Theme         woxcomponent.Theme
 	OnScroll      func(float32)
 	OnNew         func()
+	Picker        bool
+	Filters       []ChatCatalogFilter
+	Search        *woxcomponent.TextFieldProps
 }
 
 // ChatCatalog builds a floating chat catalog.
 func ChatCatalog(props ChatCatalogProps) woxwidget.Widget {
 	if props.ShowNew {
 		return chatHistoryCatalog(props)
+	}
+	if props.Picker {
+		return chatPickerCatalog(props)
 	}
 	const rowHeight = float32(38)
 	innerWidth := max(float32(0), props.Width-20)
@@ -600,6 +617,9 @@ func chatCatalogItemWithDeleteState(item ChatCatalogItemProps, width, height flo
 	}
 	if item.Placeholder {
 		return chatCatalogLoadingItem(item, width, height, theme)
+	}
+	if item.Picker {
+		return chatPickerItem(item, width, height, theme, hovered, onHover)
 	}
 	background := woxui.Color{}
 	if item.Selected {
@@ -1573,7 +1593,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	contentLines := max(1, woxcomponent.TextFieldVisualLineCount(props.Editing.Text, props.Window, style, innerWidth, props.RichRuns))
 	lineCount := chatComposerClampLines(contentLines)
 	editorHeight := chatComposerEditorHeightFor(lineCount, props.DensityScale)
-	cardHeight := editorHeight + chatComposerToolbarHeight + quoteHeight + chatComposerDividerHeight
+	cardHeight := editorHeight + chatComposerToolbarHeight + quoteHeight + chatComposerToolbarGap
 	fieldHeight := editorHeight
 	maxLines := chatComposerMaxLines
 	if contentLines > chatComposerMaxLines {
@@ -1602,8 +1622,8 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 			Theme:       props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, AutomationID: "chat-input-scroll-" + props.Key, Label: props.Hint,
 		})
 	}
-	divider := props.Theme.ResultSubtitle
-	divider.A = uint8(float32(divider.A) * 0.14)
+	border := props.Theme.ResultSubtitle
+	border.A = uint8(float32(border.A) * 0.14)
 	modelButton := ChatModelSelector(props)
 	variant := woxcomponent.ButtonPrimary
 	if props.Sending {
@@ -1631,10 +1651,10 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	cardChildren = append(cardChildren, chatComposerAttachmentPanes(props)...)
 	cardChildren = append(cardChildren,
 		input,
-		woxwidget.Container{Width: props.Width, Height: 1, Color: divider},
+		woxwidget.Container{Width: props.Width, Height: chatComposerToolbarGap},
 		woxwidget.Stack{Width: props.Width, Height: chatComposerToolbarHeight, Children: toolbarChildren},
 	)
-	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: divider, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: cardChildren}}
+	card := woxwidget.Container{Width: props.Width, Height: cardHeight, Radius: 9, Color: props.Theme.QueryBackground, BorderColor: border, BorderWidth: 1, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: cardChildren}}
 	return woxwidget.Container{Width: props.Width, Height: chatComposerHeightForAttachments(props.Attachments, lineCount, props.DensityScale), Padding: woxwidget.Insets{Top: 6, Bottom: 8}, Child: card}
 }
 

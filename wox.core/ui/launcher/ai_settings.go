@@ -527,7 +527,7 @@ func (c *aiSettingsController) openAISettingsTableRow(tableIndex, rowIndex int) 
 func validateAISettingsTableRow(definition formDefinition, fields *formFieldsState) map[string]string {
 	switch definition.Value.Key {
 	case "AIProviders":
-		if !common.ProviderName(fields.values["Name"]).IsInstalledCLI() && fields.values["Name"] != "ollama" && strings.TrimSpace(fields.values["ApiKey"]) == "" {
+		if !common.ProviderName(fields.values["Name"]).IsInstalledCLI() && fields.values["Name"] != "ollama" && fields.values["Name"] != "magpie" && strings.TrimSpace(fields.values["ApiKey"]) == "" {
 			return map[string]string{"ApiKey": "API key is required for this provider."}
 		}
 	case "AIMCPServers":

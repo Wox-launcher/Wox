@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/common"
 	"wox/common/icons"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
@@ -162,32 +163,32 @@ func TestChatCommandPaletteHeightIncludesModelLoadingRow(t *testing.T) {
 		skills:        []chatSkill{{Name: "wox-plugin-creator"}},
 		modelsLoading: true,
 	}
-	if height := chatCatalogPanelHeight(snapshot, 600); height != 146 {
-		t.Fatalf("loading palette height = %.0f, want 146", height)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 214 {
+		t.Fatalf("loading palette height = %.0f, want 214", height)
 	}
 }
 
 func TestChatModelPaletteHeightShrinksToContentAndCaps(t *testing.T) {
 	snapshot := &chatPreviewSnapshot{panel: "models", models: []aiModel{{Name: "flash"}, {Name: "pro"}}}
-	if height := chatCatalogPanelHeight(snapshot, 600); height != 118 {
-		t.Fatalf("two-model palette height = %.0f, want content height 118", height)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 190 {
+		t.Fatalf("two-model palette height = %.0f, want content height 190", height)
 	}
 
 	snapshot.models = make([]aiModel, 20)
-	if height := chatCatalogPanelHeight(snapshot, 600); height != 310 {
-		t.Fatalf("large model palette height = %.0f, want maximum 310", height)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 420 {
+		t.Fatalf("large model palette height = %.0f, want maximum 420", height)
 	}
 }
 
 func TestChatModelPaletteHeightIncludesTitleWhileLoading(t *testing.T) {
 	snapshot := &chatPreviewSnapshot{panel: "models", modelsLoading: true}
-	if height := chatCatalogPanelHeight(snapshot, 600); height != 82 {
-		t.Fatalf("loading model palette height = %.0f, want 82 so the title and placeholder stay in one panel", height)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 124 {
+		t.Fatalf("loading model palette height = %.0f, want 124 so the search, group and placeholder stay in one panel", height)
 	}
 
 	snapshot.modelsLoading = false
-	if height := chatCatalogPanelHeight(snapshot, 600); height != 82 {
-		t.Fatalf("empty model palette height = %.0f, want 82 so the title and empty copy stay in one panel", height)
+	if height := chatCatalogPanelHeight(snapshot, 600); height != 98 {
+		t.Fatalf("empty model palette height = %.0f, want 98 so the search and empty copy stay in one panel", height)
 	}
 }
 
@@ -273,8 +274,8 @@ func TestChatMentionCatalogGroupsPlugins(t *testing.T) {
 	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
 	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 160)
-	if props.Label != "" {
-		t.Fatalf("mention catalog should use group headers, label = %q", props.Label)
+	if !props.Picker || len(props.Filters) != 3 || !props.Filters[0].Selected || props.Height != previewview.ChatPickerHeight(props.ContentHeight, props.DensityScale, 160) {
+		t.Fatalf("mention catalog should use shared picker chrome, label = %q", props.Label)
 	}
 	if len(props.Items) != 3 {
 		t.Fatalf("mention catalog items = %+v", props.Items)
@@ -367,17 +368,27 @@ func TestChatMentionPluginErrorRemainsVisibleWithFileActions(t *testing.T) {
 			group := ""
 			for _, row := range props.Items {
 				if row.GroupLabel != group {
+					if group != "" {
+						height += previewview.ChatPickerSectionGap
+					}
 					height += chatCatalogGroupHeaderHeight
 					group = row.GroupLabel
 				}
 				height += chatCatalogRowHeight
 			}
-			if props.ContentHeight != height || chatCatalogPanelHeight(snapshot, 600) != previewview.ChatCatalogHeight(height, false, 600) {
+			if !props.Picker || props.ContentHeight != height || chatCatalogPanelHeight(snapshot, 600) != previewview.ChatPickerHeight(height, 1, 600) {
 				t.Fatal("plugin error row is missing from panel geometry")
 			}
 			app.chat.scrollChatPanel(1000)
 			if app.chat.chatPreview.panelScroll != max(float32(0), height-app.chat.chatPreview.panelViewport) {
 				t.Fatal("plugin error row is outside the scroll range")
+			}
+			snapshot.panelFilter = chatMentionKindFiles
+			fileProps := app.chatMentionCatalogProps(snapshot, defaultPalette(), 400, 100)
+			for _, row := range fileProps.Items {
+				if row.Kind != chatMentionKindFiles || row.Placeholder {
+					t.Fatal("plugin status leaked into the Files tab")
+				}
 			}
 		}
 	}
@@ -780,15 +791,44 @@ func TestChatHistoryViewportUpdateKeepsWheelScroll(t *testing.T) {
 
 type chatCatalogPrefetchServices struct {
 	contract.Services
-	models []contract.AIModel
-	skills []contract.AISkill
+	providers []contract.AIProvider
+	models    []contract.AIModel
+	skills    []contract.AISkill
 
 	modelsStarted chan struct{}
 	skillsStarted chan struct{}
 	release       chan struct{}
 
-	modelCalls atomic.Int32
-	skillCalls atomic.Int32
+	modelCalls    atomic.Int32
+	skillCalls    atomic.Int32
+	providerCalls atomic.Int32
+}
+
+func (s *chatCatalogPrefetchServices) AIProviders(_ context.Context, _ string) ([]contract.AIProvider, error) {
+	s.providerCalls.Add(1)
+	return append([]contract.AIProvider(nil), s.providers...), nil
+}
+
+func TestChatPrefetchLoadsProviderIconsWithoutOpeningSettings(t *testing.T) {
+	icon := common.WoxImage{ImageType: "svg", ImageData: "<svg/>"}
+	service := &chatCatalogPrefetchServices{providers: []contract.AIProvider{{Name: "deepseek", Icon: icon}}}
+	ai := newAISettingsController(CommonDeps{Invalidate: func() {}})
+	ai.SetModels(nil)
+	ai.SetSkills(nil)
+	ai.SetPluginMentions(nil)
+	app := bindTestApp(&App{lifecycleCtx: t.Context(), aiSettings: ai, services: service})
+	loaded := make(chan struct{})
+	app.chat.invalidateChatSurfaces = func() { close(loaded) }
+	app.chat.prefetchChatCatalogs()
+	waitChatCatalogPrefetch(t, loaded)
+	catalog := ai.ProviderCatalog()
+	if len(catalog) != 1 || catalog[0].Name != "deepseek" || catalog[0].Icon.ImageData != icon.ImageData {
+		t.Fatalf("chat provider icon catalog = %+v", catalog)
+	}
+	app.chat.prefetchChatCatalogs()
+	if service.providerCalls.Load() != 1 {
+		t.Fatal("chat refetched a cached provider catalog")
+	}
 }
 
 func (s *chatCatalogPrefetchServices) AIModels(_ context.Context, _ string) ([]contract.AIModel, error) {
@@ -834,7 +874,7 @@ func TestPrefetchChatCatalogsLoadsOnceWhenUncached(t *testing.T) {
 		skillsStarted: make(chan struct{}, 1),
 		release:       make(chan struct{}),
 	}
-	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai := newAISettingsController(CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }})
 	app := bindTestApp(&App{
 		lifecycleCtx: t.Context(),
 		aiSettings:   ai,
@@ -860,7 +900,7 @@ func TestPrefetchChatCatalogsSkipsCachedCatalogs(t *testing.T) {
 		modelsStarted: make(chan struct{}, 1),
 		skillsStarted: make(chan struct{}, 1),
 	}
-	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai := newAISettingsController(CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "flash", Provider: "deepseek"}})
 	ai.SetSkills([]chatSkill{{ID: "s1", Name: "creator"}})
 	app := bindTestApp(&App{
@@ -884,7 +924,7 @@ func TestEnterChatModePrefetchesUncachedCatalogs(t *testing.T) {
 		skillsStarted: make(chan struct{}, 1),
 		release:       make(chan struct{}),
 	}
-	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai := newAISettingsController(CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }})
 	app := bindTestApp(&App{
 		lifecycleCtx: t.Context(),
 		aiSettings:   ai,
@@ -908,7 +948,7 @@ func TestActivateChatPreviewPrefetchesUncachedCatalogs(t *testing.T) {
 		skillsStarted: make(chan struct{}, 1),
 		release:       make(chan struct{}),
 	}
-	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai := newAISettingsController(CommonDeps{Invalidate: func() {}, Translate: func(s string) string { return s }})
 	app := bindTestApp(&App{
 		lifecycleCtx: t.Context(),
 		aiSettings:   ai,

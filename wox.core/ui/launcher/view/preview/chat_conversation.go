@@ -99,6 +99,11 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 		catalog := *p.Catalog
 		catalog.Width = width
 		catalog.Height = ChatCatalogHeight(catalog.ContentHeight, catalog.Label != "", height)
+		if catalog.Picker {
+			catalog.Width = min(width, ChatScaledSize(catalog.DensityScale, 560))
+			// Content height is scaled already; the header follows the same density.
+			catalog.Height = ChatPickerHeight(catalog.ContentHeight, catalog.DensityScale, height)
+		}
 		p.Catalog = &catalog
 	}
 	return p

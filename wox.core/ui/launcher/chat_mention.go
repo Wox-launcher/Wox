@@ -8,6 +8,7 @@ import (
 
 	"wox/common"
 	"wox/common/icons"
+	chatview "wox/ui/launcher/view/preview"
 	"wox/util"
 )
 
@@ -108,15 +109,22 @@ func chatMentionOpensPicker(mention chatMention) (directory bool, ok bool) {
 }
 
 // chatMentionStatusHeight keeps the panel and scroll bounds aligned with its trailing status row.
-func chatMentionStatusHeight(items []chatCommandPaletteItem, loading bool, loadError string) float32 {
+func chatMentionStatusHeight(items []chatCommandPaletteItem, loading bool, loadError string, density ...float32) float32 {
 	showLoading := chatCommandPaletteShowsLoading(items, chatMentionKindPlugin, loading)
 	showError := !loading && loadError != ""
 	if !showLoading && !showError {
 		return 0
 	}
-	height := chatCatalogRowHeight
+	scale := float32(1)
+	if len(density) > 0 {
+		scale = density[0]
+	}
+	height := chatview.ChatScaledSize(scale, chatCatalogRowHeight)
 	if len(items) == 0 || items[len(items)-1].group != chatMentionKindPlugin {
-		height += chatCatalogGroupHeaderHeight
+		height += chatview.ChatScaledSize(scale, chatCatalogGroupHeaderHeight)
+		if len(items) > 0 {
+			height += chatview.ChatScaledSize(scale, chatview.ChatPickerSectionGap)
+		}
 	}
 	return height
 }
@@ -126,10 +134,14 @@ func (a *chatController) chatMentionUsePinYin() bool {
 }
 
 func (a *chatController) filteredChatMentionItems(mentions []chatMention, query string) []chatCommandPaletteItem {
-	return chatMentionPaletteItems(mentions, query, a.chatMentionUsePinYin())
+	filter := ""
+	if a.chatPreview != nil && a.chatPreview.panel == chatMentionPanel {
+		filter = a.chatPreview.panelFilter
+	}
+	return chatMentionPaletteItems(mentions, query, a.chatMentionUsePinYin(), filter)
 }
 
-func chatMentionPaletteItems(mentions []chatMention, query string, usePinYin bool) []chatCommandPaletteItem {
+func chatMentionPaletteItems(mentions []chatMention, query string, usePinYin bool, filters ...string) []chatCommandPaletteItem {
 	query = strings.TrimSpace(query)
 	type rankedMention struct {
 		item  chatCommandPaletteItem
@@ -138,6 +150,9 @@ func chatMentionPaletteItems(mentions []chatMention, query string, usePinYin boo
 	}
 	ranked := make([]rankedMention, 0, len(mentions))
 	for index, mention := range mentions {
+		if len(filters) > 0 && filters[0] != "" && mention.Kind != filters[0] {
+			continue
+		}
 		score, matched := chatMentionMatchScore(mention, query, usePinYin)
 		if !matched {
 			continue
