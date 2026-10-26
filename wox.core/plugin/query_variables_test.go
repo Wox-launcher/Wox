@@ -10,7 +10,7 @@ import (
 // TestQueryVariablesRequireSelection follows runtime declarations without reading the clipboard or selection.
 func TestQueryVariablesRequireSelection(t *testing.T) {
 	instance := &Instance{}
-	manager := &Manager{instances: []*Instance{instance}}
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{instance}}}
 	for _, variable := range []string{QueryVariableClipboardText, QueryVariableSelectedText, QueryVariableClipboardText} {
 		if !manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g", QueryVariables: []string{variable}}) {
 			t.Fatal("failed to register runtime query variable")

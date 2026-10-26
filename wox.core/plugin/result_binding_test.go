@@ -264,7 +264,7 @@ func TestSelectQueryResultMatchesPathBeforeTitle(t *testing.T) {
 
 func TestUpsertResultBindingKeepsTheOtherField(t *testing.T) {
 	manager := &Manager{}
-	manager.appendPluginInstance(&Instance{Metadata: Metadata{Id: "app", Features: []MetadataFeature{{Name: MetadataFeatureMRU}}}})
+	manager.lifecycle.appendPluginInstance(&Instance{Metadata: Metadata{Id: "app", Features: []MetadataFeature{{Name: MetadataFeatureMRU}}}})
 	var saved []setting.ResultBinding
 	currentResultBindingsForTest = func() []setting.ResultBinding { return saved }
 	t.Cleanup(func() { currentResultBindingsForTest = nil })

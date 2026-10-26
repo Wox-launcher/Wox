@@ -113,12 +113,12 @@ func singleFilePluginPath(metadata Metadata) (string, error) {
 }
 
 // ensureSingleFilePluginIDAvailable prevents a hot reload from replacing a different plugin with the same ID.
-func (m *Manager) ensureSingleFilePluginIDAvailable(metadata Metadata) error {
+func (l *pluginLifecycle) ensureSingleFilePluginIDAvailable(metadata Metadata) error {
 	filePath, err := singleFilePluginPath(metadata)
 	if err != nil {
 		return err
 	}
-	for _, instance := range m.pluginInstancesSnapshot() {
+	for _, instance := range l.pluginInstancesSnapshot() {
 		if !strings.EqualFold(instance.Metadata.Id, metadata.Id) {
 			continue
 		}

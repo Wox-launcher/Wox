@@ -33,7 +33,7 @@ func TestQueryFallbackRanksBelowLateResults(t *testing.T) {
 		Id: "fallback", Title: "fallback", Score: 100, RankAboveUsage: true,
 		Icon: common.NewWoxImageEmoji("🔍"),
 	}}}
-	if !manager.appendPluginInstance(instance) {
+	if !manager.lifecycle.appendPluginInstance(instance) {
 		t.Fatal("failed to register fallback plugin")
 	}
 	response := manager.QueryFallback(ctx, query, nil)
@@ -63,12 +63,12 @@ func TestQueryFallbackSkipsDisabledPlugins(t *testing.T) {
 	disabled := newDisabledPluginInstance(t, "disabled-fallback", false)
 	disabled.Plugin = panickingFallbackPlugin{}
 	disabled.Metadata.Name = "Disabled Fallback"
-	if !manager.appendPluginInstance(disabled) {
+	if !manager.lifecycle.appendPluginInstance(disabled) {
 		t.Fatal("failed to register the disabled fallback plugin")
 	}
 
 	enabled := &recordingFallbackPlugin{}
-	if !manager.appendPluginInstance(&Instance{
+	if !manager.lifecycle.appendPluginInstance(&Instance{
 		Metadata: Metadata{Id: "enabled-fallback", Name: "Enabled Fallback"},
 		Plugin:   enabled,
 	}) {

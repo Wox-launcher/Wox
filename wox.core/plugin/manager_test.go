@@ -32,11 +32,11 @@ func TestAppendPluginInstanceRejectsDuplicateID(t *testing.T) {
 	first := &Instance{Metadata: Metadata{Id: "9d7b4e96-a81d-44a3-a75a-bc828cf5668e", Name: "Linkding"}}
 	second := &Instance{Metadata: Metadata{Id: "9d7b4e96-a81d-44a3-a75a-bc828cf5668e", Name: "Linkding"}}
 
-	require.True(t, manager.appendPluginInstance(first))
-	require.False(t, manager.appendPluginInstance(second))
-	require.True(t, manager.appendPluginInstance(&Instance{Metadata: Metadata{Id: "other-plugin", Name: "Other"}}))
-	require.True(t, manager.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
-	require.True(t, manager.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
+	require.True(t, manager.lifecycle.appendPluginInstance(first))
+	require.False(t, manager.lifecycle.appendPluginInstance(second))
+	require.True(t, manager.lifecycle.appendPluginInstance(&Instance{Metadata: Metadata{Id: "other-plugin", Name: "Other"}}))
+	require.True(t, manager.lifecycle.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
+	require.True(t, manager.lifecycle.appendPluginInstance(&Instance{Host: &fakeHost{}, RuntimeLoaded: true}))
 
 	instances := manager.GetPluginInstances()
 	require.Len(t, instances, 4)
@@ -56,18 +56,18 @@ func TestTroubleshootingModeBlocksThirdPartyLoading(t *testing.T) {
 	builtin := &troubleshootingSystemPlugin{}
 	host := &countingLoadHost{}
 	AllSystemPlugin, AllHosts = []SystemPlugin{builtin}, []Host{host}
-	manager := &Manager{systemPluginsReady: make(chan struct{})}
+	manager := &Manager{lifecycle: pluginLifecycle{systemPluginsReady: make(chan struct{})}}
 	require.NoError(t, manager.Start(context.Background(), nil))
 	instances := manager.GetPluginInstances()
 	require.Len(t, instances, 1)
 	assert.True(t, instances[0].IsSystemPlugin)
 	assert.Equal(t, int32(1), builtin.initCalls.Load())
 	assert.Zero(t, host.startCount)
-	assert.Nil(t, manager.scriptPluginWatch)
-	assert.Nil(t, manager.singleFilePluginWatch)
-	assert.False(t, manager.hostWatchdogStarted)
+	assert.Nil(t, manager.lifecycle.scriptPluginWatch)
+	assert.Nil(t, manager.lifecycle.singleFilePluginWatch)
+	assert.False(t, manager.lifecycle.hostWatchdogStarted)
 	metadata := Metadata{Id: "third-party-plugin", Runtime: string(PLUGIN_RUNTIME_PYTHON)}
-	require.Error(t, manager.loadHostPlugin(context.Background(), host, metadata))
+	require.Error(t, manager.lifecycle.loadHostPlugin(context.Background(), host, metadata))
 	require.Error(t, manager.LoadPlugin(context.Background(), "missing-plugin-directory"))
 	require.Error(t, manager.ReloadPlugin(context.Background(), metadata))
 	assert.Zero(t, host.loadCalls.Load())
@@ -100,7 +100,7 @@ func TestConcurrentLoadHostPluginKeepsOneInstance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func() {
 			defer workers.Done()
-			require.NoError(t, manager.loadHostPlugin(context.Background(), host, metadata))
+			require.NoError(t, manager.lifecycle.loadHostPlugin(context.Background(), host, metadata))
 		}()
 	}
 	workers.Wait()
@@ -108,6 +108,11 @@ func TestConcurrentLoadHostPluginKeepsOneInstance(t *testing.T) {
 	assert.Equal(t, int32(1), host.loadCalls.Load())
 	require.Len(t, manager.GetPluginInstances(), 1)
 	assert.Equal(t, metadata.Id, manager.GetPluginInstances()[0].Metadata.Id)
+	// Loading publishes the instance before asynchronous Init finishes. Join it
+	// before another test replaces the package logger or closes the test database.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, manager.GetPluginInstances()[0].WaitInit(ctx))
 }
 
 type countingLoadHost struct {
@@ -362,7 +367,7 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 		},
 	}
 
-	normalized := manager.normalizeToolbarMsg(context.Background(), pluginInstance, ToolbarMsg{Id: "status", Title: "working"})
+	normalized := manager.presentation.normalizeToolbarMsg(context.Background(), pluginInstance, ToolbarMsg{Id: "status", Title: "working"})
 
 	assert.Equal(t, pluginIcon, normalized.Icon)
 }

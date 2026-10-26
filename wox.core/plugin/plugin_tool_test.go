@@ -185,8 +185,8 @@ func TestPluginToolHiddenUntilInitializedAndAfterDisable(t *testing.T) {
 	caller := newReadyPluginToolInstance("alpha", "Alpha")
 	target := &Instance{Metadata: Metadata{Id: "beta", Name: common.I18nString("Beta")}}
 	target.beginInitCycle()
-	manager.appendPluginInstance(caller)
-	manager.appendPluginInstance(target)
+	manager.lifecycle.appendPluginInstance(caller)
+	manager.lifecycle.appendPluginInstance(target)
 
 	emptyObject := map[string]any{"type": "object"}
 	registered := manager.RegisterPluginTool(t.Context(), target, RegisterPluginToolOption{
@@ -279,7 +279,7 @@ func TestPluginToolClearOnUnloadAndIdempotentUnregister(t *testing.T) {
 	}); result.Error != nil {
 		t.Fatalf("re-register: %v", result.Error)
 	}
-	manager.clearRuntimeCallbacks(target)
+	manager.lifecycle.clearRuntimeCallbacks(target)
 	if tools := manager.ListPluginTools(t.Context(), caller, ListPluginToolsOption{}).Tools; len(tools) != 0 {
 		t.Fatalf("tools after clear: %#v", tools)
 	}
@@ -333,8 +333,8 @@ func TestPluginToolReentrancyAndLockIsNotHeldDuringHandler(t *testing.T) {
 	manager := &Manager{}
 	pluginA := newReadyPluginToolInstance("plugin-a", "A")
 	pluginB := newReadyPluginToolInstance("plugin-b", "B")
-	manager.appendPluginInstance(pluginA)
-	manager.appendPluginInstance(pluginB)
+	manager.lifecycle.appendPluginInstance(pluginA)
+	manager.lifecycle.appendPluginInstance(pluginB)
 	emptyObject := map[string]any{"type": "object"}
 
 	started := make(chan struct{})
@@ -395,9 +395,9 @@ func TestPluginToolStableCatalogSort(t *testing.T) {
 	caller := newReadyPluginToolInstance("caller", "Caller")
 	zeta := newReadyPluginToolInstance("zeta", "Zeta")
 	alpha := newReadyPluginToolInstance("alpha", "Alpha")
-	manager.appendPluginInstance(caller)
-	manager.appendPluginInstance(zeta)
-	manager.appendPluginInstance(alpha)
+	manager.lifecycle.appendPluginInstance(caller)
+	manager.lifecycle.appendPluginInstance(zeta)
+	manager.lifecycle.appendPluginInstance(alpha)
 	emptyObject := map[string]any{"type": "object"}
 	handler := func(context.Context, InvokePluginToolHandlerOption) InvokePluginToolHandlerResult {
 		return InvokePluginToolHandlerResult{Output: map[string]any{}}
@@ -453,8 +453,8 @@ func newPluginToolTestEnv(callerID, targetID string) (*Manager, *Instance, *Inst
 	manager := &Manager{}
 	caller := newReadyPluginToolInstance(callerID, callerID)
 	target := newReadyPluginToolInstance(targetID, targetID)
-	manager.appendPluginInstance(caller)
-	manager.appendPluginInstance(target)
+	manager.lifecycle.appendPluginInstance(caller)
+	manager.lifecycle.appendPluginInstance(target)
 	return manager, caller, target
 }
 
@@ -535,7 +535,7 @@ func TestPluginToolUnloadCancelsAndDrainsBeforeReleasingResources(t *testing.T) 
 	}()
 	<-started
 	unloaded := make(chan struct{})
-	go func() { manager.deactivatePlugin(t.Context(), target); close(unloaded) }()
+	go func() { manager.lifecycle.deactivatePlugin(t.Context(), target); close(unloaded) }()
 	select {
 	case <-cancelled:
 	case <-time.After(2 * time.Second):

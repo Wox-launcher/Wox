@@ -16,11 +16,11 @@ import (
 func TestFolderBrowseQueryUsesConfiguredTriggerKeyword(t *testing.T) {
 	manager := GetPluginManager()
 	instance := &Instance{Metadata: Metadata{Id: common.FolderPluginID, TriggerKeywords: []string{"*", "cd"}}}
-	if !manager.appendPluginInstance(instance) {
+	if !manager.lifecycle.appendPluginInstance(instance) {
 		t.Fatal("folder plugin was already registered")
 	}
 	t.Cleanup(func() {
-		manager.removePluginInstances(func(item *Instance) bool {
+		manager.lifecycle.removePluginInstances(func(item *Instance) bool {
 			return item != nil && item.Metadata.Id == common.FolderPluginID
 		})
 	})

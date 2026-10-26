@@ -13,17 +13,13 @@ import (
 
 func TestClearSessionStateLeavesOnlyDestroyedWindow(t *testing.T) {
 	logger = util.GetLogger()
-	manager := &Manager{
-		sessionPluginQueries: util.NewHashMap[string, *sessionPluginQueryState](),
-		resultStore:          newQueryResultStore(),
-		pluginToolbarMsgIds:  util.NewHashMap[string, string](),
-	}
+	manager := newManager()
 	left := make(chan context.Context, 2)
 	instance := &Instance{Metadata: Metadata{Id: "session-owner", Name: "Session Owner"},
 		LeavePluginQueryCallbacks: []func(context.Context){func(ctx context.Context) { left <- ctx }}}
-	manager.appendPluginInstance(instance)
+	manager.lifecycle.appendPluginInstance(instance)
 	for _, session := range []string{"first", "second"} {
-		manager.sessionPluginQueries.Store(session, &sessionPluginQueryState{PluginId: instance.Metadata.Id, QueryId: "query-" + session})
+		manager.presentation.sessionPluginQueries.Store(session, &sessionPluginQueryState{PluginId: instance.Metadata.Id, QueryId: "query-" + session})
 	}
 	manager.ClearSessionState(context.Background(), "first")
 	select {
@@ -33,8 +29,8 @@ func TestClearSessionStateLeavesOnlyDestroyedWindow(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("destroyed window did not leave the active plugin query")
 	}
-	assert.False(t, manager.isPluginActiveInSession("first", instance.Metadata.Id))
-	assert.True(t, manager.isPluginActiveInSession("second", instance.Metadata.Id))
+	assert.False(t, manager.presentation.isPluginActiveInSession("first", instance.Metadata.Id))
+	assert.True(t, manager.presentation.isPluginActiveInSession("second", instance.Metadata.Id))
 	manager.ClearSessionState(context.Background(), "first")
 	select {
 	case <-left:

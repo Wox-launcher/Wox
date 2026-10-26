@@ -51,9 +51,7 @@ func (f *fakeHost) UnloadPlugin(ctx context.Context, metadata Metadata) {}
 // package logger available and no plugin instances.
 func newWatchdogTestManager() *Manager {
 	logger = util.GetLogger()
-	return &Manager{
-		hostWatchdogStates: map[string]*hostWatchdogState{},
-	}
+	return &Manager{lifecycle: pluginLifecycle{hostWatchdogStates: map[string]*hostWatchdogState{}}}
 }
 
 func TestHostHasLiveInstances(t *testing.T) {
@@ -61,17 +59,17 @@ func TestHostHasLiveInstances(t *testing.T) {
 	hostA := &fakeHost{}
 	hostB := &fakeHost{}
 
-	assert.False(t, m.hostHasLiveInstances(hostA))
+	assert.False(t, m.lifecycle.hostHasLiveInstances(hostA))
 
-	m.instances = []*Instance{
+	m.lifecycle.instances = []*Instance{
 		{Host: hostB, RuntimeLoaded: true},
 	}
-	assert.False(t, m.hostHasLiveInstances(hostA))
-	assert.True(t, m.hostHasLiveInstances(hostB))
+	assert.False(t, m.lifecycle.hostHasLiveInstances(hostA))
+	assert.True(t, m.lifecycle.hostHasLiveInstances(hostB))
 
 	// unloaded/disabled instances must not require host recovery
-	m.instances = append(m.instances, &Instance{Host: hostA, RuntimeLoaded: false})
-	assert.False(t, m.hostHasLiveInstances(hostA))
+	m.lifecycle.instances = append(m.lifecycle.instances, &Instance{Host: hostA, RuntimeLoaded: false})
+	assert.False(t, m.lifecycle.hostHasLiveInstances(hostA))
 }
 
 func TestWatchdogRestartsDeadHostAndResetsOnRecovery(t *testing.T) {
@@ -91,17 +89,17 @@ func TestWatchdogRestartsDeadHostAndResetsOnRecovery(t *testing.T) {
 		AllHosts = remaining
 	}()
 
-	m.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
 
 	assert.Equal(t, 1, host.stopCount)
 	assert.Equal(t, 1, host.startCount)
 	assert.True(t, host.IsStarted(context.Background()))
-	assert.Equal(t, 1, m.hostWatchdogStates["PYTHON"].consecutiveRestarts)
+	assert.Equal(t, 1, m.lifecycle.hostWatchdogStates["PYTHON"].consecutiveRestarts)
 
 	// A healthy host observed at the next check clears the failure counters.
-	m.checkHostsHealth(context.Background())
-	assert.Equal(t, 0, m.hostWatchdogStates["PYTHON"].consecutiveRestarts)
-	assert.Equal(t, int64(0), m.hostWatchdogStates["PYTHON"].cooldownUntil)
+	m.lifecycle.checkHostsHealth(context.Background())
+	assert.Equal(t, 0, m.lifecycle.hostWatchdogStates["PYTHON"].consecutiveRestarts)
+	assert.Equal(t, int64(0), m.lifecycle.hostWatchdogStates["PYTHON"].cooldownUntil)
 }
 
 func TestWatchdogBacksOffAfterRepeatedFastFailures(t *testing.T) {
@@ -111,17 +109,17 @@ func TestWatchdogBacksOffAfterRepeatedFastFailures(t *testing.T) {
 	// Simulate a plugin that keeps killing the host right after each restart.
 	for i := 0; i < hostWatchdogMaxConsecutiveFailures; i++ {
 		host.started = false
-		m.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+		m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
 	}
 
-	state := m.hostWatchdogStates["PYTHON"]
+	state := m.lifecycle.hostWatchdogStates["PYTHON"]
 	assert.Equal(t, hostWatchdogMaxConsecutiveFailures, state.consecutiveRestarts)
 	assert.Greater(t, state.cooldownUntil, int64(0))
 
 	// While in cooldown, a still-dead host is not restarted again.
 	stopBefore := host.stopCount
 	startBefore := host.startCount
-	m.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
 	assert.Equal(t, stopBefore, host.stopCount)
 	assert.Equal(t, startBefore, host.startCount)
 }
@@ -131,8 +129,8 @@ func TestWatchdogIgnoresHostsWithoutLiveInstances(t *testing.T) {
 
 	// checkHostsHealth also iterates the real AllHosts entries; without loaded
 	// instances the watchdog must not try to start any host.
-	m.checkHostsHealth(context.Background())
-	assert.Empty(t, m.instances)
+	m.lifecycle.checkHostsHealth(context.Background())
+	assert.Empty(t, m.lifecycle.instances)
 }
 
 func TestHostHasLiveInstancesDuringInstanceChanges(t *testing.T) {
@@ -144,8 +142,8 @@ func TestHostHasLiveInstancesDuringInstanceChanges(t *testing.T) {
 	go func() {
 		defer workers.Done()
 		for i := 0; i < 100; i++ {
-			m.appendPluginInstance(&Instance{Host: host, RuntimeLoaded: true})
-			m.removePluginInstances(func(instance *Instance) bool {
+			m.lifecycle.appendPluginInstance(&Instance{Host: host, RuntimeLoaded: true})
+			m.lifecycle.removePluginInstances(func(instance *Instance) bool {
 				return instance.Host == host
 			})
 		}
@@ -153,7 +151,7 @@ func TestHostHasLiveInstancesDuringInstanceChanges(t *testing.T) {
 	go func() {
 		defer workers.Done()
 		for i := 0; i < 100; i++ {
-			m.hostHasLiveInstances(host)
+			m.lifecycle.hostHasLiveInstances(host)
 		}
 	}()
 
@@ -162,11 +160,11 @@ func TestHostHasLiveInstancesDuringInstanceChanges(t *testing.T) {
 
 func TestStopHostWatchdogWaitsForExit(t *testing.T) {
 	m := newWatchdogTestManager()
-	m.startHostWatchdog(context.Background())
-	m.stopHostWatchdog()
+	m.lifecycle.startHostWatchdog(context.Background())
+	m.lifecycle.stopHostWatchdog()
 
 	select {
-	case <-m.hostWatchdogDone:
+	case <-m.lifecycle.hostWatchdogDone:
 	default:
 		t.Fatal("host watchdog is still running after stop")
 	}

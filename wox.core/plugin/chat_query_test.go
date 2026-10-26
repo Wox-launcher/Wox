@@ -28,7 +28,7 @@ func TestBuildAIChatQueryFollowsKeywordChanges(t *testing.T) {
 		Setting:  setting.NewPluginSetting(setting.NewPluginSettingStore(db, common.AIChatPluginID), nil),
 	}
 	other := &Instance{Metadata: Metadata{Id: "other-plugin"}}
-	manager := &Manager{instances: []*Instance{instance, other}}
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{instance, other}}}
 	ctx := context.Background()
 	contextData := common.ContextData{"ai_chat_active_id": "saved-chat", "ai_chat_attachments": `[{"Kind":"quote","Text":"selected text"}]`}
 

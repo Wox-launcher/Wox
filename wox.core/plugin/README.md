@@ -1,9 +1,41 @@
-# Plugin queries and result processing
+# Plugin management, queries and result processing
 
-The manager retains plugin lifecycle, query planning and business processing.
-Its internal `queryScheduler` owns execution timing and completion, while
-`queryResultStore` owns session/query result maps and deferred image tokens.
-These responsibilities remain in the plugin package.
+Manager coordinates the public entry points, query planning and business
+processing. Internal owners manage plugin lifetimes, UI callbacks, query timing
+and result retention. These responsibilities remain in the plugin package.
+
+## Plugin and host lifecycle
+
+`pluginLifecycle` owns the installed instance list, snapshot lock, per-plugin
+load locks, offline transition lock, file watchers, reload timers, and host
+watchdog/restart state. It has no Manager reference. `manager_lifecycle.go`
+preserves the public entry points and keeps UI refreshes in the coordinator.
+
+- `plugin_loader.go` discovers plugins and performs host loading and Init.
+- `plugin_lifecycle.go` owns registration, enable/disable, unload and shutdown.
+- `host_lifecycle.go` and `host_watchdog.go` share the same restart lock and
+  recovery state, including cooldowns and metadata restoration.
+- `script_plugin_watcher.go` and `single_file_watcher.go` own their distinct
+  watch policies and reload flows. `plugin_metadata.go`, `inline_metadata.go`
+  and `single_file.go` retain metadata validation and source identity rules.
+- `offline.go` suspends/resumes runtimes without changing saved enablement.
+
+Startup still initializes system plugins on the calling UI thread, starts
+third-party hosts asynchronously, and serializes loads by plugin ID. Shutdown
+stops the watchdog before closing watchers, cancelling pending reload timers
+and stopping hosts. This refactor does not add cancellation or waits for already
+executing reload/Init callbacks, or change plugin/SDK contracts.
+
+`pluginPresentation` owns Glance/Toolbar callback stores and active query-session
+routing, using instance lookup and UI capabilities rather than a Manager pointer.
+Manager wires its release callback into the lifecycle owner. Unload, disable,
+offline suspension, failed Init, successful host replacement and shutdown discard
+the affected plugin's cached UI actions. Other plugins and query-session routing
+are preserved. Existing Glance refresh, Toolbar replacement and session-leave
+cleanup remain in this owner; result-query callbacks remain in the result store.
+
+Lifecycle, watchdog and presentation tests use fake hosts and UI capabilities;
+no real plugin process or native window is needed for these regressions.
 
 ## Query scheduling
 

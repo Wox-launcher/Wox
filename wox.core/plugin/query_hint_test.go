@@ -11,11 +11,11 @@ import (
 func TestTriggerQueryHints(t *testing.T) {
 	static := &common.QueryHint{Elements: []common.QueryElement{{Id: "input", Kind: common.QueryElementArgument, Placeholder: "Static"}}}
 	instance := &Instance{Metadata: Metadata{TriggerKeywords: []string{"g"}, TriggerQueryHints: map[string]*common.QueryHint{"g": static}}}
-	manager := &Manager{instances: []*Instance{instance}}
-	if hint, _ := MatchQueryHint("g", manager.instances); hint != nil {
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{instance}}}
+	if hint, _ := MatchQueryHint("g", manager.lifecycle.instances); hint != nil {
 		t.Fatal("bare trigger received a static hint before entering plugin scope")
 	}
-	hint, owner := MatchQueryHint("g ", manager.instances)
+	hint, owner := MatchQueryHint("g ", manager.lifecycle.instances)
 	if hint == nil || owner != instance || hint.Elements[1].Placeholder != "Static" {
 		t.Fatal("static trigger hint not matched")
 	}
@@ -29,10 +29,10 @@ func TestTriggerQueryHints(t *testing.T) {
 		t.Fatal("runtime registration failed")
 	}
 	runtime.Elements[0].Placeholder = "mutated"
-	if hint, _ := MatchQueryHint("g", manager.instances); hint != nil {
+	if hint, _ := MatchQueryHint("g", manager.lifecycle.instances); hint != nil {
 		t.Fatal("bare trigger received a runtime hint before entering plugin scope")
 	}
-	current, _ := MatchQueryHint("g ", manager.instances)
+	current, _ := MatchQueryHint("g ", manager.lifecycle.instances)
 	if current.Elements[1].Placeholder != "Runtime" || hint.Elements[1].Placeholder != "Static" {
 		t.Fatal("registered or active hint was mutated")
 	}
@@ -40,7 +40,7 @@ func TestTriggerQueryHints(t *testing.T) {
 		t.Fatal("invalid update was accepted")
 	}
 	instance.Metadata.Commands = []MetadataCommand{{Command: "find", QueryHint: static}}
-	if command, _ := MatchQueryHint("g find ", manager.instances); command == nil || command.Elements[0].Text != "g find " {
+	if command, _ := MatchQueryHint("g find ", manager.lifecycle.instances); command == nil || command.Elements[0].Text != "g find " {
 		t.Fatal("command hint lost precedence")
 	}
 	conflict := &Instance{Metadata: Metadata{TriggerKeywords: []string{"g"}}}
@@ -48,15 +48,15 @@ func TestTriggerQueryHints(t *testing.T) {
 		t.Fatal("conflicting keyword received a hint")
 	}
 	manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: "g"})
-	if cleared, _ := MatchQueryHint("g ", manager.instances); cleared == nil || cleared.Elements[1].Placeholder != "" || len(cleared.Elements[1].Suggestions) != 1 || cleared.Elements[1].Suggestions[0] != "find" {
+	if cleared, _ := MatchQueryHint("g ", manager.lifecycle.instances); cleared == nil || cleared.Elements[1].Placeholder != "" || len(cleared.Elements[1].Suggestions) != 1 || cleared.Elements[1].Suggestions[0] != "find" {
 		t.Fatal("nil update should replace the runtime hint with automatic command suggestions")
 	}
 	instance.unregisterTriggerKeyword("g")
-	if restored, _ := MatchQueryHint("g ", manager.instances); restored == nil || restored.Elements[1].Placeholder != "Static" {
+	if restored, _ := MatchQueryHint("g ", manager.lifecycle.instances); restored == nil || restored.Elements[1].Placeholder != "Static" {
 		t.Fatal("unregistration did not restore metadata hint")
 	}
 	for _, text := range []string{"g test", "gg "} {
-		if got, _ := MatchQueryHint(text, manager.instances); got != nil {
+		if got, _ := MatchQueryHint(text, manager.lifecycle.instances); got != nil {
 			t.Fatalf("non-prefix query %q received hint", text)
 		}
 	}

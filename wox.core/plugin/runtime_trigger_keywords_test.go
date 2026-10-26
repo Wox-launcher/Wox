@@ -11,7 +11,7 @@ import (
 func TestRuntimeTriggerKeywords(t *testing.T) {
 	instance := &Instance{Metadata: Metadata{TriggerKeywords: []string{"*"}}}
 	other := &Instance{Metadata: Metadata{TriggerKeywords: []string{"occupied"}}}
-	manager := &Manager{instances: []*Instance{instance, other}}
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{instance, other}}}
 	for _, keyword := range []string{"", "*", "two words", "tab\tword", "occupied"} {
 		if manager.registerTriggerKeyword(instance, RegisterTriggerKeywordOption{Keyword: keyword}) {
 			t.Fatalf("invalid or occupied keyword %q succeeded", keyword)
@@ -46,7 +46,7 @@ func TestRuntimeTriggerKeywords(t *testing.T) {
 		t.Fatal("replacement keyword does not route to the plugin")
 	}
 	instance.unregisterTriggerKeyword("*")
-	(&Manager{}).clearRuntimeCallbacks(instance)
+	(&pluginLifecycle{}).clearRuntimeCallbacks(instance)
 	if got := instance.GetTriggerKeywords(); !slices.Equal(got, []string{"*"}) {
 		t.Fatalf("runtime keywords survived unload: %v", got)
 	}
@@ -55,10 +55,10 @@ func TestRuntimeTriggerKeywords(t *testing.T) {
 // TestConcurrentTriggerRegistration ensures that an ownership check cannot race another registration.
 func TestConcurrentTriggerRegistration(t *testing.T) {
 	first, second := &Instance{}, &Instance{}
-	manager := &Manager{instances: []*Instance{first, second}}
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{first, second}}}
 	var group sync.WaitGroup
 	results := make(chan bool, 2)
-	for _, instance := range manager.instances {
+	for _, instance := range manager.lifecycle.instances {
 		group.Add(1)
 		go func() {
 			defer group.Done()

@@ -21,13 +21,13 @@ func TestResolvePluginDisplayNameUnknownID(t *testing.T) {
 func TestResolvePluginDisplayNameUsesInstalledInstance(t *testing.T) {
 	id := "cloud-sync-progress-name-test"
 	manager := GetPluginManager()
-	if !manager.appendPluginInstance(&Instance{
+	if !manager.lifecycle.appendPluginInstance(&Instance{
 		Metadata: Metadata{Id: id, Name: "DeepL"},
 	}) {
 		t.Fatal("failed to register test plugin instance")
 	}
 	t.Cleanup(func() {
-		manager.removePluginInstances(func(instance *Instance) bool {
+		manager.lifecycle.removePluginInstances(func(instance *Instance) bool {
 			return instance != nil && instance.Metadata.Id == id
 		})
 	})

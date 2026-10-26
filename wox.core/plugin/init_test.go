@@ -63,7 +63,7 @@ func TestInitPluginRecordsHostInitError(t *testing.T) {
 	manager := newInitTestManager()
 	instance := newInitTestInstance(&fakeLifecyclePlugin{initErr: errors.New("host init failed")})
 
-	manager.initPlugin(context.Background(), instance)
+	manager.lifecycle.initPlugin(context.Background(), instance)
 
 	assert.False(t, instance.Initialized)
 	assert.EqualError(t, instance.WaitInit(context.Background()), "host init failed")
@@ -73,7 +73,7 @@ func TestInitPluginRecordsPanic(t *testing.T) {
 	manager := newInitTestManager()
 	instance := newInitTestInstance(&fakeLifecyclePlugin{panicInit: true})
 
-	manager.initPlugin(context.Background(), instance)
+	manager.lifecycle.initPlugin(context.Background(), instance)
 
 	assert.False(t, instance.Initialized)
 	require.Error(t, instance.InitError)
@@ -96,7 +96,7 @@ func TestInitPluginMarksInitializedOnSuccess(t *testing.T) {
 	manager := newInitTestManager()
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
 
-	manager.initPlugin(context.Background(), instance)
+	manager.lifecycle.initPlugin(context.Background(), instance)
 
 	assert.True(t, instance.Initialized)
 	require.NoError(t, instance.WaitInit(context.Background()))
@@ -107,7 +107,7 @@ func TestActivatePluginReturnsInitError(t *testing.T) {
 	instance := newInitTestInstance(&fakeLifecyclePlugin{initErr: errors.New("still broken")})
 	instance.RuntimeLoaded = true
 
-	err := manager.activatePlugin(context.Background(), instance)
+	err := manager.lifecycle.activatePlugin(context.Background(), instance)
 
 	require.EqualError(t, err, "still broken")
 	assert.False(t, instance.Initialized)
@@ -120,14 +120,14 @@ func TestActivatePluginDoesNotOverlapPendingInit(t *testing.T) {
 
 	initialDone := make(chan struct{})
 	go func() {
-		manager.initPlugin(context.Background(), instance)
+		manager.lifecycle.initPlugin(context.Background(), instance)
 		close(initialDone)
 	}()
 	<-plugin.initStart
 
 	activateDone := make(chan error, 1)
 	go func() {
-		activateDone <- manager.activatePlugin(context.Background(), instance)
+		activateDone <- manager.lifecycle.activatePlugin(context.Background(), instance)
 	}()
 	assert.Never(t, func() bool { return len(activateDone) > 0 }, 20*time.Millisecond, time.Millisecond)
 

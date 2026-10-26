@@ -14,7 +14,7 @@ func TestOfflineSuspensionKeepsInstalledMetadata(t *testing.T) {
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
 	instance.Host = host
 	instance.RuntimeLoaded = true
-	manager.instances = []*Instance{instance}
+	manager.lifecycle.instances = []*Instance{instance}
 	previous := AllHosts
 	AllHosts = []Host{host}
 	network.Default.SetOffline(true)
@@ -26,7 +26,7 @@ func TestOfflineSuspensionKeepsInstalledMetadata(t *testing.T) {
 	if len(manager.GetPluginInstances()) != 1 {
 		t.Fatal("installed metadata removed")
 	}
-	manager.checkHostsHealth(context.Background())
+	manager.lifecycle.checkHostsHealth(context.Background())
 	if host.startCount != 0 {
 		t.Fatal("watchdog restarted offline host")
 	}
@@ -46,7 +46,7 @@ func TestOfflineSkipsQueuedPluginInit(t *testing.T) {
 	instance.Host = &fakeHost{}
 	network.Default.SetOffline(true)
 	defer network.Default.SetOffline(false)
-	manager.initPlugin(context.Background(), instance)
+	manager.lifecycle.initPlugin(context.Background(), instance)
 	if target.initCalls.Load() != 0 {
 		t.Fatal("third party initialization executed")
 	}
@@ -65,7 +65,7 @@ func TestOfflineRegistrationAndResumeKeepPreferences(t *testing.T) {
 	t.Cleanup(func() { network.Default.SetOffline(false); AllHosts = previous })
 	network.Default.SetOffline(true)
 	for _, id := range []string{"enabled-offline-plugin", "disabled-offline-plugin"} {
-		if err := manager.registerOfflinePlugin(context.Background(), host, Metadata{Id: id, Name: "Offline test plugin", Runtime: string(PLUGIN_RUNTIME_PYTHON)}); err != nil {
+		if err := manager.lifecycle.registerOfflinePlugin(context.Background(), host, Metadata{Id: id, Name: "Offline test plugin", Runtime: string(PLUGIN_RUNTIME_PYTHON)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -107,7 +107,7 @@ func TestOfflineResumeContinuesAfterInitFailure(t *testing.T) {
 	healthy := &fakeLifecyclePlugin{}
 	for index, target := range []*fakeLifecyclePlugin{{initErr: broken}, healthy} {
 		id := []string{"broken-resume", "healthy-resume"}[index]
-		if err := manager.registerOfflinePlugin(context.Background(), host, Metadata{Id: id, Name: "Resume test"}); err != nil {
+		if err := manager.lifecycle.registerOfflinePlugin(context.Background(), host, Metadata{Id: id, Name: "Resume test"}); err != nil {
 			t.Fatal(err)
 		}
 		instance := manager.GetPluginInstanceById(id)

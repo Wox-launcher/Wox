@@ -17,7 +17,7 @@ func TestUnloadSingleFilePluginByPathIgnoresIDChange(t *testing.T) {
 	initSingleFileTestLocation(t)
 	singleFileDir, err := filepath.Abs(util.GetLocation().GetUserSingleFilePluginsDirectory())
 	require.NoError(t, err)
-	manager := &Manager{instances: []*Instance{{
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{{
 		Metadata: Metadata{
 			Id:        "old-id",
 			Name:      "Old",
@@ -25,9 +25,9 @@ func TestUnloadSingleFilePluginByPathIgnoresIDChange(t *testing.T) {
 			Directory: singleFileDir,
 			Entry:     "Wox.Plugin.Weather.py",
 		},
-	}}}
+	}}}}
 
-	manager.unloadSingleFilePluginByPath(context.Background(), filepath.Join(singleFileDir, "Wox.Plugin.Weather.py"))
+	manager.lifecycle.unloadSingleFilePluginByPath(context.Background(), filepath.Join(singleFileDir, "Wox.Plugin.Weather.py"))
 	assert.Empty(t, manager.pluginInstancesSnapshot())
 }
 
@@ -37,7 +37,7 @@ func TestReloadSingleFilePluginKeepsInstanceWhenMetadataInvalid(t *testing.T) {
 	require.NoError(t, err)
 	filePath := filepath.Join(singleFileDir, "keep.py")
 	require.NoError(t, os.WriteFile(filePath, []byte("not a plugin"), 0644))
-	manager := &Manager{instances: []*Instance{{
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{{
 		Metadata: Metadata{
 			Id:        "keep-id",
 			Name:      "Keep",
@@ -45,8 +45,8 @@ func TestReloadSingleFilePluginKeepsInstanceWhenMetadataInvalid(t *testing.T) {
 			Directory: singleFileDir,
 			Entry:     "keep.py",
 		},
-	}}}
-	manager.reloadSingleFilePlugin(context.Background(), filePath, "invalid metadata")
+	}}}}
+	manager.lifecycle.reloadSingleFilePlugin(context.Background(), filePath, "invalid metadata")
 	require.Len(t, manager.pluginInstancesSnapshot(), 1)
 	assert.Equal(t, "keep-id", manager.pluginInstancesSnapshot()[0].Metadata.Id)
 }
@@ -54,11 +54,11 @@ func TestReloadSingleFilePluginKeepsInstanceWhenMetadataInvalid(t *testing.T) {
 func TestSingleFilePluginIDConflictKeepsOtherPlugin(t *testing.T) {
 	initSingleFileTestLocation(t)
 	singleFileDir := util.GetLocation().GetUserSingleFilePluginsDirectory()
-	manager := &Manager{instances: []*Instance{{
+	manager := &Manager{lifecycle: pluginLifecycle{instances: []*Instance{{
 		Metadata: Metadata{Id: "duplicate", Directory: filepath.Join(t.TempDir(), "packaged")},
-	}}}
+	}}}}
 
-	err := manager.ensureSingleFilePluginIDAvailable(Metadata{
+	err := manager.lifecycle.ensureSingleFilePluginIDAvailable(Metadata{
 		Id:        "DUPLICATE",
 		Directory: singleFileDir,
 		Entry:     "duplicate.py",
@@ -68,12 +68,12 @@ func TestSingleFilePluginIDConflictKeepsOtherPlugin(t *testing.T) {
 }
 
 func TestIgnoreSingleFileWatchExpires(t *testing.T) {
-	manager := &Manager{singleFileWatchIgnored: util.NewHashMap[string, int64]()}
+	manager := &Manager{lifecycle: pluginLifecycle{singleFileWatchIgnored: util.NewHashMap[string, int64]()}}
 	filePath := filepath.Join(t.TempDir(), "plugin.py")
 	manager.IgnoreSingleFileWatch(filePath)
-	assert.True(t, manager.isSingleFileWatchIgnored(filePath))
-	manager.singleFileWatchIgnored.Store(filePath, time.Now().Add(-time.Millisecond).UnixMilli())
-	assert.False(t, manager.isSingleFileWatchIgnored(filePath))
+	assert.True(t, manager.lifecycle.isSingleFileWatchIgnored(filePath))
+	manager.lifecycle.singleFileWatchIgnored.Store(filePath, time.Now().Add(-time.Millisecond).UnixMilli())
+	assert.False(t, manager.lifecycle.isSingleFileWatchIgnored(filePath))
 }
 
 func TestReadFileWithRetryReturnsStableContent(t *testing.T) {

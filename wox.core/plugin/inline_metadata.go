@@ -139,7 +139,7 @@ func stripInlineMetadataComment(trimmed string) string {
 }
 
 // ParseScriptMetadata parses metadata from script plugin file comments.
-func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
+func (l *pluginLifecycle) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
 	parsed, err := parseInlineMetadata(scriptPath)
 	if err != nil {
 		return Metadata{}, err
@@ -161,11 +161,11 @@ func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (M
 	metadata.Entry = filepath.Base(scriptPath)
 	metadata.Directory = filepath.Dir(scriptPath)
 	metadata.LoadPluginI18nFromDirectory(ctx)
-	return m.validateAndSetScriptMetadataDefaults(metadata)
+	return l.validateAndSetScriptMetadataDefaults(metadata)
 }
 
 // ParseSingleFilePluginMetadata parses a Python or Node.js single-file SDK plugin.
-func (m *Manager) ParseSingleFilePluginMetadata(ctx context.Context, filePath string) (Metadata, error) {
+func (l *pluginLifecycle) ParseSingleFilePluginMetadata(ctx context.Context, filePath string) (Metadata, error) {
 	parsed, err := parseInlineMetadata(filePath)
 	if err != nil {
 		return Metadata{}, err

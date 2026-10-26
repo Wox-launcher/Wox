@@ -16,7 +16,7 @@ import (
 )
 
 // loadSingleFilePlugins scans the shared single-file directory for .py and .js plugins.
-func (m *Manager) loadSingleFilePlugins(ctx context.Context) ([]Metadata, error) {
+func (l *pluginLifecycle) loadSingleFilePlugins(ctx context.Context) ([]Metadata, error) {
 	logger.Debug(ctx, "start loading single-file plugin metadata")
 
 	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
@@ -34,7 +34,7 @@ func (m *Manager) loadSingleFilePlugins(ctx context.Context) ([]Metadata, error)
 			continue
 		}
 		filePath := path.Join(directory, entry.Name())
-		metadata, metadataErr := m.ParseSingleFilePluginMetadata(ctx, filePath)
+		metadata, metadataErr := l.ParseSingleFilePluginMetadata(ctx, filePath)
 		if metadataErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to parse single-file plugin metadata for %s: %s", entry.Name(), metadataErr.Error()))
 			continue
@@ -46,7 +46,7 @@ func (m *Manager) loadSingleFilePlugins(ctx context.Context) ([]Metadata, error)
 	return metaDataList, nil
 }
 
-func (m *Manager) startSingleFilePluginMonitoring(ctx context.Context) {
+func (l *pluginLifecycle) startSingleFilePluginMonitoring(ctx context.Context) {
 	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
 	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to ensure single-file plugin directory: %s", err.Error()))
@@ -54,7 +54,7 @@ func (m *Manager) startSingleFilePluginMonitoring(ctx context.Context) {
 	}
 
 	watch, err := util.WatchDirectory(directory, func(event fsnotify.Event) {
-		m.handleSingleFilePluginEvent(ctx, event)
+		l.handleSingleFilePluginEvent(ctx, event)
 	}, func(watchErr error) {
 		logger.Error(ctx, fmt.Sprintf("Single-file plugin watcher error: %s", watchErr.Error()))
 	})
@@ -62,11 +62,11 @@ func (m *Manager) startSingleFilePluginMonitoring(ctx context.Context) {
 		logger.Error(ctx, fmt.Sprintf("Failed to watch single-file plugin directory: %s", err.Error()))
 		return
 	}
-	m.singleFilePluginWatch = watch
+	l.singleFilePluginWatch = watch
 	logger.Info(ctx, fmt.Sprintf("Started monitoring single-file plugins directory: %s", directory))
 }
 
-func (m *Manager) handleSingleFilePluginEvent(ctx context.Context, event fsnotify.Event) {
+func (l *pluginLifecycle) handleSingleFilePluginEvent(ctx context.Context, event fsnotify.Event) {
 	fileName := filepath.Base(event.Name)
 	if shouldIgnoreSingleFileWatchName(fileName) || !isSingleFilePluginSourceName(fileName) {
 		return
@@ -74,7 +74,7 @@ func (m *Manager) handleSingleFilePluginEvent(ctx context.Context, event fsnotif
 	if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 		return
 	}
-	if m.isSingleFileWatchIgnored(event.Name) {
+	if l.isSingleFileWatchIgnored(event.Name) {
 		return
 	}
 
@@ -82,53 +82,53 @@ func (m *Manager) handleSingleFilePluginEvent(ctx context.Context, event fsnotif
 
 	switch {
 	case event.Op&fsnotify.Create != 0 || event.Op&fsnotify.Write != 0:
-		m.debounceSingleFilePluginReload(ctx, event.Name, event.Op.String())
+		l.debounceSingleFilePluginReload(ctx, event.Name, event.Op.String())
 	case event.Op&fsnotify.Remove != 0 || event.Op&fsnotify.Rename != 0:
-		m.unloadSingleFilePluginByPath(ctx, event.Name)
+		l.unloadSingleFilePluginByPath(ctx, event.Name)
 	case event.Op&fsnotify.Chmod != 0:
 		logger.Debug(ctx, fmt.Sprintf("Single-file plugin permissions changed: %s", event.Name))
 	}
 }
 
 // IgnoreSingleFileWatch temporarily gives a managed writer sole ownership of reload.
-func (m *Manager) IgnoreSingleFileWatch(filePath string) {
+func (l *pluginLifecycle) IgnoreSingleFileWatch(filePath string) {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		absPath = filePath
 	}
-	m.singleFileWatchIgnored.Store(absPath, time.Now().Add(singleFileManagedWriteWindow).UnixMilli())
+	l.singleFileWatchIgnored.Store(absPath, time.Now().Add(singleFileManagedWriteWindow).UnixMilli())
 }
 
-func (m *Manager) isSingleFileWatchIgnored(filePath string) bool {
+func (l *pluginLifecycle) isSingleFileWatchIgnored(filePath string) bool {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		absPath = filePath
 	}
-	deadline, exists := m.singleFileWatchIgnored.Load(absPath)
+	deadline, exists := l.singleFileWatchIgnored.Load(absPath)
 	if !exists {
 		return false
 	}
 	if time.Now().UnixMilli() <= deadline {
 		return true
 	}
-	m.singleFileWatchIgnored.Delete(absPath)
+	l.singleFileWatchIgnored.Delete(absPath)
 	return false
 }
 
-func (m *Manager) debounceSingleFilePluginReload(ctx context.Context, filePath, reason string) {
+func (l *pluginLifecycle) debounceSingleFilePluginReload(ctx context.Context, filePath, reason string) {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		absPath = filePath
 	}
-	debounceKeyedTimer(m.singleFileReloadTimers, absPath, singleFileWatchDebounce, func() {
-		if m.isSingleFileWatchIgnored(absPath) {
+	debounceKeyedTimer(l.singleFileReloadTimers, absPath, singleFileWatchDebounce, func() {
+		if l.isSingleFileWatchIgnored(absPath) {
 			return
 		}
-		m.reloadSingleFilePlugin(util.NewTraceContext(), absPath, reason)
+		l.reloadSingleFilePlugin(util.NewTraceContext(), absPath, reason)
 	})
 }
 
-func (m *Manager) reloadSingleFilePlugin(ctx context.Context, filePath, reason string) {
+func (l *pluginLifecycle) reloadSingleFilePlugin(ctx context.Context, filePath, reason string) {
 	logger.Info(ctx, fmt.Sprintf("Reloading single-file plugin: %s, reason: %s", filePath, reason))
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -152,12 +152,12 @@ func (m *Manager) reloadSingleFilePlugin(ctx context.Context, filePath, reason s
 		logger.Error(ctx, fmt.Sprintf("Failed to validate single-file plugin metadata, keeping existing instance: %s", metadataErr.Error()))
 		return
 	}
-	if conflictErr := m.ensureSingleFilePluginIDAvailable(metadata); conflictErr != nil {
+	if conflictErr := l.ensureSingleFilePluginIDAvailable(metadata); conflictErr != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to reload single-file plugin, keeping existing instance: %s", conflictErr.Error()))
 		return
 	}
 
-	m.unloadSingleFilePluginByPath(ctx, filePath)
+	l.unloadSingleFilePluginByPath(ctx, filePath)
 
 	pluginHost, exist := lo.Find(AllHosts, func(item Host) bool {
 		return strings.EqualFold(string(item.GetRuntime(ctx)), metadata.Runtime)
@@ -173,19 +173,19 @@ func (m *Manager) reloadSingleFilePlugin(ctx context.Context, filePath, reason s
 		}
 	}
 
-	if err := m.loadHostPlugin(ctx, pluginHost, metadata); err != nil {
+	if err := l.loadHostPlugin(ctx, pluginHost, metadata); err != nil {
 		logger.Error(ctx, fmt.Sprintf("Failed to reload single-file plugin: %s", err.Error()))
 		return
 	}
 	logger.Info(ctx, fmt.Sprintf("Successfully reloaded single-file plugin: %s", metadata.GetName(ctx)))
 }
 
-func (m *Manager) unloadSingleFilePluginByPath(ctx context.Context, filePath string) {
+func (l *pluginLifecycle) unloadSingleFilePluginByPath(ctx context.Context, filePath string) {
 	directory := filepath.Dir(filePath)
 	entry := filepath.Base(filePath)
 	logger.Info(ctx, fmt.Sprintf("Unloading single-file plugin by path: %s", filePath))
 
-	for _, instance := range m.pluginInstancesSnapshot() {
+	for _, instance := range l.pluginInstancesSnapshot() {
 		if !IsSingleFilePlugin(instance.Metadata) {
 			continue
 		}
@@ -196,6 +196,6 @@ func (m *Manager) unloadSingleFilePluginByPath(ctx context.Context, filePath str
 			continue
 		}
 		logger.Info(ctx, fmt.Sprintf("Found single-file plugin to unload: %s", instance.Metadata.GetName(ctx)))
-		m.UnloadPlugin(ctx, instance)
+		l.UnloadPlugin(ctx, instance)
 	}
 }

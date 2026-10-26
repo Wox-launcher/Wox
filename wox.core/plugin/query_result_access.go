@@ -17,7 +17,7 @@ func (m *Manager) ClearSessionState(ctx context.Context, sessionId string) {
 	// leave callbacks to release command processes owned by this window.
 	m.HandleQueryLifecycle(ctx, Query{SessionId: sessionId}, nil)
 	m.resultStore.clearSession(sessionId)
-	m.sessionPluginQueries.Delete(sessionId)
+	m.presentation.sessionPluginQueries.Delete(sessionId)
 	logger.Info(ctx, fmt.Sprintf("cleared plugin session state: %s", sessionId))
 }
 

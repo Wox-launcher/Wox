@@ -10,12 +10,12 @@ import (
 )
 
 // SuspendOfflinePlugins releases third-party runtimes without changing saved plugin preferences.
-func (m *Manager) SuspendOfflinePlugins(ctx context.Context) {
-	m.offlineLifecycle.Lock()
-	defer m.offlineLifecycle.Unlock()
-	for _, instance := range m.pluginInstancesSnapshot() {
+func (l *pluginLifecycle) SuspendOfflinePlugins(ctx context.Context) {
+	l.offlineLifecycle.Lock()
+	defer l.offlineLifecycle.Unlock()
+	for _, instance := range l.pluginInstancesSnapshot() {
 		if instance.Host != nil {
-			m.deactivatePlugin(ctx, instance)
+			l.deactivatePlugin(ctx, instance)
 		}
 	}
 	for _, host := range AllHosts {
@@ -26,14 +26,14 @@ func (m *Manager) SuspendOfflinePlugins(ctx context.Context) {
 }
 
 // ResumeOfflinePlugins reactivates known instances and discovers plugins skipped at offline startup.
-func (m *Manager) ResumeOfflinePlugins(ctx context.Context) error {
+func (l *pluginLifecycle) ResumeOfflinePlugins(ctx context.Context) error {
 	if util.IsThirdPartyPluginsDisabled() {
 		return nil
 	}
 	var failures []error
-	for _, instance := range m.pluginInstancesSnapshot() {
+	for _, instance := range l.pluginInstancesSnapshot() {
 		if instance.Host != nil && !instance.Setting.Disabled.Get() {
-			if err := m.activatePlugin(ctx, instance); err != nil {
+			if err := l.activatePlugin(ctx, instance); err != nil {
 				failures = append(failures, fmt.Errorf("plugin %s: %w", instance.Metadata.Id, err))
 			}
 		}
@@ -41,11 +41,11 @@ func (m *Manager) ResumeOfflinePlugins(ctx context.Context) error {
 	if network.IsOffline() {
 		return errors.Join(append(failures, network.ErrOffline)...)
 	}
-	return errors.Join(append(failures, m.loadUserPlugins(ctx, true))...)
+	return errors.Join(append(failures, l.loadUserPlugins(ctx, true))...)
 }
 
 // registerOfflinePlugin exposes installed metadata without executing any third-party code.
-func (m *Manager) registerOfflinePlugin(ctx context.Context, host Host, metadata Metadata) error {
+func (l *pluginLifecycle) registerOfflinePlugin(ctx context.Context, host Host, metadata Metadata) error {
 	if err := ensureWoxVersionSupported(metadata.GetName(ctx), metadata.MinWoxVersion); err != nil {
 		return err
 	}
@@ -57,6 +57,6 @@ func (m *Manager) registerOfflinePlugin(ctx context.Context, host Host, metadata
 	instance.API = NewAPI(instance)
 	instance.beginInitCycle()
 	instance.finishInit(false, nil)
-	m.appendPluginInstance(instance)
+	l.appendPluginInstance(instance)
 	return nil
 }

@@ -82,7 +82,7 @@ func TestBuildFileDropQueryRoutesExplicitPluginAndFallsBack(t *testing.T) {
 			TriggerKeywords: []string{"calc"},
 		},
 	}
-	if !manager.appendPluginInstance(supported) || !manager.appendPluginInstance(unsupported) {
+	if !manager.lifecycle.appendPluginInstance(supported) || !manager.lifecycle.appendPluginInstance(unsupported) {
 		t.Fatal("failed to register test plugins")
 	}
 	paths := []string{`C:\tmp\report.pdf`}
@@ -175,7 +175,7 @@ func TestShouldFallbackUnsupportedSelectionKeepsMissingAndDisabled(t *testing.T)
 func TestBuildFileDropQueryKeepsDisabledPluginScope(t *testing.T) {
 	manager := &Manager{}
 	disabled := newDisabledPluginInstance(t, "disabled-plugin", false)
-	if !manager.appendPluginInstance(disabled) {
+	if !manager.lifecycle.appendPluginInstance(disabled) {
 		t.Fatal("failed to register the disabled plugin")
 	}
 	paths := []string{`C:\tmp\report.pdf`}
