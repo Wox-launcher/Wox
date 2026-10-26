@@ -1904,5 +1904,37 @@
     ],
     "DateCreated": "2026-10-25 15:43:51",
     "DateUpdated": "2026-10-25 15:43:51"
+  },
+  {
+    "Id": "ef529aa0-1288-4a8c-b061-b98389491b4e",
+    "Name": "i18n:plugin_name",
+    "Author": "wuweixing",
+    "Version": "0.3.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "Query and copy TOTP codes, local storage, supports otpauth:// URIs",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "TOTP Codes",
+        "plugin_desc": "Query and copy TOTP codes, local storage, supports otpauth:// URIs"
+      },
+      "zh_CN": {
+        "plugin_name": "TOTP Codes",
+        "plugin_desc": "TOTP 验证码查询/复制，本地存储，支持 otpauth:// 添加"
+      }
+    },
+    "IconUrl": "https://raw.githubusercontent.com/sqlwwx/Wox.Plugin.Totp/master/images/icon.svg",
+    "Website": "https://github.com/sqlwwx/Wox.Plugin.Totp",
+    "DownloadUrl": "https://github.com/sqlwwx/Wox.Plugin.Totp/releases/latest/download/Wox.Plugin.Totp.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/sqlwwx/Wox.Plugin.Totp/master/images/screenshot1.jpg"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-10-26 17:12:00",
+    "DateUpdated": "2026-10-26 17:12:00"
   }
 ]
