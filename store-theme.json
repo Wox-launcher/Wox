@@ -201,5 +201,36 @@
         "theme_description": "深邃的蓝黑色黛底，月白色的文字，矿物淡石青的点缀，以及一道朱砂印章笔触。"
       }
     }
+  },
+  {
+    "Id": "9eb51a7c-0538-40b7-b05c-aedf88af534f",
+    "Name": "i18n:theme_name",
+    "Author": "dragonish",
+    "Version": "1.0.1",
+    "MinWoxVersion": "2.4.5",
+    "Description": "i18n:theme_description",
+    "ImageTheme": true,
+    "IconColors": {
+      "Background": "#F2EDE0",
+      "Query": "#FBD9E8",
+      "Selected": "#7A3E00"
+    },
+    "Website": "https://github.com/dragonish/Wox.Theme.WesternOilPainting",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Theme.WesternOilPainting/releases/latest/download/western-oil-painting.wox-theme",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Theme.WesternOilPainting/main/screenshot.jpg"
+    ],
+    "DateCreated": "2026-10-26 22:11:51",
+    "DateUpdated": "2026-10-26 22:11:51",
+    "I18n": {
+      "en_US": {
+        "theme_name": "Western Oil Painting",
+        "theme_description": "A Western oil-painting frame in sage, ochre and sky blue, around a warm-paper workspace with a pink query box, gold toolbar and deep burnt-sienna selection."
+      },
+      "zh_CN": {
+        "theme_name": "西方油画",
+        "theme_description": "鼠尾草绿、赭金与天青笔触的油画外框，配暖白画布内容区、粉色搜索框、金色工具栏与深焦茶选中。"
+      }
+    }
   }
 ]
