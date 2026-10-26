@@ -2,6 +2,14 @@
 
 Python host for Wox plugins.
 
+`result_actions.py` owns callbacks by session, query, result and action ID. Query,
+MRU restore, incremental results and form updates share that store. Core releases
+query buckets with its result cache; late responses cannot repopulate released
+buckets. Plugin unload closes the API's original store. See
+`wox.core/plugin/host/README.md` for the internal retention protocol.
+
+Run `uv run python -m unittest discover -s tests` to verify the host.
+
 Package plugins load under a private module namespace derived from a lossless
 encoding of the plugin ID and a load generation. Entry modules and package
 initializers retain their file locations, so `__file__` can locate resources.

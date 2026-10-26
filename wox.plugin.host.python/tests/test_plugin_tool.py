@@ -31,7 +31,7 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
     async def test_unload_waits_for_handler_and_rejects_new_calls(self):
         api = PluginAPI(AsyncMock(), "notes", "Notes")
         plugin_instances["notes"] = PluginInstance(
-            plugin=object(), api=api, plugin_dir="", module_name="notes", actions={}, form_actions={}, toolbar_msg_actions={}, sys_paths=[]
+            plugin=object(), api=api, plugin_dir="", module_name="notes", toolbar_msg_actions={}, sys_paths=[]
         )
         started, release = asyncio.Event(), asyncio.Event()
 
@@ -82,7 +82,7 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
         api = PluginAPI(AsyncMock(), "notes", "Notes")
         api.invoke_method = AsyncMock(return_value={"Output": {}, "Error": None})
         plugin_instances["notes"] = PluginInstance(
-            plugin=object(), api=api, plugin_dir="", module_name="notes", actions={}, form_actions={}, toolbar_msg_actions={}, sys_paths=[]
+            plugin=object(), api=api, plugin_dir="", module_name="notes", toolbar_msg_actions={}, sys_paths=[]
         )
 
         async def handler(ctx, option):
@@ -115,7 +115,7 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
         ws.send.side_effect = send
         api = PluginAPI(ws, "notes", "Notes")
         plugin_instances["notes"] = PluginInstance(
-            plugin=object(), api=api, plugin_dir="", module_name="notes", actions={}, form_actions={}, toolbar_msg_actions={}, sys_paths=[]
+            plugin=object(), api=api, plugin_dir="", module_name="notes", toolbar_msg_actions={}, sys_paths=[]
         )
 
         async def handler(ctx, option):
@@ -150,7 +150,7 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
     async def test_handler_exception_becomes_execution_failed(self):
         api = PluginAPI(AsyncMock(), "notes", "Notes")
         plugin_instances["notes"] = PluginInstance(
-            plugin=object(), api=api, plugin_dir="", module_name="notes", actions={}, form_actions={}, toolbar_msg_actions={}, sys_paths=[]
+            plugin=object(), api=api, plugin_dir="", module_name="notes", toolbar_msg_actions={}, sys_paths=[]
         )
 
         def handler(_ctx, _option):

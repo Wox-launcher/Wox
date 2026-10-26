@@ -1,3 +1,4 @@
+import { ResultActions } from "./resultActions"
 import {
   ChangeQueryParam,
   Context,
@@ -111,7 +112,12 @@ export class PluginAPI implements PublicAPI {
   pluginToolCalls = new Set<Promise<unknown>>()
   pluginToolsStopping = false
 
-  constructor(_ws: WebSocket, pluginId: string, pluginName: string) {
+  constructor(
+    _ws: WebSocket,
+    pluginId: string,
+    pluginName: string,
+    readonly resultActions = new ResultActions()
+  ) {
     this.pluginId = pluginId
     this.pluginName = pluginName
     this.settingChangeCallbacks = new Map<string, (ctx: Context, key: string, value: string) => void>()
@@ -393,7 +399,7 @@ export class PluginAPI implements PublicAPI {
 
     // Parse the response into UpdatableResult
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const responseData = response as any
+    const responseData = (typeof response === "string" ? JSON.parse(response) : response) as any
     const updatableResult: UpdatableResult = { Id: resultId }
 
     if (responseData.Title !== undefined) {
@@ -412,74 +418,26 @@ export class PluginAPI implements PublicAPI {
       updatableResult.Preview = responseData.Preview
     }
     if (responseData.Actions !== undefined) {
-      // Restore action callbacks from cache
-      const pluginInstance = pluginInstances.get(this.pluginId)
-      if (pluginInstance) {
-        updatableResult.Actions = responseData.Actions.map((action: ResultAction) => ({
-          ...action,
-          Action: pluginInstance.Actions.get(action.Id)
-        }))
-      } else {
-        updatableResult.Actions = responseData.Actions
-      }
+      const callbacks = this.resultActions.forContext(ctx, resultId)?.results.get(resultId)
+      updatableResult.Actions = responseData.Actions.map((action: ResultAction) => {
+        const cached = callbacks?.get(action.Id ?? "")
+        return action.Type === "form" ? { ...action, OnSubmit: cached?.Type === "form" ? cached.OnSubmit : undefined } : { ...action, Action: cached?.Type !== "form" ? cached?.Action : undefined }
+      })
     }
 
     return updatableResult
   }
 
   async UpdateResult(ctx: Context, result: UpdatableResult): Promise<boolean> {
-    // Cache action callbacks before serialization
-    if (result.Actions) {
-      const pluginInstance = pluginInstances.get(this.pluginId)
-      if (pluginInstance) {
-        for (const action of result.Actions) {
-          // Generate ID for actions that don't have one
-          if (!action.Id) {
-            action.Id = crypto.randomUUID()
-          }
-          if (!action.Type) {
-            action.Type = "execute"
-          }
-
-          if (action.Type === "execute") {
-            pluginInstance.Actions.set(action.Id, action.Action)
-          }
-          if (action.Type === "form") {
-            pluginInstance.FormActions.set(action.Id, action.OnSubmit)
-          }
-        }
-      }
-    }
+    this.resultActions.forContext(ctx, result.Id)?.cache(result, true)
 
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true
   }
 
   async PushResults(ctx: Context, query: Query, results: Result[]): Promise<boolean> {
-    const pluginInstance = pluginInstances.get(this.pluginId)
-    if (pluginInstance) {
-      for (const result of results) {
-        if (!result.Id) {
-          result.Id = crypto.randomUUID()
-        }
-        if (result.Actions) {
-          for (const action of result.Actions) {
-            if (!action.Id) {
-              action.Id = crypto.randomUUID()
-            }
-            if (!action.Type) {
-              action.Type = "execute"
-            }
-            if (action.Type === "execute") {
-              pluginInstance.Actions.set(action.Id, action.Action)
-            }
-            if (action.Type === "form") {
-              pluginInstance.FormActions.set(action.Id, action.OnSubmit)
-            }
-          }
-        }
-      }
-    }
+    const callbacks = this.resultActions.find(query.SessionId ?? "", query.Id, "")
+    for (const result of results) callbacks?.cache(result)
 
     const response = await this.invokeMethod(ctx, "PushResults", {
       query: JSON.stringify(query),

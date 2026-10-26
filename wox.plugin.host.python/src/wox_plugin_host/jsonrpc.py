@@ -3,7 +3,6 @@ import inspect
 import json
 import sys
 import traceback
-import uuid
 from os import path
 from typing import Any, Dict, Optional, Union
 
@@ -60,18 +59,25 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
     method = request.get("Method")
     plugin_name = request.get("PluginName")
 
+    # Acquire query buckets before any await so a later release cannot overtake startup.
+    if method == "releaseQueryResults":
+        for instance in plugin_instances.values():
+            instance.result_actions.release(request.get("SessionId", ""), request.get("QueryId", ""))
+        return None
+    if method == "query":
+        return await query(ctx, request)
+    if method == "onMRURestore":
+        return await on_mru_restore(ctx, request)
+    if method == "action":
+        return await action(ctx, request)
+    if method == "formAction":
+        return await form_action(ctx, request)
     await logger.info(ctx.get_trace_id(), f"invoke <{plugin_name}> method: {method}")
 
     if method == "loadPlugin":
         return await load_plugin(ctx, request)
     elif method == "init":
         return await init_plugin(ctx, request, ws)
-    elif method == "query":
-        return await query(ctx, request)
-    elif method == "action":
-        return await action(ctx, request)
-    elif method == "formAction":
-        return await form_action(ctx, request)
     elif method == "toolbarMsgAction":
         return await toolbar_msg_action(ctx, request)
     elif method == "unloadPlugin":
@@ -90,8 +96,6 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         return await on_drag_out(ctx, request)
     elif method == "onDeepLink":
         return await on_deep_link(ctx, request)
-    elif method == "onMRURestore":
-        return await on_mru_restore(ctx, request)
     elif method == "onLLMStream":
         return await on_llm_stream(ctx, request)
     elif method == "onInvokePluginTool":
@@ -126,8 +130,6 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
                 api=None,
                 plugin_dir=plugin_directory,
                 module_name=module_name,
-                actions={},
-                form_actions={},
                 toolbar_msg_actions={},
                 sys_paths=[],
             )
@@ -152,8 +154,6 @@ async def load_plugin(ctx: Context, request: Dict[str, Any]) -> None:
                 api=None,
                 plugin_dir=plugin_directory,
                 module_name=module_name,
-                actions={},
-                form_actions={},
                 toolbar_msg_actions={},
                 sys_paths=added_paths,
             )
@@ -183,7 +183,7 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: ServerConnectio
 
     try:
         # Create plugin API instance
-        api = PluginAPI(ws, plugin_id, plugin_name)
+        api = PluginAPI(ws, plugin_id, plugin_name, plugin_instance.result_actions)
         plugin_instance.api = api
         params: Dict[str, str] = request.get("Params", {})
         plugin_directory: str = params.get("PluginDirectory", "")
@@ -200,38 +200,6 @@ async def init_plugin(ctx: Context, request: Dict[str, Any], ws: ServerConnectio
             f"<{plugin_name}> init plugin failed: {str(e)}\nStack trace:\n{error_stack}",
         )
         raise e
-
-
-def _get_action_type_value(action_type: Any) -> str:
-    if hasattr(action_type, "value"):
-        return str(action_type.value)
-    return str(action_type)
-
-
-def _cache_result_actions(plugin_instance: PluginInstance, result: Any) -> None:
-    if isinstance(result, dict):
-        return
-
-    if not result.id:
-        result.id = str(uuid.uuid4())
-
-    if not result.actions:
-        return
-
-    for action in result.actions:
-        if not action.id:
-            action.id = str(uuid.uuid4())
-
-        action_type = _get_action_type_value(getattr(action, "type", None))
-        if action_type == ResultActionType.FORM.value:
-            on_submit = getattr(action, "on_submit", None)
-            if on_submit is not None:
-                plugin_instance.form_actions[action.id] = on_submit
-            continue
-
-        action_func = getattr(action, "action", None)
-        if action_func is not None:
-            plugin_instance.actions[action.id] = action_func
 
 
 def _serialize_model(value: Any) -> Dict[str, Any]:
@@ -311,11 +279,14 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
         raise Exception(f"plugin not found: {plugin_name}, forget to load plugin?")
 
     try:
-        # Clear action cache before query
-        plugin_instance.actions.clear()
-        plugin_instance.form_actions.clear()
-
         params: Dict[str, str] = request.get("Params", {})
+        session_id = request.get("SessionId", params.get("SessionId", ""))
+        query_id = request.get("QueryId", params.get("QueryId", params.get("Id", "")))
+        ctx.values.update(SessionId=session_id, QueryId=query_id)
+        if not query_id:
+            plugin_instance.result_actions.release(session_id, query_id)
+        callbacks = plugin_instance.result_actions.begin(session_id, query_id, request.get("ManagedQuery", False))
+        await logger.info(ctx.get_trace_id(), f"invoke <{plugin_name}> method: query")
         raw_response = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
         response = await _normalize_query_response(ctx, plugin_name, raw_response)
 
@@ -332,7 +303,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
 
         if results_source:
             for result in results_source:
-                _cache_result_actions(plugin_instance, result)
+                callbacks.cache(result)
 
         # Re-serialize after caching so generated result/action IDs are included
         # in the object that Go core receives and later sends back for actions.
@@ -364,7 +335,9 @@ async def action(ctx: Context, request: Dict[str, Any]) -> None:
         context_data = _parse_context_data(context_data_raw)
 
         # Get action from cache
-        action_func = plugin_instance.actions.get(action_id)
+        bucket = plugin_instance.result_actions.for_context(ctx, result_id)
+        cached = bucket.results.get(result_id, {}).get(action_id) if bucket is not None else None
+        action_func = getattr(cached, "action", None) if getattr(cached, "type", None) != ResultActionType.FORM else None
         if action_func:
             # Handle both coroutine and regular functions
             result = action_func(
@@ -446,7 +419,9 @@ async def form_action(ctx: Context, request: Dict[str, Any]) -> None:
         context_data = _parse_context_data(context_data_raw)
         values = json.loads(params.get("Values", "{}"))
 
-        action_func = plugin_instance.form_actions.get(action_id)
+        bucket = plugin_instance.result_actions.for_context(ctx, result_id)
+        cached = bucket.results.get(result_id, {}).get(action_id) if bucket is not None else None
+        action_func = getattr(cached, "on_submit", None) if getattr(cached, "type", None) == ResultActionType.FORM else None
         if action_func:
             result = action_func(
                 ctx,
@@ -506,8 +481,7 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
             if added_path in sys.path:
                 sys.path.remove(added_path)
 
-        plugin_instance.actions.clear()
-        plugin_instance.form_actions.clear()
+        plugin_instance.result_actions.close()
         plugin_instance.toolbar_msg_actions.clear()
         if isinstance(plugin_instance.api, PluginAPI):
             plugin_instance.api.plugin_tool_callbacks.clear()
@@ -551,7 +525,11 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
     if not callback:
         raise Exception(f"MRU restore callback not found: {callback_id}")
 
+    callbacks = plugin_instance.result_actions.begin(
+        request.get("SessionId", ""), request.get("QueryId", ""), request.get("ManagedQuery", False)
+    )
     try:
+        await logger.info(ctx.get_trace_id(), f"invoke <{plugin_id}> method: onMRURestore")
         # Convert dict to MRUData object for type safety
         mru_data = MRUData.from_dict(mru_data_dict)
 
@@ -561,11 +539,11 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
             result = await result  # type: ignore
 
         if result is not None:
-            _cache_result_actions(plugin_instance, result)
+            callbacks.cache(result)
 
         # Convert Result object back to dict for JSON serialization
         if result is not None:
-            return result.__dict__
+            return _serialize_result(result)
         return None
     except Exception as e:
         await logger.error(ctx.get_trace_id(), f"MRU restore callback error: {str(e)}")

@@ -12,6 +12,7 @@ import (
 // Returned cache entries keep their existing shared-pointer semantics; presentation
 // and patch processing still run in the manager without introducing new locks.
 type queryResultStore struct {
+	lifecycleMu     sync.Mutex
 	sessions        *util.HashMap[string, *util.HashMap[string, *QueryResultSet]]
 	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
 }
@@ -28,8 +29,20 @@ func newQueryResultStore() *queryResultStore {
 
 // clearSession releases results and tokens together, without invoking plugin callbacks.
 func (s *queryResultStore) clearSession(sessionId string) {
+	s.lifecycleMu.Lock()
+	var released []*QueryResultSet
+	if queries, ok := s.sessions.Load(sessionId); ok {
+		queries.Range(func(_ string, set *QueryResultSet) bool {
+			released = append(released, set)
+			return true
+		})
+	}
 	s.sessions.Delete(sessionId)
 	s.clearLazyIconsExcept(sessionId, "")
+	s.lifecycleMu.Unlock()
+	for _, set := range released {
+		set.lifetime.release()
+	}
 }
 
 type QueryResultCache struct {
@@ -57,6 +70,7 @@ type QueryResultCache struct {
 
 // QueryResultSet retains one query independently of later queries in the session.
 type QueryResultSet struct {
+	lifetime *queryResultLifetime
 	// storeMu makes alias precedence atomic when plugin responses arrive concurrently.
 	storeMu   sync.Mutex
 	Query     Query
@@ -67,6 +81,7 @@ type QueryResultSet struct {
 // newQueryResultSet creates the per-query result map and records its retention age.
 func newQueryResultSet(query Query) *QueryResultSet {
 	set := &QueryResultSet{
+		lifetime:  &queryResultLifetime{},
 		Query:     query,
 		StartedAt: util.GetSystemTimestamp(),
 		Results:   util.NewHashMap[string, *QueryResultCache](),
@@ -80,7 +95,18 @@ func (s *queryResultStore) startQuery(query Query) {
 		return
 	}
 
+	s.lifecycleMu.Lock()
+	var released []*QueryResultSet
+	defer func() {
+		s.lifecycleMu.Unlock()
+		for _, set := range released {
+			set.lifetime.release()
+		}
+	}()
 	sessionQueries, _ := s.sessions.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
+	if previous, ok := sessionQueries.Load(query.Id); ok {
+		released = append(released, previous)
+	}
 
 	// A UI session can have multiple backend query pipelines in flight because UI
 	// requests and plugin responses are handled concurrently.
@@ -88,11 +114,11 @@ func (s *queryResultStore) startQuery(query Query) {
 	// the result cache required to send the newer query's final response.
 	sessionQueries.Store(query.Id, newQueryResultSet(query))
 	s.clearLazyIconsExcept(query.SessionId, query.Id)
-	s.pruneQueries(sessionQueries, query.Id)
+	released = append(released, s.pruneQueries(sessionQueries, query.Id)...)
 }
 
 // pruneQueries bounds retained queries while protecting the query just started.
-func (s *queryResultStore) pruneQueries(sessionQueries *util.HashMap[string, *QueryResultSet], keepQueryId string) {
+func (s *queryResultStore) pruneQueries(sessionQueries *util.HashMap[string, *QueryResultSet], keepQueryId string) (released []*QueryResultSet) {
 	if sessionQueries.Len() <= maxCachedQueriesPerSession {
 		return
 	}
@@ -121,9 +147,13 @@ func (s *queryResultStore) pruneQueries(sessionQueries *util.HashMap[string, *Qu
 			entries = entries[1:]
 			continue
 		}
+		if set, ok := sessionQueries.Load(entries[0].queryId); ok {
+			released = append(released, set)
+		}
 		sessionQueries.Delete(entries[0].queryId)
 		entries = entries[1:]
 	}
+	return released
 }
 
 // getQuery only resolves the requested query within its session.
@@ -382,6 +412,14 @@ func newestCachedQueryID(sessionQueries *util.HashMap[string, *QueryResultSet]) 
 // retain many complete result snapshots (including action closures and icon
 // strings) until the next query starts.
 func (s *queryResultStore) trimHidden(sessionId string) (string, int) {
+	s.lifecycleMu.Lock()
+	var released []*QueryResultSet
+	defer func() {
+		s.lifecycleMu.Unlock()
+		for _, set := range released {
+			set.lifetime.release()
+		}
+	}()
 	sessionQueries, ok := s.sessions.Load(sessionId)
 	if !ok || sessionQueries.Len() <= 1 {
 		return "", 0
@@ -400,6 +438,9 @@ func (s *queryResultStore) trimHidden(sessionId string) (string, int) {
 		return true
 	})
 	for _, queryId := range dropped {
+		if set, ok := sessionQueries.Load(queryId); ok {
+			released = append(released, set)
+		}
 		sessionQueries.Delete(queryId)
 	}
 	s.clearLazyIconsExcept(sessionId, keepQueryId)

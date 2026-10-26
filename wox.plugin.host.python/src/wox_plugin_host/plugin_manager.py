@@ -1,7 +1,8 @@
 from typing import Dict, Any, Callable, Optional, Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import asyncio
-from wox_plugin import ActionContext, Context, FormActionContext, Plugin, ToolbarMsgActionContext, PublicAPI
+from .result_actions import ResultActions
+from wox_plugin import Context, Plugin, ToolbarMsgActionContext, PublicAPI
 
 
 @dataclass
@@ -10,10 +11,9 @@ class PluginInstance:
     api: Optional[PublicAPI]
     plugin_dir: str
     module_name: str
-    actions: Dict[str, Callable[[Context, ActionContext], Awaitable[None]]]
-    form_actions: Dict[str, Callable[[Context, FormActionContext], Awaitable[None]]]
     toolbar_msg_actions: Dict[str, Callable[[Context, ToolbarMsgActionContext], Awaitable[None] | None]]
     sys_paths: list[str]
+    result_actions: ResultActions = field(default_factory=ResultActions)
 
 
 # Global state with strong typing

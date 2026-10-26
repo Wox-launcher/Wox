@@ -1,5 +1,6 @@
-import { ActionContext, Context, FormActionContext, MapString, Plugin, Result } from "@wox-launcher/wox-plugin"
+import { Context, MapString, Plugin } from "@wox-launcher/wox-plugin"
 import { PluginAPI } from "./pluginAPI"
+import { ResultActions } from "./resultActions"
 
 export interface ToolbarMsgActionContext {
   ToolbarMsgId: string
@@ -11,14 +12,14 @@ export interface PluginInstance {
   Plugin: Plugin
   API: PluginAPI
   ModulePath: string
-  Actions: Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>
-  FormActions: Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>
+  ResultActions: ResultActions
   ToolbarMsgActions: Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>
 }
 
 export interface PluginJsonRpcRequest {
   SessionId?: string
   QueryId?: string
+  ManagedQuery?: boolean
   TraceId: string
   Id: string
   PluginId: string

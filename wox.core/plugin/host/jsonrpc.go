@@ -9,15 +9,16 @@ const (
 )
 
 type JsonRpcRequest struct {
-	SessionId  string `json:",omitempty"`
-	QueryId    string `json:",omitempty"`
-	TraceId    string
-	Id         string
-	PluginId   string
-	PluginName string
-	Method     string
-	Type       JsonRpcType
-	Params     map[string]string
+	SessionId    string `json:",omitempty"`
+	QueryId      string `json:",omitempty"`
+	ManagedQuery bool   `json:",omitempty"`
+	TraceId      string
+	Id           string
+	PluginId     string
+	PluginName   string
+	Method       string
+	Type         JsonRpcType
+	Params       map[string]string
 }
 
 type JsonRpcResponse struct {

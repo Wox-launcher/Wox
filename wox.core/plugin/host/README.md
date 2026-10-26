@@ -37,6 +37,21 @@ keys, response field casing and the following compatibility behavior unchanged:
 - Callback registration replies and later callback RPCs are separate messages.
 
 Both Node and Python SDKs keep their published signatures and wire format.
+
+Core-to-host query and MRU requests carry the optional internal `ManagedQuery`
+flag. Core releases those callbacks with `releaseQueryResults`, scoped by the
+envelope's `SessionId` and `QueryId`, after evicting the result set. This message
+applies to all plugins in that host and does not invoke plugin code. Hosts retain
+callbacks by session, query, result and action IDs; publishing a later query
+never clears another query's callbacks. An explicit scope miss never falls back.
+Unscoped legacy access requires an unambiguous result, and hosts retain at most
+32 queries per session for older Core builds without managed lifetimes.
+
+Query, push, update, form and MRU paths use the same host-owned callback store.
+Released buckets reject late responses, while plugin unload invalidates the
+store held by that plugin's API. Update patches preserve omitted callbacks of
+the same type and remove omitted actions when the action list is replaced.
+
 This boundary does not impose a new deadline on plugin-to-Core calls; operations
 such as screenshot selection may wait for user interaction. It prevents the
 dispatcher's silent exits from stranding requests while the connection is alive.

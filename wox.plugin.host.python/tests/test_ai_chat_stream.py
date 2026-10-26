@@ -101,8 +101,6 @@ class AIChatStreamLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         api=api,
                         plugin_dir="",
                         module_name="chat",
-                        actions={},
-                        form_actions={},
                         toolbar_msg_actions={},
                         sys_paths=[],
                     )

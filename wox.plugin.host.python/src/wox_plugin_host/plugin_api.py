@@ -1,3 +1,4 @@
+from .result_actions import ResultActions
 import asyncio
 import json
 import uuid
@@ -55,9 +56,10 @@ from .plugin_manager import set_current_connection, waiting_for_response
 
 
 class PluginAPI(PublicAPI):
-    def __init__(self, ws: ServerConnection, plugin_id: str, plugin_name: str):
+    def __init__(self, ws: ServerConnection, plugin_id: str, plugin_name: str, result_actions: ResultActions | None = None):
         # Init receives the socket that is current at load. Later reconnects replace it.
         set_current_connection(ws)
+        self.result_actions = result_actions if result_actions is not None else ResultActions()
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name
         self.setting_change_callbacks: Dict[str, Callable[[Context, str, str], Awaitable[None] | None]] = {}
@@ -382,6 +384,9 @@ class PluginAPI(PublicAPI):
         if response is None:
             return None
 
+        if isinstance(response, str):
+            response = json.loads(response)
+
         # Parse the response into UpdatableResult
         # The response is a dict with optional fields
         updatable_result = UpdatableResult(id=result_id)
@@ -404,65 +409,35 @@ class PluginAPI(PublicAPI):
             from wox_plugin import ResultAction
 
             actions = [ResultAction.from_json(json.dumps(action)) for action in response["Actions"]]
-            # Restore action callbacks from cache
-            from .plugin_manager import plugin_instances
-
-            plugin_instance = plugin_instances.get(self.plugin_id)
-            if plugin_instance:
-                for action in actions:
-                    if action.id in plugin_instance.actions:
-                        action.action = plugin_instance.actions[action.id]
+            bucket = self.result_actions.for_context(ctx, result_id)
+            callbacks = bucket.results.get(result_id, {}) if bucket is not None else {}
+            for action in actions:
+                cached = callbacks.get(action.id)
+                if action.type == ResultActionType.FORM:
+                    action.on_submit = (
+                        getattr(cached, "on_submit", None) if getattr(cached, "type", None) == ResultActionType.FORM else None
+                    )
+                else:
+                    action.action = getattr(cached, "action", None) if getattr(cached, "type", None) != ResultActionType.FORM else None
             updatable_result.actions = actions
 
         return updatable_result
 
     async def update_result(self, ctx: Context, result: UpdatableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
-        # Cache action callbacks before serialization
-        if result.actions:
-            from .plugin_manager import plugin_instances
-
-            plugin_instance = plugin_instances.get(self.plugin_id)
-            if plugin_instance:
-                for action in result.actions:
-                    # Generate ID for actions that don't have one
-                    if not action.id:
-                        action.id = str(uuid.uuid4())
-                    if not action.type:
-                        action.type = ResultActionType.EXECUTE
-
-                    if action.action is not None:
-                        plugin_instance.actions[action.id] = action.action
+        callbacks = self.result_actions.for_context(ctx, result.id)
+        if callbacks is not None:
+            callbacks.cache(result, preserve_callbacks=True)
 
         response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
         return bool(response) if response is not None else False
 
     async def push_results(self, ctx: Context, query: Query, results: list[Result]) -> bool:
         """Push additional results for the current query"""
-        if results:
-            from .plugin_manager import plugin_instances
-
-            plugin_instance = plugin_instances.get(self.plugin_id)
-            if plugin_instance:
-                for result in results:
-                    if not result.id:
-                        result.id = str(uuid.uuid4())
-                    if result.actions:
-                        for action in result.actions:
-                            if not action.id:
-                                action.id = str(uuid.uuid4())
-                            if not action.type:
-                                action.type = ResultActionType.EXECUTE
-
-                            action_type = str(getattr(action, "type", "execute"))
-                            if action_type == "form":
-                                on_submit = getattr(action, "on_submit", None)
-                                if on_submit is not None:
-                                    plugin_instance.form_actions[action.id] = on_submit
-                            else:
-                                action_func = getattr(action, "action", None)
-                                if action_func is not None:
-                                    plugin_instance.actions[action.id] = action_func
+        callbacks = self.result_actions.find(query.session_id, query.id, "")
+        if callbacks is not None:
+            for result in results:
+                callbacks.cache(result)
 
         results_payload = [json.loads(result.to_json()) for result in results]
         response = await self.invoke_method(

@@ -261,6 +261,26 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		Type:       JsonRpcTypeRequest,
 		Params:     params,
 	}
+	if method == "query" || method == "onMRURestore" {
+		if register, managed := plugin.QueryResultLifetime(ctx); managed {
+			request.ManagedQuery = true
+			sessionID, queryID := request.SessionId, request.QueryId
+			// Register only after this RPC exits: even canceled/failed queries have
+			// already been sent before their cleanup can be sent on this connection.
+			defer register(w, func() {
+				util.Go(util.NewTraceContext(), "release host query callbacks", func() {
+					// A restarted host owns fresh caches; never send an old release to it.
+					if w.websocketClient() != client {
+						return
+					}
+					releaseCtx := util.WithQueryIdContext(util.WithSessionContext(util.NewTraceContext(), sessionID), queryID)
+					if _, err := w.invokeMethod(releaseCtx, metadata, "releaseQueryResults", nil); err != nil {
+						util.GetLogger().Debug(releaseCtx, "failed to release host query callbacks: "+err.Error())
+					}
+				})
+			})
+		}
+	}
 	util.GetLogger().Debug(ctx, fmt.Sprintf("<Wox -> %s> inovke plugin <%s> method: %s, request id: %s", w.getHostName(ctx), metadata.GetName(ctx), method, request.Id))
 
 	jsonData, marshalErr := json.Marshal(request)

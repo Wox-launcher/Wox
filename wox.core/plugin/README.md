@@ -55,6 +55,14 @@ does not recreate an evicted set. Hiding keeps the newest set and its tokens.
 Destroying a session invokes the existing plugin-leave flow before releasing the
 results and tokens. Temporary result-hotkey sessions also release both together.
 
+External host callbacks share this retention lifetime. Query and MRU execution
+contexts carry a small cleanup registry without retaining the result set itself.
+Hosts register cleanup after their RPC finishes (including cancellation), so
+eviction during an in-flight request triggers cleanup on completion. Pruning,
+hide trimming and session destruction release the corresponding host query
+callbacks. Registration and release are synchronized; transport cleanup runs
+outside store locks and does not block the UI.
+
 The store intentionally retains the existing shared result pointers, map locks
 and alias-precedence lock. This extraction does not introduce immutable snapshots,
 new scheduling/cancellation rules, or synchronization around incremental fields.

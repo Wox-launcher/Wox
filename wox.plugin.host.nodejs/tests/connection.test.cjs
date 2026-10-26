@@ -20,6 +20,7 @@ function loadSource(name) {
 
 const connection = loadSource("connection.ts")
 mocks["./connection"] = connection
+mocks["./resultActions"] = loadSource("resultActions.ts")
 const { PluginAPI } = loadSource("pluginAPI.ts")
 const { WebSocket } = require("ws")
 

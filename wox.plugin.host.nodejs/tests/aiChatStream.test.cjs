@@ -20,6 +20,7 @@ function loadSource(name) {
   return module.exports
 }
 
+mocks["./resultActions"] = loadSource("resultActions.ts")
 const { PluginAPI } = loadSource("pluginAPI.ts")
 mocks["./pluginAPI"] = { PluginAPI }
 mocks["./singleFile"] = {}

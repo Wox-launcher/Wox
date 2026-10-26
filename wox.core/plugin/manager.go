@@ -2609,6 +2609,7 @@ func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 
 	cacheStart := util.GetSystemTimestamp()
 	m.resultStore.startQuery(query)
+	ctx = m.resultStore.withQueryResultLifetime(ctx, query.SessionId, query.Id)
 	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetInt64("costMs", util.GetSystemTimestamp()-cacheStart)
@@ -3386,6 +3387,7 @@ func (m *Manager) ExecutePluginDeeplink(ctx context.Context, pluginId string, ar
 const mruRestoreTimeout = 300 * time.Millisecond
 
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
+	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
 	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
 		Id:        queryId,
@@ -3401,6 +3403,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	query.Env.IsMRU = true
 	m.resultStore.startQuery(query)
+	ctx = m.resultStore.withQueryResultLifetime(ctx, query.SessionId, query.Id)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
 	if err != nil {

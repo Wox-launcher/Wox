@@ -13,17 +13,16 @@ import {
   QueryResponse,
   QueryReturn,
   Result,
-  ResultAction,
   Selection,
   MRUData,
   DragOutEvent,
   DragOutStatus
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
-import * as crypto from "crypto"
 import { AI } from "@wox-launcher/wox-plugin/types/ai"
 import { PluginInstance, PluginJsonRpcRequest, ToolbarMsgActionContext } from "./types"
 import { assertPathWithinDirectory, evictCommonJSModule, getPluginExport, loadCommonJSModule } from "./singleFile"
+import { ResultActions } from "./resultActions"
 
 export const pluginInstances = new Map<PluginJsonRpcRequest["PluginId"], PluginInstance>()
 
@@ -55,36 +54,6 @@ function parseContextData(raw?: string): MapString {
   }
 }
 
-function cacheResultActions(plugin: PluginInstance, result: Result): void {
-  if (result.Id === undefined || result.Id === null) {
-    result.Id = crypto.randomUUID()
-  }
-
-  if (!result.Actions) {
-    return
-  }
-
-  result.Actions.forEach(action => {
-    if (action.Id === undefined || action.Id === null) {
-      action.Id = crypto.randomUUID()
-    }
-
-    const actionType = action.Type ?? "execute"
-    if (actionType === "form") {
-      const submit = (action as Extract<ResultAction, { Type: "form" }>).OnSubmit
-      if (submit) {
-        plugin.FormActions.set(action.Id, submit)
-      }
-      return
-    }
-
-    const exec = (action as Extract<ResultAction, { Type?: "execute" }>).Action
-    if (exec) {
-      plugin.Actions.set(action.Id, exec)
-    }
-  })
-}
-
 function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: QueryReturn | undefined | null): QueryResponse {
   if (!rawResponse) {
     logger.info(ctx, `plugin query didn't return results: ${pluginName}`)
@@ -114,6 +83,12 @@ function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: Q
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
   if (request.SessionId) ctx.Values.SessionId = request.SessionId
   if (request.QueryId) ctx.Values.QueryId = request.QueryId
+  if (request.Method === "releaseQueryResults") {
+    for (const instance of Array.from(pluginInstances.values())) {
+      instance.ResultActions.release(request.SessionId ?? "", request.QueryId ?? "")
+    }
+    return
+  }
   logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}`)
 
   switch (request.Method) {
@@ -169,8 +144,7 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     Plugin: pluginExport as Plugin,
     API: {} as PluginAPI,
     ModulePath: modulePath,
-    Actions: new Map<Result["Id"], (ctx: Context, actionContext: ActionContext) => Promise<void>>(),
-    FormActions: new Map<Result["Id"], (ctx: Context, actionContext: FormActionContext) => Promise<void>>(),
+    ResultActions: new ResultActions(),
     ToolbarMsgActions: new Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>()
   })
 }
@@ -198,6 +172,7 @@ async function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   }
 
   await pluginInstance.API?.stopPluginTools()
+  pluginInstance.ResultActions.close()
   pluginInstance.API?.pluginToolCallbacks?.clear()
   pluginInstance.API?.pluginToolCallbackIds?.clear()
   evictCommonJSModule(pluginInstance.ModulePath)
@@ -230,7 +205,7 @@ async function initPlugin(ctx: Context, request: PluginJsonRpcRequest, ws: WebSo
   }
 
   const init = getMethod(ctx, request, "init")
-  const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName)
+  const pluginApi = new PluginAPI(ws, request.PluginId, request.PluginName, plugin.ResultActions)
   plugin.API = pluginApi
   const initParams: PluginInitParams = { API: pluginApi, PluginDirectory: request.Params.PluginDirectory }
   return init(ctx, initParams)
@@ -388,13 +363,16 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
 
   const query = getMethod(ctx, request, "query")
 
-  //clean action cache for current plugin
-  plugin.Actions.clear()
-  plugin.FormActions.clear()
+  const sessionId = request.SessionId ?? request.Params.SessionId ?? ""
+  const queryId = request.QueryId ?? request.Params.QueryId ?? request.Params.Id ?? ""
+  ctx.Values.SessionId = sessionId
+  ctx.Values.QueryId = queryId
+  if (!queryId) plugin.ResultActions.release(sessionId, queryId)
+  const callbacks = plugin.ResultActions.begin(sessionId, queryId, request.ManagedQuery === true)
 
   const rawResponse = await query(ctx, {
-    Id: request.Params.QueryId ?? request.Params.Id ?? "",
-    SessionId: request.Params.SessionId ?? "",
+    Id: queryId,
+    SessionId: sessionId,
     Type: request.Params.Type,
     RawQuery: request.Params.RawQuery,
     QueryHint: parseJsonParam<Query["QueryHint"]>(request.Params.QueryHint, undefined),
@@ -411,7 +389,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   const response = normalizeQueryResponse(ctx, request.PluginName, rawResponse)
 
   response.Results.forEach(result => {
-    cacheResultActions(plugin, result)
+    callbacks.cache(result)
   })
 
   return response
@@ -424,7 +402,8 @@ async function action(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const pluginAction = plugin.Actions.get(request.Params.ActionId)
+  const cached = plugin.ResultActions.forContext(ctx, request.Params.ResultId)?.results.get(request.Params.ResultId)?.get(request.Params.ActionId)
+  const pluginAction = cached?.Type !== "form" ? cached?.Action : undefined
   if (pluginAction === undefined || pluginAction === null) {
     logger.error(ctx, `<${request.PluginName}> plugin action not found: ${request.Params.ActionId}`)
     return
@@ -474,7 +453,8 @@ async function formAction(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const pluginAction = plugin.FormActions.get(request.Params.ActionId)
+  const cached = plugin.ResultActions.forContext(ctx, request.Params.ResultId)?.results.get(request.Params.ResultId)?.get(request.Params.ActionId)
+  const pluginAction = cached?.Type === "form" ? cached.OnSubmit : undefined
   if (pluginAction === undefined || pluginAction === null) {
     logger.error(ctx, `<${request.PluginName}> plugin form action not found: ${request.Params.ActionId}`)
     return
@@ -519,10 +499,12 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
     throw new Error(`MRU restore callback not found: ${callbackId}`)
   }
 
+  const callbacks = pluginInstance.ResultActions.begin(request.SessionId ?? "", request.QueryId ?? "", request.ManagedQuery === true)
+
   try {
     const result = await callback(ctx, mruData)
     if (result) {
-      cacheResultActions(pluginInstance, result)
+      callbacks.cache(result)
     }
     return result
   } catch (error) {

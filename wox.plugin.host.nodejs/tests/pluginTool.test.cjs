@@ -20,6 +20,7 @@ function loadSource(name) {
   new Function("require", "module", "exports", compiled)(name => mocks[name] ?? require(name), module, module.exports)
   return module.exports
 }
+mocks["./resultActions"] = loadSource("resultActions.ts")
 const { PluginAPI } = loadSource("pluginAPI.ts")
 mocks["./pluginAPI"] = { PluginAPI }
 mocks["./singleFile"] = {}
