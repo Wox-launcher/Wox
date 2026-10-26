@@ -14,6 +14,9 @@ uintptr_t wox_linux_window_handle(WoxLinuxWindow *window);
 int32_t wox_linux_enable_software_rendering(void);
 int32_t wox_linux_run(uintptr_t context);
 int32_t wox_linux_call(uintptr_t context);
+// Native adapters report diagnostic stages using strings with static lifetime.
+void wox_linux_note_stage(const char *stage);
+
 // wox_linux_ui_stage_snapshot copies the UI thread's current native stage.
 // age_us measures the current stage; backlog_age_us measures continuous pending
 // synchronous calls even while stages change. completed_calls counts dispatched

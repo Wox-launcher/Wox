@@ -1,6 +1,7 @@
 //go:build linux
 
 #include "native_linux.h"
+#include "native_linux_desktop.h"
 
 #include <gtk/gtk.h>
 #include <gio/gio.h>
@@ -36,7 +37,7 @@ extern void woxGoLinuxCall(uintptr_t context);
 extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_t pixel_width, int32_t pixel_height, float scale);
 extern void woxGoLinuxRenderTrace(const char *message);
 extern void woxGoLinuxInfo(const char *message);
-extern int32_t woxGoLinuxCosmicUsesLayerShell(void);
+extern int32_t woxGoLinuxWindowUsesLayerShell(int32_t wayland);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxCloseRequested(uintptr_t context);
@@ -240,7 +241,6 @@ struct WoxLinuxWindow {
   uint64_t epoch;
   // trace_frame_id correlates GTK callbacks and native framebuffer stages with Go frame metrics.
   uint64_t trace_frame_id;
-  unsigned long previous_active_window;
   float preferred_width;
   float preferred_height;
   float preferred_x;
@@ -262,7 +262,6 @@ struct WoxLinuxWindow {
   bool nonactivating;
   bool per_pixel_alpha;
   bool pointer_passthrough;
-  bool restore_previous_on_hide;
   bool application_window;
   bool screenshot_window;
   bool custom_window_chrome;
@@ -1148,7 +1147,7 @@ static void linux_ui_call_completed(void) {
   g_mutex_unlock(&wox_linux_ui_stage_mutex);
 }
 
-static void wox_linux_note_stage(const char *stage) {
+void wox_linux_note_stage(const char *stage) {
   g_mutex_lock(&wox_linux_ui_stage_mutex);
   wox_linux_ui_stage = stage;
   wox_linux_ui_stage_us = g_get_monotonic_time();
@@ -2296,29 +2295,6 @@ static WoxLayerSetAnchor layer_set_anchor;
 static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
 
-static bool compositor_uses_layer_shell(void) {
-  if (woxGoLinuxCosmicUsesLayerShell()) {
-    return true;
-  }
-  const char *desktop = g_getenv("XDG_CURRENT_DESKTOP");
-  if (desktop == NULL || desktop[0] == '\0') {
-    desktop = g_getenv("XDG_SESSION_DESKTOP");
-  }
-  if (desktop == NULL || desktop[0] == '\0') {
-    desktop = g_getenv("DESKTOP_SESSION");
-  }
-  if (desktop == NULL) {
-    return false;
-  }
-  char *lower = g_ascii_strdown(desktop, -1);
-  // Layer-shell surfaces stay off the taskbar. Plasma/KWin advertise the
-  // protocol, but skip_taskbar_hint is X11-only, so without this check the
-  // launcher appears as a regular xdg_toplevel in the Plasma panel.
-  bool result = strstr(lower, "hyprland") != NULL || strstr(lower, "sway") != NULL || strstr(lower, "wayfire") != NULL || strstr(lower, "river") != NULL || strstr(lower, "wlroots") != NULL || strstr(lower, "kde") != NULL || strstr(lower, "plasma") != NULL;
-  g_free(lower);
-  return result;
-}
-
 static bool resolve_layer_shell(void) {
   static bool checked;
   static bool available;
@@ -2349,7 +2325,12 @@ static bool resolve_layer_shell(void) {
 }
 
 static bool enable_layer_shell(GtkWindow *window) {
-  if (!compositor_uses_layer_shell() || !resolve_layer_shell() || !layer_is_supported()) {
+  bool wayland = false;
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+  wayland = display != NULL && GDK_IS_WAYLAND_DISPLAY(display);
+#endif
+  if (!woxGoLinuxWindowUsesLayerShell(wayland) || !resolve_layer_shell() || !layer_is_supported()) {
     return false;
   }
   layer_init_for_window(window);
@@ -2633,185 +2614,6 @@ static void start_layer_shell_move(WoxLinuxWindow *window) {
   window->layer_move_grabbed = status == GDK_GRAB_SUCCESS;
 }
 
-#ifdef GDK_WINDOWING_X11
-static GdkDisplay *x11_gdk_display(WoxLinuxWindow *window) {
-  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
-  if (gdk_window == NULL || !GDK_IS_X11_WINDOW(gdk_window)) {
-    return NULL;
-  }
-  return gdk_window_get_display(gdk_window);
-}
-
-static Display *x11_display(WoxLinuxWindow *window) {
-  GdkDisplay *gdk_display = x11_gdk_display(window);
-  return gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
-}
-
-static Window x11_window_id(WoxLinuxWindow *window) {
-  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
-  return gdk_window != NULL && GDK_IS_X11_WINDOW(gdk_window) ? GDK_WINDOW_XID(gdk_window) : None;
-}
-
-// Foreign XIDs can disappear before we query them. GDK's default X handler
-// treats BadWindow as fatal, so this check must run inside an error trap.
-static bool x11_window_is_viewable(GdkDisplay *gdk_display, Display *display, Window xid) {
-  if (gdk_display == NULL || display == NULL || xid == None) {
-    return false;
-  }
-  XWindowAttributes attributes;
-  gdk_x11_display_error_trap_push(gdk_display);
-  int ok = XGetWindowAttributes(display, xid, &attributes);
-  if (gdk_x11_display_error_trap_pop(gdk_display) != 0 || ok == 0) {
-    return false;
-  }
-  return attributes.map_state == IsViewable;
-}
-
-static Window active_x11_window(WoxLinuxWindow *window) {
-  Display *display = x11_display(window);
-  if (display == NULL) {
-    return None;
-  }
-  Atom property = XInternAtom(display, "_NET_ACTIVE_WINDOW", True);
-  if (property == None) {
-    return None;
-  }
-  Atom actual_type = None;
-  int actual_format = 0;
-  unsigned long count = 0;
-  unsigned long remaining = 0;
-  unsigned char *data = NULL;
-  Window active = None;
-  if (XGetWindowProperty(display, DefaultRootWindow(display), property, 0, 1, False, XA_WINDOW, &actual_type, &actual_format, &count, &remaining, &data) == Success && actual_type == XA_WINDOW && actual_format == 32 && count == 1 && data != NULL) {
-    active = *(Window *)data;
-  }
-  if (data != NULL) {
-    XFree(data);
-  }
-  return active;
-}
-
-static void save_previous_x11_window(WoxLinuxWindow *window) {
-  GdkDisplay *gdk_display = x11_gdk_display(window);
-  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
-  Window current = x11_window_id(window);
-  Window active = active_x11_window(window);
-  if (active != None && active != current && x11_window_is_viewable(gdk_display, display, active)) {
-    window->previous_active_window = active;
-    window->restore_previous_on_hide = true;
-  }
-}
-
-static void apply_x11_skip_taskbar_state(WoxLinuxWindow *window) {
-  GdkDisplay *gdk_display = x11_gdk_display(window);
-  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
-  Window xid = x11_window_id(window);
-  if (gdk_display == NULL || display == NULL || xid == None) {
-    return;
-  }
-  Atom state = XInternAtom(display, "_NET_WM_STATE", False);
-  Atom skip_taskbar = XInternAtom(display, "_NET_WM_STATE_SKIP_TASKBAR", False);
-  Atom skip_pager = XInternAtom(display, "_NET_WM_STATE_SKIP_PAGER", False);
-  if (state == None || skip_taskbar == None || skip_pager == None) {
-    return;
-  }
-  // KWin can drop SKIP_TASKBAR on remap/activate; re-add it after every show.
-  XEvent event;
-  memset(&event, 0, sizeof(event));
-  event.xclient.type = ClientMessage;
-  event.xclient.window = xid;
-  event.xclient.message_type = state;
-  event.xclient.format = 32;
-  event.xclient.data.l[0] = 1;
-  event.xclient.data.l[1] = (long)skip_taskbar;
-  event.xclient.data.l[2] = (long)skip_pager;
-  event.xclient.data.l[3] = 1;
-  gdk_x11_display_error_trap_push(gdk_display);
-  XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
-  XFlush(display);
-  gdk_x11_display_error_trap_pop_ignored(gdk_display);
-}
-
-static void request_x11_activation(WoxLinuxWindow *window) {
-  Display *display = x11_display(window);
-  Window xid = x11_window_id(window);
-  if (display == NULL || xid == None) {
-    return;
-  }
-  XRaiseWindow(display, xid);
-  Atom property = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
-  if (property != None) {
-    XEvent event;
-    memset(&event, 0, sizeof(event));
-    event.xclient.type = ClientMessage;
-    event.xclient.window = xid;
-    event.xclient.message_type = property;
-    event.xclient.format = 32;
-    event.xclient.data.l[0] = 2;
-    event.xclient.data.l[1] = CurrentTime;
-    XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
-  }
-  XFlush(display);
-}
-
-static void restore_previous_x11_window(WoxLinuxWindow *window) {
-  GdkDisplay *gdk_display = x11_gdk_display(window);
-  Display *display = gdk_display != NULL ? GDK_DISPLAY_XDISPLAY(gdk_display) : NULL;
-  Window previous = (Window)window->previous_active_window;
-  window->previous_active_window = 0;
-  if (display == NULL || !x11_window_is_viewable(gdk_display, display, previous)) {
-    return;
-  }
-  Atom property = XInternAtom(display, "_NET_ACTIVE_WINDOW", False);
-  if (property == None) {
-    return;
-  }
-  XEvent event;
-  memset(&event, 0, sizeof(event));
-  event.xclient.type = ClientMessage;
-  event.xclient.window = previous;
-  event.xclient.message_type = property;
-  event.xclient.format = 32;
-  event.xclient.data.l[0] = 2;
-  event.xclient.data.l[1] = CurrentTime;
-  // The ClientMessage still names a foreign XID that may vanish after the
-  // viewable check; keep the send inside a trap so GDK cannot abort on it.
-  gdk_x11_display_error_trap_push(gdk_display);
-  XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
-  XFlush(display);
-  gdk_x11_display_error_trap_pop_ignored(gdk_display);
-}
-#else
-static void save_previous_x11_window(WoxLinuxWindow *window) {
-  (void)window;
-}
-static void apply_x11_skip_taskbar_state(WoxLinuxWindow *window) {
-  (void)window;
-}
-static void request_x11_activation(WoxLinuxWindow *window) {
-  (void)window;
-}
-static void restore_previous_x11_window(WoxLinuxWindow *window) {
-  (void)window;
-}
-#endif
-
-// linux_x11_compositor_present reports whether the current X screen owns the standard compositor selection.
-static int linux_x11_compositor_present(WoxLinuxWindow *window) {
-#ifdef GDK_WINDOWING_X11
-  Display *display = x11_display(window);
-  if (display != NULL) {
-    char selection_name[32];
-    snprintf(selection_name, sizeof(selection_name), "_NET_WM_CM_S%d", DefaultScreen(display));
-    Atom selection = XInternAtom(display, selection_name, True);
-    return selection != None && XGetSelectionOwner(display, selection) != None ? 1 : 0;
-  }
-#else
-  (void)window;
-#endif
-  return -1;
-}
-
 // trace_linux_window_environment records the display capabilities that affect GtkGLArea presentation.
 static void trace_linux_window_environment(WoxLinuxWindow *window) {
   if (!wox_linux_render_trace_enabled || window == NULL) {
@@ -2821,15 +2623,12 @@ static void trace_linux_window_environment(WoxLinuxWindow *window) {
   GdkScreen *screen = gtk_widget_get_screen(window->window);
   GdkVisual *rgba_visual = screen != NULL ? gdk_screen_get_rgba_visual(screen) : NULL;
   GdkVisual *window_visual = gtk_widget_get_visual(window->window);
-  unsigned long xid = 0;
-#ifdef GDK_WINDOWING_X11
-  xid = (unsigned long)x11_window_id(window);
-#endif
+  unsigned long xid = wox_linux_desktop_window_id(window->window);
   trace_linux_render(
       "event=window_environment displayType=%s xid=%#lx x11Compositor=%d rgbaVisualAvailable=%d usingRgbaVisual=%d perPixelAlpha=%d backgroundBlur=%d layerShell=%d applicationWindow=%d",
       display != NULL ? G_OBJECT_TYPE_NAME(display) : "unknown",
       xid,
-      linux_x11_compositor_present(window),
+      wox_linux_desktop_compositor_present(window->window),
       rgba_visual != NULL,
       rgba_visual != NULL && rgba_visual == window_visual,
       window->per_pixel_alpha,
@@ -2858,10 +2657,7 @@ static void trace_linux_window_geometry(WoxLinuxWindow *window, const char *even
     gdk_window_get_geometry(native, &gdk_x, &gdk_y, &gdk_width, &gdk_height);
   }
   int scale = gtk_widget_get_scale_factor(window->gl_area);
-  unsigned long xid = 0;
-#ifdef GDK_WINDOWING_X11
-  xid = (unsigned long)x11_window_id(window);
-#endif
+  unsigned long xid = wox_linux_desktop_window_id(window->window);
   trace_linux_render(
       "event=%s epoch=%llu preferred=%.0f,%.0f %.0fx%.0f gtk=%d,%d %dx%d gdk=%d,%d %dx%d glArea=%dx%d overlayArea=%dx%d scale=%d visible=%d mapped=%d viewable=%d xid=%#lx",
       event,
@@ -3007,12 +2803,11 @@ static void apply_utility_taskbar_hints(WoxLinuxWindow *window) {
   }
   gtk_window_set_skip_taskbar_hint(GTK_WINDOW(window->window), TRUE);
   gtk_window_set_skip_pager_hint(GTK_WINDOW(window->window), TRUE);
-  apply_x11_skip_taskbar_state(window);
+  wox_linux_desktop_skip_taskbar(window->window);
 }
 
 // apply_linux_window_size makes GTK's allocation match the target size before the
-// next frame. gtk_window_resize alone is asynchronous, and Openbox often keeps the
-// previous taller X window, so GtkGLArea is left with a black framebuffer.
+// next frame; gtk_window_resize alone is asynchronous.
 static void apply_linux_window_size(WoxLinuxWindow *window, int width, int height) {
   if (width <= 0 || height <= 0) {
     return;
@@ -3032,19 +2827,7 @@ static void apply_linux_window_size(WoxLinuxWindow *window, int width, int heigh
   if (gdk_window != NULL) {
     gdk_window_resize(gdk_window, width, height);
   }
-#ifdef GDK_WINDOWING_X11
-  GdkDisplay *gdk_display = x11_gdk_display(window);
-  Display *display = x11_display(window);
-  Window xid = x11_window_id(window);
-  if (gdk_display != NULL && display != NULL && xid != None) {
-    gdk_x11_display_error_trap_push(gdk_display);
-    wox_linux_note_stage("x11-resize-flush");
-    XResizeWindow(display, xid, (unsigned int)width, (unsigned int)height);
-    XFlush(display);
-    wox_linux_note_stage("x11-resize-flush-done");
-    gdk_x11_display_error_trap_pop_ignored(gdk_display);
-  }
-#endif
+  wox_linux_desktop_resize(window->window, width, height);
   apply_linux_window_corner_shape(window);
   trace_linux_window_geometry(window, "resize_after_request");
 }
@@ -3092,7 +2875,7 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
     return;
   }
   trace_linux_window_geometry(window, "hide_begin");
-  bool should_restore = restore_previous && window->active && window->restore_previous_on_hide;
+  bool should_restore = restore_previous && window->active && wox_linux_desktop_can_restore_focus(window->window);
   emit_focus(window, false);
   if (window->closed) {
     return;
@@ -3125,10 +2908,9 @@ static void hide_native(WoxLinuxWindow *window, bool restore_previous) {
     gtk_widget_hide(window->window);
   }
   if (should_restore) {
-    restore_previous_x11_window(window);
+    wox_linux_desktop_restore_focus(window->window);
   }
-  window->restore_previous_on_hide = false;
-  window->previous_active_window = 0;
+  wox_linux_desktop_clear_focus(window->window);
   trace_linux_window_geometry(window, "hide_end");
 }
 
@@ -3296,8 +3078,7 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
   if (window->native_dialog_active) {
     return FALSE;
   }
-  window->restore_previous_on_hide = false;
-  window->previous_active_window = 0;
+  wox_linux_desktop_clear_focus(window->window);
   emit_focus(window, false);
   if (!window->closed && window->hide_on_blur && window->visible) {
     hide_native(window, false);
@@ -3314,10 +3095,10 @@ static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer da
 }
 
 static void on_window_destroy(GtkWidget *widget, gpointer data) {
-  (void)widget;
   WoxLinuxWindow *window = data;
   destroy_linux_background_effect(window);
   end_layer_shell_move(window);
+  wox_linux_desktop_clear_focus(widget);
   if (window->closed) {
     return;
   }
@@ -3400,12 +3181,9 @@ int32_t wox_linux_run(uintptr_t context) {
   if (context == 0 || g_atomic_int_get(&wox_linux_runtime_running) != 0) {
     return -1;
   }
-#ifdef GDK_WINDOWING_X11
-  // GTK may call Xlib during initialization, so thread support must be enabled first.
-  if (XInitThreads() == 0) {
+  if (!wox_linux_desktop_init_threads()) {
     return -3;
   }
-#endif
   apply_linux_app_identity();
   if (!gtk_init_check(NULL, NULL)) {
     return -2;
@@ -3747,7 +3525,7 @@ static void show_main(void *data) {
   call->epoch = window->epoch;
   window->visible = true;
   trace_linux_window_geometry(window, "show_begin");
-  save_previous_x11_window(window);
+  wox_linux_desktop_remember_focus(window->window);
   place_window(window);
   gtk_widget_show_all(window->window);
   apply_linux_background_effect(window);
@@ -3765,7 +3543,7 @@ static void show_main(void *data) {
     }
   }
   if (!window->nonactivating) {
-    request_x11_activation(window);
+    wox_linux_desktop_activate(window->window);
     gtk_window_present(GTK_WINDOW(window->window));
     gtk_widget_grab_focus(window->gl_area);
   }

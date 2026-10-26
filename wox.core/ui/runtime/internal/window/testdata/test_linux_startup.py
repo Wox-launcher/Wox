@@ -30,6 +30,7 @@ static int redraw_count;
 #define gtk_main() g_main_loop_run(loop)
 #define gtk_main_quit() g_main_loop_quit(loop)
 #define gtk_init_check(a, b) true
+#define wox_linux_desktop_init_threads() true
 #define apply_linux_app_identity() ((void)0)
 #define apply_linux_app_icon() ((void)0)
 #define wox_linux_background_effect_probe(display) ((void)0)
