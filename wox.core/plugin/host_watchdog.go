@@ -71,7 +71,7 @@ func (l *pluginLifecycle) startHostWatchdog(ctx context.Context) {
 }
 
 // stopHostWatchdog stops the health monitor so Wox shutdown does not try to
-// restart hosts that Manager.Stop is intentionally tearing down.
+// restart hosts that pluginLifecycle.Stop is intentionally tearing down.
 func (l *pluginLifecycle) stopHostWatchdog() {
 	l.hostWatchdogLifecycle.Lock()
 	if !l.hostWatchdogStarted {

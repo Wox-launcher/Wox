@@ -120,7 +120,8 @@ int main(int argc, char **argv) {
   wox_linux_desktop_resize(first, 241, 137);
   XWindowAttributes attributes;
   assert(XGetWindowAttributes(display, first_id, &attributes));
-  assert(attributes.width == 241 && attributes.height == 137);
+  int scale = gtk_widget_get_scale_factor(first);
+  assert(attributes.width == 241 * scale && attributes.height == 137 * scale);
   assert(wox_linux_desktop_compositor_present(first) == 0);
   char selection[32];
   snprintf(selection, sizeof(selection), "_NET_WM_CM_S%d", DefaultScreen(display));

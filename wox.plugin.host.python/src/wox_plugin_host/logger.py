@@ -42,3 +42,7 @@ async def info(trace_id: str, msg: str) -> None:
 
 async def error(trace_id: str, msg: str) -> None:
     await log(trace_id, "error", msg)
+
+
+async def warning(trace_id: str, msg: str) -> None:
+    await log(trace_id, "warning", msg)

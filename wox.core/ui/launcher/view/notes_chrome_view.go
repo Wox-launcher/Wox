@@ -313,7 +313,7 @@ func NotesSearchRowChild(label, updated string, titleColor, metaColor woxui.Colo
 	}}
 }
 
-// notesSearchSection renders a muted section label, with extra lead-in space after the first group.
+// NotesSearchSection renders a muted section label, with extra lead-in space after the first group.
 func NotesSearchSection(label string, width float32, theme woxcomponent.Theme, first bool) woxwidget.Widget {
 	top := float32(0)
 	if !first {

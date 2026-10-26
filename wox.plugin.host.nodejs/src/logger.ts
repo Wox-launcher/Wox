@@ -34,6 +34,9 @@ function log(ctx: Context, level: string, msg: string) {
 }
 
 export const logger = {
+  warn: (ctx: Context, msg: string) => {
+    log(ctx, "warn", msg)
+  },
   debug: (ctx: Context, msg: string) => {
     log(ctx, "debug", msg)
   },

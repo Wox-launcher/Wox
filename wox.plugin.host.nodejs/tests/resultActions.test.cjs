@@ -3,10 +3,19 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 const ts = require("typescript")
+const warnings = []
 
 const mocks = {
   "./connection": { waitingForResponse: {}, currentConnection: undefined },
-  "./logger": { logger: { info() {}, error() {} } },
+  "./logger": {
+    logger: {
+      info() {},
+      error() {},
+      warn(_ctx, message) {
+        warnings.push(message)
+      }
+    }
+  },
   "./singleFile": { evictCommonJSModule() {} }
 }
 
@@ -143,4 +152,23 @@ test("legacy retention is bounded and unscoped recovery requires a unique result
   assert.ok(callbacks.find("", "", "1"))
   callbacks.begin("b", "1", false).cache({ Id: "1", Actions: [] })
   assert.equal(callbacks.find("", "", "1"), undefined)
+})
+
+test("ambiguous updates warn without replacing either query's callbacks", async () => {
+  warnings.length = 0
+  const { api, callbacks } = fixture(async () => ({ Results: [] }))
+  const original = async () => {}
+  const replacement = async () => {}
+  for (const query of ["old", "new"]) {
+    callbacks.begin("a", query, true).cache({ Id: "row", Actions: [{ Id: "open", Action: original }] })
+  }
+  assert.equal(await api.UpdateResult(context(), { Id: "row", Actions: [{ Id: "open", Action: replacement }] }), true)
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /Owner.*row.*ambiguous.*SessionId\/QueryId/)
+  for (const query of ["old", "new"]) {
+    assert.equal(callbacks.find("a", query, "row").results.get("row").get("open").Action, original)
+  }
+  await api.UpdateResult(context("a", "new"), { Id: "row", Actions: [{ Id: "open", Action: replacement }] })
+  assert.equal(callbacks.find("a", "new", "row").results.get("row").get("open").Action, replacement)
+  assert.equal(warnings.length, 1)
 })

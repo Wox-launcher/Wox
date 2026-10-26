@@ -223,7 +223,7 @@ int wox_linux_desktop_compositor_present(GtkWidget *widget) {
 
 // Openbox can keep the previous taller X window after GTK resize requests, leaving
 // GtkGLArea with a black framebuffer. Synchronize the X window before drawing.
-// Dimensions are forwarded unchanged to XResizeWindow, which consumes physical pixels.
+// GTK supplies logical dimensions; XResizeWindow consumes physical pixels.
 void wox_linux_desktop_resize(GtkWidget *widget, int width, int height) {
 #ifdef GDK_WINDOWING_X11
   GdkDisplay *gdk_display = x11_gdk_display(widget);
@@ -232,7 +232,8 @@ void wox_linux_desktop_resize(GtkWidget *widget, int width, int height) {
   if (gdk_display != NULL && display != NULL && xid != None) {
     gdk_x11_display_error_trap_push(gdk_display);
     wox_linux_note_stage("x11-resize-flush");
-    XResizeWindow(display, xid, (unsigned int)width, (unsigned int)height);
+    int scale = gtk_widget_get_scale_factor(widget);
+    XResizeWindow(display, xid, (unsigned int)(width * scale), (unsigned int)(height * scale));
     XFlush(display);
     wox_linux_note_stage("x11-resize-flush-done");
     gdk_x11_display_error_trap_pop_ignored(gdk_display);

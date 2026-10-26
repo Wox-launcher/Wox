@@ -26,13 +26,15 @@ stops the watchdog before closing watchers, cancelling pending reload timers
 and stopping hosts. This refactor does not add cancellation or waits for already
 executing reload/Init callbacks, or change plugin/SDK contracts.
 
-`pluginPresentation` owns Glance/Toolbar callback stores and active query-session
-routing, using instance lookup and UI capabilities rather than a Manager pointer.
+`plugin_presentation.go` owns Glance/Toolbar callback stores and active query-session
+routing, using instance lookup and a live UI getter rather than a Manager pointer
+or a duplicate UI reference.
 Manager wires its release callback into the lifecycle owner. Unload, disable,
 offline suspension, failed Init, successful host replacement and shutdown discard
-the affected plugin's cached UI actions. Other plugins and query-session routing
-are preserved. Existing Glance refresh, Toolbar replacement and session-leave
-cleanup remain in this owner; result-query callbacks remain in the result store.
+the affected plugin's cached UI actions and clear its visible Toolbar message.
+Other plugins and query-session routing are preserved. Existing Glance refresh,
+Toolbar replacement and session-leave cleanup remain in this owner; result-query
+callbacks remain in the result store.
 
 Lifecycle, watchdog and presentation tests use fake hosts and UI capabilities;
 no real plugin process or native window is needed for these regressions.
@@ -85,7 +87,8 @@ without that scope retain the legacy lookup behavior. Starting a query preserves
 other retained result sets so responses can finish out of order; storing a result
 does not recreate an evicted set. Hiding keeps the newest set and its tokens.
 Destroying a session invokes the existing plugin-leave flow before releasing the
-results and tokens. Temporary result-hotkey sessions also release both together.
+results and tokens. Silent-query and temporary result-hotkey sessions also release
+both together after the action finishes or the query exits.
 
 External host callbacks share this retention lifetime. Query and MRU execution
 contexts carry a small cleanup registry without retaining the result set itself.

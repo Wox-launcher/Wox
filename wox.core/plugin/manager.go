@@ -109,14 +109,13 @@ func newManager() *Manager {
 		}),
 	}
 	m.lifecycle = newPluginLifecycle()
-	m.presentation = newPluginPresentation(m.lifecycle.GetPluginInstanceById)
+	m.presentation = newPluginPresentation(m.lifecycle.GetPluginInstanceById, func() common.UI { return m.ui })
 	m.lifecycle.releasePresentation = m.presentation.releasePlugin
 	return m
 }
 
 func (m *Manager) Start(ctx context.Context, ui common.UI) error {
 	m.ui = ui
-	m.presentation.ui = ui
 
 	loadErr := m.lifecycle.loadPlugins(ctx)
 	if loadErr != nil {
@@ -1546,6 +1545,8 @@ func (m *Manager) buildQueryPlan(ctx context.Context, query Query) (jobs []query
 }
 
 func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
+	// Silent hotkeys own temporary sessions without a window to release their callbacks.
+	defer m.resultStore.clearSession(query.SessionId)
 	var startTimestamp = util.GetSystemTimestamp()
 	var results []QueryResultUI
 	execution := m.Query(ctx, query)
@@ -1682,7 +1683,6 @@ func (m *Manager) GetUI() common.UI {
 // AttachUI sets the UI used by plugin APIs without loading plugins or hosts.
 func (m *Manager) AttachUI(ui common.UI) {
 	m.ui = ui
-	m.presentation.ui = ui
 }
 
 // WaitPluginInit waits until the named plugin finishes its current init cycle.

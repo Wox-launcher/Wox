@@ -2,14 +2,17 @@ package host
 
 import (
 	"context"
-	"github.com/gorilla/websocket"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 	"wox/network"
+	"wox/plugin"
 	"wox/util"
+
+	"github.com/gorilla/websocket"
 )
 
 // TestOfflineCallbackGetsError verifies rejection is delivered before host shutdown.
@@ -44,5 +47,32 @@ func TestOfflineCallbackGetsError(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("offline request was dropped")
+	}
+}
+
+// TestOfflineAllowsResultRelease keeps local cleanup available without allowing plugin execution.
+func TestOfflineAllowsResultRelease(t *testing.T) {
+	host, _, requests := newPluginRequestPeer(t)
+	network.Default.SetOffline(true)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, "silent-session"), "query")
+	metadata := plugin.Metadata{Id: "owner", Name: "Test"}
+	if _, err := host.invokeMethod(ctx, metadata, "query", nil); !errors.Is(err, network.ErrOffline) {
+		t.Fatalf("ordinary query bypassed offline mode: %v", err)
+	}
+	if _, err := host.invokeMethod(ctx, metadata, "releaseQueryResults", nil); err != nil {
+		t.Fatalf("offline cleanup failed: %v", err)
+	}
+	select {
+	case request := <-requests:
+		if request.Method != "releaseQueryResults" || request.SessionId != "silent-session" || request.QueryId != "query" {
+			t.Fatalf("unexpected cleanup request: %+v", request)
+		}
+	case <-ctx.Done():
+		t.Fatal("cleanup was not delivered")
+	}
+	if host.requestMap.Len() != 0 {
+		t.Fatal("completed cleanup retained its RPC waiter")
 	}
 }

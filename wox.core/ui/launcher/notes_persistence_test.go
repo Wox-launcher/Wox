@@ -72,14 +72,20 @@ func TestNotesRecordSwitchInvalidatesQueuedSave(t *testing.T) {
 		t.Fatal("autosave did not enqueue a callback")
 	}
 	controller.applyRecord(common.NoteRecord{ID: "second", Document: notesplugin.ParseMarkdown("second")})
-	controller.onEditorChanged("second edit")
+	// Do not schedule another edit: that would invalidate the old callback even
+	// if applyRecord forgot to cancel it. Observe entry into save, including no-op flushes.
+	saveAttempts := 0
+	controller.notesAutosave.save = func() error { saveAttempts++; return nil }
 	callback()
+	if saveAttempts != 0 {
+		t.Fatal("record switch did not invalidate the queued save")
+	}
 	select {
 	case <-services.saveCall:
 		t.Fatal("the previous record's callback saved the new record")
 	default:
 	}
-	if controller.record.ID != "second" || !controller.dirty {
+	if controller.record.ID != "second" || controller.dirty {
 		t.Fatal("stale callback changed the new edit session")
 	}
 }

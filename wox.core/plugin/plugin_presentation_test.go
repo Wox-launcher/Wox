@@ -14,11 +14,16 @@ import (
 
 type presentationTestUI struct {
 	common.UI
-	shown []ToolbarMsgUI
+	shown   []ToolbarMsgUI
+	cleared []string
 }
 
 func (ui *presentationTestUI) ShowToolbarMsg(_ context.Context, msg interface{}) {
 	ui.shown = append(ui.shown, msg.(ToolbarMsgUI))
+}
+
+func (ui *presentationTestUI) ClearToolbarMsg(_ context.Context, id string) {
+	ui.cleared = append(ui.cleared, id)
 }
 
 // TestPresentationCallbacksFollowPluginLifetime exercises the public Manager wiring and owner isolation.
@@ -40,6 +45,7 @@ func TestPresentationCallbacksFollowPluginLifetime(t *testing.T) {
 	require.NoError(t, manager.ExecuteToolbarMsgAction(ctx, "session", "first", "run"))
 	require.NoError(t, manager.ExecuteGlanceAction(ctx, "first", "status", "run"))
 	manager.UnloadPlugin(ctx, manager.GetPluginInstanceById("first"))
+	require.Equal(t, []string{"first"}, ui.cleared)
 	require.Error(t, manager.ExecuteToolbarMsgAction(ctx, "session", "first", "run"))
 	require.Error(t, manager.ExecuteGlanceAction(ctx, "first", "status", "run"))
 	require.NoError(t, manager.ExecuteToolbarMsgAction(ctx, "session", "first-other", "run"))
@@ -50,6 +56,7 @@ func TestPresentationCallbacksFollowPluginLifetime(t *testing.T) {
 	other := manager.GetPluginInstanceById("first-other")
 	other.Plugin = &fakeLifecyclePlugin{initErr: errors.New("init failed")}
 	manager.lifecycle.initPlugin(ctx, other)
+	require.Equal(t, []string{"first", "first-other"}, ui.cleared)
 	require.Error(t, manager.ExecuteGlanceAction(ctx, "first-other", "status", "run"))
 	require.Error(t, manager.ExecuteToolbarMsgAction(ctx, "session", "first-other", "run"))
 }

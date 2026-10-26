@@ -429,7 +429,15 @@ export class PluginAPI implements PublicAPI {
   }
 
   async UpdateResult(ctx: Context, result: UpdatableResult): Promise<boolean> {
-    this.resultActions.forContext(ctx, result.Id)?.cache(result, true)
+    const callbacks = this.resultActions.forContext(ctx, result.Id)
+    if (callbacks) {
+      callbacks.cache(result, true)
+    } else if (result.Actions?.length) {
+      logger.warn(
+        ctx,
+        `<${this.pluginName}> UpdateResult could not cache actions for result ${result.Id}: query scope is missing, ambiguous or released; preserve the original query Context (SessionId/QueryId)`
+      )
+    }
 
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true

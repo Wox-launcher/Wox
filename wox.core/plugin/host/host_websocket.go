@@ -240,11 +240,16 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 }
 
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
-	ctx, release, err := network.Default.Begin(ctx)
-	if err != nil {
-		return nil, err
+	// Releasing host-owned callbacks is local housekeeping and never invokes plugin
+	// code. It must still run while offline mode blocks ordinary plugin calls.
+	if method != "releaseQueryResults" {
+		var release func()
+		ctx, release, err = network.Default.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
 	}
-	defer release()
 	client := w.websocketClient()
 	if client == nil || !client.IsConnected() {
 		return "", fmt.Errorf("host is not connected")
@@ -400,6 +405,9 @@ func (w *WebsocketHost) onMessage(data string) {
 		logCtx := util.WithComponentContext(util.NewTraceContextWith(traceId), fmt.Sprintf("%s HOST", w.host.GetRuntime(ctx)))
 		if level == "error" {
 			util.GetLogger().Error(logCtx, msg)
+		}
+		if level == "warn" || level == "warning" {
+			util.GetLogger().Warn(logCtx, msg)
 		}
 		if level == "info" {
 			util.GetLogger().Info(logCtx, msg)

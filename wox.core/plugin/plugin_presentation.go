@@ -21,13 +21,14 @@ type pluginPresentation struct {
 	glanceActions        *util.HashMap[string, GlanceAction]
 	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
 	lookup               func(string) *Instance
-	ui                   common.UI
+	currentUI            func() common.UI
 }
 
-// newPluginPresentation creates callback stores and receives only instance lookup.
-func newPluginPresentation(lookup func(string) *Instance) pluginPresentation {
+// newPluginPresentation receives live capabilities without retaining a second UI reference.
+func newPluginPresentation(lookup func(string) *Instance, currentUI func() common.UI) pluginPresentation {
 	return pluginPresentation{
 		lookup:               lookup,
+		currentUI:            currentUI,
 		toolbarMsgActions:    util.NewHashMap[string, *toolbarMsgActionEntry](),
 		pluginToolbarMsgIds:  util.NewHashMap[string, string](),
 		glanceActions:        util.NewHashMap[string, GlanceAction](),
@@ -47,7 +48,8 @@ func (p *pluginPresentation) activePlugin(id string) *Instance {
 // releasePlugin drops UI callbacks when their plugin runtime is no longer usable.
 // Query-session routing stays intact so re-enabling the same plugin preserves it.
 func (p *pluginPresentation) releasePlugin(pluginID string) {
-	p.clearCurrentPluginToolbarMsgAction(pluginID)
+	// Clear the visible message along with its callbacks, including persistent messages.
+	p.clearCurrentPluginToolbarMsg(util.NewTraceContext(), pluginID)
 	prefix := pluginID + "\x00"
 	for _, key := range p.glanceActions.Keys() {
 		if strings.HasPrefix(key, prefix) {
@@ -223,7 +225,7 @@ func (p *pluginPresentation) ShowToolbarMsg(ctx context.Context, pluginInstance 
 
 	p.toolbarMsgActions.Store(normalized.Id, actionEntry)
 	p.pluginToolbarMsgIds.Store(pluginInstance.Metadata.Id, normalized.Id)
-	p.ui.ShowToolbarMsg(resolvedCtx, normalized.toToolbarMsgUI())
+	p.currentUI().ShowToolbarMsg(resolvedCtx, normalized.toToolbarMsgUI())
 }
 
 // ClearToolbarMsg removes the toolbar msg action callbacks owned by the current plugin and asks UI
@@ -241,7 +243,7 @@ func (p *pluginPresentation) ClearToolbarMsg(ctx context.Context, pluginInstance
 		p.pluginToolbarMsgIds.Delete(pluginInstance.Metadata.Id)
 	}
 	p.toolbarMsgActions.Delete(toolbarMsgId)
-	p.ui.ClearToolbarMsg(resolvedCtx, toolbarMsgId)
+	p.currentUI().ClearToolbarMsg(resolvedCtx, toolbarMsgId)
 }
 
 // ExecuteToolbarMsgAction resolves the current toolbar msg action callback and invokes it.
@@ -320,7 +322,9 @@ func (p *pluginPresentation) clearCurrentPluginToolbarMsg(ctx context.Context, p
 	}
 
 	p.clearCurrentPluginToolbarMsgAction(pluginId)
-	p.ui.ClearToolbarMsg(ctx, currentToolbarMsgId)
+	if ui := p.currentUI(); ui != nil {
+		ui.ClearToolbarMsg(ctx, currentToolbarMsgId)
+	}
 }
 
 func (p *pluginPresentation) resolveActiveToolbarMsgContext(ctx context.Context, pluginId string) (context.Context, bool) {

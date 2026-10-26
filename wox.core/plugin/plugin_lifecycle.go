@@ -17,7 +17,7 @@ import (
 
 // pluginLifecycle owns installed instances and their load, host and file-watch lifetimes.
 // Query scheduling and UI routing remain outside this owner. Locks stay with the
-// operations they protect; releasePresentation only discards plugin-owned callbacks.
+// operations they protect; releasePresentation clears plugin-owned UI messages and callbacks.
 type pluginLifecycle struct {
 	instances []*Instance
 	// Offline transitions wait for in-flight loads before suspending instances.

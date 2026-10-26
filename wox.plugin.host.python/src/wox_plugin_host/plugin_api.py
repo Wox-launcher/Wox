@@ -428,6 +428,12 @@ class PluginAPI(PublicAPI):
         callbacks = self.result_actions.for_context(ctx, result.id)
         if callbacks is not None:
             callbacks.cache(result, preserve_callbacks=True)
+        elif result.actions:
+            await logger.warning(
+                ctx.get_trace_id(),
+                f"<{self.plugin_name}> UpdateResult could not cache actions for result {result.id}: "
+                "query scope is missing, ambiguous or released; preserve the original query Context (SessionId/QueryId)",
+            )
 
         response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
         return bool(response) if response is not None else False

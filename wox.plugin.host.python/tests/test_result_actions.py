@@ -54,7 +54,7 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
             sys_paths=[],
             result_actions=self.callbacks,
         )
-        for level in ("info", "error"):
+        for level in ("info", "error", "warning"):
             patcher = patch.object(jsonrpc.logger, level, new=AsyncMock())
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -160,3 +160,19 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.callbacks.find("", "", "1"))
         self.callbacks.begin("b", "1", False).cache(result("1", lambda *_: None))
         self.assertIsNone(self.callbacks.find("", "", "1"))
+
+    async def test_ambiguous_updates_warn_without_replacing_callbacks(self):
+        original = lambda *_: None
+        replacement = lambda *_: None
+        for query in ("old", "new"):
+            self.callbacks.begin("a", query, True).cache(result("row", original))
+        update = UpdatableResult(id="row", actions=result("row", replacement).actions)
+        self.assertTrue(await self.api.update_result(context(), update))
+        jsonrpc.logger.warning.assert_awaited_once()
+        message = jsonrpc.logger.warning.call_args.args[1]
+        self.assertRegex(message, r"Owner.*row.*ambiguous.*SessionId/QueryId")
+        for query in ("old", "new"):
+            self.assertIs(self.callbacks.find("a", query, "row").results["row"]["open"].action, original)
+        await self.api.update_result(context("a", "new"), update)
+        self.assertIs(self.callbacks.find("a", "new", "row").results["row"]["open"].action, replacement)
+        jsonrpc.logger.warning.assert_awaited_once()
