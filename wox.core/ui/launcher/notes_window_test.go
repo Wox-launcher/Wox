@@ -19,6 +19,7 @@ import (
 	notesplugin "wox/plugin/system/notes"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -151,7 +152,7 @@ func TestNotesSearchRowUsesHoverHighlight(t *testing.T) {
 		ActionBackground: woxui.Color{R: 40, G: 40, B: 40, A: 255},
 		ActionText:       woxui.Color{R: 240, G: 240, B: 240, A: 255},
 	}
-	row := controller.notesListRow(common.NoteSummary{ID: "note-a", Title: "Hello", Preview: "preview", UpdatedAt: 1_700_000_000_000}, 300, theme, false)
+	row := launcherview.NotesSearchRow(controller.searchRowProps(common.NoteSummary{ID: "note-a", Title: "Hello", Preview: "preview", UpdatedAt: 1_700_000_000_000}), 300, theme, false)
 	semantics := row.(woxwidget.Semantics)
 	if semantics.AutomationID != "notes.search.note-a" {
 		t.Fatalf("search automation id = %q, want notes.search.note-a", semantics.AutomationID)
@@ -165,9 +166,9 @@ func TestNotesSearchRowShowsCenteredUpdatedTime(t *testing.T) {
 	updated := int64(1_700_000_000_000)
 	titleColor := woxui.Color{R: 240, G: 240, B: 240, A: 255}
 	metaColor := woxui.Color{R: 160, G: 160, B: 160, A: 255}
-	child := notesSearchRowChild("Hello", util.FormatTimestamp(updated), titleColor, metaColor)
+	child := launcherview.NotesSearchRowChild("Hello", util.FormatTimestamp(updated), titleColor, metaColor)
 	align, ok := child.(woxwidget.Align)
-	if !ok || align.Vertical != .5 || align.Height != notesSearchRowHeight {
+	if !ok || align.Vertical != .5 || align.Height != launcherview.NotesSearchRowHeight {
 		t.Fatalf("search row alignment = %#v, want vertically centered 36-high slot", child)
 	}
 	flex, ok := align.Child.(woxwidget.Flex)
@@ -175,7 +176,7 @@ func TestNotesSearchRowShowsCenteredUpdatedTime(t *testing.T) {
 		t.Fatalf("search row content = %#v, want title and updated time", align.Child)
 	}
 	title, ok := flex.Children[0].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
-	if !ok || title.Value != "Hello" || title.AlignmentY != .5 || title.Height != notesSearchTextHeight {
+	if !ok || title.Value != "Hello" || title.AlignmentY != .5 || title.Height != launcherview.NotesSearchTextHeight {
 		t.Fatalf("search title = %#v, want optically centered Hello", flex.Children[0])
 	}
 	meta, ok := flex.Children[1].(woxwidget.TextBlock)
@@ -189,21 +190,21 @@ func TestNotesSearchSectionIsDistinctFromRows(t *testing.T) {
 		ActionHeader: woxui.Color{R: 140, G: 146, B: 154, A: 255},
 		ActionText:   woxui.Color{R: 240, G: 240, B: 240, A: 255},
 	}
-	first := notesSearchSection("Pinned", 280, theme, true)
-	follow := notesSearchSection("Recent", 280, theme, false)
+	first := launcherview.NotesSearchSection("Pinned", 280, theme, true)
+	follow := launcherview.NotesSearchSection("Recent", 280, theme, false)
 	firstBox, ok := first.(woxwidget.Container)
-	if !ok || firstBox.Height != notesSearchSectionHeight || firstBox.Padding.Top != 0 {
+	if !ok || firstBox.Height != launcherview.NotesSearchSectionHeight || firstBox.Padding.Top != 0 {
 		t.Fatalf("first section = %#v, want a 28-high header without lead-in", first)
 	}
 	followBox, ok := follow.(woxwidget.Container)
-	if !ok || followBox.Height != notesSearchSectionHeight+notesSearchSectionLead || followBox.Padding.Top != notesSearchSectionLead {
+	if !ok || followBox.Height != launcherview.NotesSearchSectionHeight+launcherview.NotesSearchSectionLead || followBox.Padding.Top != launcherview.NotesSearchSectionLead {
 		t.Fatalf("follow section = %#v, want 12 extra lead-in before the next group", follow)
 	}
 	label := firstBox.Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
 	if label.Style.Size != woxcomponent.SettingsSectionTitleFontSize || label.Style.Weight != woxui.FontWeightSemibold || label.Color != theme.ActionHeader {
 		t.Fatalf("section label = %#v, want 11 semibold ActionHeader", label)
 	}
-	row := notesSearchRowChild("Hello", "2026-08-24 15:43:57", theme.ActionText, theme.ActionHeader)
+	row := launcherview.NotesSearchRowChild("Hello", "2026-08-24 15:43:57", theme.ActionText, theme.ActionHeader)
 	title := row.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
 	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular || title.Color != theme.ActionText {
 		t.Fatalf("row title = %#v, want 13 regular action text distinct from the section label", title)
@@ -498,7 +499,7 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	}
 	title := toolbar.Children[1]
 	alignment := title.Child.(woxwidget.Align)
-	wantLeft, wantRight, wantAlign := notesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
+	wantLeft, wantRight, wantAlign := launcherview.NotesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
 	if title.Left != wantLeft || title.Right != wantRight || alignment.Horizontal != wantAlign {
 		t.Fatalf("Notes title slot = %.0f/%.0f alignment %.1f, want %.0f/%.0f/%.1f", title.Left, title.Right, alignment.Horizontal, wantLeft, wantRight, wantAlign)
 	}
@@ -517,19 +518,19 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 }
 
 func TestNotesTitleSlotLeavesRoomAtDefaultWidth(t *testing.T) {
-	left, right, alignment := notesTitleSlot("darwin", 0)
-	if left != notesToolbarActionsWidth || right != notesToolbarActionsWidth || alignment != 0.5 {
-		t.Fatalf("macOS title slot = %.0f/%.0f/%.1f, want equal %.0f insets", left, right, alignment, notesToolbarActionsWidth)
+	left, right, alignment := launcherview.NotesTitleSlot("darwin", 0)
+	if left != launcherview.NotesToolbarActionsWidth || right != launcherview.NotesToolbarActionsWidth || alignment != 0.5 {
+		t.Fatalf("macOS title slot = %.0f/%.0f/%.1f, want equal %.0f insets", left, right, alignment, launcherview.NotesToolbarActionsWidth)
 	}
 	if room := notesDefaultWidth - left - right; room < 80 {
 		t.Fatalf("macOS title room at default width = %.0f, want enough for a short CJK title plus ellipsis", room)
 	}
-	left, right, alignment = notesTitleSlot("windows", woxcomponent.TitleBarChromeWidth("windows", true, true))
-	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("windows", true, true)+notesToolbarActionsWidth {
+	left, right, alignment = launcherview.NotesTitleSlot("windows", woxcomponent.TitleBarChromeWidth("windows", true, true))
+	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("windows", true, true)+launcherview.NotesToolbarActionsWidth {
 		t.Fatalf("Windows title slot = %.0f/%.0f/%.1f, want a leading cluster", left, right, alignment)
 	}
-	left, right, alignment = notesTitleSlot("linux", woxcomponent.TitleBarChromeWidth("linux", true, true))
-	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("linux", true, true)+notesToolbarActionsWidth {
+	left, right, alignment = launcherview.NotesTitleSlot("linux", woxcomponent.TitleBarChromeWidth("linux", true, true))
+	if left != 40 || alignment != 0 || right != woxcomponent.TitleBarChromeWidth("linux", true, true)+launcherview.NotesToolbarActionsWidth {
 		t.Fatalf("Linux title slot = %.0f/%.0f/%.1f, want a leading cluster", left, right, alignment)
 	}
 }
@@ -731,7 +732,7 @@ func TestNotesToggleMarkdownViewScrollsCaretIntoView(t *testing.T) {
 		ID: "notes.editor", Document: controller.document, Width: 320, Height: 80,
 		Padding: notesEditorPadding(), Style: controller.editorStyle(), LineHeight: 24, Zoom: 1,
 		Theme: defaultPalette().componentTheme().Controls, Controller: controller.editor,
-		Selection: controller.editor.State().Selection, RevealCaret: controller.consumeEditorCaretReveal(),
+		Selection: controller.editor.State().Selection, RevealCaret: controller.revealEditorCaret,
 	})
 	stateful, ok = preview.(woxwidget.Stateful)
 	if !ok {
@@ -1046,7 +1047,7 @@ func TestNotesListKeyboardAfterStructuralBlocks(t *testing.T) {
 				host.AttachServices(&notesEditorHostServices{})
 				render := func() {
 					for range 3 {
-						host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
+						controller.frame(host, &woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
 					}
 				}
 				press := func(key woxui.Key, modifiers woxui.KeyModifiers) {
@@ -1267,7 +1268,7 @@ func TestNotesTypingBelowTrailingTable(t *testing.T) {
 			host.AttachServices(&notesEditorHostServices{})
 			render := func() {
 				for range 3 {
-					host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
+					controller.frame(host, &woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5})
 				}
 			}
 			click := func(id string) {
@@ -1337,7 +1338,7 @@ func TestNotesImageSelectionSurvivesFrames(t *testing.T) {
 	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 640}, PixelSize: woxui.PixelSize{Width: 1200, Height: 960}, Scale: 1.5}
 	render := func() {
 		for range 3 {
-			host.Frame(&woxui.DisplayList{}, frame)
+			controller.frame(host, &woxui.DisplayList{}, frame)
 		}
 	}
 	bounds := func(id string) woxui.Rect {
@@ -1596,8 +1597,8 @@ func TestNotesFormatBarCollapsesToolsWhenCountHidingIsNotEnough(t *testing.T) {
 	})
 	bar := controller.buildFormatBar(360, defaultPalette().componentTheme())
 	items := notesFormatBarButtons(bar)
-	if len(items) != notesFormatBarLeadCount+1 {
-		t.Fatalf("narrow format items = %d, want %d tools plus more", len(items), notesFormatBarLeadCount+1)
+	if len(items) != launcherview.NotesFormatBarLeadCount+1 {
+		t.Fatalf("narrow format items = %d, want %d tools plus more", len(items), launcherview.NotesFormatBarLeadCount+1)
 	}
 	if items[len(items)-1].ID != "notes.format.more" {
 		t.Fatalf("narrow overflow control = %q, want notes.format.more", items[len(items)-1].ID)
@@ -2336,7 +2337,7 @@ func TestNotesToolbarActionBounds(t *testing.T) {
 						continue
 					}
 					found = true
-					want := woxui.Rect{X: width - woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true) - notesToolbarActionsWidth + float32(index)*34, Y: 4, Width: 32, Height: 32}
+					want := woxui.Rect{X: width - woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true) - launcherview.NotesToolbarActionsWidth + float32(index)*34, Y: 4, Width: 32, Height: 32}
 					if node.Bounds != want {
 						t.Fatalf("width=%v scale=%v %s bounds=%+v want %+v", width, scale, id, node.Bounds, want)
 					}

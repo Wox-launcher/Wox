@@ -82,6 +82,19 @@ current synchronous launcher build, not retained for asynchronous use. Retained
 callbacks only. Action-panel invalidation compares the result and toolbar
 revisions directly instead of advancing a revision during snapshot creation.
 
+Notes uses a document-local `notesEditingSession` for text and structural edits,
+selection, Markdown projection, and bounded undo/redo history. It has no native
+window, persistence service, or timer dependency; change notifications schedule
+autosave through its host. `notesAutosave` owns debounce generations and rejects
+queued callbacks after cancellation, record switches, or shutdown. The window
+controller coordinates save results, conflict-copy registry changes, search,
+clipboard and native actions. `notes_window_geometry.go` owns logical bounds and
+frame transitions. Geometry acknowledgement and one-shot focus requests happen
+at the frame entry point, outside widget composition. `notes_presentation.go`
+prepares display data and callbacks; `view/notes_chrome_view.go` owns toolbar,
+format bar, search, menus, link editor, status and overlay layout. Editor-session
+tests run without constructing an App, native window, or persistence service.
+
 Final destruction cancels the instance context, stops query/Glance/quick-select,
 file-preview (including native occlusion) and settings-highlight timers, cancels
 dictation and attachment imports, and releases terminal subscriptions. Notes get
