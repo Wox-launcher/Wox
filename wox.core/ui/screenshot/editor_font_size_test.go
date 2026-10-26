@@ -95,7 +95,7 @@ func TestScreenshotFontSizeLayoutFitsDisplay(t *testing.T) {
 					if selected {
 						annotation = &screenshotEditorAnnotation{tool: tool, fontSize: 20}
 					}
-					state.drawEditBar(&DisplayList{}, Size{Width: frameWidth, Height: 1200}, Rect{X: 24 * scale, Y: 300, Width: 300, Height: 60 * scale},
+					state.drawEditBar(&DisplayList{}, Rect{Width: frameWidth, Height: 1200}, Rect{X: 24 * scale, Y: 300, Width: 300, Height: 60 * scale},
 						Rect{X: 100, Y: 50, Width: 200, Height: 200}, tool, annotation, screenshotEditorAnnotationColor, 18, 20, scale)
 					bar, slider := state.editBarRect, state.editFontSizeRect
 					if bar.X < 0 || bar.X+bar.Width > frameWidth || slider.Width < 48*scale || slider.Y+slider.Height > bar.Y+bar.Height {

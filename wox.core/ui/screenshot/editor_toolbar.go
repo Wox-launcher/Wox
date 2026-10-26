@@ -4,6 +4,21 @@ package screenshot
 // It is narrower than a tool slot so the affordance stays secondary to the actions.
 const screenshotEditorToolbarGripSlot = 12
 
+// screenshotEditorToolbarFrame avoids monitor gaps by using the display containing most of the selection.
+// Display candidates already use the same editor coordinates as the selection.
+func screenshotEditorToolbarFrame(selection, fallback Rect, displays []Rect) Rect {
+	frame := fallback
+	var largestArea float32
+	for _, display := range displays {
+		width := max(float32(0), min(selection.X+selection.Width, display.X+display.Width)-max(selection.X, display.X))
+		height := max(float32(0), min(selection.Y+selection.Height, display.Y+display.Height)-max(selection.Y, display.Y))
+		if area := width * height; area > largestArea {
+			frame, largestArea = display, area
+		}
+	}
+	return frame
+}
+
 // screenshotEditorToolbarLayout wraps complete button slots on narrow or scaled displays without shrinking hit targets.
 func screenshotEditorToolbarLayout(frameWidth, scale float32, hideTools, recording, scrolling, background bool, extraCount int) (Size, []Rect) {
 	steps := make([]float32, 0, int(screenshotEditorToolCount)+extraCount+8)

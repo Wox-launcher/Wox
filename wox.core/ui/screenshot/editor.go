@@ -850,6 +850,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	}
 	// Creation drags can have negative dimensions; their border and handles must follow the normalized crop.
 	backgroundBounds := selection
+	toolbarFrame := screenshotEditorToolbarFrame(selection, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, state.displayCandidates)
 	if backgroundEnabled {
 		// Keep intentional off-screen wallpaper padding instead of clamping the outer canvas to the desktop.
 		backgroundBounds = state.selectionBoundsLocked()
@@ -1055,7 +1056,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		drawScreenshotEditorStrokeCursor(displayList, pointerPosition, strokeRadius, uiScale)
 	}
 	toolbarRect := Rect{}
-	toolbarSize, toolbarButtons := screenshotEditorToolbarLayout(frame.Size.Width, uiScale, hideTools, state.allowVideoRecording, state.document == nil, backgroundAvailable, len(state.extraActions))
+	toolbarSize, toolbarButtons := screenshotEditorToolbarLayout(toolbarFrame.Width, uiScale, hideTools, state.allowVideoRecording, state.document == nil, backgroundAvailable, len(state.extraActions))
 	if !dragging && !state.autoConfirm {
 		toolbarWidth, toolbarHeight := toolbarSize.Width, toolbarSize.Height
 		toolbarStackHeight := toolbarHeight
@@ -1064,10 +1065,10 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			if hasSelectedMark {
 				editTool = annotations[selectedAnnotation].tool
 			}
-			_, editHeight, _ := screenshotEditorEditBarSize(frame.Size.Width, editTool, hasSelectedMark, uiScale)
+			_, editHeight, _ := screenshotEditorEditBarSize(toolbarFrame.Width, editTool, hasSelectedMark, uiScale)
 			toolbarStackHeight += editHeight + scaled(8)
 		}
-		toolbarRect = screenshotEditorToolbarPlacement(backgroundBounds, Rect{Width: frame.Size.Width, Height: frame.Size.Height}, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
+		toolbarRect = screenshotEditorToolbarPlacement(backgroundBounds, toolbarFrame, toolbarWidth, toolbarHeight, toolbarStackHeight, uiScale)
 		if toolbarMoved {
 			origin := clampScreenshotEditorToolbarOrigin(toolbarOrigin, toolbarWidth, toolbarHeight, frame.Size, uiScale)
 			toolbarRect.X, toolbarRect.Y = origin.X, origin.Y
@@ -1228,7 +1229,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			}
 			selectedMark = &selectedCopy
 		}
-		state.drawEditBar(displayList, frame.Size, toolbarRect, selection, activeTool, selectedMark, annotationColor, mosaicRadius, fontSize, uiScale)
+		state.drawEditBar(displayList, toolbarFrame, toolbarRect, selection, activeTool, selectedMark, annotationColor, mosaicRadius, fontSize, uiScale)
 	}
 	state.publishSizeLabel(chip, label)
 	if hasHoveredTool {
@@ -1579,7 +1580,7 @@ func screenshotEditorTextCaretIndex(window woxwidget.HostServices, text string, 
 // drawEditBar places tool-specific creation and edit actions in a secondary row below the main toolbar.
 func (state *screenshotEditorOverlayState) drawEditBar(
 	displayList *DisplayList,
-	frame Size,
+	frame Rect,
 	toolbar Rect,
 	selection Rect,
 	activeTool screenshotEditorTool,
@@ -1619,8 +1620,11 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 	}
 	scaled := func(value float32) float32 { return value * uiScale }
 	width, barHeight, wrapSize := screenshotEditorEditBarSize(frame.Width, editTool, selected != nil, uiScale)
-	left := min(max(scaled(24), toolbar.X), max(scaled(24), frame.Width-width-scaled(24)))
-	top := screenshotEditorEditBarTop(toolbar, selection, barHeight, scaled(8), scaled(24))
+	left := min(max(frame.X+scaled(24), toolbar.X), max(frame.X+scaled(24), frame.X+frame.Width-width-scaled(24)))
+	top := screenshotEditorEditBarTop(toolbar, selection, barHeight, scaled(8), frame.Y+scaled(24))
+	if top+barHeight > frame.Y+frame.Height-scaled(24) && toolbar.Y-scaled(8)-barHeight >= frame.Y+scaled(24) {
+		top = toolbar.Y - scaled(8) - barHeight
+	}
 	controlTop := top
 	bar := Rect{X: left, Y: top, Width: width, Height: barHeight}
 	displayList.FillRoundedRect(bar, scaled(18), Color{R: 27, G: 23, B: 21, A: 255})
@@ -1878,7 +1882,7 @@ func screenshotEditorCursorPixelFromDesktop(cursor Point, bounds Rect, source im
 }
 
 // screenshotEditorToolbarPlacement right-aligns the bar to the selection and prefers a 16px gap below, then above.
-// stackHeight only decides whether the toolbar plus optional property bar fit below. The returned toolbar
+// stackHeight reserves room below or inside for the optional property bar. The returned toolbar
 // always uses toolbarHeight so the visible gap stays 16px on both sides instead of reserving empty stack space.
 func screenshotEditorToolbarPlacement(selection, frame Rect, toolbarWidth, toolbarHeight, stackHeight, uiScale float32) Rect {
 	if uiScale <= 0 {
@@ -1894,7 +1898,14 @@ func screenshotEditorToolbarPlacement(selection, frame Rect, toolbarWidth, toolb
 	left := min(max(frame.X+inset, selection.X+selection.Width-toolbarWidth), max(frame.X+inset, frameRight-toolbarWidth-inset))
 	top := selection.Y + selection.Height + gap
 	if top+stackHeight > frameBottom-inset {
-		top = max(frame.Y+inset, selection.Y-toolbarHeight-gap)
+		top = selection.Y - toolbarHeight - gap
+		if top < frame.Y+inset {
+			top = selection.Y + selection.Height + gap
+			if top+toolbarHeight > frameBottom-inset {
+				// Neither outside edge fits: keep the toolbar and its property bar inside the visible display.
+				top = min(max(frame.Y+inset, selection.Y+gap), max(frame.Y+inset, frameBottom-inset-stackHeight))
+			}
+		}
 	}
 	return Rect{X: left, Y: top, Width: toolbarWidth, Height: toolbarHeight}
 }
