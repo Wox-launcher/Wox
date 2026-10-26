@@ -343,7 +343,7 @@ func saveProfile(profile Profile) error {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(profile, "", "  ")
+	data, err := json.Marshal(profile)
 	if err != nil {
 		return err
 	}

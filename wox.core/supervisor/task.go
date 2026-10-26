@@ -101,7 +101,7 @@ func (m *Manager) writeTaskJournal(task Task) error {
 	if err := os.MkdirAll(m.RuntimeDirectory(), 0755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(task, "", "  ")
+	data, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}

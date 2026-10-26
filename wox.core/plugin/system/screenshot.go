@@ -780,7 +780,7 @@ func (p *ScreenshotPlugin) writeScreenshotOCRSidecar(ctx context.Context, screen
 		SourceSize:       info.Size(),
 		SourceModifiedAt: info.ModTime().UnixMilli(),
 	}
-	data, err := json.MarshalIndent(sidecar, "", "  ")
+	data, err := json.Marshal(sidecar)
 	if err != nil {
 		return fmt.Errorf("failed to encode screenshot ocr sidecar: %w", err)
 	}

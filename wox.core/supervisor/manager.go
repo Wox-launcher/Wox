@@ -149,7 +149,7 @@ func (m *Manager) SaveState(state State) error {
 	if err := m.EnsureDirectories(); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(state, "", "  ")
+	data, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}

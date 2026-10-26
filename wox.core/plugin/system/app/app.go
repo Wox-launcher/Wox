@@ -33,7 +33,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
-	"github.com/tidwall/pretty"
 )
 
 var appIcon = icons.Get(icons.PluginApp)
@@ -2599,7 +2598,7 @@ func (a *ApplicationPlugin) saveAppToCache(ctx context.Context) {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error marshalling app cache: %s", marshalErr.Error()))
 		return
 	}
-	writeErr := os.WriteFile(cachePath, pretty.Pretty(cacheContent), 0644)
+	writeErr := os.WriteFile(cachePath, cacheContent, 0644)
 	if writeErr != nil {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error writing app cache: %s", writeErr.Error()))
 		return
