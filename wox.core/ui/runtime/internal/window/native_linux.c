@@ -2292,6 +2292,7 @@ typedef void (*WoxLayerSetKeyboardMode)(GtkWindow *window, WoxKeyboardMode mode)
 typedef void (*WoxLayerSetAnchor)(GtkWindow *window, WoxEdge edge, gboolean anchored);
 typedef void (*WoxLayerSetMonitor)(GtkWindow *window, GdkMonitor *monitor);
 typedef void (*WoxLayerSetMargin)(GtkWindow *window, WoxEdge edge, int margin);
+typedef void (*WoxLayerSetNamespace)(GtkWindow *window, const char *name_space);
 
 static WoxLayerIsSupported layer_is_supported;
 static WoxLayerInitForWindow layer_init_for_window;
@@ -2300,6 +2301,7 @@ static WoxLayerSetKeyboardMode layer_set_keyboard_mode;
 static WoxLayerSetAnchor layer_set_anchor;
 static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
+static WoxLayerSetNamespace layer_set_namespace;
 
 static bool resolve_layer_shell(void) {
   static bool checked;
@@ -2321,6 +2323,9 @@ static bool resolve_layer_shell(void) {
   RESOLVE_LAYER_SYMBOL(layer_set_anchor, "gtk_layer_set_anchor");
   RESOLVE_LAYER_SYMBOL(layer_set_monitor, "gtk_layer_set_monitor");
   RESOLVE_LAYER_SYMBOL(layer_set_margin, "gtk_layer_set_margin");
+  // Optional. Older layer-shell builds still place the window; Hyprland rules
+  // need this name to match the surface.
+  RESOLVE_LAYER_SYMBOL(layer_set_namespace, "gtk_layer_set_namespace");
 #undef RESOLVE_LAYER_SYMBOL
   available = layer_is_supported != NULL && layer_init_for_window != NULL && layer_set_layer != NULL && layer_set_keyboard_mode != NULL && layer_set_anchor != NULL && layer_set_monitor != NULL && layer_set_margin != NULL;
   if (!available) {
@@ -2340,6 +2345,11 @@ static bool enable_layer_shell(GtkWindow *window) {
     return false;
   }
   layer_init_for_window(window);
+  // Compositor layer rules match this namespace. It is the Wayland app id so
+  // Hyprland can disable resize animation without matching every GTK layer.
+  if (layer_set_namespace != NULL) {
+    layer_set_namespace(window, linux_app_id());
+  }
   // TOP sits above ordinary xdg_toplevels. OVERLAY is reserved for Topmost
   // HUDs so showing the launcher cannot cover a timer or tooltip.
   layer_set_layer(window, WOX_LAYER_TOP);

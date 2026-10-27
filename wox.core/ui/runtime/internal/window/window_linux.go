@@ -205,6 +205,8 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if run == nil {
 		return nil, errors.New("woxui: Open must be called from Run's start callback or a UI callback on Linux")
 	}
+	// Install before the surface is mapped so the first result resize is instant.
+	ensureHyprlandLayerNoAnim()
 
 	window := &platformWindow{options: options}
 	window.handle = cgo.NewHandle(window)
