@@ -9,7 +9,41 @@ import (
 	"runtime"
 	"testing"
 	"wox/internal/assetfs"
+	"wox/util"
 )
+
+func TestInstallLinuxDesktopIconWritesEmbeddedPNG(t *testing.T) {
+	if !util.IsLinux() {
+		t.Skip("linux desktop icon")
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	InstallLinuxDesktopIcon()
+	iconPath, err := util.LinuxDesktopIconPath()
+	if err != nil {
+		t.Fatalf("icon path: %v", err)
+	}
+	got, err := os.ReadFile(iconPath)
+	if err != nil {
+		t.Fatalf("read icon: %v", err)
+	}
+	if !bytes.Equal(got, appIcon) {
+		t.Fatalf("icon bytes = %d, embedded = %d", len(got), len(appIcon))
+	}
+
+	info, err := os.Stat(iconPath)
+	if err != nil {
+		t.Fatalf("stat icon: %v", err)
+	}
+	InstallLinuxDesktopIcon()
+	again, err := os.Stat(iconPath)
+	if err != nil {
+		t.Fatalf("stat icon after second install: %v", err)
+	}
+	if !again.ModTime().Equal(info.ModTime()) {
+		t.Fatal("second install rewrote an unchanged icon")
+	}
+}
 
 func TestWoxPluginCreatorSkillIsEmbedded(t *testing.T) {
 	for _, filePath := range []string{

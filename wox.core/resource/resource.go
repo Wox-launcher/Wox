@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -206,25 +207,22 @@ func GetAppIconPNG() []byte {
 	return appIcon
 }
 
+// InstallLinuxDesktopIcon writes the user icon before GTK starts. gtk_init loads
+// this path and prints a warning when the file is missing, and the production
+// bootstrap process exits before EnsureLinuxDesktopIcon can run. This write does
+// not refresh the icon cache or open the process logger.
+func InstallLinuxDesktopIcon() {
+	_ = installLinuxDesktopIconFile()
+}
+
 // EnsureLinuxDesktopIcon installs Wox's icon into the user icon theme so the
 // generated desktop entry resolves correctly for AppImage and manual binaries.
 func EnsureLinuxDesktopIcon(ctx context.Context) {
+	if err := installLinuxDesktopIconFile(); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to install Linux desktop icon: %s", err.Error()))
+		return
+	}
 	if !util.IsLinux() {
-		return
-	}
-
-	iconPath, err := util.LinuxDesktopIconPath()
-	if err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to get Linux desktop icon path: %s", err.Error()))
-		return
-	}
-
-	if err := os.MkdirAll(filepath.Dir(iconPath), 0755); err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to create Linux desktop icon directory: %s", err.Error()))
-		return
-	}
-	if err := os.WriteFile(iconPath, appIcon, 0644); err != nil {
-		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to write Linux desktop icon: %s", err.Error()))
 		return
 	}
 
@@ -236,4 +234,26 @@ func EnsureLinuxDesktopIcon(ctx context.Context) {
 	if err := exec.Command("gtk-update-icon-cache", "-q", "-t", "-f", iconThemePath).Run(); err != nil {
 		util.GetLogger().Warn(ctx, fmt.Sprintf("failed to update Linux icon cache: %s", err.Error()))
 	}
+}
+
+// installLinuxDesktopIconFile writes the hicolor PNG when it is missing or stale.
+func installLinuxDesktopIconFile() error {
+	if !util.IsLinux() {
+		return nil
+	}
+
+	iconPath, err := util.LinuxDesktopIconPath()
+	if err != nil {
+		return fmt.Errorf("failed to get Linux desktop icon path: %w", err)
+	}
+	if existing, readErr := os.ReadFile(iconPath); readErr == nil && bytes.Equal(existing, appIcon) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(iconPath), 0755); err != nil {
+		return fmt.Errorf("failed to create Linux desktop icon directory: %w", err)
+	}
+	if err := os.WriteFile(iconPath, appIcon, 0644); err != nil {
+		return fmt.Errorf("failed to write Linux desktop icon: %w", err)
+	}
+	return nil
 }

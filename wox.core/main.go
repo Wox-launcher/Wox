@@ -180,6 +180,8 @@ func main() {
 	} else if supervisor.DebugModeEnabled() {
 		debug.SetTraceback("system")
 	}
+	// GTK loads this file inside gtk_init, before run() reaches EnsureLinuxDesktopIcon.
+	resource.InstallLinuxDesktopIcon()
 	mainthread.SetDispatcher(func(fn func()) {
 		if err := woxui.Call(fn); err != nil {
 			panic(err)

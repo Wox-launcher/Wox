@@ -393,8 +393,14 @@ static void apply_linux_app_identity(void) {
 
 static void apply_linux_app_icon(void) {
   gtk_window_set_default_icon_name(linux_app_id());
-  if (wox_linux_icon_path[0] != '\0') {
-    gtk_window_set_default_icon_from_file(wox_linux_icon_path, NULL);
+  // A NULL GError makes GTK print "Error loading icon from file" on stderr.
+  // Skip a missing file; normal launches write it before gtk_init.
+  if (wox_linux_icon_path[0] == '\0' || !g_file_test(wox_linux_icon_path, G_FILE_TEST_IS_REGULAR)) {
+    return;
+  }
+  GError *error = NULL;
+  if (!gtk_window_set_default_icon_from_file(wox_linux_icon_path, &error)) {
+    g_clear_error(&error);
   }
 }
 
