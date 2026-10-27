@@ -271,11 +271,11 @@ func TestQueryHotkeyPresetsMatchFlutterDefaults(t *testing.T) {
 	})
 
 	app.formTables.applyQueryHotkeyPreset(string(queryHotkeyPresetWebPanel))
-	if fields.values["Position"] != "center" || fields.values["Width"] != "500" || fields.values["MaxResultCount"] != "12" || fields.values["HideQueryBox"] != "true" || fields.values["HideToolbar"] != "true" {
+	if fields.values["Position"] != "center" || fields.values["Width"] != "500" || fields.values["MaxResultCount"] != "12" || fields.values["HideQueryBox"] != "true" || fields.values["HideToolbar"] != "true" || fields.values["HideResults"] != "true" {
 		t.Fatalf("web panel values = %#v", fields.values)
 	}
 	app.formTables.applyQueryHotkeyPreset(string(queryHotkeyPresetNormal))
-	if fields.values["Position"] != "system_default" || fields.values["Width"] != "" || fields.values["MaxResultCount"] != "" || fields.values["HideQueryBox"] != "false" || fields.values["HideToolbar"] != "false" {
+	if fields.values["Position"] != "system_default" || fields.values["Width"] != "" || fields.values["MaxResultCount"] != "" || fields.values["HideQueryBox"] != "false" || fields.values["HideToolbar"] != "false" || fields.values["HideResults"] != "false" {
 		t.Fatalf("normal values = %#v", fields.values)
 	}
 }
@@ -287,7 +287,7 @@ func TestQueryHotkeyPresetVisibilityMatchesFlutter(t *testing.T) {
 	if !queryHotkeyFieldVisible(queryHotkeyPresetWebPanel, "Position", false) || queryHotkeyFieldVisible(queryHotkeyPresetWebPanel, "HideToolbar", false) {
 		t.Fatal("preview preset should show display sizing without custom chrome toggles")
 	}
-	if !queryHotkeyFieldVisible(queryHotkeyPresetCustom, "HideToolbar", false) || queryHotkeyFieldVisible(queryHotkeyPresetCustom, "Disabled", false) || !queryHotkeyFieldVisible(queryHotkeyPresetCustom, "Disabled", true) {
+	if !queryHotkeyFieldVisible(queryHotkeyPresetCustom, "HideResults", false) || !queryHotkeyFieldVisible(queryHotkeyPresetCustom, "HideToolbar", false) || queryHotkeyFieldVisible(queryHotkeyPresetCustom, "Disabled", false) || !queryHotkeyFieldVisible(queryHotkeyPresetCustom, "Disabled", true) {
 		t.Fatal("custom preset should expose chrome fields and edit-only disabled state")
 	}
 }
@@ -1446,5 +1446,35 @@ func TestFormTableRowFromFieldsDropsLegacyJSONFieldName(t *testing.T) {
 	}
 	if _, exists := row["Path"]; exists {
 		t.Fatalf("legacy Path key was kept: %#v", row)
+	}
+}
+
+func TestQueryHotkeyHideResultsPersistsAndDeterminesPreset(t *testing.T) {
+	form := newHotkeySettingsForm(settingsData{})
+	var definition formDefinition
+	for _, candidate := range form.definitions {
+		if candidate.Value.Key == "QueryHotkeys" {
+			definition = candidate
+			break
+		}
+	}
+	values := map[string]any{"HideQueryBox": true, "HideToolbar": true, "HideResults": true}
+	fields, _ := formTableRowFields(definition, values)
+	if inferQueryHotkeyPreset(fields.values) != queryHotkeyPresetWebPanel {
+		t.Fatal("preview preset was not recognized")
+	}
+	row := formTableRowFromFields(definition, &fields, nil)
+	if row["HideResults"] != true {
+		t.Fatalf("HideResults not saved: %#v", row)
+	}
+	fields.values["HideResults"] = "false"
+	if inferQueryHotkeyPreset(fields.values) != queryHotkeyPresetCustom {
+		t.Fatal("legacy and custom combinations must remain custom")
+	}
+	fields.values["HideQueryBox"] = "false"
+	fields.values["HideToolbar"] = "false"
+	fields.values["HideResults"] = "true"
+	if inferQueryHotkeyPreset(fields.values) != queryHotkeyPresetCustom {
+		t.Fatal("HideResults alone must remain customizable")
 	}
 }

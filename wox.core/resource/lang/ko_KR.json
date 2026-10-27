@@ -595,6 +595,8 @@
   "ui_query_hotkeys_hide_query_box_tooltip": "이 쿼리 단축키가 열릴 때 쿼리 상자를 숨깁니다.",
   "ui_query_hotkeys_hide_toolbar": "도구 모음 숨기기",
   "ui_query_hotkeys_hide_toolbar_tooltip": "이 쿼리 단축키가 열릴 때 도구 모음을 숨깁니다.",
+  "ui_query_hotkeys_hide_results": "결과 숨기기",
+  "ui_query_hotkeys_hide_results_tooltip": "결과 목록을 숨깁니다. 결과 미리보기는 있는 경우 영향을 받지 않습니다.",
   "ui_query_hotkeys_width": "너비",
   "ui_query_hotkeys_width_tooltip": "선택 사항입니다. 이 쿼리 단축키의 창 너비(픽셀)입니다. 비워 두면 전역 앱 너비를 사용합니다.",
   "ui_query_hotkeys_max_result_count": "최대 결과 수",

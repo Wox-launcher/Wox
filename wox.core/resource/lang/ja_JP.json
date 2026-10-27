@@ -595,6 +595,8 @@
   "ui_query_hotkeys_hide_query_box_tooltip": "このクエリホットキーが開くときにクエリボックスを非表示にします。",
   "ui_query_hotkeys_hide_toolbar": "ツールバーを非表示",
   "ui_query_hotkeys_hide_toolbar_tooltip": "このクエリホットキーが開くときにツールバーを非表示にします。",
+  "ui_query_hotkeys_hide_results": "結果を非表示",
+  "ui_query_hotkeys_hide_results_tooltip": "結果一覧を非表示にします。結果のプレビュー（ある場合）には影響しません。",
   "ui_query_hotkeys_width": "幅",
   "ui_query_hotkeys_width_tooltip": "任意。このクエリホットキーのウィンドウ幅(ピクセル)。空の場合はグローバルのアプリ幅を使用します。",
   "ui_query_hotkeys_max_result_count": "最大結果数",

@@ -685,6 +685,7 @@ func (m *Manager) triggerQueryHotkey(ctx context.Context, queryHotkey setting.Qu
 		SelectAll:      false,
 		HideQueryBox:   queryHotkey.HideQueryBox,
 		HideToolbar:    queryHotkey.HideToolbar,
+		HideResults:    queryHotkey.HideResults,
 		WindowWidth:    normalizedWindowWidth(queryHotkey.Width),
 		MaxResultCount: normalizedMaxResultCount(queryHotkey.MaxResultCount),
 		ShowSource:     common.ShowSourceQueryHotkey,

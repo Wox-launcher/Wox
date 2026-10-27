@@ -112,6 +112,7 @@ type queryHotkeySetting struct {
 	IsSilentExecution bool
 	HideQueryBox      bool
 	HideToolbar       bool
+	HideResults       bool
 	Width             int
 	MaxResultCount    int
 	Position          string
@@ -614,7 +615,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 	for index, item := range loaded.QueryHotkeys {
 		queryHotkeys[index] = queryHotkeySetting{
 			Name: item.Name, Hotkey: item.Hotkey, Query: item.Query, IsSilentExecution: item.IsSilentExecution,
-			HideQueryBox: item.HideQueryBox, HideToolbar: item.HideToolbar, Width: item.Width,
+			HideQueryBox: item.HideQueryBox, HideToolbar: item.HideToolbar, HideResults: item.HideResults, Width: item.Width,
 			MaxResultCount: item.MaxResultCount, Position: string(item.Position), Disabled: item.Disabled,
 		}
 	}

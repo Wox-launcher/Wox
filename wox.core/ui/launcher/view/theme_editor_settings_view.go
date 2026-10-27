@@ -787,7 +787,7 @@ func themeEditorDemoHighlightTarget(token string) woxcomponent.LauncherDemoHighl
 }
 
 func themeEditorTextPreviewPanel(props ThemeEditorSettingsProps, width, height float32) woxwidget.Widget {
-	layout := previewview.ResolvePreviewLayout(width, height, true, props.DraftTheme)
+	layout := previewview.ResolvePreviewLayout(width, height, true, props.DraftTheme, false)
 	contentWidth := max(float32(0), layout.BodyWidth-24)
 	selectionColor := props.DraftTheme.SelectionBackground
 	for _, group := range props.Groups {

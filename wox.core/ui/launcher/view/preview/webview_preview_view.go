@@ -14,12 +14,13 @@ const WebViewPreviewCornerRadius = previewSurfaceRadius - previewSurfaceBorderWi
 
 // WebViewPreviewProps contains the native surface placement callback.
 type WebViewPreviewProps struct {
-	Width     float32
-	Height    float32
-	Theme     woxcomponent.Theme
-	OnBounds  func(woxui.Rect)
-	OnPointer func(woxui.PointerEvent) bool
-	OnEscape  func()
+	Width        float32
+	Height       float32
+	CornerRadius float32
+	Theme        woxcomponent.Theme
+	OnBounds     func(woxui.Rect)
+	OnPointer    func(woxui.PointerEvent) bool
+	OnEscape     func()
 }
 
 // WebViewPreview paints the portable backdrop and reports native content bounds.
@@ -37,7 +38,7 @@ func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
 			return true
 		},
 		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRoundedRect(bounds, WebViewPreviewCornerRadius, props.Theme.QueryBackground)
+			displayList.FillRoundedRect(bounds, props.CornerRadius, props.Theme.QueryBackground)
 			displayList.DeferEmbeddedSurfaceOverlay(bounds)
 			if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
 				props.OnBounds(bounds)

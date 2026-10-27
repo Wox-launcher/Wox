@@ -291,6 +291,7 @@ type QueryHotkey struct {
 	IsSilentExecution bool   // If true, the query will be executed without showing the query in the input box
 	HideQueryBox      bool
 	HideToolbar       bool
+	HideResults       bool
 	Width             int
 	MaxResultCount    int
 	Position          QueryHotkeyPosition

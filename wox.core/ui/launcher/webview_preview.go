@@ -71,7 +71,7 @@ func (d webViewPreviewData) content() woxui.WebViewContent {
 	return woxui.WebViewContent{URL: d.URL, HTML: d.HTML, InjectCSS: d.InjectCSS, UserAgent: d.UserAgent, CacheDisabled: d.CacheDisabled, CacheKey: cacheKey}
 }
 
-func (a *webViewPreviewController) buildWebViewPreview(previewData string, palette uiPalette, width, height float32) woxwidget.Widget {
+func (a *webViewPreviewController) buildWebViewPreview(previewData string, palette uiPalette, width, height float32, fullBleed bool) woxwidget.Widget {
 	theme := palette.componentTheme()
 	if network.IsOffline() {
 		return webViewPreviewSemantics("offline", previewview.WebViewPreviewMessage(a.language.translate("i18n:ui_offline_unavailable"), theme.PreviewText, theme, width, height))
@@ -94,7 +94,10 @@ func (a *webViewPreviewController) buildWebViewPreview(previewData string, palet
 	content := data.content()
 	content.DocumentKey = a.webViewDocumentKey()
 	content.CornerRadius = previewview.WebViewPreviewCornerRadius
-	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, OnPointer: a.window().ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
+	if fullBleed {
+		content.CornerRadius = 0
+	}
+	return webViewPreviewSemantics(webViewPreviewReadyValue(data), previewview.WebViewPreview(previewview.WebViewPreviewProps{Width: width, Height: height, Theme: theme, CornerRadius: content.CornerRadius, OnPointer: a.window().ForwardEmbeddedSurfacePointer, OnEscape: a.handleWebViewFallbackEscape, OnBounds: func(bounds woxui.Rect) {
 		if a.isDestroyed() || network.IsOffline() || a.webViewPreviewData != previewData || a.webViewPreviewError != "" || content.DocumentKey != a.webViewDocumentKey() {
 			return
 		}

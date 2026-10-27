@@ -3,6 +3,7 @@ package launcher
 import (
 	"testing"
 	"wox/common"
+	woxwidget "wox/ui/widget"
 )
 
 // TestQueryFullPreviewLayout applies content and layout together, even before query completion.
@@ -99,5 +100,55 @@ func TestQueryPreviewReplacesManualContent(t *testing.T) {
 	app.applyResults(app.querySession.query.QueryID, []queryResult{result}, &layout, nil, nil, 0, false)
 	if app.resultList.results[0].Preview.PreviewData != result.Preview.PreviewData || app.webView.webViewFullscreen {
 		t.Fatal("restoring the manual preview overwrote the incoming response")
+	}
+}
+
+// TestHideResultsOverridesPluginLayout for every combination of the other display options.
+func TestHideResultsOverridesPluginLayout(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	app.resultList.selected = 0
+	app.resultList.results = []queryResult{{Preview: queryPreview{PreviewType: "file", PreviewData: "main.go", DefaultHidden: true}}}
+	for _, hideQuery := range []bool{false, true} {
+		for _, hideToolbar := range []bool{false, true} {
+			for _, grid := range []bool{false, true} {
+				ratio := 0.4
+				app.show = showAppParams{HideResults: true, HideQueryBox: hideQuery, HideToolbar: hideToolbar, ShowPreviewTitleBar: hideQuery && hideToolbar}
+				app.resultList.layout = queryLayout{ResultPreviewWidthRatio: &ratio}
+				if grid {
+					app.resultList.layout.GridLayout = &gridLayout{Columns: 4}
+				}
+				layout := app.previews.selectedPreviewLayout()
+				if launcherPreviewRatio(layout, false) != 0 || layout.GridLayout != nil || !launcherPreviewVisible(layout, app.resultList.results[0].Preview) {
+					t.Fatalf("query hidden %t toolbar hidden %t grid %t: layout = %#v", hideQuery, hideToolbar, grid, layout)
+				}
+				if *app.resultList.layout.ResultPreviewWidthRatio != ratio || (app.resultList.layout.GridLayout != nil) != grid {
+					t.Fatal("HideResults modified the plugin layout")
+				}
+				snapshot := viewSnapshot{show: app.show, results: app.resultList.results, selected: 0, layout: layout}
+				if launcherPreviewTitleBarVisible(snapshot) != (hideQuery && hideToolbar) {
+					t.Fatalf("unexpected title bar visibility for query %t toolbar %t", hideQuery, hideToolbar)
+				}
+			}
+		}
+	}
+	app.show = showAppParams{HideQueryBox: true, HideToolbar: true, ShowPreviewTitleBar: true}
+	ratio := 0.4
+	app.resultList.layout = queryLayout{ResultPreviewWidthRatio: &ratio}
+	app.resultList.results[0].Preview.DefaultHidden = false
+	if launcherPreviewRatio(app.previews.selectedPreviewLayout(), false) != 0.4 {
+		t.Fatal("old settings without HideResults must retain the split layout")
+	}
+}
+
+func TestHideResultsDoesNotShowListWithoutPreview(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	result := queryResult{ID: "plain"}
+	snapshot := viewSnapshot{show: showAppParams{HideResults: true}, results: []queryResult{result}, selected: 0, layout: queryLayout{}}
+	view := app.buildContent(snapshot, 400, 300, 1, 0).(woxwidget.Semantics)
+	blank, ok := view.Child.(woxwidget.Container)
+	if !ok || blank.Child != nil || blank.Width != 400 || blank.Height != 300 {
+		t.Fatalf("hidden results should render an empty content area, got %#v", view.Child)
 	}
 }

@@ -12,6 +12,30 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestFullBleedPreviewUsesAvailableSpace(t *testing.T) {
+	theme := woxcomponent.Theme{}
+	for _, hasTags := range []bool{false, true} {
+		layout := ResolvePreviewLayout(320, 240, hasTags, theme, true)
+		wantHeight := float32(240)
+		if hasTags {
+			wantHeight -= PreviewTagHeight + PreviewTagGap
+		}
+		if layout.BodyWidth != 320 || layout.BodyHeight != wantHeight {
+			t.Fatalf("has tags %t: layout = %#v, want 320 x %v", hasTags, layout, wantHeight)
+		}
+	}
+	body := woxwidget.Container{Width: 320, Height: 240}
+	view := PreviewView(PreviewProps{Width: 320, Height: 240, Body: body, Theme: theme, FullBleed: true}).(woxwidget.Container)
+	stack := view.Child.(woxwidget.Stack)
+	if view.Padding != (woxwidget.Insets{}) || stack.Width != 320 || stack.Height != 240 || stack.Children[0].Child.(woxwidget.Container).Width != body.Width {
+		t.Fatalf("full-bleed view = %#v, stack = %#v", view, stack)
+	}
+	regular := ResolvePreviewLayout(320, 240, false, theme, false)
+	if regular.BodyWidth != 292 || regular.BodyHeight != 216 {
+		t.Fatalf("regular preview layout = %#v, want existing insets", regular)
+	}
+}
+
 func TestPreviewLoadingCentersSharedIndicator(t *testing.T) {
 	color := woxui.Color{R: 12, G: 18, B: 24, A: 255}
 	loading := PreviewLoading(320, 180, color).(woxwidget.Align)

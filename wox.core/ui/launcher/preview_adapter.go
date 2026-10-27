@@ -23,11 +23,11 @@ import (
 
 // buildPreview resolves controller-owned preview state into a pure preview view.
 func (a *App) buildPreview(result queryResult, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
-	return a.buildPreviewWithChatHeader(result, palette, width, height, imageScale, true)
+	return a.buildPreviewWithChatHeader(result, palette, width, height, imageScale, true, false)
 }
 
 // buildPreviewWithChatHeader lets preview-only windows host chat navigation in their platform title bar.
-func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, width, height, imageScale float32, showChatHeader bool) woxwidget.Widget {
+func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, width, height, imageScale float32, showChatHeader, fullBleed bool) woxwidget.Widget {
 	preview := a.remotePreview.resolvePreview(result.Preview)
 	if preview.PreviewType == "remote" {
 		return woxwidget.Container{Width: width, Height: height}
@@ -60,14 +60,14 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 	if preview.PreviewType == "terminal" {
 		return a.buildTerminalPreview(a.terminal.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
 	}
-	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme())
-	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale)
+	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme(), fullBleed)
+	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale, fullBleed)
 	return previewview.PreviewView(previewview.PreviewProps{
-		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.previews.setPreviewTooltip,
+		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.previews.setPreviewTooltip, FullBleed: fullBleed,
 	})
 }
 
-func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32) woxwidget.Widget {
+func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32, fullBleed bool) woxwidget.Widget {
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -115,7 +115,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 				Width: width, Height: height, InitialOffset: offset, Window: a.window, Theme: palette.componentTheme(),
 			})
 		case "webview":
-			return a.webView.buildWebViewPreview(file.WebViewData, palette, width, height)
+			return a.webView.buildWebViewPreview(file.WebViewData, palette, width, height, fullBleed)
 		case "native_file":
 			return a.buildNativeFilePreview(file.NativeFilePath, file.NativeFileAutoLoad, palette, width, height)
 		case "large", "too_large":
@@ -159,7 +159,7 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	case "url":
 		return content("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
 	case "webview":
-		return a.webView.buildWebViewPreview(preview.PreviewData, palette, width, height)
+		return a.webView.buildWebViewPreview(preview.PreviewData, palette, width, height, fullBleed)
 	default:
 		return content(preview.PreviewData, palette.previewText)
 	}

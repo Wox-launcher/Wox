@@ -16,6 +16,13 @@ func (a *previewController) reconcilePreviewVisibility() {
 // selectedPreviewLayout applies transient visibility without changing the plugin's layout or preview payload.
 func (a *previewController) selectedPreviewLayout() queryLayout {
 	layout := a.resultList.layout
+	if a.show().HideResults {
+		// HideResults takes precedence over plugin split/grid layouts and hidden-by-default previews.
+		ratio := 0.0
+		layout.ResultPreviewWidthRatio = &ratio
+		layout.GridLayout = nil
+		return layout
+	}
 	if a.isPreviewFullscreen() {
 		ratio := 0.0
 		layout.ResultPreviewWidthRatio = &ratio
@@ -47,7 +54,7 @@ func (a *App) toggleSelectedPreview() bool {
 	}
 	preview := a.resultList.results[a.resultList.selected].Preview
 	// Grid and preview-only surfaces retain their existing navigation contracts.
-	if preview.PreviewData == "" || a.resultList.layout.GridLayout != nil || launcherPreviewRatio(a.resultList.layout, false) == 0 || a.isPreviewFullscreen() {
+	if preview.PreviewData == "" || a.resultList.layout.GridLayout != nil || launcherPreviewRatio(a.previews.selectedPreviewLayout(), false) == 0 || a.isPreviewFullscreen() {
 		return false
 	}
 	a.previews.reconcilePreviewVisibility()

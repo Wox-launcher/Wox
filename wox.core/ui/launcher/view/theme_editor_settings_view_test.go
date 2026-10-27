@@ -194,7 +194,7 @@ func TestThemeEditorPreviewLocatorBounds(t *testing.T) {
 				if panel.Width != clip.Width || panel.Height != clip.Height {
 					t.Fatal("preview content exceeds its launcher viewport")
 				}
-				layout := previewview.ResolvePreviewLayout(panel.Width, panel.Height, true, props.DraftTheme)
+				layout := previewview.ResolvePreviewLayout(panel.Width, panel.Height, true, props.DraftTheme, false)
 				shell := panel.Children[0].Child.(woxwidget.Container)
 				slots := shell.Child.(woxwidget.Stack).Children
 				if token == "PreviewPropertyTitleColor" || token == "PreviewPropertyContentColor" {

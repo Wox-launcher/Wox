@@ -70,7 +70,7 @@ func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
 		PositionHeight: options.PositionHeight,
 		WindowWidth:    options.WindowWidth, MaxResultCount: options.MaxResultCount, QueryHistories: queryHistories,
 		LaunchMode: options.LaunchMode, StartPage: options.StartPage,
-		HideQueryBox: options.HideQueryBox, HideToolbar: options.HideToolbar, ShowPreviewTitleBar: options.ShowPreviewTitleBar,
+		HideQueryBox: options.HideQueryBox, HideToolbar: options.HideToolbar, HideResults: options.HideResults, ShowPreviewTitleBar: options.ShowPreviewTitleBar,
 		QueryBoxAtBottom: options.QueryBoxAtBottom, HideOnBlur: options.HideOnBlur,
 		RememberPosition: options.RememberPosition,
 		RestoreWindow:    options.RestoreWindow,

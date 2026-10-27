@@ -595,6 +595,8 @@
   "ui_query_hotkeys_hide_query_box_tooltip": "启用后，该快捷键查询打开时不显示查询框。",
   "ui_query_hotkeys_hide_toolbar": "隐藏工具栏",
   "ui_query_hotkeys_hide_toolbar_tooltip": "启用后，该快捷键查询打开时不显示工具栏。",
+  "ui_query_hotkeys_hide_results": "隐藏结果列表",
+  "ui_query_hotkeys_hide_results_tooltip": "隐藏结果列表，结果的预览（如有）不受影响",
   "ui_query_hotkeys_width": "宽度",
   "ui_query_hotkeys_width_tooltip": "可选。该快捷键查询窗口宽度（像素）。留空时使用全局应用宽度。",
   "ui_query_hotkeys_max_result_count": "最大结果数",

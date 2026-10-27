@@ -33,6 +33,7 @@ type ShowOptions struct {
 	StartPage      string
 	HideQueryBox   bool
 	HideToolbar    bool
+	HideResults    bool
 	// ShowPreviewTitleBar is an internal launcher control and is not part of plugin query responses.
 	ShowPreviewTitleBar bool
 	QueryBoxAtBottom    bool

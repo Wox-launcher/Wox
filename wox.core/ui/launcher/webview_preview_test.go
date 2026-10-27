@@ -50,24 +50,24 @@ func TestBuildWebViewPreviewExposesAutomationStatus(t *testing.T) {
 	payload := `{"url":"` + previewURL + `"}`
 	app := bindTestApp(&App{})
 
-	loading, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	loading, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80, false).(woxwidget.Semantics)
 	if !ok || loading.AutomationID != webViewPreviewAutomationID || loading.Value != "loading" || loading.LiveRegion != woxui.AccessibilityLiveRegionPolite {
 		t.Fatalf("loading preview semantics = %#v", loading)
 	}
 
 	app.webView.webViewPreviewData = payload
-	ready, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	ready, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80, false).(woxwidget.Semantics)
 	if !ok || ready.AutomationID != webViewPreviewAutomationID || ready.Value != previewURL {
 		t.Fatalf("ready preview semantics = %#v", ready)
 	}
 
 	app.webView.webViewPreviewError = "webview missing"
-	failed, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80).(woxwidget.Semantics)
+	failed, ok := app.webView.buildWebViewPreview(payload, uiPalette{}, 120, 80, false).(woxwidget.Semantics)
 	if !ok || failed.AutomationID != webViewPreviewAutomationID || !strings.HasPrefix(failed.Value, "error:") || !strings.Contains(failed.Value, "webview missing") {
 		t.Fatalf("error preview semantics = %#v", failed)
 	}
 
-	invalid, ok := app.webView.buildWebViewPreview("{", uiPalette{}, 120, 80).(woxwidget.Semantics)
+	invalid, ok := app.webView.buildWebViewPreview("{", uiPalette{}, 120, 80, false).(woxwidget.Semantics)
 	if !ok || invalid.AutomationID != webViewPreviewAutomationID || !strings.HasPrefix(invalid.Value, "error:") {
 		t.Fatalf("invalid preview semantics = %#v", invalid)
 	}

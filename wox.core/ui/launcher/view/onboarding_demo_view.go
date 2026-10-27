@@ -602,7 +602,7 @@ func onboardingSelectionWindow(props OnboardingProps, step OnboardingStep, width
 // onboardingSelectionPreview shows the selected file on the right, matching a live selection query.
 func onboardingSelectionPreview(props OnboardingProps, width, height, opacity float32, fileName, filePath string) woxwidget.Widget {
 	alpha := demoAlpha(opacity)
-	layout := previewview.ResolvePreviewLayout(width, height, true, props.PreviewTheme)
+	layout := previewview.ResolvePreviewLayout(width, height, true, props.PreviewTheme, false)
 	surfaceHeight := layout.BodyHeight + 2
 	tag := func(label string) woxwidget.Widget {
 		tagWidth := max(float32(36), float32(len([]rune(label)))*7+14)

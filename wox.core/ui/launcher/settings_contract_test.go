@@ -16,7 +16,7 @@ func TestSettingsDataFromContract(t *testing.T) {
 		MainHotkeyRegistrationError:  "i18n:ui_hotkey_registration_unsupported",
 		LangCode:                     i18n.LangCodeZhCn,
 		QueryHotkeys: []setting.QueryHotkey{{
-			Name: "Docs", Hotkey: "Ctrl+D", Query: "docs", Position: setting.QueryHotkeyPositionTopCenter, MaxResultCount: 8,
+			Name: "Docs", Hotkey: "Ctrl+D", Query: "docs", Position: setting.QueryHotkeyPositionTopCenter, MaxResultCount: 8, HideResults: true,
 		}},
 		ResultBindings: []setting.ResultBinding{{
 			Hash: "h1", PluginID: "app", Title: "Chrome", Alias: "ch",
@@ -46,7 +46,7 @@ func TestSettingsDataFromContract(t *testing.T) {
 	if !data.EnablePrivacyMode {
 		t.Fatal("private mode was not copied")
 	}
-	if len(data.QueryHotkeys) != 1 || data.QueryHotkeys[0].Position != "top_center" || data.QueryHotkeys[0].MaxResultCount != 8 {
+	if len(data.QueryHotkeys) != 1 || data.QueryHotkeys[0].Position != "top_center" || data.QueryHotkeys[0].MaxResultCount != 8 || !data.QueryHotkeys[0].HideResults {
 		t.Fatalf("query hotkeys = %+v", data.QueryHotkeys)
 	}
 	if len(data.ResultBindings) != 1 || data.ResultBindings[0].Alias != "ch" {

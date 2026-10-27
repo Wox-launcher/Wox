@@ -31,7 +31,7 @@ func (a *App) buildNativeFilePreview(path string, autoLoad bool, palette uiPalet
 	}
 	generation := a.nativeFile.nativeFilePreviewGeneration
 	return previewview.WebViewPreview(previewview.WebViewPreviewProps{
-		Width: width, Height: height, Theme: theme,
+		Width: width, Height: height, Theme: theme, CornerRadius: previewview.WebViewPreviewCornerRadius,
 		OnBounds: func(bounds woxui.Rect) {
 			a.nativeFile.requestNativeFilePreviewBounds(path, generation, bounds)
 		},

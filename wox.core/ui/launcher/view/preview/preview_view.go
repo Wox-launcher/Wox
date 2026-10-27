@@ -25,6 +25,7 @@ type PreviewProps struct {
 	Theme      woxcomponent.Theme
 	Window     *woxui.Window
 	OnTagHover func(bool, string, woxui.Rect)
+	FullBleed  bool
 }
 
 // PreviewTag keeps compact metadata text and its explanatory tooltip together.
@@ -42,26 +43,40 @@ type PreviewLayout struct {
 }
 
 // ResolvePreviewLayout calculates the body size after optional metadata tags are reserved.
-func ResolvePreviewLayout(width, height float32, hasTags bool, theme woxcomponent.Theme) PreviewLayout {
-	innerWidth := max(float32(0), width-26)
-	innerHeight := max(float32(0), height-22)
+func ResolvePreviewLayout(width, height float32, hasTags bool, theme woxcomponent.Theme, fullBleed bool) PreviewLayout {
+	innerWidth, innerHeight := width, height
+	border := float32(0)
+	if !fullBleed {
+		innerWidth = max(float32(0), width-26)
+		innerHeight = max(float32(0), height-22)
+		border = 2
+	}
 	bodyHeight := innerHeight
 	if hasTags {
 		bodyHeight = max(float32(0), innerHeight-theme.Controls.Scaled(PreviewTagHeight)-theme.Controls.Scaled(PreviewTagGap))
 	}
-	return PreviewLayout{BodyWidth: max(float32(0), innerWidth-2), BodyHeight: max(float32(0), bodyHeight-2), InnerWidth: innerWidth, InnerHeight: innerHeight}
+	return PreviewLayout{BodyWidth: max(float32(0), innerWidth-border), BodyHeight: max(float32(0), bodyHeight-border), InnerWidth: innerWidth, InnerHeight: innerHeight}
 }
 
 // PreviewView builds the generic preview surface and its optional metadata tags.
 func PreviewView(props PreviewProps) woxwidget.Widget {
-	layout := ResolvePreviewLayout(props.Width, props.Height, len(props.Tags) > 0, props.Theme)
-	surfaceHeight := layout.BodyHeight + 2
-	children := []woxwidget.StackChild{{Child: previewSurface(props.Body, props.Theme, layout.InnerWidth, surfaceHeight)}}
+	layout := ResolvePreviewLayout(props.Width, props.Height, len(props.Tags) > 0, props.Theme, props.FullBleed)
+	surfaceHeight := layout.BodyHeight
+	body := props.Body
+	if !props.FullBleed {
+		surfaceHeight += 2
+		body = previewSurface(body, props.Theme, layout.InnerWidth, surfaceHeight)
+	}
+	children := []woxwidget.StackChild{{Child: body}}
 	if len(props.Tags) > 0 {
 		children = append(children, woxwidget.StackChild{Top: surfaceHeight + props.Theme.Controls.Scaled(PreviewTagGap), Child: PreviewTags(props.Tags, props.Theme, props.Window, layout.InnerWidth, props.OnTagHover)})
 	}
+	padding := woxwidget.Insets{}
+	if !props.FullBleed {
+		padding = woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10}
+	}
 	return woxwidget.Container{
-		Width: props.Width, Height: props.Height, Padding: woxwidget.Insets{Left: 14, Top: 12, Right: 12, Bottom: 10},
+		Width: props.Width, Height: props.Height, Padding: padding,
 		Child: woxwidget.Stack{Width: layout.InnerWidth, Height: layout.InnerHeight, Children: children},
 	}
 }

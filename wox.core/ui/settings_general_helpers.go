@@ -43,6 +43,9 @@ func parseQueryHotkeysSettingValue(value string) ([]setting.QueryHotkey, error) 
 		if rawHideToolbar, ok := rawQueryHotkey["HideToolbar"]; ok {
 			queryHotkey.HideToolbar = parseBool(rawHideToolbar)
 		}
+		if rawHideResults, ok := rawQueryHotkey["HideResults"]; ok {
+			queryHotkey.HideResults = parseBool(rawHideResults)
+		}
 		if rawDisabled, ok := rawQueryHotkey["Disabled"]; ok {
 			queryHotkey.Disabled = parseBool(rawDisabled)
 		}

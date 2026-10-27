@@ -580,6 +580,8 @@
   "ui_query_hotkeys_hide_query_box_tooltip": "Hide the query box when this query hotkey opens.",
   "ui_query_hotkeys_hide_toolbar": "Hide Toolbar",
   "ui_query_hotkeys_hide_toolbar_tooltip": "Hide the toolbar when this query hotkey opens.",
+  "ui_query_hotkeys_hide_results": "Скрыть результаты",
+  "ui_query_hotkeys_hide_results_tooltip": "Скрыть список результатов. Предпросмотр результатов, если он доступен, не изменится.",
   "ui_query_hotkeys_width": "Width",
   "ui_query_hotkeys_width_tooltip": "Optional. Window width in pixels for this query hotkey. Empty uses the global app width.",
   "ui_query_hotkeys_max_result_count": "Maximum Results",

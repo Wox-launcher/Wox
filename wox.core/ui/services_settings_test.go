@@ -92,6 +92,16 @@ func TestDecodeTrayQueriesPreservesMissingQueryAsEmpty(t *testing.T) {
 	}
 }
 
+func TestParseQueryHotkeysPreservesHideResults(t *testing.T) {
+	queries, err := parseQueryHotkeysSettingValue(`[{"Query":"f main.go","HideQueryBox":true,"HideToolbar":true,"HideResults":true},{"HideResults":false},{}]`)
+	if err != nil {
+		t.Fatalf("parseQueryHotkeysSettingValue returned error: %v", err)
+	}
+	if len(queries) != 3 || !queries[0].HideQueryBox || !queries[0].HideToolbar || !queries[0].HideResults || queries[1].HideResults || queries[2].HideResults {
+		t.Fatalf("parsed query hotkeys = %+v", queries)
+	}
+}
+
 func TestCoreServicesRejectsUnsupportedLanguage(t *testing.T) {
 	_, err := NewCoreServices().LanguageBundle(context.Background(), "session", "unsupported")
 	if err == nil || !strings.Contains(err.Error(), "unsupported lang code") {

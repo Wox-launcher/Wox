@@ -745,12 +745,12 @@ func inferQueryHotkeyPreset(values map[string]string) queryHotkeyPreset {
 	width := strings.TrimSpace(values["Width"])
 	maxResults := strings.TrimSpace(values["MaxResultCount"])
 	hasDisplayOptions := values["Position"] != "" && values["Position"] != "system_default" ||
-		values["HideQueryBox"] == "true" || values["HideToolbar"] == "true" ||
+		values["HideQueryBox"] == "true" || values["HideToolbar"] == "true" || values["HideResults"] == "true" ||
 		width != "" && width != "0" || maxResults != "" && maxResults != "0"
 	if values["IsSilentExecution"] == "true" && !hasDisplayOptions {
 		return queryHotkeyPresetSilent
 	}
-	if values["HideQueryBox"] == "true" && values["HideToolbar"] == "true" {
+	if values["HideQueryBox"] == "true" && values["HideToolbar"] == "true" && values["HideResults"] == "true" && values["IsSilentExecution"] != "true" {
 		return queryHotkeyPresetWebPanel
 	}
 	if hasDisplayOptions {
@@ -766,7 +766,7 @@ func queryHotkeyFieldVisible(preset queryHotkeyPreset, key string, editing bool)
 		return true
 	case "Position", "Width", "MaxResultCount":
 		return preset == queryHotkeyPresetWebPanel || preset == queryHotkeyPresetCustom
-	case "IsSilentExecution", "HideQueryBox", "HideToolbar":
+	case "IsSilentExecution", "HideQueryBox", "HideToolbar", "HideResults":
 		return preset == queryHotkeyPresetCustom
 	case "Disabled":
 		return editing
@@ -788,6 +788,7 @@ func (c *formTableController) applyQueryHotkeyPreset(preset string) {
 		state.rowForm.values["Position"] = "system_default"
 		state.rowForm.values["HideQueryBox"] = "false"
 		state.rowForm.values["HideToolbar"] = "false"
+		state.rowForm.values["HideResults"] = "false"
 		state.rowForm.values["Width"] = ""
 		state.rowForm.values["MaxResultCount"] = ""
 		state.rowForm.values["IsSilentExecution"] = fmt.Sprint(selected == queryHotkeyPresetSilent)
@@ -795,6 +796,7 @@ func (c *formTableController) applyQueryHotkeyPreset(preset string) {
 		state.rowForm.values["Position"] = "center"
 		state.rowForm.values["HideQueryBox"] = "true"
 		state.rowForm.values["HideToolbar"] = "true"
+		state.rowForm.values["HideResults"] = "true"
 		state.rowForm.values["Width"] = "500"
 		state.rowForm.values["MaxResultCount"] = "12"
 		state.rowForm.values["IsSilentExecution"] = "false"

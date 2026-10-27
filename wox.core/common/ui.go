@@ -174,6 +174,7 @@ type ShowContext struct {
 	SelectAll    bool
 	HideQueryBox bool
 	HideToolbar  bool
+	HideResults  bool
 	// ShowPreviewTitleBar is an internal launcher control for full preview windows.
 	ShowPreviewTitleBar bool
 	QueryBoxAtBottom    bool

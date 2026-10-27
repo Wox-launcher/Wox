@@ -990,6 +990,9 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 	}
 	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && launcherPreviewVisible(snapshot.layout, snapshot.results[snapshot.selected].Preview)
 	if !previewVisible {
+		if snapshot.show.HideResults {
+			return launcherview.WrapLauncherResultsStatus(snapshot.queryComplete, woxwidget.Container{Width: width, Height: height})
+		}
 		return a.buildResults(snapshot, width, height, imageScale, underlayHeight)
 	}
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.webViewFullscreen || snapshot.terminalFullscreen)
@@ -1034,15 +1037,16 @@ func wrapPreviewOnlyResults(snapshot viewSnapshot, preview woxwidget.Widget) wox
 
 func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, width, height, imageScale float32) woxwidget.Widget {
 	resolved := a.remotePreview.resolvePreview(result.Preview)
-	showChatHeader := resolved.PreviewType != "chat" || !launcherPreviewTitleBarVisible(snapshot)
-	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader)
+	fullBleed := launcherPreviewTitleBarVisible(snapshot)
+	showChatHeader := resolved.PreviewType != "chat" || !fullBleed
+	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader, fullBleed)
 	// Chat is already prepared above and owns retained scrolling/message state.
 	// Hashing its entire history to cache a trivial wrapper costs more than rebuilding it.
 	// Media likewise owns its smaller animation and live-data boundaries.
 	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
 		return child
 	}
-	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load()}
+	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, fullBleed, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load()}
 	switch resolved.PreviewType {
 	case "query_requirement_settings":
 		if a.requirements.requirementForm != nil {

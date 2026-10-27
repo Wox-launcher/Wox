@@ -1644,14 +1644,14 @@ func TestQueryDisplayProvidesAllLinesToSharedViewport(t *testing.T) {
 }
 
 func TestFromCoreShowOptionsPreservesQueryHistoryOrderAndPayload(t *testing.T) {
-	options := contract.ShowOptions{ShowPreviewTitleBar: true, QueryHistories: []common.PlainQuery{
+	options := contract.ShowOptions{ShowPreviewTitleBar: true, HideResults: true, QueryHistories: []common.PlainQuery{
 		{QueryId: "latest-id", QueryType: "input", QueryText: "latest", QueryRefinements: map[string]string{"scope": "recent"}, ContextData: common.ContextData{"token": "latest"}},
 		{QueryId: "older-id", QueryType: "selection", QueryText: "older", QuerySelection: utilselection.Selection{Text: "selected"}},
 	}}
 
 	params := fromCoreShowOptions(options)
-	if !params.ShowPreviewTitleBar {
-		t.Fatal("preview title-bar control was not preserved")
+	if !params.ShowPreviewTitleBar || !params.HideResults {
+		t.Fatal("preview title-bar and result visibility controls were not preserved")
 	}
 	if len(params.QueryHistories) != 2 {
 		t.Fatalf("query history count = %d, want 2", len(params.QueryHistories))

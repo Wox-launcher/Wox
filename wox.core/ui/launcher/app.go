@@ -100,6 +100,7 @@ type showAppParams struct {
 	StartPage           string                       `json:"StartPage"`
 	HideQueryBox        bool                         `json:"HideQueryBox"`
 	HideToolbar         bool                         `json:"HideToolbar"`
+	HideResults         bool                         `json:"HideResults"`
 	QueryBoxAtBottom    bool                         `json:"QueryBoxAtBottom"`
 	HideOnBlur          bool                         `json:"HideOnBlur"`
 	RememberPosition    bool                         `json:"-"`
