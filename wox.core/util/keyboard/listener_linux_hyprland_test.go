@@ -93,6 +93,58 @@ func TestHyprlandKeyToModMask(t *testing.T) {
 	}
 }
 
+func TestReloadHyprlandBindsSkipsWhenInactive(t *testing.T) {
+	setHyprlandBindsActiveForTest(t, false)
+	var calls int
+	restored, err := reloadHyprlandBindsWith(func(string) error {
+		calls++
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored || calls != 0 {
+		t.Fatalf("restored=%v hyprctl calls=%d", restored, calls)
+	}
+}
+
+func TestReloadHyprlandBindsReevaluatesActiveFile(t *testing.T) {
+	setHyprlandBindsActiveForTest(t, true)
+	var got string
+	restored, err := reloadHyprlandBindsWith(func(luaPath string) error {
+		got = luaPath
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored || !strings.HasSuffix(got, hyprlandBindsLuaName) {
+		t.Fatalf("restored=%v bind file=%q", restored, got)
+	}
+}
+
+func TestHyprlandHotkeyConfigReloadedEvent(t *testing.T) {
+	if !hyprlandConfigReloaded("configreloaded>>\n") || !hyprlandConfigReloaded("  configreloaded>>done") {
+		t.Fatal("config reload event was not recognized")
+	}
+	if hyprlandConfigReloaded("openwindow>>configreloaded") || hyprlandConfigReloaded("configreloaded") {
+		t.Fatal("unrelated event looked like a config reload")
+	}
+}
+
+func setHyprlandBindsActiveForTest(t *testing.T, active bool) {
+	t.Helper()
+	hyprlandMu.Lock()
+	previous := hyprlandBindsActive
+	hyprlandBindsActive = active
+	hyprlandMu.Unlock()
+	t.Cleanup(func() {
+		hyprlandMu.Lock()
+		hyprlandBindsActive = previous
+		hyprlandMu.Unlock()
+	})
+}
+
 func TestUnregisterHyprlandHotkeyCallbacks(t *testing.T) {
 	const removedKey = "ALT + SPACE"
 	const retainedKey = "CTRL + SPACE"

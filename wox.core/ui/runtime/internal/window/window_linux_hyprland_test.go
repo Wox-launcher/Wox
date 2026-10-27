@@ -59,3 +59,43 @@ func TestHyprlandLayerNoAnimInstallsOnceAndRetriesAfterFailure(t *testing.T) {
 		t.Fatalf("hyprctl calls = %d, want 2", calls)
 	}
 }
+
+func TestHyprlandLayerNoAnimRestoresAfterConfigReload(t *testing.T) {
+	hyprlandLayerRule.mu.Lock()
+	hyprlandLayerRule.ready = true
+	hyprlandLayerRule.mu.Unlock()
+	t.Cleanup(func() {
+		hyprlandLayerRule.mu.Lock()
+		hyprlandLayerRule.ready = false
+		hyprlandLayerRule.mu.Unlock()
+	})
+
+	var calls int
+	if err := restoreHyprlandLayerNoAnim(func(script string) error {
+		calls++
+		if !strings.Contains(script, "no_anim = true") {
+			t.Fatalf("script = %s", script)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureHyprlandLayerNoAnimWith(func(string) error {
+		calls++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("hyprctl calls = %d, want 1", calls)
+	}
+}
+
+func TestHyprlandConfigReloadedEvent(t *testing.T) {
+	if !hyprlandConfigReloaded("configreloaded>>\n") || !hyprlandConfigReloaded("  configreloaded>>done") {
+		t.Fatal("config reload event was not recognized")
+	}
+	if hyprlandConfigReloaded("openwindow>>configreloaded") || hyprlandConfigReloaded("configreloaded") {
+		t.Fatal("unrelated event looked like a config reload")
+	}
+}

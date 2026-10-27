@@ -31,6 +31,7 @@ import (
 	"wox/setting"
 	"wox/supervisor"
 	"wox/ui/contract"
+	"wox/ui/omarchytheme"
 	woxui "wox/ui/runtime"
 	"wox/updater"
 	"wox/util"
@@ -88,6 +89,8 @@ type Manager struct {
 	exitOnce           sync.Once
 	hyprlandToggleMu   sync.Mutex
 	hyprlandToggleLast time.Time
+	omarchyReloadMu    sync.Mutex
+	omarchyReloadTimer *time.Timer
 
 	activeWindowSnapshot        common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu      sync.RWMutex
@@ -348,6 +351,15 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 		m.rememberUserThemeFile(themePath, theme.ThemeId)
 		m.themes.Store(theme.ThemeId, stripThemeAssets(theme))
+	}
+
+	// Omarchy Auto is registered only on Omarchy, before theme file watches start,
+	// so a user file cannot replace this system theme id.
+	m.loadOmarchyAutoTheme(ctx)
+	if omarchytheme.Available() {
+		util.Go(ctx, "watch omarchy theme", func() {
+			m.watchOmarchyTheme(ctx)
+		})
 	}
 
 	// Dropping a JSON into the user theme directory loads it without a restart,
@@ -965,12 +977,18 @@ func (m *Manager) UpdateServerPort(port int) {
 
 func (m *Manager) GetCurrentTheme(ctx context.Context) common.Theme {
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if v, ok := m.themes.Load(woxSetting.ThemeId.Get()); ok {
+	themeID := woxSetting.ThemeId.Get()
+	if v, ok := m.themes.Load(themeID); ok && omarchyAutoThemeForDisplay(themeID) {
 		// If it's an auto appearance theme, return the actual applied theme (light or dark)
 		if v.IsAutoAppearance {
 			return m.getActualTheme(ctx, v)
 		}
 		return m.resolvePlatformTheme(ctx, m.ThemeWithAssets(ctx, v))
+	}
+	// Cloud sync can restore Omarchy Auto on a machine that does not run Omarchy.
+	// Render the default theme and leave the saved id alone.
+	if fallback, ok := m.defaultThemeWhenOmarchyAutoUnavailable(ctx, themeID); ok {
+		return fallback
 	}
 
 	return common.Theme{}
@@ -1030,6 +1048,9 @@ func (m *Manager) getActualTheme(ctx context.Context, autoTheme common.Theme) co
 func (m *Manager) GetAllThemes(ctx context.Context) []common.Theme {
 	var themes []common.Theme
 	m.themes.Range(func(key string, value common.Theme) bool {
+		if !omarchyAutoThemeForDisplay(key) {
+			return true
+		}
 		themes = append(themes, m.resolvePlatformTheme(ctx, value))
 		return true
 	})

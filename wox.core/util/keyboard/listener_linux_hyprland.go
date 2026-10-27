@@ -3,8 +3,10 @@
 package keyboard
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"wox/util"
 )
 
@@ -35,7 +38,11 @@ const (
 
 // hyprlandMu guards bind file updates and compositor evaluations so a new
 // registration cannot race with teardown of the previous registration.
-var hyprlandMu sync.Mutex
+var (
+	hyprlandMu              sync.Mutex
+	hyprlandBindsActive     bool
+	hyprlandHotkeyWatchOnce sync.Once
+)
 
 type hyprlandBinding struct {
 	luaKey        string
@@ -175,6 +182,10 @@ func registerGlobalHotkeysLinuxHyprland(specs []GlobalHotkeySpec) (HotkeyRegistr
 	if err := hyprlandWriteAndLoadBinds(bindings); err != nil {
 		return nil, true, fmt.Errorf("failed to register Hyprland global hotkeys: %w", err)
 	}
+	// hyprctl reload drops these runtime binds. The generated file remains, and
+	// the watcher loads it again after Omarchy theme switches.
+	hyprlandBindsActive = true
+	startHyprlandHotkeyWatch()
 	for i, callbackKey := range callbackKeys {
 		RegisterHyprlandHotkeyCallback(callbackKey, specs[i+1].Callback)
 	}
@@ -251,6 +262,105 @@ func hyprlandEvalFile(luaPath string) error {
 	return nil
 }
 
+// startHyprlandHotkeyWatch reloads Wox binds after Hyprland drops runtime state.
+func startHyprlandHotkeyWatch() {
+	hyprlandHotkeyWatchOnce.Do(func() {
+		util.Go(util.NewTraceContext(), "watch hyprland hotkeys", watchHyprlandHotkeyReloads)
+	})
+}
+
+// watchHyprlandHotkeyReloads follows Hyprland's event socket. Theme switches run
+// hyprctl reload, which removes hl.bind handles created with hyprctl eval.
+func watchHyprlandHotkeyReloads() {
+	ctx := util.NewTraceContext()
+	var logged bool
+	for {
+		err := readHyprlandHotkeyReloads(func(reason string) {
+			restored, restoreErr := reloadHyprlandBinds()
+			if restoreErr != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("[hotkey] failed to restore Hyprland shortcuts: %s", restoreErr.Error()))
+				return
+			}
+			if restored && reason == "config reload" {
+				util.GetLogger().Info(ctx, "[hotkey] restored Hyprland shortcuts after config reload")
+			}
+		})
+		if err != nil && !logged {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("[hotkey] Hyprland event socket: %s", err.Error()))
+			logged = true
+		}
+		if err == nil {
+			logged = false
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// readHyprlandHotkeyReloads keeps one event-socket connection. Binds are loaded
+// when the socket connects, because a reload may have dropped them while the
+// socket was down, and again on each configreloaded event.
+func readHyprlandHotkeyReloads(restore func(reason string)) error {
+	socketPath, err := hyprlandEventSocketPath()
+	if err != nil {
+		return err
+	}
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	restore("socket connected")
+
+	reader := bufio.NewReader(conn)
+	for {
+		line, readErr := reader.ReadString('\n')
+		if hyprlandConfigReloaded(line) {
+			restore("config reload")
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+}
+
+// hyprlandEventSocketPath is Hyprland's runtime event socket for this session.
+func hyprlandEventSocketPath() (string, error) {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	signature := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")
+	if runtimeDir == "" || signature == "" {
+		return "", fmt.Errorf("Hyprland event socket is not available")
+	}
+	return filepath.Join(runtimeDir, "hypr", signature, ".socket2.sock"), nil
+}
+
+// hyprlandConfigReloaded reports Hyprland's configreloaded event.
+func hyprlandConfigReloaded(line string) bool {
+	name, _, found := strings.Cut(strings.TrimSpace(line), ">>")
+	return found && name == "configreloaded"
+}
+
+// reloadHyprlandBinds loads the current generated bind file again.
+// An unregistered session leaves the flag clear so a reload does not recreate shortcuts.
+func reloadHyprlandBinds() (bool, error) {
+	return reloadHyprlandBindsWith(hyprlandEvalFile)
+}
+
+func reloadHyprlandBindsWith(eval func(luaPath string) error) (bool, error) {
+	hyprlandMu.Lock()
+	defer hyprlandMu.Unlock()
+	if !hyprlandBindsActive {
+		return false, nil
+	}
+	luaPath, err := hyprlandBindsLuaPath()
+	if err != nil {
+		return false, err
+	}
+	if err := eval(luaPath); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func hyprlandBindsLuaPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -270,6 +380,9 @@ func (r *hyprlandHotkeyRegistration) Unregister() error {
 	if r == nil || r.unregistered {
 		return nil
 	}
+	// Stop restoring before the file becomes the disable script. A reload that
+	// arrives during teardown must not recreate the shortcuts.
+	hyprlandBindsActive = false
 
 	luaPath, err := hyprlandBindsLuaPath()
 	if err != nil {
