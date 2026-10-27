@@ -9,15 +9,11 @@ import (
 	"strings"
 
 	"wox/common"
+	"wox/util"
 )
 
 // Available reports whether this machine should offer the Omarchy Auto theme.
-func Available() bool {
-	if dirExists(os.Getenv("OMARCHY_PATH")) {
-		return true
-	}
-	return availableIn("/usr/share/omarchy", ColorsPath())
-}
+func Available() bool { return util.IsOmarchy() }
 
 // StateDir is the directory Omarchy replaces when the theme changes.
 func StateDir() string {

@@ -14,7 +14,9 @@ import (
 	"wox/common"
 	"wox/plugin/thirdparty/migrate"
 	"wox/resource"
+	"wox/setting"
 	"wox/ui/contract"
+	"wox/ui/omarchytheme"
 	"wox/util/keyboard"
 )
 
@@ -605,8 +607,11 @@ func TestOnboardingStepsStartWithIntroductionAndOmitAdvancedQuerySetup(t *testin
 
 func TestDefaultOnboardingQueryHotkeyUsesPlatformPrimaryModifier(t *testing.T) {
 	want := "Ctrl+Shift+V"
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		want = "Cmd+Shift+V"
+	case "linux":
+		want = "Ctrl+Alt+V"
 	}
 	if got := defaultOnboardingQueryHotkey(); got != want {
 		t.Fatalf("default query hotkey = %q, want %q", got, want)
@@ -673,6 +678,137 @@ func TestOnboardingSystemThemesUsesBundledOrder(t *testing.T) {
 	if len(got) != 4 || got[0].Name != "Wox Glass" || got[1].Name != "Wox Dark" || got[2].Name != "Wox Light" || got[3].Name != "Wox Auto" {
 		t.Fatalf("onboarding system themes = %#v", got)
 	}
+	if onboardingGlassID != setting.DefaultThemeId {
+		t.Fatalf("onboarding glass id = %s, default theme = %s", onboardingGlassID, setting.DefaultThemeId)
+	}
+}
+
+func TestOnboardingReplacesWoxAutoWithOmarchyAuto(t *testing.T) {
+	themes := []themeSettingsTheme{
+		{ID: "532238bc-6eda-4011-a080-c365b67486fc", Name: "Wox Auto"},
+		{ID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", Name: "Wox Light"},
+		{ID: onboardingGlassID, Name: "Wox Glass"},
+		{ID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03", Name: "Wox Dark"},
+		{ID: omarchytheme.ThemeID, Name: omarchytheme.ThemeName},
+	}
+	got := onboardingSystemThemes(themes)
+	if len(got) != 4 || got[0].Name != "Wox Glass" || got[1].Name != "Wox Dark" || got[2].Name != "Wox Light" {
+		t.Fatalf("onboarding themes = %#v", got)
+	}
+	want := "Wox Auto"
+	if omarchytheme.Available() {
+		want = "Omarchy Auto"
+	}
+	if got[3].Name != want {
+		t.Fatalf("auto theme = %s, want %s", got[3].Name, want)
+	}
+}
+
+type onboardingThemeApplyStub struct {
+	contract.Services
+	mu sync.Mutex
+	id string
+}
+
+func (s *onboardingThemeApplyStub) OperateTheme(_ context.Context, _ string, themeID string, _ contract.ThemeOperation) error {
+	s.mu.Lock()
+	s.id = themeID
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *onboardingThemeApplyStub) CurrentTheme(context.Context, string) (common.Theme, error) {
+	return common.Theme{ThemeId: omarchytheme.ThemeID, ThemeName: omarchytheme.ThemeName}, nil
+}
+
+func (s *onboardingThemeApplyStub) applied() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.id
+}
+
+func TestOnboardingThemeStepAppliesOmarchyAutoWhenStillDefault(t *testing.T) {
+	if !omarchytheme.Available() {
+		t.Skip("Omarchy Auto is offered only when Omarchy is installed")
+	}
+	services := &onboardingThemeApplyStub{}
+	app := bindTestApp(&App{
+		services:        services,
+		lifecycleCtx:    context.Background(),
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		themeSettings:   newThemeSettingsController(CommonDeps{}),
+		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+	})
+	app.appearance.applyTheme = func(themeData) {}
+	app.generalSettings.Update(func(data *settingsData) { data.ThemeID = onboardingGlassID })
+	app.themeSettings.SetThemes([]themeSettingsTheme{
+		{ID: onboardingGlassID, Name: "Wox Glass"},
+		{ID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03", Name: "Wox Dark"},
+		{ID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", Name: "Wox Light"},
+		{ID: "532238bc-6eda-4011-a080-c365b67486fc", Name: "Wox Auto"},
+		{ID: omarchytheme.ThemeID, Name: omarchytheme.ThemeName},
+	})
+	enterOnboardingThemeStep(t, app)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && (app.onboarding.themes.applying || app.generalSettings.Data().ThemeID != omarchytheme.ThemeID) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if app.generalSettings.Data().ThemeID != omarchytheme.ThemeID || services.applied() != omarchytheme.ThemeID || app.onboarding.themes.applying || app.onboarding.themes.error != "" {
+		t.Fatalf("theme = %s applied = %s applying=%v error=%s", app.generalSettings.Data().ThemeID, services.applied(), app.onboarding.themes.applying, app.onboarding.themes.error)
+	}
+	items := onboardingThemeItems(app.themeSettings.Themes(), app.generalSettings.Data().ThemeID)
+	if len(items) != 4 || items[3].ID != omarchytheme.ThemeID || !items[3].Selected || items[0].Name != "Wox Glass" {
+		t.Fatalf("theme cards = %#v", items)
+	}
+	services.mu.Lock()
+	services.id = ""
+	services.mu.Unlock()
+	enterOnboardingThemeStep(t, app)
+	time.Sleep(30 * time.Millisecond)
+	if services.applied() != "" || app.generalSettings.Data().ThemeID != omarchytheme.ThemeID {
+		t.Fatalf("second visit applied %s theme %s", services.applied(), app.generalSettings.Data().ThemeID)
+	}
+
+	app.generalSettings.Update(func(data *settingsData) { data.ThemeID = onboardingGlassID })
+	enterOnboardingThemeStep(t, app)
+	time.Sleep(30 * time.Millisecond)
+	if services.applied() != "" || app.generalSettings.Data().ThemeID != onboardingGlassID {
+		t.Fatalf("explicit Glass was replaced: applied %s theme %s", services.applied(), app.generalSettings.Data().ThemeID)
+	}
+}
+
+func TestOnboardingThemeStepKeepsAnExplicitTheme(t *testing.T) {
+	catalog := []themeSettingsTheme{
+		{ID: onboardingGlassID, Name: "Wox Glass"},
+		{ID: "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03", Name: "Wox Dark"},
+		{ID: "92dc0ea7-a52f-4b0a-9f0d-7cb36a634860", Name: "Wox Light"},
+		{ID: "532238bc-6eda-4011-a080-c365b67486fc", Name: "Wox Auto"},
+		{ID: omarchytheme.ThemeID, Name: omarchytheme.ThemeName},
+	}
+	app := bindTestApp(&App{
+		services:        &migrationSettingWriter{},
+		generalSettings: newGeneralSettingsController(CommonDeps{}, newSharedEditState()),
+		themeSettings:   newThemeSettingsController(CommonDeps{}),
+		hotkeySettings:  newHotkeySettingsController(CommonDeps{}),
+	})
+	app.generalSettings.Update(func(data *settingsData) { data.ThemeID = "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03" })
+	app.themeSettings.SetThemes(catalog)
+	enterOnboardingThemeStep(t, app)
+	if app.generalSettings.Data().ThemeID != "53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03" || app.onboarding.themes.applying {
+		t.Fatalf("chosen theme = %s applying=%v", app.generalSettings.Data().ThemeID, app.onboarding.themes.applying)
+	}
+}
+
+func enterOnboardingThemeStep(t *testing.T, app *App) {
+	t.Helper()
+	for index, step := range app.onboarding.onboardingSteps() {
+		if step.ID != "themeInstall" {
+			continue
+		}
+		app.onboarding.selectOnboardingStep(index)
+		return
+	}
+	t.Fatal("theme onboarding step not found")
 }
 
 // TestOnboardingThemeSelectionFollowsCurrentSetting covers a catalog cached before

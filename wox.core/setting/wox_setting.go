@@ -440,6 +440,15 @@ type QueryCompletionFeedback struct {
 	LastAcceptedTimestamp int64
 }
 
+// defaultLinuxMainHotkey is Ctrl+Space on Linux, and Alt+Space on Omarchy.
+// Onboarding shows this platform default, so the guide does not offer Ctrl+Space there.
+func defaultLinuxMainHotkey() string {
+	if util.IsOmarchy() {
+		return "alt+space"
+	}
+	return "ctrl+space"
+}
+
 func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	usePinYin := false
 	defaultLangCode := i18n.LangCodeEnUs
@@ -449,7 +458,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	}
 
 	return &WoxSetting{
-		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", "ctrl+space"),
+		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", defaultLinuxMainHotkey()),
 		SelectionHotkey:           NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
 		ActionPanelHotkey:         NewPlatformValue(store, "ActionPanelHotkey", DefaultActionPanelHotkeyWindows, DefaultActionPanelHotkeyMac, DefaultActionPanelHotkeyLinux),
 		IgnoreHotkeysOnFullscreen: NewPlatformValue(store, "IgnoreHotkeysOnFullscreen", false, false, false),

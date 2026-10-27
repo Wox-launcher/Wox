@@ -15,6 +15,7 @@ import (
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
+	"wox/ui/omarchytheme"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -74,6 +75,9 @@ type onboardingThemeState struct {
 	loading  bool
 	applying bool
 	error    string
+	// defaultThemeSelected remembers that Omarchy Auto was already chosen for a
+	// new install, so a later explicit pick of Wox Glass stays selected.
+	defaultThemeSelected bool
 }
 
 // beginSessionLocked starts a fresh guide session on the first page.
@@ -581,6 +585,10 @@ func defaultOnboardingQueryHotkey() string {
 	if runtime.GOOS == "darwin" {
 		return "Cmd+Shift+V"
 	}
+	// Ctrl+Shift+V pastes in Linux terminals and many apps.
+	if runtime.GOOS == "linux" {
+		return "Ctrl+Alt+V"
+	}
 	return "Ctrl+Shift+V"
 }
 
@@ -854,12 +862,22 @@ func (c *onboardingController) installOnboardingPlugin(pluginID string) {
 }
 
 // onboardingSystemThemes keeps the four bundled themes in the onboarding presentation order.
+// On Omarchy, Omarchy Auto takes the Wox Auto slot.
 func onboardingSystemThemes(themes []themeSettingsTheme) []themeSettingsTheme {
+	autoID := "532238bc-6eda-4011-a080-c365b67486fc"
+	if omarchytheme.Available() {
+		for _, theme := range themes {
+			if theme.ID == omarchytheme.ThemeID {
+				autoID = omarchytheme.ThemeID
+				break
+			}
+		}
+	}
 	ids := []string{
 		onboardingGlassID,
 		"53c1d0a4-ffc8-4d90-91dc-b408fb0b9a03",
 		"92dc0ea7-a52f-4b0a-9f0d-7cb36a634860",
-		"532238bc-6eda-4011-a080-c365b67486fc",
+		autoID,
 	}
 	byID := make(map[string]themeSettingsTheme, len(themes))
 	for _, theme := range themes {
@@ -898,6 +916,7 @@ func onboardingThemeItems(catalog []themeSettingsTheme, currentID string) []laun
 // loadOnboardingThemes loads installed system themes through the shared theme catalog.
 func (c *onboardingController) loadOnboardingThemes() {
 	if c.themes.loading || len(onboardingSystemThemes(c.themeSettings().Themes())) == 4 {
+		c.selectDefaultOnboardingTheme()
 		return
 	}
 	c.themes.loading = true
@@ -915,6 +934,7 @@ func (c *onboardingController) loadOnboardingThemes() {
 				c.themes.error = ""
 			}
 			util.GetLogger().Info(c.lifecycleCtx, fmt.Sprintf("onboarding system themes loaded: count=%d error=%v", len(onboardingSystemThemes(c.themeSettings().Themes())), err))
+			c.selectDefaultOnboardingTheme()
 			c.invalidateOnboardingWindow()
 		}); applyErr != nil {
 			util.GetLogger().Error(c.lifecycleCtx, applyErr.Error())
@@ -922,7 +942,28 @@ func (c *onboardingController) loadOnboardingThemes() {
 	})
 }
 
-// selectOnboardingTheme applies a bundled theme without changing the onboarding step.
+// selectDefaultOnboardingTheme selects Omarchy Auto when a new install is still on Wox Glass.
+func (c *onboardingController) selectDefaultOnboardingTheme() {
+	if c.themes.defaultThemeSelected || c.themes.loading || c.themes.applying || c.themeSettings() == nil || c.currentThemeID == nil {
+		return
+	}
+	currentID := c.currentThemeID()
+	if currentID != "" && currentID != onboardingGlassID {
+		return
+	}
+	for _, theme := range onboardingSystemThemes(c.themeSettings().Themes()) {
+		if theme.ID != omarchytheme.ThemeID {
+			continue
+		}
+		c.themes.defaultThemeSelected = true
+		if currentID != omarchytheme.ThemeID {
+			c.selectOnboardingTheme(omarchytheme.ThemeID)
+		}
+		return
+	}
+}
+
+// selectOnboardingTheme applies one of the themes shown on this step without changing the step.
 func (c *onboardingController) selectOnboardingTheme(themeID string) {
 	if c.themes.loading || c.themes.applying {
 		return
