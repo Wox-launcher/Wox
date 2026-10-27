@@ -338,6 +338,16 @@ func CheckGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.check", size, color)
 }
 
+// SendGlyph returns the upward arrow used to send a message.
+func SendGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlSend, size, color)
+}
+
+// StopGlyph returns the shared stop icon.
+func StopGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlStop, size, color)
+}
+
 // BadgeCheckGlyph returns the compact check drawn inside a filled selection disc.
 // The standalone check fills its view box and looks cramped and lopsided in a small circle.
 func BadgeCheckGlyph(size float32, color woxui.Color) woxwidget.Widget {

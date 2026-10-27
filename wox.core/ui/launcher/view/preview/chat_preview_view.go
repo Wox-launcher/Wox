@@ -1785,10 +1785,22 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 		props.ModelWidth = min(props.ModelWidth, max(0, props.Width-projectWidth-150))
 	}
 	modelButton := ChatModelSelector(props)
-	variant := woxcomponent.ButtonPrimary
-	if props.Sending {
-		variant = woxcomponent.ButtonSurface
+	iconColor := props.Theme.ResultTitle
+	iconColor.A = 180
+	if props.Importing && !props.Sending {
+		iconColor.A = woxcomponent.DisabledContentAlpha
 	}
+	icon := woxcomponent.SendGlyph(16, iconColor)
+	if props.Sending && props.OnStop != nil {
+		icon = woxcomponent.StopGlyph(16, iconColor)
+	}
+	hover := props.Theme.SelectedBackground
+	hover.A = 40
+	sendButton := woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+		ID: "chat-send-" + props.Key, Label: props.ActionLabel, Icon: icon,
+		Width: chatComposerAttachButtonSize, Height: chatComposerAttachButtonSize, Radius: 4,
+		HoverBackground: hover, FocusRingColor: props.Theme.Cursor, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend,
+	})
 	leadingWidth := props.ModelWidth
 	leading := woxwidget.Widget(modelButton)
 	if projectWidth > 0 {
@@ -1804,7 +1816,7 @@ func ChatInput(props ChatInputProps) woxwidget.Widget {
 	statusWidth := max(float32(0), props.Width-statusLeft-100)
 	toolbarChildren := []woxwidget.StackChild{
 		{Left: 8, Child: woxwidget.Align{Width: leadingWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: leading}},
-		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: woxcomponent.WoxButton(woxcomponent.ButtonProps{ID: "chat-send-" + props.Key, Label: props.ActionLabel, Radius: 7, FontSize: ChatScaledSize(props.DensityScale, woxcomponent.CompactButtonFontSize), Variant: variant, Disabled: props.Importing && !props.Sending, OnTap: props.OnSend, Theme: props.Theme.Controls})}},
+		{Right: 8, StretchWidth: true, Child: woxwidget.Align{Height: chatComposerToolbarHeight, Horizontal: 1, Vertical: 0.5, Child: sendButton}},
 	}
 	if props.Status != "" && statusWidth > 30 {
 		toolbarChildren = append(toolbarChildren, woxwidget.StackChild{Left: statusLeft, Child: woxwidget.Align{Width: statusWidth, Height: chatComposerToolbarHeight, Vertical: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 9)}, Color: props.StatusColor}}})

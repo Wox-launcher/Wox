@@ -197,6 +197,7 @@ const (
 	ControlPlayCircle          = "control.play-circle"
 	ControlRecord              = "control.record"
 	ControlStop                = "control.stop"
+	ControlSend                = "control.send"
 	ScreenshotVideoCamera      = "screenshot.video-camera"
 	ControlPause               = "control.pause"
 	ControlExternal            = "control.external"

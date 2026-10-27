@@ -82,6 +82,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlPlayCircle:        newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>`),
 	ControlRecord:            newMonochromeUIIcon(`<circle cx="12" cy="12" r="8.25"/><circle cx="12" cy="12" r="4.75" fill="currentColor" stroke="none"/>`),
 	ControlStop:              newMonochromeUIIcon(`<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>`),
+	ControlSend:              newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M12 19V5M6 11l6-6 6 6"/>`),
 	ScreenshotVideoCamera:    newMonochromeUIIcon(`<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>`),
 	ControlPause:             newMonochromeUIIcon(`<path d="M9 7v10M15 7v10"/>`),
 	ControlExternal:          newMonochromeUIIcon(`<path d="M14 5h5v5M19 5l-9 9"/><path d="M13 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-7"/>`),

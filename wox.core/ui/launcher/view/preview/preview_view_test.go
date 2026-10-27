@@ -363,6 +363,49 @@ func TestChatComposerAttachButtonSitsBeforeModel(t *testing.T) {
 	}
 }
 
+func TestChatComposerSendIconAlignmentAndActions(t *testing.T) {
+	for _, scale := range []float32{1, 1.5, 2} {
+		sent, stopped := 0, 0
+		props := ChatInputProps{
+			Width: 400, DensityScale: scale, Key: "test", Model: "model", ModelWidth: 100, SendLabel: "Send", StopLabel: "Stop",
+			OnAttach: func() {}, OnSend: func() { sent++ }, OnStop: func() { stopped++ },
+			Theme: woxcomponent.Theme{ResultTitle: woxui.Color{R: 220, G: 225, B: 230, A: 255}},
+		}
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ChatInput(props) })
+		host.AttachServices(terminalPreviewHostServices{})
+		frame := func() {
+			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 400, Height: 120}, PixelSize: woxui.PixelSize{Width: int(400 * scale), Height: int(120 * scale)}, Scale: scale})
+		}
+		frame()
+		attach, hasAttach := host.BoundsForKey("chat-attach-test")
+		send, hasSend := host.BoundsForKey("chat-send-test")
+		if !hasAttach || !hasSend || send.Y+send.Height/2 != attach.Y+attach.Height/2 || send.Width != attach.Width || send.Height != attach.Height {
+			t.Fatalf("scale %v: attach %+v, send %+v", scale, attach, send)
+		}
+		if !host.FocusAutomationID("chat-send-test") || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || sent != 1 {
+			t.Fatalf("scale %v: send was not activated", scale)
+		}
+		props.Sending = true
+		frame()
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "chat-send-test" && node.Label != "Stop" {
+				t.Fatalf("scale %v: streaming action label = %q", scale, node.Label)
+			}
+		}
+		if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || stopped != 1 {
+			t.Fatalf("scale %v: stop was not activated", scale)
+		}
+		props.Sending, props.Importing = false, true
+		frame()
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "chat-send-test" && node.Enabled {
+				t.Fatalf("scale %v: send should be disabled during import", scale)
+			}
+		}
+		host.Dispose()
+	}
+}
+
 func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
 	theme := woxcomponent.Theme{
 		PreviewText:        woxui.Color{R: 220, G: 225, B: 230, A: 255},
