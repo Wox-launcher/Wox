@@ -57,7 +57,7 @@ func TestMalformedSVGPreviewFinishesWithError(t *testing.T) {
 				t.Fatalf("preview = %T, want an error message", view)
 			}
 			message, ok := container.Child.(woxwidget.TextBlock)
-			if !ok || !strings.Contains(message.Value, "Unable to decode image preview:") {
+			if !ok || !strings.Contains(message.Value, "Unable to load image preview:") {
 				t.Fatalf("preview body = %#v, want a decode error instead of a spinner", container.Child)
 			}
 		})
@@ -900,6 +900,18 @@ func TestPinnedPreviewDoesNotEvictChrome(t *testing.T) {
 	}
 	if app.imageStore.images["glance"] != icon || app.imageStore.images["menu"] != icon || app.imageStore.imageCacheSize != 2*imageCacheBytes(icon) {
 		t.Fatal("releasing preview discarded chrome or miscounted bytes")
+	}
+}
+
+func TestFailedPreviewCanRetryAfterRelease(t *testing.T) {
+	store := imageStore{
+		imageViewport:  map[string]struct{}{"preview": {}},
+		imageRequested: map[string]string{"preview": "photo.jpg"},
+		imageErrors:    map[string]string{"preview": "cloud provider unavailable"},
+	}
+	store.releaseViewportImageKey("preview")
+	if _, requested := store.imageRequested["preview"]; requested || store.imageErrors["preview"] != "" {
+		t.Fatal("failed preview remained cached after release")
 	}
 }
 

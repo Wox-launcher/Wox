@@ -318,6 +318,10 @@ func (a *imageStore) releaseViewportImageKey(key string) {
 		return
 	}
 	delete(a.imageViewport, key)
+	// Retry a failed preview when it is selected again, after transient file errors resolve.
+	if a.imageErrors[key] != "" {
+		a.removeImageLocked(key)
+	}
 	if imageCacheBytes(a.images[key]) > launcherImageCacheMaxBytes {
 		a.removeImageLocked(key)
 	}

@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/gif"
@@ -9,6 +10,18 @@ import (
 	"testing"
 	"time"
 )
+
+type failingImageReader struct{ err error }
+
+func (r failingImageReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestDecodeImagePreservesInitialReadError(t *testing.T) {
+	want := errors.New("cloud file provider is not running")
+	_, err := DecodeImage(failingImageReader{err: want})
+	if !errors.Is(err, want) {
+		t.Fatalf("decode error = %v, want %v", err, want)
+	}
+}
 
 func TestDecodeImageMaxDownscalesLargeRasters(t *testing.T) {
 	source := image.NewRGBA(image.Rect(0, 0, 80, 40))

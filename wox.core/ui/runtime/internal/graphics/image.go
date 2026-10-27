@@ -2,6 +2,7 @@ package graphics
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -66,7 +67,12 @@ func DecodeImage(reader io.Reader) (*Image, error) {
 // DecodeImageMax decodes a raster and downscales it when either edge exceeds maxDimension.
 func DecodeImageMax(reader io.Reader, maxDimension int) (*Image, error) {
 	buffered := asBufferedReader(reader)
-	if header, err := buffered.Peek(6); err == nil && isGIFSignature(header) {
+	header, err := buffered.Peek(6)
+	// image.Decode can hide an initial file read error behind ErrFormat.
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if isGIFSignature(header) {
 		return decodeAnimatedGIF(buffered, maxDimension)
 	}
 	source, _, err := image.Decode(buffered)

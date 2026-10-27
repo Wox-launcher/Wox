@@ -447,7 +447,7 @@ func (a *previewController) buildPreviewImage(source, overlay woxImage, palette 
 	message := ""
 	if image == nil {
 		if imageErr := a.imageErrorFor(source, size); imageErr != "" {
-			message = "Unable to decode image preview:\n" + imageErr
+			message = "Unable to load image preview:\n" + imageErr
 		}
 	}
 	var onTap func()
