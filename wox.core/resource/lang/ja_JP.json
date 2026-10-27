@@ -2002,6 +2002,8 @@
   "plugin_sys_unhide_all_hidden_apps": "すべての非表示アプリを再表示",
   "plugin_sys_toggle_system_appearance": "システムの外観を切り替え",
   "plugin_sys_toggle_hidden_files": "隠しファイルを切り替え",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "パフォーマンス CPU プロファイリング",
   "plugin_wox_memory_plugin_name": "Wox メモリ",
   "plugin_wox_memory_plugin_description": "現在の Wox プロセスのメモリ構成を調査します",

@@ -2002,6 +2002,8 @@
   "plugin_sys_unhide_all_hidden_apps": "숨겨진 모든 앱 다시 보기",
   "plugin_sys_toggle_system_appearance": "시스템 화면 모드 전환",
   "plugin_sys_toggle_hidden_files": "숨김 파일 표시 전환",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "성능 CPU 프로파일링",
   "plugin_wox_memory_plugin_name": "Wox 메모리",
   "plugin_wox_memory_plugin_description": "현재 Wox 프로세스의 메모리 구성을 확인합니다",

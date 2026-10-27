@@ -2003,6 +2003,8 @@
   "plugin_sys_unhide_all_hidden_apps": "显示所有隐藏应用",
   "plugin_sys_toggle_system_appearance": "切换系统外观",
   "plugin_sys_toggle_hidden_files": "显示/隐藏隐藏文件",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "性能 CPU 分析",
   "plugin_wox_memory_plugin_name": "Wox 内存",
   "plugin_wox_memory_plugin_description": "查看当前 Wox 进程的内存组成",

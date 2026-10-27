@@ -45,17 +45,21 @@ type SysPlugin struct {
 	commands             []SysCommand
 	commandSearchIndexMu sync.RWMutex
 	commandSearchIndexes map[i18n.LangCode][][]*fuzzymatch.PreparedText
+	// omarchyGuards re-checks Omarchy menu visibility without blocking a query.
+	omarchyGuards *omarchyGuardCache
 }
 
 type SysCommand struct {
-	QueryHint              *common.QueryHint
-	ID                     string
-	Title                  string
-	SubTitle               string
-	Icon                   common.WoxImage
-	Aliases                []string
-	SupportedOS            []string
-	IsAvailable            func() bool
+	QueryHint   *common.QueryHint
+	ID          string
+	Title       string
+	SubTitle    string
+	Icon        common.WoxImage
+	Aliases     []string
+	SupportedOS []string
+	IsAvailable func() bool
+	// SkipEmptyQuery keeps a large external catalog out of the unfiltered system list.
+	SkipEmptyQuery         bool
 	BuildContextData       func(query plugin.Query) common.ContextData
 	BuildTitle             func(ctx context.Context, query plugin.Query) string
 	BuildSubTitle          func(ctx context.Context, query plugin.Query) string
@@ -124,6 +128,9 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	if util.IsDev() {
 		r.commands = append(r.commands, r.buildDevCommands()...)
 	}
+	// Omarchy commands come from the installed menu, so they have to join the
+	// list before the search index is built.
+	r.appendOmarchyCommands(ctx)
 	r.getCommandSearchIndex(ctx)
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
@@ -648,6 +655,9 @@ func (r *SysPlugin) fixedVolumeCommand(percent int) SysCommand {
 }
 
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if r.omarchyGuards != nil {
+		r.omarchyGuards.refreshIfStale(ctx)
+	}
 	if query.QueryHint != nil {
 		command, ok := r.findCommand("set-volume")
 		if !ok || !r.isCommandAvailable(command) {
@@ -784,6 +794,9 @@ func (r *SysPlugin) commandMatches(command SysCommand, search string, candidates
 	}
 
 	if search == "" {
+		if command.SkipEmptyQuery {
+			return false, 0
+		}
 		return true, 100
 	}
 

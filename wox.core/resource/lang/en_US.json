@@ -2002,6 +2002,8 @@
   "plugin_sys_unhide_all_hidden_apps": "Unhide All Hidden Apps",
   "plugin_sys_toggle_system_appearance": "Toggle System Appearance",
   "plugin_sys_toggle_hidden_files": "Toggle Hidden Files",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "Performance CPU profiling",
   "plugin_wox_memory_plugin_name": "Wox Memory",
   "plugin_wox_memory_plugin_description": "Inspect the current Wox process memory composition",

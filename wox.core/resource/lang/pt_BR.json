@@ -1822,6 +1822,8 @@
   "plugin_sys_unhide_all_hidden_apps": "Mostrar todos os apps ocultos",
   "plugin_sys_toggle_system_appearance": "Alternar aparência do sistema",
   "plugin_sys_toggle_hidden_files": "Alternar arquivos ocultos",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "Perfil de desempenho da CPU",
   "plugin_wox_memory_plugin_name": "Memória do Wox",
   "plugin_wox_memory_plugin_description": "Inspeciona a composição atual da memória do processo Wox",

@@ -1823,6 +1823,8 @@
   "plugin_sys_unhide_all_hidden_apps": "Показать все скрытые приложения",
   "plugin_sys_toggle_system_appearance": "Переключить оформление системы",
   "plugin_sys_toggle_hidden_files": "Переключить скрытые файлы",
+  "plugin_sys_omarchy_command_subtitle": "Omarchy",
+  "plugin_sys_omarchy_command_path": "Omarchy › %s",
   "plugin_sys_performance_cpu_profiling": "Профилирование производительности ЦП",
   "plugin_wox_memory_plugin_name": "Память Wox",
   "plugin_wox_memory_plugin_description": "Просмотр текущего состава памяти процесса Wox",
