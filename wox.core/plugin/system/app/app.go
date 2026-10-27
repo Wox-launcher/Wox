@@ -59,6 +59,8 @@ type appInfo struct {
 	Identity        string          `json:"identity,omitempty"`
 	Path            string          `json:"path"`
 	Icon            common.WoxImage `json:"icon"`
+	// IconSource survives plugin image cache invalidation so the list icon can be rebuilt.
+	IconSource *common.WoxImage `json:"icon_source,omitempty"`
 	// ResolvedIconPath preserves full-size Shell artwork before list preprocessing.
 	// Reopening its resource file would lose the shortcut's resource index or Shell customization.
 	ResolvedIconPath string `json:"resolved_icon_path,omitempty"`
@@ -98,6 +100,8 @@ func (info appInfo) equals(other appInfo) bool {
 		info.Identity == other.Identity &&
 		info.Path == other.Path &&
 		info.Icon == other.Icon &&
+		((info.IconSource == nil && other.IconSource == nil) ||
+			(info.IconSource != nil && other.IconSource != nil && *info.IconSource == *other.IconSource)) &&
 		info.ResolvedIconPath == other.ResolvedIconPath &&
 		info.IconSourcePath == other.IconSourcePath &&
 		info.IconSourceModifiedUnix == other.IconSourceModifiedUnix &&
@@ -255,6 +259,7 @@ func init() {
 type ApplicationPlugin struct {
 	api              plugin.API
 	pluginDirectory  string
+	convertIcon      func(context.Context, common.WoxImage) common.WoxImage
 	runtimeCtx       context.Context
 	appChangeMu      sync.Mutex
 	appChangeCancel  context.CancelFunc
@@ -396,6 +401,7 @@ func (a *ApplicationPlugin) GetMetadata() plugin.Metadata {
 func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	a.api = initParams.API
 	a.pluginDirectory = initParams.PluginDirectory
+	a.convertIcon = initParams.ConvertIcon
 	runtimeCtx, cancelRuntime := context.WithCancel(util.NewTraceContext())
 	a.runtimeCtx = runtimeCtx
 	a.retriever = a.getRetriever(ctx)
@@ -543,6 +549,9 @@ func (a *ApplicationPlugin) reuseAppFromCache(ctx context.Context, appPath strin
 			a.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("cached icon missing for %s, rebuilding index entry", appPath))
 			return appInfo{}, false
 		}
+	}
+	if cached.IconSource == nil || cached.Icon == *cached.IconSource {
+		a.prepareIndexedIcon(ctx, &cached)
 	}
 
 	cached.Pid = 0
@@ -1776,7 +1785,7 @@ func (a *ApplicationPlugin) upsertIndexedAppByPath(ctx context.Context, appPath 
 	a.unparsableApps.Delete(key)
 
 	a.populateAppMetadata(ctx, appPath, &info, nil)
-	info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+	a.prepareIndexedIcon(ctx, &info)
 
 	for i, app := range a.apps {
 		if a.pathCacheKey(app.Path) != key {
@@ -2106,7 +2115,7 @@ func (a *ApplicationPlugin) indexAppsByPaths(ctx context.Context, appPaths []str
 					a.populateAppMetadata(ctx, appPath, &info, fileInfo)
 
 					// preprocess icon
-					info.Icon = common.ConvertIcon(ctx, info.Icon, a.pluginDirectory)
+					a.prepareIndexedIcon(ctx, &info)
 					atomic.AddInt64(&parsedCount, 1)
 
 					lock.Lock()
@@ -2232,6 +2241,12 @@ func mergeExtraApps(current []appInfo, desired []appInfo, pathKey func(string) s
 }
 
 func (a *ApplicationPlugin) indexExtraApps(ctx context.Context, apps []appInfo, progress func()) []appInfo {
+	for i := range apps {
+		if apps[i].IconSource != nil {
+			apps[i].Icon = *apps[i].IconSource
+			apps[i].IconSource = nil
+		}
+	}
 	apps = a.retriever.PrepareExtraApps(ctx, apps)
 
 	//preprocess icon
@@ -2242,13 +2257,24 @@ func (a *ApplicationPlugin) indexExtraApps(ctx context.Context, apps []appInfo, 
 		}
 		populateLaunchpadIconMetadata(ctx, &apps[i])
 		a.populateAppMetadata(ctx, apps[i].Path, &apps[i], nil)
-		apps[i].Icon = common.ConvertIcon(ctx, apps[i].Icon, a.pluginDirectory)
+		a.prepareIndexedIcon(ctx, &apps[i])
 		if progress != nil {
 			progress()
 		}
 	}
 
 	return apps
+}
+
+// prepareIndexedIcon uses the same plugin-owned cache as result processing.
+func (a *ApplicationPlugin) prepareIndexedIcon(ctx context.Context, info *appInfo) {
+	source := info.Icon
+	info.IconSource = &source
+	if a.convertIcon != nil {
+		info.Icon = a.convertIcon(ctx, source)
+	} else {
+		info.Icon = common.ConvertIcon(ctx, source, a.pluginDirectory)
+	}
 }
 
 func (a *ApplicationPlugin) rebuildQueryEntries(ctx context.Context) {
@@ -2646,6 +2672,11 @@ func (a *ApplicationPlugin) loadAppCache(ctx context.Context) ([]appInfo, error)
 
 	for i := range apps {
 		apps[i].Pid = 0
+		if apps[i].IconSource != nil && apps[i].Icon.ImageType == common.WoxImageTypeAbsolutePath {
+			if _, err := os.Stat(apps[i].Icon.ImageData); err != nil {
+				apps[i].Icon = *apps[i].IconSource
+			}
+		}
 		populateAppLaunchKey(ctx, &apps[i])
 		if strings.TrimSpace(apps[i].Identity) == "" {
 			apps[i].Identity = strings.TrimSpace(resolveAppIdentityForPlatform(ctx, apps[i]))

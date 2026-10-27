@@ -12,6 +12,8 @@ Keep application policies in this package. The Shell package exposes only generi
 
 Windows shortcuts resolve their own Shell artwork before falling back to the executable. The index keeps the full-size resolved PNG separately from the preprocessed list icon, so Launchpad rendering and icon classification preserve custom resource indices. Cache freshness tracks both the shortcut and its icon resource; a missing resolved PNG also forces reparsing. Native file, file-type and Shell namespace icon caches share a rendering version, and changes to indexed artwork also require an app-cache version bump.
 
+Apps prepare list icons in the plugin's image cache during indexing, allowing query results to reuse the final image. The index also stores the original icon reference so it can recover after the plugin cache is cleared; older indexes are upgraded as entries are reused.
+
 Windows shortcut validation returns a specific rejection reason. Explicit launch attempts log that reason at debug level before falling back to Open; background indexing and deduplication do not log rejected shortcuts. Wire-format constants live in `util/shell/shortcut_format_windows.go`, and the default-activation and explicit-executable policies retain separate metadata allowlists.
 
 Parameter references:

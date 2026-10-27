@@ -368,6 +368,7 @@ func runPluginInit(ctx context.Context, instance *Instance) error {
 	params := InitParams{
 		API:             instance.API,
 		PluginDirectory: instance.PluginDirectory,
+		ConvertIcon:     instance.ConvertIcon,
 	}
 	if initer, ok := instance.Plugin.(FallibleInit); ok {
 		return initer.InitWithError(ctx, params)

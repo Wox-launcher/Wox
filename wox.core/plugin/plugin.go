@@ -1,6 +1,10 @@
 package plugin
 
-import "context"
+import (
+	"context"
+
+	"wox/common"
+)
 
 var AllSystemPlugin []SystemPlugin
 
@@ -59,4 +63,6 @@ type ToolbarMsgActionProxyCreator interface {
 type InitParams struct {
 	API             API
 	PluginDirectory string
+	// ConvertIcon prepares an icon in this instance's image cache.
+	ConvertIcon func(context.Context, common.WoxImage) common.WoxImage
 }
