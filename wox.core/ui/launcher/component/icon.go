@@ -220,6 +220,15 @@ func ChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widg
 	return svgIcon(name, size, color)
 }
 
+// DisclosureChevronGlyph points down when expanded and right when collapsed.
+func DisclosureChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widget {
+	name := icons.ControlChevronRight
+	if expanded {
+		name = icons.ControlChevronDown
+	}
+	return svgIcon(name, size, color)
+}
+
 // CopyGlyph returns the shared SVG copy icon.
 func CopyGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

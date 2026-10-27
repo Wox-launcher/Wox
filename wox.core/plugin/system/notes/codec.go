@@ -12,13 +12,12 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
-	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 
 	"wox/common"
+	"wox/util/markdown"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 	conflictTitleSuffix = " (Sync Conflict)"
 )
 
-var noteMarkdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
+var noteMarkdownParser = markdown.NewParser()
 
 // EmptyDocument creates the smallest valid editable document.
 func EmptyDocument() common.NoteDocument {

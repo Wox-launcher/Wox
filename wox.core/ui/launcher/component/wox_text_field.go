@@ -386,10 +386,12 @@ func (s *textFieldState) Build(context woxwidget.StateContext, widget any) woxwi
 	s.verticalOffset = min(s.verticalOffset, maximumVerticalOffset)
 	if !s.hasLastFocus || s.lastFocus != displayState.Selection.Focus {
 		caretTop := layout.top(caretLine)
+		// A line taller than the viewport cannot fit; keep its top visible instead of oscillating between its edges.
+		caretBottom := caretTop + min(s.lineHeight, innerHeight)
 		if caretTop < s.verticalOffset {
 			s.verticalOffset = caretTop
-		} else if caretTop+s.lineHeight > s.verticalOffset+innerHeight {
-			s.verticalOffset = caretTop + s.lineHeight - innerHeight
+		} else if caretBottom > s.verticalOffset+innerHeight {
+			s.verticalOffset = caretBottom - innerHeight
 		}
 	}
 	s.lastFocus = displayState.Selection.Focus

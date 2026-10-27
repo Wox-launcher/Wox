@@ -4,6 +4,13 @@ Manager coordinates the public entry points, query planning and business
 processing. Internal owners manage plugin lifetimes, UI callbacks, query timing
 and result retention. These responsibilities remain in the plugin package.
 
+System plugin implementations with their own feature state live in dedicated
+packages under `system/`, such as `app`, `chat`, and `notes`, with their tests
+and documentation. `main.go` explicitly imports those packages for registration.
+AI Chat owns conversation lifecycle, project storage, runtime context, and
+plugin mentions in [`system/chat`](system/chat/README.md); the manager accesses
+it through the shared capability contracts rather than its concrete type.
+
 ## Plugin and host lifecycle
 
 `pluginLifecycle` owns the installed instance list, snapshot lock, per-plugin

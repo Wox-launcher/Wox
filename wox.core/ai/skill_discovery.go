@@ -34,7 +34,43 @@ type skillManifestFrontMatter struct {
 
 // DiscoverSkills scans known local skill directories for SKILL.md bundles.
 func DiscoverSkills(ctx context.Context) ([]common.Skill, error) {
-	roots := discoverSkillRoots(ctx)
+	return discoverSkillsFromRoots(discoverSkillRoots(ctx))
+}
+
+// DiscoverProjectSkills discovers only the skill bundles belonging to the supplied project roots.
+func DiscoverProjectSkills(directories []string) ([]common.Skill, error) {
+	roots := make([]skillDiscoveryRoot, 0, len(directories))
+	for _, directory := range directories {
+		if strings.TrimSpace(directory) != "" {
+			roots = append(roots, skillDiscoveryRoot{Path: filepath.Join(directory, ".agents", "skills"), Source: "project", SourceName: "Project"})
+		}
+	}
+	var result []common.Skill
+	var errors []string
+	seen := make(map[string]bool)
+	for _, root := range dedupeSkillRoots(roots) {
+		skills, err := discoverSkillsFromRoots([]skillDiscoveryRoot{root})
+		if err != nil {
+			errors = append(errors, err.Error())
+		}
+		for _, skill := range skills {
+			name := strings.ToLower(strings.TrimSpace(skill.Name))
+			if skill.Enabled && name != "" {
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+			}
+			result = append(result, skill)
+		}
+	}
+	if len(errors) != 0 {
+		return result, fmt.Errorf("%s", strings.Join(errors, "; "))
+	}
+	return result, nil
+}
+
+func discoverSkillsFromRoots(roots []skillDiscoveryRoot) ([]common.Skill, error) {
 	skillsByManifestPath := map[string]common.Skill{}
 	var scanErrors []string
 

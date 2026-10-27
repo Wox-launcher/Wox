@@ -243,6 +243,7 @@ const (
 	ControlPreviewOpen         = "control.preview-open"
 	ControlChevronUp           = "control.chevron-up"
 	ControlChevronDown         = "control.chevron-down"
+	ControlChevronRight        = "control.chevron-right"
 	ControlClock               = "control.clock"
 	ControlFilterList          = "control.filter-list"
 	ControlCheck               = "control.check"

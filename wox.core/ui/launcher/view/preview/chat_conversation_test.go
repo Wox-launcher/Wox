@@ -112,3 +112,25 @@ func TestChatConversationFlushHorizontal(t *testing.T) {
 		t.Fatal("embedded chat must align with its host controls")
 	}
 }
+
+func TestDedicatedChatCentersBoundedConversation(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		width, sidebar, want float32
+	}{
+		{"wide", 1400, 240, 760},
+		{"narrow", 640, 240, 380},
+		{"sidebar closed", 1400, 0, 760},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			props := ChatConversationProps{ChatPreviewProps: ChatPreviewProps{Dedicated: true, Width: tc.width, Height: 600}}
+			if tc.sidebar > 0 {
+				props.History = &ChatCatalogProps{Width: tc.sidebar, ShowNew: true}
+			}
+			panes := prepareChatConversation(props)
+			if panes.Input.Width != tc.want || panes.Messages.Width != tc.want {
+				t.Fatalf("conversation widths: input=%v messages=%v, want %v", panes.Input.Width, panes.Messages.Width, tc.want)
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"wox/common"
 	woxui "wox/ui/runtime"
 )
 
@@ -35,6 +36,76 @@ func TestChatPickerGroupsConfiguredProvidersWithoutDroppingModels(t *testing.T) 
 	}
 }
 
+func TestChatSlashSearchIncludesProjects(t *testing.T) {
+	projects := chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "a", Name: "Wox"}, {Id: "b", Name: "Work"}}}
+	models := []aiModel{{Name: "Wox model", Provider: "provider"}}
+	skills := []chatSkill{{Name: "Wox skill"}}
+	items := chatSlashPaletteItems(models, skills, aiModel{}, projects, "b", "No project", "wox", chatCommandPanel)
+	if len(items) != 3 || items[0].group != chatProjectPanel || items[0].sourceIndex != 0 || items[1].group != "models" || items[2].group != "skills" {
+		t.Fatalf("mixed search results = %+v", items)
+	}
+	items = chatSlashPaletteItems(models, skills, aiModel{}, projects, "b", "No project", "work", chatProjectPanel)
+	if len(items) != 1 || items[0].sourceIndex != 1 || !items[0].current {
+		t.Fatalf("project filter = %+v", items)
+	}
+	items = chatSlashPaletteItems(models, skills, aiModel{}, projects, "", "No project", "no project", chatProjectPanel)
+	if len(items) != 1 || items[0].sourceIndex != -1 || !items[0].current {
+		t.Fatalf("no-project filter = %+v", items)
+	}
+}
+
+func TestChatSlashProjectSelectionPreservesDraft(t *testing.T) {
+	for _, pointer := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pointer=%t", pointer), func(t *testing.T) {
+			app := New(false, projectTestServices{})
+			defer app.cancel()
+			app.uiCall = nil
+			editor := woxui.NewTextEditor("before /wox after")
+			editor.SetCaret(len([]rune("before /wox")))
+			state := &chatPreviewState{
+				key: "chat", active: true, panel: chatCommandPanel, panelQuery: "wox", panelFilter: chatProjectPanel,
+				sidebarOpen: true, editor: editor, projects: chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "p", Name: "Wox"}}},
+			}
+			app.chat.chatPreview = state
+			snapshot := snapshotChatPreviewLocked(state)
+			app.chat.attachChatPreviewCatalogs(snapshot)
+			props := app.chatCatalogProps(snapshot, defaultPalette(), 400, 300)
+			if len(props.Filters) != 4 || !props.Filters[2].Selected || len(props.Items) != 1 || props.Items[0].Kind != chatProjectPanel {
+				t.Fatalf("project picker = %+v", props)
+			}
+			if pointer {
+				props.Items[0].OnSelect()
+			} else {
+				app.chat.activateChatPanelSelection()
+			}
+			if state.chat.ProjectID != "p" || editor.State().Text != "before  after" || state.panel != "history" || !state.sidebarOpen {
+				t.Fatalf("project selection lost draft or sidebar: project=%q draft=%q panel=%q", state.chat.ProjectID, editor.State().Text, state.panel)
+			}
+		})
+	}
+}
+
+func TestChatSlashNoProjectAndStreamingGuard(t *testing.T) {
+	app := New(false, projectTestServices{})
+	defer app.cancel()
+	app.uiCall = nil
+	state := &chatPreviewState{
+		active: true, panel: chatCommandPanel, panelFilter: chatProjectPanel,
+		editor: woxui.NewTextEditor("/"), chat: chatData{ProjectID: "p", IsStreaming: true},
+		projects: chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "p", Name: "Wox"}}},
+	}
+	app.chat.chatPreview = state
+	app.chat.activateChatPanelSelection()
+	if state.chat.ProjectID != "p" || state.editor.State().Text != "/" || state.panel != chatCommandPanel {
+		t.Fatal("streaming chat allowed a project change")
+	}
+	state.chat.IsStreaming = false
+	app.chat.activateChatPanelSelection()
+	if state.chat.ProjectID != "" || state.editor.State().Text != "" || state.panel != "" {
+		t.Fatalf("no-project selection failed: project=%q text=%q panel=%q", state.chat.ProjectID, state.editor.State().Text, state.panel)
+	}
+}
+
 func TestChatPickerCategoryPreservesSlashAndUsesFilteredKeyboardSelection(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "flash", Provider: "deepseek"}})
@@ -47,7 +118,7 @@ func TestChatPickerCategoryPreservesSlashAndUsesFilteredKeyboardSelection(t *tes
 	snapshot := snapshotChatPreviewLocked(app.chat.chatPreview)
 	app.chat.attachChatPreviewCatalogs(snapshot)
 	props := app.chatCatalogProps(snapshot, defaultPalette(), 500, 400)
-	if len(props.Items) != 2 || len(props.Filters) != 3 || !props.Filters[2].Selected || props.Search != nil {
+	if len(props.Items) != 2 || len(props.Filters) != 4 || !props.Filters[3].Selected || props.Search != nil {
 		t.Fatalf("skills filter = %+v", props)
 	}
 	if app.chat.chatPreview.editor.State().Text != "/" {
@@ -151,8 +222,8 @@ func TestChatPickerTabCyclesCategories(t *testing.T) {
 				shift bool
 				want  string
 			}{
-				{false, "models"}, {false, "skills"}, {false, ""},
-				{true, "skills"}, {true, "models"}, {true, ""},
+				{false, "models"}, {false, chatProjectPanel}, {false, "skills"}, {false, ""},
+				{true, "skills"}, {true, chatProjectPanel}, {true, "models"}, {true, ""},
 			} {
 				state.panelSelected, state.panelScroll = 3, 120
 				event := woxui.KeyEvent{Key: woxui.KeyTab, Down: true}
@@ -228,5 +299,126 @@ func TestMentionPickerSharesCategoryFilteringAndKeyboardCycle(t *testing.T) {
 	app.chat.setChatText("@")
 	if state.panelFilter != "" {
 		t.Fatal("a fresh mention picker did not reset to All")
+	}
+}
+
+func TestChatProjectSkillCatalogUsesCurrentProject(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetSkills([]chatSkill{{ID: "global", Name: "review", Source: "user"}, {ID: "global-2", Name: "other", Source: "user"}})
+	state := &chatPreviewState{chat: chatData{ProjectID: "p"}, projectSkillsProjectID: "p", projectSkills: []chatSkill{{ID: "project", Name: "review", Source: "project", Enabled: true}}, editor: woxui.NewTextEditor("/")}
+	app := bindTestApp(&App{aiSettings: ai, chat: chatController{chatPreview: state}})
+	skills := app.chat.chatSkills()
+	if len(skills) != 2 || skills[0].ID != "project" || skills[1].ID != "global-2" {
+		t.Fatalf("merged skills = %+v", skills)
+	}
+	refs := chatSkillRefsFromText("{skill:review}", skills)
+	if len(refs) != 1 || refs[0].ID != "project" || refs[0].Source != "project" {
+		t.Fatalf("skill ref = %+v", refs)
+	}
+	state.chat.ProjectID = "other-project"
+	skills = app.chat.chatSkills()
+	if len(skills) != 2 || skills[0].ID != "global" {
+		t.Fatalf("stale project skills leaked: %+v", skills)
+	}
+}
+
+func TestChatSlashFuzzyMatchAndSelection(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetSkills([]chatSkill{{ID: "commit", Name: "wox-commit", Source: "project"}, {ID: "other", Name: "design"}})
+	state := &chatPreviewState{key: "fuzzy", active: true, editor: woxui.NewTextEditor(""), projects: chatProjectUI{Loaded: true}}
+	app := bindTestApp(&App{aiSettings: ai, chat: chatController{chatPreview: state}})
+	app.chat.setChatText("/wc")
+	snapshot := snapshotChatPreviewLocked(state)
+	app.chat.attachChatPreviewCatalogs(snapshot)
+	displayed := chatSnapshotCommandItems(snapshot)
+	keyboard := app.chat.commandPaletteItems()
+	if len(displayed) != 1 || displayed[0].title != "wox-commit" || len(keyboard) != 1 || keyboard[0].sourceIndex != displayed[0].sourceIndex {
+		t.Fatalf("fuzzy results differ: displayed=%+v keyboard=%+v", displayed, keyboard)
+	}
+	app.chat.activateChatPanelSelection()
+	if got := state.editor.State().Text; got != "{skill:wox-commit} " {
+		t.Fatalf("selected text = %q", got)
+	}
+}
+
+func TestChatCatalogFuzzyMatchingAcrossGroups(t *testing.T) {
+	models := []aiModel{{Name: "gpt-6-astra", Provider: "openai"}}
+	skills := []chatSkill{{Name: "微信技能"}}
+	projects := chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "p", Name: "微信项目"}}}
+	cases := []struct {
+		query, filter string
+		pinyin        bool
+		want          string
+	}{
+		{"g6a", "models", false, "gpt-6-astra"},
+		{"wxxm", chatProjectPanel, true, "微信项目"},
+		{"wxjn", "skills", true, "微信技能"},
+		{"wxxm", chatProjectPanel, false, ""},
+		{"np", chatProjectPanel, false, "No project"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query+tc.filter+fmt.Sprint(tc.pinyin), func(t *testing.T) {
+			items := chatSlashPaletteItems(models, skills, aiModel{}, projects, "", "No project", tc.query, tc.filter, tc.pinyin)
+			if tc.want == "" && len(items) == 0 {
+				return
+			}
+			if len(items) != 1 || items[0].title != tc.want {
+				t.Fatalf("search results = %+v, want %q", items, tc.want)
+			}
+		})
+	}
+}
+
+func TestChatSearchRanksAllGroupsAndProjectUsage(t *testing.T) {
+	models := []aiModel{{Name: "commit-model", Provider: "provider"}}
+	skills := []chatSkill{{Name: "commit"}, {Name: "commit-helper"}}
+	projects := chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "a", Name: "commit-project"}}}
+	items := chatSlashPaletteItems(models, skills, aiModel{}, projects, "", "No project", "commit", chatCommandPanel)
+	if len(items) != 4 || items[0].group != "skills" || items[0].title != "commit" {
+		t.Fatalf("exact skill should lead mixed results: %+v", items)
+	}
+	for i := 1; i < len(items); i++ {
+		if items[i-1].score < items[i].score {
+			t.Fatalf("results out of score order: %+v", items)
+		}
+	}
+	projects.Projects = []common.AIChatProject{{Id: "rare", Name: "wox-team"}, {Id: "popular", Name: "wox-team", SelectionCount: 10}, {Id: "exact", Name: "wox"}, {Id: "unrelated", Name: "other", SelectionCount: 1000000}}
+	items = chatSlashPaletteItems(nil, nil, aiModel{}, projects, "", "No project", "wox", chatProjectPanel)
+	if len(items) != 3 || items[0].title != "wox" || items[1].sourceIndex != 1 || items[2].sourceIndex != 0 {
+		t.Fatalf("usage should break close matches without overwhelming exact results: %+v", items)
+	}
+	empty := chatProjectPaletteItems(projects.Projects, "", "", "No project")
+	if len(empty) != 5 || empty[1].sourceIndex != 0 || empty[2].sourceIndex != 1 {
+		t.Fatalf("empty search changed browsing order: %+v", empty)
+	}
+}
+
+func TestChatRankedSectionsPreserveHeaderGeometry(t *testing.T) {
+	items := []chatCommandPaletteItem{{group: "skills"}, {group: "models", subtitle: "first"}, {group: chatProjectPanel}, {group: "models", subtitle: "second"}}
+	// Each transition starts a section; models also have a provider header.
+	want := []float32{28, 28 + 50 + 12 + 56, 28 + 50 + 12 + 56 + 38 + 12 + 28, 28 + 50 + 12 + 56 + 38 + 12 + 28 + 38 + 12 + 56}
+	for i := range items {
+		if got := chatCommandItemOffset(items, i); got != want[i] {
+			t.Fatalf("row %d offset = %g, want %g", i, got, want[i])
+		}
+	}
+}
+
+func TestChatRankedResultsMatchKeyboardSelection(t *testing.T) {
+	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
+	ai.SetModels([]aiModel{{Name: "commit-model", Provider: "provider"}})
+	ai.SetSkills([]chatSkill{{Name: "commit", ID: "exact"}, {Name: "commit-helper", ID: "other"}})
+	state := &chatPreviewState{key: "ranked", panel: chatCommandPanel, panelQuery: "commit", editor: woxui.NewTextEditor("/commit"), projects: chatProjectUI{Loaded: true, Projects: []common.AIChatProject{{Id: "project", Name: "commit-project"}}}}
+	app := bindTestApp(&App{aiSettings: ai, chat: chatController{chatPreview: state}})
+	snapshot := snapshotChatPreviewLocked(state)
+	app.chat.attachChatPreviewCatalogs(snapshot)
+	displayed := chatSnapshotCommandItems(snapshot)
+	keyboard := app.chat.commandPaletteItems()
+	if len(displayed) == 0 || len(keyboard) != len(displayed) || displayed[0].group != "skills" || displayed[0].sourceIndex != keyboard[0].sourceIndex {
+		t.Fatalf("display/keyboard ranking mismatch: %+v / %+v", displayed, keyboard)
+	}
+	app.chat.activateChatPanelSelection()
+	if got := state.editor.State().Text; got != "{skill:commit} " {
+		t.Fatalf("selected ranked result = %q", got)
 	}
 }

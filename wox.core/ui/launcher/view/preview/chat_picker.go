@@ -36,6 +36,9 @@ func chatPickerCatalog(props ChatCatalogProps) woxwidget.Widget {
 	var header woxwidget.Widget
 	if props.Search != nil {
 		search := *props.Search
+		if search.Label == "" {
+			search.Label = search.Hint
+		}
 		search.Width, search.Height = width, s(32)
 		search.Theme = controls
 		search.Padding = woxwidget.Insets{Left: s(10), Right: s(10), Top: s(6), Bottom: s(6)}
@@ -43,13 +46,18 @@ func chatPickerCatalog(props ChatCatalogProps) woxwidget.Widget {
 		header = woxcomponent.WoxTextField(search)
 	} else {
 		buttons := make([]woxwidget.Widget, 0, len(props.Filters))
+		buttonWidth := min(s(72), max(0, (width-s(4)*float32(max(0, len(props.Filters)-1)))/float32(max(1, len(props.Filters)))))
+		buttonPadding := woxwidget.Insets{}
+		if len(props.Filters) > 3 {
+			buttonPadding = woxwidget.Insets{Left: s(4), Right: s(4)}
+		}
 		for _, filter := range props.Filters {
 			variant := woxcomponent.ButtonText
 			if filter.Selected {
 				variant = woxcomponent.ButtonSelected
 			}
 			buttons = append(buttons, woxcomponent.WoxButton(woxcomponent.ButtonProps{
-				ID: filter.ID, Label: filter.Label, Width: min(s(72), max(0, (width-s(8))/3)), Height: s(32),
+				ID: filter.ID, Label: filter.Label, Width: buttonWidth, Height: s(32), Padding: buttonPadding,
 				Variant: variant, Selected: filter.Selected, Theme: controls,
 				OnTap: filter.OnSelect,
 			}))
@@ -67,8 +75,9 @@ func chatPickerCatalog(props ChatCatalogProps) woxwidget.Widget {
 					Child: woxwidget.Container{Width: width, Height: 1, Color: border}})
 			}
 			section, group = item.Kind, ""
-			rows = append(rows, woxwidget.Container{Width: width, Height: s(28), Padding: woxwidget.Insets{Left: s(10)},
-				Child: woxwidget.Align{Height: s(28), Vertical: 0.5, Child: woxwidget.Text{Value: item.SectionLabel,
+			sectionLine := s(16)
+			rows = append(rows, woxwidget.Container{Width: width, Height: s(28), Padding: woxwidget.Insets{Left: s(10), Right: s(10)},
+				Child: woxwidget.Align{Height: s(28), Vertical: 0.5, Child: woxwidget.TextBlock{Value: item.SectionLabel, Height: sectionLine, LineHeight: sectionLine, MaxLines: 1, AlignmentY: 0.5,
 					Style: woxui.TextStyle{Size: s(woxcomponent.SettingsHelpFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}})
 		}
 		if item.Kind == "models" && item.GroupLabel != "" && item.GroupLabel != group {
@@ -81,10 +90,11 @@ func chatPickerCatalog(props ChatCatalogProps) woxwidget.Widget {
 			if item.GroupIcon != nil {
 				icon = woxwidget.Image{Source: item.GroupIcon, Width: s(20), Height: s(20)}
 			}
-			label := []woxwidget.Widget{icon, woxwidget.Expanded{Child: woxwidget.Text{Value: item.GroupLabel,
+			labelLine := s(20)
+			label := []woxwidget.Widget{icon, woxwidget.Expanded{Child: woxwidget.TextBlock{Value: item.GroupLabel, Height: labelLine, LineHeight: labelLine, MaxLines: 1, AlignmentY: 0.5,
 				Style: woxui.TextStyle{Size: s(woxcomponent.SettingsHelpFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.ResultSubtitle}}}
-			rows = append(rows, woxwidget.Container{Width: width, Height: s(28), Padding: woxwidget.Insets{Left: s(10)},
-				Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Gap: s(8), Children: label}})
+			rows = append(rows, woxwidget.Container{Width: width, Height: s(28), Padding: woxwidget.Insets{Left: s(10), Right: s(10)},
+				Child: woxwidget.Align{Height: s(28), Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Gap: s(8), Children: label}}})
 		}
 		item.DensityScale = props.DensityScale
 		if item.Placeholder {
@@ -122,9 +132,10 @@ func chatPickerItem(item ChatCatalogItemProps, width, height float32, theme woxc
 		background = theme.SelectedBackground
 		background.A = uint8(float32(background.A) * 0.5)
 	}
-	texts := []woxwidget.Widget{woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: s(woxcomponent.SettingsControlFontSize)}, Color: foreground}}
+	labelLine := s(20)
+	texts := []woxwidget.Widget{woxwidget.TextBlock{Value: item.Title, Height: labelLine, LineHeight: labelLine, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: s(woxcomponent.SettingsControlFontSize)}, Color: foreground}}
 	if item.Kind == "skills" && item.Subtitle != "" {
-		texts = append(texts, woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: s(woxcomponent.SettingsHelpFontSize)}, Color: theme.ResultSubtitle})
+		texts = append(texts, woxwidget.TextBlock{Value: item.Subtitle, Height: s(16), LineHeight: s(16), MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: s(woxcomponent.SettingsHelpFontSize)}, Color: theme.ResultSubtitle})
 	}
 	content := []woxwidget.Widget{}
 	if item.Icon != nil {
@@ -145,5 +156,5 @@ func chatPickerItem(item ChatCatalogItemProps, width, height float32, theme woxc
 		Child: woxwidget.Gesture{ID: item.SelectID, OnTap: item.OnSelect, OnHover: onHover,
 			Child: woxwidget.Container{Width: width, Height: height, Radius: s(7), Color: background,
 				Padding: woxwidget.Insets{Left: leftPadding, Right: s(12)},
-				Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Gap: s(10), Children: content}}}}
+				Child:   woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Gap: s(10), Children: content}}}}}
 }

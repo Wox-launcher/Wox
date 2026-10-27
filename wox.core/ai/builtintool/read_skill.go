@@ -33,11 +33,9 @@ func ReadSkillTool() common.Tool {
 }
 
 func readSkillCallback(ctx context.Context, args map[string]any) (common.ToolResult, error) {
-	_ = ctx
-
 	id, _ := args["id"].(string)
 	name, _ := args["name"].(string)
-	skill, err := resolveSkillToolInput(id, name)
+	skill, err := resolveSkillToolInput(ctx, id, name)
 	if err != nil {
 		return common.ToolResult{}, err
 	}
@@ -50,23 +48,30 @@ func readSkillCallback(ctx context.Context, args map[string]any) (common.ToolRes
 }
 
 // resolveSkillToolInput resolves either an exact id or a unique exact skill name.
-func resolveSkillToolInput(id string, name string) (common.Skill, error) {
+func resolveSkillToolInput(ctx context.Context, id string, name string) (common.Skill, error) {
+	skills := ai.SkillsForContext(ctx)
 	if id = strings.TrimSpace(id); id != "" {
-		skill, ok := ai.GetSkillRegistry().Get(id)
-		if !ok {
-			return common.Skill{}, fmt.Errorf("skill id not found: %s", id)
+		for _, skill := range skills {
+			if skill.Id == id {
+				if !skill.Enabled {
+					return common.Skill{}, fmt.Errorf("skill is disabled: %s", id)
+				}
+				return skill, nil
+			}
 		}
-		if !skill.Enabled {
-			return common.Skill{}, fmt.Errorf("skill is disabled: %s", id)
-		}
-		return skill, nil
+		return common.Skill{}, fmt.Errorf("skill id not found: %s", id)
 	}
 
 	if name = strings.TrimSpace(name); name == "" {
 		return common.Skill{}, fmt.Errorf("id or name is required")
 	}
 
-	matches := ai.GetSkillRegistry().FindByName(name)
+	var matches []common.Skill
+	for _, skill := range skills {
+		if strings.EqualFold(skill.Name, name) {
+			matches = append(matches, skill)
+		}
+	}
 	if len(matches) == 0 {
 		return common.Skill{}, fmt.Errorf("skill name not found: %s", name)
 	}

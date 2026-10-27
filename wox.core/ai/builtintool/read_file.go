@@ -45,7 +45,7 @@ func readFileCallback(ctx context.Context, args map[string]any) (common.ToolResu
 	if pathRaw == "" {
 		return common.ToolResult{}, fmt.Errorf("path is required")
 	}
-	abs := resolveToolPath(pathRaw)
+	abs := resolveToolPathForContext(ctx, pathRaw)
 
 	data, err := os.ReadFile(abs)
 	if err != nil {
@@ -115,6 +115,11 @@ func readFileCallback(ctx context.Context, args map[string]any) (common.ToolResu
 // It expands ~ to the home directory and handles absolute paths directly.
 // Shared by all file-based tools in this package.
 func resolveToolPath(input string) string {
+	return resolveToolPathForContext(context.Background(), input)
+}
+
+// resolveToolPathForContext keeps concurrent project requests independent of process cwd.
+func resolveToolPathForContext(ctx context.Context, input string) string {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		input = "."
@@ -136,6 +141,10 @@ func resolveToolPath(input string) string {
 		return filepath.Clean(input)
 	}
 
+	cwd := common.AIWorkingDirectory(ctx)
+	if cwd != "" {
+		return filepath.Clean(filepath.Join(cwd, input))
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return filepath.Clean(input)

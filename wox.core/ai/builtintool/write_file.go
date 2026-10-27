@@ -42,7 +42,7 @@ func writeFileCallback(ctx context.Context, args map[string]any) (common.ToolRes
 	if pathRaw == "" {
 		return common.ToolResult{}, fmt.Errorf("path is required")
 	}
-	abs := resolveToolPath(pathRaw)
+	abs := resolveToolPathForContext(ctx, pathRaw)
 
 	if mkErr := os.MkdirAll(filepath.Dir(abs), 0o755); mkErr != nil {
 		return common.ToolResult{}, mkErr

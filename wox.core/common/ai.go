@@ -255,6 +255,7 @@ func (m *Model) ProviderName() string {
 
 type AIChatData struct {
 	Id                string
+	ProjectId         string `json:",omitempty"`
 	Title             string
 	Conversations     []Conversation
 	CompactionEntries []AIChatCompactionEntry
@@ -448,8 +449,14 @@ type AIChatPreviewData struct {
 	ActiveChat   AIChatData
 	ActiveChatId string
 	Chats        []AIChatData
+	SidebarOpen  bool
 	// InitialAttachments seeds the composer without adding a conversation.
 	InitialAttachments []AIChatAttachment `json:",omitempty"`
+}
+
+// AIChatSidebarSettings is an internal capability for the shared chat sidebar preference.
+type AIChatSidebarSettings interface {
+	SetChatSidebarOpen(context.Context, bool) error
 }
 
 type AIChater interface {

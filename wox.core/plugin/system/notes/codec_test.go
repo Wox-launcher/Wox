@@ -42,6 +42,21 @@ func TestParseMarkdownKeepsBareURLs(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownKeepsPunctuationAdjacentBold(t *testing.T) {
+	for _, input := range []string{"**通常不行。**孩子", "- **没有资格：**内地"} {
+		for _, source := range []string{input, ToMarkdown(ParseMarkdown(input))} {
+			document := ParseMarkdown(source)
+			if len(document.Blocks) != 1 || len(document.Blocks[0].Spans) != 1 || !document.Blocks[0].Spans[0].Bold {
+				t.Fatalf("source %q: blocks = %#v, want one bold span", source, document.Blocks)
+			}
+			span := document.Blocks[0].Spans[0]
+			if span.Start != 0 || span.End != 5 {
+				t.Fatalf("source %q: bold span = %#v, want first five runes", source, span)
+			}
+		}
+	}
+}
+
 func TestParseMarkdownBuildsRichBlocks(t *testing.T) {
 	document := ParseMarkdown("# **Title**\n- [x] done\n- item\n\n> quote")
 	if len(document.Blocks) != 4 {

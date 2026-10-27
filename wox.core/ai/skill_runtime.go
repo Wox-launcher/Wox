@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"os"
@@ -36,6 +37,19 @@ func SkillRefFromSkill(skill common.Skill) common.AISkillRef {
 
 // ResolveSkillRef resolves a persisted message-level skill reference against the current registry.
 func ResolveSkillRef(ref common.AISkillRef) (common.Skill, bool) {
+	return ResolveSkillRefForContext(context.Background(), ref)
+}
+
+// ResolveSkillRefForContext resolves project references only within the active request.
+func ResolveSkillRefForContext(ctx context.Context, ref common.AISkillRef) (common.Skill, bool) {
+	if ref.Source == "project" {
+		for _, skill := range SkillsForContext(ctx) {
+			if skill.Source == "project" && (ref.Id != "" && skill.Id == ref.Id || ref.Id == "" && ref.Path != "" && skill.ManifestPath == ref.Path) {
+				return skill, true
+			}
+		}
+		return common.Skill{}, false
+	}
 	if id := strings.TrimSpace(ref.Id); id != "" {
 		if skill, ok := GetSkillRegistry().Get(id); ok {
 			return skill, true

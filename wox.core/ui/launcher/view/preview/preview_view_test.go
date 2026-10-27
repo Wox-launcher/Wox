@@ -305,23 +305,24 @@ func TestChatModelSelectorUsesFlutterIconsAndHoverSurface(t *testing.T) {
 	}
 	props := ChatInputProps{Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme, OnModels: func() {}}
 	state := chatModelSelectorState{hovered: true}
-	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	semantics := state.Build(woxwidget.StateContext{}, ChatModelSelector(props).(woxwidget.Stateful).Widget).(woxwidget.Semantics)
 	focusable := semantics.Child.(woxwidget.Focusable)
 	gesture := focusable.Child.(woxwidget.Gesture)
 	chip := gesture.Child.(woxwidget.Container)
-	row := chip.Child.(woxwidget.Flex)
+	row := chip.Child.(woxwidget.Align).Child.(woxwidget.Flex)
 
 	if chip.Height != 20 || chip.Radius != 4 || chip.Color.A != 40 || gesture.OnHover == nil {
 		t.Fatalf("model chip = height %.0f radius %.0f color %#v; want Flutter compact hover surface", chip.Height, chip.Radius, chip.Color)
 	}
 	modelIcon := row.Children[0].(woxwidget.Image)
 	modelText := row.Children[2].(woxwidget.Expanded).Child.(woxwidget.Align)
+	modelLabel := modelText.Child.(woxwidget.TextBlock)
 	arrowIcon := row.Children[4].(woxwidget.Image)
 	iconColor := theme.ResultTitle
 	iconColor.A = 180
 	wantIcon := woxcomponent.SparklesGlyph(16, iconColor).(woxwidget.Image)
-	if modelIcon.Source != wantIcon.Source || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
-		t.Fatalf("model chip icons = model %.0f arrow %.0f; want 16px sparkles and 14px arrow", modelIcon.Width, arrowIcon.Width)
+	if modelIcon.Source != wantIcon.Source || modelIcon.Width != 16 || modelText.Height != 20 || modelText.Vertical != 0.5 || modelLabel.AlignmentY != 0.5 || arrowIcon.Source == nil || arrowIcon.Width != 14 {
+		t.Fatalf("model chip icons = model %.0f arrow %.0f label alignment %.1f; want 16px sparkles, 14px arrow, and centered label", modelIcon.Width, arrowIcon.Width, modelLabel.AlignmentY)
 	}
 	input := ChatInput(ChatInputProps{Width: 400, Height: ChatComposerHeight(0), Key: "test", Model: "deepseek-v4-pro", ModelWidth: 160, Theme: theme}).(woxwidget.Container)
 	card := input.Child.(woxwidget.Container)
@@ -369,12 +370,12 @@ func TestChatCatalogModelRowHighlightsOnHover(t *testing.T) {
 	}
 	row := chatCatalogItem(ChatCatalogItemProps{SelectID: "model", Kind: "models", Title: "pro", OnSelect: func() {}}, 400, 38, theme, true, func(bool) {}).(woxwidget.Gesture)
 	container := row.Child.(woxwidget.Container)
-	stack := container.Child.(woxwidget.Stack)
-	icon := stack.Children[0].Child.(woxwidget.Image)
+	aligned := container.Child.(woxwidget.Align)
+	icon := aligned.Child.(woxwidget.Flex).Children[0].(woxwidget.Image)
 
 	wantIcon := woxcomponent.SparklesGlyph(18, theme.PreviewText).(woxwidget.Image)
-	if row.OnHover == nil || container.Color.A != 40 || icon.Source != wantIcon.Source || icon.Width != 18 {
-		t.Fatalf("hovered model row = color %#v icon %.0f; want hover and 18px sparkles", container.Color, icon.Width)
+	if aligned.Vertical != 0.5 || row.OnHover == nil || container.Color.A != 40 || icon.Source != wantIcon.Source || icon.Width != 18 {
+		t.Fatalf("hovered model row = color %#v icon %.0f; want centered hover and 18px sparkles", container.Color, icon.Width)
 	}
 }
 

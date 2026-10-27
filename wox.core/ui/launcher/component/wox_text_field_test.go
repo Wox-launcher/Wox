@@ -70,6 +70,35 @@ func TestSingleLineTextFieldDefaultsToVerticalCenter(t *testing.T) {
 	}
 }
 
+// TestShortTextFieldDoesNotScrollOnTyping covers a line box taller than the content viewport.
+func TestShortTextFieldDoesNotScrollOnTyping(t *testing.T) {
+	field := WoxTextField(TextFieldProps{ID: "project-name", Width: 200, Height: 32, Value: "Wox"}).(woxwidget.Stateful)
+	state := field.CreateState().(*textFieldState)
+	state.InitState(woxwidget.StateContext{}, field.Widget)
+	for _, value := range []string{"Wox", "Wox1", "Wox12", "Wox123"} {
+		state.controller.SetText(value, false)
+		state.Build(woxwidget.StateContext{}, field.Widget)
+		if state.verticalOffset != 0 {
+			t.Fatalf("value %q: vertical offset = %v, want 0", value, state.verticalOffset)
+		}
+	}
+}
+
+func TestMultilineTextFieldStillScrollsToCaret(t *testing.T) {
+	field := WoxTextField(TextFieldProps{ID: "multiline", Width: 200, Height: 56, MaxLines: 2, Value: "one\ntwo\nthree"}).(woxwidget.Stateful)
+	state := field.CreateState().(*textFieldState)
+	state.InitState(woxwidget.StateContext{}, field.Widget)
+	state.Build(woxwidget.StateContext{}, field.Widget)
+	if state.verticalOffset != 20 {
+		t.Fatalf("last line offset = %v, want 20", state.verticalOffset)
+	}
+	state.controller.SetCaret(1)
+	state.Build(woxwidget.StateContext{}, field.Widget)
+	if state.verticalOffset != 0 {
+		t.Fatalf("first line offset = %v, want 0", state.verticalOffset)
+	}
+}
+
 func TestTextFieldDismissibleChipAnimatesHover(t *testing.T) {
 	field := WoxTextField(TextFieldProps{
 		ID: "urls", Width: 200, Height: 40,

@@ -10,6 +10,48 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestChatPickerSearchHasAccessibleName covers button-opened model and project catalogs.
+func TestChatPickerSearchHasAccessibleName(t *testing.T) {
+	props := ChatCatalogProps{Picker: true, Width: 280, Height: 140, Search: &woxcomponent.TextFieldProps{ID: "picker-search", Hint: "Search projects"}}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ChatCatalog(props) })
+	host.AttachServices(terminalPreviewHostServices{})
+	defer host.Dispose()
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 280, Height: 140}, Scale: 1})
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "picker-search" {
+			if node.Label != "Search projects" {
+				t.Fatalf("search has no accessible name: %+v", node)
+			}
+			return
+		}
+	}
+	t.Fatal("search input missing")
+}
+
+func TestChatPickerFourFiltersFitNarrowHost(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		props := ChatCatalogProps{Picker: true, Width: 260, Height: 160, DensityScale: scale, Filters: []ChatCatalogFilter{
+			{ID: "all", Label: "All"}, {ID: "models", Label: "Models"}, {ID: "projects", Label: "Projects"}, {ID: "skills", Label: "Skills"},
+		}}
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ChatCatalog(props) })
+		host.AttachServices(terminalPreviewHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: props.Width, Height: props.Height}, Scale: 1})
+		found := 0
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "all" || node.AutomationID == "models" || node.AutomationID == "projects" || node.AutomationID == "skills" {
+				found++
+				if node.Bounds.X < 0 || node.Bounds.X+node.Bounds.Width > props.Width {
+					t.Fatalf("density %g: filter %q outside picker: %+v", scale, node.AutomationID, node.Bounds)
+				}
+			}
+		}
+		host.Dispose()
+		if found != 4 {
+			t.Fatalf("density %g: found %d filters", scale, found)
+		}
+	}
+}
+
 func TestChatPickerLayoutScalesRowsAndStaysInsideNarrowHost(t *testing.T) {
 	for _, scale := range []float32{0.9, 1, 1.1} {
 		for _, dpi := range []float32{1, 1.5, 2} {
@@ -64,7 +106,11 @@ func TestChatPickerCurrentModelAndKeyboardFocusRemainIndependent(t *testing.T) {
 			if (row.Color.A != 0) != selected {
 				t.Fatal("current model changed the keyboard highlight")
 			}
-			children := row.Child.(woxwidget.Flex).Children
+			aligned := row.Child.(woxwidget.Align)
+			if aligned.Vertical != 0.5 || aligned.Height != row.Height {
+				t.Fatal("picker row content is not vertically centered")
+			}
+			children := aligned.Child.(woxwidget.Flex).Children
 			if (len(children) == 2) != current {
 				t.Fatal("checkmark does not match current model")
 			}
@@ -89,11 +135,15 @@ func TestChatPickerShowsRealIconsAndSeparatesOnlyContentTypes(t *testing.T) {
 	if len(rows) != 9 {
 		t.Fatalf("want type titles, provider headers, rows, whitespace and one divider; got %d", len(rows))
 	}
-	if title := rows[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text).Value; title != "Models" {
+	if title := rows[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock).Value; title != "Models" {
 		t.Fatalf("missing Models title: %q", title)
 	}
 	for _, index := range []int{1, 4} {
-		header := rows[index].(woxwidget.Container).Child.(woxwidget.Flex)
+		headerAlign := rows[index].(woxwidget.Container).Child.(woxwidget.Align)
+		if headerAlign.Vertical != 0.5 {
+			t.Fatal("provider header is not vertically centered")
+		}
+		header := headerAlign.Child.(woxwidget.Flex)
 		if icon := header.Children[0].(woxwidget.Image); icon.Source != providerIcon {
 			t.Fatal("provider header did not use the supplied real icon")
 		}
@@ -107,7 +157,7 @@ func TestChatPickerShowsRealIconsAndSeparatesOnlyContentTypes(t *testing.T) {
 	if divider.Height != ChatPickerSectionGap || line.Height != 1 || line.Color.A == 0 {
 		t.Fatal("model/skill boundary lost its divider")
 	}
-	if title := rows[7].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text).Value; title != "Skills" {
+	if title := rows[7].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock).Value; title != "Skills" {
 		t.Fatalf("missing Skills title: %q", title)
 	}
 }
@@ -125,7 +175,7 @@ func TestMentionPickerUsesSharedDimensionsAndOriginalIcons(t *testing.T) {
 			icon := &woxui.Image{}
 			row := chatPickerItem(ChatCatalogItemProps{Kind: "files", Icon: icon, DensityScale: scale},
 				280, ChatScaledSize(scale, 38), woxcomponent.Theme{}, false, nil).(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
-			image := row.Child.(woxwidget.Flex).Children[0].(woxwidget.Image)
+			image := row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[0].(woxwidget.Image)
 			if image.Source != icon || image.Width != ChatScaledSize(scale, 20) {
 				t.Fatal("mention icon source or density was lost")
 			}

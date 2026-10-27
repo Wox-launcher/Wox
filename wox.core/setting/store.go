@@ -125,6 +125,67 @@ type PluginSettingStore struct {
 	pluginId string
 }
 
+// PluginSettingChange is one write in an atomic settings and oplog batch.
+type PluginSettingChange struct {
+	Key      string
+	Value    interface{}
+	Delete   bool
+	Syncable bool
+}
+
+// ApplyWithSync commits related settings together without re-entering the sync lock.
+func (s *PluginSettingStore) ApplyWithSync(changes []PluginSettingChange) error {
+	return s.UpdateWithSync(func(*PluginSettingStore) ([]PluginSettingChange, error) { return changes, nil })
+}
+
+// UpdateWithSync reads and changes related settings under one sync lock and transaction.
+// The callback may be retried and must only read the supplied store; do not re-enter sync writes.
+func (s *PluginSettingStore) UpdateWithSync(update func(*PluginSettingStore) ([]PluginSettingChange, error)) error {
+	return cloudsync.WithLocalSyncMutation(func() error {
+		return retrySQLiteWrite(func() error {
+			return s.db.Transaction(func(tx *gorm.DB) error {
+				store := NewPluginSettingStore(tx, s.pluginId)
+				changes, err := update(store)
+				if err != nil {
+					return err
+				}
+				for _, change := range changes {
+					if change.Delete {
+						var existing database.PluginSetting
+						err := tx.Where("plugin_id = ? AND key = ?", s.pluginId, change.Key).First(&existing).Error
+						if errors.Is(err, gorm.ErrRecordNotFound) {
+							continue
+						}
+						if err != nil {
+							return err
+						}
+						if err := store.Delete(change.Key); err != nil {
+							return err
+						}
+						if change.Syncable && !existing.IsLocal {
+							if err := store.logOplog(change.Key, nil, cloudsync.OpDelete); err != nil {
+								return err
+							}
+						}
+					} else {
+						if err := store.set(change.Key, change.Value, !change.Syncable); err != nil {
+							return err
+						}
+						if change.Syncable {
+							if err := store.logOplog(change.Key, change.Value, cloudsync.OpUpsert); err != nil {
+								return err
+							}
+						} else if err := store.discardPendingOplogs(change.Key); err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			})
+		})
+	})
+}
+
 func NewPluginSettingStore(db *gorm.DB, pluginId string) *PluginSettingStore {
 	return &PluginSettingStore{
 		db:       db,

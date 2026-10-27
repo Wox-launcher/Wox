@@ -45,8 +45,16 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 		width -= 20
 	}
 	width = max(float32(0), width)
+	if p.Dedicated {
+		width = min(width, ChatScaledSize(p.Input.DensityScale, 760))
+		if p.Question != nil {
+			question := *p.Question
+			question.Width = width
+			p.Question = &question
+		}
+	}
 	p.Input.Width = width
-	p.Input.Height = chatComposerHeightForAttachments(p.Input.Attachments, chatComposerVisibleLines(p.Input.Editing.Text, width, p.Input.Window, p.Input.RichRuns, p.Input.DensityScale), p.Input.DensityScale)
+	p.Input.Height = chatComposerHeightForAttachments(p.Input.Attachments, chatComposerVisibleLines(p.Input.Editing.Text, width, p.Input.Window, p.Input.RichRuns, p.Input.DensityScale), p.Input.DensityScale) + ChatProjectToolbarExtra(p.Input, width)
 	height := max(float32(0), p.Height-14-p.Input.Height)
 	if p.Header != nil {
 		height -= p.Header.Height
@@ -66,7 +74,7 @@ func prepareChatConversation(props ChatConversationProps) ChatPreviewProps {
 		p.Messages.ContentHeight, p.Messages.ExtentRevision = ChatMessagesScrollMetrics(p.Messages.Messages, height-14)
 		style, lineHeight := p.Messages.EmptyTextStyle, p.Messages.EmptyLineHeight
 		if style.Size <= 0 {
-			style = woxui.TextStyle{Size: ChatScaledSize(p.Messages.DensityScale, 28), Weight: woxui.FontWeightSemibold}
+			style = woxui.TextStyle{Size: ChatScaledSize(p.Messages.DensityScale, 22), Weight: woxui.FontWeightSemibold}
 		} else {
 			style.Size = ChatScaledSize(p.Messages.DensityScale, style.Size)
 		}

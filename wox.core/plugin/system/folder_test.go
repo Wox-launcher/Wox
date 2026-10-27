@@ -78,7 +78,7 @@ func TestFolderCopyNamePrefersTitleAndVolumeRoot(t *testing.T) {
 func TestFolderShiftEnterNavigation(t *testing.T) {
 	root := t.TempDir()
 	volumeRoot := filepath.VolumeName(root) + string(os.PathSeparator)
-	api := &chatTestAPI{}
+	api := &folderNavigationTestAPI{}
 	p := &FolderPlugin{api: api}
 	for _, test := range []struct {
 		name    string
@@ -212,7 +212,7 @@ func TestFolderQueryListsParentDirectoryFirst(t *testing.T) {
 		t.Fatalf("write notes: %v", err)
 	}
 
-	api := &chatTestAPI{}
+	api := &folderNavigationTestAPI{}
 	folderPlugin := &FolderPlugin{api: api}
 	response := folderPlugin.Query(t.Context(), plugin.Query{
 		Type:   plugin.QueryTypeInput,
@@ -284,7 +284,7 @@ func TestFolderBrowseActionsUseSharedTriggerQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	api := &chatTestAPI{}
+	api := &folderNavigationTestAPI{}
 	p := &FolderPlugin{api: api}
 	p.buildBrowseAction(path, true).Action(t.Context(), plugin.ActionContext{})
 	if api.changed.QueryType != plugin.FolderBrowseQuery(path).QueryType || api.changed.QueryText != plugin.FolderBrowseQuery(path).QueryText {

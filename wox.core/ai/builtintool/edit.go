@@ -52,7 +52,7 @@ func editCallback(ctx context.Context, args map[string]any) (common.ToolResult, 
 	if pathRaw == "" {
 		return common.ToolResult{}, fmt.Errorf("path is required")
 	}
-	abs := resolveToolPath(pathRaw)
+	abs := resolveToolPathForContext(ctx, pathRaw)
 
 	// Parse edits from arguments.
 	type editPair struct {

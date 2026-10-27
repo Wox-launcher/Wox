@@ -58,6 +58,59 @@ func TestSetWithSyncRollsBackSettingWhenOplogFails(t *testing.T) {
 	}
 }
 
+// TestPluginBatchIsAtomicAndKeepsLocalPathsOutOfOplog covers project metadata/local binding writes.
+func TestPluginBatchIsAtomicAndKeepsLocalPathsOutOfOplog(t *testing.T) {
+	db := openSettingSyncDB(t)
+	store := NewPluginSettingStore(db, "projects-test")
+	changes := []PluginSettingChange{
+		{Key: "project-local:p", Value: "private path"},
+		{Key: "project:p", Value: "project name", Syncable: true},
+	}
+	if err := db.Exec(`CREATE TRIGGER reject_project_oplog BEFORE INSERT ON oplogs
+		WHEN NEW.key = 'project:p' BEGIN SELECT RAISE(ABORT, 'oplog rejected'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ApplyWithSync(changes); err == nil {
+		t.Fatal("expected failed batch")
+	}
+	values, err := store.ListByPrefix("project")
+	if err != nil || len(values) != 0 {
+		t.Fatalf("partial batch committed: %v %v", values, err)
+	}
+	if err := db.Exec("DROP TRIGGER reject_project_oplog").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ApplyWithSync(changes); err != nil {
+		t.Fatal(err)
+	}
+	var local database.PluginSetting
+	if err := db.Where("plugin_id = ? AND key = ?", "projects-test", "project-local:p").First(&local).Error; err != nil || !local.IsLocal {
+		t.Fatalf("local row: %+v %v", local, err)
+	}
+	var logs []database.Oplog
+	if err := db.Where("entity_id = ?", "projects-test").Find(&logs).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || logs[0].Key != "project:p" || logs[0].Value != "project name" {
+		t.Fatalf("paths leaked into oplog: %+v", logs)
+	}
+	// Failure on the delete oplog also rolls back the chat detach and local cleanup.
+	if err := db.Exec(`CREATE TRIGGER reject_project_delete BEFORE INSERT ON oplogs
+		WHEN NEW.operation = 'delete' BEGIN SELECT RAISE(ABORT, 'delete rejected'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ApplyWithSync([]PluginSettingChange{
+		{Key: "project-local:p", Delete: true},
+		{Key: "project:p", Delete: true, Syncable: true},
+	}); err == nil {
+		t.Fatal("expected failed delete")
+	}
+	values, err = store.ListByPrefix("project")
+	if err != nil || len(values) != 2 {
+		t.Fatalf("partial delete: %v %v", values, err)
+	}
+}
+
 func TestPluginSetWithSyncWritesSettingAndOplog(t *testing.T) {
 	db := openSettingSyncDB(t)
 	store := NewPluginSettingStore(db, "plugin")

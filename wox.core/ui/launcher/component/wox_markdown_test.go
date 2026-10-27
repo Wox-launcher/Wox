@@ -1,9 +1,12 @@
 package component
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"wox/i18n"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -325,6 +328,108 @@ func TestWoxMarkdownUsesSelectableTextWhenWindowIsSet(t *testing.T) {
 	if props.ID != "md-text-1" || props.Label != body || props.Value != body || !props.ReadOnly {
 		t.Fatalf("selectable markdown field = %#v, want labeled read-only text %q", props, body)
 	}
+}
+
+type markdownLineHeightMeasurer struct{}
+
+func (markdownLineHeightMeasurer) MeasureText(value string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	height := float32(14)
+	if value == "中文" && style.Weight == woxui.FontWeightSemibold {
+		height = 21.3
+	}
+	return woxui.TextMetrics{Size: woxui.Size{Height: height}}, nil
+}
+
+func TestMarkdownSelectableLineHeightFitsEveryRichRun(t *testing.T) {
+	style := woxui.TextStyle{Size: 12}
+	rich := []TextFieldRichRun{{Start: 4, End: 6, Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}}}
+	lines := []textFieldLine{{start: 0, end: 3}, {start: 4, end: 6}}
+	height := markdownSelectableLineHeight("abc\n中文", lines, rich, style, markdownLineHeightMeasurer{})
+	if height != 22 {
+		t.Fatalf("line height = %g, want 22 for the tallest measured run", height)
+	}
+}
+
+func TestMarkdownCodeCopyButtons(t *testing.T) {
+	provider := &memoryClipboard{}
+	SetClipboardProvider(provider)
+	t.Cleanup(func() { SetClipboardProvider(nil) })
+
+	const source = "```go\n  first  \nsecond\n\n```\n\n```\nplain text\n```"
+	props := MarkdownProps{ID: "md", Document: ParseMarkdown(source), Width: 300, Window: &woxui.Window{}, Theme: ControlTheme{BodyText: woxui.Color{A: 255}}}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return WoxMarkdown(props) })
+	defer host.Dispose()
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 240}, Scale: 1})
+	if diagnostics := host.Snapshot().Diagnostics; len(diagnostics) > 0 {
+		t.Fatalf("Markdown accessibility diagnostics: %v", diagnostics)
+	}
+	buttons := map[string]woxui.AccessibilityNode{}
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if strings.Contains(node.AutomationID, "code-copy") {
+			buttons[node.AutomationID] = node
+		}
+	}
+	if len(buttons) != 2 {
+		t.Fatalf("copy buttons = %#v, want one per code block", buttons)
+	}
+	first := buttons["md-code-copy-1"]
+	if first.Role != woxui.AccessibilityRoleButton || first.Label == "" || first.Bounds.X < 250 {
+		t.Fatalf("first copy button = %#v, want a labeled button at the right edge", first)
+	}
+	point := woxui.Point{X: first.Bounds.X + first.Bounds.Width/2, Y: first.Bounds.Y + first.Bounds.Height/2}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+	if provider.text != "  first  \nsecond\n" {
+		t.Fatalf("copied first block = %q", provider.text)
+	}
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 240}, Scale: 1})
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "md-code-copy-1" && node.Label != i18n.GetI18nManager().TranslateWox(context.Background(), "toolbar_copied") {
+			t.Fatalf("copied button label = %q", node.Label)
+		}
+		if node.AutomationID == "md-code-copy-2" && node.Label != first.Label {
+			t.Fatalf("other button label changed: %q", node.Label)
+		}
+	}
+	if !host.FocusAutomationID("md-code-copy-2") || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("second copy button must be keyboard accessible")
+	}
+	if provider.text != "plain text" {
+		t.Fatalf("copied second block = %q", provider.text)
+	}
+}
+
+type failingMarkdownClipboard struct{}
+
+func (failingMarkdownClipboard) ReadText() (string, error) { return "", nil }
+func (failingMarkdownClipboard) WriteText(string) error    { return errors.New("clipboard unavailable") }
+
+func TestMarkdownCopyFailureDoesNotConfirm(t *testing.T) {
+	SetClipboardProvider(failingMarkdownClipboard{})
+	t.Cleanup(func() { SetClipboardProvider(nil) })
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return WoxMarkdown(MarkdownProps{ID: "md", Document: ParseMarkdown("```\ntext\n```"), Width: 300})
+	})
+	defer host.Dispose()
+	host.AttachServices(&hotkeyRecorderHostServices{})
+	frame := func() {
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 300, Height: 100}, Scale: 1})
+	}
+	frame()
+	if !host.FocusAutomationID("md-code-copy-1") || !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) {
+		t.Fatal("copy button must be keyboard accessible")
+	}
+	frame()
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "md-code-copy-1" {
+			if node.Label != i18n.GetI18nManager().TranslateWox(context.Background(), "selection_copy_to_clipboard") {
+				t.Fatalf("failed copy changed button label to %q", node.Label)
+			}
+			return
+		}
+	}
+	t.Fatal("copy button missing")
 }
 
 func TestWoxMarkdownSelectAllCopiesPlainText(t *testing.T) {

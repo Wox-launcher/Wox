@@ -17,6 +17,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
+	chatplugin "wox/plugin/system/chat"
 	notesplugin "wox/plugin/system/notes"
 	"wox/setting"
 	"wox/setting/definition"
@@ -1063,7 +1064,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 		if result.ExtraActionID == screenshotAIExtraActionID {
 			plugin.InvokePluginToolAndNotify(ctx, p.api, plugin.InvokePluginToolOption{
 				PluginId:  common.AIChatPluginID,
-				Name:      ToolOpenChatWithAttachments,
+				Name:      chatplugin.ToolOpenChatWithAttachments,
 				Arguments: map[string]any{"paths": []any{result.ScreenshotPath}},
 			})
 			return

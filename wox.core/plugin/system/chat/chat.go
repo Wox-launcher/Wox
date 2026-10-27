@@ -1,4 +1,4 @@
-package system
+package chat
 
 import (
 	"context"
@@ -54,6 +54,7 @@ type AIChatPlugin struct {
 	// sorted by UpdatedAt descending. Full payloads are read from store on demand so chat
 	// history does not stay resident for the whole session. chatsMu guards the slice
 	// because stream callbacks and Cloud Sync change notifications update it concurrently.
+	projectMu   sync.Mutex // Serializes membership changes with stream registration and persistence.
 	chatsMu     sync.Mutex
 	chats       []common.AIChatData
 	store       *setting.PluginSettingStore
@@ -199,6 +200,9 @@ func (r *AIChatPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// Local writes go through the store directly, so this only fires for Cloud Sync applies
 	// and settings-page edits; both must refresh the summary index and any open chat.
 	r.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, value string) {
+		if strings.HasPrefix(key, chatProjectPrefix) {
+			r.notifyProjectsChanged(callbackCtx)
+		}
 		if strings.HasPrefix(key, aiChatSettingKeyPrefix) {
 			r.handleChatSettingChanged(callbackCtx, strings.TrimPrefix(key, aiChatSettingKeyPrefix), value)
 		}
@@ -232,8 +236,8 @@ func (r *AIChatPlugin) QueryFallback(ctx context.Context, query plugin.Query) []
 
 	return []plugin.QueryResult{
 		{
-			Title:    fallbackSearchTitle,
-			Icon:     aiChatIcon,
+			Title:       fallbackSearchTitle,
+			Icon:        aiChatIcon,
 			IdentityKey: query.RawQuery,
 			Actions: []plugin.QueryResultAction{
 				{
@@ -404,6 +408,7 @@ func (r *AIChatPlugin) reloadDisabledBuiltinTools(ctx context.Context) {
 // aiChatSummary is the subset of AIChatData decoded for the in-memory index. Decoding into
 // this struct skips allocating conversations for every stored chat at startup.
 type aiChatSummary struct {
+	ProjectId string `json:",omitempty"`
 	Id        string
 	Title     string
 	Model     common.Model
@@ -412,11 +417,11 @@ type aiChatSummary struct {
 }
 
 func (summary aiChatSummary) toChatData() common.AIChatData {
-	return common.AIChatData{Id: summary.Id, Title: summary.Title, Model: summary.Model, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt, IsSummary: true}
+	return common.AIChatData{ProjectId: summary.ProjectId, Id: summary.Id, Title: summary.Title, Model: summary.Model, CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt, IsSummary: true}
 }
 
 func chatSummaryOf(chat common.AIChatData) common.AIChatData {
-	return aiChatSummary{Id: chat.Id, Title: chat.Title, Model: chat.Model, CreatedAt: chat.CreatedAt, UpdatedAt: chat.UpdatedAt}.toChatData()
+	return aiChatSummary{ProjectId: chat.ProjectId, Id: chat.Id, Title: chat.Title, Model: chat.Model, CreatedAt: chat.CreatedAt, UpdatedAt: chat.UpdatedAt}.toChatData()
 }
 
 func chatSettingKey(chatID string) string {
@@ -466,19 +471,39 @@ func (r *AIChatPlugin) loadChat(ctx context.Context, chatID string) (common.AICh
 
 // saveChat persists one chat as its own synced setting and refreshes its summary.
 func (r *AIChatPlugin) saveChat(ctx context.Context, chat common.AIChatData) {
+	r.projectMu.Lock()
+	defer r.projectMu.Unlock()
+	r.saveChatLocked(ctx, chat)
+}
+
+// saveChatLocked prevents an old stream snapshot from restoring moved project membership.
+func (r *AIChatPlugin) saveChatLocked(ctx context.Context, chat common.AIChatData) {
 	if r.store == nil || chat.Id == "" {
 		return
 	}
 	persisted := cloneAIChatDataForState(chat)
-	raw, err := json.Marshal(persisted)
+	err := r.store.UpdateWithSync(func(store *setting.PluginSettingStore) ([]setting.PluginSettingChange, error) {
+		var stored common.AIChatData
+		if err := store.Get(chatSettingKey(chat.Id), &stored); err == nil {
+			persisted.ProjectId = stored.ProjectId
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if persisted.ProjectId != "" {
+			var project chatProjectMetadata
+			if err := store.Get(chatProjectPrefix+persisted.ProjectId, &project); errors.Is(err, gorm.ErrRecordNotFound) {
+				persisted.ProjectId = ""
+			} else if err != nil {
+				return nil, err
+			}
+		}
+		return []setting.PluginSettingChange{{Key: chatSettingKey(chat.Id), Value: persisted, Syncable: true}}, nil
+	})
 	if err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to marshal chat %s: %s", chat.Id, err.Error()))
+		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to save chat %s: %s", chat.Id, err.Error()))
 		return
 	}
-	if err := r.store.SetWithSync(chatSettingKey(chat.Id), string(raw), true); err != nil {
-		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("AI: Failed to save chat %s: %s", chat.Id, err.Error()))
-		return
-	}
+
 	r.upsertChatSummary(chatSummaryOf(persisted))
 }
 
@@ -597,15 +622,28 @@ func (r *AIChatPlugin) GetAllSkills(ctx context.Context) []common.Skill {
 }
 
 func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, chatLoopCount int) {
+	r.projectMu.Lock()
+	if stored, exists := r.loadChat(ctx, aiChatData.Id); exists {
+		aiChatData.ProjectId = stored.ProjectId
+	}
+	var projectErr error
+	ctx, projectErr = r.projectRequestContext(ctx, &aiChatData)
+	if projectErr != nil {
+		r.projectMu.Unlock()
+		aiChatData.IsStreaming = false
+		aiChatData.Conversations = append(aiChatData.Conversations, common.Conversation{Id: uuid.NewString(), Role: common.ConversationRoleAssistant, Text: projectErr.Error(), Timestamp: time.Now().UnixMilli()})
+		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
+		return
+	}
 	r.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("AI: Starting chat with ID: %s, loop: %d, title: %s, model: %s, conversations: %d", aiChatData.Id, chatLoopCount, aiChatData.Title, aiChatData.Model.Name, len(aiChatData.Conversations)))
 
 	// Remember the model used for this send so the next new chat opens with it.
 	r.SetDefaultModel(ctx, aiChatData.Model)
 
-	r.saveChat(ctx, aiChatData)
+	r.saveChatLocked(ctx, aiChatData)
 
-	runtimeContext := r.buildRuntimeRequestContext(ctx, &aiChatData)
-	r.saveChat(ctx, aiChatData)
+	runtimeContext := aiChatRuntimeContext{}
+	runtimeChat := cloneAIChatDataForState(aiChatData)
 
 	// Detach from the caller deadline so hiding the launcher or finishing the
 	// start-chat RPC cannot cancel a background conversation. Only StopChat
@@ -633,6 +671,18 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		cancelChat()
 		r.activeChatCancels.CompareAndDelete(aiChatData.Id, activeCancel)
 	}
+
+	r.projectMu.Unlock()
+
+	// Compaction may call a provider. Register the stream first, then release the
+	// membership lock so unrelated projects remain usable during that network work.
+	chatCtx = r.prepareProjectResources(chatCtx)
+	preparedContext := r.buildRuntimeRequestContext(chatCtx, &runtimeChat)
+	chatDataMu.Lock()
+	aiChatData.CompactionEntries = runtimeChat.CompactionEntries
+	runtimeContext = preparedContext
+	chatDataMu.Unlock()
+	r.saveChat(ctx, runtimeChat)
 
 	const chatStreamUIUpdateMinIntervalMs int64 = 120
 	var lastChatResponseAt int64
@@ -762,6 +812,9 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		if isFinished || isTerminalError {
 			// Serialize terminal persistence with the asynchronous title result.
 			r.saveChat(ctx, snapshot)
+			if stored, ok := r.loadChat(ctx, snapshot.Id); ok {
+				snapshot.ProjectId = stored.ProjectId
+			}
 		}
 		if shouldSendSnapshot {
 			plugin.GetPluginManager().GetUI().SendChatResponse(ctx, snapshot)
@@ -826,7 +879,11 @@ func (r *AIChatPlugin) composeRuntimeConversations(ctx context.Context, aiChatDa
 		Text:      formatRuntimeTimePrompt(util.GetSystemTime()),
 		Timestamp: util.GetSystemTimestamp(),
 	})
-	if availableSkillsPrompt := ai.FormatAvailableSkillsPrompt(ai.GetSkillRegistry().ListEnabled()); availableSkillsPrompt != "" {
+	if prompt := projectRuntimePrompt(ctx); prompt != "" {
+		runtimeConversations = append(runtimeConversations, common.Conversation{Role: common.ConversationRoleSystem, Text: prompt})
+	}
+
+	if availableSkillsPrompt := ai.FormatAvailableSkillsPrompt(ai.SkillsForContext(ctx)); availableSkillsPrompt != "" {
 		runtimeConversations = append(runtimeConversations, common.Conversation{
 			Id:        uuid.NewString(),
 			Role:      common.ConversationRoleSystem,
@@ -972,7 +1029,7 @@ func (r *AIChatPlugin) withMessageSkillReferences(ctx context.Context, conversat
 	var builder strings.Builder
 	seenSkills := map[string]bool{}
 	for _, ref := range conversation.SkillRefs {
-		skill, ok := ai.ResolveSkillRef(ref)
+		skill, ok := ai.ResolveSkillRefForContext(ctx, ref)
 		if !ok {
 			r.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI: skill reference not found: id=%s name=%s path=%s", ref.Id, ref.Name, ref.Path))
 			continue
@@ -1329,6 +1386,7 @@ func (r *AIChatPlugin) newChatData(ctx context.Context) common.AIChatData {
 	chatData.UpdatedAt = util.GetSystemTimestamp()
 	chatData.Conversations = []common.Conversation{}
 	chatData.Model = r.GetDefaultModel(ctx)
+	chatData.ProjectId = r.defaultChatProject(ctx)
 	return chatData
 }
 
@@ -1347,6 +1405,7 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 		ActiveChat:         activeChat,
 		ActiveChatId:       activeChatId,
 		Chats:              chatSummaries,
+		SidebarOpen:        r.chatSidebarOpen(ctx),
 		InitialAttachments: attachments,
 	})
 	if err != nil {
@@ -1360,10 +1419,10 @@ func (r *AIChatPlugin) getChatPreviewData(ctx context.Context, activeChatId stri
 		chatContext["ai_chat_active_id"] = activeChatId
 	}
 	return plugin.QueryResult{
-		Id:       resultId,
-		Title:    "i18n:ui_ai_chat_new_chat",
-		SubTitle: "i18n:ui_ai_chat_create_new_chat",
-		Icon:     aiChatIcon,
+		Id:          resultId,
+		Title:       "i18n:ui_ai_chat_new_chat",
+		SubTitle:    "i18n:ui_ai_chat_create_new_chat",
+		Icon:        aiChatIcon,
 		IdentityKey: activeChatId,
 		Actions: []plugin.QueryResultAction{
 			{
@@ -1718,9 +1777,9 @@ func (r *AIChatPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUD
 	}
 	foundID, foundTitle := found.Id, found.Title
 	result := plugin.QueryResult{
-		Title:    foundTitle,
-		SubTitle: "i18n:plugin_ai_chat_start_chat",
-		Icon:     aiChatIcon,
+		Title:       foundTitle,
+		SubTitle:    "i18n:plugin_ai_chat_start_chat",
+		Icon:        aiChatIcon,
 		IdentityKey: foundID,
 		Actions: []plugin.QueryResultAction{
 			{

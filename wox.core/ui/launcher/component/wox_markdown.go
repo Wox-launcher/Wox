@@ -2,25 +2,25 @@ package component
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 	goldmarkutil "github.com/yuin/goldmark/util"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util/markdown"
 )
 
 var (
-	markdownParser          = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
+	markdownParser          = markdown.NewParser()
 	markdownWikiImageSyntax = regexp.MustCompile(`!\[\[([^\]]+)\]\]`)
 	markdownImageLine       = regexp.MustCompile(`^!\[[^\]]*\]\([^)]+\)$`)
 	markdownListItemLine    = regexp.MustCompile(`^(\s*)([*+-]|[0-9]{1,9}[.)])(\s+|$)`)
@@ -109,7 +109,7 @@ type MarkdownProps struct {
 	strikeText bool
 }
 
-// ParseMarkdown parses CommonMark with the GitHub-flavored extensions used by Wox previews.
+// ParseMarkdown parses GFM with Wox's inline formatting compatibility rules.
 func ParseMarkdown(value string) MarkdownDocument {
 	source := []byte(normalizeMarkdownListIndent(normalizeMarkdownImages(value)))
 	document := markdownParser.Parse(text.NewReader(source))
@@ -722,9 +722,9 @@ func markdownLinkAt(links []markdownLinkRange, offset int) string {
 }
 
 func markdownSelectableText(id, value string, rich []TextFieldRichRun, links []markdownLinkRange, props MarkdownProps, width, fontSize float32) woxwidget.Widget {
-	lineHeight := markdownSelectableLineHeight(fontSize)
 	style := woxui.TextStyle{Size: fontSize}
 	lines := textFieldRichLines(value, props.Window, style, width, true, rich)
+	lineHeight := markdownSelectableLineHeight(value, lines, rich, style, props.Window)
 	height := max(lineHeight, float32(max(1, len(lines)))*lineHeight+1)
 	var onTapOffset func(int) bool
 	var cursorAt func(int) woxui.PointerCursor
@@ -762,8 +762,20 @@ func markdownCursorAt(links []markdownLinkRange, offset int) woxui.PointerCursor
 	return woxui.PointerCursorText
 }
 
-func markdownSelectableLineHeight(fontSize float32) float32 {
-	return max(float32(15), fontSize+3)
+// markdownSelectableLineHeight reserves the native line box for every shaped run;
+// a guessed height can clip descenders when the font or fallback face is taller.
+func markdownSelectableLineHeight(value string, lines []textFieldLine, rich []TextFieldRichRun, style woxui.TextStyle, window textFieldMeasurer) float32 {
+	height := max(float32(15), style.Size+3)
+	runes := []rune(value)
+	for _, line := range lines {
+		for _, segment := range textFieldRichSegments(line.start, line.end, style, rich) {
+			metrics, err := window.MeasureText(string(runes[segment.Start:segment.End]), segment.Style)
+			if err == nil {
+				height = max(height, float32(math.Ceil(float64(metrics.Size.Height))))
+			}
+		}
+	}
+	return height
 }
 
 // markdownTokens exposes word and CJK boundaries to the existing Wrap widget.
@@ -803,14 +815,27 @@ func markdownCodeWidget(block markdownBlock, props MarkdownProps, width float32,
 	code := strings.TrimSuffix(block.runs[0].text, "\n")
 	fontSize := markdownFontSize(props)
 	style := woxui.TextStyle{Size: max(float32(10), fontSize-1)}
-	children := make([]woxwidget.Widget, 0, 2)
-	if block.language != "" {
-		children = append(children, woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: withAlpha(props.Theme.BodyText, 180)})
-	}
-	if props.Window != nil && textIndex != nil {
+	index := 0
+	if textIndex != nil {
 		*textIndex++
+		index = *textIndex
+	}
+	buttonSize := min(innerWidth, props.Theme.Scaled(24))
+	iconColor := withAlpha(props.Theme.BodyText, 180)
+	label := woxwidget.Widget(woxwidget.Container{})
+	if block.language != "" {
+		label = woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: iconColor}
+	}
+	copyButton := markdownCodeCopyButton(markdownCodeCopyProps{
+		id: fmt.Sprintf("%s-code-copy-%d", markdownSelectableID(props.ID), index), code: code, size: buttonSize, theme: props.Theme,
+	})
+	children := []woxwidget.Widget{woxwidget.Container{Width: innerWidth, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter,
+		Children: []woxwidget.Widget{woxwidget.Expanded{Child: label}, copyButton},
+	}}}
+	if props.Window != nil && textIndex != nil {
 		rich := []TextFieldRichRun{{Start: 0, End: utf8.RuneCountInString(code), Style: style, Color: props.Theme.BodyText}}
-		children = append(children, markdownSelectableText(fmt.Sprintf("%s-code-%d", markdownSelectableID(props.ID), *textIndex), code, rich, nil, props, innerWidth, style.Size))
+		children = append(children, markdownSelectableText(fmt.Sprintf("%s-code-%d", markdownSelectableID(props.ID), index), code, rich, nil, props, innerWidth, style.Size))
 	} else {
 		layout := woxwidget.LayoutTextBlock(props.Window, code, style, innerWidth, 0, 17)
 		children = append(children, woxwidget.TextBlock{Value: code, Width: innerWidth, Height: layout.Size.Height, Layout: &layout, Style: style, LineHeight: 17, Color: props.Theme.BodyText})

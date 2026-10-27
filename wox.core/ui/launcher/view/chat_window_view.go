@@ -53,7 +53,6 @@ func ChatWindowTitleBar(props ChatWindowTitleBarProps) woxwidget.Widget {
 			ID: "chat-window-title-drag", OnDragStart: props.OnDrag, OnDoubleTap: props.OnMaximize,
 			Child: woxwidget.Container{Width: props.Width, Height: ChatWindowTitleBarHeight},
 		}},
-		{AnchorBottom: true, StretchWidth: true, Child: woxwidget.Container{Height: 1, Color: woxcomponent.TitleBarAlpha(props.Theme.PreviewSplit, 76)}},
 		{Child: woxcomponent.WindowCloseChrome(woxcomponent.WindowCloseChromeProps{
 			ID: "chat.window.close", Width: props.Width, Platform: props.Platform, Theme: props.Theme.Controls, Active: props.Active, Maximized: props.Maximized,
 			OnMinimize: props.OnMinimize, OnMaximize: props.OnMaximize, OnClose: props.OnClose,

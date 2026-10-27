@@ -732,7 +732,7 @@ func fromCoreChatData(chat common.AIChatData) chatData {
 		debugTrace, _ = json.Marshal(snapshot)
 	}
 	return chatData{
-		ID: chat.Id, Title: chat.Title, Conversations: conversations, CompactionEntries: compactions,
+		ProjectID: chat.ProjectId, ID: chat.Id, Title: chat.Title, Conversations: conversations, CompactionEntries: compactions,
 		Model: aiModel{Name: chat.Model.Name, Provider: string(chat.Model.Provider), ProviderAlias: chat.Model.ProviderAlias}, DebugTrace: debugTrace,
 		CreatedAt: chat.CreatedAt, UpdatedAt: chat.UpdatedAt, IsStreaming: chat.IsStreaming, IsSummary: chat.IsSummary,
 	}

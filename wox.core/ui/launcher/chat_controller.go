@@ -44,9 +44,17 @@ type chatController struct {
 	refreshAIMCPServerToolsLocked     func()
 	applyWindowBounds                 func() error
 	selectEntireQuery                 func()
+	openDedicatedChatWindow           func()
 	closePreviewWindow                func()
 	restoreQueryTextInput             func()
 	chatPreview                       *chatPreviewState
+	chatHistoryOpen                   bool
+	chatHistoryInitialized            bool
+	chatHistoryChoiceRevision         uint64
+	chatHistoryChoiceSaving           bool
+	chatProjectChoice                 string
+	chatProjectChoiceRevision         uint64
+	chatProjectChoiceSaving           bool
 	chatFullscreen                    bool
 	chatImportQueue                   []chatAttachmentImportJob
 	chatImportRunning                 bool
@@ -86,6 +94,7 @@ func (a *App) bindChat() {
 	c.refreshAIMCPServerToolsLocked = func() { a.aiSettings.refreshAIMCPServerToolsLocked() }
 	c.applyWindowBounds = a.applyWindowBounds
 	c.selectEntireQuery = a.querySession.selectEntireQuery
+	c.openDedicatedChatWindow = a.requestOpenDedicatedChatWindow
 	c.closePreviewWindow = a.closePreviewWindow
 	c.restoreQueryTextInput = a.restoreQueryTextInput
 }

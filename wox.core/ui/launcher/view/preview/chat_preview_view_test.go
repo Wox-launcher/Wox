@@ -317,6 +317,33 @@ func TestChatPreviewKeepsHistoryWhileCommandOverlayIsOpen(t *testing.T) {
 	}
 }
 
+func TestDedicatedChatPickerFollowsCenteredComposer(t *testing.T) {
+	for _, sidebar := range []bool{false, true} {
+		props := ChatPreviewProps{
+			Dedicated: true, Width: 1400, Height: 600, Key: "dedicated",
+			Messages: ChatMessagesProps{Width: 760, Height: 480},
+			Input:    ChatInputProps{Width: 760, Height: ChatComposerHeight(0)},
+			Catalog:  &ChatCatalogProps{Width: 560, Height: 80, Picker: true},
+		}
+		if sidebar {
+			props.History = &ChatCatalogProps{Width: 240, Height: 600, ShowNew: true}
+		}
+		var stack woxwidget.Stack
+		if sidebar {
+			stack = ChatPreview(props).(woxwidget.Flex).Children[1].(woxwidget.Stack)
+		} else {
+			stack = ChatPreview(props).(woxwidget.Stack)
+		}
+		want := float32(320)
+		if sidebar {
+			want = 200
+		}
+		if got := stack.Children[len(stack.Children)-1].Left; got != want {
+			t.Fatalf("sidebar=%v: picker left=%v, want %v", sidebar, got, want)
+		}
+	}
+}
+
 func TestChatMessagesCentersEmptyStateWithAlign(t *testing.T) {
 	view := ChatMessages(ChatMessagesProps{
 		Width: 500, Height: 300, EmptyMessage: "Ask anything", EmptyTextWidth: 180, EmptyTextHeight: 36,
@@ -348,49 +375,197 @@ func TestChatCatalogLoadingPanelFitsTitleAndPlaceholder(t *testing.T) {
 	}
 }
 
-func TestChatHistoryCatalogUsesFullHeightDrawerGeometry(t *testing.T) {
-	theme := woxcomponent.Theme{Background: woxui.Color{R: 20, G: 21, B: 22, A: 255}, ActionBackground: woxui.Color{R: 30, G: 31, B: 32, A: 255}, PreviewText: woxui.Color{A: 255}, PreviewSplit: woxui.Color{R: 90, G: 91, B: 92, A: 80}}
+func TestChatHistoryUsesInsetRoundedPanel(t *testing.T) {
+	theme := woxcomponent.Theme{ResultSubtitle: woxui.Color{R: 220, G: 220, B: 220, A: 255}}
 	drawer := ChatCatalog(ChatCatalogProps{
-		Width: 260, Height: 600, Key: "history", ShowNew: true, NewLabel: "New Chat", ContentHeight: 576, Theme: theme,
-		Items: []ChatCatalogItemProps{{SelectID: "chat", DeleteID: "delete", Kind: "history", Title: "Suzhou", GroupLabel: "Today", Selected: true, OnSelect: func() {}, OnDelete: func() {}}},
+		Width: 240, Height: 600, ShowNew: true, ContentHeight: 900, Theme: theme,
 	}).(woxwidget.Stack)
-	if drawer.Width != 260 || drawer.Height != 600 || len(drawer.Children) != 2 || !drawer.Children[1].AnchorRight {
-		t.Fatalf("history drawer = width %.0f, height %.0f, children %+v", drawer.Width, drawer.Height, drawer.Children)
+	if len(drawer.Children) != 1 || drawer.Children[0].Left != ChatHistoryFloatingInset || drawer.Children[0].Top != ChatHistoryFloatingInset {
+		t.Fatalf("floating sidebar position = %+v", drawer.Children)
 	}
 	panel := drawer.Children[0].Child.(woxwidget.Container)
-	if panel.Radius != 0 || panel.Padding.Left != 10 || panel.Padding.Top != 12 || panel.Color.A != 0 {
-		t.Fatalf("history panel = radius %.0f, padding %+v, color %#v", panel.Radius, panel.Padding, panel.Color)
+	if panel.Width != 224 || panel.Height != 576 || panel.Radius != 12 || panel.Color.A == 0 || panel.BorderWidth != 1 || panel.BorderColor.A == 0 {
+		t.Fatalf("floating sidebar surface = %+v", panel)
 	}
-	if divider := drawer.Children[1].Child.(woxwidget.Container); divider.Width != 1 || divider.Color != theme.PreviewSplit {
-		t.Fatalf("history divider = width %.0f color %#v, want semantic preview divider", divider.Width, divider.Color)
+	scroll := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	if scroll.Width != 208 || scroll.Height != 552 || scroll.ContentHeight != 900 {
+		t.Fatalf("floating sidebar scroll geometry = %+v", scroll)
 	}
 }
 
-// TestChatHistoryHoverRevealsDelete follows the row's actual pointer handler.
-func TestChatHistoryHoverRevealsDelete(t *testing.T) {
-	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Chat", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
-	var hovered bool
-	view := chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, false, func(inside bool) { hovered = inside }).(woxwidget.Container)
-	row := view.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Stateful)
-	gesture := row.CreateState().Build(woxwidget.StateContext{}, row.Widget).(woxwidget.Gesture)
-	gesture.OnHoverAt(true, woxui.Rect{})
-	if !hovered {
-		t.Fatal("row hover did not reach history state")
+func TestDedicatedChatSidebarAndComposerShareBottomEdge(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		drawer := ChatCatalog(ChatCatalogProps{Width: 240, Height: 600, DensityScale: scale, ShowNew: true}).(woxwidget.Stack)
+		panel := drawer.Children[0].Child.(woxwidget.Container)
+		sidebarBottom := drawer.Children[0].Top + panel.Height
+		composer := ChatInput(ChatInputProps{Width: 300, DensityScale: scale}).(woxwidget.Container)
+		composerBottomInset := chatContentBottomInset + composer.Padding.Bottom
+		if sidebarBottom != drawer.Height-composerBottomInset {
+			t.Fatalf("density %v: sidebar bottom %v, composer bottom %v", scale, sidebarBottom, drawer.Height-composerBottomInset)
+		}
 	}
-	view = chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, hovered, nil).(woxwidget.Container)
-	button := view.Child.(woxwidget.Stack).Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	if button.Icon == nil {
-		t.Fatal("hovered history row hides delete icon")
+}
+
+func TestChatHistoryGroupLabelIsVerticallyCentered(t *testing.T) {
+	drawer := ChatCatalog(ChatCatalogProps{
+		Width: 260, Height: 600, Key: "history", ShowNew: true, NewLabel: "New Chat", ContentHeight: 800,
+		Items: []ChatCatalogItemProps{{SelectID: "chat", Kind: "history", Title: "Suzhou", GroupLabel: "Today"}},
+	}).(woxwidget.Stack)
+	panel := drawer.Children[0].Child.(woxwidget.Container)
+	scroll := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	group := scroll.Content.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	align := group.Child.(woxwidget.Align)
+	label := align.Child.(woxwidget.TextBlock)
+	if group.Padding.Top != 0 || align.Vertical != 0.5 || align.Height != group.Height || label.AlignmentY != 0.5 || label.Value != "Today" {
+		t.Fatalf("history group label is not vertically centered: padding %+v align %+v", group.Padding, align)
+	}
+}
+
+func TestChatHistoryEmptyMessageIsVerticallyCentered(t *testing.T) {
+	drawer := ChatCatalog(ChatCatalogProps{
+		Width: 260, Height: 600, Key: "history", ShowNew: true, NewLabel: "New Chat", EmptyMessage: "No conversations",
+	}).(woxwidget.Stack)
+	panel := drawer.Children[0].Child.(woxwidget.Container)
+	scroll := panel.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	empty := scroll.Content.(woxwidget.Flex).Children[2].(woxwidget.Container)
+	align := empty.Child.(woxwidget.Align)
+	label := align.Child.(woxwidget.TextBlock)
+	if empty.Padding.Top != 0 || empty.Height != ChatHistoryRowHeight || align.Vertical != 0.5 || align.Height != empty.Height || label.AlignmentY != 0.5 || label.Value != "No conversations" {
+		t.Fatalf("empty history message is not centered in the row slot: padding %+v align %+v", empty.Padding, align)
+	}
+}
+
+func TestChatHistorySectionSpacing(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		drawer := ChatCatalog(ChatCatalogProps{
+			Width: 260, Height: 600, Key: "history", ShowNew: true, DensityScale: scale,
+			Items: []ChatCatalogItemProps{
+				{SelectID: "projects", Kind: "projects-section"},
+				{SelectID: "project", Kind: "project-group"},
+				{SelectID: "recents", Kind: "projects-section", SpacingBefore: ChatHistorySectionGap},
+			},
+		}).(woxwidget.Stack)
+		scroll := drawer.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		rows := scroll.Content.(woxwidget.Flex).Children
+		gap := rows[4].(woxwidget.Container)
+		if gap.Height != ChatScaledSize(scale, ChatHistorySectionGap) || rows[5].(woxwidget.Stateful).Widget.(chatCatalogItemWidget).item.SelectID != "recents" {
+			t.Fatalf("density %v: recents spacing = %v", scale, gap.Height)
+		}
+	}
+}
+
+func TestIndentedChatHistoryHighlightMatchesProjectWidth(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		theme := woxcomponent.Theme{SelectedBackground: woxui.Color{R: 30, G: 40, B: 50, A: 255}}
+		drawer := ChatCatalog(ChatCatalogProps{
+			Width: 260, Height: 600, Key: "history", ShowNew: true, DensityScale: scale, Theme: theme,
+			Items: []ChatCatalogItemProps{
+				{SelectID: "project", Kind: "project-group", Title: "Project", OnSelect: func() {}},
+				{SelectID: "chat", Kind: "history", Title: "Chat", Indented: true, Selected: true, OnSelect: func() {}},
+			},
+		}).(woxwidget.Stack)
+		scroll := drawer.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		rows := scroll.Content.(woxwidget.Flex).Children
+		project := rows[2].(woxwidget.Stateful).Widget.(chatCatalogItemWidget)
+		chat := rows[3].(woxwidget.Stateful).Widget.(chatCatalogItemWidget)
+		if !scroll.ReserveScrollbarSpace || chat.width != scroll.ContentViewportWidth() || chat.width >= scroll.Width {
+			t.Fatalf("density %v: history width %v overlaps scrollbar viewport %v", scale, chat.width, scroll.Width)
+		}
+		if chat.width != project.width {
+			t.Fatalf("density %v: chat width %v differs from project width %v", scale, chat.width, project.width)
+		}
+		for _, hovered := range []bool{false, true} {
+			chat.item.Selected = !hovered
+			view := chatHistoryItem(chat.item, chat.width, chat.height, theme, hovered, nil).(woxwidget.Container)
+			row := chatHistoryTestRow(chatHistoryTestStack(view).Children[0].Child)
+			if row.Width != project.width || row.Color != theme.SelectedBackground || row.Padding.Left != ChatScaledSize(scale, chatSidebarRowInset)+ChatScaledSize(scale, 20) {
+				t.Fatalf("density %v hovered %v: row width %v color %v inset %v", scale, hovered, row.Width, row.Color, row.Padding.Left)
+			}
+		}
+	}
+}
+
+func TestChatHistoryDeleteScalesWithDensity(t *testing.T) {
+	const scale = float32(1.1)
+	theme := woxcomponent.Theme{ErrorText: woxui.Color{R: 210, G: 45, B: 55, A: 255}, SelectedTitle: woxui.Color{A: 255}}
+	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Suzhou", DensityScale: scale, OnSelect: func() {}, OnDelete: func() {}}
+	height := ChatScaledSize(scale, ChatHistoryRowHeight)
+	view := chatHistoryItemWithDeleteState(item, 240, height, theme, true, true, false, nil, nil, func() {}).(woxwidget.Container)
+	stack := chatHistoryTestStack(view)
+	row := chatHistoryTestRow(stack.Children[0].Child)
+	button := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	glyph := button.Icon.(woxwidget.Image)
+	wantGlyph := woxcomponent.DeleteGlyph(ChatScaledSize(scale, chatSidebarActionGlyph), theme.ErrorText).(woxwidget.Image)
+	if view.Height != height || view.Padding.Bottom != 0 || stack.Height != height || row.Height != height || button.Width != ChatScaledSize(scale, chatSidebarActionSize) || button.Height != button.Width || glyph.Source != wantGlyph.Source {
+		t.Fatalf("scaled history row = height %.0f button %.0fx%.0f, want the slot and a density-scaled delete control", view.Height, button.Width, button.Height)
+	}
+}
+
+// TestChatHistoryHoverCoversDelete checks the row and its overlapping action as one hover target.
+func TestChatHistoryHoverCoversDelete(t *testing.T) {
+	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Chat", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
+	var hovered, deleteHovered bool
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return chatHistoryItemWithDeleteState(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, hovered, deleteHovered, false,
+			func(inside bool) { hovered = inside }, func(inside bool) { deleteHovered = inside }, item.OnDelete)
+	})
+	host.AttachServices(terminalPreviewHostServices{})
+	defer host.Dispose()
+	paint := func() {
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 260, Height: 100}, Scale: 1})
+	}
+	paint()
+	for _, x := range []float32{245, 60, 245, 60} {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: x, Y: 16}})
+		paint()
+		if !hovered {
+			t.Fatalf("pointer at %v did not highlight the whole history row", x)
+		}
+		if deleteHovered != (x == 245) {
+			t.Fatalf("pointer at %v: delete hover = %v", x, deleteHovered)
+		}
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave})
+	paint()
+	if hovered {
+		t.Fatal("history row remains hovered after the pointer leaves")
+	}
+}
+
+func chatHistoryTestStack(view woxwidget.Container) woxwidget.Stack {
+	return view.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+}
+
+func TestChatHistoryStreamingIndicatorKeepsDeleteAvailable(t *testing.T) {
+	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Chat", Streaming: true, OnDelete: func() {}}
+	view := chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, true, nil).(woxwidget.Container)
+	stack := chatHistoryTestStack(view)
+	if len(stack.Children) != 3 || stack.Children[1].Right <= stack.Children[2].Right {
+		t.Fatal("stream indicator and delete action must have separate trailing slots")
+	}
+	button := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	if button.Icon == nil || button.OnTap == nil {
+		t.Fatal("streaming history must keep its delete action available on hover")
+	}
+	indicator := stack.Children[2].Child.(woxwidget.Align).Child.(woxwidget.LoopAnimation)
+	if indicator.Duration <= 0 {
+		t.Fatal("streaming history indicator must animate")
+	}
+	item.Streaming = false
+	idle := chatHistoryTestStack(chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, false, nil).(woxwidget.Container))
+	if len(idle.Children) != 2 {
+		t.Fatal("finished chat still shows an animation")
 	}
 }
 
 func TestChatHistoryItemOmitsBubbleIcon(t *testing.T) {
 	item := ChatCatalogItemProps{SelectID: "row", Kind: "history", Title: "Suzhou", DeleteID: "delete", OnSelect: func() {}, OnDelete: func() {}}
 	view := chatHistoryItem(item, 260, 46, woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}, false, func(bool) {}).(woxwidget.Container)
-	stack := view.Child.(woxwidget.Stack)
+	stack := chatHistoryTestStack(view)
 	row := chatHistoryTestRow(stack.Children[0].Child)
-	if _, ok := row.Child.(woxwidget.Align).Child.(woxwidget.Text); !ok || row.Padding.Left != 12 {
-		t.Fatal("history row should contain an indented title without a bubble icon")
+	title, ok := row.Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
+	if !ok || title.AlignmentY != 0.5 || row.Child.(woxwidget.Align).Vertical != 0.5 || row.Padding.Left != 12 {
+		t.Fatal("history row should contain an indented, vertically centered title without a bubble icon")
 	}
 }
 
@@ -410,7 +585,7 @@ func TestChatHistoryRowOwnsKeyboardActivation(t *testing.T) {
 		OnSelect: func() { selected++ }, OnDelete: func() { deleted++ },
 	}
 	row := chatHistoryItem(item, 260, ChatHistoryRowHeight, woxcomponent.Theme{}, false, nil).(woxwidget.Container)
-	semantics := row.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Semantics)
+	semantics := chatHistoryTestStack(row).Children[0].Child.(woxwidget.Gesture).Child.(woxwidget.Semantics)
 	focus := semantics.Child.(woxwidget.Focusable)
 	for _, key := range []woxui.Key{woxui.KeyEnter, woxui.KeySpace} {
 		if !focus.OnKey(woxui.KeyEvent{Key: key, Down: true}) {
@@ -429,24 +604,26 @@ func TestChatHistoryItemUsesSelectedForegroundOnHover(t *testing.T) {
 	}
 	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Suzhou", OnSelect: func() {}, OnDelete: func() {}}
 	view := chatHistoryItem(item, 260, 46, theme, true, func(bool) {}).(woxwidget.Container)
-	stack := view.Child.(woxwidget.Stack)
+	stack := chatHistoryTestStack(view)
 	row := chatHistoryTestRow(stack.Children[0].Child)
-	title := row.Child.(woxwidget.Align).Child.(woxwidget.Text)
-	if row.Color != theme.SelectedBackground || title.Color != theme.SelectedTitle {
+	title := row.Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
+	if row.Color != theme.SelectedBackground || title.Color != theme.SelectedTitle || title.AlignmentY != 0.5 {
 		t.Fatalf("hovered history row = background %#v title %#v, want selected palette", row.Color, title.Color)
 	}
 	delete := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	deleteGlyph := delete.Icon.(woxwidget.Image)
-	expectedGlyph := woxcomponent.DeleteGlyph(15, theme.SelectedSubtitle).(woxwidget.Image)
-	if deleteGlyph.Source != expectedGlyph.Source {
-		t.Fatal("hovered history delete icon should use the selected subtitle color")
+	expectedGlyph := woxcomponent.DeleteGlyph(chatSidebarActionGlyph, theme.ErrorText).(woxwidget.Image)
+	idleGlyph := woxcomponent.DeleteGlyph(chatSidebarActionGlyph, theme.PreviewText).(woxwidget.Image)
+	if deleteGlyph.Source != expectedGlyph.Source || delete.IdleIcon.(woxwidget.Image).Source != idleGlyph.Source {
+		t.Fatal("history delete icon should turn red on button hover or focus")
 	}
 
 	newChat := chatHistoryItem(ChatCatalogItemProps{SelectID: "new", Kind: "history-new", Title: "New Chat"}, 260, 38, theme, true, func(bool) {}).(woxwidget.Gesture)
 	newChatRow := chatHistoryTestRow(newChat)
 	newChatContent := newChatRow.Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	if newChatRow.Color != theme.SelectedBackground || newChatContent.Children[1].(woxwidget.Text).Color != theme.SelectedTitle {
-		t.Fatal("hovered new-chat row should use the selected background and title colors")
+	newChatTitle := newChatContent.Children[1].(woxwidget.TextBlock)
+	if newChatRow.Child.(woxwidget.Align).Vertical != 0.5 || newChatContent.CrossAxisAlignment != woxwidget.CrossAxisCenter || newChatTitle.AlignmentY != 0.5 || newChatRow.Color != theme.SelectedBackground || newChatTitle.Color != theme.SelectedTitle {
+		t.Fatal("hovered new-chat row should center its icon and title on the selected row")
 	}
 }
 
@@ -457,24 +634,24 @@ func TestChatHistoryDeleteUsesDangerHoverAndConfirmation(t *testing.T) {
 	}
 	item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Suzhou", DeleteLabel: "Delete", ConfirmDeleteLabel: "Confirm delete", OnSelect: func() {}, OnDelete: func() {}}
 	deleteControl := func(deleteHovered, deleteConfirm bool) woxwidget.Align {
-		view := chatHistoryItemWithDeleteState(item, 240, 46, theme, false, deleteHovered, deleteConfirm, func(bool) {}, func(bool) {}, func() {}).(woxwidget.Container)
-		stack := view.Child.(woxwidget.Stack)
+		view := chatHistoryItemWithDeleteState(item, 240, 46, theme, true, deleteHovered, deleteConfirm, func(bool) {}, func(bool) {}, func() {}).(woxwidget.Container)
+		stack := chatHistoryTestStack(view)
 		return stack.Children[1].Child.(woxwidget.Align)
 	}
 
 	hovered := deleteControl(true, false).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	hoveredGlyph := hovered.Icon.(woxwidget.Image)
-	expectedDangerGlyph := woxcomponent.DeleteGlyph(15, theme.ErrorText).(woxwidget.Image)
-	if hoveredGlyph.Source != expectedDangerGlyph.Source || hovered.HoverBackground.R != theme.ErrorText.R || hovered.HoverBackground.A == 0 {
-		t.Fatalf("delete hover = icon %#v background %#v, want danger treatment", hoveredGlyph.Source, hovered.HoverBackground)
+	expectedHoverGlyph := woxcomponent.DeleteGlyph(chatSidebarActionGlyph, theme.ErrorText).(woxwidget.Image)
+	if hoveredGlyph.Source != expectedHoverGlyph.Source || hovered.HoverBackground.A != 0 || hovered.Background.A != 0 {
+		t.Fatal("delete hover should use a red icon without a button background")
 	}
 
 	confirm := deleteControl(true, true)
 	confirmButton := confirm.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	confirmGlyph := confirmButton.Icon.(woxwidget.Image)
-	expectedConfirmGlyph := woxcomponent.CheckGlyph(14, theme.SelectedTitle).(woxwidget.Image)
-	if confirm.Width != 28 || confirmButton.Label != item.ConfirmDeleteLabel || confirmButton.Background != theme.ErrorText || confirmGlyph.Source != expectedConfirmGlyph.Source {
-		t.Fatalf("delete confirmation = width %.0f label %q background %#v, want danger confirmation icon", confirm.Width, confirmButton.Label, confirmButton.Background)
+	expectedConfirmGlyph := woxcomponent.CheckGlyph(chatSidebarActionGlyph, theme.ErrorText).(woxwidget.Image)
+	if confirm.Width != chatSidebarActionSize || confirmButton.Width != chatSidebarActionSize || confirmButton.Height != chatSidebarActionSize || confirmButton.Label != item.ConfirmDeleteLabel || confirmButton.Background.A != 0 || confirmButton.HoverBackground.A != 0 || confirmGlyph.Source != expectedConfirmGlyph.Source {
+		t.Fatalf("delete confirmation = width %.0f label %q background %#v, want red confirmation icon without background", confirm.Width, confirmButton.Label, confirmButton.Background)
 	}
 }
 
@@ -505,14 +682,12 @@ func TestChatHistoryDeleteConfirmationClearsOnMouseLeave(t *testing.T) {
 func TestChatCatalogItemShowsPluginIconAndName(t *testing.T) {
 	theme := woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}
 	row := chatCatalogItem(ChatCatalogItemProps{SelectID: "notes", Kind: "plugin", Title: "Notes"}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
-	stack := row.Child.(woxwidget.Container).Child.(woxwidget.Stack)
-	title := stack.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Text)
-	if title.Value != "Notes" {
-		t.Fatalf("plugin title = %#v", title)
-	}
-	subtitle := stack.Children[2].Child.(woxwidget.Container).Child.(woxwidget.Text)
-	if subtitle.Value != "" {
-		t.Fatalf("plugin subtitle = %q, want empty", subtitle.Value)
+	aligned := row.Child.(woxwidget.Container).Child.(woxwidget.Align)
+	content := aligned.Child.(woxwidget.Flex)
+	title := content.Children[1].(woxwidget.TextBlock)
+	subtitle := content.Children[2].(woxwidget.Expanded).Child.(woxwidget.TextBlock)
+	if aligned.Vertical != 0.5 || title.Value != "Notes" || title.AlignmentY != 0.5 || subtitle.Value != "" {
+		t.Fatalf("plugin row = title %#v subtitle %q", title, subtitle.Value)
 	}
 }
 
@@ -520,17 +695,15 @@ func TestChatCatalogItemOnlyShowsCheckForCurrentModel(t *testing.T) {
 	theme := woxcomponent.Theme{PreviewText: woxui.Color{A: 255}}
 
 	notCurrent := chatCatalogItem(ChatCatalogItemProps{SelectID: "flash", Kind: "models", Title: "flash", Selected: true}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
-	notCurrentStack := notCurrent.Child.(woxwidget.Container).Child.(woxwidget.Stack)
-	notCurrentCheck := notCurrentStack.Children[3].Child.(woxwidget.Container)
-	if notCurrentCheck.Width != 0 || notCurrentCheck.Child != nil {
-		t.Fatalf("non-current model check slot = width %.0f, child %#v; want empty", notCurrentCheck.Width, notCurrentCheck.Child)
+	notCurrentRow := notCurrent.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(notCurrentRow.Children) != 3 {
+		t.Fatalf("non-current model children = %d, want icon, title, and subtitle", len(notCurrentRow.Children))
 	}
 
 	current := chatCatalogItem(ChatCatalogItemProps{SelectID: "flash", Kind: "models", Title: "flash", Current: true}, 400, 38, theme, false, func(bool) {}).(woxwidget.Gesture)
-	currentStack := current.Child.(woxwidget.Container).Child.(woxwidget.Stack)
-	currentCheck := currentStack.Children[3].Child.(woxwidget.Container)
-	if currentCheck.Width != 28 || currentCheck.Child == nil {
-		t.Fatalf("current model check slot = width %.0f, child %#v; want check glyph", currentCheck.Width, currentCheck.Child)
+	currentRow := current.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	if len(currentRow.Children) != 4 || currentRow.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatalf("current model children = %d, want a centered check", len(currentRow.Children))
 	}
 }
 
@@ -604,6 +777,25 @@ func TestChatInputRendersSkillTagsAsAtomicChips(t *testing.T) {
 	}
 	if len(field.AtomicTokens) != 1 || field.AtomicTokens[0] != (woxcomponent.TextFieldTokenRange{Start: 0, End: end}) {
 		t.Fatalf("chat input atomic tokens = %#v, want the complete skill tag", field.AtomicTokens)
+	}
+}
+
+func TestChatInputUsesSharedSurfaceAndFocusTreatment(t *testing.T) {
+	for _, color := range []woxui.Color{{R: 220, G: 220, B: 220, A: 255}, {R: 30, G: 30, B: 30, A: 255}} {
+		theme := woxcomponent.Theme{ResultSubtitle: color, Cursor: woxui.Color{R: 70, G: 140, B: 220, A: 255}}
+		var borders [2]woxui.Color
+		for i, focused := range []bool{false, true} {
+			input := ChatInput(ChatInputProps{Width: 400, Focused: focused, Theme: theme}).(woxwidget.Container)
+			card := input.Child.(woxwidget.Container)
+			field := card.Child.(woxwidget.Flex).Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps)
+			if card.Radius != 12 || card.Color.A == 0 || card.BorderWidth != 1 || !field.Transparent || !field.DisableHover {
+				t.Fatalf("focused=%v: composer=%+v, field=%+v", focused, card, field)
+			}
+			borders[i] = card.BorderColor
+		}
+		if borders[0].A == 0 || borders[1].A <= borders[0].A || borders[1].R != theme.Cursor.R {
+			t.Fatalf("focus border = %#v -> %#v", borders[0], borders[1])
+		}
 	}
 }
 
@@ -835,15 +1027,16 @@ func TestChatHistoryDeleteVisibility(t *testing.T) {
 		t.Run(state.name, func(t *testing.T) {
 			item := ChatCatalogItemProps{SelectID: "row", DeleteID: "delete", Kind: "history", Title: "Conversation", Selected: true, deleteFocused: state.focused}
 			view := chatHistoryItemWithDeleteState(item, 240, ChatHistoryRowHeight, woxcomponent.Theme{}, state.hovered, state.deleteHovered, state.confirming, nil, nil, func() {}).(woxwidget.Container)
-			stack := view.Child.(woxwidget.Stack)
+			stack := chatHistoryTestStack(view)
 			button := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 			if (button.Icon != nil) != state.visible || button.Disabled || button.OnTap == nil {
 				t.Fatalf("delete visibility/accessibility = %+v, want visible %v and enabled", button, state.visible)
 			}
 			row := chatHistoryTestRow(stack.Children[0].Child)
 			title := row.Child.(woxwidget.Align)
-			if view.Height != 38 || title.Height != row.Height || title.Vertical != 0.5 || title.Child.(woxwidget.Text).Style.Weight == woxui.FontWeightSemibold {
-				t.Fatal("history title must be regular and centered in a compact row")
+			label := title.Child.(woxwidget.TextBlock)
+			if view.Height != ChatHistoryRowHeight || view.Padding.Bottom != 0 || row.Height != view.Height || title.Height != row.Height || title.Vertical != 0.5 || label.AlignmentY != 0.5 || label.Style.Weight == woxui.FontWeightSemibold {
+				t.Fatal("history title must be regular and centered in the full row slot")
 			}
 		})
 	}

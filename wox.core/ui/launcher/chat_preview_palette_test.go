@@ -16,20 +16,6 @@ import (
 	woxui "wox/ui/runtime"
 )
 
-func TestChatHistoryGroupUsesLocalDayBoundaries(t *testing.T) {
-	location := time.FixedZone("test", 8*60*60)
-	now := time.Date(2026, 8, 5, 12, 0, 0, 0, location)
-	if group := chatHistoryGroup(time.Date(2026, 8, 5, 0, 0, 0, 0, location).UnixMilli(), now); group != "today" {
-		t.Fatalf("today group = %q", group)
-	}
-	if group := chatHistoryGroup(time.Date(2026, 8, 4, 23, 59, 0, 0, location).UnixMilli(), now); group != "yesterday" {
-		t.Fatalf("yesterday group = %q", group)
-	}
-	if group := chatHistoryGroup(time.Date(2026, 8, 3, 23, 59, 0, 0, location).UnixMilli(), now); group != "history" {
-		t.Fatalf("history group = %q", group)
-	}
-}
-
 func TestSetChatTextKeepsHistorySidebarOpen(t *testing.T) {
 	ai := newAISettingsController(CommonDeps{Translate: func(s string) string { return s }})
 	ai.SetModels([]aiModel{{Name: "deepseek-v4-flash", Provider: "deepseek"}})
@@ -614,23 +600,65 @@ func TestChatPaletteIgnoresKeyRelease(t *testing.T) {
 }
 
 func TestPrimaryChatEscapeReturnsToQuery(t *testing.T) {
-	app := bindTestApp(&App{
-		isPrimary: true,
-		chat: chatController{
-			chatFullscreen: true,
-			chatPreview:    &chatPreviewState{active: true},
-		},
-		querySession: queryController{editor: woxui.NewTextEditor("chat ")},
-	})
+	for _, sidebarOpen := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sidebarOpen=%t", sidebarOpen), func(t *testing.T) {
+			panel := ""
+			if sidebarOpen {
+				panel = "history"
+			}
+			app := bindTestApp(&App{
+				isPrimary: true,
+				chat: chatController{
+					chatFullscreen: true,
+					chatPreview:    &chatPreviewState{active: true, panel: panel, sidebarOpen: sidebarOpen, editor: woxui.NewTextEditor("draft")},
+				},
+				querySession: queryController{editor: woxui.NewTextEditor("chat ")},
+			})
 
-	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
-		t.Fatal("Escape was not handled")
+			if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) {
+				t.Fatal("Escape was not handled")
+			}
+			state := app.chat.chatPreview
+			if app.chat.chatFullscreen || state == nil || state.active {
+				t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chat.chatFullscreen, state)
+			}
+			if state.sidebarOpen != sidebarOpen || state.panel != panel || state.editor.State().Text != "draft" {
+				t.Fatalf("Escape changed sidebar or draft: %+v", state)
+			}
+			if selection := app.querySession.editor.State().Selection; selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
+				t.Fatalf("query selection after escape = %+v, want full text selected", selection)
+			}
+		})
 	}
-	if app.chat.chatFullscreen || app.chat.chatPreview == nil || app.chat.chatPreview.active {
-		t.Fatalf("chat mode state = fullscreen:%v preview:%+v", app.chat.chatFullscreen, app.chat.chatPreview)
-	}
-	if selection := app.querySession.editor.State().Selection; selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
-		t.Fatalf("query selection after escape = %+v, want full text selected", selection)
+}
+
+func TestPrimaryChatEscapeClosesOverlayBeforeExiting(t *testing.T) {
+	for _, sidebarOpen := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sidebarOpen=%t", sidebarOpen), func(t *testing.T) {
+			app := bindTestApp(&App{
+				isPrimary: true,
+				chat: chatController{
+					chatFullscreen: true,
+					chatPreview:    &chatPreviewState{active: true, panel: "models", sidebarOpen: sidebarOpen, editor: woxui.NewTextEditor("draft")},
+				},
+				querySession: queryController{editor: woxui.NewTextEditor("chat ")},
+			})
+			event := woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}
+			if !app.chat.onChatPreviewKey(event) {
+				t.Fatal("Escape did not dismiss the overlay")
+			}
+			state := app.chat.chatPreview
+			wantPanel := ""
+			if sidebarOpen {
+				wantPanel = "history"
+			}
+			if !app.chat.chatFullscreen || !state.active || state.sidebarOpen != sidebarOpen || state.panel != wantPanel {
+				t.Fatalf("overlay dismissal changed chat or sidebar: %+v", state)
+			}
+			if !app.chat.onChatPreviewKey(event) || app.chat.chatFullscreen || state.active || state.sidebarOpen != sidebarOpen {
+				t.Fatal("second Escape did not exit chat while preserving the sidebar")
+			}
+		})
 	}
 }
 
@@ -673,28 +701,6 @@ func TestHistoryDrawerLeavesComposerKeysToTheEditor(t *testing.T) {
 	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || app.chat.chatPreview.error == "" {
 		t.Fatal("Enter did not reach composer submission")
 	}
-	if !app.chat.onChatPreviewKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.chat.chatPreview.panel != "" || !app.chat.chatPreview.active {
-		t.Fatal("Escape should dismiss the drawer while keeping the composer active")
-	}
-}
-
-func TestChatHistoryContentHeightIncludesGroupsAndRows(t *testing.T) {
-	location := time.FixedZone("test", 8*60*60)
-	now := time.Date(2026, 8, 5, 12, 0, 0, 0, location)
-	chat := func(id string, updatedAt int64) chatData {
-		return chatData{ID: id, UpdatedAt: updatedAt, Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
-	}
-	chats := []chatData{
-		chat("today-1", now.UnixMilli()),
-		chat("today-2", now.UnixMilli()),
-		chat("old", now.AddDate(0, 0, -5).UnixMilli()),
-	}
-	if got := chatHistoryContentHeight(chats, now); got != 46+2*32+3*38 {
-		t.Fatalf("history content height = %.0f, want %d", got, 46+2*32+3*38)
-	}
-	if got := chatHistoryContentHeight(nil, now); got != 46 {
-		t.Fatalf("empty history content height = %.0f, want 46", got)
-	}
 }
 
 func TestChatMentionWheelScrollUsesMentionContentHeight(t *testing.T) {
@@ -725,7 +731,7 @@ func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 		chats[i] = chatData{ID: string(rune('a' + i)), UpdatedAt: now.UnixMilli(), Conversations: []chatConversation{{Role: "user", Text: "hi"}}}
 	}
 	// The old len*38 estimate kept maxOffset at 0 for moderate histories, so wheel scroll never moved.
-	contentHeight := chatHistoryContentHeight(chats, time.Now())
+	contentHeight := projectHistoryHeight(&chatPreviewState{chats: chats})
 	viewport := float32(576)
 	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{panel: "history", chats: chats, panelViewport: viewport}}})
 
@@ -736,6 +742,32 @@ func TestChatHistoryWheelScrollUsesDrawerContentHeight(t *testing.T) {
 	}
 	if app.chat.chatPreview.panelScroll == 0 {
 		t.Fatal("history wheel scroll stayed at 0 with overflow")
+	}
+}
+
+func TestChatOpenWindowShortcutAndTooltip(t *testing.T) {
+	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{active: true}}})
+	opened := 0
+	app.chat.openDedicatedChatWindow = func() { opened++ }
+	hotkey, ok := woxui.ParseHotkey(chatOpenWindowHotkey())
+	if !ok {
+		t.Fatal("invalid open-window shortcut")
+	}
+	event := woxui.KeyEvent{Key: hotkey.Key, Modifiers: hotkey.Modifiers, Down: true}
+	if !app.chat.handleChatKey(event, false) || opened != 1 {
+		t.Fatal("open-window shortcut did not open the dedicated window")
+	}
+	event.Repeat = true
+	if !app.chat.handleChatKey(event, false) || opened != 1 {
+		t.Fatal("repeating the shortcut should not open another window")
+	}
+	event.Repeat = false
+	if app.chat.handleChatKey(event, true) || opened != 1 {
+		t.Fatal("dedicated chat should not handle the open-window shortcut")
+	}
+	props := app.chatHeaderProps(&chatPreviewSnapshot{}, uiPalette{}, 500, 52, true, true)
+	if !strings.Contains(props.OpenWindowLabel, strings.Join(formatHotkeyLabels(chatOpenWindowHotkey()), "+")) {
+		t.Fatalf("open-window tooltip omitted shortcut: %q", props.OpenWindowLabel)
 	}
 }
 

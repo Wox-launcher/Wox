@@ -73,6 +73,7 @@ func bashCallback(ctx context.Context, args map[string]any) (common.ToolResult, 
 	}
 	shellPath := getShell()
 	cmd := shell.BuildCommandContext(ctx, shellPath, nil, "-c", command)
+	cmd.Dir = common.AIWorkingDirectory(ctx)
 	if runtime.GOOS == "windows" && strings.TrimSuffix(strings.ToLower(filepath.Base(shellPath)), ".exe") == "cmd" {
 		configureBashCMD(cmd, command)
 	}

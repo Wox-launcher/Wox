@@ -43,6 +43,8 @@ type ScrollViewProps struct {
 	ThumbColor          woxui.Color
 	HideScrollbar       bool
 	AlwaysShowScrollbar bool
+	// RetainState keeps the content subtree stable when overflow changes.
+	RetainState bool
 	// ReserveScrollbarSpace keeps vertical content clear of the thumb and its
 	// hit target, even while faded or not overflowing, so wrapping stays stable.
 	ReserveScrollbarSpace bool
@@ -411,6 +413,9 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 }
 
 func woxScrollNeedsState(props ScrollViewProps) bool {
+	if props.RetainState {
+		return true
+	}
 	if scrollAxisViewport(props) <= 0 {
 		return false
 	}

@@ -42,6 +42,8 @@ func chatWindowNativeMinSize() woxui.Size {
 	return woxui.Size{Width: chatWindowMinimumWidth, Height: chatWindowMinimumHeight}
 }
 
+func chatOpenWindowHotkey() string { return primaryHotkey("shift+o") }
+
 // requestOpenDedicatedChatWindow pops the current conversation into the single chat window.
 func (a *App) requestOpenDedicatedChatWindow() {
 	util.Go(a.lifecycleCtx, "open dedicated chat window", func() {
