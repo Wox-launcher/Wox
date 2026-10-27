@@ -66,6 +66,43 @@ func TestResolveWallpaperXMLPathPrefersExistingImage(t *testing.T) {
 	}
 }
 
+func TestResolveOmarchyWallpaperPathFollowsThemeLink(t *testing.T) {
+	dir := t.TempDir()
+	imagePath := filepath.Join(dir, "1-glowing-city.jpg")
+	if err := os.WriteFile(imagePath, []byte("jpeg"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "background")
+	if err := os.Symlink(imagePath, link); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveOmarchyWallpaperPath(link)
+	if err != nil || got != imagePath {
+		t.Fatalf("path = %q, err = %v", got, err)
+	}
+}
+
+func TestResolveOmarchyWallpaperPathRejectsMissingLink(t *testing.T) {
+	if _, err := resolveOmarchyWallpaperPath(filepath.Join(t.TempDir(), "background")); err == nil {
+		t.Fatal("expected a missing background link to fail")
+	}
+}
+
+func TestResolveOmarchyWallpaperPathRejectsUnsupportedTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "background.txt")
+	if err := os.WriteFile(target, []byte("nope"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "background")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveOmarchyWallpaperPath(link); err == nil {
+		t.Fatal("expected an unsupported wallpaper target to fail")
+	}
+}
+
 func writeTestPNG(path string, c color.NRGBA) error {
 	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
 	for y := 0; y < 4; y++ {

@@ -8,22 +8,19 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"wox/util"
 )
 
+// getSystemWallpaperPath prefers the image the current desktop is actually showing.
+// Omarchy leaves GNOME's picture-uri pointing at an Adwaita file that is not installed.
 func getSystemWallpaperPath() (string, error) {
-	for _, key := range []string{"picture-uri-dark", "picture-uri"} {
-		output, err := exec.Command("gsettings", "get", "org.gnome.desktop.background", key).Output()
-		if err != nil {
-			continue
-		}
-		if value := resolveWallpaperPath(strings.TrimSpace(string(output)), key == "picture-uri-dark"); value != "" {
-			return value, nil
-		}
+	if util.IsOmarchy() {
+		return omarchyWallpaperPath()
 	}
-	return "", errors.New("desktop wallpaper is unavailable")
+	return gnomeWallpaperPath()
 }
 
 func resolveWallpaperPath(rawValue string, preferDark bool) string {
