@@ -2294,6 +2294,7 @@ typedef void (*WoxLayerSetMonitor)(GtkWindow *window, GdkMonitor *monitor);
 typedef void (*WoxLayerSetMargin)(GtkWindow *window, WoxEdge edge, int margin);
 typedef void (*WoxLayerSetExclusiveZone)(GtkWindow *window, int exclusive_zone);
 typedef void (*WoxLayerSetNamespace)(GtkWindow *window, const char *name_space);
+typedef void (*WoxLayerTryForceCommit)(GtkWindow *window);
 
 static WoxLayerIsSupported layer_is_supported;
 static WoxLayerInitForWindow layer_init_for_window;
@@ -2304,6 +2305,7 @@ static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
 static WoxLayerSetExclusiveZone layer_set_exclusive_zone;
 static WoxLayerSetNamespace layer_set_namespace;
+static WoxLayerTryForceCommit layer_try_force_commit;
 
 static bool resolve_layer_shell(void) {
   static bool checked;
@@ -2331,6 +2333,9 @@ static bool resolve_layer_shell(void) {
   // Optional. Older layer-shell builds still place the window; Hyprland rules
   // need this name to match the surface.
   RESOLVE_LAYER_SYMBOL(layer_set_namespace, "gtk_layer_set_namespace");
+  // Optional. 0.9+ commits a layer surface when GTK has no commit scheduled.
+  // The GL present path below also commits directly; see commit_layer_shell_before_swap.
+  RESOLVE_LAYER_SYMBOL(layer_try_force_commit, "gtk_layer_try_force_commit");
 #undef RESOLVE_LAYER_SYMBOL
   available = layer_is_supported != NULL && layer_init_for_window != NULL && layer_set_layer != NULL && layer_set_keyboard_mode != NULL && layer_set_anchor != NULL && layer_set_monitor != NULL && layer_set_margin != NULL;
   if (!available) {
@@ -3027,12 +3032,48 @@ static void present_linux_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *ren
   }
 }
 
+// commit_layer_shell_before_swap commits the layer surface before GtkGLArea
+// returns into eglSwapBuffers. Mesa waits inside that swap for the previous
+// frame callback. GDK's GL composite path drops a pending parent commit on the
+// assumption that the swap will commit it, so an occluded layer (another
+// exclusive overlay above the launcher) never delivers the callback and the UI
+// thread does not return. gtk_layer_try_force_commit skips this when GTK has
+// already scheduled a commit, which is the resize case that then gets dropped.
+// Commit the current buffer here: the new one is attached only later, inside
+// eglSwapBuffers. Flush so the commit is on the wire before that wait. Do not
+// roundtrip; the display is this same thread.
+static void commit_layer_shell_before_swap(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || !window->visible || !window->layer_shell_enabled || window->window == NULL) {
+    return;
+  }
+  wox_linux_note_stage("layer-commit");
+  if (layer_try_force_commit != NULL) {
+    layer_try_force_commit(GTK_WINDOW(window->window));
+  }
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkWindow *gdk_window = gtk_widget_get_window(window->window);
+  if (gdk_window != NULL && GDK_IS_WAYLAND_WINDOW(gdk_window)) {
+    struct wl_surface *surface = gdk_wayland_window_get_wl_surface(gdk_window);
+    if (surface != NULL) {
+      wl_surface_commit(surface);
+    }
+    GdkDisplay *display = gdk_window_get_display(gdk_window);
+    struct wl_display *wl_display = display != NULL && GDK_IS_WAYLAND_DISPLAY(display) ? gdk_wayland_display_get_wl_display(display) : NULL;
+    if (wl_display != NULL) {
+      wl_display_flush(wl_display);
+    }
+  }
+#endif
+  wox_linux_note_stage("layer-commit-done");
+}
+
 static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer data) {
   wox_linux_note_stage("gl-render");
   WoxLinuxWindow *window = data;
   WoxLinuxRenderer *renderer = GTK_WIDGET(area) == window->overlay_gl_area ? &window->overlay_renderer : &window->renderer;
   trace_linux_render("event=gtk_render frameId=%llu surface=%s context=%p allocated=%dx%d scale=%d closed=%d visible=%d ready=%d", (unsigned long long)window->trace_frame_id, linux_renderer_name(window, renderer), (void *)context, gtk_widget_get_allocated_width(GTK_WIDGET(area)), gtk_widget_get_allocated_height(GTK_WIDGET(area)), gtk_widget_get_scale_factor(GTK_WIDGET(area)), window->closed, window->visible, renderer->ready);
   if (window->closed || !window->visible || window->context == 0 || !renderer->ready) {
+    commit_layer_shell_before_swap(window);
     wox_linux_note_stage("gtk-after-gl-render");
     return TRUE;
   }
@@ -3049,6 +3090,7 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
       present_linux_renderer(window, renderer);
       wox_linux_note_stage("gl-present-done");
     }
+    commit_layer_shell_before_swap(window);
     wox_linux_note_stage("gtk-after-gl-render");
     return TRUE;
   }
@@ -3063,6 +3105,7 @@ static gboolean on_gl_render(GtkGLArea *area, GdkGLContext *context, gpointer da
     woxGoLinuxFrame(window->context, (float)width, (float)height, width * scale, height * scale, (float)scale);
     window->rendering = false;
   }
+  commit_layer_shell_before_swap(window);
   wox_linux_note_stage("gtk-after-gl-render");
   return TRUE;
 }
