@@ -872,9 +872,8 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				}()
 				analytics.TrackAppLaunched(ctx, fmt.Sprintf("%s:%s", info.Type, info.Name), displayName)
 
-				// Check if app is already running and try to activate its window
-				// macos default behavior is to activate existing instance
-				// windows needs special handling to activate existing window
+				// macOS activates the running app when its bundle is opened.
+				// Windows and Linux raise an existing window before starting another process.
 				if util.IsWindows() {
 					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=get_pid_start path=%q elapsedMs=%d", info.Path, time.Since(launchStart).Milliseconds()))
 					pidStart := time.Now()
@@ -892,6 +891,16 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 						}
 						// If activation failed, fall through to launch new instance
 						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Could not activate window for %s, launching new instance", info.Name))
+					}
+				}
+				if util.IsLinux() {
+					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=activate_start path=%q", info.Path))
+					activateStart := time.Now()
+					activated := tryActivateExistingLinuxApp(ctx, a.api, info)
+					util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=activate_done path=%q activated=%t costMs=%d", info.Path, activated, time.Since(activateStart).Milliseconds()))
+					if activated {
+						a.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Activated existing window for %s", info.Name))
+						return
 					}
 				}
 

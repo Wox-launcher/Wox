@@ -3,13 +3,13 @@ package app
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"wox/common"
 	"wox/plugin"
 	"wox/util"
@@ -33,6 +33,11 @@ type linuxDesktopEntry struct {
 
 type LinuxRetriever struct {
 	api plugin.API
+
+	runningMu       sync.Mutex
+	running         linuxRunningSnapshot
+	runningDesktops linuxDesktopCatalog
+	cpuSamples      *util.HashMap[string, linuxCPUSample]
 }
 
 func (a *LinuxRetriever) UpdateAPI(api plugin.API) {
@@ -153,14 +158,6 @@ func (a *LinuxRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) {
 
 func (a *LinuxRetriever) PrepareExtraApps(ctx context.Context, apps []appInfo) []appInfo {
 	return apps
-}
-
-func (a *LinuxRetriever) GetPid(ctx context.Context, app appInfo) int {
-	return 0
-}
-
-func (a *LinuxRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
-	return nil, errors.New("not implemented")
 }
 
 func (a *LinuxRetriever) OpenAppFolder(ctx context.Context, app appInfo) error {
