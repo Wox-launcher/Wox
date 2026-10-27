@@ -8,8 +8,12 @@ import (
 )
 
 // linuxScreenshotObjectSelection selects a backend with a verifiable global coordinate space.
-// Wayland uses display fallback and manual regions until its compositor supplies window identities and matching AT-SPI geometry.
+// Hyprland supplies window rectangles through its IPC. Other Wayland sessions keep the
+// display fallback and a manual region until their compositor can do the same.
 func linuxScreenshotObjectSelection(windows []linuxScreenshotWindow, bounds Rect, source image.Image) ([]Rect, screenshotObjectQuery) {
+	if util.IsHyprlandSession() {
+		return linuxHyprlandScreenshotObjectSelection(windows, bounds, source)
+	}
 	if util.IsLinuxWaylandSession() {
 		return nil, nil
 	}

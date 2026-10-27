@@ -1022,6 +1022,14 @@ func testLinuxLayerShellStackLayer(topmost, screenshot bool) int32 {
 	return int32(C.wox_linux_test_layer_shell_stack_layer(nativeTopmost, nativeScreenshot))
 }
 
+func testLinuxLayerShellExclusiveZone(screenshot bool) int32 {
+	nativeScreenshot := C.int32_t(0)
+	if screenshot {
+		nativeScreenshot = 1
+	}
+	return int32(C.wox_linux_test_layer_shell_exclusive_zone(nativeScreenshot))
+}
+
 func (w *platformWindow) consumePendingDamage() Rect {
 	w.mu.Lock()
 	defer w.mu.Unlock()

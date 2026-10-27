@@ -89,6 +89,7 @@ int32_t wox_linux_test_resource_cache_generation(void);
 int32_t wox_linux_test_drawn_text_fit(const char *text, const char *font_family, float font_size, float scale, int32_t *lines_out);
 int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t height, int32_t grip);
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot);
+int32_t wox_linux_test_layer_shell_exclusive_zone(int32_t screenshot);
 int32_t wox_linux_test_window_requests_background_blur(int32_t screenshot, int32_t blur_available);
 float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested);
 int32_t wox_linux_test_window_uses_per_pixel_alpha(int32_t application, int32_t nonactivating, int32_t screenshot, int32_t blur_available);

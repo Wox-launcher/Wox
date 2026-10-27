@@ -19,6 +19,8 @@ import (
 	"os"
 	"time"
 	"unsafe"
+
+	"wox/util"
 )
 
 var errLinuxPortalCaptureRequired = errors.New("Wayland requires Portal desktop capture")
@@ -28,7 +30,12 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	time.Sleep(80 * time.Millisecond)
 	var cursorX, cursorY C.float
 	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
-	selectionWindows := captureLinuxScreenshotWindows()
+	var selectionWindows []linuxScreenshotWindow
+	if util.IsHyprlandSession() {
+		selectionWindows = captureLinuxHyprlandScreenshotWindows()
+	} else {
+		selectionWindows = captureLinuxScreenshotWindows()
+	}
 	source, bounds, err := captureLinuxX11Desktop()
 	var waylandCapture linuxDesktopCapture
 	if errors.Is(err, errLinuxPortalCaptureRequired) {

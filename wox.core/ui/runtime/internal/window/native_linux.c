@@ -2292,6 +2292,7 @@ typedef void (*WoxLayerSetKeyboardMode)(GtkWindow *window, WoxKeyboardMode mode)
 typedef void (*WoxLayerSetAnchor)(GtkWindow *window, WoxEdge edge, gboolean anchored);
 typedef void (*WoxLayerSetMonitor)(GtkWindow *window, GdkMonitor *monitor);
 typedef void (*WoxLayerSetMargin)(GtkWindow *window, WoxEdge edge, int margin);
+typedef void (*WoxLayerSetExclusiveZone)(GtkWindow *window, int exclusive_zone);
 typedef void (*WoxLayerSetNamespace)(GtkWindow *window, const char *name_space);
 
 static WoxLayerIsSupported layer_is_supported;
@@ -2301,6 +2302,7 @@ static WoxLayerSetKeyboardMode layer_set_keyboard_mode;
 static WoxLayerSetAnchor layer_set_anchor;
 static WoxLayerSetMonitor layer_set_monitor;
 static WoxLayerSetMargin layer_set_margin;
+static WoxLayerSetExclusiveZone layer_set_exclusive_zone;
 static WoxLayerSetNamespace layer_set_namespace;
 
 static bool resolve_layer_shell(void) {
@@ -2323,6 +2325,9 @@ static bool resolve_layer_shell(void) {
   RESOLVE_LAYER_SYMBOL(layer_set_anchor, "gtk_layer_set_anchor");
   RESOLVE_LAYER_SYMBOL(layer_set_monitor, "gtk_layer_set_monitor");
   RESOLVE_LAYER_SYMBOL(layer_set_margin, "gtk_layer_set_margin");
+  // Optional. Older layer-shell builds still place the window; without this
+  // symbol a panel's exclusive zone keeps the screenshot mask below the bar.
+  RESOLVE_LAYER_SYMBOL(layer_set_exclusive_zone, "gtk_layer_set_exclusive_zone");
   // Optional. Older layer-shell builds still place the window; Hyprland rules
   // need this name to match the surface.
   RESOLVE_LAYER_SYMBOL(layer_set_namespace, "gtk_layer_set_namespace");
@@ -2369,11 +2374,24 @@ static WoxLayer layer_shell_stack_layer(bool topmost, bool screenshot) {
   return WOX_LAYER_TOP;
 }
 
+// layer_shell_exclusive_zone lets a screenshot surface cover a panel. -1 places
+// it on the full output; 0 keeps the launcher inside the area the panel reserved.
+static int layer_shell_exclusive_zone(bool screenshot) {
+  return screenshot ? -1 : 0;
+}
+
 static void apply_layer_shell_stack(WoxLinuxWindow *window) {
   if (window == NULL || !window->layer_shell_enabled || layer_set_layer == NULL || window->window == NULL) {
     return;
   }
   layer_set_layer(GTK_WINDOW(window->window), layer_shell_stack_layer(window->topmost, window->screenshot_window));
+}
+
+static void apply_layer_shell_exclusive_zone(WoxLinuxWindow *window) {
+  if (window == NULL || !window->layer_shell_enabled || layer_set_exclusive_zone == NULL || window->window == NULL) {
+    return;
+  }
+  layer_set_exclusive_zone(GTK_WINDOW(window->window), layer_shell_exclusive_zone(window->screenshot_window));
 }
 
 // raise_linux_topmost_windows puts HUD/screenshot surfaces back above a just-shown launcher.
@@ -3430,6 +3448,7 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->layer_shell_enabled = !application_window && enable_layer_shell(GTK_WINDOW(window->window));
   if (window->layer_shell_enabled) {
     apply_layer_shell_stack(window);
+    apply_layer_shell_exclusive_zone(window);
     if (window->nonactivating) {
       // Exclusive keyboard on the fullscreen recording border steals Escape from
       // the screenshot toolbar. Nonactivating chrome must not own the seat.
@@ -6303,6 +6322,10 @@ int32_t wox_linux_test_resize_hit(float x, float y, int32_t width, int32_t heigh
 
 int32_t wox_linux_test_layer_shell_stack_layer(int32_t topmost, int32_t screenshot) {
   return (int32_t)layer_shell_stack_layer(topmost != 0, screenshot != 0);
+}
+
+int32_t wox_linux_test_layer_shell_exclusive_zone(int32_t screenshot) {
+  return (int32_t)layer_shell_exclusive_zone(screenshot != 0);
 }
 
 float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested) {

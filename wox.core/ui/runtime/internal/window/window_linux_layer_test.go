@@ -22,3 +22,12 @@ func TestLinuxLayerShellStacksTopmostAboveLauncher(t *testing.T) {
 		t.Fatal("topmost overlays must stack above the launcher query window")
 	}
 }
+
+func TestLinuxLayerShellScreenshotCoversPanel(t *testing.T) {
+	if got := testLinuxLayerShellExclusiveZone(false); got != 0 {
+		t.Fatalf("launcher exclusive zone = %d, want 0 so a panel keeps its reserved strip", got)
+	}
+	if got := testLinuxLayerShellExclusiveZone(true); got != -1 {
+		t.Fatalf("screenshot exclusive zone = %d, want -1 so the mask covers a panel", got)
+	}
+}

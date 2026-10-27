@@ -20,15 +20,23 @@ type hyprlandCursorPosition struct {
 	Y *float64 `json:"y"`
 }
 
+// HyprlandWorkspaceRef is the workspace id Hyprland reports for a monitor.
+type HyprlandWorkspaceRef struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 // HyprlandMonitor describes an output using compositor-owned physical mode and fractional scale data.
 type HyprlandMonitor struct {
-	Name      string  `json:"name"`
-	Width     int     `json:"width"`
-	Height    int     `json:"height"`
-	X         int     `json:"x"`
-	Y         int     `json:"y"`
-	Scale     float64 `json:"scale"`
-	Transform int     `json:"transform"`
+	Name             string               `json:"name"`
+	Width            int                  `json:"width"`
+	Height           int                  `json:"height"`
+	X                int                  `json:"x"`
+	Y                int                  `json:"y"`
+	Scale            float64              `json:"scale"`
+	Transform        int                  `json:"transform"`
+	ActiveWorkspace  HyprlandWorkspaceRef `json:"activeWorkspace"`
+	SpecialWorkspace HyprlandWorkspaceRef `json:"specialWorkspace"`
 }
 
 // LogicalSize converts the physical mode to the monitor's global logical geometry.
@@ -74,6 +82,12 @@ func GetHyprlandMonitors() ([]HyprlandMonitor, error) {
 // GetHyprlandCursorPosition reads compositor-owned cursor coordinates without spawning a process.
 func GetHyprlandCursorPosition() (int, int, error) {
 	return getHyprlandCursorPosition()
+}
+
+// ReadHyprlandIPC sends one socket command and returns the compositor response.
+// command is the socket request, for example "j/clients".
+func ReadHyprlandIPC(command string, responseLimit int64) ([]byte, error) {
+	return queryHyprlandIPC(command, responseLimit)
 }
 
 // getHyprlandCursorPosition reads compositor-owned cursor coordinates without spawning a process.
