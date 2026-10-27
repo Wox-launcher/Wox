@@ -387,6 +387,16 @@ func TestOpenPluginSettingActionIncludesEnglishAlias(t *testing.T) {
 	assert.Equal(t, []string{"Open System Command settings"}, action.SearchAliases)
 }
 
+func TestActionedScoreUsesRelatedQueries(t *testing.T) {
+	now := util.GetSystemTimestamp()
+	unrelated := []setting.ActionedResult{{Timestamp: now, Query: "dictation"}, {Timestamp: now, Query: ""}}
+	assert.Zero(t, calculateActionedResultScore(unrelated, "shot", true))
+	assert.Positive(t, calculateActionedResultScore([]setting.ActionedResult{{Timestamp: now, Query: "Screenshot"}}, "shot", true))
+	assert.Greater(t, calculateActionedResultScore([]setting.ActionedResult{{Timestamp: now, Query: "SHOT"}}, "shot", true), calculateActionedResultScore([]setting.ActionedResult{{Timestamp: now, Query: "screenshot"}}, "shot", true))
+	assert.Positive(t, calculateActionedResultScore(unrelated, "", true))
+	assert.Positive(t, calculateActionedResultScore(unrelated, "shot", false))
+}
+
 func TestActionedRankingScoreTailFormatsBoost(t *testing.T) {
 	if got := actionedRankingScoreTail(55); got != "+55" {
 		t.Fatalf("actionedRankingScoreTail(55) = %q, want +55", got)

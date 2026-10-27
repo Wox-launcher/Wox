@@ -229,7 +229,7 @@ func (m *Manager) polishResult(ctx context.Context, pluginInstance *Instance, qu
 	autoScoreStart := util.GetSystemTimestamp()
 	autoScoreTimingStart := time.Now()
 	if !ignoreAutoScore {
-		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result, query.RawQuery)
+		score := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, result, query)
 		if score > 0 {
 			logger.Debug(ctx, fmt.Sprintf("<%s> result(%s) add score: %d", pluginInstance.GetName(ctx), result.Title, score))
 			result.Score += score

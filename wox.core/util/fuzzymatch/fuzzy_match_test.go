@@ -168,6 +168,13 @@ func TestFuzzyMatchScoreComparison(t *testing.T) {
 	consecutiveResult := FuzzyMatch("abcdef", "abc", false)
 	scatteredResult := FuzzyMatch("aXbXcXdef", "abc", false)
 	assert.Greater(t, consecutiveResult.Score, scatteredResult.Score)
+
+	shot := FuzzyMatch("Snow Shot", "shot", false)
+	for _, candidate := range []string{"show-task-view", "Show the current awake status"} {
+		other := FuzzyMatch(candidate, "shot", false)
+		assert.True(t, other.IsMatch, candidate)
+		assert.Greater(t, shot.Score, other.Score, candidate)
+	}
 }
 
 func TestFuzzyMatchPinyinAdvanced(t *testing.T) {
@@ -282,6 +289,22 @@ func TestStringMatcherPinyinAllowsTrailingIncompleteSyllable(t *testing.T) {
 
 func TestStringMatcherPinyinRejectsNonTrailingMixedMode(t *testing.T) {
 	assert.False(t, FuzzyMatch("你好", "nhao", true).IsMatch)
+}
+
+func TestPinyinIncompleteSyllableAfterSkippedCharacter(t *testing.T) {
+	for _, title := range []string{"锁定或解除锁定任务栏", "磁力猫 - 懂你的磁力链接搜索引擎"} {
+		prepared := PrepareText(title)
+		for _, query := range []string{"jies", "jiesu", "jiesuo"} {
+			pattern := PreparePattern(query)
+			for _, result := range []FuzzyMatchResult{
+				FuzzyMatch(title, query, true),
+				FuzzyMatchPrepared(prepared, pattern, true),
+				FuzzyMatchPattern(title, pattern, false, true),
+			} {
+				assert.True(t, result.IsMatch, "query %q should match %q", query, title)
+			}
+		}
+	}
 }
 
 func TestStringMatcher(t *testing.T) {

@@ -309,6 +309,9 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 	// Try fuzzy match on the original text
 	result := fuzzyMatchCore(originalRunes, textRunes, patternRunes)
 	if result.IsMatch {
+		if len(patternRunes) >= 3 && !containsRunes(textRunes, patternRunes) {
+			result.Score = max(1, result.Score-8)
+		}
 		return result
 	}
 
@@ -421,6 +424,10 @@ func fuzzyMatchASCIIAtLeast(text string, pattern string, minimum int64) FuzzyMat
 
 		minScore := calculateMinScoreThreshold(patternLen, textLen)
 		if score >= minScore {
+			// Penalize scattered matches only after the eligibility check so abbreviations remain searchable.
+			if patternLen >= 3 && !containsFoldASCII(text, pattern) {
+				score = max(1, score-8)
+			}
 			return FuzzyMatchResult{IsMatch: true, Score: score}
 		}
 	}
@@ -1078,14 +1085,10 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 						if matchASCIIPrefix(patternRunes[state.patternIdx:], syllable[:remainingRunes]) {
 							// Sub-case A: Length 1 (First Letter)
 							if remainingRunes == 1 {
-								// Keep result counts stable while the user is still typing the current syllable.
-								// For example, "shij" is an intermediate form of "shi"+"ji..." and should already
-								// match titles such as "视觉" or "世纪", otherwise typing the next "i" makes many
-								// results suddenly appear. Only allow this when there was no skipped syllable, so
-								// non-trailing mixed patterns such as "nhao" for "你好" stay rejected.
-								if state.matchMode == ModeFullPinyin && state.consecutiveSkipped == 0 {
+								// A partial final syllable must allow the same skips as its complete form.
+								if state.matchMode == ModeFullPinyin {
 									newScore := state.score + scoreMatch
-									if state.matchedSyllables > 0 {
+									if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
 										newScore += bonusConsecutive
 									}
 
@@ -1143,9 +1146,9 @@ func matchPinyinStrict(segments []PinyinSegment, patternRunes []rune) FuzzyMatch
 								}
 							} else {
 								// Sub-case B: Length > 1
-								if (!seg.IsChinese || state.matchMode != ModeFirstLetter) && state.consecutiveSkipped == 0 {
+								if (!seg.IsChinese || state.matchMode != ModeFirstLetter) && (state.consecutiveSkipped == 0 || state.matchMode == ModeFullPinyin) {
 									newScore := state.score + int64(remainingRunes)*scoreMatch
-									if state.matchedSyllables > 0 {
+									if state.matchedSyllables > 0 && state.consecutiveSkipped == 0 {
 										newScore += bonusConsecutive
 									}
 

@@ -699,7 +699,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		api.Notify(ctx, "i18n:plugin_manager_reset_ranking_success")
 		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
 	}
-	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, scoreResult, query.RawQuery)
+	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, scoreResult, query)
 	defaultActions = append(defaultActions, QueryResultAction{
 		Id:                     systemActionResetRankingID,
 		Name:                   "i18n:plugin_manager_reset_ranking",
@@ -1042,7 +1042,7 @@ func resultIdentityHash(pluginId string, result QueryResult) setting.ResultHash 
 	return setting.NewResultHashFromParts(pluginId, result.Title, result.SubTitle, result.IdentityKey)
 }
 
-func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, currentQuery string) int64 {
+func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, result QueryResult, query Query) int64 {
 	var score int64 = 0
 
 	resultHash := resultIdentityHash(pluginId, result)
@@ -1052,6 +1052,13 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, res
 		return score
 	}
 
+	return calculateActionedResultScore(actionResults, query.RawQuery, query.IsGlobalQuery())
+}
+
+// calculateActionedResultScore limits global usage boosts to related searches.
+func calculateActionedResultScore(actionResults []setting.ActionedResult, currentQuery string, global bool) int64 {
+	var score int64
+	currentQuery = strings.ToLower(strings.TrimSpace(currentQuery))
 	// actioned score are based on actioned counts, the more actioned, the more score
 	// also, action timestamp will be considered, the more recent actioned, the more score weight. If action is in recent 7 days, it will be considered as recent actioned and add score weight
 	// we will use fibonacci sequence to calculate score, the more recent actioned, the more score: 5, 8, 13, 21, 34, 55, 89
@@ -1059,6 +1066,10 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, res
 	// E.g. if actioned 3 times in day one, 2 times in day two, 1 time in day three, the score will be: 89*3 + 55*2 + 34*1 = 450
 
 	for _, actionResult := range actionResults {
+		historicalQuery := strings.ToLower(strings.TrimSpace(actionResult.Query))
+		if global && currentQuery != "" && (historicalQuery == "" || !strings.Contains(historicalQuery, currentQuery) && !strings.Contains(currentQuery, historicalQuery)) {
+			continue
+		}
 		var weight int64 = 2
 
 		hours := (util.GetSystemTimestamp() - actionResult.Timestamp) / 1000 / 60 / 60
@@ -1075,7 +1086,7 @@ func (m *Manager) calculateResultScore(ctx context.Context, pluginId string, res
 		}
 
 		// If the current query is within the historical selected actions, it indicates a stronger connection and increases the score.
-		if currentQuery != "" && actionResult.Query == currentQuery {
+		if currentQuery != "" && historicalQuery == currentQuery {
 			score += 20
 		}
 
