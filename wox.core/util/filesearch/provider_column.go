@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"wox/util/filesearch/column"
 )
@@ -76,13 +77,15 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	groups := &columnNameHeap{limit: limit}
 	minimumScore := exactColumnNameThreshold(ctx, view, query, limit)
 	workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
+	var sharedMinimum atomic.Int64
+	sharedMinimum.Store(minimumScore)
 	partitions := make([]*columnNameHeap, workers)
 	var wait sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
 		wait.Add(1)
 		go func(worker int) {
 			defer wait.Done()
-			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, minimumScore)
+			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, &sharedMinimum)
 		}(worker)
 	}
 	wait.Wait()
@@ -309,7 +312,7 @@ func appendColumnHeap[T any](items []T, value T, limit int) []T {
 
 // scanColumnNames scores disjoint name ranges with private top-K heaps. A local
 // loser cannot enter the global top K, so merging needs no recall cutoff.
-func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, limit, start, end, stride int, minimumScore int64) *columnNameHeap {
+func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, limit, start, end, stride int, sharedMinimum *atomic.Int64) *columnNameHeap {
 	base := view.Base
 	mask, requiresNonASCII := columnNameFilter(query)
 	groups := &columnNameHeap{limit: limit}
@@ -336,6 +339,7 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 		if ctx.Err() != nil {
 			return groups
 		}
+		minimumScore := sharedMinimum.Load()
 		candidates := ^uint64(0)
 		for _, bitmap := range columns[:count] {
 			candidates &= bitmap[word]
@@ -474,6 +478,19 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 				hit := columnNameHit{id: uint32(nameID), name: name, score: score, directory: true, recycleOnly: !dirNormal}
 				if groups.competitive(hit) {
 					groups.add(hit)
+				}
+			}
+		}
+		if limit > 0 && groups.Len() >= limit {
+			floor := groups.items[0].rankScore()
+			if query.wildcard == nil {
+				floor -= 1000000
+			}
+			// Each full partition already contains K live hits, so its floor is
+			// safe for every other partition; equal scores still compete on ties.
+			for old := sharedMinimum.Load(); floor > old; old = sharedMinimum.Load() {
+				if sharedMinimum.CompareAndSwap(old, floor) {
+					break
 				}
 			}
 		}

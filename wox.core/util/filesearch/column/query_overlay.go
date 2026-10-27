@@ -63,7 +63,9 @@ func (v View) DirectoryUnchanged(row uint32) bool {
 func buildQueryOverlay(v View) *QueryOverlay {
 	q := &QueryOverlay{Children: make(map[uint64][]uint64), Names: make([]LiveName, 0, len(v.Delta))}
 	var stack []uint32
+	var added []Record
 	for _, change := range v.Delta {
+		row, inBase := v.Base.Row(change.ID)
 		if !change.Deleted && change.ID != v.Base.IDs[0] {
 			q.Children[change.ParentID] = append(q.Children[change.ParentID], change.ID)
 			mask, nonASCII := CharacterMask(change.Name)
@@ -71,7 +73,7 @@ func buildQueryOverlay(v View) *QueryOverlay {
 			if nonASCII {
 				name.Mask = ^uint64(0)
 			}
-			if row, ok := v.Base.Row(change.ID); ok && change.Name == v.Base.Name(v.Base.NameIDs[row]) {
+			if inBase && change.Name == v.Base.Name(v.Base.NameIDs[row]) {
 				name.BaseName = v.Base.NameIDs[row]
 				if !nonASCII || v.Base.NameFlags[name.BaseName]&NameMaskComplete != 0 {
 					name.Mask = v.Base.NameMasks[name.BaseName]
@@ -79,11 +81,14 @@ func buildQueryOverlay(v View) *QueryOverlay {
 			}
 			q.Names = append(q.Names, name)
 		}
-		if row, ok := v.Base.Row(change.ID); ok && v.Base.Flags[row]&Directory != 0 {
+		if inBase && v.Base.Flags[row]&Directory != 0 {
 			parent := v.Base.Parents[row]
 			if change.Deleted || change.Flags&Directory == 0 || parent == NoRow || change.ParentID != v.Base.IDs[parent] || change.Name != v.Base.Name(v.Base.NameIDs[row]) {
 				stack = append(stack, row)
 			}
+		}
+		if !change.Deleted && change.Flags&Directory != 0 && (!inBase || v.Base.Flags[row]&Directory == 0) {
+			added = append(added, change.Record)
 		}
 	}
 	if len(stack) > 0 {
@@ -107,15 +112,6 @@ func buildQueryOverlay(v View) *QueryOverlay {
 	count := 0
 	for _, word := range q.StaleDirectories {
 		count += bits.OnesCount64(word)
-	}
-	var added []Record
-	for _, change := range v.Delta {
-		if change.Deleted || change.Flags&Directory == 0 {
-			continue
-		}
-		if row, exists := v.Base.Row(change.ID); !exists || v.Base.Flags[row]&Directory == 0 {
-			added = append(added, change.Record)
-		}
 	}
 	if count+len(added) <= 4096 {
 		q.PathsCached = true

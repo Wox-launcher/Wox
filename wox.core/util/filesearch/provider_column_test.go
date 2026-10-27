@@ -86,6 +86,45 @@ func TestColumnQueryMatchesExhaustiveScoring(t *testing.T) {
 	}
 }
 
+// TestParallelColumnSearchMatchesUnlimited covers the shared pruning floor with
+// multiple workers, ties, wildcard scores, and mixed Unicode names.
+func TestParallelColumnSearchMatchesUnlimited(t *testing.T) {
+	previous := runtime.GOMAXPROCS(2)
+	defer runtime.GOMAXPROCS(previous)
+	builder := column.NewBuilder(t.TempDir(), 1)
+	for i := 0; i < 33000; i++ {
+		name := fmt.Sprintf("sample-document-%05d.txt", i)
+		if i%13 == 0 {
+			name = fmt.Sprintf("sd-%05d.txt", i)
+		} else if i%29 == 0 {
+			name = fmt.Sprintf("重庆-sd-%05d.md", i)
+		}
+		if err := builder.Add(column.Record{ID: uint64(i + 2), ParentID: 1, Name: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base, err := builder.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareColumnNames(base); err != nil {
+		t.Fatal(err)
+	}
+	view := column.View{Base: base}
+	for _, raw := range []string{"sd", "s", "*.txt", "cq"} {
+		query := SearchQuery{Raw: raw}
+		all, err := searchColumnView(context.Background(), view, query, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := sortAndLimitResults(all, 5)
+		got, err := searchColumnView(context.Background(), view, query, 5)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("%q: got %+v, want %+v, error %v", raw, got, want, err)
+		}
+	}
+}
+
 func TestColumnShortQueriesAndPinyin(t *testing.T) {
 	view := columnQueryFixture(t)
 	for raw, name := range map[string]string{"rpt": "report.txt", "rp": "report.txt", "xiangmu": "项目报告.txt", "xm": "项目报告.txt", "chongqing": "重庆火锅.md", "zhongqing": "重庆火锅.md", "woxcs2026": "Wox测试2026.txt"} {

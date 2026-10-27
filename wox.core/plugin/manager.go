@@ -351,6 +351,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 
 func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Instance, query Query) pluginQueryInput {
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
+	tracker := timetracking.New("build_plugin_query_input_base")
 	layoutStart := util.GetSystemTimestamp()
 	layoutTimingStart := time.Now()
 	metadataLayout := m.buildMetadataBackedQueryLayout(ctx, pluginInstance, query)
@@ -364,13 +365,14 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 		metadataLayout: metadataLayout,
 		queryContext:   queryContext,
 	}
-	if tracker := timetracking.New("build_plugin_query_input_base"); tracker.Enabled() {
+	if tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
 		tracker.SetRawString("plugin", pluginLabel)
 		tracker.SetInt64("layoutMs", layoutCost)
 		tracker.SetInt64("layoutUs", layoutCostUs)
 		tracker.SetInt64("contextMs", contextCost)
-		tracker.Log(ctx)
+		// One write avoids serializing every concurrent plugin three times before Query.
+		defer tracker.Log(ctx)
 	}
 
 	// Query requirements are checked before calling Plugin.Query so plugins do not
@@ -384,30 +386,21 @@ func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Ins
 			Layout:  layout,
 			Context: input.queryContext,
 		}
-		if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
-			tracker.SetRawString("queryId", query.Id)
-			tracker.SetRawString("plugin", pluginLabel)
+		if tracker.Enabled() {
 			tracker.SetBool("blocked", true)
-			tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
-			tracker.Log(ctx)
+			tracker.SetInt64("requirementMs", util.GetSystemTimestamp()-requirementStart)
 		}
 		return input
 	}
-	if tracker := timetracking.New("build_plugin_query_input_requirement"); tracker.Enabled() {
-		tracker.SetRawString("queryId", query.Id)
-		tracker.SetRawString("plugin", pluginLabel)
+	if tracker.Enabled() {
 		tracker.SetBool("blocked", false)
-		tracker.SetInt64("costMs", util.GetSystemTimestamp()-requirementStart)
-		tracker.Log(ctx)
+		tracker.SetInt64("requirementMs", util.GetSystemTimestamp()-requirementStart)
 	}
 
 	envStart := util.GetSystemTimestamp()
 	input.query = m.buildPluginQueryEnv(ctx, pluginInstance, query)
-	if tracker := timetracking.New("build_plugin_query_env"); tracker.Enabled() {
-		tracker.SetRawString("queryId", query.Id)
-		tracker.SetRawString("plugin", pluginLabel)
-		tracker.SetInt64("costMs", util.GetSystemTimestamp()-envStart)
-		tracker.Log(ctx)
+	if tracker.Enabled() {
+		tracker.SetInt64("envMs", util.GetSystemTimestamp()-envStart)
 	}
 	return input
 }
