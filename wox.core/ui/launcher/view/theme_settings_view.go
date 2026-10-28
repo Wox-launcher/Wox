@@ -661,9 +661,28 @@ func themeAutoSwatch(light, dark woxcomponent.Theme, size float32) woxwidget.Wid
 	return woxwidget.Painter{Width: size, Height: size, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
 		fillThemeDiagonalPolygon(displayList, themeRoundedRectPoints(bounds, common.ThemeSwatchRadius), bounds, light.Background, dark.Background)
 		query := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchAutoQueryTop, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchQueryHeight}
-		result := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchAutoQueryTop + common.ThemeSwatchQueryHeight + common.ThemeSwatchGap, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchResultHeight}
+		result := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchResultTop, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchResultHeight}
 		fillThemeDiagonalRect(displayList, query, bounds, light.QueryBackground, dark.QueryBackground)
 		fillThemeDiagonalRect(displayList, result, bounds, light.SelectedBackground, dark.SelectedBackground)
+		separator := woxui.Rect{X: bounds.X + common.ThemeSwatchInset, Y: bounds.Y + common.ThemeSwatchSeparatorTop, Width: max(float32(0), bounds.Width-common.ThemeSwatchInset*2), Height: common.ThemeSwatchSeparatorHeight}
+		indicator := woxui.Rect{X: result.X, Y: result.Y, Width: common.ThemeSwatchIndicatorWidth, Height: result.Height}
+		lightSeparator, lightThickness, _, _ := light.QuerySeparator()
+		darkSeparator, darkThickness, _, _ := dark.QuerySeparator()
+		if lightThickness <= 0 {
+			lightSeparator = woxui.Color{}
+		}
+		if darkThickness <= 0 {
+			darkSeparator = woxui.Color{}
+		}
+		fillThemeDiagonalRect(displayList, separator, bounds, lightSeparator, darkSeparator)
+		lightIndicator, darkIndicator := light.ResultIndicator(), dark.ResultIndicator()
+		if lightIndicator.Width <= 0 {
+			lightIndicator.Color = woxui.Color{}
+		}
+		if darkIndicator.Width <= 0 {
+			darkIndicator.Color = woxui.Color{}
+		}
+		fillThemeDiagonalRect(displayList, indicator, bounds, lightIndicator.Color, darkIndicator.Color)
 		drawThemeDiagonalLine(displayList, bounds, common.ThemeSwatchAutoLineWidth)
 		if color, width := themeSwatchOutline(dark); width > 0 {
 			displayList.StrokeRoundedRect(bounds, common.ThemeSwatchRadius, width, color)
@@ -824,12 +843,20 @@ func themeActions(props ThemeSettingsProps, theme ThemeCatalogItem) []woxwidget.
 func themeSwatch(theme woxcomponent.Theme, size float32) woxwidget.Widget {
 	innerWidth := max(float32(0), size-common.ThemeSwatchInset*2)
 	borderColor, borderWidth := themeSwatchOutline(theme)
-	return woxwidget.Container{Width: size, Height: size, Radius: common.ThemeSwatchRadius, Color: theme.Background, BorderColor: borderColor, BorderWidth: borderWidth, Padding: woxwidget.Insets{Left: common.ThemeSwatchInset, Right: common.ThemeSwatchInset}, Child: woxwidget.Align{Height: size, Vertical: 0.5, Child: woxwidget.Flex{
-		Axis: woxwidget.Vertical, Gap: common.ThemeSwatchGap, Children: []woxwidget.Widget{
-			woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchQueryHeight, Radius: common.ThemeSwatchQueryRadius, Color: theme.QueryBackground},
-			woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchResultHeight, Radius: common.ThemeSwatchResultRadius, Color: theme.SelectedBackground},
-		},
-	}}}
+	resultTop := common.ThemeSwatchResultTop
+	children := []woxwidget.StackChild{
+		{Left: common.ThemeSwatchInset, Top: common.ThemeSwatchAutoQueryTop, Child: woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchQueryHeight, Radius: common.ThemeSwatchQueryRadius, Color: theme.QueryBackground}},
+		{Left: common.ThemeSwatchInset, Top: resultTop, Child: woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchResultHeight, Radius: common.ThemeSwatchResultRadius, Color: theme.SelectedBackground}},
+	}
+	separator, thickness, _, _ := theme.QuerySeparator()
+	if thickness > 0 && separator.A > 0 {
+		children = append(children, woxwidget.StackChild{Left: common.ThemeSwatchInset, Top: common.ThemeSwatchSeparatorTop, Child: woxwidget.Container{Width: innerWidth, Height: common.ThemeSwatchSeparatorHeight, Color: separator}})
+	}
+	indicator := theme.ResultIndicator()
+	if indicator.Width > 0 && indicator.Color.A > 0 {
+		children = append(children, woxwidget.StackChild{Left: common.ThemeSwatchInset, Top: resultTop, Child: woxwidget.Container{Width: common.ThemeSwatchIndicatorWidth, Height: common.ThemeSwatchResultHeight, Color: indicator.Color}})
+	}
+	return woxwidget.Container{Width: size, Height: size, Radius: common.ThemeSwatchRadius, Color: theme.Background, BorderColor: borderColor, BorderWidth: borderWidth, Child: woxwidget.Stack{Width: size, Height: size, Children: children}}
 }
 
 func themeSwatchOutline(theme woxcomponent.Theme) (woxui.Color, float32) {

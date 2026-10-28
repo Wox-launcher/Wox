@@ -43,6 +43,8 @@ type StoreThemeIconColors struct {
 	Background   string
 	Query        string
 	Selected     string
+	Separator    string `json:",omitempty"`
+	Indicator    string `json:",omitempty"`
 	Outline      string `json:",omitempty"`
 	OutlineWidth int    `json:",omitempty"`
 }
@@ -82,6 +84,8 @@ func (c StoreThemeIconColors) SwatchImage() WoxImage {
 		Background:   c.Background,
 		Query:        c.Query,
 		Selected:     c.Selected,
+		Separator:    c.Separator,
+		Indicator:    c.Indicator,
 		Outline:      c.Outline,
 		OutlineWidth: ThemeSwatchOutlineWidth(c.OutlineWidth),
 	}))

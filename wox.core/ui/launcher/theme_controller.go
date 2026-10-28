@@ -396,6 +396,16 @@ func storeThemeSwatchPreview(colors common.StoreThemeIconColors) themeData {
 		QueryBoxBackgroundColor:         query,
 		ResultItemActiveBackgroundColor: colors.Selected,
 		AppBorderColor:                  colors.Outline,
+		QuerySeparatorColor:             colors.Separator,
+		ResultItemActiveIndicatorColor:  colors.Indicator,
+	}
+	if strings.TrimSpace(colors.Separator) != "" {
+		width := 1
+		preview.QuerySeparatorThickness = &width
+	}
+	if strings.TrimSpace(colors.Indicator) != "" {
+		width := 1
+		preview.ResultItemActiveIndicatorWidth = &width
 	}
 	if colors.OutlineWidth > 0 && strings.TrimSpace(colors.Outline) != "" {
 		width := colors.OutlineWidth

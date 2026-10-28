@@ -4,6 +4,8 @@ export type StoreThemeIconColors = {
   Background?: string;
   Query?: string;
   Selected?: string;
+  Separator?: string;
+  Indicator?: string;
   Outline?: string;
   OutlineWidth?: number;
 };

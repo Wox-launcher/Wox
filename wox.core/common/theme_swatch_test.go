@@ -23,6 +23,45 @@ func TestNewWoxImageThemeUsesSettingsSwatchSVG(t *testing.T) {
 	}
 }
 
+func TestThemeSwatchUsesSamePaletteForInstalledAndStoreThemes(t *testing.T) {
+	colors := StoreThemeIconColors{Background: "#F2EDE0", Query: "#FBD9E8", Selected: "#7A3E00", Separator: "#C8452C", Indicator: "#C8452C"}
+	width := 1
+	installed := ThemeSwatchSVG(Theme{
+		AppBackgroundColor: colors.Background, QueryBoxBackgroundColor: colors.Query,
+		ResultItemActiveBackgroundColor: colors.Selected, QuerySeparatorThickness: &width, QuerySeparatorColor: colors.Separator,
+		ResultItemActiveIndicatorWidth: &width, ResultItemActiveIndicatorColor: colors.Indicator,
+	})
+	if store := colors.SwatchImage().ImageData; store != installed {
+		t.Fatalf("store and installed swatches differ:\n%s\n%s", store, installed)
+	}
+	if !strings.Contains(installed, `y="13" width="24" height="0.75" fill="#C8452C"`) || !strings.Contains(installed, `y="19" width="1" height="6" fill="#C8452C"`) {
+		t.Fatalf("swatch does not show separator and indicator: %s", installed)
+	}
+	colors.Separator, colors.Indicator = "", ""
+	if strings.Contains(colors.SwatchImage().ImageData, `fill="#C8452C"`) {
+		t.Fatal("missing separator and indicator must not be drawn")
+	}
+}
+
+func TestThemeSwatchRespectsDisabledAndLegacyMarkers(t *testing.T) {
+	zero, one := 0, 1
+	theme := Theme{
+		QuerySeparatorColor: "#123456", QuerySeparatorThickness: &zero,
+		ResultItemActiveBorderLeftWidth: 3, ResultItemActiveBorderLeftColor: "#654321",
+		ResultItemActiveIndicatorWidth: &zero,
+	}
+	svg := ThemeSwatchSVG(theme)
+	if strings.Contains(svg, "#123456") || strings.Contains(svg, "#654321") {
+		t.Fatal("zero width must disable the separator and the v2 marker")
+	}
+	theme.QuerySeparatorThickness = &one
+	theme.ResultItemActiveIndicatorWidth = nil
+	svg = ThemeSwatchSVG(theme)
+	if !strings.Contains(svg, "#123456") || !strings.Contains(svg, "#654321") {
+		t.Fatal("enabled separator and legacy marker must be visible")
+	}
+}
+
 func TestNewWoxImageThemeAutoUsesDiagonalMask(t *testing.T) {
 	image := NewWoxImageThemeAuto(
 		Theme{AppBackgroundColor: "#F5F5F5", QueryBoxBackgroundColor: "#E8E8E8", ResultItemActiveBackgroundColor: "#D8D8D8"},

@@ -10,12 +10,15 @@ const (
 	ThemeSwatchSize                float32 = 32
 	ThemeSwatchRadius              float32 = 8
 	ThemeSwatchInset               float32 = 4
-	ThemeSwatchQueryHeight         float32 = 10
+	ThemeSwatchQueryHeight         float32 = 8
 	ThemeSwatchQueryRadius         float32 = 4
-	ThemeSwatchGap                 float32 = 4
-	ThemeSwatchResultHeight        float32 = 5
+	ThemeSwatchResultHeight        float32 = 6
 	ThemeSwatchResultRadius        float32 = 2
-	ThemeSwatchAutoQueryTop        float32 = 5
+	ThemeSwatchAutoQueryTop        float32 = 4
+	ThemeSwatchResultTop                   = (ThemeSwatchSize + ThemeSwatchAutoQueryTop + ThemeSwatchQueryHeight - ThemeSwatchResultHeight) / 2
+	ThemeSwatchSeparatorTop        float32 = 13
+	ThemeSwatchSeparatorHeight     float32 = 0.75
+	ThemeSwatchIndicatorWidth      float32 = 1
 	ThemeSwatchAutoLineWidth       float32 = 1.5
 	ThemeSwatchOutlineWidthDefault float32 = 2
 	ThemeSwatchOutlineWidthMin     float32 = 1.5
@@ -28,6 +31,8 @@ type themeSwatchColors struct {
 	Background   string
 	Query        string
 	Selected     string
+	Separator    string
+	Indicator    string
 	Outline      string
 	OutlineWidth float32
 }
@@ -101,19 +106,32 @@ func ThemeSwatchOutlineWidth(authored int) float32 {
 }
 
 func themeSwatchQueryTop() float32 {
-	return (ThemeSwatchSize - ThemeSwatchQueryHeight - ThemeSwatchGap - ThemeSwatchResultHeight) / 2
-}
-
-func themeSwatchAutoResultTop() float32 {
-	return ThemeSwatchAutoQueryTop + ThemeSwatchQueryHeight + ThemeSwatchGap
+	return ThemeSwatchAutoQueryTop
 }
 
 func themeSwatchColorsFromTheme(theme Theme, fallback themeSwatchColors) themeSwatchColors {
 	outline, outlineWidth := themeSwatchOutline(theme)
+	separator := ""
+	if theme.QuerySeparatorThickness != nil && *theme.QuerySeparatorThickness > 0 {
+		separator = theme.QuerySeparatorColor
+	}
+	indicatorWidth := theme.ResultItemActiveBorderLeftWidth
+	indicatorColor := firstNonEmpty(theme.ResultItemActiveBorderLeftColor, theme.QueryBoxCursorColor)
+	if theme.ResultItemActiveIndicatorWidth != nil {
+		indicatorWidth = *theme.ResultItemActiveIndicatorWidth
+	}
+	if strings.TrimSpace(theme.ResultItemActiveIndicatorColor) != "" {
+		indicatorColor = theme.ResultItemActiveIndicatorColor
+	}
+	if indicatorWidth <= 0 {
+		indicatorColor = ""
+	}
 	return themeSwatchColors{
 		Background:   firstNonEmpty(theme.AppBackgroundColor, fallback.Background),
 		Query:        firstNonEmpty(theme.QueryBoxBackgroundColor, fallback.Query),
 		Selected:     firstNonEmpty(theme.ResultItemActiveBackgroundColor, fallback.Selected),
+		Separator:    separator,
+		Indicator:    indicatorColor,
 		Outline:      outline,
 		OutlineWidth: outlineWidth,
 	}
@@ -157,7 +175,7 @@ func themeSwatchAuthoredBorderColor(theme Theme) bool {
 func themeSwatchSVG(colors themeSwatchColors) string {
 	innerWidth := ThemeSwatchSize - ThemeSwatchInset*2
 	queryTop := themeSwatchQueryTop()
-	resultTop := queryTop + ThemeSwatchQueryHeight + ThemeSwatchGap
+	resultTop := ThemeSwatchResultTop
 	var builder strings.Builder
 	fmt.Fprintf(&builder,
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %g %g"><rect width="%g" height="%g" rx="%g" fill="%s"/><rect x="%g" y="%g" width="%g" height="%g" rx="%g" fill="%s"/><rect x="%g" y="%g" width="%g" height="%g" rx="%g" fill="%s"/>`,
@@ -166,6 +184,12 @@ func themeSwatchSVG(colors themeSwatchColors) string {
 		ThemeSwatchInset, queryTop, innerWidth, ThemeSwatchQueryHeight, ThemeSwatchQueryRadius, svgPaint(colors.Query),
 		ThemeSwatchInset, resultTop, innerWidth, ThemeSwatchResultHeight, ThemeSwatchResultRadius, svgPaint(colors.Selected),
 	)
+	if strings.TrimSpace(colors.Separator) != "" {
+		fmt.Fprintf(&builder, `<rect x="%g" y="%g" width="%g" height="%g" fill="%s"/>`, ThemeSwatchInset, ThemeSwatchSeparatorTop, innerWidth, ThemeSwatchSeparatorHeight, svgPaint(colors.Separator))
+	}
+	if strings.TrimSpace(colors.Indicator) != "" {
+		fmt.Fprintf(&builder, `<rect x="%g" y="%g" width="%g" height="%g" fill="%s"/>`, ThemeSwatchInset, resultTop, ThemeSwatchIndicatorWidth, ThemeSwatchResultHeight, svgPaint(colors.Indicator))
+	}
 	builder.WriteString(themeSwatchSVGOutline(themeSwatchChrome{Color: colors.Outline, Width: colors.OutlineWidth}))
 	builder.WriteString(`</svg>`)
 	return builder.String()
@@ -174,7 +198,7 @@ func themeSwatchSVG(colors themeSwatchColors) string {
 func themeAutoSwatchSVG(light, dark themeSwatchColors, chrome themeSwatchChrome) string {
 	innerWidth := ThemeSwatchSize - ThemeSwatchInset*2
 	queryTop := ThemeSwatchAutoQueryTop
-	resultTop := themeSwatchAutoResultTop()
+	resultTop := ThemeSwatchResultTop
 	half := ThemeSwatchAutoLineWidth / 2
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf(
@@ -203,6 +227,19 @@ func themeAutoSwatchSVG(light, dark themeSwatchColors, chrome themeSwatchChrome)
 	builder.WriteString(svgMaskedPolygon(themeSwatchDiagonalPolygon(query, false), dark.Query))
 	builder.WriteString(svgMaskedPolygon(themeSwatchDiagonalPolygon(result, true), light.Selected))
 	builder.WriteString(svgMaskedPolygon(themeSwatchDiagonalPolygon(result, false), dark.Selected))
+	separator := []themeSwatchPoint{{ThemeSwatchInset, ThemeSwatchSeparatorTop}, {ThemeSwatchInset + innerWidth, ThemeSwatchSeparatorTop}, {ThemeSwatchInset + innerWidth, ThemeSwatchSeparatorTop + ThemeSwatchSeparatorHeight}, {ThemeSwatchInset, ThemeSwatchSeparatorTop + ThemeSwatchSeparatorHeight}}
+	indicator := []themeSwatchPoint{{ThemeSwatchInset, resultTop}, {ThemeSwatchInset + ThemeSwatchIndicatorWidth, resultTop}, {ThemeSwatchInset + ThemeSwatchIndicatorWidth, resultTop + ThemeSwatchResultHeight}, {ThemeSwatchInset, resultTop + ThemeSwatchResultHeight}}
+	for _, part := range []struct {
+		points      []themeSwatchPoint
+		light, dark string
+	}{{separator, light.Separator, dark.Separator}, {indicator, light.Indicator, dark.Indicator}} {
+		if strings.TrimSpace(part.light) != "" {
+			builder.WriteString(svgMaskedPolygon(themeSwatchDiagonalPolygon(part.points, true), part.light))
+		}
+		if strings.TrimSpace(part.dark) != "" {
+			builder.WriteString(svgMaskedPolygon(themeSwatchDiagonalPolygon(part.points, false), part.dark))
+		}
+	}
 	builder.WriteString(svgMaskedPolygon([]themeSwatchPoint{
 		{ThemeSwatchSize - half, 0},
 		{ThemeSwatchSize + half, 0},

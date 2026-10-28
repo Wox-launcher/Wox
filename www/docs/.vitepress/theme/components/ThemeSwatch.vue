@@ -8,53 +8,25 @@ const props = defineProps<{
 }>();
 
 const visible = computed(() => hasThemeSwatch(props.colors));
-const frameStyle = computed(() => {
-  const colors = props.colors;
-  const width = colors?.Outline && colors.OutlineWidth ? Math.min(3, Math.max(1, colors.OutlineWidth)) : 0;
-  return {
-    width: `${props.size || 56}px`,
-    height: `${props.size || 56}px`,
-    background: colors?.Background || "transparent",
-    border: width > 0 ? `${width}px solid ${colors?.Outline}` : "0",
-  };
-});
-const queryColor = computed(() => {
-  const query = props.colors?.Query || "transparent";
-  return query.toLowerCase() === "transparent" ? "transparent" : query;
-});
+const outlineWidth = computed(() => props.colors?.Outline && props.colors.OutlineWidth
+  ? Math.min(2.5, Math.max(1.5, props.colors.OutlineWidth * 0.75))
+  : 0);
 </script>
 
 <template>
-  <div v-if="visible" class="theme-swatch" :style="frameStyle">
-    <span class="bar query" :style="{ background: queryColor }"></span>
-    <span class="bar selected" :style="{ background: colors?.Selected || 'transparent' }"></span>
-  </div>
+  <svg v-if="visible" class="theme-swatch" :width="size || 56" :height="size || 56" viewBox="0 0 32 32" aria-hidden="true">
+    <rect width="32" height="32" rx="8" :fill="colors?.Background" />
+    <rect x="4" y="4" width="24" height="8" rx="4" :fill="colors?.Query" />
+    <rect x="4" y="19" width="24" height="6" rx="2" :fill="colors?.Selected" />
+    <rect v-if="colors?.Separator" x="4" y="13" width="24" height="0.75" :fill="colors.Separator" />
+    <rect v-if="colors?.Indicator" x="4" y="19" width="1" height="6" :fill="colors.Indicator" />
+    <rect v-if="outlineWidth" :x="outlineWidth / 2" :y="outlineWidth / 2" :width="32 - outlineWidth" :height="32 - outlineWidth" :rx="8 - outlineWidth / 2" fill="none" :stroke="colors?.Outline" :stroke-width="outlineWidth" />
+  </svg>
 </template>
 
 <style scoped>
 .theme-swatch {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  box-sizing: border-box;
-  padding: 7px;
-  border-radius: 16px;
-  flex-shrink: 0;
-}
-
-.bar {
   display: block;
-  width: 100%;
-  border-radius: 4px;
-}
-
-.query {
-  height: 10px;
-}
-
-.selected {
-  height: 6px;
-  border-radius: 3px;
+  flex-shrink: 0;
 }
 </style>

@@ -56,7 +56,8 @@
       "Query": "#EEE9D5FF",
       "Selected": "#FFF8E3FF",
       "Outline": "#B8B29A80",
-      "OutlineWidth": 1
+      "OutlineWidth": 1,
+      "Separator": "#B58B0BFF"
     },
     "Website": "https://gist.github.com/qianlifeng/3a1311efa39d685e5f737ab98a741bc9",
     "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/3a1311efa39d685e5f737ab98a741bc9/raw/Wox.Theme.Saffron.json",
@@ -126,7 +127,8 @@
       "Query": "#44475A99",
       "Selected": "#44475AFF",
       "Outline": "#6272A459",
-      "OutlineWidth": 1
+      "OutlineWidth": 1,
+      "Indicator": "#BD93F9FF"
     },
     "Website": "https://gist.github.com/dragonish/c6118868fc93e7519ef1d11b2a5b0248",
     "DownloadUrl": "https://gist.githubusercontent.com/dragonish/c6118868fc93e7519ef1d11b2a5b0248/raw/Wox.Theme.Dracula.json",
@@ -149,7 +151,9 @@
       "Query": "#F2EDE0FF",
       "Selected": "#E9E1CEFF",
       "Outline": "#B8B0A080",
-      "OutlineWidth": 1
+      "OutlineWidth": 1,
+      "Separator": "#C8452CFF",
+      "Indicator": "#C8452CFF"
     },
     "Website": "https://gist.github.com/dragonish/2cf9d018af5fd48991be9de497128d81",
     "DownloadUrl": "https://gist.githubusercontent.com/dragonish/2cf9d018af5fd48991be9de497128d81/raw/Wox.Theme.FiveShadesOfInk.json",
@@ -182,7 +186,9 @@
       "Query": "#2A3542FF",
       "Selected": "#354253FF",
       "Outline": "#3A475A80",
-      "OutlineWidth": 1
+      "OutlineWidth": 1,
+      "Separator": "#D96A4AFF",
+      "Indicator": "#D96A4AFF"
     },
     "Website": "https://gist.github.com/dragonish/9278791e2a2e09ee4281f97a45545730",
     "DownloadUrl": "https://gist.githubusercontent.com/dragonish/9278791e2a2e09ee4281f97a45545730/raw/Wox.Theme.Dai.json",

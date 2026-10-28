@@ -489,6 +489,22 @@ func TestThemeSwatchSkipsDefaultWindowChrome(t *testing.T) {
 	}
 }
 
+func TestThemeSwatchShowsEnabledSeparatorAndIndicator(t *testing.T) {
+	width := 1
+	color := woxui.Color{R: 200, G: 69, B: 44, A: 255}
+	theme := woxcomponent.Theme{QuerySeparatorThickness: &width, QuerySeparatorColor: &color, ResultItemActiveIndicatorWidth: &width, ResultItemActiveIndicatorColor: &color}
+	swatch := themeSwatch(theme, common.ThemeSwatchSize).(woxwidget.Container)
+	children := swatch.Child.(woxwidget.Stack).Children
+	if len(children) != 4 || children[2].Top != common.ThemeSwatchSeparatorTop || children[3].Top != common.ThemeSwatchResultTop {
+		t.Fatalf("swatch children = %#v, want separator and indicator", children)
+	}
+	width = 0
+	swatch = themeSwatch(theme, common.ThemeSwatchSize).(woxwidget.Container)
+	if len(swatch.Child.(woxwidget.Stack).Children) != 2 {
+		t.Fatal("disabled separator and indicator should not be drawn")
+	}
+}
+
 func TestThemeSystemTagCentersLabel(t *testing.T) {
 	tagColor := woxui.Color{R: 80, G: 90, B: 100, A: 255}
 	props := ThemeSettingsProps{
