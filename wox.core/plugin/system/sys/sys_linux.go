@@ -5,6 +5,7 @@ package sys
 import (
 	"fmt"
 	"os/exec"
+	"wox/util"
 	"wox/util/shell"
 )
 
@@ -117,6 +118,9 @@ func runToggleHiddenFilesCommand() (*exec.Cmd, error) {
 }
 
 func runLockCommand() (*exec.Cmd, error) {
+	if util.IsHyprlandSession() && util.IsOmarchy() {
+		return runOmarchyLockCommand()
+	}
 	return shell.Run("loginctl", "lock-session")
 }
 

@@ -15,6 +15,11 @@ import (
 	"wox/util/shell"
 )
 
+// runOmarchyLockCommand uses Omarchy's lock service and associated lock hooks.
+func runOmarchyLockCommand() (*exec.Cmd, error) {
+	return shell.Run("omarchy", "system", "lock")
+}
+
 // appendOmarchyCommands adds the installed Omarchy menu to system search.
 // The catalog lives in Omarchy's JSONC files, including the user's extension,
 // so a Wox build does not have to track menu changes.
