@@ -133,3 +133,27 @@ func TestOmarchyGuardScriptReportsConditions(t *testing.T) {
 		t.Fatalf("guard results = %#v", results)
 	}
 }
+
+func TestOmarchyCheckedStateAppearsInSubtitle(t *testing.T) {
+	items, err := parseOmarchyMenuJSONC(`{"setup.browser.firefox":{"label":"Firefox","action":"true","checked":"true"}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	menu := mergeOmarchyMenu(items, nil)
+	if !strings.Contains(omarchyGuardScript(menu), "setup.browser.firefox:c:1") {
+		t.Fatal("checked condition missing from guard script")
+	}
+	state := newOmarchyWhenState()
+	command := buildOmarchySysCommands(menu, state, common.WoxImage{}, nil)[0]
+	if strings.Contains(command.BuildSubTitle(context.Background(), plugin.Query{}), "✓") {
+		t.Fatal("unknown state should not appear selected")
+	}
+	state.replace(parseOmarchyGuardOutput("setup.browser.firefox:c:1\n"))
+	if !strings.Contains(command.BuildSubTitle(context.Background(), plugin.Query{}), "✓") {
+		t.Fatal("checked state missing from subtitle")
+	}
+	state.replace(parseOmarchyGuardOutput("setup.browser.firefox:c:0\n"))
+	if strings.Contains(command.BuildSubTitle(context.Background(), plugin.Query{}), "✓") {
+		t.Fatal("unchecked state appears selected")
+	}
+}

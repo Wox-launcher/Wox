@@ -4,6 +4,8 @@ package sys
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -50,6 +52,57 @@ func TestHostOmarchyMenuCommands(t *testing.T) {
 		}
 		if item.ID == "system.lock" && item.Action != "" && !ids[omarchyCommandPrefix+"system.lock"] {
 			t.Fatal("lock action was not exported")
+		}
+	}
+}
+
+func TestReloadOmarchyCommandsKeepsLastValidCatalog(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("OMARCHY_PATH", root)
+	t.Setenv("HOME", home)
+	menuDir := filepath.Join(root, "default", "omarchy")
+	extDir := filepath.Join(home, ".config", "omarchy", "extensions")
+	for _, dir := range []string{menuDir, extDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	menu := filepath.Join(menuDir, "omarchy-menu.jsonc")
+	ext := filepath.Join(extDir, "omarchy-menu.jsonc")
+	write := func(path, value string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(value), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(menu, `{"one":{"label":"One","action":"true"}}`)
+	write(ext, `{}`)
+	p := &SysPlugin{commands: []SysCommand{{ID: "builtin"}}}
+	if !p.reloadOmarchyCommands(context.Background()) {
+		t.Fatal("initial load failed")
+	}
+	if _, ok := p.findCommand("omarchy:one"); !ok {
+		t.Fatal("initial command missing")
+	}
+	write(ext, `{broken`)
+	if p.reloadOmarchyCommands(context.Background()) {
+		t.Fatal("invalid menu accepted")
+	}
+	if _, ok := p.findCommand("omarchy:one"); !ok {
+		t.Fatal("invalid edit removed previous command")
+	}
+	write(ext, `{"two":{"label":"Two","action":"true"}}`)
+	write(menu, `{"three":{"label":"Three","action":"true"}}`)
+	if !p.reloadOmarchyCommands(context.Background()) {
+		t.Fatal("updated menu failed")
+	}
+	if _, ok := p.findCommand("omarchy:one"); ok {
+		t.Fatal("removed command retained")
+	}
+	for _, id := range []string{"builtin", "omarchy:two", "omarchy:three"} {
+		if _, ok := p.findCommand(id); !ok {
+			t.Fatalf("command %s missing", id)
 		}
 	}
 }

@@ -42,6 +42,7 @@ func init() {
 
 type SysPlugin struct {
 	api                  plugin.API
+	commandsMu           sync.RWMutex
 	commands             []SysCommand
 	commandSearchIndexMu sync.RWMutex
 	commandSearchIndexes map[i18n.LangCode][][]*fuzzymatch.PreparedText
@@ -131,7 +132,9 @@ func (r *SysPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	// Omarchy commands come from the installed menu, so they have to join the
 	// list before the search index is built.
 	r.appendOmarchyCommands(ctx)
+	r.commandsMu.RLock()
 	r.getCommandSearchIndex(ctx)
+	r.commandsMu.RUnlock()
 
 	r.api.OnMRURestore(ctx, r.handleMRURestore)
 }
@@ -655,6 +658,8 @@ func (r *SysPlugin) fixedVolumeCommand(percent int) SysCommand {
 }
 
 func (r *SysPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	r.commandsMu.RLock()
+	defer r.commandsMu.RUnlock()
 	if r.omarchyGuards != nil {
 		r.omarchyGuards.refreshIfStale(ctx)
 	}
@@ -915,6 +920,8 @@ func sysCommandIdentityKey(command SysCommand, contextData common.ContextData) s
 }
 
 func (r *SysPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error) {
+	r.commandsMu.RLock()
+	defer r.commandsMu.RUnlock()
 	commandID := mruData.ContextData["commandId"]
 	if commandID == "" {
 		return nil, fmt.Errorf("empty commandId in context data")

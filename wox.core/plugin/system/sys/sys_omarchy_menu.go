@@ -54,6 +54,7 @@ type omarchyMenuItem struct {
 	Provider    string
 	Description string
 	When        string
+	Checked     string
 	Aliases     []string
 }
 
@@ -317,6 +318,7 @@ func normalizeOmarchyItem(id string, fields map[string]json.RawMessage) omarchyM
 	provider, _ := omarchyJSONString(fields, "provider")
 	description, _ := omarchyJSONString(fields, "description")
 	when, _ := omarchyJSONString(fields, "when")
+	checked, _ := omarchyJSONString(fields, "checked")
 	return omarchyMenuItem{
 		ID:          id,
 		Parent:      parent,
@@ -325,6 +327,7 @@ func normalizeOmarchyItem(id string, fields map[string]json.RawMessage) omarchyM
 		Provider:    strings.TrimSpace(provider),
 		Description: strings.TrimSpace(description),
 		When:        strings.TrimSpace(when),
+		Checked:     strings.TrimSpace(checked),
 		Aliases:     omarchyJSONAliases(fields["aliases"]),
 	}
 }
@@ -466,7 +469,11 @@ func buildOmarchySysCommands(items []omarchyMenuItem, state *omarchyWhenState, i
 				return state.allows(menuID, when)
 			},
 			BuildSubTitle: func(ctx context.Context, _ plugin.Query) string {
-				return omarchyCommandSubtitle(ctx, parentPath)
+				subtitle := omarchyCommandSubtitle(ctx, parentPath)
+				if checked, ok := state.values.Load(menuID + ":c"); ok && checked {
+					subtitle += "  ✓"
+				}
+				return subtitle
 			},
 			Action: func(ctx context.Context, _ plugin.ActionContext) {
 				if run != nil {
@@ -478,16 +485,21 @@ func buildOmarchySysCommands(items []omarchyMenuItem, state *omarchyWhenState, i
 	return commands
 }
 
-// omarchyGuardScript is the body that prints `<id>:w:1` or `<id>:w:0` for
-// every conditional row. The package helpers are prepended by the runner.
+// omarchyGuardScript evaluates visibility and checked conditions in one shell.
+// The package helpers are prepended by the runner.
 func omarchyGuardScript(items []omarchyMenuItem) string {
 	var body strings.Builder
 	for _, item := range items {
-		if item.When == "" || !omarchyMenuIDPattern.MatchString(item.ID) {
+		if !omarchyMenuIDPattern.MatchString(item.ID) {
 			continue
 		}
-		when := strings.ReplaceAll(item.When, "\n", " ")
-		fmt.Fprintf(&body, "if { %s; } >/dev/null 2>&1; then echo %s:w:1; else echo %s:w:0; fi\n", when, item.ID, item.ID)
+		for _, condition := range []struct{ kind, expression string }{{"w", item.When}, {"c", item.Checked}} {
+			if condition.expression == "" {
+				continue
+			}
+			expression := strings.ReplaceAll(condition.expression, "\n", " ")
+			fmt.Fprintf(&body, "if { %s; } >/dev/null 2>&1; then echo %s:%s:1; else echo %s:%s:0; fi\n", expression, item.ID, condition.kind, item.ID, condition.kind)
+		}
 	}
 	return body.String()
 }
@@ -504,6 +516,10 @@ func parseOmarchyGuardOutput(output string) map[string]bool {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		switch {
+		case strings.HasSuffix(line, ":c:1"):
+			results[strings.TrimSuffix(line, ":1")] = true
+		case strings.HasSuffix(line, ":c:0"):
+			results[strings.TrimSuffix(line, ":0")] = false
 		case strings.HasSuffix(line, ":w:1"):
 			results[strings.TrimSuffix(line, ":w:1")] = true
 		case strings.HasSuffix(line, ":w:0"):
