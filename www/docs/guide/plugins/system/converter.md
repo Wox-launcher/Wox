@@ -16,7 +16,7 @@ Converter handles units, currencies, crypto prices, number bases, dates, time zo
 100 usd + 50 usd
 ```
 
-Converter listens globally. Use `calculator` as an explicit keyword if another global result is taking priority.
+Converter listens globally and has no default trigger keyword. Select its result if another global result appears first.
 
 ## Supported Work
 

@@ -42,7 +42,7 @@ wpm install everything
 | `chat` | AI 对话 |
 | `ai` | AI 命令 |
 | `wpm`, `store`, `pm` | 插件管理器 |
-| `calculator` | 计算器 / 转换器显式模式 |
+| `calculator` | 计算器显式模式 |
 | `h` | 查询历史 |
 
 ## 查询提示
@@ -63,7 +63,7 @@ wpm install everything
 | --- | --- |
 | Windows: `Alt + Space` | 显示或隐藏 Wox |
 | macOS: `Command + Space` | 显示或隐藏 Wox |
-| Linux: `Ctrl + Space` | 显示或隐藏 Wox |
+| Linux: `Ctrl + Space`（Omarchy 上为 `Alt + Space`） | 显示或隐藏 Wox |
 | `Esc` | 隐藏 Wox，或从嵌套视图返回 |
 | `Up` / `Down` | 在结果中移动 |
 | `Enter` | 执行选中结果的主要动作 |

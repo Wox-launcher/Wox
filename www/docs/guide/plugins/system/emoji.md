@@ -13,7 +13,7 @@ emoji heart
 emoji flag
 ```
 
-Results use a grid layout so you can scan many choices quickly. Press `Enter` to copy the selected emoji. The Action Panel can copy a larger emoji image, add a keyword, or paste into the active window when available.
+Results use a grid layout so you can scan many choices quickly. By default, `Enter` pastes the selected emoji into the active app; the primary action can be changed to copy in plugin settings. The Action Panel also offers copy and paste actions, copying a larger emoji image, and adding a keyword.
 
 ## AI Matching
 

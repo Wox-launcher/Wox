@@ -1,6 +1,6 @@
 # 安装
 
-优先选择你平时管理桌面应用的方式。包管理器更适合后续升级；Release 压缩包更适合需要便携目录的场景。Wox 默认使用稳定版更新通道。
+优先选择你平时管理桌面应用的方式。包管理器更适合后续升级；Release 可执行文件更适合需要便携目录的场景。Wox 默认使用稳定版更新通道。
 
 ## 包管理器
 
@@ -26,11 +26,11 @@ Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **�
 
 ### Windows
 
-1. 从 Releases 下载 Windows 压缩包。
-2. 解压到你自己管理的目录，例如 `C:\Tools\Wox`。
-3. 运行 `Wox.exe`。
+1. 从 Releases 下载 `wox-windows-amd64.exe`。
+2. 将它放到你自己管理的目录，例如 `C:\Tools\Wox`。
+3. 运行下载的可执行文件。
 
-如果希望设置和插件跟着这份副本走，请在第一次启动前，在 `Wox.exe` 旁边建一个 `wox-user` 文件夹。见[便携用户数据](#便携用户数据)。
+如果希望设置和插件跟着这份副本走，请在第一次启动前，在可执行文件旁边建一个 `wox-user` 文件夹。见[便携用户数据](#便携用户数据)。
 
 如果 Windows SmartScreen 弹出确认，请先确认文件来自官方 Wox Release 页面。
 
@@ -50,12 +50,12 @@ Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **�
    - openSUSE：从 Releases 下载 `.rpm`，执行 `sudo zypper install ./wox-linux-amd64.rpm`
    - Arch Linux：从 AUR 安装 `wox-bin`
    - AppImage：下载 `wox-linux-amd64.AppImage`，赋予执行权限后直接运行
-2. 也可以从 Releases 下载 Linux 二进制，解压到稳定目录（例如 `~/Applications/wox`），再运行 `./wox`。
+2. 也可以从 Releases 下载 `wox-linux-amd64`，放到稳定目录中，赋予执行权限后运行。
 
 如果二进制或 AppImage 没有执行权限：
 
 ```bash
-chmod +x ./wox
+chmod +x ./wox-linux-amd64
 # 或
 chmod +x ./wox-linux-amd64.AppImage
 ```
@@ -86,7 +86,7 @@ Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 
 - Winget：`winget uninstall -e --id Wox.Wox`
 - Scoop：`scoop uninstall wox`
-- 手动安装：删除解压目录
+- 手动安装：删除下载的可执行文件
 - 完全重置：删除 `%USERPROFILE%\.wox`
 
 ### macOS
@@ -101,5 +101,5 @@ Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 - Debian / Ubuntu：`sudo apt remove wox`
 - Fedora / RHEL：`sudo dnf remove wox`
 - openSUSE：`sudo zypper remove wox`
-- 手动或 AppImage 安装：删除解压出的二进制或 AppImage 文件
+- 手动或 AppImage 安装：删除二进制或 AppImage 文件
 - 完全重置：删除 `~/.wox`

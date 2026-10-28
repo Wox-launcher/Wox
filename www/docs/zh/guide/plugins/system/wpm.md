@@ -20,6 +20,6 @@ wpm install everything
 
 动作可以安装、更新、卸载、打开插件网站，或复制用于创建插件的 AI prompt。也可以从模板创建单文件插件或全功能插件。
 
-Node.js 和 Python 插件需要对应运行时。如果刚安装了 host，可以在插件管理器设置里刷新运行时。
+Node.js 和 Python 插件需要对应运行时。如果刚安装了解释器，可以打开 **设置 -> 插件 -> 运行时设置** 刷新状态，或配置其可执行文件路径。
 
 见 [插件商店](/zh/store/plugins) 和 [如何创建插件](/zh/development/)。

@@ -56,7 +56,7 @@ On Windows and Linux, start Wox once after installing or updating so it can regi
 
 ### How do I update plugins?
 
-Run `wpm`, select the plugin, and use the update action when one is available. You can also manage installed plugins from Plugin Manager settings.
+Run `wpm`, select the plugin, and use the update action when one is available. You can also manage plugins under **Settings -> Plugins -> Installed Plugins**.
 
 ## File Search
 
@@ -78,7 +78,7 @@ Run `theme` in Wox or open **Settings -> Theme**.
 
 ### How do I change the hotkey?
 
-Open **Settings -> General** and edit the hotkey field. Query hotkeys, tray queries, and the selection hotkey are on the same page. See [Hotkeys](./usage/hotkeys.md).
+Open **Settings -> Hotkey** to edit the main, selection, and query hotkeys. Tray queries are under **Settings -> General**. See [Hotkeys](./usage/hotkeys.md).
 
 ### Where did Explorer go?
 

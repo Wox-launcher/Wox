@@ -11,9 +11,9 @@ Configure [AI Settings](./settings.md) first.
 1. Open **Settings -> Plugins -> AI Command**.
 2. Open the command list.
 3. Add a command with a name, query keyword, model, and prompt.
-4. Use `%s` in the prompt where Wox should insert your input.
+4. Use `{wox:input_text}` in the prompt where Wox should insert your input. Existing `%s` prompts remain supported.
 
-You can also insert `{wox:selected_text}` or other query variables when the command should read the current selection.
+To pass the current selection, use a query such as `ai translate {wox:selected_text}` in a Query Hotkey. The command receives that text through `{wox:input_text}`.
 
 ## Example: Commit Message From a Diff
 
@@ -37,7 +37,7 @@ Rules:
 - Output only the commit message.
 
 Diff:
-%s
+{wox:input_text}
 ```
 
 Add a macOS shell helper:

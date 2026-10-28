@@ -34,7 +34,7 @@ Wox 会把你输入的内容路由给插件。
 ## 建议的第一次使用路径
 
 1. 先完成 [安装](./installation.md)。
-2. 用默认快捷键打开 Wox：Windows 为 `Alt + Space`，macOS 为 `Command + Space`，Linux 为 `Ctrl + Space`。
+2. 用默认快捷键打开 Wox：Windows 为 `Alt + Space`，macOS 为 `Command + Space`，Linux 为 `Ctrl + Space`（Omarchy 上为 `Alt + Space`）。
 3. 先输入一个应用名，确认应用搜索正常。
 4. 阅读 [查询](./usage/querying.md)，了解关键字、查询提示和 fallback 结果。
 5. 打开 **设置 -> 插件**，或从侧栏选择一个内置插件，按自己的使用习惯调整。

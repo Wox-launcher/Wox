@@ -34,7 +34,7 @@ When a result is selected, press `Enter` for the primary action or open the [Act
 ## Recommended first pass
 
 1. [Install Wox](./installation.md).
-2. Open Wox with the default hotkey: `Alt + Space` on Windows, `Command + Space` on macOS, or `Ctrl + Space` on Linux.
+2. Open Wox with the default hotkey: `Alt + Space` on Windows, `Command + Space` on macOS, or `Ctrl + Space` on Linux (`Alt + Space` on Omarchy).
 3. Type an application name to confirm app search.
 4. Read [Querying](./usage/querying.md) for keywords, query hints, and fallback results.
 5. Open **Settings -> Plugins**, or pick a built-in plugin from the sidebar, when you want to tune a workflow.

@@ -30,7 +30,7 @@ Safari bookmarks are not currently indexed.
 
 Open **Settings -> Plugins -> Browser Bookmark** to choose which browsers Wox should index. Keep only the browsers you actually use enabled if you have many duplicate bookmarks.
 
-Bookmarks reload when the browser bookmark file changes, and again when Wox restarts. If Firefox has the profile database locked, close Firefox once and retry.
+Bookmarks reload when Wox starts or when the browser selection changes in plugin settings. Restart Wox to pick up bookmark file changes. If Firefox has the profile database locked, close Firefox once and retry.
 
 ## Icons and Ordering
 

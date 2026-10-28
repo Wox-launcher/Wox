@@ -1,6 +1,6 @@
 # Installation
 
-Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release archive is useful when you want a portable copy. Wox uses the stable update channel by default.
+Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release executable is useful when you want a portable copy. Wox uses the stable update channel by default.
 
 ## Package Managers
 
@@ -26,11 +26,11 @@ Wox checks the stable update channel by default. To receive beta prereleases, op
 
 ### Windows
 
-1. Download the Windows archive from Releases.
-2. Extract it to a directory you control, such as `C:\Tools\Wox`.
-3. Run `Wox.exe`.
+1. Download `wox-windows-amd64.exe` from Releases.
+2. Place it in a directory you control, such as `C:\Tools\Wox`.
+3. Run the downloaded executable.
 
-To carry settings and plugins with this copy, create a `wox-user` folder next to `Wox.exe` before the first launch. See [Portable user data](#portable-user-data).
+To carry settings and plugins with this copy, create a `wox-user` folder next to the executable before the first launch. See [Portable user data](#portable-user-data).
 
 If Windows SmartScreen asks for confirmation, check that the file came from the official Wox release page before continuing.
 
@@ -50,12 +50,12 @@ If macOS blocks the first launch, open Wox from Finder once and choose **Open** 
    - openSUSE: install the `.rpm` from Releases with `sudo zypper install ./wox-linux-amd64.rpm`
    - Arch Linux: install `wox-bin` from the AUR
    - AppImage: download `wox-linux-amd64.AppImage`, mark it executable, and run it
-2. Or download the Linux binary from Releases, extract it to a stable location such as `~/Applications/wox`, and run `./wox`.
+2. Or download `wox-linux-amd64` from Releases, place it in a stable directory, make it executable, and run it.
 
 If the binary or AppImage is not executable after download, run:
 
 ```bash
-chmod +x ./wox
+chmod +x ./wox-linux-amd64
 # or
 chmod +x ./wox-linux-amd64.AppImage
 ```
@@ -86,7 +86,7 @@ Remove the application first, then decide whether to keep user data.
 
 - Winget: `winget uninstall -e --id Wox.Wox`
 - Scoop: `scoop uninstall wox`
-- Manual install: delete the extracted Wox directory
+- Manual install: delete the downloaded executable
 - Full reset: delete `%USERPROFILE%\.wox`
 
 ### macOS
@@ -101,5 +101,5 @@ Remove the application first, then decide whether to keep user data.
 - Debian / Ubuntu: `sudo apt remove wox`
 - Fedora / RHEL: `sudo dnf remove wox`
 - openSUSE: `sudo zypper remove wox`
-- Manual or AppImage install: delete the extracted binary or AppImage file
+- Manual or AppImage install: delete the binary or AppImage file
 - Full reset: remove `~/.wox`

@@ -42,7 +42,7 @@ Common built-in keywords:
 | `chat` | AI chat |
 | `ai` | AI Command |
 | `wpm`, `store`, `pm` | Plugin Manager |
-| `calculator` | Calculator / converter explicit mode |
+| `calculator` | Calculator explicit mode |
 | `h` | Query history |
 
 ## Query Hints
@@ -63,7 +63,7 @@ Web Search templates can also insert selected text or clipboard text captured be
 | --- | --- |
 | Windows: `Alt + Space` | Toggle Wox visibility |
 | macOS: `Command + Space` | Toggle Wox visibility |
-| Linux: `Ctrl + Space` | Toggle Wox visibility |
+| Linux: `Ctrl + Space` (`Alt + Space` on Omarchy) | Toggle Wox visibility |
 | `Esc` | Hide Wox or go back from a nested view |
 | `Up` / `Down` | Move through results |
 | `Enter` | Run the selected result's primary action |

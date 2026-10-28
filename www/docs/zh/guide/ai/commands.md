@@ -11,9 +11,9 @@ AI 命令把一段保存好的 prompt 变成可重复使用的 Wox 命令。适�
 1. 打开 **设置 -> 插件 -> AI 命令**。
 2. 打开命令列表。
 3. 添加命令，填写名称、查询关键字、模型和 prompt。
-4. 在 prompt 里用 `%s` 表示 Wox 要插入的输入。
+4. 在 prompt 里用 `{wox:input_text}` 表示 Wox 要插入的输入。已有的 `%s` 写法仍然支持。
 
-如果命令需要读取当前选区，也可以插入 `{wox:selected_text}` 或其他查询变量。
+如果命令需要读取当前选区，可以在快捷键查询中使用 `ai translate {wox:selected_text}`；命令通过 `{wox:input_text}` 接收这段文本。
 
 ## 示例：根据 diff 写提交说明
 
@@ -37,7 +37,7 @@ Rules:
 - Output only the commit message.
 
 Diff:
-%s
+{wox:input_text}
 ```
 
 再加一个 macOS shell 辅助函数：

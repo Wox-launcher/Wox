@@ -7,7 +7,7 @@ The Action Panel is the second step for a result. `Enter` runs the primary actio
 ## Open It
 
 1. Highlight a result.
-2. Press `Ctrl + K` on Windows/Linux or `Command + K` on macOS. Change this in **Settings -> General**.
+2. Press `Ctrl + K` on Windows/Linux or `Command + K` on macOS. Change this in **Settings -> Hotkey**.
 3. Pick an action with the keyboard and press `Enter`.
 
 You can type in the Action Panel to filter actions. Localized action names also match English aliases, so `copy`, `open`, or `delete` still find the right command.

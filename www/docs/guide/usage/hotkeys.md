@@ -1,6 +1,6 @@
 # Hotkeys
 
-Wox has one main launcher hotkey, plus optional hotkeys that run a prepared query. Open **Settings -> General** to change them.
+Wox has one main launcher hotkey, plus optional hotkeys that run a prepared query. Open **Settings -> Hotkey** to change them.
 
 ## Main Hotkey
 
@@ -10,7 +10,7 @@ The default toggle is:
 | --- | --- |
 | Windows | `Alt + Space` |
 | macOS | `Command + Space` |
-| Linux | `Ctrl + Space` |
+| Linux | `Ctrl + Space` (`Alt + Space` on Omarchy) |
 
 There is also a **Selection hotkey**. It opens Wox against the current text or file selection so plugins such as Selection, Web Search, and AI Command can act on it.
 
@@ -18,7 +18,7 @@ On macOS, grant Accessibility if hotkey recording asks for it. On Linux Wayland,
 
 ## Fullscreen Applications
 
-Enable **Settings -> General -> Ignore hotkeys in fullscreen** to suppress the main, selection and query hotkeys while the foreground window is fullscreen. It is off by default; ordinary maximized windows are unaffected. Dictation hotkeys are independent of this launcher setting.
+Enable **Settings -> Hotkey -> Ignore hotkeys in fullscreen** to suppress the main, selection and query hotkeys while the foreground window is fullscreen. It is off by default; ordinary maximized windows are unaffected. Dictation hotkeys are independent of this launcher setting.
 
 Detection supports Windows, macOS (Accessibility permission required), Linux X11 with `xprop`, and Hyprland with `hyprctl`. The switch is disabled on unsupported Wayland desktops or when the required Linux command is missing. Detection failures leave hotkeys enabled.
 
@@ -28,7 +28,7 @@ This suppresses Wox actions without unregistering the shortcuts, so it does not 
 
 A Query Hotkey binds a shortcut to a query. Instead of opening Wox and typing `x ` or `window group Work`, the shortcut does that in one step.
 
-Open **Settings -> General -> Query Hotkeys**, add a row, and start from a preset:
+Open **Settings -> Hotkey -> Query Hotkeys**, add a row, and start from a preset:
 
 | Preset | Use it for |
 | --- | --- |
@@ -58,13 +58,15 @@ Silent translation is the same pattern: create an AI Command, then bind a Query 
 
 Tray Queries are the mouse-friendly version of Query Hotkeys. In **Settings -> General -> Tray Queries**, add an icon and a query. Clicking the tray or menu-bar item opens Wox near the tray and runs that query.
 
+Tray Queries are unavailable in Linux Wayland sessions.
+
 This is useful for a dashboard, a WebView site, clipboard history (`cb`), or notes (`note`).
 
 ## Other Built-in Hotkey Surfaces
 
 | Feature | Where |
 | --- | --- |
-| Open the Action Panel | Default `Ctrl+K` (`Cmd+K` on macOS); change it in **Settings -> General** |
+| Open the Action Panel | Default `Ctrl+K` (`Cmd+K` on macOS); change it in **Settings -> Hotkey** |
 | Open a Web Search in WebView | Result action `Ctrl+Enter` (`Cmd+Enter` on macOS); the query box stays visible; Escape returns focus to the query |
 | Close the current WebView page | Action Panel `Ctrl+W` (`Cmd+W` on macOS); destroys the page so its memory can be released |
 | Hide a background WebView page | Action Panel `Ctrl+H` (`Cmd+H` on macOS); only on query-hotkey full preview windows with Run in background |
