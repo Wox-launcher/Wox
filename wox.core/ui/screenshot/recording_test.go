@@ -1335,7 +1335,7 @@ func TestOverlayRecordingCursorUsesDPIScale(t *testing.T) {
 
 func TestDrawRecordingCountdownUsesRedFillAndWhiteOutline(t *testing.T) {
 	displayList := &DisplayList{}
-	drawRecordingCountdown(displayList, Rect{Width: 800, Height: 600}, 3*time.Second-recordingCountdownFadeDuration, 1)
+	drawRecordingCountdown(displayList, nil, Rect{Width: 800, Height: 600}, 3*time.Second-recordingCountdownFadeDuration, 1)
 	if displayList.CommandCount() < 9 {
 		t.Fatalf("countdown commands = %d, want a white outline plus red fill", displayList.CommandCount())
 	}
@@ -1501,5 +1501,50 @@ func TestRecordingEncoderPreservesRedAndBlue(t *testing.T) {
 	blue, red := pixels[(16*64+16)*3:][:3], pixels[(16*64+48)*3:][:3]
 	if blue[2] < 230 || blue[0] > 20 || red[0] < 230 || red[2] > 20 {
 		t.Fatalf("colors changed after MP4 encoding: blue RGB=%v red RGB=%v", blue, red)
+	}
+}
+
+// TestRecordingKeycapEdgesHavePixelCoverage catches binary circle fills before
+// encoding, including fading caps and fractional capture/display scales.
+func TestRecordingKeycapEdgesHavePixelCoverage(t *testing.T) {
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		for _, remaining := range []time.Duration{time.Second, 175 * time.Millisecond} {
+			t.Run(fmt.Sprintf("scale=%g/lifetime=%s", scale, remaining), func(t *testing.T) {
+				now := time.Unix(100, 0)
+				target := image.NewRGBA(image.Rect(0, 0, 400, 270))
+				selection := Rect{X: 17.25, Y: 13.5, Width: 240, Height: 140}
+				if err := renderRecordingKeycaps(target, selection, Size{Width: 320, Height: 180}, []recordingKeycap{{label: "A", expiresAt: now.Add(remaining)}}, now, scale); err != nil {
+					t.Fatal(err)
+				}
+				fullAlpha := uint8(230)
+				if remaining < 350*time.Millisecond {
+					fullAlpha = uint8(remaining.Milliseconds() * 230 / 350)
+				}
+				partial, solid := 0, 0
+				var levels [256]bool
+				for index := 0; index < len(target.Pix); index += 4 {
+					r, g, b, alpha := target.Pix[index], target.Pix[index+1], target.Pix[index+2], target.Pix[index+3]
+					if r > alpha || g > alpha || b > alpha {
+						t.Fatal("keycap color is not premultiplied by coverage")
+					}
+					if alpha > 0 && alpha < fullAlpha {
+						partial++
+						levels[alpha] = true
+					}
+					if alpha == fullAlpha {
+						solid++
+					}
+				}
+				distinct := 0
+				for _, present := range levels {
+					if present {
+						distinct++
+					}
+				}
+				if partial < 10 || distinct < 4 || solid == 0 {
+					t.Fatalf("keycap edge coverage: partial=%d levels=%d solid=%d; want smooth edges and a solid interior", partial, distinct, solid)
+				}
+			})
+		}
 	}
 }

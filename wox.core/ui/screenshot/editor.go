@@ -1002,27 +1002,32 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.mu.Unlock()
 
 	displayList.Clear(Color{A: 255})
-	if backgroundEnabled && backgroundImage != nil {
-		displayList.DrawImage(backgroundImage, Rect{Width: frame.Size.Width, Height: frame.Size.Height})
+	frameRect := Rect{Width: frame.Size.Width, Height: frame.Size.Height}
+	hasBackgroundPreview := backgroundEnabled && backgroundImage != nil
+	if hasBackgroundPreview {
+		displayList.DrawImage(backgroundImage, frameRect)
 	} else {
-		displayList.DrawImage(previewImage, Rect{Width: frame.Size.Width, Height: frame.Size.Height})
+		displayList.DrawImage(previewImage, frameRect)
 	}
 	dim := Color{A: screenshotEditorDimAlpha}
 	if !hasSelection || selection.Width <= 0 || selection.Height <= 0 {
 		state.publishSizeLabel(Rect{}, "")
-		displayList.FillRect(Rect{Width: frame.Size.Width, Height: frame.Size.Height}, dim)
+		displayList.FillRect(frameRect, dim)
 		if pointerInside && !colorInspectorDismissed {
 			drawScreenshotEditorColorInspector(displayList, previewImage, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
 		}
 		return
 	}
-	if !backgroundEnabled || backgroundImage == nil {
-		displayList.FillRect(Rect{Width: frame.Size.Width, Height: selection.Y}, dim)
-		displayList.FillRect(Rect{Y: selection.Y + selection.Height, Width: frame.Size.Width, Height: max(float32(0), frame.Size.Height-selection.Y-selection.Height)}, dim)
-		displayList.FillRect(Rect{Y: selection.Y, Width: selection.X, Height: selection.Height}, dim)
-		displayList.FillRect(Rect{X: selection.X + selection.Width, Y: selection.Y, Width: max(float32(0), frame.Size.Width-selection.X-selection.Width), Height: selection.Height}, dim)
+	if !hasBackgroundPreview {
+		// Adjacent translucent bands leave bright seams where their antialiased edges meet.
+		displayList.FillRect(frameRect, dim)
 	}
 	displayList.PushClipRect(selection)
+	if !hasBackgroundPreview {
+		// Restore the opaque base as well so transparent capture pixels are not blended twice.
+		displayList.FillRect(frameRect, Color{A: 255})
+		displayList.DrawImage(previewImage, frameRect)
+	}
 	if textEditing && !textSelection.Collapsed() {
 		drawScreenshotEditorTextSelection(displayList, state.window, textPosition, textValue, textSelection, textFontSize*annotationScale, annotationColor, annotationScale)
 	}

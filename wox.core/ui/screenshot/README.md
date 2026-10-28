@@ -26,6 +26,18 @@ on-demand keyboard focus. An exclusive layer also captures pointer input outside
 its bounds, preventing the separate border and desktop from receiving clicks.
 The fullscreen screenshot keeps exclusive focus until this recording transition.
 
+The recording key display uses `util/keyboard`'s passive Hyprland Lua key-event
+listener when available, without requiring input-device permissions. Events stay
+in a bounded memory queue drained over IPC; closing the recording removes the
+listener, and a two-second lease expires it if Wox exits unexpectedly. Config
+reloads recreate the listener while its subscription remains open. Older
+Hyprland versions retain the existing evdev fallback.
+
 ## Verification
 
 From `wox.core`, run `go test -race -tags sqlite_fts5 ./ui/runtime ./ui/screenshot` and `go build -tags sqlite_fts5 .`. The macOS selector fixture uses a deterministic AX provider and AddressSanitizer without requesting accessibility permission. Windows native changes also require a CGO-enabled Windows build; Linux desktop integration must be checked in the affected desktop session.
+
+The Hyprland key listener has an opt-in live check (requires `wtype`):
+`WOX_TEST_HYPRLAND_RAW_KEYS=1 go test -race -tags sqlite_fts5 ./util/keyboard -run TestHyprlandRawKeyLive`.
+It injects one Shift press/release and checks listener removal and lease expiry,
+without typing text or changing the desktop configuration.

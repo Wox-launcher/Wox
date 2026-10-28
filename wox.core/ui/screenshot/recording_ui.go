@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/keyboard"
+
+	"golang.org/x/image/vector"
 )
 
 const (
@@ -1019,7 +1022,7 @@ func (state *recordingToolbarState) drawOverlay(displayList *DisplayList, frame 
 		displayList.StrokeRoundedRect(local, 0, 2*uiScale, Color{R: 47, G: 128, B: 237, A: 255})
 	}
 	if session != nil && session.currentState() == recordingStateCountdown {
-		drawRecordingCountdown(displayList, local, session.CountdownRemaining(), uiScale)
+		drawRecordingCountdown(displayList, state.overlay, local, session.CountdownRemaining(), uiScale)
 		if state.overlay != nil {
 			_ = state.overlay.Invalidate()
 		}
@@ -1191,17 +1194,32 @@ func renderRecordingKeycaps(target *image.RGBA, selection Rect, frame Size, keyc
 		if remaining < 350*time.Millisecond {
 			alpha = uint8(max(int64(0), remaining.Milliseconds()) * 230 / 350)
 		}
-		rect := screenshotEditorScaleRect(Rect{X: left, Y: top, Width: widths[index], Height: 36 * scale}, scaleX, scaleY)
+		capRect := Rect{X: left, Y: top, Width: widths[index], Height: 36 * scale}
+		rect := screenshotEditorScaleRect(capRect, scaleX, scaleY)
 		centerY := (rect.Min.Y + rect.Max.Y) / 2
-		radius := float32(rect.Dy())
 		background := uint8(uint16(24) * uint16(alpha) / 255)
-		drawScreenshotEditorPixelLine(overlay, clip, image.Pt(rect.Min.X+rect.Dy()/2, centerY), image.Pt(rect.Max.X-rect.Dy()/2, centerY), radius, color.RGBA{R: background, G: background, B: background, A: alpha})
+		drawRecordingKeycapBackground(overlay, clip, capRect, scaleX, scaleY, color.RGBA{R: background, G: background, B: background, A: alpha})
 		// Single letters such as T/E/S sit in a circular cap; left-padded text reads as off-center.
 		drawScreenshotEditorPixelCenteredTextWithFont(overlay, clip, keycap.label, image.Pt((rect.Min.X+rect.Max.X)/2, centerY), 14*scale*scaleY, color.RGBA{R: alpha, G: alpha, B: alpha, A: alpha}, recordingKeycapExportFont())
 		left += widths[index] + 6*scale
 	}
 	draw.Draw(target, clip, overlay, clip.Min, draw.Over)
 	return nil
+}
+
+// drawRecordingKeycapBackground rasterizes one capsule with fractional pixel
+// coverage. Stamping integer-radius discs produces hard stair-step edges in video.
+func drawRecordingKeycapBackground(target *image.RGBA, clip image.Rectangle, rect Rect, scaleX, scaleY float32, ink color.RGBA) {
+	bounds := image.Rect(
+		int(math.Floor(float64(rect.X*scaleX))), int(math.Floor(float64(rect.Y*scaleY))),
+		int(math.Ceil(float64((rect.X+rect.Width)*scaleX))), int(math.Ceil(float64((rect.Y+rect.Height)*scaleY))),
+	).Intersect(clip).Intersect(target.Bounds())
+	if bounds.Empty() {
+		return
+	}
+	raster := vector.NewRasterizer(bounds.Dx(), bounds.Dy())
+	screenshotEditorRectRasterPath(raster, rect, min(rect.Width, rect.Height)/2, scaleX, scaleY, bounds.Min, false)
+	raster.Draw(target, bounds, image.NewUniform(ink), image.Point{})
 }
 
 // recordingToolbarControlLayout uses the same 16px pad, 40px buttons, and 48px stride as the screenshot toolbar.

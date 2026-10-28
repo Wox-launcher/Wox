@@ -5,7 +5,16 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	woxui "wox/ui/runtime"
 )
+
+// recordingCountdownTestSurface models a native line box taller than the digit's font size.
+type recordingCountdownTestSurface struct{ *Window }
+
+func (*recordingCountdownTestSurface) MeasureText(_ string, style TextStyle) (woxui.TextMetrics, error) {
+	return woxui.TextMetrics{Size: Size{Width: style.Size * 0.6, Height: style.Size * 1.5}, Baseline: style.Size * 1.2}, nil
+}
 
 // TestRecordingOutlineHasUniformCoverage guards against gaps and thick diagonal spokes at glyph terminals.
 func TestRecordingOutlineHasUniformCoverage(t *testing.T) {
@@ -46,10 +55,10 @@ func TestRecordingCountdownFadesInPlace(t *testing.T) {
 			} {
 				remaining := time.Duration(seconds)*time.Second - sample.elapsed
 				actual := &DisplayList{}
-				drawRecordingCountdown(actual, Rect{Width: 800 * scale, Height: 600 * scale}, remaining, scale)
+				drawRecordingCountdown(actual, &recordingCountdownTestSurface{}, Rect{Width: 800 * scale, Height: 600 * scale}, remaining, scale)
 				expected := &DisplayList{}
 				// This digit box stays centered at (400, 300) logical units throughout the fade.
-				drawRecordingOutlinedText(expected, fmt.Sprint(seconds), Rect{X: 350.4 * scale, Y: 212 * scale, Width: 99.2 * scale, Height: 176 * scale},
+				drawRecordingOutlinedText(expected, fmt.Sprint(seconds), Rect{X: 352 * scale, Y: 180 * scale, Width: 96 * scale, Height: 240 * scale},
 					TextStyle{Size: 160 * scale, Weight: FontWeightSemibold},
 					Color{R: 255, G: 59, B: 48, A: sample.alpha}, Color{R: 255, G: 255, B: 255, A: sample.alpha}, 8*scale)
 				if err := actual.Compare(expected); err != nil {
@@ -72,7 +81,7 @@ func TestRecordingCountdownUsesOverlayCoordinates(t *testing.T) {
 		actual := &DisplayList{}
 		state.drawOverlay(actual, FrameInfo{Size: Size{Width: 800, Height: 600}, Scale: 2})
 		expected := &DisplayList{}
-		drawRecordingCountdown(expected, Rect{Width: 800, Height: 600}, 2800*time.Millisecond, 1)
+		drawRecordingCountdown(expected, nil, Rect{Width: 800, Height: 600}, 2800*time.Millisecond, 1)
 		if err := actual.Compare(expected); err != nil {
 			t.Errorf("desktop origin %+v changed countdown layout: %v", origin, err)
 		}

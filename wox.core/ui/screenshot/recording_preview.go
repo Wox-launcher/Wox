@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	woxwidget "wox/ui/widget"
 	"wox/util/ffmpeg"
 )
 
@@ -35,7 +36,7 @@ func recordingCountdownFontSize(selection Rect, uiScale float32) float32 {
 }
 
 // drawRecordingCountdown fades each digit in without moving it away from the selection center.
-func drawRecordingCountdown(displayList *DisplayList, selection Rect, remaining time.Duration, uiScale float32) {
+func drawRecordingCountdown(displayList *DisplayList, window woxwidget.HostServices, selection Rect, remaining time.Duration, uiScale float32) {
 	if displayList == nil || remaining <= 0 {
 		return
 	}
@@ -49,13 +50,22 @@ func drawRecordingCountdown(displayList *DisplayList, selection Rect, remaining 
 	size := recordingCountdownFontSize(selection, uiScale)
 	strokeWidth := max(float32(4), size*0.05)
 	style := TextStyle{Size: size, Weight: FontWeightSemibold}
-	width := screenshotEditorEstimatedTextWidth(label, size) + strokeWidth*2
-	height := size + strokeWidth*2
-	rect := Rect{
-		X: selection.X + (selection.Width-width)/2, Y: selection.Y + (selection.Height-height)/2,
-		Width: width, Height: height,
+	textSize := Size{Width: screenshotEditorEstimatedTextWidth(label, size), Height: size * 1.5}
+	// Font size is not the line height: fallback fonts can raise the baseline enough to clip digits.
+	if window != nil {
+		if metrics, err := window.MeasureText(label, style); err == nil && metrics.Size.Width > 0 && metrics.Size.Height > 0 {
+			textSize = metrics.Size
+		}
 	}
-	drawRecordingOutlinedText(displayList, label, rect, style, fill, stroke, strokeWidth)
+	woxwidget.PaintStateless(window, woxwidget.Align{
+		Width: selection.Width, Height: selection.Height, Horizontal: 0.5, Vertical: 0.5,
+		Child: woxwidget.Container{
+			Padding: woxwidget.UniformInsets(strokeWidth),
+			Child: woxwidget.Painter{Width: textSize.Width, Height: textSize.Height, Paint: func(displayList *DisplayList, bounds Rect) {
+				drawRecordingOutlinedText(displayList, label, bounds, style, fill, stroke, strokeWidth)
+			}},
+		},
+	}, displayList, selection)
 }
 
 // drawRecordingOutlinedText draws a solid halo first so the fill stays readable on any desktop.
