@@ -2050,6 +2050,8 @@ func (m *Manager) ExitApp(ctx context.Context) {
 	m.exitOnce.Do(func() {
 		util.GetLogger().Info(ctx, "start quitting")
 		plugin.GetPluginManager().Stop(ctx)
+		// Hyprland bindings live in the compositor and can launch Wox again after it exits.
+		m.hotkeyService.UnregisterAll(ctx)
 		ai.ResetMCPClients()
 		shell.CloseLifetimeBoundJob()
 		supervisor.GetManager().MarkCleanExit(ctx)
