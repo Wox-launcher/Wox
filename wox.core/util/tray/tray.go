@@ -6,10 +6,11 @@ type MenuItem struct {
 }
 
 type ClickRect struct {
-	X      int
-	Y      int
-	Width  int
-	Height int
+	DisplayID string
+	X         int
+	Y         int
+	Width     int
+	Height    int
 }
 
 type QueryIconItem struct {

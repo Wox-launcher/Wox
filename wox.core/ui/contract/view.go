@@ -11,9 +11,11 @@ import (
 
 // Position describes the launcher window origin chosen by core policy.
 type Position struct {
-	Type string
-	X    int
-	Y    int
+	// DisplayID disambiguates Windows per-monitor logical coordinates.
+	DisplayID string
+	Type      string
+	X         int
+	Y         int
 }
 
 // ShowOptions contains the launch-time state and window behavior consumed by the Go UI.

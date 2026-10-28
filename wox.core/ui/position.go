@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"wox/common"
 	"wox/setting"
 	"wox/util"
 	"wox/util/screen"
@@ -47,44 +48,49 @@ import (
 //   3. The window should be centered based on its maximum possible height for consistency
 
 type Position struct {
-	Type setting.PositionType
-	X    int
-	Y    int
+	DisplayID string
+	Type      setting.PositionType
+	X         int
+	Y         int
 }
 
 func NewMouseScreenPosition(windowWidth int) Position {
-	x, y := getWindowMouseScreenLocation(util.NewTraceContext(), windowWidth, 0, true, true)
+	x, y, displayID := getWindowMouseScreenLocation(util.NewTraceContext(), windowWidth, 0, true, true)
 	return Position{
-		Type: setting.PositionTypeMouseScreen,
-		X:    x,
-		Y:    y,
+		Type:      setting.PositionTypeMouseScreen,
+		DisplayID: displayID,
+		X:         x,
+		Y:         y,
 	}
 }
 
 func NewActiveScreenPosition(windowWidth int) Position {
-	x, y := getWindowActiveScreenLocation(util.NewTraceContext(), windowWidth, 0, true, true)
+	x, y, displayID := getWindowActiveScreenLocation(util.NewTraceContext(), windowWidth, 0, true, true)
 	return Position{
-		Type: setting.PositionTypeActiveScreen,
-		X:    x,
-		Y:    y,
+		Type:      setting.PositionTypeActiveScreen,
+		DisplayID: displayID,
+		X:         x,
+		Y:         y,
 	}
 }
 
 func NewMouseScreenPositionWithOptions(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) Position {
-	x, y := getWindowMouseScreenLocation(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	x, y, displayID := getWindowMouseScreenLocation(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar)
 	return Position{
-		Type: setting.PositionTypeMouseScreen,
-		X:    x,
-		Y:    y,
+		Type:      setting.PositionTypeMouseScreen,
+		DisplayID: displayID,
+		X:         x,
+		Y:         y,
 	}
 }
 
 func NewActiveScreenPositionWithOptions(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) Position {
-	x, y := getWindowActiveScreenLocation(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar)
+	x, y, displayID := getWindowActiveScreenLocation(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar)
 	return Position{
-		Type: setting.PositionTypeActiveScreen,
-		X:    x,
-		Y:    y,
+		Type:      setting.PositionTypeActiveScreen,
+		DisplayID: displayID,
+		X:         x,
+		Y:         y,
 	}
 }
 
@@ -96,32 +102,38 @@ func NewLastLocationPosition(x, y int) Position {
 	}
 }
 
+// explicitWindowPosition retains the display that supplied an explicit logical origin.
+func explicitWindowPosition(position common.WindowPosition) Position {
+	return Position{Type: setting.PositionTypeLastLocation, X: position.X, Y: position.Y, DisplayID: position.DisplayID}
+}
+
 // NewSpecificScreenPositionWithOptions centers the launcher on the saved monitor.
 func NewSpecificScreenPositionWithOptions(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool, saved setting.ShowDisplayTarget, trustID bool) Position {
-	x, y := specificScreenPosition(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar, saved, trustID)
+	x, y, displayID := specificScreenPosition(ctx, windowWidth, maxResultCount, showQueryBox, showToolbar, saved, trustID)
 	return Position{
-		Type: setting.PositionTypeSpecificScreen,
-		X:    x,
-		Y:    y,
+		Type:      setting.PositionTypeSpecificScreen,
+		DisplayID: displayID,
+		X:         x,
+		Y:         y,
 	}
 }
 
-func getWindowMouseScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {
+func getWindowMouseScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int, string) {
 	size := screen.GetMouseScreen()
 	x, y := getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
 	if util.IsLinux() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("linux-window-bounds go stage=mouse-screen screen=%d,%d %dx%d windowWidth=%d maxResultCount=%d showQueryBox=%t showToolbar=%t target=%d,%d screenDebug=%s", size.X, size.Y, size.Width, size.Height, windowWidth, maxResultCount, showQueryBox, showToolbar, x, y, screen.LastMouseScreenDebug()))
 	}
-	return x, y
+	return x, y, size.DisplayID
 }
 
-func getWindowActiveScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {
+func getWindowActiveScreenLocation(ctx context.Context, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int, string) {
 	size := screen.GetActiveScreen()
 	x, y := getCenterLocation(ctx, size, windowWidth, maxResultCount, showQueryBox, showToolbar)
 	if util.IsLinux() {
 		util.GetLogger().Info(ctx, fmt.Sprintf("linux-window-bounds go stage=active-screen screen=%d,%d %dx%d windowWidth=%d maxResultCount=%d showQueryBox=%t showToolbar=%t target=%d,%d screenDebug=%s", size.X, size.Y, size.Width, size.Height, windowWidth, maxResultCount, showQueryBox, showToolbar, x, y, screen.LastMouseScreenDebug()))
 	}
-	return x, y
+	return x, y, size.DisplayID
 }
 
 func getCenterLocation(ctx context.Context, size screen.Size, windowWidth int, maxResultCount int, showQueryBox bool, showToolbar bool) (int, int) {

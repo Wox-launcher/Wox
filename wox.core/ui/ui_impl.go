@@ -467,11 +467,7 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 
 	// if specific position provided, use it
 	if showContext.WindowPosition != nil {
-		position = Position{
-			Type: setting.PositionTypeLastLocation,
-			X:    showContext.WindowPosition.X,
-			Y:    showContext.WindowPosition.Y,
-		}
+		position = explicitWindowPosition(*showContext.WindowPosition)
 	} else {
 		switch woxSetting.ShowPosition.Get() {
 		case setting.PositionTypeActiveScreen:
@@ -480,9 +476,9 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 			// An explicit WindowPosition above does not set this, so it cannot replace the saved origin.
 			last := woxSetting.LastWindowPosition.Get()
 			rememberPosition = true
-			if last.Valid && lastLocationVisible(last.X, last.Y) {
-				logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d", last.X, last.Y))
-				position = NewLastLocationPosition(last.X, last.Y)
+			if restored, ok := resolveLastLocation(last, windowWidth, CalculateMaxWindowHeight(ctx, maxResultCount, showQueryBox, !hideToolbar)); ok {
+				logger.Info(ctx, fmt.Sprintf("Using saved window position: x=%d, y=%d, display=%s", restored.X, restored.Y, restored.DisplayID))
+				position = restored
 			} else if last.Valid {
 				logger.Info(ctx, fmt.Sprintf("Saved window position is off-screen: x=%d, y=%d", last.X, last.Y))
 				position = NewMouseScreenPositionWithOptions(ctx, windowWidth, maxResultCount, showQueryBox, !hideToolbar)
@@ -507,7 +503,7 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 		SelectAll: showContext.SelectAll, HideQueryBox: showContext.HideQueryBox, HideToolbar: hideToolbar, HideResults: showContext.HideResults, ShowPreviewTitleBar: showContext.ShowPreviewTitleBar,
 		QueryBoxAtBottom: showContext.QueryBoxAtBottom, HideOnBlur: showContext.HideOnBlur,
 		RestoreWindow:    showContext.RestoreWindow,
-		Position:         contract.Position{Type: string(position.Type), X: position.X, Y: position.Y},
+		Position:         contract.Position{Type: string(position.Type), X: position.X, Y: position.Y, DisplayID: position.DisplayID},
 		RememberPosition: rememberPosition,
 		PositionHeight:   showContext.WindowPositionHeight,
 		WindowWidth:      windowWidth, MaxResultCount: maxResultCount, QueryHistories: queryHistories, LaunchMode: woxSetting.LaunchMode.Get(),

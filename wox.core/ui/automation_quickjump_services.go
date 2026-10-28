@@ -36,6 +36,7 @@ func (s *CoreServices) AutomationOpenQuickJumpQuery(ctx context.Context, session
 	display := screen.GetMouseScreen()
 	anchor := common.WindowRect{X: display.X, Y: display.Y, Width: display.Width, Height: display.Height}
 	position := quickJumpAutomationWindowPosition(anchor, windowWidth, initialWindowHeight)
+	position.DisplayID = display.DisplayID
 	showContext := common.ShowContext{
 		HideToolbar:          true,
 		QueryBoxAtBottom:     true,

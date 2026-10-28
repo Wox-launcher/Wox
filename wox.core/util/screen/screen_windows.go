@@ -21,6 +21,7 @@ typedef struct {
     int height;
     int x;
     int y;
+    char id[64];
 } ScreenInfo;
 
 typedef struct {
@@ -131,6 +132,29 @@ UINT GetDpiForMonitorCompat(HMONITOR hMonitor) {
     return dpi;
 }
 
+// Preserve the monitor identity alongside its per-monitor logical coordinates.
+static void setScreenInfoID(ScreenInfo* info, HMONITOR monitor) {
+    MONITORINFOEXW details;
+    ZeroMemory(&details, sizeof(details));
+    details.cbSize = sizeof(details);
+    if (GetMonitorInfoW(monitor, (MONITORINFO*)&details)) {
+        WideCharToMultiByte(CP_UTF8, 0, details.szDevice, -1, info->id, sizeof(info->id), NULL, NULL);
+    }
+}
+
+static void displayIDFromWindow(uintptr_t window, char* id, int size) {
+    HWND hwnd = (HWND)window;
+    if (!IsWindow(hwnd)) {
+        return;
+    }
+    MONITORINFOEXW details = {0};
+    details.cbSize = sizeof(details);
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (monitor && GetMonitorInfoW(monitor, (MONITORINFO*)&details)) {
+        WideCharToMultiByte(CP_UTF8, 0, details.szDevice, -1, id, size, NULL, NULL);
+    }
+}
+
 ScreenInfo getMouseScreenSize() {
     POINT pt;
     GetCursorPos(&pt);  // Returns physical coordinates
@@ -160,7 +184,9 @@ ScreenInfo getMouseScreenSize() {
         int x = (int)(physicalX / scale);
         int y = (int)(physicalY / scale);
 
-        return (ScreenInfo){.width = width, .height = height, .x = x, .y = y};
+        ScreenInfo info = {.width = width, .height = height, .x = x, .y = y};
+        setScreenInfoID(&info, hMonitor);
+        return info;
     }
     return (ScreenInfo){.width = 0, .height = 0, .x = 0, .y = 0};
 }
@@ -191,7 +217,9 @@ ScreenInfo getActiveScreenSize() {
             int x = (int)(physicalX / scale);
             int y = (int)(physicalY / scale);
 
-            return (ScreenInfo){.width = width, .height = height, .x = x, .y = y};
+            ScreenInfo info = {.width = width, .height = height, .x = x, .y = y};
+            setScreenInfoID(&info, hMonitor);
+            return info;
         }
     }
 
@@ -275,7 +303,10 @@ int listDisplays(ScreenDisplayInfo* displays, int maxCount) {
 }
 */
 import "C"
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 const maxDisplayCount = 16
 
@@ -286,21 +317,34 @@ func init() {
 func GetMouseScreen() Size {
 	screenInfo := C.getMouseScreenSize()
 	return Size{
-		Width:  int(screenInfo.width),
-		Height: int(screenInfo.height),
-		X:      int(screenInfo.x),
-		Y:      int(screenInfo.y),
+		DisplayID: C.GoString(&screenInfo.id[0]),
+		Width:     int(screenInfo.width),
+		Height:    int(screenInfo.height),
+		X:         int(screenInfo.x),
+		Y:         int(screenInfo.y),
 	}
 }
 
 func GetActiveScreen() Size {
 	screenInfo := C.getActiveScreenSize()
 	return Size{
-		Width:  int(screenInfo.width),
-		Height: int(screenInfo.height),
-		X:      int(screenInfo.x),
-		Y:      int(screenInfo.y),
+		DisplayID: C.GoString(&screenInfo.id[0]),
+		Width:     int(screenInfo.width),
+		Height:    int(screenInfo.height),
+		X:         int(screenInfo.x),
+		Y:         int(screenInfo.y),
 	}
+}
+
+// DisplayIDForWindow resolves the actual monitor of a decimal Windows HWND.
+func DisplayIDForWindow(windowID string) string {
+	handle, err := strconv.ParseUint(windowID, 10, 64)
+	if err != nil || handle == 0 {
+		return ""
+	}
+	var id [64]C.char
+	C.displayIDFromWindow(C.uintptr_t(handle), &id[0], C.int(len(id)))
+	return C.GoString(&id[0])
 }
 
 func listDisplays() ([]Display, error) {

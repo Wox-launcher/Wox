@@ -216,6 +216,8 @@ type OpenWoxInstanceRequest struct {
 type WindowPosition struct {
 	X int
 	Y int
+	// DisplayID identifies the monitor whose logical coordinates X and Y use.
+	DisplayID string
 }
 
 type TrayAnchor struct {

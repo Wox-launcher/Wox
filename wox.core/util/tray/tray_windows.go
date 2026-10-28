@@ -65,7 +65,7 @@ func reportLeftClick() {
 }
 
 //export reportQueryClick
-func reportQueryClick(iconId C.UINT_PTR, x C.int, y C.int, width C.int, height C.int) {
+func reportQueryClick(iconId C.UINT_PTR, x C.int, y C.int, width C.int, height C.int, displayID *C.char) {
 	trayMu.RLock()
 	callback, exists := queryIconCallbacks[uint32(iconId)]
 	trayMu.RUnlock()
@@ -74,10 +74,11 @@ func reportQueryClick(iconId C.UINT_PTR, x C.int, y C.int, width C.int, height C
 	}
 
 	callback(ClickRect{
-		X:      int(x),
-		Y:      int(y),
-		Width:  int(width),
-		Height: int(height),
+		DisplayID: C.GoString(displayID),
+		X:         int(x),
+		Y:         int(y),
+		Width:     int(width),
+		Height:    int(height),
 	})
 }
 

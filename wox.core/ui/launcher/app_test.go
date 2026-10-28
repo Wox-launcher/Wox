@@ -726,12 +726,12 @@ func TestConstrainLauncherHeightToWorkArea(t *testing.T) {
 		{ID: "main", Bounds: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}, WorkArea: screen.Rect{X: 0, Y: 0, Width: 1920, Height: 1040}, Scale: 2, Primary: true},
 	}
 
-	y, height, anchor := constrainLauncherHeightToWorkArea(false, 400, 850, 760, 500, 75, 0, displays)
+	y, height, anchor := constrainLauncherHeightToWorkArea(false, false, 400, 850, 760, 500, 75, 0, displays)
 	if y != 850 || height != 190 || anchor != 0 {
 		t.Fatalf("downward launcher = y %.0f height %.0f anchor %.0f, want 850/190/0", y, height, anchor)
 	}
 
-	y, height, anchor = constrainLauncherHeightToWorkArea(true, -1100, -600, 500, 500, 75, -480, displays)
+	y, height, anchor = constrainLauncherHeightToWorkArea(true, false, -1100, -600, 500, 500, 75, -480, displays)
 	if y != -680 || height != 200 || anchor != -480 {
 		t.Fatalf("upward launcher = y %.0f height %.0f anchor %.0f, want -680/200/-480", y, height, anchor)
 	}
@@ -740,9 +740,32 @@ func TestConstrainLauncherHeightToWorkArea(t *testing.T) {
 func TestConstrainLauncherHeightKeepsQueryChromeInWorkArea(t *testing.T) {
 	displays := []screen.Display{{Bounds: screen.Rect{Width: 1920, Height: 1080}, WorkArea: screen.Rect{Width: 1920, Height: 1040}, Primary: true}}
 
-	y, height, _ := constrainLauncherHeightToWorkArea(false, 400, 1020, 760, 500, 75, 0, displays)
+	y, height, _ := constrainLauncherHeightToWorkArea(false, false, 400, 1020, 760, 500, 75, 0, displays)
 	if y != 965 || height != 75 {
 		t.Fatalf("low launcher = y %.0f height %.0f, want 965/75", y, height)
+	}
+}
+
+// TestConstrainLauncherHeightPreservesPartlyVisibleSavedPosition covers both query directions.
+func TestConstrainLauncherHeightPreservesPartlyVisibleSavedPosition(t *testing.T) {
+	displays := []screen.Display{{Bounds: screen.Rect{Width: 1920, Height: 1080}, WorkArea: screen.Rect{Width: 1920, Height: 1040}}}
+	for _, tc := range []struct {
+		name          string
+		queryAtBottom bool
+		y, anchor     float32
+	}{
+		{"top outside", false, -30, 0},
+		{"bottom outside", false, 1020, 0},
+		{"taskbar area", false, 1070, 0},
+		{"bottom query below", true, 990, 1090},
+		{"bottom query above", true, -80, 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			y, height, anchor := constrainLauncherHeightToWorkArea(tc.queryAtBottom, true, 200, tc.y, 800, 100, 75, tc.anchor, displays)
+			if y != tc.y || height != 100 || anchor != tc.anchor {
+				t.Fatalf("got y=%v height=%v anchor=%v, want %v/100/%v", y, height, anchor, tc.y, tc.anchor)
+			}
+		})
 	}
 }
 
@@ -755,12 +778,12 @@ func TestLauncherHeightOnResolvedDisplay(t *testing.T) {
 		t.Fatal("fixture must reproduce ambiguous logical display selection")
 	}
 	for _, height := range []float32{75, 179, 571} {
-		y, gotHeight, _ := constrainLauncherHeightToWorkArea(false, 663, 1322, 750, height, min(height, 115), 0, []screen.Display{lower})
+		y, gotHeight, _ := constrainLauncherHeightToWorkArea(false, false, 663, 1322, 750, height, min(height, 115), 0, []screen.Display{lower})
 		if y != 1322 || gotHeight != height {
 			t.Fatalf("lower display: y=%v height=%v, want 1322/%v", y, gotHeight, height)
 		}
 	}
-	y, height, anchor := constrainLauncherHeightToWorkArea(true, 663, 1322, 750, 571, 115, 1893, []screen.Display{lower})
+	y, height, anchor := constrainLauncherHeightToWorkArea(true, false, 663, 1322, 750, 571, 115, 1893, []screen.Display{lower})
 	if y != 1322 || height != 571 || anchor != 1893 {
 		t.Fatalf("bottom query: y=%v height=%v anchor=%v", y, height, anchor)
 	}

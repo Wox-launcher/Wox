@@ -109,9 +109,10 @@ type showAppParams struct {
 }
 
 type position struct {
-	Type string `json:"Type"`
-	X    int    `json:"X"`
-	Y    int    `json:"Y"`
+	DisplayID string `json:"DisplayID"`
+	Type      string `json:"Type"`
+	X         int    `json:"X"`
+	Y         int    `json:"Y"`
 }
 
 type queryResponse struct {
@@ -921,7 +922,7 @@ func (a *App) hideWindow(notify bool) error {
 	var launcher *woxui.ManagedWindow
 	alreadyHidden := false
 	var hideErr error
-	var lastX, lastY int
+	var lastPosition setting.SavedWindowPosition
 	saveLast := false
 	if err := a.runOnUI("prepare launcher hide", func() {
 		if !a.visible {
@@ -929,7 +930,7 @@ func (a *App) hideWindow(notify bool) error {
 			return
 		}
 		if a.isPrimary && a.show.RememberPosition {
-			lastX, lastY, saveLast = a.captureLauncherOriginLocked()
+			lastPosition, saveLast = a.captureLauncherOriginLocked()
 		}
 		a.actions.clearActionPanelStateLocked()
 		a.forms.form = nil
@@ -960,7 +961,7 @@ func (a *App) hideWindow(notify bool) error {
 		return hideErr
 	}
 	if saveLast {
-		if err := saveLastWindowOrigin(lastX, lastY); err != nil {
+		if err := saveLastWindowOrigin(lastPosition); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("save last window location: %v", err))
 		}
 	}
@@ -1016,16 +1017,26 @@ func (a *App) closePreviewWindow() {
 	})
 }
 
-// captureLauncherOriginLocked reads the primary window origin in logical coordinates.
-func (a *App) captureLauncherOriginLocked() (int, int, bool) {
+// captureLauncherOriginLocked records the logical origin and its actual native monitor.
+func (a *App) captureLauncherOriginLocked() (setting.SavedWindowPosition, bool) {
 	if a.window == nil {
-		return 0, 0, false
+		return setting.SavedWindowPosition{}, false
 	}
 	bounds, err := a.window.Bounds()
 	if err != nil {
-		return 0, 0, false
+		return setting.SavedWindowPosition{}, false
 	}
-	return roundLogicalCoordinate(bounds.X), roundLogicalCoordinate(bounds.Y), true
+	position := setting.SavedWindowPosition{X: roundLogicalCoordinate(bounds.X), Y: roundLogicalCoordinate(bounds.Y), Width: roundLogicalCoordinate(bounds.Width), Height: roundLogicalCoordinate(bounds.Height), Valid: true}
+	if displays, err := screen.ListDisplays(); err == nil {
+		if display, err := a.window.BoundsDisplay(bounds, true, displays); err == nil && display.ID != "" {
+			area := display.WorkArea
+			if area.IsEmpty() {
+				area = display.Bounds
+			}
+			position.DisplayID, position.WorkX, position.WorkY = display.ID, area.X, area.Y
+		}
+	}
+	return position, true
 }
 
 func roundLogicalCoordinate(value float32) int {
@@ -1036,7 +1047,7 @@ func roundLogicalCoordinate(value float32) int {
 }
 
 // saveLastWindowOrigin writes one local value before the next show reads it.
-func saveLastWindowOrigin(x, y int) error {
+func saveLastWindowOrigin(position setting.SavedWindowPosition) error {
 	woxSetting := setting.CurrentWoxSetting()
 	if woxSetting == nil || woxSetting.ShowPosition == nil || woxSetting.ShowPosition.Get() != setting.PositionTypeLastLocation {
 		return nil
@@ -1045,10 +1056,10 @@ func saveLastWindowOrigin(x, y int) error {
 		return nil
 	}
 	previous := woxSetting.LastWindowPosition.Get()
-	if previous.Valid && previous.X == x && previous.Y == y {
+	if previous == position {
 		return nil
 	}
-	return woxSetting.LastWindowPosition.Set(setting.SavedWindowPosition{X: x, Y: y, Valid: true})
+	return woxSetting.LastWindowPosition.Set(position)
 }
 
 func (a *App) onFocus(event woxui.FocusEvent) {
@@ -1068,10 +1079,10 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 	launcher := a.launcher
 	// A pop-out still uses this session's services after the launcher loses focus.
 	retainSecondary := a.isPrimary || a.chatWindow.chatWindowOpen() || a.hasCacheableWebViewPreviewLocked()
-	var lastX, lastY int
+	var lastPosition setting.SavedWindowPosition
 	saveLast := false
 	if hideOnBlur && a.isPrimary && a.show.RememberPosition {
-		lastX, lastY, saveLast = a.captureLauncherOriginLocked()
+		lastPosition, saveLast = a.captureLauncherOriginLocked()
 	}
 	if hideOnBlur {
 		a.visible = false
@@ -1095,7 +1106,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		a.webView.clearWebViewPreviewModeLocked()
 	}
 	if saveLast {
-		if err := saveLastWindowOrigin(lastX, lastY); err != nil {
+		if err := saveLastWindowOrigin(lastPosition); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("save last window location after blur: %v", err))
 		}
 	}
@@ -1647,8 +1658,14 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	var targetDisplay screen.Display
 	displays, listErr := screen.ListDisplays()
 	if listErr == nil {
+		displayID := ""
+		if useShowPosition && runtime.GOOS == "windows" {
+			displayID = params.Position.DisplayID
+		}
 		var displayErr error
-		targetDisplay, displayErr = a.window.BoundsDisplay(requested, !useShowPosition, displays)
+		targetDisplay, displayErr = launcherResolveDisplay(displays, displayID, func() (screen.Display, error) {
+			return a.window.BoundsDisplay(requested, !useShowPosition, displays)
+		})
 		if displayErr != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-display resolve failed: showPos=%t requested=%+v error=%v", useShowPosition, requested, displayErr))
 		}
@@ -1658,7 +1675,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 			// rectangles can overlap even when the physical monitors do not (#4572).
 			layoutDisplays = []screen.Display{targetDisplay}
 		}
-		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, layoutDisplays)
+		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, params.RememberPosition, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, layoutDisplays)
 		if useShowPosition || y != requested.Y || targetHeight != requested.Height {
 			util.GetLogger().Info(context.Background(), fmt.Sprintf("launcher-display showPos=%t useNativeCurrent=%t requestedLogical=%+v minimumHeight=%.1f selected=%+v displays=%+v", useShowPosition, !useShowPosition, requested, float32(minimumHeight), targetDisplay, displays))
 		}
@@ -1749,7 +1766,7 @@ func launcherWindowOrigin(params showAppParams, current woxui.Rect, targetHeight
 }
 
 // constrainLauncherHeightToWorkArea keeps the query chrome anchored while shrinking overflowing content into its scroll viewport.
-func constrainLauncherHeightToWorkArea(queryAtBottom bool, x, y, width, height, minimumHeight, bottomAnchor float32, displays []screen.Display) (constrainedY, constrainedHeight, constrainedBottomAnchor float32) {
+func constrainLauncherHeightToWorkArea(queryAtBottom, rememberPosition bool, x, y, width, height, minimumHeight, bottomAnchor float32, displays []screen.Display) (constrainedY, constrainedHeight, constrainedBottomAnchor float32) {
 	anchorInset := max(float32(1), minimumHeight/2)
 	anchorY := y + anchorInset
 	if queryAtBottom {
@@ -1763,6 +1780,19 @@ func constrainLauncherHeightToWorkArea(queryAtBottom bool, x, y, width, height, 
 	workTop := float32(workArea.Y)
 	workBottom := float32(workArea.Bottom())
 	minimumHeight = min(max(0, minimumHeight), float32(workArea.Height))
+	// A remembered window may intentionally extend past a display edge, even
+	// into the taskbar area. Do not move its origin while it is still visible.
+	if rememberPosition && (!queryAtBottom && (y < workTop || y > workBottom-minimumHeight) || queryAtBottom && (bottomAnchor > workBottom || bottomAnchor < workTop+minimumHeight)) {
+		for _, display := range displays {
+			bounds := display.Bounds
+			if bounds.IsEmpty() {
+				bounds = display.WorkArea
+			}
+			if !bounds.IsEmpty() && x < float32(bounds.Right()) && x+width > float32(bounds.X) && y < float32(bounds.Bottom()) && y+height > float32(bounds.Y) {
+				return y, height, bottomAnchor
+			}
+		}
+	}
 	if queryAtBottom {
 		bottomAnchor = max(workTop+minimumHeight, min(bottomAnchor, workBottom))
 		height = min(height, bottomAnchor-workTop)

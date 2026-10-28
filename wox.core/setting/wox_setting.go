@@ -146,9 +146,14 @@ type ShowDisplayTarget struct {
 
 // SavedWindowPosition keeps both coordinates together, including negative origins.
 type SavedWindowPosition struct {
-	X     int  `json:"x"`
-	Y     int  `json:"y"`
-	Valid bool `json:"valid"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Width     int    `json:"width,omitempty"`
+	Height    int    `json:"height,omitempty"`
+	Valid     bool   `json:"valid"`
+	DisplayID string `json:"displayId,omitempty"`
+	WorkX     int    `json:"workX,omitempty"`
+	WorkY     int    `json:"workY,omitempty"`
 }
 
 // Chosen reports whether the user has picked a monitor.

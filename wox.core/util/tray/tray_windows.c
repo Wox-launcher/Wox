@@ -23,7 +23,7 @@ BOOL trayComInitialized = FALSE;
 
 void reportClick(UINT_PTR menuId);
 void reportLeftClick();
-void reportQueryClick(UINT_PTR iconId, int x, int y, int width, int height);
+void reportQueryClick(UINT_PTR iconId, int x, int y, int width, int height, char *displayId);
 void clearQueryTrayIcons();
 
 static int findQueryIconIndex(UINT iconId)
@@ -213,13 +213,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				int width = (int)((rect.right - rect.left) / scale);
 				int height = (int)((rect.bottom - rect.top) / scale);
 
-				reportQueryClick((UINT_PTR)iconId, x, y, width, height);
+				MONITORINFOEXW monitorInfo = {0};
+				monitorInfo.cbSize = sizeof(monitorInfo);
+				char displayId[64] = {0};
+				if (GetMonitorInfoW(hMonitor, (MONITORINFO *)&monitorInfo))
+				{
+					WideCharToMultiByte(CP_UTF8, 0, monitorInfo.szDevice, -1, displayId, sizeof(displayId), NULL, NULL);
+				}
+				reportQueryClick((UINT_PTR)iconId, x, y, width, height, displayId);
 			}
 			else
 			{
 				int anchorX = (int)(short)LOWORD((DWORD)wParam);
 				int anchorY = (int)(short)HIWORD((DWORD)wParam);
-				reportQueryClick((UINT_PTR)iconId, anchorX, anchorY, 0, 0);
+				reportQueryClick((UINT_PTR)iconId, anchorX, anchorY, 0, 0, "");
 			}
 		}
 		else if (eventCode == WM_CONTEXTMENU || eventCode == WM_RBUTTONUP)

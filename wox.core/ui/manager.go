@@ -1642,10 +1642,11 @@ func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQu
 	}
 
 	windowWidth := m.getTrayQueryWindowWidth(queryCtx, trayQuery)
-	screenRect := m.getTrayQueryScreenRect(queryCtx, rect)
+	screenRect, displayID := m.getTrayQueryScreenRect(queryCtx, rect)
 	windowHeight := m.getTrayQueryInitialWindowHeight(queryCtx, trayQuery)
 	windowAnchorBottom := m.getTrayQueryWindowAnchorBottom(rect, screenRect)
 	position := m.getTrayQueryWindowPosition(queryCtx, rect, screenRect, windowWidth, windowHeight, windowAnchorBottom)
+	position.DisplayID = displayID
 	var trayAnchor *common.TrayAnchor
 	if util.IsWindows() {
 		trayAnchor = &common.TrayAnchor{
@@ -1795,7 +1796,7 @@ func (m *Manager) getQueryHotkeyWindowPosition(ctx context.Context, queryHotkey 
 		logger.Info(ctx, fmt.Sprintf("linux-window-bounds go stage=query-hotkey screen=%d,%d %dx%d windowWidth=%d windowHeight=%d positionType=%s target=%d,%d screenDebug=%s", screenSize.X, screenSize.Y, screenSize.Width, screenSize.Height, windowWidth, windowHeight, positionType, x, y, screen.LastMouseScreenDebug()))
 	}
 
-	return common.WindowPosition{X: x, Y: y}, true
+	return common.WindowPosition{X: x, Y: y, DisplayID: screenSize.DisplayID}, true
 }
 
 // resolveQueryHotkeyWindowPosition maps the nine-grid setting onto precomputed screen anchors.
@@ -1866,26 +1867,12 @@ func normalizedMaxResultCount(maxResultCount int) int {
 	return clampInt(maxResultCount, 5, 15)
 }
 
-func (m *Manager) getTrayQueryScreenRect(ctx context.Context, rect tray.ClickRect) common.WindowRect {
+func (m *Manager) getTrayQueryScreenRect(ctx context.Context, rect tray.ClickRect) (common.WindowRect, string) {
 	displays, err := screen.ListDisplays()
 	if err == nil {
-		pointX := rect.X
-		pointY := rect.Y
-		if rect.Width > 0 && rect.Height > 0 {
-			pointX = rect.X + rect.Width/2
-			pointY = rect.Y + rect.Height/2
-		}
-
-		for _, display := range displays {
-			workArea := display.WorkArea
-			if pointX >= workArea.X && pointX < workArea.Right() && pointY >= workArea.Y && pointY < workArea.Bottom() {
-				return common.WindowRect{
-					X:      workArea.X,
-					Y:      workArea.Y,
-					Width:  workArea.Width,
-					Height: workArea.Height,
-				}
-			}
+		if display, ok := trayQueryDisplay(rect, displays); ok {
+			area := display.WorkArea
+			return common.WindowRect{X: area.X, Y: area.Y, Width: area.Width, Height: area.Height}, display.ID
 		}
 	}
 
@@ -1899,7 +1886,27 @@ func (m *Manager) getTrayQueryScreenRect(ctx context.Context, rect tray.ClickRec
 		Y:      screenSize.Y,
 		Width:  screenSize.Width,
 		Height: screenSize.Height,
+	}, screenSize.DisplayID
+}
+
+// trayQueryDisplay uses the native tray monitor before considering ambiguous logical coordinates.
+func trayQueryDisplay(rect tray.ClickRect, displays []screen.Display) (screen.Display, bool) {
+	if rect.DisplayID != "" {
+		for _, display := range displays {
+			if display.ID == rect.DisplayID {
+				return display, true
+			}
+		}
+		return screen.Display{}, false
 	}
+	pointX, pointY := rect.X+rect.Width/2, rect.Y+rect.Height/2
+	for _, display := range displays {
+		area := display.WorkArea
+		if pointX >= area.X && pointX < area.Right() && pointY >= area.Y && pointY < area.Bottom() {
+			return display, true
+		}
+	}
+	return screen.Display{}, false
 }
 
 func (m *Manager) toTrayIconBytes(ctx context.Context, icon common.WoxImage) []byte {

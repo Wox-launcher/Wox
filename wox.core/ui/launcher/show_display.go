@@ -295,3 +295,15 @@ func savedShowDisplay(target setting.ShowDisplayTarget) screen.SavedDisplay {
 		WorkWidth: target.WorkWidth, WorkHeight: target.WorkHeight, Primary: target.Primary,
 	}
 }
+
+// launcherResolveDisplay preserves the monitor selected before logical coordinates became ambiguous.
+func launcherResolveDisplay(displays []screen.Display, id string, fallback func() (screen.Display, error)) (screen.Display, error) {
+	if id != "" {
+		for _, display := range displays {
+			if display.ID == id {
+				return display, nil
+			}
+		}
+	}
+	return fallback()
+}

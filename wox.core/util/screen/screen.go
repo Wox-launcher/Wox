@@ -13,10 +13,12 @@ func setLastMouseScreenDebug(debug string) {
 }
 
 type Size struct {
-	Width  int
-	Height int
-	X      int
-	Y      int
+	// DisplayID identifies the monitor that supplied these coordinates when available.
+	DisplayID string
+	Width     int
+	Height    int
+	X         int
+	Y         int
 }
 
 type Rect struct {

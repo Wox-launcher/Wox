@@ -63,9 +63,10 @@ func fromCoreShowOptions(options contract.ShowOptions) showAppParams {
 	return showAppParams{
 		SelectAll: options.SelectAll,
 		Position: position{
-			Type: options.Position.Type,
-			X:    options.Position.X,
-			Y:    options.Position.Y,
+			Type:      options.Position.Type,
+			DisplayID: options.Position.DisplayID,
+			X:         options.Position.X,
+			Y:         options.Position.Y,
 		},
 		PositionHeight: options.PositionHeight,
 		WindowWidth:    options.WindowWidth, MaxResultCount: options.MaxResultCount, QueryHistories: queryHistories,

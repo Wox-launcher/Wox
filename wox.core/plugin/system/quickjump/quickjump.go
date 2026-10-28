@@ -24,6 +24,7 @@ import (
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
+	"wox/util/screen"
 	"wox/util/shell"
 	"wox/util/window"
 
@@ -1243,6 +1244,7 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
+			position.DisplayID = screen.DisplayIDForWindow(dialogWindowId)
 			showContext := common.ShowContext{
 				HideToolbar:          true,
 				QueryBoxAtBottom:     true,
@@ -1350,6 +1352,7 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 			woxSetting := setting.GetSettingManager().GetWoxSetting(localCtx)
 			initialWindowHeight := getExplorerInitialWindowHeight(localCtx)
 			position := getExplorerWindowPosition(common.WindowRect{X: x, Y: y, Width: w, Height: h}, woxSetting.AppWidth.Get()/2, initialWindowHeight)
+			position.DisplayID = screen.DisplayIDForWindow(sourceWindow.WindowId)
 			showContext := common.ShowContext{
 				HideToolbar:          true,
 				QueryBoxAtBottom:     true,
