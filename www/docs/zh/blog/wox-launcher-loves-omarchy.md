@@ -4,6 +4,7 @@ description: "跟随 Omarchy 变化的主题、可搜索的桌面命令，以及
 date: 2026-10-28
 category: product
 cover: /images/blog/wox-launcher-loves-omarchy.webp
+coverDark: /images/blog/wox-launcher-loves-omarchy-dark.webp
 coverAlt: Wox 和 Omarchy 图标，中间是一颗爱心
 ---
 

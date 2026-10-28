@@ -4,6 +4,7 @@ description: Use app launchpad to browse installed apps and open them by their f
 date: 2026-05-16
 category: workspace
 cover: /images/blog/app-launchpad.webp
+coverDark: /images/blog/app-launchpad-dark.webp
 coverAlt: A tidy grid of flat app icons
 ---
 

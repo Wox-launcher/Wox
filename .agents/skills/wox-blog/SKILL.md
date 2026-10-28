@@ -16,7 +16,7 @@ Write for people using Wox: one concrete task, its useful outcome, and enough de
 ## Write the article pair
 
 - Read [the writing style guide](references/writing-style.md) before drafting or substantially rewriting. It contains the Mole sample analysis, Wox-specific examples, and an editorial review. Borrow explanatory techniques rather than copying an author's voice.
-- Default to English in `www/docs/blog/<slug>.md` and Simplified Chinese in `www/docs/zh/blog/<slug>.md`, using the same slug, date, category, and cover. Honor explicit single-language requests.
+- Default to English in `www/docs/blog/<slug>.md` and Simplified Chinese in `www/docs/zh/blog/<slug>.md`, using the same slug, date, category, and cover pair. Honor explicit single-language requests.
 - Use [the article template](assets/article-template.md) for frontmatter and a starting point, replacing every template token. It is not a mandatory outline.
 - Choose a specific title about a task or benefit. Avoid a repeated “Did You Know” / “你知道吗” prefix, exaggerated claims, and generic introductions. The description should add useful context rather than repeat the title.
 - Develop the situation, a concrete example, the reason for consequential settings, and the observable result as needed. Use connected prose for the explanation and steps for actions. Add useful context where an article feels thin; do not pad it with adjectives, repeated benefits, or a mandatory FAQ/conclusion. Keep length and structure proportional to the task.
@@ -26,7 +26,7 @@ Write for people using Wox: one concrete task, its useful outcome, and enough de
 
 ## Supply card metadata and a cover
 
-Required frontmatter: `title`, `description`, `date`, `category`, `cover`, and `coverAlt`.
+Required frontmatter: `title`, `description`, `date`, `category`, `cover`, `coverDark`, and `coverAlt`.
 
 | Category ID | English label | Chinese label |
 | --- | --- | --- |
@@ -37,9 +37,9 @@ Required frontmatter: `title`, `description`, `date`, `category`, `cover`, and `
 
 Choose the closest category. Add a category only when the article genuinely falls outside these themes, updating loader validation and both localized labels in `BlogIndex.vue` together.
 
-- The default cover style is the approved flat illustration family: front-facing 2D shapes, thin charcoal-blue outlines, pale gray backgrounds, muted blue/sage/peach accents, and generous whitespace. Avoid clay-like 3D materials, bevels, thick keys, perspective, and heavy shadows. Use no text or logos in covers.
+- The default cover style is the approved flat illustration family: front-facing 2D shapes, muted blue/sage/peach accents, and generous whitespace. Avoid clay-like 3D materials, bevels, thick keys, perspective, and heavy shadows. Avoid text and logos unless the article calls for them; preserve official logos exactly when used.
 - Read [the cover style reference](references/cover-style.md) when creating or replacing a cover. Use the built-in image generation tool for original illustrations; inspect an existing cover as a style reference when useful.
-- Save selected images under `www/docs/public/images/blog/` and reference `/images/blog/<name>.webp` (or the actual image extension). Localize `coverAlt` concisely.
+- Create matching light and dark covers, save them under `www/docs/public/images/blog/`, and reference them in `cover` and `coverDark`. Do not simulate the dark cover using an image filter. Localize `coverAlt` concisely.
 - Covers express the topic, not evidence of product behavior. Preserve real screenshots and videos in the body. Never substitute generated mock UI for factual screenshots.
 - When a real Wox product screenshot is needed but unavailable, continue drafting with a descriptive text placeholder at the intended position, such as `> Screenshot needed: Wox workspace settings showing the saved window layout on Windows.` Specify the screen, relevant state or action, and what the image should demonstrate; use the article language. Do not create an image link to a nonexistent file. At delivery, notify the user and list the article locations and screenshots they need to supply. These intentional screenshot placeholders may remain in the draft; they do not block completing the text and local validation.
 - If image generation is unavailable, finish text preparation and report the missing cover. Do not leave broken references or silently switch to a different medium.

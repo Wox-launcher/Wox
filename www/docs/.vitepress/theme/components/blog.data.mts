@@ -10,6 +10,7 @@ export interface BlogPost {
   date: string;
   category: "workspace" | "preview" | "automation" | "product";
   cover: string;
+  coverDark: string;
   coverAlt: string;
 }
 
@@ -21,7 +22,7 @@ export default createContentLoader(["blog/*.md", "zh/blog/*.md"], {
     return pages
       .filter(({ url }) => !/^\/(?:zh\/)?blog\/(?:index\.html)?$/.test(url))
       .map(({ url, frontmatter }) => {
-        for (const key of ["title", "description", "category", "cover", "coverAlt"]) {
+        for (const key of ["title", "description", "category", "cover", "coverDark", "coverAlt"]) {
           if (typeof frontmatter[key] !== "string" || !frontmatter[key].trim()) {
             throw new Error(`${url}: blog frontmatter requires ${key}`);
           }
@@ -33,8 +34,10 @@ export default createContentLoader(["blog/*.md", "zh/blog/*.md"], {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) {
           throw new Error(`${url}: blog date must be a valid YYYY-MM-DD date`);
         }
-        if (!frontmatter.cover.startsWith("/images/blog/") || !existsSync(fileURLToPath(new URL(`../../../public${frontmatter.cover}`, import.meta.url)))) {
-          throw new Error(`${url}: blog cover must exist under public/images/blog/`);
+        for (const cover of [frontmatter.cover, frontmatter.coverDark]) {
+          if (!cover.startsWith("/images/blog/") || !existsSync(fileURLToPath(new URL(`../../../public${cover}`, import.meta.url)))) {
+            throw new Error(`${url}: blog cover must exist under public/images/blog/`);
+          }
         }
         return {
           url,
@@ -44,6 +47,7 @@ export default createContentLoader(["blog/*.md", "zh/blog/*.md"], {
           date,
           category: frontmatter.category,
           cover: frontmatter.cover,
+          coverDark: frontmatter.coverDark,
           coverAlt: frontmatter.coverAlt,
         } satisfies BlogPost;
       })

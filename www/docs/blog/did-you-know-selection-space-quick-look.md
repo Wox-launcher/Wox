@@ -4,6 +4,7 @@ description: Select a file in Explorer or a file dialog and press Space to previ
 date: 2026-05-26
 category: preview
 cover: /images/blog/file-preview.webp
+coverDark: /images/blog/file-preview-dark.webp
 coverAlt: A file preview panel and a spacebar
 ---
 

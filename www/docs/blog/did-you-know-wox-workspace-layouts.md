@@ -4,6 +4,7 @@ description: Save your apps and window positions, then reopen and arrange your w
 date: 2026-07-01
 category: workspace
 cover: /images/blog/workspace-layouts.webp
+coverDark: /images/blog/workspace-layouts-dark.webp
 coverAlt: Three app windows arranged into a workspace layout
 ---
 

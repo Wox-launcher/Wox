@@ -4,6 +4,7 @@ description: "从 2013 年的 WinAlfred，到今天的跨平台原生启动器�
 date: 2026-10-20
 category: product
 cover: /images/blog/rediscover-wox-v2.webp
+coverDark: /images/blog/rediscover-wox-v2-dark.webp
 coverAlt: 绿色手写 Wox v1 图标通过箭头过渡到白底黑色 W 的 Wox v2 图标
 ---
 

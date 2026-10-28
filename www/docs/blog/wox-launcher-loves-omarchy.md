@@ -4,6 +4,7 @@ description: "A live Omarchy theme, searchable desktop commands, and a more natu
 date: 2026-10-28
 category: product
 cover: /images/blog/wox-launcher-loves-omarchy.webp
+coverDark: /images/blog/wox-launcher-loves-omarchy-dark.webp
 coverAlt: Wox and Omarchy icons with a heart between them
 ---
 

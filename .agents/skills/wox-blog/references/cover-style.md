@@ -1,8 +1,12 @@
 # Blog cover illustrations
 
-Use flat, two-dimensional editorial illustrations: thin charcoal-blue outlines, simple filled shapes, pale neutral gray backgrounds, warm white panels, and restrained slate-blue, sage, and peach accents. Keep a front-facing view with generous negative space. Avoid clay-like materials, bevels, extrusion, perspective, glossy highlights, gradients, and cast shadows. Images contain no text; the site owns headings and labels.
+Use flat, two-dimensional editorial illustrations: thin outlines, simple filled shapes, and restrained slate-blue, sage, and peach accents. Light covers use pale neutral gray backgrounds and warm white panels. Keep a front-facing view with generous negative space. Avoid clay-like materials, bevels, extrusion, perspective, glossy highlights, gradients, and cast shadows. The site owns headings and labels.
 
 Compose one recognizable concept in a landscape 16:9 frame. Keep important objects in the central area for safe card cropping. Inspect at card size in both website themes.
+
+Create a matching dark-theme version for each cover. Preserve the subject and composition while using charcoal and slate backgrounds and panels, lighter outlines, and the same restrained accents. Reference the light and dark files separately in the article frontmatter; do not simulate the dark version with a CSS filter.
+
+Avoid text and logos unless needed for the article. When a cover includes the Wox logo, use the official `www/docs/public/logo.png` asset in both themes; preserve its black W and white rounded-square background, shape, and proportions. Do not rely on a generated approximation, invert, recolor, or redesign it. Check the rendered cover against the official asset; preserve other brand marks accurately as well.
 
 Use the built-in image generation tool, one call per cover. Export web-sized WebP copies (1280px wide at quality 85 for the current set) into `www/docs/public/images/blog/`. Keep original generated files in place. Use the current covers as the style reference.
 
@@ -11,7 +15,7 @@ Use the built-in image generation tool, one call per cover. Export web-sized Web
 - Match the approved flat covers currently in `www/docs/public/images/blog/`, rather than the earlier clay-style drafts. A new topic should still look like part of this set.
 - Shapes should read as a drawing at card size: thin strokes, simple fills, and a front-facing view. Reject thick extruded panels, chunky physical keycaps, beveled edges, glossy highlights, or shadows that give the objects weight and volume.
 - Keep one clear subject with few supporting objects. Preserve 16:9 framing and enough whitespace for safe cropping; do not fill the cover with tiny interface detail.
-- Use restrained color accents and a light neutral background. Keep titles, labels, and branding in the page text, and use real product captures inside the article.
+- Use restrained color accents and a theme-appropriate background. Keep titles and labels in the page text, and use real product captures inside the article. Check any required brand marks against their original assets.
 - Inspect the generated image before exporting it. If it drifts back toward 3D, correct that specific visual property with the image tool rather than accepting it because the subject is recognizable.
 
 ## Reusable prompt

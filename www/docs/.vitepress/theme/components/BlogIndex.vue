@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useData, withBase } from "vitepress";
 import { data as posts } from "./blog.data.mts";
 
-const { lang } = useData();
+const { lang, isDark } = useData();
 const isChinese = computed(() => lang.value.toLowerCase().startsWith("zh"));
 const localizedPosts = computed(() => posts.filter((post) => post.lang === (isChinese.value ? "zh" : "en")));
 const categories = computed(() =>
@@ -28,15 +28,18 @@ function formatDate(date: string) {
     <div class="blog-grid">
       <article v-for="(post, index) in localizedPosts" :key="post.url" class="blog-card">
         <a :href="withBase(post.url)" class="blog-card-link" :aria-label="post.title">
-          <img
-            class="blog-cover"
-            :src="withBase(post.cover)"
-            :alt="post.coverAlt"
-            width="1600"
-            height="900"
-            :loading="index < 3 ? 'eager' : 'lazy'"
-            decoding="async"
-          />
+          <div class="blog-cover-frame">
+            <img
+              class="blog-cover"
+              :src="withBase(isDark ? post.coverDark : post.cover)"
+              :alt="post.coverAlt"
+              width="1600"
+              height="900"
+              :loading="index < 3 ? 'eager' : 'lazy'"
+              decoding="async"
+            />
+            <img v-if="post.cover.endsWith('/wox-launcher-loves-omarchy.webp')" class="blog-wox-logo" :src="withBase('/logo.png')" alt="" />
+          </div>
           <div class="blog-card-body">
             <span class="blog-category">{{ categories[post.category] }}</span>
             <h2>{{ post.title }}</h2>
@@ -90,6 +93,10 @@ function formatDate(date: string) {
   border-radius: 15px;
 }
 
+.blog-cover-frame {
+  position: relative;
+}
+
 .blog-cover {
   display: block;
   width: 100%;
@@ -98,6 +105,14 @@ function formatDate(date: string) {
   object-fit: cover;
   background: #f3f4f5;
   border-bottom: 1px solid var(--wox-home-border);
+}
+
+.blog-wox-logo {
+  position: absolute;
+  left: 22.2%;
+  top: 33.4%;
+  width: 17.3%;
+  height: auto;
 }
 
 .blog-card-body {

@@ -4,6 +4,7 @@ description: 在资源管理器或文件对话框中选中文件，按空格即�
 date: 2026-05-26
 category: preview
 cover: /images/blog/file-preview.webp
+coverDark: /images/blog/file-preview-dark.webp
 coverAlt: 文件预览面板与空格键
 ---
 

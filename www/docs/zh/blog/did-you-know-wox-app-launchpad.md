@@ -4,6 +4,7 @@ description: 用 app launchpad 浏览已安装应用，通过熟悉的图标快�
 date: 2026-05-16
 category: workspace
 cover: /images/blog/app-launchpad.webp
+coverDark: /images/blog/app-launchpad-dark.webp
 coverAlt: 排列整齐的平面应用图标网格
 ---
 

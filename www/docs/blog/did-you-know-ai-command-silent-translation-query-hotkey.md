@@ -4,6 +4,7 @@ description: Combine an AI command with a shortcut to translate selected text an
 date: 2026-05-16
 category: automation
 cover: /images/blog/silent-translation.webp
+coverDark: /images/blog/silent-translation-dark.webp
 coverAlt: An arrow transforming text between two panels with a shortcut key
 ---
 

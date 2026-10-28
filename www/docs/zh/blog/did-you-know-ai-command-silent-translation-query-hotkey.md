@@ -4,6 +4,7 @@ description: 将 AI 命令与快捷键组合，翻译选中文本并把结果直
 date: 2026-05-16
 category: automation
 cover: /images/blog/silent-translation.webp
+coverDark: /images/blog/silent-translation-dark.webp
 coverAlt: 两个文本面板之间的转换箭头与快捷键
 ---
 

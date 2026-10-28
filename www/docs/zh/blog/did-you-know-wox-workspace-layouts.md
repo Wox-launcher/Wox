@@ -4,6 +4,7 @@ description: 保存常用应用和窗口位置，从 Wox 一次打开并排列�
 date: 2026-07-01
 category: workspace
 cover: /images/blog/workspace-layouts.webp
+coverDark: /images/blog/workspace-layouts-dark.webp
 coverAlt: 三个应用窗口排列成工作区布局
 ---
 

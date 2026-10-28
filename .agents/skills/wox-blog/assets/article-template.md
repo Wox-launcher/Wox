@@ -4,6 +4,7 @@ description: "{{one_sentence_context_or_outcome}}"
 date: "{{YYYY-MM-DD}}"
 category: "{{workspace_or_preview_or_automation_or_product}}"
 cover: "/images/blog/{{cover_filename}}"
+coverDark: "/images/blog/{{dark_cover_filename}}"
 coverAlt: "{{localized_description_of_the_illustration}}"
 ---
 

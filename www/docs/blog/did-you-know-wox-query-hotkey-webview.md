@@ -4,6 +4,7 @@ description: Bind a website to a shortcut and check it in a compact Wox panel, w
 date: 2026-05-16
 category: automation
 cover: /images/blog/webview-hotkey.webp
+coverDark: /images/blog/webview-hotkey-dark.webp
 coverAlt: A compact web panel with a globe and shortcut keys
 ---
 

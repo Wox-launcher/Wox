@@ -4,6 +4,7 @@ description: 把常用网站绑定到快捷键，在紧凑的 Wox 面板里快�
 date: 2026-05-16
 category: automation
 cover: /images/blog/webview-hotkey.webp
+coverDark: /images/blog/webview-hotkey-dark.webp
 coverAlt: 带地球图案的网页面板与快捷键
 ---
 

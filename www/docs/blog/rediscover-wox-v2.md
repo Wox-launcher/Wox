@@ -4,6 +4,7 @@ description: "From WinAlfred in 2013 to a native launcher for three desktop plat
 date: 2026-10-20
 category: product
 cover: /images/blog/rediscover-wox-v2.webp
+coverDark: /images/blog/rediscover-wox-v2-dark.webp
 coverAlt: The green handwritten Wox v1 icon transitioning to the white and black Wox v2 icon
 ---
 
