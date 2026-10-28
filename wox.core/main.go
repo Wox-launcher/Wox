@@ -500,6 +500,12 @@ func run() {
 		ui.GetUIManager().ProcessDeeplink(util.NewTraceContext(), deeplink)
 	})
 	for _, deeplink := range startupDeepLinks {
+		// The launcher is already shown on startup, so toggling here would
+		// immediately hide it when a URL starts the first Wox instance.
+		if deeplink == "wox://toggle" || deeplink == "wox://toggle/" {
+			ui.GetUIManager().GetUI(ctx).ShowApp(ctx, common.ShowContext{SelectAll: true})
+			continue
+		}
 		ui.GetUIManager().ProcessDeeplink(ctx, deeplink)
 	}
 	automationInfo, automationErr := automation.Start(ctx, embeddedGoUIApp)
