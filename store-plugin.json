@@ -1044,15 +1044,15 @@
     "Id": "b8e3d1a4-6c2f-4a9e-8d71-3f5c0a2e9b16",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
-    "MinWoxVersion": "2.0.0",
-    "Runtime": "script",
+    "Version": "1.1.0",
+    "MinWoxVersion": "2.4.8",
+    "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
-    "IconEmoji": "🎬",
-    "Website": "https://gist.github.com/qianlifeng/c6b0e26b0db6efa9e9e9cd6a9252e08b",
-    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/c6b0e26b0db6efa9e9e9cd6a9252e08b/raw/Wox.Plugin.Script.VideoDownloader.py",
+    "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.VideoDownloader/main/images/app.svg",
+    "Website": "https://github.com/qianlifeng/Wox.Plugin.VideoDownloader",
+    "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.VideoDownloader/releases/latest/download/wox.plugin.videoDownloader.wox",
     "ScreenshotUrls": [
-      "https://gist.github.com/user-attachments/assets/e1a930cb-5ba9-45d2-a7a2-e1365764193b"
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.VideoDownloader/main/screenshot.png"
     ],
     "SupportedOS": [
       "Windows",
@@ -1060,7 +1060,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-01 23:00:00",
-    "DateUpdated": "2026-09-01 23:00:00",
+    "DateUpdated": "2026-10-28 20:45:39",
     "I18n": {
       "en_US": {
         "plugin_name": "Video Downloader",
