@@ -104,7 +104,9 @@ This grants read access to `/dev/input/event*` devices. Wox passively listens to
 sudo usermod -aG input $USER
 ```
 
-Log out and back in, then restart Wox.
+Save your work and **restart your computer** to apply the new group membership, then open Wox. Run `id -nG` to verify that the current session includes `input`.
+
+Logging out and back in may leave `systemd --user` running with its old groups. Desktops and applications launched by that user service manager can inherit those old groups even after a new login. Restarting the computer ensures they pick up the updated membership.
 
 #### CapsLock combo hotkeys (e.g. `capslock+a`) — `input` group required, `uinput` group recommended
 
@@ -112,35 +114,23 @@ CapsLock combos need the `input` group (evdev read access) to detect the combo. 
 
 When CapsLock is used as a combo prefix, the system toggles the caps lock state because Wox cannot consume the raw event on Wayland. Wox undoes this toggle by injecting a CapsLock key event through a temporary uinput virtual keyboard. Without uinput, the hotkey still fires, but the caps lock LED may be left toggled and an extra character may be typed into the focused field.
 
-To enable full CapsLock restoration, add yourself to the `uinput` group:
+To enable full CapsLock restoration, copy and run this entire block in a terminal as your normal user. It adds the required groups, configures device permissions, and loads `uinput` now and at boot. If a command fails, the script stops; check the error before continuing.
 
 ```bash
-getent group uinput >/dev/null || sudo groupadd -r uinput
-sudo usermod -aG input,uinput "$USER"
+sudo bash -s -- "$USER" <<'EOF'
+set -eu
+getent group uinput >/dev/null || groupadd -r uinput
+usermod -aG input,uinput "$1"
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' > /etc/udev/rules.d/80-uinput.rules
+echo uinput > /etc/modules-load.d/uinput.conf
+udevadm control --reload-rules
+modprobe uinput
+udevadm trigger --action=change /sys/class/misc/uinput
+udevadm settle
+EOF
 ```
 
-Then ensure `/dev/uinput` is group-writable. Many stock distros ship `/dev/uinput` as `crw------- root:root`, so group membership alone is not enough — you also need a udev rule:
-
-```bash
-echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules
-```
-
-Next, load the `uinput` kernel module and apply the device permissions. The presence of `/dev/uinput` alone does not mean the module is loaded:
-
-```bash
-sudo modprobe uinput
-sudo udevadm trigger --action=change /sys/class/misc/uinput
-sudo udevadm settle
-```
-
-Enable automatic loading at boot so the device remains available after a restart:
-
-```bash
-echo uinput | sudo tee /etc/modules-load.d/uinput.conf
-```
-
-**Log out of your desktop session and back in** to apply the new group membership, then verify:
+After the script completes successfully, save your work and **restart your computer** to apply the new group membership, then verify:
 
 ```bash
 id -nG
@@ -148,43 +138,15 @@ ls -l /dev/uinput
 test -w /dev/uinput && echo "uinput writable"
 ```
 
-`id -nG` should include `input` and `uinput`, the device should show `crw-rw---- root uinput`, and the last command should print `uinput writable`. Then restart Wox so it checks permissions again.
+`id -nG` should include `input` and `uinput`, the device should show `crw-rw---- root uinput`, and the last command should print `uinput writable`. Then open Wox and run `doctor` to check access.
 
 If a command fails:
 
 - **`udevadm trigger` reports `No such device`**: run `sudo modprobe uinput` first. Check that `/sys/class/misc/uinput` exists before retrying the udev trigger command above. Creating a group or writing a rule does not load the module.
 - **`modprobe` reports `Module uinput not found`**: check whether your current kernel provides the module. If you recently upgraded your kernel, reboot into the new kernel and retry.
 - **The device still belongs to `root:root` or lacks group write permission**: check the saved udev rule, reload the rules, trigger the device event, and wait for `udevadm settle` to finish.
-- **Device permissions are correct but it is still not writable**: run `id -nG` without a username to check the current session's groups. Opening a new terminal may not apply newly added groups; log out of the desktop and back in. Changing only device permissions does not require logging out, but Wox still needs to be restarted.
+- **Device permissions are correct but it is still not writable**: run `id -nG` without a username to check the current session's groups. `id -nG "$USER"` shows the account's configured groups, which may differ from the groups active in the session. If the account includes `input` and `uinput` but the session does not, restart your computer; reopening a terminal or logging out and back in may retain the old groups. If the session already has the required groups and you only change device permissions, restarting Wox is enough; a computer restart is not needed.
 
 After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
 
 > **Note:** The system setup above requires `sudo`, but Wox itself runs as a regular user without an extra system daemon. For CapsLock combos, Wox reads evdev events passively and uses uinput to restore CapsLock state and delete the stray combo character. Without uinput, the hotkey still fires, but these recovery operations cannot complete.
-
-### How do I disable the Wox window animation on Wayland? {#wayland-disable-animation}
-
-On Wayland, Wox renders its main window as a layer-shell surface (namespace `gtk-layer-shell`) on the overlay layer, not as a regular XDG toplevel. As a result, compositor animation rules that target application windows (by app id or window class) do not apply to Wox. To remove the open/close/resize transition animation, configure a layer rule that targets the `gtk-layer-shell` namespace.
-
-#### Hyprland
-
-Add a `layer_rule` to `~/.config/hypr/hyprland.conf` (or the equivalent Lua config):
-
-```ini
-layerrule noanim, gtk-layer-shell
-```
-
-With the Lua config (`hyprland.lua`):
-
-```lua
-hl.layer_rule({
-    name    = "wox-no-anim",
-    match   = { namespace = "gtk-layer-shell" },
-    no_anim = true,
-})
-```
-
-Hyprland hot-reloads the config, so the change takes effect immediately. If Wox was already visible, toggle it once so the layer surface is recreated with the new rule.
-
-#### Other compositors
-
-Look for the equivalent layer-surface animation option in your compositor's documentation and target the `gtk-layer-shell` namespace. Wox does not control compositor-side animations from within the application.

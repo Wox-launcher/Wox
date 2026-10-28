@@ -104,7 +104,9 @@ macOS 可能会限制 Desktop、Documents、Downloads、外置磁盘等位置。
 sudo usermod -aG input $USER
 ```
 
-重新登录，然后重启 Wox。
+保存工作后，**重启电脑**，让新增的组成员资格生效，然后打开 Wox。运行 `id -nG`，确认当前会话包含 `input`。
+
+注销并重新登录后，`systemd --user` 仍可能沿用旧的用户组。由这个用户服务管理器启动的桌面和应用，即使在重新登录后也可能继承旧权限。重启电脑可以确保它们使用更新后的组成员资格。
 
 #### CapsLock 组合键（如 `capslock+a`）— 需要 `input` 组，推荐 `uinput` 组
 
@@ -112,35 +114,23 @@ CapsLock 组合键需要 `input` 组（evdev 读取权限）来检测组合键�
 
 当 CapsLock 被用作组合键前缀时，由于 Wox 在 Wayland 下无法拦截原始事件，系统会切换 CapsLock 状态。Wox 通过 uinput 虚拟键盘注入一个 CapsLock 按键事件来撤销这个切换。如果没有 uinput，热键仍会触发，但大小写灯可能被切换，并可能在当前输入框里多输入一个字符。
 
-要启用完整的 CapsLock 状态恢复，请将自己加入 `uinput` 组：
+要启用完整的 CapsLock 状态恢复，以普通用户打开终端，复制并运行下面整个代码块即可。它会添加所需的用户组、配置设备权限、加载 `uinput` 并设置开机自动加载。如果某条命令失败，脚本会停止，请先检查错误再继续。
 
 ```bash
-getent group uinput >/dev/null || sudo groupadd -r uinput
-sudo usermod -aG input,uinput "$USER"
+sudo bash -s -- "$USER" <<'EOF'
+set -eu
+getent group uinput >/dev/null || groupadd -r uinput
+usermod -aG input,uinput "$1"
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' > /etc/udev/rules.d/80-uinput.rules
+echo uinput > /etc/modules-load.d/uinput.conf
+udevadm control --reload-rules
+modprobe uinput
+udevadm trigger --action=change /sys/class/misc/uinput
+udevadm settle
+EOF
 ```
 
-然后确保 `/dev/uinput` 对组可写。许多原版发行版将 `/dev/uinput` 设为 `crw------- root:root`，仅加入组还不够——还需要一条 udev 规则：
-
-```bash
-echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput"' | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules
-```
-
-接着加载 `uinput` 内核模块，并应用设备权限。即使 `/dev/uinput` 文件已经存在，也不代表模块已加载：
-
-```bash
-sudo modprobe uinput
-sudo udevadm trigger --action=change /sys/class/misc/uinput
-sudo udevadm settle
-```
-
-设置开机自动加载，避免重启后设备再次不可用：
-
-```bash
-echo uinput | sudo tee /etc/modules-load.d/uinput.conf
-```
-
-**注销整个桌面会话并重新登录**，让新增的组成员资格生效，然后检查：
+脚本成功执行后，保存工作并**重启电脑**，让新增的组成员资格生效，然后检查：
 
 ```bash
 id -nG
@@ -148,43 +138,15 @@ ls -l /dev/uinput
 test -w /dev/uinput && echo "uinput writable"
 ```
 
-`id -nG` 应包含 `input` 和 `uinput`，设备应显示 `crw-rw---- root uinput`，最后一条命令应输出 `uinput writable`。确认后重启 Wox，让它重新检测权限。
+`id -nG` 应包含 `input` 和 `uinput`，设备应显示 `crw-rw---- root uinput`，最后一条命令应输出 `uinput writable`。确认后打开 Wox，运行 `doctor` 检查权限。
 
 遇到错误时：
 
 - **`udevadm trigger` 报 `No such device`**：先执行 `sudo modprobe uinput`。检查 `/sys/class/misc/uinput` 是否存在，再触发上面的 udev 命令；仅创建组或写入规则不会加载模块。
 - **`modprobe` 报 `Module uinput not found`**：检查当前内核是否提供该模块。如果刚升级过内核，先重启到新内核再重试。
 - **设备仍是 `root:root` 或没有组写权限**：检查 udev 规则是否保存正确，重新加载规则、触发设备事件并等待 `udevadm settle` 完成。
-- **设备权限正确但仍不可写**：用不带用户名的 `id -nG` 检查当前会话的组。新增组后只重开终端可能不够，需要注销桌面再登录；如果只是修改设备权限，则无需重新登录，但仍需重启 Wox。
+- **设备权限正确但仍不可写**：用不带用户名的 `id -nG` 检查当前会话的组。`id -nG "$USER"` 显示的是账户配置中的组，可能与当前会话实际生效的组不同。如果账户配置包含 `input` 和 `uinput`，但当前会话没有，请重启电脑；只重开终端或注销后重新登录仍可能沿用旧的用户组。如果当前会话已包含所需的组，只是修改设备权限，则重启 Wox 即可，无需重启电脑。
 
 设置完成后，单独按下 CapsLock 时正常切换大小写；将 CapsLock 用作组合键前缀时，系统的 CapsLock 切换会被自动撤销。普通组合键热键（如 `ctrl+space`）不受此设置影响，始终通过 `org.freedesktop.portal.GlobalShortcuts` portal 工作。
 
 > **注意：** 上述系统配置需要 `sudo`，但 Wox 本身以普通用户运行，无需额外的系统守护进程。在 CapsLock 组合键流程中，Wox 被动读取 evdev 事件，并通过 uinput 恢复大小写状态、删除多打的组合字符。没有 uinput 时热键仍能触发，但这些恢复操作无法完成。
-
-### 如何在 Wayland 下禁用 Wox 窗口动画？ {#wayland-disable-animation}
-
-在 Wayland 下，Wox 的主窗口是 layer-shell 表面（namespace 为 `gtk-layer-shell`），位于 overlay 层，并不是普通的 XDG 顶层窗口。因此，合成器中针对应用窗口（按 app id 或窗口 class 匹配）的动画规则对 Wox 不生效。要去除打开/关闭/调整大小时的过渡动画，需要配置针对 `gtk-layer-shell` namespace 的 layer 规则。
-
-#### Hyprland
-
-在 `~/.config/hypr/hyprland.conf`（或对应的 Lua 配置）中添加 `layer_rule`：
-
-```ini
-layerrule noanim, gtk-layer-shell
-```
-
-使用 Lua 配置（`hyprland.lua`）时：
-
-```lua
-hl.layer_rule({
-    name    = "wox-no-anim",
-    match   = { namespace = "gtk-layer-shell" },
-    no_anim = true,
-})
-```
-
-Hyprland 会热重载配置，修改后立即生效。如果 Wox 当前已显示，切换一次让 layer 表面按新规则重新创建即可。
-
-#### 其他合成器
-
-查阅你所使用的合成器文档中对应的 layer-surface 动画选项，并针对 `gtk-layer-shell` namespace 进行配置。Wox 本身无法从应用内部控制合成器侧的动画。

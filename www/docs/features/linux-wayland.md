@@ -13,18 +13,17 @@ Wox is a native launcher on Linux, not an Electron shell. On Wayland it shows as
 
 ## What it is
 
-Wox ships stable Linux builds alongside Windows and macOS. The main window is a layer-shell surface (namespace `gtk-layer-shell`) on the overlay layer, so it can appear above other windows without becoming a normal XDG toplevel.
+Wox ships stable Linux builds alongside Windows and macOS. On desktops that support layer-shell, the main window uses Wox's own namespace (`io.github.WoxLauncher.Wox`) on the top layer, so it can appear above ordinary windows without becoming a normal XDG toplevel.
 
 Ordinary combination hotkeys such as `Ctrl+Space` go through `org.freedesktop.portal.GlobalShortcuts`. Double-modifier and CapsLock-combo hotkeys need extra input permissions because Wayland does not let Wox intercept raw keys the way X11 does.
 
 ## Why the limits exist
 
-Wayland compositors own animations, global shortcuts, and clipboard portals. Wox does not bypass those with a root daemon. Layer-shell also means compositor rules that target application windows will not hide Wox's open/close animation — you configure a layer rule instead.
+Wayland compositors own animations, global shortcuts, and clipboard portals. Wox does not bypass those with a root daemon.
 
-These constraints are still true on current Wayland compositors.
+On Hyprland, Wox automatically applies a layer rule to disable its window animations and reapplies it after compositor configuration reloads. No manual animation rule is needed. This automatic handling is specific to Hyprland; other desktops manage animations through their own compositor settings.
 
 ## How to set it up
 
 - [Double-modifier and CapsLock hotkeys on Wayland](/guide/faq.html#wayland-double-modifier-hotkeys)
-- [Disable the Wox window animation on Wayland](/guide/faq.html#wayland-disable-animation)
 - [Installation](/guide/installation)
