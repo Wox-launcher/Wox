@@ -128,7 +128,6 @@ function englishGuideSidebar() {
         { text: "Introduction", link: "/guide/introduction" },
         { text: "Installation", link: "/guide/installation" },
         { text: "FAQ", link: "/guide/faq" },
-        { text: "Rediscover Wox v2", link: "/blog/rediscover-wox-v2" },
       ],
     },
     {
@@ -201,7 +200,6 @@ function chineseGuideSidebar() {
         { text: "简介", link: "/zh/guide/introduction" },
         { text: "安装", link: "/zh/guide/installation" },
         { text: "常见问题", link: "/zh/guide/faq" },
-        { text: "重新认识 Wox v2", link: "/zh/blog/rediscover-wox-v2" },
       ],
     },
     {
