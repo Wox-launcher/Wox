@@ -126,7 +126,11 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 		revision:  1,
 	}
 
-	pixmaps, iconName, iconThemePath, iconFile := prepareTrayIcon(appIcon)
+	prepareIcon := prepareTrayIcon
+	if isOmarchyTraySession() {
+		prepareIcon = prepareOmarchyTrayIcon
+	}
+	pixmaps, iconName, iconThemePath, iconFile := prepareIcon(appIcon)
 	host.iconFile = iconFile
 
 	sniProps := map[string]map[string]*prop.Prop{

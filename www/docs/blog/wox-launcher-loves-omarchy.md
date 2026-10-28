@@ -24,6 +24,16 @@ On a new installation, the onboarding theme step selects Omarchy Auto by default
 
 An Omarchy theme switch also reloads Hyprland. Wox restores its Hyprland hotkey bindings and layer animation rule after that reload, so the launcher remains ready to use.
 
+## A tray icon that fits the bar
+
+When the Wox tray icon is enabled on Omarchy, it uses a simple symbolic W. The bar colors it to match its other icons, so it follows the foreground color when you switch themes.
+
+![Wox tray icon on a dark Omarchy bar](/images/blog/omarchy-tray-icon-1.png)
+
+![Wox tray icon on another dark Omarchy theme](/images/blog/omarchy-tray-icon-2.png)
+
+![Wox tray icon on a light Omarchy bar](/images/blog/omarchy-tray-icon-3.png)
+
 ## Find Omarchy commands from Wox
 
 Open Wox and search for an Omarchy menu item, such as `theme` or `lock`. Matching Omarchy commands appear alongside other results, with an Omarchy label and their menu path. Select one to run its action; entries backed by a dynamic menu open the corresponding Omarchy submenu.

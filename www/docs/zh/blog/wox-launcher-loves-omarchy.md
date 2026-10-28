@@ -22,6 +22,16 @@ Omarchy 为 Linux 桌面带来了统一的外观和适合键盘操作的工作�
 
 ![Wox 主题列表中选中了 Omarchy Auto](/images/blog/omarchy-theme-auto.png)
 
+## 与状态栏融为一体的托盘图标
+
+在 Omarchy 上启用 Wox 托盘图标后，状态栏会显示一个简洁的单色 W，并为它应用与其他图标相同的前景色。切换主题时，图标颜色也会随状态栏一起变化。
+
+![深色 Omarchy 状态栏中的 Wox 托盘图标](/images/blog/omarchy-tray-icon-1.png)
+
+![另一种深色 Omarchy 主题下的 Wox 托盘图标](/images/blog/omarchy-tray-icon-2.png)
+
+![浅色 Omarchy 状态栏中的 Wox 托盘图标](/images/blog/omarchy-tray-icon-3.png)
+
 ## 在 Wox 里搜索 Omarchy 命令
 
 打开 Wox，搜索 Omarchy 菜单中的项目，例如 `theme` 或 `lock`。匹配的 Omarchy 命令会与其他结果一起出现，并显示 Omarchy 标识和菜单路径。选中后即可运行对应操作；由动态菜单提供的项目会打开相应的 Omarchy 子菜单。
