@@ -62,7 +62,7 @@ func DefaultTheme() Theme {
 }
 
 func defaultIcons() map[string]common.WoxImage {
-	icons := make(map[string]common.WoxImage, len(defaultUIIcons)+len(defaultPluginIcons)+len(defaultActionIcons)+len(defaultSysIcons)+len(defaultMiscIcons))
+	icons := make(map[string]common.WoxImage, len(defaultUIIcons)+len(defaultPluginIcons)+len(defaultActionIcons)+len(defaultSysIcons)+len(defaultMiscIcons)+len(defaultWindowIcons))
 	for name, icon := range defaultUIIcons {
 		icons[name] = icon
 	}
@@ -76,6 +76,9 @@ func defaultIcons() map[string]common.WoxImage {
 		icons[name] = icon
 	}
 	for name, icon := range defaultMiscIcons {
+		icons[name] = icon
+	}
+	for name, icon := range defaultWindowIcons {
 		icons[name] = icon
 	}
 	return icons

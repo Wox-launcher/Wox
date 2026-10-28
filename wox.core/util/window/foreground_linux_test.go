@@ -98,11 +98,11 @@ func TestParseKWinForeground(t *testing.T) {
 }
 
 func TestParseHyprlandForeground(t *testing.T) {
-	app, err := parseHyprlandForeground([]byte(`{"class":"kitty","initialClass":"kitty","title":"shell","pid":920}`))
+	app, err := parseHyprlandForeground([]byte(`{"address":"0xabc","class":"kitty","initialClass":"kitty","title":"shell","pid":920}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if app.AppID != "kitty" || app.Pid != 920 || app.Title != "shell" {
+	if app.AppID != "kitty" || app.Pid != 920 || app.Title != "shell" || app.WindowID != "0xabc" {
 		t.Fatalf("foreground = %+v", app)
 	}
 	if _, err := parseHyprlandForeground([]byte(`{"class":"","pid":0}`)); !errors.Is(err, errLinuxForegroundMissing) {

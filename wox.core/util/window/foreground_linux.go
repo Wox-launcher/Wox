@@ -20,6 +20,7 @@ var (
 // linuxForegroundApp is the focused window plus the desktop entry matched to it.
 // Identity is the .desktop basename, which is what the ignore-application picker stores.
 type linuxForegroundApp struct {
+	WindowID string
 	Pid      int
 	Title    string
 	AppID    string

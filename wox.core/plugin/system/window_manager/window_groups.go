@@ -164,6 +164,9 @@ var windowGroupLayoutDefinitions = map[string]windowGroupLayoutDefinition{
 
 // windowManagerMetadataCommands registers normal window commands plus the group command used by query hotkeys.
 func windowManagerMetadataCommands() []plugin.MetadataCommand {
+	if util.IsHyprlandSession() {
+		return hyprlandMetadataCommands()
+	}
 	commands := make([]plugin.MetadataCommand, 0, len(windowManagerCommands)+1)
 	for _, command := range windowManagerCommands {
 		commands = append(commands, plugin.MetadataCommand{
@@ -271,16 +274,16 @@ func (p *WindowManagerPlugin) windowGroupResult(ctx context.Context, group windo
 	capturedGroup := group
 
 	return plugin.QueryResult{
-		Id:       "window-group-" + group.Id,
-		Title:    group.Name,
-		SubTitle: subtitle,
-		Icon:     windowManagerIcon,
-		Score:    score,
+		Id:          "window-group-" + group.Id,
+		Title:       group.Name,
+		SubTitle:    subtitle,
+		Icon:        icons.Get(icons.WindowGroup),
+		Score:       score,
 		IdentityKey: "window-group:" + group.Id,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:      "i18n:plugin_window_manager_group_action_apply",
-				Icon:      icons.Get(icons.ActionRun),
+				Icon:      icons.Get(icons.ActionExecute),
 				IsDefault: true,
 				ContextData: map[string]string{
 					windowManagerMRUTypeKey:    windowManagerMRUTypeGroup,

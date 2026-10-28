@@ -28,6 +28,7 @@ type HyprlandWorkspaceRef struct {
 
 // HyprlandMonitor describes an output using compositor-owned physical mode and fractional scale data.
 type HyprlandMonitor struct {
+	ID               int                  `json:"id"`
 	Name             string               `json:"name"`
 	Width            int                  `json:"width"`
 	Height           int                  `json:"height"`

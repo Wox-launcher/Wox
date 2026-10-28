@@ -21,6 +21,7 @@ func queryHyprlandForeground(ctx context.Context) (linuxForegroundApp, error) {
 
 func parseHyprlandForeground(output []byte) (linuxForegroundApp, error) {
 	var active struct {
+		Address      string `json:"address"`
 		Class        string `json:"class"`
 		InitialClass string `json:"initialClass"`
 		Title        string `json:"title"`
@@ -30,10 +31,11 @@ func parseHyprlandForeground(output []byte) (linuxForegroundApp, error) {
 		return linuxForegroundApp{}, fmt.Errorf("hyprctl activewindow: %w", err)
 	}
 	app := linuxForegroundApp{
-		Pid:   active.Pid,
-		Title: active.Title,
-		AppID: active.Class,
-		AltID: active.InitialClass,
+		WindowID: active.Address,
+		Pid:      active.Pid,
+		Title:    active.Title,
+		AppID:    active.Class,
+		AltID:    active.InitialClass,
 	}
 	if normalizeLinuxAppID(app.AppID) == "" && normalizeLinuxAppID(app.AltID) == "" && app.Pid <= 0 {
 		return linuxForegroundApp{}, errLinuxForegroundMissing

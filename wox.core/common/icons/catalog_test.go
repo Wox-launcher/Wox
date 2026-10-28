@@ -385,3 +385,36 @@ func TestTextFormatGlyphLetterGap(t *testing.T) {
 		}
 	}
 }
+
+// TestFullscreenIconUsesThemeColor checks the glyph in both launcher appearances.
+func TestFullscreenIconUsesThemeColor(t *testing.T) {
+	source := Get(ControlFullscreen).ImageData
+	if !strings.Contains(source, `stroke="var(--wox-theme-icon-color)"`) {
+		t.Fatal("fullscreen glyph does not opt into the theme icon color")
+	}
+	for _, tc := range []struct {
+		color string
+		white bool
+	}{{"#000000", false}, {"#ffffff", true}} {
+		img, err := woxsvg.Render(strings.ReplaceAll(source, "var(--wox-theme-icon-color)", tc.color), 24, 24)
+		if err != nil {
+			t.Fatal(err)
+		}
+		visible := false
+		for y := 0; y < 24; y++ {
+			for x := 0; x < 24; x++ {
+				pixel := img.RGBAAt(x, y)
+				if pixel.A < 200 {
+					continue
+				}
+				visible = true
+				if (!tc.white && (pixel.R != 0 || pixel.G != 0 || pixel.B != 0)) || (tc.white && (pixel.R != pixel.A || pixel.G != pixel.A || pixel.B != pixel.A)) {
+					t.Fatalf("color %s rendered unexpected pixel %+v", tc.color, pixel)
+				}
+			}
+		}
+		if !visible {
+			t.Fatalf("color %s rendered no visible glyph", tc.color)
+		}
+	}
+}

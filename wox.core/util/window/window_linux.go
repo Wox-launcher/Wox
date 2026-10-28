@@ -34,7 +34,11 @@ func GetActiveWindowPid() int {
 }
 
 func GetActiveWindowId() string {
-	return ""
+	app, err := currentLinuxForeground()
+	if err != nil {
+		return ""
+	}
+	return app.WindowID
 }
 
 // GetManagedWindow is not implemented on Linux yet.

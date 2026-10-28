@@ -63,7 +63,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlSave:              newMonochromeUIIcon(`<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>`),
 	ControlOverwrite:         newMonochromeUIIcon(`<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M12 10v7"/><path d="m9 13.5 3 3.5 3-3.5"/>`),
 	ControlSearch:            newMonochromeUIIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>`),
-	ControlFullscreen:        newMonochromeUIIcon(`<path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
+	ControlFullscreen:        newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
 	ControlFullscreenExit:    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),
 	ControlSidebar:           newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>`),
 	ControlTune:              tuneUIIcon,

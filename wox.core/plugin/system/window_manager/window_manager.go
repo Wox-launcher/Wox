@@ -14,6 +14,7 @@ import (
 	"wox/i18n"
 	"wox/plugin"
 	"wox/setting/definition"
+	"wox/util"
 	"wox/util/window"
 )
 
@@ -104,7 +105,7 @@ type WindowManagerPlugin struct {
 }
 
 func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
-	return plugin.Metadata{
+	metadata := plugin.Metadata{
 		Id:            common.WindowManagerPluginID,
 		Name:          "i18n:plugin_window_manager_plugin_name",
 		Author:        "Wox Launcher",
@@ -181,16 +182,27 @@ func (p *WindowManagerPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 	}
+	if util.IsHyprlandSession() {
+		metadata.SupportedOS = append(metadata.SupportedOS, "Linux")
+		metadata.SettingDefinitions = nil
+	}
+	return metadata
 }
 
 func (p *WindowManagerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api = initParams.API
 	p.restore = make(map[string]window.WindowRect)
+	if util.IsHyprlandSession() {
+		hyprlandWorkspaceIDs(ctx)
+	}
 	p.api.OnMRURestore(ctx, p.handleMRURestore)
 }
 
 // Query lists available window layout commands or returns the explicitly parsed command.
 func (p *WindowManagerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if util.IsHyprlandSession() {
+		return p.queryHyprlandWindows(ctx, query)
+	}
 	if strings.EqualFold(query.Command, windowManagerCommandGroup) {
 		return p.queryWindowGroups(ctx, query)
 	}
@@ -267,16 +279,16 @@ func (p *WindowManagerPlugin) commandResult(ctx context.Context, query plugin.Qu
 	capturedEnv := query.Env
 	capturedCommand := command
 	return plugin.QueryResult{
-		Title:    "i18n:" + command.TitleKey,
-		SubTitle: subtitle,
-		Icon:     windowManagerCommandIcon(command.Op),
-		Score:    score,
+		Title:       "i18n:" + command.TitleKey,
+		SubTitle:    subtitle,
+		Icon:        windowManagerCommandIcon(command.Op),
+		Score:       score,
 		IdentityKey: "window-command:" + command.Command,
-		Tails:    targetWindowIconTail(query.Env.ActiveWindowIcon),
+		Tails:       targetWindowIconTail(query.Env.ActiveWindowIcon),
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:                   "i18n:plugin_window_manager_action_apply",
-				Icon:                   icons.Get(icons.ActionRun),
+				Icon:                   icons.Get(icons.ActionExecute),
 				IsDefault:              true,
 				PreventHideAfterAction: true,
 				ContextData: map[string]string{
@@ -309,105 +321,79 @@ func (p *WindowManagerPlugin) commandMatches(ctx context.Context, command window
 	return bestScore > 0, bestScore
 }
 
-const (
-	layoutIconFill   = "#2563EB"
-	layoutIconEmpty  = "#F8FAFC"
-	layoutIconStroke = "#64748B"
-)
-
-type layoutIconRect struct {
-	X      float64
-	Y      float64
-	Width  float64
-	Height float64
-}
-
-// windowManagerCommandIcon renders the target layout as a compact SVG preview.
+// windowManagerCommandIcon maps each operation to a theme-aware semantic glyph.
 func windowManagerCommandIcon(operation windowOperation) common.WoxImage {
+	var name string
 	switch operation {
 	case operationLeftHalf:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 16, Height: 32})
+		name = icons.LayoutLeftHalf
 	case operationRightHalf:
-		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 8, Width: 16, Height: 32})
+		name = icons.LayoutRightHalf
 	case operationTopHalf:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 32, Height: 16})
+		name = icons.LayoutTopHalf
 	case operationBottomHalf:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 24, Width: 32, Height: 16})
+		name = icons.LayoutBottomHalf
 	case operationTopLeftQuarter:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 16, Height: 16})
+		name = icons.LayoutTopLeft
 	case operationTopRightQuarter:
-		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 8, Width: 16, Height: 16})
+		name = icons.LayoutTopRight
 	case operationBottomLeftQuarter:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 24, Width: 16, Height: 16})
+		name = icons.LayoutBottomLeft
 	case operationBottomRightQuarter:
-		return layoutSummaryIcon(layoutIconRect{X: 24, Y: 24, Width: 16, Height: 16})
+		name = icons.LayoutBottomRight
 	case operationFirstThird:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 11, Height: 32})
+		name = icons.LayoutFirstThird
 	case operationCenterThird:
-		return layoutSummaryIcon(layoutIconRect{X: 19, Y: 8, Width: 10, Height: 32})
+		name = icons.LayoutCenterThird
 	case operationLastThird:
-		return layoutSummaryIcon(layoutIconRect{X: 29, Y: 8, Width: 11, Height: 32})
+		name = icons.LayoutLastThird
 	case operationFirstTwoThirds:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 21, Height: 32})
+		name = icons.LayoutFirstTwoThirds
 	case operationLastTwoThirds:
-		return layoutSummaryIcon(layoutIconRect{X: 19, Y: 8, Width: 21, Height: 32})
+		name = icons.LayoutLastTwoThirds
 	case operationMaximize:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 8, Width: 32, Height: 32})
+		name = icons.WindowMaximize
 	case operationAlmostMaximize:
-		return layoutSummaryIcon(layoutIconRect{X: 10, Y: 10, Width: 28, Height: 28})
+		name = icons.LayoutAlmostMaximize
 	case operationCenter:
-		return layoutSummaryIcon(layoutIconRect{X: 14, Y: 12, Width: 20, Height: 24})
+		name = icons.LayoutCenter
 	case operationReasonableSize:
-		return layoutSummaryIcon(layoutIconRect{X: 12, Y: 12, Width: 24, Height: 24})
+		name = icons.LayoutReasonable
 	case operationMaximizeHeight:
-		return layoutSummaryIcon(layoutIconRect{X: 18, Y: 8, Width: 12, Height: 32})
+		name = icons.LayoutMaximizeHeight
 	case operationMaximizeWidth:
-		return layoutSummaryIcon(layoutIconRect{X: 8, Y: 18, Width: 32, Height: 12})
+		name = icons.LayoutMaximizeWidth
 	case operationNextDisplay:
-		return displayMoveIcon(true)
+		name = icons.WindowNextDisplay
 	case operationPreviousDisplay:
-		return displayMoveIcon(false)
+		name = icons.WindowPreviousDisplay
 	case operationMinimize:
-		return layoutSummaryIcon(layoutIconRect{X: 13, Y: 35, Width: 22, Height: 4})
-	case operationRestore:
-		return layoutSummaryIcon(layoutIconRect{X: 14, Y: 14, Width: 20, Height: 20})
+		name = icons.WindowMinimize
+	case operationRestore, "restore-maximized":
+		name = icons.WindowRestore
+	case "toggle-fullscreen":
+		name = icons.WindowFullscreen
+	case "toggle-floating":
+		name = icons.WindowFloating
+	case "swap-left":
+		name = icons.WindowSwapLeft
+	case "swap-right":
+		name = icons.WindowSwapRight
+	case "swap-up":
+		name = icons.WindowSwapUp
+	case "swap-down":
+		name = icons.WindowSwapDown
+	case "focus-window":
+		name = icons.WindowFocus
 	default:
+		if strings.HasPrefix(string(operation), "workspace-") {
+			name = icons.WindowMoveWorkspace
+		}
+	}
+	if name == "" {
 		return windowManagerIcon
 	}
-}
-
-// layoutSummaryIcon draws an empty desktop frame and fills the target area.
-func layoutSummaryIcon(filledRects ...layoutIconRect) common.WoxImage {
-	var filled strings.Builder
-	for _, rect := range filledRects {
-		filled.WriteString(layoutIconRectSvg(rect))
-	}
-
-	return common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="8" y="8" width="32" height="32" rx="5" fill="` + layoutIconEmpty + `"/>` + filled.String() + `<rect x="8" y="8" width="32" height="32" rx="5" fill="none" stroke="` + layoutIconStroke + `" stroke-width="2.5"/></svg>`)
-}
-
-// displayMoveIcon uses two frames because display movement is not a single-display layout.
-func displayMoveIcon(next bool) common.WoxImage {
-	targetX := 29.0
-	arrowPath := "M20 24H28M25 21L28 24L25 27"
-	if !next {
-		targetX = 9
-		arrowPath = "M28 24H20M23 21L20 24L23 27"
-	}
-
-	return common.NewWoxImageSvg(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect x="6" y="13" width="16" height="22" rx="3" fill="%s" stroke="%s" stroke-width="2.3"/><rect x="26" y="13" width="16" height="22" rx="3" fill="%s" stroke="%s" stroke-width="2.3"/><rect x="%s" y="19" width="10" height="10" rx="1.8" fill="%s"/><path d="%s" fill="none" stroke="%s" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`, layoutIconEmpty, layoutIconStroke, layoutIconEmpty, layoutIconStroke, svgNumber(targetX), layoutIconFill, arrowPath, layoutIconFill))
-}
-
-// layoutIconRectSvg converts a logical filled area into SVG markup.
-func layoutIconRectSvg(rect layoutIconRect) string {
-	return fmt.Sprintf(`<rect x="%s" y="%s" width="%s" height="%s" rx="1.8" fill="%s"/>`, svgNumber(rect.X), svgNumber(rect.Y), svgNumber(rect.Width), svgNumber(rect.Height), layoutIconFill)
-}
-
-func svgNumber(value float64) string {
-	if value == math.Trunc(value) {
-		return strconv.Itoa(int(value))
-	}
-	return strconv.FormatFloat(value, 'f', 1, 64)
+	return icons.Get(name)
 }
 
 // targetWindowIconTail shows which captured window will be adjusted without taking over the main layout icon.
@@ -433,6 +419,12 @@ func (p *WindowManagerPlugin) applyCommand(ctx context.Context, command windowMa
 
 	p.api.HideApp(ctx)
 	time.Sleep(120 * time.Millisecond)
+	if util.IsHyprlandSession() {
+		if err := applyHyprlandWindowCommand(ctx, command, env); err != nil {
+			p.notifyFailure(ctx, err)
+		}
+		return
+	}
 
 	managedWindow, err := window.GetManagedWindow(env.ActiveWindowId, env.ActiveWindowPid, env.ActiveWindowTitle)
 	if err != nil {
