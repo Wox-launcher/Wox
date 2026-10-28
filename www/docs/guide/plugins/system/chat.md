@@ -14,6 +14,14 @@ You can continue from chat history, switch agents, attach selected text, files, 
 
 A conversation can be popped into a dedicated window. The unsent draft stays there after the launcher hides.
 
+## Mention a Plugin
+
+Type `@` in the chat input and select a plugin to make its tools available to the AI. Then describe what you want it to do. Only enabled plugins that provide tools appear in the list. The selected plugin's tools remain available in later turns of the conversation.
+
+For example, mention the Unsplash plugin and ask it to change your desktop wallpaper:
+
+![Using @Unsplash in a chat](/images/guide/ai-chat-at-plugin.png)
+
 ## Settings
 
 | Setting | Use |
