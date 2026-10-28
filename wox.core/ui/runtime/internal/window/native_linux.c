@@ -1809,6 +1809,11 @@ static void emit_focus(WoxLinuxWindow *window, bool active) {
   }
 }
 
+// Read on the GTK thread: hidden windows may retain a focused accessibility snapshot.
+int32_t wox_linux_window_is_focused(WoxLinuxWindow *window) {
+  return window != NULL && !window->closed && window->visible && window->active;
+}
+
 static uint8_t portable_modifiers(GdkModifierType state) {
   uint8_t modifiers = 0;
   if ((state & GDK_SHIFT_MASK) != 0) {

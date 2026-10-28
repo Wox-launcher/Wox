@@ -209,6 +209,9 @@ const (
 )
 
 func getSelectedFromOS(ctx context.Context) (Selection, error) {
+	if util.IsHyprlandSession() && util.IsOmarchy() {
+		return getSelectedLinuxHyprland(ctx)
+	}
 	// Try X11 PRIMARY selection first. This works for XWayland apps and X11 sessions.
 	if text, err := readLinuxSelectionText(linuxPrimarySelection); err == nil && text != "" {
 		util.GetLogger().Debug(ctx, "selection: Successfully got text via PRIMARY selection")

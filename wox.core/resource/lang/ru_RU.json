@@ -104,6 +104,7 @@
   "ui_attention_unread_tooltip": "Элементы внимания ({hotkey})",
   "ui_selection_hotkey": "Горячая клавиша выбора",
   "ui_selection_hotkey_tips": "Горячие клавиши для выполнения действий с выбранным текстом или файлами",
+  "ui_selection_hotkey_wayland_tips": "Копирует выделение для поиска и заменяет содержимое буфера обмена.",
   "ui_action_panel_hotkey": "Горячая клавиша действий",
   "ui_action_panel_hotkey_tips": "Открыть или закрыть панель действий выбранного результата",
   "ui_hotkey_ignore_apps": "Игнорируемые приложения для хоткея",

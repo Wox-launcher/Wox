@@ -211,3 +211,21 @@ func TestLauncherHotkeyUsesRecordedAliases(t *testing.T) {
 		t.Fatal("recorded direction key did not match")
 	}
 }
+
+func TestWaylandSelectionHotkeyRequiresSupportedBackend(t *testing.T) {
+	for _, supported := range []bool{false, true} {
+		form := newHotkeySettingsForm(settingsData{IsLinuxWaylandSession: true, SelectionQuerySupported: supported})
+		found := false
+		for _, definition := range form.definitions {
+			if definition.Value.Key == "SelectionHotkey" {
+				found = true
+				if definition.Value.Tooltip != "i18n:ui_selection_hotkey_wayland_tips" {
+					t.Fatal("Wayland selection limitations are not explained")
+				}
+			}
+		}
+		if found != supported {
+			t.Fatalf("supported=%t selection field=%t", supported, found)
+		}
+	}
+}

@@ -24,7 +24,7 @@ typedef struct WoxDataControlOffer {
     struct WoxDataControlOffer *next;
 } WoxDataControlOffer;
 
-typedef struct {
+typedef struct WoxDataControlState {
     struct wl_display *display;
     struct wl_registry *registry;
     struct wl_seat *seat;
@@ -33,6 +33,7 @@ typedef struct {
     WoxDataControlOffer *offers;
     WoxDataControlOffer *selection;
     int finished;
+    unsigned int selection_events;
 } WoxDataControlState;
 
 static void wox_data_control_set_error(WoxDataControlReadResult *result, const char *format, ...) {
@@ -100,6 +101,7 @@ static void wox_data_control_device_selection(
     (void)device;
     WoxDataControlState *state = data;
     state->selection = offer == NULL ? NULL : wox_data_control_find_offer(state, offer);
+    state->selection_events++;
 }
 
 static void wox_data_control_device_finished(
@@ -353,6 +355,50 @@ int wox_data_control_read(WoxDataControlReadResult *result) {
         return -1;
     }
     return 0;
+}
+
+// A separate connection observes ownership events, including copies of identical data.
+WoxDataControlState *wox_data_control_watch_start(WoxDataControlReadResult *result) {
+    memset(result, 0, sizeof(*result));
+    WoxDataControlState *state = calloc(1, sizeof(*state));
+    if (state == NULL) return NULL;
+    state->display = wl_display_connect(NULL);
+    if (state->display == NULL) goto fail;
+    state->registry = wl_display_get_registry(state->display);
+    wl_registry_add_listener(state->registry, &wox_data_control_registry_listener, state);
+    if (wl_display_roundtrip(state->display) < 0 || state->manager == NULL || state->seat == NULL) goto fail;
+    state->device = ext_data_control_manager_v1_get_data_device(state->manager, state->seat);
+    ext_data_control_device_v1_add_listener(state->device, &wox_data_control_device_listener, state);
+    if (wl_display_roundtrip(state->display) < 0 || state->finished) goto fail;
+    state->selection_events = 0;
+    return state;
+fail:
+    wox_data_control_set_error(result, "failed to start Wayland clipboard observer");
+    wox_data_control_state_destroy(state);
+    free(state);
+    return NULL;
+}
+
+int wox_data_control_watch_next(WoxDataControlState *state, WoxDataControlReadResult *result) {
+    struct pollfd fd = {.fd = wl_display_get_fd(state->display), .events = POLLIN};
+    while (state->selection_events == 0 && !state->finished) {
+        if (wl_display_dispatch_pending(state->display) < 0) return -1;
+        if (state->selection_events != 0) break;
+        int ready = poll(&fd, 1, 1500);
+        if (ready <= 0 || wl_display_dispatch(state->display) < 0) return -1;
+    }
+    if (state->selection == NULL) return 1;
+    const char *mime = wox_data_control_choose_mime(state->selection);
+    if (mime == NULL) return 1;
+    result->mime_type = strdup(mime);
+    if (result->mime_type == NULL) return -1;
+    return wox_data_control_receive(state, mime, result);
+}
+
+void wox_data_control_watch_close(WoxDataControlState *state) {
+    if (state == NULL) return;
+    wox_data_control_state_destroy(state);
+    free(state);
 }
 
 void wox_data_control_read_result_free(WoxDataControlReadResult *result) {

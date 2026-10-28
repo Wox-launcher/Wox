@@ -51,15 +51,22 @@ func SetInternalSelectedTextProvider(provider func() (string, bool)) {
 	internalSelectedTextMu.Unlock()
 }
 
+// SupportsSelectionQuery reports whether the current desktop has a selection query backend.
+func SupportsSelectionQuery() bool {
+	return !util.IsLinuxWaylandSession() || (util.IsHyprlandSession() && util.IsOmarchy())
+}
+
 // GetSelected prefers a focused Wox editor, then falls back to the OS capture path.
 func GetSelected(ctx context.Context) (Selection, error) {
 	if text, handled := lookupInternalSelectedText(); handled {
 		if text == "" {
+			util.GetLogger().Debug(ctx, "selection: focused Wox window has no selected text")
 			return Selection{}, noSelection
 		}
 		util.GetLogger().Debug(ctx, fmt.Sprintf("using internal UI selected text, runes=%d", len([]rune(text))))
 		return Selection{Type: SelectionTypeText, Text: text}, nil
 	}
+	util.GetLogger().Debug(ctx, "selection: reading from the focused application")
 	return getSelectedFromOS(ctx)
 }
 

@@ -503,8 +503,8 @@ func (m *Manager) handleMainHotkeyTrigger(combineKey string) {
 func (m *Manager) handleSelectionHotkeyTrigger(combineKey string) {
 	triggerCtx := util.NewTraceContext()
 	logger.Info(triggerCtx, fmt.Sprintf("selection hotkey callback received: hotkey=%s recordingActive=%t", combineKey, m.isHotkeyRecordingActive()))
-	if util.IsLinuxWaylandSession() {
-		logger.Info(triggerCtx, "selection hotkey ignored: selection capture is unavailable on Wayland")
+	if !selection.SupportsSelectionQuery() {
+		logger.Info(triggerCtx, "selection hotkey ignored: selection capture is unavailable on this desktop")
 		return
 	}
 	if m.recordHotkeyIfRecording(triggerCtx, combineKey) {
@@ -573,8 +573,8 @@ func (m *Manager) applyResultBindings(ctx context.Context, bindings []setting.Re
 // QuerySelection captures the current text selection and opens a Wox query for it.
 func (m *Manager) QuerySelection(ctx context.Context) {
 	newCtx := util.NewTraceContext()
-	if util.IsLinuxWaylandSession() {
-		logger.Info(newCtx, "skip selection query: selection capture is unavailable on Wayland")
+	if !selection.SupportsSelectionQuery() {
+		logger.Info(newCtx, "skip selection query: selection capture is unavailable on this desktop")
 		return
 	}
 

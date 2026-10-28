@@ -27,6 +27,23 @@ var linuxAccessibilityDeferred = struct {
 
 func init() {
 	updateNativeAccessibility = updateLinuxAccessibility
+	accessibilityWindowFocused = linuxAccessibilityWindowFocused
+}
+
+// linuxAccessibilityWindowFocused checks live focus because hidden windows stop
+// publishing frames before their accessibility snapshot observes focus loss.
+func linuxAccessibilityWindowFocused(window *platformWindow, _ AccessibilityTree) bool {
+	focused := false
+	if window == nil {
+		return false
+	}
+	_ = platformCall(func() {
+		native, err := window.openNative()
+		if err == nil {
+			focused = C.wox_linux_window_is_focused(native) != 0
+		}
+	})
+	return focused
 }
 
 // updateLinuxAccessibility queues the latest mirror. Applying it on the current

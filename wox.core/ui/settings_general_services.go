@@ -23,6 +23,7 @@ import (
 	"wox/util/font"
 	"wox/util/keyboard"
 	"wox/util/permission"
+	"wox/util/selection"
 	"wox/util/window"
 )
 
@@ -70,6 +71,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		ShowPosition:                       woxSetting.ShowPosition.Get(),
 		ShowDisplay:                        woxSetting.ShowDisplay.Get(),
 		IsLinuxWaylandSession:              util.IsLinuxWaylandSession(),
+		SelectionQuerySupported:            selection.SupportsSelectionQuery(),
 		IsEvdevReadAvailable:               keyboard.IsEvdevReadAvailable(),
 		EnableAutoBackup:                   woxSetting.EnableAutoBackup.Get(),
 		EnableAutoUpdate:                   woxSetting.EnableAutoUpdate.Get(),

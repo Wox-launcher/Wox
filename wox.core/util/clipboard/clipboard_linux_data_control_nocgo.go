@@ -12,3 +12,8 @@ type dataControlSelection struct {
 func readDataControlSelection() (dataControlSelection, error) {
 	return dataControlSelection{}, errors.New("ext-data-control-v1 requires cgo")
 }
+
+// CaptureNextWaylandCopy requires the native data-control client.
+func CaptureNextWaylandCopy(trigger func() error) (Data, error) {
+	return nil, errors.New("ext-data-control-v1 requires cgo")
+}

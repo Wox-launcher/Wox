@@ -112,6 +112,7 @@
   "ui_attention_unread_tooltip": "注目項目({hotkey})",
   "ui_selection_hotkey": "選択ホットキー",
   "ui_selection_hotkey_tips": "選択したテキストまたはファイルに対してアクションを実行するホットキー",
+  "ui_selection_hotkey_wayland_tips": "現在の選択範囲をコピーして検索します。クリップボードの内容は置き換わります。",
   "ui_action_panel_hotkey": "アクションホットキー",
   "ui_action_panel_hotkey_tips": "選択中の結果のアクションパネルを開閉します",
   "ui_hotkey_ignore_apps": "ホットキーを無視するアプリ",

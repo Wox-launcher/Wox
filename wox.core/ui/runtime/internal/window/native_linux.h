@@ -51,6 +51,7 @@ int32_t wox_linux_window_reset_webview(WoxLinuxWindow *window);
 int32_t wox_linux_window_evict_webview(WoxLinuxWindow *window, const char *cache_key);
 int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window, uint8_t kind, float x, float y);
 int32_t wox_linux_window_focus_webview(WoxLinuxWindow *window);
+int32_t wox_linux_window_is_focused(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_webview_action_hotkey(WoxLinuxWindow *window, const char *js, const char *key, uint8_t modifiers);
 void wox_linux_free_string(char *value);
 int32_t wox_linux_window_invalidate(WoxLinuxWindow *window);

@@ -57,6 +57,7 @@ type settingsData struct {
 	QueryAliases                       []queryAliasSetting
 	TrayQueries                        json.RawMessage
 	IsLinuxWaylandSession              bool
+	SelectionQuerySupported            bool
 	UseSoftwareRendering               bool
 	SoftwareRenderingRestartRequired   bool
 	UsePinYin                          bool
@@ -639,6 +640,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		QueryAliases:                       queryAliases,
 		TrayQueries:                        trayQueries,
 		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
+		SelectionQuerySupported:            loaded.SelectionQuerySupported,
 		UseSoftwareRendering:               loaded.UseSoftwareRendering,
 		SoftwareRenderingRestartRequired:   loaded.SoftwareRenderingRestartRequired,
 		UsePinYin:                          loaded.UsePinYin,

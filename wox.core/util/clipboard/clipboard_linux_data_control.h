@@ -11,6 +11,11 @@ typedef struct {
     char *error;
 } WoxDataControlReadResult;
 
+typedef struct WoxDataControlState WoxDataControlState;
+WoxDataControlState *wox_data_control_watch_start(WoxDataControlReadResult *result);
+int wox_data_control_watch_next(WoxDataControlState *state, WoxDataControlReadResult *result);
+void wox_data_control_watch_close(WoxDataControlState *state);
+
 int wox_data_control_read(WoxDataControlReadResult *result);
 void wox_data_control_read_result_free(WoxDataControlReadResult *result);
 

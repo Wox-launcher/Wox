@@ -9,6 +9,7 @@ import (
 	"wox/setting"
 	"wox/util"
 	utilhotkey "wox/util/hotkey"
+	"wox/util/selection"
 )
 
 // Callbacks routes Wox-owned hotkey triggers back to their owning subsystem.
@@ -156,7 +157,7 @@ func (s *Service) IsRegistered(source EntrySource, id string) bool {
 
 // EffectiveSelectionHotkeyForRuntime returns the runtime selection hotkey.
 func EffectiveSelectionHotkeyForRuntime(selectionHotkey string) string {
-	if util.IsLinuxWaylandSession() {
+	if !selection.SupportsSelectionQuery() {
 		return ""
 	}
 	return strings.TrimSpace(selectionHotkey)

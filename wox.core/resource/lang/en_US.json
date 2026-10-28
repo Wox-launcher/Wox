@@ -112,6 +112,7 @@
   "ui_attention_unread_tooltip": "Attention items ({hotkey})",
   "ui_selection_hotkey": "Selection Hotkey",
   "ui_selection_hotkey_tips": "Hotkeys to do actions on selected text or files",
+  "ui_selection_hotkey_wayland_tips": "Copies the current selection to search it. This replaces the clipboard contents.",
   "ui_action_panel_hotkey": "Action Hotkey",
   "ui_action_panel_hotkey_tips": "Open or close the action panel for the selected result",
   "ui_hotkey_ignore_apps": "Ignore Hotkey Apps",

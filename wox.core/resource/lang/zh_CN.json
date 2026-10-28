@@ -112,6 +112,7 @@
   "ui_attention_unread_tooltip": "关注事项({hotkey})",
   "ui_selection_hotkey": "选中查询热键",
   "ui_selection_hotkey_tips": "用于基于当前选中内容发起查询并执行操作的快捷键",
+  "ui_selection_hotkey_wayland_tips": "复制当前选区后进行搜索，会替换剪贴板内容。",
   "ui_action_panel_hotkey": "操作热键",
   "ui_action_panel_hotkey_tips": "打开或关闭当前结果的操作面板",
   "ui_hotkey_ignore_apps": "忽略热键应用",

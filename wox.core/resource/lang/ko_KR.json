@@ -112,6 +112,7 @@
   "ui_attention_unread_tooltip": "알림 항목({hotkey})",
   "ui_selection_hotkey": "선택 단축키",
   "ui_selection_hotkey_tips": "선택한 텍스트나 파일에 대한 작업을 수행하는 단축키",
+  "ui_selection_hotkey_wayland_tips": "현재 선택 영역을 복사해 검색하며 클립보드 내용을 바꿉니다.",
   "ui_action_panel_hotkey": "액션 단축키",
   "ui_action_panel_hotkey_tips": "선택한 결과의 작업 패널을 열거나 닫습니다",
   "ui_hotkey_ignore_apps": "단축키 무시 앱",

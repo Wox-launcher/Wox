@@ -104,6 +104,7 @@
   "ui_attention_unread_tooltip": "Itens de atenção ({hotkey})",
   "ui_selection_hotkey": "Atalho de seleção",
   "ui_selection_hotkey_tips": "Atalhos para executar ações em texto ou arquivos selecionados",
+  "ui_selection_hotkey_wayland_tips": "Copia a seleção para pesquisá-la, substituindo o conteúdo da área de transferência.",
   "ui_action_panel_hotkey": "Atalho de Ação",
   "ui_action_panel_hotkey_tips": "Abrir ou fechar o painel de ações do resultado selecionado",
   "ui_hotkey_ignore_apps": "Ignorar Apps no Atalho",

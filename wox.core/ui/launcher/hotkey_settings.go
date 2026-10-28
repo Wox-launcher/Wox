@@ -45,9 +45,13 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 	definitions := []formDefinition{
 		{Type: "hotkey", Value: formDefinitionValue{Key: "MainHotkey", Label: "i18n:ui_hotkey", Tooltip: "i18n:ui_hotkey_tips"}},
 	}
-	if !data.IsLinuxWaylandSession {
+	if !data.IsLinuxWaylandSession || data.SelectionQuerySupported {
+		tip := "i18n:ui_selection_hotkey_tips"
+		if data.IsLinuxWaylandSession {
+			tip = "i18n:ui_selection_hotkey_wayland_tips"
+		}
 		definitions = append(definitions,
-			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "i18n:ui_selection_hotkey", Tooltip: "i18n:ui_selection_hotkey_tips"}},
+			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "i18n:ui_selection_hotkey", Tooltip: tip}},
 		)
 	}
 	definitions = append(definitions, formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "ActionPanelHotkey", Label: "i18n:ui_action_panel_hotkey", Tooltip: "i18n:ui_action_panel_hotkey_tips"}})
