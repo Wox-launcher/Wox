@@ -164,6 +164,12 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	var overlayManaged, borderManaged *ManagedWindow
 	var openErr error
 	if err := Call(func() {
+		if platform.prepareRecordingToolbar != nil {
+			openErr = platform.prepareRecordingToolbar(state.window)
+			if openErr != nil {
+				return
+			}
+		}
 		var created bool
 		overlayManaged, created, openErr = manager.Open(recordingOverlayWindowID, WindowOptions{
 			Title: "Wox Recording Overlay", Size: Size{Width: 100, Height: 100}, Role: WindowRoleScreenshot,

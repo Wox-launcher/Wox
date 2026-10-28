@@ -56,3 +56,10 @@ development files, `xvfb-run` and `xauth` installed for native adapter regressio
 tests. They exercise real EWMH messages, focus restoration after foreign windows
 disappear, per-window state, remapping, native resize and object release at GTK
 scales 1 and 2. They do not emulate a full Wayland compositor or window manager.
+
+Run `python3 testdata/test_linux_pointer_passthrough.py` from this directory in a
+live Hyprland session to verify input-region changes on the actual native backend.
+It builds a toolbar and border window, verifies that releasing exclusive keyboard
+focus lets the border receive input, then checks repeated restoration and removal
+of pointer input without application redraws.
+It briefly moves the pointer without clicking and restores its position afterward.

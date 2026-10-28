@@ -5,7 +5,6 @@ package screenshot
 /*
 #include <stdlib.h>
 #include "../runtime/internal/window/native_linux.h"
-int32_t wox_screenshot_cursor_position(float *x, float *y);
 int32_t wox_screenshot_set_cursor_position(int32_t x, int32_t y);
 */
 import "C"
@@ -28,8 +27,7 @@ var errLinuxPortalCaptureRequired = errors.New("Wayland requires Portal desktop 
 func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, error) {
 	// Give the compositor one frame to remove the launcher before copying desktop pixels.
 	time.Sleep(80 * time.Millisecond)
-	var cursorX, cursorY C.float
-	hasCapturedCursor := C.wox_screenshot_cursor_position(&cursorX, &cursorY) == 0
+	capturedCursor := linuxScreenshotCursorPosition(Rect{})
 	var selectionWindows []linuxScreenshotWindow
 	if util.IsHyprlandSession() {
 		selectionWindows = captureLinuxHyprlandScreenshotWindows()
@@ -83,11 +81,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			return nil
 		},
 		cursorPosition: func() *Point {
-			var x, y C.float
-			if C.wox_screenshot_cursor_position(&x, &y) != 0 {
-				return nil
-			}
-			return &Point{X: float32(x) - bounds.X, Y: float32(y) - bounds.Y}
+			return linuxScreenshotCursorPosition(bounds)
 		},
 		setRecordingBounds: func(window *Window, selection Rect, _ Size, margin float32) error {
 			return window.SetBounds(Rect{
@@ -95,11 +89,12 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Width: selection.Width + margin*2, Height: selection.Height + margin*2,
 			})
 		},
-		retainRecordingBorder: true,
-		recordingFrameIsRGBA:  true,
+		prepareRecordingToolbar: linuxRecordingToolbarPreparation(),
+		retainRecordingBorder:   true,
+		recordingFrameIsRGBA:    true,
 	}
-	if hasCapturedCursor {
-		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(Point{X: float32(cursorX), Y: float32(cursorY)}, bounds, source)
+	if capturedCursor != nil {
+		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(*capturedCursor, bounds, source)
 	}
 	return runScreenshotEditor(options, source, platform)
 }

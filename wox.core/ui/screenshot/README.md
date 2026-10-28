@@ -21,6 +21,11 @@ The system plugin owns the configurable history directory and its background rel
 
 `util/imageencode` owns the lossless PNG Sub filter and fast deflate stream. Windows CGO builds use native packed-row filtering without an additional full-image buffer; other builds keep the equivalent Go implementation. Export diagnostics separate PNG encoding, native clipboard preparation/commit, display validation, and scene pixel snapshots so debug-build costs are distinguishable from clipboard contention.
 
+On Hyprland, recording changes the reused screenshot toolbar from exclusive to
+on-demand keyboard focus. An exclusive layer also captures pointer input outside
+its bounds, preventing the separate border and desktop from receiving clicks.
+The fullscreen screenshot keeps exclusive focus until this recording transition.
+
 ## Verification
 
 From `wox.core`, run `go test -race -tags sqlite_fts5 ./ui/runtime ./ui/screenshot` and `go build -tags sqlite_fts5 .`. The macOS selector fixture uses a deterministic AX provider and AddressSanitizer without requesting accessibility permission. Windows native changes also require a CGO-enabled Windows build; Linux desktop integration must be checked in the affected desktop session.

@@ -331,6 +331,7 @@ type screenshotEditorPlatform struct {
 	setPointerPosition      func(Point) error
 	cursorPosition          func() *Point
 	setRecordingBounds      func(*Window, Rect, Size, float32) error
+	prepareRecordingToolbar func(*Window) error
 	// retainRecordingBorder keeps the Go-drawn selection stroke visible while
 	// recording. Linux has no native hollow strip windows like Windows.
 	retainRecordingBorder bool

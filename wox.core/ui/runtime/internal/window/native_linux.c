@@ -2283,6 +2283,7 @@ typedef enum {
 typedef enum {
   WOX_KEYBOARD_NONE = 0,
   WOX_KEYBOARD_EXCLUSIVE = 1,
+  WOX_KEYBOARD_ON_DEMAND = 2,
 } WoxKeyboardMode;
 
 typedef gboolean (*WoxLayerIsSupported)(void);
@@ -4735,6 +4736,32 @@ int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, co
   return call.result;
 }
 
+// set_keyboard_exclusive_main changes seat ownership without remapping the surface.
+static void set_keyboard_exclusive_main(void *data) {
+  WoxBoolCall *call = data;
+  WoxLinuxWindow *window = call->window;
+  if (window->closed) {
+    call->result = -1;
+    return;
+  }
+  if (!window->layer_shell_enabled || window->nonactivating) {
+    return;
+  }
+  layer_set_keyboard_mode(GTK_WINDOW(window->window), call->enabled ? WOX_KEYBOARD_EXCLUSIVE : WOX_KEYBOARD_ON_DEMAND);
+  gtk_widget_queue_draw(window->window);
+  if (layer_try_force_commit != NULL) {
+    layer_try_force_commit(GTK_WINDOW(window->window));
+  }
+}
+
+int32_t wox_linux_window_set_keyboard_exclusive(WoxLinuxWindow *window, int32_t enabled) {
+  if (window == NULL) {
+    return -1;
+  }
+  WoxBoolCall call = {.window = window, .enabled = enabled != 0};
+  return run_on_main_sync(set_keyboard_exclusive_main, &call) ? call.result : -1;
+}
+
 static void set_pointer_passthrough_main(void *data) {
   WoxBoolCall *call = data;
   if (call->window->closed) {
@@ -4743,6 +4770,9 @@ static void set_pointer_passthrough_main(void *data) {
   }
   call->window->pointer_passthrough = call->enabled;
   apply_linux_pointer_passthrough(call->window);
+  // GDK defers Wayland input-region updates until end_paint. A static overlay
+  // otherwise keeps its previous hit region even after this call succeeds.
+  gtk_widget_queue_draw(call->window->window);
 }
 
 int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled) {
