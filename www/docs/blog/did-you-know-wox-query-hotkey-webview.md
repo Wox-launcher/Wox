@@ -15,24 +15,31 @@ WebSearch's WebView option puts a saved website in a compact panel that you can 
 
 ## Check that the site opens in Wox
 
-In **Settings → Plugins → Web Search**, add a title, trigger keyword and URL, then enable **Open in WebView**. For example:
+Open **Settings → Installed Plugins → Web Search**. Under **Web Searches**, click **Add** and fill in the fields for a fixed website:
 
-| Keyword | Site | Query |
-| --- | --- | --- |
-| `x` | `https://x.com` | `x ` |
-| `ig` | `https://www.instagram.com` | `ig ` |
+| Field | Example value |
+| --- | --- |
+| keyword | `x` |
+| Title | `X` |
+| URLs | `https://x.com` |
 
-The space after the trigger is required, including in saved queries. Open Wox and enter `x ` to check that the page loads. If it requires a login, follow the site's prompts.
+![Web Search entry editor showing the keyword, title, and URLs fields](/images/blog/web-search-entry.png)
 
-![Wox WebView opened by a query hotkey](/images/did-you-know-wox-webview-hotkey.png)
+Scroll down in the editor, expand **WebView**, enable **Open by default**, and save. The **URLs** field accepts one URL per line; a WebView preview displays the first resolved URL.
 
-For a status page or dashboard of your own, open **Settings → Plugins → Web Search** and add a site keyword and full URL. With `status` as the keyword, the query becomes `status `. Enable **Open in WebView** for the entry.
+Here `x` is the **keyword** configured above. Open Wox, type `x` followed by a space, and check that the page loads. Add the space to the query, not the **keyword** field, and keep it when saving the query to a hotkey. If the site requires a login, follow its prompts.
+
+The Instagram screenshots below show the panel in an earlier Wox version; use the current settings and labels in the steps here.
+
+![Instagram shown in a Wox WebView in an earlier version](/images/did-you-know-wox-webview-hotkey.png)
+
+For a status page or dashboard of your own, add another Web Search entry with its own keyword and full URL, and enable **WebView → Open by default**. With `status` as the keyword, the query becomes `status `.
 
 Testing the query manually confirms that the site configuration and page work before you attach a shortcut to them.
 
 ## Bind the query to a shortcut
 
-Add an entry in **Settings → General → Query Hotkeys**:
+Add an entry in **Settings → Hotkey → Query Hotkeys**:
 
 | Field | Example value |
 | --- | --- |
@@ -40,17 +47,17 @@ Add an entry in **Settings → General → Query Hotkeys**:
 | Hotkey | An unused combination, such as `ctrl+shift+x` |
 | Query | `x ` |
 
-**Preview Query** hides the query box and toolbar, leaving most of the panel for the page. Save the entry and press the shortcut to open it directly, without typing `x ` again.
+**Preview Query** hides the query box, toolbar, and result list, leaving the panel for the page preview. Save the entry and press the shortcut to open it directly, without typing `x ` again.
 
-> Screenshot needed: The Query Hotkey editor with `Preview Query` selected, showing the shortcut and `x ` query so readers can match the three fields above.
+![queryhotkey](/images/blog/query-hotkey-preview-query.png)
 
-Try the default size first. If the page feels cramped or scrolls horizontally, adjust the query hotkey's width, position, or other display options. A width that works for a timeline may not suit a full dashboard.
+Try the preset size first. If the page feels cramped or scrolls horizontally, adjust the query hotkey's width or position. You can also set a preview width and height in the Web Search entry's **WebView** settings.
 
-Use the same setup for other sites, replacing the query with `ig ` or your own site keyword.
+Use the same setup for other sites, replacing the query with your own keyword followed by a space.
 
 ## Add a tray entry if you prefer clicking
 
-To open the same panel with the mouse, add an entry in **Settings → General → Tray Queries**:
+To open the same panel with the mouse, add an entry in **Settings → General → Tray Queries**. Tray Queries are not available in Linux Wayland sessions.
 
 | Field | Example value |
 | --- | --- |
@@ -59,7 +66,7 @@ To open the same panel with the mouse, add an entry in **Settings → General �
 | Hide Query Box | Enabled |
 | Hide Toolbar | Enabled |
 | Width | Try `420`, then adjust for the page |
-| Max Result Count | `5` |
+| Maximum Results | `5` |
 
 Clicking the tray or menu-bar icon opens Wox near the tray and runs the query. It uses the same saved site, so you do not need to configure the website again.
 
