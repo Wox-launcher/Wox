@@ -22,14 +22,15 @@ import (
 const formTableRowIDKey = "wox_table_row_id"
 
 type formTableEditorState struct {
-	target     *formFieldsState
-	fieldIndex int
-	definition formDefinition
-	rows       []map[string]any
-	selected   int
-	rowForm    *formFieldsState
-	rowIndex   int
-	rowBase    map[string]any
+	target       *formFieldsState
+	fieldIndex   int
+	definition   formDefinition
+	rows         []map[string]any
+	selected     int
+	rowForm      *formFieldsState
+	rowIndex     int
+	rowBase      map[string]any
+	providerTest *aiProviderTestState
 	// rowEditorOnly closes the whole overlay when a row opened directly from an inline table exits.
 	rowEditorOnly     bool
 	status            string
@@ -60,6 +61,7 @@ type formTableEditorSnapshot struct {
 	selected          int
 	rowForm           *formFieldsSnapshot
 	rowIndex          int
+	providerTest      *aiProviderTestState
 	status            string
 	fieldErrors       map[string]string
 	invalid           bool
@@ -317,6 +319,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		selected:          state.selected,
 		rowForm:           rowForm,
 		rowIndex:          state.rowIndex,
+		providerTest:      snapshotAIProviderTest(state.providerTest, rowForm),
 		status:            state.status,
 		fieldErrors:       cloneFormTableFieldErrors(state.fieldErrors),
 		invalid:           state.invalid,
@@ -909,6 +912,7 @@ func clearFormTableRowValidationLocked(state *formTableEditorState) {
 	}
 	state.status = ""
 	state.fieldErrors = nil
+	state.providerTest = nil
 }
 
 func (c *formTableController) translateFormTableFieldErrors(errors map[string]string) map[string]string {

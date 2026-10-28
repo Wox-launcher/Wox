@@ -22,18 +22,15 @@ func TestNewAISettingsFormMatchesFlutterTableDefinitions(t *testing.T) {
 	if !providers.InlineTable || providers.SortColumnKey != "Name" {
 		t.Fatalf("provider table options = inline %v, sort %q; want inline and Name", providers.InlineTable, providers.SortColumnKey)
 	}
-	assertFormTableColumnWidths(t, providers.Columns[:5], []int{80, 100, 120, 160, 0})
-	if providers.Columns[0].Type != "aiModelStatus" || !providers.Columns[0].HideInUpdate {
-		t.Fatalf("provider status column = type %q, hide in update %v", providers.Columns[0].Type, providers.Columns[0].HideInUpdate)
+	assertFormTableColumnWidths(t, providers.Columns[:4], []int{160, 120, 160, 0})
+	if providers.Columns[3].Key != "ApiKey" || providers.Columns[3].Type != "password" || !providers.Columns[3].HideInTable {
+		t.Fatalf("provider API key column should stay hidden in the table, got %+v", providers.Columns[3])
 	}
-	if providers.Columns[4].Key != "ApiKey" || providers.Columns[4].Type != "password" || !providers.Columns[4].HideInTable {
-		t.Fatalf("provider API key column should stay hidden in the table, got %+v", providers.Columns[4])
-	}
-	if shown := bindTestApp(&App{}).formTables.formTableDisplayValue(providers.Columns[4], map[string]any{"ApiKey": "secret"}); shown != "••••••" {
+	if shown := bindTestApp(&App{}).formTables.formTableDisplayValue(providers.Columns[3], map[string]any{"ApiKey": "secret"}); shown != "••••••" {
 		t.Fatalf("provider API key display = %q, want masked text", shown)
 	}
-	if providers.Columns[1].Key != "Name" || !providers.Columns[1].Filterable {
-		t.Fatalf("provider name column should be a filterable select, got %+v", providers.Columns[1])
+	if providers.Columns[0].Key != "Name" || !providers.Columns[0].Filterable {
+		t.Fatalf("provider name column should be a filterable select, got %+v", providers.Columns[0])
 	}
 
 	builtin := form.definitions[1].Value

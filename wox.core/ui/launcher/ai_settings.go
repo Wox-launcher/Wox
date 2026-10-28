@@ -43,6 +43,9 @@ func (c *aiSettingsController) buildAISettingsPage(snapshot settingsSnapshot, wi
 	for index, definition := range aiForm.definitions {
 		field := c.formTables.formTableFieldProps(*aiForm, callbacks, snapshot.palette, index, definition, contentWidth, 0)
 		switch definition.Value.Key {
+		case "AIProviders":
+			field.OnAdd = func() { c.addAISettingsTableRow(index) }
+			c.addAIProviderTestActions(&field, aiForm.values[definition.Value.Key], snapshot.ai.ProviderTests, imageScale)
 		case "AIBuiltinTools":
 			field.ReadOnly = true
 			field.OnAdd = nil
@@ -223,8 +226,7 @@ func newAISettingsForm(data settingsData) formFieldsState {
 			Value: formDefinitionValue{
 				Key: "AIProviders", Title: "i18n:ui_ai_model", SortColumnKey: "Name", InlineTable: true,
 				Columns: []formTableColumn{
-					{Key: "Status", Label: "i18n:ui_ai_providers_status", Width: 80, Type: "aiModelStatus", HideInUpdate: true},
-					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 100, Type: "select", Filterable: true, Validators: []formValidator{{Type: "not_empty"}}},
+					{Key: "Name", Label: "i18n:ui_ai_providers_name", Tooltip: "i18n:ui_ai_providers_name_tooltip", Width: 160, Type: "select", Filterable: true, Validators: []formValidator{{Type: "not_empty"}}},
 					{Key: "Alias", Label: "i18n:ui_ai_providers_alias", Tooltip: "i18n:ui_ai_providers_alias_tooltip", Width: 120, Type: "text"},
 					{Key: "Host", Label: "i18n:ui_ai_providers_host", Tooltip: "i18n:ui_ai_providers_host_tooltip", Width: 160, Type: "text", VisibleWhen: api},
 					{Key: "ApiKey", Label: "i18n:ui_ai_providers_api_key", Tooltip: "i18n:ui_ai_providers_api_key_tooltip", Type: "password", HideInTable: true, VisibleWhen: api},
@@ -566,6 +568,8 @@ func (c *aiSettingsController) applyAISettingsRawLocked(key, value string) {
 	raw := json.RawMessage(append([]byte(nil), value...))
 	switch key {
 	case "AIProviders":
+		c.providerTests = nil
+		c.providerTestHover = nil
 		c.generalSettings().Update(func(d *settingsData) { d.AIProviders = raw })
 		c.ResetModels()
 	case "AIMCPServers":

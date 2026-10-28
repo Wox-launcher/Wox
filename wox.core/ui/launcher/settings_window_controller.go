@@ -84,6 +84,32 @@ func (c *settingsWindowController) setSettingChoiceTooltip(inside bool, text str
 	c.setSettingsHoverTooltip(inside, text, anchor, "top")
 }
 
+// refreshSettingChoiceTooltip updates an already visible tooltip without another hover delay.
+func (c *settingsWindowController) refreshSettingChoiceTooltip(text string, anchor woxui.Rect) {
+	if util.IsLinux() {
+		if c.inlineTooltip != nil && c.inlineTooltip.Anchor == anchor {
+			c.inlineTooltipRevision.Add(1)
+			c.inlineTooltip.Text = text
+			c.invalidateSettingsWindow()
+			return
+		}
+		c.setSettingChoiceTooltip(true, text, anchor)
+		return
+	}
+	const name = "go-ui-setting-choice"
+	c.tooltips.tooltipMu.Lock()
+	previous, shown := c.tooltips.nativeHoverTooltipShown[name]
+	c.tooltips.tooltipMu.Unlock()
+	if !shown || previous.anchor != anchor {
+		c.setSettingChoiceTooltip(true, text, anchor)
+		return
+	}
+	revision := c.choiceTooltipRevision.Add(1)
+	util.Go(c.tooltips.lifecycleCtx, "refresh settings tooltip", func() {
+		c.tooltips.showNativeHoverTooltip(&c.choiceTooltipRevision, revision, name, text, nil, anchor, "top", c.settingsNativeWindow, false)
+	})
+}
+
 // setSettingsHoverTooltip shows one settings-window tooltip on the requested side.
 // Linux draws it inside the window; other platforms use a native tooltip window.
 func (c *settingsWindowController) setSettingsHoverTooltip(inside bool, text string, anchor woxui.Rect, side string) {

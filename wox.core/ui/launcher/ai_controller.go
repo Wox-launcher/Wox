@@ -16,6 +16,7 @@ import (
 // forms.
 type aiSettingsSnapshot struct {
 	Form                  *formFieldsSnapshot
+	ProviderTests         map[int]aiProviderRowTest
 	ProviderCatalog       []aiProviderInfo
 	ProvidersLoading      bool
 	ProvidersLoaded       bool
@@ -54,7 +55,10 @@ type aiSettingsController struct {
 	imageForTint    func(woxImage, *woxui.Color, int) *woxui.Image
 
 	// Inline form state for the AI settings tab (providers / MCP servers / skills tables).
-	form *formFieldsState
+	form                 *formFieldsState
+	providerTests        map[int]aiProviderRowTest
+	providerTestHover    *aiProviderTestHover
+	providerTestSequence uint64
 
 	// Provider catalog loaded once from core; feeds the AIProviders name dropdown and
 	// the default-host autofill in the shared table row editor.
@@ -121,6 +125,8 @@ func (a *App) bindAISettings() {
 // the AI tab is currently selected.
 func (c *aiSettingsController) SetForm(form *formFieldsState) {
 	c.form = form
+	c.providerTests = nil
+	c.providerTestHover = nil
 }
 
 // Form returns the live AI settings form pointer. Callers compare table-editor targets
@@ -501,8 +507,13 @@ func (c *aiSettingsController) Snapshot() aiSettingsSnapshot {
 		snapshot := snapshotFormFieldsLocked(c.form)
 		form = &snapshot
 	}
+	tests := make(map[int]aiProviderRowTest, len(c.providerTests))
+	for index, test := range c.providerTests {
+		tests[index] = test
+	}
 	return aiSettingsSnapshot{
 		Form:                  form,
+		ProviderTests:         tests,
 		ProviderCatalog:       append([]aiProviderInfo(nil), c.providerCatalog...),
 		ProvidersLoading:      c.providersLoading,
 		ProvidersLoaded:       c.providersLoaded,

@@ -356,12 +356,6 @@ func (c *formTableController) formTableViewCell(column formTableColumn, row map[
 	if column.Type == "ignoredApps" {
 		return c.formTableIgnoreRuleAppsCell(row, imageScale, theme.Background)
 	}
-	if column.Type == "aiModelStatus" {
-		statusColor := woxui.Color{R: 69, G: 184, B: 88, A: 255}
-		cell.Text = ""
-		cell.IndicatorColor = &statusColor
-		return cell
-	}
 	if column.Type == "checkbox" {
 		cell.Text = ""
 		if formTableColumnValue(column, row) == "true" {
@@ -455,6 +449,10 @@ func (c *formTableController) buildFormTableOverlay(snapshot *formTableEditorSna
 		panelWidth = max(float32(0), min(contentWidth+48, width-64))
 		innerWidth = max(float32(0), panelWidth-48)
 		contentHeight := c.formTableRowEditorContentHeight(snapshot, max(float32(0), innerWidth-20), labelWidth)
+		if snapshot.definition.Value.Key == "AIProviders" {
+			description := c.aiProviderTestDescription(snapshot)
+			contentHeight += 10 + launcherview.FormTableRowFieldHeightFor("button", description, "", 1, false, max(float32(0), innerWidth-30-labelWidth))
+		}
 		if snapshot.patternPreview != nil {
 			contentWidth = max(contentWidth, 640)
 			panelWidth = max(float32(0), min(contentWidth+48, width-64))
@@ -710,6 +708,21 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 			contentHeight += fieldHeight
 			rows = append(rows, c.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
 		}
+	}
+	if snapshot.definition.Value.Key == "AIProviders" {
+		label := c.language.translate("i18n:ui_ai_provider_test")
+		description := c.aiProviderTestDescription(snapshot)
+		fieldHeight := launcherview.FormTableRowFieldHeightFor("button", description, "", 1, false, controlWidth)
+		contentHeight += 10 + fieldHeight
+		disabled := false
+		if snapshot.providerTest != nil {
+			disabled = snapshot.providerTest.loading
+		}
+		rows = append(rows, launcherview.FormButtonField(launcherview.FormButtonFieldProps{
+			ID: "ai-provider-test-field", ButtonID: "ai-provider-test", Label: label, ButtonLabel: label,
+			Description: description, Disabled: disabled, Width: fieldWidth, Height: fieldHeight, LabelWidth: labelWidth,
+			Theme: palette, OnTap: c.testAIProvider,
+		}))
 	}
 	if snapshot.patternPreview != nil {
 		if len(rows) > 0 {
