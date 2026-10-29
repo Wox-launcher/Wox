@@ -12,7 +12,7 @@ coverAlt: Three app windows arranged into a workspace layout
 
 Starting a coding session might mean putting your editor on the main display, then arranging a terminal and browser beside it. Move those windows for a meeting or a bit of research, and you have to arrange them again when you return. A Wox workspace lets you configure that recurring layout and restore it from the launcher.
 
-A workspace records where your apps' windows should go. For this example, call it `Work`: an editor on the left and a browser on the right, with a terminal or notes on a second display if you have one.
+On Windows and macOS, a workspace records where your apps' windows should go. For this example, call it `Work`: an editor on the left and a browser on the right, with a terminal or notes on a second display if you have one.
 
 ## Save the arrangement you use most
 
@@ -37,13 +37,11 @@ window group
 
 Select `Work` and run it. Wox moves matching app windows into their assigned positions. If an app is not running and its configuration includes a usable app path, Wox tries to launch it, wait for a window, and place it.
 
-> Screenshot needed: The real desktop after configuring and applying the example `Work` workspace, with the editor on the left and browser on the right.
-
 The layout restores window positions. Which project or document an app opens, and how it restores its previous session, still depend on that app. You can open the project you need first, then let Wox arrange the windows.
 
 ## Give the layout its own shortcut
 
-For a layout you use every day, add a Query Hotkey in **Settings → General → Query Hotkeys**. Choose the **Silent Run** preset and enter:
+For a layout you use every day, add a Query Hotkey in **Settings → Hotkey → Query Hotkeys**. Choose the **Silent Run** preset and enter:
 
 ```text
 window group Work

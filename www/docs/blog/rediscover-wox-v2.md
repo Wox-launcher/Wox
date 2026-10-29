@@ -50,7 +50,7 @@ Appearance is adjustable too. Wox can follow the system's light and dark modes, 
 
 The basic interaction is still familiar: bring up Wox, type an app's name, and press Enter. There is also quite a bit available before installing any third-party plugins.
 
-For example, enter `f report` to find files and folders with `report` in their names within your configured folders, then select a result to preview it. The screenshot below shows a selected folder and its contents on the right. On Windows, an optional NTFS service uses the MFT and USN journal to maintain a fast file index. macOS and Linux use directory-based indexing. You can configure separate directories for file-content search. The [file search guide](/guide/plugins/system/file) explains the setup and permissions.
+For example, enter `f report` to find files and folders with `report` in their names, then select a result to preview it. The screenshot below shows a selected folder and its contents on the right. The regular index searches configured folders. On Windows, an optional NTFS service uses the MFT and USN journal to index volumes independently of those filename roots. macOS and Linux use directory-based indexing. You can configure separate directories for file-content search. The [file search guide](/guide/plugins/system/file) explains the setup and permissions.
 
 ![Wox searching for report and previewing the selected folder's contents](/images/guide/plugin_file.png)
 
@@ -58,7 +58,7 @@ To recover something you copied earlier, open [clipboard history](/guide/plugins
 
 Wox also includes screenshot capture and annotation, short video recording, notes, and countdown timers. Dictation can run locally after downloading an offline model. For AI Chat and AI Commands, you configure your own model provider and API key. One use is to [translate selected text and replace it in place](/blog/did-you-know-ai-command-silent-translation-query-hotkey). Any model-service charges come from that provider.
 
-I also often use a shortcut to open X in a small window, take a look, and close it again. That combines the [WebSearch WebView option](/guide/plugins/system/websearch) with a Query Hotkey, currently on Windows and macOS. The WebView displays the website; the launcher interface itself remains native.
+I also often use a shortcut to open X in a small window, take a look, and close it again. That combines the [WebSearch WebView option](/guide/plugins/system/websearch) with a Query Hotkey, on Windows, macOS, and Linux (where WebKitGTK 4.1 or 4.0 is required). The WebView displays the website; the launcher interface itself remains native.
 
 If you repeatedly arrange an editor, browser, and terminal in the same positions, you can save a [workspace layout](/blog/did-you-know-wox-workspace-layouts) and restore it with a shortcut.
 

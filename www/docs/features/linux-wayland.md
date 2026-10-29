@@ -7,7 +7,7 @@ description: "Wox is a native Linux launcher with Wayland layer-shell support, i
 
 <ReleaseStamp />
 
-Wox is a native launcher on Linux, not an Electron shell. On Wayland it shows as a layer-shell overlay and still receives regular global hotkeys through the desktop portal.
+Wox is a native launcher on Linux, not an Electron shell. On supported Wayland desktops it shows as a layer-shell overlay and uses the desktop-specific backend for regular global hotkeys.
 
 ![Wox on Linux with compositor background blur](/images/linux-wayland.png)
 
@@ -15,7 +15,14 @@ Wox is a native launcher on Linux, not an Electron shell. On Wayland it shows as
 
 Wox ships stable Linux builds alongside Windows and macOS. On desktops that support layer-shell, the main window uses Wox's own namespace (`io.github.WoxLauncher.Wox`) on the top layer, so it can appear above ordinary windows without becoming a normal XDG toplevel.
 
-Ordinary combination hotkeys such as `Ctrl+Space` go through `org.freedesktop.portal.GlobalShortcuts`. Double-modifier and CapsLock-combo hotkeys need extra input permissions because Wayland does not let Wox intercept raw keys the way X11 does.
+Ordinary combination hotkeys such as `Ctrl+Space` use the backend for the current desktop:
+
+- Hyprland: native compositor bindings.
+- GNOME: the Global Shortcuts portal, with a desktop-settings fallback.
+- COSMIC: native desktop shortcut configuration.
+- Other Wayland desktops: the Global Shortcuts portal when available.
+
+Double-modifier and CapsLock-combo hotkeys need extra input permissions because Wayland does not let Wox intercept raw keys the way X11 does.
 
 ## Why the limits exist
 

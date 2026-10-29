@@ -14,7 +14,7 @@ The default toggle is:
 
 There is also a **Selection hotkey**. It opens Wox against the current text or file selection so plugins such as Selection, Web Search, and AI Command can act on it.
 
-On macOS, grant Accessibility if hotkey recording asks for it. On Linux Wayland, ordinary combinations such as `Ctrl + Space` use the desktop portal; double-modifier and CapsLock combos need extra input permissions. See the [Wayland FAQ](../faq.md#wayland-double-modifier-hotkeys).
+On macOS, grant Accessibility if hotkey recording asks for it. On Linux Wayland, ordinary combinations such as `Ctrl + Space` use a desktop-specific shortcut backend; double-modifier and CapsLock combos need extra input permissions. See the [Wayland FAQ](../faq.md#wayland-double-modifier-hotkeys).
 
 ## Fullscreen Applications
 
@@ -68,8 +68,8 @@ This is useful for a dashboard, a WebView site, clipboard history (`cb`), or not
 | --- | --- |
 | Open the Action Panel | Default `Ctrl+K` (`Cmd+K` on macOS); change it in **Settings -> Hotkey** |
 | Open a Web Search in WebView | Result action `Ctrl+Enter` (`Cmd+Enter` on macOS); the query box stays visible; Escape returns focus to the query |
-| Close the current WebView page | Action Panel `Ctrl+W` (`Cmd+W` on macOS); destroys the page so its memory can be released |
-| Hide a background WebView page | Action Panel `Ctrl+H` (`Cmd+H` on macOS); only on query-hotkey full preview windows with Run in background |
+| Close the current WebView page | Windows/macOS Action Panel `Ctrl+W` (`Cmd+W` on macOS); destroys the page so its memory can be released |
+| Hide a background WebView page | Windows/macOS Action Panel `Ctrl+H` (`Cmd+H` on macOS); only on query-hotkey full preview windows with Run in background |
 | Dictation press / double-press / hold | **Settings -> Plugins -> Dictation** |
 | Screenshot capture | **Settings -> Plugins -> Screenshot**, or query `screenshot` |
 | Hotkey overview | Query `hotkeys` to list registered shortcuts |

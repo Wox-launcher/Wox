@@ -28,7 +28,7 @@ Use this view when you want to browse what is available. When you already know w
 
 If you often find apps by their icons, save the query as a shortcut:
 
-1. Open **Settings → General → Query Hotkeys** and add an entry.
+1. Open **Settings → Hotkey → Query Hotkeys** and add an entry.
 2. Choose the **Normal Query** preset and set the query to `app launchpad`.
 3. Record an unused shortcut and save.
 

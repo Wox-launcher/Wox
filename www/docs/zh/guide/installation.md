@@ -62,38 +62,38 @@ chmod +x ./wox-linux-amd64.AppImage
 
 ## 用户数据
 
-Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
+默认情况下，Wox 使用以下本机数据目录：
 
-| 平台 | 数据目录 | Core 日志 |
+| 平台 | 本机数据目录 | Core 日志 |
 | --- | --- | --- |
 | Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
 | macOS | `~/.wox` | `~/.wox/log/wox.log` |
 | Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
-迁移配置时，优先备份这个目录。
+设置、插件和用户数据库默认位于本机数据目录内的 `wox-user`。自定义用户数据路径记录在 `.wox/.userdata.location`；便携模式优先使用可执行文件旁的 `wox-user`。迁移前请确认实际使用的目录，操作步骤见[备份与恢复](./plugins/system/backup.md)。
 
 ### 便携用户数据
 
 在启动某一份 Wox 之前，先在可执行文件旁边建一个 `wox-user` 目录。Wox 会把设置、插件、主题和用户数据库放在这个目录里。
 
-日志、插件 host、缓存、模型和文件索引仍留在上面的本机数据目录中。这些文件换一台电脑通常不能共用。Wox 不会自己在可执行文件旁边创建 `wox-user`。删掉这个目录后，会回到普通的用户数据位置。
+日志、插件 host、缓存、模型和文件索引仍留在上面的本机数据目录中。这些文件换一台电脑通常不能共用。Wox 不会自己在可执行文件旁边创建 `wox-user`。退出 Wox 后，将该目录移走或重命名，便会回到普通的用户数据位置，同时保留便携数据。
 
 ## 卸载
 
-先删除应用本体，再决定是否保留用户数据。
+先删除应用本体，再决定是否保留用户数据。完全重置前，请按照[常见问题中的重置步骤](./faq.md)备份并确认实际用户数据路径；只删除 `.wox` 不会清除外部的便携或自定义用户数据。
 
 ### Windows
 
 - Winget：`winget uninstall -e --id Wox.Wox`
 - Scoop：`scoop uninstall wox`
 - 手动安装：删除下载的可执行文件
-- 完全重置：删除 `%USERPROFILE%\.wox`
+- 清理本机数据：备份后删除 `%USERPROFILE%\.wox`
 
 ### macOS
 
 - Homebrew：`brew uninstall --cask wox`
 - 手动安装：从 `Applications` 删除 Wox
-- 完全重置：删除 `~/.wox`
+- 清理本机数据：备份后删除 `~/.wox`
 
 ### Linux
 
@@ -102,4 +102,4 @@ Wox 会把设置、插件数据、缓存和日志放在应用目录之外：
 - Fedora / RHEL：`sudo dnf remove wox`
 - openSUSE：`sudo zypper remove wox`
 - 手动或 AppImage 安装：删除二进制或 AppImage 文件
-- 完全重置：删除 `~/.wox`
+- 清理本机数据：备份后删除 `~/.wox`

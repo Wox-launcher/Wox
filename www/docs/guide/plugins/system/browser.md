@@ -1,6 +1,6 @@
 # Browser Plugin
 
-Browser searches and switches tabs in the active browser when browser integration is available. It is contextual: tab results stay scoped to the browser you are using.
+Browser searches and switches tabs from connected browsers when browser integration is available. The explicit `browser` query works regardless of the foreground app; global tab results appear when a supported browser is focused and may include tabs from other connected browsers.
 
 ![The Browser plugin](/images/guide/plugin_browser.png)
 

@@ -18,7 +18,7 @@ Actions depend on the plugin and the selected result. Typical examples:
 
 | Result | Common actions |
 | --- | --- |
-| App | Open, reveal in file manager, copy path, uninstall (Windows), terminate a running app |
+| App | Open, reveal in file manager, copy path, uninstall (Windows and eligible macOS apps), terminate a running app |
 | File | Open, open containing folder, delete to trash, show system context menu, save to Notes |
 | Clipboard item | Copy, paste to the active window, favorite, edit title, edit text, delete, save to Notes |
 | Bookmark or URL | Open in browser |

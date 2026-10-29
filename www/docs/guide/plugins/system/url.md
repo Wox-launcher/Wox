@@ -11,4 +11,4 @@ https://www.woxlauncher.com
 github.com/Wox-launcher/Wox
 ```
 
-Recent URLs can reappear as you type. Use the Action Panel to copy the address or open it in a different browser when available.
+Recent URLs can reappear as you type. URLs open in the default browser. Use the Action Panel on a recent URL to remove it from history.

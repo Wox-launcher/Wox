@@ -1,6 +1,6 @@
 ---
 title: "Floating notes in the launcher"
-description: "Capture text, tables, and images in Wox Notes. Search, pin, and restore them without leaving the keyboard."
+description: "Capture text, tables, and images in Wox Notes. Search, pin, and reopen them without leaving the keyboard."
 ---
 
 # Floating notes in the launcher
@@ -20,7 +20,6 @@ Query `note` to search notes, or `note new` to create one. Each note opens in it
 | `note` | Search and reopen notes |
 | `note new` | Create a note |
 | `note search invoice` | Filter by title or text |
-| `note deleted` | Browse recently deleted notes |
 
 Notes can be pinned, including across macOS Spaces. You can export Markdown, text, or HTML. Cloud Sync can sync note text; images stay on the device.
 
@@ -34,4 +33,4 @@ Clipboard, File Search, Screenshot, Selection, Quick Jump, and Shell can save th
 2. Write in the note window. The launcher can hide; the note stays open.
 3. Later, type `note` and pick the note to bring it back.
 
-Deleted notes stay recoverable for 60 days, then they are purged.
+Deleted notes are retained for 60 days before automatic cleanup. There is currently no launcher command or Notes view for browsing or restoring deleted notes.

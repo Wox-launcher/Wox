@@ -62,38 +62,38 @@ chmod +x ./wox-linux-amd64.AppImage
 
 ## User Data
 
-Wox keeps settings, plugin data, cache, and logs outside the application directory:
+By default, Wox uses the following per-machine data directory:
 
-| Platform | Data directory | Core log |
+| Platform | Per-machine directory | Core log |
 | --- | --- | --- |
 | Windows | `%USERPROFILE%\.wox` | `%USERPROFILE%\.wox\log\wox.log` |
 | macOS | `~/.wox` | `~/.wox/log/wox.log` |
 | Linux | `~/.wox` | `~/.wox/log/wox.log` |
 
-Back up this directory if you want to move your configuration to another machine.
+Settings, plugins, and the user database default to `wox-user` inside this directory. A custom user-data path is recorded in `.wox/.userdata.location`; portable mode takes precedence by using `wox-user` beside the executable. Confirm the active location before migrating; see [Backup and Restore](./plugins/system/backup.md).
 
 ### Portable user data
 
 Create a `wox-user` directory next to the executable before you start that copy of Wox. Wox then stores settings, plugins, themes, and the user database in that directory.
 
-Logs, plugin hosts, caches, models, and the file index stay in the per-machine data directory above. Those files differ between computers. Wox does not create `wox-user` beside the executable by itself. Remove that directory to use the normal user-data location again.
+Logs, plugin hosts, caches, models, and the file index stay in the per-machine data directory above. Those files differ between computers. Wox does not create `wox-user` beside the executable by itself. Quit Wox and move or rename that directory to use the normal user-data location again while keeping the portable data.
 
 ## Uninstall
 
-Remove the application first, then decide whether to keep user data.
+Remove the application first, then decide whether to keep user data. For a full reset, follow the [FAQ reset instructions](./faq.md) to back up and identify the active user-data path. Deleting `.wox` alone does not clear portable or custom user data stored elsewhere.
 
 ### Windows
 
 - Winget: `winget uninstall -e --id Wox.Wox`
 - Scoop: `scoop uninstall wox`
 - Manual install: delete the downloaded executable
-- Full reset: delete `%USERPROFILE%\.wox`
+- Per-machine data cleanup: back up, then delete `%USERPROFILE%\.wox`
 
 ### macOS
 
 - Homebrew: `brew uninstall --cask wox`
 - Manual install: remove Wox from `Applications`
-- Full reset: remove `~/.wox`
+- Per-machine data cleanup: back up, then remove `~/.wox`
 
 ### Linux
 
@@ -102,4 +102,4 @@ Remove the application first, then decide whether to keep user data.
 - Fedora / RHEL: `sudo dnf remove wox`
 - openSUSE: `sudo zypper remove wox`
 - Manual or AppImage install: delete the binary or AppImage file
-- Full reset: remove `~/.wox`
+- Per-machine data cleanup: back up, then remove `~/.wox`

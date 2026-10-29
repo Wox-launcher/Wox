@@ -50,7 +50,7 @@ If an engine has multiple URLs, Wox opens each URL in order.
 
 Enable **Open in WebView by default** to display a single search result directly inside Wox. The default **Focus Web Page** action uses Enter to move keyboard focus to the displayed page without reloading it. Otherwise, Enter opens the browser and `Ctrl+Enter` (`Cmd+Enter` on macOS) opens the first URL in an embedded preview. Windows, macOS and Linux support WebView; Linux needs WebKitGTK 4.1 or 4.0 installed.
 
-The preview action panel includes Refresh, Go Back, Go Forward, Open in Browser and Close Webpage. **Run in background** retains the page when Wox is hidden; explicitly closing the page releases it. Preview-only query-hotkey panels also offer **Hide Webpage** when background retention is enabled.
+On Windows and macOS, the preview Action Panel offers Refresh, Go Back, Go Forward, Open in Browser, and Close Webpage. **Run in background** retains the page when Wox is hidden; explicitly closing the page releases it. Preview-only query-hotkey panels also offer **Hide Webpage** when background retention is enabled. Linux supports WebView previews but does not currently expose these page controls in the Action Panel. The WebSearch result can still provide its own Open in Browser action.
 
 ## Fixed Websites
 

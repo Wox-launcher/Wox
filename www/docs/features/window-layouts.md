@@ -7,7 +7,7 @@ description: "Snap windows from Wox, then save and restore multi-app workspace l
 
 <ReleaseStamp />
 
-The Window Manager plugin snaps the active window and can restore a saved workspace. It is available on Windows and macOS.
+On Windows and macOS, the Window Manager plugin snaps the active window and can restore a saved workspace. Starting in v2.4.9, Wox also offers Hyprland-specific window commands on Linux.
 
 ![Window layouts in Wox](/images/guide/plugin_window_manager.png)
 
@@ -43,3 +43,7 @@ Wox moves matching windows into the saved slots. If an assigned app is not open 
 For a one-keystroke flow, bind a Query Hotkey to `window group Work`. If that query resolves to one workspace, **Silent Run** can apply it without showing the launcher. See [Hotkeys](/guide/usage/hotkeys).
 
 Workspace layouts arrange normal app windows on the current display setup. If an app blocks system window management, or a saved display is disconnected, Wox applies what it can.
+
+## Hyprland on Linux
+
+Starting in v2.4.9, query `window` on Hyprland to access compositor-native actions such as toggling floating or fullscreen, swapping windows, and moving windows between workspaces or displays. Use `window focus-window` to find and focus an existing window. Available actions depend on the current desktop state. Hyprland does not use the Windows/macOS snap layouts or saved workspace groups described above; other Linux desktop environments do not currently provide these Window Manager commands.

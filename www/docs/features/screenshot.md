@@ -38,7 +38,7 @@ In a custom folder, history, retention, and later folder moves only include Wox 
 2. Select the region and annotate if needed.
 3. Later, type `screenshot` and filter by date or OCR text.
 
-On Windows and macOS, hover over a window to highlight it and click to select it. Drag to select a custom region. Overlapping windows follow their visible stacking order. On macOS, a window spanning displays is selected within the display under the pointer.
+On Windows and macOS, hover over a window to highlight it and click to select it. Starting in v2.4.9, Wox also supports window selection on Hyprland. Other Wayland desktops fall back to display or manual region selection. Drag to select a custom region. Overlapping windows follow their visible stacking order. On macOS, a window spanning displays is selected within the display under the pointer.
 
 When native window capture is available, an unchanged window selection uses the window's own pixels at export, preserving transparent rounded corners without the desktop behind them. The editor keeps showing the original desktop pixels. Moving, resizing, or replacing the selection cancels this transparency effect, even if you later return to the original bounds. Transparent captures are saved as PNG by default and keep their alpha when copied or pinned. Choosing JPEG explicitly produces an opaque image.
 

@@ -32,13 +32,11 @@ Then open **Settings → Plugins → AI Commands** and create or edit a command:
 
 `translate` is the command keyword used in the query. `%s` marks where the input text belongs in the prompt. Asking for only the translated text helps keep explanations and introductory phrases out of what gets pasted into your note.
 
-> Screenshot needed: The AI Command editor showing the `translate` command, the translation prompt containing `%s`, the selected model, and `Run And Paste` as the default action. Do not include API keys.
-
 **Run And Paste** determines where the answer goes. Wox waits for the complete answer, writes the final text to the clipboard, and pastes into the active window recorded before the command was triggered. It does not insert partial output as the model generates it.
 
 ## Have the shortcut supply the selected text
 
-Add an entry in **Settings → General → Query Hotkeys**:
+Add an entry in **Settings → Hotkey → Query Hotkeys**:
 
 | Field | Example value |
 | --- | --- |
@@ -49,8 +47,6 @@ Add an entry in **Settings → General → Query Hotkeys**:
 `{wox:selected_text}` supplies the current selection when you trigger the shortcut. The same shortcut can handle a different paragraph each time without you editing the query.
 
 **Silent Run** executes the default action directly when the query has a single result. The two settings have separate jobs: the AI command's default action handles pasting, while the hotkey preset skips confirmation in the launcher.
-
-> Screenshot needed: The Query Hotkey editor with `Silent Run` selected, showing the recorded shortcut and the complete query `ai translate {wox:selected_text}`.
 
 ## Try it in an editable note
 

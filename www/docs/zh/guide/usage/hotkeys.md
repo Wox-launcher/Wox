@@ -14,7 +14,7 @@ Wox 有一个主启动热键，也可以再为准备好的查询绑定快捷键�
 
 另外还有 **选中热键**。它会针对当前选中的文本或文件打开 Wox，方便选区、网页搜索和 AI 命令这类插件继续处理。
 
-在 macOS 上，如果录制热键时提示权限，需要授予辅助功能权限。在 Linux Wayland 上，`Ctrl + Space` 这类普通组合走桌面门户；双修饰键和 CapsLock 组合需要额外输入权限。见 [Wayland 常见问题](../faq.md#wayland-double-modifier-hotkeys)。
+在 macOS 上，如果录制热键时提示权限，需要授予辅助功能权限。在 Linux Wayland 上，`Ctrl + Space` 这类普通组合使用当前桌面的快捷键后端；双修饰键和 CapsLock 组合需要额外输入权限。见 [Wayland 常见问题](../faq.md#wayland-double-modifier-hotkeys)。
 
 ## 全屏应用
 
@@ -66,8 +66,8 @@ Linux Wayland 会话中无法使用托盘查询。
 | --- | --- |
 | 打开操作面板 | 默认 `Ctrl+K`（macOS 上为 `Cmd+K`）；可在 **设置 -> 热键** 中修改 |
 | 在 WebView 中打开网页搜索 | 结果操作 `Ctrl+Enter`（macOS 上为 `Cmd+Enter`）；查询框保持可见；Escape 把焦点交回查询框 |
-| 关闭当前 WebView 网页 | 操作面板 `Ctrl+W`（macOS 上为 `Cmd+W`）；销毁页面以释放内存 |
-| 隐藏后台 WebView 网页 | 操作面板 `Ctrl+H`（macOS 上为 `Cmd+H`）；仅在启用了后台运行的快捷键全预览窗口中出现 |
+| 关闭当前 WebView 网页 | Windows/macOS 操作面板 `Ctrl+W`（macOS 上为 `Cmd+W`）；销毁页面以释放内存 |
+| 隐藏后台 WebView 网页 | Windows/macOS 操作面板 `Ctrl+H`（macOS 上为 `Cmd+H`）；仅在启用了后台运行的快捷键全预览窗口中出现 |
 | 听写：单击 / 双击 / 按住 | **设置 -> 插件 -> 听写** |
 | 截图 | **设置 -> 插件 -> 截图**，或查询 `screenshot` |
 | 热键总览 | 查询 `hotkeys` 查看已注册快捷键 |

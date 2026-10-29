@@ -1,6 +1,6 @@
 # File Plugin
 
-The File plugin searches files and folders from configured roots. Use the `f` keyword when you want file results instead of global app, web, or calculator results.
+The File plugin searches files and folders using a local index. Use the `f` keyword when you want file results instead of global app, web, or calculator results.
 
 ![The File plugin](/images/guide/plugin_file.png)
 
@@ -17,7 +17,7 @@ The first run may show indexing status while Wox scans configured roots. Results
 
 ## What Gets Indexed
 
-Open **Settings -> Plugins -> File** to manage roots. Wox indexes those roots and skips common system/generated directories that are not useful for launcher search.
+Open **Settings -> Plugins -> File** to manage roots. The regular filename index uses those roots and skips common system/generated directories that are not useful for launcher search. On Windows, an active Fast Index service searches indexed NTFS volumes instead of limiting filename search to these roots.
 
 Use a small, deliberate root list for best results:
 
@@ -30,7 +30,7 @@ On Windows, File Search can use optional Fast Indexing. Open **Settings -> Plugi
 
 ![Fast Indexing in File Search settings](/images/guide/plugin_filesearch.png)
 
-Fast Indexing is Windows-only. macOS and Linux keep using the regular root-based index. Content-search directories are configured separately from filename-search roots.
+Fast Indexing is Windows-only. macOS and Linux keep using the regular root-based index. Content-search directories are configured separately from filename-search roots and remain scoped to those content directories even with Fast Index.
 
 For a short overview of what File Search is for, see [File search launcher](/features/file-search).
 
@@ -52,7 +52,7 @@ While browsing, use `Shift+Enter` again to enter subfolders. `Enter` continues t
 - Add an extension when you know it: `f proposal .pdf`.
 - Spaces combine conditions with AND, in any order: `f amiga .txt` matches `amiga_workbench.txt`. Use double quotes for a continuous phrase: `f "release notes" .txt`.
 - Add a folder hint when names are common: `f design README`.
-- If results feel too broad, narrow the configured roots instead of relying only on longer queries.
+- For the regular index, narrow the configured roots if results are too broad. Fast Index searches indexed NTFS volumes independently of filename roots; use ignore rules and more specific queries there.
 
 ## Index Status
 
@@ -64,13 +64,13 @@ If search status reports a permission problem, grant Wox access to the affected 
 
 ### A file is missing
 
-1. Confirm the file is under a configured root.
+1. Check the active index mode: confirm the file is under a configured root for the regular index, or on an indexed NTFS volume for Fast Index.
 2. Confirm Wox has permission to read the folder.
 3. Wait for indexing to finish if the file was just created.
 4. Restart Wox if a removable drive or network mount was attached after Wox started.
 
 ### Search is slow
 
-- Remove very large generated folders from roots.
-- Keep roots focused on places you actually search.
+- For the regular and content indexes, remove very large generated folders from roots.
+- Keep regular and content roots focused on places you actually search.
 - Check logs under the Wox data directory if toolbar status stays in one phase for too long.

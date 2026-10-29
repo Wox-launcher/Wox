@@ -7,7 +7,7 @@ description: "从 Wox 吸附窗口，并在 Windows 和 macOS 上保存、恢复
 
 <ReleaseStamp />
 
-窗口管理插件可以吸附当前窗口，也可以恢复已保存的工作区。目前支持 Windows 和 macOS。
+在 Windows 和 macOS 上，窗口管理插件可以吸附当前窗口，也可以恢复已保存的工作区。从 v2.4.9 起，Wox 还在 Linux 的 Hyprland 桌面提供专用窗口命令。
 
 ![Wox 窗口布局](/images/guide/plugin_window_manager.png)
 
@@ -43,3 +43,7 @@ Wox 会把匹配的窗口移到保存的槽位。如果指定应用还没打开�
 如果想一键完成，把快捷键查询绑定到 `window group Work`。当查询只对应一个工作区时，**静默执行** 可以不显示启动器直接应用。见 [快捷键](/zh/guide/usage/hotkeys)。
 
 工作区布局处理的是当前显示器上的普通应用窗口。如果某个应用阻止系统窗口管理，或保存的显示器未连接，Wox 会尽量应用能处理的部分。
+
+## Linux 上的 Hyprland
+
+从 v2.4.9 起，在 Hyprland 桌面中，查询 `window` 可以使用合成器原生操作，例如切换浮动或全屏、交换窗口，以及在工作区或显示器之间移动窗口。用 `window focus-window` 可以查找并聚焦已有窗口。可用操作取决于当前桌面状态。Hyprland 不使用上文的 Windows/macOS 吸附布局或已保存工作区；其他 Linux 桌面环境目前不提供这些窗口管理命令。

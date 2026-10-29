@@ -50,7 +50,7 @@ Wox 曾经是很多 Windows 用户认识启动器的起点。后来维护逐渐�
 
 最基础的操作还是熟悉的那一套：呼出 Wox，输入应用名，按回车打开。但现在不安装第三方插件，也有不少可以直接用的功能。
 
-比如找文件。你可以输入 `f report`，在配置好的目录中查找名称包含 `report` 的文件和文件夹，选中结果后查看预览。下图选中的是一个文件夹，右侧会列出它的内容。Windows 上可选装 NTFS 快速索引服务，利用 MFT 和 USN 日志维护索引；macOS 和 Linux 则使用按目录建立的索引。需要搜索文件内容时，可以另外配置内容索引目录。具体入口和权限要求见[文件搜索指南](/zh/guide/plugins/system/file)。
+比如找文件。你可以输入 `f report`，查找名称包含 `report` 的文件和文件夹，选中结果后查看预览。下图选中的是一个文件夹，右侧会列出它的内容。常规索引搜索配置的目录。Windows 上可选装 NTFS 快速索引服务，利用 MFT 和 USN 日志索引磁盘卷，不受文件名根目录限制；macOS 和 Linux 则使用按目录建立的索引。需要搜索文件内容时，可以另外配置内容索引目录。具体入口和权限要求见[文件搜索指南](/zh/guide/plugins/system/file)。
 
 ![Wox 搜索 report，右侧预览选中文件夹的内容](/images/guide/plugin_file.png)
 
@@ -58,7 +58,7 @@ Wox 曾经是很多 Windows 用户认识启动器的起点。后来维护逐渐�
 
 截图标注、短视频录制、笔记和倒计时，现在也都能在 Wox 里完成。语音输入可以下载模型后在本地离线运行。AI 聊天和 AI 命令则由你配置自己的模型提供商和 API Key；例如，把选中的一段话[翻译后替换回原处](/zh/blog/did-you-know-ai-command-silent-translation-query-hotkey)。模型服务的费用由对应提供商收取。
 
-我自己也经常用快捷键打开一个 X 的小窗口，看一下就关掉。这是 [网页搜索的 WebView 选项](/zh/guide/plugins/system/websearch)配合查询热键的用法，目前支持 Windows 和 macOS。这里的 WebView 用来显示网页内容，启动器界面仍然是原生的。
+我自己也经常用快捷键打开一个 X 的小窗口，看一下就关掉。这是 [网页搜索的 WebView 选项](/zh/guide/plugins/system/websearch)配合查询热键的用法，支持 Windows、macOS 和 Linux（Linux 需要 WebKitGTK 4.1 或 4.0）。这里的 WebView 用来显示网页内容，启动器界面仍然是原生的。
 
 如果每天都要把编辑器、浏览器和终端摆回同样的位置，还可以保存一套[工作区布局](/zh/blog/did-you-know-wox-workspace-layouts)，下次一键恢复。
 

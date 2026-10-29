@@ -4,7 +4,7 @@ Many results can open a preview instead of jumping straight into another app. Us
 
 ## From the Result List
 
-When the highlighted result supports preview, Wox shows it automatically beside the list, or filling the available space for some result types. You do not need to press a key.
+Many highlighted results show a preview automatically beside the list, or fill the available space for some result types. Folder browsing starts with the preview collapsed; its preview can be expanded when needed.
 
 ![Clipboard history with an automatic preview](/images/guide/plugin_clipboard.png)
 

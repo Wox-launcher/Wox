@@ -12,26 +12,28 @@ Open the core log:
 | macOS | `~/.wox/log/wox.log` |
 | Linux | `~/.wox/log/wox.log` |
 
-Start with the newest core log. If the UI opens but a plugin fails, check the plugin-specific log directory under the same Wox data folder.
+Start with the newest entries in `wox.log`. Plugin API logs are written to this same file with plugin identifiers. For runtime startup or plugin-host failures, also inspect the `log/hosts` directory.
 
 ### How do I reset Wox?
 
-Quit Wox, then remove the Wox data directory:
+First create a [backup](./plugins/system/backup.md) and copy it outside the directories you will remove. Before quitting Wox, identify the active user-data location as well as the per-machine directory below:
 
-| Platform | Data directory |
+| Platform | Per-machine directory |
 | --- | --- |
 | Windows | `%USERPROFILE%\.wox` |
 | macOS | `~/.wox` |
 | Linux | `~/.wox` |
 
-This removes settings, installed plugins, plugin data, cache, and logs.
+The default user-data directory is `wox-user` inside this directory. If a `wox-user` folder exists beside the executable, that portable folder takes precedence. Otherwise, `.wox/.userdata.location` records the active user-data path, which may be a custom location.
+
+Quit Wox, then remove the per-machine directory to clear its logs, caches, local backups, and default user data. For a full reset, also remove the active portable or custom user-data directory if it is outside `.wox`. Remove only the Wox data folder, not a shared parent folder. Settings, installed plugins, plugin data, and notes in that folder will be lost. Files saved to separately configured external locations are not removed by deleting `.wox`.
 
 ## Search
 
 ### Why is an app, file, or bookmark missing?
 
 - App search may need a few seconds after installing a new app.
-- File search only returns paths inside configured roots and readable by Wox.
+- Regular file indexing searches configured roots. Windows Fast Index searches indexed NTFS volumes independently of filename roots; content search has its own roots. Check the active mode and indexing status in File plugin settings.
 - Browser bookmarks are read from supported browser profiles; browser sync can delay updates.
 - Open the related plugin settings and confirm the plugin is enabled.
 
@@ -56,7 +58,7 @@ On Windows and Linux, start Wox once after installing or updating so it can regi
 
 ### How do I update plugins?
 
-Run `wpm`, select the plugin, and use the update action when one is available. You can also manage plugins under **Settings -> Plugins -> Installed Plugins**.
+Run `wpm update` to list available updates, then update a plugin or use the update-all result. You can also manage plugins under **Settings -> Plugins -> Installed Plugins**.
 
 ## File Search
 
@@ -147,6 +149,6 @@ If a command fails:
 - **The device still belongs to `root:root` or lacks group write permission**: check the saved udev rule, reload the rules, trigger the device event, and wait for `udevadm settle` to finish.
 - **Device permissions are correct but it is still not writable**: run `id -nG` without a username to check the current session's groups. `id -nG "$USER"` shows the account's configured groups, which may differ from the groups active in the session. If the account includes `input` and `uinput` but the session does not, restart your computer; reopening a terminal or logging out and back in may retain the old groups. If the session already has the required groups and you only change device permissions, restarting Wox is enough; a computer restart is not needed.
 
-After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) continue to work via the `org.freedesktop.portal.GlobalShortcuts` portal regardless of this setting.
+After setup, when CapsLock is pressed alone, it toggles caps lock normally. When CapsLock is used as a combo prefix, the system's caps lock toggle is automatically undone. Regular combination hotkeys (like `ctrl+space`) use the desktop-specific shortcut backend and do not require this evdev setup. See [Linux and Wayland](../features/linux-wayland.md) for the backends used by each desktop.
 
 > **Note:** The system setup above requires `sudo`, but Wox itself runs as a regular user without an extra system daemon. For CapsLock combos, Wox reads evdev events passively and uses uinput to restore CapsLock state and delete the stray combo character. Without uinput, the hotkey still fires, but these recovery operations cannot complete.
