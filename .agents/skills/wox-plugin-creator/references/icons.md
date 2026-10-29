@@ -1,14 +1,15 @@
 # Icons
 
-Use this reference when a plugin needs polished `result` and `action` icons.
+Use this reference for result, action, setting, and other functional icons. Prefer SVG for these icons; use other supported formats when appropriate to the content or explicitly requested. The plugin logo has a separate workflow.
 
 ## Result vs action
 
 Treat result icons and Action Panel icons as different contracts.
 
-- **Plugin metadata and result-row icons** may be colorful. Brand marks, app icons, favicons, emoji, and mixed-color SVGs belong here. When the row is a real company, app, or product and a stable logo URL exists, use that image. Use a generic mark when there is no logo.
+- **Plugin metadata logo** follows [plugin_logo_design.md](plugin_logo_design.md): design an iOS-like rounded-square identity logo unless the user wants to keep an existing or supplied logo. The image generator and rounded-square mask are reserved for this logo.
+- **Result-row icons** should preferably be SVG and may be colorful. A result representing the plugin itself may reuse its logo. When the row represents a company, app, or product with a stable logo URL, use that image; emoji and other supported formats remain available when appropriate.
 - **Action Panel leading icons must be monochrome theme-adaptive SVGs.** Prefer verbs that match Wox's built-in `action.*` catalog: copy, open, execute (lightning), delete, edit, paste, add, search, settings.
-- Do not reuse the plugin mark, a colored result icon, an emoji, or a brand logo as the leading action glyph. The Action Panel only tints SVGs that contain `var(--wox-theme-icon-color)`. A colored or emoji action stays authored and looks out of place next to system actions.
+- Do not reuse the plugin logo, a colored result icon, an emoji, or a brand logo as the leading action glyph. The Action Panel only tints SVGs that contain `var(--wox-theme-icon-color)`. A colored or emoji action stays authored and looks out of place next to system actions.
 - Execute actions use the lightning verb, not a gear or a play triangle.
 - Result identity can stay colorful even when the same row's actions are monochrome.
 
@@ -16,8 +17,8 @@ Third-party plugins cannot call `icons.Get`. Copy a bundled action SVG from `ass
 
 ## Defaults
 
-- Prefer inline SVG constants in `icons.ts` or `icons.py`.
-- Use colorful `48x48` SVG only for plugin/result identity.
+- Prefer inline SVG constants in `icons.ts` or `icons.py` for suitable result and action glyphs.
+- Colorful SVGs are suitable for result identity; the generated raster logo is for plugin metadata.
 - Keep action icons in one monochrome family (Wox verbs or Lucide/Tabler outlines).
 - Prefer simple shapes that remain legible at 16-32 px after downscaling.
 - Check `assets/iconify/action/` first for Action Panel verbs. Only search Iconify when no bundled verb matches.
@@ -61,14 +62,14 @@ When one of the action verbs already matches the intent, treat it as the default
 ## Family Selection
 
 - Action icons: monochrome families such as `tabler`, `lucide`, or `material-symbols`, then rewrite paints to `var(--wox-theme-icon-color)`.
-- Result icons: palette-enabled families only when the plugin identity clearly benefits from multicolor icons.
+- Result icons: palette-enabled families only when the result identity clearly benefits from multicolor icons.
 - Avoid mixing stroke-heavy outline actions with dense filled actions in the same plugin.
 
 ## Search Workflow
 
 1. For an action, pick a bundled verb from the table above.
 2. If no verb matches, search Iconify for a monochrome outline and apply the theme variable.
-3. For a result or plugin mark, colorful SVG or emoji is acceptable.
+3. For a result icon, prefer a suitable SVG; use another supported format when appropriate. For the plugin logo, follow [plugin_logo_design.md](plugin_logo_design.md).
 4. Prefer icons whose silhouette still reads when scaled down.
 5. Store the selected SVG as a shared constant in `icons.ts` or `icons.py`.
 

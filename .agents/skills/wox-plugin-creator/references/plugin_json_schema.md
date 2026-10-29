@@ -23,7 +23,7 @@ The `plugin.json` file must be a valid JSON object located in the root of your p
 | `MinWoxVersion`   | `string`   | Minimum Wox version required (SemVer). Single-file SDK plugins must use `"2.4.2"`.                  | `"2.0.0"` / `"2.4.2"`                      |
 | `Runtime`         | `string`   | Runtime environment. Enum: `PYTHON`, `NODEJS`. Wox requires Python 3.10+ or Node.js 20+.           | `"PYTHON"`                                 |
 | `Entry`           | `string`   | Main entry file path relative to plugin root.                                                      | `"main.py"` or `"dist/index.js"`           |
-| `Icon`            | `Icon`     | Plugin icon. See [Icon Formats](#icon-formats) below.                                              | `"emoji:🧮"`                               |
+| `Icon`            | `Icon`     | Plugin logo. See [Icon Formats](#icon-formats) below.                                              | `"emoji:🧮"`                               |
 | `TriggerKeywords` | `string[]` | Array of keywords to trigger the plugin. Use `"*"` for global triggers (careful!). Can't be empty. | `["calc", "math"]`                         |
 | `SupportedOS`     | `string[]` | Array of supported operating systems. Enum: `Windows`, `Linux`, `Darwin`. Can't be empty.          | `["Windows", "Darwin"]`                    |
 

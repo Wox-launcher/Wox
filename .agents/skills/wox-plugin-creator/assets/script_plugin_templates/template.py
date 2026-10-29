@@ -63,7 +63,7 @@ Actions:
 - Set "isDefault": true to make Enter run that action. The first action is the default if omitted.
 - Optional "hotkey": prefer cmd on macOS / ctrl on Windows and Linux; avoid Wox built-ins and duplicate bindings
 - Set "preventHideAfterAction": true on an action to keep Wox open after it runs
-- Action icons must be monochrome `svg:` markup using `var(--wox-theme-icon-color)`. Do not use emoji, brand, or the plugin mark as the leading action icon.
+- Action icons must be monochrome `svg:` markup using `var(--wox-theme-icon-color)`. Do not use emoji, brand, or the plugin logo as the leading action icon.
 
 Built-in Actions (handled automatically by Wox, no need to implement in action):
 - copy-to-clipboard: Copy text to clipboard

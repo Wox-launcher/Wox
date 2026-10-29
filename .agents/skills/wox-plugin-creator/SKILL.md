@@ -1,6 +1,6 @@
 ---
 name: wox-plugin-creator
-description: Create, scaffold, implement, and package Wox plugins (nodejs, python, singlefile-python, singlefile-nodejs). Use when cloning official SDK templates, generating single-file SDK plugin templates, editing plugin.json metadata, defining SettingDefinitions and validators, wiring i18n, implementing plugin APIs, QueryResponse refinements, refinement and action hotkeys, structured query slots, Plugin Tools (RegisterPluginTool / InvokePluginTool), or preparing plugin repositories for local packaging. If the user wants to publish a plugin to the official Wox store or check whether it is already listed, prefer wox-plugin-submit2store.
+description: Create, scaffold, implement, design logos for, and package Wox plugins (nodejs, python, singlefile-python, singlefile-nodejs). Use for plugin metadata, settings, i18n, APIs, refinements, hotkeys, structured queries, Plugin Tools, and local packaging. For official store submission or listing checks, prefer wox-plugin-submit2store.
 ---
 
 # Wox Plugin Creator
@@ -85,15 +85,16 @@ Plugin settings are cloud-synced. Each settings write becomes a sync record and 
 - For ready-to-copy patterns such as validated textbox/select fields, editable tables, AI model selectors, and dynamic preview settings, read `references/settings_patterns.md`.
 - For Python settings APIs, note that helper builders are limited; advanced settings are often created by constructing `PluginSettingDefinitionItem` and value objects directly.
 
-### 2) Author result and action icons
+### 2) Design the plugin logo and author other icons
 
-- Read `references/icons.md` before choosing any glyph. Result-row and plugin-identity icons may be colorful; Action Panel leading icons must not.
-- Scaffold templates use inline SVGs for the default plugin and result icons. Keep those defaults as SVG; use emoji or other formats only when deliberately choosing a result identity icon.
+- When creating a plugin or designing its logo, use the Icon Design workflow adapted in [references/plugin_logo_design.md](references/plugin_logo_design.md). This generator and its rounded-square mask are for the plugin's identity logo in metadata, not for result, action, setting, or other functional icons. Create a distinctive iOS-like rounded-square logo with transparent corners. Respect an existing or user-supplied logo when the user wants to keep it.
+- Read [references/icons.md](references/icons.md) before choosing result, action, or other functional icons. Prefer SVG for these icons; use other supported formats when appropriate to the content or explicitly requested. Result icons may be colorful; Action Panel leading icons must be monochrome and theme-adaptive.
+- Scaffold icons are placeholders; replace the plugin identity placeholder with the designed logo. Keep or replace other scaffold icons with suitable SVGs.
 - Prefer a bundled monochrome verb from `assets/iconify/action/` (copy, open, execute/lightning, delete, edit, paste, add, search, settings). These SVGs already use `var(--wox-theme-icon-color)` so the Action Panel can tint them to the row label.
-- Do not use emoji, brand logos, the plugin mark, or mixed-color result art as the leading action icon. The panel only tints SVGs that contain the theme variable; anything else stays authored and looks inconsistent next to system actions.
+- Do not use emoji, brand logos, the plugin logo, or mixed-color result art as the leading action icon. The panel only tints SVGs that contain the theme variable; anything else stays authored and looks inconsistent next to system actions.
 - Execute actions use the lightning verb (`action/execute.svg`), not a gear or play triangle. Settings actions use the gear.
 - For a new action metaphor, fetch a monochrome Iconify outline with `scripts/search_iconify.py` (it rewrites `currentColor` to the theme variable by default). Use `--no-wox-theme` only for colorful **result** icons.
-- Single-file SDK plugins cannot use relative image paths. Inline the SVG for actions; emoji/URL/base64 are acceptable for result identity only.
+- Single-file SDK plugins cannot use relative image paths. Inline action SVGs and prefer inline SVGs for results; emoji/URL/base64 are also available for result identity. Embed a generated plugin logo in metadata as described in `references/plugin_logo_design.md`.
 
 ### 3) Package and submit plugin
 
@@ -197,6 +198,6 @@ Do not target older interpreters. Single-file SDK plugins run inside Wox's exist
 
 ## Resources
 
-- scripts: `scripts/scaffold_wox_plugin.py`, `scripts/detect_local_runtime.py`, `scripts/search_iconify.py`
-- references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/icons.md`, `references/refinements.md`, `references/hotkeys.md`, `references/plugin_tools.md`
+- scripts: `scripts/scaffold_wox_plugin.py`, `scripts/detect_local_runtime.py`, `scripts/search_iconify.py`, `scripts/round_plugin_logo.py`
+- references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/plugin_logo_design.md`, `references/icons.md`, `references/refinements.md`, `references/hotkeys.md`, `references/plugin_tools.md`
 - assets: `assets/single_file_plugin_templates/`, `assets/iconify/action/`
