@@ -83,18 +83,19 @@ func TestWPMCommandDiscovery(t *testing.T) {
 	for _, keyword := range []string{"store", "wpm", "pm"} {
 		hint, _ := plugin.MatchQueryHint(keyword+" ", []*plugin.Instance{{Metadata: w.GetMetadata()}})
 		require.NotNil(t, hint)
-		require.Equal(t, []string{"create", "install", "uninstall"}, hint.Elements[1].Suggestions)
+		require.Equal(t, []string{"create", "install", "uninstall", "update"}, hint.Elements[1].Suggestions)
 		require.True(t, hint.CommandSuggestions, "command completion must retain its trailing space")
 		for _, tc := range []struct {
 			search string
 			count  int
 		}{
-			{"", 3},
+			{"", 4},
 			{"inst", 2},
 			{" INST ", 2},
 			{" DEV. ", 0},
 			{"dev.add", 0},
 			{"create", 1},
+			{"update", 1},
 			{"missing-command", 0},
 		} {
 			t.Run(keyword+"/"+tc.search, func(t *testing.T) {
@@ -121,5 +122,38 @@ func TestWPMCommandDiscovery(t *testing.T) {
 	for _, result := range createResults {
 		require.NotContains(t, result.Title, "script_template")
 		require.NotContains(t, result.Group, "group_script_plugins")
+	}
+}
+
+// TestWPMUpgradeablePlugins excludes missing, current, and newer installed plugins.
+func TestWPMUpgradeablePlugins(t *testing.T) {
+	manifests := []plugin.StorePluginManifest{
+		{Id: "old", Version: "2.0.0"},
+		{Id: "current", Version: "1.0.0"},
+		{Id: "newer", Version: "1.0.0"},
+		{Id: "missing", Version: "2.0.0"},
+	}
+	installed := map[string]*plugin.Instance{
+		"old":     {Metadata: plugin.Metadata{Version: "1.0.0"}},
+		"current": {Metadata: plugin.Metadata{Version: "1.0.0"}},
+		"newer":   {Metadata: plugin.Metadata{Version: "2.0.0"}},
+	}
+	require.Equal(t, manifests[:1], wpmUpgradeablePlugins(manifests, installed))
+	require.Empty(t, wpmUpgradeablePlugins(manifests, nil))
+}
+
+// TestWPMUpdateEmpty reports when no store plugins need an upgrade.
+func TestWPMUpdateEmpty(t *testing.T) {
+	w := &WPMPlugin{}
+	response := w.Query(context.Background(), plugin.Query{Type: plugin.QueryTypeInput, TriggerKeyword: "wpm", Command: "update"})
+	require.Len(t, response.Results, 1)
+	require.Equal(t, "i18n:plugin_wpm_all_up_to_date", response.Results[0].Title)
+	require.Equal(t, plugin.WoxPreview{}, response.Results[0].Preview)
+	for _, locale := range []string{"en_US", "zh_CN", "ja_JP", "ko_KR", "pt_BR", "ru_RU"} {
+		data, err := os.ReadFile("../../resource/lang/" + locale + ".json")
+		require.NoError(t, err)
+		var translations map[string]string
+		require.NoError(t, json.Unmarshal(data, &translations))
+		require.NotEmpty(t, translations["plugin_wpm_all_up_to_date"], locale)
 	}
 }

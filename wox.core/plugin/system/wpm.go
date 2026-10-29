@@ -109,7 +109,7 @@ func (w *WPMPlugin) getLocalPluginDescription(ctx context.Context, metadata plug
 func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 	// Keep developer commands callable without advertising them in the query hint.
 	commandHint := &common.QueryHint{CommandSuggestions: true, Elements: []common.QueryElement{
-		{Id: "operation", Kind: common.QueryElementArgument, Suggestions: []string{"create", "install", "uninstall"}},
+		{Id: "operation", Kind: common.QueryElementArgument, Suggestions: []string{"create", "install", "uninstall", "update"}},
 	}}
 	return plugin.Metadata{
 		Id:            "e2c5f005-6c73-43c8-bc53-ab04def265b2",
@@ -150,6 +150,10 @@ func (w *WPMPlugin) GetMetadata() plugin.Metadata {
 			{
 				Command:     "install",
 				Description: "i18n:plugin_wpm_command_install",
+			},
+			{
+				Command:     "update",
+				Description: "i18n:plugin_wpm_command_update",
 			},
 			{
 				Command:     "uninstall",
@@ -421,6 +425,10 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 		response := plugin.NewQueryResponse(w.installCommand(ctx, query))
 		response.Refinements = []plugin.QueryRefinement{w.buildInstallStatusRefinement()}
 		return response
+	}
+
+	if query.Command == "update" {
+		return plugin.NewQueryResponse(w.updateCommand(ctx, query))
 	}
 
 	if query.Command == "uninstall" {
@@ -913,7 +921,7 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 // createUpgradeAction creates an upgrade action with the same UI-lock pattern
 // as createInstallAction: the action is immediately removed when triggered to
 // prevent double-upgrades, and restored if the upgrade fails.
-func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
+func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifest, showPreview bool) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_upgrade",
 		Icon:                   icons.Get(icons.ActionUpdate),
@@ -924,8 +932,10 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 			if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
 				emptyActions := []plugin.QueryResultAction{}
 				updatable.Actions = &emptyActions
-				installingPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, true)
-				updatable.Preview = &installingPreview
+				if showPreview {
+					installingPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, true)
+					updatable.Preview = &installingPreview
+				}
 				w.api.UpdateResult(ctx, *updatable)
 			}
 
@@ -944,10 +954,14 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 				if installErr != nil {
 					// Restore upgrade + uninstall actions so the user can retry.
 					if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-						restoredActions := []plugin.QueryResultAction{w.createUpgradeAction(pluginManifest), w.createUninstallAction(pluginManifest)}
+						restoredActions := []plugin.QueryResultAction{w.createUpgradeAction(pluginManifest, showPreview), w.createUninstallAction(pluginManifest)}
 						updatable.Actions = &restoredActions
-						restoredPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
-						updatable.Preview = &restoredPreview
+						if showPreview {
+							restoredPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
+							updatable.Preview = &restoredPreview
+						} else {
+							restoredActions = restoredActions[:1]
+						}
 						w.api.UpdateResult(ctx, *updatable)
 					}
 					w.api.Notify(ctx, fmt.Sprintf(
@@ -960,13 +974,17 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 
 				// Update tails, preview, and actions to the installed state.
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
-					updatable.Tails = &newTails
-					successPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
-					updatable.Preview = &successPreview
-					newActions := w.buildPostInstallActions(ctx, pluginManifest)
-					updatable.Actions = &newActions
-					w.api.UpdateResult(ctx, *updatable)
+					if !showPreview {
+						w.api.RefreshQuery(ctx, plugin.RefreshQueryParam{})
+					} else {
+						newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
+						updatable.Tails = &newTails
+						successPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
+						updatable.Preview = &successPreview
+						newActions := w.buildPostInstallActions(ctx, pluginManifest)
+						updatable.Actions = &newActions
+						w.api.UpdateResult(ctx, *updatable)
+					}
 				}
 
 				w.api.Notify(ctx, fmt.Sprintf(
@@ -1067,7 +1085,7 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			if upgradeFlag {
 				// Upgrade is available: show Upgrade + Uninstall actions.
 				actions = []plugin.QueryResultAction{
-					w.createUpgradeAction(pluginManifest),
+					w.createUpgradeAction(pluginManifest, true),
 					w.createUninstallAction(pluginManifest),
 				}
 			} else {
@@ -1116,6 +1134,71 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		})
 	}
 	return results
+}
+
+// wpmUpgradeablePlugins selects store entries with a newer version than the installed plugin.
+func wpmUpgradeablePlugins(manifests []plugin.StorePluginManifest, installed map[string]*plugin.Instance) []plugin.StorePluginManifest {
+	var upgrades []plugin.StorePluginManifest
+	for _, manifest := range manifests {
+		if instance, ok := installed[manifest.Id]; ok && plugin.IsVersionUpgradable(instance.Metadata.Version, manifest.Version) {
+			upgrades = append(upgrades, manifest)
+		}
+	}
+	return upgrades
+}
+
+// updateCommand lists upgradeable plugins and offers a sequential upgrade of all of them.
+func (w *WPMPlugin) updateCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+	installed := w.buildInstalledPluginLookup()
+	upgrades := wpmUpgradeablePlugins(w.searchStorePlugins(ctx, ""), installed)
+	if len(upgrades) == 0 {
+		return []plugin.QueryResult{{Title: "i18n:plugin_wpm_all_up_to_date", Icon: wpmIcon}}
+	}
+
+	query.Refinements = map[string]string{wpmInstallStatusRefinementKey: wpmInstallStatusRefinementUpgradable}
+	results := w.installCommand(ctx, query)
+	for i := range results {
+		for _, manifest := range upgrades {
+			if results[i].IdentityKey == manifest.Id {
+				results[i].Preview = plugin.WoxPreview{}
+				results[i].Tails = []plugin.QueryResultTail{plugin.NewQueryResultTailText(fmt.Sprintf("%s → %s", installed[manifest.Id].Metadata.Version, manifest.Version))}
+				results[i].Actions = attachWPMMRUContext([]plugin.QueryResultAction{w.createUpgradeAction(manifest, false)}, manifest.Id)
+				break
+			}
+		}
+	}
+	all := plugin.QueryResult{
+		Title: "i18n:plugin_wpm_upgrade_all", Icon: icons.Get(icons.ActionUpdate),
+		IdentityKey: "wpm:upgrade-all", Score: 1000000,
+		Actions: []plugin.QueryResultAction{{
+			Name: "i18n:plugin_wpm_upgrade_all", Icon: icons.Get(icons.ActionUpdate), PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+					empty := []plugin.QueryResultAction{}
+					updatable.Actions = &empty
+					w.api.UpdateResult(ctx, *updatable)
+				}
+				util.Go(ctx, "upgrade all plugins", func() {
+					for _, manifest := range upgrades {
+						name := manifest.GetName(ctx)
+						w.api.Notify(ctx, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), name))
+						err := plugin.GetStoreManager().InstallWithProgress(ctx, manifest, func(message string) {
+							w.api.Notify(ctx, fmt.Sprintf("%s: %s", name, message))
+						})
+						if err != nil {
+							w.api.Notify(ctx, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), formatStorePluginInstallError(ctx, w.api, manifest, err)))
+							continue
+						}
+						w.api.Notify(ctx, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"), name, w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past")))
+					}
+					if w.api.GetUpdatableResult(ctx, actionContext.ResultId) != nil {
+						w.api.RefreshQuery(ctx, plugin.RefreshQueryParam{})
+					}
+				})
+			},
+		}},
+	}
+	return append([]plugin.QueryResult{all}, results...)
 }
 
 func (w *WPMPlugin) listDevCommand(ctx context.Context) []plugin.QueryResult {
