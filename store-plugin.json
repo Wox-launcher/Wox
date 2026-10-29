@@ -1936,5 +1936,25 @@
     ],
     "DateCreated": "2026-10-26 17:12:00",
     "DateUpdated": "2026-10-26 17:12:00"
+  },
+  {
+    "Id": "c5dfb872-03a5-413a-96e3-438339e4d238",
+    "Name": "Window Pin",
+    "Author": "qianlifeng",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.7",
+    "Runtime": "nodejs",
+    "Description": "Keep Windows applications above other windows",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/4a596b22-ac4d-4caf-9b92-5181bf895e82",
+    "Website": "https://gist.github.com/qianlifeng/03c57db33077eda40b352dc6aa67c039",
+    "DownloadUrl": "https://gist.githubusercontent.com/qianlifeng/03c57db33077eda40b352dc6aa67c039/raw/Wox.Plugin.WindowPin.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/0db10cf1-18f5-46e1-a05f-337df6ec1539"
+    ],
+    "SupportedOS": [
+      "Windows"
+    ],
+    "DateCreated": "2026-10-29 19:02:24",
+    "DateUpdated": "2026-10-29 19:02:24"
   }
 ]
