@@ -3,12 +3,16 @@ package launcher
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"wox/common"
+	launcherview "wox/ui/launcher/view"
 	chatview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 type projectTestServices struct{ chatHistoryTestServices }
@@ -125,6 +129,232 @@ func TestChatProjectHistoryIncludesEmptyGroupsAndHidesCollapsedChats(t *testing.
 	}
 }
 
+func TestChatHistorySearchFindsCollapsedProjectTitles(t *testing.T) {
+	projects := chatProjectUI{Projects: []common.AIChatProject{{Id: "p", Name: "Project"}}, Collapsed: map[string]bool{chatProjectsSection: true, "p": true, chatRecentsSection: true}}
+	chats := []chatData{{ID: "match", ProjectID: "p", Title: "Project roadmap", IsSummary: true}, {ID: "recent", Title: "Roadmap review", IsSummary: true}, {ID: "other", Title: "Unrelated", IsSummary: true}, {ID: "draft", Title: "Roadmap draft"}}
+	rows := chatHistoryRows(projects, chats, "roadmap", false)
+	if len(rows) != 2 || rows[0].ChatID != "match" || rows[1].ChatID != "recent" {
+		t.Fatalf("search omitted collapsed chats or included unrelated entries: %+v", rows)
+	}
+	if len(chatHistoryRows(projects, chats, "missing", false)) != 0 {
+		t.Fatal("unmatched search should be empty")
+	}
+	if len(chatHistoryRows(projects, chats, "  ", false)) != len(chatProjectHistoryRows(projects, chats)) {
+		t.Fatal("clearing the search should restore collapsed sections")
+	}
+}
+
+func TestChatHistorySearchKeepsDraftAndResetsScroll(t *testing.T) {
+	state := &chatPreviewState{editor: woxui.NewTextEditor("unsent draft"), panelScroll: 80, sidebarScroll: 90}
+	app := bindTestApp(&App{chat: chatController{chatPreview: state}})
+	props := app.chatProjectHistoryProps(snapshotChatPreviewLocked(state), uiPalette{}, 240, 400)
+	wantShortcut := "(" + strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+") + ")"
+	if !strings.HasSuffix(props.Search.Hint, wantShortcut) {
+		t.Fatalf("search hint %q does not include %q", props.Search.Hint, wantShortcut)
+	}
+	state.historySearch.SetText("hello", false)
+	props.Search.OnChanged("hello")
+	if state.historyQuery != "hello" || state.panelScroll != 0 || state.sidebarScroll != 0 || state.editor.State().Text != "unsent draft" {
+		t.Fatal("search altered the draft or retained stale scroll")
+	}
+	props.OnSearchClear()
+	if state.historyQuery != "" || state.historySearch.Text() != "" || state.editor.State().Text != "unsent draft" {
+		t.Fatal("clear did not reset the search independently of the draft")
+	}
+}
+
+func TestChatHistoryShortcutOpensAndFocusesSearch(t *testing.T) {
+	for _, dedicated := range []bool{false, true} {
+		state := &chatPreviewState{active: true, editor: woxui.NewTextEditor("unsent"), chats: []chatData{{ID: "a", Title: "Roadmap", IsSummary: true}}}
+		app := bindTestApp(&App{chat: chatController{chatPreview: state}, appearance: appearanceController{palette: defaultPalette()}})
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+			if !chatHistoryVisible(state.panel, state.sidebarOpen) {
+				return woxwidget.Container{Width: 240, Height: 600}
+			}
+			snapshot := snapshotChatPreviewLocked(state)
+			props := app.chatProjectHistoryProps(snapshot, defaultPalette(), 240, 576)
+			props.Height = 600
+			app.configureChatHistorySearch(&props, snapshot, dedicated, nil)
+			return chatview.ChatCatalog(props)
+		})
+		if dedicated {
+			app.chatWindow.chatHost = host
+		} else {
+			app.host = host
+		}
+		host.AttachServices(&notesEditorHostServices{})
+		frame := woxui.FrameInfo{Size: woxui.Size{Width: 240, Height: 600}, Scale: 1}
+		host.Frame(&woxui.DisplayList{}, frame)
+		hotkey, ok := woxui.ParseHotkey(primaryHotkey("p"))
+		if !ok || !app.chat.handleChatKey(woxui.KeyEvent{Key: hotkey.Key, Modifiers: hotkey.Modifiers, Down: true}, dedicated) {
+			t.Fatal("search shortcut was not handled")
+		}
+		host.Frame(&woxui.DisplayList{}, frame)
+		host.Frame(&woxui.DisplayList{}, frame)
+		var focused bool
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "chat-history-search" {
+				focused = node.Focused
+			}
+		}
+		if !focused || !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "road"}) || state.historyQuery != "road" || state.editor.State().Text != "unsent" {
+			t.Fatalf("dedicated %v: shortcut did not focus independent search", dedicated)
+		}
+		host.Dispose()
+	}
+}
+
+func TestChatHistoryShortcutTakesPriorityInActiveLauncherChat(t *testing.T) {
+	state := &chatPreviewState{active: true, editor: woxui.NewTextEditor("draft")}
+	app := bindTestApp(&App{chat: chatController{chatPreview: state}})
+	hotkey, ok := woxui.ParseHotkey(primaryHotkey("p"))
+	if !ok || !app.onKey(woxui.KeyEvent{Key: hotkey.Key, Modifiers: hotkey.Modifiers, Down: true}) {
+		t.Fatal("launcher did not route the search shortcut to active chat")
+	}
+	if !chatHistoryVisible(state.panel, state.sidebarOpen) || !state.historyFocus || state.historyFocusDedicated {
+		t.Fatal("launcher shortcut did not open and target chat history search")
+	}
+}
+
+func TestChatHistorySearchFieldFiltersOnTextInput(t *testing.T) {
+	state := &chatPreviewState{editor: woxui.NewTextEditor("unsent"), chat: chatData{ID: "a", Conversations: []chatConversation{{Text: "previous"}}}, chats: []chatData{{ID: "a", Title: "Roadmap", IsSummary: true}, {ID: "b", Title: "Budget", IsSummary: true}}}
+	app := bindTestApp(&App{chat: chatController{chatPreview: state}, appearance: appearanceController{palette: defaultPalette()}})
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		props := app.chatProjectHistoryProps(snapshotChatPreviewLocked(state), defaultPalette(), 240, 576)
+		props.Height = 600
+		return chatview.ChatCatalog(props)
+	})
+	defer host.Dispose()
+	host.AttachServices(&notesEditorHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 240, Height: 600}, Scale: 1}
+	host.Frame(&woxui.DisplayList{}, frame)
+	var search woxui.Rect
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "chat-history-search" {
+			search = node.Bounds
+		}
+	}
+	if search.Width == 0 {
+		t.Fatal("chat history search field is missing")
+	}
+	point := woxui.Point{X: search.X + 20, Y: search.Y + search.Height/2}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+	if !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "road"}) || state.historyQuery != "road" {
+		t.Fatal("search field did not accept input")
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || state.editor.State().Text != "unsent" {
+		t.Fatal("search Enter should not submit or alter the chat draft")
+	}
+	host.Frame(&woxui.DisplayList{}, frame)
+	found := map[string]bool{}
+	for _, node := range host.Snapshot().Tree.Nodes {
+		found[node.AutomationID] = true
+	}
+	if !found["chat-history-row-a"] || found["chat-history-row-b"] || !found["chat-history-search-clear"] {
+		t.Fatalf("unexpected filtered history: %+v", found)
+	}
+}
+
+func TestChatHistorySearchEscapeReturnsToComposer(t *testing.T) {
+	for _, tc := range []struct{ dedicated, active bool }{{false, true}, {false, false}, {true, true}} {
+		t.Run(fmt.Sprintf("dedicated=%t/active=%t", tc.dedicated, tc.active), func(t *testing.T) {
+			state := &chatPreviewState{active: tc.active, panel: "history", sidebarOpen: true, editor: woxui.NewTextEditor("unsent")}
+			app := bindTestApp(&App{isPrimary: true, chat: chatController{chatFullscreen: tc.active, chatPreview: state}, querySession: queryController{editor: woxui.NewTextEditor("chat ")}})
+			host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+				snapshot := snapshotChatPreviewLocked(state)
+				props := app.chatProjectHistoryProps(snapshot, defaultPalette(), 240, 576)
+				props.Height = 600
+				app.configureChatHistorySearch(&props, snapshot, tc.dedicated, nil)
+				children := []woxwidget.StackChild{}
+				if !app.chat.chatFullscreen && !tc.dedicated {
+					children = append(children, woxwidget.StackChild{Child: woxwidget.EditableText{Key: launcherview.LauncherQueryInputKey, Autofocus: true, Child: woxwidget.Container{Width: 240, Height: 30}}})
+				}
+				children = append(children, woxwidget.StackChild{Child: chatview.ChatCatalog(props)})
+				children = append(children, woxwidget.StackChild{Top: 570, Child: woxwidget.EditableText{Key: woxwidget.Key("chat-input-" + snapshot.key), OnKey: func(event woxui.KeyEvent) bool {
+					return app.chat.handleChatKey(event, tc.dedicated)
+				}, OnFocusChange: func(focused bool) {
+					if focused {
+						app.chat.focusChatInput()
+					}
+				}, Child: woxwidget.Container{Width: 240, Height: 30}}})
+				return woxwidget.Stack{Width: 240, Height: 600, Children: children}
+			})
+			if !tc.dedicated {
+				app.host = host
+			} else {
+				app.chatWindow.chatHost = host
+			}
+			defer host.Dispose()
+			host.AttachServices(&notesEditorHostServices{})
+			frame := woxui.FrameInfo{Size: woxui.Size{Width: 240, Height: 600}, Scale: 1}
+			host.Frame(&woxui.DisplayList{}, frame)
+			var search woxui.Rect
+			for _, node := range host.Snapshot().Tree.Nodes {
+				if node.AutomationID == "chat-history-search" {
+					search = node.Bounds
+				}
+			}
+			if search.Width == 0 {
+				t.Fatal("chat history search field is missing")
+			}
+			point := woxui.Point{X: search.X + 20, Y: search.Y + search.Height/2}
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+			host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+			if !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "road"}) {
+				t.Fatal("search field did not accept input")
+			}
+			fallback := app.chat.onChatPreviewKey
+			if tc.dedicated {
+				fallback = app.chat.onDedicatedChatKey
+			}
+			event := woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}
+			if !app.dispatchWindowKey(event, host, "", func() {}, fallback) || state.historyQuery != "" || state.historySearch.Text() != "" || app.chat.chatFullscreen != tc.active || state.editor.State().Text != "unsent" {
+				t.Fatal("first Escape should clear search and preserve chat and draft")
+			}
+			host.Frame(&woxui.DisplayList{}, frame)
+			event.Repeat = true
+			if !app.dispatchWindowKey(event, host, "", func() {}, fallback) || app.chat.chatFullscreen != tc.active {
+				t.Fatal("repeated Escape should not leave chat")
+			}
+			event.Repeat = false
+			if !app.dispatchWindowKey(event, host, "", func() { t.Fatal("unexpected window close") }, func(woxui.KeyEvent) bool { t.Fatal("Escape reached launcher fallback"); return false }) || !host.HasFocus(woxwidget.Key("chat-input-"+snapshotChatPreviewLocked(state).key)) || !state.active || app.chat.chatFullscreen != tc.active {
+				t.Fatal("second Escape should focus the composer without leaving chat")
+			}
+			event.Repeat = true
+			if !app.dispatchWindowKey(event, host, "", func() {}, fallback) || !state.active {
+				t.Fatal("held Escape should not leave chat after focusing the composer")
+			}
+			event.Repeat = false
+			if !app.dispatchWindowKey(event, host, "", func() {}, fallback) || app.chat.chatFullscreen != tc.dedicated {
+				t.Fatal("Escape in the composer should follow the host's normal chat behavior")
+			}
+			if !tc.dedicated {
+				host.Frame(&woxui.DisplayList{}, frame)
+				selection := app.querySession.editor.State().Selection
+				if state.active || !host.HasFocus(launcherview.LauncherQueryInputKey) || selection.Anchor != 0 || selection.Focus != len([]rune("chat ")) {
+					t.Fatal("Escape should return to the selected launcher query")
+				}
+			}
+		})
+	}
+}
+
+func TestChatHistorySearchKeyboardSelectsMatchingChat(t *testing.T) {
+	state := &chatPreviewState{
+		panel: "history", active: true, historyQuery: "road", panelViewport: chatview.ChatHistoryRowHeight,
+		editor: woxui.NewTextEditor("unsent"), chat: chatData{ID: "b", Conversations: []chatConversation{{Text: "existing"}}},
+		chats: []chatData{{ID: "a", Title: "Roadmap one", IsSummary: true}, {ID: "b", Title: "Roadmap two", IsSummary: true}},
+	}
+	app := bindTestApp(&App{chat: chatController{chatPreview: state}})
+	if !app.chat.onChatHistorySearchKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true}) || state.sidebarSelected != 1 || state.panelScroll != chatview.ChatHistoryRowHeight {
+		t.Fatal("down should select and reveal the second match")
+	}
+	if !app.chat.onChatHistorySearchKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || state.chat.ID != "b" || state.sidebarSelected != 1 || state.editor.State().Text != "unsent" {
+		t.Fatal("enter should activate the selected match without submitting the draft")
+	}
+}
+
 func TestChatRecentsHistoryProps(t *testing.T) {
 	state := &chatPreviewState{}
 	app := bindTestApp(&App{
@@ -221,7 +451,7 @@ func TestProjectHistoryKeyboardAccountsForSectionSpacing(t *testing.T) {
 	for _, selected := range []int{1, 2, 3} {
 		state.panelSelected, state.panelScroll = selected, 0
 		ensureChatPanelSelectionVisibleLocked(state, len(rows))
-		want := float32(46) + float32(selected)*chatview.ChatHistoryRowHeight
+		want := float32(selected) * chatview.ChatHistoryRowHeight
 		if selected >= 2 {
 			want += chatview.ChatHistorySectionGap
 		}

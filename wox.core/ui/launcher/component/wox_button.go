@@ -45,14 +45,21 @@ type ButtonProps struct {
 	FontWeight woxui.FontWeight
 	Disabled   bool
 	// Selected marks the active choice when several buttons form one selector.
-	Selected          bool
-	Variant           ButtonVariant
-	OnTap             func()
-	OnHoverAt         func(bool, woxui.Rect)
-	OnTrailingHoverAt func(bool, woxui.Rect)
-	OnFocusChange     func(bool)
-	OnKey             func(woxui.KeyEvent) bool
-	Theme             ControlTheme
+	Selected        bool
+	Variant         ButtonVariant
+	HoverBackground *woxui.Color
+	Cursor          woxui.PointerCursor
+	OnTap           func()
+	// Pan callbacks allow domain rows to reuse button chrome during pointer reordering.
+	OnPanStart         func(woxui.Point)
+	OnPanUpdate        func(woxui.Point)
+	OnPanEnd           func()
+	OnSecondaryTapDown func(woxui.Point)
+	OnHoverAt          func(bool, woxui.Rect)
+	OnTrailingHoverAt  func(bool, woxui.Rect)
+	OnFocusChange      func(bool)
+	OnKey              func(woxui.KeyEvent) bool
+	Theme              ControlTheme
 }
 
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
@@ -117,6 +124,7 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		foreground = withAlpha(foreground, DisabledContentAlpha)
 		border = withAlpha(border, DisabledContentAlpha)
 		onTap = nil
+		props.OnPanStart, props.OnPanUpdate, props.OnPanEnd, props.OnSecondaryTapDown = nil, nil, nil, nil
 	}
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
 	if props.Disabled {
@@ -183,8 +191,11 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		buttonBackground := background
 		if hovered {
 			buttonBackground = controlHoverColor(background, foreground)
+			if props.HoverBackground != nil {
+				buttonBackground = *props.HoverBackground
+			}
 		}
-		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: func(inside bool, bounds woxui.Rect) {
+		return woxwidget.Gesture{ID: props.ID, Cursor: props.Cursor, OnTap: onTap, OnPanStart: props.OnPanStart, OnPanUpdate: props.OnPanUpdate, OnPanEnd: props.OnPanEnd, OnSecondaryTapDown: props.OnSecondaryTapDown, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 			onHoverAt(inside, bounds)
 			if props.OnHoverAt != nil {
 				props.OnHoverAt(inside, bounds)

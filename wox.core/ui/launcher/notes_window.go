@@ -44,6 +44,7 @@ var (
 
 // notesWindowController binds editing, persistence, and presentation to one native window.
 type notesWindowController struct {
+	sidebar notesSidebarState
 	*notesEditingSession
 	*notesAutosave
 	owner           *notesController
@@ -117,7 +118,12 @@ func newNotesWindowController(owner *notesController, record common.NoteRecord) 
 			controller.host.RevealCaret()
 		}
 	}
+	controller.initSidebar()
 	controller.applyRecord(record)
+	if notesplugin.DocumentIsEmpty(record.Document) {
+		parent := ""
+		controller.sidebar.pendingParent = &parent
+	}
 	return controller
 }
 
@@ -215,8 +221,10 @@ func (a *notesController) openNoteRequest(request common.NotesWindowRequest) err
 			if explicitNoteID {
 				return err
 			}
-		} else {
+		} else if record.DeletedAt == 0 {
 			return a.openNoteRecord(record, request)
+		} else if explicitNoteID {
+			return fmt.Errorf("note is no longer available: %s", request.NoteID)
 		}
 	}
 	items, err := a.services.NotesList(context.Background(), "", false)
@@ -277,8 +285,8 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 		}
 		host := woxwidget.NewHost(c.buildNotes)
 		managed, _, openErr = c.owner.windows.Open(c.windowID, woxui.WindowOptions{
-			Title: c.owner.language.translate("i18n:notes_title"), Size: woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight},
-			MinSize:             notesNativeMinSize(),
+			Title: c.owner.language.translate("i18n:notes_title"), Size: woxui.Size{Width: max(notesDefaultWidth, c.sidebarMinSize().Width), Height: notesDefaultHeight},
+			MinSize:             c.sidebarMinSize(),
 			TitleBarControls:    woxui.TitleBarControls{Height: woxcomponent.TitleBarHeight, Close: true, Minimize: true, Maximize: true},
 			OnMaximizeRequested: c.toggleMaximize,
 			Role:                notesWindowRole, Icon: notesWindowIcon(), Resizable: true, Topmost: c.windowPinned, HideOnBlur: false,
@@ -290,14 +298,27 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 				}
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
-				if c.onFindKey(event) {
+				if c.sidebar.dialog == "" && c.onSidebarShortcut(event) {
+					return true
+				}
+				if c.sidebar.dialog == "menu" && event.Down && event.Key == woxui.KeyEscape {
+					c.closeSidebarDialog()
+					return true
+				}
+				if c.sidebar.dragging && event.Down && event.Key == woxui.KeyEscape {
+					c.cancelSidebarDrag()
+					return true
+				}
+				if c.sidebar.dialog == "" && c.onFindKey(event) {
 					return true
 				}
 				return c.owner.dispatchWindowKey(event, host, common.NotesPluginID, c.requestClose, c.onKey)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },
+			OnFileDrop:       c.handleFileDrop,
 			OnCloseRequested: c.requestClose,
 			OnClosed: func() {
+				c.cancelSidebarDrag()
 				c.cancelScheduledSave()
 				c.discardEmptyNote()
 				if !notesplugin.DocumentIsEmpty(c.document) {
@@ -331,13 +352,14 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 	}
 	c.windowMaximized = c.readWindowMaximized()
 	if !c.restoreBounds(window) {
-		_ = window.CenterOnMouseScreen(woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight})
+		_ = window.CenterOnMouseScreen(woxui.Size{Width: max(notesDefaultWidth, c.sidebarMinSize().Width), Height: notesDefaultHeight})
 		if bounds, err := window.Bounds(); err == nil {
 			offset := float32((len(c.owner.noteWindows) - 1) % 8 * 24)
 			bounds.X, bounds.Y = bounds.X+offset, bounds.Y+offset
 			_ = window.SetBounds(clampNotesBounds(bounds))
 		}
 	}
+	c.syncSidebarMinSize()
 	c.applyRestoredMaximize(window)
 	return managed, nil
 }
@@ -367,12 +389,14 @@ func (c *notesWindowController) open(request common.NotesWindowRequest) error {
 func (c *notesWindowController) applyRecord(record common.NoteRecord) {
 	c.cancelScheduledSave()
 	c.notesEditingSession.load(record)
+	c.sidebar.pendingParent = nil
 	c.windowPinned = c.readWindowPinned()
 	c.applyWindowTopmost()
 	c.resizeForDocument()
 }
 
 func (c *notesWindowController) hide() {
+	c.cancelSidebarDrag()
 	if c == nil || c.managed == nil {
 		return
 	}
@@ -396,6 +420,7 @@ func (c *notesWindowController) close() error {
 	if c == nil || c.managed == nil {
 		return nil
 	}
+	c.cancelSidebarDrag()
 	c.updateToolbarTooltip(false, "", woxui.Rect{})
 	c.applyMarkdownToDocument()
 	if notesplugin.DocumentIsEmpty(c.document) {

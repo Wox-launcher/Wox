@@ -66,6 +66,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlFullscreen:        newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>`),
 	ControlFullscreenExit:    newMonochromeUIIcon(`<path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/>`),
 	ControlSidebar:           newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>`),
+	ControlSidebarOpen:       common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path fill="var(--wox-theme-icon-color)" stroke="none" d="M6 4h3v16H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"/><path d="M9 4v16"/></svg>`),
 	ControlTune:              tuneUIIcon,
 	ControlSettingsSuggest:   newMonochromeUIIcon(`<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15"/><path d="m18 3 .55 1.45L20 5l-1.45.55L18 7l-.55-1.45L16 5l1.45-.55z"/>`),
 	ControlLocate:            newMonochromeUIIcon(`<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>`),
@@ -129,6 +130,8 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlChevronUp:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>`),
 	ControlChevronDown:       newMonochromeUIIcon(`<path d="m6 9 6 6 6-6"/>`),
 	ControlChevronRight:      common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--wox-theme-icon-color)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>`),
+	ControlExpandAll:         newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m6 5 6 6 6-6M6 13l6 6 6-6"/>`),
+	ControlCollapseAll:       newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m6 11 6-6 6 6M6 19l6-6 6 6"/>`),
 	ControlClock:             common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`),
 	ControlFilterList:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`),
 	ControlCheck:             common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`),
@@ -141,6 +144,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlToolbarHidden:     newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="2" stroke="var(--wox-theme-icon-color)"/>`),
 	ControlTextFormat:        newMonochromeUIIcon(`<path d="M2 20 6.5 4 11 20M4 14h5M22 12v8M22 16a3 4 0 1 0-6 0 3 4 0 1 0 6 0"/>`),
 	ControlPin:               newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
+	ControlPinFilled:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" d="M8 3h8l-1 7 4 4v2h-6v5l-1 2-1-2v-5H5v-2l4-4z"/></svg>`),
 
 	// Notes and other compact editor format bars.
 	ControlFormatHeading:       newMonochromeUIIcon(`<path d="M6 5v14M18 5v14M6 12h12"/>`),

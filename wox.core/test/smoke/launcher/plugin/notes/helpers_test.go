@@ -147,7 +147,7 @@ func formatNotesMenuNodes(snapshot woxwidget.AutomationSnapshot) string {
 
 func openSearch(t *testing.T, ctx context.Context, client *automationdriver.Client, query string) {
 	t.Helper()
-	if err := client.Perform(ctx, "notes.toolbar.search", woxui.AccessibilityActionActivate, ""); err != nil {
+	if err := client.PressKey(ctx, woxui.Key("p"), woxui.KeyModifierControl|woxui.KeyModifierMeta); err != nil {
 		t.Fatalf("open Notes search: %v", err)
 	}
 	if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {

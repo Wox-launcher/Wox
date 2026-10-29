@@ -499,6 +499,24 @@ func chatProjectHistoryRows(state chatProjectUI, chats []chatData) []chatProject
 	return rows
 }
 
+// chatHistoryRows searches summaries independently of collapsed project state.
+func chatHistoryRows(projects chatProjectUI, chats []chatData, query string, usePinYin bool) []chatProjectHistoryRow {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return chatProjectHistoryRows(projects, chats)
+	}
+	var rows []chatProjectHistoryRow
+	for _, chat := range chats {
+		if !chat.IsSummary && len(chat.Conversations) == 0 {
+			continue
+		}
+		if _, ok := chatCatalogMatchScore(query, usePinYin, chat.Title); ok {
+			rows = append(rows, chatProjectHistoryRow{ChatID: chat.ID, Title: chat.Title, Streaming: chat.IsStreaming})
+		}
+	}
+	return rows
+}
+
 type chatProjectHistoryRow struct {
 	ProjectID, ChatID, Title string
 	Group                    bool
@@ -521,9 +539,13 @@ func (a *chatController) activateProjectHistoryRow(row chatProjectHistoryRow) {
 	a.invalidateChatSurfaces()
 }
 
-// projectHistoryHeight includes the new-chat entry, its gap and all visible history rows.
+// projectHistoryHeight measures the scrollable history beneath the fixed search header.
 func projectHistoryHeight(state *chatPreviewState) float32 {
-	return chatview.ChatScaledSize(state.panelDensityScale, 46) + float32(len(chatProjectHistoryRows(state.projects, state.chats)))*chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistoryRowHeight) + chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistorySectionGap)
+	height := float32(len(chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin))) * chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistoryRowHeight)
+	if strings.TrimSpace(state.historyQuery) == "" {
+		height += chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistorySectionGap)
+	}
+	return height
 }
 
 const chatProjectPanel = "projects"

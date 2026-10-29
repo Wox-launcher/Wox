@@ -130,6 +130,7 @@ const (
 	PointerCursorHand
 	// PointerCursorHidden lets a surface paint its own size-dependent pointer.
 	PointerCursorHidden
+	PointerCursorGrab
 )
 
 // PointerEvent uses logical client coordinates; positive scroll Y means upward motion.

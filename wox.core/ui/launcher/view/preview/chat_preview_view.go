@@ -11,7 +11,7 @@ import (
 )
 
 // ChatHistoryRowHeight keeps drawer layout and controller scrolling in logical units.
-const ChatHistoryRowHeight = float32(38)
+const ChatHistoryRowHeight = woxcomponent.SidebarRowHeight
 
 // ChatHistoryFloatingInset leaves space around the chat sidebar.
 const ChatHistoryFloatingInset = float32(8)
@@ -25,6 +25,11 @@ const (
 
 // ChatHistorySectionGap separates the project and recent conversation sections.
 const ChatHistorySectionGap = float32(12)
+
+// ChatHistorySearchHeaderHeight keeps the new-chat action and search field above the scrollport.
+func ChatHistorySearchHeaderHeight(scale float32) float32 {
+	return ChatScaledSize(scale, 38) + ChatScaledSize(scale, 8) + ChatScaledSize(scale, 32) + ChatScaledSize(scale, 8)
+}
 
 // Sidebar rows share one inset and trailing-action size. Vertical drawer padding stays 12
 // because the history scrollport subtracts 24; horizontal padding is the tighter 4-unit inset.
@@ -233,7 +238,7 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 		}
 		content := woxwidget.Container{Width: contentWidth, Height: props.Height, Padding: woxwidget.Insets{Left: inset, Top: 6, Right: inset, Bottom: chatContentBottomInset}, Child: column}
 		if overlay == nil {
-			return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{ChatCatalog(*history), content}}
+			return woxcomponent.SidebarSplit(ChatCatalog(*history), content)
 		}
 		contentInnerWidth := max(float32(0), contentWidth-2*inset)
 		contentInnerHeight := max(float32(0), props.Height-14)
@@ -245,14 +250,12 @@ func ChatPreview(props ChatPreviewProps) woxwidget.Widget {
 			}
 		}
 		top := 6 + max(headerHeight, contentInnerHeight-inputHeight-overlay.Height-6)
-		return woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-			ChatCatalog(*history),
+		return woxcomponent.SidebarSplit(ChatCatalog(*history),
 			woxwidget.Stack{Width: contentWidth, Height: props.Height, Children: []woxwidget.StackChild{
 				{Child: content},
 				{Child: woxwidget.Gesture{ID: "chat-panel-dismiss-" + props.Key, OnTap: props.OnDismiss, Child: woxwidget.Container{Width: contentWidth, Height: props.Height}}},
 				{Left: left, Top: top, Child: ChatCatalog(*overlay)},
-			}},
-		}}
+			}})
 	}
 	column := woxwidget.Widget(woxwidget.Flex{Axis: woxwidget.Vertical, Children: children})
 	if props.Dedicated {
@@ -290,6 +293,7 @@ type ChatHeaderProps struct {
 	OpenWindowLabel   string
 	HistoryLabel      string
 	HistoryTooltip    string
+	SidebarOpen       bool
 	Theme             woxcomponent.Theme
 	OnHistory         func()
 	OnDebug           func() bool
@@ -352,19 +356,19 @@ func chatHeaderContent(props ChatHeaderProps) woxwidget.Widget {
 	}
 	title := woxwidget.Gesture{ID: "chat-title-drag-" + props.Key, OnDragStart: props.OnDrag, OnDoubleTap: props.OnDoubleTap, Child: woxwidget.Align{
 		Height: 36, Horizontal: 0, Vertical: 0.5,
-		Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, 14), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
+		Child: woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: ChatScaledSize(props.DensityScale, woxcomponent.SidebarTitleFontSize), Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
 	}}
 	children := []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{ID: "chat-titlebar-drag-" + props.Key, OnDragStart: props.OnDrag, OnDoubleTap: props.OnDoubleTap, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
-		{Left: 2, Child: woxwidget.Align{Width: 36, Height: props.Height, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
-			ID: "chat-history-" + props.Key, Label: props.HistoryLabel, Icon: woxcomponent.SidebarGlyph(20, props.Theme.ResultSubtitle), Width: 36, Height: 36, Radius: 7,
+		{Left: 2, Child: woxwidget.Align{Width: 36, Height: props.Height, Vertical: 0.5, Child: woxcomponent.SidebarToggle(woxcomponent.IconButtonProps{
+			ID: "chat-history-" + props.Key, Label: props.HistoryLabel, Width: 36, Height: 36, Radius: 7,
 			HoverBackground: menuHoverBackground, FocusRingColor: props.Theme.Cursor, OnTap: props.OnHistory,
 			OnHoverAt: func(inside bool, bounds woxui.Rect) {
 				if props.OnHistoryHover != nil {
 					props.OnHistoryHover(inside, props.HistoryTooltip, bounds)
 				}
 			},
-		})}},
+		}, woxcomponent.SidebarTitleIconSize, props.Theme.ResultSubtitle, props.Theme.PreviewText, props.SidebarOpen)}},
 		{Left: 44, Right: 4 + debugWidth + openWindowWidth + exitWidth, StretchWidth: true, Child: woxwidget.Align{Height: props.Height, Vertical: 0.5, Child: title}},
 	}
 	if props.ShowDebug {
@@ -457,23 +461,25 @@ type ChatCatalogItemProps struct {
 
 // ChatCatalogProps contains a typed history, model, or skill catalog.
 type ChatCatalogProps struct {
-	Width         float32
-	Height        float32
-	DensityScale  float32
-	Key           string
-	Label         string
-	Items         []ChatCatalogItemProps
-	EmptyMessage  string
-	Scroll        float32
-	ContentHeight float32
-	ShowNew       bool
-	NewLabel      string
-	Theme         woxcomponent.Theme
-	OnScroll      func(float32)
-	OnNew         func()
-	Picker        bool
-	Filters       []ChatCatalogFilter
-	Search        *woxcomponent.TextFieldProps
+	Width            float32
+	Height           float32
+	DensityScale     float32
+	Key              string
+	Label            string
+	Items            []ChatCatalogItemProps
+	EmptyMessage     string
+	Scroll           float32
+	ContentHeight    float32
+	ShowNew          bool
+	NewLabel         string
+	Theme            woxcomponent.Theme
+	OnScroll         func(float32)
+	OnNew            func()
+	Picker           bool
+	Filters          []ChatCatalogFilter
+	Search           *woxcomponent.TextFieldProps
+	SearchClearLabel string
+	OnSearchClear    func()
 }
 
 // ChatCatalog builds a floating chat catalog.
@@ -534,15 +540,19 @@ func chatHistoryCatalog(props ChatCatalogProps) woxwidget.Widget {
 	panelHeight := max(float32(0), props.Height-outerInset-ChatHistoryFloatingBottomInset)
 	innerWidth := max(float32(0), panelWidth-chatSidebarDrawerPaddingX*2)
 	viewportHeight := max(float32(40), panelHeight-chatSidebarDrawerPaddingY*2)
+	if props.Search != nil {
+		viewportHeight = max(float32(0), panelHeight-chatSidebarDrawerPaddingY*2-ChatHistorySearchHeaderHeight(props.DensityScale))
+	}
 	scrollProps := woxcomponent.ScrollViewProps{
 		Key: woxwidget.Key("chat-catalog-scroll-" + props.Key), Width: innerWidth, Height: viewportHeight, ContentHeight: props.ContentHeight,
 		Offset: props.Scroll, OnScroll: props.OnScroll, RetainState: true, ReserveScrollbarSpace: true,
 		Theme: woxcomponent.ControlTheme{DensityScale: props.DensityScale},
 	}
 	rowWidth := scrollProps.ContentViewportWidth()
-	rows := []woxwidget.Widget{
-		ChatCatalogItem(ChatCatalogItemProps{SelectID: "chat-new-" + props.Key, Kind: "history-new", Title: props.NewLabel, DensityScale: props.DensityScale, OnSelect: props.OnNew}, rowWidth, ChatScaledSize(props.DensityScale, 38), props.Theme),
-		woxwidget.Container{Width: rowWidth, Height: ChatScaledSize(props.DensityScale, 8)},
+	newChat := ChatCatalogItem(ChatCatalogItemProps{SelectID: "chat-new-" + props.Key, Kind: "history-new", Title: props.NewLabel, DensityScale: props.DensityScale, OnSelect: props.OnNew}, rowWidth, ChatScaledSize(props.DensityScale, 38), props.Theme)
+	var rows []woxwidget.Widget
+	if props.Search == nil {
+		rows = append(rows, newChat, woxwidget.Container{Width: rowWidth, Height: ChatScaledSize(props.DensityScale, 8)})
 	}
 
 	groupLabel := ""
@@ -575,11 +585,29 @@ func chatHistoryCatalog(props ChatCatalogProps) woxwidget.Widget {
 	scrollProps.Content = woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}
 	scrollProps.ThumbColor = thumbColor
 	scroll := woxcomponent.WoxScrollView(scrollProps)
-	background := props.Theme.ResultSubtitle
-	background.A = uint8(float32(background.A) * 0.08)
-	border := props.Theme.ResultSubtitle
-	border.A = uint8(float32(border.A) * 0.12)
-	panel := woxwidget.Container{Width: panelWidth, Height: panelHeight, Radius: ChatScaledSize(props.DensityScale, 12), Color: background, BorderColor: border, BorderWidth: 1, Padding: woxwidget.Insets{Left: chatSidebarDrawerPaddingX, Top: chatSidebarDrawerPaddingY, Right: chatSidebarDrawerPaddingX, Bottom: chatSidebarDrawerPaddingY}, Child: scroll}
+	theme := props.Theme
+	theme.Controls.DensityScale = props.DensityScale
+	var content woxwidget.Widget = scroll
+	if props.Search != nil {
+		s := func(value float32) float32 { return ChatScaledSize(props.DensityScale, value) }
+		search := *props.Search
+		search.Width, search.Height, search.Theme = rowWidth, s(32), theme.Controls
+		right := s(12)
+		if search.Value != "" {
+			right = s(36)
+		}
+		search.Padding = woxwidget.Insets{Left: s(12), Top: s(4), Right: right, Bottom: s(4)}
+		search.LineHeight = search.Height - 2*s(4)
+		search.Background = woxcomponent.TitleBarAlpha(theme.Controls.BodyText, 18)
+		search.Style = woxui.TextStyle{Size: woxcomponent.SettingsControlFontSize}
+		search.MaxLines = 1
+		field := woxwidget.Stack{Width: rowWidth, Height: s(32), Children: []woxwidget.StackChild{{Child: woxcomponent.WoxTextField(search)}}}
+		if search.Value != "" && props.OnSearchClear != nil {
+			field.Children = append(field.Children, woxwidget.StackChild{Right: s(2), AnchorRight: true, Child: woxwidget.Align{Width: s(28), Height: s(32), Horizontal: .5, Vertical: .5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{ID: "chat-history-search-clear", Label: props.SearchClearLabel, Width: s(28), Height: s(28), Radius: s(14), Icon: woxcomponent.CloseGlyph(s(16), theme.Controls.TextSecondary), HoverBackground: woxcomponent.TitleBarAlpha(theme.Controls.TextSecondary, 25), FocusRingColor: theme.Controls.Focus, OnTap: props.OnSearchClear})}})
+		}
+		content = woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{newChat, woxwidget.Container{Height: s(8)}, field, woxwidget.Container{Height: s(8)}, scroll}}
+	}
+	panel := woxcomponent.SidebarPanel(panelWidth, panelHeight, woxwidget.Insets{Left: chatSidebarDrawerPaddingX, Top: chatSidebarDrawerPaddingY, Right: chatSidebarDrawerPaddingX, Bottom: chatSidebarDrawerPaddingY}, theme, content)
 	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Left: outerInset, Top: outerInset, Child: panel}}}
 }
 

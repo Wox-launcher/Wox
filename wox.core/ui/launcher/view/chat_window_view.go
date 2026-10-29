@@ -38,6 +38,7 @@ type ChatWindowTitleBarProps struct {
 	Platform                                string
 	Active, Maximized                       bool
 	Theme                                   woxcomponent.Theme
+	Icon                                    *woxui.Image
 	Header                                  *previewview.ChatHeaderProps
 	OnDrag, OnMinimize, OnMaximize, OnClose func()
 }
@@ -47,6 +48,8 @@ func ChatWindowTitleBar(props ChatWindowTitleBarProps) woxwidget.Widget {
 	left := float32(0)
 	if props.Platform == "darwin" {
 		left = 78 // Reserve the native traffic-light cluster in logical units.
+	} else {
+		left = 40
 	}
 	children := []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{
@@ -57,6 +60,9 @@ func ChatWindowTitleBar(props ChatWindowTitleBarProps) woxwidget.Widget {
 			ID: "chat.window.close", Width: props.Width, Platform: props.Platform, Theme: props.Theme.Controls, Active: props.Active, Maximized: props.Maximized,
 			OnMinimize: props.OnMinimize, OnMaximize: props.OnMaximize, OnClose: props.OnClose,
 		})},
+	}
+	if props.Platform != "darwin" && props.Icon != nil {
+		children = append(children, woxwidget.StackChild{Left: 12, Child: woxwidget.Align{Width: 20, Height: ChatWindowTitleBarHeight, Vertical: .5, Child: woxwidget.Image{Source: props.Icon, Width: 20, Height: 20}}})
 	}
 	if props.Header != nil {
 		header := *props.Header

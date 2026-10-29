@@ -89,6 +89,11 @@ func windowsBigIconSize(source *Image) int {
 
 // windowsHICONFromImage rasterizes a premultiplied RGBA image into a 32-bit alpha HICON.
 func windowsHICONFromImage(source *Image, size int) (win.HICON, error) {
+	return windowsIconOrCursorFromImage(source, size, true)
+}
+
+// windowsIconOrCursorFromImage shares alpha bitmap creation for icons and custom cursors.
+func windowsIconOrCursorFromImage(source *Image, size int, icon bool) (win.HICON, error) {
 	rgba, err := windowsIconRGBA(source, size)
 	if err != nil {
 		return 0, err
@@ -116,13 +121,19 @@ func windowsHICONFromImage(source *Image, size int) (win.HICON, error) {
 		win.DeleteObject(win.HGDIOBJ(color))
 		return 0, fmt.Errorf("create window icon mask failed")
 	}
-	icon := win.CreateIconIndirect(&win.ICONINFO{FIcon: win.TRUE, HbmMask: mask, HbmColor: color})
+	info := win.ICONINFO{HbmMask: mask, HbmColor: color}
+	if icon {
+		info.FIcon = win.TRUE
+	} else {
+		info.XHotspot, info.YHotspot = uint32(size/2), uint32(size/3)
+	}
+	handle := win.CreateIconIndirect(&info)
 	win.DeleteObject(win.HGDIOBJ(color))
 	win.DeleteObject(win.HGDIOBJ(mask))
-	if icon == 0 {
+	if handle == 0 {
 		return 0, fmt.Errorf("create window icon failed")
 	}
-	return icon, nil
+	return handle, nil
 }
 
 func windowsIconRGBA(source *Image, size int) (*image.RGBA, error) {

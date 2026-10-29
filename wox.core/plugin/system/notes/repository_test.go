@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,39 +99,29 @@ func TestRepositorySaveConflictPreservesRemoteAndCreatesCopy(t *testing.T) {
 	}
 }
 
-func TestRepositoryTrashRestoreAndPurge(t *testing.T) {
+func TestRepositoryDeletePermanentlyRemovesNote(t *testing.T) {
 	repository, db := newRepositoryForTest(t)
 	record, err := repository.Create()
 	if err != nil {
-		t.Fatalf("create: %v", err)
+		t.Fatal(err)
 	}
 	record, _, err = repository.Save(record.ID, record.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "keep"}}})
 	if err != nil {
-		t.Fatalf("persist note: %v", err)
+		t.Fatal(err)
 	}
-	deleted, err := repository.Delete(record.ID)
-	if err != nil || deleted.DeletedAt == 0 {
-		t.Fatalf("delete: %#v err=%v", deleted, err)
+	if _, err := repository.Delete(record.ID); err != nil {
+		t.Fatal(err)
 	}
-	restored, err := repository.Restore(record.ID)
-	if err != nil || restored.DeletedAt != 0 {
-		t.Fatalf("restore: %#v err=%v", restored, err)
-	}
-	deleted, err = repository.Delete(record.ID)
-	if err != nil {
-		t.Fatalf("delete again: %v", err)
-	}
-	deleted.DeletedAt = time.Now().Add(-61 * 24 * time.Hour).UnixMilli()
-	if err := repository.write(deleted); err != nil {
-		t.Fatalf("backdate trash: %v", err)
-	}
-	count, err := repository.PurgeDeletedBefore(time.Now().Add(-60 * 24 * time.Hour))
-	if err != nil || count != 1 {
-		t.Fatalf("purge count=%d err=%v", count, err)
+	if _, err := repository.Get(record.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("deleted note still exists: %v", err)
 	}
 	var remaining int64
 	if err := db.Model(&database.PluginSetting{}).Where("plugin_id = ? AND key = ?", common.NotesPluginID, noteSettingPrefix+record.ID).Count(&remaining).Error; err != nil || remaining != 0 {
-		t.Fatalf("purged row remains=%d err=%v", remaining, err)
+		t.Fatalf("deleted row remains=%d err=%v", remaining, err)
+	}
+	var oplog database.Oplog
+	if err := db.Where("entity_id = ? AND key = ? AND operation = ?", common.NotesPluginID, noteSettingPrefix+record.ID, "delete").First(&oplog).Error; err != nil {
+		t.Fatalf("missing sync delete: %v", err)
 	}
 }
 
@@ -155,10 +146,6 @@ func TestRepositoryLocalPreferencesDoNotSyncAndTrashHonorsBoundary(t *testing.T)
 	record, _, err = repository.Save(record.ID, record.Revision, common.NoteDocument{Blocks: []common.NoteBlock{{Text: "keep"}}})
 	if err != nil {
 		t.Fatalf("persist note: %v", err)
-	}
-	record, err = repository.Delete(record.ID)
-	if err != nil {
-		t.Fatalf("delete: %v", err)
 	}
 	cutoff := time.Now().Add(-60 * 24 * time.Hour).Truncate(time.Millisecond)
 	record.DeletedAt = cutoff.Add(time.Millisecond).UnixMilli()
@@ -230,13 +217,6 @@ func TestRepositoryRemovesAttachmentsOnPermanentDelete(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
-	if _, err := repository.Delete(record.ID); err != nil {
-		t.Fatalf("soft delete: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("trash should keep attachments: %v", err)
-	}
-
 	shared, err := repository.Create()
 	if err != nil {
 		t.Fatalf("create shared: %v", err)
@@ -246,14 +226,14 @@ func TestRepositoryRemovesAttachmentsOnPermanentDelete(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("save shared: %v", err)
 	}
-	if err := repository.Discard(record.ID); err != nil {
-		t.Fatalf("discard first: %v", err)
+	if _, err := repository.Delete(record.ID); err != nil {
+		t.Fatalf("delete first: %v", err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("shared attachment was removed too early: %v", err)
 	}
-	if err := repository.Discard(shared.ID); err != nil {
-		t.Fatalf("discard last: %v", err)
+	if _, err := repository.Delete(shared.ID); err != nil {
+		t.Fatalf("delete last: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("last note should remove its attachments, err=%v", err)

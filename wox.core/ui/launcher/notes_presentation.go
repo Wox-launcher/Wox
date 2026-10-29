@@ -19,8 +19,14 @@ import (
 func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widget {
 	a := c.owner
 	theme := a.palette().componentTheme()
+	fullSize := frame.Size
+	sidebarVisible := c.sidebar.open
+	sidebarWidth := theme.Controls.Scaled(256)
+	if sidebarVisible {
+		frame.Size.Width -= sidebarWidth
+	}
 	findQuery, findTarget := c.currentFind()
-	toolbar := c.buildToolbar(frame.Size.Width, frame.WindowFocused, theme)
+	toolbar := c.buildToolbar(fullSize.Width, frame.WindowFocused, theme)
 	formatHeight := float32(0)
 	var formatBar woxwidget.Widget
 	if c.formatVisible {
@@ -83,19 +89,49 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 	var overlay woxwidget.Widget
 	if c.linkOpen {
 		overlay = c.buildLinkOverlay(frame.Size, theme)
-	} else if c.searchOpen {
-		overlay = c.buildSearchOverlay(frame.Size, theme)
 	} else if c.moreOpen {
 		overlay = c.buildMoreOverlay(frame.Size, theme)
 	}
 	if c.findOpen {
 		overlay = c.buildFindOverlay(frame.Size, theme, overlay)
 	}
-	overlay = c.composeLinuxInlineTooltip(frame.Size, theme, overlay)
-	return launcherview.NotesWindow(launcherview.NotesWindowProps{
-		Width: frame.Size.Width, Height: frame.Size.Height, Label: a.language.translate("i18n:notes_title"), Toolbar: toolbar, Editor: editor,
+	bodyToolbar := toolbar
+	if sidebarVisible {
+		bodyToolbar = woxwidget.Container{Width: frame.Size.Width, Height: launcherview.NotesToolbarHeight}
+	}
+	body := launcherview.NotesWindow(launcherview.NotesWindowProps{
+		Width: frame.Size.Width, Height: frame.Size.Height, Label: a.language.translate("i18n:notes_title"), Toolbar: bodyToolbar, Editor: editor,
 		FormatBar: formatBar, Status: status, Overlay: overlay, Theme: theme,
 	})
+	var sidebar woxwidget.Widget
+	if sidebarVisible {
+		height := fullSize.Height - theme.Controls.Scaled(16)
+		height -= launcherview.NotesToolbarHeight
+		sidebar = c.buildSidebar(woxui.Size{Width: theme.Controls.Scaled(240), Height: height}, theme)
+	}
+	result := launcherview.NotesSidebarLayout(fullSize, sidebar, body, sidebarWidth, theme.Controls.Scaled(8), theme.Background)
+	if sidebarVisible {
+		// Window chrome spans the entire window; only the editor is offset by a docked sidebar.
+		result = woxwidget.Stack{Width: fullSize.Width, Height: fullSize.Height, Children: []woxwidget.StackChild{{Child: result}, {Child: toolbar}}}
+	}
+	// Keep the content at a stable tree path while the drag preview appears.
+	chrome := []woxwidget.StackChild{{Child: result}}
+	if c.sidebar.dragging && c.sidebar.dragMoved {
+		scale := theme.Controls.Scaled
+		width := min(scale(220), fullSize.Width)
+		left := max(float32(0), min(c.sidebar.dragPointer.X-scale(8), fullSize.Width-width))
+		top := max(float32(0), min(c.sidebar.dragPointer.Y-scale(10), fullSize.Height-scale(20)))
+		ghost := woxwidget.Semantics{AutomationID: "notes.sidebar.drag.preview", Role: woxui.AccessibilityRoleText, Label: c.sidebar.dragSource.Title, Child: woxcomponent.ReorderGhost(c.sidebar.dragSource.Title, width, scale(16), theme.Controls.DensityScale, woxui.TextStyle{Size: scale(13)}, theme.Controls.BodyText, theme.Controls)}
+		chrome = append(chrome, woxwidget.StackChild{Left: left, Top: top, Child: ghost})
+	}
+	result = woxwidget.Stack{Width: fullSize.Width, Height: fullSize.Height, Children: chrome}
+	// Hover anchors are window coordinates, including those originating in the sidebar.
+	result = c.composeLinuxInlineTooltip(fullSize, theme, result)
+	if c.sidebar.dialog != "" {
+		return woxwidget.Stack{Width: fullSize.Width, Height: fullSize.Height, Children: []woxwidget.StackChild{{Child: result}, {Child: c.sidebarDialog(fullSize, theme)}}}
+	}
+	return result
+
 }
 
 // buildMarkdownEditor hosts the raw Markdown source instead of the rich preview.
@@ -155,20 +191,25 @@ func (c *notesWindowController) buildToolbar(width float32, active bool, theme w
 	if custom := notesplugin.CustomNoteTitle(c.document); custom != "" {
 		title = custom
 	}
-	searchLabel := c.owner.language.translate("i18n:notes_search") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+") + ")"
 	pinHotkey := "(" + strings.Join(formatHotkeyLabels(primaryHotkey("shift+p")), "+") + ")"
 	pinLabel := c.owner.language.translate("i18n:notes_pin_window") + " " + pinHotkey
 	if c.windowPinned {
 		pinLabel = c.owner.language.translate("i18n:notes_unpin_window") + " " + pinHotkey
 	}
 	newLabel := c.owner.language.translate("i18n:notes_new") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("n")), "+") + ")"
+	densityScale := float32(1)
+	if c.owner.densityScale != nil {
+		densityScale = c.owner.densityScale()
+	}
 	return launcherview.NotesToolbar(launcherview.NotesToolbarProps{
 		Width: width, Active: active, Platform: runtime.GOOS, Pinned: c.windowPinned,
+		DensityScale: densityScale,
+		SidebarLabel: c.sidebarLabel("sidebar_toggle") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")", SidebarOpen: c.sidebar.open, OnSidebar: c.toggleSidebar,
 		Maximized: c.windowMaximized, FormatVisible: c.formatVisible, Title: title,
-		Label: c.owner.language.translate("i18n:notes_title"), SearchLabel: searchLabel, PinLabel: pinLabel, NewLabel: newLabel,
+		Label: c.owner.language.translate("i18n:notes_title"), PinLabel: pinLabel, NewLabel: newLabel,
 		FormatLabel: c.owner.language.translate("i18n:notes_format"), MoreLabel: c.owner.language.translate("i18n:notes_more"),
 		Icon: notesWindowIcon(), Theme: theme, OnHover: c.updateToolbarTooltip,
-		OnSearch: c.toggleSearch, OnPin: c.toggleWindowPin,
+		OnPin:    c.toggleWindowPin,
 		OnFormat: func() { c.formatVisible = !c.formatVisible; c.invalidate() },
 		OnNew:    func() { c.runAction(c.owner.openNewNoteWindow) },
 		OnMore:   func() { c.moreOpen = !c.moreOpen; c.formatMore = false; c.searchOpen = false; c.invalidate() },
@@ -295,7 +336,7 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 	}
 	return launcherview.NotesSearchOverlay(launcherview.NotesSearchProps{
 		Size: size, Items: rows, Selected: c.searchIndex, Theme: theme,
-		Label: c.owner.language.translate("i18n:notes_search"), Hint: c.owner.language.translate("i18n:notes_search_placeholder"),
+		Label: c.owner.language.translate("i18n:notes_search"), Hint: c.searchHint(),
 		EmptyLabel: c.owner.language.translate("i18n:notes_no_results"), CloseLabel: c.owner.language.translate("i18n:close"),
 		Value: c.searchEditor.Text(), Editor: c.searchEditor, Focus: c.searchFocus, Window: c.noteMeasureWindow(),
 		OnChanged: func(string) { _ = c.reloadSummaries(); c.searchIndex = 0; c.invalidate() }, OnKey: c.onSearchKey,
@@ -306,17 +347,12 @@ func (c *notesWindowController) buildSearchOverlay(size woxui.Size, theme woxcom
 // searchRowProps resolves domain labels and captures the selected record for activation.
 func (c *notesWindowController) searchRowProps(summary common.NoteSummary) launcherview.NotesSearchItem {
 	label := summary.Title
-	if summary.DeletedAt > 0 {
-		label += " · " + c.owner.language.translate("i18n:notes_restore")
-	}
 	return launcherview.NotesSearchItem{ID: summary.ID, Label: label, Updated: util.FormatTimestamp(summary.UpdatedAt),
 		Section: c.searchSectionLabel(summary), OnTap: func() { c.openSearchItem(summary) }}
 }
 
 func (c *notesWindowController) searchSectionLabel(item common.NoteSummary) string {
 	switch {
-	case item.DeletedAt > 0:
-		return c.owner.language.translate("i18n:notes_deleted")
 	case item.PinnedAt > 0:
 		return c.owner.language.translate("i18n:notes_favorites")
 	default:
@@ -325,7 +361,7 @@ func (c *notesWindowController) searchSectionLabel(item common.NoteSummary) stri
 }
 
 func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcomponent.Theme) woxwidget.Widget {
-	width := float32(240)
+	width := min(theme.Controls.Scaled(300), max(float32(0), size.Width-theme.Controls.Scaled(16)))
 	if c.formatMore {
 		rows := []woxwidget.Widget{
 			c.menuRow("format-bullet", c.owner.language.translate("i18n:notes_format_bullet"), width, theme, func() { c.setBlock(common.NoteBlockBullet) }),
@@ -348,16 +384,14 @@ func (c *notesWindowController) buildMoreOverlay(size woxui.Size, theme woxcompo
 	}
 	rows := []woxwidget.Widget{
 		c.menuRow("view", c.viewModeMenuLabel(), width, theme, c.toggleMarkdownView),
+		launcherview.NotesMenuSeparator(width, theme),
 		c.menuRow("copy-link", c.owner.language.translate("i18n:notes_copy_link"), width, theme, c.copyLink),
 		c.menuRow("export-md", c.owner.language.translate("i18n:notes_export_markdown"), width, theme, func() { c.export("md") }),
 		c.menuRow("export-txt", c.owner.language.translate("i18n:notes_export_text"), width, theme, func() { c.export("txt") }),
 		c.menuRow("export-html", c.owner.language.translate("i18n:notes_export_html"), width, theme, func() { c.export("html") }),
+		launcherview.NotesMenuSeparator(width, theme),
 	}
-	if c.record.DeletedAt > 0 {
-		rows = append(rows, c.menuRow("restore", c.owner.language.translate("i18n:notes_restore"), width, theme, c.restore))
-	} else {
-		rows = append(rows, c.menuRow("delete", c.owner.language.translate("i18n:notes_delete"), width, theme, c.delete))
-	}
+	rows = append(rows, c.menuRow("delete", c.owner.language.translate("i18n:notes_delete"), width, theme, c.delete))
 	return c.moreOverlay(size, width, rows, theme)
 }
 
@@ -366,7 +400,23 @@ func (c *notesWindowController) moreOverlay(size woxui.Size, width float32, rows
 }
 
 func (c *notesWindowController) menuRow(id, label string, width float32, theme woxcomponent.Theme, action func()) woxwidget.Widget {
-	return launcherview.NotesMenuRow(id, label, width, theme, func() { c.moreOpen = false; action(); c.invalidate() })
+	size, color := theme.Controls.Scaled(16), theme.ActionText
+	var icon woxwidget.Widget
+	switch id {
+	case "view":
+		if c.markdownView {
+			icon = woxcomponent.ArticleGlyph(size, color)
+		} else {
+			icon = woxcomponent.CodeGlyph(size, color)
+		}
+	case "copy-link":
+		icon = woxcomponent.FormatGlyph("link", size, color)
+	case "export-md", "export-txt", "export-html":
+		icon = woxcomponent.DownloadGlyph(size, color)
+	case "delete":
+		icon = woxcomponent.DeleteGlyph(size, color)
+	}
+	return launcherview.NotesMenuRow(id, label, width, theme, icon, func() { c.moreOpen = false; action(); c.invalidate() })
 }
 
 // buildLinkOverlay supplies the link draft and event handlers to its view.

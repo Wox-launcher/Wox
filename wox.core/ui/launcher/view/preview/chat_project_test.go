@@ -118,6 +118,7 @@ func TestChatProjectArrowAndActionColors(t *testing.T) {
 		ResultSubtitle: woxui.Color{R: 110, G: 110, B: 110, A: 255},
 		SelectedTitle:  woxui.Color{R: 255, G: 255, B: 255, A: 255},
 		ErrorText:      woxui.Color{R: 220, G: 45, B: 55, A: 255},
+		Controls:       woxcomponent.ControlTheme{TextSecondary: woxui.Color{R: 130, G: 140, B: 150, A: 255}},
 	}
 	for _, collapsed := range []bool{false, true} {
 		for _, hovered := range []bool{false, true} {
@@ -131,8 +132,9 @@ func TestChatProjectArrowAndActionColors(t *testing.T) {
 				t.Fatalf("collapsed %v hovered %v: arrow slot = %+v", collapsed, hovered, arrow)
 			}
 			if hovered {
-				want := woxcomponent.DisclosureChevronGlyph(16, theme.PreviewText, !collapsed).(woxwidget.Image)
-				if arrow.Child.(woxwidget.Image).Source != want.Source {
+				want := woxcomponent.DisclosureChevronGlyph(12, theme.Controls.TextSecondary, !collapsed).(woxwidget.Image)
+				align := arrow.Child.(woxwidget.Align)
+				if align.Horizontal != .5 || align.Vertical != .5 || align.Child.(woxwidget.Image).Source != want.Source {
 					t.Fatalf("collapsed %v: incorrect arrow", collapsed)
 				}
 				actions := stack.Children[1].Child.(woxwidget.Align).Child.(woxwidget.Flex)
@@ -148,6 +150,27 @@ func TestChatProjectArrowAndActionColors(t *testing.T) {
 							t.Fatal("project delete should turn red without a button background")
 						}
 					}
+				}
+			}
+		}
+	}
+}
+
+func TestChatDisclosureMatchesNotesAtEachDensity(t *testing.T) {
+	for _, density := range []float32{.9, 1, 1.1} {
+		for _, color := range []woxui.Color{{R: 80, G: 80, B: 80, A: 255}, {R: 180, G: 180, B: 180, A: 255}} {
+			for _, collapsed := range []bool{false, true} {
+				theme := woxcomponent.Theme{Controls: woxcomponent.ControlTheme{TextSecondary: color}}
+				item := ChatCatalogItemProps{SelectID: "project", Kind: "project-group", Title: "Project", DensityScale: density, Collapsed: collapsed}
+				group := chatProjectHistoryGroup(item, 240, theme, true, false, false, false, nil, nil, nil, nil).(woxwidget.Semantics)
+				row := group.Child.(woxwidget.Gesture).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture).Child.(woxwidget.Container)
+				label := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+				arrow := label.Children[len(label.Children)-1].(woxwidget.Container).Child.(woxwidget.Align)
+				glyph := arrow.Child.(woxwidget.Image)
+				size := ChatScaledSize(density, 12)
+				want := woxcomponent.DisclosureChevronGlyph(size, color, !collapsed).(woxwidget.Image)
+				if glyph.Width != size || glyph.Height != size || glyph.Source != want.Source {
+					t.Fatalf("density %v collapsed %v: disclosure differs from Notes", density, collapsed)
 				}
 			}
 		}

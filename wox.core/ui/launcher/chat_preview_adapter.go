@@ -60,6 +60,7 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 		historyHeight := max(float32(0), height-previewview.ChatScaledSize(a.chatDensityScale(), previewview.ChatHistoryFloatingInset)-previewview.ChatHistoryFloatingBottomInset)
 		props := a.chatHistoryCatalogProps(snapshot, palette, catalogWidth, historyHeight)
 		props.Height = height
+		a.configureChatHistorySearch(&props, snapshot, !showOpenWindow, window)
 		history = &props
 	}
 	panel := snapshot.panel
@@ -87,6 +88,42 @@ func (a *App) buildChatPreviewFromSnapshot(snapshot *chatPreviewSnapshot, palett
 			History:  history, OnDismiss: func() { a.chat.toggleChatPanel(panel) },
 		}})
 	return a.chatProjectOverlay(snapshot, palette, width, height, window, body)
+}
+
+// configureChatHistorySearch keeps focus requests scoped to the host showing the sidebar.
+func (a *App) configureChatHistorySearch(props *previewview.ChatCatalogProps, snapshot *chatPreviewSnapshot, dedicated bool, window *woxui.Window) {
+	props.Search.Window = window
+	props.Search.Focused = snapshot.historyFocus && snapshot.historyFocusDedicated == dedicated
+	searchKey := props.Search.OnKey
+	props.Search.OnKey = func(event woxui.KeyEvent) bool {
+		if searchKey(event) {
+			return true
+		}
+		if event.Down && !event.Composing && event.Modifiers == 0 && event.Key == woxui.KeyEscape {
+			host := a.host
+			if dedicated {
+				host = a.chatWindow.chatHost
+			}
+			if host != nil {
+				host.RequestFocus(woxwidget.Key("chat-input-" + snapshot.key))
+			}
+			return true
+		}
+		return false
+	}
+	props.Search.OnFocusChange = func(focused bool) {
+		if !focused {
+			if state := a.chat.chatPreview; state != nil && state.historyFocus && state.historyFocusDedicated == dedicated {
+				state.historyFocus = false
+				a.invalidateChatSurfaces()
+			}
+		}
+	}
+	clear := props.OnSearchClear
+	props.OnSearchClear = func() {
+		clear()
+		a.chat.focusHistorySearch(dedicated)
+	}
 }
 
 // chatHeaderProps resolves the current title and available controller actions.
@@ -118,7 +155,7 @@ func (a *App) chatHeaderProps(snapshot *chatPreviewSnapshot, palette uiPalette, 
 		DebugCopiedLabel: a.language.translate("i18n:toolbar_copied"),
 		ShowExit:         showExit && launcherChromeHidden(a.show, a.chat.chatFullscreen), ExitLabel: exitLabel,
 		ShowOpenWindow: showOpenWindow, OpenWindowLabel: openWindowLabel,
-		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, Theme: palette.componentTheme(),
+		HistoryLabel: historyLabel, HistoryTooltip: historyTooltip, SidebarOpen: chatHistoryVisible(snapshot.panel, snapshot.sidebarOpen), Theme: palette.componentTheme(),
 		OnHistory: func() { a.chat.toggleChatPanel("history") }, OnHistoryHover: a.previews.setPreviewTooltip, OnDebug: func() bool {
 			value := formatChatDebugTrace(snapshot.chat.DebugTrace)
 			return a.chat.copyChatText(value)

@@ -712,6 +712,7 @@ func (h *Host) refreshHoverFromPointer() {
 	}
 	target := h.root.hitTest(h.pointerAt)
 	if nodeID(target) == h.hovered {
+		h.updatePointerCursor(target, h.pointerAt)
 		return
 	}
 	targetGesture := ""
@@ -720,6 +721,7 @@ func (h *Host) refreshHoverFromPointer() {
 	}
 	if targetGesture != "" && targetGesture == h.hoveredGestureID {
 		h.hovered = target.id
+		h.updatePointerCursor(target, h.pointerAt)
 		return
 	}
 	h.setHovered(target, h.pointerAt)
@@ -1434,6 +1436,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		if h.panning != 0 {
 			panner := h.nodes[h.panning]
 			h.panning = 0
+			h.updatePointerCursor(target, event.Position)
 			h.dragging = false
 			h.pressed = 0
 			if panner != nil && panner.gesture != nil && panner.gesture.onPanEnd != nil {
@@ -1809,6 +1812,9 @@ func (h *Host) remapCoverHover() {
 
 // updatePointerCursor resolves position-sensitive cursors before static ancestor fallbacks.
 func (h *Host) updatePointerCursor(target *node, position woxui.Point) {
+	if panner := h.nodes[h.panning]; panner != nil && panner.gesture != nil && panner.gesture.cursor != woxui.PointerCursorDefault {
+		target = panner
+	}
 	cursor := woxui.PointerCursorDefault
 	for current := target; current != nil; current = current.parent {
 		if current.gesture != nil && current.gesture.cursorAt != nil {

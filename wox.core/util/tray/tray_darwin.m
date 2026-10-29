@@ -399,7 +399,14 @@ void addMenuItem(const char *title, int tag) {
       item.tag = tag;
       item.target = globalTarget;
       [globalMenu addItem:item];
+      [item release];
     }
+  }
+}
+
+void addMenuSeparator(void) {
+  @autoreleasepool {
+    [globalMenu addItem:[NSMenuItem separatorItem]];
   }
 }
 

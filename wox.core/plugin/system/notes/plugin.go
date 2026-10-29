@@ -56,7 +56,6 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 		Commands: []plugin.MetadataCommand{
 			{Command: "new", Description: "i18n:plugin_notes_command_new"},
 			{Command: "search", Description: "i18n:plugin_notes_command_search"},
-			{Command: "deleted", Description: "i18n:plugin_notes_command_deleted"},
 		},
 		Features: []plugin.MetadataFeature{
 			{Name: plugin.MetadataFeatureDeepLink},
@@ -79,6 +78,9 @@ func (p *Plugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	p.api.OnMRURestore(ctx, p.handleMRURestore)
 	p.registerPluginTools(ctx)
 	p.api.OnSettingChanged(ctx, func(callbackCtx context.Context, key string, _ string) {
+		if strings.HasPrefix(key, noteGroupPrefix) || strings.HasPrefix(key, notePlacementPrefix) {
+			p.repository.ExternalChanged("")
+		}
 		if strings.HasPrefix(key, noteSettingPrefix) {
 			p.repository.ExternalChanged(strings.TrimPrefix(key, noteSettingPrefix))
 		}
@@ -105,12 +107,10 @@ func (p *Plugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResp
 	switch command {
 	case "new":
 		return plugin.NewQueryResponse([]plugin.QueryResult{p.newResult()})
-	case "deleted":
-		return plugin.NewQueryResponse(p.noteResults(ctx, search, true))
 	case "search":
-		return plugin.NewQueryResponse(p.noteResults(ctx, search, false))
+		return plugin.NewQueryResponse(p.noteResults(ctx, search))
 	}
-	return plugin.NewQueryResponse(p.noteResults(ctx, search, false))
+	return plugin.NewQueryResponse(p.noteResults(ctx, search))
 }
 
 func (p *Plugin) newResult() plugin.QueryResult {
@@ -122,15 +122,15 @@ func (p *Plugin) newResult() plugin.QueryResult {
 	}
 }
 
-func (p *Plugin) noteResults(ctx context.Context, search string, deleted bool) []plugin.QueryResult {
-	records, err := p.repository.List(true)
+func (p *Plugin) noteResults(ctx context.Context, search string) []plugin.QueryResult {
+	records, err := p.repository.List(false)
 	if err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to list notes: %v", err))
 		return nil
 	}
 	results := make([]plugin.QueryResult, 0, len(records))
 	for _, record := range records {
-		if (record.DeletedAt > 0) != deleted || DocumentIsEmpty(record.Document) {
+		if DocumentIsEmpty(record.Document) {
 			continue
 		}
 		title := NoteTitle(record.Document)
@@ -191,15 +191,6 @@ func noteResultPreviewMarkdown(document common.NoteDocument) string {
 
 func (p *Plugin) noteActions(record common.NoteRecord) []plugin.QueryResultAction {
 	contextData := noteActionContext(record.ID)
-	if record.DeletedAt > 0 {
-		return []plugin.QueryResultAction{{Id: "restore", Name: "i18n:plugin_notes_action_restore", IsDefault: true, Icon: icons.Get(icons.ActionUpdate), ContextData: contextData, Action: func(ctx context.Context, _ plugin.ActionContext) {
-			if _, err := p.repository.Restore(record.ID); err != nil {
-				p.notifyError(ctx, err)
-				return
-			}
-			p.openWindow(ctx, common.NotesWindowRequest{Action: common.NotesWindowOpen, NoteID: record.ID})
-		}}}
-	}
 	// Action verbs use theme-adaptive catalog SVGs so they stay visible on both appearances.
 	// The stored field stays PinnedAt, but the user-facing concept is Favorites, shared
 	// with clipboard, color and folder; the pin glyph belongs to "Pin in current query".
@@ -496,13 +487,9 @@ func (p *Plugin) NotesDelete(_ context.Context, id string) (common.NoteRecord, e
 	return p.repository.Delete(id)
 }
 
-// NotesDiscard permanently removes a note so empty drafts never enter trash.
+// NotesDiscard permanently removes an empty draft.
 func (p *Plugin) NotesDiscard(_ context.Context, id string) error {
 	return p.repository.Discard(id)
-}
-
-func (p *Plugin) NotesRestore(_ context.Context, id string) (common.NoteRecord, error) {
-	return p.repository.Restore(id)
 }
 
 func (p *Plugin) NotesExport(_ context.Context, id, format string) (common.NoteExport, error) {

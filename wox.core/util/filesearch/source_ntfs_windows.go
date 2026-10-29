@@ -34,6 +34,7 @@ type ntfsSource struct {
 	notify             func(context.Context, []ContentHookNotification)
 	wantsNotifications func() bool
 	progress           func(nativeBuildProgress)
+	changed            func()
 }
 
 // build retains the old searchable generation until enumeration and journal
@@ -163,6 +164,13 @@ func (s *ntfsSource) replay(ctx context.Context, wait bool) error {
 		kind = protocol.Subscribe
 	}
 	wrote := false
+	defer func() {
+		// A failed stream can still have published earlier frames. Notify once
+		// per read, after releasing store locks, even when its checkpoint fails.
+		if wrote && s.changed != nil {
+			s.changed()
+		}
+	}()
 	next, err := s.read(ctx, kind, boundary, func(changes []column.Change) error {
 		notifyContent := s.notify != nil && (s.wantsNotifications == nil || s.wantsNotifications())
 		var notifications []ContentHookNotification
@@ -222,10 +230,10 @@ func (s *ntfsSource) replay(ctx context.Context, wait bool) error {
 			return err
 		}
 		if len(filtered) != 0 {
-			wrote = true
 			if err := s.store.Apply(filtered, cursor); err != nil {
 				return err
 			}
+			wrote = true
 		}
 		if notifyContent {
 			if err := s.store.Read(func(view column.View) error {

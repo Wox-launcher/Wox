@@ -1452,7 +1452,8 @@ func (m *Manager) ShowTray() {
 				m.GetUI(ctx).OpenSettingWindow(ctx, common.SettingWindowContext{Source: common.SettingWindowSourceTray})
 			},
 		}, tray.MenuItem{
-			Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_quit"),
+			Title:           i18n.GetI18nManager().TranslateWox(ctx, "ui_tray_quit"),
+			SeparatorBefore: true,
 			Callback: func() {
 				m.ExitApp(util.NewTraceContext())
 			},

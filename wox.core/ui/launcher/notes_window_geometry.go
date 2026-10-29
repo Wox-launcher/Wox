@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util/screen"
@@ -18,12 +19,50 @@ type notesWindowBounds struct {
 
 // frame handles window and one-shot focus transitions outside widget composition.
 func (c *notesWindowController) frame(host *woxwidget.Host, displayList *woxui.DisplayList, frame woxui.FrameInfo) {
+	if c.sidebar.minimumWidth != c.sidebarMinSize().Width {
+		c.syncSidebarMinSize()
+	}
 	c.observeFrame(frame.Size)
 	host.Frame(displayList, frame)
+	if c.sidebar.menuFocusPending && c.sidebar.dialog == "menu" {
+		c.sidebar.menuFocusPending = false
+		first := "notes.organize.pin"
+		if c.sidebar.target.Group {
+			first = "notes.organize.new-note"
+		}
+		host.RequestFocus(woxwidget.Key(first))
+	}
 	c.revealEditorCaret = false
 	c.findReveal = false
 	if !c.markdownView {
 		c.requestTextFocus = false
+	}
+}
+
+// sidebarMinSize reserves the original editor width when the tree is visible.
+func (c *notesWindowController) sidebarMinSize() woxui.Size {
+	minimum := notesNativeMinSize()
+	minimum.Width = woxcomponent.SidebarMinimumWidth(minimum.Width, c.controlTheme().Scaled(256), c.sidebar.open)
+	return minimum
+}
+
+// syncSidebarMinSize updates native tracking limits and expands an undersized restored window.
+func (c *notesWindowController) syncSidebarMinSize() {
+	if c.managed == nil {
+		return
+	}
+	minimum := c.sidebarMinSize()
+	if c.restoreFrame.Width > 0 && c.restoreFrame.Width < minimum.Width {
+		c.restoreFrame.Width = minimum.Width
+	}
+	// Windows can synchronously render during SetBounds; publish the applied target before resizing.
+	previous := c.sidebar.minimumWidth
+	c.sidebar.minimumWidth = minimum.Width
+	err := syncSidebarWindow(c.managed.Window(), minimum, c.windowMaximized, clampNotesBounds, func(size woxui.Size) { c.requestedSize = size })
+	if err != nil {
+		c.sidebar.minimumWidth = previous
+		c.fail(err)
+		return
 	}
 }
 
@@ -46,6 +85,7 @@ func (c *notesWindowController) observeFrame(size woxui.Size) {
 
 // persistBounds stores logical coordinates and zoom as device-local preferences.
 func (c *notesWindowController) persistBounds() {
+	c.persistSidebarScroll()
 	if c.managed == nil {
 		return
 	}
@@ -78,6 +118,7 @@ func (c *notesWindowController) restoreBounds(window *woxui.Window) bool {
 	}
 	c.manualSize = true
 	bounds := clampNotesBounds(woxui.Rect{X: saved.X, Y: saved.Y, Width: saved.Width, Height: saved.Height})
+	bounds.Width = max(bounds.Width, c.sidebarMinSize().Width)
 	c.restoreFrame = bounds
 	return window.SetBounds(bounds) == nil
 }
@@ -260,6 +301,7 @@ func (c *notesWindowController) restoreFromMaximize() {
 		}
 	}
 	target = clampNotesBounds(target)
+	target.Width = max(target.Width, c.sidebarMinSize().Width)
 	c.requestedSize = woxui.Size{Width: target.Width, Height: target.Height}
 	if err := c.managed.Window().SetBounds(target); err != nil {
 		return

@@ -71,9 +71,10 @@ type linuxTray struct {
 }
 
 type menuEntry struct {
-	id       int32
-	title    string
-	callback func()
+	id        int32
+	title     string
+	callback  func()
+	separator bool
 }
 
 type sniServer struct {
@@ -361,9 +362,15 @@ func (m *dbusMenuServer) AboutToShow(id int32) (bool, *dbus.Error) {
 	return false, nil
 }
 
+// makeMenuEntries keeps command IDs stable while giving separators their own IDs.
 func makeMenuEntries(items []MenuItem) []menuEntry {
 	entries := make([]menuEntry, 0, len(items))
+	separatorID := int32(len(items) + 1)
 	for i, item := range items {
+		if i > 0 && item.SeparatorBefore {
+			entries = append(entries, menuEntry{id: separatorID, separator: true})
+			separatorID++
+		}
 		entries = append(entries, menuEntry{
 			id:       int32(i + 1),
 			title:    item.Title,
@@ -412,6 +419,13 @@ func menuItemProperties(items []menuEntry, id int32) (map[string]dbus.Variant, b
 	}
 	for _, item := range items {
 		if item.id == id {
+			if item.separator {
+				return map[string]dbus.Variant{
+					"type":    dbus.MakeVariant("separator"),
+					"enabled": dbus.MakeVariant(false),
+					"visible": dbus.MakeVariant(true),
+				}, true
+			}
 			return map[string]dbus.Variant{
 				"label":   dbus.MakeVariant(item.title),
 				"enabled": dbus.MakeVariant(true),

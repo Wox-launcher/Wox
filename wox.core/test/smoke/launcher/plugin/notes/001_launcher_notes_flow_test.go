@@ -4,6 +4,8 @@ package notes
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,8 +16,8 @@ import (
 )
 
 // Test001LauncherNotesFlow verifies the native Notes window preserves a rich note through its core lifecycle.
-// Flow: create from Launcher -> enter Markdown -> confirm the window is pinned by default -> create an independent note window -> search the saved note -> delete and restore it.
-// Evidence: the utility window exposes formatted backing text, window-pin state, persisted search results, trash state, and restored content.
+// Flow: create from Launcher -> enter Markdown -> confirm the window is pinned by default -> create an independent note window -> search the saved note -> delete it.
+// Evidence: the utility window exposes formatted backing text, window-pin state, persisted search results, and removal from search.
 func Test001LauncherNotesFlow(t *testing.T) {
 	const title = "Wox Notes Smoke"
 	const markdown = "# " + title + "\n- [ ] ship"
@@ -45,6 +47,11 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		waitForEditorValue(t, ctx, client, "")
 		openSearch(t, ctx, client, title)
 		rowID := waitForSearchRow(t, ctx, client, title, false)
+		if captureDir := os.Getenv("WOX_SMOKE_ARTIFACT_DIR"); captureDir != "" {
+			if err := client.Capture(ctx, filepath.Join(captureDir, "notes-sidebar-search.png")); err != nil {
+				t.Fatalf("capture Notes sidebar search: %v", err)
+			}
+		}
 		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("open persisted note from search: %v", err)
 		}
@@ -57,21 +64,26 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("wait for Notes delete action: %v", err)
 		}
+		if captureDir := os.Getenv("WOX_SMOKE_ARTIFACT_DIR"); captureDir != "" {
+			if err := client.Capture(ctx, filepath.Join(captureDir, "notes-more-menu.png")); err != nil {
+				t.Fatalf("capture Notes menu: %v", err)
+			}
+		}
 		if err := client.Perform(ctx, "notes.menu.delete", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete note: %v", err)
 		}
 		openSearch(t, ctx, client, title)
-		rowID = waitForSearchRow(t, ctx, client, title, true)
-		if err := client.Perform(ctx, rowID, woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("restore deleted note: %v", err)
-		}
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			editor, found := automationdriver.Find(snapshot, "notes.editor")
-			_, searchOpen := automationdriver.Find(snapshot, "notes.search")
-			return found && editor.Value == projected && !searchOpen
+			_, searchVisible := automationdriver.Find(snapshot, "notes.search")
+			for _, node := range snapshot.Tree.Nodes {
+				if strings.HasPrefix(node.AutomationID, "notes.search.") && node.Role == woxui.AccessibilityRoleListItem && strings.Contains(node.Label, title) {
+					return false
+				}
+			}
+			return searchVisible
 		})
 		if err != nil {
-			t.Fatalf("wait for restored Notes editor: %v", err)
+			t.Fatalf("deleted note remained in search: %v", err)
 		}
 		smoke.AssertNoDiagnostics(t, snapshot)
 	})

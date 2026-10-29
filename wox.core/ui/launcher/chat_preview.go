@@ -17,6 +17,7 @@ import (
 	"wox/common"
 	chatview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 	"wox/util"
 )
 
@@ -211,16 +212,21 @@ type chatPreviewState struct {
 	panelLeadingHeight float32
 	panelDensityScale  float32
 	// sidebarOpen keeps the conversation drawer visible while a slash/model overlay is open.
-	sidebarOpen      bool
-	sidebarSelected  int
-	sidebarScroll    float32
-	sidebarViewport  float32
-	question         *aiQuestion
-	questionEditor   *woxui.TextEditor
-	questionSelected int
-	expandedRounds   map[string]bool
-	attachments      []common.AIChatAttachment
-	importing        bool
+	sidebarOpen           bool
+	sidebarSelected       int
+	sidebarScroll         float32
+	sidebarViewport       float32
+	historyQuery          string
+	historyUsePinYin      bool
+	historySearch         *woxwidget.TextEditingController
+	historyFocus          bool
+	historyFocusDedicated bool
+	question              *aiQuestion
+	questionEditor        *woxui.TextEditor
+	questionSelected      int
+	expandedRounds        map[string]bool
+	attachments           []common.AIChatAttachment
+	importing             bool
 }
 
 type chatPreviewSnapshot struct {
@@ -258,6 +264,10 @@ type chatPreviewSnapshot struct {
 	sidebarSelected       int
 	sidebarScroll         float32
 	sidebarViewport       float32
+	historyQuery          string
+	historyUsePinYin      bool
+	historyFocus          bool
+	historyFocusDedicated bool
 	question              *aiQuestion
 	questionEditing       woxui.TextEditingState
 	questionSelected      int
@@ -646,31 +656,35 @@ func snapshotChatPreviewLocked(state *chatPreviewState) *chatPreviewSnapshot {
 	snapshot := &chatPreviewSnapshot{
 		projects: cloneChatProjectUI(state.projects),
 		// Payload revisions must not recreate scroll/drag state on every streamed update.
-		key:              state.resultID + "|" + state.chat.ID,
-		queryID:          state.queryID,
-		resultID:         state.resultID,
-		chat:             cloneChatData(state.chat),
-		active:           state.active,
-		scroll:           state.scroll,
-		loading:          state.loading,
-		sending:          state.sending,
-		error:            state.error,
-		chats:            append([]chatData(nil), state.chats...),
-		panel:            state.panel,
-		panelQuery:       state.panelQuery,
-		panelFilter:      state.panelFilter,
-		panelSelected:    state.panelSelected,
-		panelScroll:      state.panelScroll,
-		panelViewport:    state.panelViewport,
-		sidebarOpen:      state.sidebarOpen,
-		sidebarSelected:  state.sidebarSelected,
-		sidebarScroll:    state.sidebarScroll,
-		sidebarViewport:  state.sidebarViewport,
-		question:         cloneChatQuestion(state.question),
-		questionSelected: state.questionSelected,
-		expandedRounds:   make(map[string]bool, len(state.expandedRounds)),
-		attachments:      slices.Clone(state.attachments),
-		importing:        state.importing,
+		key:                   state.resultID + "|" + state.chat.ID,
+		queryID:               state.queryID,
+		resultID:              state.resultID,
+		chat:                  cloneChatData(state.chat),
+		active:                state.active,
+		scroll:                state.scroll,
+		loading:               state.loading,
+		sending:               state.sending,
+		error:                 state.error,
+		chats:                 append([]chatData(nil), state.chats...),
+		panel:                 state.panel,
+		panelQuery:            state.panelQuery,
+		panelFilter:           state.panelFilter,
+		panelSelected:         state.panelSelected,
+		panelScroll:           state.panelScroll,
+		panelViewport:         state.panelViewport,
+		sidebarOpen:           state.sidebarOpen,
+		sidebarSelected:       state.sidebarSelected,
+		sidebarScroll:         state.sidebarScroll,
+		sidebarViewport:       state.sidebarViewport,
+		historyQuery:          state.historyQuery,
+		historyUsePinYin:      state.historyUsePinYin,
+		historyFocus:          state.historyFocus,
+		historyFocusDedicated: state.historyFocusDedicated,
+		question:              cloneChatQuestion(state.question),
+		questionSelected:      state.questionSelected,
+		expandedRounds:        make(map[string]bool, len(state.expandedRounds)),
+		attachments:           slices.Clone(state.attachments),
+		importing:             state.importing,
 	}
 	for roundID, expanded := range state.expandedRounds {
 		snapshot.expandedRounds[roundID] = expanded
@@ -1015,6 +1029,9 @@ func (a *chatController) toggleChatPanel(panel string) {
 		}
 	}
 	if panel == "history" {
+		if !chatHistoryVisible(state.panel, state.sidebarOpen) {
+			state.historyFocus = false
+		}
 		a.rememberChatSidebar(state.sidebarOpen)
 	}
 	state.active = true
@@ -1195,6 +1212,14 @@ func keepChatHistoryPanelLocked(state *chatPreviewState, chatID string) {
 	}
 	state.panel = "history"
 	state.sidebarOpen = true
+	if strings.TrimSpace(state.historyQuery) != "" {
+		for index, row := range chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin) {
+			if row.ChatID == chatID {
+				state.panelSelected, state.sidebarSelected = index, index
+				return
+			}
+		}
+	}
 	for index, chat := range state.chats {
 		if chat.ID == chatID {
 			state.panelSelected = index
@@ -1506,7 +1531,7 @@ func (a *chatController) moveChatPanelSelection(delta int) {
 	if state == nil || state.panel == "" {
 		return
 	}
-	count := len(chatProjectHistoryRows(state.projects, state.chats))
+	count := len(chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin))
 	var commands []chatCommandPaletteItem
 	if state.panel == chatProjectPanel {
 		commands = a.projectPaletteItems()
@@ -1569,7 +1594,7 @@ func (a *chatController) activateChatPanelSelection() {
 	panel := state.panel
 	selected := state.panelSelected
 	if panel == "history" {
-		rows := chatProjectHistoryRows(state.projects, state.chats)
+		rows := chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin)
 		if selected >= 0 && selected < len(rows) {
 			a.activateProjectHistoryRow(rows[selected])
 		}
@@ -1636,7 +1661,7 @@ func (a *chatController) setChatPanelViewport(height float32) {
 	if state := a.chatPreview; state != nil {
 		initialize := state.panelViewport <= 0
 		state.panelViewport = max(float32(1), height)
-		count := len(chatProjectHistoryRows(state.projects, state.chats))
+		count := len(chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin))
 		commands := []chatCommandPaletteItem(nil)
 		if state.panel == chatProjectPanel {
 			commands = a.projectPaletteItems()
@@ -1672,11 +1697,13 @@ func ensureChatPanelSelectionVisibleLocked(state *chatPreviewState, count int) {
 		return
 	}
 	rowHeight := chatview.ChatScaledSize(state.panelDensityScale, chatCatalogRowHeight)
-	headerHeight := chatview.ChatScaledSize(state.panelDensityScale, 46)
-	gap := chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistorySectionGap)
-	maxOffset := max(float32(0), headerHeight+float32(count)*rowHeight+gap-state.panelViewport)
-	rowTop := headerHeight + float32(state.panelSelected)*rowHeight
-	for index, row := range chatProjectHistoryRows(state.projects, state.chats) {
+	gap := float32(0)
+	if strings.TrimSpace(state.historyQuery) == "" {
+		gap = chatview.ChatScaledSize(state.panelDensityScale, chatview.ChatHistorySectionGap)
+	}
+	maxOffset := max(float32(0), float32(count)*rowHeight+gap-state.panelViewport)
+	rowTop := float32(state.panelSelected) * rowHeight
+	for index, row := range chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin) {
 		if row.Group && row.ProjectID == chatRecentsSection && index <= state.panelSelected {
 			rowTop += gap
 			break
@@ -2158,6 +2185,9 @@ func (a *chatController) handleChatKey(event woxui.KeyEvent, dedicated bool) boo
 	if !event.Down || event.Composing {
 		return false
 	}
+	if event.Key == woxui.KeyEscape && event.Repeat {
+		return true
+	}
 	state := a.chatPreview
 	active := state != nil && state.active
 	if state != nil && (state.projects.Editor != nil || state.projects.DeleteID != "") {
@@ -2182,6 +2212,22 @@ func (a *chatController) handleChatKey(event woxui.KeyEvent, dedicated bool) boo
 	if active && !dedicated && hotkeyMatches(chatOpenWindowHotkey(), event) {
 		if !event.Repeat && a.openDedicatedChatWindow != nil {
 			a.openDedicatedChatWindow()
+		}
+		return true
+	}
+	if active && state.question == nil && hotkeyMatches(primaryHotkey("p"), event) {
+		if !event.Repeat {
+			if chatOverlayPanel(state.panel) {
+				restoreChatHistoryPanelLocked(state)
+			}
+			if !chatHistoryVisible(state.panel, state.sidebarOpen) {
+				a.toggleChatPanel("history")
+			}
+			state.historyFocus, state.historyFocusDedicated = true, dedicated
+			if a.focusHistorySearch != nil {
+				a.focusHistorySearch(dedicated)
+			}
+			a.invalidateChatSurfaces()
 		}
 		return true
 	}
@@ -2423,6 +2469,7 @@ func (a *chatController) exitChatMode() {
 	if state := a.chatPreview; state != nil {
 		state.active = a.chatWindowOpen()
 	}
+	a.focusQuery()
 	a.restoreQueryTextInput()
 	// Returning from chat selects the whole query so a new search starts with a clean slate.
 	a.selectEntireQuery()

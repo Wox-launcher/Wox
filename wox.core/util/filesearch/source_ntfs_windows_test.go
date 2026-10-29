@@ -120,7 +120,8 @@ func TestNTFSInterruptedReplayKeepsOldCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 	interrupted := errors.New("connection lost")
-	source := ntfsSource{root: `C:\`, store: store, stream: func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
+	changed := 0
+	source := ntfsSource{root: `C:\`, store: store, changed: func() { changed++ }, stream: func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
 		batch, _ := protocol.AppendEntry(nil, protocol.Entry{ID: 10, ParentID: 5, Name: "new.txt", USN: 110})
 		if err := emit(protocol.Records, batch); err != nil {
 			return err
@@ -129,6 +130,9 @@ func TestNTFSInterruptedReplayKeepsOldCursor(t *testing.T) {
 	}}
 	if err := source.replay(context.Background(), false); !errors.Is(err, interrupted) {
 		t.Fatal(err)
+	}
+	if changed != 1 {
+		t.Fatalf("published frame from interrupted read emitted %d changes, want 1", changed)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
@@ -173,7 +177,8 @@ func TestNTFSNoopReplayDoesNotWriteJournal(t *testing.T) {
 	if err := store.Publish(base, string(cursor), "ntfs-v3", 0); err != nil {
 		t.Fatal(err)
 	}
-	source := ntfsSource{root: `C:\`, store: store}
+	changed := 0
+	source := ntfsSource{root: `C:\`, store: store, changed: func() { changed++ }}
 	for iteration := 0; iteration < 3; iteration++ {
 		before := store.Revision()
 		source.stream = func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
@@ -191,6 +196,9 @@ func TestNTFSNoopReplayDoesNotWriteJournal(t *testing.T) {
 		}
 		if store.Revision() != before {
 			t.Fatal("metadata-only replay wrote the index")
+		}
+		if changed != 0 {
+			t.Fatal("unchanged records emitted a status update")
 		}
 	}
 	source.stream = func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
@@ -210,6 +218,9 @@ func TestNTFSNoopReplayDoesNotWriteJournal(t *testing.T) {
 	}
 	if err := source.replay(ctx, false); err != nil {
 		t.Fatal(err)
+	}
+	if changed != 1 {
+		t.Fatalf("record batch emitted %d changes, want 1", changed)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)

@@ -38,6 +38,7 @@ type ntfsNameIndex struct {
 	mu         sync.Mutex
 	states     map[string]nativeVolumeState
 	notify     func()
+	changes    chan struct{}
 	callbacks  nativeIndexCallbacks
 	runStarted time.Time
 }
@@ -106,14 +107,58 @@ func newNTFSNameIndex(ctx context.Context, dir string, roots []string, stream fa
 		}
 		index.states[id] = state
 	}
+	if index.notify != nil {
+		index.changes = make(chan struct{}, 1)
+		index.workers.Add(1)
+		go index.publishStatusChanges(workerCtx)
+	}
 	for id, shard := range index.directory.shards {
 		index.workers.Add(1)
 		go index.runVolume(workerCtx, id, &ntfsSource{
 			root: shard.root.Path, store: shard.store, stream: stream, notify: callbacks.content, wantsNotifications: callbacks.wantsContent,
 			progress: func(progress nativeBuildProgress) { index.updateProgress(id, progress) },
+			changed:  index.queueStatusChange,
 		})
 	}
 	return index, nil
+}
+
+// queueStatusChange never makes USN ingestion wait for toolbar or stats consumers.
+func (i *ntfsNameIndex) queueStatusChange() {
+	select {
+	case i.changes <- struct{}{}:
+	default:
+	}
+}
+
+// publishStatusChanges coalesces volume changes in a fixed window. Continuous
+// writes still get updates, while an idle index has no running polling timer.
+func (i *ntfsNameIndex) publishStatusChanges(ctx context.Context) {
+	defer i.workers.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-i.changes:
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		// Consume the merged signal before publishing so a change arriving
+		// during the callback remains queued for the next update.
+		select {
+		case <-i.changes:
+		default:
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		i.notify()
+	}
 }
 
 // runVolume retries transport failures without discarding a searchable base.

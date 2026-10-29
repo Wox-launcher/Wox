@@ -49,6 +49,18 @@ func TestDocumentFromClipboardFilesImportsImagePaths(t *testing.T) {
 	}
 }
 
+func TestDocumentFromClipboardFilesPreservesFileLinks(t *testing.T) {
+	for _, name := range []string{"report (draft) 文档.txt", "目录 [1] #100%.txt"} {
+		path := filepath.Join(t.TempDir(), name)
+		document := DocumentFromClipboardFiles([]string{path})
+		for _, candidate := range []common.NoteDocument{document, ParseMarkdown(ToMarkdown(document))} {
+			if len(candidate.Blocks) != 1 || candidate.Blocks[0].Text != name || len(candidate.Blocks[0].Spans) != 1 || candidate.Blocks[0].Spans[0].Link != path {
+				t.Fatalf("file link was not preserved: %#v", candidate.Blocks)
+			}
+		}
+	}
+}
+
 func TestImportNoteImageCopiesBytesOutsideNoteJSON(t *testing.T) {
 	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
 	src := filepath.Join(t.TempDir(), "capture.png")

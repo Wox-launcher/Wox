@@ -5,6 +5,7 @@
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <stdlib.h>
+#include "menu_windows.h"
 
 NOTIFYICONDATA nid;
 HMENU hMenu;
@@ -20,6 +21,8 @@ UINT lastActivateMessage = 0;
 UINT lastActivateIconId = 0;
 UINT lastActivateEventCode = 0;
 BOOL trayComInitialized = FALSE;
+static HANDLE trayPreviousDpiContext = NULL;
+typedef HANDLE(WINAPI *SetThreadDpiAwarenessContextFunc)(HANDLE);
 
 void reportClick(UINT_PTR menuId);
 void reportLeftClick();
@@ -61,10 +64,10 @@ static void showQueryIconMenu(UINT iconId)
 
 	POINT p;
 	GetCursorPos(&p);
-	SetForegroundWindow(hwnd);
-	TrackPopupMenu(queryMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hwnd, NULL);
-	PostMessage(hwnd, WM_NULL, 0, 0);
+	UINT command = trayTrackPopupMenu(hwnd, queryMenu, p);
 	DestroyMenu(queryMenu);
+	if (command != 0)
+		reportClick(command);
 }
 
 static BOOL isTrayActivateEvent(UINT eventCode)
@@ -103,6 +106,11 @@ void addMenuItem(UINT_PTR menuId, const char *title)
 	free(wTitle);
 }
 
+void addMenuSeparator(void)
+{
+	AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+}
+
 void setTrayIcon(const char *tooltip, HICON icon)
 {
 	nid.cbSize = sizeof(NOTIFYICONDATA);
@@ -137,7 +145,14 @@ void removeTrayIcon()
 	}
 }
 
+// Native menu tracking and GDI resources stay on the tray's owning thread.
 void showMenu()
+{
+	if (hwnd != NULL)
+		PostMessageW(hwnd, WM_APP + 3, 0, 0);
+}
+
+static void showMainMenu(void)
 {
 	if (hwnd == NULL || hMenu == NULL)
 	{
@@ -146,21 +161,34 @@ void showMenu()
 
 	POINT p;
 	GetCursorPos(&p);
-	SetForegroundWindow(hwnd); // Set the foreground window before showing the menu for proper focus
-	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, p.x, p.y, 0, hwnd, NULL);
-	PostMessage(hwnd, WM_NULL, 0, 0); // Post a null message to make the menu close properly
+	UINT command = trayTrackPopupMenu(hwnd, hMenu, p);
+	if (command != 0)
+		reportClick(command);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
 	{
+	case WM_MEASUREITEM:
+		if (trayMeasureMenuItem((MEASUREITEMSTRUCT *)lParam))
+			return TRUE;
+		return DefWindowProc(hwnd, uMsg, wParam, lParam);
+	case WM_DRAWITEM:
+		if (trayDrawMenuItem((DRAWITEMSTRUCT *)lParam))
+			return TRUE;
+		return DefWindowProc(hwnd, uMsg, wParam, lParam);
+	case WM_MENUCHAR:
+		return trayMenuChar((HMENU)lParam, LOWORD(wParam));
+	case WM_APP + 3:
+		showMainMenu();
+		break;
 	case WM_APP + 1:
 	{
 		UINT eventCode = LOWORD((DWORD)lParam);
 		if (eventCode == WM_CONTEXTMENU || eventCode == WM_RBUTTONUP)
 		{
-			showMenu();
+			showMainMenu();
 		}
 		else if (!isDuplicateTrayActivateEvent(WM_APP + 1, 1, eventCode) && isTrayActivateEvent(eventCode))
 		{
@@ -285,6 +313,11 @@ HICON loadIcon(const char *iconName)
 
 void init(const char *iconName, const char *tooltip)
 {
+	// Debug builds may not embed the application manifest. Keep this thread PMv2 too.
+	SetThreadDpiAwarenessContextFunc setThreadDpiAwarenessContext =
+		(SetThreadDpiAwarenessContextFunc)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+	if (setThreadDpiAwarenessContext != NULL)
+		trayPreviousDpiContext = setThreadDpiAwarenessContext((HANDLE)-4);
 	// ITaskbarList must be used from an initialized COM apartment on this
 	// long-lived tray thread, then balanced when its message loop exits.
 	HRESULT coInitResult = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -335,10 +368,18 @@ void init(const char *iconName, const char *tooltip)
 void runMessageLoop()
 {
 	MSG msg;
-	while (GetMessage(&msg, NULL, 0, 0))
+	while (GetMessage(&msg, NULL, 0, 0) > 0)
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
+	}
+	// Go can reuse this OS thread after UnlockOSThread; do not leak its DPI override.
+	if (trayPreviousDpiContext != NULL)
+	{
+		SetThreadDpiAwarenessContextFunc setThreadDpiAwarenessContext =
+			(SetThreadDpiAwarenessContextFunc)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+		setThreadDpiAwarenessContext(trayPreviousDpiContext);
+		trayPreviousDpiContext = NULL;
 	}
 }
 

@@ -88,6 +88,8 @@ class ToolbarMsg:
     indeterminate: bool = field(default=False)
     #: Optional actions rendered on the right side of the toolbar.
     actions: List[ToolbarMsgAction] = field(default_factory=list)
+    #: Suppress both an explicit icon and the default plugin icon.
+    hide_icon: bool = field(default=False)
 
     def to_json(self) -> str:
         """Serialize the toolbar msg to the host payload format."""
@@ -96,6 +98,7 @@ class ToolbarMsg:
                 "Id": self.id,
                 "Title": self.title,
                 "Icon": json.loads(self.icon.to_json()),
+                "HideIcon": self.hide_icon,
                 "Progress": self.progress,
                 "Indeterminate": self.indeterminate,
                 "Actions": [action.to_dict() for action in self.actions],

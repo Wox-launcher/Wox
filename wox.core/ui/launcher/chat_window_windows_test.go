@@ -12,6 +12,58 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+// TestDedicatedChatSidebarResizesWindow checks the real native minimum on open and close.
+func TestDedicatedChatSidebarResizesWindow(t *testing.T) {
+	err := woxui.Run(func() error {
+		app := New(false, nil)
+		defer app.cancel()
+		defer app.windows.CloseAll()
+		frames := 0
+		managed, _, err := app.windows.Open(chatWindowID, woxui.WindowOptions{Title: "Sidebar resize test", Size: woxui.Size{Width: chatWindowMinimumWidth, Height: chatWindowMinimumHeight}, MinSize: chatWindowNativeMinSize(), Resizable: true, OnFrame: func(_ *woxui.DisplayList, _ woxui.FrameInfo) {
+			frames++
+			if app.chatWindow.chatView != nil && app.chatWindow.sidebarMinimumWidth != app.chatWindow.sidebarMinSize().Width {
+				app.chatWindow.syncSidebarMinSize()
+			}
+		}})
+		if err != nil {
+			return err
+		}
+		app.chatWindow.chatView = managed
+		app.chat.chatPreview = &chatPreviewState{sidebarOpen: true}
+		if _, err := managed.Show(); err != nil {
+			return err
+		}
+		app.chatWindow.syncSidebarMinSize()
+		bounds, err := managed.Window().Bounds()
+		if err != nil {
+			return err
+		}
+		if bounds.Width < chatWindowMinimumWidth+chatHistorySidebarWidth {
+			return fmt.Errorf("open sidebar width %g", bounds.Width)
+		}
+		if frames == 0 {
+			return fmt.Errorf("native resize did not render a frame")
+		}
+		app.chat.chatPreview.sidebarOpen = false
+		app.chatWindow.syncSidebarMinSize()
+		bounds.Width = chatWindowMinimumWidth
+		if err := managed.Window().SetBounds(bounds); err != nil {
+			return err
+		}
+		bounds, err = managed.Window().Bounds()
+		if err != nil {
+			return err
+		}
+		if bounds.Width > chatWindowMinimumWidth {
+			return fmt.Errorf("closed sidebar width %g", bounds.Width)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestDedicatedChatRendersWithoutLauncherMeasurer reproduces unavailable launcher text resources without a 30-second timer.
 func TestDedicatedChatRendersWithoutLauncherMeasurer(t *testing.T) {
 	err := woxui.Run(func() error {

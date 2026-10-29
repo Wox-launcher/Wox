@@ -116,7 +116,7 @@ func DocumentFromClipboardFiles(paths []string) common.NoteDocument {
 			}
 		}
 		name := filepath.Base(path)
-		blocks = append(blocks, ParseMarkdown(fmt.Sprintf("[%s](%s)", name, path)).Blocks...)
+		blocks = append(blocks, common.NoteBlock{Type: common.NoteBlockParagraph, Text: name, Spans: []common.NoteSpan{{Start: 0, End: utf8.RuneCountInString(name), Link: path}}})
 	}
 	if len(blocks) == 0 {
 		return common.NoteDocument{}

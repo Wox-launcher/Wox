@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	goldmarkutil "github.com/yuin/goldmark/util"
 
 	"wox/common"
 	"wox/util/markdown"
@@ -596,7 +598,16 @@ func encodeMarkdownInlineRun(text string, style inlineStyle) string {
 		text = "~~" + text + "~~"
 	}
 	if style.link != "" {
-		text = "[" + text + "](" + strings.ReplaceAll(style.link, ")", "%29") + ")"
+		if filepath.IsAbs(style.link) {
+			// Angle destinations preserve spaces; slash separators avoid Markdown backslash escaping on Windows.
+			destination := filepath.ToSlash(style.link)
+			destination = strings.ReplaceAll(destination, `\`, `\\`)
+			destination = strings.ReplaceAll(destination, ">", `\>`)
+			label := strings.NewReplacer("[", `\[`, "]", `\]`).Replace(text)
+			text = "[" + label + "](<" + destination + ">)"
+		} else {
+			text = "[" + text + "](" + strings.ReplaceAll(style.link, ")", "%29") + ")"
+		}
 	}
 	return text
 }
@@ -1139,7 +1150,11 @@ func appendMarkdownInline(node ast.Node, source []byte, style inlineStyle, outpu
 	current := style
 	switch value := node.(type) {
 	case *ast.Text:
-		appendParsedText(output, spans, string(value.Segment.Value(source)), current)
+		content := value.Segment.Value(source)
+		if filepath.IsAbs(current.link) {
+			content = goldmarkutil.UnescapePunctuations(content)
+		}
+		appendParsedText(output, spans, string(content), current)
 		if value.HardLineBreak() || value.SoftLineBreak() {
 			output.WriteRune('\n')
 		}
@@ -1157,6 +1172,9 @@ func appendMarkdownInline(node ast.Node, source []byte, style inlineStyle, outpu
 		current.code = true
 	case *ast.Link:
 		current.link = string(value.Destination)
+		if filepath.IsAbs(current.link) {
+			current.link = filepath.FromSlash(string(goldmarkutil.UnescapePunctuations(value.Destination)))
+		}
 	case *ast.Image:
 		// Pictures that are not promoted to image blocks keep their destination as a link.
 		current.link = strings.TrimSpace(string(value.Destination))

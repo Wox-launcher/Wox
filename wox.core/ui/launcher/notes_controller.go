@@ -20,6 +20,7 @@ type notesController struct {
 	tooltips             *tooltipController
 	palette              func() uiPalette
 	fontFamily           func() string
+	densityScale         func() float32
 	runOnUI              func(string, func()) error
 	dispatchWindowKey    func(woxui.KeyEvent, *woxwidget.Host, string, func(), func(woxui.KeyEvent) bool) bool
 	imageForViewport     func(woxImage, int) *woxui.Image
@@ -39,6 +40,7 @@ func (a *App) bindNotes() {
 	c.tooltips = &a.tooltips
 	c.palette = func() uiPalette { return a.appearance.palette }
 	c.fontFamily = func() string { return a.generalSettings.Data().AppFontFamily }
+	c.densityScale = a.chatDensityScale
 	c.runOnUI = a.runOnUI
 	c.dispatchWindowKey = a.dispatchWindowKey
 	c.imageForViewport = a.imageForViewport

@@ -26,7 +26,7 @@ func TestCreateNoteToolCancelledBeforeImport(t *testing.T) {
 	}
 }
 
-func TestPluginQueryRoutesListNewSearchAndDeleted(t *testing.T) {
+func TestPluginQueryRoutesListNewAndSearch(t *testing.T) {
 	repository, _ := newRepositoryForTest(t)
 	p := &Plugin{repository: repository}
 	empty, err := repository.Create()
@@ -54,9 +54,9 @@ func TestPluginQueryRoutesListNewSearchAndDeleted(t *testing.T) {
 	if _, err := repository.Delete(created.ID); err != nil {
 		t.Fatalf("delete note: %v", err)
 	}
-	deleted := p.Query(context.Background(), plugin.Query{Command: "deleted"})
-	if len(deleted.Results) != 1 || deleted.Results[0].Id != created.ID || deleted.Results[0].Actions[0].Id != "restore" {
-		t.Fatalf("deleted query did not expose restore: %#v", deleted.Results)
+	list = p.Query(context.Background(), plugin.Query{})
+	if len(list.Results) != 1 || list.Results[0].Id == created.ID {
+		t.Fatalf("deleted note remains in results: %#v", list.Results)
 	}
 	newResult := p.Query(context.Background(), plugin.Query{Command: "new"})
 	if len(newResult.Results) != 1 || newResult.Results[0].Id != "notes:new" {

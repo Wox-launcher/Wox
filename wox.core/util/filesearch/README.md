@@ -15,6 +15,12 @@ FSEvents. Windows configured roots use the USN journal. Linux uses recursive fsn
 ReadDirectoryChangesW subtree watches. Platform adapters must
 not depend on query policy or plugin implementations.
 
+Native NTFS incremental reads publish status changes after applying filename
+records, independently of content extraction. A single worker coalesces these
+notifications across volumes in 1 second windows without polling while idle or
+blocking USN ingestion on UI consumers. File Search uses the existing status
+subscription to refresh its toolbar file count from published index statistics.
+
 Filename indexing prioritizes bounded memory, fast enumeration and low-latency
 queries. Results use the default relevance ranking without user-selectable sort
 orders. Size and modification-time sorting are not offered: the NTFS MFT/USN

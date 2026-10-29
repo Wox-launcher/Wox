@@ -261,6 +261,20 @@ func (w *Window) Hide() error {
 	return w.native.hide()
 }
 
+// SetMinSize updates the logical minimum used by native interactive resizing.
+func (w *Window) SetMinSize(size Size) error {
+	if w == nil || w.native == nil {
+		return errors.New("window is not initialized")
+	}
+	if size.Width < 0 || size.Height < 0 {
+		return errors.New("window minimum size must not be negative")
+	}
+	if native, ok := any(w.native).(interface{ setMinSize(Size) error }); ok {
+		return native.setMinSize(size)
+	}
+	return ErrPlatformUnsupported
+}
+
 // SetBounds moves and resizes the window in logical virtual-desktop coordinates.
 func (w *Window) SetBounds(bounds Rect) error {
 	if w == nil || w.native == nil {

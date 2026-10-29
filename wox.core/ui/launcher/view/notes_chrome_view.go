@@ -18,10 +18,10 @@ const (
 	notesSearchOverlayPadding = float32(12)
 	notesSearchOverlayGap     = float32(8)
 	notesSearchOverlayTop     = float32(44)
-	// NotesToolbarActionsWidth is the five 32-wide title-bar buttons plus gaps
+	// NotesToolbarActionsWidth is the four 32-wide title-bar buttons plus gaps
 	// and the 6px inset used to place that cluster. Equal macOS title insets
 	// used to be 220, which left only 20px at the 460 default width.
-	NotesToolbarActionsWidth = float32(174)
+	NotesToolbarActionsWidth = float32(140)
 	notesFormatButtonSize    = float32(28)
 	notesFormatButtonGap     = float32(2)
 	notesFormatBarPadLeft    = float32(12)
@@ -34,18 +34,22 @@ const (
 
 // NotesToolbarProps is a presentation snapshot plus stable event callbacks.
 type NotesToolbarProps struct {
-	Width                                    float32
-	Active, Pinned                           bool
-	Maximized, FormatVisible                 bool
-	Platform                                 string
-	Title, Label                             string
-	SearchLabel, PinLabel, NewLabel          string
-	FormatLabel, MoreLabel                   string
-	Icon                                     *woxui.Image
-	Theme                                    woxcomponent.Theme
-	OnHover                                  func(bool, string, woxui.Rect)
-	OnSearch, OnPin, OnFormat, OnNew, OnMore func()
-	OnDrag, OnMaximize, OnMinimize, OnClose  func()
+	SidebarLabel                            string
+	SidebarOpen                             bool
+	OnSidebar                               func()
+	Width                                   float32
+	DensityScale                            float32
+	Active, Pinned                          bool
+	Maximized, FormatVisible                bool
+	Platform                                string
+	Title, Label                            string
+	PinLabel, NewLabel                      string
+	FormatLabel, MoreLabel                  string
+	Icon                                    *woxui.Image
+	Theme                                   woxcomponent.Theme
+	OnHover                                 func(bool, string, woxui.Rect)
+	OnPin, OnFormat, OnNew, OnMore          func()
+	OnDrag, OnMaximize, OnMinimize, OnClose func()
 }
 
 // NotesToolbar composes title-bar chrome from prepared state.
@@ -68,19 +72,25 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 		})
 	}
 	color := theme.ToolbarText
-	pinColor := color
+	pin := woxcomponent.PinGlyph(iconSize, color)
 	if props.Pinned {
-		pinColor = woxcomponent.DocumentListMarkerColor
+		pin = woxcomponent.FilledPinGlyph(iconSize, theme.PreviewText)
 	}
 	right := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 2, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		button("search", props.SearchLabel, woxcomponent.SearchGlyph(iconSize, color), false, props.OnSearch),
-		button("pin", props.PinLabel, woxcomponent.PinGlyph(iconSize, pinColor), false, props.OnPin),
+		button("pin", props.PinLabel, pin, false, props.OnPin),
 		button("format", props.FormatLabel, woxcomponent.ToolbarToggleGlyph(iconSize, color, props.FormatVisible), false, props.OnFormat),
 		button("new", props.NewLabel, woxcomponent.AddGlyph(iconSize, color), false, props.OnNew),
 		button("more", props.MoreLabel, woxcomponent.MenuGlyph(iconSize, color), false, props.OnMore),
 	}}
 	contentRight := woxcomponent.TitleBarChromeWidth(props.Platform, true, true)
 	titleLeft, titleRight, titleAlignment := NotesTitleSlot(props.Platform, contentRight)
+	if props.OnSidebar != nil {
+		if props.Platform == "darwin" {
+			titleLeft += 32
+		} else {
+			titleLeft += 44
+		}
+	}
 	drag := woxwidget.Semantics{AutomationID: "notes.toolbar.drag", Role: woxui.AccessibilityRoleGroup, Label: props.Label, Child: woxwidget.Gesture{
 		ID:          "notes.toolbar.drag",
 		OnDragStart: props.OnDrag,
@@ -91,7 +101,7 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 		{Child: drag},
 		{Left: titleLeft, Right: titleRight, StretchWidth: true, Child: woxwidget.Align{Height: NotesToolbarHeight, Horizontal: titleAlignment, Vertical: .5, Child: woxwidget.TextBlock{
 			Value: props.Title, MaxLines: 1, ShrinkWrap: true, AlignmentY: 0.5,
-			Style: woxui.TextStyle{Size: 12, Weight: woxui.FontWeightSemibold}, Color: theme.ToolbarText,
+			Style: woxui.TextStyle{Size: (woxcomponent.ControlTheme{DensityScale: props.DensityScale}).Scaled(woxcomponent.SidebarTitleFontSize), Weight: woxui.FontWeightSemibold}, Color: theme.PreviewText,
 		}}},
 		{Right: contentRight + 6, AnchorRight: true, Child: woxwidget.Align{Width: NotesToolbarActionsWidth - 6, Height: NotesToolbarHeight, Vertical: 0.5, Child: right}},
 	}
@@ -102,6 +112,14 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 		ID: "notes.toolbar.close", Width: width, Platform: props.Platform, Theme: theme.Controls, Active: active, Maximized: props.Maximized,
 		OnMinimize: props.OnMinimize, OnMaximize: props.OnMaximize, OnClose: props.OnClose,
 	})})
+	if props.OnSidebar != nil {
+		left := float32(42)
+		if props.Platform == "darwin" {
+			left = woxcomponent.TitleBarChromeWidth(props.Platform, true, true)
+		}
+		sidebar := woxcomponent.SidebarToggle(woxcomponent.IconButtonProps{ID: "notes.toolbar.sidebar", Label: props.SidebarLabel, Width: 36, Height: 36, Radius: 7, HoverBackground: woxcomponent.TitleBarAlpha(theme.ResultSubtitle, 25), FocusRingColor: theme.Cursor, OnTap: func() { props.OnHover(false, "", woxui.Rect{}); props.OnSidebar() }, OnHoverAt: func(inside bool, bounds woxui.Rect) { props.OnHover(inside, props.SidebarLabel, bounds) }}, woxcomponent.SidebarTitleIconSize, theme.ResultSubtitle, theme.PreviewText, props.SidebarOpen)
+		children = append(children, woxwidget.StackChild{Left: left, Child: woxwidget.Align{Width: 36, Height: NotesToolbarHeight, Vertical: .5, Child: sidebar}})
+	}
 	content := woxwidget.Stack{Width: width, Height: NotesToolbarHeight, Children: children}
 	return woxwidget.Container{Width: width, Height: NotesToolbarHeight, Child: content}
 }
@@ -326,17 +344,29 @@ func NotesSearchSection(label string, width float32, theme woxcomponent.Theme, f
 }
 
 // NotesMenuRow renders a prepared menu action.
-func NotesMenuRow(id, label string, width float32, theme woxcomponent.Theme, action func()) woxwidget.Widget {
-	radius := float32(6)
+func NotesMenuRow(id, label string, width float32, theme woxcomponent.Theme, icon woxwidget.Widget, action func()) woxwidget.Widget {
+	scale := theme.Controls.Scaled
+	radius := scale(6)
 	background := theme.ActionBackground
 	hoverBackground := woxcomponent.ControlHoverColor(background, theme.ActionText)
+	children := []woxwidget.Widget{}
+	if icon != nil {
+		children = append(children, woxwidget.Align{Width: scale(16), Height: scale(32), Vertical: .5, Horizontal: .5, Child: icon})
+	}
+	children = append(children, woxwidget.Expanded{Child: woxwidget.TextBlock{Value: label, MaxLines: 1, ShrinkWrap: true, AlignmentY: .5, Style: woxui.TextStyle{Size: scale(13)}, Color: theme.ActionText}})
 	return woxcomponent.WoxListItem(woxcomponent.ListItemProps{
-		ID: "notes.menu." + id, Label: label, Width: width - 12, Height: 32, Radius: &radius,
+		ID: "notes.menu." + id, Label: label, Width: width - scale(12), Height: scale(32), Radius: &radius,
 		Background: &background, HoverBackground: &hoverBackground, SkipFocus: true,
 		OnTap: action, Theme: theme.Controls,
-		Padding: woxwidget.Insets{Left: 9},
-		Child:   woxwidget.Align{Height: 32, Vertical: .5, Child: woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: 12}, Color: theme.ActionText}},
+		Padding: woxwidget.Insets{Left: scale(8), Right: scale(8)},
+		Child:   woxwidget.Align{Height: scale(32), Vertical: .5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scale(8), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}},
 	})
+}
+
+// NotesMenuSeparator separates related actions without adding an interactive row.
+func NotesMenuSeparator(width float32, theme woxcomponent.Theme) woxwidget.Widget {
+	s := theme.Controls.Scaled
+	return woxwidget.Align{Width: width - s(12), Height: s(9), Vertical: .5, Child: woxwidget.Container{Width: width - s(12), Height: 1, Color: theme.Controls.Border}}
 }
 
 // NotesOverlayScrim places a dismissible panel above the note.
@@ -349,9 +379,23 @@ func NotesOverlayScrim(size woxui.Size, panel woxwidget.Widget, left, top float3
 
 // NotesMenuOverlay composes rows into the title-bar menu.
 func NotesMenuOverlay(size woxui.Size, width float32, rows []woxwidget.Widget, theme woxcomponent.Theme, closeLabel string, dismiss func()) woxwidget.Widget {
-	panelHeight := float32(len(rows))*32 + 12
-	panel := woxwidget.Container{Width: width, Height: panelHeight, Radius: 9, Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(6), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
-	return NotesOverlayScrim(size, panel, max(float32(8), size.Width-width-8), 40, closeLabel, dismiss)
+	s := theme.Controls.Scaled
+	contentHeight := float32(0)
+	for _, row := range rows {
+		if separator, ok := row.(woxwidget.Align); ok {
+			contentHeight += separator.Height
+		} else {
+			contentHeight += s(32)
+		}
+	}
+	panelHeight := min(contentHeight+s(12), max(float32(0), size.Height-s(16)))
+	var content woxwidget.Widget = woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}
+	if contentHeight > panelHeight-s(12) {
+		content = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: "notes.menu.scroll", Width: max(float32(0), width-s(12)), Height: max(float32(0), panelHeight-s(12)), ContentHeight: contentHeight, Theme: theme.Controls, Content: content})
+	}
+	panel := woxwidget.Container{Width: width, Height: panelHeight, Radius: s(9), Floating: true, Color: theme.ActionBackground, BorderColor: theme.PreviewSplit, BorderWidth: 1, Padding: woxwidget.UniformInsets(s(6)), Child: content}
+	top := min(float32(40), max(s(8), size.Height-panelHeight-s(8)))
+	return NotesOverlayScrim(size, panel, max(s(8), size.Width-width-s(8)), top, closeLabel, dismiss)
 }
 
 type NotesLinkProps struct {

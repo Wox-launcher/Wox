@@ -28,6 +28,7 @@ type chatWindowController struct {
 	chatWindowMaximized      bool
 	chatWindowRestoreFrame   woxui.Rect
 	chatWindowGeneration     uint64
+	sidebarMinimumWidth      float32
 }
 
 // bindChatWindow supplies rendering and feature handoffs to the native window owner.

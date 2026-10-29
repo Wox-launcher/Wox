@@ -36,6 +36,40 @@ func TestLauncherToolbarSplitGivesStatusPriority(t *testing.T) {
 	}
 }
 
+// TestToolbarTextOnlyCount keeps the label flush with the status area and preserves
+// reserved actions across launcher themes, densities, and constrained widths.
+func TestToolbarTextOnlyCount(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1, 1.5} {
+		for _, width := range []float32{400, 800} {
+			for _, color := range []woxui.Color{{R: 30, G: 30, B: 30, A: 255}, {R: 230, G: 230, B: 230, A: 255}} {
+				props := LauncherToolbarProps{
+					Width: width, Height: 40 * scale, Window: &woxui.Window{}, DensityScale: scale,
+					Label: "已索引 20,646 个文件", Theme: woxcomponent.Theme{ToolbarText: color},
+					Actions: []LauncherToolbarAction{
+						{ID: "open", Label: "Open", HotkeyLabels: []string{"Enter"}, Pinned: true},
+						{ID: launcherToolbarMoreActionID, Label: "Actions", HotkeyLabels: []string{"Ctrl", "J"}},
+					},
+				}
+				built := LauncherToolbarView(props).(woxwidget.Stack)
+				row := built.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+				left := row.Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+				status := left.Children[0].(woxwidget.Semantics).Child.(woxwidget.Flex)
+				if len(status.Children) != 1 {
+					t.Fatalf("text-only status contains an icon or placeholder: %+v", status)
+				}
+				label := status.Children[0].(woxwidget.Align).Child.(woxwidget.Text)
+				if label.Value != props.Label || label.Color != color || label.Style.Size != scaledLauncherSize(woxcomponent.ToolbarFontSize, scale) {
+					t.Fatalf("label lost toolbar typography or theme: %+v", label)
+				}
+				right := row.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
+				if len(right.Children) != 2 {
+					t.Fatalf("width=%v scale=%v: reserved shortcuts disappeared", width, scale)
+				}
+			}
+		}
+	}
+}
+
 func TestLauncherToolbarSplitEllipsizesStatusToKeepReservedShortcuts(t *testing.T) {
 	left, right := launcherToolbarSplit(300, 220, 150, 16)
 	if left != 134 || right != 150 {

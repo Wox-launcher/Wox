@@ -220,6 +220,15 @@ func ChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widg
 	return svgIcon(name, size, color)
 }
 
+// ExpandAllGlyph shows the available bulk disclosure action.
+func ExpandAllGlyph(size float32, color woxui.Color, collapse bool) woxwidget.Widget {
+	name := icons.ControlExpandAll
+	if collapse {
+		name = icons.ControlCollapseAll
+	}
+	return svgIcon(name, size, color)
+}
+
 // DisclosureChevronGlyph points down when expanded and right when collapsed.
 func DisclosureChevronGlyph(size float32, color woxui.Color, expanded bool) woxwidget.Widget {
 	name := icons.ControlChevronRight
@@ -235,6 +244,11 @@ func CopyGlyph(size float32, color woxui.Color) woxwidget.Widget {
 		size = 14
 	}
 	return svgIcon("control.copy", size, color)
+}
+
+// DownloadGlyph identifies export actions.
+func DownloadGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlDownload, size, color)
 }
 
 // KeyboardGlyph returns the shared keyboard icon used by shortcut overviews.
@@ -466,6 +480,11 @@ func PinGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.pin", size, color)
 }
 
+// FilledPinGlyph distinguishes a pinned window by shape as well as color.
+func FilledPinGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon("control.pin-filled", size, color)
+}
+
 var formatGlyphNames = map[string]string{
 	"block":               "control.format-heading",
 	"bold":                "control.format-bold",
@@ -489,6 +508,10 @@ var formatGlyphNames = map[string]string{
 	"image-larger":        "control.add",
 	"image-delete":        "control.delete",
 	"more":                "control.more-horizontal",
+}
+
+func MoreHorizontalGlyph(size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(icons.ControlMoreHorizontal, size, color)
 }
 
 // FormatGlyph returns the shared SVG used by compact editor format bars.

@@ -1639,6 +1639,7 @@ static NSCursor *darwin_host_pointer_cursor(uint8_t cursor) {
     case 7: return darwin_diagonal_resize_cursor(NO);
     case 8: return [NSCursor pointingHandCursor];
     case 9: return darwin_web_view_cursor(@"none");
+    case 10: return [NSCursor openHandCursor];
     default: return [NSCursor arrowCursor];
   }
 }

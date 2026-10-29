@@ -9,9 +9,150 @@ import (
 	"testing"
 	"time"
 
+	"wox/util"
 	"wox/util/filesearchservice"
 	"wox/util/filesearchservice/protocol"
 )
+
+// TestNativeIndexIncrementalCountNotifications exercises the same engine status
+// subscription used by the toolbar, with content extraction explicitly disabled.
+func TestNativeIndexIncrementalCountNotifications(t *testing.T) {
+	ctx := context.Background()
+	batches := make(chan []protocol.Entry)
+	counts := make(chan int64, 16)
+	ready := make(chan struct{})
+	var engine *Engine
+	var contentCalls atomic.Int32
+	stream := func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
+		if kind == protocol.Enumerate {
+			return emitNativeIndexFixture(emit, boundary.Volume, "initial.txt")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case entries := <-batches:
+			for _, entry := range entries {
+				boundary.NextUSN++
+				entry.USN = boundary.NextUSN
+				payload, err := protocol.AppendEntry(nil, entry)
+				if err != nil {
+					return err
+				}
+				if err := emit(protocol.Records, payload); err != nil {
+					return err
+				}
+			}
+			payload, err := protocol.EncodeBoundary(boundary)
+			if err != nil {
+				return err
+			}
+			return emit(protocol.Checkpoint, payload)
+		}
+	}
+	index, err := newNTFSNameIndex(ctx, t.TempDir(), []string{`C:\`}, stream, nativeIndexCallbacks{
+		status: func() {
+			select {
+			case <-ready:
+				engine.notifyStatusChanged(ctx)
+			default:
+			}
+		},
+		wantsContent: func() bool { return false },
+		content:      func(context.Context, []ContentHookNotification) { contentCalls.Add(1) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+	engine = &Engine{nativeIndex: index, statusListeners: util.NewHashMap[string, func(StatusSnapshot)]()}
+	engine.OnStatusChanged(func(status StatusSnapshot) {
+		if status.IsIndexing {
+			return
+		}
+		stats, err := engine.GetIndexStats(ctx)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		counts <- stats.FileCount
+	})
+	close(ready)
+	awaitNativeMatches(t, index, "initial", 1)
+	// Wait for the worker to reach subscription, beyond full-build callbacks.
+	for _, step := range []struct {
+		entries []protocol.Entry
+		want    int64
+	}{
+		{[]protocol.Entry{{ID: 12, ParentID: 5, Name: "first.txt"}, {ID: 13, ParentID: 5, Name: "second.txt"}, {ID: 14, ParentID: 5, Name: "folder", Flags: protocol.Directory}}, 3},
+		{[]protocol.Entry{{ID: 12, ParentID: 5, Name: "first.txt", Flags: protocol.Deleted}}, 2},
+	} {
+		select {
+		case batches <- step.entries:
+		case <-time.After(3 * time.Second):
+			t.Fatal("native index did not subscribe for changes")
+		}
+		timeout := time.After(3 * time.Second)
+		updated := false
+		for !updated {
+			select {
+			case count := <-counts:
+				updated = count == step.want
+			case <-timeout:
+				t.Fatalf("no automatic count update to %d", step.want)
+			}
+		}
+	}
+	// The full-build replacement hook is existing behavior; incrementals must
+	// not require content notifications in order to publish filename statistics.
+	if contentCalls.Load() > 1 {
+		t.Fatal("incremental count updates enabled content extraction")
+	}
+}
+
+// TestNativeIndexCoalescesStatusChanges also checks that changes arriving during
+// a slow consumer are delivered in the next window, and shutdown joins the worker.
+func TestNativeIndexCoalescesStatusChanges(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	updates, release := make(chan struct{}, 2), make(chan struct{}, 2)
+	index := &ntfsNameIndex{changes: make(chan struct{}, 1), notify: func() {
+		updates <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+	}}
+	for range 1000 {
+		index.queueStatusChange()
+	}
+	index.workers.Add(1)
+	go index.publishStatusChanges(ctx)
+	defer func() {
+		cancel()
+		index.workers.Wait()
+	}()
+	for round := range 2 {
+		select {
+		case <-updates:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("missing coalesced update %d", round)
+		}
+		if len(index.changes) != 0 {
+			t.Fatal("burst was not consumed by one update")
+		}
+		if round == 0 {
+			for range 1000 {
+				index.queueStatusChange()
+			}
+		}
+		release <- struct{}{}
+	}
+	cancel()
+	index.workers.Wait()
+	index.queueStatusChange()
+	if len(updates) != 0 {
+		t.Fatal("status worker emitted after shutdown")
+	}
+}
 
 // emitNativeIndexFixture sends the same bounded fact frames as the service.
 func emitNativeIndexFixture(emit filesearchservice.FactSink, root, name string) error {

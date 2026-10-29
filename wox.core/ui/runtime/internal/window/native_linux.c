@@ -594,6 +594,7 @@ static int32_t apply_linux_pointer_cursor(WoxLinuxWindow *window) {
       "nesw-resize",
       "pointer",
       "none",
+      "grab",
   };
   uint8_t host_cursor = window->pointer_cursor;
   const char *host_cursor_name = host_cursor < sizeof(host_cursor_names) / sizeof(host_cursor_names[0]) ? host_cursor_names[host_cursor] : "default";

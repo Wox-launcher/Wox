@@ -1442,7 +1442,7 @@ func textFieldTrailingHandleWidget(props TextFieldProps, state woxui.TextEditing
 	}
 	return &textFieldHandleOverlay{bounds: bounds, widget: woxwidget.Semantics{
 		Key: woxwidget.Key(id), AutomationID: id, Role: woxui.AccessibilityRoleButton, Label: label,
-		Child: woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorMove, OnPanStart: func(position woxui.Point) {
+		Child: woxwidget.Gesture{ID: id, Cursor: woxui.PointerCursorGrab, OnPanStart: func(position woxui.Point) {
 			if onPanStart != nil {
 				onPanStart()
 			}
@@ -1572,19 +1572,7 @@ func textFieldReorderGhost(props TextFieldProps, handle woxui.Rect, innerWidth, 
 		width = size
 	}
 	x := max(float32(0), handle.X)
-	background := props.Theme.InputBackground
-	if background.A == 0 {
-		background = props.Theme.Background
-	}
-	background.A = 230
-	return woxwidget.Container{
-		Width: width, Height: size + 4, Radius: 6, Color: background,
-		Padding: woxwidget.Insets{Left: 4, Right: pad, Top: 2, Bottom: 2},
-		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			icon,
-			woxwidget.Text{Value: preview, Style: style, Color: textColor},
-		}},
-	}, x, max(float32(0), y-2), true
+	return ReorderGhost(preview, width, size, 1, style, textColor, props.Theme), x, max(float32(0), y-2), true
 }
 
 // openTextFieldContextMenu places Cut/Copy/Paste/Select All in a Host overlay so it is not clipped by the field.

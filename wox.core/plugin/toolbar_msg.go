@@ -10,6 +10,7 @@ type ToolbarMsg struct {
 	Id            string
 	Title         string
 	Icon          common.WoxImage
+	HideIcon      bool // HideIcon suppresses both an explicit icon and the default plugin icon.
 	Progress      *int // Progress is a 0-100 value when the work has a measurable percentage.
 	Indeterminate bool // Indeterminate shows a spinner without percentage when progress cannot be measured yet.
 	Actions       []ToolbarMsgAction

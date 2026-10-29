@@ -2186,12 +2186,15 @@ const mruRestoreTimeout = 300 * time.Millisecond
 
 func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string) []QueryResultUI {
 	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, sessionId), queryId)
-	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query := Query{
 		Id:        queryId,
 		SessionId: sessionId,
 		Type:      QueryTypeInput,
 	}
+	// The recent-items start page bypasses runUIQuery, but still leaves the
+	// previous plugin context. Clear its toolbar before potentially slow restores.
+	m.HandleQueryLifecycle(ctx, query, nil)
+	activeWindowSnapshot := m.GetUI().GetActiveWindowSnapshot(ctx)
 	query.Env.ActiveWindowTitle = activeWindowSnapshot.Name
 	query.Env.ActiveWindowPid = activeWindowSnapshot.Pid
 	query.Env.ActiveWindowId = activeWindowSnapshot.WindowId

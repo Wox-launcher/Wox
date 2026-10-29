@@ -302,6 +302,20 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	})
 }
 
+// setMinSize updates AppKit's logical content resize limits.
+func (w *platformWindow) setMinSize(size Size) error {
+	return w.runLockedOnMain(func() error {
+		native, err := w.openNative()
+		if err != nil {
+			return err
+		}
+		if C.wox_darwin_window_set_min_size(native, C.float(size.Width), C.float(size.Height)) != 0 {
+			return errors.New("woxui: failed to set macOS minimum window size")
+		}
+		return nil
+	})
+}
+
 func (w *platformWindow) bounds() (Rect, error) {
 	native, err := w.openNative()
 	if err != nil {

@@ -82,6 +82,11 @@ current synchronous launcher build, not retained for asynchronous use. Retained
 callbacks only. Action-panel invalidation compares the result and toolbar
 revisions directly instead of advancing a revision during snapshot creation.
 
+`launcher/component/wox_sidebar.go` owns the shared sidebar panel, split layout,
+toggle control and minimum-width calculation used by Chat and Notes. Their window
+controllers use `sidebar_window.go` for native minimum-size and resize handling;
+feature controllers retain their own open state, persistence and content actions.
+
 Notes uses a document-local `notesEditingSession` for text and structural edits,
 selection, Markdown projection, and bounded undo/redo history. It has no native
 window, persistence service, or timer dependency; change notifications schedule
@@ -94,6 +99,18 @@ at the frame entry point, outside widget composition. `notes_presentation.go`
 prepares display data and callbacks; `view/notes_chrome_view.go` owns toolbar,
 format bar, search, menus, link editor, status and overlay layout. Editor-session
 tests run without constructing an App, native window, or persistence service.
+
+Notes organization is separate from document revisions. The Notes repository stores
+`group:<id>` and `placement:<note-id>` records through atomic settings/oplog batches.
+Deleted groups retain their parent so late remote children resolve to a surviving
+ancestor; missing parents and cycles are displayed at the root without read-time
+writes. Existing notes without placement records stay at the root until organized.
+`notes_sidebar.go` owns each window's tree interaction, menus, drag lifecycle and
+local presentation preferences; `view/notes_sidebar_view.go` owns its responsive
+layout. The tree stays beside the editor; opening it raises the native minimum width
+and expands an undersized window to preserve the editor's minimum width. Note switching still flushes the document
+first and reuses an existing window for the target note.
+
 
 Final destruction cancels the instance context, stops query/Glance/quick-select,
 file-preview (including native occlusion) and settings-highlight timers, cancels

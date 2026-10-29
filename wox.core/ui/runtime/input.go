@@ -98,6 +98,7 @@ const (
 	PointerCursorResizeNESW       = input.PointerCursorResizeNESW
 	PointerCursorHand             = input.PointerCursorHand
 	PointerCursorHidden           = input.PointerCursorHidden
+	PointerCursorGrab             = input.PointerCursorGrab
 )
 
 // PointerEvent uses logical client coordinates; positive scroll Y means upward motion.

@@ -372,6 +372,19 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	assert.Equal(t, pluginIcon, normalized.Icon)
 }
 
+// TestNormalizeToolbarMsgHideIcon preserves text-only messages through the UI payload.
+func TestNormalizeToolbarMsgHideIcon(t *testing.T) {
+	pluginIcon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg"/>`)
+	instance := &Instance{Metadata: Metadata{Icon: pluginIcon.String()}}
+	for _, icon := range []common.WoxImage{{}, pluginIcon} {
+		normalized := (&Manager{}).presentation.normalizeToolbarMsg(context.Background(), instance, ToolbarMsg{
+			Id: "count", Title: "20,646 files", Icon: icon, HideIcon: true,
+		})
+		assert.True(t, normalized.Icon.IsEmpty())
+		assert.True(t, normalized.toToolbarMsgUI().Icon.IsEmpty())
+	}
+}
+
 func TestAppendActionEnglishAliasPreservesCustomAliases(t *testing.T) {
 	pluginInstance := &Instance{Metadata: Metadata{I18n: map[string]map[string]string{
 		"en_US": {"copy_path": "Copy Path"},

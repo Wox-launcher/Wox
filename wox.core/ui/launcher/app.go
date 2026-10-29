@@ -1876,6 +1876,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if a.actions.onActionKey(event) {
 		return true
 	}
+	if hotkeyMatches(primaryHotkey("p"), event) && a.chat.onChatPreviewKey(event) {
+		return true
+	}
 	if hotkeyMatches(primaryHotkey("p"), event) && !event.Repeat && a.toggleSelectedPreview() {
 		return true
 	}

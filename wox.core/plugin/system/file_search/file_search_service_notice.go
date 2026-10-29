@@ -14,6 +14,7 @@ import (
 func (c *FileSearchPlugin) refreshServiceUpdateNotice(ctx context.Context, status filesearchservice.Status) {
 	c.toolbarMsgStateMu.Lock()
 	c.serviceUpdateStatus = status
+	c.toolbarRevision++
 	c.toolbarMsgStateMu.Unlock()
 	if !status.HasUpdate() {
 		return

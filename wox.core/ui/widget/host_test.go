@@ -1565,6 +1565,37 @@ func TestHostUpdatesPointerCursorWithinGesture(t *testing.T) {
 	}
 }
 
+func TestHostKeepsPanCursorAcrossOtherTargets(t *testing.T) {
+	dragging := false
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		cursor := woxui.PointerCursorDefault
+		if dragging {
+			cursor = woxui.PointerCursorGrab
+		}
+		return Flex{Axis: Horizontal, Children: []Widget{
+			Gesture{ID: "drag", Cursor: cursor, OnPanStart: func(woxui.Point) {}, OnPanUpdate: func(woxui.Point) { dragging = true }, OnPanEnd: func() { dragging = false }, Child: Container{Width: 40, Height: 20}},
+			Gesture{ID: "other", Cursor: woxui.PointerCursorText, Child: Container{Width: 40, Height: 20}},
+		}}
+	})
+	services := &fakeHostServices{}
+	host.AttachServices(services)
+	renderTestFrame(host)
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 5, Y: 5}})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 15, Y: 5}})
+	renderTestFrame(host)
+	if services.pointerCursor != woxui.PointerCursorGrab {
+		t.Fatal("pan cursor did not update after drag began")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: woxui.Point{X: 50, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorGrab {
+		t.Fatal("another target replaced the active pan cursor")
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: woxui.Point{X: 50, Y: 5}})
+	if services.pointerCursor != woxui.PointerCursorText {
+		t.Fatal("pointer cursor was not restored when the pan ended")
+	}
+}
+
 func TestHostUnfocusesOptedInControlOnOutsidePointerDown(t *testing.T) {
 	var focusChanges []bool
 	host := NewHost(func(frame woxui.FrameInfo) Widget {

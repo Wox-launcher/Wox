@@ -393,6 +393,46 @@ func TestChatHistoryUsesInsetRoundedPanel(t *testing.T) {
 	}
 }
 
+func TestChatHistorySearchStaysAboveScrollAndCanClear(t *testing.T) {
+	for _, density := range []float32{.9, 1, 1.1} {
+		query := "roadmap"
+		editor := woxwidget.NewTextEditingController(query)
+		props := ChatCatalogProps{Width: 240, Height: 600, Key: "history", DensityScale: density, ShowNew: true, NewLabel: "New Chat", ContentHeight: 1000, SearchClearLabel: "Clear search"}
+		props.Search = &woxcomponent.TextFieldProps{ID: "chat-history-search", Label: "Search chat titles", Value: query, Controller: editor}
+		props.OnSearchClear = func() { query = ""; editor.SetText("", false) }
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { props.Search.Value = query; return ChatCatalog(props) })
+		host.AttachServices(terminalPreviewHostServices{})
+		frame := woxui.FrameInfo{Size: woxui.Size{Width: 240, Height: 600}, Scale: 1}
+		host.Frame(&woxui.DisplayList{}, frame)
+		var clear woxui.Rect
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "chat-history-search-clear" {
+				clear = node.Bounds
+			}
+		}
+		if clear.Width == 0 {
+			t.Fatalf("density %v: search clear is missing", density)
+		}
+		point := woxui.Point{X: clear.X + clear.Width/2, Y: clear.Y + clear.Height/2}
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		if query != "" || editor.Text() != "" {
+			t.Fatal("clear did not reset the search field")
+		}
+		drawer := ChatCatalog(props).(woxwidget.Stack)
+		panel := drawer.Children[0].Child.(woxwidget.Container)
+		content := panel.Child.(woxwidget.Flex)
+		if len(content.Children) != 5 {
+			t.Fatalf("density %v: search header is not separate from scroll", density)
+		}
+		scroll := content.Children[4].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+		if scroll.Height != panel.Height-2*chatSidebarDrawerPaddingY-ChatHistorySearchHeaderHeight(density) {
+			t.Fatalf("density %v: incorrect scroll viewport %v", density, scroll.Height)
+		}
+		host.Dispose()
+	}
+}
+
 func TestDedicatedChatSidebarAndComposerShareBottomEdge(t *testing.T) {
 	for _, scale := range []float32{0.9, 1, 1.1} {
 		drawer := ChatCatalog(ChatCatalogProps{Width: 240, Height: 600, DensityScale: scale, ShowNew: true}).(woxwidget.Stack)

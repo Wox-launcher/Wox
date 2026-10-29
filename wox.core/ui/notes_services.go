@@ -75,14 +75,6 @@ func (s *CoreServices) NotesDiscard(ctx context.Context, id string) error {
 	return services.NotesDiscard(ctx, id)
 }
 
-func (s *CoreServices) NotesRestore(ctx context.Context, id string) (common.NoteRecord, error) {
-	services, err := notesServices()
-	if err != nil {
-		return common.NoteRecord{}, err
-	}
-	return services.NotesRestore(ctx, id)
-}
-
 func (s *CoreServices) NotesExport(ctx context.Context, id, format string) (common.NoteExport, error) {
 	services, err := notesServices()
 	if err != nil {
@@ -105,4 +97,22 @@ func (s *CoreServices) NotesSetLocal(ctx context.Context, key, value string) err
 		return err
 	}
 	return services.NotesSetLocal(ctx, key, value)
+}
+
+// NotesTree loads independently synced note organization.
+func (s *CoreServices) NotesTree(ctx context.Context) (common.NotesTree, error) {
+	services, err := notesServices()
+	if err != nil {
+		return common.NotesTree{}, err
+	}
+	return services.NotesTree(ctx)
+}
+
+// NotesOrganize applies a group or placement transaction.
+func (s *CoreServices) NotesOrganize(ctx context.Context, change common.NotesTreeChange) (common.NotesTree, error) {
+	services, err := notesServices()
+	if err != nil {
+		return common.NotesTree{}, err
+	}
+	return services.NotesOrganize(ctx, change)
 }

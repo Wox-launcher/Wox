@@ -5,6 +5,7 @@ package tray
 // #include <stdlib.h>
 // void createTray(const char *iconBytes, int length);
 // void addMenuItem(const char *title, int tag);
+// void addMenuSeparator();
 // int addQueryTray(const char *iconBytes, int length, int tag, const char *identifier, const char *tooltip, int menuTag, const char *menuTitle);
 // void clearQueryTrayIcons();
 // void removeTray();
@@ -102,7 +103,10 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 
 		C.createTray((*C.char)(iconBytesC), C.int(len(appIcon)))
 
-		for _, item := range items {
+		for i, item := range items {
+			if i > 0 && item.SeparatorBefore {
+				C.addMenuSeparator()
+			}
 			addMenuItem(item.Title, item.Callback)
 		}
 	})

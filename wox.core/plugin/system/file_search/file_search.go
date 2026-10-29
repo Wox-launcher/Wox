@@ -117,6 +117,10 @@ type FileSearchPlugin struct {
 	unsubscribeStatusChange  func()
 	toolbarMsgStateMu        sync.Mutex
 	lastToolbarMsgSignature  string
+	toolbarQueryActive       bool
+	toolbarRevision          uint64
+	contentToolbarMsg        *plugin.ToolbarMsg
+	contentToolbarGeneration uint64
 	serviceUpdateStatus      filesearchservice.Status
 	completionHoldUntilMs    int64
 	completionHoldGeneration int64
@@ -417,6 +421,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	// Enter-time sync keeps the initial state correct and lets inactive sessions rely
 	// on manager-side ignore behavior instead of blocking every search.
 	c.api.OnEnterPluginQuery(ctx, func(ctx context.Context) {
+		c.enterToolbarQuery()
 		if runtime.GOOS == "windows" {
 			c.refreshServiceUpdateNotice(ctx, filesearchservice.GetStatus())
 		}
@@ -504,7 +509,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 				if err := c.engine.ResetContentIndex(callbackCtx); err != nil {
 					c.api.Log(callbackCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to remove content search database: %s", err.Error()))
 				}
-				c.api.ClearToolbarMsg(callbackCtx, contentSearchToolbarMsgID)
+				c.clearContentToolbarMsg(callbackCtx, 0)
 				c.syncUserRoots(callbackCtx)
 			}
 			return
@@ -516,6 +521,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	})
 
 	c.api.OnUnload(ctx, func(ctx context.Context) {
+		c.resetToolbarMsgState()
 		c.nextContentSearchGeneration()
 		c.stopContentCrawlWork()
 		if c.unsubscribeStatusChange != nil {
@@ -726,7 +732,7 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 	c.contentCrawlTimer = nil
 	c.contentSearchStateMu.Unlock()
 
-	c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+	c.showContentToolbarMsg(ctx, plugin.ToolbarMsg{
 		Id:            contentSearchToolbarMsgID,
 		Title:         fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_content_indexing_progress"), 0),
 		Indeterminate: true,
@@ -763,7 +769,7 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 		err := <-done
 		if err != nil && !errors.Is(err, context.Canceled) && c.isContentSearchCurrent(runningCtx, generation) {
 			c.api.Log(runningCtx, plugin.LogLevelError, "Content index failed: "+err.Error())
-			c.api.ClearToolbarMsg(runningCtx, contentSearchToolbarMsgID)
+			c.clearContentToolbarMsg(runningCtx, 0)
 			c.api.Notify(runningCtx, "i18n:plugin_file_content_index_failed")
 		}
 		c.finishContentCrawl(runningCtx, generation)
@@ -850,7 +856,7 @@ func (c *FileSearchPlugin) waitForFileSearchIdle(ctx context.Context) {
 func (c *FileSearchPlugin) handleContentCrawlProgress(ctx context.Context, generation int64, progress filesearch.ContentCrawlProgress) {
 	if progress.Complete {
 		averageRate := estimateCompletedIndexRate(int64(progress.FilesIndexed), progress.ElapsedMillis)
-		c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+		toolbarGeneration := c.showContentToolbarMsg(ctx, plugin.ToolbarMsg{
 			Id: contentSearchToolbarMsgID,
 			Title: fmt.Sprintf(
 				c.api.GetTranslation(ctx, "plugin_file_content_index_ready"),
@@ -861,13 +867,13 @@ func (c *FileSearchPlugin) handleContentCrawlProgress(ctx context.Context, gener
 		})
 		time.AfterFunc(5*time.Second, func() {
 			if c.isContentSearchCurrent(ctx, generation) {
-				c.api.ClearToolbarMsg(ctx, contentSearchToolbarMsgID)
+				c.clearContentToolbarMsg(ctx, toolbarGeneration)
 			}
 		})
 		return
 	}
 
-	c.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
+	c.showContentToolbarMsg(ctx, plugin.ToolbarMsg{
 		Id:            contentSearchToolbarMsgID,
 		Title:         fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_content_indexing_progress"), progress.FilesIndexed),
 		Indeterminate: true,
@@ -1502,7 +1508,7 @@ func (c *FileSearchPlugin) rebuildContentIndex(ctx context.Context) {
 			c.api.Notify(rebuildCtx, "i18n:plugin_file_rebuild_content_index_failed")
 			return
 		}
-		c.api.ClearToolbarMsg(rebuildCtx, contentSearchToolbarMsgID)
+		c.clearContentToolbarMsg(rebuildCtx, 0)
 		if c.isContentSearchCurrent(rebuildCtx, generation) {
 			c.requestContentCrawl(rebuildCtx, generation)
 		}
@@ -2020,14 +2026,7 @@ func (c *FileSearchPlugin) syncToolbarMsgWithStatus(ctx context.Context, status 
 			return
 		}
 		c.cancelCompletionToolbarHold()
-		// Avoid repeating the same clear request on every identical idle snapshot.
-		// The previous implementation always cleared and re-sent status updates, which
-		// produced long runs of duplicate file-search and UI bridge logs without any
-		// visible toolbar change.
-		if !c.takeToolbarMsgUpdate("") {
-			return
-		}
-		c.api.ClearToolbarMsg(ctx, fileSearchToolbarMsgID)
+		c.syncIndexedFileCount(ctx, c.engine, 0)
 		return
 	}
 
@@ -2293,6 +2292,7 @@ func (c *FileSearchPlugin) handleStatusChanged(status filesearch.StatusSnapshot)
 func (c *FileSearchPlugin) takeToolbarMsgUpdate(signature string) bool {
 	c.toolbarMsgStateMu.Lock()
 	defer c.toolbarMsgStateMu.Unlock()
+	c.toolbarRevision++
 
 	if c.lastToolbarMsgSignature == signature {
 		return false
@@ -2306,6 +2306,10 @@ func (c *FileSearchPlugin) resetToolbarMsgState() {
 	c.toolbarMsgStateMu.Lock()
 	defer c.toolbarMsgStateMu.Unlock()
 
+	c.toolbarQueryActive = false
+	c.toolbarRevision++
+	c.contentToolbarMsg = nil
+	c.contentToolbarGeneration++
 	c.lastToolbarMsgSignature = ""
 	c.completionHoldUntilMs = 0
 	c.completionHoldGeneration++
@@ -2327,6 +2331,7 @@ func (c *FileSearchPlugin) armCompletionToolbarHold() int64 {
 	// plugin layer because this is display policy, not indexer state.
 	c.completionHoldGeneration++
 	c.completionHoldUntilMs = util.GetSystemTimestamp() + fullIndexCompletionToolbarHoldMs
+	c.toolbarRevision++
 	return c.completionHoldGeneration
 }
 
@@ -2343,9 +2348,9 @@ func (c *FileSearchPlugin) cancelCompletionToolbarHold() {
 
 func (c *FileSearchPlugin) clearCompletionToolbarIfCurrent(ctx context.Context, generation int64) {
 	c.toolbarMsgStateMu.Lock()
-	defer c.toolbarMsgStateMu.Unlock()
 
 	if c.completionHoldGeneration != generation || c.completionHoldUntilMs == 0 || c.completionHoldUntilMs > util.GetSystemTimestamp() {
+		c.toolbarMsgStateMu.Unlock()
 		return
 	}
 	// Keep the generation check and clear request under the same lock. Otherwise
@@ -2354,7 +2359,11 @@ func (c *FileSearchPlugin) clearCompletionToolbarIfCurrent(ctx context.Context, 
 	c.completionHoldUntilMs = 0
 	c.completionHoldGeneration++
 	c.lastToolbarMsgSignature = ""
+	c.toolbarRevision++
+	revision := c.toolbarRevision
 	c.api.ClearToolbarMsg(ctx, fileSearchToolbarMsgID)
+	c.toolbarMsgStateMu.Unlock()
+	c.syncIndexedFileCount(ctx, c.engine, revision)
 }
 
 func (c *FileSearchPlugin) scheduleCompletionToolbarClear(ctx context.Context, generation int64) {
@@ -2419,6 +2428,7 @@ func buildToolbarMsgSignature(msg plugin.ToolbarMsg) string {
 		msg.Id,
 		msg.Title,
 		msg.Icon.String(),
+		fmt.Sprintf("%t", msg.HideIcon),
 		progress,
 		fmt.Sprintf("%t", msg.Indeterminate),
 		strings.Join(actionParts, "||"),

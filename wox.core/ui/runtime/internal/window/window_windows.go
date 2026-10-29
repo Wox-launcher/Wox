@@ -542,6 +542,10 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds}).err
 }
 
+func (w *platformWindow) setMinSize(size Size) error {
+	return platformCall(func() { w.options.MinSize = size })
+}
+
 func (w *platformWindow) setBoundsOnDisplay(bounds Rect, display screen.Display) error {
 	return w.call(windowCommand{kind: windowCommandSetBounds, bounds: bounds, displayScale: float32(display.Scale)}).err
 }
@@ -786,7 +790,12 @@ func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
 		return errors.New("window is closed")
 	}
 	w.pointerCursor = cursor
+	hwnd := w.hwnd
 	w.mu.Unlock()
+	if cursor == PointerCursorGrab {
+		win.SetCursor(windowsGrabCursor(hwnd))
+		return nil
+	}
 	win.SetCursor(windowsPointerCursor(cursor))
 	return nil
 }
@@ -1598,6 +1607,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 func (w *platformWindow) resolvedPointerCursor() win.HCURSOR {
 	if w.webViewPointerOver && w.webViewCursorKnown {
 		return w.webViewCursor
+	}
+	if w.pointerCursor == PointerCursorGrab {
+		return windowsGrabCursor(w.hwnd)
 	}
 	return windowsPointerCursor(w.pointerCursor)
 }

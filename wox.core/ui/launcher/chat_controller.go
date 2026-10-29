@@ -5,6 +5,7 @@ import (
 
 	"wox/common"
 	"wox/ui/contract"
+	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 )
 
@@ -44,7 +45,9 @@ type chatController struct {
 	refreshAIMCPServerToolsLocked     func()
 	applyWindowBounds                 func() error
 	selectEntireQuery                 func()
+	focusQuery                        func()
 	openDedicatedChatWindow           func()
+	focusHistorySearch                func(bool)
 	closePreviewWindow                func()
 	restoreQueryTextInput             func()
 	chatPreview                       *chatPreviewState
@@ -94,7 +97,25 @@ func (a *App) bindChat() {
 	c.refreshAIMCPServerToolsLocked = func() { a.aiSettings.refreshAIMCPServerToolsLocked() }
 	c.applyWindowBounds = a.applyWindowBounds
 	c.selectEntireQuery = a.querySession.selectEntireQuery
+	c.focusQuery = func() {
+		if a.host == nil || !a.queryCanFocus() {
+			return
+		}
+		if !a.host.RequestFocus(launcherview.LauncherQueryInputKey) {
+			// The query is mounted on the next frame when chat was fullscreen.
+			a.host.ClearFocus()
+		}
+	}
 	c.openDedicatedChatWindow = a.requestOpenDedicatedChatWindow
+	c.focusHistorySearch = func(dedicated bool) {
+		host := a.host
+		if dedicated {
+			host = a.chatWindow.chatHost
+		}
+		if host != nil {
+			host.RequestFocus("chat-history-search")
+		}
+	}
 	c.closePreviewWindow = a.closePreviewWindow
 	c.restoreQueryTextInput = a.restoreQueryTextInput
 }

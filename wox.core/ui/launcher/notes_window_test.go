@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gorm.io/gorm"
+
 	"wox/common"
 	notesplugin "wox/plugin/system/notes"
 	"wox/ui/contract"
@@ -370,6 +372,7 @@ func TestNotesSearchSwitchesNoteInCurrentWindow(t *testing.T) {
 	windowID := controller.windowID
 	app.notes.noteWindows[controller.record.ID] = controller
 	controller.searchOpen = true
+	controller.searchEditor.SetText("other", false)
 
 	controller.openSearchItem(common.NoteSummary{ID: "target", Title: "other note"})
 	if controller.record.ID != "target" {
@@ -382,39 +385,28 @@ func TestNotesSearchSwitchesNoteInCurrentWindow(t *testing.T) {
 		t.Fatalf("window map = %#v, want current window rebound to target", app.notes.noteWindows)
 	}
 	if controller.searchOpen {
-		t.Fatal("search overlay stayed open after switching")
+		t.Fatal("search kept focus after switching")
+	}
+	if controller.searchEditor.Text() != "other" {
+		t.Fatal("switching notes must keep the sidebar search results")
 	}
 	if controller.editor.Text() != "other note" {
 		t.Fatalf("editor = %q, want the selected note in this window", controller.editor.Text())
 	}
 }
 
-func TestNotesSearchRestoresDeletedNoteInCurrentWindow(t *testing.T) {
-	target := common.NoteRecord{
-		ID: "trashed", Revision: "r1", DeletedAt: 1,
-		Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "trashed note"}}},
-	}
-	services := &notesWindowTestServices{records: map[string]common.NoteRecord{"trashed": target}}
-	app := bindTestApp(&App{
-		services:   services,
-		appearance: appearanceController{palette: defaultPalette()},
-		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
-	})
+func TestNotesRefreshCancelsPendingSaveAfterDelete(t *testing.T) {
+	services := &notesWindowTestServices{}
+	app := bindTestApp(&App{services: services, appearance: appearanceController{palette: defaultPalette()}})
 	controller := newNotesWindowController(&app.notes, common.NoteRecord{
-		ID: "current", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph, Text: "this note"}}},
+		ID: "deleted", Document: common.NoteDocument{Blocks: []common.NoteBlock{{Text: "unsaved edits"}}},
 	})
-	windowID := controller.windowID
-	app.notes.noteWindows[controller.record.ID] = controller
-
-	controller.openSearchItem(common.NoteSummary{ID: "trashed", Title: "trashed note", DeletedAt: 1})
-	if controller.record.ID != "trashed" || controller.record.DeletedAt != 0 {
-		t.Fatalf("restored note = id %q deleted %d, want trashed in this window", controller.record.ID, controller.record.DeletedAt)
-	}
-	if controller.windowID != windowID || app.notes.noteWindows["trashed"] != controller {
-		t.Fatalf("restore opened another window: id %q map %#v", controller.windowID, app.notes.noteWindows)
-	}
-	if controller.editor.Text() != "trashed note" {
-		t.Fatalf("editor = %q, want restored note text", controller.editor.Text())
+	controller.dirty = true
+	controller.scheduleSave()
+	generation := controller.saveGeneration
+	controller.refresh("deleted")
+	if controller.dirty || controller.saveTimer != nil || controller.saveGeneration == generation {
+		t.Fatal("deleting a note must cancel pending saves")
 	}
 }
 
@@ -432,7 +424,7 @@ func TestNotesSearchResetsSelectionWhenOpened(t *testing.T) {
 	}
 }
 
-func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
+func TestNotesToolbarKeepsSearchAndAddsSidebar(t *testing.T) {
 	app := bindTestApp(&App{
 		appearance: appearanceController{palette: defaultPalette()},
 		notes:      notesController{noteWindows: map[string]*notesWindowController{}},
@@ -467,8 +459,8 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	if controls["notes.toolbar.back"] || controls["notes.toolbar.forward"] || !controls["notes.toolbar.new"] || !controls["notes.toolbar.pin"] {
 		t.Fatalf("Notes title-bar controls = %#v, want new and pin without history navigation", controls)
 	}
-	if !controls["notes.toolbar.search"] {
-		t.Fatalf("Notes title-bar controls = %#v, want search beside pin", controls)
+	if controls["notes.toolbar.search"] {
+		t.Fatalf("Notes title-bar controls = %#v, search belongs in the sidebar", controls)
 	}
 	var pinIcon woxwidget.Widget
 	for _, child := range toolbar.Children {
@@ -491,7 +483,7 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	if image, ok := pinIcon.(woxwidget.Image); !ok || image.Source == nil || image.Width != 16 || image.Height != 16 {
 		t.Fatalf("pin icon = %#v, want 16x16 thumbtack SVG beside search", pinIcon)
 	}
-	for key, hotkey := range map[woxwidget.Key]string{"notes.toolbar.search": primaryHotkey("p"), "notes.toolbar.pin": primaryHotkey("shift+p"), "notes.toolbar.new": primaryHotkey("n")} {
+	for key, hotkey := range map[woxwidget.Key]string{"notes.toolbar.pin": primaryHotkey("shift+p"), "notes.toolbar.new": primaryHotkey("n")} {
 		shortcut := "(" + strings.Join(formatHotkeyLabels(hotkey), "+") + ")"
 		if !strings.HasSuffix(labels[key], shortcut) {
 			t.Fatalf("Notes title-bar label %q = %q, want shortcut suffix %q", key, labels[key], shortcut)
@@ -500,12 +492,22 @@ func TestNotesToolbarRemovesHistoryControls(t *testing.T) {
 	title := toolbar.Children[1]
 	alignment := title.Child.(woxwidget.Align)
 	wantLeft, wantRight, wantAlign := launcherview.NotesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
+	if runtime.GOOS == "darwin" {
+		wantLeft += 32
+	} else {
+		wantLeft += 44
+	}
 	if title.Left != wantLeft || title.Right != wantRight || alignment.Horizontal != wantAlign {
 		t.Fatalf("Notes title slot = %.0f/%.0f alignment %.1f, want %.0f/%.0f/%.1f", title.Left, title.Right, alignment.Horizontal, wantLeft, wantRight, wantAlign)
 	}
 	label, ok := alignment.Child.(woxwidget.TextBlock)
 	if !ok || label.MaxLines != 1 || !label.ShrinkWrap || label.AlignmentY != 0.5 {
 		t.Fatalf("Notes title = %#v, want a single-line ellipsized TextBlock", alignment.Child)
+	}
+	sidebar := toolbar.Children[len(toolbar.Children)-1].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	shortcut := "(" + strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+") + ")"
+	if !strings.HasSuffix(sidebar.Label, shortcut) {
+		t.Fatalf("sidebar label %q does not show shortcut %q", sidebar.Label, shortcut)
 	}
 	if runtime.GOOS != "darwin" {
 		icon := toolbar.Children[3]
@@ -579,6 +581,53 @@ func TestNotesMoreMenuOmitsListPin(t *testing.T) {
 	}
 	if !ids["notes.menu.view"] {
 		t.Fatalf("more menu ids = %#v, want the Markdown/preview toggle", ids)
+	}
+}
+
+func TestNotesMoreMenuHasIconsAndGroups(t *testing.T) {
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{ID: "note"})
+	for _, density := range []float32{.9, 1, 1.1} {
+		for _, deleted := range []bool{false, true} {
+			controller.record.DeletedAt = 0
+			if deleted {
+				controller.record.DeletedAt = 1
+			}
+			theme := defaultPalette().componentTheme()
+			theme.Controls.DensityScale = density
+			overlay := controller.buildMoreOverlay(woxui.Size{Width: 460, Height: 400}, theme).(woxwidget.Stack)
+			panel := overlay.Children[1].Child.(woxwidget.Container)
+			rows := panel.Child.(woxwidget.Flex).Children
+			if len(rows) != 8 {
+				t.Fatalf("density %v deleted %v: got %d rows, want six actions and two separators", density, deleted, len(rows))
+			}
+			for index, row := range rows {
+				if index == 1 || index == 6 {
+					if separator, ok := row.(woxwidget.Align); !ok || separator.Height != theme.Controls.Scaled(9) {
+						t.Fatalf("row %d is not a separator: %#v", index, row)
+					}
+					continue
+				}
+				state := row.(woxwidget.Semantics).Child.(woxwidget.Stateful)
+				content := state.CreateState().Build(woxwidget.StateContext{}, state.Widget).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+				icon := content.Children[0].(woxwidget.Align).Child.(woxwidget.Image)
+				if icon.Source == nil || icon.Width != theme.Controls.Scaled(16) {
+					t.Fatalf("row %d has no correctly sized icon", index)
+				}
+			}
+			wantHeight := theme.Controls.Scaled(12) + 6*theme.Controls.Scaled(32) + 2*theme.Controls.Scaled(9)
+			if panel.Height != wantHeight {
+				t.Fatalf("menu height = %v, want %v", panel.Height, wantHeight)
+			}
+			small := controller.buildMoreOverlay(woxui.Size{Width: 460, Height: 200}, theme).(woxwidget.Stack)
+			smallPanel := small.Children[1].Child.(woxwidget.Container)
+			if small.Children[1].Top+smallPanel.Height > 200 || smallPanel.Height <= 0 {
+				t.Fatalf("small menu overflows the window: top %v height %v", small.Children[1].Top, smallPanel.Height)
+			}
+			if _, ok := smallPanel.Child.(woxwidget.Stateful); !ok {
+				t.Fatal("overflowing menu must be scrollable")
+			}
+		}
 	}
 }
 
@@ -1866,7 +1915,8 @@ func TestNotesBuildKeepsThemeBackground(t *testing.T) {
 	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
-	root := controller.buildNotes(woxui.FrameInfo{Size: woxui.Size{Width: 460, Height: 320}}).(woxwidget.Semantics)
+	layers := controller.buildNotes(woxui.FrameInfo{Size: woxui.Size{Width: 460, Height: 320}}).(woxwidget.Stack)
+	root := layers.Children[0].Child.(woxwidget.Semantics)
 	body := root.Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	want := defaultPalette().componentTheme().Background
 	if body.Color != want || body.Color.A == 0 {
@@ -1986,22 +2036,7 @@ func (s *notesWindowTestServices) NotesGet(_ context.Context, id string) (common
 	if s.record.ID == id {
 		return s.record, nil
 	}
-	return common.NoteRecord{}, errors.New("note not found")
-}
-
-func (s *notesWindowTestServices) NotesRestore(_ context.Context, id string) (common.NoteRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	record, ok := s.records[id]
-	if !ok {
-		return common.NoteRecord{}, errors.New("note not found")
-	}
-	record.DeletedAt = 0
-	if s.records == nil {
-		s.records = map[string]common.NoteRecord{}
-	}
-	s.records[id] = record
-	return record, nil
+	return common.NoteRecord{}, gorm.ErrRecordNotFound
 }
 
 func (s *notesWindowTestServices) NotesSetLocal(_ context.Context, key, value string) error {
@@ -2228,7 +2263,7 @@ func TestNotesSearchOverlayDoesNotOverflow(t *testing.T) {
 	controller := newNotesWindowController(&app.notes, common.NoteRecord{
 		ID: "note", Document: common.NoteDocument{Version: 1, Blocks: []common.NoteBlock{{ID: "block", Type: common.NoteBlockParagraph}}},
 	})
-	controller.summaries = []common.NoteSummary{{ID: "note", Title: "Wox Notes Smoke", UpdatedAt: 1, DeletedAt: 1}}
+	controller.summaries = []common.NoteSummary{{ID: "note", Title: "Wox Notes Smoke", UpdatedAt: 1}}
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
 		return controller.buildSearchOverlay(woxui.Size{Width: notesDefaultWidth, Height: notesDefaultHeight}, defaultPalette().componentTheme())
 	})
@@ -2319,6 +2354,70 @@ func TestNotesPasteInsertsImageFile(t *testing.T) {
 	}
 }
 
+func TestNotesFileDropInsertsImageAndFile(t *testing.T) {
+	util.GetLocation().UpdateUserDataDirectory(t.TempDir())
+	dir := t.TempDir()
+	imagePath := filepath.Join(dir, "shot.png")
+	file, err := os.Create(imagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 8, 6))); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(dir, "report (draft) 文档.txt")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, markdown := range []bool{false, true} {
+		controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
+			ID: "note", Document: common.NoteDocument{Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "original"}}},
+		})
+		if markdown {
+			controller.toggleMarkdownView()
+		}
+		controller.handleFileDrop([]string{imagePath, filePath})
+		if markdown {
+			controller.toggleMarkdownView()
+		}
+		imageFound, linkFound := false, false
+		for _, block := range controller.document.Blocks {
+			imageFound = imageFound || block.Type == common.NoteBlockImage && block.Image != nil && block.Image.FileName == "shot.png"
+			for _, span := range block.Spans {
+				linkFound = linkFound || span.Link == filePath
+			}
+		}
+		if !imageFound || !linkFound || !controller.dirty {
+			t.Fatalf("markdown %v: drop did not insert image and file link: %#v", markdown, controller.document.Blocks)
+		}
+		controller.cancelScheduledSave()
+		if !controller.undoDocument() || strings.Contains(notesplugin.ToPlainText(controller.document), filepath.Base(filePath)) {
+			t.Fatalf("markdown %v: drop was not undoable", markdown)
+		}
+	}
+}
+
+func TestNotesFileDropIgnoredWhileReadOnlyOrDialogOpen(t *testing.T) {
+	for _, modal := range []bool{false, true} {
+		controller := newNotesWindowController(&bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}}).notes, common.NoteRecord{
+			ID: "note", Document: common.NoteDocument{Blocks: []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph, Text: "original"}}},
+		})
+		if modal {
+			controller.sidebar.dialog = "delete"
+		} else {
+			controller.record.DeletedAt = 1
+		}
+		controller.handleFileDrop([]string{filepath.Join(t.TempDir(), "report.txt")})
+		if controller.dirty || notesplugin.ToPlainText(controller.document) != "original" {
+			t.Fatalf("modal %v: drop modified a protected note", modal)
+		}
+	}
+}
+
 // TestNotesToolbarActionBounds checks real layout, including right anchoring after resize.
 func TestNotesToolbarActionBounds(t *testing.T) {
 	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
@@ -2330,7 +2429,7 @@ func TestNotesToolbarActionBounds(t *testing.T) {
 	for _, width := range []float32{420, 800, 600} {
 		for _, scale := range []float32{1, 1.5, 2} {
 			host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 40}, PixelSize: woxui.PixelSize{Width: int(width * scale), Height: int(40 * scale)}, Scale: scale})
-			for index, id := range []string{"search", "pin", "format", "new", "more"} {
+			for index, id := range []string{"pin", "format", "new", "more"} {
 				found := false
 				for _, node := range host.Snapshot().Tree.Nodes {
 					if node.AutomationID != "notes.toolbar."+id {
@@ -2348,4 +2447,11 @@ func TestNotesToolbarActionBounds(t *testing.T) {
 			}
 		}
 	}
+}
+
+func (s *notesWindowTestServices) NotesTree(context.Context) (common.NotesTree, error) {
+	return common.NotesTree{}, nil
+}
+func (s *notesWindowTestServices) NotesOrganize(context.Context, common.NotesTreeChange) (common.NotesTree, error) {
+	return common.NotesTree{}, nil
 }

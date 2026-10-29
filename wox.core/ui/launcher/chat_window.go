@@ -42,6 +42,36 @@ func chatWindowNativeMinSize() woxui.Size {
 	return woxui.Size{Width: chatWindowMinimumWidth, Height: chatWindowMinimumHeight}
 }
 
+// sidebarMinSize keeps the dedicated chat content readable while its history is open.
+func (a *chatWindowController) sidebarMinSize() woxui.Size {
+	open := a.chat != nil && a.chat.chatPreview != nil && chatHistoryVisible(a.chat.chatPreview.panel, a.chat.chatPreview.sidebarOpen)
+	minimum := chatWindowNativeMinSize()
+	minimum.Width = woxcomponent.SidebarMinimumWidth(minimum.Width, chatHistorySidebarWidth, open)
+	return minimum
+}
+
+// syncSidebarMinSize shares window resizing with other sidebar hosts.
+func (a *chatWindowController) syncSidebarMinSize() {
+	window := a.chatNativeWindow()
+	if window == nil {
+		return
+	}
+	minimum := a.sidebarMinSize()
+	if a.chatWindowRestoreFrame.Width > 0 && a.chatWindowRestoreFrame.Width < minimum.Width {
+		previous := a.chatWindowRestoreFrame
+		a.chatWindowRestoreFrame.Width = minimum.Width
+		a.chatWindowRestoreFrame = fitSidebarWindow(a.chatWindowRestoreFrame, previous)
+	}
+	// Native resize can synchronously render another frame before SetBounds returns.
+	previous := a.sidebarMinimumWidth
+	a.sidebarMinimumWidth = minimum.Width
+	if err := syncSidebarWindow(window, minimum, a.chatWindowMaximized, clampChatWindowBounds, nil); err != nil {
+		a.sidebarMinimumWidth = previous
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("resize chat sidebar: %v", err))
+		return
+	}
+}
+
 func chatOpenWindowHotkey() string { return primaryHotkey("shift+o") }
 
 // requestOpenDedicatedChatWindow pops the current conversation into the single chat window.
@@ -168,11 +198,16 @@ func (a *chatWindowController) ensureChatWindow() (*woxui.ManagedWindow, error) 
 		managed, _, openErr = a.windows.Open(id, woxui.WindowOptions{
 			Title:               a.chatWindowTitle(),
 			Size:                woxui.Size{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight},
-			MinSize:             chatWindowNativeMinSize(),
+			MinSize:             a.sidebarMinSize(),
 			TitleBarControls:    woxui.TitleBarControls{Height: launcherview.ChatWindowTitleBarHeight, Close: true, Minimize: true, Maximize: true},
 			OnMaximizeRequested: a.toggleChatWindowMaximize,
 			Role:                chatWindowRole, Icon: chatWindowIcon(), Resizable: true, HideOnBlur: false,
-			OnFrame: host.Frame, OnPointer: host.Pointer,
+			OnFrame: func(list *woxui.DisplayList, frame woxui.FrameInfo) {
+				if a.sidebarMinimumWidth != a.sidebarMinSize().Width {
+					a.syncSidebarMinSize()
+				}
+				host.Frame(list, frame)
+			}, OnPointer: host.Pointer,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
 				a.chatWindowFocused = event.Active
@@ -219,10 +254,14 @@ func (a *chatWindowController) ensureChatWindow() (*woxui.ManagedWindow, error) 
 		return nil, err
 	}
 	if a.chatWindowRestoreFrame.Width > 0 && a.chatWindowRestoreFrame.Height > 0 && !a.chatWindowMaximized {
-		_ = window.SetBounds(clampChatWindowBounds(a.chatWindowRestoreFrame))
+		bounds := clampChatWindowBounds(a.chatWindowRestoreFrame)
+		bounds.Width = max(bounds.Width, a.sidebarMinSize().Width)
+		bounds = fitSidebarWindow(bounds, a.chatWindowRestoreFrame)
+		_ = window.SetBounds(bounds)
 	} else if err := window.CenterOnMouseScreen(woxui.Size{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight}); err != nil {
 		util.GetLogger().Warn(a.lifecycleCtx, fmt.Sprintf("center dedicated chat window: %v", err))
 	}
+	a.syncSidebarMinSize()
 	if a.chatWindowMaximized {
 		a.maximizeChatWindowOn(window)
 	}
@@ -318,7 +357,7 @@ func (a *App) buildChatWindowTitleBar(width float32, active bool, theme woxcompo
 		header = &props
 	}
 	return launcherview.ChatWindowTitleBar(launcherview.ChatWindowTitleBarProps{
-		Width: width, Platform: runtime.GOOS, Active: active, Maximized: a.chatWindow.chatWindowMaximized, Theme: theme, Header: header,
+		Width: width, Platform: runtime.GOOS, Active: active, Maximized: a.chatWindow.chatWindowMaximized, Theme: theme, Header: header, Icon: chatWindowIcon(),
 		OnDrag: a.chatWindow.startChatWindowDrag, OnMinimize: a.chatWindow.minimizeChatWindow, OnMaximize: a.chatWindow.toggleChatWindowMaximize, OnClose: a.chatWindow.requestCloseChatWindow,
 	})
 }
@@ -392,6 +431,7 @@ func (a *chatWindowController) restoreChatWindowFromMaximize() {
 		target = woxui.Rect{Width: chatWindowDefaultWidth, Height: chatWindowDefaultHeight}
 	}
 	target = clampChatWindowBounds(target)
+	target.Width = max(target.Width, a.sidebarMinSize().Width)
 	if err := window.SetBounds(target); err != nil {
 		return
 	}

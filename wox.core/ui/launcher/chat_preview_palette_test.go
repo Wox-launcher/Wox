@@ -771,6 +771,19 @@ func TestChatOpenWindowShortcutAndTooltip(t *testing.T) {
 	}
 }
 
+func TestChatHeaderSidebarIconTracksVisibleHistory(t *testing.T) {
+	app := bindTestApp(&App{})
+	for _, tc := range []struct {
+		panel      string
+		open, want bool
+	}{{"", false, false}, {"", true, true}, {"history", false, true}} {
+		props := app.chatHeaderProps(&chatPreviewSnapshot{panel: tc.panel, sidebarOpen: tc.open}, uiPalette{}, 500, 40, false, false)
+		if props.SidebarOpen != tc.want {
+			t.Fatalf("panel %q sidebarOpen %v: icon state = %v", tc.panel, tc.open, props.SidebarOpen)
+		}
+	}
+}
+
 func TestChatDebugHeaderCopiesWithoutOpeningPanel(t *testing.T) {
 	app := bindTestApp(&App{chat: chatController{chatPreview: &chatPreviewState{panel: "history"}}})
 	snapshot := &chatPreviewSnapshot{chat: chatData{DebugTrace: []byte(`{"Events":[]}`)}}

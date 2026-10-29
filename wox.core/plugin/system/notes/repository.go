@@ -114,6 +114,13 @@ func (r *Repository) Create() (common.NoteRecord, error) {
 
 // Discard permanently removes a note, including unsaved empty drafts that were never stored.
 func (r *Repository) Discard(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.discard(id)
+}
+
+// discard removes the record while the repository lock is held.
+func (r *Repository) discard(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return errors.New("note id is empty")
 	}
@@ -236,7 +243,7 @@ func (r *Repository) SetPinned(id string, pinned bool) (common.NoteRecord, error
 	return record, nil
 }
 
-// Delete moves a note to the 60-day trash.
+// Delete permanently removes a note and its unreferenced attachments.
 func (r *Repository) Delete(id string) (common.NoteRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -244,31 +251,9 @@ func (r *Repository) Delete(id string) (common.NoteRecord, error) {
 	if err != nil {
 		return common.NoteRecord{}, err
 	}
-	record.DeletedAt = util.GetSystemTimestamp()
-	record.UpdatedAt = record.DeletedAt
-	record.Revision = uuid.NewString()
-	if err := r.write(record); err != nil {
+	if err := r.discard(id); err != nil {
 		return common.NoteRecord{}, err
 	}
-	go r.notify(id)
-	return record, nil
-}
-
-// Restore returns a trashed note to the active list.
-func (r *Repository) Restore(id string) (common.NoteRecord, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	record, err := r.Get(id)
-	if err != nil {
-		return common.NoteRecord{}, err
-	}
-	record.DeletedAt = 0
-	record.UpdatedAt = util.GetSystemTimestamp()
-	record.Revision = uuid.NewString()
-	if err := r.write(record); err != nil {
-		return common.NoteRecord{}, err
-	}
-	go r.notify(id)
 	return record, nil
 }
 

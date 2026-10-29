@@ -1288,6 +1288,8 @@ export interface ToolbarMsg {
    * Optional icon shown before the title.
    */
   Icon?: WoxImage
+  /** Suppresses both an explicit icon and the default plugin icon. Defaults to false. */
+  HideIcon?: boolean
   /**
    * Optional 0-100 progress value for determinate progress.
    */

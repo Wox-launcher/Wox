@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -9,26 +10,29 @@ import (
 	"regexp"
 	"strings"
 
+	"gorm.io/gorm"
+
 	"wox/common"
 	notesplugin "wox/plugin/system/notes"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/shell"
 )
 
-// reloadSummaries refreshes search, pin, and trash rows for the current filter.
+// reloadSummaries refreshes search and favorite rows for the current filter.
 func (c *notesWindowController) reloadSummaries() error {
-	query := ""
-	if c.searchOpen {
-		query = strings.TrimSpace(c.searchEditor.Text())
-	}
-	items, err := c.owner.services.NotesList(context.Background(), query, true)
+	query := strings.TrimSpace(c.searchEditor.Text())
+	items, err := c.owner.services.NotesList(context.Background(), query, false)
 	if err != nil {
 		c.errorText = err.Error()
 		return err
 	}
 	c.summaries = items
+	if err := c.reloadSidebar(); err != nil {
+		return err
+	}
 	c.clampSearchIndex()
 	return nil
 }
@@ -36,11 +40,25 @@ func (c *notesWindowController) reloadSummaries() error {
 // refresh applies external sync changes only when no dirty local edit would be replaced.
 func (c *notesWindowController) refresh(noteID string) {
 	_ = c.reloadSummaries()
-	if c.record.ID == "" || (noteID != "" && noteID != c.record.ID) || c.dirty {
+	if c.record.ID == "" || (noteID != "" && noteID != c.record.ID) {
 		c.invalidate()
 		return
 	}
-	if record, err := c.owner.services.NotesGet(context.Background(), c.record.ID); err == nil && record.Revision != c.record.Revision {
+	record, err := c.owner.services.NotesGet(context.Background(), c.record.ID)
+	if noteID == c.record.ID && errors.Is(err, gorm.ErrRecordNotFound) {
+		// A deleted note must not be recreated by an outstanding autosave or close callback.
+		c.cancelScheduledSave()
+		c.dirty = false
+		if c.managed != nil {
+			_ = c.managed.Close()
+		}
+		return
+	}
+	if c.dirty {
+		c.invalidate()
+		return
+	}
+	if err == nil && record.Revision != c.record.Revision {
 		c.applyRecord(record)
 	} else if err != nil && !notesplugin.DocumentIsEmpty(c.document) {
 		c.errorText = err.Error()
@@ -48,7 +66,7 @@ func (c *notesWindowController) refresh(noteID string) {
 	c.invalidate()
 }
 
-// searchItems returns notes in overlay order: pinned, recent, then recently deleted.
+// searchItems returns notes in overlay order: favorites, then recent.
 func (c *notesWindowController) searchItems() []common.NoteSummary {
 	items := make([]common.NoteSummary, 0, len(c.summaries))
 	appendMatching := func(match func(common.NoteSummary) bool) {
@@ -60,7 +78,6 @@ func (c *notesWindowController) searchItems() []common.NoteSummary {
 	}
 	appendMatching(func(item common.NoteSummary) bool { return item.PinnedAt > 0 && item.DeletedAt == 0 })
 	appendMatching(func(item common.NoteSummary) bool { return item.PinnedAt == 0 && item.DeletedAt == 0 })
-	appendMatching(func(item common.NoteSummary) bool { return item.DeletedAt > 0 })
 	return items
 }
 
@@ -82,7 +99,7 @@ func (c *notesWindowController) moveSearchSelection(delta int) {
 
 // openSearchItem shows the chosen note in this window instead of opening another utility window.
 func (c *notesWindowController) openSearchItem(summary common.NoteSummary) {
-	if summary.ID == c.record.ID && summary.DeletedAt == 0 {
+	if summary.ID == c.record.ID {
 		c.searchOpen = false
 		c.editorFocus.RequestFocus()
 		c.invalidate()
@@ -92,13 +109,7 @@ func (c *notesWindowController) openSearchItem(summary common.NoteSummary) {
 		c.fail(err)
 		return
 	}
-	var record common.NoteRecord
-	var err error
-	if summary.DeletedAt > 0 {
-		record, err = c.owner.services.NotesRestore(context.Background(), summary.ID)
-	} else {
-		record, err = c.owner.services.NotesGet(context.Background(), summary.ID)
-	}
+	record, err := c.owner.services.NotesGet(context.Background(), summary.ID)
 	if err != nil {
 		c.fail(err)
 		return
@@ -136,7 +147,6 @@ func (c *notesWindowController) showNoteInCurrentWindow(record common.NoteRecord
 	c.applyRecord(record)
 	c.owner.noteWindows[record.ID] = c
 	c.owner.activateNoteWindow(c)
-	c.searchEditor.SetText("", false)
 	c.searchIndex = 0
 	return c.reloadSummaries()
 }
@@ -166,14 +176,13 @@ func (c *notesWindowController) fail(err error) {
 
 // toggleSearch switches focus between the editor and keyboard-first note browser.
 func (c *notesWindowController) toggleSearch() {
-	c.searchOpen, c.moreOpen, c.linkOpen = !c.searchOpen, false, false
-	if c.searchOpen {
-		c.searchIndex = 0
-		_ = c.reloadSummaries()
-		c.searchFocus.RequestFocus()
-	} else {
-		c.editorFocus.RequestFocus()
+	if !c.sidebar.open {
+		c.toggleSidebar()
 	}
+	c.searchOpen, c.moreOpen, c.linkOpen = true, false, false
+	c.searchIndex = 0
+	_ = c.reloadSummaries()
+	c.searchFocus.RequestFocus()
 	c.invalidate()
 }
 
@@ -184,6 +193,8 @@ func (c *notesWindowController) onSearchKey(event woxui.KeyEvent) bool {
 	switch event.Key {
 	case woxui.KeyEscape:
 		c.searchOpen = false
+		c.searchEditor.SetText("", false)
+		_ = c.reloadSummaries()
 		c.editorFocus.RequestFocus()
 		c.invalidate()
 		return true
@@ -293,8 +304,6 @@ func (c *notesWindowController) onKey(event woxui.KeyEvent) bool {
 		}
 	case woxui.Key("n"):
 		c.runAction(c.owner.openNewNoteWindow)
-	case woxui.Key("b"):
-		c.toggleInline("bold")
 	case woxui.Key("i"):
 		c.toggleInline("italic")
 	case woxui.Key("u"):
@@ -401,8 +410,14 @@ func (c *notesWindowController) handleBlockTap(offset int) bool {
 	return false
 }
 
-// openNoteLink opens a persisted note URL in the desktop browser.
+// openNoteLink opens local file links in their associated app and web links in the browser.
 func (c *notesWindowController) openNoteLink(target string) {
+	if filepath.IsAbs(target) {
+		if err := shell.Open(target); err != nil {
+			c.fail(err)
+		}
+		return
+	}
 	if c.managed == nil {
 		return
 	}
@@ -433,7 +448,7 @@ func (c *notesWindowController) taskReorderDest(contentY float32) int {
 	if lineHeight <= 0 {
 		lineHeight = 24
 	}
-	innerWidth := c.lastFrame.Width - 32
+	innerWidth := c.noteContentWidth() - 32
 	if innerWidth <= 0 {
 		innerWidth = 400
 	}
@@ -497,6 +512,14 @@ func noteDocumentHasImage(document common.NoteDocument) bool {
 	return false
 }
 
+// handleFileDrop inserts files into this note using the same import behavior as paste.
+func (c *notesWindowController) handleFileDrop(paths []string) {
+	if c.record.DeletedAt > 0 || c.sidebar.dialog != "" {
+		return
+	}
+	c.pasteClipboardFiles(paths)
+}
+
 // pasteClipboardFiles imports copied image files and turns other paths into links.
 func (c *notesWindowController) pasteClipboardFiles(paths []string) bool {
 	pasted := notesplugin.DocumentFromClipboardFiles(paths)
@@ -547,7 +570,7 @@ func (c *notesWindowController) copyLink() {
 	}
 }
 
-// delete soft-deletes the note and closes only its bound window.
+// delete permanently removes the note and closes its bound window.
 func (c *notesWindowController) delete() {
 	if c.record.ID == "" {
 		return
@@ -565,20 +588,6 @@ func (c *notesWindowController) delete() {
 			return err
 		}
 		return c.close()
-	})
-}
-
-func (c *notesWindowController) restore() {
-	if c.record.ID == "" {
-		return
-	}
-	c.runAction(func() error {
-		record, err := c.owner.services.NotesRestore(context.Background(), c.record.ID)
-		if err == nil {
-			c.applyRecord(record)
-			err = c.reloadSummaries()
-		}
-		return err
 	})
 }
 
@@ -635,7 +644,7 @@ func (c *notesWindowController) noteImageCacheSource(image common.NoteImage) (wo
 	if c.owner == nil {
 		return woxImage{}, 0, false
 	}
-	width := c.lastFrame.Width
+	width := c.noteContentWidth()
 	if width <= 0 {
 		width = notesDefaultWidth
 	}

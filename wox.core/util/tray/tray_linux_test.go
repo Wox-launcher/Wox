@@ -171,3 +171,55 @@ func TestLinuxTrayMenuHoveredDoesNotDispatchCallback(t *testing.T) {
 		t.Fatal("hovered event should not activate the menu item")
 	}
 }
+
+// TestLinuxTrayMenuGroups verifies DBusMenu semantics and command IDs across separators.
+func TestLinuxTrayMenuGroups(t *testing.T) {
+	clicked := make(chan string, 3)
+	host := &linuxTray{items: makeMenuEntries([]MenuItem{
+		{Title: "Toggle Wox", SeparatorBefore: true, Callback: func() { clicked <- "toggle" }},
+		{Title: "Settings", Callback: func() { clicked <- "settings" }},
+		{Title: "Quit", SeparatorBefore: true, Callback: func() { clicked <- "quit" }},
+	})}
+	menu := &dbusMenuServer{host: host}
+	_, layout, err := menu.GetLayout(0, -1, nil)
+	if err != nil || len(layout.Children) != 4 {
+		t.Fatalf("layout: %#v, %v", layout, err)
+	}
+	for i, id := range []int32{1, 2, 4, 3} {
+		if child := layout.Children[i].Value().(menuLayout); child.ID != id {
+			t.Fatalf("child %d has id %d, want %d", i, child.ID, id)
+		}
+	}
+	separator := layout.Children[2].Value().(menuLayout)
+	if separator.Properties["type"].Value() != "separator" || separator.Properties["enabled"].Value() != false {
+		t.Fatalf("separator properties: %v", separator.Properties)
+	}
+	if _, ok := separator.Properties["label"]; ok {
+		t.Fatal("separator must not expose a command label")
+	}
+	groups, groupErr := menu.GetGroupProperties([]int32{4}, []string{"type"})
+	if groupErr != nil || len(groups) != 1 || len(groups[0].Properties) != 1 || groups[0].Properties["type"].Value() != "separator" {
+		t.Fatalf("filtered separator: %v, %v", groups, groupErr)
+	}
+	if err := menu.Event(4, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"toggle", "settings", "quit"} {
+		if err := menu.Event(int32(i+1), "clicked", dbus.MakeVariant(""), 0); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case got := <-clicked:
+			if got != want {
+				t.Fatalf("command %d: got %q, want %q", i+1, got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("command did not execute")
+		}
+	}
+	select {
+	case got := <-clicked:
+		t.Fatalf("unexpected separator callback: %s", got)
+	default:
+	}
+}

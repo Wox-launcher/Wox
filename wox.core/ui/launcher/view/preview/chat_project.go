@@ -213,7 +213,7 @@ func chatProjectHistoryGroup(item ChatCatalogItemProps, width float32, theme wox
 	}
 	var arrow woxwidget.Widget
 	if hovered {
-		arrow = woxcomponent.DisclosureChevronGlyph(s(16), foreground, !item.Collapsed)
+		arrow = woxwidget.Align{Width: s(16), Height: s(16), Horizontal: .5, Vertical: .5, Child: woxcomponent.DisclosureChevronGlyph(s(12), controls.TextSecondary, !item.Collapsed)}
 	}
 	reserved := float32(0)
 	if item.OnNew != nil {

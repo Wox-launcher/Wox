@@ -3,6 +3,8 @@ package tray
 type MenuItem struct {
 	Title    string
 	Callback func()
+	// SeparatorBefore starts a native menu group without adding an action.
+	SeparatorBefore bool
 }
 
 type ClickRect struct {

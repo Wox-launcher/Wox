@@ -288,6 +288,18 @@ func (w *platformWindow) setBounds(bounds Rect) error {
 	return nil
 }
 
+// setMinSize updates the native window's logical geometry hints.
+func (w *platformWindow) setMinSize(size Size) error {
+	native, err := w.openNative()
+	if err != nil {
+		return err
+	}
+	if C.wox_linux_window_set_min_size(native, C.float(size.Width), C.float(size.Height)) != 0 {
+		return errors.New("woxui: failed to set Linux minimum window size")
+	}
+	return nil
+}
+
 func (w *platformWindow) bounds() (Rect, error) {
 	native, err := w.openNative()
 	if err != nil {

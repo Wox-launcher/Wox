@@ -1,11 +1,12 @@
 package tray
 
 /*
-#cgo LDFLAGS: -lshell32 -lole32 -luuid
+#cgo LDFLAGS: -lshell32 -lole32 -luuid -lgdi32 -ladvapi32
 #include <windows.h>
 
 extern void init(char *iconPath, char *tooltip);
 extern void addMenuItem(unsigned int id, char *title);
+extern void addMenuSeparator();
 extern void addQueryTrayIcon(unsigned int id, char *iconPath, char *tooltip, unsigned int menuId, char *menuTitle);
 extern void clearQueryTrayIcons();
 extern void removeTrayIcon();
@@ -31,7 +32,16 @@ import (
 	"sync"
 	"unsafe"
 	"wox/util"
+	"wox/util/appearance"
 )
+
+//export trayMenuIsDark
+func trayMenuIsDark() C.int {
+	if appearance.IsDark() {
+		return 1
+	}
+	return 0
+}
 
 // menuCallbacks maps menu item IDs to their callbacks.
 var trayMu sync.RWMutex
@@ -117,7 +127,10 @@ func CreateTray(appIcon []byte, onClick func(), items ...MenuItem) {
 		C.init(iconPathC, tooltipC)
 
 		trayMu.Lock()
-		for _, item := range itemsCopy {
+		for i, item := range itemsCopy {
+			if i > 0 && item.SeparatorBefore {
+				C.addMenuSeparator()
+			}
 			title := C.CString(item.Title)
 			menuId := C.nextMenuId
 			C.addMenuItem(menuId, title)

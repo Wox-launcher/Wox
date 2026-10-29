@@ -12,6 +12,22 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestDedicatedChatSidebarMinimumWidth(t *testing.T) {
+	state := &chatPreviewState{}
+	controller := chatWindowController{chat: &chatController{chatPreview: state}}
+	if controller.sidebarMinSize().Width != chatWindowMinimumWidth {
+		t.Fatal("closed sidebar changed minimum")
+	}
+	state.sidebarOpen = true
+	if controller.sidebarMinSize().Width != chatWindowMinimumWidth+chatHistorySidebarWidth {
+		t.Fatal("open sidebar did not reserve conversation width")
+	}
+	state.sidebarOpen, state.panel = false, "history"
+	if controller.sidebarMinSize().Width != chatWindowMinimumWidth+chatHistorySidebarWidth {
+		t.Fatal("visible history did not reserve conversation width")
+	}
+}
+
 func TestDedicatedChatSurvivesLauncherPreviewReplacement(t *testing.T) {
 	state := &chatPreviewState{key: "original", chat: chatData{ID: "original"}, active: true, editor: woxui.NewTextEditor("unsent draft")}
 	app := New(false, nil)

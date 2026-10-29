@@ -100,10 +100,10 @@ func (a *App) chatProjectOverlay(snapshot *chatPreviewSnapshot, palette uiPalett
 
 // chatProjectHistoryProps renders the same flattened order used by keyboard navigation.
 func (a *App) chatProjectHistoryProps(snapshot *chatPreviewSnapshot, palette uiPalette, width, height float32) previewview.ChatCatalogProps {
-	rows := chatProjectHistoryRows(snapshot.projects, snapshot.chats)
+	rows := chatHistoryRows(snapshot.projects, snapshot.chats, snapshot.historyQuery, snapshot.historyUsePinYin)
 	items := make([]previewview.ChatCatalogItemProps, 0, len(rows))
 	tr := func(key string) string { return a.language.translate("i18n:plugin_ai_chat_project_" + key) }
-	for _, row := range rows {
+	for index, row := range rows {
 		title := strings.TrimSpace(row.Title)
 		if title == "" {
 			title = a.language.translate("i18n:ui_ai_chat_new_chat")
@@ -115,6 +115,9 @@ func (a *App) chatProjectHistoryProps(snapshot *chatPreviewSnapshot, palette uiP
 			DeleteID: "chat-history-delete-" + row.ChatID, DeleteLabel: a.language.translate("i18n:ui_ai_chat_delete_chat"),
 			ConfirmDeleteLabel: a.language.translate("i18n:ui_delete_row_confirm"),
 			OnDelete:           func() { a.chat.deleteChatHistory(row.ChatID) },
+		}
+		if strings.TrimSpace(snapshot.historyQuery) != "" {
+			item.Selected = index == snapshot.sidebarSelected
 		}
 		if row.Group {
 			item.Kind, item.OnDelete, item.Collapsed = "project-group", nil, snapshot.projects.Collapsed[row.ProjectID]
@@ -147,9 +150,12 @@ func (a *App) chatProjectHistoryProps(snapshot *chatPreviewSnapshot, palette uiP
 		}
 		items = append(items, item)
 	}
-	viewport := max(float32(1), height-24)
 	scale := a.chatDensityScale()
-	content := previewview.ChatScaledSize(scale, 46) + float32(len(rows))*previewview.ChatScaledSize(scale, previewview.ChatHistoryRowHeight) + previewview.ChatScaledSize(scale, previewview.ChatHistorySectionGap)
+	viewport := max(float32(1), height-24-previewview.ChatHistorySearchHeaderHeight(scale))
+	content := float32(len(rows)) * previewview.ChatScaledSize(scale, previewview.ChatHistoryRowHeight)
+	if strings.TrimSpace(snapshot.historyQuery) == "" {
+		content += previewview.ChatScaledSize(scale, previewview.ChatHistorySectionGap)
+	}
 	offset := snapshot.sidebarScroll
 	if snapshot.panel == "history" {
 		offset = snapshot.panelScroll
@@ -162,12 +168,90 @@ func (a *App) chatProjectHistoryProps(snapshot *chatPreviewSnapshot, palette uiP
 			state.sidebarViewport = viewport
 		}
 	}
+	var searchEditor *woxwidget.TextEditingController
+	if state := a.chat.chatPreview; state != nil {
+		if state.historySearch == nil {
+			state.historySearch = woxwidget.NewTextEditingController(state.historyQuery)
+		}
+		searchEditor = state.historySearch
+	}
 	return previewview.ChatCatalogProps{
 		Width: width, Height: height, DensityScale: a.chatDensityScale(), Key: snapshot.key, Items: items,
 		Scroll: min(max(0, offset), max(0, content-viewport)), ContentHeight: content,
 		ShowNew: true, NewLabel: a.language.translate("i18n:ui_ai_chat_new_chat"), OnNew: a.chat.startNewChat,
-		Theme: palette.componentTheme(), OnScroll: a.chat.scrollChatHistoryDrawer,
+		Search:           &woxcomponent.TextFieldProps{ID: "chat-history-search", Label: a.language.translate("i18n:ui_ai_chat_history_search"), Hint: a.language.translate("i18n:ui_ai_chat_history_search") + " (" + strings.Join(formatHotkeyLabels(primaryHotkey("p")), "+") + ")", Value: snapshot.historyQuery, Controller: searchEditor, OnChanged: a.chat.setChatHistoryQuery, OnKey: a.chat.onChatHistorySearchKey},
+		SearchClearLabel: a.language.translate("i18n:notes_search_clear"), OnSearchClear: a.chat.clearChatHistorySearch,
+		EmptyMessage: a.language.translate("i18n:ui_ai_chat_history_no_results"),
+		Theme:        palette.componentTheme(), OnScroll: a.chat.scrollChatHistoryDrawer,
 	}
+}
+
+// setChatHistoryQuery filters the sidebar without changing the conversation draft.
+func (a *chatController) setChatHistoryQuery(query string) {
+	if state := a.chatPreview; state != nil {
+		state.historyQuery = query
+		state.historyUsePinYin = a.usePinYin != nil && a.usePinYin()
+		state.panelSelected, state.sidebarSelected = 0, 0
+		state.panelScroll, state.sidebarScroll = 0, 0
+		a.invalidateChatSurfaces()
+	}
+}
+
+func (a *chatController) clearChatHistorySearch() {
+	if state := a.chatPreview; state != nil && state.historySearch != nil {
+		state.historySearch.SetText("", false)
+	}
+	a.setChatHistoryQuery("")
+}
+
+// onChatHistorySearchKey navigates matching conversations without sending the chat draft.
+func (a *chatController) onChatHistorySearchKey(event woxui.KeyEvent) bool {
+	state := a.chatPreview
+	if state == nil || !event.Down || event.Composing || event.Modifiers != 0 {
+		return false
+	}
+	if event.Key == woxui.KeyEscape && (state.historyQuery != "" || event.Repeat) {
+		if !event.Repeat {
+			a.clearChatHistorySearch()
+		}
+		return true
+	}
+	rows := chatHistoryRows(state.projects, state.chats, state.historyQuery, state.historyUsePinYin)
+	if strings.TrimSpace(state.historyQuery) == "" {
+		return event.Key == woxui.KeyEnter
+	}
+	switch event.Key {
+	case woxui.KeyEnter:
+		if state.sidebarSelected >= 0 && state.sidebarSelected < len(rows) {
+			a.activateProjectHistoryRow(rows[state.sidebarSelected])
+		}
+		return true
+	case woxui.KeyArrowUp, woxui.KeyArrowDown:
+		if len(rows) == 0 {
+			return true
+		}
+		delta := 1
+		if event.Key == woxui.KeyArrowUp {
+			delta = -1
+		}
+		state.sidebarSelected = min(max(0, state.sidebarSelected+delta), len(rows)-1)
+		state.panelSelected = state.sidebarSelected
+		rowHeight := previewview.ChatScaledSize(state.panelDensityScale, previewview.ChatHistoryRowHeight)
+		top := float32(state.sidebarSelected) * rowHeight
+		offset, viewport := &state.sidebarScroll, state.sidebarViewport
+		if state.panel == "history" {
+			offset, viewport = &state.panelScroll, state.panelViewport
+		}
+		if top < *offset {
+			*offset = top
+		} else if top+rowHeight > *offset+viewport {
+			*offset = top + rowHeight - viewport
+		}
+		*offset = min(max(0, *offset), max(0, projectHistoryHeight(state)-viewport))
+		a.invalidateChatSurfaces()
+		return true
+	}
+	return false
 }
 
 // chatProjectPickerProps uses the model picker surface, search field and keyboard behavior.

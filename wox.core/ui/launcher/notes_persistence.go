@@ -55,6 +55,9 @@ func (c *notesAutosave) cancelScheduledSave() {
 func (c *notesWindowController) flush() error {
 	c.cancelScheduledSave()
 	c.applyMarkdownToDocument()
+	if !c.dirty && c.sidebar.pendingParent != nil && !notesplugin.DocumentIsEmpty(c.document) {
+		return c.placeSidebarDraft()
+	}
 	if !c.dirty || c.record.ID == "" || c.owner == nil || c.owner.services == nil {
 		return nil
 	}
@@ -82,6 +85,9 @@ func (c *notesWindowController) flush() error {
 		c.errorText = c.owner.language.translate("i18n:notes_conflict_copy")
 	} else {
 		c.errorText = ""
+	}
+	if err := c.placeSidebarDraft(); err != nil {
+		return err
 	}
 	return c.reloadSummaries()
 }

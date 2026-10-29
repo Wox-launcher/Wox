@@ -348,16 +348,20 @@ func (p *pluginPresentation) resolveActiveToolbarMsgContext(ctx context.Context,
 // normalizeToolbarMsg translates user-facing text, normalizes UI-facing icons, clones context data,
 // and backfills host proxies for external plugin action callbacks.
 func (p *pluginPresentation) normalizeToolbarMsg(ctx context.Context, pluginInstance *Instance, msg ToolbarMsg) ToolbarMsg {
-	icon := msg.Icon
-	if icon.IsEmpty() {
-		icon = common.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, common.WoxImage{})
+	var normalizedIcon common.WoxImage
+	if !msg.HideIcon {
+		icon := msg.Icon
+		if icon.IsEmpty() {
+			icon = common.ParseWoxImageOrDefault(pluginInstance.Metadata.Icon, common.WoxImage{})
+		}
+		normalizedIcon = pluginInstance.ConvertIcon(ctx, icon)
 	}
-	normalizedIcon := pluginInstance.ConvertIcon(ctx, icon)
 
 	normalized := ToolbarMsg{
 		Id:            msg.Id,
 		Title:         pluginInstance.translateMetadataText(ctx, common.I18nString(msg.Title)),
 		Icon:          normalizedIcon,
+		HideIcon:      msg.HideIcon,
 		Progress:      msg.Progress,
 		Indeterminate: msg.Indeterminate,
 		Actions:       make([]ToolbarMsgAction, 0, len(msg.Actions)),

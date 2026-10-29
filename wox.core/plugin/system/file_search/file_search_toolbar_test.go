@@ -31,6 +31,8 @@ func (a fileSearchToolbarTestAPI) Log(ctx context.Context, level plugin.LogLevel
 }
 func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string) string {
 	switch key {
+	case "plugin_file_status_indexed_files":
+		return "%s files"
 	case "plugin_file_status_full_indexing_progress":
 		return "Full indexing... %s files (%s/s) · %s"
 	case "plugin_file_status_full_indexing_saving":

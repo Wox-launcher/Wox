@@ -29,7 +29,7 @@ func (c *notesWindowController) noteVisualCaret(source string, offset int, sourc
 
 // noteEditorInnerWidth is the text field width after Notes chrome insets.
 func (c *notesWindowController) noteEditorInnerWidth() float32 {
-	width := c.lastFrame.Width
+	width := c.noteContentWidth()
 	if width <= 0 {
 		width = notesDefaultWidth
 	}
