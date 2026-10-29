@@ -83,7 +83,7 @@ interface Result {
 
 ```typescript
 interface ResultAction {
-  Id: string;
+  Id?: string; // Omit for a host-generated unique ID, or assign a unique ID per action and query.
   Name: string;
   IsDefault?: boolean;
   Hotkey?: string;
@@ -253,7 +253,7 @@ class MyPlugin implements Plugin {
       {
         Title: greeting,
         Icon: { ImageType: "emoji", ImageData: "👋" },
-        Actions: [{ Id: "copy", Name: "Copy", Action: async () => {} }],
+        Actions: [{ Name: "Copy", Action: async () => {} }],
       },
     ];
   }
