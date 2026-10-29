@@ -2992,6 +2992,8 @@
   "ui_screenshot_record_format_gif": "GIF · 动图",
   "ui_screenshot_record_format_webp": "WebP · 动图",
   "ui_screenshot_record_export_failed": "导出失败，请重试或选择其他格式。",
+  "ui_screenshot_record_exporting": "正在导出录屏…",
+  "ui_screenshot_record_export_progress": "正在导出录屏… %d%%",
   "ui_screenshot_record_play": "播放预览",
   "ui_screenshot_record_cancel": "取消录制",
   "ui_screenshot_record_privacy": "按键提示可能暴露敏感输入",

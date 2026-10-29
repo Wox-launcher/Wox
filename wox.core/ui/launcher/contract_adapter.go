@@ -506,6 +506,7 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			Format: a.language.translate("i18n:ui_screenshot_record_format"), FormatMP4: a.language.translate("i18n:ui_screenshot_record_format_mp4"),
 			FormatGIF: a.language.translate("i18n:ui_screenshot_record_format_gif"), FormatWebP: a.language.translate("i18n:ui_screenshot_record_format_webp"),
 			ExportFailed: a.language.translate("i18n:ui_screenshot_record_export_failed"),
+			Exporting:    a.language.translate("i18n:ui_screenshot_record_exporting"), ExportProgress: a.language.translate("i18n:ui_screenshot_record_export_progress"),
 		},
 	})
 	if err != nil {

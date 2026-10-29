@@ -15,6 +15,8 @@ import (
 	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/keyboard"
+	"wox/util/overlay"
+	"wox/util/overlay/textoverlay"
 
 	"golang.org/x/image/vector"
 )
@@ -67,6 +69,7 @@ type recordingToolbarState struct {
 	chordUsed            bool
 	pressedKeys          map[keyboard.Key]string
 	finishing            bool
+	exporting            bool
 	cancelled            bool
 	lastError            string
 	hoverTooltip         string
@@ -570,6 +573,12 @@ func (state *recordingToolbarState) recordingStatus() recordingState {
 
 // syncRecordingSurfaces uncovers the selection while capturing, matching scrolling screenshot.
 func (state *recordingToolbarState) syncRecordingSurfaces() {
+	state.mu.Lock()
+	exporting := state.exporting
+	state.mu.Unlock()
+	if exporting {
+		return
+	}
 	status := state.recordingStatus()
 	ready := status == recordingStateReady
 	if ready || status == recordingStateSave {
@@ -1807,7 +1816,29 @@ func (state *recordingToolbarState) hidePreviewSurfacesForDialog() {
 	}
 }
 
+// hideRecordingSurfacesForExport leaves the progress notification as the only visible recording UI.
+func (state *recordingToolbarState) hideRecordingSurfacesForExport() error {
+	state.mu.Lock()
+	state.exporting = true
+	state.mu.Unlock()
+	state.closeScrollBorder()
+	if err := state.setManagedVisible(state.borderManaged, false); err != nil {
+		return err
+	}
+	if state.window != nil {
+		return state.window.Hide()
+	}
+	return nil
+}
+
 func (state *recordingToolbarState) restorePreviewSurfacesAfterDialog() {
+	state.mu.Lock()
+	wasExporting := state.exporting
+	state.exporting = false
+	state.mu.Unlock()
+	if wasExporting && state.window != nil {
+		_, _ = state.window.Show()
+	}
 	state.syncRecordingSurfaces()
 	if state.window != nil {
 		_ = state.window.Invalidate()
@@ -1867,7 +1898,33 @@ func (state *recordingToolbarState) saveRecording() {
 			return
 		}
 		target = recordingExportPath(target, exportFormat)
-		if err := session.Save(ctx, target, exportFormat); err != nil {
+		var hideErr error
+		if err := Call(func() {
+			hideErr = state.hideRecordingSurfacesForExport()
+		}); err != nil {
+			hideErr = err
+		}
+		if hideErr != nil {
+			state.setFinishError(hideErr)
+			return
+		}
+		notificationID := fmt.Sprintf("wox-recording-export-%p", state)
+		showProgress := func(percent int) {
+			message := state.options.RecordingTooltips.Exporting
+			if percent >= 0 {
+				message = fmt.Sprintf(state.options.RecordingTooltips.ExportProgress, percent)
+			}
+			_ = Call(func() {
+				textoverlay.Show(textoverlay.Options{
+					Window:  overlay.WindowOptions{ID: notificationID, Anchor: overlay.AnchorBottomCenter, OffsetY: -80, Movable: true},
+					Message: message, Loading: true,
+				})
+			})
+		}
+		showProgress(-1)
+		err := session.Save(ctx, target, exportFormat, showProgress)
+		overlay.Close(notificationID)
+		if err != nil {
 			state.setFinishError(err)
 			return
 		}

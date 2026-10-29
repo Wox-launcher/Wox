@@ -2793,6 +2793,8 @@
   "ui_screenshot_record_format_gif": "GIF · Анимация",
   "ui_screenshot_record_format_webp": "WebP · Анимация",
   "ui_screenshot_record_export_failed": "Не удалось экспортировать. Повторите попытку или выберите другой формат.",
+  "ui_screenshot_record_exporting": "Экспорт записи…",
+  "ui_screenshot_record_export_progress": "Экспорт записи… %d%%",
   "ui_screenshot_record_play": "Проиграть предпросмотр",
   "ui_screenshot_record_cancel": "Отменить запись",
   "ui_screenshot_record_privacy": "Нажатия клавиш могут раскрыть конфиденциальные данные",

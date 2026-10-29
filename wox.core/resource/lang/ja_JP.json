@@ -2992,6 +2992,8 @@
   "ui_screenshot_record_format_gif": "GIF · アニメーション画像",
   "ui_screenshot_record_format_webp": "WebP · アニメーション画像",
   "ui_screenshot_record_export_failed": "書き出しに失敗しました。再試行するか、別の形式を選択してください。",
+  "ui_screenshot_record_exporting": "録画を書き出しています…",
+  "ui_screenshot_record_export_progress": "録画を書き出しています… %d%%",
   "ui_screenshot_record_play": "プレビューを再生",
   "ui_screenshot_record_cancel": "録画をキャンセル",
   "ui_screenshot_record_privacy": "キー入力は機密情報を表示する可能性があります",

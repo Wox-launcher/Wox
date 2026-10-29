@@ -2992,6 +2992,8 @@
   "ui_screenshot_record_format_gif": "GIF · Animated image",
   "ui_screenshot_record_format_webp": "WebP · Animated image",
   "ui_screenshot_record_export_failed": "Export failed. Try again or choose another format.",
+  "ui_screenshot_record_exporting": "Exporting recording…",
+  "ui_screenshot_record_export_progress": "Exporting recording… %d%%",
   "ui_screenshot_record_play": "Play preview",
   "ui_screenshot_record_cancel": "Cancel recording",
   "ui_screenshot_record_privacy": "Keystrokes may reveal sensitive input",

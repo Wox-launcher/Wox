@@ -61,10 +61,23 @@ func TestRecordingExportFormats(t *testing.T) {
 			if err := os.WriteFile(temp, sourceData, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			session := &recordingSession{state: recordingStateSave, tempPath: temp}
+			started := time.Now()
+			session := &recordingSession{state: recordingStateSave, tempPath: temp, startedAt: started, stoppedAt: started.Add(400 * time.Millisecond), config: recordingSessionConfig{Now: time.Now}}
 			target := filepath.Join(dir, "saved."+format.extension())
-			if err := session.Save(context.Background(), target, format); err != nil {
+			if err := os.WriteFile(target, []byte("old destination"), 0o600); err != nil {
 				t.Fatal(err)
+			}
+			var updates []int
+			if err := session.Save(context.Background(), target, format, func(percent int) { updates = append(updates, percent) }); err != nil {
+				t.Fatal(err)
+			}
+			if format == recordingExportMP4 && len(updates) == 0 {
+				t.Fatal("MP4 export did not report progress")
+			}
+			for _, percent := range updates {
+				if percent < -1 || percent > 99 || (percent == -1 && format != recordingExportWebP) {
+					t.Fatalf("unexpected export progress: %v", updates)
+				}
 			}
 			if session.currentState() != recordingStateClosed || session.TempPath() != "" {
 				t.Fatal("successful export did not close the take")
@@ -78,8 +91,17 @@ func TestRecordingExportFormats(t *testing.T) {
 			}
 			switch format {
 			case recordingExportMP4:
-				if !bytes.Equal(data, sourceData) {
-					t.Fatal("MP4 export should preserve the original encoding")
+				encoders, err := exec.Command(ffmpeg, "-hide_banner", "-encoders").Output()
+				if err != nil {
+					t.Fatal(err)
+				}
+				codec := "Video: h264"
+				if bytes.Contains(encoders, []byte("libx265")) {
+					codec = "Video: hevc"
+				}
+				output, err := exec.Command(ffmpeg, "-hide_banner", "-i", target, "-f", "null", "-").CombinedOutput()
+				if err != nil || !bytes.Contains(output, []byte(codec)) {
+					t.Fatalf("MP4 export did not decode as %s: %v\n%s", codec, err, output)
 				}
 			case recordingExportGIF:
 				animation, err := gif.DecodeAll(bytes.NewReader(data))
@@ -138,7 +160,7 @@ func TestRecordingExportFailurePreservesTakeAndDestination(t *testing.T) {
 		}
 	}
 	session := &recordingSession{state: recordingStateSave, tempPath: source}
-	if err := session.Save(context.Background(), target, recordingExportGIF); err == nil {
+	if err := session.Save(context.Background(), target, recordingExportGIF, nil); err == nil {
 		t.Fatal("invalid recording unexpectedly exported")
 	}
 	for _, path := range []string{source, target} {
@@ -153,8 +175,11 @@ func TestRecordingExportFailurePreservesTakeAndDestination(t *testing.T) {
 	if leftovers, _ := filepath.Glob(filepath.Join(dir, ".wox-recording-*")); len(leftovers) != 0 {
 		t.Fatalf("partial exports left behind: %v", leftovers)
 	}
-	if err := session.Save(context.Background(), filepath.Join(dir, "retry.mp4"), recordingExportMP4); err != nil {
-		t.Fatalf("retry with original format failed: %v", err)
+	if err := session.Save(context.Background(), filepath.Join(dir, "retry.mp4"), recordingExportMP4, nil); err == nil {
+		t.Fatal("invalid recording unexpectedly exported on retry")
+	}
+	if _, err := os.Stat(source); err != nil || session.currentState() != recordingStateSave {
+		t.Fatal("failed MP4 export lost its retryable source")
 	}
 }
 
@@ -214,7 +239,7 @@ func TestRecordingExportCancelledPreservesTake(t *testing.T) {
 	session := &recordingSession{state: recordingStateSave, tempPath: source}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := session.Save(ctx, target, recordingExportWebP); err != context.Canceled {
+	if err := session.Save(ctx, target, recordingExportWebP, nil); err != context.Canceled {
 		t.Fatalf("cancelled export error = %v", err)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -222,6 +247,30 @@ func TestRecordingExportCancelledPreservesTake(t *testing.T) {
 	}
 	if _, err := os.Stat(source); err != nil || session.currentState() != recordingStateSave {
 		t.Fatal("cancelled export lost its retryable source")
+	}
+}
+
+// TestRecordingExportHidesSelectionUntilRetry keeps native border strips closed during export.
+func TestRecordingExportHidesSelectionUntilRetry(t *testing.T) {
+	closed, opened := 0, 0
+	state := &recordingToolbarState{
+		session:           &recordingSession{state: recordingStateSave},
+		scrollBorderClose: func() { closed++ },
+		platform: screenshotEditorPlatform{showScrollBorder: func(Rect, Size) (func(), error) {
+			opened++
+			return func() { closed++ }, nil
+		}},
+	}
+	if err := state.hideRecordingSurfacesForExport(); err != nil {
+		t.Fatal(err)
+	}
+	state.syncRecordingSurfaces()
+	if !state.exporting || closed != 1 || opened != 0 {
+		t.Fatalf("export should keep selection hidden: exporting=%t closed=%d opened=%d", state.exporting, closed, opened)
+	}
+	state.restorePreviewSurfacesAfterDialog()
+	if state.exporting || opened != 1 {
+		t.Fatalf("retry should restore selection: exporting=%t opened=%d", state.exporting, opened)
 	}
 }
 

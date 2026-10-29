@@ -664,7 +664,7 @@ func (session *recordingSession) Cancel() error {
 }
 
 // Save atomically publishes the selected format and removes the temporary MP4 only on success.
-func (session *recordingSession) Save(ctx context.Context, target string, format recordingExportFormat) error {
+func (session *recordingSession) Save(ctx context.Context, target string, format recordingExportFormat, progress func(int)) error {
 	session.operationMu.Lock()
 	defer session.operationMu.Unlock()
 	session.mu.Lock()
@@ -675,7 +675,11 @@ func (session *recordingSession) Save(ctx context.Context, target string, format
 	}
 	source := session.tempPath
 	session.mu.Unlock()
-	if err := exportRecordingAtomically(ctx, source, target, format); err != nil {
+	duration := time.Duration(0)
+	if session.config.Now != nil {
+		duration = session.EffectiveDuration()
+	}
+	if err := exportRecordingAtomically(ctx, source, target, format, duration, progress); err != nil {
 		return err
 	}
 	if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
@@ -713,13 +717,8 @@ func cleanupRecordingOrphans(root string, now time.Time, maxAge time.Duration) e
 	return nil
 }
 
-// copyRecordingAtomically uses a sibling file so failed copies never leave a partial destination.
-func copyRecordingAtomically(source, target string) error {
-	return exportRecordingAtomically(context.Background(), source, target, recordingExportMP4)
-}
-
 // exportRecordingAtomically publishes only a complete export and preserves the source on failure.
-func exportRecordingAtomically(ctx context.Context, source, target string, format recordingExportFormat) error {
+func exportRecordingAtomically(ctx context.Context, source, target string, format recordingExportFormat, duration time.Duration, progress func(int)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -749,34 +748,16 @@ func exportRecordingAtomically(ctx context.Context, source, target string, forma
 	}
 	siblingPath := sibling.Name()
 	defer os.Remove(siblingPath)
-	if format != recordingExportMP4 {
-		if err := sibling.Close(); err != nil {
-			return err
-		}
-		if err := convertRecording(ctx, source, siblingPath, format); err != nil {
-			return err
-		}
-		// Conversion writes directly into the sibling, avoiding a second full-file copy.
-		sibling, err = os.OpenFile(siblingPath, os.O_RDWR, 0)
-		if err != nil {
-			return err
-		}
-	} else {
-		input, err := os.Open(source)
-		if err != nil {
-			_ = sibling.Close()
-			return fmt.Errorf("open finalized recording: %w", err)
-		}
-		_, copyErr := io.Copy(sibling, input)
-		closeInputErr := input.Close()
-		if copyErr != nil {
-			_ = sibling.Close()
-			return fmt.Errorf("copy finalized recording: %w", copyErr)
-		}
-		if closeInputErr != nil {
-			_ = sibling.Close()
-			return closeInputErr
-		}
+	if err := sibling.Close(); err != nil {
+		return err
+	}
+	if err := convertRecording(ctx, source, siblingPath, format, duration, progress); err != nil {
+		return err
+	}
+	// Conversion writes directly into the sibling, avoiding a second full-file copy.
+	sibling, err = os.OpenFile(siblingPath, os.O_RDWR, 0)
+	if err != nil {
+		return err
 	}
 	syncErr := sibling.Sync()
 	closeOutputErr := sibling.Close()

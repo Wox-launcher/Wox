@@ -73,6 +73,8 @@ type RecordingTooltips struct {
 	FormatGIF      string
 	FormatWebP     string
 	ExportFailed   string
+	Exporting      string
+	ExportProgress string
 }
 
 // ScreenshotActionTooltips carries localized labels for screenshot-wide actions.

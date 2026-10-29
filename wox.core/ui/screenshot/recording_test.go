@@ -1136,34 +1136,12 @@ func TestCleanupRecordingOrphansKeepsRecentAndUnrelatedFiles(t *testing.T) {
 	}
 }
 
-func TestCopyRecordingAtomicallyReplacesTarget(t *testing.T) {
-	root := t.TempDir()
-	source := filepath.Join(root, "source.mp4")
-	target := filepath.Join(root, "target.mp4")
-	if err := os.WriteFile(source, []byte("new video"), 0o600); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
-	if err := os.WriteFile(target, []byte("old video"), 0o600); err != nil {
-		t.Fatalf("write target: %v", err)
-	}
-	if err := copyRecordingAtomically(source, target); err != nil {
-		t.Fatalf("publish recording: %v", err)
-	}
-	content, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read target: %v", err)
-	}
-	if string(content) != "new video" {
-		t.Fatalf("target content = %q", content)
-	}
-}
-
-func TestCopyRecordingAtomicallyRejectsTemporaryFileAsTarget(t *testing.T) {
+func TestExportRecordingAtomicallyRejectsTemporaryFileAsTarget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "recording.mp4")
 	if err := os.WriteFile(path, []byte("video"), 0o600); err != nil {
 		t.Fatalf("write recording: %v", err)
 	}
-	if err := copyRecordingAtomically(path, path); err == nil {
+	if err := exportRecordingAtomically(context.Background(), path, path, recordingExportMP4, 0, nil); err == nil {
 		t.Fatal("publishing over the temporary file should be rejected")
 	}
 	if _, err := os.Stat(path); err != nil {
