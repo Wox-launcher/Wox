@@ -2,7 +2,11 @@
 
 package window
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lxn/win"
+)
 
 // TestWindowBackdropPolicyFollowsLiveCorners covers the policy shared by show and activation across theme changes.
 func TestWindowBackdropPolicyFollowsLiveCorners(t *testing.T) {
@@ -89,12 +93,13 @@ func TestWindowsNCActivateKeepsSystemBackdropActive(t *testing.T) {
 	}
 }
 
-func TestWindowsWindowsStayFrameless(t *testing.T) {
-	if windowsWindowStyle(WindowOptions{Resizable: true})&windowsWSSizeBox != 0 {
-		t.Fatal("Desktop Acrylic stays stable only without WS_THICKFRAME")
-	}
+func TestWindowsResizableStyleSupportsSnap(t *testing.T) {
 	if windowsWindowStyle(WindowOptions{})&windowsWSSizeBox != 0 {
-		t.Fatal("fixed windows must stay frameless")
+		t.Fatal("fixed windows must not become resizable")
+	}
+	style := windowsWindowStyle(WindowOptions{Resizable: true})
+	if style&windowsWSSizeBox == 0 || style&uint32(win.WS_MAXIMIZEBOX) == 0 || style&uint32(win.WS_SYSMENU) == 0 {
+		t.Fatal("Snap requires native resize and maximize styles")
 	}
 }
 

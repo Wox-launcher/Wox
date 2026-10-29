@@ -831,12 +831,13 @@ func (w *platformWindow) close() error {
 	return w.call(windowCommand{kind: windowCommandClose}).err
 }
 
-// windowsWindowStyle keeps every Wox window frameless. WS_THICKFRAME makes
-// Desktop Acrylic go glass-like on the active window and opaque when it
-// blurs, which is why Notes looked different from WebView after gaining focus.
-// Resizable windows already resize through WM_NCHITTEST.
-func windowsWindowStyle(_ WindowOptions) uint32 {
-	return uint32(win.WS_POPUP)
+// windowsWindowStyle opts into the native resize and maximize styles needed for Snap.
+func windowsWindowStyle(options WindowOptions) uint32 {
+	style := uint32(win.WS_POPUP)
+	if options.Resizable {
+		style |= windowsWSSizeBox | uint32(win.WS_MAXIMIZEBOX) | uint32(win.WS_SYSMENU)
+	}
+	return style
 }
 
 // createNativeWindow publishes the HWND only after CreateWindowEx has completed its synchronous messages.
