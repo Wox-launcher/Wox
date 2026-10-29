@@ -1653,11 +1653,16 @@ func resolveFileSearchResultIcon(ctx context.Context, result filesearch.SearchRe
 		diagnostics.statMissCount++
 	}
 
-	// Resolve regular files to a cached type icon here because letting manager-side
+	// Resolve ordinary files to a cached type icon here because letting manager-side
 	// icon conversion inspect every file path forces repeated embedded-icon probes.
 	// That fallback work was the main reason logs showed 30ms+ end-to-end latency
 	// even when file search itself had already finished within the single-digit budget.
 	extension := strings.ToLower(strings.TrimSpace(filepath.Ext(result.Path)))
+	if util.IsWindows() && extension == ".exe" {
+		// Executables have individual embedded icons; resolve them lazily so
+		// extracting artwork does not delay the search results.
+		return common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(result.Path), common.ResultListIconSize)
+	}
 	if cachedIcon, ok := fileTypeIcons[extension]; ok {
 		return cachedIcon
 	}
