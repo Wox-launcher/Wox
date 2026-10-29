@@ -139,6 +139,7 @@ type TextFieldProps struct {
 	OnCut func() bool
 	// PaintSelection draws unfocused selections; a collapsed range highlights the whole document block.
 	PaintSelection bool
+	Find           *TextFieldFind
 	// OnPaste receives raw clipboard text and, when it returns true, replaces the default insert.
 	// Empty text is still delivered so callers can paste images or files from the same shortcut.
 	OnPaste            func(string) bool
@@ -1374,7 +1375,7 @@ func textFieldInnerContent(props TextFieldProps, state woxui.TextEditingState, s
 		}
 		if props.Window != nil {
 			drawTextFieldTrailingHandleHighlight(displayList, bounds, state, style, props, softWrap)
-			drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, props.PaintSelection, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window)
+			drawTextField(displayList, bounds, state, style, props.RichRuns, textColor, props.Theme, focused, caretVisible, props.PaintSelection, maxLines, props.LineHeight, props.verticalOffset, props.TextAlignmentY, softWrap, props.Window, props.Find)
 			drawTextFieldTrailingHandleDropLine(displayList, bounds, props)
 		}
 	}}
@@ -2186,7 +2187,7 @@ func textFieldAlignedTextBounds(bounds woxui.Rect, value string, style woxui.Tex
 	return bounds
 }
 
-func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme ControlTheme, focused, caretVisible, paintSelection bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window) {
+func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxui.TextEditingState, style woxui.TextStyle, richRuns []TextFieldRichRun, textColor woxui.Color, theme ControlTheme, focused, caretVisible, paintSelection bool, maxLines int, lineHeight, verticalOffset, textAlignmentY float32, softWrap bool, window *woxui.Window, find ...*TextFieldFind) {
 	richRuns = textFieldCompositionRichRuns(state, richRuns)
 	displayRunes, start, end, focus, compositionStart, compositionEnd := textFieldDisplayState(state)
 	lines := textFieldRichLines(string(displayRunes), window, style, bounds.Width, softWrap, richRuns)
@@ -2196,6 +2197,13 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 	horizontalOffset := float32(0)
 	if visibleLines == 1 {
 		horizontalOffset = textFieldHorizontalOffset(focused, displayRunes, focus, style, bounds.Width, window)
+		if len(find) > 0 && find[0] != nil && find[0].Active >= 0 && !focused {
+			horizontalOffset = textFieldHorizontalOffset(true, displayRunes, find[0].Active+utf8.RuneCountInString(find[0].Query), style, bounds.Width, window)
+		}
+	}
+	var findMatches []woxui.TextSelection
+	if len(find) > 0 && find[0] != nil {
+		findMatches = FindTextMatches(state.Text, find[0].Query)
 	}
 	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
 		line := lines[lineIndex]
@@ -2209,6 +2217,25 @@ func drawTextField(displayList *woxui.DisplayList, bounds woxui.Rect, state woxu
 		}
 		y := bounds.Y + top - verticalOffset
 		lineX := textFieldLineOriginX(bounds.X-horizontalOffset, line)
+		if len(find) > 0 && find[0] != nil {
+			for _, match := range findMatches {
+				left, right := max(match.Start(), line.start), min(match.End(), line.end)
+				if left >= right {
+					continue
+				}
+				color := theme.TextSelectionBackground
+				if match.Start() != find[0].Active {
+					color.A = color.A / 2
+				}
+				x := textFieldMeasureRange(window, displayRunes, line.start, left, style, richRuns)
+				width := textFieldMeasureRange(window, displayRunes, left, right, style, richRuns)
+				rect := woxui.Rect{X: lineX + x, Y: y, Width: width, Height: lineBox}
+				displayList.FillRoundedRect(rect, 3, color)
+				if match.Start() == find[0].Active {
+					displayList.StrokeRoundedRect(rect, 3, 1, theme.Focus)
+				}
+			}
+		}
 		selectionStart := max(start, line.start)
 		selectionEnd := min(end, line.end)
 		if (focused || paintSelection) && selectionStart < selectionEnd {

@@ -39,6 +39,8 @@ var noteTableCellPadding = woxwidget.Insets{Top: 2, Bottom: 2}
 
 // NoteTableProps describes one editable Notes table block.
 type NoteTableProps struct {
+	FindQuery   string
+	FindTarget  *NoteFindTarget
 	ID          string
 	Block       int
 	Table       common.NoteTable
@@ -87,10 +89,14 @@ func WoxNoteTable(props NoteTableProps) woxwidget.Widget {
 		}
 		rows = append(rows, woxwidget.Flex{Axis: woxwidget.Horizontal, Children: cells})
 	}
+	var visible *woxwidget.ScrollRange
+	if target := props.FindTarget; target != nil && target.Block == props.Block {
+		visible = &woxwidget.ScrollRange{Start: float32(target.Column) * cellWidth, End: float32(target.Column+1) * cellWidth}
+	}
 	gridHeight := float32(len(rows)) * noteTableRowHeight(props.Zoom)
 	grid := WoxTableGridFrame(props.Width, gridHeight, noteTableBorder(props.Theme), woxwidget.ScrollView{
 		Key: woxwidget.Key(props.ID + "-hscroll"), ID: props.ID + "-hscroll",
-		Width: props.Width, Height: gridHeight, ContentWidth: contentWidth, Horizontal: true,
+		Width: props.Width, Height: gridHeight, ContentWidth: contentWidth, Horizontal: true, KeepVisible: visible,
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows},
 	})
 	var child woxwidget.Widget = grid
@@ -175,6 +181,7 @@ func noteTableCellField(props NoteTableProps, table common.NoteTable, row, colum
 		Padding: woxwidget.Insets{Left: 8, Right: 8},
 		Child: WoxTextField(TextFieldProps{
 			ID: fmt.Sprintf("%s.%d.%d", props.ID, row, column), Label: "Table cell",
+			Find:  noteFieldFind(props.FindQuery, props.FindTarget, props.Block, row, column),
 			Width: max(float32(0), width-16), Height: cellHeight - 2, Padding: noteTableCellPadding,
 			Transparent: true, DisableHover: true,
 			Style:    woxui.TextStyle{Size: props.Style.Size, Weight: weight, Family: props.Style.Family},

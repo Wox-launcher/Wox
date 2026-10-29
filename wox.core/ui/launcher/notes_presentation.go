@@ -19,6 +19,7 @@ import (
 func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widget {
 	a := c.owner
 	theme := a.palette().componentTheme()
+	findQuery, findTarget := c.currentFind()
 	toolbar := c.buildToolbar(frame.Size.Width, frame.WindowFocused, theme)
 	formatHeight := float32(0)
 	var formatBar woxwidget.Widget
@@ -38,9 +39,9 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 		editor = c.buildMarkdownEditor(frame.Size.Width, editorHeight, theme)
 	} else {
 		editor = woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
-			EdgeFade: 24,
-			ID:       "notes.editor", Label: a.language.translate("i18n:notes_editor"), Document: c.document,
-			Width: frame.Size.Width, Height: editorHeight, Padding: notesEditorPadding(),
+			EdgeFade: 24, FindQuery: findQuery, FindTarget: findTarget, FindReveal: c.findReveal,
+			ID: "notes.editor", Label: a.language.translate("i18n:notes_editor"), Document: c.document,
+			Width: frame.Size.Width, Height: editorHeight, Padding: c.findEditorPadding(),
 			Style: c.editorStyle(), LineHeight: notesEditorLineHeight * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
@@ -87,6 +88,9 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 	} else if c.moreOpen {
 		overlay = c.buildMoreOverlay(frame.Size, theme)
 	}
+	if c.findOpen {
+		overlay = c.buildFindOverlay(frame.Size, theme, overlay)
+	}
 	overlay = c.composeLinuxInlineTooltip(frame.Size, theme, overlay)
 	return launcherview.NotesWindow(launcherview.NotesWindowProps{
 		Width: frame.Size.Width, Height: frame.Size.Height, Label: a.language.translate("i18n:notes_title"), Toolbar: toolbar, Editor: editor,
@@ -96,7 +100,12 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 
 // buildMarkdownEditor hosts the raw Markdown source instead of the rich preview.
 func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	padding := notesEditorPadding()
+	query, target := c.currentFind()
+	active := -1
+	if target != nil {
+		active = target.Offset
+	}
+	padding := c.findEditorPadding()
 	// Source and preview share the UI font so toggling views does not change typeface.
 	style := c.editorStyle()
 	lineHeight := notesEditorLineHeight * c.zoom
@@ -112,6 +121,7 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 			TextAlignmentY: 0.5, TextColor: theme.PreviewText, Value: c.editor.Text(), Controller: c.editor,
 			FocusNode: c.editorFocus, Focused: c.editorFocus.HasFocus(), Autofocus: true,
 			ReadOnly: c.record.DeletedAt > 0, MaxLines: 10000, Window: c.managed.Window(), Theme: theme.Controls,
+			Find:      &woxcomponent.TextFieldFind{Query: query, Active: active},
 			OnChanged: c.onMarkdownChanged, OnKey: c.onKey, OnUndo: c.undoDocument, OnRedo: c.redoDocument,
 			OnPaste: c.pasteFromClipboard,
 		}),
@@ -121,13 +131,22 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 
 // noteMarkdownCaretVisible is the source-editor scroller interval that contains the caret.
 func (c *notesWindowController) noteMarkdownCaretVisible(width, lineHeight float32, padding woxwidget.Insets) *woxwidget.ScrollRange {
-	if !c.revealEditorCaret || lineHeight <= 0 {
+	_, target := c.currentFind()
+	if (!c.revealEditorCaret && (!c.findReveal || target == nil)) || lineHeight <= 0 {
 		return nil
 	}
 	innerWidth := max(float32(0), width-padding.Left-padding.Right)
-	line := woxcomponent.TextFieldVisualLineIndex(c.editor.Text(), c.editor.State().Selection.Focus, c.noteMeasureWindow(), c.editorStyle(), innerWidth, nil)
+	offset := c.editor.State().Selection.Focus
+	if target != nil && c.findReveal {
+		offset = target.Offset
+	}
+	line := woxcomponent.TextFieldVisualLineIndex(c.editor.Text(), offset, c.noteMeasureWindow(), c.editorStyle(), innerWidth, nil)
 	top := padding.Top + float32(line)*lineHeight
-	return &woxwidget.ScrollRange{Start: top, End: top + lineHeight}
+	start := top
+	if target != nil {
+		start = max(float32(0), top-c.controlTheme().Scaled(44))
+	}
+	return &woxwidget.ScrollRange{Start: start, End: top + lineHeight}
 }
 
 // buildToolbar prepares labels and native actions for the pure toolbar view.

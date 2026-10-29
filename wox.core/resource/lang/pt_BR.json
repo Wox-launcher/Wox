@@ -3341,5 +3341,9 @@
   "plugin_ai_chat_project_busy": "Aguarde o término das respostas antes de mover conversas ou excluir o projeto.",
   "plugin_ai_chat_project_bind_directories": "Configure uma pasta principal válida neste dispositivo antes de enviar.",
   "plugin_ai_chat_project_needs_directories": "Configurar pastas",
-  "plugin_ai_chat_project_directory_hint": "Caminho da pasta (vazio para procurar)"
+  "plugin_ai_chat_project_directory_hint": "Caminho da pasta (vazio para procurar)",
+  "notes_find": "Localizar na nota",
+  "notes_find_previous": "Ocorrência anterior",
+  "notes_find_next": "Próxima ocorrência",
+  "notes_find_close": "Fechar busca"
 }

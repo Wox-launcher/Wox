@@ -57,6 +57,11 @@ type notesWindowController struct {
 	summaries       []common.NoteSummary
 	searchIndex     int
 	searchOpen      bool
+	findOpen        bool
+	findReveal      bool
+	findEditor      *woxwidget.TextEditingController
+	findFocus       *woxwidget.FocusNode
+	findIndex       int
 	moreOpen        bool
 	formatMore      bool
 	linkOpen        bool
@@ -92,11 +97,12 @@ func newNotesWindowController(owner *notesController, record common.NoteRecord) 
 		owner:               owner,
 		notesEditingSession: newNotesEditingSession(),
 		searchEditor:        woxwidget.NewTextEditingController(""),
-		searchFocus:         woxwidget.NewFocusNode(),
-		linkEditor:          woxwidget.NewTextEditingController("https://"),
-		linkFocus:           woxwidget.NewFocusNode(),
-		windowID:            woxui.WindowID("wox.notes." + newID()),
-		formatVisible:       true,
+		findEditor:          woxwidget.NewTextEditingController(""), findFocus: woxwidget.NewFocusNode(),
+		searchFocus:   woxwidget.NewFocusNode(),
+		linkEditor:    woxwidget.NewTextEditingController("https://"),
+		linkFocus:     woxwidget.NewFocusNode(),
+		windowID:      woxui.WindowID("wox.notes." + newID()),
+		formatVisible: true,
 	}
 	controller.notesAutosave = &notesAutosave{
 		dispatch: owner.runOnUI, stopped: owner.isDestroyed,
@@ -284,6 +290,9 @@ func (c *notesWindowController) ensure() (*woxui.ManagedWindow, error) {
 				}
 			},
 			OnKey: func(event woxui.KeyEvent) bool {
+				if c.onFindKey(event) {
+					return true
+				}
 				return c.owner.dispatchWindowKey(event, host, common.NotesPluginID, c.requestClose, c.onKey)
 			},
 			OnTextInput:      func(event woxui.TextInputEvent) { host.TextInput(event) },

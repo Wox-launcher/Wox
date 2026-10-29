@@ -14,6 +14,9 @@ const noteEditorSegmentGap = float32(8)
 
 // NoteEditorProps describes the Notes document surface hosted by the utility window.
 type NoteEditorProps struct {
+	FindReveal           bool
+	FindQuery            string
+	FindTarget           *NoteFindTarget
 	EdgeFade             float32
 	ID                   string
 	Document             common.NoteDocument
@@ -130,11 +133,16 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 				table = *block.Table
 			}
 			height := noteTableBlockHeight(table, props.Zoom, !props.ReadOnly && props.OnTableInsertRow != nil)
+			if target := props.FindTarget; props.FindReveal && target != nil && target.Block == segment.Start {
+				top := contentHeight + noteEditorEdgePadding(props.Padding, len(children) == 0).Top + float32(target.Row)*noteTableRowHeight(props.Zoom)
+				caretVisible = &woxwidget.ScrollRange{Start: max(float32(0), top-props.Theme.Scaled(44)), End: top + noteTableRowHeight(props.Zoom) + noteTableToolbarHeight + noteTableToolbarGap}
+			}
 			padding := noteEditorEdgePadding(props.Padding, len(children) == 0)
 			children = append(children, woxwidget.Container{Width: props.Width, Padding: padding, Child: WoxNoteTable(NoteTableProps{
 				ID: fmt.Sprintf("%s.table.%s", props.ID, block.ID), Block: segment.Start, Table: table,
 				Width: max(float32(0), props.Width-props.Padding.Left-props.Padding.Right), ReadOnly: props.ReadOnly,
 				Theme: props.Theme, Window: props.Window, Zoom: props.Zoom, Style: props.Style,
+				FindQuery: props.FindQuery, FindTarget: props.FindTarget,
 				Focused: props.FocusedTableBlock == segment.Start, FocusRow: props.FocusedTableRow, FocusCol: props.FocusedTableCol,
 				OnChange: func(updated common.NoteTable) {
 					if props.OnTableChange != nil {
@@ -180,6 +188,13 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 		}
 		if props.RevealCaret && primary && caretVisible == nil {
 			caretVisible = noteEditorTextCaretRange(props, segment, primary, padding, contentHeight)
+		}
+		if target := props.FindTarget; props.FindReveal && target != nil && target.Block == segment.Start && target.Row < 0 {
+			value, runs, _ := ProjectNoteSegment(props.Document, segment, props.Style, props.Theme)
+			lines := textFieldVisualLines(value, props.Window, props.Style, max(float32(0), props.Width-padding.Left-padding.Right), NoteFieldRuns(runs))
+			line := textFieldLineIndex(lines, target.Offset)
+			top := contentHeight + padding.Top + textFieldLayoutLines(lines, props.LineHeight).top(line)
+			caretVisible = &woxwidget.ScrollRange{Start: max(float32(0), top-props.Theme.Scaled(44)), End: top + props.LineHeight}
 		}
 		children = append(children, noteEditorTextField(props, segment, fieldID, height, primary, padding))
 		contentHeight += height
@@ -254,6 +269,7 @@ func noteEditorTextField(props NoteEditorProps, segment NoteDocumentSegment, id 
 	}
 	return WoxTextField(TextFieldProps{
 		ID: id, Label: props.Label, Width: props.Width, Height: height, Padding: padding,
+		Find:        noteFieldFind(props.FindQuery, props.FindTarget, segment.Start, -1, -1),
 		Transparent: true, DisableHover: true, Style: props.Style, RichRuns: NoteFieldRuns(runs),
 		LineHeight: props.LineHeight, TextAlignmentY: 0.5, TextColor: props.TextColor, Value: value,
 		Controller: controller, FocusNode: focus, Focused: focused, Autofocus: autofocus,

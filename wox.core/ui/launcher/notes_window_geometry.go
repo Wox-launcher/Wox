@@ -21,6 +21,7 @@ func (c *notesWindowController) frame(host *woxwidget.Host, displayList *woxui.D
 	c.observeFrame(frame.Size)
 	host.Frame(displayList, frame)
 	c.revealEditorCaret = false
+	c.findReveal = false
 	if !c.markdownView {
 		c.requestTextFocus = false
 	}

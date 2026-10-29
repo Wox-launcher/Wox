@@ -3342,5 +3342,9 @@
   "plugin_ai_chat_project_busy": "Дождитесь завершения ответов, прежде чем перемещать беседы или удалять проект.",
   "plugin_ai_chat_project_bind_directories": "Перед отправкой укажите действительную основную папку на этом устройстве.",
   "plugin_ai_chat_project_needs_directories": "Настроить папки",
-  "plugin_ai_chat_project_directory_hint": "Путь к папке (пустое поле для выбора)"
+  "plugin_ai_chat_project_directory_hint": "Путь к папке (пустое поле для выбора)",
+  "notes_find": "Найти в заметке",
+  "notes_find_previous": "Предыдущее совпадение",
+  "notes_find_next": "Следующее совпадение",
+  "notes_find_close": "Закрыть поиск"
 }
