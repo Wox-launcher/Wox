@@ -1941,7 +1941,7 @@
     "Id": "c5dfb872-03a5-413a-96e3-438339e4d238",
     "Name": "Window Pin",
     "Author": "qianlifeng",
-    "Version": "1.0.1",
+    "Version": "1.0.2",
     "MinWoxVersion": "2.4.7",
     "Runtime": "nodejs",
     "Description": "Keep Windows applications above other windows",
@@ -1955,6 +1955,6 @@
       "Windows"
     ],
     "DateCreated": "2026-10-29 19:02:24",
-    "DateUpdated": "2026-10-29 14:12:38"
+    "DateUpdated": "2026-10-29 22:38:13"
   }
 ]
