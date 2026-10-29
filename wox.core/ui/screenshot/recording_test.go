@@ -584,6 +584,48 @@ func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	}
 }
 
+// TestRecordingCaptureBorderKeepsStrokeOutsideEncodedPixels covers fractional selections and nonuniform scaling.
+func TestRecordingCaptureBorderKeepsStrokeOutsideEncodedPixels(t *testing.T) {
+	selection := Rect{X: 13.4, Y: 18.7, Width: 201.3, Height: 102.6}
+	origin := Point{X: -20, Y: 7}
+	for _, size := range []image.Point{{400, 300}, {600, 450}, {800, 375}} {
+		frame := Size{Width: 400, Height: 300}
+		pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, size.X, size.Y), selection, frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pixels = normalizeRecordingPixelBounds(pixels)
+		stroke := float32(3)
+		border := recordingCaptureBorder(selection, origin, frame, size.X, size.Y, stroke)
+		sx, sy := frame.Width/float32(size.X), frame.Height/float32(size.Y)
+		if border.X+stroke+origin.X >= float32(pixels.Min.X)*sx ||
+			border.Y+stroke+origin.Y >= float32(pixels.Min.Y)*sy ||
+			border.X+border.Width-stroke+origin.X <= float32(pixels.Max.X)*sx ||
+			border.Y+border.Height-stroke+origin.Y <= float32(pixels.Max.Y)*sy {
+			t.Fatalf("size %v: border %+v overlaps capture %v", size, border, pixels)
+		}
+	}
+}
+
+func TestRecordingActiveBorderUsesCaptureBounds(t *testing.T) {
+	state := &recordingToolbarState{
+		session:   &recordingSession{state: recordingStateRecording},
+		selection: Rect{X: 80.4, Y: 80.2, Width: 200, Height: 100},
+		frameSize: Size{Width: 400, Height: 300},
+		editor:    &screenshotEditorOverlayState{image: testScreenshotImage(t, 600, 450)},
+		platform:  screenshotEditorPlatform{retainRecordingBorder: true},
+	}
+	frame := FrameInfo{Size: state.frameSize}
+	got := &DisplayList{}
+	state.drawBorder(got, frame)
+	want := &DisplayList{}
+	want.Clear(Color{})
+	want.StrokeRoundedRect(recordingCaptureBorder(state.selection, Point{}, state.frameSize, 600, 450, 2), 0, 2, Color{R: 47, G: 128, B: 237, A: 255})
+	if err := got.Compare(want); err != nil {
+		t.Fatalf("active border does not use capture bounds: %v", err)
+	}
+}
+
 func TestRecordingPreviewKeepsSelectionStrokeWithoutDuplicateTooltip(t *testing.T) {
 	session := &recordingSession{state: recordingStateSave, config: recordingSessionConfig{PixelBounds: image.Rect(0, 0, 200, 100)}}
 	state := &recordingToolbarState{

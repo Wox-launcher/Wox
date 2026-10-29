@@ -1102,7 +1102,11 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	}
 	coverSelection := status == recordingStateCountdown || status == recordingStateSave
 	if !coverSelection {
-		displayList.StrokeRoundedRect(localSelection, 0, 2*uiScale, blue)
+		border := localSelection
+		if status != recordingStateReady && state.platform.retainRecordingBorder && source != nil {
+			border = recordingCaptureBorder(selection, origin, frameSize, source.Width, source.Height, 2*uiScale)
+		}
+		displayList.StrokeRoundedRect(border, 0, 2*uiScale, blue)
 	}
 	if status == recordingStateReady {
 		drawScreenshotEditorHandles(displayList, localSelection, blue, uiScale)
@@ -1112,12 +1116,31 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	if toolbarBounds.Width > 0 {
 		localToolbar = Rect{X: toolbarBounds.X - origin.X, Y: toolbarBounds.Y - origin.Y, Width: toolbarBounds.Width, Height: toolbarBounds.Height}
 	}
-	drawScreenshotEditorSizeLabel(displayList, labelWindow, label, localSelection, localToolbar, frame.Size, uiScale)
+	// The size chip can fall inside the selection near a display edge or toolbar.
+	if !state.platform.retainRecordingBorder || (status != recordingStateRecording && status != recordingStatePaused) {
+		drawScreenshotEditorSizeLabel(displayList, labelWindow, label, localSelection, localToolbar, frame.Size, uiScale)
+	}
 	// After recording starts the toolbar draws this hint. Drawing it again here
 	// stacked a second tooltip when Linux kept the border window visible.
 	if !collapsed && status == recordingStateReady {
 		drawScreenshotEditorToolTooltipAt(displayList, state.border, recordingToolbarTooltipLocalRect(state.border, frameSize, toolbarBounds, hoverTooltipRect, selection, origin, hoverTooltip, uiScale), hoverTooltip, uiScale)
 	}
+}
+
+// recordingCaptureBorder places the inset stroke outside the rounded capture pixels,
+// with a pixel of clearance for compositor sampling and antialiasing.
+func recordingCaptureBorder(selection Rect, origin Point, frameSize Size, pixelWidth, pixelHeight int, stroke float32) Rect {
+	pixels, err := screenshotEditorPixelSelection(image.Rect(0, 0, pixelWidth, pixelHeight), selection, frameSize)
+	if err != nil {
+		return recordingBorderLocalSelection(selection, origin)
+	}
+	pixels = normalizeRecordingPixelBounds(pixels)
+	scaleX, scaleY := frameSize.Width/float32(pixelWidth), frameSize.Height/float32(pixelHeight)
+	left := float32(pixels.Min.X)*scaleX - scaleX - stroke - origin.X
+	top := float32(pixels.Min.Y)*scaleY - scaleY - stroke - origin.Y
+	right := float32(pixels.Max.X)*scaleX + scaleX + stroke - origin.X
+	bottom := float32(pixels.Max.Y)*scaleY + scaleY + stroke - origin.Y
+	return Rect{X: left, Y: top, Width: right - left, Height: bottom - top}
 }
 
 // recordingBorderLocalSelection maps the desktop selection into the current border window.
