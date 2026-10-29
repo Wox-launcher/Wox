@@ -11,7 +11,7 @@ import (
 // refreshQueryResultsHold waits longer than a typed-query grace period. Refresh
 // re-runs the same query, and the first snapshot is often only the fastest
 // plugins. Painting that snapshot collapses the window until the rest arrive.
-const refreshQueryResultsHold = 400 * time.Millisecond
+const refreshQueryResultsHold = 1200 * time.Millisecond
 
 // refreshResultSnapshot owns the latest deferred response, including optional metadata,
 // so releasing a refresh hold applies one coherent snapshot through the normal result pipeline.

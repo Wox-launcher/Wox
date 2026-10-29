@@ -73,7 +73,7 @@ Mutable controller state is confined to the UI thread, except for explicitly
 synchronized image bookkeeping, terminal subscription reconciliation, and atomic
 revisions. Background work publishes through UI dispatch and retains its existing
 query IDs, session keys or generation checks. Result refresh still holds shrinking
-partial snapshots for 400 ms using actual list/grid geometry; typed-query grace
+partial snapshots for 1.2 seconds using actual list/grid geometry; typed-query grace
 and final-response handling remain separate policies.
 
 `snapshot()` only reads state. Its collection references are borrowed for the
