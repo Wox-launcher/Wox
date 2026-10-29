@@ -41,6 +41,7 @@ var builtInSettingSearchAliases = map[string][]string{
 	"UseSoftwareRendering":      {"CPU", "GPU", "WARP", "software rendering"},
 	"MainHotkey":                {"shortcut", "main hotkey"},
 	"ActionPanelHotkey":         {"action hotkey", "more actions", "action panel"},
+	"NavigationBindings":        {"navigation", "emacs", "vim"},
 	"UsePinYin":                 {"pinyin"},
 	"LangCode":                  {"language"},
 	"ShowPosition":              {"position", "screen", "monitor", "display"},

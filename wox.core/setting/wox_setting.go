@@ -17,6 +17,7 @@ type WoxSetting struct {
 	MainHotkey                *PlatformValue[string]
 	SelectionHotkey           *PlatformValue[string]
 	ActionPanelHotkey         *PlatformValue[string] // Action Hotkey; new default primary+K, existing users keep J via migration.
+	NavigationBindings        *WoxSettingValue[NavigationBindingMode]
 	IgnoreHotkeysOnFullscreen *PlatformValue[bool]
 	IgnoredHotkeyApps         *PlatformValue[[]IgnoredHotkeyApp]
 	LogLevel                  *WoxSettingValue[string]
@@ -131,6 +132,14 @@ const (
 	PositionTypeActiveScreen   PositionType = "active_screen"
 	PositionTypeLastLocation   PositionType = "last_location"
 	PositionTypeSpecificScreen PositionType = "specific_screen"
+)
+
+type NavigationBindingMode string
+
+const (
+	NavigationBindingModeOff   NavigationBindingMode = "off"
+	NavigationBindingModeEmacs NavigationBindingMode = "emacs"
+	NavigationBindingModeVim   NavigationBindingMode = "vim"
 )
 
 // ShowDisplayTarget is the monitor the user picked for a specific-screen position.
@@ -467,6 +476,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", defaultLinuxMainHotkey()),
 		SelectionHotkey:           NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
 		ActionPanelHotkey:         NewPlatformValue(store, "ActionPanelHotkey", DefaultActionPanelHotkeyWindows, DefaultActionPanelHotkeyMac, DefaultActionPanelHotkeyLinux),
+		NavigationBindings:        NewWoxSettingValue(store, "NavigationBindings", NavigationBindingModeOff),
 		IgnoreHotkeysOnFullscreen: NewPlatformValue(store, "IgnoreHotkeysOnFullscreen", false, false, false),
 		IgnoredHotkeyApps:         NewPlatformValue(store, "IgnoredHotkeyApps", []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}, []IgnoredHotkeyApp{}),
 		LogLevel: NewWoxSettingValueWithValidator(store, "LogLevel", LogLevelInfo, func(level string) bool {

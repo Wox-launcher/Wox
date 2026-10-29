@@ -42,6 +42,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		MainHotkeyRegistrationError:        GetUIManager().mainHotkeyRegistrationErrorKey(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
 		ActionPanelHotkey:                  woxSetting.ActionPanelHotkey.Get(),
+		NavigationBindings:                 woxSetting.NavigationBindings.Get(),
 		IgnoreHotkeysOnFullscreen:          woxSetting.IgnoreHotkeysOnFullscreen.Get(),
 		FullscreenDetectionSupported:       window.SupportsActiveWindowFullscreen(),
 		IgnoredHotkeyApps:                  append([]setting.IgnoredHotkeyApp(nil), woxSetting.IgnoredHotkeyApps.Get()...),
@@ -200,6 +201,14 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 	}
 
 	switch key {
+	case "NavigationBindings":
+		mode := setting.NavigationBindingMode(value)
+		if mode != setting.NavigationBindingModeOff && mode != setting.NavigationBindingModeEmacs && mode != setting.NavigationBindingModeVim {
+			return fmt.Errorf("invalid navigation bindings: %q", value)
+		}
+		if err := woxSetting.NavigationBindings.Set(mode); err != nil {
+			return err
+		}
 	case "EnableAutostart":
 		woxSetting.EnableAutostart.Set(boolValue)
 	case "IgnoreHotkeysOnFullscreen":

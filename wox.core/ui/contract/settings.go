@@ -140,6 +140,7 @@ type GeneralSettings struct {
 	MainHotkeyRegistrationError        string
 	SelectionHotkey                    string
 	ActionPanelHotkey                  string
+	NavigationBindings                 setting.NavigationBindingMode
 	IgnoreHotkeysOnFullscreen          bool
 	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  []setting.IgnoredHotkeyApp

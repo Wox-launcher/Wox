@@ -69,6 +69,17 @@ static const char* woxSmokeSendChord(const unsigned short* keys, int count) {
     }
     return NULL;
 }
+
+// woxSmokeSendKeyEvent lets hold gestures cross the real Windows input boundary.
+static const char* woxSmokeSendKeyEvent(unsigned short key, int down) {
+    INPUT input;
+    ZeroMemory(&input, sizeof(input));
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = key;
+    input.ki.wScan = (WORD)MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
+    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    return SendInput(1, &input, sizeof(INPUT)) == 1 ? NULL : "failed to send Windows smoke key event";
+}
 */
 import "C"
 
@@ -135,6 +146,23 @@ func SendNativeKeyChord(keys ...string) error {
 		return fmt.Errorf("empty Windows smoke chord")
 	}
 	if message := C.woxSmokeSendChord(&resolved[0], C.int(len(resolved))); message != nil {
+		return fmt.Errorf("%s", C.GoString(message))
+	}
+	return nil
+}
+
+// SendNativeKeyEvent sends a key press or release without releasing held modifiers.
+func SendNativeKeyEvent(key string, down bool) error {
+	keyCodes := map[string]C.ushort{"alt": 0x12, "b": 0x42, "f": 0x46, "j": 0x4A, "n": 0x4E, "p": 0x50, "1": 0x31, "2": 0x32}
+	code, ok := keyCodes[strings.ToLower(key)]
+	if !ok {
+		return fmt.Errorf("unsupported Windows smoke key %q", key)
+	}
+	state := C.int(0)
+	if down {
+		state = 1
+	}
+	if message := C.woxSmokeSendKeyEvent(code, state); message != nil {
 		return fmt.Errorf("%s", C.GoString(message))
 	}
 	return nil

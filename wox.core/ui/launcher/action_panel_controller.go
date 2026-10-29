@@ -3,6 +3,7 @@ package launcher
 import (
 	"sync/atomic"
 
+	"wox/setting"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -16,6 +17,7 @@ type actionPanelController struct {
 	resultActionPanelEntries func() []actionPanelEntry
 	runningVersion           func() string
 	actionPanelHotkey        func() string
+	navigationBindings       func() setting.NavigationBindingMode
 	usePinYin                func() bool
 	toggleAboutMenu          func()
 	activateActionPanelEntry func(actionPanelEntry)
@@ -40,6 +42,7 @@ func (a *App) bindActions() {
 	a.actions.resultActionPanelEntries = a.resultActionPanelEntries
 	a.actions.runningVersion = a.runningVersion
 	a.actions.actionPanelHotkey = a.actionPanelHotkey
+	a.actions.navigationBindings = func() setting.NavigationBindingMode { return a.generalSettings.Data().NavigationBindings }
 	a.actions.usePinYin = a.usePinYin
 	a.actions.toggleAboutMenu = a.toggleAboutMenu
 	a.actions.activateActionPanelEntry = a.activateActionPanelEntry

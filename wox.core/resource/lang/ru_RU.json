@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "Клавиши навигации",
+  "ui_navigation_bindings_tips": "Навигация по результатам и действиям клавишами Emacs или Vim.",
   "notes_search_clear": "Очистить поиск",
   "ui_ai_chat_models": "Модели",
   "ui_ai_chat_search_models": "Поиск моделей или провайдеров",

@@ -35,12 +35,11 @@ func (a *quickSelectController) onQuickSelectKey(event woxui.KeyEvent) bool {
 		a.stopQuickSelectLocked()
 		return false
 	}
-	if event.Down && !event.Repeat && a.quickSelectMode {
-		if number := quickSelectDigit(event.Key); number > 0 {
-			if a.activateQuickSelectNumber(number) {
-				return true
-			}
+	if number := quickSelectDigit(event.Key); number > 0 && (a.quickSelectKeyPressed || a.quickSelectMode) {
+		if event.Down && !event.Repeat && a.quickSelectMode {
+			a.activateQuickSelectNumber(number)
 		}
+		return true
 	}
 	if event.Repeat && isQuickSelectModifierKey(event) {
 		return true

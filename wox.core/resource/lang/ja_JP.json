@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "ナビゲーションキー",
+  "ui_navigation_bindings_tips": "Emacs または Vim のキーで結果とアクションを移動します。",
   "ui_ai_chat_models": "モデル",
   "ui_ai_chat_search_models": "モデルまたはプロバイダーを検索",
   "plugin_websearch_default_webview": "既定で開く",

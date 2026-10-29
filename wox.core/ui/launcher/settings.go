@@ -49,6 +49,7 @@ type settingsData struct {
 	MainHotkeyRegistrationError        string
 	SelectionHotkey                    string
 	ActionPanelHotkey                  string
+	NavigationBindings                 setting.NavigationBindingMode
 	IgnoreHotkeysOnFullscreen          bool
 	FullscreenDetectionSupported       bool
 	IgnoredHotkeyApps                  json.RawMessage
@@ -137,19 +138,20 @@ type settingChoice struct {
 }
 
 type settingItem struct {
-	key               string
-	title             string
-	description       string
-	value             string
-	choices           []settingChoice
-	trailers          map[string]string
-	icons             map[string]woxImage
-	preserveIconColor bool
-	filterable        bool
-	text              bool
-	controlWidth      float32
-	browseFile        bool
-	disabled          bool
+	key                string
+	title              string
+	description        string
+	value              string
+	choices            []settingChoice
+	trailers           map[string]string
+	choiceDescriptions map[string]string
+	icons              map[string]woxImage
+	preserveIconColor  bool
+	filterable         bool
+	text               bool
+	controlWidth       float32
+	browseFile         bool
+	disabled           bool
 }
 
 type settingsSnapshot struct {
@@ -632,6 +634,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		MainHotkeyRegistrationError:        loaded.MainHotkeyRegistrationError,
 		SelectionHotkey:                    loaded.SelectionHotkey,
 		ActionPanelHotkey:                  loaded.ActionPanelHotkey,
+		NavigationBindings:                 loaded.NavigationBindings,
 		IgnoreHotkeysOnFullscreen:          loaded.IgnoreHotkeysOnFullscreen,
 		FullscreenDetectionSupported:       loaded.FullscreenDetectionSupported,
 		IgnoredHotkeyApps:                  ignoredHotkeyApps,
@@ -1564,7 +1567,18 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "UseSoftwareRendering", title: "i18n:ui_software_rendering", description: "i18n:ui_software_rendering_tips", value: boolValue(data.UseSoftwareRendering), choices: boolChoices},
 		}
 	case "hotkey":
-		var items []settingItem
+		modifier := "Alt"
+		if util.IsMacOS() {
+			modifier = "Ctrl"
+		}
+		items := []settingItem{{key: "NavigationBindings", value: string(data.NavigationBindings), choices: []settingChoice{
+			{string(setting.NavigationBindingModeOff), "Disabled"},
+			{string(setting.NavigationBindingModeEmacs), "Emacs"},
+			{string(setting.NavigationBindingModeVim), "Vim"},
+		}, choiceDescriptions: map[string]string{
+			string(setting.NavigationBindingModeEmacs): fmt.Sprintf("%s + B/F/P/N", modifier),
+			string(setting.NavigationBindingModeVim):   fmt.Sprintf("%s + H/J/K/L", modifier),
+		}}}
 		// Native fullscreen on macOS also covers everyday work, so this restriction is unsupported.
 		if !util.IsMacOS() {
 			items = append(items, settingItem{key: "IgnoreHotkeysOnFullscreen", value: boolValue(data.IgnoreHotkeysOnFullscreen), choices: boolChoices, disabled: !data.FullscreenDetectionSupported})

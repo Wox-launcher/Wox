@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "Teclas de navegação",
+  "ui_navigation_bindings_tips": "Navegue pelos resultados e ações com teclas do Emacs ou Vim.",
   "notes_search_clear": "Limpar pesquisa",
   "ui_ai_chat_models": "Modelos",
   "ui_ai_chat_search_models": "Buscar modelos ou provedores",

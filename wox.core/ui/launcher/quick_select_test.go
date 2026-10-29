@@ -102,6 +102,35 @@ func TestQuickSelectHoldShowsNumbersAndReleaseHidesThem(t *testing.T) {
 	}
 }
 
+func TestQuickSelectInterruptedUntilModifierReleased(t *testing.T) {
+	app := bindTestApp(&App{resultList: resultController{results: []queryResult{{ID: "one"}}}, lifecycleCtx: t.Context()})
+	modifier := quickSelectModifierEvent(true)
+	app.quickSelect.onQuickSelectKey(modifier)
+	if app.quickSelect.quickSelectTimer == nil {
+		t.Fatal("holding the modifier should start the timer")
+	}
+	app.quickSelect.onQuickSelectKey(woxui.KeyEvent{Key: "1", Modifiers: modifier.Modifiers, Down: true})
+	app.quickSelect.onQuickSelectKey(woxui.KeyEvent{Key: "1", Modifiers: modifier.Modifiers})
+	if app.quickSelect.quickSelectTimer == nil {
+		t.Fatal("number keys should not interrupt the hold")
+	}
+	app.quickSelect.onQuickSelectKey(woxui.KeyEvent{Key: "j", Modifiers: modifier.Modifiers, Down: true})
+	if app.quickSelect.quickSelectTimer != nil || app.quickSelect.quickSelectKeyPressed {
+		t.Fatal("another key should cancel this hold")
+	}
+	modifier.Repeat = true
+	app.quickSelect.onQuickSelectKey(modifier)
+	if app.quickSelect.quickSelectTimer != nil {
+		t.Fatal("modifier repeat must not restart the interrupted hold")
+	}
+	app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(false))
+	app.quickSelect.onQuickSelectKey(quickSelectModifierEvent(true))
+	if app.quickSelect.quickSelectTimer == nil {
+		t.Fatal("a new hold after release should start the timer")
+	}
+	app.quickSelect.stopQuickSelectLocked()
+}
+
 func TestQuickSelectNumberActivatesVisibleResult(t *testing.T) {
 	app := bindTestApp(&App{
 		resultList: resultController{

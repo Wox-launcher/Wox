@@ -27,6 +27,10 @@ type settingChoicePickerSnapshot struct {
 func (c *generalSettingsController) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
 	for index, choice := range snapshot.item.choices {
+		trailing := snapshot.item.trailers[choice.value]
+		if description := snapshot.item.choiceDescriptions[choice.value]; description != "" {
+			trailing = description
+		}
 		var leading *woxui.Image
 		if source := snapshot.item.icons[choice.value]; source.ImageData != "" {
 			if snapshot.item.preserveIconColor {
@@ -36,7 +40,7 @@ func (c *generalSettingsController) buildSettingChoicePickerOverlay(snapshot *se
 			}
 		}
 		choices[index] = launcherview.SettingsChoice{
-			Value: choice.value, Label: choice.label, Leading: leading, Trailing: snapshot.item.trailers[choice.value],
+			Value: choice.value, Label: choice.label, Leading: leading, Trailing: trailing,
 			Tooltip: c.localizedSettingChoiceTooltip(snapshot.item.key, choice),
 		}
 	}

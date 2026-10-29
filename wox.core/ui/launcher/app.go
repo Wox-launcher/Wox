@@ -683,6 +683,11 @@ func (a *App) start() error {
 			if event.Down {
 				a.resultDrag.releaseResultFileDragHold()
 			}
+			// Focused controls can consume a key before onKey sees it; any other
+			// key still cancels the current hold-to-number gesture.
+			if event.Down && !isQuickSelectModifierKey(event) && quickSelectDigit(event.Key) == 0 {
+				a.quickSelect.stopQuickSelectLocked()
+			}
 			if event.Down && !event.Composing && !a.hotkeyRecordingUsesSettingsWindow() && !a.hotkeyRecordingUsesOnboardingWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 				return true
 			}
@@ -1896,6 +1901,28 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	}
 	if a.onFilePreviewKey(event) {
 		return true
+	}
+	if !a.actions.actionPanel {
+		// Navigation bindings select results directly, so Up cannot recall query history.
+		switch navigationDirection(a.generalSettings.Data().NavigationBindings, event) {
+		case woxui.KeyArrowUp:
+			a.moveSelection(-a.resultList.resultNavigationColumns())
+			return true
+		case woxui.KeyArrowDown:
+			a.querySession.canRecallHistory = false
+			a.moveSelection(a.resultList.resultNavigationColumns())
+			return true
+		case woxui.KeyArrowLeft:
+			if a.resultList.layout.GridLayout != nil {
+				a.moveSelection(-1)
+				return true
+			}
+		case woxui.KeyArrowRight:
+			if a.resultList.layout.GridLayout != nil {
+				a.moveSelection(1)
+				return true
+			}
+		}
 	}
 	if a.toolbar.onToolbarKey(event) {
 		return true

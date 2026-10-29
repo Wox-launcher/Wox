@@ -420,6 +420,16 @@ func (a *actionPanelController) onActionKey(event woxui.KeyEvent) bool {
 	if !open {
 		return false
 	}
+	if a.navigationBindings != nil {
+		switch navigationDirection(a.navigationBindings(), event) {
+		case woxui.KeyArrowUp:
+			a.moveActionSelection(-1)
+			return true
+		case woxui.KeyArrowDown:
+			a.moveActionSelection(1)
+			return true
+		}
+	}
 	if event.Key == woxui.KeyTab {
 		return true
 	}

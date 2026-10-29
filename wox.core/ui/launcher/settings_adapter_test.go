@@ -202,6 +202,54 @@ func TestHotkeySettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	}
 }
 
+func TestHotkeyNavigationSettingFollowsActionHotkey(t *testing.T) {
+	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	form := newHotkeySettingsForm(settingsData{})
+	app.hotkeySettings.SetForm(&form)
+	items := settingItems("hotkey", settingsData{})
+	page := app.buildSettingsPage(settingsSnapshot{tab: "hotkey", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, items, 800, 600, 1)
+	scroll := page.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	rows := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	var actionKey woxwidget.Key
+	for index, definition := range form.definitions {
+		if definition.Value.Key == "ActionPanelHotkey" {
+			actionKey = formFieldRowKey("settings-hotkey", index)
+			break
+		}
+	}
+	positions := map[woxwidget.Key]int{}
+	for index, row := range rows {
+		if keyed, ok := row.(woxwidget.Keyed); ok {
+			positions[keyed.Key] = index
+		}
+	}
+	action, actionFound := positions[actionKey]
+	navigation, navigationFound := positions["setting-row-NavigationBindings"]
+	if !actionFound || !navigationFound || navigation != action+1 {
+		t.Fatalf("action row = %d (found %v), navigation row = %d (found %v)", action, actionFound, navigation, navigationFound)
+	}
+	if fullscreen, found := positions["setting-row-IgnoreHotkeysOnFullscreen"]; found && fullscreen != navigation+1 {
+		t.Fatalf("fullscreen row = %d, want immediately after navigation row %d", fullscreen, navigation)
+	}
+}
+
+func TestNavigationChoiceDescriptionsAppearOnlyInMenu(t *testing.T) {
+	app := bindTestApp(&App{})
+	app.generalSettings.imageForTint = func(woxImage, *woxui.Color, int) *woxui.Image { return nil }
+	item := app.generalSettings.localizedSettingItem(settingItems("hotkey", settingsData{NavigationBindings: "vim"})[0])
+	if got := settingValueLabel(item); got != "Vim" || item.trailers[item.value] != "" {
+		t.Fatalf("collapsed value = %q, trailing = %q", got, item.trailers[item.value])
+	}
+	widget := app.generalSettings.buildSettingChoicePickerOverlay(&settingChoicePickerSnapshot{item: item}, settingsPalette(), 800, 600, 1)
+	props := widget.(woxwidget.Stateful).Widget.(launcherview.SettingsChoiceProps)
+	for _, choice := range props.Choices[1:] {
+		if choice.Trailing == "" || choice.Trailing != item.choiceDescriptions[choice.Value] {
+			t.Fatalf("menu choice %q description = %q", choice.Label, choice.Trailing)
+		}
+	}
+}
+
 func TestGeneralSettingsTablesKeepFlutterOuterGap(t *testing.T) {
 	windows := woxui.NewWindowManager()
 	app := newApp(false, nil, windows, newAppInstanceRegistry(), nil, true, "", launcherWindowID)

@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "탐색 단축키",
+  "ui_navigation_bindings_tips": "Emacs 또는 Vim 단축키로 결과와 동작을 탐색합니다.",
   "ui_ai_chat_models": "모델",
   "ui_ai_chat_search_models": "모델 또는 제공업체 검색",
   "plugin_websearch_default_webview": "기본으로 열기",

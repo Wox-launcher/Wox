@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "导航快捷键",
+  "ui_navigation_bindings_tips": "使用 Emacs 或 Vim 快捷键导航结果和操作。",
   "ui_ai_chat_models": "模型",
   "ui_ai_chat_search_models": "搜索模型或 Provider",
   "plugin_websearch_default_webview": "默认打开",

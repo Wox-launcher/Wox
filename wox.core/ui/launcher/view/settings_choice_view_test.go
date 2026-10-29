@@ -228,7 +228,11 @@ func TestSettingsChoiceTrailingUsesRowTextColor(t *testing.T) {
 	menuScope := stack.Children[1].Child.(woxwidget.FocusScope)
 	menuContent := menuScope.Child.(woxwidget.Semantics).Child.(woxwidget.Stack).Children[0].Child.(woxwidget.Container)
 	scroll := menuContent.Child.(woxwidget.Flex).Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
-	row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+	semantics := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if semantics.Description != "AC" {
+		t.Fatalf("choice description = %q, want trailing text for accessibility", semantics.Description)
+	}
+	row := semantics.Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
 	trailing := settingsChoiceRowTrailing(row)
 	if trailing.Value != "AC" || trailing.Color != title {
 		t.Fatalf("choice trailing = %q %#v, want row Text so TextSecondary cannot restyle Glance values", trailing.Value, trailing.Color)

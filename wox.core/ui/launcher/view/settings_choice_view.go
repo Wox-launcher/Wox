@@ -418,7 +418,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			}
 		}, OnTap: activate, Child: woxwidget.Stack{Width: width, Height: settingsChoiceRowHeight, Children: []woxwidget.StackChild{{Child: rowBackground}, {Child: rowContent}}}}
 		rows = append(rows, woxwidget.Semantics{
-			Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label,
+			Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label, Description: choice.Trailing,
 			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Selected: selected,
 			OnAction: func(action woxui.AccessibilityAction, _ string) error {
 				if action == woxui.AccessibilityActionActivate {

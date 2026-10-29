@@ -1,4 +1,6 @@
 {
+  "ui_navigation_bindings": "Navigation bindings",
+  "ui_navigation_bindings_tips": "Navigate results and actions with Emacs or Vim keys.",
   "ui_ai_chat_models": "Models",
   "ui_ai_chat_search_models": "Search models or providers",
   "plugin_websearch_default_webview": "Open by default",

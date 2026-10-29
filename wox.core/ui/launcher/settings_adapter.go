@@ -310,6 +310,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		snapshot.palette,
 	))
 	var keepVisibleKey woxwidget.Key
+	var navigationHotkeyRow woxwidget.Widget
 	var fullscreenHotkeyRow woxwidget.Widget
 	var networkRows []woxwidget.Widget
 	currentSection := ""
@@ -322,11 +323,16 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		target := woxwidget.Keyed{Key: woxwidget.Key("setting-row-" + item.key), Child: woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+item.key, Child: row, Theme: snapshot.palette,
 		})}
-		// Keep the built-in switch's save/search callbacks while placing it beside
-		// the app exclusions in the hotkey form.
-		if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil && item.key == "IgnoreHotkeysOnFullscreen" {
-			fullscreenHotkeyRow = target
-			continue
+		// Keep the built-in rows' save/search callbacks inside the hotkey group.
+		if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil {
+			switch item.key {
+			case "NavigationBindings":
+				navigationHotkeyRow = target
+				continue
+			case "IgnoreHotkeysOnFullscreen":
+				fullscreenHotkeyRow = target
+				continue
+			}
 		}
 		// Query Aliases and Tray Queries sit above Network, so proxy rows wait
 		// until those tables have been appended.
@@ -373,6 +379,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 				Width: contentWidth, Highlighted: snapshot.highlight == "built-in:"+definition.Value.Key, Child: field, Theme: snapshot.palette,
 			})
 			children = append(children, woxwidget.Keyed{Key: formFieldRowKey("settings-hotkey", index), Child: target})
+			if definition.Value.Key == "ActionPanelHotkey" && navigationHotkeyRow != nil {
+				children = append(children, navigationHotkeyRow)
+			}
 		}
 	}
 	if snapshot.tab == "general" && snapshot.general.Form != nil {
@@ -474,6 +483,7 @@ func (c *generalSettingsController) localizedSettingItem(item settingItem) setti
 		"EnableAutostart":      {"ui_autostart", "ui_autostart_tips"}, "HideOnStart": {"ui_hide_on_start", "ui_hide_on_start_tips"},
 		"LaunchMode": {"ui_launch_mode", "ui_launch_mode_tips"}, "StartPage": {"ui_start_page", "ui_start_page_tips"},
 		"IgnoreHotkeysOnFullscreen": {"ui_hotkey_ignore_fullscreen", "ui_hotkey_ignore_fullscreen_tips"},
+		"NavigationBindings":        {"ui_navigation_bindings", "ui_navigation_bindings_tips"},
 		"HideOnLostFocus":           {"ui_hide_on_lost_focus", "ui_hide_on_lost_focus_tips"}, "UsePinYin": {"ui_use_pinyin", "ui_use_pinyin_tips"},
 		"SwitchInputMethodABC": {"ui_switch_input_method_abc", "ui_switch_input_method_abc_tips"}, "LangCode": {"ui_lang", "ui_lang_tips"},
 		"ShowPosition": {"ui_show_position", "ui_show_position_tips"}, "ShowTray": {"ui_show_tray", "ui_show_tray_tips"},
@@ -512,6 +522,7 @@ func (c *generalSettingsController) localizedSettingChoiceLabel(key string, choi
 		"ShowPosition":       {"mouse_screen": "ui_show_position_mouse_screen", "active_screen": "ui_show_position_active_screen", "last_location": "ui_show_position_last_location", "specific_screen": "ui_show_position_specific_screen"},
 		"UiDensity":          {"compact": "ui_interface_size_compact", "normal": "ui_interface_size_normal", "comfortable": "ui_interface_size_comfortable"},
 		"AppFontFamily":      {"": "ui_app_font_family_system_default"},
+		"NavigationBindings": {string(setting.NavigationBindingModeOff): "ui_disabled"},
 		"CloudSyncServerUrl": {"https://sync.woxlauncher.com": "ui_cloud_sync_server_url_production", "http://127.0.0.1:8787": "ui_cloud_sync_server_url_local"},
 		"ReleaseChannel":     {"stable": "ui_release_channel_stable", "beta": "ui_release_channel_beta"},
 	}
