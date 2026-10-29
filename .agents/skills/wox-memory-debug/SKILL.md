@@ -1,13 +1,20 @@
 ---
 name: wox-memory-debug
-description: Diagnose memory leaks in the current single-process Wox Go UI by launching the real debug build with its automation endpoint enabled, replaying representative launcher searches and settings-window open/close cycles, sampling the same process across repeated workload blocks, and comparing Go heap profiles when retained memory keeps growing. Use for Wox memory-leak checks, search-result retention, settings cleanup, Go UI memory growth, or repeated UI lifecycle regressions on Windows or macOS.
+description: Diagnose memory leaks and reduce query-time and idle memory in the single-process Wox Go UI on Windows or macOS. Use the real automation-enabled debug build to measure searches and settings lifecycles, attribute Go and native memory, implement focused optimizations, and verify memory savings without responsiveness or behavior regressions.
 ---
 
 # Wox Memory Debug
 
 ## Goal
 
-Run the real Go UI in debug mode with the `wox_automation` endpoint, exercise normal launcher searches and the independent settings-window lifecycle through the semantics tree, and decide whether memory settles after warm-up or grows with repeated work. Treat Wox as one Go process and use post-warm-up growth rather than an absolute memory budget as the leak criterion.
+This skill has two equally important goals:
+
+1. Detect memory leaks through repeated searches and independent settings-window open/close cycles.
+2. Reduce memory occupied during queries and while idle, including stable allocations that never leak.
+
+Run the real Go UI with the `wox_automation` endpoint. Unless the user limits the task to diagnosis, continue from measurement to attribution, focused implementation, and before/after verification. A `no leak signal` result completes only the leak check; it is not a reason to skip footprint optimization. If measured owners offer no justified improvement, report the evidence and tradeoffs rather than inventing a saving.
+
+Treat Wox as one Go process. Use post-warm-up growth as the leak criterion, and reproducible reductions in comparable query and idle measurements as the optimization criterion. Historical measurements are context, not universal memory budgets. Read `wox.core/ui/README.md`, especially its platform memory guidance and hidden-state ownership rules, before changing memory lifecycle behavior.
 
 ## Run the Debug Build
 
@@ -18,6 +25,8 @@ Run the real Go UI in debug mode with the `wox_automation` endpoint, exercise no
 cd /Users/qianlifeng/Projects/Wox/wox.core
 WOX_AUTOMATION_INFO_FILE=/tmp/wox-memory-automation.json /Users/qianlifeng/go/bin/dlv debug . --build-flags=-tags=sqlite_fts5,wox_automation
 ```
+
+On Windows, set `$env:_NO_DEBUG_HEAP = '1'` before starting Delve so the Windows debug heap does not distort allocation and fragmentation behavior. Use the local checkout and tool paths. Keep Go/compiler flags, renderer, heap sampling, real user data, enabled plugins, display scale, and debugger mode consistent between runs. If heap sampling is disabled, enable it for both sides of a profiling comparison (for example, `GODEBUG=memprofilerate=524288`) and establish a fresh baseline.
 
 3. At the Delve prompt, run `continue`.
 4. Wait until startup and plugin initialization finish, then wait for `WOX_AUTOMATION_INFO_FILE` to be written.
@@ -42,7 +51,7 @@ go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /t
    - File-oriented search, such as `readme`.
 3. Use a different deterministic seed for each block so the workload is reproducible while still varying result types.
 4. The driver waits for the query value, allows results to settle, records the visible result count and semantics generation, clears the query, and continues. It does not execute results or commands.
-5. At the end of the block, the driver hides the launcher. Wait 10 seconds so every checkpoint uses the same idle state.
+5. At the end of the block, the driver hides the launcher. Wait 45 seconds on Windows or 10 seconds on macOS so every checkpoint uses the same idle state.
 
 Take the warm baseline only after these blocks. Initial startup growth, lazy font loading, icon decoding, and cache creation are expected and are not leak evidence.
 
@@ -64,13 +73,30 @@ powershell -ExecutionPolicy Bypass -File C:\dev\Wox\.agents\skills\wox-memory-de
 
 Use `PrivateWorkingSetMB`.
 
-Do not compare macOS physical footprint with Windows private working set. Compare checkpoints from the same PID, OS, debug session, workload, and idle state.
+Do not compare macOS physical footprint with Windows private working set. Keep one PID alive throughout each workload series. Before/after builds require separate processes: warm each independently with the same workload and compare equivalent lifecycle states, not adjacent checkpoints across a restart.
+
+Confirm the launcher stays hidden throughout idle sampling, using `window.state` with `instanceName: "primary"` and logs when necessary. A hotkey, settings window, or other interaction that changes the checkpoint state invalidates that checkpoint; record the interference and repeat it after a full idle wait.
+
+## Measure Query and Idle Footprint
+
+Collect these separately before optimization and replay the same measurements afterward:
+
+| State | Measurement |
+| --- | --- |
+| Active queries | Sample the same PID throughout deterministic mixed-query blocks at a fixed cadence; report the median and observed maximum, query count, and cadence. These samples are separate from the hidden checkpoint at block end. |
+| Settled visible results | Hold representative queries from each safe category until results settle, then take three samples before clearing or hiding. Keep result/preview state and display scale comparable. |
+| Visible idle | Clear the query, leave the launcher visible without interaction for a fixed recorded interval, then take three samples. |
+| Hidden idle | Clear and hide, wait 45 seconds on Windows or 10 seconds on macOS, then take three samples. Use an additional 30-60 seconds of idle when the result has not settled. |
+
+The bundled query driver clears each query quickly and hides at block end. Use concurrent sampling for active-query measurements and a separate automation sequence to hold settled results or visible idle; a post-block sample cannot describe query-time memory. Label sampled maxima as observed maxima, since short allocation peaks can fall between samples. Keep sampler overhead and cadence identical before and after.
+
+Record query latency, first-query latency after hidden cleanup, and CPU behavior alongside memory. Measure process footprint and Go live heap separately; on Windows also record private commit when evaluating page release so reduced residency is not mistaken for reduced ownership. Capture expensive profiles or native breakdowns outside latency measurements.
 
 ## Run the Measured Query Workload
 
 1. Record the warm baseline.
 2. Run five measured blocks of 10 or 20 queries using distinct seeds and the same query pool.
-3. After each block, clear the query, hide the launcher, wait 10 seconds, and sample the same PID three times.
+3. After each block, clear the query, hide the launcher, wait 45 seconds on Windows or 10 seconds on macOS, and sample the same PID three times.
 4. Record the median of each three-sample checkpoint to reduce sampler noise.
 5. Report cumulative query count, median memory, change from the warm baseline, and the observed shape of the series.
 
@@ -85,14 +111,14 @@ cd /Users/qianlifeng/Projects/Wox/wox.core
 go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode settings -count 1
 ```
 
-1. Run one settings cycle as warm-up. Wait 10 seconds and record the closed-settings baseline.
+1. Run one settings cycle as warm-up. Wait 45 seconds on Windows or 10 seconds on macOS and record the closed-settings baseline.
 2. Run at least three measured blocks of five open/close cycles:
 
 ```bash
 go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode settings -count 5
 ```
 
-3. After each block, keep both launcher and settings closed, wait 10 seconds, and sample the same PID three times. Record the median.
+3. After each block, keep both launcher and settings closed, wait 45 seconds on Windows or 10 seconds on macOS, and sample the same PID three times. Record the median.
 4. Confirm every cycle reports both an `opened_generation` and `closed_generation`. The driver considers close complete only after `settings-search-field` disappears and `launcher.query.input` returns, which means `settingsView` and `settingsHost` have left the active automation surface.
 5. Compare measured block medians with the post-warm-up closed-settings baseline. Repeat one identical five-cycle block after a 30-second idle checkpoint when the trend is ambiguous.
 
@@ -148,9 +174,11 @@ Apply the same classification independently to cumulative queries and cumulative
 
 Go may retain heap arenas after objects become unreachable, so a high or non-decreasing process footprint alone is not proof. Report the result as `no leak signal`, `possible leak`, or `strong leak signal`, together with the measurements that support it.
 
-## Attribute Persistent Growth
+## Attribute Growth and Stable Footprint
 
-Only profile after the repeated-query or settings-lifecycle run shows a possible or strong leak signal.
+Profile when attributing either persistent growth or reducible query/idle footprint. A stable process can still retain unnecessary data, caches, native resources, or allocation capacity. Inspect absolute retained owners as well as deltas; a small delta does not explain a large steady footprint.
+
+For hidden Windows checkpoints, prefer the automation-only `perf.memory_snapshot` with an optional distinct `profilePath`. It captures Go statistics and native resident-page ownership without showing the launcher or forcing GC. Inspect `wox.core/ui/automation/server_enabled.go` for the current transport and result fields. Use equivalent natural cleanup and sampling settings for both captures. The launcher command below is another capture path, but showing it recreates renderer resources and is not a hidden-state measurement.
 
 1. Trigger the Wox Memory plugin's `woxmemory profile ` command through the automation driver after warm-up:
 
@@ -179,17 +207,31 @@ go tool pprof -top -base /tmp/wox-memory-before.prof /tmp/wox-memory-after.prof
 
 If process memory grows but the Go heap delta stays small, inspect Go UI native owners next: GPU textures and image caches, decoded result icons, preview resources, platform window allocations, and query-result cleanup. For settings-only growth, inspect `settingsView`, `settingsHost`, settings editors/forms, theme wallpaper previews, cloud/model state, asynchronous reloads, and native window/renderer destruction. On macOS, compare `vmmap <PID> -summary` checkpoints and pay particular attention to `IOAccelerator` and `IOSurface`. If repeated identical queries still grow, inspect lazy-image cache identity, per-draw Metal texture creation, and drawable-size churn before attributing growth to unique query strings.
 
+For stable footprint, inspect the largest absolute owners with `go tool pprof -top` and allocation call paths, then reconcile them with native memory. Prioritize duplicated query data, result/action closures, oversized image decoding, cache contents and lifetime, eager settings/plugin loads, SQLite caches, renderer resources, and thread ownership according to measurements. Distinguish live allocations from reusable capacity, native fragmentation, and file-backed resident pages; reducing one does not guarantee the same reduction in process footprint.
+
 Use `-query terminal` with query mode for an identical-query control only when the mixed workload needs further attribution.
+
+## Optimize and Verify
+
+1. Establish reproducible query and idle baselines and identify a likely owner before editing production code. A reproducible footprint with attributable avoidable ownership is sufficient; a leak is not required.
+2. Implement a focused change at the owning feature or shared capability. Prefer avoiding allocations and duplicate ownership, decoding at the required size, loading data on demand, bounding caches, and releasing resources at their actual lifecycle boundary. Preserve query results, previews, settings behavior, and intentional background features.
+3. Format and run relevant focused checks, then rebuild and rerun the same warm-up, query/idle measurements, and leak workloads. Keep one PID per build's series. Compare memory in MB and percent, including active-query maxima, settled results, visible idle, and hidden idle; do not hide an increase in one state behind a decrease in another.
+4. Check query latency, first use after idle, CPU, and visible rendering. Reject or revise changes whose memory savings introduce material responsiveness, CPU, or behavior regressions. When savings are near sampler variation, repeat matched baseline/candidate runs before claiming improvement.
+5. Continue with the next measured owner while a meaningful, low-risk reduction remains. Finish with verified savings or an evidence-based explanation of the remaining ownership and why further changes are not justified within the task.
+
+Do not lower the reported footprint by disabling ordinary functionality, changing the workload/data/renderer between runs, repeatedly forcing GC, or evicting the process working set with `EmptyWorkingSet` / `SetProcessWorkingSetSize(-1, -1)`. Normal lifecycle cleanup may return unused memory, but measurement-only trims do not count as an optimization. Report file-page residency and private commit separately when relevant, and retain the latency cost of rebuilding released caches in the comparison.
 
 ## Report
 
 Include:
 
-- OS, debug configuration, PID, workload, and checkpoint timing.
+- OS, revision/build, debug configuration, PID for each run, workload, and checkpoint timing.
+- Before/after query and idle footprint table, with active-query median/observed maximum, settled-result samples, visible idle, hidden idle, and absolute/percentage savings. If no change was justified, report the measured baseline and owners investigated instead of implying optimization was completed.
 - A checkpoint table with cumulative queries and median process memory.
 - A separate closed-settings checkpoint table with cumulative open/close cycles and median process memory.
 - The trend classification and whether a longer confirmation block was needed.
-- Go heap delta owners only when profiling was necessary.
+- Go and native owners supporting the optimization or leak diagnosis, including stable retained owners when relevant.
+- Changes made, validation results, query/first-after-idle latency and CPU tradeoffs, and remaining opportunities or blockers. State footprint optimization results separately from leak classification.
 - Any limitation that prevented consistent UI automation or reliable sampling.
 
-Do not edit production code until the measurements identify a reproducible trend and a likely owner.
+Do not stop at `no leak signal` when query and idle footprint optimization remains in scope.
