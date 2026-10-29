@@ -106,7 +106,7 @@ func newGeneralQuerySettingsForm(data settingsData) formFieldsState {
 			{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
 		},
 	}}}
-	if !data.IsLinuxWaylandSession {
+	if !data.IsLinuxWaylandSession || data.TrayQuerySupported {
 		definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
 			Key: "TrayQueries", Title: "i18n:ui_tray_queries", Tooltip: "i18n:ui_tray_queries_tips", InlineTable: true,
 			Columns: []formTableColumn{

@@ -171,6 +171,7 @@ type GeneralSettings struct {
 	ShowDisplay                        setting.ShowDisplayTarget
 	IsLinuxWaylandSession              bool
 	SelectionQuerySupported            bool
+	TrayQuerySupported                 bool
 	IsEvdevReadAvailable               bool
 	EnableAutoBackup                   bool
 	EnableAutoUpdate                   bool

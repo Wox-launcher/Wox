@@ -229,3 +229,18 @@ func TestWaylandSelectionHotkeyRequiresSupportedBackend(t *testing.T) {
 		}
 	}
 }
+
+func TestTrayQuerySettingsWaylandCapability(t *testing.T) {
+	for _, supported := range []bool{false, true} {
+		form := newGeneralQuerySettingsForm(settingsData{IsLinuxWaylandSession: true, TrayQuerySupported: supported})
+		found := false
+		for _, definition := range form.definitions {
+			if definition.Value.Key == "TrayQueries" {
+				found = true
+			}
+		}
+		if found != supported {
+			t.Fatalf("supported=%v, tray query settings visible=%v", supported, found)
+		}
+	}
+}

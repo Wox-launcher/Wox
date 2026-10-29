@@ -59,6 +59,7 @@ type settingsData struct {
 	TrayQueries                        json.RawMessage
 	IsLinuxWaylandSession              bool
 	SelectionQuerySupported            bool
+	TrayQuerySupported                 bool
 	UseSoftwareRendering               bool
 	SoftwareRenderingRestartRequired   bool
 	UsePinYin                          bool
@@ -644,6 +645,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		TrayQueries:                        trayQueries,
 		IsLinuxWaylandSession:              loaded.IsLinuxWaylandSession,
 		SelectionQuerySupported:            loaded.SelectionQuerySupported,
+		TrayQuerySupported:                 loaded.TrayQuerySupported,
 		UseSoftwareRendering:               loaded.UseSoftwareRendering,
 		SoftwareRenderingRestartRequired:   loaded.SoftwareRenderingRestartRequired,
 		UsePinYin:                          loaded.UsePinYin,

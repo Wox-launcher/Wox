@@ -1568,12 +1568,7 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 }
 
 func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
-	if util.IsLinuxWaylandSession() {
-		logger.Info(ctx, "skip tray query icon refresh: tray query is unavailable on Wayland")
-		return
-	}
-	if util.IsLinux() {
-		// tray query is not supported on linux yet
+	if !tray.SupportsQueryIcons() {
 		return
 	}
 
@@ -1621,8 +1616,7 @@ func (m *Manager) refreshTrayQueryIcons(ctx context.Context) {
 }
 
 func (m *Manager) executeTrayQuery(ctx context.Context, trayQuery setting.TrayQuery, rect tray.ClickRect) {
-	if util.IsLinuxWaylandSession() {
-		logger.Info(ctx, "skip tray query: tray query is unavailable on Wayland")
+	if !tray.SupportsQueryIcons() {
 		return
 	}
 
@@ -1698,6 +1692,13 @@ func (m *Manager) getTrayQueryWindowPosition(ctx context.Context, rect tray.Clic
 		x = rect.X + (rect.Width-windowWidth)/2
 		if util.IsWindows() {
 			y = windowAnchorBottom - windowHeight
+		} else if util.IsLinux() && tray.SupportsQueryIcons() && rect.Y <= screenRect.Y+screenRect.Height/2 {
+			// Layer-shell already places the window below the panel exclusive zone.
+			// Extra pointer-based margins leave a gap that can steal focus.
+			y = screenRect.Y
+		} else if util.IsLinux() && rect.Y > screenRect.Y+screenRect.Height/2 {
+			// A bottom panel needs the query window above the pointer.
+			y = rect.Y - windowHeight - margin
 		} else {
 			y = rect.Y + rect.Height + margin
 		}
@@ -1710,6 +1711,9 @@ func (m *Manager) getTrayQueryWindowPosition(ctx context.Context, rect tray.Clic
 	x = clampInt(x, minX, maxX)
 
 	minY := screenRect.Y + 10
+	if util.IsLinux() && tray.SupportsQueryIcons() {
+		minY = screenRect.Y
+	}
 	maxY := screenRect.Y + screenRect.Height - windowHeight - 10
 	if maxY < minY {
 		maxY = minY
@@ -1900,9 +1904,15 @@ func trayQueryDisplay(rect tray.ClickRect, displays []screen.Display) (screen.Di
 		}
 		return screen.Display{}, false
 	}
+	if rect.Width <= 0 || rect.Height <= 0 {
+		return screen.Display{}, false
+	}
 	pointX, pointY := rect.X+rect.Width/2, rect.Y+rect.Height/2
 	for _, display := range displays {
-		area := display.WorkArea
+		area := display.Bounds
+		if area.IsEmpty() {
+			area = display.WorkArea
+		}
 		if pointX >= area.X && pointX < area.Right() && pointY >= area.Y && pointY < area.Bottom() {
 			return display, true
 		}

@@ -1,5 +1,19 @@
 package tray
 
+import (
+	"os"
+	"strings"
+	"wox/util"
+)
+
+// SupportsQueryIcons reports whether this session can display query tray icons.
+func SupportsQueryIcons() bool {
+	if !util.IsLinux() {
+		return true
+	}
+	return util.IsOmarchy() && util.IsHyprlandSession() && strings.EqualFold(strings.TrimSpace(os.Getenv("DESKTOP_SESSION")), "omarchy")
+}
+
 type MenuItem struct {
 	Title    string
 	Callback func()

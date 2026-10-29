@@ -69,3 +69,15 @@ func TestExplicitPositionAndTrayMonitor(t *testing.T) {
 		t.Fatalf("explicit position = %+v", position)
 	}
 }
+
+// TestTrayQueryDisplayIncludesPanel finds the monitor even when the pointer is outside its work area.
+func TestTrayQueryDisplayIncludesPanel(t *testing.T) {
+	displays := []screen.Display{{ID: "left", Bounds: screen.Rect{X: -1600, Y: -200, Width: 1600, Height: 1000}, WorkArea: screen.Rect{X: -1600, Y: -160, Width: 1600, Height: 960}, Scale: 1.5}}
+	display, ok := trayQueryDisplay(tray.ClickRect{X: -1200, Y: -190, Width: 1, Height: 1}, displays)
+	if !ok || display.ID != "left" {
+		t.Fatalf("panel display = %+v, %v", display, ok)
+	}
+	if _, ok := trayQueryDisplay(tray.ClickRect{}, displays); ok {
+		t.Fatal("missing pointer must fall back to the mouse screen")
+	}
+}

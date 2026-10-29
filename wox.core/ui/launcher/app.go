@@ -1069,6 +1069,7 @@ func saveLastWindowOrigin(position setting.SavedWindowPosition) error {
 
 func (a *App) onFocus(event woxui.FocusEvent) {
 	if event.Active {
+		a.releaseTrayQueryKeyboardGrab()
 		a.notifyQueryBoxFocusOnWindowActivation()
 		return
 	}

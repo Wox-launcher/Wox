@@ -6,10 +6,10 @@ import (
 	"embed"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"wox/internal/assetfs"
 	"wox/util"
+	"wox/util/mouse"
 )
 
 //go:embed wox-tray-symbolic.svg
@@ -19,7 +19,7 @@ var omarchyTrayIcon = assetfs.New(rawOmarchyTrayIcon)
 
 // isOmarchyTraySession avoids changing the icon in other sessions on an Omarchy installation.
 func isOmarchyTraySession() bool {
-	return util.IsOmarchy() && util.IsHyprlandSession() && strings.EqualFold(strings.TrimSpace(os.Getenv("DESKTOP_SESSION")), "omarchy")
+	return SupportsQueryIcons()
 }
 
 // prepareOmarchyTrayIcon exposes a named symbolic icon for the Omarchy shell to tint.
@@ -38,4 +38,18 @@ func prepareOmarchyTrayIcon(appIcon []byte) ([]sniIconPixmap, string, string, st
 	}
 	// An empty pixmap makes the host resolve the symbolic name and retain its suffix.
 	return []sniIconPixmap{}, "wox-tray-symbolic", iconDir, iconFile
+}
+
+// startOmarchyQueryTray gives each query its own StatusNotifierItem connection.
+func startOmarchyQueryTray(item QueryIconItem) (*linuxTray, error) {
+	return startLinuxTrayItem(item.Icon, "wox-query-"+item.Identifier, item.Tooltip, nil, func(x, y int32) {
+		// The tray host may send zero coordinates; Hyprland reports logical desktop coordinates.
+		rect := ClickRect{}
+		if point, ok := mouse.CurrentPosition(); ok {
+			rect = ClickRect{X: int(point.X), Y: int(point.Y), Width: 1, Height: 1}
+		}
+		if item.Callback != nil {
+			item.Callback(rect)
+		}
+	}, []MenuItem{{Title: item.ContextMenuTitle, Callback: item.ContextMenuCallback}}, true)
 }

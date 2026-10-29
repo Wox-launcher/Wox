@@ -30,8 +30,9 @@ const (
 )
 
 var (
-	trayMu    sync.Mutex
-	linuxHost *linuxTray
+	trayMu     sync.Mutex
+	linuxHost  *linuxTray
+	queryHosts []*linuxTray
 )
 
 type sniIconPixmap struct {
@@ -65,6 +66,7 @@ type linuxTray struct {
 
 	mu        sync.Mutex
 	leftClick func()
+	activate  func(int32, int32)
 	items     []menuEntry
 	revision  uint32
 	iconFile  string
@@ -103,17 +105,46 @@ func RemoveTray() {
 	trayMu.Lock()
 	host := linuxHost
 	linuxHost = nil
+	queries := queryHosts
+	queryHosts = nil
 	trayMu.Unlock()
 	if host != nil {
 		host.close()
 	}
+	for _, query := range queries {
+		query.close()
+	}
 }
 
 func SetQueryIcons(items []QueryIconItem) {
-	// Linux query tray icons are not implemented yet.
+	if !isOmarchyTraySession() {
+		return
+	}
+	trayMu.Lock()
+	defer trayMu.Unlock()
+	for _, host := range queryHosts {
+		host.close()
+	}
+	queryHosts = nil
+	if linuxHost == nil {
+		return
+	}
+	for _, item := range items {
+		host, err := startOmarchyQueryTray(item)
+		if err != nil {
+			util.GetLogger().Warn(util.NewTraceContext(), fmt.Sprintf("Linux query tray: %s", err))
+			continue
+		}
+		queryHosts = append(queryHosts, host)
+	}
 }
 
 func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTray, error) {
+	return startLinuxTrayItem(appIcon, util.LinuxDesktopAppID, "Wox", onClick, nil, items, false)
+}
+
+// startLinuxTrayItem exports one independent StatusNotifierItem and its menu.
+func startLinuxTrayItem(appIcon []byte, id, title string, onClick func(), onActivate func(int32, int32), items []MenuItem, query bool) (*linuxTray, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("connect to session bus: %w", err)
@@ -123,22 +154,32 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 		conn:      conn,
 		done:      make(chan struct{}),
 		leftClick: onClick,
+		activate:  onActivate,
 		items:     makeMenuEntries(items),
 		revision:  1,
 	}
 
 	prepareIcon := prepareTrayIcon
-	if isOmarchyTraySession() {
+	if !query && isOmarchyTraySession() {
 		prepareIcon = prepareOmarchyTrayIcon
 	}
-	pixmaps, iconName, iconThemePath, iconFile := prepareIcon(appIcon)
+	var pixmaps []sniIconPixmap
+	var iconName, iconThemePath, iconFile string
+	if query {
+		pixmaps = []sniIconPixmap{}
+		if decoded := decodeTrayIcon(appIcon); decoded != nil {
+			pixmaps = buildSNIIconPixmaps(decoded)
+		}
+	} else {
+		pixmaps, iconName, iconThemePath, iconFile = prepareIcon(appIcon)
+	}
 	host.iconFile = iconFile
 
 	sniProps := map[string]map[string]*prop.Prop{
 		sniInterface: {
 			"Category":            {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitTrue},
-			"Id":                  {Value: util.LinuxDesktopAppID, Writable: false, Emit: prop.EmitTrue},
-			"Title":               {Value: "Wox", Writable: false, Emit: prop.EmitTrue},
+			"Id":                  {Value: id, Writable: false, Emit: prop.EmitTrue},
+			"Title":               {Value: title, Writable: false, Emit: prop.EmitTrue},
 			"Status":              {Value: "Active", Writable: false, Emit: prop.EmitTrue},
 			"WindowId":            {Value: int32(0), Writable: false, Emit: prop.EmitTrue},
 			"IconName":            {Value: iconName, Writable: false, Emit: prop.EmitTrue},
@@ -148,7 +189,7 @@ func startLinuxTray(appIcon []byte, onClick func(), items []MenuItem) (*linuxTra
 			"AttentionIconName":   {Value: "", Writable: false, Emit: prop.EmitTrue},
 			"AttentionIconPixmap": {Value: []sniIconPixmap{}, Writable: false, Emit: prop.EmitTrue},
 			"AttentionMovieName":  {Value: "", Writable: false, Emit: prop.EmitTrue},
-			"ToolTip":             {Value: sniToolTip{IconName: iconName, IconPixmap: pixmaps, Title: "Wox"}, Writable: false, Emit: prop.EmitTrue},
+			"ToolTip":             {Value: sniToolTip{IconName: iconName, IconPixmap: pixmaps, Title: title}, Writable: false, Emit: prop.EmitTrue},
 			"ItemIsMenu":          {Value: false, Writable: false, Emit: prop.EmitTrue},
 			"Menu":                {Value: dbus.ObjectPath(sniMenuPath), Writable: false, Emit: prop.EmitTrue},
 			"IconThemePath":       {Value: iconThemePath, Writable: false, Emit: prop.EmitTrue},
@@ -276,7 +317,12 @@ func (h *linuxTray) watchWatcher(signals <-chan *dbus.Signal) {
 func (s *sniServer) Activate(x int32, y int32) *dbus.Error {
 	s.host.mu.Lock()
 	callback := s.host.leftClick
+	activate := s.host.activate
 	s.host.mu.Unlock()
+	if activate != nil {
+		go activate(x, y)
+		return nil
+	}
 	if callback != nil {
 		go callback()
 	}

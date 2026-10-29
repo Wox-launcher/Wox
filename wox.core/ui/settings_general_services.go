@@ -24,6 +24,7 @@ import (
 	"wox/util/keyboard"
 	"wox/util/permission"
 	"wox/util/selection"
+	"wox/util/tray"
 	"wox/util/window"
 )
 
@@ -73,6 +74,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		ShowDisplay:                        woxSetting.ShowDisplay.Get(),
 		IsLinuxWaylandSession:              util.IsLinuxWaylandSession(),
 		SelectionQuerySupported:            selection.SupportsSelectionQuery(),
+		TrayQuerySupported:                 tray.SupportsQueryIcons(),
 		IsEvdevReadAvailable:               keyboard.IsEvdevReadAvailable(),
 		EnableAutoBackup:                   woxSetting.EnableAutoBackup.Get(),
 		EnableAutoUpdate:                   woxSetting.EnableAutoUpdate.Get(),

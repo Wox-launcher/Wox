@@ -223,3 +223,17 @@ func TestLinuxTrayMenuGroups(t *testing.T) {
 	default:
 	}
 }
+
+func TestSNIQueryActivateDispatchesCoordinates(t *testing.T) {
+	received := make(chan [2]int32, 1)
+	server := &sniServer{host: &linuxTray{activate: func(x, y int32) { received <- [2]int32{x, y} }}}
+	server.Activate(-20, 30)
+	select {
+	case got := <-received:
+		if got != [2]int32{-20, 30} {
+			t.Fatalf("coordinates = %v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("activation callback did not run")
+	}
+}

@@ -21,7 +21,8 @@ except at the beginning of the menu. Commands retain their IDs and callbacks.
 
 These system surfaces follow platform typography and scaling, independently of
 the launcher's theme and UI density. Main and query menus share the Windows
-renderer; Linux query tray icons remain unsupported.
+renderer. Omarchy exposes query icons as separate StatusNotifierItems; other
+Linux sessions do not yet support query tray icons.
 
 ## Verification
 
