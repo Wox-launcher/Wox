@@ -1567,33 +1567,31 @@ func (c *ClipboardPlugin) buildClipboardFilePreview(ctx context.Context, filePat
 		}
 	}
 
-	items := make([]plugin.WoxPreviewListItem, 0, len(filePaths))
-	for _, filePath := range filePaths {
-		icon := common.NewWoxImageFileIcon(filePath)
-		extension := strings.TrimPrefix(filepath.Ext(filePath), ".")
-		typeLabel := strings.ToUpper(extension)
-		if util.IsDirExists(filePath) {
-			icon = icons.Get(icons.PluginFolder)
-			typeLabel = "DIR"
-		}
-		if typeLabel == "" {
-			typeLabel = "FILE"
-		}
-
+	// Previewing a clipboard batch must not probe every path: those filesystem
+	// calls can block the entire query, particularly for cloud-backed directories.
+	const maxPreviewFiles = 10
+	shown := filePaths[:min(len(filePaths), maxPreviewFiles)]
+	items := make([]plugin.WoxPreviewListItem, 0, len(shown))
+	for _, filePath := range shown {
 		items = append(items, plugin.WoxPreviewListItem{
-			Icon:     &icon,
 			Title:    filepath.Base(filePath),
 			Subtitle: filepath.Dir(filePath),
-			Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText(typeLabel)},
 		})
+	}
+	if remaining := len(filePaths) - len(shown); remaining > 0 {
+		previewTags = append(previewTags, plugin.WoxPreviewTag{Label: fmt.Sprintf(c.api.GetTranslation(ctx, "selection_remaining_files_not_shown"), remaining)})
 	}
 
 	previewJSON, err := json.Marshal(plugin.WoxPreviewListData{Items: items})
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to marshal clipboard file preview: %s", err.Error()))
+		fallback := strings.Join(shown, "\n")
+		if len(filePaths) > len(shown) {
+			fallback += "\n" + previewTags[len(previewTags)-1].Label
+		}
 		return plugin.WoxPreview{
 			PreviewType: plugin.WoxPreviewTypeText,
-			PreviewData: strings.Join(filePaths, "\n"),
+			PreviewData: fallback,
 			PreviewTags: previewTags,
 		}
 	}
@@ -1858,7 +1856,7 @@ func escapeClipboardMarkdownLinkDestination(link string) string {
 
 // convertImageRecord converts an image record to a query result
 func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record ClipboardRecord, query plugin.Query) plugin.QueryResult {
-	previewWoxImage, iconWoxImage := c.generateImagePreviewAndIcon(ctx, record)
+	previewWoxImage, iconWoxImage := c.resolveImagePreviewAndIcon(record)
 	overlayWoxImage := common.NewWoxImageAbsolutePath(record.FilePath)
 
 	group, groupScore := c.getResultGroup(ctx, record)
@@ -2182,9 +2180,8 @@ func clipboardTimestampTag(timestamp int64, now time.Time) plugin.WoxPreviewTag 
 	return plugin.WoxPreviewTag{Label: copied.Format(format), Tooltip: copied.Format("2006-01-02 15:04:05")}
 }
 
-// generateImagePreviewAndIcon generates preview and icon for image records
-func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, record ClipboardRecord) (previewImg, iconImg common.WoxImage) {
-	// Check memory cache first
+// resolveImagePreviewAndIcon uses cached thumbnails without decoding originals during a query.
+func (c *ClipboardPlugin) resolveImagePreviewAndIcon(record ClipboardRecord) (previewImg, iconImg common.WoxImage) {
 	cached, exists := c.imageCache.Load(record.ID)
 	if exists {
 		return cached.Preview, cached.Icon
@@ -2193,7 +2190,9 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 	imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
 	imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
 
-	if util.IsFileExists(imagePreviewFile) && util.IsFileExists(imageIconFile) {
+	hasPreview := util.IsFileExists(imagePreviewFile)
+	hasIcon := util.IsFileExists(imageIconFile)
+	if hasPreview && hasIcon {
 		previewImg = common.NewWoxImageAbsolutePath(imagePreviewFile)
 		iconImg = common.NewWoxImageAbsolutePath(imageIconFile)
 
@@ -2205,59 +2204,22 @@ func (c *ClipboardPlugin) generateImagePreviewAndIcon(ctx context.Context, recor
 		return
 	}
 
-	// Load original image and generate preview/icon
-	sourceImage := c.loadImageFromFile(ctx, record.FilePath)
-	if sourceImage == nil {
-		// Return default icons if image is not available
-		previewImage := c.getDefaultTextIcon()
-		iconImage := icons.Get(icons.ActionPreview)
-		return previewImage, iconImage
+	// A missing thumbnail must not force every query to decode and resize the
+	// original. The UI loads the selected preview and visible row icons on demand.
+	previewImg = c.getDefaultTextIcon()
+	originalExists := record.FilePath != "" && util.IsFileExists(record.FilePath)
+	if hasPreview {
+		previewImg = common.NewWoxImageAbsolutePath(imagePreviewFile)
+	} else if originalExists {
+		previewImg = common.NewWoxImageAbsolutePath(record.FilePath)
 	}
-
-	compressedPreviewImg := imaging.Resize(sourceImage, 400, 0, imaging.Lanczos)
-	compressedIconImg := common.NewImageThumbnail(sourceImage)
-
-	// Save to disk cache first
-	if saveErr := imaging.Save(compressedPreviewImg, imagePreviewFile); saveErr != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save clipboard image preview cache failed, err=%s", saveErr.Error()))
-		// Fallback to base64 if disk save fails
-		previewImage, err := common.NewWoxImage(compressedPreviewImg)
-		if err != nil {
-			previewImage = c.getDefaultTextIcon()
-		}
-		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
-		if iconErr != nil {
-			iconImage = icons.Get(icons.ActionPreview)
-		}
-		return previewImage, iconImage
+	iconImg = icons.Get(icons.ActionPreview)
+	if hasIcon {
+		iconImg = common.NewWoxImageAbsolutePath(imageIconFile)
+	} else if originalExists {
+		iconImg = common.NewWoxImageLazyLoadCandidate(common.NewWoxImageAbsolutePath(record.FilePath), common.ResultListIconSize)
 	}
-
-	if saveErr := imaging.Save(compressedIconImg, imageIconFile); saveErr != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("save clipboard image icon cache failed, err=%s", saveErr.Error()))
-		// Fallback to base64 if disk save fails
-		previewImage, err := common.NewWoxImage(compressedPreviewImg)
-		if err != nil {
-			previewImage = c.getDefaultTextIcon()
-		}
-		iconImage, iconErr := common.NewWoxImage(compressedIconImg)
-		if iconErr != nil {
-			iconImage = icons.Get(icons.ActionPreview)
-		}
-		return previewImage, iconImage
-	}
-
-	// Use file paths for better performance
-	previewImage := common.NewWoxImageAbsolutePath(imagePreviewFile)
-	iconImage := common.NewWoxImageAbsolutePath(imageIconFile)
-
-	// Cache the generated images in memory for faster access
-	c.imageCache.Store(record.ID, &ImageCacheEntry{
-		Preview: previewImage,
-		Icon:    iconImage,
-	})
-
-	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("generated image preview and icon cache, id=%s", record.ID))
-	return previewImage, iconImage
+	return previewImg, iconImg
 }
 
 // loadImageFromFile loads an image from a file path

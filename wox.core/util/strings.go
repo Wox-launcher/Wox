@@ -2,6 +2,7 @@ package util
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"wox/util/fuzzymatch"
 )
@@ -26,6 +27,25 @@ func EllipsisEnd(s string, maxLen int) string {
 }
 
 func EllipsisMiddle(s string, maxLen int) string {
+	if maxLen >= 4 && utf8.ValidString(s) {
+		if utf8.RuneCountInString(s) <= maxLen {
+			return s
+		}
+		// Only the ends are displayed; allocating a rune slice for the entire
+		// clipboard text can consume several times the input size.
+		half := maxLen / 2
+		prefixEnd := 0
+		for i := 0; i < half-1; i++ {
+			_, size := utf8.DecodeRuneInString(s[prefixEnd:])
+			prefixEnd += size
+		}
+		suffixStart := len(s)
+		for i := 0; i < half-2; i++ {
+			_, size := utf8.DecodeLastRuneInString(s[:suffixStart])
+			suffixStart -= size
+		}
+		return s[:prefixEnd] + "..." + s[suffixStart:]
+	}
 	runes := []rune(s)
 	if len(runes) <= maxLen {
 		return s

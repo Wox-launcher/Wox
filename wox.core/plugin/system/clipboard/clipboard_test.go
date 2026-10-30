@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,17 +12,145 @@ import (
 	"testing"
 	"time"
 	"wox/common"
+	"wox/common/icons"
 	"wox/database"
 	"wox/plugin"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+
+	"github.com/google/uuid"
 )
+
+type clipboardPreviewTestAPI struct{ imagePasteFailureAPI }
+
+func (a *clipboardPreviewTestAPI) GetTranslation(ctx context.Context, key string) string {
+	if key == "selection_remaining_files_not_shown" {
+		return "%d more files not shown"
+	}
+	return a.imagePasteFailureAPI.GetTranslation(ctx, key)
+}
+
+// TestBulkFilePreviewIsBounded keeps large clipboard batches usable without truncating their actions.
+func TestBulkFilePreviewIsBounded(t *testing.T) {
+	root := t.TempDir()
+	for _, count := range []int{2, 10, 11, 1201} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			paths := make([]string, count)
+			for i := range paths {
+				paths[i] = filepath.Join(root, fmt.Sprintf("photo-%d.jpg", i))
+			}
+			c := &ClipboardPlugin{api: &clipboardPreviewTestAPI{}}
+			result := c.convertFileRecord(context.Background(), ClipboardRecord{ID: "bulk", Type: string(clipboard.ClipboardTypeFile), FilePaths: paths}, plugin.Query{})
+			if result.DragData == nil || !slices.Equal(result.DragData.Files, paths) {
+				t.Fatal("drag must retain every copied path")
+			}
+			var data plugin.WoxPreviewListData
+			if err := json.Unmarshal([]byte(result.Preview.PreviewData), &data); err != nil {
+				t.Fatal(err)
+			}
+			shown := min(count, 10)
+			if result.Preview.PreviewType != plugin.WoxPreviewTypeList || len(data.Items) != shown {
+				t.Fatalf("preview has %d rows, want %d", len(data.Items), shown)
+			}
+			for i := 0; i < shown; i++ {
+				if data.Items[i].Title != filepath.Base(paths[i]) || data.Items[i].Subtitle != root {
+					t.Fatalf("incorrect preview row %d: %+v", i, data.Items[i])
+				}
+			}
+			if count > shown && (len(result.Preview.PreviewTags) != 3 || result.Preview.PreviewTags[2].Label != fmt.Sprintf("%d more files not shown", count-shown)) {
+				t.Fatalf("incorrect omitted count: %+v", result.Preview.PreviewTags)
+			}
+			if count == shown && len(result.Preview.PreviewTags) != 2 {
+				t.Fatalf("unexpected omitted count: %+v", result.Preview.PreviewTags)
+			}
+		})
+	}
+}
 
 type imagePasteFailureAPI struct {
 	plugin.API
 	notification string
 	logs         []string
+}
+
+// TestClipboardImageCacheMissLoadsOriginalOnDemand exercises missing and partial thumbnail caches.
+func TestClipboardImageCacheMissLoadsOriginalOnDemand(t *testing.T) {
+	if os.Getenv("WOX_CLIPBOARD_IMAGE_CACHE_TEST_CHILD") == "" {
+		t.Setenv(util.TestWoxDataDirEnv, t.TempDir())
+		t.Setenv(util.TestUserDataDirEnv, t.TempDir())
+		t.Setenv("WOX_CLIPBOARD_IMAGE_CACHE_TEST_CHILD", "1")
+		command := exec.Command(os.Args[0], "-test.run=^TestClipboardImageCacheMissLoadsOriginalOnDemand$")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("image cache check: %v\n%s", err, output)
+		}
+		return
+	}
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatal(err)
+	}
+	original := filepath.Join(t.TempDir(), "original.png")
+	if err := os.WriteFile(original, []byte("not a decoded image"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	record := ClipboardRecord{ID: uuid.NewString(), FilePath: original}
+	c := &ClipboardPlugin{api: &imagePasteFailureAPI{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
+	preview, icon := c.resolveImagePreviewAndIcon(record)
+	if preview != common.NewWoxImageAbsolutePath(original) {
+		t.Fatalf("uncached preview = %+v", preview)
+	}
+	converted, err := common.ConvertPluginIcon(context.Background(), icon, "clipboard-test", "", common.IconConversion{AllowLazy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := common.ParseWoxLazyLoadImagePayload(converted)
+	if err != nil || payload.Source == nil || *payload.Source != preview {
+		t.Fatalf("uncached icon must defer loading the original: %+v, %v", payload, err)
+	}
+	cacheDir := util.GetLocation().GetImageCacheDirectory()
+	previewPath := filepath.Join(cacheDir, fmt.Sprintf("clipboard_%s_preview.png", record.ID))
+	iconPath := filepath.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
+	if _, err := os.Stat(previewPath); !os.IsNotExist(err) {
+		t.Fatal("query must not generate a preview cache")
+	}
+	if err := os.WriteFile(previewPath, []byte("cached preview"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	preview, icon = c.resolveImagePreviewAndIcon(record)
+	if preview != common.NewWoxImageAbsolutePath(previewPath) || icon.ImageType != common.WoxImageTypeLazyLoad {
+		t.Fatal("partial cache must keep the cached preview and defer the icon")
+	}
+	if err := os.WriteFile(iconPath, []byte("cached icon"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	preview, icon = c.resolveImagePreviewAndIcon(record)
+	if preview != common.NewWoxImageAbsolutePath(previewPath) || icon != common.NewWoxImageAbsolutePath(iconPath) {
+		t.Fatal("complete cache must use both thumbnails")
+	}
+	missing := ClipboardRecord{ID: uuid.NewString(), FilePath: filepath.Join(t.TempDir(), "missing.png")}
+	_, icon = c.resolveImagePreviewAndIcon(missing)
+	if icon != icons.Get(icons.ActionPreview) {
+		t.Fatal("missing original must use the placeholder")
+	}
+}
+
+// TestLongClipboardTextKeepsFullContent protects copying and editing when previews are shortened later.
+func TestLongClipboardTextKeepsFullContent(t *testing.T) {
+	content := strings.Repeat("long text ", 20000) + "tail marker"
+	c := &ClipboardPlugin{api: &imagePasteFailureAPI{}}
+	result := c.convertTextRecord(context.Background(), ClipboardRecord{ID: "long", Type: string(clipboard.ClipboardTypeText), Content: content}, plugin.Query{Env: plugin.QueryEnv{ActiveWindowTitle: "Test", ActiveWindowPid: 1234}})
+	if result.Preview.PreviewData != content {
+		t.Fatal("query preview must keep the original text for on-demand truncation")
+	}
+	for _, action := range result.Actions {
+		if action.Name == "i18n:plugin_clipboard_edit_text" {
+			if len(action.Form) != 1 || action.Form[0].Value.GetDefaultValue() != content {
+				t.Fatal("edit action must keep the complete text")
+			}
+			return
+		}
+	}
+	t.Fatal("edit action missing")
 }
 
 func (a *imagePasteFailureAPI) GetSetting(context.Context, string) string { return "" }
@@ -392,7 +521,6 @@ func TestClipboardFavoriteVisibleInFavQuery(t *testing.T) {
 		FilePaths: []string{`C:\tmp\notes.txt`},
 	}
 	ctx := context.Background()
-
 	if !clipboardFavoriteVisibleInFavQuery(ctx, text, "", clipboardTypeRefinementAll) {
 		t.Fatal("empty fav search must keep text favorites")
 	}
@@ -441,6 +569,14 @@ func TestClipboardFavQueryFiltersBySearch(t *testing.T) {
 	api := &clipboardFavoritesTestAPI{settings: map[string]string{favoritesSettingKey: string(favorites)}}
 	c := &ClipboardPlugin{api: api, db: clipboardQueryTestDB{}, imageCache: util.NewHashMap[string, *ImageCacheEntry]()}
 	ctx := context.Background()
+	longText := strings.Repeat("a", 128*1024) + " target"
+	if !clipboardRecordMatchesSearch(ctx, ClipboardRecord{Type: string(clipboard.ClipboardTypeText), Content: longText}, "target", clipboardTypeRefinementAll) {
+		t.Fatal("search must match the end of a long text record")
+	}
+	longOCR := strings.Repeat("图像内容", 3000) + "终点"
+	if !clipboardRecordMatchesSearch(ctx, ClipboardRecord{Type: string(clipboard.ClipboardTypeImage), OCRText: &longOCR}, "终点", clipboardTypeRefinementAll) {
+		t.Fatal("search must match the end of long image OCR text")
+	}
 
 	if got := clipboardResultTitles(c.Query(ctx, plugin.Query{}).Results); len(got) != 0 {
 		t.Fatalf("default cb titles = %v, want no favorites", got)

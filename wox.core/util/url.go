@@ -16,7 +16,10 @@ func UrlPattern() *regexp.Regexp {
 // and clipboard link filtering do not drift. The pattern is intentionally the
 // same whole-string rule that the URL plugin used before this shared helper.
 func IsUrl(raw string) bool {
-	return len(urlPattern.FindStringIndex(strings.TrimSpace(raw))) > 0
+	value := strings.TrimSpace(raw)
+	// Every supported host contains a dot. Avoid running the regexp over large
+	// clipboard texts that cannot possibly match it.
+	return strings.Contains(value, ".") && urlPattern.MatchString(value)
 }
 
 // NormalizeUrl prepares a URL-like value for shell opening. Bare domains and IP
