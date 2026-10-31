@@ -299,6 +299,30 @@ func TestPluginDetailHeaderAlignsTitleWithIcon(t *testing.T) {
 	}
 }
 
+func TestPluginDetailHeaderShowsDisabledTag(t *testing.T) {
+	warning := woxui.Color{R: 253, G: 186, B: 116, A: 255}
+	theme := woxcomponent.ControlTheme{Warning: warning, DensityScale: 1.1}
+	for _, label := range []string{"", "Disabled"} {
+		header := pluginDetailHeader(PluginHeaderProps{Author: "Author", DisabledLabel: label}, 600, 80, theme).(woxwidget.Container)
+		identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+		row := identity.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+		if label == "" {
+			if len(row.Children) != 1 {
+				t.Fatal("enabled plugins must not show a disabled tag")
+			}
+			continue
+		}
+		if len(row.Children) != 2 {
+			t.Fatal("disabled plugins must show a status tag")
+		}
+		tag := row.Children[1].(woxwidget.Container)
+		text := tag.Child.(woxwidget.TextBlock)
+		if text.Value != label || text.Color != warning || tag.Color.R != warning.R || tag.Height != theme.Scaled(22) {
+			t.Fatalf("disabled tag = %#v, text = %#v", tag, text)
+		}
+	}
+}
+
 func TestPluginManagementButtonsUseIntrinsicWidth(t *testing.T) {
 	actions := pluginOutlineActions([]PluginAction{{ID: "plugin-uninstall", Label: "Uninstall", Width: 124, Enabled: true}}, woxcomponent.ControlTheme{})
 	button := focusedControlGesture(actions.(woxwidget.Flex).Children[0]).Child.(woxwidget.Container)

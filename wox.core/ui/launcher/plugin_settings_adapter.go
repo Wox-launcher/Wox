@@ -338,11 +338,15 @@ func pluginSettingKeepVisibleKey(fields formFieldsSnapshot, firstVisible int) wo
 }
 
 func (c *pluginSettingsController) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, imageScale float32) launcherview.PluginHeaderProps {
-	return launcherview.PluginHeaderProps{
+	props := launcherview.PluginHeaderProps{
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author,
 		Icon: c.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
 		MetadataActions: c.pluginMetadataActions(snapshot, plugin, imageScale), Management: c.pluginManagementActions(snapshot, plugin),
 	}
+	if plugin.IsDisable {
+		props.DisabledLabel = c.language.translate("i18n:ui_plugin_filter_disabled")
+	}
+	return props
 }
 
 func (c *pluginSettingsController) pluginDetailIntroFormProps(snapshot settingsSnapshot, imageScale float32, intro string, rows []woxwidget.Widget, accent woxui.Color) *launcherview.PluginFormProps {
@@ -693,7 +697,7 @@ func (c *pluginSettingsController) pluginStoreDetailProps(snapshot settingsSnaps
 	}
 	contentWidth := max(float32(0), width-32)
 	metadata := c.pluginMetadataProps(plugin, "privacy")
-	return &launcherview.PluginStoreDetailProps{
+	props := &launcherview.PluginStoreDetailProps{
 		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
 		Icon: c.imageForSurface(plugin.Icon, 256, settingsPalette().Background), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
@@ -704,6 +708,10 @@ func (c *pluginSettingsController) pluginStoreDetailProps(snapshot settingsSnaps
 		Commands:   c.pluginCommandsFormProps(snapshot, plugin, contentWidth, imageScale, true, false, nil),
 		Screenshot: screenshot, ScreenshotLoading: screenshotLoading, Error: plugins.PluginOperationError, OnWebsite: onWebsite, OnScreenshot: onScreenshot,
 	}
+	if plugin.IsInstalled && plugin.IsDisable {
+		props.DisabledLabel = c.language.translate("i18n:ui_plugin_filter_disabled")
+	}
+	return props
 }
 
 func (c *pluginSettingsController) pluginFilterPanelProps(snapshot settingsSnapshot) *launcherview.PluginFilterPanelProps {

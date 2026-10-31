@@ -438,6 +438,25 @@ func TestPluginSettingTabMovesOneHostFocusPerPress(t *testing.T) {
 	}
 }
 
+func TestPluginDetailDisabledLabel(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.language.translations = map[string]string{"ui_plugin_filter_disabled": "Disabled"}
+	for _, disabled := range []bool{false, true} {
+		item := pluginSettingsPlugin{Name: "Example", IsInstalled: true, IsDisable: disabled}
+		want := ""
+		if disabled {
+			want = "Disabled"
+		}
+		if got := a.pluginSettings.pluginHeaderProps(settingsSnapshot{}, item, 1).DisabledLabel; got != want {
+			t.Fatalf("installed disabled=%v: label %q, want %q", disabled, got, want)
+		}
+		if got := a.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, item, 600, 1).DisabledLabel; got != want {
+			t.Fatalf("store disabled=%v: label %q, want %q", disabled, got, want)
+		}
+	}
+}
+
 func TestPluginCommandsUseHintAndReadonlyTable(t *testing.T) {
 	plugins := newPluginSettingsController(CommonDeps{})
 	plugins.SetPlugins([]pluginSettingsPlugin{{

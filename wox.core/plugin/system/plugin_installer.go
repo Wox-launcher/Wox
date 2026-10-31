@@ -113,6 +113,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	// Determine action title and button text based on installation status and version comparison
 	actionTitleKey := "plugin_installer_install"
 	actionButtonName := "Install"
+	subTitle := fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx))
 
 	if isInstalled {
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
@@ -125,6 +126,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 			} else if installedVersion.LessThan(currentVersion) {
 				actionTitleKey = "plugin_installer_upgrade"
 				actionButtonName = "Upgrade"
+				subTitle = fmt.Sprintf("v%s → v%s", installedPlugin.Metadata.Version, pluginMetadata.Version)
 			} else {
 				actionTitleKey = "plugin_installer_reinstall"
 				actionButtonName = "Reinstall"
@@ -156,7 +158,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 	// create result for plugin installation
 	results = append(results, plugin.QueryResult{
 		Title:       fmt.Sprintf("%s: %s", actionTitle, pluginMetadata.GetName(ctx)),
-		SubTitle:    fmt.Sprintf("Version: %s, Author: %s\nDescription: %s", pluginMetadata.Version, pluginMetadata.Author, pluginMetadata.GetDescription(ctx)),
+		SubTitle:    subTitle,
 		Icon:        pluginIcon,
 		IdentityKey: pluginMetadata.Id,
 		Actions: []plugin.QueryResultAction{

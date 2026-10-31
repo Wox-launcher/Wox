@@ -209,7 +209,11 @@ func (s *ScriptPlugin) executeScript(ctx context.Context, request map[string]int
 			Title:             getStringFromMap(itemMap, "title"),
 			SubTitle:          getStringFromMap(itemMap, "subtitle"),
 			Score:             int64(getFloatFromMap(itemMap, "score")),
+			Group:             getFirstStringFromMap(itemMap, []string{"group", "Group"}),
 			IdentityKey:       getFirstStringFromMap(itemMap, []string{"identityKey", "identity_key", "IdentityKey", "scoreKey", "score_key", "ScoreKey"}),
+		}
+		if groupScore := getFirstFloatPtrFromMap(itemMap, []string{"groupScore", "group_score", "GroupScore"}); groupScore != nil {
+			queryResult.GroupScore = int64(*groupScore)
 		}
 
 		// Icon: WoxImage.String() format, e.g. "base64:data:image/png;base64,xxx" or "emoji:🧮"

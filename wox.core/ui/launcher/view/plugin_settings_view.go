@@ -412,6 +412,7 @@ type PluginHeaderProps struct {
 	Name            string
 	Version         string
 	Author          string
+	DisabledLabel   string
 	Icon            *woxui.Image
 	FallbackColor   woxui.Color
 	MetadataActions []PluginAction
@@ -464,6 +465,7 @@ type PluginStoreDetailProps struct {
 	Name              string
 	Version           string
 	Author            string
+	DisabledLabel     string
 	Description       string
 	Runtime           string
 	WebsiteLabel      string
@@ -601,8 +603,14 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 			woxwidget.Text{Value: props.Version, Style: woxui.TextStyle{Size: theme.Scaled(13)}, Color: theme.TextSecondary},
 		}}},
 	}}}
-	author := woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Align{
-		Height: 32, Vertical: 0.5, Child: woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary},
+	authorItems := []woxwidget.Widget{woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary}}
+	if props.DisabledLabel != "" {
+		tagTheme := theme
+		tagTheme.Text = theme.Warning
+		authorItems = append(authorItems, woxcomponent.WoxTag(props.DisabledLabel, theme.Warning, tagTheme))
+	}
+	author := woxwidget.Container{Height: 32, Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Flex{
+		Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: authorItems,
 	}}
 	return woxwidget.Container{Width: width, Height: height, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{identity, author}}},
@@ -626,7 +634,7 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 // pluginStoreDetail supplies read-only content to the same detail surface as installed plugins.
 func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	return pluginEditor(PluginEditorProps{
-		Header:   PluginHeaderProps{Name: props.Name, Version: props.Version, Author: props.Author, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management},
+		Header:   PluginHeaderProps{Name: props.Name, Version: props.Version, Author: props.Author, DisabledLabel: props.DisabledLabel, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management},
 		ScrollID: props.ScrollID, DescriptionDetail: &props, Keywords: props.Keywords, Commands: props.Commands, Metadata: props.Metadata, Error: props.Error,
 	}, width, height, theme)
 }
