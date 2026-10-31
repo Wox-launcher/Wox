@@ -10,9 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"wox/common"
+	"wox/common/icons"
 
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -23,6 +25,58 @@ type screenshotTestSurface struct{ *Window }
 
 func (*screenshotTestSurface) MeasureText(text string, style TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{Size: Size{Width: float32(len([]rune(text))) * style.Size / 2, Height: style.Size + 6}}, nil
+}
+
+// TestScreenshotSizeLabelLock keeps the glyph and dimensions centered together at each display scale.
+func TestScreenshotSizeLabelLock(t *testing.T) {
+	surface := &screenshotTestSurface{}
+	for _, scale := range []float32{1, 1.25, 1.5, 2.5} {
+		label := "1725 x 1424"
+		frame := Size{Width: 1600, Height: 1000}
+		selection := Rect{X: 1500, Y: 300, Width: 100, Height: 100}
+		unlocked := screenshotEditorSizeLabelRect(surface, label, selection, Rect{}, frame, scale, false)
+		chip := screenshotEditorSizeLabelRect(surface, label, selection, Rect{}, frame, scale, true)
+		if chip.Width != unlocked.Width+20*scale || chip.X+chip.Width > frame.Width {
+			t.Fatalf("scale %v: locked chip does not fit: %+v", scale, chip)
+		}
+		actual := &DisplayList{}
+		drawScreenshotEditorSizeLabel(actual, surface, label, selection, Rect{}, frame, scale, true)
+		style := TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}
+		metrics, _ := surface.MeasureText(label, style)
+		start := chip.X + (chip.Width-20*scale-metrics.Size.Width)/2
+		expected := &DisplayList{}
+		expected.FillRoundedRect(chip, 10*scale, Color{R: 23, G: 23, B: 23, A: 255})
+		drawScreenshotEditorToolbarIconSized(expected, icons.ControlLink, Rect{X: start, Y: chip.Y + (chip.Height-14*scale)/2, Width: 14 * scale, Height: 14 * scale}, Color{R: 255, G: 255, B: 255, A: 255}, scale, 14)
+		expected.DrawText(label, Rect{X: start + 20*scale, Y: chip.Y + (chip.Height-metrics.Size.Height)/2, Width: metrics.Size.Width, Height: metrics.Size.Height}, style, Color{R: 255, G: 255, B: 255, A: 255})
+		if err := actual.Compare(expected); err != nil {
+			t.Fatalf("scale %v: locked size label: %v", scale, err)
+		}
+	}
+}
+
+// TestScreenshotSizeLabelLockHitArea follows the applied lock and makes the added icon area clickable.
+func TestScreenshotSizeLabelLockHitArea(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 1200, Height: 800},
+		selection: Rect{X: 200, Y: 200, Width: 300, Height: 200}, hasSelection: true,
+	}
+	frame := FrameInfo{Size: state.frameSize}
+	state.draw(&DisplayList{}, frame)
+	unlocked := state.sizeLabelRect
+	state.openSizeDialog()
+	dialog := state.activeSizeDialog()
+	dialog.setRatioLocked(true)
+	dialog.apply()
+	state.draw(&DisplayList{}, frame)
+	locked := state.sizeLabelRect
+	if locked.Width <= unlocked.Width || locked.X != unlocked.X {
+		t.Fatalf("locked hit area = %+v, unlocked = %+v", locked, unlocked)
+	}
+	point := Point{X: locked.X + locked.Width - 1, Y: locked.Y + locked.Height/2}
+	state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+	if state.activeSizeDialog() == nil {
+		t.Fatal("added chip area did not open the size dialog")
+	}
 }
 
 // screenshotTooltipTestSurface models glyphs wider and taller than the editor's character estimates.
@@ -38,9 +92,9 @@ func TestScreenshotSizeLabelCentersOpaqueChrome(t *testing.T) {
 	for _, scale := range []float32{1, 1.25, 1.5, 2.5} {
 		label := "1814 x 1280"
 		selection, frame := Rect{X: 200, Y: 300, Width: 400, Height: 200}, Size{Width: 1600, Height: 1000}
-		chip := screenshotEditorSizeLabelRect(label, selection, Rect{}, frame, scale)
+		chip := screenshotEditorSizeLabelRect(surface, label, selection, Rect{}, frame, scale, false)
 		actual := &DisplayList{}
-		drawScreenshotEditorSizeLabel(actual, surface, label, selection, Rect{}, frame, scale)
+		drawScreenshotEditorSizeLabel(actual, surface, label, selection, Rect{}, frame, scale, false)
 		style := TextStyle{Size: 14 * scale, Weight: FontWeightSemibold}
 		metrics, _ := surface.MeasureText(label, style)
 		expected := &DisplayList{}
@@ -222,6 +276,162 @@ func TestScreenshotSizeDialogKeyboardAndLayout(t *testing.T) {
 	}
 }
 
+// TestScreenshotSizeDialogTabSelectsDimensions exercises forward and reverse traversal without changing pointer editing.
+func TestScreenshotSizeDialogTabSelectsDimensions(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 1200, Height: 800},
+		selection: Rect{X: 200, Y: 200, Width: 300, Height: 200}, hasSelection: true,
+	}
+	state.openSizeDialog()
+	dialog := state.activeSizeDialog()
+	dialog.host = woxwidget.NewHost(dialog.build)
+	dialog.host.AttachServices(&screenshotTestSurface{})
+	defer dialog.host.Dispose()
+	draw := func() { dialog.host.Frame(&DisplayList{}, FrameInfo{Size: dialog.size()}) }
+	draw()
+	draw()
+	if !dialog.host.HasFocus("screenshot.size.width") || dialog.width.State().Selection.Collapsed() {
+		t.Fatal("initial width must be focused and selected")
+	}
+	dialog.key(KeyEvent{Key: woxui.KeyTab, Down: true})
+	if !dialog.host.HasFocus("screenshot.size.swap") {
+		t.Fatal("Tab must retain the existing focus order")
+	}
+	dialog.key(KeyEvent{Key: woxui.KeyTab, Down: true})
+	if !dialog.host.HasFocus("screenshot.size.height") || dialog.height.State().Selection.Start() != 0 || dialog.height.State().Selection.End() != len([]rune(dialog.height.Text())) {
+		t.Fatal("Tab to height must select the complete value")
+	}
+	dialog.host.TextInput(TextInputEvent{Kind: TextInputCommit, Text: "151"})
+	if dialog.height.Text() != "151" {
+		t.Fatalf("typing after Tab should replace the height: %q", dialog.height.Text())
+	}
+	dialog.key(KeyEvent{Key: woxui.KeyTab, Modifiers: KeyModifierShift, Down: true})
+	dialog.key(KeyEvent{Key: woxui.KeyTab, Modifiers: KeyModifierShift, Down: true})
+	if !dialog.host.HasFocus("screenshot.size.width") || dialog.width.State().Selection.Start() != 0 || dialog.width.State().Selection.End() != len([]rune(dialog.width.Text())) {
+		t.Fatal("Shift+Tab to width must select the complete value")
+	}
+	draw()
+	var heightBounds Rect
+	for _, node := range dialog.host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "screenshot.size.height" {
+			heightBounds = node.Bounds
+		}
+	}
+	point := Point{X: heightBounds.X + heightBounds.Width/2, Y: heightBounds.Y + heightBounds.Height/2}
+	dialog.host.Pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+	dialog.host.Pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: point})
+	if !dialog.host.HasFocus("screenshot.size.height") || !dialog.height.State().Selection.Collapsed() {
+		t.Fatal("pointer focus must place a caret instead of selecting the whole value")
+	}
+}
+
+// TestScreenshotSizeRatioPresetLayout checks translated labels and preset controls at each interface density.
+func TestScreenshotSizeRatioPresetLayout(t *testing.T) {
+	surface := &screenshotTestSurface{}
+	for _, density := range []float32{0.9, 1, 1.1} {
+		for _, label := range []string{"Aspect ratio presets", "常用宽高比", "アスペクト比のプリセット", "종횡비 프리셋", "Proporções predefinidas", "Готовые пропорции"} {
+			state := &screenshotEditorOverlayState{
+				image: testScreenshotImage(t, 1000, 800), frameSize: Size{Width: 1000, Height: 800},
+				selection: Rect{X: 100, Y: 100, Width: 300, Height: 200}, hasSelection: true,
+				sizeDialogOptions: ScreenshotOptions{SizeLabels: ScreenshotSizeLabels{RatioPresets: label}},
+			}
+			state.sizeDialogOptions.Theme.DensityScale = density
+			state.openSizeDialog()
+			dialog := state.activeSizeDialog()
+			dialog.host = woxwidget.NewHost(dialog.build)
+			dialog.host.AttachServices(surface)
+			dialog.host.Frame(&DisplayList{}, FrameInfo{Size: dialog.size()})
+			count := 0
+			for _, node := range dialog.host.Snapshot().Tree.Nodes {
+				if strings.HasPrefix(node.AutomationID, "screenshot.size.ratio.") {
+					count++
+					if node.Bounds.X < 20 || node.Bounds.X+node.Bounds.Width > dialog.size().Width-20 {
+						t.Fatalf("density=%v label=%q: preset outside content: %+v", density, label, node.Bounds)
+					}
+					metrics, _ := surface.MeasureText(node.Label, TextStyle{Size: 11 * density})
+					if metrics.Size.Width > node.Bounds.Width {
+						t.Fatalf("density=%v: preset %q clipped", density, node.Label)
+					}
+				}
+			}
+			if count != len(screenshotSizeRatioPresets) {
+				t.Fatalf("density=%v label=%q: got %d presets", density, label, count)
+			}
+			dialog.host.Dispose()
+		}
+	}
+}
+
+// TestScreenshotSizeRatioPresets covers selection, bounds, cancel, and the applied drag ratio.
+func TestScreenshotSizeRatioPresets(t *testing.T) {
+	state := &screenshotEditorOverlayState{
+		image: testScreenshotImage(t, 1200, 800), frameSize: Size{Width: 1200, Height: 800},
+		selection: Rect{X: 800, Y: 600, Width: 300, Height: 100}, hasSelection: true,
+		sizeDialogOptions: ScreenshotOptions{SizeLabels: ScreenshotSizeLabels{RatioPresets: "Aspect ratio presets"}},
+	}
+	state.openSizeDialog()
+	dialog := state.activeSizeDialog()
+	dialog.host = woxwidget.NewHost(dialog.build)
+	dialog.host.AttachServices(&screenshotTestSurface{})
+	defer dialog.host.Dispose()
+	draw := func() { dialog.host.Frame(&DisplayList{}, FrameInfo{Size: dialog.size()}) }
+	draw()
+	draw()
+	for _, preset := range screenshotSizeRatioPresets {
+		var bounds Rect
+		for _, node := range dialog.host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "screenshot.size.ratio."+preset.label {
+				bounds = node.Bounds
+			}
+		}
+		if bounds.Width != 40 || bounds.X+bounds.Width > dialog.size().Width {
+			t.Fatalf("preset %s outside dialog: %+v", preset.label, bounds)
+		}
+		point := Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
+		dialog.host.Pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: point})
+		dialog.host.Pointer(PointerEvent{Kind: PointerUp, Button: PointerButtonPrimary, Position: point})
+		draw()
+		width, _ := strconv.Atoi(dialog.width.Text())
+		height, _ := strconv.Atoi(dialog.height.Text())
+		if !dialog.lockRatio || dialog.aspectRatio != preset.ratio || width < 1 || width > dialog.maxWidth || height < 1 || height > dialog.maxHeight || math.Abs(float64(height)-float64(width)/preset.ratio) > 1 {
+			t.Fatalf("preset %s produced %dx%d, ratio %v", preset.label, width, height, dialog.aspectRatio)
+		}
+		selected := false
+		for _, node := range dialog.host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "screenshot.size.ratio."+preset.label {
+				selected = node.Selected
+			}
+		}
+		if !selected {
+			t.Fatalf("preset %s is not selected", preset.label)
+		}
+	}
+	if !dialog.host.FocusAutomationID("screenshot.size.ratio.16:9") || !dialog.key(KeyEvent{Key: woxui.KeySpace, Down: true}) || dialog.aspectRatio != 16.0/9 {
+		t.Fatal("keyboard activation did not select the preset")
+	}
+	dialog.width.SetText("0", false)
+	dialog.selectRatioPreset(1)
+	if !dialog.invalid || dialog.aspectRatio != 16.0/9 {
+		t.Fatal("an invalid width must not replace the selected preset")
+	}
+	original := state.selection
+	state.closeSizeDialog(false)
+	if state.selection != original || state.selectionAspectRatio != 0 {
+		t.Fatal("cancel applied the preset")
+	}
+	state.openSizeDialog()
+	dialog = state.activeSizeDialog()
+	dialog.selectRatioPreset(16.0 / 9)
+	dialog.apply()
+	if state.selectionAspectRatio != 16.0/9 {
+		t.Fatal("applied preset did not lock the selected ratio")
+	}
+	pixels, err := state.selectionPixelBoundsLocked()
+	if err != nil || pixels.Dx() != 300 || pixels.Dy() != 169 {
+		t.Fatalf("applied 16:9 crop = %v, err=%v", pixels, err)
+	}
+}
+
 // TestScreenshotSizeDialogRatioAndSwap routes pointer and text events through the actual form controls.
 func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
 	state := &screenshotEditorOverlayState{
@@ -239,11 +449,13 @@ func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
 		t.Helper()
 		frame.Size = dialog.size()
 		dialog.draw(&DisplayList{}, frame)
-		var lock, apply, errorBounds Rect
+		var lock, ratios, apply, errorBounds Rect
 		for _, node := range dialog.host.Snapshot().Tree.Nodes {
 			switch node.AutomationID {
 			case "screenshot.size.lock-row":
 				lock = node.Bounds
+			case "screenshot.size.ratios":
+				ratios = node.Bounds
 			case "screenshot.size.apply":
 				apply = node.Bounds
 			case "screenshot.size.error":
@@ -253,10 +465,13 @@ func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
 		if bottom := frame.Size.Height - apply.Y - apply.Height; bottom != 20 {
 			t.Fatalf("footer bottom padding = %v, want 20", bottom)
 		}
-		previous := lock
+		if ratios.Y-lock.Y-lock.Height != 12 {
+			t.Fatalf("presets must follow lock row: lock=%+v ratios=%+v", lock, ratios)
+		}
+		previous := ratios
 		if dialog.invalid {
-			if errorBounds.Height != 36 || errorBounds.Y-lock.Y-lock.Height != 12 {
-				t.Fatalf("validation must fit between checkbox and actions: lock=%+v error=%+v", lock, errorBounds)
+			if errorBounds.Height != 36 || errorBounds.Y-ratios.Y-ratios.Height != 12 {
+				t.Fatalf("validation must fit between presets and actions: ratios=%+v error=%+v", ratios, errorBounds)
 			}
 			previous = errorBounds
 		} else if errorBounds != (Rect{}) {
@@ -301,28 +516,33 @@ func TestScreenshotSizeDialogRatioAndSwap(t *testing.T) {
 			t.Fatalf("draft = %s x %s, want %s x %s", dialog.width.Text(), dialog.height.Text(), width, height)
 		}
 	}
-	typeValue("width", "450")
-	typeValue("height", "100")
+	typeValue("width", "0")
 	click("lock-row")
-	assertSize("450", "300")
-	if !dialog.lockRatio || dialog.aspectRatio != 1.5 {
-		t.Fatal("lock must use the selected region's 3:2 ratio")
+	if dialog.lockRatio || !dialog.invalid {
+		t.Fatal("invalid draft must not produce a locked ratio")
+	}
+	typeValue("width", "450")
+	typeValue("height", "150")
+	click("lock-row")
+	assertSize("450", "150")
+	if !dialog.lockRatio || dialog.aspectRatio != 3 {
+		t.Fatal("lock must use the entered 3:1 ratio")
 	}
 	typeValue("width", "501")
-	assertSize("501", "334")
-	typeValue("height", "333")
-	assertSize("500", "333")
+	assertSize("501", "167")
+	typeValue("height", "100")
+	assertSize("300", "100")
 	click("swap")
-	assertSize("333", "500")
+	assertSize("100", "300")
 	typeValue("width", "200")
-	assertSize("200", "300")
+	assertSize("200", "600")
 	click("lock")
 	typeValue("width", "250")
-	assertSize("250", "300")
+	assertSize("250", "600")
 	click("lock")
-	assertSize("250", "167")
-	if dialog.aspectRatio != 1.5 {
-		t.Fatal("relocking must return to the actual selection ratio")
+	assertSize("250", "600")
+	if dialog.aspectRatio != 250.0/600 {
+		t.Fatal("relocking must use the current draft ratio")
 	}
 	original := state.selection
 	typeValue("width", "1001")
@@ -912,7 +1132,7 @@ func TestScreenshotEditorToolbarPlacementKeepsSixteenPixelGap(t *testing.T) {
 		t.Fatalf("above property bar Y = %v, want over toolbar", got)
 	}
 
-	aboveLabel := screenshotEditorSizeLabelRect("900 x 290", aboveSelection, above, Size{Width: 1200, Height: 700}, 1)
+	aboveLabel := screenshotEditorSizeLabelRect((*Window)(nil), "900 x 290", aboveSelection, above, Size{Width: 1200, Height: 700}, 1, false)
 	if aboveLabel.Y != aboveSelection.Y+8 {
 		t.Fatalf("above size label = %+v, want inside selection below the toolbar", aboveLabel)
 	}
@@ -920,7 +1140,7 @@ func TestScreenshotEditorToolbarPlacementKeepsSixteenPixelGap(t *testing.T) {
 		t.Fatalf("size label %+v overlaps toolbar %+v", aboveLabel, above)
 	}
 
-	belowLabel := screenshotEditorSizeLabelRect("900 x 400", belowSelection, below, Size{Width: 1200, Height: 700}, 1)
+	belowLabel := screenshotEditorSizeLabelRect((*Window)(nil), "900 x 400", belowSelection, below, Size{Width: 1200, Height: 700}, 1, false)
 	if belowLabel.Y != belowSelection.Y-32 {
 		t.Fatalf("below size label = %+v, want above selection", belowLabel)
 	}

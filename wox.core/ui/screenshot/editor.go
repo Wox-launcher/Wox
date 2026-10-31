@@ -196,8 +196,13 @@ type screenshotEditorOverlayState struct {
 	windowCaptureDone       chan struct{}
 	windowCaptureGeneration uint64
 	sizeLabelRect           Rect
+	sizeRatioRect           Rect
+	sizeRatioMenuRect       Rect
+	sizeRatioMenuOpen       bool
+	sizeRatioMenuIndex      int
 	sizeDialog              *screenshotSizeDialog
 	sizeDialogOptions       ScreenshotOptions
+	selectionAspectRatio    float64 // Pixel width divided by pixel height; zero means unlocked.
 	confirmRect             Rect
 	cancelRect              Rect
 	saveRect                Rect
@@ -824,6 +829,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.toolbarRect = toolbar
 		state.toolbarGripRect = Rect{}
 		state.sizeLabelRect = Rect{}
+		state.sizeRatioRect, state.sizeRatioMenuRect, state.sizeRatioMenuOpen = Rect{}, Rect{}, false
 		state.mu.Unlock()
 		state.publishSizeLabel(Rect{}, "")
 		drawScreenshotScrollingControls(displayList, frame.Size, preview, uiScale)
@@ -896,6 +902,8 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.measureNumberAnnotation(&state.annotations[index], annotationScale)
 	}
 	dragging := state.dragging
+	ratio := state.selectionAspectRatio
+	ratioLocked := ratio > 0
 	selectionReleasedAt := state.selectionReleasedAt
 	if !dragging && !selectionReleasedAt.IsZero() {
 		state.selectionReleasedAt = time.Time{}
@@ -993,6 +1001,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.toolbarRect = Rect{}
 	state.toolbarGripRect = Rect{}
 	state.sizeLabelRect = Rect{}
+	state.sizeRatioRect = Rect{}
 	state.toolRects = [screenshotEditorToolCount]Rect{}
 	state.editBarRect = Rect{}
 	state.editColorRects = [6]Rect{}
@@ -1089,17 +1098,31 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	if backgroundEnabled && backgroundImage != nil {
 		label = fmt.Sprintf("%d x %d", backgroundSize.X, backgroundSize.Y)
 	}
-	drawScreenshotEditorSizeLabel(displayList, state.window, label, backgroundBounds, toolbarRect, frame.Size, uiScale)
+	drawScreenshotEditorSizeLabel(displayList, state.window, label, backgroundBounds, toolbarRect, frame.Size, uiScale, ratioLocked)
 	if dragging || state.autoConfirm {
 		state.publishSizeLabel(Rect{}, "")
 		return
 	}
-	chip := screenshotEditorSizeLabelRect(label, backgroundBounds, toolbarRect, frame.Size, uiScale)
+	chip := screenshotEditorSizeLabelRect(state.window, label, backgroundBounds, toolbarRect, frame.Size, uiScale, ratioLocked)
+	ratioRect := screenshotRatioTriggerRect(state.window, chip, backgroundBounds, toolbarFrame, state.sizeDialogOptions.SizeLabels, ratio, uiScale)
 	state.mu.Lock()
 	state.sizeLabelRect = chip
+	state.sizeRatioRect = ratioRect
+	ratioMenuOpen := state.sizeRatioMenuOpen
+	if ratioMenuOpen {
+		state.sizeRatioMenuRect = screenshotRatioMenuRect(state.window, ratioRect, toolbarFrame, state.sizeDialogOptions.SizeLabels, uiScale)
+	} else {
+		state.sizeRatioMenuRect = Rect{}
+	}
+	ratioMenuRect := state.sizeRatioMenuRect
+	ratioMenuIndex := state.sizeRatioMenuIndex
 	state.mu.Unlock()
+	drawScreenshotRatioTrigger(displayList, state.window, ratioRect, state.sizeDialogOptions.SizeLabels, ratio, ratioMenuOpen, uiScale)
 	if pointerInside && screenshotEditorRectContains(chip, pointerPosition) {
 		displayList.StrokeRoundedRect(chip, scaled(10), scaled(1), green)
+	}
+	if pointerInside && screenshotEditorRectContains(ratioRect, pointerPosition) {
+		displayList.StrokeRoundedRect(ratioRect, scaled(10), scaled(1), green)
 	}
 	gripRect := screenshotEditorToolbarGripRect(toolbarRect, uiScale)
 	buttonIndex := 0
@@ -1258,11 +1281,16 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, saveRect, confirmRect, backgroundRect)
 		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, anchor, selection, tooltip, uiScale)
 	}
-	if pointerInside && !colorInspectorDismissed {
+	if pointerInside && !colorInspectorDismissed && !ratioMenuOpen {
 		drawScreenshotEditorColorInspector(displayList, previewImage, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
 	}
-	if pointerInside && screenshotEditorRectContains(chip, pointerPosition) && state.activeSizeDialog() == nil {
+	if !ratioMenuOpen && pointerInside && screenshotEditorRectContains(chip, pointerPosition) && state.activeSizeDialog() == nil {
 		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, chip, selection, state.sizeDialogOptions.SizeLabels.Title+" (S)", uiScale)
+	} else if !ratioMenuOpen && pointerInside && screenshotEditorRectContains(ratioRect, pointerPosition) && state.activeSizeDialog() == nil {
+		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, ratioRect, selection, state.sizeDialogOptions.SizeLabels.RatioPresets, uiScale)
+	}
+	if ratioMenuOpen {
+		drawScreenshotRatioMenu(displayList, state.window, ratioMenuRect, state.sizeDialogOptions.SizeLabels, ratio, ratioMenuIndex, uiScale)
 	}
 }
 
@@ -1533,6 +1561,17 @@ func drawScreenshotEditorToolTooltipAt(displayList *DisplayList, window woxwidge
 	}, displayList, rect)
 }
 
+// screenshotEditorMeasuredTextWidth uses the active font and falls back when native metrics are unavailable.
+func screenshotEditorMeasuredTextWidth(window woxwidget.HostServices, text string, style TextStyle) float32 {
+	width := screenshotEditorEstimatedTextWidth(text, style.Size)
+	if window != nil {
+		if metrics, err := window.MeasureText(text, style); err == nil && metrics.Size.Width > 0 {
+			width = metrics.Size.Width
+		}
+	}
+	return float32(math.Ceil(float64(width)))
+}
+
 func screenshotEditorEstimatedTextWidth(text string, fontSize float32) float32 {
 	width := float32(0)
 	for _, character := range text {
@@ -1728,9 +1767,13 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 }
 
 // screenshotEditorSizeLabelRect keeps the dimension chip on the free side of the selection edge.
-func screenshotEditorSizeLabelRect(label string, selection, toolbar Rect, frame Size, uiScale float32) Rect {
+func screenshotEditorSizeLabelRect(window woxwidget.HostServices, label string, selection, toolbar Rect, frame Size, uiScale float32, ratioLocked bool) Rect {
 	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
-	width := max(scaled(80), float32(len(label))*scaled(8)+scaled(16))
+	style := TextStyle{Size: scaled(14), Weight: FontWeightSemibold}
+	width := screenshotEditorMeasuredTextWidth(window, label, style) + scaled(16)
+	if ratioLocked {
+		width += scaled(20)
+	}
 	height := scaled(26)
 	left := min(max(scaled(8), selection.X+scaled(12)), max(scaled(8), frame.Width-width-scaled(8))) - scaled(8)
 	top := max(scaled(8), selection.Y-scaled(32))
@@ -1741,15 +1784,26 @@ func screenshotEditorSizeLabelRect(label string, selection, toolbar Rect, frame 
 }
 
 // drawScreenshotEditorSizeLabel places a DPI-scaled dimension chip beside the selection.
-func drawScreenshotEditorSizeLabel(displayList *DisplayList, window woxwidget.HostServices, label string, selection, toolbar Rect, frame Size, uiScale float32) {
+func drawScreenshotEditorSizeLabel(displayList *DisplayList, window woxwidget.HostServices, label string, selection, toolbar Rect, frame Size, uiScale float32, ratioLocked bool) {
 	scaled := func(value float32) float32 { return value * max(float32(1), uiScale) }
-	chip := screenshotEditorSizeLabelRect(label, selection, toolbar, frame, uiScale)
+	chip := screenshotEditorSizeLabelRect(window, label, selection, toolbar, frame, uiScale, ratioLocked)
+	text := woxwidget.TextBlock{
+		Value: label, Width: chip.Width, Height: chip.Height, LineHeight: chip.Height, MaxLines: 1, Centered: true, AlignmentY: 0.5,
+		Style: TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color: Color{R: 255, G: 255, B: 255, A: 255},
+	}
+	var content woxwidget.Widget = text
+	if ratioLocked {
+		text.ShrinkWrap = true
+		content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaled(6), MainAxisAlignment: woxwidget.MainAxisCenter, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+			woxwidget.Painter{Width: scaled(14), Height: scaled(14), Paint: func(list *DisplayList, bounds Rect) {
+				drawScreenshotEditorToolbarIconSized(list, icons.ControlLink, bounds, text.Color, uiScale, 14)
+			}},
+			text,
+		}}
+	}
 	woxwidget.PaintStateless(window, woxwidget.Container{
 		Width: chip.Width, Height: chip.Height, Radius: scaled(10), Color: Color{R: 23, G: 23, B: 23, A: 255},
-		Child: woxwidget.TextBlock{
-			Value: label, Width: chip.Width, Height: chip.Height, LineHeight: chip.Height, MaxLines: 1, Centered: true, AlignmentY: 0.5,
-			Style: TextStyle{Size: scaled(14), Weight: FontWeightSemibold}, Color: Color{R: 255, G: 255, B: 255, A: 255},
-		},
+		Child: content,
 	}, displayList, chip)
 }
 
@@ -1956,6 +2010,9 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		return
 	}
 	if event.Button != PointerButtonPrimary && event.Kind != PointerMove && event.Kind != PointerLeave && event.Kind != PointerScroll {
+		return
+	}
+	if state.handleScreenshotRatioPointer(event) {
 		return
 	}
 	switch event.Kind {
@@ -2349,6 +2406,9 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 	}
 	if !event.Down {
 		return false
+	}
+	if state.handleScreenshotRatioKey(event) {
+		return true
 	}
 	if state.fontSizeKey(event) {
 		return true
@@ -2820,6 +2880,7 @@ func (state *screenshotEditorOverlayState) beginPointerToolActionLocked(event Po
 				state.objectCancel()
 			}
 			state.selectionDragged = false
+			state.selectionAspectRatio = 0
 			state.selection = Rect{X: event.Position.X, Y: event.Position.Y}
 			state.dragging = true
 			state.colorInspectorDismissed = true
@@ -3308,6 +3369,10 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 		state.pointerCursor = PointerCursorHand
 		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorHand
 	}
+	if screenshotEditorRectContains(state.sizeRatioRect, point) {
+		state.pointerCursor = PointerCursorHand
+		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorHand
+	}
 	if screenshotEditorRectContains(state.toolbarGripRect, point) {
 		state.pointerCursor = PointerCursorMove
 		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0 || previousCursor != PointerCursorMove
@@ -3450,7 +3515,14 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, m
 	case screenshotEditorEditMoveSelection:
 		state.setSelectionLocked(shiftScreenshotEditorRectWithinBounds(state.editOriginalRect, delta, frameBounds))
 	case screenshotEditorEditResizeSelection:
-		state.setSelectionLocked(resizeScreenshotEditorRect(state.editOriginalRect, state.editHandle, screenshotEditorDraggedHandlePoint(state.editOriginalRect, state.editHandle, delta), frameBounds))
+		handlePoint := screenshotEditorDraggedHandlePoint(state.editOriginalRect, state.editHandle, delta)
+		selection := resizeScreenshotEditorRect(state.editOriginalRect, state.editHandle, handlePoint, frameBounds)
+		if state.selectionAspectRatio > 0 && state.image != nil && delta != (Point{}) {
+			// The selection is in editor coordinates, while the locked ratio describes exported pixels.
+			ratio := float32(state.selectionAspectRatio) * (state.frameSize.Width / float32(state.image.Width)) / (state.frameSize.Height / float32(state.image.Height))
+			selection = resizeScreenshotEditorRectWithRatio(state.editOriginalRect, state.editHandle, handlePoint, frameBounds, ratio)
+		}
+		state.setSelectionLocked(selection)
 	case screenshotEditorEditMoveAnnotation, screenshotEditorEditResizeAnnotation, screenshotEditorEditArrowStart, screenshotEditorEditArrowEnd, screenshotEditorEditArrowMiddle, screenshotEditorEditRectRadius:
 		if !state.hasSelectedMark || state.selectedAnnotation < 0 || state.selectedAnnotation >= len(state.annotations) {
 			return Rect{}
@@ -3504,6 +3576,71 @@ func (state *screenshotEditorOverlayState) updateSelectEditLocked(point Point, m
 		return unionScreenshotEditorRects(previous, screenshotEditorAnnotationDirtyRect(state.annotations[state.selectedAnnotation], state.annotationScale()))
 	}
 	return Rect{}
+}
+
+// resizeScreenshotEditorRectWithRatio keeps the opposite corner or edge fixed and fits both dimensions inside the frame.
+func resizeScreenshotEditorRectWithRatio(original Rect, handle screenshotEditorHandle, point Point, bounds Rect, ratio float32) Rect {
+	point = clampScreenshotEditorPoint(point, bounds)
+	left, top := original.X, original.Y
+	right, bottom := left+original.Width, top+original.Height
+	switch handle {
+	case screenshotEditorHandleTop, screenshotEditorHandleBottom:
+		anchor := top
+		if handle == screenshotEditorHandleTop {
+			anchor = bottom
+		}
+		center := left + original.Width/2
+		height := min(float32(math.Abs(float64(point.Y-anchor))), max(0, 2*min(center-bounds.X, bounds.X+bounds.Width-center)/ratio))
+		y := anchor
+		if point.Y < anchor {
+			y -= height
+		}
+		return Rect{X: center - height*ratio/2, Y: y, Width: height * ratio, Height: height}
+	case screenshotEditorHandleLeft, screenshotEditorHandleRight:
+		anchor := left
+		if handle == screenshotEditorHandleLeft {
+			anchor = right
+		}
+		center := top + original.Height/2
+		width := min(float32(math.Abs(float64(point.X-anchor))), max(0, 2*min(center-bounds.Y, bounds.Y+bounds.Height-center)*ratio))
+		x := anchor
+		if point.X < anchor {
+			x -= width
+		}
+		return Rect{X: x, Y: center - width/ratio/2, Width: width, Height: width / ratio}
+	}
+	anchor := Point{X: left, Y: top}
+	switch handle {
+	case screenshotEditorHandleTopLeft:
+		anchor = Point{X: right, Y: bottom}
+	case screenshotEditorHandleTopRight:
+		anchor = Point{X: left, Y: bottom}
+	case screenshotEditorHandleBottomLeft:
+		anchor = Point{X: right, Y: top}
+	case screenshotEditorHandleBottomRight:
+	default:
+		return original
+	}
+	dx, dy := point.X-anchor.X, point.Y-anchor.Y
+	widthAvailable, heightAvailable := bounds.X+bounds.Width-anchor.X, bounds.Y+bounds.Height-anchor.Y
+	if dx < 0 {
+		widthAvailable = anchor.X - bounds.X
+	}
+	if dy < 0 {
+		heightAvailable = anchor.Y - bounds.Y
+	}
+	// Project the pointer onto the ratio-constrained diagonal for smooth two-axis corner drags.
+	height := (float32(math.Abs(float64(dx)))*ratio + float32(math.Abs(float64(dy)))) / (ratio*ratio + 1)
+	height = min(height, max(0, min(widthAvailable/ratio, heightAvailable)))
+	width := height * ratio
+	x, y := anchor.X, anchor.Y
+	if dx < 0 {
+		x -= width
+	}
+	if dy < 0 {
+		y -= height
+	}
+	return Rect{X: x, Y: y, Width: width, Height: height}
 }
 
 // screenshotEditorDraggedHandlePoint preserves where inside a resize handle the pointer was pressed.

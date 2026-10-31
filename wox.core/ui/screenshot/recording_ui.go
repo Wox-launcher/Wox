@@ -1076,11 +1076,13 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	uiScale := max(float32(1), state.toolbarChromeScale())
 	var source *Image
 	var labelWindow *Window
+	ratioLocked := false
 	if state.editor != nil {
 		state.editor.mu.Lock()
 		state.editor.uiScale = uiScale
 		source = state.editor.image
 		labelWindow = state.editor.window
+		ratioLocked = state.editor.selectionAspectRatio > 0
 		state.editor.mu.Unlock()
 	}
 	state.mu.Lock()
@@ -1118,7 +1120,7 @@ func (state *recordingToolbarState) drawBorder(displayList *DisplayList, frame F
 	}
 	// The size chip can fall inside the selection near a display edge or toolbar.
 	if !state.platform.retainRecordingBorder || (status != recordingStateRecording && status != recordingStatePaused) {
-		drawScreenshotEditorSizeLabel(displayList, labelWindow, label, localSelection, localToolbar, frame.Size, uiScale)
+		drawScreenshotEditorSizeLabel(displayList, labelWindow, label, localSelection, localToolbar, frame.Size, uiScale, ratioLocked)
 	}
 	// After recording starts the toolbar draws this hint. Drawing it again here
 	// stacked a second tooltip when Linux kept the border window visible.

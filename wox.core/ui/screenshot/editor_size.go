@@ -26,6 +26,15 @@ type screenshotSizeDialog struct {
 	invalid       bool
 	lockRatio     bool
 	aspectRatio   float64
+	tabTraversal  bool
+}
+
+var screenshotSizeRatioPresets = []struct {
+	label string
+	ratio float64
+}{
+	{"1:1", 1}, {"3:2", 3.0 / 2}, {"4:3", 4.0 / 3}, {"16:9", 16.0 / 9},
+	{"2:3", 2.0 / 3}, {"3:4", 3.0 / 4}, {"9:16", 9.0 / 16},
 }
 
 // publishSizeLabel publishes capture dimensions and the current annotation-size control together.
@@ -35,13 +44,44 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 	}
 	tree := woxui.AccessibilityTree{Generation: 1}
 	if bounds.Width > 0 {
+		label := state.sizeDialogOptions.SizeLabels.Title
+		state.mu.Lock()
+		if state.selectionAspectRatio > 0 && state.sizeDialogOptions.SizeLabels.LockAspectRatio != "" {
+			label += ", " + state.sizeDialogOptions.SizeLabels.LockAspectRatio
+		}
+		state.mu.Unlock()
 		tree.RootIDs = []woxui.AccessibilityNodeID{1}
 		tree.Nodes = []woxui.AccessibilityNode{{
 			ID: 1, AutomationID: "screenshot.size.open", Role: woxui.AccessibilityRoleButton,
-			Label: state.sizeDialogOptions.SizeLabels.Title, Value: value, Bounds: state.surfaceRect(bounds),
+			Label: label, Value: value, Bounds: state.surfaceRect(bounds),
 			Enabled: state.activeSizeDialog() == nil, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
 		}}
 		state.mu.Lock()
+		if state.sizeRatioRect.Width > 0 {
+			tree.RootIDs = append(tree.RootIDs, 4)
+			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
+				ID: 4, AutomationID: "screenshot.ratio.open", Role: woxui.AccessibilityRoleButton,
+				Label: state.sizeDialogOptions.SizeLabels.RatioPresets, Value: screenshotRatioLabel(state.sizeDialogOptions.SizeLabels, state.selectionAspectRatio),
+				Bounds: state.surfaceRect(state.sizeRatioRect), Enabled: state.sizeDialog == nil, Expanded: state.sizeRatioMenuOpen,
+				Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+			})
+			if state.sizeRatioMenuOpen {
+				rowHeight := state.sizeRatioMenuRect.Height / float32(len(screenshotSizeRatioPresets)+1)
+				for index := 0; index <= len(screenshotSizeRatioPresets); index++ {
+					label, suffix := state.sizeDialogOptions.SizeLabels.RatioFree, "free"
+					if index > 0 {
+						label, suffix = screenshotSizeRatioPresets[index-1].label, screenshotSizeRatioPresets[index-1].label
+					}
+					id := woxui.AccessibilityNodeID(100 + index)
+					tree.RootIDs = append(tree.RootIDs, id)
+					tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
+						ID: id, AutomationID: "screenshot.ratio." + suffix, Role: woxui.AccessibilityRoleMenuItem, Label: label,
+						Bounds:  state.surfaceRect(Rect{X: state.sizeRatioMenuRect.X, Y: state.sizeRatioMenuRect.Y + float32(index)*rowHeight, Width: state.sizeRatioMenuRect.Width, Height: rowHeight}),
+						Enabled: true, Selected: screenshotRatioIndex(state.selectionAspectRatio) == index, Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate},
+					})
+				}
+			}
+		}
 		if state.backgroundRect.Width > 0 {
 			tree.RootIDs = append(tree.RootIDs, 3)
 			tree.Nodes = append(tree.Nodes, woxui.AccessibilityNode{
@@ -62,6 +102,28 @@ func (state *screenshotEditorOverlayState) publishSizeLabel(bounds Rect, value s
 		state.mu.Unlock()
 	}
 	_ = state.window.UpdateAccessibility(tree, func(id woxui.AccessibilityNodeID, action woxui.AccessibilityAction, value string) error {
+		if id == 4 && action == woxui.AccessibilityActionActivate {
+			state.mu.Lock()
+			if state.hasSelection && state.sizeDialog == nil {
+				state.commitTextLocked()
+				state.sizeRatioMenuOpen = !state.sizeRatioMenuOpen
+				state.sizeRatioMenuIndex = screenshotRatioIndex(state.selectionAspectRatio)
+			}
+			state.mu.Unlock()
+			state.setTextInputEnabled(false)
+			state.invalidate()
+			return nil
+		}
+		if id >= 100 && id <= woxui.AccessibilityNodeID(100+len(screenshotSizeRatioPresets)) && action == woxui.AccessibilityActionActivate {
+			state.mu.Lock()
+			if state.sizeRatioMenuOpen {
+				state.chooseScreenshotRatioLocked(int(id - 100))
+				state.sizeRatioMenuOpen = false
+			}
+			state.mu.Unlock()
+			state.invalidate()
+			return nil
+		}
 		if id == 3 && action == woxui.AccessibilityActionActivate {
 			state.toggleWindowBackground()
 			return nil
@@ -97,8 +159,10 @@ func (state *screenshotEditorOverlayState) openSizeDialog() bool {
 	dialog := &screenshotSizeDialog{
 		editor: state, width: woxwidget.NewTextEditingController(strconv.Itoa(pixels.Dx())), height: woxwidget.NewTextEditingController(strconv.Itoa(pixels.Dy())),
 		maxWidth: max(pixels.Dx(), state.image.Width-max(0, pixels.Min.X)), maxHeight: max(pixels.Dy(), state.image.Height-max(0, pixels.Min.Y)),
+		lockRatio: state.selectionAspectRatio > 0, aspectRatio: state.selectionAspectRatio,
 	}
 	dialog.width.SelectAll()
+	state.sizeRatioMenuOpen = false
 	state.sizeDialog = dialog
 	state.hasHoveredMark, state.hasHoveredTool, state.hasHoveredAction = false, false, false
 	state.mu.Unlock()
@@ -173,7 +237,7 @@ func (dialog *screenshotSizeDialog) draw(displayList *DisplayList, frame FrameIn
 
 // size fits the form's fixed line slots, standard controls, gaps, and 20-unit outer padding.
 func (dialog *screenshotSizeDialog) size() Size {
-	height := float32(220)
+	height := float32(292)
 	if dialog.invalid {
 		height += 48 // Two error lines plus the same 12-unit gap used by settings dialogs.
 	}
@@ -222,6 +286,11 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 				return woxcomponent.WoxSettingTextField(woxcomponent.TextFieldProps{
 					ID: "screenshot.size." + field.id, Label: field.label, Width: size.Width, Controller: field.controller, Window: window, Theme: theme,
 					OnChanged: func(value string) { dialog.changeDimension(index == 0, value) },
+					OnFocusChange: func(focused bool) {
+						if focused && dialog.tabTraversal {
+							field.controller.SelectAll()
+						}
+					},
 					OnKey: func(event KeyEvent) bool {
 						if event.Down && !event.Composing && event.Key == KeyEnter {
 							dialog.apply()
@@ -240,6 +309,14 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 			drawScreenshotEditorToolbarIconSized(displayList, "control.swap", bounds, theme.Text, 1, 16)
 		}},
 	})
+	presets := make([]woxwidget.Widget, 0, len(screenshotSizeRatioPresets))
+	for _, preset := range screenshotSizeRatioPresets {
+		presets = append(presets, woxcomponent.WoxSegmentedButton(woxcomponent.SegmentedButtonProps{
+			ID: "screenshot.size.ratio." + preset.label, Label: preset.label, Width: 40, Theme: theme,
+			Selected: dialog.lockRatio && math.Abs(dialog.aspectRatio-preset.ratio) < 1e-9,
+			OnTap:    func() { dialog.selectRatioPreset(preset.ratio) },
+		}))
+	}
 	children := []woxwidget.Widget{
 		woxwidget.TextBlock{Value: labels.Title, Height: 20, MaxLines: 1, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize), Weight: FontWeightSemibold}, Color: theme.Text},
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisEnd, Children: []woxwidget.Widget{fields[0], swap, fields[1]}},
@@ -251,6 +328,11 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 					})},
 					woxwidget.Text{Value: labels.LockAspectRatio, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
 				},
+			}}},
+		woxwidget.Semantics{AutomationID: "screenshot.size.ratios", Role: woxui.AccessibilityRoleGroup, Label: labels.RatioPresets,
+			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
+				woxwidget.TextBlock{Value: labels.RatioPresets, Height: 20, MaxLines: 1, Style: TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text},
+				woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: presets},
 			}}},
 	}
 	if dialog.invalid {
@@ -271,22 +353,42 @@ func (dialog *screenshotSizeDialog) build(frame FrameInfo) woxwidget.Widget {
 	})
 }
 
-// setRatioLocked snapshots the capture's pixel ratio, not a possibly edited or invalid draft ratio.
-func (dialog *screenshotSizeDialog) setRatioLocked(locked bool) {
-	dialog.lockRatio = locked
-	if !locked {
+// selectRatioPreset preserves the draft width where possible and fits the linked size inside the available capture.
+func (dialog *screenshotSizeDialog) selectRatioPreset(ratio float64) {
+	width, err := strconv.Atoi(strings.TrimSpace(dialog.width.Text()))
+	if err != nil || width < 1 {
+		dialog.setInvalid(true)
 		return
 	}
-	state := dialog.editor
-	state.mu.Lock()
-	pixels, err := state.selectionPixelBoundsLocked()
-	state.mu.Unlock()
-	if err != nil {
+	width, height := screenshotSizePresetDimensions(width, dialog.maxWidth, dialog.maxHeight, ratio)
+	dialog.width.SetText(strconv.Itoa(width), false)
+	dialog.height.SetText(strconv.Itoa(height), false)
+	dialog.aspectRatio, dialog.lockRatio = ratio, true
+	dialog.setInvalid(false)
+}
+
+// screenshotSizePresetDimensions fits a ratio to the available pixels while preserving width where possible.
+func screenshotSizePresetDimensions(width, maxWidth, maxHeight int, ratio float64) (int, int) {
+	width = min(width, maxWidth, max(1, int(math.Floor(float64(maxHeight)*ratio))))
+	return width, min(maxHeight, max(1, int(math.Round(float64(width)/ratio))))
+}
+
+// setRatioLocked snapshots the current draft without changing either entered dimension.
+func (dialog *screenshotSizeDialog) setRatioLocked(locked bool) {
+	if !locked {
 		dialog.lockRatio = false
 		return
 	}
-	dialog.aspectRatio = float64(pixels.Dx()) / float64(pixels.Dy())
-	dialog.changeDimension(true, dialog.width.Text())
+	width, widthErr := strconv.Atoi(strings.TrimSpace(dialog.width.Text()))
+	height, heightErr := strconv.Atoi(strings.TrimSpace(dialog.height.Text()))
+	if widthErr != nil || heightErr != nil || width < 1 || height < 1 {
+		dialog.lockRatio = false
+		dialog.setInvalid(true)
+		return
+	}
+	dialog.lockRatio = true
+	dialog.aspectRatio = float64(width) / float64(height)
+	dialog.setInvalid(false)
 }
 
 // changeDimension rounds the linked dimension to a whole pixel without truncating out-of-range drafts.
@@ -316,8 +418,17 @@ func (dialog *screenshotSizeDialog) swapDimensions() {
 
 // key confines keyboard actions to the size form while it is open.
 func (dialog *screenshotSizeDialog) key(event KeyEvent) bool {
-	if dialog.host != nil && dialog.host.Key(event) {
-		return true
+	if dialog.host != nil {
+		// Select before the host syncs text input, but leave pointer-based caret placement intact.
+		dialog.tabTraversal = event.Down && event.Key == woxui.KeyTab && !event.Composing && event.Modifiers & ^KeyModifierShift == 0
+		handled := dialog.host.Key(event)
+		dialog.tabTraversal = false
+		if handled {
+			if dialog.window != nil {
+				_ = dialog.window.Window().Invalidate()
+			}
+			return true
+		}
 	}
 	if event.Down && !event.Composing && event.Key == KeyEscape {
 		dialog.editor.closeSizeDialog(true)
@@ -336,6 +447,10 @@ func (dialog *screenshotSizeDialog) apply() {
 	}
 	state := dialog.editor
 	state.mu.Lock()
+	state.selectionAspectRatio = 0
+	if dialog.lockRatio {
+		state.selectionAspectRatio = dialog.aspectRatio
+	}
 	pixels, err := state.selectionPixelBoundsLocked()
 	if err == nil && (pixels.Dx() != width || pixels.Dy() != height) {
 		selection := screenshotEditorSelectionWithPixelSize(state.selectionBoundsLocked(), state.frameSize, image.Pt(state.image.Width, state.image.Height), width, height)

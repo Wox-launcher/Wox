@@ -38,7 +38,8 @@ type ScreenshotOptions struct {
 // ScreenshotSizeLabels carries localized copy for editing capture dimensions in pixels.
 type ScreenshotSizeLabels struct {
 	Title, Width, Height, Apply, Cancel, InvalidSize string
-	LockAspectRatio, Swap                            string
+	LockAspectRatio, Swap, RatioPresets              string
+	RatioFree, RatioCustom                           string
 }
 
 // RecordingRuntimeLabels carries the consent, transfer, and recovery copy for optional FFmpeg installation.

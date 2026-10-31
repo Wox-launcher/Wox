@@ -575,12 +575,23 @@ func TestRecordingSizeLabelAndBorderMarginScaleWithDPI(t *testing.T) {
 	want.Clear(Color{})
 	want.StrokeRoundedRect(local, 0, 4, Color{R: 47, G: 128, B: 237, A: 255})
 	drawScreenshotEditorHandles(want, local, Color{R: 47, G: 128, B: 237, A: 255}, 2)
-	drawScreenshotEditorSizeLabel(want, (*Window)(nil), "200 x 100", local, Rect{}, frame.Size, 2)
+	drawScreenshotEditorSizeLabel(want, (*Window)(nil), "200 x 100", local, Rect{}, frame.Size, 2, false)
 	if err := got.Compare(want); err != nil {
 		t.Fatalf("recording border should use live chrome scale, not stale editor.uiScale: %v", err)
 	}
 	if state.editor.uiScale != 2 {
 		t.Fatalf("editor uiScale = %v, want 2 so handle hit-testing matches the drawn chrome", state.editor.uiScale)
+	}
+	state.editor.selectionAspectRatio = 2
+	got = &DisplayList{}
+	state.drawBorder(got, frame)
+	want = &DisplayList{}
+	want.Clear(Color{})
+	want.StrokeRoundedRect(local, 0, 4, Color{R: 47, G: 128, B: 237, A: 255})
+	drawScreenshotEditorHandles(want, local, Color{R: 47, G: 128, B: 237, A: 255}, 2)
+	drawScreenshotEditorSizeLabel(want, (*Window)(nil), "200 x 100", local, Rect{}, frame.Size, 2, true)
+	if err := got.Compare(want); err != nil {
+		t.Fatalf("recording border did not show the locked ratio: %v", err)
 	}
 }
 
@@ -653,7 +664,7 @@ func TestRecordingPreviewKeepsSelectionStrokeWithoutDuplicateTooltip(t *testing.
 	local := recordingBorderLocalSelection(state.selection, state.borderOrigin)
 	wantBorder := &DisplayList{}
 	wantBorder.Clear(Color{})
-	drawScreenshotEditorSizeLabel(wantBorder, (*Window)(nil), "200 x 100", local, Rect{}, Size{Width: 400, Height: 300}, 1)
+	drawScreenshotEditorSizeLabel(wantBorder, (*Window)(nil), "200 x 100", local, Rect{}, Size{Width: 400, Height: 300}, 1, false)
 	if err := border.Compare(wantBorder); err != nil {
 		t.Fatalf("save-state border should not restack the toolbar tooltip or covered stroke: %v", err)
 	}

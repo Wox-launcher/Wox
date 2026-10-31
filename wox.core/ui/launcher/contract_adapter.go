@@ -459,6 +459,8 @@ func (a *App) CaptureScreenshot(_ context.Context, request common.CaptureScreens
 			Apply: a.language.translate("i18n:plugin_screenshot_size_apply"), Cancel: a.language.translate("i18n:ui_screenshot_tool_cancel"),
 			InvalidSize:     a.language.translate("i18n:plugin_screenshot_size_invalid"),
 			LockAspectRatio: a.language.translate("i18n:plugin_screenshot_size_lock_ratio"), Swap: a.language.translate("i18n:plugin_screenshot_size_swap"),
+			RatioPresets: a.language.translate("i18n:plugin_screenshot_size_ratio_presets"),
+			RatioFree:    a.language.translate("i18n:plugin_screenshot_size_ratio_free"), RatioCustom: a.language.translate("i18n:plugin_screenshot_size_ratio_custom"),
 		},
 		AnnotationTooltips: woxscreenshot.ScreenshotAnnotationTooltips{
 			FontSize:  a.language.translate("i18n:ui_screenshot_font_size"),
