@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.4.9 - 2026-10-31
+
+Bring settings and data from Raycast into Wox, and organize AI conversations into projects. Omarchy users can also match the launcher to their desktop theme and search its menu commands.
+
+
+![Wox v2.4.9: Raycast import and Omarchy support](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.4.9.png)
+
+- Add
+  - [`Raycast`] Import a Raycast export during setup to bring over supported settings, shortcuts, notes, clipboard history, and other data. You can also import compatible locally installed extensions and use their commands in Wox.
+  - [`AI Chat`] Organize conversations into projects and associate them with folders, so chats and available tools can work with the files and instructions for each project.
+
+- Improve
+  - [`Notes`] Organize and pin notes in the sidebar, search your notes, and find text within an open note.
+  - [`AI Chat`] Search conversation history and test provider connections in Settings.
+  - [`Omarchy`] Follow the active desktop theme automatically and search Omarchy menu commands from Wox. New installations use Alt+Space to open the launcher.
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/www/docs/public/images/blog/omarchy-theme-auto.png)
+  - [`Linux`] On Hyprland, bring a running app's window forward, including on another workspace, and select windows for screenshots. App results can show CPU and memory usage. On Omarchy, use selected text in searches.
+  - [`Web Search`] Open saved websites and searches directly inside Wox, with the option to keep pages running in the background. Existing WebView sites move to Web Search. Query hotkeys can open a preview without the results list. [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
+  - [`Hotkey`] Choose Emacs or Vim-style keys to navigate results and the Action Panel, and customize the filter shortcut. [#4682](https://github.com/Wox-launcher/Wox/issues/4682)
+  - [`Screenshot`] Compress MP4 recordings and show progress while they are saved.
+  - [`Quick Jump`] Use Directory Opus as a source when switching a file dialog to an open folder. [#4670](https://github.com/Wox-launcher/Wox/pull/4670) [@momadacoding](https://github.com/momadacoding)
+  - [`Plugin`] Update installed plugins with the WPM update command.
+
+- Fix
+  - [`Clipboard`] Keep searches responsive with large histories, including histories with many images or long text.
+  - [`Query`] Rank close matches above scattered letters and keep unrelated past searches from pushing results up.
+  - [`Launcher`] Keep the launcher on the intended display when monitors use different scaling, and restore its position more reliably. [#4680](https://github.com/Wox-launcher/Wox/issues/4680)
+  - [`Screenshot`] Keep the editing toolbar on the active display, and exclude the recording border from Linux captures.
+  - [`Windows`] Restore Snap support for resizable Wox windows and fix freezes when hiding Wox with software rendering enabled. [#4637](https://github.com/Wox-launcher/Wox/issues/4637)
+  - [`Browser`] Fix links from Wox opening in the wrong default browser on Windows. [#4674](https://github.com/Wox-launcher/Wox/issues/4674)
+
+- Store
+  - Plugin
+    - [Asyntai AI Chatbot](https://asyntai.com/documentation/integrations/wox/) Read your website chats, leads and tickets, and ask your Asyntai AI chatbot, right from Wox. [#4672](https://github.com/Wox-launcher/Wox/pull/4672) [@asyntai](https://github.com/asyntai)
+    - [TOTP Codes](https://github.com/sqlwwx/Wox.Plugin.Totp) Query and copy TOTP codes, local storage, supports otpauth:// URIs [#4676](https://github.com/Wox-launcher/Wox/pull/4676) [@sqlwwx](https://github.com/sqlwwx)
+    - [Window Pin](https://gist.github.com/qianlifeng/03c57db33077eda40b352dc6aa67c039) Keep Windows applications above other windows [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [Western Oil Painting](https://github.com/dragonish/Wox.Theme.WesternOilPainting) A Western oil-painting frame in sage, ochre and sky blue, around a warm-paper workspace with a pink query box, gold toolbar and deep burnt-sienna selection. [#4678](https://github.com/Wox-launcher/Wox/pull/4678) [@dragonish](https://github.com/dragonish)
+
 ## v2.4.8 - 2026-10-25
 
 File searches are faster and use less memory. You can open a new app window with Ctrl/Cmd+Enter and choose where screenshots are saved.

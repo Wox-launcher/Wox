@@ -7,7 +7,7 @@ description: Update Wox CHANGELOG.md and CHANGELOG.zh_CN.md based on commits sin
 
 ## Overview
 
-Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version to `HEAD` and keep wording, section order, and markdown style consistent with existing entries. The two files must describe the same release with the same structure; only the language of user-facing prose changes.
+Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version to `HEAD`, create a release cover, and keep wording, section order, and markdown style consistent with existing entries. The two files must describe the same release with the same structure; only the language of user-facing prose changes.
 
 ## Workflow
 
@@ -39,7 +39,15 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 - Exclude internal refactors/tests/docs/chore unless directly user-visible.
 - Exclude tiny UI-only polish by default (for example spacing, alignment, minor color/wording tweaks) unless it fixes a functional UX issue or the user explicitly asks to include small UI changes.
 
-4. Write changelog entries in repository style.
+4. Create a release cover.
+
+- Every changelog update must include a newly generated cover for the target release. Choose the single most important user-facing feature or improvement as its subject. Do not combine several headline features into one cover. If no change stands out as a main feature, use the title `Improvements` and a general Wox product visual.
+- Use the built-in image generation tool and follow the `imagegen` skill. Inspect the result and iterate if its text, visual quality, or relationship to the release is wrong. If generation is unavailable, finish the text updates and explicitly report the missing cover; do not add a broken image reference or silently substitute a different method.
+- Follow the approved release-cover style: a 2.85:1 landscape aspect ratio (57:20, for example 1710 × 600 pixels), restrained near-black background, generous negative space, a small outlined version capsule above a large white sans-serif title on the left, and one cropped product interface or feature visual on the right. Keep the composition clean and editorial, with subtle depth and no decorative glow, floating icons, busy scenery, or AI-looking effects. Keep the cover title short and use the actual release version. Fit or crop the generated image to the required aspect ratio without stretching or cutting off important content. Inspect `screenshots/changelog-v2.4.9.png`, when available, for the approved visual direction; it is a style reference, not an example of how many features to cover.
+- Prefer actual Wox screenshots or established product assets as visual references when available. Generated interface imagery is illustrative: do not invent or misrepresent feature behavior, and do not present a generated mockup as an actual screenshot.
+- Save the cover under `screenshots/` with a descriptive release-specific filename. If the filename already exists, use a distinct filename unless the user requested replacement. Insert the same cover image reference in both changelogs immediately after the highlight paragraph and before the sections; use the repository's GitHub raw image URL pattern. Replace an existing cover reference for the target release when needed, while preserving other screenshots and old release sections.
+
+5. Write changelog entries in repository style.
 
 - Preserve header pattern exactly (for example: `## v2.0.1 -`). Use the same heading, date, screenshots, issue links, and section keys in both files.
 - Keep section titles in English in both files: `- Add`, `- Improve`, `- Fix`, `- Store`. The client already localizes these labels.
@@ -56,7 +64,7 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 - Prefer plugin/module prefix when clear, e.g. ``[`Shell`]`` or ``[`Clipboard`]``.
 - Write issue references as Markdown links, e.g. `[#4339](https://github.com/Wox-launcher/Wox/issues/4339)`. Do not leave a bare `#4339` for the preview to rewrite later.
 - Every changelog item originating from a PR must credit its contributor with `[@username](https://github.com/username)` and link the PR as `[#1234](https://github.com/Wox-launcher/Wox/pull/1234)`. Apply this to `Add`, `Improve`, `Fix`, and `Store`, with identical attribution in both languages. When a bullet combines contributions from several PRs, credit each relevant PR author once. Keep store author credits; if that author is also the PR contributor, reuse the existing mention, otherwise append the PR contributor separately. For example: ``  - [`Notes`] Fix typing `- [ ] ` not creating a task. [#4618](https://github.com/Wox-launcher/Wox/pull/4618) [@lmgarret](https://github.com/lmgarret)``.
-- Keep existing screenshots. Add new screenshot lines when screenshots already exist, or when a user explicitly asks to reserve screenshot positions for upcoming images.
+- Keep existing feature screenshots. Add new feature screenshot lines when screenshots already exist, or when a user explicitly asks to reserve screenshot positions for upcoming images. The release cover is required separately as described above.
 - Write `Store` as two nested groups, omitting an empty group: `Plugin` then `Theme`. Each item is already-clickable Markdown: `[Name](page_url) Description [@github_username](https://github.com/github_username)`. Resolve `i18n:` names and descriptions from `I18n.en_US` in `CHANGELOG.md` and from `I18n.zh_CN` in `CHANGELOG.zh_CN.md` (`plugin_name`, `plugin_desc` or `plugin_description`). If a locale is missing, fall back to `en_US`, then `Name` / `Description`. Use `ThemeName` and `Description` for themes. Link the name to `Website` (plugin) or `ThemeUrl` (theme). If that URL is empty, write the plain name without a link. Append the author as a GitHub profile link. Prefer the username from a `github.com` / `gist.github.com` `Website` or `ThemeUrl`; otherwise use `Author` or `ThemeAuthor` when it is a single handle. Skip the author link when the author is only a display name. Do not add store screenshots, download URLs, or version numbers.
 
   ```markdown
@@ -71,19 +79,20 @@ Update `CHANGELOG.md` and `CHANGELOG.zh_CN.md` from the latest released version 
 - Write the English file first, then produce the Chinese file as a line-for-line counterpart. Do not add or drop bullets in only one language.
 - Both files now contain the full version history. Keep new headings in both files and do not leave a new release in only one language.
 
-5. Keep README in sync only when the latest **stable** heading changes.
+6. Keep README in sync only when the latest **stable** heading changes.
 
 - Update the line next to the Release badge to `Latest: vX.Y.Z · Mon YYYY`, matching that heading (for example `Latest: v2.4.3 · Sep 2026`). GitHub README is not generated.
 - Skip this when you only add bullets under an existing heading, or when the newest heading is a beta (`vX.Y.Z-beta.N`).
 - Do not hand-edit `www/docs`. Homepage version text, compare stamps, and `/changelog/*` pages are generated from `CHANGELOG.md` and `CHANGELOG.zh_CN.md` during `docs:dev` / `docs:build`.
 
-6. Validate before finishing.
+7. Validate before finishing.
 
 - Ensure no duplicate bullets.
 - Ensure every `Add`/`Improve`/`Fix` bullet maps to at least one commit in range.
 - Ensure every PR-derived item includes its PR link and verified contributor mention in both languages, including when the same feature combines direct commits and PR contributions. Check merge history or GitHub associations so `--no-merges` does not hide attribution.
 - Ensure every `Store` bullet maps to a plugin `Id` or theme `ThemeId` that is new since `last_release_tag`.
 - Ensure every release section you create or update has a biggest-highlight paragraph under the version heading in both files, written in everyday language a typical user can understand.
+- Verify the generated cover exists in the repository, matches the release version and 2.85:1 aspect ratio, presents one main feature or `Improvements`, and is referenced identically in both changelogs. Inspect it for legible text and the approved style.
 - Reread new bullets as a user: drop leftover implementation terms such as schema, chrome, prefetch, incremental index, DirectWrite, overlay, conversion mode, or host restart unless they are the feature name.
 - Ensure English and Chinese newest sections have the same headings, screenshots, issue links, and bullet count.
 - If the latest stable heading is new or its date changed, ensure README contains `Latest: vX.Y.Z · Mon YYYY` matching it (`docs:build` fails if this line is missing).
@@ -128,7 +137,7 @@ for t in new_t:
 
 ## Output Rules
 
-- Edit `CHANGELOG.md` and `CHANGELOG.zh_CN.md` together.
+- Edit `CHANGELOG.md` and `CHANGELOG.zh_CN.md` together and include the generated release cover.
 - If the latest stable heading changed, also update the README `Latest: vX.Y.Z · Mon YYYY` line. Do not edit `www/docs` changelog pages or homepage copy.
 - Keep final response short: what section was updated and what categories were changed, including `Store` plugin/theme counts when present.
 - If commit intent is ambiguous, state the assumption briefly in the final response.

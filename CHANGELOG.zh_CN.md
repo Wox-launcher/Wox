@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.4.9 - 2026-10-31
+
+可以将 Raycast 的设置和数据导入 Wox，并用项目整理 AI 对话。Omarchy 用户还可以让启动器跟随桌面主题，并搜索桌面菜单命令。
+
+
+![Wox v2.4.9: Raycast import and Omarchy support](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.4.9.png)
+
+- Add
+  - [`Raycast`] 在设置过程中导入 Raycast 导出文件，带入受支持的设置、快捷键、笔记、剪贴板历史等数据。还可以导入本机已安装的兼容扩展，在 Wox 中使用其命令。
+  - [`AI Chat`] 用项目整理对话并关联文件夹，让对话和可用工具处理各项目的文件和说明。
+
+- Improve
+  - [`Notes`] 在侧边栏整理和置顶笔记，搜索笔记，并在打开的笔记中查找文字。
+  - [`AI Chat`] 搜索对话历史，并在设置中测试服务商连接。
+  - [`Omarchy`] 自动跟随当前桌面主题，并在 Wox 中搜索 Omarchy 菜单命令。新安装默认使用 Alt+Space 打开启动器。
+    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/www/docs/public/images/blog/omarchy-theme-auto.png)
+  - [`Linux`] 在 Hyprland 上唤起已运行的应用窗口，包括切换到其他工作区，并可选择窗口截图。应用结果可显示 CPU 和内存占用。Omarchy 上可使用选中的文字搜索。
+  - [`Web Search`] 可直接在 Wox 中打开保存的网站和搜索，并选择让页面在后台运行。已有 WebView 网站会迁移到 Web Search。查询热键可打开不带结果列表的预览。 [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
+  - [`Hotkey`] 可选择使用 Emacs 或 Vim 风格按键浏览结果和操作面板，并自定义筛选快捷键。 [#4682](https://github.com/Wox-launcher/Wox/issues/4682)
+  - [`Screenshot`] 压缩 MP4 录制文件，并在保存时显示进度。
+  - [`Quick Jump`] 切换文件对话框到已打开的文件夹时，支持使用 Directory Opus。 [#4670](https://github.com/Wox-launcher/Wox/pull/4670) [@momadacoding](https://github.com/momadacoding)
+  - [`Plugin`] 可使用 WPM 更新命令更新已安装的插件。
+
+- Fix
+  - [`Clipboard`] 修复剪贴板历史较大时搜索响应缓慢，包括含有大量图片或长文本的历史。
+  - [`Query`] 修复零散字母匹配排在紧密匹配之前，以及不相关的历史搜索影响结果排序。
+  - [`Launcher`] 修复显示器缩放比例不同时启动器出现在错误屏幕，并更可靠地恢复窗口位置。 [#4680](https://github.com/Wox-launcher/Wox/issues/4680)
+  - [`Screenshot`] 修复编辑工具栏出现在其他屏幕，以及 Linux 录制画面包含录制边框。
+  - [`Windows`] 恢复可调整大小的 Wox 窗口的贴靠功能，并修复启用软件渲染时隐藏 Wox 导致卡死。 [#4637](https://github.com/Wox-launcher/Wox/issues/4637)
+  - [`Browser`] 修复 Windows 上 Wox 链接未使用默认浏览器打开。 [#4674](https://github.com/Wox-launcher/Wox/issues/4674)
+
+- Store
+  - Plugin
+    - [Asyntai AI Chatbot](https://asyntai.com/documentation/integrations/wox/) Read your website chats, leads and tickets, and ask your Asyntai AI chatbot, right from Wox. [#4672](https://github.com/Wox-launcher/Wox/pull/4672) [@asyntai](https://github.com/asyntai)
+    - [TOTP Codes](https://github.com/sqlwwx/Wox.Plugin.Totp) TOTP 验证码查询/复制，本地存储，支持 otpauth:// 添加 [#4676](https://github.com/Wox-launcher/Wox/pull/4676) [@sqlwwx](https://github.com/sqlwwx)
+    - [Window Pin](https://gist.github.com/qianlifeng/03c57db33077eda40b352dc6aa67c039) Keep Windows applications above other windows [@qianlifeng](https://github.com/qianlifeng)
+  - Theme
+    - [西方油画](https://github.com/dragonish/Wox.Theme.WesternOilPainting) 鼠尾草绿、赭金与天青笔触的油画外框，配暖白画布内容区、粉色搜索框、金色工具栏与深焦茶选中。 [#4678](https://github.com/Wox-launcher/Wox/pull/4678) [@dragonish](https://github.com/dragonish)
+
 ## v2.4.8 - 2026-10-25
 
 文件搜索更快，也更省内存。现在可以用 Ctrl/Cmd+Enter 打开应用新窗口，并自行选择截图保存位置。
