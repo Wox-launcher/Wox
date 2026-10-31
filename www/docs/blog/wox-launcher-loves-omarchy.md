@@ -12,7 +12,7 @@ coverAlt: Wox and Omarchy icons with a heart between them
 
 Omarchy brings a coordinated look and a keyboard-friendly workflow to the Linux desktop. Wox should feel at home there too: its colors can follow the desktop, and the things you already do in Omarchy should be easy to reach from the launcher.
 
-The improvements in this article will be available in Wox v2.4.9.
+The improvements in this article are available in Wox v2.4.9.
 
 ## A launcher that follows your Omarchy theme
 
@@ -41,6 +41,10 @@ Open Wox and search for an Omarchy menu item, such as `theme` or `lock`. Matchin
 ![Omarchy menu commands in Wox search results](/images/blog/omarchy-menus.png)
 
 Wox reads the installed menu and the user's menu extension, so your own entries can be found too. Available results depend on the installed menu and its conditions; the Apps submenu is left to Wox's application search.
+
+## Omarchy Shell plugin
+
+The [Wox plugin in the Omarchy Plugin Marketplace](https://plugins.omarchy.org/plugin.html?id=io.github.wox-launcher.wox) adds an Omarchy Shell service for toggling Wox. Install and start Wox separately before using the plugin; the listing links to its installation instructions.
 
 ## Shortcuts, windows, and screenshots
 

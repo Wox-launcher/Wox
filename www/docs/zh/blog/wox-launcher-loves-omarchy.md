@@ -12,7 +12,7 @@ coverAlt: Wox 和 Omarchy 图标，中间是一颗爱心
 
 Omarchy 为 Linux 桌面带来了统一的外观和适合键盘操作的工作流。我们希望 Wox 在这样的桌面上也能自然融入：颜色跟随桌面变化，平时使用的 Omarchy 功能也能从启动器里找到。
 
-本文介绍的改进将在 v2.4.9 中生效。
+本文介绍的改进已在 Wox v2.4.9 中推出。
 
 ## 跟随 Omarchy 主题变化
 
@@ -39,6 +39,10 @@ Omarchy 为 Linux 桌面带来了统一的外观和适合键盘操作的工作�
 ![Wox 搜索结果中的 Omarchy 菜单命令](/images/blog/omarchy-menus.png)
 
 Wox 会读取已安装的菜单和用户菜单扩展，因此自定义的菜单项也可以被搜索到。具体结果取决于本机菜单及其可用条件；Apps 子菜单则交给 Wox 的应用搜索处理。
+
+## Omarchy Shell 插件
+
+[Omarchy 插件商店中的 Wox 插件](https://plugins.omarchy.org/plugin.html?id=io.github.wox-launcher.wox)提供了一个 Omarchy Shell 服务，用于打开或隐藏 Wox。使用插件前，需要单独安装并启动 Wox；安装说明可以从商店页面进入。
 
 ## 快捷键、窗口和截图
 
