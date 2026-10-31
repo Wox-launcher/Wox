@@ -2,26 +2,24 @@
 
 ## v2.4.9 - 2026-10-31
 
-可以将 Raycast 的设置和数据导入 Wox，并用项目整理 AI 对话。Omarchy 用户还可以让启动器跟随桌面主题，并搜索桌面菜单命令。
+支持导入Raycast的设置以及插件；AI Chat支持项目；增强Omarchy系统适配，新增Omarchy Auto主题，可以跟随Omarchy的主题。
 
 
 ![Wox v2.4.9: Raycast import and Omarchy support](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.4.9.png)
 
 - Add
   - [`Raycast`] 在设置过程中导入 Raycast 导出文件，带入受支持的设置、快捷键、笔记、剪贴板历史等数据。还可以导入本机已安装的兼容扩展，在 Wox 中使用其命令。
-  - [`AI Chat`] 用项目整理对话并关联文件夹，让对话和可用工具处理各项目的文件和说明。
+  - [`Omarchy`] 自动跟随当前桌面主题，并在 Wox 中搜索 Omarchy 菜单命令。详情参考：[https://www.woxlauncher.com/blog/wox-launcher-loves-omarchy.html](https://www.woxlauncher.com/blog/wox-launcher-loves-omarchy.html)
 
 - Improve
   - [`Notes`] 在侧边栏整理和置顶笔记，搜索笔记，并在打开的笔记中查找文字。
-  - [`AI Chat`] 搜索对话历史，并在设置中测试服务商连接。
-  - [`Omarchy`] 自动跟随当前桌面主题，并在 Wox 中搜索 Omarchy 菜单命令。新安装默认使用 Alt+Space 打开启动器。
-    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/www/docs/public/images/blog/omarchy-theme-auto.png)
+  - [`AI Chat`] 搜索对话历史，并在设置中测试服务商连接。并支持项目分组。
   - [`Linux`] 在 Hyprland 上唤起已运行的应用窗口，包括切换到其他工作区，并可选择窗口截图。应用结果可显示 CPU 和内存占用。Omarchy 上可使用选中的文字搜索。
-  - [`Web Search`] 可直接在 Wox 中打开保存的网站和搜索，并选择让页面在后台运行。已有 WebView 网站会迁移到 Web Search。查询热键可打开不带结果列表的预览。 [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
+  - [`Web Search`] 可直接在 Wox 中打开保存的网站和搜索，并选择让页面在后台运行。**已有 WebView 网站会迁移到 Web Search**。查询热键可打开不带结果列表的预览。 [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
   - [`Hotkey`] 可选择使用 Emacs 或 Vim 风格按键浏览结果和操作面板，并自定义筛选快捷键。 [#4682](https://github.com/Wox-launcher/Wox/issues/4682)
   - [`Screenshot`] 压缩 MP4 录制文件，并在保存时显示进度。
   - [`Quick Jump`] 切换文件对话框到已打开的文件夹时，支持使用 Directory Opus。 [#4670](https://github.com/Wox-launcher/Wox/pull/4670) [@momadacoding](https://github.com/momadacoding)
-  - [`Plugin`] 可使用 WPM 更新命令更新已安装的插件。
+  - [`Plugin`] 可使用 `wpm update` 更新命令更新已安装的插件。
 
 - Fix
   - [`Clipboard`] 修复剪贴板历史较大时搜索响应缓慢，包括含有大量图片或长文本的历史。

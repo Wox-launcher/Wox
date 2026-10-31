@@ -2,26 +2,24 @@
 
 ## v2.4.9 - 2026-10-31
 
-Bring settings and data from Raycast into Wox, and organize AI conversations into projects. Omarchy users can also match the launcher to their desktop theme and search its menu commands.
+Import Raycast settings and plugins into Wox, and organize AI Chat conversations into projects. Wox also offers improved Omarchy support, including an Omarchy Auto theme that follows your desktop theme.
 
 
 ![Wox v2.4.9: Raycast import and Omarchy support](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.4.9.png)
 
 - Add
   - [`Raycast`] Import a Raycast export during setup to bring over supported settings, shortcuts, notes, clipboard history, and other data. You can also import compatible locally installed extensions and use their commands in Wox.
-  - [`AI Chat`] Organize conversations into projects and associate them with folders, so chats and available tools can work with the files and instructions for each project.
+  - [`Omarchy`] Automatically follow the current desktop theme and search Omarchy menu commands in Wox. For details, see [the Omarchy guide](https://www.woxlauncher.com/blog/wox-launcher-loves-omarchy.html).
 
 - Improve
   - [`Notes`] Organize and pin notes in the sidebar, search your notes, and find text within an open note.
-  - [`AI Chat`] Search conversation history and test provider connections in Settings.
-  - [`Omarchy`] Follow the active desktop theme automatically and search Omarchy menu commands from Wox. New installations use Alt+Space to open the launcher.
-    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/www/docs/public/images/blog/omarchy-theme-auto.png)
+  - [`AI Chat`] Search conversation history, test provider connections in Settings, and organize conversations into projects.
   - [`Linux`] On Hyprland, bring a running app's window forward, including on another workspace, and select windows for screenshots. App results can show CPU and memory usage. On Omarchy, use selected text in searches.
-  - [`Web Search`] Open saved websites and searches directly inside Wox, with the option to keep pages running in the background. Existing WebView sites move to Web Search. Query hotkeys can open a preview without the results list. [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
+  - [`Web Search`] Open saved websites and searches directly inside Wox, with the option to keep pages running in the background. **Existing WebView sites move to Web Search.** Query hotkeys can open a preview without the results list. [#4659](https://github.com/Wox-launcher/Wox/issues/4659)
   - [`Hotkey`] Choose Emacs or Vim-style keys to navigate results and the Action Panel, and customize the filter shortcut. [#4682](https://github.com/Wox-launcher/Wox/issues/4682)
   - [`Screenshot`] Compress MP4 recordings and show progress while they are saved.
   - [`Quick Jump`] Use Directory Opus as a source when switching a file dialog to an open folder. [#4670](https://github.com/Wox-launcher/Wox/pull/4670) [@momadacoding](https://github.com/momadacoding)
-  - [`Plugin`] Update installed plugins with the WPM update command.
+  - [`Plugin`] Update installed plugins with `wpm update`.
 
 - Fix
   - [`Clipboard`] Keep searches responsive with large histories, including histories with many images or long text.
