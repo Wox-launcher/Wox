@@ -42,6 +42,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		MainHotkeyRegistrationFailed:       GetUIManager().hasMainHotkeyToolbarWarning(),
 		MainHotkeyRegistrationError:        GetUIManager().mainHotkeyRegistrationErrorKey(),
 		SelectionHotkey:                    woxSetting.SelectionHotkey.Get(),
+		RefinementHotkey:                   woxSetting.RefinementHotkey.Get(),
 		ActionPanelHotkey:                  woxSetting.ActionPanelHotkey.Get(),
 		NavigationBindings:                 woxSetting.NavigationBindings.Get(),
 		IgnoreHotkeysOnFullscreen:          woxSetting.IgnoreHotkeysOnFullscreen.Get(),
@@ -175,6 +176,11 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 			}
 		}
 		woxSetting.SelectionHotkey.Set(value)
+		return privacy.RefreshPreservedSettings(woxSetting)
+	case "RefinementHotkey":
+		if err := woxSetting.RefinementHotkey.Set(value); err != nil {
+			return err
+		}
 		return privacy.RefreshPreservedSettings(woxSetting)
 	case "ActionPanelHotkey":
 		woxSetting.ActionPanelHotkey.Set(value)

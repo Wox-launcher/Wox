@@ -29,6 +29,16 @@ func (a *App) actionPanelHotkey() string {
 	return setting.DefaultActionPanelHotkey()
 }
 
+// refinementHotkey returns the configured filter shortcut or its original platform default.
+func (a *App) refinementHotkey() string {
+	if a != nil && a.generalSettings != nil {
+		if hotkey := strings.TrimSpace(a.generalSettings.Data().RefinementHotkey); hotkey != "" {
+			return hotkey
+		}
+	}
+	return primaryHotkey("f")
+}
+
 func normalizeToolbarHotkey(hotkey string) string {
 	return strings.ToLower(strings.ReplaceAll(hotkey, " ", ""))
 }

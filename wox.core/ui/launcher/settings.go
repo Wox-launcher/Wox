@@ -48,6 +48,7 @@ type settingsData struct {
 	MainHotkeyRegistrationFailed       bool
 	MainHotkeyRegistrationError        string
 	SelectionHotkey                    string
+	RefinementHotkey                   string
 	ActionPanelHotkey                  string
 	NavigationBindings                 setting.NavigationBindingMode
 	IgnoreHotkeysOnFullscreen          bool
@@ -634,6 +635,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		MainHotkeyRegistrationFailed:       loaded.MainHotkeyRegistrationFailed,
 		MainHotkeyRegistrationError:        loaded.MainHotkeyRegistrationError,
 		SelectionHotkey:                    loaded.SelectionHotkey,
+		RefinementHotkey:                   loaded.RefinementHotkey,
 		ActionPanelHotkey:                  loaded.ActionPanelHotkey,
 		NavigationBindings:                 loaded.NavigationBindings,
 		IgnoreHotkeysOnFullscreen:          loaded.IgnoreHotkeysOnFullscreen,

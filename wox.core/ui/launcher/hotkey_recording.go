@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corehotkey "wox/hotkey"
+	"wox/setting"
 	woxui "wox/ui/runtime"
 	"wox/util"
 	utilhotkey "wox/util/hotkey"
@@ -52,8 +53,8 @@ type recordedHotkeyPayload struct {
 // startHotkeyRecording asks core for the strongest recorder available on the current platform.
 // onKey, when set, is asked before a captured combo is stored.
 func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool) {
-	// Action panel shortcuts are local key events, so global special triggers cannot fire them.
-	if persistKey == "ActionPanelHotkey" {
+	// In-app shortcuts use local key events, so global special triggers cannot fire them.
+	if persistKey == "ActionPanelHotkey" || persistKey == "RefinementHotkey" {
 		allowedKinds = []string{"normalCombo"}
 	}
 	if len(allowedKinds) == 0 {
@@ -243,6 +244,17 @@ func (c *hotkeyRecordingController) applyRecordedHotkey(payload recordedHotkeyPa
 		util.GetLogger().Info(state.diagnosticCtx, "hotkey UI candidate ignored: reason=unchanged")
 		return nil
 	}
+	if state.persistKey == "ActionPanelHotkey" || state.persistKey == "RefinementHotkey" {
+		if conflict := c.inAppHotkeyConflict(state.persistKey, canonical); conflict != "" {
+			state.display = canonical
+			state.status = conflict
+			state.statusError = true
+			c.invalidate()
+			return nil
+		}
+		c.acceptRecordedHotkey(state, canonical)
+		return nil
+	}
 	if hotkeyKindSkipsAvailability(payload.Kind) && state.persistKey != "MainHotkey" {
 		c.acceptRecordedHotkey(state, canonical)
 		return nil
@@ -396,6 +408,8 @@ func (c *hotkeyRecordingController) saveRecordedHotkeySetting(state *hotkeyRecor
 				c.onboarding.clearStagedMainHotkey()
 			case "SelectionHotkey":
 				c.generalSettings().Update(func(d *settingsData) { d.SelectionHotkey = value })
+			case "RefinementHotkey":
+				c.generalSettings().Update(func(d *settingsData) { d.RefinementHotkey = value })
 			case "ActionPanelHotkey":
 				c.generalSettings().Update(func(d *settingsData) { d.ActionPanelHotkey = value })
 				c.syncWebViewActionHotkey()
@@ -425,6 +439,10 @@ func (c *hotkeyRecordingController) onHotkeyRecordingKey(event woxui.KeyEvent) b
 		util.GetLogger().Info(state.diagnosticCtx, fmt.Sprintf("hotkey UI local event: index=%d down=%t repeat=%t modifiers=%d unknownKey=%t ready=%t raw=%t fallback=%t checking=%t stop=%t clear=%t", state.localEventCount, event.Down, event.Repeat, event.Modifiers, event.Key == woxui.KeyUnknown, state.ready, state.raw, state.fallback, state.checking, hotkeyRecordingStops(event), event.Key == woxui.KeyBackspace && event.Modifiers == 0))
 	}
 	if event.Key == woxui.KeyBackspace && event.Modifiers == 0 {
+		if state.persistKey == "RefinementHotkey" {
+			_ = c.applyRecordedHotkey(recordedHotkeyPayload{Hotkey: primaryHotkey("f"), Kind: "normalCombo"})
+			return true
+		}
 		c.acceptRecordedHotkey(state, "")
 		return true
 	}
@@ -547,4 +565,63 @@ func (c *hotkeyRecordingController) recordFormTableRowHotkey(index int) {
 		}
 	}
 	c.startHotkeyRecording("form-table-row", target, index, "", allowed, c.formTables.onFormTableKey)
+}
+
+// inAppHotkeyConflict checks shortcuts that can consume the same launcher event.
+func (c *hotkeyRecordingController) inAppHotkeyConflict(key, hotkey string) string {
+	event, ok := recordedHotkeyEvent(hotkey)
+	if !ok {
+		return c.language.translate("i18n:ui_hotkey_unavailable")
+	}
+	data := c.generalSettings().Data()
+	conflict := func(label string) string {
+		return strings.ReplaceAll(c.language.translate("i18n:ui_in_app_hotkey_conflict"), "{action}", c.language.translate(label))
+	}
+	if key != "ActionPanelHotkey" && hotkeyMatches(firstNonEmpty(data.ActionPanelHotkey, setting.DefaultActionPanelHotkey()), event) {
+		return conflict("i18n:ui_action_panel_hotkey")
+	}
+	if key != "RefinementHotkey" && hotkeyMatches(firstNonEmpty(data.RefinementHotkey, primaryHotkey("f")), event) {
+		return conflict("i18n:ui_refinement_hotkey")
+	}
+	if navigationDirection(data.NavigationBindings, event) != "" {
+		return conflict("i18n:ui_navigation_bindings")
+	}
+	for _, item := range []struct{ hotkey, label string }{
+		{data.MainHotkey, "i18n:ui_hotkey"},
+		{data.SelectionHotkey, "i18n:ui_selection_hotkey"},
+		{primaryHotkey("p"), "i18n:ui_hotkey_overview_preview_toggle"},
+		{primaryHotkey("u"), "i18n:ui_hotkey_overview_attention"},
+		{primaryHotkey("b"), "i18n:ui_hotkey_overview_preview_fullscreen"},
+		{primaryHotkey("shift+f"), "i18n:ui_hotkey_overview_preview_search"},
+		{primaryHotkey("l"), "i18n:ui_hotkey_overview_file_preview_load"},
+		{primaryHotkey("r"), "i18n:ui_hotkey_overview_webview_refresh"},
+		{primaryHotkey("["), "i18n:ui_hotkey_overview_webview_back"},
+		{primaryHotkey("]"), "i18n:ui_hotkey_overview_webview_forward"},
+		{primaryHotkey("o"), "i18n:ui_hotkey_overview_webview_open_in_browser"},
+		{primaryHotkey("h"), "i18n:ui_hotkey_overview_webview_hide_page"},
+		{primaryHotkey(","), "i18n:ui_hotkey_overview_open_settings"},
+		{primaryHotkey("w"), "i18n:ui_hotkey_overview_close_window"},
+		{aboutMenuHotkey(), "i18n:ui_about"},
+	} {
+		if hotkeyMatches(item.hotkey, event) {
+			return conflict(item.label)
+		}
+	}
+	for _, query := range data.QueryHotkeys {
+		if !query.Disabled && hotkeyMatches(query.Hotkey, event) {
+			return conflict("i18n:ui_query_hotkeys")
+		}
+	}
+	for _, binding := range data.ResultBindings {
+		if hotkeyMatches(binding.Hotkey, event) {
+			return conflict("i18n:ui_result_bindings")
+		}
+	}
+	// These editing shortcuts must remain available while the query box has focus.
+	for _, letter := range []string{"a", "c", "x", "v", "z"} {
+		if hotkeyMatches(primaryHotkey(letter), event) {
+			return conflict("i18n:ui_in_app_hotkey_text_editing")
+		}
+	}
+	return ""
 }

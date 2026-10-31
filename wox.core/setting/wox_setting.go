@@ -16,6 +16,7 @@ type WoxSetting struct {
 	EnableAutostart           *PlatformValue[bool]
 	MainHotkey                *PlatformValue[string]
 	SelectionHotkey           *PlatformValue[string]
+	RefinementHotkey          *PlatformValue[string]
 	ActionPanelHotkey         *PlatformValue[string] // Action Hotkey; new default primary+K, existing users keep J via migration.
 	NavigationBindings        *WoxSettingValue[NavigationBindingMode]
 	IgnoreHotkeysOnFullscreen *PlatformValue[bool]
@@ -475,6 +476,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 	return &WoxSetting{
 		MainHotkey:                NewPlatformValue(store, "MainHotkey", "alt+space", "cmd+space", defaultLinuxMainHotkey()),
 		SelectionHotkey:           NewPlatformValue(store, "SelectionHotkey", "win+alt+space", "command+option+space", "ctrl+shift+j"),
+		RefinementHotkey:          NewPlatformValue(store, "RefinementHotkey", "ctrl+f", "command+f", "ctrl+f"),
 		ActionPanelHotkey:         NewPlatformValue(store, "ActionPanelHotkey", DefaultActionPanelHotkeyWindows, DefaultActionPanelHotkeyMac, DefaultActionPanelHotkeyLinux),
 		NavigationBindings:        NewWoxSettingValue(store, "NavigationBindings", NavigationBindingModeOff),
 		IgnoreHotkeysOnFullscreen: NewPlatformValue(store, "IgnoreHotkeysOnFullscreen", false, false, false),

@@ -352,7 +352,7 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 		}
 	}
 	if snapshot.tab == "hotkey" && snapshot.hotkey.Form != nil {
-		children = append(children, a.buildSettingsSectionHeader(a.language.translate("i18n:ui_general_section_hotkeys"), contentWidth, snapshot.palette))
+		children = append(children, a.buildSettingsSectionHeader(a.language.translate("i18n:ui_global_hotkeys"), contentWidth, snapshot.palette))
 		hotkeyForm := *snapshot.hotkey.Form
 		hotkeyForm.active = snapshot.hotkey.Focused
 		callbacks := formFieldCallbacks{
@@ -360,6 +360,9 @@ func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, 
 			focus: a.hotkeySettings.focusHotkeySettingsField, openTable: a.hotkeySettings.openHotkeySettingsTable, recordKey: a.hotkeySettings.recordHotkeySettingsField,
 		}
 		for index, definition := range hotkeyForm.definitions {
+			if definition.Value.Key == "ActionPanelHotkey" {
+				children = append(children, a.buildSettingsSectionHeader(a.language.translate("i18n:ui_in_app_hotkeys"), contentWidth, snapshot.palette))
+			}
 			// On Wayland the app-exclusion table is absent; keep the switch before
 			// query hotkeys, immediately after the available hotkey recorders.
 			if definition.Type == "table" && fullscreenHotkeyRow != nil {

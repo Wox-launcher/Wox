@@ -54,7 +54,6 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 			formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "SelectionHotkey", Label: "i18n:ui_selection_hotkey", Tooltip: tip}},
 		)
 	}
-	definitions = append(definitions, formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "ActionPanelHotkey", Label: "i18n:ui_action_panel_hotkey", Tooltip: "i18n:ui_action_panel_hotkey_tips"}})
 	if !data.IsLinuxWaylandSession {
 		definitions = append(definitions, formDefinition{Type: "table", Value: formDefinitionValue{
 			Key: "IgnoredHotkeyApps", Title: "i18n:ui_hotkey_ignore_apps", Tooltip: "i18n:ui_hotkey_ignore_apps_tips", MaxHeight: 220, InlineTable: true,
@@ -85,7 +84,12 @@ func newHotkeySettingsForm(data settingsData) formFieldsState {
 			{Key: "Disabled", Label: "i18n:ui_disabled", Tooltip: "i18n:ui_disabled_tooltip", Width: 60, Type: "checkbox"},
 		},
 	}})
+	definitions = append(definitions,
+		formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "ActionPanelHotkey", Label: "i18n:ui_action_panel_hotkey", Tooltip: "i18n:ui_action_panel_hotkey_tips"}},
+		formDefinition{Type: "hotkey", Value: formDefinitionValue{Key: "RefinementHotkey", Label: "i18n:ui_refinement_hotkey", Tooltip: "i18n:ui_refinement_hotkey_tips"}},
+	)
 	values := map[string]string{
+		"RefinementHotkey":  data.RefinementHotkey,
 		"MainHotkey":        data.MainHotkey,
 		"SelectionHotkey":   data.SelectionHotkey,
 		"ActionPanelHotkey": data.ActionPanelHotkey,

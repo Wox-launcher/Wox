@@ -218,7 +218,7 @@ func (a *App) buildHotkeyOverviewPreview(data hotkeyOverviewPreviewData, palette
 		{Title: launcherScope, Entries: []previewview.HotkeyOverviewPreviewEntry{
 			entry(primaryHotkey("p"), a.language.translate("i18n:ui_hotkey_overview_preview_toggle"), launcherScope, builtinSource, "", true),
 			entry(a.actionPanelHotkey(), a.language.translate("i18n:ui_hotkey_overview_more_actions"), launcherScope, settingSource, "", true),
-			entry(primaryHotkey("f"), a.language.translate("i18n:ui_hotkey_overview_filters"), launcherScope, builtinSource, "", true),
+			entry(a.refinementHotkey(), a.language.translate("i18n:ui_hotkey_overview_filters"), launcherScope, settingSource, "", true),
 			entry(primaryHotkey("u"), a.language.translate("i18n:ui_hotkey_overview_attention"), launcherScope, builtinSource, "", true),
 		}},
 		{Title: previewScope, Entries: []previewview.HotkeyOverviewPreviewEntry{

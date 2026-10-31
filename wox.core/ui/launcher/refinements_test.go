@@ -197,3 +197,22 @@ func TestQueryLoadingOnlyAppearsForUnansweredCurrentQuery(t *testing.T) {
 		t.Fatal("non-final empty response stopped loading")
 	}
 }
+
+func TestRefinementHotkeyUsesConfiguredShortcut(t *testing.T) {
+	app := bindTestApp(&App{language: languageCatalog{translations: map[string]string{
+		"ui_query_refinement_filters_tooltip": "Filter ({hotkey})",
+	}}})
+	app.generalSettings.ApplyData(settingsData{RefinementHotkey: "alt+g"})
+	if got := app.refinementHotkey(); got != "alt+g" {
+		t.Fatalf("configured refinement shortcut = %q", got)
+	}
+	if got, want := app.refinementToggleTooltip(), "Filter ("+strings.Join(formatHotkeyLabels("alt+g"), "+")+")"; got != want {
+		t.Fatalf("tooltip = %q, want %q", got, want)
+	}
+	if !hotkeyMatches(app.refinementHotkey(), woxui.KeyEvent{Key: "g", Modifiers: woxui.KeyModifierAlt, Down: true}) {
+		t.Fatal("configured shortcut must match its key event")
+	}
+	if hotkeyMatches(app.refinementHotkey(), woxui.KeyEvent{Key: "f", Modifiers: woxui.KeyModifierControl, Down: true}) {
+		t.Fatal("old shortcut must not remain active after customization")
+	}
+}

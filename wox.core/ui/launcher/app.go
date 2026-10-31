@@ -1943,7 +1943,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
-	if event.Key == woxui.Key("f") && event.Modifiers.HasPrimary() && a.toggleRefinementBar() {
+	if hotkeyMatches(a.refinementHotkey(), event) && a.toggleRefinementBar() {
 		return true
 	}
 	if event.Key == woxui.Key("u") && event.Modifiers.HasPrimary() && a.attention.activateAttentionUnread() {

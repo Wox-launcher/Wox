@@ -211,12 +211,9 @@ func TestHotkeyNavigationSettingFollowsActionHotkey(t *testing.T) {
 	page := app.buildSettingsPage(settingsSnapshot{tab: "hotkey", hotkey: app.hotkeySettings.Snapshot(), palette: settingsPalette()}, items, 800, 600, 1)
 	scroll := page.(woxwidget.Container).Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	rows := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
-	var actionKey woxwidget.Key
+	keys := map[string]woxwidget.Key{}
 	for index, definition := range form.definitions {
-		if definition.Value.Key == "ActionPanelHotkey" {
-			actionKey = formFieldRowKey("settings-hotkey", index)
-			break
-		}
+		keys[definition.Value.Key] = formFieldRowKey("settings-hotkey", index)
 	}
 	positions := map[woxwidget.Key]int{}
 	for index, row := range rows {
@@ -224,13 +221,21 @@ func TestHotkeyNavigationSettingFollowsActionHotkey(t *testing.T) {
 			positions[keyed.Key] = index
 		}
 	}
-	action, actionFound := positions[actionKey]
+	action, actionFound := positions[keys["ActionPanelHotkey"]]
 	navigation, navigationFound := positions["setting-row-NavigationBindings"]
 	if !actionFound || !navigationFound || navigation != action+1 {
 		t.Fatalf("action row = %d (found %v), navigation row = %d (found %v)", action, actionFound, navigation, navigationFound)
 	}
-	if fullscreen, found := positions["setting-row-IgnoreHotkeysOnFullscreen"]; found && fullscreen != navigation+1 {
-		t.Fatalf("fullscreen row = %d, want immediately after navigation row %d", fullscreen, navigation)
+	if positions[keys["RefinementHotkey"]] <= navigation {
+		t.Fatalf("refinement row = %d, want after navigation row %d", positions[keys["RefinementHotkey"]], navigation)
+	}
+	for _, key := range []string{"MainHotkey", "SelectionHotkey", "QueryHotkeys", "ResultBindings"} {
+		if position, found := positions[keys[key]]; !found || position >= action {
+			t.Fatalf("global row %s at %d (found %v), want before in-app rows", key, position, found)
+		}
+	}
+	if fullscreen, found := positions["setting-row-IgnoreHotkeysOnFullscreen"]; found && fullscreen >= action {
+		t.Fatalf("fullscreen row = %d, want in global hotkeys before action row %d", fullscreen, action)
 	}
 }
 
