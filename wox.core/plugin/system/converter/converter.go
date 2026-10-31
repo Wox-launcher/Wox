@@ -266,8 +266,15 @@ func (c *Converter) buildCryptoConsentResult() plugin.QueryResult {
 	}
 }
 
-// buildResultTails uses the timestamp captured with the prices that produced this result.
+// buildResultTails shows auxiliary time information or the age of the price snapshot.
 func (c *Converter) buildResultTails(ctx context.Context, result engine.Presentation) []plugin.QueryResultTail {
+	if result.Weekday != "" {
+		tails := []plugin.QueryResultTail{plugin.NewQueryResultTailText(result.Weekday)}
+		if result.UTCOffset != "" {
+			tails = append(tails, plugin.NewQueryResultTailText(result.UTCOffset))
+		}
+		return tails
+	}
 	if result.TimeZone != "" {
 		return []plugin.QueryResultTail{plugin.NewQueryResultTailText(result.TimeZone)}
 	}

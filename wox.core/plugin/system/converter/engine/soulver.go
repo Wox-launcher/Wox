@@ -142,7 +142,7 @@ func reservedWord(s string) bool {
 		"percentage", "sci",
 		"until", "through", "weekday", "payment", "frames", "fps", "upload",
 		"download", "copy", "binary", "hexadecimal", "octal", "current",
-		"timestamp", "iso8601", "iso", "date", "transfer", "send", "inflation",
+		"timestamp", "iso8601", "iso", "date", "datetime", "dt", "transfer", "send", "inflation",
 		"assuming", "dms", "easter", "christmas", "halloween", "valentine",
 		"thanksgiving", "ramadan", "hanukkah", "orthodox", "chinese",
 		"next", "halfway":
@@ -154,7 +154,7 @@ func reservedWord(s string) bool {
 func isFormatWord(s string) bool {
 	return s == "timespan" || s == "laptime" || s == "number" || s == "num" || s == "decimal" ||
 		s == "fraction" || s == "percent" || s == "percentage" || s == "multiplier" || s == "multiple" ||
-		s == "binary" || s == "hexadecimal" || s == "octal" || s == "date" ||
+		s == "binary" || s == "hexadecimal" || s == "octal" || s == "date" || s == "datetime" || s == "dt" ||
 		s == "timestamp" || s == "iso8601" || s == "iso" || s == "dms" || s == "timecode" || s == "sci" ||
 		s == "pitch" || s == "midi" || isBase(s)
 }
@@ -175,6 +175,8 @@ func canonicalFormat(s string) string {
 		return "percent"
 	case "iso":
 		return "iso8601"
+	case "dt":
+		return "datetime"
 	}
 	return s
 }

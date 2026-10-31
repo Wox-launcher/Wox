@@ -122,6 +122,23 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 		v = Value{Kind: Number, Number: big.NewRat(v.Time.Unix(), 1)}
 		format = ""
 	}
+	if format == "datetime" {
+		if v.Kind != Number {
+			return Evaluation{}, invalid("datetime requires a Unix timestamp")
+		}
+		sec, _ := v.Number.Float64()
+		if sec > 1e12 {
+			sec /= 1000
+		}
+		// Check before converting to int64, then check the local year after applying its offset.
+		if sec < -62135683200 || sec > 253402387199 {
+			return Evaluation{}, invalid("date exceeds supported range")
+		}
+		v = Value{Kind: Instant, Time: time.Unix(int64(sec), 0).In(env.Local)}
+		if v.Time.Year() < 1 || v.Time.Year() > 9999 {
+			return Evaluation{}, invalid("date exceeds supported range")
+		}
+	}
 	if format == "iso8601" && v.Kind == Number {
 		sec, _ := v.Number.Float64()
 		if sec > 1e12 {
@@ -152,7 +169,6 @@ func (c *Catalog) Evaluate(ctx context.Context, q *Query, env Env) (result Evalu
 			sec = sec / 1000
 		}
 		v = Value{Kind: Date, Time: time.Unix(int64(sec), 0).In(env.Local)}
-		format = ""
 	}
 	if format == "" && q.root != nil && q.root.op == "/" && len(q.target) == 0 && sameUnit(c.dimensions(v.Unit), Unit{"time": 1}) {
 		if right, err := c.eval(q.root.args[1], env); err == nil && right.Kind == Number {

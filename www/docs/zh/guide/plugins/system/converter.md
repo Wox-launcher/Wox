@@ -118,6 +118,9 @@ time diff Paris
 diff Paris
 time in 4 hours in San Francisco
 2024-03-15T14:30:00Z
+1793425414 to datetime
+1793425414000 as datetime
+1793425414 to dt
 August 5 + 5
 3:45pm + 5
 monday in 3 weeks
@@ -144,6 +147,8 @@ time saved 5 min at 1.5x
 
 `GMT+8`、`UTC-7` 是固定偏移。`Tokyo time` 表示该地当前时间。
 `time difference between Seattle and Moscow` 表示两个时区此刻的时差。
+`to datetime` 和 `as datetime`（也可简写为 `to dt` 和 `as dt`）将 Unix 时间戳显示为系统本地时区的完整日期和时间，精确到秒。与 `to date` 一样，大于 `1e12` 的数值按毫秒解释，其他数值按秒解释。两种结果都会在星期旁显示该时间戳对应的 UTC 偏移。
+日期和时间结果的星期提示单独显示，复制结果时不包含星期；明确指定包含星期的格式除外。
 省略日期时，使用源时区的今天。IST 固定表示印度（`Asia/Kolkata`）；CET 使用 `Europe/Paris`，包含夏令时偏移。夏令时切换期间不存在或重复的当地时刻不会返回单一转换结果。副标题显示源和目标的日期、时区及 UTC 偏移。
 
 操作菜单支持复制格式化结果、未格式化结果、问题和答案。未格式化时间结果保留时区偏移。

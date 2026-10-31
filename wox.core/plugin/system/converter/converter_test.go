@@ -127,6 +127,55 @@ func (converterTestAPI) GetTranslation(ctx context.Context, key string) string {
 }
 func (converterTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {}
 
+// TestUnixDateTimeQuery verifies that the formatted local time reaches the result row.
+func TestUnixDateTimeQuery(t *testing.T) {
+	converter := &Converter{api: converterTestAPI{}, catalog: newCatalog()}
+	for _, input := range []string{"1793425414 to datetime", "1793425414 to dt", "1793425414000 as dt"} {
+		response := converter.Query(context.Background(), plugin.Query{Search: input})
+		if len(response.Results) != 1 {
+			t.Fatalf("%s returned %d results", input, len(response.Results))
+		}
+		result := response.Results[0]
+		if want := time.Unix(1793425414, 0).In(time.Local).Format(time.DateTime); result.Title != want {
+			t.Fatalf("%s title = %q, want %q", input, result.Title, want)
+		}
+		localTime := time.Unix(1793425414, 0).In(time.Local)
+		if result.SubTitle != "" || len(result.Tails) != 2 || result.Tails[0].Text != localTime.Weekday().String()[:3] || result.Tails[1].Text != "UTC"+localTime.Format("-07:00") {
+			t.Fatalf("%s: unexpected time hints: %+v", input, result)
+		}
+		if len(result.Actions) != 3 {
+			t.Fatalf("%s: expected three copy actions, got %d", input, len(result.Actions))
+		}
+	}
+}
+
+// TestUnixDateQueryShowsLocalTimezone verifies the timezone hint reaches the result row.
+func TestUnixDateQueryShowsLocalTimezone(t *testing.T) {
+	converter := &Converter{api: converterTestAPI{}, catalog: newCatalog()}
+	response := converter.Query(context.Background(), plugin.Query{Search: "1793471400 as date"})
+	if len(response.Results) != 1 {
+		t.Fatalf("date query returned %d results", len(response.Results))
+	}
+	result := response.Results[0]
+	localTime := time.Unix(1793471400, 0).In(time.Local)
+	if result.Title != localTime.Format(time.DateOnly) || result.SubTitle != "" || len(result.Tails) != 2 || result.Tails[0].Text != localTime.Weekday().String()[:3] || result.Tails[1].Text != "UTC"+localTime.Format("-07:00") {
+		t.Fatalf("unexpected date result: %+v", result)
+	}
+}
+
+// TestDateQuerySeparatesWeekday checks the result and its auxiliary weekday tail.
+func TestDateQuerySeparatesWeekday(t *testing.T) {
+	converter := &Converter{api: converterTestAPI{}, catalog: newCatalog()}
+	response := converter.Query(context.Background(), plugin.Query{Search: "2026-09-08 + 3 days"})
+	if len(response.Results) != 1 {
+		t.Fatalf("date query returned %d results", len(response.Results))
+	}
+	result := response.Results[0]
+	if result.Title != "2026-09-11" || len(result.Tails) != 1 || result.Tails[0].Text != "Fri" {
+		t.Fatalf("unexpected date result: %+v", result)
+	}
+}
+
 func TestTimeDisplayResultOptsIntoAutomaticQueryHistory(t *testing.T) {
 	ctx := context.Background()
 	api := converterTestAPI{}

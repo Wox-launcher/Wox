@@ -249,6 +249,141 @@ func TestCompatibilityCorpus(t *testing.T) {
 	}
 }
 
+// TestUnixDateTime covers the local result, copy values, and the offset at each instant.
+func TestUnixDateTime(t *testing.T) {
+	c, env := fixture()
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		input, formatted, raw, offset string
+		location                      *time.Location
+	}{
+		{"1793425414 to datetime", "2026-10-31 13:43:34", "2026-10-31T13:43:34+08:00", "UTC+08:00", shanghai},
+		{"1793425414000 as datetime", "2026-10-31 13:43:34", "2026-10-31T13:43:34+08:00", "UTC+08:00", shanghai},
+		{"1793425414 to dt", "2026-10-31 13:43:34", "2026-10-31T13:43:34+08:00", "UTC+08:00", shanghai},
+		{"1793425414000 as dt", "2026-10-31 13:43:34", "2026-10-31T13:43:34+08:00", "UTC+08:00", shanghai},
+		{"1730611800 to datetime", "2024-11-03 01:30:00", "2024-11-03T01:30:00-04:00", "UTC-04:00", newYork},
+		{"1730615400 to datetime", "2024-11-03 01:30:00", "2024-11-03T01:30:00-05:00", "UTC-05:00", newYork},
+		{"-1 to datetime", "1970-01-01 07:59:59", "1970-01-01T07:59:59+08:00", "UTC+08:00", shanghai},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			env.Local = tc.location
+			q, err := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
+			if err != nil || !q.Domain {
+				t.Fatalf("parse: %v, query: %+v", err, q)
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := c.Format(r, FormatOptions{})
+			if p.Formatted != tc.formatted || p.Raw != tc.raw || p.SubTitle != "" || p.TimeZone != "" || p.UTCOffset != tc.offset {
+				t.Fatalf("unexpected presentation: %+v", p)
+			}
+		})
+	}
+	for _, input := range []string{"1 km to datetime", "999999999999999999999999 to datetime", "1 km to dt", "999999999999999999999999 as dt"} {
+		q, err := c.Parse(input, ParseOptions{DecimalSeparator: "."})
+		if err == nil {
+			_, err = c.Evaluate(context.Background(), q, env)
+		}
+		if err == nil {
+			t.Errorf("accepted invalid datetime input %q", input)
+		}
+	}
+}
+
+// TestUnixDatePresentation shows the timestamp's local offset without changing date-only results.
+func TestUnixDatePresentation(t *testing.T) {
+	c, env := fixture()
+	for _, tc := range []struct {
+		input, location, formatted, raw, offset, weekday string
+	}{
+		{"1793471400 as date", "Asia/Shanghai", "2026-11-01", "2026-11-01", "UTC+08:00", "Sun"},
+		{"1793471400000 to date", "Asia/Shanghai", "2026-11-01", "2026-11-01", "UTC+08:00", "Sun"},
+		{"1730611800 to date", "America/New_York", "2024-11-03", "2024-11-03", "UTC-04:00", "Sun"},
+		{"1730615400 to date", "America/New_York", "2024-11-03", "2024-11-03", "UTC-05:00", "Sun"},
+		{"2026-11-01", "Asia/Shanghai", "2026-11-01", "2026-11-01", "", "Sun"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			var err error
+			env.Local, err = time.LoadLocation(tc.location)
+			if err != nil {
+				t.Fatal(err)
+			}
+			q, err := c.Parse(tc.input, ParseOptions{DecimalSeparator: "."})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := c.Format(r, FormatOptions{})
+			if p.Formatted != tc.formatted || p.Raw != tc.raw || p.SubTitle != "" || p.TimeZone != "" || p.UTCOffset != tc.offset || p.Weekday != tc.weekday {
+				t.Fatalf("unexpected presentation: %+v", p)
+			}
+		})
+	}
+	q, err := c.Parse("1793471400 as date", ParseOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Local, err = time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := c.Evaluate(context.Background(), q, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := c.Format(r, FormatOptions{Translate: func(key string) string {
+		if key == "ui_weekday_sun" {
+			return "周日"
+		}
+		return key
+	}})
+	if p.Weekday != "周日" || p.Formatted != "2026-11-01" {
+		t.Fatalf("unexpected localized presentation: %+v", p)
+	}
+}
+
+// TestWeekdayPresentation keeps weekday hints separate across date and time results.
+func TestWeekdayPresentation(t *testing.T) {
+	c, env := fixture()
+	for _, tc := range []struct{ input, formatted, weekday string }{
+		{"today", "2026-09-08", "Tue"},
+		{"today + 3 weeks", "2026-09-29", "Tue"},
+		{"date in Vancouver", "2026-09-08", "Tue"},
+		{"2019-04-01T15:30:00 to date", "2019-04-01", "Mon"},
+		{"time in Tokyo", "21:00", "Tue"},
+		{"3pm GMT+8 to Paris", "09:00 (2026-09-08)", "Tue"},
+		{"1793425414 to datetime", "2026-10-31 05:43:34", "Sat"},
+		{"March 12, 2023 as EEEE, MMM d, yyyy", "Sunday, Mar 12, 2023", ""},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			q, err := c.Parse(tc.input, ParseOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := c.Evaluate(context.Background(), q, env)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := c.Format(r, FormatOptions{})
+			if p.Formatted != tc.formatted || p.Weekday != tc.weekday {
+				t.Fatalf("unexpected presentation: %+v", p)
+			}
+		})
+	}
+}
+
 func TestTimeCorpus(t *testing.T) {
 	c, env := fixture()
 	for _, tc := range []struct{ input, raw string }{

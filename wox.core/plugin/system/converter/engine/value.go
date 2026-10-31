@@ -92,7 +92,7 @@ type Evaluation struct {
 
 type Presentation struct {
 	Formatted, Raw, Expression, SubTitle string
-	TimeZone                             string
+	TimeZone, Weekday, UTCOffset         string
 	Currency                             bool
 	RateUpdatedAt                        int64
 }

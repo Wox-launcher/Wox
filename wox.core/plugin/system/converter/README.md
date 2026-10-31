@@ -63,6 +63,9 @@ polling have been removed. `modules` now contains the existing price services;
 - `now` uses the captured reference instant. Date and clock literals together
   (such as `2026-06-14 16:00`) use the local timezone. Compound durations such as
   `4d17h` form one operand; days here mean 24 elapsed hours.
+- Unix timestamps `to datetime` / `as datetime` (also `to dt` / `as dt`) display local date and time to
+  the second. As with `to date`, values above 1e12 are milliseconds; other values
+  are seconds. The raw copy retains the local UTC offset.
 - Date differences count calendar days. Instant differences measure elapsed time.
   Clock differences are signed within the same abstract day, without an assumed
   midnight rollover. Clock addition displays a day offset when it crosses midnight.

@@ -130,6 +130,9 @@ time diff Paris
 diff Paris
 time in 4 hours in San Francisco
 2024-03-15T14:30:00Z
+1793425414 to datetime
+1793425414000 as datetime
+1793425414 to dt
 August 5 + 5
 3:45pm + 5
 monday in 3 weeks
@@ -156,6 +159,12 @@ time saved 5 min at 1.5x
 
 `GMT+8` and `UTC-7` are fixed offsets. `Tokyo time` means the current time in that place.
 `time difference between Seattle and Moscow` is the offset gap between two zones.
+`to datetime` and `as datetime` (also `to dt` and `as dt`) show a Unix timestamp in the system's local timezone,
+including seconds. Like `to date`, values greater than `1e12` are interpreted as
+milliseconds; other values are interpreted as seconds. Both date and datetime
+results show the UTC offset at the timestamp alongside the weekday.
+Weekdays are shown separately from date and time results, so copying the result
+does not include the weekday unless it was explicitly requested in the format.
 When the date is omitted, the source timezone supplies today's date. IST means
 India (`Asia/Kolkata`); CET uses `Europe/Paris`, including summer time. Missing or
 repeated local times at daylight-saving transitions are rejected. Results show

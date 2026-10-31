@@ -357,6 +357,9 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 		return p
 	case Date:
 		p.Raw = v.Time.Format("2006-01-02")
+		if r.Target == "date" {
+			p.UTCOffset = offsetText(v.Time)
+		}
 		if r.Target == "weekday" {
 			p.Formatted = v.Time.Weekday().String()
 			return p
@@ -365,7 +368,8 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 			p.Formatted = v.Time.Format(goDateLayout(r.FormatUnits[0]))
 			return p
 		}
-		p.Formatted = fmt.Sprintf(translate("plugin_converter_weekday_date_format", "%s, %s"), weekday(v.Time), p.Raw)
+		p.Weekday = weekday(v.Time)
+		p.Formatted = p.Raw
 		return p
 	case Clock:
 		p.Raw = v.Time.Format("15:04")
@@ -388,12 +392,19 @@ func (c *Catalog) Format(r Evaluation, o FormatOptions) Presentation {
 			return p
 		}
 		p.Raw = v.Time.Format(time.RFC3339Nano)
-		clock := fmt.Sprintf(translate("plugin_converter_time_format", "%02d:%02d (%s)"), v.Time.Hour(), v.Time.Minute(), weekday(v.Time))
+		if r.Target == "datetime" {
+			p.Formatted = v.Time.Format(time.DateTime)
+			p.UTCOffset = offsetText(v.Time)
+			p.Weekday = weekday(v.Time)
+			return p
+		}
+		clock := v.Time.Format("15:04")
 		p.Formatted = clock
 		if r.Target != "current" {
 			p.Formatted = fmt.Sprintf(translate("plugin_converter_time_with_date_format", "%s (%s)"), clock, v.Time.Format("2006-01-02"))
 		}
 		p.TimeZone = v.Time.Location().String()
+		p.Weekday = weekday(v.Time)
 		p.SubTitle = v.Time.Format("2006-01-02 15:04") + " " + p.TimeZone + " " + offsetText(v.Time)
 		if r.Source != nil {
 			s := *r.Source

@@ -225,7 +225,11 @@ func TestCalculatorTime(t *testing.T) {
 	for targetDate.Weekday() != time.Monday {
 		targetDate = targetDate.AddDate(0, 0, 1)
 	}
-	expectedMonday := fmt.Sprintf("Mon, %s", targetDate.Format("2006-01-02"))
+	expectedMonday := targetDate.Format("2006-01-02")
+	targetDateInThreeDays := now.AddDate(0, 0, 3)
+	for targetDateInThreeDays.Weekday() != time.Monday {
+		targetDateInThreeDays = targetDateInThreeDays.AddDate(0, 0, 1)
+	}
 
 	// Calculate expected days until Christmas 2030
 	christmas := time.Date(2030, time.December, 25, 0, 0, 0, 0, time.Local)
@@ -249,7 +253,7 @@ func TestCalculatorTime(t *testing.T) {
 			ExpectedTitle:  expectedMonday,
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				return strings.Contains(title, "Mon") && strings.Contains(title, "-")
+				return title == expectedMonday
 			},
 		},
 		{
@@ -330,11 +334,10 @@ func TestCalculatorTime(t *testing.T) {
 		{
 			Name:           "Weekday in future",
 			Query:          "Monday in 3 days",
-			ExpectedTitle:  "",
+			ExpectedTitle:  targetDateInThreeDays.Format("2006-01-02"),
 			ExpectedAction: "Copy",
 			TitleCheck: func(title string) bool {
-				// should show a date
-				return strings.Contains(title, ", 202")
+				return title == targetDateInThreeDays.Format("2006-01-02")
 			},
 		},
 		{
