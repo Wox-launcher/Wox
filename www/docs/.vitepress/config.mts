@@ -108,6 +108,7 @@ export default defineConfig({
   // square favicon that is a multiple of 48px. The docs site previously shipped
   // none, so results fell back to the generic globe.
   head: [
+    ["script", { type: "module", src: "https://static.cloudflareinsights.com/beacon.min.js", "data-cf-beacon": JSON.stringify({ token: "94f7104e9bc74b4199e93557e278c93b" }) }],
     ["link", { rel: "icon", type: "image/png", sizes: "48x48", href: "/favicon-48x48.png" }],
     ["link", { rel: "icon", type: "image/png", sizes: "192x192", href: "/favicon-192x192.png" }],
     ["link", { rel: "icon", href: "/favicon.ico", sizes: "32x32" }],
