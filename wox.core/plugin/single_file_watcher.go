@@ -74,7 +74,7 @@ func (l *pluginLifecycle) handleSingleFilePluginEvent(ctx context.Context, event
 	if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 		return
 	}
-	if l.isSingleFileWatchIgnored(event.Name) {
+	if l.isSingleFileWatchIgnored(event.Name) || l.isArtifactWatchIgnored(event.Name) {
 		return
 	}
 
@@ -121,7 +121,7 @@ func (l *pluginLifecycle) debounceSingleFilePluginReload(ctx context.Context, fi
 		absPath = filePath
 	}
 	debounceKeyedTimer(l.singleFileReloadTimers, absPath, singleFileWatchDebounce, func() {
-		if l.isSingleFileWatchIgnored(absPath) {
+		if l.isSingleFileWatchIgnored(absPath) || l.isArtifactWatchIgnored(absPath) {
 			return
 		}
 		l.reloadSingleFilePlugin(util.NewTraceContext(), absPath, reason)

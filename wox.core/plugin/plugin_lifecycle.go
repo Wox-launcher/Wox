@@ -26,6 +26,7 @@ type pluginLifecycle struct {
 	systemPluginsReady     chan struct{}
 	scriptPluginWatch      *util.DirectoryWatch
 	scriptReloadTimers     *util.HashMap[string, *time.Timer]
+	artifactWatchIgnored   *util.HashMap[string, int64]
 	singleFilePluginWatch  *util.DirectoryWatch
 	singleFileReloadTimers *util.HashMap[string, *time.Timer]
 	singleFileWatchIgnored *util.HashMap[string, int64]
@@ -46,6 +47,7 @@ func newPluginLifecycle() pluginLifecycle {
 	return pluginLifecycle{
 		systemPluginsReady:     make(chan struct{}),
 		scriptReloadTimers:     util.NewHashMap[string, *time.Timer](),
+		artifactWatchIgnored:   util.NewHashMap[string, int64](),
 		singleFileReloadTimers: util.NewHashMap[string, *time.Timer](),
 		singleFileWatchIgnored: util.NewHashMap[string, int64](),
 		hostWatchdogStates:     map[string]*hostWatchdogState{},

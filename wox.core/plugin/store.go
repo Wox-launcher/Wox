@@ -482,9 +482,6 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 	if exist {
 		logger.Info(ctx, fmt.Sprintf("found this plugin has installed %s(%s)", installedPlugin.Metadata.GetName(ctx), installedPlugin.Metadata.Version))
 		existingKind := InstalledPluginArtifactKind(installedPlugin)
-		if existingKind != kind {
-			return fmt.Errorf("plugin %s cannot change delivery form from %s to %s", manifest.Id, existingKind, kind)
-		}
 		installedVersion, installedErr := semver.NewVersion(installedPlugin.Metadata.Version)
 		currentVersion, currentErr := semver.NewVersion(manifest.Version)
 		if installedErr == nil && currentErr == nil {
@@ -492,6 +489,16 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 				logger.Info(ctx, fmt.Sprintf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.GetName(ctx), manifest.Version, manifest.GetName(ctx), installedPlugin.Metadata.Version))
 				return fmt.Errorf("skip %s(%s) from %s store, because it's already installed(%s)", manifest.GetName(ctx), manifest.Version, manifest.GetName(ctx), installedPlugin.Metadata.Version)
 			}
+		}
+		if existingKind != kind {
+			if err := s.migratePluginArtifact(ctx, installedPlugin, manifest, kind, progressCallback); err != nil {
+				return err
+			}
+			reloadSettingPlugins(ctx)
+			if syncInstall {
+				s.logInstalledPluginUpsert(ctx, manifest)
+			}
+			return nil
 		}
 
 		// Package plugins replace the directory. Script and single-file plugins
@@ -528,6 +535,10 @@ func (s *Store) installWithProgress(ctx context.Context, manifest StorePluginMan
 }
 
 func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
+	return s.installNormalPlugin(ctx, manifest, progressCallback, false)
+}
+
+func (s *Store) installNormalPlugin(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback, validateManifest bool) error {
 	// download plugin
 	logger.Info(ctx, fmt.Sprintf("start to download plugin: %s", manifest.DownloadUrl))
 	if progressCallback != nil {
@@ -589,6 +600,15 @@ func (s *Store) installNormalPluginWithProgress(ctx context.Context, manifest St
 		progressCallback(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_install_progress_loading"))
 	}
 
+	if validateManifest {
+		metadata, err := GetPluginManager().ParseMetadata(ctx, pluginDirectory)
+		if err != nil {
+			return fmt.Errorf("failed to parse plugin metadata: %w", err)
+		}
+		if err := ValidateSingleFileHeaderMatchesManifest(metadata, manifest); err != nil {
+			return fmt.Errorf("plugin package does not match store manifest: %w", err)
+		}
+	}
 	loadErr := GetPluginManager().LoadPlugin(ctx, pluginDirectory)
 	if loadErr != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to load plugin %s(%s): %s", manifest.GetName(ctx), manifest.Version, loadErr.Error()))
@@ -629,6 +649,10 @@ func (s *Store) installScriptPlugin(ctx context.Context, manifest StorePluginMan
 }
 
 func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback) error {
+	return s.installScriptPluginForStore(ctx, manifest, progressCallback, false)
+}
+
+func (s *Store) installScriptPluginForStore(ctx context.Context, manifest StorePluginManifest, progressCallback InstallProgressCallback, validateManifest bool) error {
 	logger.Info(ctx, fmt.Sprintf("detected script plugin, use script install flow: %s", manifest.GetName(ctx)))
 
 	if progressCallback != nil {
@@ -787,7 +811,11 @@ func (s *Store) installScriptPluginWithProgress(ctx context.Context, manifest St
 		}
 		return fmt.Errorf("failed to parse script plugin metadata: %s", metaErr.Error())
 	}
-	if manifest.Id != "" && metadata.Id != "" && !strings.EqualFold(manifest.Id, metadata.Id) {
+	if validateManifest {
+		if err := ValidateSingleFileHeaderMatchesManifest(metadata, manifest); err != nil {
+			return fmt.Errorf("script plugin does not match store manifest: %w", err)
+		}
+	} else if manifest.Id != "" && metadata.Id != "" && !strings.EqualFold(manifest.Id, metadata.Id) {
 		logger.Warn(ctx, fmt.Sprintf("script metadata id(%s) not equal to store manifest id(%s), proceed with metadata id", metadata.Id, manifest.Id))
 	}
 

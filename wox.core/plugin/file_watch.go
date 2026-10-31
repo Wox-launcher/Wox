@@ -2,10 +2,22 @@ package plugin
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"wox/util"
 )
+
+// isArtifactWatchIgnored keeps managed artifact replacements from racing watcher reloads.
+func (l *pluginLifecycle) isArtifactWatchIgnored(filePath string) bool {
+	filePath, _ = filepath.Abs(filePath)
+	ignored := false
+	l.artifactWatchIgnored.Compute(filePath, func(deadline int64, exists bool) (int64, bool) {
+		ignored = exists && time.Now().UnixMilli() <= deadline
+		return deadline, ignored
+	})
+	return ignored
+}
 
 func debounceKeyedTimer(timers *util.HashMap[string, *time.Timer], key string, delay time.Duration, fn func()) {
 	if timer, exists := timers.Load(key); exists {

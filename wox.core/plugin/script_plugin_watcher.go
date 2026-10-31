@@ -72,6 +72,9 @@ func (l *pluginLifecycle) handleScriptPluginEvent(ctx context.Context, event fsn
 	if strings.HasPrefix(fileName, ".") || strings.HasSuffix(fileName, "~") || strings.HasSuffix(fileName, ".tmp") {
 		return
 	}
+	if l.isArtifactWatchIgnored(event.Name) {
+		return
+	}
 
 	// Skip directories
 	if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
@@ -104,6 +107,10 @@ func (l *pluginLifecycle) debounceScriptPluginReload(ctx context.Context, script
 
 	// Create new timer
 	timer := time.AfterFunc(2*time.Second, func() {
+		if l.isArtifactWatchIgnored(scriptPath) {
+			l.scriptReloadTimers.Delete(fileName)
+			return
+		}
 		l.reloadScriptPlugin(util.NewTraceContext(), scriptPath, reason)
 		l.scriptReloadTimers.Delete(fileName)
 	})
