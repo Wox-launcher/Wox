@@ -16,7 +16,7 @@ import (
 )
 
 // Test001LauncherNotesFlow verifies the native Notes window preserves a rich note through its core lifecycle.
-// Flow: create from Launcher -> enter Markdown -> confirm the window is pinned by default -> create an independent note window -> search the saved note -> delete it.
+// Flow: create from Launcher -> enter Markdown -> confirm the window is pinned by default -> create an independent note window -> search and delete the saved note -> reopen Notes and search again.
 // Evidence: the utility window exposes formatted backing text, window-pin state, persisted search results, and removal from search.
 func Test001LauncherNotesFlow(t *testing.T) {
 	const title = "Wox Notes Smoke"
@@ -72,15 +72,16 @@ func Test001LauncherNotesFlow(t *testing.T) {
 		if err := client.Perform(ctx, "notes.menu.delete", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("delete note: %v", err)
 		}
+		openNewNoteEditor(t, ctx, client)
 		openSearch(t, ctx, client, title)
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			_, searchVisible := automationdriver.Find(snapshot, "notes.search")
+			search, searchVisible := automationdriver.Find(snapshot, "notes.search")
 			for _, node := range snapshot.Tree.Nodes {
 				if strings.HasPrefix(node.AutomationID, "notes.search.") && node.Role == woxui.AccessibilityRoleListItem && strings.Contains(node.Label, title) {
 					return false
 				}
 			}
-			return searchVisible
+			return searchVisible && search.Value == title
 		})
 		if err != nil {
 			t.Fatalf("deleted note remained in search: %v", err)
