@@ -108,3 +108,21 @@ func TestNotesSessionMarkdownRoundTripWithoutWindow(t *testing.T) {
 		t.Fatalf("preview round trip changed the edit: text=%q selection=%+v dirty=%v", session.editor.Text(), session.selection, session.dirty)
 	}
 }
+
+func TestNotesSessionMarkdownRoundTripKeepsBlankLinesBeforeHeadings(t *testing.T) {
+	session := newNotesEditingSession()
+	session.load(common.NoteRecord{ID: "note", Document: common.NoteDocument{Blocks: []common.NoteBlock{
+		{Type: common.NoteBlockTask, Text: "first"},
+		{Type: common.NoteBlockParagraph},
+		{Type: common.NoteBlockHeading1, Text: "SEO"},
+		{Type: common.NoteBlockTask, Text: "second"},
+		{Type: common.NoteBlockParagraph},
+		{Type: common.NoteBlockHeading1, Text: "Done"},
+	}}})
+	before := session.editor.Text()
+	session.toggleMarkdownView()
+	session.toggleMarkdownView()
+	if got := session.editor.Text(); got != before || session.dirty {
+		t.Fatalf("preview round trip = %q, want %q; dirty = %v", got, before, session.dirty)
+	}
+}

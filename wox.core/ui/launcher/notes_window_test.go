@@ -1616,7 +1616,7 @@ func TestNotesFormatBarUsesSVGIconsAndHoverTooltips(t *testing.T) {
 			t.Fatalf("format item %d = icon %#v hover %v, want SVG with tooltip", index, button.Icon, button.OnHoverAt != nil)
 		}
 	}
-	row := bar.(woxwidget.Container).Child.(woxwidget.Flex)
+	row := bar.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	if len(row.Children) != 2 {
 		t.Fatalf("format row = %#v, want stats on the left and tools on the right", row.Children)
 	}

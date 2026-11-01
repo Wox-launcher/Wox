@@ -490,6 +490,17 @@ func MapMarkdown(document common.NoteDocument) MarkdownCaretMap {
 		}
 		if noteBlankParagraph(block) {
 			ordered = [common.NoteMaximumIndent + 1]int{1, 1, 1}
+			if index > 0 && !noteBlankParagraph(document.Blocks[index-1]) {
+				next := index + 1
+				for next < len(document.Blocks) && noteBlankParagraph(document.Blocks[next]) {
+					next++
+				}
+				if next < len(document.Blocks) && (!noteMarkdownProse(document.Blocks[index-1].Type) || !noteMarkdownProse(document.Blocks[next].Type)) {
+					// The parser consumes one separator around non-prose blocks; preserve explicit empty blocks after it.
+					lineStarts = append(lineStarts, markdownJoinOffset(lines))
+					lines = append(lines, "")
+				}
+			}
 			lineStarts = append(lineStarts, markdownJoinOffset(lines))
 			lines = append(lines, "")
 			start := lineStarts[len(lineStarts)-1]
@@ -563,6 +574,10 @@ func markdownCodeCaretBlocks(indexes []int, start int, value string) []MarkdownC
 // keepTightMarkdown leaves adjacent list items without a blank line between them.
 func keepTightMarkdown(previous, next common.NoteBlockType) bool {
 	return noteListBlockType(previous) && noteListBlockType(next)
+}
+
+func noteMarkdownProse(blockType common.NoteBlockType) bool {
+	return blockType == common.NoteBlockParagraph || blockType == common.NoteBlockQuote
 }
 
 func noteBlankParagraph(block common.NoteBlock) bool {

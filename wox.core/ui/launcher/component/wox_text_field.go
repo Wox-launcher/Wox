@@ -70,7 +70,7 @@ type TextFieldRichRun struct {
 	// BlockGap adds space after the visual line that ends at End.
 	// Lines wrapped inside the run keep the normal line box.
 	BlockGap float32
-	// LineBox replaces the field line height for an empty line covered by this run.
+	// LineBox reserves vertical space for this run or an empty separator line.
 	LineBox float32
 }
 
@@ -1749,17 +1749,15 @@ func textFieldRunsHaveLineBox(runs []TextFieldRichRun) bool {
 	return false
 }
 
-// textFieldLineBox is the shortened box of an empty separator line.
+// textFieldLineBox finds the space requested by runs on this visual line.
 func textFieldLineBox(line textFieldLine, runs []TextFieldRichRun) float32 {
-	if line.start != line.end {
-		return 0
-	}
+	box := float32(0)
 	for _, run := range runs {
-		if run.LineBox > 0 && line.start == run.Start && line.end == run.End {
-			return run.LineBox
+		if line.start == line.end && line.start == run.Start && line.end == run.End || line.start < run.End && line.end > run.Start {
+			box = max(box, run.LineBox)
 		}
 	}
-	return 0
+	return box
 }
 
 func textFieldRunsHaveBlockGap(runs []TextFieldRichRun) bool {
@@ -1809,6 +1807,9 @@ func textFieldLayoutLines(lines []textFieldLine, lineHeight float32) textFieldLi
 		height := lineHeight
 		if line.box > 0 {
 			height = line.box
+			if line.start != line.end {
+				height = max(height, lineHeight)
+			}
 		}
 		layout.tops[index] = y
 		layout.boxes[index] = height
@@ -2064,7 +2065,8 @@ func TextFieldCaretLayoutAt(value string, offset int, window *woxui.Window, styl
 	index := textFieldLineIndex(lines, offset)
 	line := lines[index]
 	x := textFieldCaretX(line, offset, window, style)
-	y := textFieldLayoutLines(lines, lineHeight).top(index) + lineHeight*0.5
+	layout := textFieldLayoutLines(lines, lineHeight)
+	y := layout.top(index) + layout.box(index)*0.5
 	lineWidth := x
 	if window != nil {
 		lineWidth = line.indent + textFieldMeasureRange(window, []rune(value), line.start, line.end, style, runs)

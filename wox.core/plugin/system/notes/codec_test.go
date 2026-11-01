@@ -103,6 +103,36 @@ func TestParseMarkdownKeepsBlankLinesAsEmptyParagraphs(t *testing.T) {
 	}
 }
 
+func TestMarkdownRoundTripPreservesExplicitBlankParagraphs(t *testing.T) {
+	for _, pair := range [][2]common.NoteBlockType{
+		{common.NoteBlockParagraph, common.NoteBlockHeading1},
+		{common.NoteBlockTask, common.NoteBlockHeading1},
+		{common.NoteBlockHeading1, common.NoteBlockTask},
+		{common.NoteBlockParagraph, common.NoteBlockParagraph},
+	} {
+		for _, blanks := range []int{1, 2} {
+			blocks := []common.NoteBlock{{Type: pair[0], Text: "first"}}
+			for i := 0; i < blanks; i++ {
+				blocks = append(blocks, common.NoteBlock{Type: common.NoteBlockParagraph})
+			}
+			blocks = append(blocks, common.NoteBlock{Type: pair[1], Text: "second"})
+			document := common.NoteDocument{Blocks: blocks}
+			for cycle := 0; cycle < 2; cycle++ {
+				markdown := ToMarkdown(document)
+				document = ParseMarkdown(markdown)
+				if len(document.Blocks) != len(blocks) {
+					t.Fatalf("%v, %d blanks, cycle %d: %q parsed as %#v", pair, blanks, cycle, markdown, document.Blocks)
+				}
+				for i, want := range blocks {
+					if document.Blocks[i].Type != want.Type || document.Blocks[i].Text != want.Text {
+						t.Fatalf("%v, %d blanks, cycle %d: block %d = %#v", pair, blanks, cycle, i, document.Blocks[i])
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestMarkdownCaretSkipsLinkDestination(t *testing.T) {
 	document := ParseMarkdown("最终改名 **Wox**，寓意 it just works. 见[建议](https://v2ex.com/t/986005/#r_939222)后面")
 	if len(document.Blocks) != 1 {

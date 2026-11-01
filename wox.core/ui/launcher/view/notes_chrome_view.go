@@ -203,7 +203,8 @@ func NotesFormatBar(props NotesFormatBarProps) woxwidget.Widget {
 	}
 	return woxwidget.Container{Width: width, Height: NotesFormatBarHeight,
 		Padding: woxwidget.Insets{Left: notesFormatBarPadLeft, Right: notesFormatBarPadRight},
-		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatBarStatsGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}}
+		Child: woxwidget.Align{Height: NotesFormatBarHeight, Vertical: .5,
+			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: notesFormatBarStatsGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: row}}}
 }
 
 // notesFormatToolsWidth is the shrink-wrapped width of count format buttons plus gaps.

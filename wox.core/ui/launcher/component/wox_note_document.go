@@ -42,7 +42,7 @@ type NoteTextRun struct {
 	ListMarker string
 	// BlockGap is extra space after the visual line that ends this run.
 	BlockGap float32
-	// LineBox, when set, replaces the field line height for the empty line this run covers.
+	// LineBox reserves vertical space for this run or an empty separator line.
 	LineBox float32
 }
 
@@ -235,9 +235,15 @@ func ProjectNoteDocument(document common.NoteDocument, base woxui.TextStyle, the
 			if link != "" && color == (woxui.Color{}) {
 				color = DocumentListMarkerColor
 			}
+			lineBox := float32(0)
+			if block.Type == common.NoteBlockHeading1 || block.Type == common.NoteBlockHeading2 || block.Type == common.NoteBlockHeading3 {
+				// Heading glyphs need more room than the body line height, including when wrapped.
+				lineBox = style.Size * 1.4
+			}
 			runs = append(runs, NoteTextRun{
 				Start: textStart + offset, End: textStart + end, Style: style,
-				Color: color, Underline: inline.underline || inline.link != "",
+				LineBox: lineBox,
+				Color:   color, Underline: inline.underline || inline.link != "",
 				Strike: inline.strike || block.Type == common.NoteBlockTask && block.Checked, Background: background,
 			})
 			offset = end

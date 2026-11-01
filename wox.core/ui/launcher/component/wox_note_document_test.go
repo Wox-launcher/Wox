@@ -163,6 +163,22 @@ func TestProjectNoteDocumentShrinksASingleParagraphSeparator(t *testing.T) {
 	}
 }
 
+func TestProjectNoteDocumentHeadingLineHeight(t *testing.T) {
+	for _, scale := range []float32{1, 2} {
+		document := common.NoteDocument{Blocks: []common.NoteBlock{
+			{Type: common.NoteBlockHeading1, Text: "Heading"},
+			{Type: common.NoteBlockParagraph, Text: "body"},
+		}}
+		style := woxui.TextStyle{Size: 14 * scale}
+		value, runs, _ := ProjectNoteDocument(document, style, ControlTheme{})
+		lines := textFieldRichLines(value, nil, style, 400, true, NoteFieldRuns(runs))
+		layout := textFieldLayoutLines(lines, 20*scale)
+		if layout.box(0) != 28*scale || layout.box(1) != 20*scale {
+			t.Fatalf("scale %v: heading and body boxes = %v, %v", scale, layout.box(0), layout.box(1))
+		}
+	}
+}
+
 func TestProjectNoteDocumentKeepsExtraBlankLinesFullHeight(t *testing.T) {
 	document := common.NoteDocument{Blocks: []common.NoteBlock{
 		{Type: common.NoteBlockParagraph, Text: "first"},
