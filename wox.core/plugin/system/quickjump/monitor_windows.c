@@ -39,7 +39,6 @@ static UINT getDpiForWindowMonitor(HWND hwnd)
 extern void fileExplorerActivatedCallbackCGO(int pid, int isFileDialog, uintptr_t windowId, int x, int y, int w, int h);
 extern void fileExplorerDeactivatedCallbackCGO();
 extern void fileExplorerTransitionInvalidatedCallbackCGO();
-extern void fileManagerSourceActivatedCallbackCGO(int pid, uintptr_t windowId);
 extern void fileExplorerLogCallbackCGO(char *msg);
 
 static HWINEVENTHOOK gForegroundHook = NULL;
@@ -56,11 +55,9 @@ static PVOID volatile gOwnDialogHwnd = NULL;
 enum ForegroundState
 {
     stateNone = 0,
+    // Explorer or a Directory Opus lister: both are Quick Switch sources with type-to-search.
     stateExplorer = 1,
-    stateDialog = 2,
-    // A third-party file manager that may only be a Quick Switch source. It never
-    // enters stateExplorer, so Explorer-only behavior such as type-to-search stays out.
-    stateFileManagerSource = 3
+    stateDialog = 2
 };
 static enum ForegroundState currentState = stateNone;
 
@@ -338,7 +335,7 @@ static int isFileListClassName(const WCHAR *className)
 // Whitelist approach: returns 1 only when the focused control is the file list view.
 // This ensures type-to-search does NOT trigger from the search bar, address bar,
 // rename input, or any other non-file-list control.
-static int hasFocusedFileList()
+static int hasFocusedFileList(int (*isAcceptedClassName)(const WCHAR *))
 {
     HWND foreground = GetForegroundWindow();
     if (!foreground)
@@ -371,7 +368,7 @@ static int hasFocusedFileList()
     // so it correctly won't match the whitelist.
     WCHAR className[128];
     int len = GetClassNameW(focus, className, (int)(sizeof(className) / sizeof(className[0])));
-    if (len > 0 && isFileListClassName(className))
+    if (len > 0 && isAcceptedClassName(className))
     {
         return 1;
     }
@@ -476,6 +473,13 @@ static int isDirectoryOpusLister(HWND hwnd, DWORD pid)
     return _stricmp(processName, "dopus.exe") == 0;
 }
 
+// dopus.filedisplay is the details/list view and dopus.iconfiledisplay the icon views.
+// The folder tree, location bar, find-as-you-type field and inline rename all keep their keys.
+static int isDirectoryOpusFileDisplayClassName(const WCHAR *className)
+{
+    return _wcsicmp(className, L"dopus.filedisplay") == 0 || _wcsicmp(className, L"dopus.iconfiledisplay") == 0;
+}
+
 static void updateHooksForExplorer(int isExplorerActive)
 {
     (void)isExplorerActive;
@@ -563,14 +567,15 @@ int refreshFileExplorerMonitorStateForRawKey(int allowDesktop)
         return 0;
     }
 
-    int isExplorer = isExplorerProcess(pid);
-    HWND dialog = resolveOpenSaveDialogWindow(hwnd);
+    int isOpusLister = isDirectoryOpusLister(hwnd, pid);
+    int isExplorer = !isOpusLister && isExplorerProcess(pid);
+    HWND dialog = isOpusLister ? NULL : resolveOpenSaveDialogWindow(hwnd);
     isDialog = dialog != NULL;
     if (isDialog)
     {
         hwnd = dialog;
     }
-    if (!((isExplorer && (classResult == 1 || isDesktop)) || isDialog))
+    if (!((isExplorer && (classResult == 1 || isDesktop)) || isDialog || isOpusLister))
     {
         return 0;
     }
@@ -676,14 +681,13 @@ static void CALLBACK foregroundChangedProc(
 
     if (isDirectoryOpusLister(hwnd, pid))
     {
-        // Leaving Explorer or a dialog for Opus must still close their overlays and
-        // clear the old source before Opus becomes the only Quick Switch source.
-        deactivateTrackedWindow("directory opus lister");
+        // Opus listers are handled as Explorer windows: Go records them as the Quick Switch
+        // source in ActivateExplorer, and type-to-search can open over them. Users who prefer
+        // Opus find-as-you-type add dopus.exe to Quick Jump's ignored applications.
+        logMessage("foregroundChangedProc: directory opus lister hwnd=0x%p pid=%lu", hwnd, pid);
         gLastExplorerPid = pid;
         gLastExplorerHwnd = hwnd;
-        currentState = stateFileManagerSource;
-        logMessage("foregroundChangedProc: directory opus lister hwnd=0x%p pid=%lu", hwnd, pid);
-        fileManagerSourceActivatedCallbackCGO((int)pid, (uintptr_t)hwnd);
+        triggerActivation(hwnd, pid, 0);
         return;
     }
 
@@ -1014,11 +1018,20 @@ void notifyOwnFileDialogChanged(uintptr_t hwnd, int opened)
 int isForegroundExplorerFileListFocused()
 {
     HWND hwnd = GetForegroundWindow();
+    DWORD pid = 0;
+    if (hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, &pid);
+    }
+    if (isDirectoryOpusLister(hwnd, pid))
+    {
+        return hasFocusedFileList(isDirectoryOpusFileDisplayClassName);
+    }
     if (!isForegroundExplorerOrDialogWindow(hwnd))
     {
         return 0;
     }
-    return hasFocusedFileList();
+    return hasFocusedFileList(isFileListClassName);
 }
 
 void startFileExplorerMonitor()

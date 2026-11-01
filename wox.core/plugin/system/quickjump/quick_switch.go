@@ -191,8 +191,8 @@ func (c *QuickJumpPlugin) newQuickSwitchDeps() quickSwitchDeps {
 	return quickSwitchDeps{
 		getExplorerPath: func(pid int, windowID string) string {
 			// Directory Opus listers are not Shell windows, so Explorer's COM lookup cannot read them.
-			if path, handled := getDirectoryOpusListerPath(pid, windowID); handled {
-				return path
+			if lister, ok := findDirectoryOpusLister(pid, windowID); ok {
+				return lister.sourcePath(util.NewTraceContext())
 			}
 			return window.GetFileExplorerPathByWindow(pid, windowID)
 		},

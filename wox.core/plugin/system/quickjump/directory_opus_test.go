@@ -63,3 +63,25 @@ func TestSelectDirectoryOpusSourcePathRejectsUnknownListerAndBadOutput(t *testin
 		t.Fatalf("malformed output path = %q, want empty", got)
 	}
 }
+
+func TestBuildDirectoryOpusGoArgs(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+		want   string
+	}{
+		{name: "folder", target: `C:\Users\liuhao\Downloads`, want: `/acmd Go PATH="C:\Users\liuhao\Downloads"`},
+		{name: "file with spaces", target: `D:\My Files\report v2.pdf`, want: `/acmd Go PATH="D:\My Files\report v2.pdf"`},
+		// Opus does not treat backslashes as escapes, so a root stays a valid quoted path.
+		{name: "drive root", target: `D:\`, want: `/acmd Go PATH="D:\"`},
+		{name: "unicode", target: `D:\中文 目录\文件.txt`, want: `/acmd Go PATH="D:\中文 目录\文件.txt"`},
+		{name: "surrounding whitespace", target: `  C:\Temp  `, want: `/acmd Go PATH="C:\Temp"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildDirectoryOpusGoArgs(tt.target); got != tt.want {
+				t.Fatalf("args = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
