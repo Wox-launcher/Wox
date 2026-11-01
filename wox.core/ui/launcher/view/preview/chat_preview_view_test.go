@@ -907,7 +907,12 @@ func TestChatInputShowsQuoteCardAboveComposer(t *testing.T) {
 	if quote.AutomationID != "chat-quote-quoted" || quote.Role != woxui.AccessibilityRoleGroup {
 		t.Fatalf("quote card = %#v", quote)
 	}
-	dismiss := quote.Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
+	inset := quote.Child.(woxwidget.Container)
+	card := inset.Child.(woxwidget.Container)
+	if inset.Padding.Left != chatComposerAttachmentInset || inset.Padding.Top != 6 || card.LeftBorderWidth != 2 || card.Height != chatQuoteCardHeight-12 || card.Width != 400-chatComposerAttachmentInset {
+		t.Fatalf("draft quote accent must stay inside the composer: inset %#v, card %#v", inset.Padding, card)
+	}
+	dismiss := card.Child.(woxwidget.Flex).Children[2].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 	if dismiss.ID != "chat-quote-dismiss-quoted" || dismiss.HoverBackground != chatIconHoverBackground(theme) || dismiss.HoverBackground.A == 0 {
 		t.Fatalf("quote dismiss = %#v, want shared icon-button hover", dismiss)
 	}

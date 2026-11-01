@@ -2005,7 +2005,7 @@ func chatQuoteCard(attachment ChatAttachmentProps, width float32, theme woxcompo
 	fontSize := ChatScaledSize(scale, woxcomponent.CompactButtonFontSize)
 	height := chatQuoteCardHeightFor(scale)
 	textHeight := lineHeight * 2
-	textWidth := max(float32(0), width-68)
+	textWidth := max(float32(0), width-68-chatComposerAttachmentInset)
 	value := chatQuotePreviewText(attachment.Text)
 	var layout *woxwidget.TextBlockLayout
 	maxLines := 2
@@ -2039,12 +2039,21 @@ func chatQuoteCard(attachment ChatAttachmentProps, width float32, theme woxcompo
 			Width: 28, Height: 28, Radius: 14, HoverBackground: chatIconHoverBackground(theme), FocusRingColor: theme.Cursor, OnTap: dismiss,
 		}))
 	}
+	card := woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 8, Top: 6, Bottom: 6},
+		LeftBorderColor: woxcomponent.DocumentListMarkerColor, LeftBorderWidth: 2,
+		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren},
+	}
+	var content woxwidget.Widget = card
+	if !sent {
+		// Keep the quote accent clear of the composer's rounded outer border.
+		card.Width = max(float32(0), width-chatComposerAttachmentInset)
+		card.Height = height - 12
+		card.Padding.Top, card.Padding.Bottom = 0, 0
+		content = woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: chatComposerAttachmentInset, Top: 6, Bottom: 6}, Child: card}
+	}
 	return woxwidget.Semantics{
 		AutomationID: "chat-quote-" + attachment.ID, Role: woxui.AccessibilityRoleGroup, Label: attachment.Label + ": " + attachment.Text,
-		Child: woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Left: 8, Top: 6, Right: 0, Bottom: 6},
-			LeftBorderColor: woxcomponent.DocumentListMarkerColor, LeftBorderWidth: 2,
-			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren},
-		},
+		Child: content,
 	}
 }
 
