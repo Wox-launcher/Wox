@@ -206,7 +206,7 @@ func (l *pluginLifecycle) loadHostPluginLocked(ctx context.Context, host Host, m
 	}
 	// Plugin loading is the final shared gate for startup, local installs, and dev
 	// reloads. Install-time checks can be bypassed by existing files on disk, so
-	// keep this guard here to prevent incompatible plugins from entering runtime hosts.
+	// keep this guard here to validate metadata and enforce the release version floor.
 	if err := ensureWoxVersionSupported(metadata.GetName(ctx), metadata.MinWoxVersion); err != nil {
 		return err
 	}

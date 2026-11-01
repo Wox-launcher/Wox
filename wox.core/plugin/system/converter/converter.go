@@ -243,7 +243,7 @@ func (c *Converter) buildCryptoConsentResult() plugin.QueryResult {
 						IsLocal: true,
 					})
 					if !saveResult.Success {
-						c.api.Notify(actionCtx, saveResult.ErrMsg)
+						c.api.ShowToastMsg(actionCtx, plugin.ShowToastMsgOption{Message: saveResult.ErrMsg})
 						return
 					}
 

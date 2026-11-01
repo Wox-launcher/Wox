@@ -133,7 +133,7 @@ func (s *ScriptPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 			return issueResponse
 		}
 
-		s.api.Notify(ctx, err.Error())
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return plugin.QueryResponse{}
 	}
 
@@ -524,7 +524,11 @@ func (s *ScriptPlugin) handleBuiltInAction(ctx context.Context, actionId string,
 	case "notify":
 		message := getStringFromMap(actionData, "message")
 		if message != "" {
-			s.api.Notify(ctx, message)
+			if instance := plugin.GetPluginManager().GetPluginInstanceById(s.metadata.Id); instance != nil {
+				plugin.GetPluginManager().GetUI().Notify(ctx, legacyNotifyMessage(ctx, instance, message))
+			} else {
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: message})
+			}
 		}
 		return true
 

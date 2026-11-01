@@ -8,6 +8,7 @@ import (
 	"wox/common"
 	"wox/network"
 	"wox/util"
+	"wox/util/notifier"
 
 	"github.com/google/uuid"
 	"github.com/samber/lo"
@@ -48,6 +49,7 @@ func (p *pluginPresentation) activePlugin(id string) *Instance {
 // releasePlugin drops UI callbacks when their plugin runtime is no longer usable.
 // Query-session routing stays intact so re-enabling the same plugin preserves it.
 func (p *pluginPresentation) releasePlugin(pluginID string) {
+	notifier.CancelPlugin(pluginID)
 	// Clear the visible message along with its callbacks, including persistent messages.
 	p.clearCurrentPluginToolbarMsg(util.NewTraceContext(), pluginID)
 	prefix := pluginID + "\x00"

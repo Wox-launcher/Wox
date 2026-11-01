@@ -169,3 +169,8 @@ func (m *mockAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTrigger
 func (m *mockAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
 	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
+
+func (api *mockAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

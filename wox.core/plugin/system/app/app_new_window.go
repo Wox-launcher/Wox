@@ -31,7 +31,7 @@ func (a *ApplicationPlugin) buildNewWindowAction(info appInfo, displayName strin
 					return
 				}
 				util.GetLogger().Error(ctx, fmt.Sprintf("error opening new app window %q: %s", info.Path, err))
-				a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+				a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 				return
 			}
 			// Dispatch success does not guarantee that the application created a visible window.

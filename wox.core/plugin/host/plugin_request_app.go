@@ -86,14 +86,60 @@ func (w *WebsocketHost) handleGetThemeColors(ctx context.Context, pluginInstance
 	return result, nil
 }
 
-// handleNotify adapts the Notify wire call to the plugin API.
+// legacyNotifyMessage preserves the original notification routing and presentation for old hosts.
+func legacyNotifyMessage(ctx context.Context, instance *plugin.Instance, message string) common.NotifyMsg {
+	icon := instance.Metadata.Icon
+	if parsed, err := common.ParseWoxImage(icon); err == nil {
+		icon = instance.ConvertIcon(ctx, parsed).String()
+	}
+	return common.NotifyMsg{PluginId: instance.Metadata.Id, Text: instance.API.GetTranslation(ctx, message), Icon: icon, DisplaySeconds: 5}
+}
+
+// handleNotify retains the legacy wire method without exposing it on the Go plugin API.
 func (w *WebsocketHost) handleNotify(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	message, err := requirePluginParam(request.Params, "message")
 	if err != nil {
 		return nil, err
 	}
-	pluginInstance.API.Notify(ctx, message)
+	plugin.GetPluginManager().GetUI().Notify(ctx, legacyNotifyMessage(ctx, pluginInstance, message))
 	return "", nil
+}
+
+// handleShowToastMsg converts a host-owned callback ID into a one-shot proxy.
+func (w *WebsocketHost) handleShowToastMsg(ctx context.Context, instance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	var payload struct {
+		Message string
+		Title   string
+		Action  *struct {
+			Name        string
+			ContextData common.ContextData
+			CallbackId  string
+		}
+	}
+	if err := json.Unmarshal([]byte(request.Params["option"]), &payload); err != nil {
+		return nil, fmt.Errorf("invalid toast option: %w", err)
+	}
+	option := plugin.ShowToastMsgOption{Message: payload.Message, Title: payload.Title}
+	if payload.Action != nil {
+		if payload.Action.CallbackId == "" {
+			return plugin.ShowToastMsgResult{ErrMsg: "action callback is required"}, nil
+		}
+		id := payload.Action.CallbackId
+		invoke := func(ctx context.Context, run bool, data common.ContextData) {
+			_, err := w.invokeMethod(ctx, instance.Metadata, "toastMsgAction", map[string]string{"CallbackId": id, "Invoke": fmt.Sprint(run), "ContextData": data.Marshal()})
+			if err != nil {
+				util.GetLogger().Debug(ctx, "toast callback delivery failed: "+err.Error())
+				if run {
+					_, _ = w.invokeMethod(util.NewTraceContext(), instance.Metadata, "toastMsgAction", map[string]string{"CallbackId": id, "Invoke": "false"})
+				}
+			}
+		}
+		option.Action = &plugin.ToastMsgAction{Name: payload.Action.Name, ContextData: payload.Action.ContextData,
+			Action:  func(ctx context.Context, action plugin.ToastMsgActionContext) { invoke(ctx, true, action.ContextData) },
+			Release: func() { invoke(util.NewTraceContext(), false, nil) },
+		}
+	}
+	return instance.API.ShowToastMsg(ctx, option), nil
 }
 
 // handlePushAttention adapts the PushAttention wire call to the plugin API.

@@ -27,6 +27,7 @@ type Options struct {
 	CenterContent bool
 	FollowScroll  bool
 	IconSize      float64
+	IconTextGap   float32
 
 	Tooltip         string
 	TooltipIcon     image.Image
@@ -36,9 +37,18 @@ type Options struct {
 	CopyButtonTooltip        string
 	CopyButtonSuccessTooltip string
 	OnClick                  func() bool
+	// ToastTitle and ToastAction are used for compact notification windows.
+	ToastTitle       string
+	ToastActionLabel string
+	OnToastAction    func()
 }
 
 // Show displays or updates a text overlay through the shared Go UI runtime.
 func Show(options Options) {
 	showRuntimeTextOverlay(options)
+}
+
+// ShowWithResult reports whether the overlay could be displayed.
+func ShowWithResult(options Options) bool {
+	return showRuntimeTextOverlay(options)
 }

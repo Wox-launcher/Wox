@@ -25,7 +25,7 @@ func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save fun
 		if err := save(); err != nil {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+err.Error())
 			if ctx.Err() == nil {
-				p.api.Notify(ctx, "i18n:plugin_screenshot_edit_save_failed")
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_save_failed"})
 			}
 			return
 		}
@@ -82,7 +82,7 @@ func (p *ScreenshotPlugin) screenshotEditAction(path string) plugin.QueryResultA
 		Name: "i18n:plugin_screenshot_history_edit", Icon: icons.Get(icons.ActionEdit),
 		Action: func(ctx context.Context, _ plugin.ActionContext) {
 			if !screenshotedit.Available(path) {
-				p.api.Notify(ctx, "i18n:plugin_screenshot_edit_failed")
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_failed"})
 				return
 			}
 			p.runScreenshot(ctx, path)

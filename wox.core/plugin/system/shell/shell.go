@@ -699,7 +699,7 @@ func (s *ShellPlugin) resolveWorkingDirectory(ctx context.Context, workingDirect
 		}
 		s.api.Log(ctx, plugin.LogLevelWarning, message)
 		if notify {
-			s.api.Notify(ctx, message)
+			s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: message})
 		}
 		return "", false
 	}
@@ -734,17 +734,17 @@ func (s *ShellPlugin) buildEditCommandAction(data shellContextData) plugin.Query
 				SavedCommandIndex: currentData.SavedCommandIndex,
 			}
 			if nextData.Command == "" {
-				s.api.Notify(ctx, "i18n:plugin_shell_command_body_required")
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_shell_command_body_required"})
 				return
 			}
 			if currentData.IsSavedCommand {
 				nextData.Interpreter = strings.TrimSpace(actionContext.Values[shellFormInterpreterKey])
 				if err := s.updateConfiguredCommand(ctx, currentData.SavedCommandIndex, nextData); err != nil {
 					s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update shell command: %s", err.Error()))
-					s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_update_failed"), err.Error()))
+					s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_update_failed"), err.Error())})
 					return
 				}
-				s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_updated"))
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_updated")})
 				s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 				return
 			}
@@ -779,15 +779,15 @@ func (s *ShellPlugin) buildAddCommandAction(data shellContextData) plugin.QueryR
 				command.Command = currentData.Command
 			}
 			if command.Alias == "" || command.Command == "" {
-				s.api.Notify(ctx, "i18n:plugin_shell_command_required")
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_shell_command_required"})
 				return
 			}
 			if err := s.addConfiguredCommand(ctx, command); err != nil {
 				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to add shell command: %s", err.Error()))
-				s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_add_failed"), err.Error()))
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_add_failed"), err.Error())})
 				return
 			}
-			s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_added"))
+			s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_added")})
 			s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		},
 	}
@@ -807,7 +807,7 @@ func (s *ShellPlugin) buildRunWithInterpreterAction(data shellContextData) plugi
 			currentData := shellContextDataFromActionContext(actionContext.ActionContext, data)
 			interpreter := effectiveInterpreter(actionContext.Values[shellFormInterpreterKey], currentData.Interpreter)
 			if strings.TrimSpace(currentData.Command) == "" {
-				s.api.Notify(ctx, "i18n:plugin_shell_command_body_required")
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_shell_command_body_required"})
 				return
 			}
 			util.Go(ctx, "execute shell command with selected interpreter", func() {
@@ -843,7 +843,7 @@ func (s *ShellPlugin) buildChangeWorkingDirectoryAction(data shellContextData, t
 			resolved, ok := s.resolveWorkingDirectory(ctx, path, true)
 			if !ok || resolved == "" {
 				if path == "" {
-					s.api.Notify(ctx, "i18n:plugin_shell_working_directory_required")
+					s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_shell_working_directory_required"})
 				}
 				return
 			}
@@ -911,10 +911,10 @@ func (s *ShellPlugin) buildDeleteConfiguredCommandAction(data shellContextData) 
 			}
 			if err := s.deleteConfiguredCommand(ctx, currentData.SavedCommandIndex); err != nil {
 				s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to delete shell command: %s", err.Error()))
-				s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_delete_failed"), err.Error()))
+				s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_delete_failed"), err.Error())})
 				return
 			}
-			s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_deleted"))
+			s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_command_deleted")})
 			s.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
 		},
 	}
@@ -1944,12 +1944,12 @@ func (s *ShellPlugin) executeCommandInBackground(ctx context.Context, data shell
 	// Start command in background without waiting
 	if err := cmd.Start(); err != nil {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to start background command: %s", err.Error()))
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_failed"), err.Error()))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_failed"), err.Error())})
 		return
 	}
 
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Background command started with PID: %d", cmd.Process.Pid))
-	s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_background_started"))
+	s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_background_started")})
 
 	historyID := uuid.NewString()
 	startTime := time.Now()
@@ -2293,11 +2293,11 @@ func (s *ShellPlugin) notifyCommandFinished(ctx context.Context, data shellConte
 	title := displayTitleForCommand(data)
 	switch status {
 	case "completed":
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_completed_notify"), title))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_completed_notify"), title)})
 	case "killed":
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_killed_notify"), title))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_killed_notify"), title)})
 	default:
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_failed_notify"), title, exitCode))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_failed_notify"), title, exitCode)})
 	}
 }
 

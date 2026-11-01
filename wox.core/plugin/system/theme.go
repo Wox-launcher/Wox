@@ -190,7 +190,7 @@ func (c *ThemePlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						if err := ui.GetStoreManager().InstallManifest(ctx, manifest); err != nil {
-							c.api.Notify(ctx, err.Error())
+							c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 						}
 					},
 				},

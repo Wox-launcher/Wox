@@ -558,7 +558,7 @@ func (p *CloudSyncPlugin) notify(ctx context.Context, key string) {
 
 func (p *CloudSyncPlugin) notifyText(ctx context.Context, text string) {
 	if p.api != nil {
-		p.api.Notify(ctx, text)
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: text})
 	}
 }
 

@@ -223,12 +223,12 @@ func (p *ScreenshotPlugin) startScreenshotTransfer(oldJobs *sync.WaitGroup) {
 			if err := p.transferScreenshotHistory(ctx); err == nil {
 				p.indexScreenshotScenes(ctx)
 				p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
-				p.api.Notify(ctx, "i18n:plugin_screenshot_directory_migration_complete")
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_directory_migration_complete"})
 				return
 			} else if ctx.Err() == nil {
 				util.GetLogger().Warn(ctx, "failed to move screenshot history; will retry: "+err.Error())
 				if !reported {
-					p.api.Notify(ctx, "i18n:plugin_screenshot_directory_migration_failed")
+					p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_directory_migration_failed"})
 					reported = true
 				}
 			}

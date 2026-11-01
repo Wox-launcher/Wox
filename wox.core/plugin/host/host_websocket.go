@@ -242,7 +242,7 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
 	// Releasing host-owned callbacks is local housekeeping and never invokes plugin
 	// code. It must still run while offline mode blocks ordinary plugin calls.
-	if method != "releaseQueryResults" {
+	if method != "releaseQueryResults" && !(method == "toastMsgAction" && params["Invoke"] == "false") {
 		var release func()
 		ctx, release, err = network.Default.Begin(ctx)
 		if err != nil {

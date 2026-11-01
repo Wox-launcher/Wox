@@ -163,6 +163,12 @@ type requestTestAPI struct {
 	screenshot                             plugin.ScreenshotOption
 	result                                 *plugin.UpdatableResult
 	settingChanged                         func(context.Context, string, string)
+	toast                                  plugin.ShowToastMsgOption
+}
+
+func (a *requestTestAPI) ShowToastMsg(_ context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	a.toast = option
+	return plugin.ShowToastMsgResult{Success: true}
 }
 
 func (a *requestTestAPI) GetSetting(_ context.Context, key string) string {
@@ -170,6 +176,18 @@ func (a *requestTestAPI) GetSetting(_ context.Context, key string) string {
 		panic("test API failure")
 	}
 	return "value:" + key
+}
+
+func (a *requestTestAPI) GetTranslation(_ context.Context, key string) string {
+	return "translated:" + key
+}
+
+func TestLegacyNotifyMessageKeepsPluginPresentation(t *testing.T) {
+	instance := &plugin.Instance{Metadata: plugin.Metadata{Id: "plugin-id"}, API: &requestTestAPI{}}
+	got := legacyNotifyMessage(context.Background(), instance, "message")
+	if got.PluginId != "plugin-id" || got.Text != "translated:message" || got.DisplaySeconds != 5 || got.Icon != "" {
+		t.Fatalf("legacy notification changed: %+v", got)
+	}
 }
 
 // SaveSetting records empty values and originating query identity without touching persisted settings.
@@ -221,6 +239,10 @@ func TestPluginRequestPreservesLegacyWireValues(t *testing.T) {
 	call("ChangeQuery", map[string]string{"queryType": "input", "queryText": "", "queryHint": "{"})
 	if api.query.QueryType != plugin.QueryTypeInput || api.query.QueryText != "" || api.query.QueryHint != nil {
 		t.Fatalf("optional malformed hint changed query: %+v", api.query)
+	}
+	toast := call("ShowToastMsg", map[string]string{"option": `{"Message":"hello","Title":"title","Action":{"Name":"Open","CallbackId":"action-id","ContextData":{"path":"file"}}}`}).(map[string]any)
+	if toast["Success"] != true || api.toast.Message != "hello" || api.toast.Title != "title" || api.toast.Action == nil || api.toast.Action.Name != "Open" || api.toast.Action.ContextData["path"] != "file" || api.toast.Action.Action == nil || api.toast.Action.Release == nil {
+		t.Fatalf("toast option or callback proxy lost: result=%#v option=%+v", toast, api.toast)
 	}
 	call("RefreshQuery", map[string]string{"preserveSelectedIndex": "true", "SelectedResultId": " row "})
 	if !api.refresh.PreserveSelectedIndex || api.refresh.SelectedResultId != "row" {

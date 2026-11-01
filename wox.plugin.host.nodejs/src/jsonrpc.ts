@@ -104,6 +104,13 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return formAction(ctx, request)
     case "toolbarMsgAction":
       return toolbarMsgAction(ctx, request)
+    case "toastMsgAction": {
+      const api = pluginInstances.get(request.PluginId)?.API
+      const callback = api?.toastCallbacks.get(request.Params.CallbackId)
+      api?.toastCallbacks.delete(request.Params.CallbackId)
+      if (request.Params.Invoke === "true" && callback) await callback(ctx, { ContextData: parseContextData(request.Params.ContextData) })
+      return
+    }
     case "unloadPlugin":
       return unloadPlugin(ctx, request)
     case "onPluginSettingChange":
@@ -173,6 +180,7 @@ async function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
 
   await pluginInstance.API?.stopPluginTools()
   pluginInstance.ResultActions.close()
+  pluginInstance.API?.toastCallbacks.clear()
   pluginInstance.API?.pluginToolCallbacks?.clear()
   pluginInstance.API?.pluginToolCallbackIds?.clear()
   evictCommonJSModule(pluginInstance.ModulePath)
@@ -263,6 +271,7 @@ async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
 
   const callbackId = request.Params.CallbackId
   await plugin.API.stopPluginTools()
+  plugin.API.toastCallbacks.clear()
   await plugin.API.unloadCallbacks.get(callbackId)?.(ctx)
 }
 

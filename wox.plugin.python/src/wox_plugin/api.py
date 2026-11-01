@@ -18,6 +18,7 @@ from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, 
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
 from .models.toolbar_msg import ToolbarMsg
+from .models.toast_msg import ShowToastMsgOption, ShowToastMsgResult
 from .models.drag_out import (
     DragOutListenOption,
     DragOutListenResult,
@@ -288,7 +289,7 @@ class PublicAPI(Protocol):
 
     async def notify(self, ctx: Context, message: str) -> None:
         """
-        Show a notification message.
+        Show a notification message. Deprecated: use show_toast_msg.
 
         Displays a system notification to the user. Useful for
         async operations where the result is shown later.
@@ -301,6 +302,10 @@ class PublicAPI(Protocol):
             await api.notify(ctx, "Download complete!")
             await api.notify(ctx, "i18n:plugin.download_complete")
         """
+        ...
+
+    async def show_toast_msg(self, ctx: Context, option: ShowToastMsgOption) -> ShowToastMsgResult:
+        """Show an independent transient notification. Requires Wox 2.5.0."""
         ...
 
     async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:

@@ -858,7 +858,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.Open(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item: path=%s err=%s", item.path, err.Error()))
-						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+						p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 					}
 				},
 			},
@@ -868,7 +868,7 @@ func (p *ScreenshotPlugin) screenshotHistoryResult(item screenshotHistoryItem) p
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					if err := shell.OpenFileInFolder(item.path); err != nil {
 						p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open screenshot history item folder: path=%s err=%s", item.path, err.Error()))
-						p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+						p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 					}
 				},
 			},
@@ -908,7 +908,7 @@ func (p *ScreenshotPlugin) screenshotHistoryGroup(timestamp int64) (string, int6
 func (p *ScreenshotPlugin) copyScreenshotHistoryItem(ctx context.Context, screenshotPath string) {
 	if err := plugin.GetPluginManager().GetUI().WriteClipboardImageFile(ctx, screenshotPath); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy screenshot history item: path=%s err=%s", screenshotPath, err.Error()))
-		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_warning")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_capture_clipboard_warning"})
 	}
 }
 
@@ -971,10 +971,10 @@ func isScreenshotPermissionDeniedFailure(errorCode string, errorMessage string) 
 // notifyCaptureFailure maps screenshot bridge errors to the clearest user-visible notification.
 func (p *ScreenshotPlugin) notifyCaptureFailure(ctx context.Context, errorCode string, errorMessage string) {
 	if isScreenshotPermissionDeniedFailure(errorCode, errorMessage) {
-		p.api.Notify(ctx, "i18n:plugin_screenshot_permission_denied")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_permission_denied"})
 		return
 	}
-	p.api.Notify(ctx, "i18n:plugin_screenshot_capture_failed")
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_capture_failed"})
 }
 
 func (p *ScreenshotPlugin) captureScreenshot(ctx context.Context, actionContext plugin.ActionContext) {
@@ -1004,7 +1004,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 	request.OnClipboardReady = func() {
 		if !clipboardNotified {
 			clipboardNotified = true
-			p.api.Notify(ctx, "i18n:plugin_screenshot_capture_clipboard_success")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_capture_clipboard_success"})
 		}
 	}
 	result, err := ui.CaptureScreenshot(ctx, request)
@@ -1015,7 +1015,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 			detail = err.Error()
 		}
 		util.GetLogger().Warn(ctx, "failed to save screenshot history after clipboard publication: "+detail)
-		p.api.Notify(ctx, "i18n:plugin_screenshot_capture_history_save_failed")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_capture_history_save_failed"})
 		return
 	}
 	if err != nil {
@@ -1023,7 +1023,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 		// notification here instead of silently falling through to keep the action predictable for the user.
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("capture screenshot request failed: %s", err.Error()))
 		if editPath != "" {
-			p.api.Notify(ctx, "i18n:plugin_screenshot_edit_failed")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_failed"})
 			return
 		}
 		p.notifyCaptureFailure(ctx, "", err.Error())
@@ -1035,7 +1035,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 		defer p.saveScreenshotSceneInBackground(result.ScreenshotPath, result.SaveEditableScene, jobs)
 		if result.EditableSceneWarning != "" {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+result.EditableSceneWarning)
-			defer p.api.Notify(ctx, "i18n:plugin_screenshot_edit_save_failed")
+			defer p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_save_failed"})
 		}
 		// Animation exports are saved artifacts, not still screenshots for OCR and history thumbnails.
 		if result.ArtifactKind == common.CaptureArtifactKindVideo || (result.ArtifactPath != "" && result.ScreenshotPath == "") {
@@ -1044,7 +1044,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 				p.notifyCaptureFailure(ctx, "", "")
 				return
 			}
-			p.api.Notify(ctx, result.ArtifactPath)
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: result.ArtifactPath})
 			return
 		}
 		// Screenshot export and clipboard write now complete inside UI plus the platform runner.
@@ -1075,27 +1075,27 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 			if !result.PinOverlayShown {
 				if err := p.pinScreenshotToScreen(ctx, result.ScreenshotPath, result.LogicalSelectionRect); err != nil {
 					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to pin screenshot: path=%s err=%s", result.ScreenshotPath, err.Error()))
-					p.api.Notify(ctx, "plugin_screenshot_pin_failed")
+					p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_screenshot_pin_failed"})
 				}
 			}
 			return
 		}
 
 		if !clipboardNotified {
-			p.api.Notify(ctx, "plugin_screenshot_capture_success")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_screenshot_capture_success"})
 		}
 		if result.ClipboardWarningMessage != "" {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("screenshot clipboard warning: %s", result.ClipboardWarningMessage))
-			p.api.Notify(ctx, "plugin_screenshot_capture_clipboard_warning")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_screenshot_capture_clipboard_warning"})
 		}
 	case common.CaptureScreenshotStatusFailed:
 		if editPath != "" {
 			util.GetLogger().Warn(ctx, "failed to restore screenshot scene: "+result.ErrorMessage)
 			if result.ErrorCode == "display_layout_changed" {
-				p.api.Notify(ctx, "i18n:plugin_screenshot_edit_display_layout_changed")
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_display_layout_changed"})
 				return
 			}
-			p.api.Notify(ctx, "i18n:plugin_screenshot_edit_failed")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_failed"})
 			return
 		}
 		errText := result.ErrorMessage
@@ -1106,7 +1106,7 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 		p.notifyCaptureFailure(ctx, result.ErrorCode, errText)
 	case common.CaptureScreenshotStatusCancelled:
 		if result.CopiedColor != "" {
-			p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_screenshot_color_copy_success"), result.CopiedColor))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_screenshot_color_copy_success"), result.CopiedColor)})
 		}
 		return
 	default:

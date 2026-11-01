@@ -307,7 +307,7 @@ func (p *extensionPlugin) runNoView(ctx context.Context, query plugin.Query, com
 	query.ContextData = common.ContextData{"raycast.arguments": string(raw)}
 	params, err := p.launchConfig(ctx, query, command)
 	if err != nil {
-		p.api.Notify(ctx, err.Error())
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return
 	}
 	p.mu.Lock()
@@ -318,7 +318,7 @@ func (p *extensionPlugin) runNoView(ctx context.Context, query plugin.Query, com
 	s, err := p.startSession(ctx, query, command)
 	if err != nil {
 		p.mu.Unlock()
-		p.api.Notify(ctx, err.Error())
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return
 	}
 	// Track headless processes too so disabling or uninstalling the plugin terminates them.
@@ -326,7 +326,7 @@ func (p *extensionPlugin) runNoView(ctx context.Context, query plugin.Query, com
 	p.mu.Unlock()
 	defer func() { s.close(); p.mu.Lock(); delete(p.sessions, s.prefix); p.mu.Unlock() }()
 	if _, err := s.call(ctx, "launch", params); err != nil {
-		p.api.Notify(ctx, err.Error())
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 	}
 }
 
@@ -394,7 +394,7 @@ func (p *extensionPlugin) dispatch(ctx context.Context, s *commandSession, resul
 		s.mu.Unlock()
 	}()
 	if _, err := s.call(ctx, "action", map[string]any{"id": id, "values": values}); err != nil {
-		p.api.Notify(ctx, err.Error())
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 	}
 }
 

@@ -23,6 +23,8 @@ const (
 	smokeAutomationStreamingCommand        = "streaming-preview"
 	smokeAutomationToolbarCommand          = "toolbar"
 	smokeAutomationToolbarLongCommand      = "toolbar-long"
+	smokeAutomationToastCommand            = "toast"
+	smokeAutomationToastResultCommand      = "toast-result"
 	smokeAutomationAttentionCommand        = "attention"
 	smokeAutomationQuickSelectCommand      = "quick-select"
 	smokeAutomationPinRankingCommand       = "pin-ranking"
@@ -74,6 +76,8 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
 			{Command: smokeAutomationToolbarLongCommand, Description: "Long toolbar message fixture"},
+			{Command: smokeAutomationToastCommand, Description: "Toast notification fixture"},
+			{Command: smokeAutomationToastResultCommand, Description: "Toast action result fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
@@ -113,6 +117,37 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryToolbar(ctx)
 	case smokeAutomationToolbarLongCommand:
 		return p.queryToolbarLong(ctx)
+	case smokeAutomationToastResultCommand:
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Toast action completed", Icon: icons.Get(icons.PluginApp)}})
+	case smokeAutomationToastCommand:
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Show toast fixture", Icon: icons.Get(icons.PluginApp), Actions: []plugin.QueryResultAction{{
+			Name: "Show toast", IsDefault: true, PreventHideAfterAction: true,
+			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+				title := "Toast fixture"
+				message := "Toast fixture message"
+				actionLabel := "Open fixture"
+				if query.Search == "hidden" {
+					p.api.HideApp(actionCtx)
+					title = ""
+					message = "A longer toast message that wraps across multiple lines while its action remains available and the launcher is hidden."
+				}
+				if query.Search == "long" {
+					title = "File received"
+					message = `Received file: C:\Users\Example\Downloads\LocalSend\2026-11-01_18-35-41 - Phone - ff1ffea7-f0cd-44cc-a9aa-5b194e435317\IMG_2829.jpeg`
+					actionLabel = "View receive history"
+				}
+				p.api.ShowToastMsg(actionCtx, plugin.ShowToastMsgOption{Message: message, Title: title, Action: &plugin.ToastMsgAction{
+					Name: actionLabel, ContextData: common.ContextData{"marker": "toast"},
+					Action: func(callbackCtx context.Context, action plugin.ToastMsgActionContext) {
+						if action.ContextData["marker"] != "toast" {
+							return
+						}
+						p.api.ShowApp(callbackCtx)
+						p.api.ChangeQuery(callbackCtx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "wox-smoke toast-result "})
+					},
+				}})
+			},
+		}}}})
 	case smokeAutomationAttentionCommand:
 		return p.queryAttentionFixture()
 	case smokeAutomationQuickSelectCommand:

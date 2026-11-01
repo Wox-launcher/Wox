@@ -492,7 +492,7 @@ func (p *WindowManagerPlugin) restoreWindow(ctx context.Context, managedWindow w
 	p.restoreM.Unlock()
 
 	if !ok {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_restore_missing"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_restore_missing")})
 		return
 	}
 
@@ -512,11 +512,11 @@ func (p *WindowManagerPlugin) storeRestoreRect(managedWindow window.ManagedWindo
 func (p *WindowManagerPlugin) notifyFailure(ctx context.Context, err error) {
 	switch {
 	case errors.Is(err, window.ErrWindowManagementPermissionDenied):
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_permission_denied"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_permission_denied")})
 	case errors.Is(err, window.ErrWindowManagementNoAdjacentDisplay):
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_no_adjacent_display"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_no_adjacent_display")})
 	default:
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_action_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_action_failed"), err.Error())})
 	}
 	p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("window manager command failed: %s", err.Error()))
 }

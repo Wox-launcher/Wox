@@ -385,3 +385,8 @@ func (a *aiCommandTestAPI) RegisterTriggerKeyword(context.Context, plugin.Regist
 func (a *aiCommandTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
 	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
+
+func (api *aiCommandTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

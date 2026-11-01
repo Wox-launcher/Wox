@@ -247,6 +247,7 @@ from .models.ai import (
 )
 from .models.attention import AttentionAction, AttentionActionType, PushAttentionRequest
 from .models.context import Context
+from .models.toast_msg import ShowToastMsgOption, ShowToastMsgResult, ToastMsgAction, ToastMsgActionContext
 from .models.image import WoxImage, WoxImageType
 from .models.log import LogLevel
 from .models.mru import MRUData, MRURestoreCallback
@@ -424,6 +425,10 @@ __all__: List[str] = [
     "assistant_message",
     # Query
     "ChangeQueryParam",
+    "ShowToastMsgOption",
+    "ShowToastMsgResult",
+    "ToastMsgAction",
+    "ToastMsgActionContext",
     "RefreshQueryParam",
     "QueryType",
     "Selection",

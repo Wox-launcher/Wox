@@ -950,12 +950,12 @@ func (p *WindowManagerPlugin) notifyWindowGroupSummary(ctx context.Context, grou
 	}
 
 	if summary.Moved == 0 && len(issues) == 0 {
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_no_apps"), groupName))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_no_apps"), groupName)})
 		return
 	}
 
 	if len(issues) > 0 {
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_partial"), summary.Moved, groupName, strings.Join(issues, "; ")))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_window_manager_group_partial"), summary.Moved, groupName, strings.Join(issues, "; "))})
 	}
 }
 

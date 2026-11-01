@@ -339,14 +339,14 @@ func (a *ApplicationPlugin) executeUninstall(ctx context.Context, info appInfo, 
 	if err := executeAppUninstall(ctx, info); err != nil {
 		a.api.Log(ctx, plugin.LogLevelError, "uninstall failed for "+displayName+": "+err.Error())
 		if isAppUninstallNotFound(err) {
-			a.api.Notify(ctx, a.api.GetTranslation(ctx, "plugin_app_uninstall_not_found"))
+			a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: a.api.GetTranslation(ctx, "plugin_app_uninstall_not_found")})
 			return
 		}
 		if isAppUninstallNotAllowed(err) {
-			a.api.Notify(ctx, a.api.GetTranslation(ctx, "plugin_app_uninstall_not_allowed"))
+			a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: a.api.GetTranslation(ctx, "plugin_app_uninstall_not_allowed")})
 			return
 		}
-		a.api.Notify(ctx, fmtUninstallMessage(a.api.GetTranslation(ctx, "plugin_app_uninstall_failed"), err.Error()))
+		a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmtUninstallMessage(a.api.GetTranslation(ctx, "plugin_app_uninstall_failed"), err.Error())})
 		return
 	}
 
@@ -354,7 +354,7 @@ func (a *ApplicationPlugin) executeUninstall(ctx context.Context, info appInfo, 
 	if util.IsMacOS() {
 		successKey = "plugin_app_uninstall_trashed"
 	}
-	a.api.Notify(ctx, a.api.GetTranslation(ctx, successKey))
+	a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: a.api.GetTranslation(ctx, successKey)})
 }
 
 func fmtUninstallMessage(template string, value string) string {

@@ -23,6 +23,7 @@ from wox_plugin import (
     QueryResponse,
     ResultActionType,
     DragOutEvent,
+    ToastMsgActionContext,
 )
 
 from . import logger
@@ -80,6 +81,16 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         return await init_plugin(ctx, request, ws)
     elif method == "toolbarMsgAction":
         return await toolbar_msg_action(ctx, request)
+    elif method == "toastMsgAction":
+        toast_instance = plugin_instances.get(request.get("PluginId", ""))
+        api = toast_instance.api if toast_instance else None
+        params = request.get("Params", {})
+        callback = api.toast_callbacks.pop(params.get("CallbackId", ""), None) if isinstance(api, PluginAPI) else None
+        if callback and params.get("Invoke") == "true":
+            result = callback(ctx, ToastMsgActionContext(context_data=_parse_context_data(params.get("ContextData"))))
+            if inspect.isawaitable(result):
+                await result
+        return None
     elif method == "unloadPlugin":
         return await unload_plugin(ctx, request)
     elif method == "onPluginSettingChange":
@@ -467,6 +478,7 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
     try:
         # Remove plugin from instances
         if isinstance(plugin_instance.api, PluginAPI):
+            plugin_instance.api.toast_callbacks.clear()
             await plugin_instance.api.stop_plugin_tools()
         del plugin_instances[plugin_id]
 
@@ -708,6 +720,7 @@ async def on_unload(ctx: Context, request: Dict[str, Any]) -> None:
     if not callback:
         raise Exception(f"unload callback not found: {callback_id}")
 
+    api.toast_callbacks.clear()
     await api.stop_plugin_tools()
     try:
         result = callback(ctx)

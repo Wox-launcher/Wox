@@ -143,7 +143,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 						_ = woxSetting.EnableAutoUpdate.Set(true)
 					}
 					plugin.GetPluginManager().GetUI().ReloadSetting(ctx)
-					p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
+					p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking")})
 					updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
 						p.refreshVisibleUpdatePreview(ctx, actionContext, info, true, releaseChannel, channelVersions)
 						p.notifyUpdate(ctx, info)
@@ -182,7 +182,7 @@ func (p *UpdatePlugin) buildActions(ctx context.Context, info updater.UpdateInfo
 		IsDefault:              info.Status != updater.UpdateStatusReady,
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking")})
 			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
 				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, releaseChannel, channelVersions)
 				p.notifyUpdate(ctx, info)
@@ -249,7 +249,7 @@ func (p *UpdatePlugin) buildSwitchReleaseChannelAction(ctx context.Context, auto
 			}
 
 			if err := woxSetting.ReleaseChannel.Set(targetChannel); err != nil {
-				p.api.Notify(ctx, err.Error())
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				return
 			}
 
@@ -260,7 +260,7 @@ func (p *UpdatePlugin) buildSwitchReleaseChannelAction(ctx context.Context, auto
 				return
 			}
 
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_checking")})
 			updater.CheckForUpdatesWithCallback(ctx, func(info updater.UpdateInfo) {
 				p.refreshVisibleUpdatePreview(ctx, actionContext, info, autoUpdateEnabled, string(targetChannel), channelVersions)
 				p.notifyUpdate(ctx, info)
@@ -324,13 +324,13 @@ func (p *UpdatePlugin) refreshVisibleUpdatePreview(ctx context.Context, actionCo
 func (p *UpdatePlugin) notifyApplyProgress(ctx context.Context, stage updater.ApplyUpdateStage) {
 	switch stage {
 	case updater.ApplyUpdateStagePreparing:
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_preparing"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_preparing")})
 	case updater.ApplyUpdateStageExtracting:
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_extracting"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_extracting")})
 	case updater.ApplyUpdateStageReplacing:
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_replacing"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_replacing")})
 	case updater.ApplyUpdateStageRestarting:
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_restarting"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_apply_restarting")})
 	}
 }
 
@@ -340,24 +340,24 @@ func (p *UpdatePlugin) notifyUpdate(ctx context.Context, info updater.UpdateInfo
 		if info.UpdateError != nil {
 			errText = info.UpdateError.Error()
 		}
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_error"), errText))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_error"), errText)})
 		return
 	}
 
 	if info.Status == updater.UpdateStatusDownloading {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_downloading"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_downloading")})
 		return
 	}
 
 	if info.Status == updater.UpdateStatusReady {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_ready"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_ready")})
 		return
 	}
 
 	if info.HasUpdate {
-		p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_available"), info.CurrentVersion, info.LatestVersion))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_available"), info.CurrentVersion, info.LatestVersion)})
 		return
 	}
 
-	p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_up_to_date"))
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_notify_up_to_date")})
 }

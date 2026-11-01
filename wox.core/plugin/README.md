@@ -33,6 +33,9 @@ stops the watchdog before closing watchers, cancelling pending reload timers
 and stopping hosts. This refactor does not add cancellation or waits for already
 executing reload/Init callbacks, or change plugin/SDK contracts.
 
+Plugin minimum Wox versions are validated on install and load. Development
+builds allow a future minimum version, while release builds enforce it.
+
 `plugin_presentation.go` owns Glance/Toolbar callback stores and active query-session
 routing, using instance lookup and a live UI getter rather than a Manager pointer
 or a duplicate UI reference.
@@ -42,6 +45,11 @@ the affected plugin's cached UI actions and clear its visible Toolbar message.
 Other plugins and query-session routing are preserved. Existing Glance refresh,
 Toolbar replacement and session-leave cleanup remain in this owner; result-query
 callbacks remain in the result store.
+
+`ShowToastMsg` displays one independent transient overlay. Its optional action
+is invalidated on dismissal, replacement, or plugin unload and runs outside the
+UI thread. Existing Node.js and Python plugins keep the legacy `Notify` wire
+method through their runtime hosts; it is not part of the Go plugin API.
 
 Lifecycle, watchdog and presentation tests use fake hosts and UI capabilities;
 no real plugin process or native window is needed for these regressions.

@@ -152,7 +152,7 @@ func InvokePluginToolAndNotify(ctx context.Context, api API, option InvokePlugin
 	result := api.InvokePluginTool(ctx, option)
 	if result.Error != nil {
 		api.Log(ctx, LogLevelError, fmt.Sprintf("failed to invoke plugin tool %s/%s: %s", option.PluginId, option.Name, result.Error.Error()))
-		api.Notify(ctx, result.Error.Message)
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: result.Error.Message})
 	}
 	return result
 }

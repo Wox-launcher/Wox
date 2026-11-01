@@ -351,7 +351,7 @@ func CreateNoteAction(api plugin.API, title string, text string, path string) pl
 			})
 			if created.Error != nil {
 				api.Log(ctx, plugin.LogLevelError, created.Error.Error())
-				api.Notify(ctx, created.Error.Message)
+				api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: created.Error.Message})
 				return
 			}
 			noteID, _ := created.Output["noteId"].(string)
@@ -362,7 +362,7 @@ func CreateNoteAction(api plugin.API, title string, text string, path string) pl
 			})
 			if opened.Error != nil {
 				api.Log(ctx, plugin.LogLevelError, opened.Error.Error())
-				api.Notify(ctx, opened.Error.Message)
+				api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: opened.Error.Message})
 			}
 		},
 	}
@@ -428,7 +428,7 @@ func (p *Plugin) purgeEmpty(ctx context.Context) {
 
 func (p *Plugin) notifyError(ctx context.Context, err error) {
 	p.api.Log(ctx, plugin.LogLevelError, err.Error())
-	p.api.Notify(ctx, err.Error())
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 }
 
 func noteDeepLink(id string) string {

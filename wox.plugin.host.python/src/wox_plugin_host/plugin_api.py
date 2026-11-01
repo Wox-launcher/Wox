@@ -44,6 +44,9 @@ from wox_plugin import (
     UnregisterPluginToolResult,
     SetSettingOption,
     SetSettingResult,
+    ShowToastMsgOption,
+    ShowToastMsgResult,
+    ToastMsgActionContext,
     ToolbarMsg,
     UpdatableResult,
     WoxImage,
@@ -77,6 +80,7 @@ class PluginAPI(PublicAPI):
         self.plugin_tool_callback_ids: Dict[str, str] = {}
         self.plugin_tool_calls: set[asyncio.Task[Any]] = set()
         self.plugin_tools_stopping = False
+        self.toast_callbacks: Dict[str, Callable[[Context, ToastMsgActionContext], Awaitable[None] | None]] = {}
 
     async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
         """Invoke a method on Wox"""
@@ -155,6 +159,27 @@ class PluginAPI(PublicAPI):
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
+
+    async def show_toast_msg(self, ctx: Context, option: ShowToastMsgOption) -> ShowToastMsgResult:
+        """Register a one-shot action and show a transient notification."""
+        if option.action and not callable(option.action.action):
+            return ShowToastMsgResult(err_msg="action callback is required")
+        callback_id = str(uuid.uuid4()) if option.action else ""
+        action = None
+        if option.action:
+            self.toast_callbacks[callback_id] = option.action.action
+            action = {"Name": option.action.name, "ContextData": option.action.context_data, "CallbackId": callback_id}
+        try:
+            result = await self.invoke_method(
+                ctx, "ShowToastMsg", {"option": {"Message": option.message, "Title": option.title, "Action": action}}
+            )
+            parsed = ShowToastMsgResult(success=result.get("Success", False), err_msg=result.get("ErrMsg", ""))
+            if not parsed.success:
+                self.toast_callbacks.pop(callback_id, None)
+            return parsed
+        except Exception:
+            self.toast_callbacks.pop(callback_id, None)
+            raise
 
     async def push_attention(self, ctx: Context, request: PushAttentionRequest) -> None:
         """Push a persistent attention item into Wox."""

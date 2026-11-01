@@ -1231,7 +1231,7 @@ func (c *ClipboardPlugin) editTitleAction(record ClipboardRecord) plugin.QueryRe
 			if record.IsFavorite {
 				if err := c.updateFavoriteAlias(ctx, record.ID, aliasPtr); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite title: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update favorite title: "+err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "Failed to update favorite title: " + err.Error()})
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record title: %s", record.ID))
 					isUpdateSuccess = true
@@ -1239,7 +1239,7 @@ func (c *ClipboardPlugin) editTitleAction(record ClipboardRecord) plugin.QueryRe
 			} else {
 				if err := c.db.UpdateAlias(ctx, record.ID, aliasPtr); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update title: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update clipboard title: "+err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "Failed to update clipboard title: " + err.Error()})
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record title: %s", record.ID))
 					isUpdateSuccess = true
@@ -1752,7 +1752,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			if record.IsFavorite {
 				if err := c.updateFavoriteContent(ctx, record.ID, raw); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update favorite content: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update favorite content: "+err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "Failed to update favorite content: " + err.Error()})
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated favorite record content: %s", record.ID))
 					isUpdateSuccess = true
@@ -1760,7 +1760,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 			} else {
 				if err := c.db.UpdateContent(ctx, record.ID, raw); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to update content: %s", err.Error()))
-					c.api.Notify(ctx, "Failed to update clipboard content: "+err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "Failed to update clipboard content: " + err.Error()})
 				} else {
 					c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("updated clipboard record content: %s", record.ID))
 					isUpdateSuccess = true

@@ -3,6 +3,7 @@ package plugin
 import (
 	"fmt"
 	"wox/updater"
+	"wox/util"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -33,11 +34,8 @@ func ensureWoxVersionSupported(pluginName string, minWoxVersion string) error {
 		return fmt.Errorf("plugin %s requires an invalid MinWoxVersion %q: %w", pluginName, requiredVersionText, requiredErr)
 	}
 
-	// MinWoxVersion is a hard compatibility floor. Older install paths only stored
-	// the field as metadata, so incompatible plugins could be installed and then
-	// fail later in less obvious ways. Keep the comparison centralized so store,
-	// local-package, startup, and dev reload paths all enforce the same rule.
-	if requiredVersion.GreaterThan(currentVersion) {
+	// Development builds may contain unreleased APIs even when their version has not been bumped.
+	if util.IsProd() && requiredVersion.GreaterThan(currentVersion) {
 		return fmt.Errorf("plugin %s requires Wox %s or later, current Wox version is %s", pluginName, requiredVersion.String(), currentVersion.String())
 	}
 

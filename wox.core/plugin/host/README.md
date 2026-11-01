@@ -38,6 +38,11 @@ keys, response field casing and the following compatibility behavior unchanged:
 
 Both Node and Python SDKs keep their published signatures and wire format.
 
+`ShowToastMsg` sends an optional one-shot action ID. The host retains its
+callback until core sends `toastMsgAction` to invoke or release it; failed
+requests and plugin unload also release the host callback. Legacy `Notify`
+requests keep their existing route.
+
 Core-to-host query and MRU requests carry the optional internal `ManagedQuery`
 flag. Core releases those callbacks with `releaseQueryResults`, scoped by the
 envelope's `SessionId` and `QueryId`, after evicting the result set. This message

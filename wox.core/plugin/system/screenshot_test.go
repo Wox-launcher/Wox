@@ -340,3 +340,8 @@ func TestNewScreenshotActionAllowsLauncherHide(t *testing.T) {
 		t.Fatal("new screenshot action must allow the launcher to hide")
 	}
 }
+
+func (api *screenshotSceneTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

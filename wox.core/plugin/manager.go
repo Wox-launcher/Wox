@@ -660,7 +660,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 	pinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
 		settingManager.PinResult(ctx, resultHash, query.RawQuery)
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_pin_in_query_success")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_pin_in_query_success"})
 		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
 	}
 
@@ -668,7 +668,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 	unpinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
 		settingManager.UnpinResult(ctx, resultHash, query.RawQuery)
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_unpin_in_query_success")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_unpin_in_query_success"})
 		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
 	}
 
@@ -696,7 +696,7 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 		settingManager.ClearActionedResults(ctx, resultHash)
 
 		api := NewAPI(pluginInstance)
-		api.Notify(ctx, "i18n:plugin_manager_reset_ranking_success")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_reset_ranking_success"})
 		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
 	}
 	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, scoreResult, query)
@@ -784,24 +784,24 @@ func (m *Manager) newAddQueryAliasAction(pluginInstance *Instance, queryText str
 			existing := aliasSetting.Get()
 			for _, saved := range existing {
 				if strings.EqualFold(saved.Alias, alias.Alias) {
-					api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_duplicated")
+					api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_add_query_shortcut_duplicated"})
 					return
 				}
 			}
 
 			if err := ValidateQueryAliasAgainstResultAliases(alias, currentResultBindings()); err != nil {
-				api.Notify(ctx, err.Error())
+				api.ShowToastMsg(ctx, ShowToastMsgOption{Message: err.Error()})
 				return
 			}
 			if err := aliasSetting.Set(append(append([]setting.QueryAlias(nil), existing...), alias)); err != nil {
 				util.GetLogger().Error(ctx, fmt.Sprintf("save query alias: %v", err))
-				api.Notify(ctx, "i18n:plugin_manager_result_binding_save_failed")
+				api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_result_binding_save_failed"})
 				return
 			}
 			// The settings window reads Wox settings once when it opens, so it must be
 			// told about an alias added from the launcher.
 			m.ui.ReloadSetting(ctx)
-			api.Notify(ctx, "i18n:plugin_manager_add_query_shortcut_success")
+			api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_add_query_shortcut_success"})
 		},
 	}
 }

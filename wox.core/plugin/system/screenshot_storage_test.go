@@ -333,3 +333,8 @@ func TestScreenshotCustomFolderLeavesUnrelatedImagesAlone(t *testing.T) {
 		t.Fatalf("retention did not remove an expired Wox screenshot: %v", err)
 	}
 }
+
+func (api *screenshotStorageTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

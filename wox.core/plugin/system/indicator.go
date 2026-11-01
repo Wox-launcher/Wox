@@ -396,32 +396,32 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			pluginName := storePlugin.GetName(ctx)
-			i.api.Notify(ctx, fmt.Sprintf(
+			i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
 				i.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 				i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 				pluginName,
-			))
+			)})
 
 			util.Go(ctx, "upgrade plugin from indicator", func() {
 				pluginName := storePlugin.GetName(ctx)
 				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, storePlugin, func(message string) {
-					i.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginName, message))
+					i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
 				})
 
 				if installErr != nil {
-					i.api.Notify(ctx, fmt.Sprintf(
+					i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 						formatStorePluginInstallError(ctx, i.api, storePlugin, installErr),
-					))
+					)})
 					return
 				}
 
-				i.api.Notify(ctx, fmt.Sprintf(
+				i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
 					i.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 					pluginName,
 					i.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
-				))
+				)})
 				i.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 			})
 		},

@@ -523,11 +523,11 @@ func (e *EmojiPlugin) createEmojiResult(ctx context.Context, query plugin.Query,
 	subTitle := e.getSecondaryName(title, entry)
 
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: subTitle,
-		Icon:     common.NewWoxImageEmoji(emoji),
+		Title:       title,
+		SubTitle:    subTitle,
+		Icon:        common.NewWoxImageEmoji(emoji),
 		IdentityKey: emoji,
-		Actions:  attachEmojiMRUContext(e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed), emoji),
+		Actions:     attachEmojiMRUContext(e.buildEmojiActions(ctx, query, emoji, isFrequentlyUsed), emoji),
 	}
 }
 
@@ -609,7 +609,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 			img, err := emojiimage.Render(emoji, 200)
 			if err != nil {
 				e.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to build emoji image: %v", err))
-				e.api.Notify(ctx, fmt.Sprintf("Failed to build emoji image: %v", err))
+				e.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to build emoji image: %v", err)})
 				return
 			}
 

@@ -923,7 +923,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				util.GetLogger().Info(ctx, fmt.Sprintf("app_launch_timing stage=shell_open_done path=%q costMs=%d error=%v", info.Path, time.Since(shellStart).Milliseconds(), runErr))
 				if runErr != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app %s: %s", info.Path, runErr.Error()))
-					a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), runErr.Error()))
+					a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), runErr.Error())})
 				}
 			},
 		},
@@ -945,7 +945,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 
 					if err := openAppAsAdministrator(info.Path); err != nil {
 						a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening app as administrator %s: %s", info.Path, err.Error()))
-						a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+						a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 					}
 				},
 			})
@@ -960,7 +960,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := a.retriever.OpenAppFolder(ctx, info); err != nil {
 					a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening folder: %s", err.Error()))
-					a.api.Notify(ctx, fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+					a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(a.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 				}
 			},
 		})
@@ -973,7 +973,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(info.Path); err != nil {
 				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error copying app path: %s", err.Error()))
-				a.api.Notify(ctx, err.Error())
+				a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 			}
 		},
 	})
@@ -985,7 +985,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(appCopyName(displayName, info)); err != nil {
 				a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error copying app name: %s", err.Error()))
-				a.api.Notify(ctx, err.Error())
+				a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 			}
 		},
 	})
@@ -1016,7 +1016,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 				err := nativecontextmenu.ShowContextMenu(info.Path)
 				if err != nil {
 					a.api.Log(ctx, plugin.LogLevelError, err.Error())
-					a.api.Notify(ctx, err.Error())
+					a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				}
 			},
 			Hotkey:                 util.PrimaryHotkey("m"),
@@ -1070,7 +1070,7 @@ func (a *ApplicationPlugin) startAppIndex() {
 		if !completed {
 			return
 		}
-		a.api.Notify(a.runtimeCtx, fmt.Sprintf(a.api.GetTranslation(a.runtimeCtx, "plugin_app_index_completed"), appIndexElapsedSeconds(elapsed)))
+		a.api.ShowToastMsg(a.runtimeCtx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(a.api.GetTranslation(a.runtimeCtx, "plugin_app_index_completed"), appIndexElapsedSeconds(elapsed))})
 		a.api.RefreshQuery(a.runtimeCtx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 	})
 }

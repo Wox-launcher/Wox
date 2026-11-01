@@ -61,16 +61,16 @@ func (s *ShellPlugin) executeCommandAsAdministrator(ctx context.Context, data sh
 	if err != nil {
 		if shellutil.IsElevationCancelled(err) {
 			s.api.Log(ctx, plugin.LogLevelInfo, "Administrator elevation cancelled")
-			s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_cancelled"))
+			s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_cancelled")})
 			return
 		}
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to start elevated command: %s", err.Error()))
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_failed"), err.Error()))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_failed"), err.Error())})
 		return
 	}
 
 	data.Background = true
-	s.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_started"))
+	s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_execute_as_administrator_started")})
 
 	historyID := uuid.NewString()
 	startTime := time.Now()

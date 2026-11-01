@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"wox/common"
 	"wox/setting"
 	"wox/setting/definition"
 )
 
 type Instance struct {
+	toastEpoch       atomic.Uint64
 	imageMu          sync.RWMutex
 	imageCacheClosed bool
 

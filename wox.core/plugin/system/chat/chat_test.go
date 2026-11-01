@@ -372,3 +372,8 @@ func (emptyChatAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTrigg
 func (emptyChatAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
 	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
+
+func (api emptyChatAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

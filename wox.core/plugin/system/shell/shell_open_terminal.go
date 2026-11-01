@@ -41,7 +41,7 @@ func (s *ShellPlugin) openCommandInExternalTerminal(ctx context.Context, data sh
 	s.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Opening shell command in external terminal: %s with interpreter: %s", data.Command, data.Interpreter))
 	if err := openExternalTerminal(data.Interpreter, data.Command, data.WorkingDirectory); err != nil {
 		s.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to open external terminal: %s", err.Error()))
-		s.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_open_in_system_terminal_failed"), err.Error()))
+		s.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_open_in_system_terminal_failed"), err.Error())})
 		return
 	}
 	s.api.HideApp(ctx)

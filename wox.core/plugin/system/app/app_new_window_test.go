@@ -102,3 +102,8 @@ func TestUnsupportedNewWindowUsesDefaultOpen(t *testing.T) {
 		t.Fatalf("fallback calls=%d notification=%q", calls, api.message)
 	}
 }
+
+func (api *newWindowNotificationAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

@@ -44,13 +44,16 @@ var (
 )
 
 type runtimeTextLayout struct {
-	windowSize     woxui.Size
-	contentSize    woxui.Size
-	titleBarHeight float32
-	viewportHeight float32
-	textWidth      float32
-	textLayout     woxwidget.TextBlockLayout
-	scrollable     bool
+	windowSize       woxui.Size
+	contentSize      woxui.Size
+	titleBarHeight   float32
+	viewportHeight   float32
+	textWidth        float32
+	textLayout       woxwidget.TextBlockLayout
+	scrollable       bool
+	toastActionWidth float32
+	toastActionBelow bool
+	toastTitleLayout woxwidget.TextBlockLayout
 }
 
 type runtimeTextOverlay struct {
@@ -181,6 +184,9 @@ func (instance *runtimeTextOverlay) tryAutoClose() {
 
 func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui.Rect) runtimeTextLayout {
 	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
+	if instance.options.ToastTitle != "" {
+		style.Size = textOverlayScaled(12)
+	}
 	leadingWidth := float32(0)
 	if instance.options.Loading || instance.icon != nil {
 		leadingWidth = float32(instance.options.IconSize)
@@ -205,7 +211,7 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 	leadingReserve := leadingWidth
 	if leadingWidth > 0 {
-		leadingReserve += runtimeTextLeadingGap
+		leadingReserve += textOverlayIconTextGap(instance.options)
 	}
 	tipReserve := tipWidth
 	if tipWidth > 0 {
@@ -217,8 +223,20 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 
 	natural, _ := window.MeasureText(instance.options.Message, style)
+	toastTextWidth := natural.Size.Width
 	padding := textOverlayPadding(instance.options)
 	windowWidth := natural.Size.Width + leadingReserve + tipReserve + hotkeyReserve + closeReserve + padding.Left + padding.Right
+	actionWidth := float32(0)
+	if instance.options.ToastActionLabel != "" {
+		label, _ := window.MeasureText(instance.options.ToastActionLabel, woxui.TextStyle{Size: textOverlayScaled(12)})
+		actionWidth = label.Size.Width + textOverlayScaled(24)
+		windowWidth += actionWidth + runtimeTextLeadingGap
+	}
+	if instance.options.ToastTitle != "" {
+		title, _ := window.MeasureText(instance.options.ToastTitle, woxui.TextStyle{Size: textOverlayFontSize(instance.options), Weight: woxui.FontWeightSemibold})
+		toastTextWidth = max(toastTextWidth, title.Size.Width)
+		windowWidth = max(windowWidth, title.Size.Width+leadingReserve+closeReserve+actionWidth+runtimeTextLeadingGap+padding.Left+padding.Right)
+	}
 	if titleBarHeight > 0 && (instance.options.Title != "" || instance.titleIcon != nil) {
 		titleWidth := float32(0)
 		if instance.options.Title != "" {
@@ -255,9 +273,21 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 
 	contentWidth := max(float32(1), windowWidth-padding.Left-padding.Right)
 	textWidth := max(float32(1), contentWidth-leadingReserve-tipReserve-hotkeyReserve-closeReserve)
+	actionBelow := toastActionNeedsOwnRow(textWidth, actionWidth, toastTextWidth)
+	if actionWidth > 0 && !actionBelow {
+		textWidth -= actionWidth + runtimeTextLeadingGap
+	}
 	textLayout := woxwidget.LayoutTextBlock(window, instance.options.Message, style, textWidth, 0, 0)
 	textHeight := textLayout.Size.Height + runtimeTextBottomPadding
+	var toastTitleLayout woxwidget.TextBlockLayout
+	if instance.options.ToastTitle != "" {
+		toastTitleLayout = woxwidget.LayoutTextBlock(window, instance.options.ToastTitle, woxui.TextStyle{Size: textOverlayFontSize(instance.options), Weight: woxui.FontWeightSemibold}, textWidth, 0, 0)
+		textHeight += toastTitleLayout.Size.Height + textOverlayScaled(4)
+	}
 	rowHeight := max(textHeight, leadingWidth)
+	if actionWidth > 0 && !actionBelow {
+		rowHeight = max(rowHeight, textOverlayScaled(28))
+	}
 	if len(instance.options.HotkeyLabels) > 0 {
 		rowHeight = max(rowHeight, 20)
 	}
@@ -267,6 +297,9 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	copyReserve := float32(0)
 	if instance.options.ShowCopyButton && titleBarHeight == 0 {
 		copyReserve = runtimeTextCopySize + runtimeTextCopyGap
+	}
+	if actionBelow {
+		copyReserve += textOverlayScaled(36)
 	}
 	naturalHeight := titleBarHeight + rowHeight + copyReserve + padding.Top + padding.Bottom
 	maxHeight := workArea.Height
@@ -278,14 +311,29 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	viewportHeight := max(float32(1), contentHeight-copyReserve)
 
 	return runtimeTextLayout{
-		windowSize:     woxui.Size{Width: windowWidth, Height: windowHeight},
-		contentSize:    woxui.Size{Width: contentWidth, Height: contentHeight},
-		titleBarHeight: titleBarHeight,
-		viewportHeight: viewportHeight,
-		textWidth:      textWidth,
-		textLayout:     textLayout,
-		scrollable:     textHeight > viewportHeight,
+		windowSize:       woxui.Size{Width: windowWidth, Height: windowHeight},
+		contentSize:      woxui.Size{Width: contentWidth, Height: contentHeight},
+		titleBarHeight:   titleBarHeight,
+		viewportHeight:   viewportHeight,
+		textWidth:        textWidth,
+		textLayout:       textLayout,
+		scrollable:       textHeight > viewportHeight,
+		toastActionWidth: min(actionWidth, contentWidth),
+		toastActionBelow: actionBelow,
+		toastTitleLayout: toastTitleLayout,
 	}
+}
+
+// toastActionNeedsOwnRow keeps long messages readable when the screen is narrow.
+func toastActionNeedsOwnRow(textWidth, actionWidth, naturalTextWidth float32) bool {
+	return actionWidth > 0 && textWidth-actionWidth-runtimeTextLeadingGap < min(textOverlayScaled(200), naturalTextWidth)
+}
+
+func textOverlayIconTextGap(options Options) float32 {
+	if options.IconTextGap > 0 {
+		return textOverlayScaled(options.IconTextGap)
+	}
+	return runtimeTextLeadingGap
 }
 
 func runtimeTextUsesTitleBar(options Options) bool {
@@ -308,16 +356,26 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	textColor := chrome.Foreground
 	mutedColor := textOverlayMutedColor(chrome)
 	style := woxui.TextStyle{Size: textOverlayFontSize(instance.options)}
-	text := instance.overlayMessage(layout, style, textColor, chrome)
+	messageColor := textColor
+	if instance.options.ToastTitle != "" {
+		style.Size = textOverlayScaled(12)
+		// A titled toast treats its message as secondary text in either theme.
+		messageColor.A = uint8(uint16(messageColor.A) * 2 / 3)
+	}
+	text := instance.overlayMessage(layout, style, messageColor, chrome)
 	var textContent woxwidget.Widget = text
 	if layout.scrollable {
+		messageViewportHeight := layout.viewportHeight
+		if instance.options.ToastTitle != "" {
+			messageViewportHeight = max(1, messageViewportHeight-layout.toastTitleLayout.Size.Height-textOverlayScaled(4))
+		}
 		var keepVisible *woxwidget.ScrollRange
 		if instance.followBottom {
 			end := layout.textLayout.Size.Height + runtimeTextBottomPadding
 			keepVisible = &woxwidget.ScrollRange{Start: end, End: end}
 		}
 		textContent = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
-			Key: "text-overlay-scroll", Content: text, Width: layout.textWidth, Height: layout.viewportHeight,
+			Key: "text-overlay-scroll", Content: text, Width: layout.textWidth, Height: messageViewportHeight,
 			ContentHeight: layout.textLayout.Size.Height + runtimeTextBottomPadding, Controller: instance.scroll,
 			KeepVisible: keepVisible, ThumbColor: mutedColor, AlwaysShowScrollbar: true,
 			OnOffsetChanged: func(offset float32) {
@@ -325,22 +383,36 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 			},
 		})
 	}
+	if instance.options.ToastTitle != "" {
+		textContent = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: textOverlayScaled(4), Children: []woxwidget.Widget{
+			woxwidget.TextBlock{Value: instance.options.ToastTitle, Style: woxui.TextStyle{Size: textOverlayFontSize(instance.options), Weight: woxui.FontWeightSemibold}, Color: textColor, Width: layout.textWidth, Layout: &layout.toastTitleLayout},
+			textContent,
+		}}
+	}
 
 	row := []woxwidget.Widget{}
+	var leading woxwidget.Widget
 	if instance.options.Loading {
 		size := float32(instance.options.IconSize)
 		if size <= 0 {
 			size = 24
 		}
-		row = append(row, woxcomponent.WoxLoadingIndicator(size, textColor))
+		leading = woxcomponent.WoxLoadingIndicator(size, textColor)
 	} else if instance.icon != nil {
 		size := float32(instance.options.IconSize)
 		if size <= 0 {
 			size = 24
 		}
-		row = append(row, woxwidget.Image{Source: instance.icon, Width: size, Height: size, Fit: woxwidget.ImageFitContain})
+		leading = woxwidget.Image{Source: instance.icon, Width: size, Height: size, Fit: woxwidget.ImageFitContain}
 	}
-	row = append(row, textContent)
+	if leading != nil {
+		row = append(row, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: textOverlayIconTextGap(instance.options), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{leading, textContent}})
+	} else {
+		row = append(row, textContent)
+	}
+	if layout.toastActionWidth > 0 && !layout.toastActionBelow {
+		row = append(row, instance.toastButton(chrome))
+	}
 	if chip := textOverlayHotkeyChip(instance.window, instance.options.HotkeyLabels, chrome); chip != nil {
 		row = append(row, chip)
 	}
@@ -351,7 +423,8 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		}
 		row = append(row, woxwidget.Image{Source: instance.tipIcon, Width: size, Height: size, Fit: woxwidget.ImageFitContain})
 	}
-	if instance.options.Closable && layout.titleBarHeight == 0 {
+	toastChrome := instance.options.ToastTitle != "" || instance.options.ToastActionLabel != ""
+	if instance.options.Closable && layout.titleBarHeight == 0 && !toastChrome {
 		row = append(row, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: "text-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(14, textColor),
 			Width: runtimeTextCloseSize, Height: runtimeTextCloseSize, Radius: runtimeTextCloseSize / 2,
@@ -369,6 +442,13 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 	}
 	rowWidget := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: runtimeTextLeadingGap, CrossAxisAlignment: crossAxis, Children: row}
 	children := []woxwidget.StackChild{}
+	if toastChrome && instance.options.Closable {
+		children = append(children, woxwidget.StackChild{Right: 0, Top: 0, AnchorRight: true, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: "text-overlay-close", Label: "Close", Icon: woxcomponent.CloseGlyph(14, textColor),
+			Width: runtimeTextCloseSize, Height: runtimeTextCloseSize, Radius: runtimeTextCloseSize / 2,
+			HoverBackground: textOverlayHoverFill(chrome), OnTap: func() { overlay.RequestClose(instance.id) },
+		})})
+	}
 	if layout.scrollable {
 		children = append(children, woxwidget.StackChild{Top: 0, Child: rowWidget})
 	} else {
@@ -392,6 +472,9 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		})})
 	}
 
+	if layout.toastActionBelow {
+		children = append(children, woxwidget.StackChild{Bottom: 0, AnchorBottom: true, Child: instance.toastButton(chrome)})
+	}
 	content := woxwidget.Stack{Width: layout.contentSize.Width, Height: layout.contentSize.Height, Children: children}
 	radius, borderWidth, borderColor := runtimeTextWindowChrome(runtime.GOOS)
 	rootChildren := []woxwidget.StackChild{{Child: woxwidget.Container{
@@ -409,6 +492,18 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		return woxwidget.Gesture{ID: "text-overlay-click", OnTap: func() { instance.options.OnClick() }, Child: root}
 	}
 	return root
+}
+
+// toastButton uses the shared button interaction and the overlay's theme colors.
+func (instance *runtimeTextOverlay) toastButton(chrome overlay.ThemeChrome) woxwidget.Widget {
+	background := textOverlayHoverFill(chrome)
+	theme := woxcomponent.ControlTheme{InputBackground: background, ControlText: chrome.Foreground, Text: chrome.Foreground, Focus: chrome.Foreground, DensityScale: setting.CurrentUiDensityScale()}
+	return woxcomponent.WoxButton(woxcomponent.ButtonProps{
+		ID: "toast-action", Label: instance.options.ToastActionLabel, Width: instance.layout.toastActionWidth,
+		Height: textOverlayScaled(28), Radius: textOverlayScaled(14), FontSize: 12,
+		Padding: woxwidget.Insets{Left: textOverlayScaled(12), Right: textOverlayScaled(12)}, Theme: theme,
+		OnTap: instance.options.OnToastAction,
+	})
 }
 
 // overlayMessage paints the body. Centered loading placeholders stay draw-only;

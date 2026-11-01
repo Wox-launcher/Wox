@@ -159,14 +159,14 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 			if actionCallback != nil {
 				if err := actionCallback(ctx); err != nil {
 					api.Log(ctx, plugin.LogLevelError, err.Error())
-					api.Notify(ctx, err.Error())
+					api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 					return
 				}
 			}
 			util.Go(ctx, "paste to active window", func() {
 				if err := pasteToActiveWindow(ctx, api, windowPid); err != nil {
 					api.Log(ctx, plugin.LogLevelError, err.Error())
-					api.Notify(ctx, err.Error())
+					api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				}
 			})
 		},

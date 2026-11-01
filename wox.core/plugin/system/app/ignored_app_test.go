@@ -331,3 +331,8 @@ func TestHideAppFromSearchSkipsAppsAlreadyCoveredByPattern(t *testing.T) {
 		t.Fatalf("pattern hide should not add an app row: %+v", rules)
 	}
 }
+
+func (api *recordingAppAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

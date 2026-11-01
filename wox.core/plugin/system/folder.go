@@ -672,7 +672,7 @@ func (p *FolderPlugin) buildAddFavoriteAction(name string, path string) plugin.Q
 				p.notifyFavoriteSettingError(ctx, "plugin_folder_favorite_add_failed", err)
 				return
 			}
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_added"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_added")})
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		},
 	}
@@ -704,7 +704,7 @@ func (p *FolderPlugin) buildEditFavoriteAction(name string, path string, favorit
 				p.notifyFavoriteSettingError(ctx, "plugin_folder_favorite_update_failed", err)
 				return
 			}
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_updated"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_updated")})
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		},
 	}
@@ -724,7 +724,7 @@ func (p *FolderPlugin) buildDeleteFavoriteAction(name string, path string, favor
 				p.notifyFavoriteSettingError(ctx, "plugin_folder_favorite_delete_failed", err)
 				return
 			}
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_deleted"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_deleted")})
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: false})
 		},
 	}
@@ -899,7 +899,7 @@ func (p *FolderPlugin) resolveFavoritePath(ctx context.Context, path string, not
 	cleanedPath, err := normalizeFolderFavoritePath(path)
 	if err != nil {
 		if notify && p.api != nil {
-			p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_required"))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_required")})
 		}
 		return "", false, false
 	}
@@ -907,7 +907,7 @@ func (p *FolderPlugin) resolveFavoritePath(ctx context.Context, path string, not
 	info, statErr := os.Stat(cleanedPath)
 	if statErr != nil {
 		if notify && p.api != nil {
-			p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_invalid"), cleanedPath))
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_folder_favorite_path_invalid"), cleanedPath)})
 		} else if p.api != nil {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Skipping missing favorite path: path=%q err=%v", cleanedPath, statErr))
 		}
@@ -942,7 +942,7 @@ func (p *FolderPlugin) notifyFavoriteSettingError(ctx context.Context, messageKe
 		return
 	}
 	p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to update folder favorites: %s", err.Error()))
-	p.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, messageKey), err.Error()))
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, messageKey), err.Error())})
 }
 
 func (p *FolderPlugin) buildFavoriteActionContextData(name string, path string, favoriteIndex int) map[string]string {

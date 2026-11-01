@@ -928,8 +928,8 @@ func (s *Store) InstallFromLocalWithProgress(ctx context.Context, filePath strin
 		return err
 	}
 
-	// Local package installs must be checked before unpacking so an incompatible
-	// archive cannot replace an existing plugin or leave a partial install behind.
+	// Check before unpacking so invalid or incompatible release packages cannot
+	// replace an existing plugin or leave a partial install behind.
 	if err := ensureWoxVersionSupported(pluginMetadata.GetName(ctx), pluginMetadata.MinWoxVersion); err != nil {
 		logger.Error(ctx, fmt.Sprintf("failed to install local plugin %s(%s): %s", pluginMetadata.GetName(ctx), pluginMetadata.Version, err.Error()))
 		return err

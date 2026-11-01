@@ -190,6 +190,18 @@ const opened = await this.api.InvokePluginTool(ctx, {
 
 ## Actions
 
+For a transient notification with one optional action, use `ShowToastMsg` on Wox 2.5.0 or newer:
+
+```typescript
+await api.ShowToastMsg(ctx, {
+  Message: "The file is ready",
+  Title: "Transfer complete",
+  Action: { Name: "Open", ContextData: { path }, Action: async (ctx, action) => openFile(action.ContextData.path) }
+})
+```
+
+The action runs at most once. `Notify` remains supported for existing plugins and keeps its original routing.
+
 Actions are operations users can perform on results:
 
 Only the default Enter action appears in the toolbar automatically. Set

@@ -181,7 +181,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := ui.GetUIManager().RestartApp(ctx); err != nil {
 					util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
-					r.api.Notify(ctx, fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_sys_restart_wox_failed"), err.Error()))
+					r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_sys_restart_wox_failed"), err.Error())})
 					return
 				}
 			},
@@ -265,7 +265,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				percent, ok := parseVolumeContext(actionContext.ContextData)
 				if !ok {
-					r.api.Notify(ctx, "i18n:plugin_sys_set_volume_invalid")
+					r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_set_volume_invalid"})
 					return
 				}
 				r.runSystemAction(ctx, "set-volume", func() (*exec.Cmd, error) {
@@ -462,7 +462,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 					removeErr := os.RemoveAll(cacheDirectory)
 					if removeErr != nil {
 						r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to remove cache directory: %s", removeErr.Error()))
-						r.api.Notify(ctx, "i18n:plugin_sys_clear_cache_failed")
+						r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_clear_cache_failed"})
 						return
 					}
 
@@ -471,7 +471,7 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 					common.ClearConvertIconPathExistenceCache()
 
 					r.api.Log(ctx, plugin.LogLevelInfo, "cache directory cleared successfully")
-					r.api.Notify(ctx, "i18n:plugin_sys_clear_cache_success")
+					r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_clear_cache_success"})
 				}
 			},
 		},
@@ -1054,7 +1054,7 @@ func (r *SysPlugin) executeConfirmedSystemCommand(ctx context.Context, commandID
 
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to execute %s: %s", commandID, err.Error()))
-		r.api.Notify(ctx, err.Error())
+		r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return
 	}
 }
@@ -1063,7 +1063,7 @@ func (r *SysPlugin) runSystemAction(ctx context.Context, commandID string, actio
 	_, err := action()
 	if err != nil {
 		r.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to execute %s: %s", commandID, err.Error()))
-		r.api.Notify(ctx, err.Error())
+		r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 	}
 }
 

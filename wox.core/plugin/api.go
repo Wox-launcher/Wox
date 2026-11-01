@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"image"
 	"sync"
 	"time"
 	"wox/ai"
@@ -11,6 +12,7 @@ import (
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
+	"wox/util/notifier"
 
 	"github.com/samber/lo"
 )
@@ -81,7 +83,6 @@ type API interface {
 	ChangeQuery(ctx context.Context, query common.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
-	Notify(ctx context.Context, description string)
 	PushAttention(ctx context.Context, request PushAttentionRequest)
 	Log(ctx context.Context, level LogLevel, msg string)
 	GetTranslation(ctx context.Context, key string) string
@@ -111,6 +112,10 @@ type API interface {
 	// InvokePluginTool executes another plugin's registered tool after schema validation.
 	// Requires Wox >= 2.4.5.
 	InvokePluginTool(ctx context.Context, option InvokePluginToolOption) InvokePluginToolResult
+
+	// ShowToastMsg displays a toast message to the user.
+	// Requires Wox >= 2.5.0
+	ShowToastMsg(ctx context.Context, option ShowToastMsgOption) ShowToastMsgResult
 
 	// ShowToolbarMsg creates or updates the toolbar msg for the current plugin query context.
 	// It is only accepted while the caller is the active plugin in the current session.
@@ -355,7 +360,6 @@ func (a *APIImpl) ChangeQuery(ctx context.Context, query common.PlainQuery) {
 		util.GetLogger().Error(ctx, "ChangeQuery requires QueryType input or selection")
 		return
 	}
-
 	query.QueryHint = query.QueryHint.NormalizeForQuery(query.QueryType, query.QueryText)
 	if query.QueryHint != nil {
 		query.QueryHint = query.QueryHint.Clone()
@@ -376,19 +380,41 @@ func (a *APIImpl) ShowApp(ctx context.Context) {
 	})
 }
 
-func (a *APIImpl) Notify(ctx context.Context, message string) {
-	icon := a.pluginInstance.Metadata.Icon
-	if parsedIcon, err := common.ParseWoxImage(icon); err == nil {
-		convertedIcon := a.pluginInstance.ConvertIcon(ctx, parsedIcon)
-		icon = convertedIcon.String()
+// ShowToastMsg displays an independent transient window owned by this plugin.
+func (a *APIImpl) ShowToastMsg(ctx context.Context, option ShowToastMsgOption) ShowToastMsgResult {
+	if option.Message == "" {
+		return ShowToastMsgResult{ErrMsg: "message is required"}
 	}
-
-	GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
-		PluginId:       a.pluginInstance.Metadata.Id,
-		Text:           a.GetTranslation(ctx, message),
-		Icon:           icon,
-		DisplaySeconds: 5,
-	})
+	if option.Action != nil && (option.Action.Name == "" || option.Action.Action == nil) {
+		return ShowToastMsgResult{ErrMsg: "action requires a name and callback"}
+	}
+	icon := a.pluginInstance.Metadata.Icon
+	var imageIcon image.Image
+	if parsed, err := common.ParseWoxImage(icon); err == nil {
+		converted := a.pluginInstance.ConvertIcon(ctx, parsed)
+		imageIcon, _ = converted.ToImageWithoutRemoteFetch()
+	}
+	epoch := a.pluginInstance.toastEpoch.Load()
+	toast := notifier.Toast{PluginID: a.pluginInstance.Metadata.Id, Icon: imageIcon, Title: a.GetTranslation(ctx, option.Title), Message: a.GetTranslation(ctx, option.Message), IsValid: func() bool { return a.pluginInstance.toastEpoch.Load() == epoch }}
+	if option.Action != nil {
+		action := *option.Action
+		action.ContextData = make(common.ContextData, len(option.Action.ContextData))
+		for key, value := range option.Action.ContextData {
+			action.ContextData[key] = value
+		}
+		toast.ActionLabel = a.GetTranslation(ctx, action.Name)
+		toast.OnDone = func(clicked bool) {
+			if clicked && toast.IsValid() {
+				action.Action(context.WithoutCancel(ctx), ToastMsgActionContext{ContextData: action.ContextData})
+			} else if action.Release != nil {
+				action.Release()
+			}
+		}
+	}
+	if !notifier.ShowToast(toast) {
+		return ShowToastMsgResult{ErrMsg: "could not show notification"}
+	}
+	return ShowToastMsgResult{Success: true}
 }
 
 // PushAttention persists a plugin-owned item and refreshes the launcher unread badge.

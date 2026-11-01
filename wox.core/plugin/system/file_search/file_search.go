@@ -770,7 +770,7 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 		if err != nil && !errors.Is(err, context.Canceled) && c.isContentSearchCurrent(runningCtx, generation) {
 			c.api.Log(runningCtx, plugin.LogLevelError, "Content index failed: "+err.Error())
 			c.clearContentToolbarMsg(runningCtx, 0)
-			c.api.Notify(runningCtx, "i18n:plugin_file_content_index_failed")
+			c.api.ShowToastMsg(runningCtx, plugin.ShowToastMsgOption{Message: "i18n:plugin_file_content_index_failed"})
 		}
 		c.finishContentCrawl(runningCtx, generation)
 	})
@@ -1008,7 +1008,7 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	if err != nil {
 		c.logQueryDiagnostics(ctx, query.Search, diagnostics, 0, util.GetSystemTimestamp()-queryStartedAt)
 		c.api.Log(ctx, plugin.LogLevelError, err.Error())
-		c.api.Notify(ctx, err.Error())
+		c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return plugin.QueryResponse{}
 	}
 	results = refineFileSearchResults(results, selectedType, c.fileSearchResultLimitFor(ctx, query, selectedType))
@@ -1294,7 +1294,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := shell.Open(item.Path); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open file search result: path=%s err=%s", item.Path, err.Error()))
-					c.api.Notify(ctx, fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 					return
 				}
 				if recordErr := recentfiles.RecordAccess(ctx, item.Path); recordErr != nil {
@@ -1326,7 +1326,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				if err := shell.OpenFileInFolder(item.Path); err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to reveal file search result: path=%s err=%s", item.Path, err.Error()))
-					c.api.Notify(ctx, fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error()))
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_app_open_failed_description"), err.Error())})
 				}
 			},
 			Hotkey: util.PrimaryHotkey("enter"),
@@ -1343,7 +1343,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 			err := trash.MoveToTrash(item.Path)
 			if err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, err.Error())
-				c.api.Notify(ctx, err.Error())
+				c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				return
 			}
 		},
@@ -1361,7 +1361,7 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 				err := nativecontextmenu.ShowContextMenu(item.Path)
 				if err != nil {
 					c.api.Log(ctx, plugin.LogLevelError, err.Error())
-					c.api.Notify(ctx, err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				}
 			},
 			Hotkey:                 util.PrimaryHotkey("m"),
@@ -1505,7 +1505,7 @@ func (c *FileSearchPlugin) rebuildContentIndex(ctx context.Context) {
 		}
 		if err := c.engine.ResetContentIndex(rebuildCtx); err != nil {
 			c.api.Log(rebuildCtx, plugin.LogLevelError, "Failed to reset content search index: "+err.Error())
-			c.api.Notify(rebuildCtx, "i18n:plugin_file_rebuild_content_index_failed")
+			c.api.ShowToastMsg(rebuildCtx, plugin.ShowToastMsgOption{Message: "i18n:plugin_file_rebuild_content_index_failed"})
 			return
 		}
 		c.clearContentToolbarMsg(rebuildCtx, 0)
@@ -1538,7 +1538,7 @@ func (c *FileSearchPlugin) indexFilesFromScratch(ctx context.Context) {
 		// content crawl restarts below.
 		if err := c.engine.RebuildIndex(rebuildCtx); err != nil {
 			c.api.Log(rebuildCtx, plugin.LogLevelError, "Failed to reset file search index: "+err.Error())
-			c.api.Notify(rebuildCtx, "i18n:plugin_file_index_files_failed")
+			c.api.ShowToastMsg(rebuildCtx, plugin.ShowToastMsgOption{Message: "i18n:plugin_file_index_files_failed"})
 			c.syncToolbarMsgWithStatus(rebuildCtx, filesearch.StatusSnapshot{ErrorRootCount: 1, LastError: err.Error()}, false)
 			return
 		}

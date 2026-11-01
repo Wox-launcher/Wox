@@ -355,7 +355,7 @@ func (c *Plugin) buildCopyAnswerAction(answer string) plugin.QueryResultAction {
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			if err := clipboard.WriteText(answer); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy ai command answer: %s", err.Error()))
-				c.api.Notify(ctx, "plugin_ai_command_copy_failed")
+				c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_ai_command_copy_failed"})
 			}
 		},
 	}
@@ -363,7 +363,7 @@ func (c *Plugin) buildCopyAnswerAction(answer string) plugin.QueryResultAction {
 
 func (c *Plugin) notifyAICommandActionError(ctx context.Context, err error) {
 	c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("ai command action failed: %s", err.Error()))
-	c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_action_failed_with_error"), err.Error()))
+	c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_action_failed_with_error"), err.Error())})
 }
 
 func buildAICommandLoadingOptions(name string, position mouse.Point, message string) textoverlay.Options {
@@ -447,7 +447,7 @@ func (c *Plugin) showAICommandResultOverlay(ctx context.Context, name string, ti
 		opts.OnClick = func() bool {
 			if err := clipboard.WriteText(copyText); err != nil {
 				c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to copy ai command overlay answer: %s", err.Error()))
-				c.api.Notify(ctx, "plugin_ai_command_copy_failed")
+				c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_ai_command_copy_failed"})
 				return false
 			}
 			return true
@@ -818,13 +818,13 @@ func (c *Plugin) querySelection(ctx context.Context, query plugin.Query) []plugi
 		model := command.AIModel()
 		modelLabel := fmt.Sprintf("%s - %s", model.ProviderName(), model.Name)
 		result := plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    command.Name,
-			SubTitle: modelLabel,
-			Icon:     aiCommandIcon,
+			Id:          uuid.NewString(),
+			Title:       command.Name,
+			SubTitle:    modelLabel,
+			Icon:        aiCommandIcon,
 			IdentityKey: command.Command,
-			Preview:  c.buildSelectionPreview(ctx, command, query),
-			Actions:  attachAICommandMRUContext(c.buildAICommandActions(ctx, command, conversations, modelLabel, query), command.Command, query.Search),
+			Preview:     c.buildSelectionPreview(ctx, command, query),
+			Actions:     attachAICommandMRUContext(c.buildAICommandActions(ctx, command, conversations, modelLabel, query), command.Command, query.Search),
 		}
 		results = append(results, result)
 	}
@@ -855,9 +855,9 @@ func (c *Plugin) listAllCommands(ctx context.Context, query plugin.Query) []plug
 	var results []plugin.QueryResult
 	for _, command := range commands {
 		results = append(results, plugin.QueryResult{
-			Title:    command.Command,
-			SubTitle: command.Name,
-			Icon:     aiCommandIcon,
+			Title:       command.Command,
+			SubTitle:    command.Name,
+			Icon:        aiCommandIcon,
 			IdentityKey: command.Command,
 			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
 				{
@@ -941,9 +941,9 @@ func (c *Plugin) queryCommand(ctx context.Context, query plugin.Query) []plugin.
 	model := aiCommandSetting.AIModel()
 	chatModelLabel := fmt.Sprintf("%s - %s", model.ProviderName(), model.Name)
 	result := plugin.QueryResult{
-		Id:       uuid.NewString(),
-		Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
-		SubTitle: chatModelLabel,
+		Id:          uuid.NewString(),
+		Title:       fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_ai_command_chat_with"), aiCommandSetting.Name),
+		SubTitle:    chatModelLabel,
 		IdentityKey: aiCommandSetting.Command + "\x1f" + query.Search,
 		// Behavior change: input AI command queries are now lazy. The preview shows
 		// the exact text that will be sent when the user chooses Run or Run And Paste,
@@ -992,9 +992,9 @@ func (c *Plugin) handleMRURestore(ctx context.Context, mruData plugin.MRUData) (
 	search := strings.TrimSpace(mruData.ContextData["search"])
 	if search == "" {
 		result := plugin.QueryResult{
-			Title:    command.Command,
-			SubTitle: command.Name,
-			Icon:     aiCommandIcon,
+			Title:       command.Command,
+			SubTitle:    command.Name,
+			Icon:        aiCommandIcon,
 			IdentityKey: command.Command,
 			Actions: attachAICommandMRUContext([]plugin.QueryResultAction{
 				{

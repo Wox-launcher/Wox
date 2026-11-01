@@ -301,3 +301,8 @@ func resultHasChangeWorkingDirectoryAction(result plugin.QueryResult) bool {
 	}
 	return false
 }
+
+func (api *shellQueryTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

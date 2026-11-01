@@ -72,6 +72,20 @@ When a plugin needs to control the preview width or grid layout, set
 `gridLayout` metadata features are deprecated because they can only describe
 static plugin or command defaults.
 
+## Notifications
+
+For transient notifications on Wox 2.5.0 or newer, use `show_toast_msg()` with a required message and an optional title and action. The action receives its context data and runs at most once. The older `notify()` method remains available and preserves its original routing.
+
+```python
+from wox_plugin import ShowToastMsgOption, ToastMsgAction
+
+await self.api.show_toast_msg(ctx, ShowToastMsgOption(
+    message="The file is ready",
+    title="Transfer complete",
+    action=ToastMsgAction(name="Open", action=open_file, context_data={"path": path}),
+))
+```
+
 ## Saving Settings
 
 `set_setting()` requires Wox >= 2.4.0 and accepts a `SetSettingOption`. Set

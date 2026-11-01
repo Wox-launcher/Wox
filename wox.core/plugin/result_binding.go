@@ -469,11 +469,11 @@ func (m *Manager) submitResultBindingField(ctx context.Context, pluginInstance *
 	api := NewAPI(pluginInstance)
 	value := strings.TrimSpace(rawValue)
 	if field == resultBindingFormHotkeyKey && value != "" && !canBindResultHotkey(pluginInstance, result) {
-		api.Notify(ctx, "i18n:plugin_manager_result_hotkey_not_executable")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_result_hotkey_not_executable"})
 		return
 	}
 	if field == resultBindingFormAliasKey && value != "" && !setting.IsSingleWordResultAlias(value) {
-		api.Notify(ctx, "i18n:plugin_manager_result_alias_invalid")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_result_alias_invalid"})
 		return
 	}
 
@@ -517,7 +517,7 @@ func (m *Manager) submitResultBindingField(ctx context.Context, pluginInstance *
 
 	if m.applyResultBindings == nil {
 		util.GetLogger().Error(ctx, "result binding applier is not initialized")
-		api.Notify(ctx, "i18n:plugin_manager_result_binding_save_failed")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_result_binding_save_failed"})
 		return
 	}
 	if err := m.applyResultBindings(ctx, bindings); err != nil {
@@ -526,7 +526,7 @@ func (m *Manager) submitResultBindingField(ctx context.Context, pluginInstance *
 		if !strings.HasPrefix(message, "i18n:") {
 			message = "i18n:plugin_manager_result_binding_save_failed"
 		}
-		api.Notify(ctx, message)
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: message})
 		return
 	}
 	if resultID != "" {
@@ -535,10 +535,10 @@ func (m *Manager) submitResultBindingField(ctx context.Context, pluginInstance *
 		}
 	}
 	if field == resultBindingFormHotkeyKey {
-		api.Notify(ctx, "i18n:plugin_manager_set_result_hotkey_success")
+		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_set_result_hotkey_success"})
 		return
 	}
-	api.Notify(ctx, "i18n:plugin_manager_set_result_alias_success")
+	api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_set_result_alias_success"})
 }
 
 // ValidateResultBindings checks result identities and alias conflicts before saving.

@@ -1207,11 +1207,11 @@ func (p *DictationPlugin) prepareActionInputContext(ctx context.Context, action 
 	selected, selectedErr := selection.GetSelected(ctx)
 	if selectedErr != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to get selected text for dictation action %s: %s", action.ID, selectedErr.Error()))
-		p.api.Notify(ctx, "plugin_dictation_action_selected_text_required")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_selected_text_required"})
 		return dictationActionInputContext{}, false
 	}
 	if selected.Type != selection.SelectionTypeText || strings.TrimSpace(selected.Text) == "" {
-		p.api.Notify(ctx, "plugin_dictation_action_selected_text_required")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_selected_text_required"})
 		return dictationActionInputContext{}, false
 	}
 
@@ -1242,7 +1242,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 
 	action, actionFound := p.actionByID(actionID)
 	if !actionFound || action.Disabled {
-		p.api.Notify(ctx, "plugin_dictation_action_unavailable")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_unavailable"})
 		clearStarting()
 		return
 	}
@@ -1261,13 +1261,13 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	modelID := p.api.GetSetting(ctx, settingKeyModel)
 
 	if modelID == "" {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_no_model_selected"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_no_model_selected")})
 		clearStarting()
 		return
 	}
 
 	if p.modelManager == nil {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error")})
 		clearStarting()
 		return
 	}
@@ -1291,7 +1291,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	// Find the model on disk.
 	models, err := p.modelManager.ListLocalModels()
 	if err != nil {
-		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_error"), err.Error())})
 		clearStarting()
 		return
 	}
@@ -1305,7 +1305,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 		}
 	}
 	if selectedModel == nil {
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_not_found"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_model_not_found")})
 		clearStarting()
 		return
 	}
@@ -1362,7 +1362,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	if p.recognizerPool == nil || p.audioCapturePool == nil || p.vadPool == nil {
 		p.runtimeMu.Unlock()
 		p.api.Log(ctx, plugin.LogLevelError, "dictation start failed: runtime is not initialized")
-		p.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed")})
 		p.closeDictationOverlay()
 		p.stopVolumeDucking(ctx)
 		clearStarting()
@@ -1372,7 +1372,7 @@ func (p *DictationPlugin) startRecording(ctx context.Context, actionID string) {
 	if err := session.Start(); err != nil {
 		p.runtimeMu.Unlock()
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("dictation start failed: %s", err.Error()))
-		p.api.Notify(ctx, fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_start_failed"), err.Error())})
 		p.closeDictationOverlay()
 		p.stopVolumeDucking(ctx)
 		clearStarting()
@@ -1479,7 +1479,7 @@ func (p *DictationPlugin) stopAndOutput(ctx context.Context) {
 	time.Sleep(100 * time.Millisecond)
 	if err := p.executeActionOutput(ctx, action, outputText, text, inputContext, aiRefineSucceeded); err != nil {
 		p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to output dictation action %s: %s", action.ID, err.Error()))
-		p.api.Notify(ctx, err.Error())
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 	}
 }
 
@@ -1543,7 +1543,7 @@ func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictat
 
 	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
 	if !modelOk {
-		p.api.Notify(ctx, "plugin_dictation_action_ai_no_model")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_ai_no_model"})
 		return "", "", false, false
 	}
 
@@ -1559,15 +1559,15 @@ func (p *DictationPlugin) prepareActionOutput(ctx context.Context, action dictat
 	if actionErr != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("dictation action AI failed: %s", actionErr.Error()))
 		if strings.Contains(actionErr.Error(), "timeout") {
-			p.api.Notify(ctx, "plugin_dictation_action_ai_timeout")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_ai_timeout"})
 		} else {
-			p.api.Notify(ctx, "plugin_dictation_action_ai_failed")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_ai_failed"})
 		}
 		return "", "", false, false
 	}
 	answer = strings.TrimSpace(answer)
 	if answer == "" {
-		p.api.Notify(ctx, "plugin_dictation_action_ai_empty")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_action_ai_empty"})
 		return "", "", false, false
 	}
 	return answer, answer, aiRefineSucceeded, true
@@ -1595,7 +1595,7 @@ func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictation
 	}
 	model, modelOk := parseActionAIModel(ctx, p.api, action.Model)
 	if !modelOk {
-		p.api.Notify(ctx, "plugin_dictation_ai_no_model")
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_ai_no_model"})
 		return cleaned, false
 	}
 	recentCtx := p.history.recentContext(util.GetSystemTimestamp())
@@ -1608,9 +1608,9 @@ func (p *DictationPlugin) refineTranscript(ctx context.Context, action dictation
 	if refineErr != nil {
 		p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("AI refine failed: %s", refineErr.Error()))
 		if strings.Contains(refineErr.Error(), "timeout") {
-			p.api.Notify(ctx, "plugin_dictation_ai_timeout")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_ai_timeout"})
 		} else {
-			p.api.Notify(ctx, "plugin_dictation_ai_failed")
+			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_ai_failed"})
 		}
 		return cleaned, false
 	}
@@ -1669,7 +1669,7 @@ func (p *DictationPlugin) executeActionOutput(ctx context.Context, action dictat
 				if copyErr := clipboard.WriteText(outputText); copyErr != nil {
 					return fmt.Errorf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), copyErr.Error())
 				}
-				p.api.Notify(ctx, "plugin_dictation_copied_to_clipboard")
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_dictation_copied_to_clipboard"})
 				return nil
 			}
 			return fmt.Errorf("%s: %s", i18n.GetI18nManager().TranslateWox(ctx, "plugin_dictation_type_failed"), err.Error())

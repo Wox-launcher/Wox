@@ -58,7 +58,7 @@ func (p *extensionPlugin) invokeAPI(ctx context.Context, query plugin.Query, met
 	case "hide":
 		p.api.HideApp(ctx)
 	case "notify":
-		p.api.Notify(ctx, args.Title)
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: args.Title})
 	case "clearSearch":
 		p.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: p.commandQuery(query, query.Command), QueryRefinements: query.Refinements, ContextData: query.ContextData})
 	case "selectedText":

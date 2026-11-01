@@ -162,7 +162,7 @@ func (p *FeedbackPlugin) restart(ctx context.Context, debugMode, disablePlugins 
 	util.GetLogger().Info(ctx, fmt.Sprintf("restarting diagnostic session: debugMode=%t thirdPartyPluginsDisabled=%t", debugMode, disablePlugins))
 	if err := supervisor.GetManager().StartSupervisorDetached(ctx, true, feedbackRestartArgs(debugMode, disablePlugins)...); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to restart Wox: %s", err))
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_restart_failed"), err.Error())})
 		return
 	}
 	ui.GetUIManager().ExitApp(ctx)
@@ -322,7 +322,7 @@ func (p *FeedbackPlugin) buildCrashIncidentActions(incident supervisor.CrashInci
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				reportPath, _, err := p.ensureCrashReport(ctx, incident)
 				if err != nil {
-					p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error()))
+					p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error())})
 					return
 				}
 				if err := shell.OpenFileInFolder(reportPath); err != nil {
@@ -337,12 +337,12 @@ func (p *FeedbackPlugin) buildCrashIncidentActions(incident supervisor.CrashInci
 func (p *FeedbackPlugin) openCrashIssue(ctx context.Context, incident supervisor.CrashIncident) {
 	reportPath, created, err := p.ensureCrashReport(ctx, incident)
 	if err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error())})
 		return
 	}
 	p.openGitHubThenRevealFile(ctx, crashIssueURL(incident), reportPath)
 	if created {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_exported"), reportPath))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_exported"), reportPath)})
 	}
 }
 
@@ -415,11 +415,11 @@ func formatCrashDuration(durationMs int64) string {
 func (p *FeedbackPlugin) exportDiagnostics(ctx context.Context) {
 	exportPath, err := supervisor.GetManager().Export(ctx)
 	if err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_export_failed"), err.Error())})
 		return
 	}
 	p.openGitHubThenRevealFile(ctx, githubIssueURL(feedbackBugTemplate, feedbackBugTitlePrefix), exportPath)
-	p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_exported"), exportPath))
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_exported"), exportPath)})
 }
 
 // openGitHubThenRevealFile opens the issue page first so Explorer is not covered by the browser.
@@ -444,8 +444,8 @@ func (p *FeedbackPlugin) clearLogs(ctx context.Context) {
 	// The supervisor retains this handle for child output; deleting it also
 	// disconnects that output from diagnostic exports on platforms that allow unlink.
 	if err := util.GetLogger().ClearHistory(filepath.Base(supervisor.GetManager().SupervisorLogPath())); err != nil {
-		p.api.Notify(ctx, fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_clear_failed"), err.Error()))
+		p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(p.api.GetTranslation(ctx, "plugin_feedback_notify_clear_failed"), err.Error())})
 		return
 	}
-	p.api.Notify(ctx, p.api.GetTranslation(ctx, "plugin_feedback_notify_logs_cleared"))
+	p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: p.api.GetTranslation(ctx, "plugin_feedback_notify_logs_cleared")})
 }

@@ -76,9 +76,9 @@ func (c *BackupPlugin) backup(ctx context.Context, query plugin.Query) []plugin.
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						backupErr := setting.GetSettingManager().Backup(ctx, setting.BackupTypeManual)
 						if backupErr != nil {
-							c.api.Notify(ctx, backupErr.Error())
+							c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: backupErr.Error()})
 						} else {
-							c.api.Notify(ctx, i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_success"))
+							c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: i18n.GetI18nManager().TranslateWox(ctx, "plugin_backup_success")})
 						}
 					},
 				},
@@ -119,7 +119,7 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						restoreErr := ui.RequestUserDataRestore(ctx, backup.Id)
 						if restoreErr != nil {
-							c.api.Notify(ctx, restoreErr.Error())
+							c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: restoreErr.Error()})
 						}
 					},
 				},
@@ -128,7 +128,7 @@ func (c *BackupPlugin) restore(ctx context.Context, query plugin.Query) []plugin
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						openErr := shell.Open(backup.Path)
 						if openErr != nil {
-							c.api.Notify(ctx, openErr.Error())
+							c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: openErr.Error()})
 						}
 					},
 				},

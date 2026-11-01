@@ -126,7 +126,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 	util.Go(ctx, "newWebsocketServer on init", func() {
 		err := c.newWebsocketServer(ctx)
 		if err != nil {
-			c.api.Notify(ctx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_browser_server_start_error"), err.Error()))
+			c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_browser_server_start_error"), err.Error())})
 		}
 	})
 
@@ -136,7 +136,7 @@ func (c *BrowserPlugin) Init(ctx context.Context, initParams plugin.InitParams) 
 			util.Go(callbackCtx, "newWebsocketServer on port changed", func() {
 				err := c.newWebsocketServer(callbackCtx)
 				if err != nil {
-					c.api.Notify(callbackCtx, fmt.Sprintf(i18n.GetI18nManager().TranslateWox(callbackCtx, "plugin_browser_server_start_error"), err.Error()))
+					c.api.ShowToastMsg(callbackCtx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(callbackCtx, "plugin_browser_server_start_error"), err.Error())})
 				}
 			})
 		}
@@ -169,11 +169,11 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 		}
 
 		results = append(results, plugin.QueryResult{
-			Title:    tab.Title,
-			SubTitle: tab.Url,
-			Score:    util.MaxInt64(titleScore, urlScore),
+			Title:       tab.Title,
+			SubTitle:    tab.Url,
+			Score:       util.MaxInt64(titleScore, urlScore),
 			IdentityKey: tab.Url,
-			Icon:     icon,
+			Icon:        icon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_browser_open_tab",
@@ -489,10 +489,10 @@ func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRU
 			icon = browserIcon.Overlay(tabIcon, 0.4, 0.6, 0.6)
 		}
 		result := plugin.QueryResult{
-			Title:    current.Title,
-			SubTitle: current.Url,
+			Title:       current.Title,
+			SubTitle:    current.Url,
 			IdentityKey: current.Url,
-			Icon:     icon,
+			Icon:        icon,
 			Actions: []plugin.QueryResultAction{
 				{
 					Name:        "i18n:plugin_browser_open_tab",
@@ -515,10 +515,10 @@ func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRU
 		title = url
 	}
 	result := plugin.QueryResult{
-		Title:    title,
-		SubTitle: url,
+		Title:       title,
+		SubTitle:    url,
 		IdentityKey: url,
-		Icon:     browserIcon,
+		Icon:        browserIcon,
 		Actions: []plugin.QueryResultAction{
 			{
 				Name:        "i18n:plugin_url_open",

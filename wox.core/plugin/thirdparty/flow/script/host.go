@@ -425,7 +425,7 @@ func (b pluginBridge) Notify(ctx context.Context, title string, subtitle string)
 		}
 		text += subtitle
 	}
-	api.Notify(ctx, text)
+	api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: text})
 }
 
 func (b pluginBridge) CopyText(ctx context.Context, text string) {

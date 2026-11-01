@@ -843,7 +843,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 		aiChatData.IsStreaming = false
 		plugin.GetPluginManager().GetUI().SendChatResponse(ctx, aiChatData)
 		r.saveChat(ctx, aiChatData)
-		r.api.Notify(ctx, r.api.GetTranslation(ctx, "ui_ai_chat_failed_to_chat"))
+		r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: r.api.GetTranslation(ctx, "ui_ai_chat_failed_to_chat")})
 	}
 }
 
@@ -1563,7 +1563,7 @@ func (r *AIChatPlugin) querySelection(ctx context.Context, query plugin.Query) p
 							reason = r.api.GetTranslation(ctx, key)
 						}
 						util.GetLogger().Error(ctx, fmt.Sprintf("AI: import attachment %s failed", name))
-						r.api.Notify(ctx, fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_ai_chat_attachment_failed"), name, reason))
+						r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(r.api.GetTranslation(ctx, "plugin_ai_chat_attachment_failed"), name, reason)})
 						return
 					}
 					attachments = imported

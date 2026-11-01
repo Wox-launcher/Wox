@@ -21,6 +21,8 @@ from wox_plugin import (  # noqa: E402
     RegisterPluginToolOption,
     UnregisterPluginToolOption,
     InvokePluginToolOption,
+    ShowToastMsgOption,
+    ToastMsgAction,
 )
 from wox_plugin_host import jsonrpc  # noqa: E402
 from wox_plugin_host.plugin_api import PluginAPI  # noqa: E402
@@ -28,6 +30,26 @@ from wox_plugin_host.plugin_manager import PluginInstance, plugin_instances, wai
 
 
 class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
+    async def test_toast_callback_is_one_shot_and_can_be_released(self):
+        api = PluginAPI(AsyncMock(), "toast", "Toast")
+        plugin_instances["toast"] = PluginInstance(plugin=object(), api=api, plugin_dir="", module_name="toast", toolbar_msg_actions={}, sys_paths=[])
+        api.invoke_method = AsyncMock(return_value={"Success": True, "ErrMsg": ""})
+        fired = []
+        option = ShowToastMsgOption(message="done", action=ToastMsgAction(name="Open", action=lambda ctx, data: fired.append(data.context_data)))
+        await api.show_toast_msg(Context.new(), option)
+        callback_id = next(iter(api.toast_callbacks))
+        request = {"PluginId": "toast", "PluginName": "Toast", "Method": "toastMsgAction", "Params": {"CallbackId": callback_id, "Invoke": "true", "ContextData": '{"path":"test"}'}}
+        await jsonrpc.handle_request_from_wox(Context.new(), request, AsyncMock())
+        await jsonrpc.handle_request_from_wox(Context.new(), request, AsyncMock())
+        self.assertEqual(fired, [{"path": "test"}])
+        await api.show_toast_msg(Context.new(), option)
+        request["Params"]["CallbackId"] = next(iter(api.toast_callbacks))
+        request["Params"]["Invoke"] = "false"
+        await jsonrpc.handle_request_from_wox(Context.new(), request, AsyncMock())
+        self.assertEqual(len(fired), 1)
+        self.assertFalse(api.toast_callbacks)
+        del plugin_instances["toast"]
+
     async def test_unload_waits_for_handler_and_rejects_new_calls(self):
         api = PluginAPI(AsyncMock(), "notes", "Notes")
         plugin_instances["notes"] = PluginInstance(

@@ -228,3 +228,8 @@ func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, plugin.
 func (a *attentionActionTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
 	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
+
+func (api *attentionActionTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

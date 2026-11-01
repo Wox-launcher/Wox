@@ -32,6 +32,8 @@ import {
   PluginToolHandler,
   SetSettingOption,
   SetSettingResult,
+  ShowToastMsgOption,
+  ShowToastMsgResult,
   UpdatableResult
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
@@ -96,6 +98,7 @@ function aiChatOptionsPayload(options: AI.ChatOptions | undefined): Record<strin
 }
 
 export class PluginAPI implements PublicAPI {
+  toastCallbacks = new Map<string, NonNullable<ShowToastMsgOption["Action"]>["Action"]>()
   pluginId: string
   pluginName: string
   settingChangeCallbacks: Map<string, (ctx: Context, key: string, value: string) => void>
@@ -203,6 +206,22 @@ export class PluginAPI implements PublicAPI {
 
   async Notify(ctx: Context, message: string): Promise<void> {
     await this.invokeMethod(ctx, "Notify", { message })
+  }
+
+  async ShowToastMsg(ctx: Context, option: ShowToastMsgOption): Promise<ShowToastMsgResult> {
+    if (option.Action && typeof option.Action.Action !== "function") return { Success: false, ErrMsg: "action callback is required" }
+    const callbackId = option.Action ? crypto.randomUUID() : ""
+    if (option.Action) this.toastCallbacks.set(callbackId, option.Action.Action)
+    try {
+      const result = (await this.invokeMethod(ctx, "ShowToastMsg", {
+        option: JSON.stringify({ ...option, Action: option.Action && { Name: option.Action.Name, ContextData: option.Action.ContextData, CallbackId: callbackId } })
+      })) as ShowToastMsgResult
+      if (!result.Success) this.toastCallbacks.delete(callbackId)
+      return result
+    } catch (error) {
+      this.toastCallbacks.delete(callbackId)
+      throw error
+    }
   }
 
   async PushAttention(ctx: Context, request: PushAttentionRequest): Promise<void> {

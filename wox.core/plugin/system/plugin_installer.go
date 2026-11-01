@@ -101,7 +101,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 
 	pluginMetadata, err := plugin.GetStoreManager().ParsePluginManifestFromLocal(ctx, filePath)
 	if err != nil {
-		i.api.Notify(ctx, fmt.Sprintf("Failed to parse plugin manifest: %s", err.Error()))
+		i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to parse plugin manifest: %s", err.Error())})
 		return results
 	}
 
@@ -170,13 +170,13 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
 						// notify starting
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx)))
+						i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx))})
 
 						installErr := plugin.GetStoreManager().InstallFromLocalWithProgress(ctx, filePath, func(message string) {
-							i.api.Notify(ctx, fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), message))
+							i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), message)})
 						})
 						if installErr != nil {
-							i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error()))
+							i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error())})
 							return
 						}
 
@@ -213,7 +213,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 						// success
 						actionVerbKey := fmt.Sprintf("plugin_installer_verb_%s_past", strings.ToLower(actionButtonName))
 						actionVerb := i.api.GetTranslation(ctx, actionVerbKey)
-						i.api.Notify(ctx, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.GetName(ctx), actionVerb))
+						i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.GetName(ctx), actionVerb)})
 					})
 				},
 			},
@@ -345,9 +345,9 @@ func (i *PluginInstallerPlugin) queryThemePackage(ctx context.Context, filePath 
 	// Match .wox installation priority above generic file-selection actions (AI Chat: 2000).
 	return []plugin.QueryResult{{Title: theme.GetName(ctx), SubTitle: theme.GetDescription(ctx), IdentityKey: theme.ThemeId, Icon: themeIcon, Score: 3000, Actions: []plugin.QueryResultAction{{Name: "i18n:plugin_theme_install_theme", Icon: icons.Get(icons.ActionInstall), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ActionContext) {
 		if err := ui.GetStoreManager().Install(ctx, theme); err != nil {
-			i.api.Notify(ctx, err.Error())
+			i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		} else {
-			i.api.Notify(ctx, "i18n:plugin_theme_install_success")
+			i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_theme_install_success"})
 		}
 	}}}}}
 }

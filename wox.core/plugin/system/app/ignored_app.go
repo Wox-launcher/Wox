@@ -116,12 +116,12 @@ func (a *ApplicationPlugin) hideAppFromSearch(ctx context.Context, info appInfo,
 	current, err := parseIgnoreRules(a.api.GetSetting(ctx, ignoreRulesSettingKey))
 	if err != nil {
 		a.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("failed to parse %s: %s", ignoreRulesSettingKey, err.Error()))
-		a.api.Notify(ctx, "i18n:plugin_app_hide_failed")
+		a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_app_hide_failed"})
 		return
 	}
 
 	if ignoreRuleHidesApp(info, displayName, current) {
-		a.api.Notify(ctx, "i18n:plugin_app_already_hidden")
+		a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_app_already_hidden"})
 		return
 	}
 
@@ -130,7 +130,7 @@ func (a *ApplicationPlugin) hideAppFromSearch(ctx context.Context, info appInfo,
 	payload, err := json.Marshal(current)
 	if err != nil {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to encode %s: %s", ignoreRulesSettingKey, err.Error()))
-		a.api.Notify(ctx, "i18n:plugin_app_hide_failed")
+		a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_app_hide_failed"})
 		return
 	}
 
@@ -141,9 +141,9 @@ func (a *ApplicationPlugin) hideAppFromSearch(ctx context.Context, info appInfo,
 	})
 	if !result.Success {
 		a.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save %s: %s", ignoreRulesSettingKey, result.ErrMsg))
-		a.api.Notify(ctx, "i18n:plugin_app_hide_failed")
+		a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_app_hide_failed"})
 		return
 	}
 
-	a.api.Notify(ctx, "i18n:plugin_app_hide_completed")
+	a.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_app_hide_completed"})
 }

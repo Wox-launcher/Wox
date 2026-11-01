@@ -158,10 +158,10 @@ func (t *TimerPlugin) buildStartResult(ctx context.Context, duration time.Durati
 	}
 
 	return plugin.QueryResult{
-		Title:    title,
-		SubTitle: subTitle,
-		Icon:     timerPluginIcon,
-		Score:    timerStartResultScore,
+		Title:       title,
+		SubTitle:    subTitle,
+		Icon:        timerPluginIcon,
+		Score:       timerStartResultScore,
 		IdentityKey: timerStartIdentityKey(duration, note),
 		Actions: attachTimerMRUContext([]plugin.QueryResultAction{
 			{
@@ -190,14 +190,14 @@ func (t *TimerPlugin) buildTimerResult(ctx context.Context, entry *timerEntry) p
 	title := formatTimerRemaining(remaining)
 	subTitle := t.timerSubtitle(ctx, entry)
 	result := plugin.QueryResult{
-		Id:       entry.ID,
-		Title:    title,
-		SubTitle: subTitle,
-		Icon:     timerResultIcon(entry),
-		Score:    timerResultScoreBase - int64(remaining/time.Second),
+		Id:          entry.ID,
+		Title:       title,
+		SubTitle:    subTitle,
+		Icon:        timerResultIcon(entry),
+		Score:       timerResultScoreBase - int64(remaining/time.Second),
 		IdentityKey: "timer:" + entry.ID,
-		Tails:    t.timerTails(ctx, entry),
-		Actions:  attachTimerMRUContext(t.buildTimerActions(ctx, entry.ID), timerEntryMRUContext(entry)),
+		Tails:       t.timerTails(ctx, entry),
+		Actions:     attachTimerMRUContext(t.buildTimerActions(ctx, entry.ID), timerEntryMRUContext(entry)),
 	}
 	t.trackResult(result.Id, entry.ID)
 	return result
@@ -336,7 +336,7 @@ func (t *TimerPlugin) startTimer(ctx context.Context, duration time.Duration, du
 	if note != "" {
 		display = note
 	}
-	t.api.Notify(ctx, fmt.Sprintf("%s %s", t.api.GetTranslation(ctx, "plugin_timer_started"), display))
+	t.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s %s", t.api.GetTranslation(ctx, "plugin_timer_started"), display)})
 	if pin {
 		t.setPinned(ctx, entry.ID, true)
 	}
@@ -630,7 +630,7 @@ func (t *TimerPlugin) notifyTimerFinished(ctx context.Context, entry *timerEntry
 	}
 	message := fmt.Sprintf("%s %s", t.api.GetTranslation(ctx, "plugin_timer_finished"), display)
 	if t.api != nil {
-		t.api.Notify(ctx, message)
+		t.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: message})
 	}
 	icon, _ := timerPluginIcon.ToImage()
 	notifier.Notify(icon, message)

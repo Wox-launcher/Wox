@@ -2,38 +2,93 @@ package notifier
 
 import (
 	"image"
-
 	"wox/common/icons"
+	woxui "wox/ui/runtime"
 	"wox/util"
 	"wox/util/overlay"
 	"wox/util/overlay/textoverlay"
 )
 
-const defaultNotificationName = "wox_notifier"
+const (
+	defaultNotificationName = "wox_notifier"
+	defaultToastMaxWidth    = 560
+)
 
-// Notify displays a standard Wox notification through the text overlay preset.
+// Toast carries the content and completion callback for one transient notification.
+type Toast struct {
+	PluginID    string
+	Icon        image.Image
+	Title       string
+	Message     string
+	ActionLabel string
+	OnDone      func(clicked bool)
+	IsValid     func() bool
+}
+
+// activeToast is only accessed on the UI thread.
+var activeToast *Toast
+
+// Notify displays the legacy notification without an action.
 func Notify(icon image.Image, message string) {
-	if message == "" {
+	util.Go(util.NewTraceContext(), "show notification", func() { ShowToast(Toast{Icon: icon, Message: message}) })
+}
+
+// ShowToast replaces the current notification on the UI thread.
+func ShowToast(toast Toast) bool {
+	if toast.Message == "" {
+		return false
+	}
+	if toast.Icon == nil {
+		toast.Icon, _ = icons.Get(icons.BrandWox).ToImage()
+	}
+	shown := false
+	if err := woxui.Call(func() {
+		if toast.IsValid != nil && !toast.IsValid() {
+			return
+		}
+		if activeToast != nil {
+			finishToast(activeToast, false)
+		}
+		activeToast = &toast
+		shown = textoverlay.ShowWithResult(textoverlay.Options{
+			Window: overlay.WindowOptions{ID: defaultNotificationName, Anchor: overlay.AnchorBottomCenter, OffsetY: -80, Movable: true, MaxWidth: defaultToastMaxWidth,
+				OnClose: func() { finishToast(&toast, false) }},
+			Closable: true, AutoCloseSeconds: 5, Message: toast.Message, Icon: toast.Icon, IconSize: 20, IconTextGap: 16,
+			ToastTitle: toast.Title, ToastActionLabel: toast.ActionLabel,
+			OnToastAction: func() {
+				if activeToast == &toast {
+					overlay.Close(defaultNotificationName)
+					finishToast(&toast, true)
+				}
+			},
+		})
+		if !shown {
+			finishToast(&toast, false)
+		}
+	}); err != nil {
+		return false
+	}
+	return shown
+}
+
+// finishToast invalidates the session before dispatching plugin work asynchronously.
+func finishToast(toast *Toast, clicked bool) {
+	if activeToast != toast {
 		return
 	}
-	if icon == nil {
-		img, _ := icons.Get(icons.BrandWox).ToImage()
-		icon = img
+	activeToast = nil
+	if toast.OnDone != nil {
+		util.Go(util.NewTraceContext(), "finish toast", func() { toast.OnDone(clicked) })
 	}
+}
 
-	util.Go(util.NewTraceContext(), "notifier.Notify", func() {
-		textoverlay.Show(textoverlay.Options{
-			Window: overlay.WindowOptions{
-				ID:      defaultNotificationName,
-				Anchor:  overlay.AnchorBottomCenter,
-				OffsetY: -80,
-				Movable: true,
-			},
-			Closable:         true,
-			AutoCloseSeconds: 5,
-			Message:          message,
-			Icon:             icon,
-			IconSize:         20,
-		})
+// CancelPlugin invalidates a plugin's active toast during unload.
+func CancelPlugin(pluginID string) {
+	_ = woxui.Call(func() {
+		if activeToast != nil && activeToast.PluginID == pluginID {
+			toast := activeToast
+			overlay.Close(defaultNotificationName)
+			finishToast(toast, false)
+		}
 	})
 }

@@ -140,3 +140,8 @@ func (e emptyAPIImpl) RegisterTriggerKeyword(context.Context, plugin.RegisterTri
 func (e emptyAPIImpl) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
 	return plugin.UnregisterTriggerKeywordResult{Success: true}
 }
+
+func (api emptyAPIImpl) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	api.Notify(ctx, option.Message)
+	return plugin.ShowToastMsgResult{Success: true}
+}

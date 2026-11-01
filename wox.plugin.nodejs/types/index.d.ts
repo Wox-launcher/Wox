@@ -1548,6 +1548,28 @@ export interface SetSettingResult {
   ErrMsg: string
 }
 
+/** An optional one-shot action for a transient notification. */
+export interface ToastMsgActionContext {
+  ContextData: MapString
+}
+
+export interface ToastMsgAction {
+  Name: string
+  ContextData?: MapString
+  Action: (ctx: Context, actionContext: ToastMsgActionContext) => Promise<void> | void
+}
+
+export interface ShowToastMsgOption {
+  Message: string
+  Title?: string
+  Action?: ToastMsgAction
+}
+
+export interface ShowToastMsgResult {
+  Success: boolean
+  ErrMsg: string
+}
+
 export interface PublicAPI {
   /**
    * Change Wox query
@@ -1569,10 +1591,10 @@ export interface PublicAPI {
    */
   IsVisible: (ctx: Context) => Promise<boolean>
 
-  /**
-   * Notify message
-   */
+  /** @deprecated Use ShowToastMsg for an independent notification window. */
   Notify: (ctx: Context, message: string) => Promise<void>
+  /** Show an independent notification window. Requires Wox >= 2.5.0. */
+  ShowToastMsg: (ctx: Context, option: ShowToastMsgOption) => Promise<ShowToastMsgResult>
 
   /**
    * Push a persistent attention item into Wox.

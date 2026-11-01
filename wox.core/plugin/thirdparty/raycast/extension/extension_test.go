@@ -256,7 +256,9 @@ func (a *recordingAPI) GetCacheFolder(context.Context) string                   
 func (*recordingAPI) GetThemeColors(context.Context, plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
 	return plugin.GetThemeColorsResult{}
 }
-func (*recordingAPI) Notify(context.Context, string) {}
+func (*recordingAPI) ShowToastMsg(context.Context, plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
+	return plugin.ShowToastMsgResult{Success: true}
+}
 func (a *recordingAPI) GetSetting(_ context.Context, key string) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -35,6 +35,40 @@ const context = () => ({
   }
 })
 
+test("toast callbacks are one-shot and dismissal does not invoke them", async () => {
+  const api = new PluginAPI({}, "toast-owner", "Owner")
+  const calls = []
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "ShowToastMsg")
+    calls.push(JSON.parse(params.option))
+    return { Success: true, ErrMsg: "" }
+  }
+  rpc.pluginInstances.set("toast-owner", { API: api })
+  const fired = []
+  await api.ShowToastMsg(context(), { Message: "done", Action: { Name: "Open", Action: (_ctx, value) => fired.push(value.ContextData) } })
+  const id = calls[0].Action.CallbackId
+  const request = { PluginId: "toast-owner", PluginName: "Owner", Method: "toastMsgAction", Params: { CallbackId: id, Invoke: "true", ContextData: '{"path":"test"}' } }
+  await rpc.handleRequestFromWox(context(), request, {})
+  await rpc.handleRequestFromWox(context(), request, {})
+  assert.deepEqual(fired, [{ path: "test" }])
+  await api.ShowToastMsg(context(), { Message: "again", Action: { Name: "Open", Action: () => fired.push("unexpected") } })
+  request.Params.CallbackId = calls[1].Action.CallbackId
+  request.Params.Invoke = "false"
+  await rpc.handleRequestFromWox(context(), request, {})
+  assert.equal(api.toastCallbacks.size, 0)
+  assert.equal(fired.length, 1)
+  rpc.pluginInstances.delete("toast-owner")
+})
+
+test("toast callback is released when the request fails", async () => {
+  const api = new PluginAPI({}, "toast-owner", "Owner")
+  api.invokeMethod = async () => {
+    throw new Error("disconnected")
+  }
+  await assert.rejects(api.ShowToastMsg(context(), { Message: "done", Action: { Name: "Open", Action: () => {} } }))
+  assert.equal(api.toastCallbacks.size, 0)
+})
+
 test("unload drains work even after Core stops waiting", async () => {
   const api = new PluginAPI({}, "owner", "Owner")
   let finish

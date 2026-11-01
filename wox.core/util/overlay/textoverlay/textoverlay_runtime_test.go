@@ -342,6 +342,122 @@ func TestRuntimeTextOverlayBuildInvokesClick(t *testing.T) {
 	}
 }
 
+func TestTextOverlayIconTextGap(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		options Options
+		want    float32
+	}{
+		{"default", Options{Message: "message"}, runtimeTextLeadingGap},
+		{"toast", Options{Message: "message", IconTextGap: 16}, textOverlayScaled(16)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			instance := &runtimeTextOverlay{
+				icon: &woxui.Image{}, options: tc.options,
+				layout: runtimeTextLayout{windowSize: woxui.Size{Width: 200, Height: 80}, contentSize: woxui.Size{Width: 180, Height: 60}, viewportHeight: 60, textWidth: 140},
+			}
+			found := false
+			walkTextOverlayWidget(instance.build(woxui.FrameInfo{Size: instance.layout.windowSize}), func(widget woxwidget.Widget) {
+				flex, ok := widget.(woxwidget.Flex)
+				if !ok || len(flex.Children) != 2 {
+					return
+				}
+				if _, ok := flex.Children[0].(woxwidget.Image); ok {
+					found = true
+					if flex.Gap != tc.want || textOverlayIconTextGap(tc.options) != tc.want {
+						t.Fatalf("icon gap = %v, want %v", flex.Gap, tc.want)
+					}
+				}
+			})
+			if !found {
+				t.Fatal("icon and message row not found")
+			}
+		})
+	}
+}
+
+func TestToastActionNeedsOwnRow(t *testing.T) {
+	minTextWidth := textOverlayScaled(200)
+	for _, tc := range []struct {
+		name        string
+		available   float32
+		action      float32
+		naturalText float32
+		wantBelow   bool
+	}{
+		{"wide window", minTextWidth + 150 + runtimeTextLeadingGap, 150, 500, false},
+		{"narrow window", minTextWidth + 150 + runtimeTextLeadingGap - 1, 150, 500, true},
+		{"short message", 150 + runtimeTextLeadingGap + 50, 150, 50, false},
+		{"no action", 50, 0, 500, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := toastActionNeedsOwnRow(tc.available, tc.action, tc.naturalText); got != tc.wantBelow {
+				t.Fatalf("action below = %v, want %v", got, tc.wantBelow)
+			}
+		})
+	}
+}
+
+func TestToastBuildContainsOptionalTitleAndAction(t *testing.T) {
+	clicked := false
+	instance := &runtimeTextOverlay{
+		layout: runtimeTextLayout{
+			windowSize: woxui.Size{Width: 400, Height: 100}, contentSize: woxui.Size{Width: 364, Height: 76},
+			viewportHeight: 76, textWidth: 160, textLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 160, Height: 20}, LineHeight: 20},
+			toastTitleLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 160, Height: 20}, LineHeight: 20}, toastActionWidth: 100,
+		},
+		options: Options{Message: "message", ToastTitle: "title", ToastActionLabel: "open", OnToastAction: func() { clicked = true }},
+	}
+	root := instance.build(woxui.FrameInfo{Size: instance.layout.windowSize})
+	field, ok := findTextOverlayMessageField(root)
+	foreground := overlay.CurrentThemeChrome().Foreground
+	secondary := foreground
+	secondary.A = uint8(uint16(secondary.A) * 2 / 3)
+	if !ok || field.TextColor != secondary {
+		t.Fatalf("titled toast message color = %+v, want secondary %+v", field.TextColor, secondary)
+	}
+	hasTitle, hasAction := false, false
+	walkTextOverlayWidget(root, func(child woxwidget.Widget) {
+		if text, ok := child.(woxwidget.TextBlock); ok && text.Value == "title" {
+			hasTitle = true
+		}
+		if button, ok := child.(woxwidget.Semantics); ok && button.AutomationID == "toast-action" {
+			hasAction = button.Label == "open"
+			if focus, ok := button.Child.(woxwidget.Focusable); ok {
+				focus.OnKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true})
+			}
+		}
+	})
+	if !hasTitle || !hasAction || !clicked {
+		t.Fatalf("title=%v action=%v clicked=%v", hasTitle, hasAction, clicked)
+	}
+	instance.options.ToastTitle = ""
+	root = instance.build(woxui.FrameInfo{Size: instance.layout.windowSize})
+	field, ok = findTextOverlayMessageField(root)
+	if !ok || field.TextColor != foreground {
+		t.Fatalf("untitled toast message color = %+v, want foreground %+v", field.TextColor, foreground)
+	}
+}
+
+func TestToastMessageUsesSecondaryColorInLightAndDarkThemes(t *testing.T) {
+	defer overlay.SetThemeProvider(nil)
+	for _, theme := range []common.Theme{
+		{OverlayBackgroundColor: "#181818", OverlayFontColor: "#ffffff"},
+		{OverlayBackgroundColor: "#f5f5f5", OverlayFontColor: "#000000"},
+	} {
+		overlay.SetThemeProvider(func() common.Theme { return theme })
+		instance := &runtimeTextOverlay{
+			layout:  runtimeTextLayout{windowSize: woxui.Size{Width: 200, Height: 80}, contentSize: woxui.Size{Width: 180, Height: 60}, viewportHeight: 60, textWidth: 160, textLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 160, Height: 20}, LineHeight: 20}},
+			options: Options{Message: "message", ToastTitle: "title"},
+		}
+		field, ok := findTextOverlayMessageField(instance.build(woxui.FrameInfo{Size: instance.layout.windowSize}))
+		foreground := overlay.CurrentThemeChrome().Foreground
+		if !ok || field.TextColor.R != foreground.R || field.TextColor.G != foreground.G || field.TextColor.B != foreground.B || field.TextColor.A >= foreground.A {
+			t.Fatalf("message color %+v is not a subdued theme foreground %+v", field.TextColor, foreground)
+		}
+	}
+}
+
 func TestRuntimeTextOverlayBuildUsesSelectableMessage(t *testing.T) {
 	const body = "Please provide the text to translate."
 	instance := &runtimeTextOverlay{
@@ -434,6 +550,10 @@ func walkTextOverlayWidget(widget woxwidget.Widget, visit func(woxwidget.Widget)
 	case woxwidget.Container:
 		walkTextOverlayWidget(typed.Child, visit)
 	case woxwidget.Gesture:
+		walkTextOverlayWidget(typed.Child, visit)
+	case woxwidget.Semantics:
+		walkTextOverlayWidget(typed.Child, visit)
+	case woxwidget.Focusable:
 		walkTextOverlayWidget(typed.Child, visit)
 	}
 }
