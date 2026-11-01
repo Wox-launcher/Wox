@@ -453,7 +453,7 @@ func TestInAppHotkeyConflicts(t *testing.T) {
 		"ui_in_app_hotkey_text_editing": "Editing",
 	}}})
 	app.generalSettings.ApplyData(settingsData{
-		MainHotkey: "alt+space", ActionPanelHotkey: "alt+k", RefinementHotkey: "alt+f",
+		MainHotkey: "alt+space", ActionPanelHotkey: "alt+k", RefinementHotkey: "alt+g",
 		NavigationBindings: "emacs", QueryHotkeys: []queryHotkeySetting{{Hotkey: "alt+q"}, {Hotkey: "alt+d", Disabled: true}},
 	})
 	modifier := "alt+"
@@ -462,13 +462,14 @@ func TestInAppHotkeyConflicts(t *testing.T) {
 	}
 	for _, tc := range []struct{ key, hotkey, want string }{
 		{"RefinementHotkey", "alt+k", "Already used by Actions"},
-		{"ActionPanelHotkey", "alt+f", "Already used by Filters"},
+		{"ActionPanelHotkey", "alt+g", "Already used by Filters"},
 		{"RefinementHotkey", modifier + "n", "Already used by Navigation"},
+		{"RefinementHotkey", modifier + "f", "Already used by Navigation"},
 		{"RefinementHotkey", "alt+space", "Already used by Main"},
 		{"RefinementHotkey", "alt+q", "Already used by Query"},
 		{"RefinementHotkey", primaryHotkey("c"), "Already used by Editing"},
 		{"RefinementHotkey", "alt+d", ""},
-		{"RefinementHotkey", "alt+f", ""},
+		{"RefinementHotkey", "alt+g", ""},
 	} {
 		if got := app.hotkeyRecording.inAppHotkeyConflict(tc.key, tc.hotkey); got != tc.want {
 			t.Errorf("%s %s: got %q, want %q", tc.key, tc.hotkey, got, tc.want)

@@ -1028,7 +1028,7 @@ func wrapPreviewOnlyResults(snapshot viewSnapshot, preview woxwidget.Widget) wox
 		result := snapshot.results[snapshot.selected]
 		preview = woxwidget.Semantics{
 			Key: woxwidget.Key("launcher-result-key-" + result.ID), AutomationID: "launcher.result." + result.ID,
-			Role: woxui.AccessibilityRoleListItem, Label: result.Title, Value: result.Title, Selected: true,
+			Role: woxui.AccessibilityRoleListItem, Label: result.Title, Description: result.SubTitle, Value: result.Title, Selected: true,
 			LiveRegion: woxui.AccessibilityLiveRegionPolite, Child: preview,
 		}
 	}

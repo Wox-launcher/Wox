@@ -82,7 +82,29 @@ func Test005NotesSidebarTree(t *testing.T) {
 				activate("notes.organize.save")
 			}
 		}
-		activate("notes.toolbar.sidebar")
+		// Search in an earlier case may have left the remembered sidebar open.
+		initialSidebarSnapshot, err := client.Snapshot(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, searching := automationdriver.Find(initialSidebarSnapshot, "notes.search.results"); searching {
+			if err := client.Perform(ctx, "notes.search", woxui.AccessibilityActionFocus, ""); err != nil {
+				t.Fatal(err)
+			}
+			if err := client.PressKey(ctx, woxui.KeyEscape, 0); err != nil {
+				t.Fatal(err)
+			}
+			initialSidebarSnapshot, err = client.WaitFor(ctx, func(s woxwidget.AutomationSnapshot) bool {
+				_, open := automationdriver.Find(s, "notes.sidebar.tree")
+				return open
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, open := automationdriver.Find(initialSidebarSnapshot, "notes.sidebar.tree"); !open {
+			activate("notes.toolbar.sidebar")
+		}
 		createGroup("Sidebar A")
 		activate(row("Sidebar A").AutomationID)
 		createGroup("Sidebar B")

@@ -279,6 +279,15 @@ func TestMRUResultsResetGridLayout(t *testing.T) {
 	}
 }
 
+func TestPreviewOnlyResultExposesSubtitle(t *testing.T) {
+	snapshot := viewSnapshot{results: []queryResult{{ID: "status", Title: "File Search Status", SubTitle: "files=10000"}}, selected: 0}
+	results := wrapPreviewOnlyResults(snapshot, woxwidget.Container{}).(woxwidget.Semantics)
+	result := results.Child.(woxwidget.Semantics)
+	if result.Label != "File Search Status" || result.Description != "files=10000" {
+		t.Fatalf("preview result semantics: label=%q description=%q", result.Label, result.Description)
+	}
+}
+
 func TestLauncherChromeHiddenForPreviewOnlyModes(t *testing.T) {
 	if !launcherChromeHidden(showAppParams{HideQueryBox: true, HideToolbar: true}, false) {
 		t.Fatal("hidden query box and toolbar should expose preview close behavior")
