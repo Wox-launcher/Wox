@@ -642,7 +642,8 @@ func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
 		return
 	}
 	plugin := plugins[index]
-	if form := c.Form(); form != nil && form.pluginID == plugin.ID {
+	previousForm := c.Form()
+	if form := previousForm; form != nil && form.pluginID == plugin.ID {
 		syncFormFieldsEditorLocked(&form.formFieldsState)
 		refreshFormDisplayDefinitions(&form.formFieldsState, pluginSettingsFormDefinitions(plugin))
 		if editor := c.formTables.settingsEditor; editor != nil && editor.target == &form.formFieldsState {
@@ -690,6 +691,18 @@ func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
 	applyDictationFormCompatibility(plugin, values)
 	fields := newFormFieldsState(definitions, values, false)
 	preserveDictationCompatibilityValues(plugin.ID, fields.values, values)
+	if previousForm != nil && previousForm.pluginID == plugin.ID && previousForm.active && previousForm.focused >= 0 && previousForm.focused < len(previousForm.definitions) && previousForm.focused < len(fields.definitions) {
+		fieldIndex := previousForm.focused
+		previous := previousForm.definitions[fieldIndex]
+		current := fields.definitions[fieldIndex]
+		if previous.Type == current.Type && previous.Value.Key != "" && previous.Value.Key == current.Value.Key && formDefinitionFocusable(current) {
+			// A post-save refresh must not discard the active editor and its selection.
+			setFormFieldsFocusLocked(&fields, fieldIndex)
+			if previousForm.editor != nil && previousForm.editor.Text() == fields.values[current.Value.Key] {
+				fields.editor = previousForm.editor
+			}
+		}
+	}
 	if models := c.aiSettings().Models(); len(models) > 0 {
 		applyAIModelOptionsLocked(&fields, models)
 	}

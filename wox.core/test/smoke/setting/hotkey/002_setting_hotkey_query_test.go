@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	queryHotkeyTableID  = "hotkey-settings-field-5"
+	queryHotkeyTableID  = smoke.QueryHotkeyTableID
 	queryHotkeyChord    = "ctrl+alt+f12"
 	queryHotkeyQuery    = "wox-smoke result-binding "
 	queryHotkeyResult   = "Result binding fixture"

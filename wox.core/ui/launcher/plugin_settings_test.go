@@ -1320,6 +1320,41 @@ func TestPluginSelectionRefreshPreservesUnsavedField(t *testing.T) {
 	}
 }
 
+func TestPluginSelectionRefreshPreservesFocusedField(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
+		ID: "app", SettingDefinitions: []formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "accessKey"}}},
+		Setting: pluginSettingsData{Settings: map[string]string{"accessKey": "saved-key"}},
+	}})
+	a.pluginSettings.setPluginSelectionLocked(0)
+	a.pluginSettings.focusPluginFormField(1)
+	previous := a.pluginSettings.Form()
+	previousEditor := previous.editor
+
+	a.pluginSettings.setPluginSelectionLocked(0)
+	current := a.pluginSettings.Form()
+	if !current.active || current.focused != 1 || current.editor != previousEditor || current.editor.Text() != "saved-key" {
+		t.Fatalf("same-plugin refresh lost the active editor: active=%v focused=%d editor preserved=%v", current.active, current.focused, current.editor == previousEditor)
+	}
+
+	plugins := a.pluginSettings.Plugins()
+	plugins[0].Setting.Settings["accessKey"] = "normalized-key"
+	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.setPluginSelectionLocked(0)
+	current = a.pluginSettings.Form()
+	if !current.active || current.focused != 1 || current.editor.Text() != "normalized-key" {
+		t.Fatal("same-plugin refresh did not update the active field's persisted value")
+	}
+
+	plugins[0].SettingDefinitions[0].Value.Key = "replacement"
+	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.setPluginSelectionLocked(0)
+	if a.pluginSettings.Form().active {
+		t.Fatal("a replacement field must not inherit the previous field's focus")
+	}
+}
+
 func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()

@@ -47,7 +47,7 @@ func Test002SettingGeneralStartPageMRUAfterQueryHotkey(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ConfigureStartPage(t, ctx, client, 1)
 		mruLabel := seedConverterMRU(t, ctx, client)
-		const tableID = "hotkey-settings-field-5"
+		const tableID = smoke.QueryHotkeyTableID
 		if err := client.OpenSettings(ctx, "/hotkeys"); err != nil {
 			t.Fatal(err)
 		}

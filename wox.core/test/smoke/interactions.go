@@ -17,6 +17,9 @@ import (
 	"wox/util/clipboard"
 )
 
+// QueryHotkeyTableID identifies the query shortcut table in Windows Hotkey settings.
+const QueryHotkeyTableID = "hotkey-settings-field-4"
+
 // OpenGeneralSettingsAndReadChoice opens General settings and returns one persisted choice label.
 func OpenGeneralSettingsAndReadChoice(t *testing.T, ctx context.Context, client *automationdriver.Client, settingKey string) string {
 	t.Helper()

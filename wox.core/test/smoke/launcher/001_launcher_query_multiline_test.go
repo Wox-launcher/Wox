@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ import (
 )
 
 // Test001LauncherQueryMultiline verifies multiline keyboard input, clipboard paste, and wheel scrolling in the native query box.
-// Flow: show launcher -> insert a line with Shift+Enter -> paste mixed newline text with the platform shortcut -> scroll the overflowing query toward earlier lines.
+// Flow: show launcher -> insert a line with Shift+Enter -> paste mixed newline text with the platform shortcut -> scroll the overflowing query.
 // Evidence: internal line endings are normalized, leading and trailing line endings are dropped, and the query moves vertically after the wheel event without changing its value.
 func Test001LauncherQueryMultiline(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
@@ -72,16 +73,26 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		if _, found := automationdriver.Find(snapshot, "launcher.query.input"); !found {
 			t.Fatal("launcher query input disappeared before wheel scroll")
 		}
-		beforeScroll, found := automationdriver.Find(snapshot, "launcher.query.scroll")
-		if !found {
-			t.Fatal("launcher query scroll state is unavailable")
+		// The caret may land at either end of the viewport depending on layout timing.
+		// Set a known starting position before testing a real wheel event.
+		if err := client.Perform(ctx, "launcher.query.scroll", woxui.AccessibilityActionScroll, "0"); err != nil {
+			t.Fatalf("reset multiline query scroll: %v", err)
 		}
-		// KeepVisible already pins the caret line, so the viewport starts at max
-		// offset. A negative wheel delta would try to scroll further down and no-op.
+		var beforeScroll woxui.AccessibilityNode
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			input, inputFound := automationdriver.Find(snapshot, "launcher.query.input")
+			var found bool
+			beforeScroll, found = automationdriver.Find(snapshot, "launcher.query.scroll")
+			var offset, maximum float64
+			_, parseErr := fmt.Sscanf(beforeScroll.Value, "%f/%f", &offset, &maximum)
+			return inputFound && input.Value == expected && found && parseErr == nil && offset == 0 && maximum > 0
+		}); err != nil {
+			t.Fatalf("wait for scrollable query at top: %v", err)
+		}
 		if err := client.Pointer(ctx, woxui.PointerEvent{
 			Kind:     woxui.PointerScroll,
 			Position: woxui.Point{X: beforeScroll.Bounds.X + 20, Y: beforeScroll.Bounds.Y + beforeScroll.Bounds.Height/2},
-			Scroll:   woxui.Point{Y: 34},
+			Scroll:   woxui.Point{Y: -34},
 		}); err != nil {
 			t.Fatalf("scroll multiline query with wheel: %v", err)
 		}
@@ -90,7 +101,9 @@ func Test001LauncherQueryMultiline(t *testing.T) {
 		snapshot, err = client.WaitFor(scrollCtx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			input, found := automationdriver.Find(snapshot, "launcher.query.input")
 			scroll, scrollFound := automationdriver.Find(snapshot, "launcher.query.scroll")
-			return found && input.Value == expected && scrollFound && scroll.Value != beforeScroll.Value
+			var offset, maximum float64
+			_, parseErr := fmt.Sscanf(scroll.Value, "%f/%f", &offset, &maximum)
+			return found && input.Value == expected && scrollFound && parseErr == nil && offset > 0
 		})
 		if err != nil {
 			currentSnapshot, snapshotErr := client.Snapshot(ctx)
