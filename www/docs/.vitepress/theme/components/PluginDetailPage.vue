@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
 
-const { lang } = useData();
-const plugins = ref<LocalizedStorePluginManifest[]>([]);
-const isLoading = ref(true);
+const { lang, params } = useData();
+const plugins = computed(() => fetchStorePlugins().map((item) => localizePlugin(item, lang.value)));
+const isLoading = ref(!params.value?.id);
 const activeScreenshot = ref(0);
-const currentPluginId = ref("");
+const currentPluginId = ref(String(params.value?.id || ""));
 const lastPluginStorageKey = "wox-store:last-plugin-id";
 const pluginDetailBodyClass = "plugin-detail-page";
 
@@ -142,8 +142,7 @@ const shareHref = computed(() => {
 });
 
 function pluginDetailHref(pluginId: string) {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/plugin.html" : "/store/plugin.html";
-  return withBase(`${prefix}?id=${encodeURIComponent(pluginId)}`);
+  return withBase(pluginDetailPath(pluginId, lang.value));
 }
 
 function installHref(plugin: LocalizedStorePluginManifest) {
@@ -185,37 +184,25 @@ function syncCurrentPluginIdFromUrl(replaceHistory = false) {
   }
 }
 
-function openPluginDetail(pluginId: string) {
-  if (typeof window === "undefined" || !pluginId) return;
-  if (currentPluginId.value === pluginId) return;
+function loadPlugins() {
+  if (params.value?.id) return;
 
-  currentPluginId.value = pluginId;
-  activeScreenshot.value = 0;
-  window.sessionStorage.setItem(lastPluginStorageKey, pluginId);
-
-  const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.set("id", pluginId);
-  window.history.pushState({}, "", currentUrl.toString());
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-async function loadPlugins() {
-  isLoading.value = true;
-
-  try {
-    const storePlugins = await fetchStorePlugins();
-    plugins.value = storePlugins.map((item) => localizePlugin(item, lang.value));
-    syncCurrentPluginIdFromUrl(true);
-    activeScreenshot.value = 0;
-  } catch (error) {
-    console.error(error);
-  } finally {
-    isLoading.value = false;
+  syncCurrentPluginIdFromUrl(true);
+  isLoading.value = false;
+  if (plugin.value) {
+    window.location.replace(pluginDetailHref(plugin.value.Id));
   }
 }
 
+watch(params, (value) => {
+  if (value?.id) {
+    currentPluginId.value = String(value.id);
+    activeScreenshot.value = 0;
+  }
+});
+
 function handlePopState() {
-  syncCurrentPluginIdFromUrl();
+  if (!params.value?.id) syncCurrentPluginIdFromUrl();
   activeScreenshot.value = 0;
 }
 
@@ -375,7 +362,7 @@ onUnmounted(() => {
       </div>
 
       <div class="related-grid">
-        <a v-for="item in relatedPlugins" :key="item.Id" :href="pluginDetailHref(item.Id)" class="related-card" @click.prevent="openPluginDetail(item.Id)">
+        <a v-for="item in relatedPlugins" :key="item.Id" :href="pluginDetailHref(item.Id)" class="related-card">
           <div class="related-top">
             <img v-if="item.IconUrl" :src="item.IconUrl" class="related-icon" alt="plugin icon" />
             <div v-else class="related-icon related-placeholder">{{ item.IconEmoji || "🧩" }}</div>

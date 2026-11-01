@@ -1,6 +1,7 @@
 import { defineConfig } from "vitepress";
 import { generateChangelogPages, getLatestRelease } from "../../scripts/release-meta.mjs";
 import { applySeo } from "./seo";
+import { fetchStorePlugins, localizePlugin } from "./theme/components/pluginStore";
 
 generateChangelogPages();
 
@@ -22,9 +23,17 @@ export default defineConfig({
   },
   sitemap: {
     hostname: "https://www.woxlauncher.com",
-    transformItems: (items) => items.filter((item) => !/^(?:zh\/)?compare\/(?:index\.html)?$/.test(item.url)),
+    transformItems: (items) => items.filter((item) => !/^(?:zh\/)?(?:compare\/(?:index\.html)?|store\/plugin\.html)$/.test(item.url)),
   },
   transformPageData(pageData) {
+    if (pageData.params?.id) {
+      const plugin = fetchStorePlugins().find((item) => item.Id === pageData.params?.id);
+      if (plugin) {
+        const localized = localizePlugin(plugin, pageData.relativePath.startsWith("zh/") ? "zh-CN" : "en-US");
+        pageData.title = pageData.frontmatter.title = pageData.relativePath.startsWith("zh/") ? `${localized.LocalizedName} 插件` : `${localized.LocalizedName} Plugin`;
+        pageData.description = pageData.frontmatter.description = localized.LocalizedDescription;
+      }
+    }
     applySeo(pageData);
     if (!keepsGuideChrome(pageData.relativePath)) {
       pageData.frontmatter.aside = false;

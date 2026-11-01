@@ -24,7 +24,7 @@ export type LocalizedStorePluginManifest = StorePluginManifest & {
   LocalizedDescription: string;
 };
 
-export async function fetchStorePlugins() {
+export function fetchStorePlugins() {
   return storePluginData as StorePluginManifest[];
 }
 
@@ -82,4 +82,10 @@ export function formatStoreDate(dateText: string | undefined, lang: string) {
     month: "short",
     day: "numeric",
   }).format(parsed);
+}
+
+// Plugin IDs remain stable when a plugin is renamed.
+export function pluginDetailPath(pluginId: string, lang: string): string {
+  const prefix = lang.toLowerCase().startsWith("zh") ? "/zh" : "";
+  return `${prefix}/store/plugins/${encodeURIComponent(pluginId)}.html`;
 }

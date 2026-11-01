@@ -29,6 +29,9 @@ export function applySeo(pageData: PageData): void {
   pageData.frontmatter.head ??= [];
   const head = pageData.frontmatter.head as Array<[string, Record<string, string>]>;
   head.push(["link", { rel: "canonical", href: canonical }]);
+  if (/^(?:zh\/)?store\/plugin\.md$/.test(pageData.relativePath)) {
+    head.push(["meta", { name: "robots", content: "noindex, follow" }]);
+  }
   if (redirect) {
     head.push(["meta", { name: "robots", content: "noindex, follow" }]);
     head.push(["meta", { "http-equiv": "refresh", content: `0; url=${redirect}` }]);
@@ -41,7 +44,7 @@ export function applySeo(pageData: PageData): void {
   }
 
   const alternate = alternateRelativePath(pageData.relativePath);
-  if (!alternate || !pageExists(alternate)) {
+  if (!alternate || (!pageData.params?.id && !pageExists(alternate))) {
     return;
   }
 

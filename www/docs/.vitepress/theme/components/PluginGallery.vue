@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, localizePlugin, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, fetchStorePlugins, localizePlugin, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
 
-const plugins = ref<LocalizedStorePluginManifest[]>([]);
+
 const searchQuery = ref("");
 const { lang } = useData();
 
@@ -29,14 +29,7 @@ const uiText = computed(() => {
   };
 });
 
-onMounted(async () => {
-  try {
-    const storePlugins = await fetchStorePlugins();
-    plugins.value = storePlugins.map((plugin) => localizePlugin(plugin, lang.value));
-  } catch (error) {
-    console.error(error);
-  }
-});
+const plugins = computed(() => fetchStorePlugins().map((plugin) => localizePlugin(plugin, lang.value)));
 
 const filteredPlugins = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
@@ -48,8 +41,7 @@ const filteredPlugins = computed(() => {
 });
 
 function pluginDetailHref(pluginId: string) {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/plugin.html" : "/store/plugin.html";
-  return withBase(`${prefix}?id=${encodeURIComponent(pluginId)}`);
+  return withBase(pluginDetailPath(pluginId, lang.value));
 }
 
 function installHref(plugin: LocalizedStorePluginManifest) {
