@@ -602,11 +602,46 @@ int refreshFileExplorerMonitorState()
     return refreshFileExplorerMonitorStateForRawKey(0);
 }
 
+// directoryOpusActivePane returns the focused file display of an Opus lister, or NULL when
+// hwnd is not a lister or its focus is elsewhere (folder tree, location bar, rename).
+// A lister can be split left/right or top/bottom and each pane owns a file display, so the
+// focused one is the pane being typed in, whatever the layout.
+static HWND directoryOpusActivePane(HWND hwnd)
+{
+    WCHAR className[64];
+    if (!hwnd || GetClassNameW(hwnd, className, 64) == 0 || _wcsicmp(className, L"dopus.lister") != 0)
+    {
+        return NULL;
+    }
+
+    GUITHREADINFO guiInfo;
+    guiInfo.cbSize = sizeof(GUITHREADINFO);
+    DWORD threadId = GetWindowThreadProcessId(hwnd, NULL);
+    if (threadId == 0 || !GetGUIThreadInfo(threadId, &guiInfo) || !guiInfo.hwndFocus || !IsChild(hwnd, guiInfo.hwndFocus))
+    {
+        return NULL;
+    }
+    if (GetClassNameW(guiInfo.hwndFocus, className, 64) == 0 || !isDirectoryOpusFileDisplayClassName(className))
+    {
+        return NULL;
+    }
+    return guiInfo.hwndFocus;
+}
+
 static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
 {
     currentState = isDialog ? stateDialog : stateExplorer;
+    // The popup is placed at the anchor's bottom-right. For Opus, anchor to the pane being
+    // typed in rather than the whole lister. Every type-to-search keydown re-publishes the
+    // activation, so switching panes (e.g. Tab) moves the popup to the new pane.
+    // The window identity sent to Go stays the lister HWND.
+    HWND anchor = isDialog ? NULL : directoryOpusActivePane(hwnd);
+    if (!anchor)
+    {
+        anchor = hwnd;
+    }
     RECT rect;
-    if (GetWindowRect(hwnd, &rect))
+    if (GetWindowRect(anchor, &rect))
     {
         int physX = rect.left;
         int physY = rect.top;
@@ -616,14 +651,14 @@ static void triggerActivation(HWND hwnd, DWORD pid, int isDialog)
         // Convert physical coordinates to logical coordinates for UI.
         // GetWindowRect returns physical pixels, but UI's windowManager.setPosition
         // expects logical (DPI-scaled) coordinates.
-        UINT dpi = getDpiForWindowMonitor(hwnd);
+        UINT dpi = getDpiForWindowMonitor(anchor);
         float scale = (float)dpi / 96.0f;
 
         int x = (int)(physX / scale);
         int y = (int)(physY / scale);
         int w = (int)(physW / scale);
         int h = (int)(physH / scale);
-        logMessage("Activated hwnd=0x%p pid=%lu dialog=%d physical=(%d,%d,%d,%d) logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", hwnd, pid, isDialog, physX, physY, physW, physH, x, y, w, h, dpi, scale);
+        logMessage("Activated hwnd=0x%p anchor=0x%p pid=%lu dialog=%d physical=(%d,%d,%d,%d) logical=(%d,%d,%d,%d) dpi=%u scale=%.2f", hwnd, anchor, pid, isDialog, physX, physY, physW, physH, x, y, w, h, dpi, scale);
         fileExplorerActivatedCallbackCGO((int)pid, isDialog, (uintptr_t)hwnd, x, y, w, h);
     }
     else
