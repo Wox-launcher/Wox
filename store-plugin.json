@@ -1014,8 +1014,8 @@
     "Id": "c3e8a7d2-4b1f-4e6a-9d2c-8f5a1b0e7c34",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
-    "MinWoxVersion": "2.0.0",
+    "Version": "1.1.0",
+    "MinWoxVersion": "2.4.9",
     "Runtime": "script",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://avatars.githubusercontent.com/u/16618068?s=128",
@@ -1028,7 +1028,7 @@
       "Windows"
     ],
     "DateCreated": "2026-09-01 22:55:00",
-    "DateUpdated": "2026-09-01 22:55:00",
+    "DateUpdated": "2026-11-01 03:04:58",
     "I18n": {
       "en_US": {
         "plugin_name": "Scoop",
