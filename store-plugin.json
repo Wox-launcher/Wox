@@ -397,8 +397,8 @@
     "Id": "407fdbba-bdab-4bc1-aa09-b46e811155a6",
     "Name": "LocalSend",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
-    "MinWoxVersion": "2.0.0",
+    "Version": "0.1.0",
+    "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.LocalSend/refs/heads/main/images/app.png",
@@ -413,7 +413,7 @@
       "linux"
     ],
     "DateCreated": "2026-01-02 22:40:00",
-    "DateUpdated": "2026-01-02 22:40:00",
+    "DateUpdated": "2026-11-01 15:03:09",
     "I18n": {
       "en_US": {
         "plugin_description": "Share files via LocalSend protocol"
