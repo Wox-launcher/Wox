@@ -2,9 +2,18 @@ package quickjump
 
 import (
 	"encoding/xml"
+	"fmt"
 	"strconv"
 	"strings"
 )
+
+// directoryOpusLister is one Directory Opus lister window plus the dopusrt.exe that controls it.
+// Callers resolve it once per action with findDirectoryOpusLister and use its methods.
+type directoryOpusLister struct {
+	pid         int
+	hwnd        uintptr
+	dopusrtPath string
+}
 
 // directoryOpusPathsResult is the XML written by `dopusrt /info <file>,paths`.
 // Each <path> is one tab: lister and tab are HWNDs in hex, the element text is the
@@ -38,4 +47,11 @@ func selectDirectoryOpusSourcePath(data []byte, listerHwnd uintptr) string {
 		return strings.TrimSpace(tab.Path)
 	}
 	return ""
+}
+
+// buildDirectoryOpusGoArgs returns the dopusrt arguments that run Opus' Go command on targetPath
+// in the active lister. Opus parses the text after /acmd itself and does not treat backslashes
+// as escapes, so a root such as D:\ can stay quoted as-is.
+func buildDirectoryOpusGoArgs(targetPath string) string {
+	return fmt.Sprintf(`/acmd Go PATH="%s"`, strings.TrimSpace(targetPath))
 }

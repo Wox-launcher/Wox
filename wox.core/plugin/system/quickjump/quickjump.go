@@ -229,6 +229,10 @@ func (c *QuickJumpPlugin) shouldHandleQuery(ctx context.Context, query plugin.Qu
 		return true
 	}
 
+	if _, ok := findDirectoryOpusLister(query.Env.ActiveWindowPid, query.Env.ActiveWindowId); ok {
+		return true
+	}
+
 	isFileExplorer, err := window.IsFileExplorer(query.Env.ActiveWindowPid)
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, "Failed to check if active app is file explorer: "+err.Error())
@@ -519,6 +523,17 @@ func (c *QuickJumpPlugin) revealEntry(ctx context.Context, env plugin.QueryEnv, 
 		return
 	}
 
+	if opusLister, ok := findDirectoryOpusLister(env.ActiveWindowPid, env.ActiveWindowId); ok {
+		// Go on a file path reads its parent folder and selects the file, so current-folder
+		// and global hits share one command.
+		if err := opusLister.goTo(ctx, fullPath); err != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Reveal in Directory Opus failed: pid=%d windowId=%q path=%s err=%s", env.ActiveWindowPid, env.ActiveWindowId, fullPath, err.Error()))
+			return
+		}
+		c.api.HideApp(ctx)
+		return
+	}
+
 	if isGlobalResult && !isDir {
 		if !window.NavigateInFileExplorer(env.ActiveWindowPid, filepath.Dir(fullPath), env.ActiveWindowTitle, env.ActiveWindowId) {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Navigate explorer to entry parent failed: pid=%d path=%s", env.ActiveWindowPid, fullPath))
@@ -806,6 +821,13 @@ func (c *QuickJumpPlugin) getCurrentFileExplorerPath(ctx context.Context, env pl
 	}
 
 	if util.IsWindows() {
+		// Directory Opus listers are not Shell windows; read the source tab through dopusrt.
+		if opusLister, ok := findDirectoryOpusLister(env.ActiveWindowPid, env.ActiveWindowId); ok {
+			opusPath := opusLister.sourcePath(ctx)
+			c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("Explorer path resolved from Directory Opus lister: pid=%d windowId=%q path=%q", env.ActiveWindowPid, env.ActiveWindowId, opusPath))
+			return opusPath
+		}
+
 		// After Quick Jump takes focus, GetForegroundWindow() is Wox. The
 		// captured Explorer HWND is the only safe window to query: probing
 		// sibling explorer.exe cabinets can crash Explorer if one owns a
@@ -854,6 +876,17 @@ func (c *QuickJumpPlugin) jumpToFolder(ctx context.Context, env plugin.QueryEnv,
 		c.setCachedOpenSaveDialogPath(env.ActiveWindowPid, env.ActiveWindowTitle, env.ActiveWindowId, folderPath)
 		c.api.HideApp(ctx)
 		return
+	}
+
+	if opusLister, ok := findDirectoryOpusLister(env.ActiveWindowPid, env.ActiveWindowId); ok {
+		err := opusLister.goTo(ctx, folderPath)
+		if err == nil {
+			c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Navigate Directory Opus succeeded: pid=%d windowId=%q path=%s elapsedMs=%d", env.ActiveWindowPid, env.ActiveWindowId, folderPath, time.Since(startedAt).Milliseconds()))
+			c.api.HideApp(ctx)
+			return
+		}
+		// Fall through so the Shell open fallback below still takes the user to the folder.
+		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("Navigate Directory Opus failed: pid=%d windowId=%q path=%s err=%s", env.ActiveWindowPid, env.ActiveWindowId, folderPath, err.Error()))
 	}
 
 	if window.NavigateInFileExplorer(env.ActiveWindowPid, folderPath, env.ActiveWindowTitle, env.ActiveWindowId) {
