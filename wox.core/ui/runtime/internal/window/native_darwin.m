@@ -140,6 +140,7 @@ struct WoxDarwinWindow {
   uint8_t pointer_cursor;
   NSCursor *web_view_cursor;
   bool pointer_over_web_view;
+  NSEvent *dispatching_pointer_event;
   NSEvent *primary_mouse_down_event;
   bool closed;
   bool render_scheduled;
@@ -2100,7 +2101,11 @@ static uint8_t portable_pointer_button(NSEvent *event) {
     return;
   }
   NSPoint position = [self convertPoint:event.locationInWindow fromView:nil];
+  // Tracking callbacks can carry a synthesized event distinct from currentEvent.
+  NSEvent *previous = owner->dispatching_pointer_event;
+  owner->dispatching_pointer_event = event;
   woxGoDarwinPointer(owner->context, kind, (float)position.x, (float)position.y, button, scroll_x, scroll_y, portable_modifiers(event.modifierFlags));
+  owner->dispatching_pointer_event = previous;
 }
 
 - (void)mouseEntered:(NSEvent *)event {
@@ -3495,20 +3500,23 @@ int32_t wox_darwin_window_set_webview_action_hotkey(WoxDarwinWindow *window, con
   return result;
 }
 
-// WebKit handles hover through its tracking-area owner, which can differ from
-// the WKWebView responder. The temporary hit-test passthrough lets that owner
-// see the browser as the actual target while Wox forwards the event.
-static bool forward_web_view_tracking_event(WKWebView *web_view, NSEvent *event, bool leave) {
-  for (NSTrackingArea *area in web_view.trackingAreas) {
-    if ((area.options & NSTrackingMouseMoved) == 0 || area.owner == nil) continue;
-    if (leave) {
-      [area.owner mouseExited:event];
-    } else {
-      [area.owner mouseMoved:event];
-    }
-    return true;
-  }
-  return false;
+// WebKit suppresses buttonless motion in non-key windows. A native dragged
+// motion reaches its normal DOM hit testing without activating the window.
+// No press is sent: DOM buttons still reflects the real pressed-button mask,
+// and WebCore's drag/selection state remains untouched. Route directly to the
+// responder so its tracking observer cannot discard a host-generated leave.
+static void forward_web_view_hover(WKWebView *web_view, NSEvent *event, bool leave) {
+  NSPoint location = leave ? [web_view convertPoint:NSMakePoint(-1, -1) toView:nil] : event.locationInWindow;
+  NSEvent *motion = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDragged
+                                    location:location
+                               modifierFlags:event.modifierFlags
+                                   timestamp:event.timestamp
+                                windowNumber:web_view.window.windowNumber
+                                     context:nil
+                                 eventNumber:0
+                                  clickCount:0
+                                    pressure:0];
+  [web_view mouseDragged:motion];
 }
 
 int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *window, uint8_t kind) {
@@ -3518,34 +3526,17 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
   if (kind == WOX_POINTER_LEAVE) {
     bool was_over_web_view = window->pointer_over_web_view;
     window->pointer_over_web_view = false;
-    NSEvent *current = NSApp.currentEvent;
+    NSEvent *current = window->dispatching_pointer_event;
     if (was_over_web_view && current != nil) {
-      NSEvent *leave = current;
-      if (current.type != NSEventTypeMouseExited) {
-        NSPoint outside = [window->active_web_view convertPoint:NSMakePoint(-1, -1) toView:nil];
-        leave = [NSEvent enterExitEventWithType:NSEventTypeMouseExited
-                                      location:outside
-                                 modifierFlags:current.modifierFlags
-                                     timestamp:current.timestamp
-                                  windowNumber:window->window.windowNumber
-                                       context:nil
-                                   eventNumber:0
-                                trackingNumber:0
-                                      userData:NULL];
-      }
-      if (leave != nil) {
-        window->forwarding_embedded_pointer = true;
-        if (!forward_web_view_tracking_event(window->active_web_view, leave, true)) {
-          [window->active_web_view mouseExited:leave];
-        }
-        window->forwarding_embedded_pointer = false;
-      }
+      window->forwarding_embedded_pointer = true;
+      forward_web_view_hover(window->active_web_view, current, true);
+      window->forwarding_embedded_pointer = false;
     }
     apply_darwin_pointer_cursor(window);
     return 0;
   }
   window->pointer_over_web_view = true;
-  NSEvent *event = NSApp.currentEvent;
+  NSEvent *event = window->dispatching_pointer_event;
   // A draggable HTML surface defers the press until the matching release.
   // Replay the retained press instead of treating the current release as a press.
   if (kind == WOX_POINTER_DOWN && event.type == NSEventTypeLeftMouseUp) {
@@ -3591,9 +3582,7 @@ int32_t wox_darwin_window_forward_embedded_surface_pointer(WoxDarwinWindow *wind
   case NSEventTypeMouseMoved:
   case NSEventTypeMouseEntered:
   case NSEventTypeMouseExited:
-    if (!forward_web_view_tracking_event(window->active_web_view, event, false)) {
-      [target mouseMoved:event];
-    }
+    forward_web_view_hover(window->active_web_view, event, false);
     break;
   case NSEventTypeLeftMouseDragged:
     [target mouseDragged:event];

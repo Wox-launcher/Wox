@@ -155,4 +155,6 @@ TestNativeWindowMessages -count=1` exercises real WebView2; set
 binary is in a temporary directory.
 
 On macOS, `make smoke pluginwindow/001` checks a draggable HTML window's WebKit
-snapshot transparency, pointer enter and leave, and the page's close-button click.
+snapshot transparency, prompt pointer enter and leave (including repeated entry and
+leaving after a click), and the page's close-button click. The fixture keeps the
+window non-key and rejects unintended pressed buttons, selection, or dragging.

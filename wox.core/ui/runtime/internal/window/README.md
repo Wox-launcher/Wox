@@ -63,3 +63,12 @@ It builds a toolbar and border window, verifies that releasing exclusive keyboar
 focus lets the border receive input, then checks repeated restoration and removal
 of pointer input without application redraws.
 It briefly moves the pointer without clicking and restores its position afterward.
+
+On macOS, embedded HTML hover uses the native callback's event, not the global
+`NSApp.currentEvent`, which can differ for synthesized tracking callbacks.
+WebKit suppresses buttonless DOM motion in non-key windows. The adapter sends
+motion through its drag responder without sending a press or activating the
+window; the DOM pressed-button mask still comes from the actual input state.
+Leaving uses an outside point in WebView coordinates and the same responder,
+so WebKit tracking-area ownership cannot keep CSS hover stuck. Plugin-window
+native smoke coverage checks this nonactivating interaction contract.

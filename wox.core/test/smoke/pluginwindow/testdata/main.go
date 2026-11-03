@@ -6,7 +6,7 @@ package main
 #cgo LDFLAGS: -framework Cocoa -framework WebKit
 #include <stdlib.h>
 int woxSmokeInstallInput(const char *title);
-int woxSmokePostPointer(int kind, double x, double y);
+int woxSmokeDispatchPointer(int kind, double x, double y);
 int woxSmokeStartSnapshot(void);
 int woxSmokeSnapshotResult(void);
 void woxSmokeRemoveInput(void);
@@ -37,10 +37,17 @@ button{position:absolute;right:6px;top:6px;width:24px;height:24px;opacity:0;poin
 body:hover button{opacity:1;pointer-events:auto}
 </style></head><body><div id="marker"></div><button id="close">×</button><script>
 const closeButton=document.getElementById('close');
+let presses=0, clicks=0;
+document.addEventListener('mousedown',()=>presses++);
+document.addEventListener('mousemove',e=>{
+  if(e.buttons!==0 || e.button!==0 || getSelection().toString())
+    woxWindow.postMessage({kind:'invalid-hover'});
+});
+document.addEventListener('dragstart',()=>woxWindow.postMessage({kind:'invalid-hover'}));
 function hover(){setTimeout(()=>woxWindow.postMessage({kind:'hover',visible:getComputedStyle(closeButton).opacity==='1'}),0)}
 document.body.addEventListener('mouseenter',hover);
 document.body.addEventListener('mouseleave',hover);
-closeButton.addEventListener('click',()=>woxWindow.postMessage({kind:'click'}));
+closeButton.addEventListener('click',()=>woxWindow.postMessage({kind:++clicks===1 && presses===1?'click':'invalid-hover'}));
 </script></body></html>`
 
 type message struct {
@@ -122,6 +129,10 @@ func exercise(events <-chan plugin.WindowEvent) error {
 		for {
 			select {
 			case event := <-events:
+				var input message
+				if event.Type == plugin.WindowEventMessage && json.Unmarshal(event.Data, &input) == nil && input.Kind == "invalid-hover" {
+					return errors.New("hover generated pressed buttons, selection, dragging, or extra clicks")
+				}
 				if event.Type == plugin.WindowEventError {
 					return fmt.Errorf("plugin window error: %s", event.ErrMsg)
 				}
@@ -169,17 +180,19 @@ func exercise(events <-chan plugin.WindowEvent) error {
 		}
 	}
 
-	post := func(kind int, x, y float64) error {
-		var posted bool
-		if err := ui.Call(func() { posted = C.woxSmokePostPointer(C.int(kind), C.double(x), C.double(y)) != 0 }); err != nil {
+	dispatch := func(kind int, x, y float64) error {
+		var dispatched bool
+		if err := ui.Call(func() { dispatched = C.woxSmokeDispatchPointer(C.int(kind), C.double(x), C.double(y)) != 0 }); err != nil {
 			return err
 		}
-		if !posted {
-			return errors.New("could not post AppKit pointer event")
+		if !dispatched {
+			return errors.New("could not dispatch AppKit pointer event without activating the window")
 		}
 		return nil
 	}
 	waitMessage := func(kind string, visible bool) error {
+		// A delayed hover is a regression even when the overall fixture eventually finishes.
+		deadline.Reset(2 * time.Second)
 		return wait(func(event plugin.WindowEvent) bool {
 			if event.Type != plugin.WindowEventMessage {
 				return false
@@ -188,32 +201,50 @@ func exercise(events <-chan plugin.WindowEvent) error {
 			return json.Unmarshal(event.Data, &received) == nil && received.Kind == kind && (kind != "hover" || received.Visible == visible)
 		})
 	}
-	if err := post(0, 64, 40); err != nil {
+	if err := dispatch(4, 64, 40); err != nil {
 		return err
 	}
 	if err := waitMessage("hover", true); err != nil {
 		return fmt.Errorf("hover enter: %w", err)
 	}
-	if err := post(1, -10, -10); err != nil {
+	if err := dispatch(0, 70, 42); err != nil {
+		return err
+	}
+	if err := dispatch(1, -10, -10); err != nil {
 		return err
 	}
 	if err := waitMessage("hover", false); err != nil {
 		return fmt.Errorf("hover leave: %w", err)
 	}
-	if err := post(0, 110, 18); err != nil {
+	if err := dispatch(0, 110, 18); err != nil {
 		return err
 	}
 	if err := waitMessage("hover", true); err != nil {
 		return fmt.Errorf("hover re-entry: %w", err)
 	}
-	if err := post(2, 110, 18); err != nil {
+	if err := dispatch(2, 110, 18); err != nil {
 		return err
 	}
-	if err := post(3, 110, 18); err != nil {
+	if err := dispatch(3, 110, 18); err != nil {
 		return err
 	}
 	if err := waitMessage("click", false); err != nil {
 		return fmt.Errorf("close button click: %w", err)
+	}
+	// The WebView is now first responder; leaving must still clear CSS hover.
+	for i := 0; i < 3; i++ {
+		if err := dispatch(1, -10, -10); err != nil {
+			return err
+		}
+		if err := waitMessage("hover", false); err != nil {
+			return fmt.Errorf("leave after click: %w", err)
+		}
+		if err := dispatch(4, 64, 40); err != nil {
+			return err
+		}
+		if err := waitMessage("hover", true); err != nil {
+			return fmt.Errorf("repeated enter: %w", err)
+		}
 	}
 	return nil
 }
