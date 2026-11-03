@@ -6,6 +6,31 @@ import (
 	"wox/util/keyboard"
 )
 
+func TestModifierPressTrackerDarwinCapsComboDoesNotStick(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS reports Caps Lock as a toggle")
+	}
+	for _, physicalAvailable := range []bool{false, true} {
+		tracker := newModifierPressTracker()
+		tracker.Register([]keyboard.Key{keyboard.KeyRightCtrl})
+		tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyCapsLock, NativeCapsLockStateAvailable: physicalAvailable, NativeCapsLockPressed: true}, neverDelayModifierPress, 100)
+		tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyV, NativeCapsLockStateAvailable: physicalAvailable, NativeCapsLockPressed: true}, neverDelayModifierPress, 110)
+		tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyV, NativeCapsLockStateAvailable: physicalAvailable}, neverDelayModifierPress, 120)
+		tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyRightCtrl, NativeCapsLockStateAvailable: physicalAvailable}, neverDelayModifierPress, 130)
+		assertModifierPress(t, tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyRightCtrl, NativeCapsLockStateAvailable: physicalAvailable}, neverDelayModifierPress, 140), "right_ctrl")
+	}
+}
+
+func TestModifierPressTrackerDarwinRejectsModifierWhileCapsPhysicallyHeld(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS physical Caps Lock state")
+	}
+	tracker := newModifierPressTracker()
+	tracker.Register([]keyboard.Key{keyboard.KeyRightCtrl})
+	tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyDown, Key: keyboard.KeyRightCtrl, NativeCapsLockStateAvailable: true, NativeCapsLockPressed: true}, neverDelayModifierPress, 100)
+	assertNoModifierPress(t, tracker.HandleEvent(keyboard.RawKeyEvent{Type: keyboard.EventTypeKeyUp, Key: keyboard.KeyRightCtrl, NativeCapsLockStateAvailable: true, NativeCapsLockPressed: true}, neverDelayModifierPress, 110))
+}
+
 // TestModifierPressTrackerRecoversLostWindowsReleases keeps Win+L from
 // leaving the launcher's single-Win shortcut canceled after unlocking.
 func TestModifierPressTrackerRecoversLostWindowsReleases(t *testing.T) {

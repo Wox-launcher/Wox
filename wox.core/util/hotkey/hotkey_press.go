@@ -93,6 +93,27 @@ func (t *modifierPressTracker) HandleEvent(event keyboard.RawKeyEvent, shouldDel
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// macOS reports Caps Lock as a lock-state transition, not a physical
+	// key-up. Use IOHID's physical state when available, and never retain a
+	// toggle event as a held key when that state is unavailable.
+	if runtime.GOOS == "darwin" {
+		if event.Key == keyboard.KeyCapsLock {
+			t.cancelPendingLocked(event.Key)
+			for _, registration := range t.registrations {
+				if registration.active {
+					registration.canceled = true
+				}
+			}
+			delete(t.pressed, keyboard.KeyCapsLock)
+			return nil
+		}
+		if event.NativeCapsLockStateAvailable && event.NativeCapsLockPressed {
+			t.pressed[keyboard.KeyCapsLock] = true
+		} else {
+			delete(t.pressed, keyboard.KeyCapsLock)
+		}
+	}
+
 	switch event.Type {
 	case keyboard.EventTypeKeyDown:
 		// Win+L can lose releases while the desktop is locked. Native Windows
