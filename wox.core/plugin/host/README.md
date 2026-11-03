@@ -38,6 +38,17 @@ keys, response field casing and the following compatibility behavior unchanged:
 
 Both Node and Python SDKs keep their published signatures and wire format.
 
+Core starts each Python or Node host with a fresh random secret in
+`WOX_HOST_SECRET`. The host removes it from its environment, listens only on
+IPv4 loopback, and accepts a single connection whose `X-Wox-Host-Secret`
+handshake header matches and whose request has no `Origin` header. The response
+must include `X-Wox-Host-Protocol: 1` so Core refuses outdated host bundles.
+Core keeps the secret for reconnects; restarting a host creates a new one.
+Build Core and both host bundles together. This protects the host from network
+and browser connections, not from plugins or other code running with the user's
+privileges. Authenticated Core requests may load plugins from user-configured
+development directories.
+
 `ShowToastMsg` sends an optional one-shot action ID. The host retains its
 callback until core sends `toastMsgAction` to invoke or release it; failed
 requests and plugin unload also release the host callback. Legacy `Notify`

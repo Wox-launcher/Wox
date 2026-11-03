@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/plugin"
 	"wox/util"
 	"wox/util/shell"
 )
@@ -52,7 +53,7 @@ func TestLiveHostConnectionDeadline(t *testing.T) {
 	}
 	dialCtx, stop := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer stop()
-	err = host.startWebsocketServer(dialCtx, port)
+	err = host.startWebsocketServer(dialCtx, port, "test-secret")
 	defer host.websocketClient().Close(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected connection deadline, got %v", err)
@@ -129,6 +130,57 @@ func TestNodeHostIgnoresAncestorModuleType(t *testing.T) {
 	}
 	if !host.IsHostStarted(ctx) || host.GetLastStartError() != "" {
 		t.Fatal("host did not reach a healthy runtime status")
+	}
+}
+
+// TestPackagedScriptHostLifecycle exercises Core with the staged release hosts.
+func TestPackagedScriptHostLifecycle(t *testing.T) {
+	tests := []struct {
+		name, executable, bundle, entry, source string
+		runtime                                 plugin.Host
+	}{
+		{"node", "node", "node-host.cjs", "plugin.cjs", "module.exports.plugin = {}\n", &NodejsHost{}},
+		{"python", os.Getenv("WOX_TEST_PYTHON"), "python-host.pyz", "plugin.py", "plugin = object()\n", &PythonHost{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.executable == "" {
+				t.Skip("set WOX_TEST_PYTHON to test the staged Python host")
+			}
+			executable, err := exec.LookPath(tc.executable)
+			if err != nil {
+				t.Skipf("host interpreter unavailable: %v", err)
+			}
+			bundle, err := filepath.Abs(filepath.Join("../../resource/hosts", tc.bundle))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(bundle); os.IsNotExist(err) {
+				t.Skip("build the host bundle first")
+			}
+			directory := t.TempDir()
+			if err := os.WriteFile(filepath.Join(directory, tc.entry), []byte(tc.source), 0600); err != nil {
+				t.Fatal(err)
+			}
+			host := &WebsocketHost{host: tc.runtime, requestMap: util.NewHashMap[string, chan JsonRpcResponse]()}
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			defer host.StopHost(context.Background())
+			for range 2 {
+				if err := host.StartHost(ctx, executable, bundle, nil); err != nil {
+					t.Fatal(err)
+				}
+				for _, mode := range []string{"package", "singleFile"} {
+					_, err := host.invokeMethod(ctx, plugin.Metadata{Id: mode}, "loadPlugin", map[string]string{
+						"PluginDirectory": directory, "Entry": tc.entry, "EntryMode": mode,
+					})
+					if err != nil {
+						t.Fatalf("load %s plugin: %v", mode, err)
+					}
+				}
+				host.StopHost(ctx)
+			}
+		})
 	}
 }
 

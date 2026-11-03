@@ -48,7 +48,11 @@ class DragContextTest(unittest.IsolatedAsyncioTestCase):
         async def callback(ctx, request):
             await api.invoke_method(ctx, "RefreshQuery", {})
 
-        with patch.object(jsonrpc.logger, "info", new=AsyncMock()), patch.object(jsonrpc, "on_drag_out", side_effect=callback):
+        with (
+            patch("wox_plugin_host.plugin_manager.current_connection", ws),
+            patch.object(jsonrpc.logger, "info", new=AsyncMock()),
+            patch.object(jsonrpc, "on_drag_out", side_effect=callback),
+        ):
             await jsonrpc.handle_request_from_wox(
                 Context.new(),
                 {"Method": "onDragOut", "PluginName": "Droppy", "SessionId": "secondary", "QueryId": "source-query"},

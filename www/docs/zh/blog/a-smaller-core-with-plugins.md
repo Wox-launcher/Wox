@@ -1,5 +1,5 @@
 ---
-title: "AI 让功能越来越容易开发，Wox 如何保持简单？"
+title: "让 Wox 保持简单"
 description: "当添加功能的成本下降，启动器该如何控制复杂度，同时给不同的需求留出空间？"
 date: 2026-11-03
 category: product
@@ -8,7 +8,7 @@ coverDark: /images/blog/a-smaller-core-with-plugins-dark.webp
 coverAlt: 启动器旁的计时器和麦克风插件插画
 ---
 
-# AI 让功能越来越容易开发，Wox 如何保持简单？
+# 让 Wox 保持简单
 
 一个启动器用久了，很容易长出许多功能。有人想要倒计时，有人需要语音输入，也有人希望把自己的脚本接进搜索框。每个需求单独看都很合理，做出来也确实能帮到一些人。
 

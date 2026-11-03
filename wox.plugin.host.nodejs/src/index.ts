@@ -1,6 +1,7 @@
 import "winston-daily-rotate-file"
 import { WebSocketServer } from "ws"
-import { closeCurrentConnection, setCurrentConnection, settleResponse } from "./connection"
+import type { IncomingMessage } from "http"
+import { closeCurrentConnection, currentConnection, setCurrentConnection, settleResponse } from "./connection"
 import { handleRequestFromWox, PluginJsonRpcTypeRequest, PluginJsonRpcTypeResponse } from "./jsonrpc"
 import { logger } from "./logger"
 import * as crypto from "crypto"
@@ -25,6 +26,12 @@ process.on("unhandledRejection", function (reason, error) {
 })
 
 const startupContext = NewTraceContext()
+const hostSecret = process.env.WOX_HOST_SECRET
+delete process.env.WOX_HOST_SECRET
+if (!hostSecret) {
+  logger.error(startupContext, "host authentication secret is missing")
+  process.exit(1)
+}
 logger.info(startupContext, "----------------------------------------")
 logger.info(startupContext, `start nodejs host: ${hostId}`)
 logger.info(startupContext, `port: ${port}`)
@@ -40,7 +47,20 @@ setInterval(() => {
   }
 }, 1000)
 
-const wss = new WebSocketServer({ port: Number.parseInt(port) })
+const wss = new WebSocketServer({
+  host: "127.0.0.1",
+  port: Number.parseInt(port),
+  verifyClient: ({ req }: { req: IncomingMessage }) => {
+    const supplied = req.headers["x-wox-host-secret"]
+    if (req.headers.origin !== undefined || typeof supplied !== "string" || currentConnection !== undefined) return false
+    const expectedBytes = Buffer.from(hostSecret)
+    const suppliedBytes = Buffer.from(supplied)
+    return expectedBytes.length === suppliedBytes.length && crypto.timingSafeEqual(expectedBytes, suppliedBytes)
+  }
+})
+wss.on("headers", headers => {
+  headers.push("X-Wox-Host-Protocol: 1")
+})
 wss.on("connection", function connection(ws) {
   setCurrentConnection(ws)
   logger.updateWebSocket(ws)

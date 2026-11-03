@@ -36,6 +36,7 @@ class CurrentConnectionTest(unittest.IsolatedAsyncioTestCase):
         original = AsyncMock()
         replacement = AsyncMock()
         replacement.send.side_effect = send
+        set_current_connection(original)
         api = PluginAPI(original, "tasknotes", "TaskNotes")
         saved = api
         set_current_connection(replacement)
@@ -53,6 +54,7 @@ class CurrentConnectionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_close_fails_a_call_waiting_on_the_current_connection(self):
         ws = AsyncMock()
+        set_current_connection(ws)
         api = PluginAPI(ws, "tasknotes", "TaskNotes")
         with patch("wox_plugin_host.plugin_api.logger.error", new=AsyncMock()):
             invoke = asyncio.create_task(api.invoke_method(Context.new(), "HideApp", {}))

@@ -1,13 +1,15 @@
 import asyncio
 import json
+import secrets
 import uuid
 import traceback
+from http import HTTPStatus
 from typing import Any
 from wox_plugin import Context
 import websockets
 from websockets.asyncio.server import ServerConnection
 
-from . import logger
+from . import logger, plugin_manager
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST, PLUGIN_JSONRPC_TYPE_RESPONSE
 from .plugin_manager import close_current_connection, set_current_connection, waiting_for_response
 from .jsonrpc import handle_request_from_wox
@@ -108,6 +110,10 @@ async def handle_message(ws: ServerConnection, message: str) -> None:
 
 async def handler(websocket: ServerConnection) -> None:
     """WebSocket connection handler"""
+    # Concurrent handshakes can both pass process_request before a handler runs.
+    if plugin_manager.current_connection is not None:
+        await websocket.close(code=1008, reason="host already connected")
+        return
     set_current_connection(websocket)
 
     try:
@@ -125,8 +131,24 @@ async def handler(websocket: ServerConnection) -> None:
             await logger.info(str(uuid.uuid4()), "connection closed")
 
 
-async def start_websocket(websocket_port: int) -> None:
+async def start_websocket(websocket_port: int, host_secret: str) -> None:
     """Start WebSocket server"""
+
+    def authenticate(connection: ServerConnection, request: Any) -> Any:
+        supplied = request.headers.get_all("X-Wox-Host-Secret")
+        if (
+            request.headers.get_all("Origin")
+            or len(supplied) != 1
+            or not secrets.compare_digest(supplied[0].encode("utf-8"), host_secret.encode("utf-8"))
+            or plugin_manager.current_connection is not None
+        ):
+            return connection.respond(HTTPStatus.FORBIDDEN, "Forbidden\n")
+        return None
+
+    def identify_host(_connection: ServerConnection, _request: Any, response: Any) -> Any:
+        response.headers["X-Wox-Host-Protocol"] = "1"
+        return response
+
     await logger.info(str(uuid.uuid4()), "start websocket server")
-    async with websockets.serve(handler, "", websocket_port):
+    async with websockets.serve(handler, "127.0.0.1", websocket_port, process_request=authenticate, process_response=identify_host):
         await asyncio.Future()  # run forever

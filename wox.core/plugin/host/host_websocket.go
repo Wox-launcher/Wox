@@ -2,10 +2,13 @@ package host
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -63,6 +66,15 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	}()
 	w.setStartState(executablePath, "")
 
+	secretBytes := make([]byte, 32)
+	if _, err := rand.Read(secretBytes); err != nil {
+		startErr := fmt.Errorf("failed to generate host authentication secret: %w", err)
+		w.setStartState(executablePath, startErr.Error())
+		return startErr
+	}
+	secret := hex.EncodeToString(secretBytes)
+	envs = append(envs, "WOX_HOST_SECRET="+secret)
+
 	port, portErr := util.GetAvailableTcpPort(ctx)
 	if portErr != nil {
 		startErr := fmt.Errorf("failed to get available port: %w", portErr)
@@ -99,7 +111,7 @@ func (w *WebsocketHost) StartHost(ctx context.Context, executablePath string, en
 	// Keep this context alive with the host: WebsocketClient uses it for the connected transport too.
 	hostCtx, cancelHost := context.WithCancelCause(ctx)
 	process := watchHostProcess(cmd, stderr, cancelHost)
-	if connectErr := w.startWebsocketServer(hostCtx, port); connectErr != nil {
+	if connectErr := w.startWebsocketServer(hostCtx, port, secret); connectErr != nil {
 		// Snapshot the cause before terminating an otherwise live host on connection timeout.
 		startErr := fmt.Errorf("host process started but websocket connection failed: %w", connectErr)
 		select {
@@ -347,8 +359,8 @@ func (w *WebsocketHost) decodeHostResult(result any, target any) error {
 	return nil
 }
 
-func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) error {
-	client := util.NewWebsocketClient(fmt.Sprintf("ws://127.0.0.1:%d", port))
+func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int, secret string) error {
+	client := util.NewWebsocketClientWithHandshake(fmt.Sprintf("ws://127.0.0.1:%d", port), http.Header{"X-Wox-Host-Secret": {secret}}, http.Header{"X-Wox-Host-Protocol": {"1"}})
 	w.statusLock.Lock()
 	w.ws = client
 	w.statusLock.Unlock()
@@ -367,6 +379,10 @@ func (w *WebsocketHost) startWebsocketServer(ctx context.Context, port int) erro
 		connErr := client.Connect(ctx)
 		if connErr == nil {
 			return nil
+		}
+		// An older host may still accept unauthenticated connections, so stop it immediately.
+		if errors.Is(connErr, util.ErrWebsocketHandshake) {
+			return connErr
 		}
 		lastErr = connErr
 		if attempt == maxAttempts {

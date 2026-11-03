@@ -1,6 +1,6 @@
 ---
-title: "As AI makes features easier to build, how can Wox stay simple?"
-description: "Keeping a launcher focused while giving different needs room to grow."
+title: "Keeping Wox Simple"
+description: "How plugins help Wox stay focused as AI makes features easier to create."
 date: 2026-11-03
 category: product
 cover: /images/blog/a-smaller-core-with-plugins.webp
@@ -8,7 +8,7 @@ coverDark: /images/blog/a-smaller-core-with-plugins-dark.webp
 coverAlt: An illustration of a launcher with timer and microphone plugin tiles
 ---
 
-# As AI makes features easier to build, how can Wox stay simple?
+# Keeping Wox Simple
 
 A launcher can accumulate a lot of features over time. One person wants a countdown, another needs dictation, and someone else wants to connect a script to the search box. Each request makes sense on its own, and each feature can help the people who need it.
 

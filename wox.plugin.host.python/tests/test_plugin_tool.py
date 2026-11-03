@@ -143,7 +143,11 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
         async def handler(ctx, option):
             return InvokePluginToolHandlerResult(output={"noteId": option.arguments["text"]})
 
-        with patch.object(jsonrpc.logger, "info", new=AsyncMock()), patch.object(jsonrpc.logger, "error", new=AsyncMock()):
+        with (
+            patch("wox_plugin_host.plugin_manager.current_connection", ws),
+            patch.object(jsonrpc.logger, "info", new=AsyncMock()),
+            patch.object(jsonrpc.logger, "error", new=AsyncMock()),
+        ):
             result = await api.register_plugin_tool(
                 Context.new(),
                 RegisterPluginToolOption(

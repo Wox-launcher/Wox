@@ -59,13 +59,11 @@ from wox_plugin import (
 from . import logger
 from .constants import PLUGIN_JSONRPC_TYPE_REQUEST
 from . import plugin_manager
-from .plugin_manager import set_current_connection, waiting_for_response
+from .plugin_manager import waiting_for_response
 
 
 class PluginAPI(PublicAPI):
     def __init__(self, ws: ServerConnection, plugin_id: str, plugin_name: str, result_actions: ResultActions | None = None):
-        # Init receives the socket that is current at load. Later reconnects replace it.
-        set_current_connection(ws)
         self.result_actions = result_actions if result_actions is not None else ResultActions()
         self.plugin_id = plugin_id
         self.plugin_name = plugin_name

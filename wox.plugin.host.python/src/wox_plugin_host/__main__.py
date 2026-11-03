@@ -71,6 +71,11 @@ async def main() -> None:
     """Main function"""
     global wox_process_handle
 
+    host_secret = os.environ.pop("WOX_HOST_SECRET", "")
+    if not host_secret:
+        await logger.error(trace_id, "host authentication secret is missing")
+        sys.exit(1)
+
     if platform.system() == "Windows":
         import ctypes  # type: ignore[import-not-found]
         import ctypes.wintypes  # type: ignore[import-not-found]
@@ -92,7 +97,7 @@ async def main() -> None:
 
     # Start tasks
     monitor_task = asyncio.create_task(monitor_wox_process())
-    websocket_task = asyncio.create_task(start_websocket(port))
+    websocket_task = asyncio.create_task(start_websocket(port, host_secret))
     try:
         await asyncio.gather(monitor_task, websocket_task)
     finally:

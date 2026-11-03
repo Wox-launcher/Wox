@@ -2,7 +2,9 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -11,8 +13,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// ErrWebsocketHandshake identifies a connected server with an incompatible handshake.
+var ErrWebsocketHandshake = errors.New("websocket handshake validation failed")
+
 type WebsocketClient struct {
 	url                  string
+	headers              http.Header
+	expectedHeaders      http.Header
 	conn                 *websocket.Conn
 	cancelReceiveMsgChan chan struct{}
 	onReceiveMsg         func(data []byte)
@@ -27,6 +34,11 @@ type WebsocketClient struct {
 
 func NewWebsocketClient(url string) *WebsocketClient {
 	return &WebsocketClient{url: url, stopped: make(chan struct{})}
+}
+
+// NewWebsocketClientWithHandshake preserves and validates headers across reconnects.
+func NewWebsocketClientWithHandshake(url string, headers, expectedHeaders http.Header) *WebsocketClient {
+	return &WebsocketClient{url: url, headers: headers.Clone(), expectedHeaders: expectedHeaders.Clone(), stopped: make(chan struct{})}
 }
 
 func (w *WebsocketClient) Connect(ctx context.Context) error {
@@ -56,10 +68,17 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 			return err
 		}
 	}
-	conn, _, dialErr := dialer.DialContext(ctx, w.url, nil)
+	conn, response, dialErr := dialer.DialContext(ctx, w.url, w.headers)
 	if dialErr != nil {
 		release()
 		return dialErr
+	}
+	for name, values := range w.expectedHeaders {
+		if len(values) != 1 || response.Header.Get(name) != values[0] {
+			conn.Close()
+			release()
+			return fmt.Errorf("%w: missing expected %s header", ErrWebsocketHandshake, name)
+		}
 	}
 
 	if ctx.Err() != nil {
