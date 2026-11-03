@@ -333,3 +333,50 @@ func (s chatModelTestServices) SetDefaultChatModel(_ context.Context, _ string, 
 func (s chatHistoryTestServices) ChatByID(context.Context, string, string) (common.AIChatData, error) {
 	return s.chat, nil
 }
+
+func TestChatWaitingForResponse(t *testing.T) {
+	user := chatConversation{Role: "user", Text: "hello"}
+	cases := []struct {
+		name      string
+		messages  []chatConversation
+		streaming bool
+		want      bool
+	}{
+		{"sent", []chatConversation{user}, true, true},
+		{"empty assistant", []chatConversation{user, {Role: "assistant", Text: "  "}}, true, true},
+		{"first token", []chatConversation{user, {Role: "assistant", Text: "Hello"}}, true, false},
+		{"reasoning", []chatConversation{user, {Role: "assistant", Reasoning: "Thinking"}}, true, false},
+		{"tool", []chatConversation{user, {Role: "tool"}}, true, false},
+		{"stopped or failed", []chatConversation{user}, false, false},
+		{"previous reply", []chatConversation{user, {Role: "assistant", Text: "old"}, user}, true, true},
+		{"no user", nil, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := chatWaitingForResponse(tc.messages, tc.streaming); got != tc.want {
+				t.Fatalf("waiting = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDeletedActiveChatStaysOutOfHistory covers the transition to a new draft.
+func TestDeletedActiveChatStaysOutOfHistory(t *testing.T) {
+	state := &chatPreviewState{
+		chat:   chatData{ID: "deleted", ProjectID: "project", Model: aiModel{Name: "model"}, Conversations: []chatConversation{{Role: "user", Text: "hello"}}},
+		chats:  []chatData{{ID: "deleted", IsSummary: true}, {ID: "other", IsSummary: true}},
+		editor: woxui.NewTextEditor("draft"),
+	}
+	app := bindTestApp(&App{chat: chatController{chatPreview: state}})
+	app.chat.applyDeletedChat("deleted")
+	if len(state.chats) != 1 || state.chats[0].ID != "other" {
+		t.Fatalf("history after delete = %+v", state.chats)
+	}
+	if state.chat.ID == "" || state.chat.ID == "deleted" || state.chat.ProjectID != "project" || state.chat.Model.Name != "model" || len(state.chat.Conversations) != 0 {
+		t.Fatalf("new draft = %+v", state.chat)
+	}
+	app.chat.startNewChat()
+	if len(state.chats) != 1 || state.chats[0].ID != "other" {
+		t.Fatalf("empty draft appeared in history: %+v", state.chats)
+	}
+}

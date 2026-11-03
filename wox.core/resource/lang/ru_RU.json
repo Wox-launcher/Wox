@@ -1123,6 +1123,7 @@
   "ui_ai_chat_stop": "Остановить",
   "ui_ai_chat_options": "Опции чата",
   "ui_ai_chat_select_model_title": "Выбрать модель",
+  "ui_ai_chat_waiting_response": "Ожидание ответа…",
   "ui_ai_chat_loading_models": "Загрузка моделей…",
   "ui_ai_chat_loading_skills": "Загрузка навыков…",
   "ui_ai_chat_mention_plugins": "Плагины",

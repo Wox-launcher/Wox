@@ -641,7 +641,15 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 	for i := 0; i < len(conversations); i++ {
 		conversation := conversations[i]
 		if conversation.Role == common.ConversationRoleSystem {
-			chatMessages = append(chatMessages, openai.SystemMessage(conversation.Text))
+			text := conversation.Text
+			if i == 0 {
+				// Some model templates only accept a single system message at the beginning.
+				for i+1 < len(conversations) && conversations[i+1].Role == common.ConversationRoleSystem {
+					i++
+					text += "\n\n" + conversations[i].Text
+				}
+			}
+			chatMessages = append(chatMessages, openai.SystemMessage(text))
 		}
 		if conversation.Role == common.ConversationRoleUser {
 			images := append([]common.WoxImage(nil), conversation.Images...)

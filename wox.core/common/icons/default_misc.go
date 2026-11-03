@@ -3,6 +3,29 @@ package icons
 import "wox/common"
 
 var defaultMiscIcons = map[string]common.WoxImage{
+	// Official LM Studio icon uses its sRGB fallback because the renderer does not support Display P3.
+	// Source: https://lmstudio.ai/brand
+	BrandLMStudio: common.NewWoxImageSvg(`<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 179.2C0 116.474 0 85.1112 12.2073 61.1531C22.9451 40.0789 40.0789 22.9451 61.1531 12.2073C85.1112 0 116.474 0 179.2 0H332.8C395.526 0 426.889 0 450.847 12.2073C471.921 22.9451 489.055 40.0789 499.793 61.1531C512 85.1112 512 116.474 512 179.2V332.8C512 395.526 512 426.889 499.793 450.847C489.055 471.921 471.921 489.055 450.847 499.793C426.889 512 395.526 512 332.8 512H179.2C116.474 512 85.1112 512 61.1531 499.793C40.0789 489.055 22.9451 471.921 12.2073 450.847C0 426.889 0 395.526 0 332.8V179.2Z" fill="url(#paint0_linear_496_292)"/>
+<rect opacity="0.25" x="128" y="84" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="64" y="84" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect opacity="0.25" x="224" y="144" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="160" y="144" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect opacity="0.25" x="168" y="204" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="104" y="204" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect opacity="0.25" x="112" y="264" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="48" y="264" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect opacity="0.25" x="176" y="324" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="112" y="324" width="224" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect opacity="0.25" x="304" y="384" width="152" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<rect x="240" y="384" width="152" height="44" rx="22" fill="white" style="fill:white;fill-opacity:1;"/>
+<defs>
+<linearGradient id="paint0_linear_496_292" x1="-219.792" y1="229.426" x2="239.06" y2="702.601" gradientUnits="userSpaceOnUse">
+<stop stop-color="#6E7EF3" style="stop-color:#6E7EF3;stop-opacity:1;"/>
+<stop offset="1" stop-color="#4F13BE" style="stop-color:#4F13BE;stop-opacity:1;"/>
+</linearGradient>
+</defs>
+</svg>`),
 	// Menu variants keep recognizable silhouettes without tinting the full-color brand artwork.
 	BrandRedditMonochrome:  newActionIcon(`<ellipse cx="12" cy="14" rx="9" ry="6"/><path d="m12 8 1-5 5 1M8 17c2 1.5 6 1.5 8 0M4 10C0 7 0 14 3 14M20 10c4-3 4 4 1 4"/><circle cx="19.5" cy="4" r="1.5"/><circle cx="8.5" cy="13" r=".75"/><circle cx="15.5" cy="13" r=".75"/>`),
 	BrandDiscordMonochrome: common.NewWoxImageSvg(`<svg viewBox="0 0 256 199" width="256" height="199" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid"><path d="M216.856 16.597A208.502 208.502 0 0 0 164.042 0c-2.275 4.113-4.933 9.645-6.766 14.046-19.692-2.961-39.203-2.961-58.533 0-1.832-4.4-4.55-9.933-6.846-14.046a207.809 207.809 0 0 0-52.855 16.638C5.618 67.147-3.443 116.4 1.087 164.956c22.169 16.555 43.653 26.612 64.775 33.193A161.094 161.094 0 0 0 79.735 175.3a136.413 136.413 0 0 1-21.846-10.632 108.636 108.636 0 0 0 5.356-4.237c42.122 19.702 87.89 19.702 129.51 0a131.66 131.66 0 0 0 5.355 4.237 136.07 136.07 0 0 1-21.886 10.653c4.006 8.02 8.638 15.67 13.873 22.848 21.142-6.58 42.646-16.637 64.815-33.213 5.316-56.288-9.08-105.09-38.056-148.36ZM85.474 135.095c-12.645 0-23.015-11.805-23.015-26.18s10.149-26.2 23.015-26.2c12.867 0 23.236 11.804 23.015 26.2.02 14.375-10.148 26.18-23.015 26.18Zm85.051 0c-12.645 0-23.014-11.805-23.014-26.18s10.148-26.2 23.014-26.2c12.867 0 23.236 11.804 23.015 26.2 0 14.375-10.148 26.18-23.015 26.18Z" fill="var(--wox-theme-icon-color)"/></svg>`),

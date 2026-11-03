@@ -329,6 +329,7 @@ const (
 	UsageExtension             = "usage.extension"
 	UsageTrophy                = "usage.trophy"
 	UsageMedal                 = "usage.medal"
+	BrandLMStudio              = "brand.lmstudio"
 	RuntimePython              = "runtime.python"
 	RuntimeNodejs              = "runtime.nodejs"
 	RuntimeScript              = "runtime.script"

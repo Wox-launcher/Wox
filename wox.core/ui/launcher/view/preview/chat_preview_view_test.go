@@ -1086,3 +1086,14 @@ func TestChatHistoryDeleteVisibility(t *testing.T) {
 		})
 	}
 }
+
+func TestChatWaitingIndicatorUsesScaledScrollExtent(t *testing.T) {
+	props := ChatMessageProps{Key: "pending", Kind: "waiting", Text: "Waiting for response", DensityScale: 1.1}
+	if got := chatMessageHeight(props); got != ChatScaledSize(props.DensityScale, 24) {
+		t.Fatalf("waiting height = %v", got)
+	}
+	indicator := chatMessageContent(props, 300, false, nil, nil).(woxwidget.Semantics)
+	if indicator.AutomationID != "chat.waiting" || indicator.Role != woxui.AccessibilityRoleProgressBar || indicator.Label != props.Text {
+		t.Fatalf("waiting semantics = %+v", indicator)
+	}
+}

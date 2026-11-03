@@ -1123,6 +1123,7 @@
   "ui_ai_chat_stop": "Parar",
   "ui_ai_chat_options": "Opções de chat",
   "ui_ai_chat_select_model_title": "Selecionar modelo",
+  "ui_ai_chat_waiting_response": "Aguardando resposta…",
   "ui_ai_chat_loading_models": "Carregando modelos…",
   "ui_ai_chat_loading_skills": "Carregando habilidades…",
   "ui_ai_chat_mention_plugins": "Plugins",

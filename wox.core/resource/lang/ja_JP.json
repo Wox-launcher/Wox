@@ -1188,6 +1188,7 @@
   "ui_ai_chat_stop": "停止",
   "ui_ai_chat_options": "チャットオプション",
   "ui_ai_chat_select_model_title": "モデルを選択",
+  "ui_ai_chat_waiting_response": "応答を待っています…",
   "ui_ai_chat_loading_models": "モデルを読み込み中…",
   "ui_ai_chat_loading_skills": "スキルを読み込み中…",
   "ui_ai_chat_mention_plugins": "プラグイン",

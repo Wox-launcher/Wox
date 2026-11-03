@@ -97,6 +97,18 @@ func TestInstalledAIProviderFields(t *testing.T) {
 	}
 }
 
+func TestLMStudioProviderAllowsOptionalAPIKey(t *testing.T) {
+	definition := newAISettingsForm(settingsData{}).definitions[0]
+	fields, _ := formTableRowFields(definition, map[string]any{"Name": string(common.ProviderNameLMStudio)})
+	if errors := validateAISettingsTableRow(definition, &fields); len(errors) != 0 {
+		t.Fatalf("LM Studio should accept an empty API key: %v", errors)
+	}
+	fields.values["ApiKey"] = "secret"
+	if row := formTableRowFromFields(definition, &fields, nil); row["ApiKey"] != "secret" {
+		t.Fatalf("LM Studio API key was not saved: %+v", row)
+	}
+}
+
 func TestBuiltinSkillViewRowIsReadOnly(t *testing.T) {
 	definition := newAISettingsForm(settingsData{}).definitions[3]
 	rows := bindTestApp(&App{}).formTables.formTableViewRows(definition, nil, []map[string]any{

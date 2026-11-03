@@ -620,6 +620,27 @@ func formatChatRoundDuration(start, end int64) string {
 	return fmt.Sprintf("%dm %ds", minutes, seconds)
 }
 
+// chatWaitingForResponse checks only the current turn, including empty assistant placeholders.
+func chatWaitingForResponse(conversations []chatConversation, streaming bool) bool {
+	if !streaming {
+		return false
+	}
+	for i := len(conversations) - 1; i >= 0; i-- {
+		message := conversations[i]
+		switch message.Role {
+		case "user":
+			return true
+		case "tool":
+			return false
+		case "assistant":
+			if strings.TrimSpace(message.Text) != "" || strings.TrimSpace(message.Reasoning) != "" || len(message.Images) > 0 || message.ToolCallInfo.Name != "" {
+				return false
+			}
+		}
+	}
+	return false
+}
+
 // chatMessagesProps prepares semantic messages and leaves their widget composition to the view.
 func (a *App) chatMessagesProps(window *woxui.Window, snapshot *chatPreviewSnapshot, palette uiPalette, width, height, imageScale float32) previewview.ChatMessagesProps {
 	// LazyList needs every row's height, but unchanged historical Markdown must not
@@ -648,9 +669,20 @@ func (a *App) chatMessagesProps(window *woxui.Window, snapshot *chatPreviewSnaps
 	if len(snapshot.chat.Conversations) == 0 {
 		return props
 	}
+	waiting := chatWaitingForResponse(snapshot.chat.Conversations, snapshot.chat.IsStreaming || snapshot.sending)
 	renderItems := chatRenderItems(snapshot.chat.Conversations, snapshot.chat.IsStreaming || snapshot.sending, snapshot.expandedRounds)
-	props.Messages = make([]previewview.ChatMessageProps, 0, len(renderItems))
+	props.Messages = make([]previewview.ChatMessageProps, 0, len(renderItems)+1)
+	lastUser := -1
+	for i := len(renderItems) - 1; i >= 0; i-- {
+		if renderItems[i].conversation.Role == "user" {
+			lastUser = i
+			break
+		}
+	}
 	for index, item := range renderItems {
+		if waiting && index > lastUser && item.kind == "" && item.conversation.Role == "assistant" && strings.TrimSpace(item.conversation.Text) == "" && strings.TrimSpace(item.conversation.Reasoning) == "" && len(item.conversation.Images) == 0 {
+			continue
+		}
 		if item.kind == "round" {
 			roundID := item.roundID
 			props.Messages = append(props.Messages, a.chatRoundProps(item, palette.componentTheme(), func() { a.chat.toggleChatDisclosure(roundID) }))
@@ -661,6 +693,9 @@ func (a *App) chatMessagesProps(window *woxui.Window, snapshot *chatPreviewSnaps
 			continue
 		}
 		props.Messages = append(props.Messages, a.chatMessageProps(window, snapshot.key, index, item.conversation, palette, width, item.showMeta, item.hideReasoning, imageScale))
+	}
+	if waiting {
+		props.Messages = append(props.Messages, previewview.ChatMessageProps{Key: "waiting-" + snapshot.chat.ID, Kind: "waiting", DensityScale: scale, Text: a.language.translate("i18n:ui_ai_chat_waiting_response"), Theme: palette.componentTheme()})
 	}
 	props.ContentHeight, props.ExtentRevision = previewview.ChatMessagesScrollMetrics(props.Messages, innerHeight)
 	maxOffset := max(float32(0), props.ContentHeight-innerHeight)

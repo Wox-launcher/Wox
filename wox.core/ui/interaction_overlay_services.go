@@ -178,16 +178,14 @@ func (s *CoreServices) SetDefaultChatModel(ctx context.Context, sessionID string
 	return nil
 }
 
-// DeleteChat removes one persisted chat.
+// DeleteChat removes one persisted chat; an already absent chat is also deleted.
 func (s *CoreServices) DeleteChat(ctx context.Context, sessionID string, chatID string) error {
 	ctx = uiServiceContext(ctx, sessionID)
 	chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx)
 	if chater == nil {
 		return errors.New("ai chat plugin not found")
 	}
-	if !chater.DeleteChat(ctx, chatID) {
-		return errors.New("chat not found")
-	}
+	chater.DeleteChat(ctx, chatID)
 	return nil
 }
 

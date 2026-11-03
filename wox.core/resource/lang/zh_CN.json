@@ -1186,6 +1186,7 @@
   "ui_ai_chat_stop": "停止",
   "ui_ai_chat_options": "聊天选项",
   "ui_ai_chat_select_model_title": "选择模型",
+  "ui_ai_chat_waiting_response": "等待回复…",
   "ui_ai_chat_loading_models": "正在加载模型…",
   "ui_ai_chat_loading_skills": "正在加载技能…",
   "ui_ai_chat_mention_plugins": "插件",

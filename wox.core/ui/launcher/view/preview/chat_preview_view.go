@@ -1195,6 +1195,12 @@ func chatMessageContent(props ChatMessageProps, width float32, hovered bool, onH
 	if props.Kind == "tool-activity" {
 		return chatToolActivity(props, width)
 	}
+	if props.Kind == "waiting" {
+		size := ChatScaledSize(props.DensityScale, 16)
+		return woxwidget.Semantics{Key: woxwidget.Key("chat-waiting-" + props.Key), AutomationID: "chat.waiting", Role: woxui.AccessibilityRoleProgressBar, Label: props.Text, Value: "loading", ReadOnly: true,
+			Child: woxwidget.Container{Width: width, Height: ChatScaledSize(props.DensityScale, 24), Padding: woxwidget.Insets{Left: ChatScaledSize(props.DensityScale, 2)}, Child: woxwidget.Align{Height: ChatScaledSize(props.DensityScale, 24), Vertical: 0.5, Child: woxcomponent.WoxLoadingIndicator(size, props.Theme.ResultSubtitle)}},
+		}
+	}
 	cardWidth := max(float32(0), width-4)
 	left := float32(2)
 	background := woxui.Color{}
@@ -1541,6 +1547,9 @@ func chatMessageActionWidth(props ChatMessageProps) float32 {
 
 // chatMessageHeight derives the card extent from the visible message sections.
 func chatMessageHeight(props ChatMessageProps) float32 {
+	if props.Kind == "waiting" {
+		return ChatScaledSize(props.DensityScale, 24)
+	}
 	if props.Kind == "round" {
 		return 30
 	}

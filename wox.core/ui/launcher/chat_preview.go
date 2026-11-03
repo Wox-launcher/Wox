@@ -1336,6 +1336,9 @@ func (a *chatController) applyDeletedChat(chatID string) {
 		state.panelSelected = min(state.panelSelected, max(0, len(state.chats)-1))
 	}
 	if activeDeleted {
+		// Do not let startNewChat put the deleted conversation back into history.
+		state := a.chatPreview
+		state.chat.ID = ""
 		a.startNewChat()
 	}
 	a.invalidateChatSurfaces()

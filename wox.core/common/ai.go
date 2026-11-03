@@ -13,6 +13,8 @@ import (
 type ConversationRole string
 type ProviderName string
 
+const ProviderNameLMStudio ProviderName = "lmstudio"
+
 // IsInstalledCLI identifies providers that reuse a locally authenticated command.
 func (p ProviderName) IsInstalledCLI() bool {
 	switch p {

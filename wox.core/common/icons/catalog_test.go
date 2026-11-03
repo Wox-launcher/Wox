@@ -90,6 +90,22 @@ func TestCommunityBrandIconsRenderFromSvgl(t *testing.T) {
 	}
 }
 
+func TestLMStudioBrandIconRendersInColor(t *testing.T) {
+	icon := Get(BrandLMStudio)
+	if strings.Contains(icon.ImageData, "var(--wox-theme-icon-color)") {
+		t.Fatal("LM Studio icon must retain its official colors")
+	}
+	img, err := woxsvg.Render(icon.ImageData, 32, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	background := img.RGBAAt(16, 16)
+	bar := img.RGBAAt(16, 6)
+	if background.A == 0 || background.B <= background.R || bar.R < 240 || bar.G < 240 || bar.B < 240 {
+		t.Fatalf("LM Studio icon colors: background=%v, bar=%v", background, bar)
+	}
+}
+
 func TestChatPickerIconsRenderInColor(t *testing.T) {
 	for _, name := range []string{ChatSelectFile, ChatSelectFolder} {
 		icon := Get(name)

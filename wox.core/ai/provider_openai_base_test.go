@@ -117,6 +117,51 @@ func TestDeepSeekConversationReplayPreservesReasoning(t *testing.T) {
 	}
 }
 
+func TestConvertConversationsCombinesOnlyLeadingSystemMessages(t *testing.T) {
+	provider := &OpenAIBaseProvider{}
+	conversations := []common.Conversation{
+		{Role: common.ConversationRoleSystem, Text: "time"},
+		{Role: common.ConversationRoleSystem, Text: "project"},
+		{Role: common.ConversationRoleSystem, Text: "skills"},
+		{Role: common.ConversationRoleSystem, Text: "tools"},
+		{Role: common.ConversationRoleUser, Text: "hello"},
+		{Role: common.ConversationRoleAssistant, Text: "hi"},
+		{Role: common.ConversationRoleSystem, Text: "later instruction"},
+	}
+	messages, err := provider.convertConversations(conversations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(messages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ role, content string }{
+		{"system", "time\n\nproject\n\nskills\n\ntools"},
+		{"user", "hello"},
+		{"assistant", "hi"},
+		{"system", "later instruction"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("messages = %s", data)
+	}
+	for i := range want {
+		if got[i].Role != want[i].role || got[i].Content != want[i].content {
+			t.Fatalf("message %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if conversations[0].Text != "time" || conversations[1].Text != "project" {
+		t.Fatal("conversion mutated the original conversations")
+	}
+}
+
 func TestChatImageAttachmentsReachProviderAsImageContent(t *testing.T) {
 	directory := t.TempDir()
 	previous := util.GetLocation().GetUserDataDirectory()
