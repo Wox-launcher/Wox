@@ -532,6 +532,8 @@ func capsLockComboToHotkeyString(key keyboard.Key) string {
 		return "capslock+tab"
 	case keyboard.KeyDelete:
 		return "capslock+delete"
+	case keyboard.KeyInsert:
+		return "capslock+insert"
 	case keyboard.KeyLeft:
 		return "capslock+left"
 	case keyboard.KeyRight:

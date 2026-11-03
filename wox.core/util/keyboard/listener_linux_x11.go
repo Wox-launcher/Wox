@@ -301,6 +301,8 @@ func keyToLinuxKeyCode(key Key) (uint32, error) {
 		return 0xFF09, nil
 	case KeyDelete:
 		return 0xFFFF, nil
+	case KeyInsert:
+		return 0xFF63, nil
 	case KeyLeft:
 		return 0xFF51, nil
 	case KeyRight:
@@ -446,6 +448,8 @@ func linuxKeyCodeToKey(code uint32) Key {
 		return KeyTab
 	case 0xFFFF:
 		return KeyDelete
+	case 0xFF63:
+		return KeyInsert
 	case 0xFF51:
 		return KeyLeft
 	case 0xFF53:

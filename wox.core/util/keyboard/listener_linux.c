@@ -50,7 +50,7 @@ static int gThreadStarted = 0;
 static int gRawEnabled = 0;
 static HotkeyEntry *gHotkeys = NULL;
 static ModifierEntry gModifiers[8];
-static ModifierEntry gRawKeys[58];
+static ModifierEntry gRawKeys[59];
 static pthread_mutex_t gRequestMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gRequestCond = PTHREAD_COND_INITIALIZER;
 static KeyboardRequest gRequest;
@@ -209,7 +209,7 @@ static void poll_raw_keys(void) {
     }
 
     XQueryKeymap(gDisplay, keymap);
-    for (int i = 0; i < 58; i++) {
+    for (int i = 0; i < 59; i++) {
         if (gRawKeys[i].keycode == 0) {
             continue;
         }
@@ -318,15 +318,15 @@ int woxLinuxEnsureKeyboardReady(char **errorOut) {
         gModifiers[i].pressed = 0;
     }
 
-    KeySym rawSyms[58] = {
+    KeySym rawSyms[59] = {
         XK_Caps_Lock,
         XK_a, XK_b, XK_c, XK_d, XK_e, XK_f, XK_g, XK_h, XK_i, XK_j, XK_k, XK_l, XK_m,
         XK_n, XK_o, XK_p, XK_q, XK_r, XK_s, XK_t, XK_u, XK_v, XK_w, XK_x, XK_y, XK_z,
         XK_0, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
-        XK_space, XK_Return, XK_Escape, XK_Tab, XK_Delete, XK_Left, XK_Right, XK_Up, XK_Down,
+        XK_space, XK_Return, XK_Escape, XK_Tab, XK_Delete, XK_Insert, XK_Left, XK_Right, XK_Up, XK_Down,
         XK_F1, XK_F2, XK_F3, XK_F4, XK_F5, XK_F6, XK_F7, XK_F8, XK_F9, XK_F10, XK_F11, XK_F12
     };
-    for (int i = 0; i < 58; i++) {
+    for (int i = 0; i < 59; i++) {
         gRawKeys[i].keysym = (unsigned int)rawSyms[i];
         gRawKeys[i].keycode = XKeysymToKeycode(gDisplay, rawSyms[i]);
         gRawKeys[i].pressed = 0;

@@ -307,3 +307,62 @@ func TestRecordingSessionSupplementsModifierOnlyDelivery(t *testing.T) {
 		t.Fatal("local fallback must not record double modifiers")
 	}
 }
+
+func TestRecordingInsertAloneAndWithModifier(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		modifier keyboard.Key
+		want     string
+	}{
+		{name: "standalone", want: "insert"},
+		{name: "control", modifier: keyboard.KeyLeftCtrl, want: "ctrl+insert"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var recorded []recordedHotkey
+			state := newRecordingRawState(hotkeyKindSet([]hotkeyKind{hotkeyKindNormalCombo}), func(candidate recordedHotkey) {
+				recorded = append(recorded, candidate)
+			})
+			defer state.Close()
+			if tc.modifier != keyboard.KeyUnknown {
+				state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, tc.modifier))
+			}
+			if !state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyInsert)) {
+				t.Fatal("Insert was not consumed")
+			}
+			if len(recorded) != 1 || recorded[0].Hotkey != tc.want || recorded[0].Kind != hotkeyKindNormalCombo {
+				t.Fatalf("recorded = %+v, want %s", recorded, tc.want)
+			}
+		})
+	}
+	if got := capsLockComboToHotkeyString(keyboard.KeyInsert); got != "capslock+insert" {
+		t.Fatalf("CapsLock+Insert = %q", got)
+	}
+}
+
+func TestRecordingDeleteAloneAndWithModifier(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		modifier keyboard.Key
+		want     string
+	}{
+		{name: "standalone", want: "delete"},
+		{name: "control", modifier: keyboard.KeyLeftCtrl, want: "ctrl+delete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var recorded []recordedHotkey
+			state := newRecordingRawState(hotkeyKindSet([]hotkeyKind{hotkeyKindNormalCombo}), func(candidate recordedHotkey) {
+				recorded = append(recorded, candidate)
+			})
+			defer state.Close()
+			if tc.modifier != keyboard.KeyUnknown {
+				state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, tc.modifier))
+			}
+			if !state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyDelete)) {
+				t.Fatal("Delete was not consumed")
+			}
+			if len(recorded) != 1 || recorded[0].Hotkey != tc.want || recorded[0].Kind != hotkeyKindNormalCombo {
+				t.Fatalf("recorded = %+v, want %s", recorded, tc.want)
+			}
+		})
+	}
+}

@@ -36,6 +36,8 @@ func KeyName(token string) (string, error) {
 		return "tab", nil
 	case KeyDelete:
 		return "delete", nil
+	case KeyInsert:
+		return "insert", nil
 	case KeyLeft:
 		return "left", nil
 	case KeyRight:
@@ -61,6 +63,8 @@ func normalizeKeyAlias(token string) string {
 		return "escape"
 	case "del":
 		return "delete"
+	case "ins":
+		return "insert"
 	case "arrow-left":
 		return "left"
 	case "arrow-right":

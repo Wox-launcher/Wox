@@ -503,6 +503,8 @@ func keyToWindowsVK(key Key) (uint32, error) {
 		return 0x09, nil
 	case KeyDelete:
 		return 0x2E, nil
+	case KeyInsert:
+		return 0x2D, nil
 	case KeyLeft:
 		return 0x25, nil
 	case KeyRight:
@@ -696,6 +698,8 @@ func windowsVKToKey(vkCode uint32) Key {
 		return KeyTab
 	case 0x2E:
 		return KeyDelete
+	case 0x2D:
+		return KeyInsert
 	case 0x25:
 		return KeyLeft
 	case 0x27:

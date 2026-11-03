@@ -30,6 +30,7 @@ const (
 	KeyArrowRight = input.KeyArrowRight
 	KeyArrowDown  = input.KeyArrowDown
 	KeyDelete     = input.KeyDelete
+	KeyInsert     = input.KeyInsert
 	KeyAlt        = input.KeyAlt
 	KeyMeta       = input.KeyMeta
 )

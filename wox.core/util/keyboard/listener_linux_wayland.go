@@ -715,6 +715,8 @@ func keyToWaylandTriggerName(key Key) (string, error) {
 		return "Tab", nil
 	case KeyDelete:
 		return "Delete", nil
+	case KeyInsert:
+		return "Insert", nil
 	case KeyLeft:
 		return "Left", nil
 	case KeyRight:

@@ -404,7 +404,10 @@ func keyToDarwinKeyCode(key Key) (uint32, error) {
 	case KeyTab:
 		return 48, nil
 	case KeyDelete:
-		return 51, nil
+		// Forward Delete is distinct from Backspace, which clears the recorder.
+		return 117, nil
+	case KeyInsert:
+		return 114, nil
 	case KeyLeft:
 		return 123, nil
 	case KeyRight:
@@ -548,8 +551,10 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyEscape
 	case 48:
 		return KeyTab
-	case 51:
+	case 117:
 		return KeyDelete
+	case 114:
+		return KeyInsert
 	case 123:
 		return KeyLeft
 	case 124:

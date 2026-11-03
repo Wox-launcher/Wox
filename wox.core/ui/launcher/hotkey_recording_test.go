@@ -574,3 +574,31 @@ func TestSameTableHotkeyOwner(t *testing.T) {
 		t.Fatal("new or cloned row accepted")
 	}
 }
+
+func TestFallbackHotkeyStringRecordsInsert(t *testing.T) {
+	for _, tc := range []struct {
+		modifiers woxui.KeyModifiers
+		want      string
+	}{
+		{want: "insert"},
+		{modifiers: woxui.KeyModifierControl, want: "ctrl+insert"},
+	} {
+		if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeyInsert, Down: true, Modifiers: tc.modifiers}); got != tc.want {
+			t.Fatalf("Insert with modifiers %v = %q, want %q", tc.modifiers, got, tc.want)
+		}
+	}
+}
+
+func TestFallbackHotkeyStringRecordsDelete(t *testing.T) {
+	for _, tc := range []struct {
+		modifiers woxui.KeyModifiers
+		want      string
+	}{
+		{want: "delete"},
+		{modifiers: woxui.KeyModifierControl, want: "ctrl+delete"},
+	} {
+		if got := fallbackHotkeyString(woxui.KeyEvent{Key: woxui.KeyDelete, Down: true, Modifiers: tc.modifiers}); got != tc.want {
+			t.Fatalf("Delete with modifiers %v = %q, want %q", tc.modifiers, got, tc.want)
+		}
+	}
+}

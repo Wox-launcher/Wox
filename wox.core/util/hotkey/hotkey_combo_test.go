@@ -50,3 +50,16 @@ func TestParseComboKeepsLocalNavigationAndSpecialTriggersSeparate(t *testing.T) 
 		}
 	}
 }
+
+func TestInsertAliasesParseForLocalAndGlobalHotkeys(t *testing.T) {
+	for _, value := range []string{"insert", "ins", "ctrl+ins", "ctrl+insert"} {
+		combo, err := ParseCombo(value)
+		if err != nil || combo.Key != "insert" {
+			t.Fatalf("local combo %q = %+v, %v", value, combo, err)
+		}
+		spec, err := (&Hotkey{}).parseCombineKey(value)
+		if err != nil || spec.key != keyboard.KeyInsert || spec.modifiers != combo.Modifiers {
+			t.Fatalf("global combo %q = %+v, %v", value, spec, err)
+		}
+	}
+}

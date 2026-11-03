@@ -378,7 +378,7 @@ func (s *recordingRawState) HandleEvent(event keyboard.RawKeyEvent) bool {
 			reason = "normal_combo_not_allowed"
 		case normalKeyString(event.Key) == "":
 			reason = "unsupported_key"
-		case len(s.currentGenericModifiersLocked()) == 0 && !isFunctionKey(event.Key):
+		case len(s.currentGenericModifiersLocked()) == 0 && !isStandaloneRecordingKey(event.Key):
 			reason = "no_tracked_modifier"
 		default:
 			reason = "normal_combo_candidate"
@@ -540,7 +540,7 @@ func (s *recordingRawState) normalComboStringLocked(key keyboard.Key) string {
 	}
 
 	modifiers := s.currentGenericModifiersLocked()
-	if len(modifiers) == 0 && !isFunctionKey(key) {
+	if len(modifiers) == 0 && !isStandaloneRecordingKey(key) {
 		return ""
 	}
 
@@ -552,8 +552,9 @@ func (s *recordingRawState) normalComboStringLocked(key keyboard.Key) string {
 	return joinHotkeyParts(parts)
 }
 
-func isFunctionKey(key keyboard.Key) bool {
-	return key >= keyboard.KeyF1 && key <= keyboard.KeyF24
+// isStandaloneRecordingKey allows function keys, Insert and Delete without modifiers.
+func isStandaloneRecordingKey(key keyboard.Key) bool {
+	return key == keyboard.KeyInsert || key == keyboard.KeyDelete || (key >= keyboard.KeyF1 && key <= keyboard.KeyF24)
 }
 
 func (s *recordingRawState) currentGenericModifiersLocked() []keyboard.Key {
@@ -611,6 +612,8 @@ func normalKeyString(key keyboard.Key) string {
 		return "tab"
 	case keyboard.KeyDelete:
 		return "delete"
+	case keyboard.KeyInsert:
+		return "insert"
 	case keyboard.KeyLeft:
 		return "left"
 	case keyboard.KeyRight:

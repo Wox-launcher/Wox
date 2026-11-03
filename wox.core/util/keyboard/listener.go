@@ -142,6 +142,7 @@ const (
 	KeyComma
 	KeyPeriod
 	KeySlash
+	KeyInsert
 )
 
 func ParseKey(token string) (Key, error) {
@@ -228,6 +229,8 @@ func ParseKey(token string) (Key, error) {
 		return KeyTab, nil
 	case "delete", "del":
 		return KeyDelete, nil
+	case "insert":
+		return KeyInsert, nil
 	case "left":
 		return KeyLeft, nil
 	case "right":

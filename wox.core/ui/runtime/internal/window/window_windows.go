@@ -1812,6 +1812,8 @@ func windowsKey(virtualKey uintptr) Key {
 		return KeyArrowDown
 	case win.VK_DELETE:
 		return KeyDelete
+	case 0x2D: // VK_INSERT
+		return KeyInsert
 	case 0xBD: // VK_OEM_MINUS, '-' on US keyboards
 		return Key("-")
 	case 0xBB: // VK_OEM_PLUS, '=' on US keyboards

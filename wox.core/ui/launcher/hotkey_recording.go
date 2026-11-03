@@ -557,7 +557,7 @@ func hotkeyRecordingStops(event woxui.KeyEvent) bool {
 }
 
 func fallbackHotkeyString(event woxui.KeyEvent) string {
-	if !event.Down || event.Repeat || event.Key == woxui.KeyUnknown || (event.Modifiers == 0 && !isFunctionKeyEvent(event.Key)) {
+	if !event.Down || event.Repeat || event.Key == woxui.KeyUnknown || (event.Modifiers == 0 && event.Key != woxui.KeyInsert && event.Key != woxui.KeyDelete && !isFunctionKeyEvent(event.Key)) {
 		return ""
 	}
 	// Modifier presses belong to the raw global hotkey recorder.
@@ -607,7 +607,7 @@ func fallbackHotkeyString(event woxui.KeyEvent) string {
 	return strings.Join(append(parts, key), "+")
 }
 
-// isFunctionKeyEvent limits modifier-free fallback candidates to function keys.
+// isFunctionKeyEvent recognizes F1 through F24 in portable input events.
 func isFunctionKeyEvent(key woxui.Key) bool {
 	value := strings.TrimPrefix(string(key), "f")
 	if len(value) == len(key) {

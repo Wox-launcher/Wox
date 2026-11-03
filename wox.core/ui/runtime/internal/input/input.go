@@ -22,6 +22,7 @@ const (
 	KeyArrowRight Key = "arrow-right"
 	KeyArrowDown  Key = "arrow-down"
 	KeyDelete     Key = "delete"
+	KeyInsert     Key = "insert"
 	// KeyAlt is Alt on Windows and Linux, Option on macOS.
 	KeyAlt Key = "alt"
 	// KeyMeta is Windows/Super on Windows and Linux, Command on macOS.

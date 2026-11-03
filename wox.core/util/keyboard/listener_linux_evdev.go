@@ -139,6 +139,8 @@ func evdevCodeToKey(code uint16) Key {
 		return KeyTab
 	case 111: // KEY_DELETE
 		return KeyDelete
+	case 110: // KEY_INSERT
+		return KeyInsert
 
 	// Arrow keys
 	case 105:

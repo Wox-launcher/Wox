@@ -1884,11 +1884,17 @@ static uint8_t portable_modifiers(NSEventModifierFlags flags) {
 
 // portable_key keeps AppKit function-key values out of the shared Go input contract.
 static const char *portable_key(NSEvent *event) {
+  if (event.keyCode == 114) {
+    return "insert";
+  }
   NSString *characters = [[event charactersIgnoringModifiers] lowercaseString];
   if (characters.length == 0) {
     return "";
   }
   switch ([characters characterAtIndex:0]) {
+  case NSInsertFunctionKey:
+  case NSHelpFunctionKey:
+    return "insert";
   case NSBackspaceCharacter:
   case NSDeleteCharacter:
     return "backspace";

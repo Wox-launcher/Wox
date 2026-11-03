@@ -95,6 +95,8 @@ func hyprlandKeyName(key Key) string {
 		return "TAB"
 	case KeyDelete:
 		return "DELETE"
+	case KeyInsert:
+		return "INSERT"
 	case KeyLeft:
 		return "LEFT"
 	case KeyRight:

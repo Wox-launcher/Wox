@@ -288,6 +288,8 @@ func keyToEvdevKeyCode(key Key) (uint16, error) {
 		return 15, nil
 	case KeyDelete:
 		return 111, nil
+	case KeyInsert:
+		return 110, nil
 	case KeyLeft:
 		return 105, nil
 	case KeyRight:
