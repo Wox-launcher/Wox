@@ -124,6 +124,7 @@ The `ctx` object is required for all API calls.
 On-disk cache goes in `GetCacheFolder`. Do not store cache with `SaveSetting` or `SetSetting`.
 
 - `GetCacheFolder(ctx)`: Return `~/.wox/cache/plugins/<plugin-id>/`. Wox creates it if needed and deletes it on uninstall.
+- If the path is empty, report the failure or disable caching. Pass the resolved path to background work; do not fall back to user data or the working directory.
 - Call it once in `init()`, keep the path, and write downloads, thumbnails, fetched JSON, and other rebuildable snapshots under it.
 - Plugin setting writes are cloud-synced. A cache value saved as a setting is replicated on every change and fills sync history, even when the key is hidden from `SettingDefinitions`.
 - `IsLocal: true` keeps a small machine-local preference out of cloud sync. Do not use it as a cache store. `IsPlatformSpecific` still syncs.

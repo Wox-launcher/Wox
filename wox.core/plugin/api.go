@@ -79,219 +79,169 @@ const (
 	CopyTypeImage     CopyType = "image"
 )
 
-// API exposes the runtime services that plugins can call back into.
+// API exposes the runtime services available to a plugin instance.
+// Published plugin and SDK entry points must remain backward compatible.
 type API interface {
-	CreateWindow(ctx context.Context, option CreateWindowOption) CreateWindowResult
+	// Launcher and query lifecycle.
+
+	// ChangeQuery changes the launcher query. Only input and selection query types are accepted.
 	ChangeQuery(ctx context.Context, query common.PlainQuery)
-	HideApp(ctx context.Context)
+
+	// ShowApp shows the launcher and selects its query text.
 	ShowApp(ctx context.Context)
+
+	// HideApp hides the launcher.
+	HideApp(ctx context.Context)
+
+	// IsVisible reports visibility for the context's session when known; otherwise it reports the
+	// primary launcher, without counting secondary panels.
+	IsVisible(ctx context.Context) bool
+
+	// OnEnterPluginQuery registers a callback that fires once when a session enters this plugin's query context.
+	OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context))
+
+	// OnLeavePluginQuery registers a callback that fires once when a session leaves this plugin's query context.
+	OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context))
+
+	// RegisterQueryCommands replaces runtime query commands. Invalid debounce values leave the
+	// previous commands intact; metadata commands take precedence over duplicates.
+	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
+
+	// RegisterTriggerKeyword registers a runtime trigger. It fails for invalid keywords or keywords
+	// owned by another enabled plugin; re-registering this plugin's keyword succeeds.
+	RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult
+
+	// UnregisterTriggerKeyword removes this plugin's runtime trigger registration. An absent
+	// registration also succeeds.
+	UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult
+
+	// RefreshQuery re-executes the current query. Selection behavior is controlled by param;
+	// SelectedResultId requires the rebuilt result to retain its ID.
+	RefreshQuery(ctx context.Context, param RefreshQueryParam)
+
+	// PushResults adds results for the supplied query. The query must include its ID and session ID;
+	// false means the UI did not accept the update.
+	PushResults(ctx context.Context, query Query, results []QueryResult) bool
+
+	// GetUpdatableResult returns a snapshot of a cached result, or nil if it is not found. Modify the
+	// snapshot and pass it to UpdateResult to apply changes.
+	GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult
+
+	// UpdateResult applies a patch to a query result in the UI. Nil fields are left unchanged. Returns
+	// false if the update is rejected, including when the result is no longer available. Stop periodic
+	// updates when it returns false; use PreventHideAfterAction if an action needs the result to stay visible.
+	UpdateResult(ctx context.Context, result UpdatableResult) bool
+
+	// OnMRURestore registers a callback that reconstructs a result from its MRU data. The plugin must
+	// declare the MRU feature.
+	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
+
+	// OnDragOut registers a post-drag notification for draggable results. It cannot cancel a drag;
+	// native drags are copy-only, so remove source files after a successful drag if needed.
+	OnDragOut(ctx context.Context, option DragOutListenOption) DragOutListenResult
+
+	// Presentation and notifications.
+
+	// CreateWindow creates a hidden plugin window and installs its event callback before content
+	// loads.
+	CreateWindow(ctx context.Context, option CreateWindowOption) CreateWindowResult
+
+	// ShowToastMsg displays a transient toast message.
+	// Requires Wox >= 2.5.0.
+	ShowToastMsg(ctx context.Context, option ShowToastMsgOption) ShowToastMsgResult
+
+	// PushAttention persists a plugin-owned attention item and refreshes the unread badge.
 	PushAttention(ctx context.Context, request PushAttentionRequest)
-	Log(ctx context.Context, level LogLevel, msg string)
-	GetTranslation(ctx context.Context, key string) string
+
+	// ShowToolbarMsg creates or updates a toolbar message while this plugin is active in the current
+	// query session. It is cleared when the session leaves the plugin's query context.
+	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
+
+	// ClearToolbarMsg removes a toolbar message previously shown by this plugin by ID.
+	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
+
+	// RefreshGlance asks the UI to fetch the latest Global Glance data for this plugin and the given
+	// IDs.
+	RefreshGlance(ctx context.Context, ids []string)
+
+	// GetThemeColors returns the current launcher palette as opaque #RRGGBB colors for plugin HTML and
+	// webviews. Requires Wox >= 2.4.5.
+	GetThemeColors(ctx context.Context, option GetThemeColorsOption) GetThemeColorsResult
+
+	// Settings and lifecycle.
+
+	// GetSetting returns a plugin setting, preferring the current platform's value. Returns an empty
+	// string if absent.
 	GetSetting(ctx context.Context, key string) string
-	// SaveSetting is kept for compatibility with plugins targeting Wox before v2.4.0.
+
+	// SaveSetting persists a synchronized plugin setting.
 	//
 	// Deprecated: use SetSetting.
 	SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool)
-	// SetSetting saves a plugin setting with explicit platform and device-local behavior.
-	// Available since Wox v2.4.0.
-	SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult
-	OnHotkey(ctx context.Context, option OnHotkeyOption) OnHotkeyResult
-	OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string))
-	OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem)
-	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
-	OnUnload(ctx context.Context, callback func(ctx context.Context))
-	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
 
-	// RegisterPluginTool publishes a callable tool owned by the current plugin.
+	// SetSetting persists a plugin setting with explicit platform and device-local behavior. Available
+	// since Wox v2.4.0.
+	SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult
+
+	// OnSettingChanged registers a callback for plugin setting changes.
+	OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string))
+
+	// OnGetDynamicSetting registers a callback that supplies a dynamic setting definition for a key.
+	OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem)
+
+	// OnHotkey subscribes to plugin hotkey events once per initialization cycle. Bindings become
+	// active after successful initialization.
+	OnHotkey(ctx context.Context, option OnHotkeyOption) OnHotkeyResult
+
+	// OnDeepLink registers a callback for deep link arguments. The plugin must declare the deep link
+	// feature.
+	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
+
+	// OnUnload registers a callback invoked when the plugin is unloaded.
+	OnUnload(ctx context.Context, callback func(ctx context.Context))
+
+	// Plugin tools and AI.
+
+	// RegisterPluginTool publishes a callable tool owned by this plugin.
 	// Requires Wox >= 2.4.5.
 	RegisterPluginTool(ctx context.Context, option RegisterPluginToolOption) RegisterPluginToolResult
-	// UnregisterPluginTool removes a tool previously registered by this plugin.
-	// Repeating the operation succeeds. Requires Wox >= 2.4.5.
+
+	// UnregisterPluginTool removes a tool registered by this plugin. Repeating the operation succeeds.
+	// Requires Wox >= 2.4.5.
 	UnregisterPluginTool(ctx context.Context, option UnregisterPluginToolOption) UnregisterPluginToolResult
-	// ListPluginTools returns currently callable tools from initialized, enabled plugins.
+
+	// ListPluginTools returns callable tools from initialized, enabled plugins.
 	// Requires Wox >= 2.4.5.
 	ListPluginTools(ctx context.Context, option ListPluginToolsOption) ListPluginToolsResult
-	// InvokePluginTool executes another plugin's registered tool after schema validation.
+
+	// InvokePluginTool invokes another plugin's registered tool after schema validation. Requires Wox
 	// Requires Wox >= 2.4.5.
 	InvokePluginTool(ctx context.Context, option InvokePluginToolOption) InvokePluginToolResult
 
-	// ShowToastMsg displays a toast message to the user.
-	// Requires Wox >= 2.5.0
-	ShowToastMsg(ctx context.Context, option ShowToastMsgOption) ShowToastMsgResult
-
-	// ShowToolbarMsg creates or updates the toolbar msg for the current plugin query context.
-	// It is only accepted while the caller is the active plugin in the current session.
-	// Leaving that plugin query context clears the toolbar msg automatically.
-	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
-
-	// ClearToolbarMsg removes a toolbar msg previously shown by this plugin by its id.
-	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
-
-	// OnEnterPluginQuery registers a callback that fires once when the session enters
-	// this plugin's query context.
-	OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context))
-
-	// OnLeavePluginQuery registers a callback that fires once when the session leaves
-	// this plugin's query context.
-	OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context))
-	// OnDragOut registers a notification after a result file drag started from
-	// this plugin reaches a terminal OS status. QueryResultDragData is what
-	// makes a result draggable; this callback cannot block or cancel that drag.
-	// Native drags stay copy-only, so a plugin that wants take-out to empty its
-	// own source should remove those files when Status is success.
-	OnDragOut(ctx context.Context, option DragOutListenOption) DragOutListenResult
-	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
-	// RegisterTriggerKeyword returns Success=false for invalid keywords or keywords owned by another enabled plugin.
-	// Re-registering this plugin's own keyword succeeds without adding a duplicate.
-	RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult
-	// UnregisterTriggerKeyword releases only this plugin's runtime registration.
-	// An already absent registration is also considered successful.
-	UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult
+	// AIChatStream starts an asynchronous AI chat stream and delivers updates to a non-nil callback.
+	// The plugin must declare the AI feature; setup errors are returned immediately. A nil callback
+	// does not start a stream.
 	AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error
 
-	// GetUpdatableResult retrieves the current state of a result from the result cache.
-	// Returns nil if the result is not found (no longer visible in UI).
-	// Returns a pointer to UpdatableResult containing the current state if found.
-	//
-	// The returned UpdatableResult can be modified and passed to UpdateResult() to update the UI.
-	//
-	// Example - Toggle favorite state:
-	//   Action: func(ctx context.Context, actionContext ActionContext) {
-	//       // Get current result state
-	//       updatableResult := api.GetUpdatableResult(ctx, actionContext.ResultId)
-	//       if updatableResult == nil {
-	//           return // Result no longer visible
-	//       }
-	//
-	//       // Toggle favorite
-	//       if isFavorite {
-	//           removeFavorite()
-	//           // Update action name and icon
-	//           (*updatableResult.Actions)[actionIndex].Name = "Add to favorite"
-	//           (*updatableResult.Actions)[actionIndex].Icon = AddToFavIcon
-	//           // Remove favorite tail
-	//           *updatableResult.Tails = removeMatchingTail(*updatableResult.Tails, favoriteTail)
-	//       } else {
-	//           addFavorite()
-	//           // Update action name and icon
-	//           (*updatableResult.Actions)[actionIndex].Name = "Remove from favorite"
-	//           (*updatableResult.Actions)[actionIndex].Icon = RemoveFromFavIcon
-	//           // Add favorite tail
-	//           *updatableResult.Tails = append(*updatableResult.Tails, favoriteTail)
-	//       }
-	//
-	//       // Update the result
-	//       api.UpdateResult(ctx, *updatableResult)
-	//   }
-	GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult
+	// Utilities.
 
-	// UpdateResult updates a query result that is currently displayed in the UI.
-	//
-	// This method is designed for showing real-time progress updates during long-running operations,
-	// such as file downloads, plugin installations, or API calls. It directly pushes updates to the UI
-	// without polling, making it ideal for one-time or event-driven updates.
-	//
-	// Returns:
-	//   - true: The result was successfully updated (still visible in the UI)
-	//   - false: The result is no longer visible in the UI (caller should stop updating)
-	//
-	// When to use UpdateResult:
-	//   - Progress updates during Action execution (e.g., "Downloading... 50%")
-	//   - One-time status updates (e.g., "Installation complete")
-	//   - Event-driven updates with clear start/end (e.g., file change notifications)
-	//   - Periodic updates (e.g., CPU/memory monitoring) - start a timer in Init() and track result IDs
-	//
-	// Best practices:
-	//   - Set PreventHideAfterAction: true in your action to keep the result visible
-	//   - Only call this within Action handlers or background goroutines spawned by actions
-	//   - Check the return value - if false, stop updating to avoid resource leaks
-	//   - Only update fields that have changed (use nil for fields you don't want to update)
-	//
-	// Example:
-	//   Action: func(ctx context.Context, actionContext ActionContext) {
-	//       title := "Installing..."
-	//       api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title})
-	//
-	//       go func() {
-	//           title := "Downloading..."
-	//           if !api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title}) {
-	//               return // Result no longer visible, stop updating
-	//           }
-	//           // ... perform download ...
-	//           title = "Installation complete"
-	//           api.UpdateResult(ctx, UpdatableResult{Id: actionContext.ResultId, Title: &title})
-	//       }()
-	//   }
-	UpdateResult(ctx context.Context, result UpdatableResult) bool
+	// Log writes a message to the Wox log under this plugin name.
+	Log(ctx context.Context, level LogLevel, msg string)
 
-	// PushResults pushes additional query results to UI for the given query.
-	// Returns true if results were accepted by UI (query still active), false otherwise.
-	PushResults(ctx context.Context, query Query, results []QueryResult) bool
+	// GetTranslation resolves a translation using the plugin and Wox translations for the current
+	// language.
+	GetTranslation(ctx context.Context, key string) string
 
-	// IsVisible returns whether the primary launcher is currently visible.
-	// Intended for periodic result refresh (CPU/memory, timer, media) and
-	// in-app notification routing — not for suppressing secondary flows.
-	// Without a session id this is primary-only; secondary panels do not count.
-	//
-	// Example:
-	//   func (p *Plugin) refreshData(ctx context.Context) {
-	//       if !p.api.IsVisible(ctx) {
-	//           return // Primary launcher is hidden, skip update
-	//       }
-	//       // ... update data ...
-	//   }
-	IsVisible(ctx context.Context) bool
+	// GetCacheFolder returns this plugin's machine-local cache directory, creating it if needed, or an
+	// empty string on failure. Wox deletes it on uninstall; store settings through GetSetting and
+	// SetSetting instead.
+	GetCacheFolder(ctx context.Context) string
 
-	// RefreshQuery re-executes the current query with the existing query text.
-	// This is useful when plugin data changes and you want to update the displayed results.
-	//
-	// Parameters:
-	//   - ctx: Context
-	//   - param: RefreshQueryParam to control refresh behavior
-	//
-	// Example - Refresh after marking item as favorite:
-	//   Action: func(ctx context.Context, actionContext ActionContext) {
-	//       markAsFavorite(item)
-	//       // Refresh query and preserve user's current selection
-	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
-	//   }
-	//
-	// Example - Refresh after deleting item:
-	//   Action: func(ctx context.Context, actionContext ActionContext) {
-	//       deleteItem(item)
-	//       // Refresh query and reset to first item
-	//       api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: false})
-	//   }
-	//
-	// Example - Refresh after moving the selected item:
-	//   api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: item.Id})
-	// The rebuilt result must use the same QueryResult.Id. The highlight follows
-	// that result when its index changes.
-	RefreshQuery(ctx context.Context, param RefreshQueryParam)
-
-	// RefreshGlance asks Wox UI to pull the latest Global Glance data for this plugin.
-	// It deliberately does not push UI content so user slot settings remain authoritative.
-	RefreshGlance(ctx context.Context, ids []string)
-
-	// Copy copies the given content to the system clipboard.
-	// Supports text, image, or both simultaneously.
+	// Copy copies text or an image to the system clipboard according to params.Type.
 	Copy(ctx context.Context, params CopyParams)
 
 	// Screenshot captures a user-selected screen area and returns the saved image path.
 	Screenshot(ctx context.Context, option ScreenshotOption) ScreenshotResult
-
-	// GetCacheFolder returns this plugin's dedicated cache directory under
-	// ~/.wox/cache/plugins/<plugin-id>/. The folder is created if it does not exist.
-	// Use it for machine-local files such as downloads and search caches. Do not store
-	// user settings here; those belong in GetSetting/SetSetting so they can sync.
-	// Wox deletes the folder when the plugin is uninstalled.
-	GetCacheFolder(ctx context.Context) string
-
-	// GetThemeColors returns the current launcher palette as opaque #RRGGBB colors.
-	// Use it for HTML/webview previews so plugin surfaces follow light and dark themes.
-	// Requires Wox >= 2.4.5.
-	GetThemeColors(ctx context.Context, option GetThemeColorsOption) GetThemeColorsResult
 }
 
 type CopyParams struct {
