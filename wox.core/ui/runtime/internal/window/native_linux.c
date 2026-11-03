@@ -429,6 +429,7 @@ typedef void (*WoxWebKitUserScriptUnref)(gpointer script);
 typedef gboolean (*WoxWebKitRegisterScriptMessageHandler)(gpointer manager, const gchar *name);
 typedef void (*WoxWebKitViewLoadURI)(gpointer web_view, const gchar *uri);
 typedef void (*WoxWebKitViewLoadHTML)(gpointer web_view, const gchar *content, const gchar *base_uri);
+typedef void (*WoxWebKitViewSetBackgroundColor)(gpointer web_view, const GdkRGBA *color);
 typedef gpointer (*WoxWebKitViewGetSettings)(gpointer web_view);
 typedef gpointer (*WoxWebKitViewGetUserContentManager)(gpointer web_view);
 typedef void (*WoxWebKitSettingsSetUserAgent)(gpointer settings, const gchar *user_agent);
@@ -450,6 +451,7 @@ typedef struct {
   WoxWebKitRegisterScriptMessageHandler register_script_message_handler;
   WoxWebKitViewLoadURI load_uri;
   WoxWebKitViewLoadHTML load_html;
+  WoxWebKitViewSetBackgroundColor set_background_color;
   WoxWebKitViewGetSettings get_settings;
   WoxWebKitViewGetUserContentManager get_user_content_manager;
   WoxWebKitSettingsSetUserAgent set_user_agent;
@@ -493,6 +495,7 @@ static bool ensure_webkit(void) {
   wox_webkit.register_script_message_handler = (WoxWebKitRegisterScriptMessageHandler)load_webkit_symbol("webkit_user_content_manager_register_script_message_handler");
   wox_webkit.load_uri = (WoxWebKitViewLoadURI)load_webkit_symbol("webkit_web_view_load_uri");
   wox_webkit.load_html = (WoxWebKitViewLoadHTML)load_webkit_symbol("webkit_web_view_load_html");
+  wox_webkit.set_background_color = (WoxWebKitViewSetBackgroundColor)load_webkit_symbol("webkit_web_view_set_background_color");
   wox_webkit.get_settings = (WoxWebKitViewGetSettings)load_webkit_symbol("webkit_web_view_get_settings");
   wox_webkit.get_user_content_manager = (WoxWebKitViewGetUserContentManager)load_webkit_symbol("webkit_web_view_get_user_content_manager");
   wox_webkit.set_user_agent = (WoxWebKitSettingsSetUserAgent)load_webkit_symbol("webkit_settings_set_user_agent");
@@ -886,6 +889,11 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
     web_view = wox_webkit.view_new();
   }
   if (web_view != NULL) {
+    // Let transparent HTML reveal the Wox surface beneath the WebView.
+    if (wox_webkit.set_background_color != NULL) {
+      const GdkRGBA transparent = {0, 0, 0, 0};
+      wox_webkit.set_background_color(web_view, &transparent);
+    }
     if (user_agent[0] != '\0') {
       gpointer settings = wox_webkit.get_settings(web_view);
       if (settings == NULL) {
@@ -4464,6 +4472,29 @@ int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window
   }
   window->pointer_over_web_view = kind != WOX_POINTER_LEAVE;
   if (kind == WOX_POINTER_LEAVE) {
+    GdkWindow *target = gtk_widget_get_window(window->active_web_view);
+    if (target != NULL) {
+      // The widget host can synthesize a leave from a motion event at the surface edge.
+      GdkEvent *leave = gdk_event_new(GDK_LEAVE_NOTIFY);
+      leave->crossing.window = g_object_ref(target);
+      leave->crossing.send_event = TRUE;
+      leave->crossing.time = gdk_event_get_time(window->dispatching_pointer_event);
+      // Wayland may report the last in-bounds position on leave; WebKit uses
+      // the coordinates for hit testing, so force them outside the view.
+      leave->crossing.x = -1;
+      leave->crossing.y = y;
+      gdk_event_get_root_coords(window->dispatching_pointer_event, &leave->crossing.x_root, &leave->crossing.y_root);
+      GdkModifierType state = 0;
+      gdk_event_get_state(window->dispatching_pointer_event, &state);
+      leave->crossing.state = state;
+      leave->crossing.mode = GDK_CROSSING_NORMAL;
+      leave->crossing.detail = GDK_NOTIFY_NONLINEAR;
+      gdk_event_set_device(leave, gdk_event_get_device(window->dispatching_pointer_event));
+      window->forwarding_embedded_pointer = true;
+      gtk_widget_event(window->active_web_view, leave);
+      window->forwarding_embedded_pointer = false;
+      gdk_event_free(leave);
+    }
     apply_linux_pointer_cursor(window);
     return 0;
   }
@@ -4486,6 +4517,13 @@ int32_t wox_linux_window_forward_embedded_surface_pointer(WoxLinuxWindow *window
   case GDK_BUTTON_RELEASE:
   case GDK_2BUTTON_PRESS:
   case GDK_3BUTTON_PRESS:
+    // A delayed click can replay a press while the current native event is a release.
+    if (kind == WOX_POINTER_DOWN && event->type == GDK_BUTTON_RELEASE) {
+      event->type = GDK_BUTTON_PRESS;
+      if (event->button.button == GDK_BUTTON_PRIMARY) {
+        event->button.state &= ~GDK_BUTTON1_MASK;
+      }
+    }
     event->button.x = x;
     event->button.y = y;
     event_window = &event->button.window;

@@ -20,7 +20,7 @@ strip when needed. Set `Closable: false` for a chrome-free indicator. Geometry
 uses the shared overlay work-area and DPI conversions, including negative desktop
 origins. Bounds are clamped to the work area.
 
-HTML pages control their own background. On Windows, a transparent `html` and
+HTML pages control their own background. On Windows and macOS, a transparent `html` and
 `body` allows the window's themed wash and native material to show through the
 WebView. An opaque page background covers that material. The HTML author is
 responsible for choosing readable text colors; the plugin theme color API returns
@@ -153,3 +153,6 @@ host. On Windows, `WOX_WINDOW_NATIVE_TEST=1 go test ./ui/pluginwindow -run
 TestNativeWindowMessages -count=1` exercises real WebView2; set
 `WOX_WEBVIEW2_LOADER_PATH` to `resource/others/webview/WebView2Loader.dll` if the test
 binary is in a temporary directory.
+
+On macOS, `make smoke pluginwindow/001` checks a draggable HTML window's WebKit
+snapshot transparency, pointer enter and leave, and the page's close-button click.
