@@ -163,16 +163,18 @@ class PublicAPI(Protocol):
     initialization via PluginInitParams.
 
     Method categories:
-        - UI Control: show_app, hide_app, is_visible, notify, push_attention
-        - Query: change_query, refresh_query, push_results
-        - Settings: get_setting, save_setting, on_setting_changed, on_get_dynamic_setting
+        - UI Control: create_window, show_app, hide_app, is_visible, show_toast_msg, notify, push_attention
+        - Query: change_query, refresh_query, push_results, register_query_commands,
+          register_trigger_keyword, unregister_trigger_keyword
+        - Settings: get_setting, set_setting, save_setting, on_setting_changed, on_get_dynamic_setting
         - Logging: log
         - Internationalization: get_translation
         - Results: get_updatable_result, update_result
         - AI: ai_chat_stream
         - MRU: on_mru_restore
-        - Callbacks: on_unload, on_deep_link
-        - Commands: register_query_commands
+        - Callbacks: on_hotkey, on_unload, on_deep_link, on_enter_plugin_query, on_leave_plugin_query, on_drag_out
+        - Plugin tools: register_plugin_tool, unregister_plugin_tool, list_plugin_tools, invoke_plugin_tool
+        - Toolbar: show_toolbar_msg, clear_toolbar_msg
         - Clipboard: copy
         - Screenshot: screenshot
         - Cache: get_cache_folder
@@ -265,9 +267,9 @@ class PublicAPI(Protocol):
 
     async def is_visible(self, ctx: Context) -> bool:
         """
-        Check if Wox window is currently visible.
-
-        Returns True if the Wox window is shown, False if hidden.
+        Check whether the context's session is visible. If the session is
+        unknown, report primary launcher visibility; secondary panels do not
+        count toward that fallback.
 
         This is useful for plugins that perform periodic updates
         (e.g., CPU/memory monitoring) to avoid wasting resources
@@ -326,10 +328,11 @@ class PublicAPI(Protocol):
 
     async def show_toolbar_msg(self, ctx: Context, msg: ToolbarMsg) -> None:
         """
-        Show or update a toolbar msg for the current plugin.
+        Show or update a toolbar message for the current plugin.
 
         Reusing the same msg id replaces the previous content.
-        Plugin-scoped messages are only accepted while the user stays in this plugin query.
+        Messages are only accepted while the user stays in this plugin query and
+        are cleared when the session leaves that query context.
 
         Args:
             ctx: Context
@@ -390,15 +393,15 @@ class PublicAPI(Protocol):
         """
         Get setting value.
 
-        Retrieves the current value for a setting key. Returns the
-        default value if the user hasn't set a custom value.
+        Retrieves the current value for a setting key, preferring the current
+        platform's value. Returns an empty string if the key is absent.
 
         Args:
             ctx: Context
             key: Setting key defined in your plugin settings
 
         Returns:
-            str: Current setting value (or default)
+            str: Current setting value, or an empty string if absent
 
         Example:
             api_key = await api.get_setting(ctx, "api_key")
@@ -512,7 +515,8 @@ class PublicAPI(Protocol):
         Register deep link callback.
 
         Deep links allow external apps/websites to invoke your plugin
-        with parameters. The callback receives the arguments.
+        with parameters. The callback receives the arguments. The plugin must
+        declare the deep link feature.
 
         Args:
             ctx: Context
@@ -582,7 +586,10 @@ class PublicAPI(Protocol):
 
     async def register_query_commands(self, ctx: Context, commands: List[MetadataCommand]) -> None:
         """
-        Register query commands.
+        Replace the plugin's runtime query commands.
+
+        Invalid debounce values leave the previous commands intact. Metadata
+        commands take precedence over runtime commands with the same name.
 
         Commands provide structured sub-commands for your plugin.
         For example, ">todo add" and ">todo list" both use the
@@ -619,15 +626,15 @@ class PublicAPI(Protocol):
         ...
 
     async def unregister_plugin_tool(self, ctx: Context, option: UnregisterPluginToolOption) -> UnregisterPluginToolResult:
-        """Unregister a plugin tool previously registered by this plugin. Requires Wox >= 2.4.5."""
+        """Unregister this plugin's tool; repeating the operation succeeds. Requires Wox >= 2.4.5."""
         ...
 
     async def list_plugin_tools(self, ctx: Context, option: ListPluginToolsOption) -> ListPluginToolsResult:
-        """List currently callable plugin tools. Requires Wox >= 2.4.5."""
+        """List callable tools from initialized, enabled plugins. Requires Wox >= 2.4.5."""
         ...
 
     async def invoke_plugin_tool(self, ctx: Context, option: InvokePluginToolOption) -> InvokePluginToolResult:
-        """Invoke another plugin's registered tool. Requires Wox >= 2.4.5."""
+        """Invoke another plugin's tool after schema validation. Requires Wox >= 2.4.5."""
         ...
 
     async def ai_chat_stream(
@@ -680,9 +687,9 @@ class PublicAPI(Protocol):
         """
         Register MRU (Most Recently Used) restore callback.
 
-        The callback is invoked when a user selects an MRU item.
-        Return a Result to restore it, or None if the item is
-        no longer valid (it will be removed from MRU).
+        The callback reconstructs a result from its stored MRU data. The plugin
+        must declare the MRU feature. Return a Result, or None if the item is
+        no longer valid. Return promptly; start-page restoration has a timeout.
 
         Args:
             ctx: Context
@@ -699,7 +706,7 @@ class PublicAPI(Protocol):
                         sub_title=path,
                         icon=WoxImage.new_absolute(path)
                     )
-                return None  # Remove from MRU
+                return None  # Item cannot be restored
 
             await api.on_mru_restore(ctx, self._on_mru_restore)
         """
@@ -707,11 +714,10 @@ class PublicAPI(Protocol):
 
     async def get_updatable_result(self, ctx: Context, result_id: str) -> Optional[UpdatableResult]:
         """
-        Get the current state of a result displayed in the UI.
+        Get a snapshot of a result from the result cache.
 
-        Returns UpdatableResult with current values if the result
-        is still visible. Returns None if the result is no longer
-        visible (e.g., user changed query).
+        Returns an UpdatableResult with cached values, or None if the result
+        is not found. A cached result is not necessarily still visible.
 
         System actions and tails (like favorite icon) are filtered
         out and re-added automatically by update_result().
@@ -727,7 +733,7 @@ class PublicAPI(Protocol):
             # In an action handler
             updatable_result = await api.get_updatable_result(ctx, result_id)
             if updatable_result is None:
-                return  # Result no longer visible
+                return  # Result not found in cache
 
             # Modify fields
             updatable_result.title = "Updated title"
@@ -742,8 +748,9 @@ class PublicAPI(Protocol):
         """
         Update a query result displayed in the UI.
 
-        Returns True if the result was updated (still visible).
-        Returns False if the result is no longer visible.
+        Returns True if the UI accepted the update. Returns False if it was
+        rejected, including when the result is no longer available. Unset
+        fields are left unchanged; stop periodic updates after a rejection.
 
         This is designed for long-running operations in Action handlers.
         Set prevent_hide_after_action=True in your action to keep
@@ -754,7 +761,7 @@ class PublicAPI(Protocol):
             result: UpdatableResult with id (required) and optional fields
 
         Returns:
-            bool: True if updated, False if no longer visible
+            bool: True if accepted, False if rejected
 
         Example:
             async def my_action(action_ctx: ActionContext):
@@ -777,8 +784,8 @@ class PublicAPI(Protocol):
         """
         Push additional results for the current query.
 
-        Returns True if results were accepted (query still active).
-        Returns False if query is no longer active (results ignored).
+        The query must include its ID and session ID. Returns True if the UI
+        accepted the results, or False if the update was rejected.
 
         Useful for:
         - Streaming results as they become available
@@ -791,7 +798,7 @@ class PublicAPI(Protocol):
             results: Results to append to the list
 
         Returns:
-            bool: True if accepted, False if query changed
+            bool: True if accepted, False if rejected
 
         Example:
             async def query_with_streaming(ctx: Context, query: Query) -> QueryResponse:
@@ -891,6 +898,8 @@ class PublicAPI(Protocol):
 
         Example:
             cache_dir = await api.get_cache_folder(ctx)
+            if not cache_dir:
+                raise RuntimeError("Plugin cache folder is unavailable")
             gif_path = os.path.join(cache_dir, "downloads", "item.gif")
         """
         ...

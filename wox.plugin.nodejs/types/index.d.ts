@@ -1574,12 +1574,14 @@ export interface ShowToastMsgResult {
   ErrMsg: string
 }
 
+/** Runtime services available to a plugin through its initialization parameters. */
 export interface PublicAPI {
   /** Subscribe once during init; global settings own registration and cleanup. */
   OnHotkey(ctx: Context, option: OnHotkeyOption): Promise<OnHotkeyResult>
+  /** Create a hidden plugin window and install its event callback before content loads. */
   CreateWindow(ctx: Context, option: CreateWindowOption): Promise<CreateWindowResult>
   /**
-   * Change Wox query
+   * Change the launcher query. Only input and selection query types are accepted.
    */
   ChangeQuery: (ctx: Context, query: ChangeQueryParam) => Promise<void>
 
@@ -1589,12 +1591,13 @@ export interface PublicAPI {
   HideApp: (ctx: Context) => Promise<void>
 
   /**
-   * Show Wox
+   * Show the launcher and select its query text.
    */
   ShowApp: (ctx: Context) => Promise<void>
 
   /**
-   * Check if Wox window is currently visible
+   * Report visibility for the context's session when known; otherwise report
+   * the primary launcher without counting secondary panels.
    */
   IsVisible: (ctx: Context) => Promise<boolean>
 
@@ -1615,7 +1618,8 @@ export interface PublicAPI {
    * Show or update a toolbar msg.
    *
    * Reusing the same Id updates the current status instead of creating a duplicate.
-   * Plugin-scoped status is only accepted while the user stays in this plugin query.
+   * Plugin-scoped status is only accepted while the user stays in this plugin query
+   * and is cleared when the session leaves that query context.
    */
   ShowToolbarMsg: (ctx: Context, status: ToolbarMsg) => Promise<void>
 
@@ -1637,9 +1641,9 @@ export interface PublicAPI {
   GetTranslation: (ctx: Context, key: string) => Promise<string>
 
   /**
-   * Get customized setting
+   * Get a plugin setting, preferring the current platform's value.
    *
-   * will try to get platform specific setting first, if not found, will try to get global setting
+   * Returns an empty string if the key is absent.
    */
   GetSetting: (ctx: Context, key: string) => Promise<string>
 
@@ -1668,12 +1672,12 @@ export interface PublicAPI {
   OnGetDynamicSetting: (ctx: Context, callback: (ctx: Context, key: string) => PluginSettingDefinitionItem) => Promise<void>
 
   /**
-   * Register deep link callback
+   * Register a deep link callback. The plugin must declare the deep link feature.
    */
   OnDeepLink: (ctx: Context, callback: (ctx: Context, arguments: MapString) => void) => Promise<void>
 
   /**
-   * Register on load event
+   * Register a callback invoked when the plugin is unloaded.
    */
   OnUnload: (ctx: Context, callback: (ctx: Context) => Promise<void>) => Promise<void>
 
@@ -1696,11 +1700,14 @@ export interface PublicAPI {
   OnDragOut: (ctx: Context, option: DragOutListenOption) => Promise<DragOutListenResult>
 
   /**
-   * Register query commands
+   * Replace runtime query commands. Invalid debounce values leave the previous
+   * commands intact; metadata commands take precedence over duplicates.
    */
   RegisterQueryCommands: (ctx: Context, commands: MetadataCommand[]) => Promise<void>
 
+  /** Register a runtime trigger; invalid keywords or keywords owned by another enabled plugin fail. */
   RegisterTriggerKeyword: (ctx: Context, option: RegisterTriggerKeywordOption) => Promise<RegisterTriggerKeywordResult>
+  /** Remove this plugin's runtime trigger registration; an absent registration also succeeds. */
   UnregisterTriggerKeyword: (ctx: Context, option: UnregisterTriggerKeywordOption) => Promise<UnregisterTriggerKeywordResult>
 
   /**
@@ -1708,15 +1715,16 @@ export interface PublicAPI {
    */
   RegisterPluginTool: (ctx: Context, option: RegisterPluginToolOption) => Promise<RegisterPluginToolResult>
   /**
-   * Unregister a plugin tool previously registered by this plugin. Requires Wox >= 2.4.5.
+   * Unregister a plugin tool previously registered by this plugin. Repeating the operation succeeds.
+   * Requires Wox >= 2.4.5.
    */
   UnregisterPluginTool: (ctx: Context, option: UnregisterPluginToolOption) => Promise<UnregisterPluginToolResult>
   /**
-   * List currently callable plugin tools. Requires Wox >= 2.4.5.
+   * List callable tools from initialized, enabled plugins. Requires Wox >= 2.4.5.
    */
   ListPluginTools: (ctx: Context, option: ListPluginToolsOption) => Promise<ListPluginToolsResult>
   /**
-   * Invoke another plugin's registered tool. Requires Wox >= 2.4.5.
+   * Invoke another plugin's registered tool after schema validation. Requires Wox >= 2.4.5.
    */
   InvokePluginTool: (ctx: Context, option: InvokePluginToolOption) => Promise<InvokePluginToolResult>
 
@@ -1731,7 +1739,8 @@ export interface PublicAPI {
   AIChatStream: (ctx: Context, model: AI.AIModel, conversations: AI.Conversation[], options: AI.ChatOptions, callback: AI.ChatStreamFunc) => Promise<void>
 
   /**
-   * Register MRU restore callback
+   * Register an MRU restore callback. The plugin must declare the MRU feature.
+   * Return promptly; start-page restoration has a timeout.
    * @param ctx Context
    * @param callback Callback function that takes MRUData and returns Result or null
    *                 Return null if the MRU data is no longer valid
@@ -1739,10 +1748,10 @@ export interface PublicAPI {
   OnMRURestore: (ctx: Context, callback: (ctx: Context, mruData: MRUData) => Promise<Result | null>) => Promise<void>
 
   /**
-   * Get the current state of a result that is displayed in the UI.
+   * Get a snapshot of a result from the result cache.
    *
-   * Returns UpdatableResult with current values if the result is still visible.
-   * Returns null if the result is no longer visible.
+   * Returns an UpdatableResult with cached values, or null if the result is not
+   * found. A cached result is not necessarily still visible.
    *
    * Note: System actions and tails (like favorite icon) are automatically filtered out.
    * They will be re-added by the system when you call UpdateResult().
@@ -1754,7 +1763,7 @@ export interface PublicAPI {
    *   // Get current result state
    *   const updatableResult = await api.GetUpdatableResult(ctx, actionContext.ResultId)
    *   if (updatableResult === null) {
-   *     return  // Result no longer visible
+   *     return  // Result not found in cache
    *   }
    *
    *   // Modify the result
@@ -1768,34 +1777,33 @@ export interface PublicAPI {
    *
    * @param ctx Context
    * @param resultId ID of the result to get
-   * @returns Promise<UpdatableResult | null> Current result state, or null if not visible
+   * @returns Cached result snapshot, or null if not found
    */
   GetUpdatableResult: (ctx: Context, resultId: string) => Promise<UpdatableResult | null>
 
   /**
    * Update a query result that is currently displayed in the UI.
    *
-   * Returns true if the result was successfully updated (still visible in UI).
-   * Returns false if the result is no longer visible.
+   * Returns true if the UI accepted the update, or false if it was rejected,
+   * including when the result is no longer available. Omitted fields are unchanged.
    *
    * This method is designed for long-running operations within Action handlers.
    * Best practices:
    * - Set PreventHideAfterAction: true in your action
-   * - Only use during action execution or in background tasks spawned by actions
-   * - For periodic updates, start a timer in init() and track result IDs
+   * - For periodic updates, start a timer in init(), track result IDs, and stop on rejection
    *
    * Example:
    * ```typescript
    * // In an action handler
    * Action: async (ctx, actionContext) => {
    *   // Update only the title
-   *   const success = await api.UpdateResult(ctx, {
+   *   await api.UpdateResult(ctx, {
    *     Id: actionContext.ResultId,
    *     Title: "Downloading... 50%"
    *   })
    *
    *   // Update title and tails
-   *   const success = await api.UpdateResult(ctx, {
+   *   await api.UpdateResult(ctx, {
    *     Id: actionContext.ResultId,
    *     Title: "Processing...",
    *     Tails: [{ Type: "text", Text: "Step 1/3" }]
@@ -1805,15 +1813,15 @@ export interface PublicAPI {
    *
    * @param ctx Context
    * @param result UpdatableResult with Id (required) and optional fields to update
-   * @returns Promise<boolean> True if updated successfully, false if result no longer visible
+   * @returns True if accepted, false if rejected
    */
   UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
 
   /**
    * Push additional results for the current query.
    *
-   * Returns true if UI accepted the results (query still active),
-   * false if query is no longer active.
+   * The query must include its ID and session ID. Returns true if the UI
+   * accepted the results, or false if the update was rejected.
    *
    * @param ctx Context
    * @param query Current query
