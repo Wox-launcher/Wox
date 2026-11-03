@@ -1583,3 +1583,16 @@ func testDarwinEdgeFade(scale, top, bottom float32) ([]byte, int) {
 
 // macOS already rasterizes IOSurfaces through CPU bitmap contexts.
 func platformConfigureSoftwareRendering(bool) {}
+
+// showInactive displays a focusable window without activating it.
+func (w *platformWindow) showInactive() (FocusEpoch, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return 0, err
+	}
+	epoch := C.wox_darwin_window_show_inactive(native)
+	if epoch == 0 {
+		return 0, errors.New("could not show inactive window")
+	}
+	return FocusEpoch(epoch), nil
+}

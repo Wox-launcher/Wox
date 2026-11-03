@@ -53,9 +53,25 @@ type Hotkey struct {
 	modifierKeys []keyboard.Key
 }
 
+// HoldEndReason distinguishes normal release from an interrupted gesture.
+type HoldEndReason string
+
+const (
+	HoldEndReleased    HoldEndReason = "released"
+	HoldEndInterrupted HoldEndReason = "interrupted"
+	HoldEndUnavailable HoldEndReason = "unavailable"
+)
+
+// HoldTransition is delivered synchronously to a short, nonblocking enqueue callback.
+type HoldTransition struct {
+	Started bool
+	Reason  HoldEndReason
+}
+
 type Spec struct {
-	CombineKey string
-	Callback   func() // onPress; required
+	OnHoldTransition func(HoldTransition)
+	CombineKey       string
+	Callback         func() // onPress; required
 	// CanTriggerBeforeRelease opts safe Windows Caps callbacks out of the synthetic-input release guard.
 	// It runs on the callback goroutine, never on the keyboard hook thread.
 	CanTriggerBeforeRelease func() bool
@@ -133,7 +149,7 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 	case hotkeyKindHoldModifier:
 		util.GetLogger().Info(ctx, fmt.Sprintf("register hold-modifier hotkey: %s", combineKey))
 		h.modifierKeys = canonicalHoldModifierKeys(spec.modifierChordKeys)
-		return startHoldModifierTracking(h.modifierKeys, onPress, onRelease)
+		return startHoldModifierTrackingWithEvents(h.modifierKeys, onPress, onRelease, options.onHoldTransition)
 	case hotkeyKindPressModifier:
 		util.GetLogger().Info(ctx, fmt.Sprintf("register press-modifier hotkey: %s", combineKey))
 		h.modifierKeys = canonicalHoldModifierKeys(spec.modifierChordKeys)
@@ -213,7 +229,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 				// OnRelease. Only modifier chords use hold mode today; double-
 				// modifier and CapsLock fall back to press-only (RegisterWithRelease
 				// rejects non-chord release callbacks).
-				err = hk.RegisterWithRelease(ctx, spec.CombineKey, spec.Callback, spec.OnRelease)
+				err = hk.register(ctx, spec.CombineKey, spec.Callback, spec.OnRelease, registerOptions{onHoldTransition: spec.OnHoldTransition})
 			} else if parsed.isModifierChord() {
 				// Press-only modifier chord needs RegisterWithModifierPress so the
 				// chord is resolved as a press trigger, not a normal combo.

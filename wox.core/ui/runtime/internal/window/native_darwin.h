@@ -91,6 +91,8 @@ int32_t wox_darwin_test_large_image_admission(void);
 
 int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t custom, float radius);
 
+uint64_t wox_darwin_window_show_inactive(WoxDarwinWindow *window);
+
 #endif
 
 int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height);

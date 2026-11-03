@@ -2,6 +2,11 @@
 
 This package provides type definitions for developing Wox plugins in Python.
 
+Plugin-owned windows are available through `api.create_window(ctx, option)`.
+The returned instance has `show`, `hide`, `close`, `set_options`, `content.set` and
+`content.post_message`, all with named Option/Result models. See the
+[window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+
 ## Requirements
 
 - Python >= 3.8 (defined in `pyproject.toml`)
@@ -277,3 +282,10 @@ accepted = await api.update_result(ctx, UpdatableResult(
     ),
 ))
 ```
+
+## Declarative global hotkeys (development)
+
+Declare `Type: "hotkey"`, `Scope: "global"` in static plugin settings, then subscribe
+with `OnHotkey` (`on_hotkey` in Python) during init. Wox manages registration, conflicts
+and cleanup. See the [contract and examples](../wox.core/plugin/hotkey.md) for gesture
+kinds, paired hold events, stable table IDs and asynchronous callback handling.

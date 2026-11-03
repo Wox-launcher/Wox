@@ -18,7 +18,7 @@ On macOS, grant Accessibility if hotkey recording asks for it. On Linux Wayland,
 
 ## Fullscreen Applications
 
-Enable **Settings -> Hotkey -> Ignore hotkeys in fullscreen** to suppress the main, selection and query hotkeys while the foreground window is fullscreen. It is off by default; ordinary maximized windows are unaffected. Dictation hotkeys are independent of this launcher setting.
+Enable **Settings -> Hotkey -> Ignore hotkeys in fullscreen** to suppress the main, selection and query hotkeys while the foreground window is fullscreen. It is off by default; ordinary maximized windows are unaffected. Plugin hotkeys are independent of this launcher setting.
 
 Detection supports Windows, macOS (Accessibility permission required), Linux X11 with `xprop`, and Hyprland with `hyprctl`. The switch is disabled on unsupported Wayland desktops or when the required Linux command is missing. Detection failures leave hotkeys enabled.
 
@@ -70,6 +70,6 @@ This is useful for a dashboard, a WebView site, clipboard history (`cb`), or not
 | Open a Web Search in WebView | Result action `Ctrl+Enter` (`Cmd+Enter` on macOS); the query box stays visible; Escape returns focus to the query |
 | Close the current WebView page | Windows/macOS Action Panel `Ctrl+W` (`Cmd+W` on macOS); destroys the page so its memory can be released |
 | Hide a background WebView page | Windows/macOS Action Panel `Ctrl+H` (`Cmd+H` on macOS); only on query-hotkey full preview windows with Run in background |
-| Dictation press / double-press / hold | **Settings -> Plugins -> Dictation** |
+| Plugin global hotkeys | Configure them in the plugin settings |
 | Screenshot capture | **Settings -> Plugins -> Screenshot**, or query `screenshot` |
 | Hotkey overview | Query `hotkeys` to list registered shortcuts |

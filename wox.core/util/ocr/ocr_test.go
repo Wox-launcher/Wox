@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"wox/util/speech"
 )
 
 func TestSortLinesByReadingOrder(t *testing.T) {
@@ -31,7 +30,7 @@ func TestSortLinesByReadingOrder(t *testing.T) {
 
 func TestPaddleEngineStatusReportsMissingRuntime(t *testing.T) {
 	root := t.TempDir()
-	runtimeManager, err := speech.NewNativeLibManager(filepath.Join(root, "sherpa"), filepath.Join(root, "onnx"), filepath.Join(root, "vad"))
+	runtimeManager, err := NewNativeLibManager(filepath.Join(root, "sherpa"), filepath.Join(root, "onnx"))
 	if err != nil {
 		t.Fatal(err)
 	}

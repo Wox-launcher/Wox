@@ -14,6 +14,7 @@ const (
 )
 
 type registerOptions struct {
+	onHoldTransition        func(HoldTransition)
 	allowModifierPress      bool
 	canTriggerBeforeRelease func() bool
 	// probe uses a single registration attempt so a taken combo is not retried
@@ -45,4 +46,21 @@ func resolveHotkeyKind(spec hotkeySpec, hasRelease bool, options registerOptions
 		return hotkeyKindCapsLockCombo, nil
 	}
 	return hotkeyKindNormalCombo, nil
+}
+
+// BindingKind validates a persisted binding and reports its gesture kind.
+func BindingKind(value string) (hotkeyKind, error) {
+	binding, err := ParseBinding(value)
+	if err != nil {
+		return "", err
+	}
+	spec, err := (&Hotkey{}).parseCombineKey(binding.CombineKey)
+	if err != nil {
+		return "", err
+	}
+	if err = validateHotkeySpec(spec); err != nil {
+		return "", err
+	}
+	kind, err := resolveHotkeyKind(spec, binding.Trigger == TriggerHold, registerOptions{allowModifierPress: true})
+	return kind, err
 }

@@ -1,3 +1,7 @@
+import type { OnHotkeyOption, OnHotkeyResult } from "./hotkey.js"
+export * from "./hotkey.js"
+import { CreateWindowOption, CreateWindowResult } from "./window.js"
+export * from "./window.js"
 import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
 import { AI } from "./ai.js"
 
@@ -1571,6 +1575,9 @@ export interface ShowToastMsgResult {
 }
 
 export interface PublicAPI {
+  /** Subscribe once during init; global settings own registration and cleanup. */
+  OnHotkey(ctx: Context, option: OnHotkeyOption): Promise<OnHotkeyResult>
+  CreateWindow(ctx: Context, option: CreateWindowOption): Promise<CreateWindowResult>
   /**
    * Change Wox query
    */
@@ -1721,13 +1728,7 @@ export interface PublicAPI {
    * when no thinking mode or loop policy is needed. Chunks arrive through
    * `callback`, including `Status: "error"` when the stream cannot start.
    */
-  AIChatStream: (
-    ctx: Context,
-    model: AI.AIModel,
-    conversations: AI.Conversation[],
-    options: AI.ChatOptions,
-    callback: AI.ChatStreamFunc
-  ) => Promise<void>
+  AIChatStream: (ctx: Context, model: AI.AIModel, conversations: AI.Conversation[], options: AI.ChatOptions, callback: AI.ChatStreamFunc) => Promise<void>
 
   /**
    * Register MRU restore callback

@@ -4,8 +4,60 @@ import (
 	"context"
 
 	"wox/setting"
+	woxui "wox/ui/runtime"
+	"wox/util"
 	"wox/util/screen"
 )
+
+// pluginWindowWorkArea selects the same display as the launcher while leaving the plugin's anchor intact.
+func pluginWindowWorkArea() (woxui.Rect, bool) {
+	displays, err := screen.ListDisplays()
+	if err != nil || len(displays) == 0 {
+		return woxui.Rect{}, false
+	}
+	woxSetting := setting.GetSettingManager().GetWoxSetting(context.Background())
+	mode := woxSetting.ShowPosition.Get()
+	var active screen.Size
+	if mode == setting.PositionTypeActiveScreen {
+		active = screen.GetActiveScreen()
+	}
+	width, height := 0, 0
+	if mode == setting.PositionTypeLastLocation {
+		width = woxSetting.AppWidth.Get()
+		height = CalculateMaxWindowHeight(context.Background(), woxSetting.MaxResultCount.Get(), true, true)
+	}
+	return pluginWindowWorkAreaOnDisplays(mode, woxSetting.ShowDisplay.Get(), woxSetting.LastWindowPosition.Get(), displays, screen.GetMouseScreen(), active, width, height, !util.IsLinux())
+}
+
+// pluginWindowWorkAreaOnDisplays resolves the launcher display in logical coordinates.
+func pluginWindowWorkAreaOnDisplays(mode setting.PositionType, target setting.ShowDisplayTarget, last setting.SavedWindowPosition, displays []screen.Display, mouse, active screen.Size, width, height int, trustID bool) (woxui.Rect, bool) {
+	selected := mouse
+	switch mode {
+	case setting.PositionTypeActiveScreen:
+		selected = active
+	case setting.PositionTypeSpecificScreen:
+		if display, match := screen.ResolveShowDisplay(displays, savedShowDisplay(target), trustID); match != screen.ShowDisplayMatchNone {
+			selected = screen.Size{DisplayID: display.ID, X: display.Bounds.X, Y: display.Bounds.Y, Width: display.Bounds.Width, Height: display.Bounds.Height}
+		}
+	case setting.PositionTypeLastLocation:
+		if position, ok := resolveLastLocationOnDisplays(last, displays, width, height); ok {
+			selected = screen.Size{DisplayID: position.DisplayID, X: position.X, Y: position.Y, Width: 1, Height: 1}
+		}
+	}
+	for _, display := range displays {
+		bounds := display.Bounds
+		if (selected.DisplayID != "" && display.ID == selected.DisplayID) || (selected.DisplayID == "" && selected.X >= bounds.X && selected.X < bounds.Right() && selected.Y >= bounds.Y && selected.Y < bounds.Bottom()) {
+			area := display.WorkArea
+			if area.IsEmpty() {
+				area = bounds
+			}
+			if !area.IsEmpty() {
+				return woxui.Rect{X: float32(area.X), Y: float32(area.Y), Width: float32(area.Width), Height: float32(area.Height)}, true
+			}
+		}
+	}
+	return woxui.Rect{}, false
+}
 
 func savedShowDisplay(target setting.ShowDisplayTarget) screen.SavedDisplay {
 	return screen.SavedDisplay{

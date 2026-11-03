@@ -255,8 +255,9 @@ func (c *pluginSettingsController) pluginDetailProps(snapshot settingsSnapshot, 
 	}
 	c.addPluginKeywordQueryTests(&keywordTable, plugin.ID, form.values["TriggerKeywords"], imageScale)
 	accent := snapshot.palette.Info
+	keywordField := pluginSettingFieldWithError(launcherview.FormTableField(keywordTable), form.fieldErrors[keywordDefinition.Value.Key], 0, snapshot.palette)
 	editor.Keywords = c.pluginDetailIntroFormProps(snapshot, imageScale, "", []woxwidget.Widget{
-		woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: launcherview.FormTableField(keywordTable)},
+		woxwidget.Keyed{Key: pluginSettingRowKey(0), Child: keywordField},
 	}, accent)
 	editor.Keywords.SectionLabel = c.language.translate("i18n:ui_plugin_tab_trigger_keywords")
 	editor.Commands = c.pluginCommandsFormProps(snapshot, plugin, innerWidth, imageScale, true, true, pluginFormTriggerKeywords(plugin, form.values))
@@ -271,6 +272,9 @@ func (c *pluginSettingsController) pluginDetailProps(snapshot settingsSnapshot, 
 			keepVisibleKey = pluginSettingRowKey(formIndex)
 		}
 		field := c.buildFormField(form.formFieldsSnapshot, callbacks, snapshot.palette, formIndex, definition, innerWidth, 0)
+		if definition.Type == "table" || definition.Type == "app" || definition.Type == "ocrModel" {
+			field = pluginSettingFieldWithError(field, form.fieldErrors[definition.Value.Key], formIndex, snapshot.palette)
+		}
 		target := woxcomponent.WoxSettingTarget(woxcomponent.SettingTargetProps{
 			Width: innerWidth, Highlighted: snapshot.highlight == "plugin-setting:"+plugin.ID+"\x00"+definition.Value.Key, Child: field, Theme: snapshot.palette,
 		})
@@ -301,6 +305,17 @@ func (c *pluginSettingsController) pluginDetailProps(snapshot settingsSnapshot, 
 	}
 	props.Editor = editor
 	return props
+}
+
+// pluginSettingFieldWithError attaches save errors to fields without their own error slot.
+func pluginSettingFieldWithError(field woxwidget.Widget, message string, index int, palette woxcomponent.ControlTheme) woxwidget.Widget {
+	if message == "" {
+		return field
+	}
+	return woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{field, woxwidget.Semantics{
+		AutomationID: fmt.Sprintf("plugin-settings-field-%d-error", index), Role: woxui.AccessibilityRoleText, Label: message, Value: message, LiveRegion: woxui.AccessibilityLiveRegionPolite,
+		Child: woxwidget.TextBlock{Value: message, LineHeight: 16, Style: woxui.TextStyle{Size: palette.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: palette.Error},
+	}}}
 }
 
 // openPluginSettingLink opens Markdown links from plugin setting help text.

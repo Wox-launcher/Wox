@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"sync"
+	"sync/atomic"
 	"time"
 	"wox/ai"
 	"wox/common"
@@ -80,6 +81,7 @@ const (
 
 // API exposes the runtime services that plugins can call back into.
 type API interface {
+	CreateWindow(ctx context.Context, option CreateWindowOption) CreateWindowResult
 	ChangeQuery(ctx context.Context, query common.PlainQuery)
 	HideApp(ctx context.Context)
 	ShowApp(ctx context.Context)
@@ -94,6 +96,7 @@ type API interface {
 	// SetSetting saves a plugin setting with explicit platform and device-local behavior.
 	// Available since Wox v2.4.0.
 	SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult
+	OnHotkey(ctx context.Context, option OnHotkeyOption) OnHotkeyResult
 	OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string))
 	OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem)
 	OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string))
@@ -351,6 +354,13 @@ type SetSettingResult struct {
 
 // APIImpl is the concrete API implementation bound to one plugin instance.
 type APIImpl struct {
+	hotkeyMu             sync.Mutex
+	hotkeys              *hotkeySubscription
+	hotkeysStopped       bool
+	windowEpoch          atomic.Uint64
+	windowSuspended      atomic.Bool
+	windowOnce           sync.Once
+	windows              *util.HashMap[string, *PluginWindow]
 	pluginInstance       *Instance
 	toolCallStartTimeMap *util.HashMap[string, int64] // store the start time of tool calls
 }
@@ -521,6 +531,11 @@ func (a *APIImpl) SaveSetting(ctx context.Context, key string, value string, isP
 
 // SetSetting persists a plugin setting according to the request's platform and local-only options.
 func (a *APIImpl) SetSetting(ctx context.Context, option SetSettingOption) SetSettingResult {
+	return a.setHotkeySetting(ctx, option)
+}
+
+// persistSetting performs storage and notifications after hotkey registration has been validated.
+func (a *APIImpl) persistSetting(ctx context.Context, option SetSettingOption) SetSettingResult {
 	if option.Key == "" {
 		return SetSettingResult{ErrMsg: "setting key cannot be empty"}
 	}

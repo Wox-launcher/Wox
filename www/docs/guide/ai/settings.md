@@ -1,6 +1,6 @@
 # AI Settings
 
-AI features are optional. Configure a provider only if you want AI Chat, AI Commands, AI-assisted emoji search, AI-refined dictation, or AI theme generation.
+AI features are optional. Configure a provider only if you want AI Chat, AI Commands, AI-assisted emoji search, or AI theme generation.
 
 ![AI provider settings](/images/guide/ai_provider.jpg)
 
@@ -36,7 +36,6 @@ The provider list is grouped into **API** and **Installed CLI**. API providers u
 - [AI Chat](../plugins/system/chat.md)
 - [AI Commands](./commands.md)
 - [Theme generation](./theme.md)
-- [Dictation](/features/dictation)
 
 ## Troubleshooting
 

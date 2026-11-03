@@ -351,6 +351,11 @@ func (l *pluginLifecycle) initPluginLocked(ctx context.Context, instance *Instan
 	}()
 
 	err := runPluginInit(ctx, instance)
+	if err == nil {
+		if api, ok := instance.API.(*APIImpl); ok {
+			err = api.ActivateHotkeys(ctx)
+		}
+	}
 	instance.InitFinishedTimestamp = util.GetSystemTimestamp()
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("init plugin %s failed, cost %d ms: %s", instance.Metadata.GetName(ctx), instance.InitFinishedTimestamp-instance.InitStartTimestamp, err.Error()))

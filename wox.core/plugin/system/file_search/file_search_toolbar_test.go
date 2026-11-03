@@ -4,13 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"wox/common"
 	"wox/plugin"
-	"wox/setting/definition"
+	"wox/plugin/plugintest"
 	"wox/util/filesearch"
 )
 
-type fileSearchToolbarTestAPI struct{}
+type fileSearchToolbarTestAPI struct {
+	plugintest.StubAPI
+}
 
 type fullProgressToolbarAPI struct {
 	fileSearchToolbarTestAPI
@@ -21,14 +22,6 @@ func (a *fullProgressToolbarAPI) ShowToolbarMsg(_ context.Context, msg plugin.To
 	a.messages = append(a.messages, msg)
 }
 
-func (a fileSearchToolbarTestAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {}
-func (a fileSearchToolbarTestAPI) HideApp(ctx context.Context)                              {}
-func (a fileSearchToolbarTestAPI) ShowApp(ctx context.Context)                              {}
-func (a fileSearchToolbarTestAPI) Notify(ctx context.Context, description string)           {}
-func (a fileSearchToolbarTestAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
-}
-func (a fileSearchToolbarTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
-}
 func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string) string {
 	switch key {
 	case "plugin_file_status_indexed_files":
@@ -54,70 +47,6 @@ func (a fileSearchToolbarTestAPI) GetTranslation(ctx context.Context, key string
 	default:
 		return key
 	}
-}
-func (a fileSearchToolbarTestAPI) GetSetting(ctx context.Context, key string) string { return "" }
-func (a fileSearchToolbarTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
-}
-func (a fileSearchToolbarTestAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
-	return plugin.SetSettingResult{Success: true}
-}
-func (a fileSearchToolbarTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
-}
-func (a fileSearchToolbarTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {
-}
-func (a fileSearchToolbarTestAPI) OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string)) {
-}
-func (a fileSearchToolbarTestAPI) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a fileSearchToolbarTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
-}
-func (a fileSearchToolbarTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
-	return plugin.RegisterPluginToolResult{}
-}
-func (a fileSearchToolbarTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
-	return plugin.UnregisterPluginToolResult{}
-}
-func (a fileSearchToolbarTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
-	return plugin.ListPluginToolsResult{}
-}
-func (a fileSearchToolbarTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
-	return plugin.InvokePluginToolResult{}
-}
-func (a fileSearchToolbarTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
-func (a fileSearchToolbarTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}
-func (a fileSearchToolbarTestAPI) OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a fileSearchToolbarTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a fileSearchToolbarTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
-	return plugin.DragOutListenResult{}
-}
-func (a fileSearchToolbarTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
-}
-func (a fileSearchToolbarTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
-	return nil
-}
-func (a fileSearchToolbarTestAPI) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
-	return nil
-}
-func (a fileSearchToolbarTestAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
-	return false
-}
-func (a fileSearchToolbarTestAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
-	return false
-}
-func (a fileSearchToolbarTestAPI) IsVisible(ctx context.Context) bool { return false }
-func (a fileSearchToolbarTestAPI) RefreshQuery(ctx context.Context, param plugin.RefreshQueryParam) {
-}
-func (a fileSearchToolbarTestAPI) RefreshGlance(ctx context.Context, ids []string) {}
-func (a fileSearchToolbarTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
-}
-func (a fileSearchToolbarTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-func (a fileSearchToolbarTestAPI) GetCacheFolder(ctx context.Context) string { return "" }
-func (a fileSearchToolbarTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
-	return plugin.GetThemeColorsResult{}
 }
 
 func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
@@ -240,16 +169,4 @@ func assertFileSearchCopyAction(t *testing.T, api *fileSearchStatusCopyAPI, acti
 		return
 	}
 	t.Fatalf("missing action %s in %#v", name, actions)
-}
-
-func (a fileSearchToolbarTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
-	return plugin.RegisterTriggerKeywordResult{Success: true}
-}
-func (a fileSearchToolbarTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
-	return plugin.UnregisterTriggerKeywordResult{Success: true}
-}
-
-func (api fileSearchToolbarTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
-	api.Notify(ctx, option.Message)
-	return plugin.ShowToastMsgResult{Success: true}
 }

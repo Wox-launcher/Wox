@@ -6,13 +6,15 @@ import (
 	"wox/common"
 	"wox/database"
 	"wox/plugin"
-	"wox/setting/definition"
+	"wox/plugin/plugintest"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 type attentionActionTestAPI struct {
+	plugintest.StubAPI
+
 	changedQuery string
 }
 
@@ -20,86 +22,8 @@ func (a *attentionActionTestAPI) ChangeQuery(ctx context.Context, query common.P
 	a.changedQuery = query.QueryText
 }
 
-func (a *attentionActionTestAPI) HideApp(ctx context.Context)                    {}
-func (a *attentionActionTestAPI) ShowApp(ctx context.Context)                    {}
-func (a *attentionActionTestAPI) Notify(ctx context.Context, description string) {}
-func (a *attentionActionTestAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {
-}
-func (a *attentionActionTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {}
 func (a *attentionActionTestAPI) GetTranslation(ctx context.Context, key string) string {
 	return key
-}
-func (a *attentionActionTestAPI) GetSetting(ctx context.Context, key string) string {
-	return ""
-}
-func (a *attentionActionTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
-}
-func (a *attentionActionTestAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
-	return plugin.SetSettingResult{Success: true}
-}
-func (a *attentionActionTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
-}
-func (a *attentionActionTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {
-}
-func (a *attentionActionTestAPI) OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string)) {
-}
-func (a *attentionActionTestAPI) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *attentionActionTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
-}
-func (a *attentionActionTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
-	return plugin.RegisterPluginToolResult{}
-}
-func (a *attentionActionTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
-	return plugin.UnregisterPluginToolResult{}
-}
-func (a *attentionActionTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
-	return plugin.ListPluginToolsResult{}
-}
-func (a *attentionActionTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
-	return plugin.InvokePluginToolResult{}
-}
-func (a *attentionActionTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
-func (a *attentionActionTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}
-func (a *attentionActionTestAPI) OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *attentionActionTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *attentionActionTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
-	return plugin.DragOutListenResult{}
-}
-func (a *attentionActionTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
-}
-func (a *attentionActionTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
-	return nil
-}
-func (a *attentionActionTestAPI) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
-	return nil
-}
-func (a *attentionActionTestAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
-	return false
-}
-func (a *attentionActionTestAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
-	return false
-}
-func (a *attentionActionTestAPI) IsVisible(ctx context.Context) bool {
-	return false
-}
-func (a *attentionActionTestAPI) RefreshQuery(ctx context.Context, param plugin.RefreshQueryParam) {
-}
-func (a *attentionActionTestAPI) RefreshGlance(ctx context.Context, ids []string) {
-}
-func (a *attentionActionTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
-}
-func (a *attentionActionTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-func (a *attentionActionTestAPI) GetCacheFolder(ctx context.Context) string {
-	return ""
-}
-
-func (a *attentionActionTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
-	return plugin.GetThemeColorsResult{}
 }
 
 func newSystemAttentionTestManager(t *testing.T) *plugin.AttentionManager {
@@ -220,16 +144,4 @@ func TestAttentionActionMarksItemUnread(t *testing.T) {
 	if len(items.Unread) != 1 || len(items.Read) != 0 {
 		t.Fatalf("expected action to mark item unread, got unread=%d read=%d", len(items.Unread), len(items.Read))
 	}
-}
-
-func (a *attentionActionTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
-	return plugin.RegisterTriggerKeywordResult{Success: true}
-}
-func (a *attentionActionTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
-	return plugin.UnregisterTriggerKeywordResult{Success: true}
-}
-
-func (api *attentionActionTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
-	api.Notify(ctx, option.Message)
-	return plugin.ShowToastMsgResult{Success: true}
 }

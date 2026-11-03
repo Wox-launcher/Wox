@@ -319,7 +319,7 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 				validators = optionalIntegerValidatorsForEmptyAsZero(validators)
 			}
 			columns[index] = formTableColumn{
-				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type,
+				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type, HotkeyScope: string(column.Scope),
 				Validators: validators, SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
 				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind,
@@ -331,20 +331,12 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 			groups[index] = formTableGroup{Key: group.Key, Title: group.Title, Tooltip: group.Tooltip, CollapsedByDefault: group.CollapsedByDefault}
 		}
 		converted.Value = formDefinitionValue{
-			Key: value.Key, DefaultValue: value.DefaultValue, Title: value.Title, Tooltip: value.Tooltip, Columns: columns,
+			Key: value.Key, DefaultValue: value.DefaultValue, Title: value.Title, Tooltip: value.Tooltip, Columns: columns, HotkeyIdentityField: value.HotkeyIdentityField,
 			SortColumnKey: value.SortColumnKey, SortOrder: value.SortOrder, SearchColumnKey: value.SearchColumnKey,
 			MaxHeight: value.MaxHeight, InlineTable: value.InlineTable, EnableSearch: value.EnableSearch, Groups: groups,
 		}
 	case *definition.PluginSettingValueHotkey:
-		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
-	case *definition.PluginSettingValueDictationHotkey:
-		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue}
-	case *definition.PluginSettingValueDictationModel:
-		options := make([]formOption, len(value.Options))
-		for index, option := range value.Options {
-			options[index] = formOption{ID: option.ID, Value: option.ID, DisplayName: option.DisplayName, Description: option.Description, Languages: option.Languages, Recommended: option.Recommended, Status: string(option.Status), DownloadProgress: option.DownloadProgress, SizeMB: option.SizeMB, Error: option.Error}
-		}
-		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue, Options: options}
+		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Tooltip: value.Tooltip, DefaultValue: value.DefaultValue, HotkeyScope: string(value.Scope), AllowedHotkeyKinds: append([]string(nil), value.AllowedHotkeyKinds...)}
 	case *definition.PluginSettingValueOCRModel:
 		options := make([]formOption, len(value.Options))
 		for index, option := range value.Options {

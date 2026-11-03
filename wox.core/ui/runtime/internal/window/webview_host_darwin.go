@@ -271,3 +271,13 @@ func (d *darwinWebViewDriver) Evaluate(script string, done func(string, error)) 
 	}
 	return nil
 }
+
+// woxGoDarwinWebViewMessage delivers messages from the active main frame.
+//
+//export woxGoDarwinWebViewMessage
+func woxGoDarwinWebViewMessage(contextID C.uintptr_t, message *C.char) {
+	window := cgo.Handle(contextID).Value().(*platformWindow)
+	if callback := window.options.OnWebViewMessage; callback != nil {
+		callback(C.GoString(message))
+	}
+}

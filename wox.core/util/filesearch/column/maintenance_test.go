@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // TestCountsSurviveReopenAndParentDeletion checks the revision-zero cache case
@@ -39,6 +40,92 @@ func TestCountsSurviveReopenAndParentDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertCounts(1, 2)
+}
+
+// TestEstimatedCountsIncrementAndReconcile covers cheap changes and delayed subtree correction.
+func TestEstimatedCountsIncrementAndReconcile(t *testing.T) {
+	store, _ := fixtureStore(t)
+	ctx := context.Background()
+	check := func(wantFiles, wantEntries int64) {
+		t.Helper()
+		files, entries, err := store.EstimatedCounts(ctx)
+		if err != nil || files != wantFiles || entries != wantEntries {
+			t.Fatalf("estimated counts = %d/%d, want %d/%d: %v", files, entries, wantFiles, wantEntries, err)
+		}
+	}
+	check(2, 4)
+	if err := store.Apply([]Change{{Record: Record{ID: 99, ParentID: 10, Name: "new.txt"}}}, "add"); err != nil {
+		t.Fatal(err)
+	}
+	check(3, 5)
+	if err := store.Apply([]Change{{Record: Record{ID: 99}, Deleted: true}}, "delete"); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 4)
+	if err := store.Apply([]Change{{Record: Record{ID: 10}, Deleted: true}}, "remove parent"); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 3) // The removed directory's descendant is corrected on reconciliation.
+	store.estimateAt = time.Now().Add(-countReconcileInterval)
+	check(1, 2)
+	if store.estimateDirty {
+		t.Fatal("reconciled estimate remained dirty")
+	}
+	if err := store.Apply([]Change{{Record: Record{ID: 10, ParentID: 5, Name: "restored", Flags: Directory}}}, "restore"); err != nil {
+		t.Fatal(err)
+	}
+	check(1, 3)
+	store.estimateAt = time.Now().Add(-countReconcileInterval)
+	check(2, 4)
+	if err := store.Apply([]Change{{Record: Record{ID: 12, ParentID: 999, Name: "orphan", Version: 10}}}, "move"); err != nil {
+		t.Fatal(err)
+	}
+	check(1, 3)
+	if err := store.Apply([]Change{{Record: Record{ID: 12, ParentID: 10, Name: "restored.txt", Version: 11}}}, "move back"); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 4)
+}
+
+// TestCountsIgnoreMetadataChanges keeps frequent file writes from triggering a full index recount.
+func TestCountsIgnoreMetadataChanges(t *testing.T) {
+	store, _ := fixtureStore(t)
+	ctx := context.Background()
+	if _, _, err := store.Counts(ctx); err != nil {
+		t.Fatal(err)
+	}
+	initial := store.countRevision
+	for _, batch := range [][]Change{
+		nil,
+		{{Record: Record{ID: 12, ParentID: 10, Name: "renamed.txt", Flags: SizeKnown | ModifiedKnown, Size: 100, Version: 10}}},
+		{{Record: Record{ID: 10, ParentID: 5, Name: "renamed-dir", Flags: Directory, Version: 11}}},
+		{{Record: Record{ID: 999}, Deleted: true}},
+	} {
+		if err := store.Apply(batch, "cursor"); err != nil {
+			t.Fatal(err)
+		}
+		if store.countRevision != initial {
+			t.Fatal("unchanged membership invalidated the count cache")
+		}
+		files, entries, err := store.Counts(ctx)
+		if err != nil || files != 2 || entries != 4 {
+			t.Fatalf("counts = %d/%d, err = %v", files, entries, err)
+		}
+	}
+	if err := store.Apply([]Change{{Record: Record{ID: 10, Version: 12}, Deleted: true}}, "delete"); err != nil {
+		t.Fatal(err)
+	}
+	files, entries, err := store.Counts(ctx)
+	if err != nil || files != 1 || entries != 2 || store.countRevision == initial {
+		t.Fatalf("counts after parent removal = %d/%d, err = %v", files, entries, err)
+	}
+	if err := store.Apply([]Change{{Record: Record{ID: 10, ParentID: 5, Name: "restored", Flags: Directory | Structural, Version: 13}}}, "restore"); err != nil {
+		t.Fatal(err)
+	}
+	files, entries, err = store.Counts(ctx)
+	if err != nil || files != 2 || entries != 3 {
+		t.Fatalf("counts after structural parent restore = %d/%d, err = %v", files, entries, err)
+	}
 }
 
 // TestCompactionThreshold tests actual bounded mutations rather than depending

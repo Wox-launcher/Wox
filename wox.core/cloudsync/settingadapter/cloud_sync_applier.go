@@ -340,6 +340,11 @@ func notifyPluginSettingChanged(ctx context.Context, pluginID string, key string
 		if instance.Metadata.Id != pluginID {
 			continue
 		}
+		if refresher, ok := instance.API.(interface{ RefreshHotkeys(context.Context) error }); ok {
+			if err := refresher.RefreshHotkeys(ctx); err != nil {
+				util.GetLogger().Error(ctx, "synced plugin hotkeys unavailable: "+err.Error())
+			}
+		}
 		for _, callback := range instance.SettingChangeCallbacks {
 			callback(ctx, key, value)
 		}

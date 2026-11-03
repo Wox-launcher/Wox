@@ -22,6 +22,8 @@ class PluginSettingDefinitionType(str, Enum):
     in the plugin settings panel.
     """
 
+    HOTKEY = "hotkey"
+
     HEAD = "head"
     """
     Section heading/separator.
@@ -555,6 +557,8 @@ class PluginSettingValueTableColumn:
     hide_in_update: bool = False
     query_variable_kind: str = ""
     group: str = ""
+    scope: str = ""
+    allowed_hotkey_kinds: List[str] = field(default_factory=list)
     empty_as_zero: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
@@ -572,6 +576,8 @@ class PluginSettingValueTableColumn:
             "QueryVariableKind": self.query_variable_kind,
             "Group": self.group,
             "EmptyAsZero": self.empty_as_zero,
+            "Scope": self.scope,
+            "AllowedHotkeyKinds": self.allowed_hotkey_kinds,
         }
 
     @classmethod
@@ -590,6 +596,8 @@ class PluginSettingValueTableColumn:
             query_variable_kind=data.get("QueryVariableKind", ""),
             group=data.get("Group", ""),
             empty_as_zero=data.get("EmptyAsZero", False),
+            scope=data.get("Scope", ""),
+            allowed_hotkey_kinds=data.get("AllowedHotkeyKinds", []),
         )
 
 
@@ -610,6 +618,8 @@ class PluginSettingValueTable(PluginSettingDefinitionValue):
     sort_order: str = ""
     search_column_key: str = ""
     max_height: int = 0
+    hotkey_identity_field: str = ""
+    hotkey_disabled_field: str = ""
     inline_table: bool = False
     enable_search: bool = False
 
@@ -626,6 +636,8 @@ class PluginSettingValueTable(PluginSettingDefinitionValue):
             "SearchColumnKey": self.search_column_key,
             "MaxHeight": self.max_height,
             "InlineTable": self.inline_table,
+            "HotkeyIdentityField": self.hotkey_identity_field,
+            "HotkeyDisabledField": self.hotkey_disabled_field,
             "EnableSearch": self.enable_search,
         }
 
@@ -643,6 +655,8 @@ class PluginSettingValueTable(PluginSettingDefinitionValue):
             search_column_key=data.get("SearchColumnKey", ""),
             max_height=data.get("MaxHeight", 0),
             inline_table=data.get("InlineTable", False),
+            hotkey_identity_field=data.get("HotkeyIdentityField", ""),
+            hotkey_disabled_field=data.get("HotkeyDisabledField", ""),
             enable_search=data.get("EnableSearch", False),
         )
 
@@ -772,6 +786,8 @@ class PluginSettingDefinitionItem:
                 tooltip=value_data.get("Tooltip", ""),
                 max_lines=value_data.get("MaxLines", 1),
             )
+        elif setting_type == PluginSettingDefinitionType.HOTKEY:
+            value = PluginSettingValueHotkey.from_dict(value_data)
         elif setting_type == PluginSettingDefinitionType.CHECKBOX:
             value = PluginSettingValueCheckBox(
                 key=value_data.get("Key", ""),
@@ -908,3 +924,34 @@ def create_label_setting(content: str, tooltip: str = "") -> PluginSettingDefini
             tooltip=tooltip,
         ),
     )
+
+
+@dataclass
+class PluginSettingValueHotkey(PluginSettingDefinitionValue):
+    """A recorded shortcut; global scope enables automatic registration."""
+
+    label: str = ""
+    tooltip: str = ""
+    scope: str = ""
+    allowed_hotkey_kinds: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "Key": self.key,
+            "DefaultValue": self.default_value,
+            "Label": self.label,
+            "Tooltip": self.tooltip,
+            "Scope": self.scope,
+            "AllowedHotkeyKinds": self.allowed_hotkey_kinds,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PluginSettingValueHotkey":
+        return cls(
+            key=data.get("Key", ""),
+            default_value=data.get("DefaultValue", ""),
+            label=data.get("Label", ""),
+            tooltip=data.get("Tooltip", ""),
+            scope=data.get("Scope", ""),
+            allowed_hotkey_kinds=data.get("AllowedHotkeyKinds", []),
+        )

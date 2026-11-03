@@ -44,17 +44,19 @@ const (
 )
 
 type PluginSettingValueTable struct {
-	Key             string
-	DefaultValue    string
-	Title           string
-	Tooltip         string
-	Columns         []PluginSettingValueTableColumn
-	SortColumnKey   string // The key of the column that should be used for sorting
-	SortOrder       string // asc or desc
-	SearchColumnKey string // Optional column to search and pin when table search is open
-	MaxHeight       int    // Max table height in px, <= 0 means use UI default
-	InlineTable     bool   // Render the table directly in settings instead of behind a separate editor row.
-	EnableSearch    bool   // Show a search icon before Add that expands a row filter
+	Key                 string
+	HotkeyIdentityField string // Stable row identity for global hotkey columns; defaults to id.
+	HotkeyDisabledField string // Optional boolean field that disables a row.
+	DefaultValue        string
+	Title               string
+	Tooltip             string
+	Columns             []PluginSettingValueTableColumn
+	SortColumnKey       string // The key of the column that should be used for sorting
+	SortOrder           string // asc or desc
+	SearchColumnKey     string // Optional column to search and pin when table search is open
+	MaxHeight           int    // Max table height in px, <= 0 means use UI default
+	InlineTable         bool   // Render the table directly in settings instead of behind a separate editor row.
+	EnableSearch        bool   // Show a search icon before Add that expands a row filter
 	// Groups names collapsible sections in the add/edit row dialog. Columns
 	// reference a group by Key; empty Group stays ungrouped at the top.
 	Groups []PluginSettingValueTableGroup
@@ -82,8 +84,9 @@ type PluginSettingValueTableColumn struct {
 	TextMaxLines       int                                // Only used by text-like table columns
 	HideInTable        bool                               // Hide this column in the table, but still show it in the setting dialog
 	HideInUpdate       bool                               // Hide this column in the update/add dialog, but still show it in the table
-	AllowedHotkeyKinds []string                           // Only used when Type is PluginSettingValueTableColumnTypeHotkey
-	PreviewMatchedApps bool                               // Show a live indexed-app preview under this text column
+	Scope              HotkeyScope
+	AllowedHotkeyKinds []string // Only used when Type is PluginSettingValueTableColumnTypeHotkey
+	PreviewMatchedApps bool     // Show a live indexed-app preview under this text column
 	// QueryVariableKind selects the {wox:...} picker set for queryVariable columns.
 	QueryVariableKind string
 	// Group is a PluginSettingValueTableGroup.Key. Empty keeps the field ungrouped.

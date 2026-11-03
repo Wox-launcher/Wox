@@ -9,9 +9,11 @@ and provides access to UI control, settings, logging, and more.
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
+from .models.hotkey import OnHotkeyOption, OnHotkeyResult
 from .models.ai import AIModel, ChatOptions, ChatStreamCallback, Conversation
 from .models.attention import PushAttentionRequest
 from .models.context import Context
+from .models.window import CreateWindowOption, CreateWindowResult
 from .models.log import LogLevel
 from .models.mru import MRUData
 from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam
@@ -304,6 +306,10 @@ class PublicAPI(Protocol):
         """
         ...
 
+    async def create_window(self, ctx: Context, option: CreateWindowOption) -> CreateWindowResult:
+        """Create a hidden plugin-owned window with an instance-bound content API."""
+        ...
+
     async def show_toast_msg(self, ctx: Context, option: ShowToastMsgOption) -> ShowToastMsgResult:
         """Show an independent transient notification. Requires Wox 2.5.0."""
         ...
@@ -435,6 +441,10 @@ class PublicAPI(Protocol):
         2.4.0 before using this method.
         """
         ...
+
+    async def on_hotkey(self, ctx: Context, option: OnHotkeyOption) -> OnHotkeyResult:
+        """Subscribe once during init to global hotkeys declared in settings."""
+        raise NotImplementedError
 
     async def on_setting_changed(
         self,

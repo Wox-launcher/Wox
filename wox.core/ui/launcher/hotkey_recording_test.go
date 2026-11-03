@@ -2,13 +2,51 @@ package launcher
 
 import (
 	"context"
+	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
+
+func TestHotkeyRecordingHintMatchesAllowedKinds(t *testing.T) {
+	app := newActionFormHotkeyTestApp(nil)
+	app.language.translations = map[string]string{
+		"ui_hotkey_hint_normal_combo": "normal", "ui_hotkey_hint_double_modifier": "double",
+		"ui_hotkey_hint_caps_lock_combo": "caps", "ui_hotkey_hint_press_modifier": "press",
+		"ui_hotkey_hint_hold_modifier": "hold", "ui_hotkey_hint_press_win": "win",
+	}
+	kinds := []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
+	labels := []string{"normal", "double", "caps", "press", "hold"}
+	for mask := 1; mask < 1<<len(kinds); mask++ {
+		var allowed, want []string
+		for i, kind := range kinds {
+			if mask&(1<<i) != 0 {
+				allowed, want = append(allowed, kind), append(want, labels[i])
+			}
+		}
+		if got := app.hotkeyRecording.hotkeyRecordingHint(allowed, false); got != strings.Join(want, " · ") {
+			t.Fatalf("kinds %v: hint = %q, want %v", allowed, got, want)
+		}
+	}
+	if got := app.hotkeyRecording.hotkeyRecordingHint([]string{"normalCombo", "pressModifier"}, true); got != "normal · win" {
+		t.Fatalf("Windows main hotkey hint = %q", got)
+	}
+}
+
+func TestRecordableHotkeyKindsUsesAvailableFallback(t *testing.T) {
+	allowed := []string{"normalCombo", "holdModifier"}
+	if got := recordableHotkeyKinds(allowed, contract.HotkeyRecordingCapability{RawRecorderAvailable: true}); !reflect.DeepEqual(got, allowed) {
+		t.Fatalf("raw kinds = %v", got)
+	}
+	capability := contract.HotkeyRecordingCapability{FallbackAllowedKinds: []string{"normalCombo", "capsLockCombo"}}
+	if got := recordableHotkeyKinds(allowed, capability); !reflect.DeepEqual(got, []string{"normalCombo"}) {
+		t.Fatalf("fallback kinds = %v", got)
+	}
+}
 
 func TestCanonicalRecordedHotkeyPrefixesHoldModifier(t *testing.T) {
 	if got := canonicalRecordedHotkey(recordedHotkeyPayload{Hotkey: "cmd", Kind: "holdModifier"}); got != "hold:cmd" {
@@ -269,6 +307,45 @@ type delayedAvailabilityServices struct {
 	release chan struct{}
 }
 
+type pluginConflictServices struct {
+	contract.Services
+	conflict contract.HotkeyAvailability
+}
+
+func (s *pluginConflictServices) CheckHotkeyAvailability(context.Context, string, string) (contract.HotkeyAvailability, error) {
+	return s.conflict, nil
+}
+
+func TestRecordingPluginHotkeyDistinguishesItsOwnBinding(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		conflict contract.HotkeyAvailability
+		wantSelf bool
+	}{
+		{"same field", contract.HotkeyAvailability{ConflictType: "plugin", PluginID: "plugin", SettingKey: "hotkey"}, true},
+		{"different plugin", contract.HotkeyAvailability{ConflictType: "plugin", PluginID: "other", SettingKey: "hotkey"}, false},
+		{"different setting", contract.HotkeyAvailability{ConflictType: "plugin", PluginID: "plugin", SettingKey: "other"}, false},
+		{"table row", contract.HotkeyAvailability{ConflictType: "plugin", PluginID: "plugin", SettingKey: "hotkey", ItemID: "row", ColumnKey: "hotkey"}, false},
+		{"system", contract.HotkeyAvailability{ConflictType: "system"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			services := &pluginConflictServices{conflict: tc.conflict}
+			app := newActionFormHotkeyTestApp(services)
+			app.settingsWindow.open = true
+			form := &pluginSettingsFormState{pluginID: "plugin", saving: true, formFieldsState: newFormFieldsState(
+				[]formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}}, map[string]string{"hotkey": "ctrl+shift+o"}, true,
+			)}
+			app.pluginSettings.SetForm(form)
+			state := &hotkeyRecordingState{diagnosticCtx: context.Background(), target: &form.formFieldsState, idPrefix: "plugin-settings", display: "ctrl+shift+p", statusError: true}
+			app.hotkeyRecording.SetRecording(state)
+			app.hotkeyRecording.checkRecordedHotkey(state, "ctrl+shift+o")
+			if state.statusError == tc.wantSelf {
+				t.Fatalf("status error = %t, want %t", state.statusError, !tc.wantSelf)
+			}
+		})
+	}
+}
+
 func (s *delayedAvailabilityServices) CheckHotkeyAvailability(context.Context, string, string) (contract.HotkeyAvailability, error) {
 	s.started <- struct{}{}
 	<-s.release
@@ -474,5 +551,26 @@ func TestInAppHotkeyConflicts(t *testing.T) {
 		if got := app.hotkeyRecording.inAppHotkeyConflict(tc.key, tc.hotkey); got != tc.want {
 			t.Errorf("%s %s: got %q, want %q", tc.key, tc.hotkey, got, tc.want)
 		}
+	}
+}
+
+// TestSameTableHotkeyOwner accepts only the edited row's own binding.
+func TestSameTableHotkeyOwner(t *testing.T) {
+	form := &pluginSettingsFormState{pluginID: "plugin"}
+	row := &formFieldsState{definitions: []formDefinition{{Value: formDefinitionValue{Key: "hotkey"}}}}
+	editor := &formTableEditorState{target: &form.formFieldsState, rowForm: row, rowIndex: 0, rowBase: map[string]any{"id": "row-1"}, definition: formDefinition{Value: formDefinitionValue{Key: "actions"}}}
+	state := &hotkeyRecordingState{target: row, fieldIndex: 0, idPrefix: "form-table-row"}
+	availability := contract.HotkeyAvailability{ConflictType: "plugin", PluginID: "plugin", SettingKey: "actions", ItemID: "row-1", ColumnKey: "hotkey"}
+	if !sameTableHotkeyOwner(availability, form, editor, state) {
+		t.Fatal("own shortcut rejected")
+	}
+	availability.ItemID = "row-2"
+	if sameTableHotkeyOwner(availability, form, editor, state) {
+		t.Fatal("another row accepted")
+	}
+	availability.ItemID = "row-1"
+	editor.rowIndex = -1
+	if sameTableHotkeyOwner(availability, form, editor, state) {
+		t.Fatal("new or cloned row accepted")
 	}
 }

@@ -36,8 +36,6 @@ func defaultSnapshot() woxSnapshot {
 		ThemeID: setting.DefaultThemeId, ThemeKnown: true,
 		ShowPosition: string(setting.PositionTypeMouseScreen), ShowPositionKnown: true,
 		UIDensity: string(setting.UiDensityNormal), UIDensityKnown: true,
-		DictationSound: true, DictationSoundKnown: true,
-		DictationDuck: false, DictationDuckKnown: true,
 		EmojiAction: "paste", EmojiActionKnown: true,
 		ScreenshotOCR: true, ScreenshotOCRKnown: true,
 		ScreenshotDays: 15, ScreenshotDaysKnown: true,
@@ -330,27 +328,6 @@ func readOverlapSnapshot(snap *woxSnapshot) {
 	if raw, ok := pluginSettingString(setting.NewPluginSettingStore(database.GetDB(), common.AppPluginID), "AppDirectories"); ok {
 		if paths, err := parseImportedPathTable(raw); err == nil {
 			snap.AppDirectories = paths
-		}
-	}
-	dictation := setting.NewPluginSettingStore(database.GetDB(), common.DictationPluginID)
-	if value, ok := pluginSettingBool(dictation, "playSound"); ok {
-		snap.DictationSound = value
-		snap.DictationSoundKnown = true
-	}
-	if value, ok := pluginSettingBool(dictation, "duckVolume"); ok {
-		snap.DictationDuck = value
-		snap.DictationDuckKnown = true
-	}
-	if raw, ok := pluginSettingString(dictation, "dictionary"); ok {
-		var entries []struct {
-			Phrase string `json:"phrase"`
-		}
-		if json.Unmarshal([]byte(raw), &entries) == nil {
-			for _, entry := range entries {
-				if phrase := strings.TrimSpace(entry.Phrase); phrase != "" {
-					snap.DictationPhrases = append(snap.DictationPhrases, phrase)
-				}
-			}
 		}
 	}
 	emoji := setting.NewPluginSettingStore(database.GetDB(), common.EmojiPluginID)

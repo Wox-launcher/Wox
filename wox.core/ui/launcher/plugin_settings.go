@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -676,6 +677,9 @@ func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
 	if c.PluginsStore() {
 		c.SetSelected(index)
 		c.SetForm(nil)
+		if previousForm != nil {
+			c.retargetHotkeyRecording(&previousForm.formFieldsState, nil)
+		}
 		return
 	}
 	definitions := pluginSettingsFormDefinitions(plugin)
@@ -688,9 +692,7 @@ func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
 	for key, value := range plugin.Setting.Settings {
 		values[key] = value
 	}
-	applyDictationFormCompatibility(plugin, values)
 	fields := newFormFieldsState(definitions, values, false)
-	preserveDictationCompatibilityValues(plugin.ID, fields.values, values)
 	if previousForm != nil && previousForm.pluginID == plugin.ID && previousForm.active && previousForm.focused >= 0 && previousForm.focused < len(previousForm.definitions) && previousForm.focused < len(fields.definitions) {
 		fieldIndex := previousForm.focused
 		previous := previousForm.definitions[fieldIndex]
@@ -712,6 +714,13 @@ func (c *pluginSettingsController) setPluginSelectionLocked(index int) {
 	}
 	c.SetSelected(index)
 	c.SetForm(&pluginSettingsFormState{formFieldsState: fields, pluginID: plugin.ID, initial: initial})
+	if previousForm != nil {
+		var target *formFieldsState
+		if previousForm.pluginID == plugin.ID {
+			target = &c.Form().formFieldsState
+		}
+		c.retargetHotkeyRecording(&previousForm.formFieldsState, target)
+	}
 }
 
 // pluginSettingsFormDefinitions separates plugin metadata controls from the
@@ -1249,13 +1258,13 @@ func (c *pluginSettingsController) onPluginSettingsKey(event woxui.KeyEvent) boo
 			c.runFocusedPluginServiceAction(focused)
 		} else if fieldType == "table" {
 			c.openFormTable(focused)
-		} else if fieldType == "dictationModel" || fieldType == "ocrModel" {
+		} else if fieldType == "ocrModel" {
 			anchor := woxui.Rect{}
 			if host := c.settings.host; host != nil {
 				anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("plugin-settings-field-%d", focused)))
 			}
 			c.openPluginModelManager(focused, anchor)
-		} else if fieldType == "dictationHotkey" {
+		} else if fieldType == "hotkey" {
 			c.recordPluginFormHotkey(focused)
 		} else if fieldType == "select" || fieldType == "selectAIModel" {
 			c.openFocusedPluginFormChoice(focused)
@@ -1343,14 +1352,21 @@ func (c *pluginSettingsController) runPluginServiceAction(actionID string) {
 	})
 }
 
-// recordPluginFormHotkey reuses core's dictation-aware recorder while keeping the value staged with other plugin changes.
+// recordPluginFormHotkey reuses core's global hotkey recorder while keeping the value staged with other plugin changes.
 func (c *pluginSettingsController) recordPluginFormHotkey(index int) {
 	state := c.Form()
-	if state == nil || index < 0 || index >= len(state.definitions) || state.definitions[index].Type != "dictationHotkey" {
+	if state == nil || index < 0 || index >= len(state.definitions) || (state.definitions[index].Type != "hotkey") {
 		return
 	}
 	target := &state.formFieldsState
-	c.startHotkeyRecording("plugin-settings", target, index, "", dictationHotkeyRecordingKinds, nil)
+	kinds := state.definitions[index].Value.AllowedHotkeyKinds
+	if len(kinds) == 0 {
+		kinds = defaultHotkeyRecordingKinds
+		if state.definitions[index].Value.HotkeyScope == "global" {
+			kinds = globalHotkeyRecordingKinds
+		}
+	}
+	c.startHotkeyRecording("plugin-settings", target, index, "", kinds, nil)
 }
 
 // activatePluginForm transfers keyboard and IME ownership from the plugin list to its first field.
@@ -1922,9 +1938,6 @@ func preparePluginSettingSaveValues(state *pluginSettingsFormState) (map[string]
 		}
 		persisted["TriggerKeywords"] = strings.Join(keywords, ",")
 	}
-	if err := rewriteDictationSaveValues(state.pluginID, state.values, state.initial, persisted); err != nil {
-		return nil, nil, err
-	}
 	return submitted, persisted, nil
 }
 
@@ -1981,7 +1994,7 @@ func (c *pluginSettingsController) submitPluginSettings() {
 	}
 	submittedValues, persistedValues, err := preparePluginSettingSaveValues(state)
 	if err != nil {
-		state.status = "Could not prepare dictation actions: " + err.Error()
+		state.status = "Could not prepare plugin settings: " + err.Error()
 		state.statusError = true
 		c.settings.invalidateSettingsWindow()
 		return
@@ -2035,8 +2048,17 @@ func (c *pluginSettingsController) reconcilePluginSettingSave(submitted *pluginS
 	if sameForm {
 		form.saving = false
 		if saveErr != nil {
-			form.status = saveErr.Error()
-			form.statusError = true
+			var fieldErr *contract.PluginSettingUpdateError
+			if errors.As(saveErr, &fieldErr) {
+				if value, ok := submittedValues[fieldErr.Key]; ok {
+					if value != form.values[fieldErr.Key] {
+						return true
+					}
+					form.fieldErrors = map[string]string{fieldErr.Key: fieldErr.Err.Error()}
+					return false
+				}
+			}
+			form.status, form.statusError = saveErr.Error(), true
 		} else {
 			for key, value := range submittedValues {
 				form.initial[key] = value

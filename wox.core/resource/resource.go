@@ -74,7 +74,7 @@ func Extract(ctx context.Context) error {
 			return rmErr
 		}
 	}
-	// Enable recursive extraction for nested directories such as others/dictation and others/woxmr.
+	// Enable recursive extraction for nested directories such as others/woxmr.
 	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
 	if othersErr != nil {
 		return othersErr
@@ -182,16 +182,6 @@ func GetLangJson(ctx context.Context, langCode string) ([]byte, error) {
 
 func GetEmbedThemes(ctx context.Context) []string {
 	return embedThemes
-}
-
-// GetDictationFile returns the embedded dictation resource bytes by name.
-func GetDictationFile(name string) ([]byte, error) {
-	return OthersFS.ReadFile(path.Join("others", "dictation", name))
-}
-
-// GetDictationResourcePath returns the extracted path for a dictation resource.
-func GetDictationResourcePath(name string) string {
-	return filepath.Join(util.GetLocation().GetOthersDirectory(), "dictation", filepath.FromSlash(name))
 }
 
 func GetAppIcon() []byte {

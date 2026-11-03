@@ -13,6 +13,15 @@ import (
 	"wox/setting/definition"
 )
 
+// PluginSettingUpdateError identifies the setting whose update failed.
+type PluginSettingUpdateError struct {
+	Key string
+	Err error
+}
+
+func (e *PluginSettingUpdateError) Error() string { return e.Err.Error() }
+func (e *PluginSettingUpdateError) Unwrap() error { return e.Err }
+
 // UpdateChannelVersion describes the latest version published for one update channel.
 type UpdateChannelVersion struct {
 	Channel       string
@@ -255,6 +264,10 @@ type HotkeyAvailability struct {
 	Available     bool
 	ConflictType  string
 	ConflictValue string
+	PluginID      string
+	SettingKey    string
+	ItemID        string
+	ColumnKey     string
 }
 
 // HotkeyInteractionSettingsServices exposes the recorder lifecycle used by settings forms.
@@ -342,8 +355,7 @@ type AIOperationSettingsServices interface {
 type ManagedModelKind string
 
 const (
-	ManagedModelDictation ManagedModelKind = "dictation"
-	ManagedModelOCR       ManagedModelKind = "ocr"
+	ManagedModelOCR ManagedModelKind = "ocr"
 )
 
 // ManagedModelStatus contains runtime download state merged into settings metadata.

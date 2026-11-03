@@ -17,7 +17,7 @@ import { Platform } from "./index.js"
  * const settingType: PluginSettingDefinitionType = "textbox"
  * ```
  */
-export type PluginSettingDefinitionType = "head" | "textbox" | "password" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
+export type PluginSettingDefinitionType = "hotkey" | "head" | "textbox" | "password" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
 
 /**
  * Visual styling properties for a setting element.
@@ -467,17 +467,7 @@ export interface PluginSettingValueSelectOption {
 /**
  * Column type for an editable settings table.
  */
-export type PluginSettingValueTableColumnType =
-  | "text"
-  | "textList"
-  | "queryVariable"
-  | "queryVariableList"
-  | "checkbox"
-  | "dirPath"
-  | "hotkey"
-  | "select"
-  | "selectAIModel"
-  | "woxImage"
+export type PluginSettingValueTableColumnType = "text" | "textList" | "queryVariable" | "queryVariableList" | "checkbox" | "dirPath" | "hotkey" | "select" | "selectAIModel" | "woxImage"
 
 /**
  * A collapsible section in the table add/edit dialog.
@@ -508,6 +498,8 @@ export interface PluginSettingValueTableGroup {
  * One column in an editable settings table.
  */
 export interface PluginSettingValueTableColumn {
+  Scope?: "local" | "global"
+  AllowedHotkeyKinds?: import("./hotkey.js").HotkeyKind[]
   /**
    * Row-object field name stored for this column.
    */
@@ -583,6 +575,8 @@ export interface PluginSettingValueTableColumn {
  * ```
  */
 export interface PluginSettingValueTable extends PluginSettingDefinitionValue {
+  HotkeyIdentityField?: string
+  HotkeyDisabledField?: string
   /**
    * Unique key for storing the JSON row list.
    */
@@ -731,3 +725,13 @@ export interface PluginSettingValidatorIsNumber extends PluginSettingValidatorVa
  * ```
  */
 export interface PluginSettingValidatorNotEmpty extends PluginSettingValidatorValue {}
+
+/** Global scope opts a recorded setting into Wox-managed registration. */
+export interface PluginSettingValueHotkey extends PluginSettingDefinitionValue {
+  Key: string
+  Label: string
+  DefaultValue: string
+  Tooltip?: string
+  Scope?: "local" | "global"
+  AllowedHotkeyKinds?: import("./hotkey.js").HotkeyKind[]
+}

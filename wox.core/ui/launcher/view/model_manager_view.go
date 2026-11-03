@@ -337,7 +337,7 @@ func modelManagerPanel(props ModelManagerProps, width, height float32) woxwidget
 	}
 	status := props.Error
 	if status == "" {
-		status = "↑↓ select · Enter download/select · Delete removes a dictation model · Ctrl+R refresh"
+		status = "↑↓ select · Enter download/select · Ctrl+R refresh"
 	}
 	statusColor := props.Theme.TextSecondary
 	if props.Error != "" {

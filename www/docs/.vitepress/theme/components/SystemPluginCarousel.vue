@@ -77,18 +77,6 @@ const plugins: SystemPlugin[] = [
     description: { en: "Capture a screen area.", zh: "截取屏幕区域。" },
   },
   {
-    key: "timer",
-    href: "/features/timer.html",
-    title: { en: "Timer", zh: "计时器" },
-    description: { en: "Start countdown timers from the launcher.", zh: "从启动器开始倒计时。" },
-  },
-  {
-    key: "dictation",
-    href: "/features/dictation.html",
-    title: { en: "Dictation", zh: "听写" },
-    description: { en: "Turn speech into text.", zh: "将语音转为文字。" },
-  },
-  {
     key: "window-layouts",
     href: "/features/window-layouts.html",
     title: { en: "Window layouts", zh: "窗口布局" },

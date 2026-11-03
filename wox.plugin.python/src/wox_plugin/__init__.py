@@ -224,6 +224,8 @@ settings = [
 
 from typing import List
 
+from .models.hotkey import HotkeyKind, HotkeyPhase, HotkeyEndReason, HotkeyEvent, OnHotkeyOption, OnHotkeyResult
+from .models.setting import PluginSettingValueHotkey
 from .api import (
     ChatStreamCallback,
     PublicAPI,
@@ -337,7 +339,41 @@ from .models.toolbar_msg import (
 )
 from .plugin import Plugin, PluginInitParams, QueryReturn
 
+from .models.window import (
+    WindowContentType,
+    WindowPresentation,
+    WindowAnchor,
+    WindowEventType,
+    WindowContent,
+    WindowOptions,
+    WindowEvent,
+    WindowResult,
+    CreateWindowOption,
+    CreateWindowResult,
+    WindowShowOption,
+    WindowHideOption,
+    WindowCloseOption,
+    WindowSetOptionsOption,
+    WindowContentSetOption,
+    WindowMessageOption,
+    WindowShowResult,
+    WindowHideResult,
+    WindowCloseResult,
+    WindowSetOptionsResult,
+    WindowContentSetResult,
+    WindowMessageResult,
+    PluginWindowContent,
+    PluginWindow,
+)
+
 __all__: List[str] = [
+    "HotkeyKind",
+    "HotkeyPhase",
+    "HotkeyEndReason",
+    "HotkeyEvent",
+    "OnHotkeyOption",
+    "OnHotkeyResult",
+    "PluginSettingValueHotkey",
     # Plugin
     "Plugin",
     "PluginInitParams",
@@ -472,6 +508,30 @@ __all__: List[str] = [
     "create_textbox_setting",
     "create_checkbox_setting",
     "create_label_setting",
+    "WindowContentType",
+    "WindowPresentation",
+    "WindowAnchor",
+    "WindowEventType",
+    "WindowContent",
+    "WindowOptions",
+    "WindowEvent",
+    "WindowResult",
+    "CreateWindowOption",
+    "CreateWindowResult",
+    "WindowShowOption",
+    "WindowHideOption",
+    "WindowCloseOption",
+    "WindowSetOptionsOption",
+    "WindowContentSetOption",
+    "WindowMessageOption",
+    "WindowShowResult",
+    "WindowHideResult",
+    "WindowCloseResult",
+    "WindowSetOptionsResult",
+    "WindowContentSetResult",
+    "WindowMessageResult",
+    "PluginWindowContent",
+    "PluginWindow",
 ]
 
 

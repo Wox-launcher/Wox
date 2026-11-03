@@ -1,5 +1,7 @@
 package hotkey
 
+import utilhotkey "wox/util/hotkey"
+
 // EntrySource identifies which Wox subsystem owns a hotkey.
 type EntrySource string
 
@@ -8,11 +10,13 @@ const (
 	SourceSelection EntrySource = "selection"
 	SourceQuery     EntrySource = "query"
 	SourceResult    EntrySource = "result"
-	SourceDictation EntrySource = "dictation"
+	SourcePlugin    EntrySource = "plugin"
 )
 
 // Entry describes one Wox-owned hotkey before it is bound to the platform.
 type Entry struct {
+	Owner                   string
+	OnHoldTransition        func(utilhotkey.HoldTransition)
 	Source                  EntrySource
 	ID                      string
 	CombineKey              string

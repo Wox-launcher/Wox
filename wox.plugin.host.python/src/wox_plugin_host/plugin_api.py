@@ -1,3 +1,7 @@
+from wox_plugin.models.hotkey import HotkeyEvent, OnHotkeyOption, OnHotkeyResult
+import inspect
+from .plugin_window import WindowProxy
+from wox_plugin.models.window import CreateWindowOption, CreateWindowResult, window_option_payload
 from .result_actions import ResultActions
 import asyncio
 import json
@@ -80,6 +84,9 @@ class PluginAPI(PublicAPI):
         self.plugin_tool_callback_ids: Dict[str, str] = {}
         self.plugin_tool_calls: set[asyncio.Task[Any]] = set()
         self.plugin_tools_stopping = False
+        self.hotkey_callbacks: dict[str, Callable[[Context, HotkeyEvent], Awaitable[None] | None]] = {}
+        self.hotkey_tasks: set[asyncio.Task[Any]] = set()
+        self.window_callbacks: dict[str, WindowProxy] = {}
         self.toast_callbacks: Dict[str, Callable[[Context, ToastMsgActionContext], Awaitable[None] | None]] = {}
 
     async def invoke_method(self, ctx: Context, method: str, params: Dict[str, Any]) -> Any:
@@ -159,6 +166,74 @@ class PluginAPI(PublicAPI):
     async def notify(self, ctx: Context, message: str) -> None:
         """Show a notification message"""
         await self.invoke_method(ctx, "Notify", {"message": message})
+
+    async def on_hotkey(self, ctx: Context, option: OnHotkeyOption) -> OnHotkeyResult:
+        """Install callback ownership before Core can emit an event."""
+        if not callable(option.callback):
+            return OnHotkeyResult(err_msg="hotkey callback is required")
+        callback_id = str(uuid.uuid4())
+        self.hotkey_callbacks[callback_id] = option.callback
+        try:
+            result = await self.invoke_method(ctx, "OnHotkey", {"option": json.dumps({"CallbackID": callback_id})})
+            if not result.get("Success"):
+                self.hotkey_callbacks.pop(callback_id, None)
+            return OnHotkeyResult(success=result.get("Success", False), err_msg=result.get("ErrMsg", ""))
+        except BaseException:
+            self.hotkey_callbacks.pop(callback_id, None)
+            raise
+
+    def dispatch_hotkey(self, ctx: Context, callback_id: str, data: dict) -> None:
+        """Acknowledge dispatch immediately so a pending start cannot block release."""
+        callback = self.hotkey_callbacks.get(callback_id)
+        if not callback:
+            return
+        event = HotkeyEvent.from_dict(data)
+
+        async def run():
+            try:
+                result = callback(ctx, event)
+                if inspect.isawaitable(result):
+                    await result
+            except asyncio.CancelledError:
+                pass
+            except Exception as error:
+                await logger.error(ctx.get_trace_id(), f"hotkey callback failed: {error}")
+
+        task = asyncio.create_task(run())
+        self.hotkey_tasks.add(task)
+        task.add_done_callback(self.hotkey_tasks.discard)
+
+    def release_hotkeys(self):
+        """Stop delivery and cancel tasks owned by this init cycle."""
+        self.hotkey_callbacks.clear()
+        for task in self.hotkey_tasks:
+            task.cancel()
+        self.hotkey_tasks.clear()
+
+    def release_windows(self):
+        for window in self.window_callbacks.values():
+            window.release()
+        self.window_callbacks.clear()
+
+    async def create_window(self, ctx: Context, option: CreateWindowOption) -> CreateWindowResult:
+        """Register events before Core can finish loading the native document."""
+        callback_id = str(uuid.uuid4())
+        window = WindowProxy(self.invoke_method, option.on_event)
+        self.window_callbacks[callback_id] = window
+        try:
+            payload = window_option_payload(option)
+            payload["CallbackID"] = callback_id
+            result = await self.invoke_method(ctx, "CreateWindow", {"option": payload})
+            if not result.get("Success", False):
+                window.release()
+                self.window_callbacks.pop(callback_id, None)
+                return CreateWindowResult(err_msg=result.get("ErrMsg", ""))
+            window.id = result["WindowID"]
+            return CreateWindowResult(success=True, window=window, window_id=window.id)
+        except BaseException:
+            window.release()
+            self.window_callbacks.pop(callback_id, None)
+            raise
 
     async def show_toast_msg(self, ctx: Context, option: ShowToastMsgOption) -> ShowToastMsgResult:
         """Register a one-shot action and show a transient notification."""

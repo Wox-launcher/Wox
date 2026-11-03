@@ -20,6 +20,10 @@ records, independently of content extraction. A single worker coalesces these
 notifications across volumes in 1 second windows without polling while idle or
 blocking USN ingestion on UI consumers. File Search uses the existing status
 subscription to refresh its toolbar file count from published index statistics.
+The Windows status display keeps bounded in-memory counts and adjusts them as
+records change. Directory subtree changes can temporarily make those counts
+approximate; the next status read after five minutes reconciles them from the index.
+There is no timer while idle. Exact counts remain available for other callers.
 
 Filename indexing prioritizes bounded memory, fast enumeration and low-latency
 queries. Results use the default relevance ranking without user-selectable sort

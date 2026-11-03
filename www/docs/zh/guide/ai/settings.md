@@ -1,6 +1,6 @@
 # AI 设置
 
-AI 功能是可选的。只有在你需要 AI 对话、AI 命令、AI 辅助 Emoji 搜索、听写润色或 AI 生成主题时，才需要配置 provider。
+AI 功能是可选的。只有在你需要 AI 对话、AI 命令、AI 辅助 Emoji 搜索或 AI 生成主题时，才需要配置 provider。
 
 ![AI provider 设置](/images/guide/ai_provider.jpg)
 
@@ -36,7 +36,6 @@ provider 列表会分成 **API** 和 **已安装的 CLI**。API provider 使用�
 - [AI 对话](../plugins/system/chat.md)
 - [AI 命令](./commands.md)
 - [主题生成](./theme.md)
-- [听写](/zh/features/dictation)
 
 ## 排查
 

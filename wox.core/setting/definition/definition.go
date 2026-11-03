@@ -23,11 +23,10 @@ const (
 	PluginSettingDefinitionTypeNewLine       PluginSettingDefinitionType = "newline"
 	PluginSettingDefinitionTypeTable         PluginSettingDefinitionType = "table"
 
+	PluginSettingDefinitionTypeHotkey PluginSettingDefinitionType = "hotkey"
+
 	// Wox-internal setting types used by system plugins. These are not part
 	// of the public plugin API and are rendered by dedicated UI widgets.
-	PluginSettingDefinitionTypeHotkey           PluginSettingDefinitionType = "hotkey"
-	PluginSettingDefinitionTypeDictationHotkey  PluginSettingDefinitionType = "dictationHotkey"
-	PluginSettingDefinitionTypeDictationModel   PluginSettingDefinitionType = "dictationModel"
 	PluginSettingDefinitionTypeOCRModel         PluginSettingDefinitionType = "ocrModel"
 	PluginSettingDefinitionTypeStats            PluginSettingDefinitionType = "stats"
 	PluginSettingDefinitionTypeFileIndexService PluginSettingDefinitionType = "fileIndexService"
@@ -170,22 +169,6 @@ func (n *PluginSettingDefinitionItem) UnmarshalJSON(b []byte) error {
 	case "hotkey":
 		n.Type = PluginSettingDefinitionTypeHotkey
 		var v PluginSettingValueHotkey
-		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
-		if unmarshalErr != nil {
-			return unmarshalErr
-		}
-		n.Value = &v
-	case "dictationHotkey":
-		n.Type = PluginSettingDefinitionTypeDictationHotkey
-		var v PluginSettingValueDictationHotkey
-		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
-		if unmarshalErr != nil {
-			return unmarshalErr
-		}
-		n.Value = &v
-	case "dictationModel":
-		n.Type = PluginSettingDefinitionTypeDictationModel
-		var v PluginSettingValueDictationModel
 		unmarshalErr := json.Unmarshal([]byte(contentResult.String()), &v)
 		if unmarshalErr != nil {
 			return unmarshalErr

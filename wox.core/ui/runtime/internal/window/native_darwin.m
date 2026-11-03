@@ -29,6 +29,7 @@ extern void woxGoDarwinCloseRequested(uintptr_t context);
 extern void woxGoDarwinMaximizeRequested(uintptr_t context);
 extern void woxGoDarwinProtocolURL(uintptr_t context, const char *url);
 extern void woxGoDarwinOpenFile(uintptr_t context, const char *path);
+extern void woxGoDarwinWebViewMessage(uintptr_t context, const char *message);
 extern void woxGoDarwinWebViewHideRequested(uintptr_t context);
 extern void woxGoDarwinWebViewOpenInBrowser(uintptr_t context);
 extern void woxGoDarwinWebViewTooltip(uintptr_t context, int32_t visible, const char *text, float x, float y, float width, float height);
@@ -1681,7 +1682,9 @@ static NSString *web_view_cursor_script(void) {
   if (owner == NULL || owner->closed || owner->context == 0) {
     return;
   }
-  if ([message.name isEqualToString:@"woxWebViewEscapeDiagnostic"]) {
+  if ([message.name isEqualToString:@"woxMessage"] && message.frameInfo.isMainFrame && message.webView == owner->active_web_view && [message.body isKindOfClass:[NSString class]]) {
+    woxGoDarwinWebViewMessage(owner->context, [message.body UTF8String]);
+  } else if ([message.name isEqualToString:@"woxWebViewEscapeDiagnostic"]) {
     NSString *detail = [message.body isKindOfClass:[NSString class]] ? message.body : @"page-unknown";
     woxGoDarwinWebViewEscapeDiagnostic(owner->context, detail.UTF8String);
   } else if ([message.name isEqualToString:@"woxWebViewPreview"]) {
@@ -1788,6 +1791,7 @@ static WKWebView *create_web_view(WoxDarwinWindow *window, NSString *inject_css,
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewPreview"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewActionPanel"];
   [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxWebViewCursor"];
+  [configuration.userContentController addScriptMessageHandler:message_handler name:@"woxMessage"];
   WKUserScript *shortcut_script = [[[WKUserScript alloc] initWithSource:web_view_shortcut_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES] autorelease];
   [configuration.userContentController addUserScript:shortcut_script];
   WKUserScript *cursor_script = [[[WKUserScript alloc] initWithSource:web_view_cursor_script() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO] autorelease];
@@ -4792,4 +4796,17 @@ int32_t wox_darwin_webview_evaluate(WoxDarwinWindow *target, const char *script,
     woxGoWebViewScriptResult(callback, (char *)[text UTF8String], error ? (char *)[[error localizedDescription] UTF8String] : NULL);
   }];
   return 0;
+}
+
+// Suppress activation for this presentation without changing subsequent click focus.
+uint64_t wox_darwin_window_show_inactive(WoxDarwinWindow *window) {
+  if (window == NULL) return 0;
+  __block uint64_t epoch = 0;
+  run_on_main_sync(^{
+    bool previous = window->nonactivating;
+    window->nonactivating = true;
+    epoch = wox_darwin_window_show(window);
+    window->nonactivating = previous;
+  });
+  return epoch;
 }

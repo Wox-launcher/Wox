@@ -36,7 +36,6 @@ wpm install everything
 | `cb` | 剪贴板历史 |
 | `note` | 笔记 |
 | `screenshot` | 截图 |
-| `timer` | 计时器 |
 | `jump` | 快速跳转 |
 | `emoji` | Emoji 搜索 |
 | `chat` | AI 对话 |

@@ -59,20 +59,6 @@ type aiStreamPreviewData struct {
 	AnswerTitle    string `json:"answerTitle"`
 }
 
-type dictationHistoryPreviewData struct {
-	RefinedText         string `json:"refinedText"`
-	OriginalText        string `json:"originalText"`
-	RefinedLabel        string `json:"refinedLabel"`
-	OriginalLabel       string `json:"originalLabel"`
-	StatusLabel         string `json:"statusLabel"`
-	IsChanged           bool   `json:"isChanged"`
-	RawAudioPath        string `json:"rawAudioPath"`
-	ProcessedAudioPath  string `json:"processedAudioPath"`
-	AudioLabel          string `json:"audioLabel"`
-	RawAudioLabel       string `json:"rawAudioLabel"`
-	ProcessedAudioLabel string `json:"processedAudioLabel"`
-}
-
 type hotkeyOverviewPreviewData struct {
 	Search string `json:"search"`
 }

@@ -28,7 +28,7 @@ func TestMapOverlapSettingsFromExport(t *testing.T) {
 	}
 	payload.Settings.InternalExtensions = []InternalExtension{
 		{ID: raycastApplicationsID, Meta: json.RawMessage(`{"userSearchScopes":["` + jsonPath(extra) + `","relative"]}`)},
-		{ID: raycastDictationExtensionID, Meta: json.RawMessage(`{"sounds":true,"customVocabulary":["Wox"]}`)},
+		{ID: "e:r:dictation", Meta: json.RawMessage(`{"sounds":false,"customVocabulary":["Wox"]}`)},
 		{ID: raycastEmojiExtensionID, Meta: json.RawMessage(`{"primaryAction":"paste"}`)},
 		{ID: raycastScreenshotExtensionID, Meta: json.RawMessage(`{"textRecognitionEnabled":true,"storageDuration":"unlimited"}`)},
 	}
@@ -58,11 +58,10 @@ func TestMapOverlapSettingsFromExport(t *testing.T) {
 	if row := got["setting:mcp_servers"]; !row.selectable || !strings.Contains(row.value, "duckduckgo-mcp-server") || row.detail != "ddg" {
 		t.Fatalf("mcp = %+v", row)
 	}
-	if _, exists := got["setting:dictation_sound"]; exists {
-		t.Fatal("default dictation sound was offered again")
-	}
-	if row := got["setting:dictation_vocabulary"]; !row.selectable || row.pluginID != common.DictationPluginID || !strings.Contains(row.value, "Wox") {
-		t.Fatalf("vocabulary = %+v", row)
+	for id := range got {
+		if strings.HasPrefix(id, "setting:dictation_") {
+			t.Fatalf("removed system Dictation must not be offered for import: %s", id)
+		}
 	}
 	if _, exists := got["setting:emoji_action"]; exists {
 		t.Fatal("default emoji paste action was offered again")
@@ -79,8 +78,8 @@ func TestMapOverlapSettingsFromExport(t *testing.T) {
 	if _, exists := got["setting:screenshot_retention"]; exists {
 		t.Fatal("unlimited screenshot retention was imported")
 	}
-	imported := importSelected(mapped, []string{"setting:theme", "setting:mcp_servers", "setting:dictation_vocabulary"})
-	if len(imported.Settings) != 3 {
+	imported := importSelected(mapped, []string{"setting:theme", "setting:mcp_servers"})
+	if len(imported.Settings) != 2 {
 		t.Fatalf("writes = %+v", imported.Settings)
 	}
 	for _, category := range catalogFrom(mapped) {
@@ -176,7 +175,7 @@ func TestMapClipboardFileList(t *testing.T) {
 	}
 }
 
-func TestMapSkillDirectoriesAndDictationMute(t *testing.T) {
+func TestMapSkillDirectoriesAndClipboardRetention(t *testing.T) {
 	root := t.TempDir()
 	skills := filepath.Join(root, "skills")
 	if err := os.Mkdir(skills, 0o755); err != nil {
@@ -186,9 +185,6 @@ func TestMapSkillDirectoriesAndDictationMute(t *testing.T) {
 	payload.Settings.InternalExtensions = []InternalExtension{{
 		ID:   raycastAIExtensionID,
 		Meta: json.RawMessage(`{"skillDirectories":["` + jsonPath(skills) + `","relative", "` + jsonPath(skills) + `"]}`),
-	}, {
-		ID:   raycastDictationExtensionID,
-		Meta: json.RawMessage(`{"muteWhileRecording":true}`),
 	}, {
 		ID:   raycastClipboardExtensionID,
 		Meta: json.RawMessage(`{"historyDuration":"P1M"}`),
@@ -204,9 +200,6 @@ func TestMapSkillDirectoriesAndDictationMute(t *testing.T) {
 	}
 	if _, exists := got["setting:ai_skills"]; exists {
 		t.Fatal("an existing skill directory was imported again")
-	}
-	if row := got["setting:dictation_pause_media"]; !row.selectable || row.key != "duckVolume" || row.value != "true" || row.pluginID != common.DictationPluginID {
-		t.Fatalf("mute = %+v", row)
 	}
 	if row := got["setting:clipboard_text_days"]; !row.selectable || row.value != "30" || row.key != "text_history_days" {
 		t.Fatalf("text days = %+v", row)

@@ -20,7 +20,6 @@ import (
 
 	"wox/util"
 	"wox/util/processmemory"
-	"wox/util/speech"
 
 	paddleocr "github.com/multippt/gopaddleocr/pkg/ocr"
 	classifystub "github.com/multippt/gopaddleocr/pkg/ocr/classify/stub"
@@ -101,11 +100,11 @@ var paddlePPOCRv6SmallFiles = []paddleModelFile{
 }
 
 // PaddleModelManager owns the optional PP-OCRv6 small model and its ONNX
-// Runtime workflow. It shares the Wox-managed native runtime with dictation.
+// Runtime workflow. It uses the Wox-managed native runtime.
 type PaddleModelManager struct {
 	modelsDir      string
 	modelDir       string
-	runtimeManager *speech.NativeLibManager
+	runtimeManager *NativeLibManager
 
 	downloadMu sync.Mutex
 	status     PaddleModelStatus
@@ -138,10 +137,9 @@ func GetPaddleModelManager() (*PaddleModelManager, error) {
 			return
 		}
 
-		runtimeManager, err := speech.NewNativeLibManager(
-			location.GetSherpaONNXRuntimeDirectory(speech.NativeLibVersion),
-			location.GetONNXRuntimeDirectory(speech.ONNXRuntimeVersion),
-			filepath.Join(location.GetDictationModelsDirectory(), "silero-vad"),
+		runtimeManager, err := NewNativeLibManager(
+			location.GetSherpaONNXRuntimeDirectory(NativeLibVersion),
+			location.GetONNXRuntimeDirectory(ONNXRuntimeVersion),
 		)
 		if err != nil {
 			paddleModelManagerErr = fmt.Errorf("create ONNX runtime manager: %w", err)
@@ -248,7 +246,7 @@ func (m *PaddleModelManager) GetStatus() PaddleModelStatus {
 }
 
 // GetEngineStatus returns the runtime download state without requiring the
-// dictation-only VAD model.
+// unrelated speech models.
 func (m *PaddleModelManager) GetEngineStatus() PaddleEngineStatus {
 	status := m.runtimeManager.GetStatus()
 	return PaddleEngineStatus{

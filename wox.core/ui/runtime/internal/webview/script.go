@@ -72,6 +72,9 @@ func (c *Controller) UpdateScript(key, script string) bool {
 		if _, ok := c.driver.(ScriptDriver); !ok || c.scripts.blocked || !c.visible.Load() || c.scripts.source.HTML == "" || c.scripts.source.URL != "" || key == "" || key != c.scripts.source.DocumentKey {
 			return nil
 		}
+		if len(c.scripts.queue) >= 64 || len(script) > 2*1024*1024 {
+			return nil
+		}
 		c.scripts.queue = append(c.scripts.queue, script)
 		if len(c.scripts.queue) == 10 || len(c.scripts.queue)%100 == 0 {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("WebView script backlog: generation=%d queued=%d ready=%t", c.scripts.generation, len(c.scripts.queue), c.scripts.documentSeen))

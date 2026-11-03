@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	corehotkey "wox/hotkey"
 	"wox/setting"
 )
 
@@ -42,5 +43,16 @@ func TestHotkeyLegacyAliases(t *testing.T) {
 		if !hotkeyCompareKeysIntersect(hotkeyCompareKeys(pair[0]), hotkeyCompareKeys(pair[1])) {
 			t.Errorf("aliases diverge: %v", pair)
 		}
+	}
+}
+
+func TestHotkeyEntryConflictIdentifiesPluginBinding(t *testing.T) {
+	entries := []corehotkey.Entry{{Source: corehotkey.SourcePlugin, Owner: "plugin", ID: "plugin\x00hotkey\x00row\x00column", CombineKey: "ctrl+shift+o"}}
+	got := hotkeyEntryConflict(hotkeyCompareKeys("shift+ctrl+o"), entries)
+	if got.Available || got.ConflictType != "plugin" || got.PluginID != "plugin" || got.SettingKey != "hotkey" || got.ItemID != "row" || got.ColumnKey != "column" {
+		t.Fatalf("plugin conflict = %+v", got)
+	}
+	if got := hotkeyEntryConflict(hotkeyCompareKeys("ctrl+shift+p"), entries); !got.Available {
+		t.Fatalf("unrelated shortcut conflict = %+v", got)
 	}
 }

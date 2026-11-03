@@ -62,19 +62,13 @@ type modelManagerOptionAction struct {
 
 // buildModelManagerOverlay converts controller state into the pure modal view.
 func (c *pluginSettingsController) buildModelManagerOverlay(snapshot *modelManagerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
-	title := "Dictation models"
-	downloadLabel := c.language.translate("i18n:plugin_dictation_model_download")
-	retryLabel := c.language.translate("i18n:plugin_dictation_model_retry")
-	deleteLabel := c.language.translate("i18n:plugin_dictation_model_delete")
-	extractingLabel := c.language.translate("i18n:plugin_dictation_model_extracting")
-	finalizingLabel := c.language.translate("i18n:plugin_dictation_model_finalizing")
-	recommendedLabel := c.language.translate("i18n:plugin_dictation_model_recommended")
-	if snapshot.kind == "ocrModel" {
-		title = "OCR models"
-		downloadLabel = c.language.translate("i18n:plugin_ocr_model_download")
-		retryLabel = c.language.translate("i18n:plugin_ocr_model_retry")
-		deleteLabel = "Delete"
-	}
+	title := "OCR models"
+	downloadLabel := c.language.translate("i18n:plugin_ocr_model_download")
+	retryLabel := c.language.translate("i18n:plugin_ocr_model_retry")
+	deleteLabel := c.language.translate("i18n:ui_delete")
+	extractingLabel := c.language.translate("i18n:plugin_ocr_model_downloading")
+	finalizingLabel := c.language.translate("i18n:plugin_ocr_model_finalizing")
+	recommendedLabel := c.language.translate("i18n:ui_ai_question_recommended")
 	engineLabel := "Checking inference engine…"
 	engineButtonLabel := "Download engine"
 	engineEnabled := false
@@ -133,9 +127,6 @@ func (c *pluginSettingsController) buildModelManagerOverlay(snapshot *modelManag
 		}
 		if usable {
 			converted.OnChoose = func() { c.chooseManagedModel(index) }
-		}
-		if snapshot.kind == "dictationModel" && option.Status == "downloaded" {
-			converted.OnDelete = func() { c.runModelManagerAction("delete", index) }
 		}
 		options = append(options, converted)
 	}
@@ -264,7 +255,7 @@ func (c *pluginSettingsController) openPluginModelManager(index int, anchor woxu
 		return
 	}
 	definition := state.definitions[index]
-	if definition.Type != "dictationModel" && definition.Type != "ocrModel" {
+	if definition.Type != "ocrModel" {
 		return
 	}
 	setFormFieldsFocusLocked(&state.formFieldsState, index)
@@ -296,21 +287,16 @@ func (c *pluginSettingsController) modelManagerCurrentLocked(state *modelManager
 // refreshModelManager merges runtime-only progress into translated definition metadata.
 func (c *pluginSettingsController) refreshModelManager(state *modelManagerState) {
 	shouldLoad := false
-	kind := ""
 	if err := c.runOnUI("start refreshing model manager", func() {
 		if !c.modelManagerCurrentLocked(state) || !beginModelManagerRefresh(state) {
 			return
 		}
-		kind = state.kind
 		shouldLoad = true
 	}); err != nil || !shouldLoad {
 		return
 	}
 
-	modelKind := contract.ManagedModelDictation
-	if kind == "ocrModel" {
-		modelKind = contract.ManagedModelOCR
-	}
+	modelKind := contract.ManagedModelOCR
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	loadedStatuses, statusErr := c.services.ManagedModelStatuses(ctx, c.sessionID, modelKind)
 	statuses := make([]formOption, len(loadedStatuses))
@@ -486,14 +472,10 @@ func (c *pluginSettingsController) runModelManagerAction(action string, index in
 	}
 	state.busy = action + ":" + modelID
 	state.error = ""
-	kind := state.kind
 	c.settings.invalidateSettingsWindow()
 
 	util.Go(c.lifecycleCtx, "run model manager action", func() {
-		modelKind := contract.ManagedModelDictation
-		if kind == "ocrModel" {
-			modelKind = contract.ManagedModelOCR
-		}
+		modelKind := contract.ManagedModelOCR
 		operation := contract.ManagedModelOperationDownload
 		if action == "delete" {
 			operation = contract.ManagedModelOperationDelete
@@ -570,11 +552,6 @@ func (c *pluginSettingsController) onModelManagerKey(event woxui.KeyEvent) bool 
 			} else if status == "not_downloaded" || status == "failed" || status == "" {
 				c.runModelManagerAction("download", selected)
 			}
-		}
-	case woxui.KeyDelete:
-		canDelete := c.ModelManager() == state && state.kind == "dictationModel" && selected >= 0 && selected < len(state.options) && state.options[selected].Status == "downloaded"
-		if canDelete {
-			c.runModelManagerAction("delete", selected)
 		}
 	default:
 		if event.Modifiers.HasPrimary() && event.Key == woxui.Key("r") {

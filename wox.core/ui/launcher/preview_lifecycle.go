@@ -93,8 +93,6 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 		}
 	case "terminal":
 		a.terminal.activateTerminalPreview(preview)
-	case "dictation_history":
-		a.dictation.reconcileDictationAudioPreview(preview)
 	case "webview":
 		webViewURLChanged = a.webView.activateWebViewPreview(preview.PreviewData)
 	}
@@ -152,9 +150,6 @@ func (a *previewController) deactivatePreviewTypes(keep string) bool {
 	}
 	if keep != "terminal" {
 		a.terminal.deactivateTerminalPreview()
-	}
-	if keep != "dictation_history" {
-		a.dictation.deactivateDictationAudio()
 	}
 	if keep != "webview" {
 		hideWebView := a.webView.deactivateWebViewPreview()

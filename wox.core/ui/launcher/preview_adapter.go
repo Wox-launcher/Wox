@@ -144,12 +144,6 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 			return content(fmt.Sprintf("Invalid AI stream preview: %v", err), errorText)
 		}
 		return content(formatAIStreamPreview(data), palette.previewText)
-	case "dictation_history":
-		data, err := decodeStructuredPreview[dictationHistoryPreviewData](preview.PreviewData)
-		if err != nil {
-			return content(fmt.Sprintf("Invalid dictation history preview: %v", err), errorText)
-		}
-		return a.dictation.buildDictationHistoryPreview(scrollKey, data, palette, width, height)
 	case "hotkey_overview":
 		data, err := decodeStructuredPreview[hotkeyOverviewPreviewData](preview.PreviewData)
 		if err != nil {

@@ -16,6 +16,29 @@ type scriptDriver struct {
 	callbacks []func(string, error)
 }
 
+// TestScriptQueueBounds prevents a stalled page from accumulating unlimited updates.
+func TestScriptQueueBounds(t *testing.T) {
+	d := &scriptDriver{}
+	c := New(d, immediateDispatch)
+	defer c.Close()
+	_ = c.Show(Content{DocumentKey: "bounded", HTML: "<p>page</p>"}, Rect{Width: 100, Height: 100}, 1)
+	if c.UpdateScript("bounded", strings.Repeat("x", 2*1024*1024+1)) {
+		t.Fatal("oversized update accepted")
+	}
+	for range 64 {
+		if !c.UpdateScript("bounded", "update()") {
+			t.Fatal("valid queue entry rejected")
+		}
+	}
+	if c.UpdateScript("bounded", "overflow()") {
+		t.Fatal("unbounded queue")
+	}
+	d.callbacks[0]("ok", nil)
+	if !c.UpdateScript("bounded", "next()") {
+		t.Fatal("queue did not recover after consumption")
+	}
+}
+
 func (d *scriptDriver) Evaluate(script string, done func(string, error)) error {
 	d.scripts = append(d.scripts, script)
 	d.callbacks = append(d.callbacks, done)

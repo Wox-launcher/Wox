@@ -24,7 +24,6 @@ import (
 	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
-	dictationplugin "wox/plugin/system/dictation"
 	"wox/plugin/system/shell/terminal"
 	"wox/privacy"
 	"wox/resource"
@@ -32,6 +31,7 @@ import (
 	"wox/supervisor"
 	"wox/ui/contract"
 	"wox/ui/omarchytheme"
+	"wox/ui/pluginwindow"
 	woxui "wox/ui/runtime"
 	"wox/updater"
 	"wox/util"
@@ -122,15 +122,6 @@ func GetUIManager() *Manager {
 				managerInstance.handleResultBindingHotkeyTrigger(combineKey, binding)
 			},
 			QueryCanTriggerBeforeRelease: queryCanTriggerBeforeRelease,
-			OnDictationHoldPress: func(ctx context.Context, actionID string) {
-				managerInstance.handleDictationHotkeyPress(ctx, actionID)
-			},
-			OnDictationHoldRelease: func(ctx context.Context, actionID string) {
-				managerInstance.handleDictationHotkeyRelease(ctx, actionID)
-			},
-			OnDictationPressAction: func(ctx context.Context, actionID string) {
-				managerInstance.handleDictationHotkeyPressAction(ctx, actionID)
-			},
 		})
 		managerInstance.ui = &uiImpl{
 			isVisible:       false, // Initially hidden
@@ -150,9 +141,10 @@ func GetUIManager() *Manager {
 		managerInstance.themeReloadTimers = util.NewHashMap[string, *time.Timer]()
 		managerInstance.themeWatchIgnored = util.NewHashMap[string, int64]()
 		logger = util.GetLogger()
-		// Inject the UI Manager as the dictation hotkey registrar to break the
-		// import cycle between ui and plugin/system/dictation.
-		dictationplugin.SetHotkeyRegistrar(managerInstance)
+		plugin.SetWindowFactory(func(id string, option plugin.CreateWindowOption, emit func(plugin.WindowEvent)) (plugin.WindowDriver, error) {
+			return pluginwindow.CreateWithWorkArea(id, option, emit, pluginWindowWorkArea)
+		})
+		plugin.SetHotkeyBindingApplier(managerInstance.hotkeyService.ApplyPluginBindings)
 		plugin.GetPluginManager().SetResultBindingApplier(managerInstance.applyResultBindings)
 		selection.SetInternalSelectedTextProvider(woxui.SelectedTextFromFocusedWindow)
 	})
@@ -280,13 +272,6 @@ func (m *Manager) applyTerminalState(ctx context.Context, uiSessionID string, st
 	}
 }
 
-// CollectDictationHotkeys implements the dictation.HotkeyRegistrar interface.
-func (m *Manager) CollectDictationHotkeys(ctx context.Context, bindings []corehotkey.DictationBinding, registerNow bool) {
-	if err := m.hotkeyService.UpdateDictationBindings(ctx, bindings, registerNow); err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to update dictation hotkeys: %s", err.Error()))
-	}
-}
-
 // CollectWoxSettingHotkeys collects startup Wox-setting hotkeys before plugins load.
 func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *setting.WoxSetting) {
 	m.hotkeyService.CollectWoxSettings(ctx, woxSetting)
@@ -294,7 +279,7 @@ func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *sett
 
 // RegisterAllHotkeys performs a single registration pass of all collected
 // hotkeys. This is the registration-phase entry point called after all sources
-// (Wox settings + dictation plugin) have populated the collector.
+// have populated the collector.
 func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
 	err := m.hotkeyService.RegisterAll(ctx)
 	if bindingErr := m.hotkeyService.ResultBindingRegistrationError(); bindingErr != nil {
@@ -425,58 +410,6 @@ func (m *Manager) RegisterSelectionHotkey(ctx context.Context, combineKey string
 	config := corehotkey.WoxConfigFromSetting(woxSetting)
 	config.SelectionHotkey = combineKey
 	return m.registerWoxHotkeys(ctx, config, true)
-}
-
-// handleDictationHotkeyPress finds the loaded DictationPlugin and starts
-// the recording session.
-func (m *Manager) handleDictationHotkeyPress(ctx context.Context, actionID string) {
-	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
-	if sp == nil {
-		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey press callback: action=%s", actionID))
-		return
-	}
-	type dictationStarter interface {
-		StartDictation(ctx context.Context, actionID string)
-	}
-	if ds, ok := sp.(dictationStarter); ok {
-		ds.StartDictation(ctx, actionID)
-	}
-}
-
-// handleDictationHotkeyRelease finds the loaded DictationPlugin and stops
-// the recording session, producing the recognized text.
-func (m *Manager) handleDictationHotkeyRelease(ctx context.Context, actionID string) {
-	logger.Info(ctx, fmt.Sprintf("dictation: handleDictationHotkeyRelease enter, action=%s", actionID))
-	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
-	if sp == nil {
-		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey release callback: action=%s", actionID))
-		return
-	}
-	type dictationStopper interface {
-		StopDictation(ctx context.Context, actionID string)
-	}
-	if ds, ok := sp.(dictationStopper); ok {
-		logger.Info(ctx, fmt.Sprintf("dictation: calling StopDictation, action=%s", actionID))
-		ds.StopDictation(ctx, actionID)
-	} else {
-		logger.Error(ctx, "dictation: plugin does not implement dictationStopper")
-	}
-}
-
-// handleDictationHotkeyPressAction finds the loaded DictationPlugin and runs
-// the press-triggered dictation action.
-func (m *Manager) handleDictationHotkeyPressAction(ctx context.Context, actionID string) {
-	sp := plugin.GetPluginManager().GetSystemPlugin(common.DictationPluginID)
-	if sp == nil {
-		logger.Error(ctx, fmt.Sprintf("dictation plugin not found for hotkey callback: action=%s", actionID))
-		return
-	}
-	type dictationPressHandler interface {
-		PressDictationHotkey(ctx context.Context, actionID string)
-	}
-	if handler, ok := sp.(dictationPressHandler); ok {
-		handler.PressDictationHotkey(ctx, actionID)
-	}
 }
 
 // handleMainHotkeyTrigger runs the main shortcut callback shared by native and
@@ -783,13 +716,17 @@ type HotkeyAvailability struct {
 	Available     bool
 	ConflictType  string
 	ConflictValue string
+	PluginID      string
+	SettingKey    string
+	ItemID        string
+	ColumnKey     string
 }
 
 const (
 	hotkeyConflictTypeMain      = "main"
 	hotkeyConflictTypeSelection = "selection"
 	hotkeyConflictTypeQuery     = "query"
-	hotkeyConflictTypeDictation = "dictation"
+	hotkeyConflictTypePlugin    = "plugin"
 	hotkeyConflictTypeSystem    = "system"
 )
 
@@ -845,21 +782,29 @@ func (m *Manager) findConfiguredHotkeyConflict(ctx context.Context, hotkeyStr st
 		}
 	}
 
-	// Dictation hotkeys are collected into the same collector; check all
-	// entries for conflicts by source.
-	for _, entry := range m.hotkeyService.Snapshot() {
-		if entry.Source == corehotkey.SourceDictation {
-			if hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(entry.CombineKey)) {
-				return HotkeyAvailability{Available: false, ConflictType: hotkeyConflictTypeDictation, ConflictValue: entry.ID}
+	return hotkeyEntryConflict(candidateKeys, m.hotkeyService.Snapshot())
+}
+
+// hotkeyEntryConflict identifies Wox-owned plugin bindings before the OS probe.
+func hotkeyEntryConflict(candidateKeys map[string]bool, entries []corehotkey.Entry) HotkeyAvailability {
+	for _, entry := range entries {
+		if !hotkeyCompareKeysIntersect(candidateKeys, hotkeyCompareKeys(entry.CombineKey)) {
+			continue
+		}
+		switch entry.Source {
+		case corehotkey.SourcePlugin:
+			parts := strings.Split(entry.ID, "\x00")
+			if len(parts) == 4 && parts[0] == entry.Owner {
+				return HotkeyAvailability{ConflictType: hotkeyConflictTypePlugin, PluginID: entry.Owner, SettingKey: parts[1], ItemID: parts[2], ColumnKey: parts[3]}
 			}
+			return HotkeyAvailability{ConflictType: hotkeyConflictTypePlugin}
 		}
 	}
-
 	return HotkeyAvailability{Available: true}
 }
 
 func hotkeyCompareKeys(hotkeyStr string) map[string]bool {
-	// Compare the physical chord so Win aliases and dictation's hold prefix
+	// Compare the physical chord so Win aliases and the hold prefix
 	// cannot hide a conflict with the launcher's new single-Win shortcut.
 	if key, err := utilhotkey.BindingKey(hotkeyStr); err == nil && key != "" {
 		return map[string]bool{key: true}

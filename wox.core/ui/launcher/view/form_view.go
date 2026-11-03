@@ -323,6 +323,7 @@ type FormHotkeyFieldProps struct {
 	Labels             []string
 	Placeholder        string
 	Status             string
+	FieldError         string
 	StatusPlacement    HotkeyStatusPlacement
 	Width              float32
 	Height             float32
@@ -348,7 +349,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		description = strings.TrimSpace(description + " " + props.Status)
 	}
 	recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
-		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
+		ID: props.ID, Labels: props.Labels, Placeholder: props.Placeholder, Focused: props.Recording, Error: props.Error || props.FieldError != "", Hold: props.Hold, HoldPrefix: props.HoldPrefix,
 		Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange, OnKey: props.OnKey,
 	})
 	recorder = woxwidget.Semantics{
@@ -393,7 +394,7 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		controlChildren[0] = woxwidget.StackChild{Right: edgeInset, AnchorRight: true, Child: recorderSlot}
 	}
 	if showStatus && placement != HotkeyStatusBelow && controlWidth > recorderWidth+statusGap {
-		statusColor := hotkeyStatusColor(props)
+		statusColor := hotkeyStatusColor(props.Theme, props.Error)
 		if props.SettingsLayout && placement == HotkeyStatusLeft {
 			const labelGap = float32(32)
 			recorderLeft := controlWidth - 2 - recorderWidth
@@ -402,18 +403,18 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 			// Flutter positions the hint from its actual render box. Clip Go's wider overflow area before the recorder so fallback glyphs cannot outpaint measured text bounds.
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: hintLeft, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
 				Width: hintWidth, Height: 22, Child: woxwidget.Align{Width: hintWidth, Height: 22, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{
-					Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor,
+					Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: statusColor,
 				}},
 			}}})
 		} else if placement == HotkeyStatusLeft {
 			hintWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: 0, Child: woxwidget.Align{Width: hintWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Clip{
-				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor},
+				Width: hintWidth, Height: 22, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: statusColor},
 			}}})
 		} else {
 			statusWidth := max(float32(0), controlWidth-recorderWidth-statusGap)
 			controlChildren = append(controlChildren, woxwidget.StackChild{Left: recorderWidth + statusGap, Child: woxwidget.Align{Width: statusWidth, Height: woxcomponent.SettingsControlHeight, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor,
+				Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: statusColor,
 			}}})
 		}
 	}
@@ -430,11 +431,12 @@ func FormHotkeyField(props FormHotkeyFieldProps) woxwidget.Widget {
 		control = woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			control,
 			woxwidget.TextBlock{
-				Value: props.Status, Width: controlWidth, LineHeight: 18, MaxLines: 3,
-				Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: hotkeyStatusColor(props),
+				Value: props.Status, Width: controlWidth, LineHeight: props.Theme.Scaled(18),
+				Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: hotkeyStatusColor(props.Theme, props.Error),
 			},
 		}}
 	}
+	control = formFieldControlWithError(props.ID, props.FieldError, control, props.Theme)
 	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, control, woxcomponent.SettingsControlHeight, props.Theme, props.OnOpenLink, props.Window)
 }
 
@@ -449,11 +451,15 @@ func resolveHotkeyStatusPlacement(props FormHotkeyFieldProps) HotkeyStatusPlacem
 	return HotkeyStatusRight
 }
 
-func hotkeyStatusColor(props FormHotkeyFieldProps) woxui.Color {
-	if props.Error {
-		return props.Theme.Error
+func hotkeyStatusColor(theme woxcomponent.ControlTheme, isError bool) woxui.Color {
+	if isError {
+		return theme.Error
 	}
-	return props.Theme.TextSecondary
+	// Launcher Warning is a tag background, not a text color; it may be too pale on light themes.
+	if theme.Warning.A == 0 || theme.WarningText.A != 0 {
+		return theme.Text
+	}
+	return theme.Warning
 }
 
 // FormSwitchFieldProps contains one Flutter-style plugin boolean row.

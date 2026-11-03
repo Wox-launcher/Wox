@@ -2,6 +2,11 @@
 
 TypeScript type definitions and SDK for developing Wox plugins in TypeScript/JavaScript.
 
+Plugin-owned windows are available through `API.CreateWindow(ctx, option)`.
+The returned instance has `Show`, `Hide`, `Close`, `SetOptions`, `Content.Set` and
+`Content.PostMessage`, all with named Option/Result contracts. See the
+[window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+
 ## Quick Start
 
 Query debounce can be declared in `plugin.json` at plugin, trigger and command
@@ -456,3 +461,10 @@ const accepted = await api.UpdateResult(ctx, {
   }
 })
 ```
+
+## Declarative global hotkeys (development)
+
+Declare `Type: "hotkey"`, `Scope: "global"` in static plugin settings, then subscribe
+with `OnHotkey` (`on_hotkey` in Python) during init. Wox manages registration, conflicts
+and cleanup. See the [contract and examples](../wox.core/plugin/hotkey.md) for gesture
+kinds, paired hold events, stable table IDs and asynchronous callback handling.

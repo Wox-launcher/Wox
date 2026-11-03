@@ -50,6 +50,12 @@ func (p *pluginPresentation) activePlugin(id string) *Instance {
 // Query-session routing stays intact so re-enabling the same plugin preserves it.
 func (p *pluginPresentation) releasePlugin(pluginID string) {
 	notifier.CancelPlugin(pluginID)
+	if instance := p.lookup(pluginID); instance != nil {
+		if api, ok := instance.API.(*APIImpl); ok {
+			api.stopHotkeys()
+			api.closeWindows()
+		}
+	}
 	// Clear the visible message along with its callbacks, including persistent messages.
 	p.clearCurrentPluginToolbarMsg(util.NewTraceContext(), pluginID)
 	prefix := pluginID + "\x00"

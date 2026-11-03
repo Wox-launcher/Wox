@@ -140,6 +140,15 @@ func (l *pluginLifecycle) restartHostInternal(ctx context.Context, pluginHost Ho
 		reloadMetadataList = append(reloadMetadataList, instance.Metadata)
 	}
 
+	// Invalidate UI capabilities before shutdown, even if starting the replacement host fails.
+	if l.releasePresentation != nil {
+		for _, instance := range l.pluginInstancesSnapshot() {
+			if strings.EqualFold(instance.Metadata.Runtime, string(runtime)) {
+				l.releasePresentation(instance.Metadata.Id)
+			}
+		}
+	}
+
 	// Bug fix: a shared runtime host can keep process-wide native modules loaded even after one
 	// plugin unregisters. Restart the host so uninstall can retry with fresh process state.
 	pluginHost.Stop(ctx)
@@ -153,14 +162,6 @@ func (l *pluginLifecycle) restartHostInternal(ctx context.Context, pluginHost Ho
 
 	// Replace stale runtime instances only after the new host is available, then rebuild the
 	// remaining plugins from metadata so the shared runtime returns to a consistent state.
-	if l.releasePresentation != nil {
-		for _, instance := range l.pluginInstancesSnapshot() {
-			if strings.EqualFold(instance.Metadata.Runtime, string(runtime)) {
-				l.releasePresentation(instance.Metadata.Id)
-			}
-		}
-	}
-
 	l.removePluginInstances(func(instance *Instance) bool {
 		return strings.EqualFold(instance.Metadata.Runtime, string(runtime))
 	})

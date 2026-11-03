@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -1216,6 +1217,34 @@ func TestPluginDetailRendersRequiredSettingErrorUnderField(t *testing.T) {
 	}
 }
 
+func TestPluginSettingSaveErrorAppearsUnderHotkey(t *testing.T) {
+	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer a.cancel()
+	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{ID: "test", Name: "Test"}})
+	a.pluginSettings.SetSelected(0)
+	form := &pluginSettingsFormState{pluginID: "test", saving: true, formFieldsState: newFormFieldsState([]formDefinition{
+		pluginTriggerKeywordDefinition(), {Type: "hotkey", Value: formDefinitionValue{Key: "hotkey", Label: "Hotkey"}},
+	}, map[string]string{"hotkey": "hold:right_shift"}, true)}
+	a.pluginSettings.SetForm(form)
+	err := &contract.PluginSettingUpdateError{Key: "hotkey", Err: errors.New("hotkey unavailable")}
+	if a.pluginSettings.reconcilePluginSettingSave(form, "test", map[string]string{"hotkey": "hold:right_shift"}, nil, err) {
+		t.Fatal("failed value should not be resubmitted")
+	}
+	if form.status != "" || form.fieldErrors["hotkey"] != "hotkey unavailable" {
+		t.Fatalf("status = %q, field errors = %v", form.status, form.fieldErrors)
+	}
+	props := a.pluginSettings.pluginDetailProps(settingsSnapshot{plugins: a.pluginSettings.Snapshot()}, 800, 600, 1)
+	node, ok := findPluginSemanticsByAutomationID(props.Editor.Form.Rows[0], "plugin-settings-field-1-error")
+	if !ok || node.Label != "hotkey unavailable" {
+		t.Fatalf("missing inline hotkey error: %+v", node)
+	}
+	form.values["hotkey"] = "hold:left_shift"
+	form.fieldErrors = nil
+	if !a.pluginSettings.reconcilePluginSettingSave(form, "test", map[string]string{"hotkey": "hold:right_shift"}, nil, err) || len(form.fieldErrors) != 0 {
+		t.Fatal("a stale failure should resubmit the edited value without showing its error")
+	}
+}
+
 func findPluginSemanticsByAutomationID(widget woxwidget.Widget, automationID string) (woxwidget.Semantics, bool) {
 	switch node := widget.(type) {
 	case woxwidget.Semantics:
@@ -1355,40 +1384,43 @@ func TestPluginSelectionRefreshPreservesFocusedField(t *testing.T) {
 	}
 }
 
-func TestSetPluginSelectionAppliesCachedAIModels(t *testing.T) {
-	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+func TestPluginSelectionRefreshKeepsHotkeyRecordingOnCurrentForm(t *testing.T) {
+	services := &actionRecordingTestServices{kinds: make(chan []string, 1)}
+	a := newApp(false, services, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.aiSettings.SetModels([]aiModel{{Name: "deepseek-chat", Provider: "deepseek"}})
+	a.settingsWindow.open = true
 	a.pluginSettings.SetPlugins([]pluginSettingsPlugin{{
-		ID: dictationPluginID,
-		SettingDefinitions: []formDefinition{{
-			Type: "selectAIModel", Value: formDefinitionValue{Key: dictationDefaultAIModelKey, Label: "AI model"},
-		}},
-		Setting: pluginSettingsData{Settings: map[string]string{
-			dictationActionsKey: `[{"id":"default","type":"default","name":"default","hotkey":"","output":"input","aiRefineEnabled":true}]`,
-		}},
+		ID: "app", SettingDefinitions: []formDefinition{{Type: "hotkey", Value: formDefinitionValue{Key: "hotkey"}}},
+		Setting: pluginSettingsData{Settings: map[string]string{"hotkey": "right_shift"}},
 	}})
 	a.pluginSettings.setPluginSelectionLocked(0)
+	previous := a.pluginSettings.Form()
+	a.hotkeyRecording.SetRecording(&hotkeyRecordingState{
+		diagnosticCtx: context.Background(), target: &previous.formFieldsState, fieldIndex: 1,
+		idPrefix: "plugin-settings", display: "right_shift",
+	})
 
-	form := a.pluginSettings.Form()
-	if form == nil {
-		t.Fatal("plugin form should be built")
+	plugins := a.pluginSettings.Plugins()
+	plugins[0].SettingDefinitions = append([]formDefinition{{Type: "textbox", Value: formDefinitionValue{Key: "other"}}}, plugins[0].SettingDefinitions...)
+	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.setPluginSelectionLocked(0)
+	current := a.pluginSettings.Form()
+	if current == previous || a.hotkeyRecording.Recording().target != &current.formFieldsState || a.hotkeyRecording.Recording().fieldIndex != 2 {
+		t.Fatal("recording did not follow the hotkey field to the refreshed form")
 	}
-	found := false
-	for _, definition := range form.definitions {
-		if definition.Type != "selectAIModel" {
-			continue
-		}
-		found = true
-		if len(definition.Value.Options) == 0 {
-			t.Fatal("selectAIModel options should be filled from the cached catalog")
-		}
+	if !a.onSettingsWindowKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || a.hotkeyRecording.Recording() != nil {
+		t.Fatal("the first Enter after refresh must stop recording")
 	}
-	if !found {
-		t.Fatal("dictation form should keep the AI model field")
-	}
-	if form.values[dictationDefaultAIRefineKey] != "true" {
-		t.Fatalf("AI Polish checkbox = %q, want true from persisted actions", form.values[dictationDefaultAIRefineKey])
+
+	a.hotkeyRecording.SetRecording(&hotkeyRecordingState{
+		diagnosticCtx: context.Background(), target: &current.formFieldsState, fieldIndex: 2,
+		idPrefix: "plugin-settings", display: "right_shift",
+	})
+	plugins[0].SettingDefinitions = plugins[0].SettingDefinitions[:1]
+	a.pluginSettings.SetPlugins(plugins)
+	a.pluginSettings.setPluginSelectionLocked(0)
+	if a.hotkeyRecording.Recording() != nil {
+		t.Fatal("recording must stop when the refreshed form removes its field")
 	}
 }
 
@@ -1400,11 +1432,11 @@ func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 		"ui_ai_model_selector_open_ai_settings": "Open AI settings",
 		"ui_ai_model_selector_no_models_desc":   "Configure a provider first.",
 	}
-	definition := formDefinition{Type: "selectAIModel", Value: formDefinitionValue{Key: dictationDefaultAIModelKey, Label: "AI model"}}
+	definition := formDefinition{Type: "selectAIModel", Value: formDefinitionValue{Key: "aiModel", Label: "AI model"}}
 	a.pluginSettings.SetForm(&pluginSettingsFormState{
-		pluginID:        dictationPluginID,
-		formFieldsState: formFieldsState{definitions: []formDefinition{definition}, values: map[string]string{dictationDefaultAIModelKey: ""}, focused: 0, active: true},
-		initial:         map[string]string{dictationDefaultAIModelKey: ""},
+		pluginID:        "test-plugin",
+		formFieldsState: formFieldsState{definitions: []formDefinition{definition}, values: map[string]string{"aiModel": ""}, focused: 0, active: true},
+		initial:         map[string]string{"aiModel": ""},
 	})
 
 	a.aiSettings.SetModels([]aiModel{{Name: "deepseek-chat", Provider: "deepseek"}})
@@ -1421,48 +1453,6 @@ func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 	picker = a.generalSettings.ChoicePicker()
 	if picker == nil || len(picker.item.choices) != 1 || picker.item.choices[0].value != pluginAIModelOpenSettingsValue {
 		t.Fatalf("empty picker = %#v, want an Open AI settings action", picker)
-	}
-}
-
-func TestPreparePluginSettingSaveValuesTracksDictationDerivedFields(t *testing.T) {
-	definition := formDefinition{Type: "dictationHotkey"}
-	definition.Value.Key = dictationDefaultHotkeyKey
-	state := &pluginSettingsFormState{
-		pluginID: dictationPluginID,
-		formFieldsState: formFieldsState{
-			definitions: []formDefinition{definition},
-			values: map[string]string{
-				dictationDefaultHotkeyKey:         "left_alt",
-				dictationDefaultActionInternalKey: `{"id":"default","type":"default","hotkey":"ctrl+space"}`,
-			},
-		},
-		initial: map[string]string{dictationDefaultHotkeyKey: "ctrl+space"},
-	}
-
-	submitted, persisted, err := preparePluginSettingSaveValues(state)
-	if err != nil {
-		t.Fatalf("prepare dictation save values: %v", err)
-	}
-	if submitted[dictationDefaultHotkeyKey] != "left_alt" {
-		t.Fatalf("submitted hotkey = %q, want left_alt", submitted[dictationDefaultHotkeyKey])
-	}
-	if _, ok := persisted[dictationDefaultHotkeyKey]; ok {
-		t.Fatal("derived hotkey should not be sent as a standalone plugin setting")
-	}
-	actions := decodeDictationActions(persisted[dictationActionsKey])
-	if len(actions) != 1 || dictationString(actions[0]["hotkey"]) != "left_alt" {
-		t.Fatalf("persisted actions = %#v, want default left_alt hotkey", actions)
-	}
-
-	for key, value := range submitted {
-		state.initial[key] = value
-	}
-	if pluginFormDirty(state.definitions, state.values, state.initial) {
-		t.Fatal("saved dictation hotkey should not leave the form dirty")
-	}
-	state.values[dictationDefaultHotkeyKey] = "cmd+x"
-	if !pluginFormDirty(state.definitions, state.values, state.initial) {
-		t.Fatal("a newer hotkey edit should remain dirty after the previous save completes")
 	}
 }
 

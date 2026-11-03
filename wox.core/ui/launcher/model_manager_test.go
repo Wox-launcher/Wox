@@ -3,7 +3,7 @@ package launcher
 import "testing"
 
 func TestBeginModelManagerRefreshDoesNotMarkOverlayLoading(t *testing.T) {
-	state := &modelManagerState{kind: "dictationModel"}
+	state := &modelManagerState{kind: "ocrModel"}
 	if !beginModelManagerRefresh(state) || !state.refreshing || state.loading {
 		t.Fatalf("refresh start = refreshing %v loading %v, want in-flight fetch without UI loading", state.refreshing, state.loading)
 	}
@@ -30,21 +30,21 @@ func TestMergeModelStatusesReportsProgressChange(t *testing.T) {
 }
 
 func TestResolveModelManagerOptionActionOffersDownloadForMissingSelectedModel(t *testing.T) {
-	action := resolveModelManagerOptionAction("dictationModel", formOption{ID: "qwen3", Status: "not_downloaded"}, true, false, "Download", "Retry", "Extracting", "Finalizing")
+	action := resolveModelManagerOptionAction("ocrModel", formOption{ID: "qwen3", Status: "not_downloaded"}, true, false, "Download", "Retry", "Extracting", "Finalizing")
 	if action.operation != "download" || action.label != "Download" || !action.enabled {
 		t.Fatalf("missing selected model action = %+v, want enabled download", action)
 	}
 }
 
 func TestResolveModelManagerOptionActionKeepsDownloadedSelectionInactive(t *testing.T) {
-	action := resolveModelManagerOptionAction("dictationModel", formOption{ID: "qwen3", Status: "downloaded"}, true, false, "Download", "Retry", "Extracting", "Finalizing")
+	action := resolveModelManagerOptionAction("ocrModel", formOption{ID: "qwen3", Status: "downloaded", Available: true}, true, false, "Download", "Retry", "Extracting", "Finalizing")
 	if action.operation != "select" || action.label != "Select" || action.enabled {
 		t.Fatalf("downloaded selected model action = %+v, want inactive select", action)
 	}
 }
 
 func TestAbandonedModelManagerRefreshCanStartAgain(t *testing.T) {
-	state := &modelManagerState{kind: "dictationModel"}
+	state := &modelManagerState{kind: "ocrModel"}
 	if !beginModelManagerRefresh(state) {
 		t.Fatal("first refresh should claim the latch")
 	}
@@ -60,7 +60,7 @@ func TestAbandonedModelManagerRefreshCanStartAgain(t *testing.T) {
 }
 
 func TestAbandonModelManagerClearsRefreshing(t *testing.T) {
-	state := &modelManagerState{kind: "dictationModel", refreshing: true}
+	state := &modelManagerState{kind: "ocrModel", refreshing: true}
 	app := bindTestApp(&App{aiSettings: newAISettingsController(CommonDeps{})})
 	app.pluginSettings.SetModelManager(state)
 	app.pluginSettings.abandonModelManager()

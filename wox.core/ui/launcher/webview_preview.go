@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
+	"wox/ui/previewcontent"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -39,28 +39,8 @@ type webViewPreviewData struct {
 
 // decodeWebViewPreview preserves compatibility with plugins that still send a plain URL.
 func decodeWebViewPreview(previewData string) (webViewPreviewData, error) {
-	trimmed := strings.TrimSpace(previewData)
-	if trimmed == "" {
-		return webViewPreviewData{}, errors.New("preview data is empty")
-	}
-	if strings.HasPrefix(trimmed, "{") {
-		var data webViewPreviewData
-		if err := json.Unmarshal([]byte(trimmed), &data); err != nil {
-			return webViewPreviewData{}, err
-		}
-		var fields map[string]json.RawMessage
-		_ = json.Unmarshal([]byte(trimmed), &fields)
-		_, hasMode := fields["updateMode"]
-		_, hasScript := fields["script"]
-		if hasMode || hasScript {
-			return webViewPreviewData{}, errors.New("script updates are only valid in UpdateResult")
-		}
-		if strings.TrimSpace(data.URL) == "" && data.HTML == "" {
-			return webViewPreviewData{}, errors.New("preview requires a URL or HTML")
-		}
-		return data, nil
-	}
-	return webViewPreviewData{URL: trimmed}, nil
+	data, err := previewcontent.DecodeWebView(previewData)
+	return webViewPreviewData(data), err
 }
 
 func (d webViewPreviewData) content() woxui.WebViewContent {

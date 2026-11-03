@@ -1058,13 +1058,6 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 		}
 	case "terminal":
 		state = append(state, snapshotTerminalPreview(a.terminal.terminalPreview))
-	case "dictation_history":
-		if a.dictation.dictationAudio != nil {
-			state = append(state, a.dictation.dictationAudio.revision, a.dictation.dictationAudio.path, a.dictation.dictationAudio.snapshot)
-		}
-		if a.dictation.dictationCompare != nil {
-			state = append(state, a.dictation.dictationCompare.revision, a.dictation.dictationCompare.sessionKey, a.dictation.dictationCompare.busy, a.dictation.dictationCompare.models)
-		}
 	case "file":
 		filePreview := a.filePreview.filePreviewFor(resolved.PreviewData)
 		state = append(state, filePreview)

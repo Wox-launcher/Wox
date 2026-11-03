@@ -277,17 +277,33 @@ func TestFormHotkeyFieldShowsRegistrationErrorWhenNotRecording(t *testing.T) {
 }
 
 func TestFormHotkeyFieldStatusPlacementBelowUsesControlColumn(t *testing.T) {
+	theme := woxcomponent.ControlTheme{Warning: woxui.Color{R: 253, G: 186, B: 116, A: 255}, TextSecondary: woxui.Color{R: 150, A: 255}}
 	field := FormHotkeyField(FormHotkeyFieldProps{
 		ID: "action-hotkey", Label: "Hotkey", Description: "Restore this result",
-		Status: "Press any key", StatusPlacement: HotkeyStatusBelow, Recording: true, Width: 420, LabelWidth: 80, Theme: woxcomponent.ControlTheme{},
+		Status: "Press any key", StatusPlacement: HotkeyStatusBelow, Recording: true, Width: 420, LabelWidth: 80, Theme: theme,
 	})
 	controlColumn := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	control := controlColumn.Children[0].(woxwidget.Flex)
 	if control.Axis != woxwidget.Vertical {
 		t.Fatalf("below placement axis = %v, want vertical", control.Axis)
 	}
-	if status := control.Children[1].(woxwidget.TextBlock); status.Value != "Press any key" {
-		t.Fatalf("below placement status = %q", status.Value)
+	if status := control.Children[1].(woxwidget.TextBlock); status.Value != "Press any key" || status.Color != theme.Warning || status.Style.Weight != woxui.FontWeightSemibold || status.MaxLines != 0 {
+		t.Fatalf("recording status = %#v, want emphasized warm text", status)
+	}
+	if description := controlColumn.Children[1].(woxwidget.TextBlock); description.Color != theme.TextSecondary {
+		t.Fatalf("description color = %#v, want secondary text", description.Color)
+	}
+}
+
+func TestHotkeyStatusColorPreservesErrorsAndLauncherFallback(t *testing.T) {
+	theme := woxcomponent.ControlTheme{Text: woxui.Color{R: 20, A: 255}, Error: woxui.Color{R: 255, A: 255}}
+	if hotkeyStatusColor(theme, false) != theme.Text || hotkeyStatusColor(theme, true) != theme.Error {
+		t.Fatal("recording status must fall back to text color and retain error color")
+	}
+	theme.Warning = woxui.Color{R: 253, G: 230, B: 138, A: 255}
+	theme.WarningText = woxui.Color{R: 102, G: 60, A: 255}
+	if hotkeyStatusColor(theme, false) != theme.Text {
+		t.Fatal("a tag background must not be used as recording text on launcher themes")
 	}
 }
 

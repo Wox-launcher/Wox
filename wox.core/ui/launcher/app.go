@@ -284,12 +284,15 @@ type formDefinition struct {
 }
 
 type formDefinitionValue struct {
-	Key          string `json:"Key"`
-	Label        string `json:"Label"`
-	Title        string `json:"Title"`
-	Suffix       string `json:"Suffix"`
-	DefaultValue string `json:"DefaultValue"`
-	Tooltip      string `json:"Tooltip"`
+	HotkeyScope         string   `json:"Scope"`
+	AllowedHotkeyKinds  []string `json:"AllowedHotkeyKinds"`
+	HotkeyIdentityField string   `json:"HotkeyIdentityField"`
+	Key                 string   `json:"Key"`
+	Label               string   `json:"Label"`
+	Title               string   `json:"Title"`
+	Suffix              string   `json:"Suffix"`
+	DefaultValue        string   `json:"DefaultValue"`
+	Tooltip             string   `json:"Tooltip"`
 	// Filterable shows a search field in a select dropdown.
 	Filterable bool `json:"Filterable,omitempty"`
 	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
@@ -337,6 +340,7 @@ type formStatsRow struct {
 }
 
 type formTableColumn struct {
+	HotkeyScope   string          `json:"Scope"`
 	Key           string          `json:"Key"`
 	Label         string          `json:"Label"`
 	Tooltip       string          `json:"Tooltip"`
@@ -440,7 +444,6 @@ type App struct {
 	querySession    queryController
 	resultList      resultController
 	actions         actionPanelController
-	dictation       dictationPreviewController
 	terminal        terminalController
 	webView         webViewPreviewController
 	nativeFile      nativeFilePreviewController

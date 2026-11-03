@@ -251,6 +251,11 @@ func (u *uiImpl) GetActiveWindowSnapshot(ctx context.Context) common.ActiveWindo
 	return GetUIManager().GetActiveWindowSnapshot(ctx)
 }
 
+// RefreshActiveWindowSnapshot captures context for activations that do not show the launcher.
+func (u *uiImpl) RefreshActiveWindowSnapshot(ctx context.Context) {
+	GetUIManager().RefreshActiveWindowSnapshotBlocking(ctx)
+}
+
 func (u *uiImpl) SendChatResponse(ctx context.Context, aiChatData common.AIChatData) {
 	u.applyView(ctx, "send chat response", func(view contract.View) error { return view.SendChatResponse(ctx, aiChatData) })
 }

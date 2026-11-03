@@ -345,7 +345,7 @@ func (c *formTableController) formTableRowStatus(columns []formTableColumn, row 
 func (c *formTableController) formTableViewCell(column formTableColumn, row map[string]any, theme woxcomponent.ControlTheme, imageScale float32) launcherview.FormTableCell {
 	text := c.formTableDisplayValue(column, row)
 	cell := launcherview.FormTableCell{Text: compactFormTableText(text, 80), SearchText: text}
-	if column.Type == "hotkey" || column.Type == "dictationHotkey" {
+	if column.Type == "hotkey" {
 		// Format only the visible label; raw text remains searchable and editable.
 		cell.Text = strings.Join(formatHotkeyLabels(text), " + ")
 		if strings.HasPrefix(strings.TrimSpace(text), "hold:") {
@@ -658,7 +658,8 @@ func (c *formTableController) buildFormTableList(snapshot *formTableEditorSnapsh
 
 func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	rowForm := snapshot.rowForm
-	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: c.focusFormTableRowField, change: c.changeFormTableRowChoice, setText: c.setFormTableRowText, onKey: c.onFormTableKey, openChoice: c.openFormTableRowChoice, pickDir: c.pickFormTableRowDirectory, pickApp: c.openFormTableAppPicker, recordKey: c.recordFormTableRowHotkey}
+	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: c.focusFormTableRowField, change: c.changeFormTableRowChoice, setText: c.setFormTableRowText, onKey: c.onFormTableKey, openChoice: c.openFormTableRowChoice, pickDir: c.pickFormTableRowDirectory, pickApp: c.openFormTableAppPicker, recordKey: c.recordFormTableRowHotkey,
+		openAIModelChoice: c.openFormTableAIModelChoice, setAIModelName: c.setFormTableAIModelName, finishAIModelEdit: c.finishFormTableAIModelEdit, openAISettings: func() { c.selectSettingTab("ai") }, openLink: c.openAboutLink, fieldErrors: snapshot.fieldErrors}
 	definitions := rowForm.definitions
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
 		visible := make([]formDefinition, 0, len(definitions))
@@ -785,6 +786,11 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 
 // buildFormTableRowField maps the portable field definition onto the compact table-editor controls.
 func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, callbacks formFieldCallbacks, palette woxcomponent.ControlTheme, index int, definition formDefinition, width, labelWidth float32, fieldError string) woxwidget.Widget {
+	if definition.Type == "selectAIModel" && c.buildAIModelField != nil {
+		callbacks.labelWidth = labelWidth
+		height := launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, false, max(float32(0), width-labelWidth-10))
+		return c.buildAIModelField(fields, callbacks, palette, index, definition, width, height)
+	}
 	value := definition.Value
 	fieldValue := fields.values[value.Key]
 	focused := fields.active && fields.focused == index
@@ -883,7 +889,7 @@ func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, 
 			props.SelectIcon = c.imageForSurface(selectedIcon, physicalImageSize(18, callbacks.imageScale), palette.Background)
 		}
 		props.OnChoiceTap = func(anchor woxui.Rect) { callbacks.openChoice(index, anchor) }
-	case "hotkey", "dictationHotkey":
+	case "hotkey":
 		presentation := c.hotkeyRecordingFieldStatus("form-table-row", index)
 		if presentation.Active {
 			fieldValue = presentation.Value

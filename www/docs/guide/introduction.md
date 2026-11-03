@@ -1,6 +1,6 @@
 # Introduction
 
-Wox is a keyboard-first launcher for Windows, macOS, and Linux. Use it to open apps, find files, capture notes, take screenshots, run timers, search the web, reuse clipboard history, talk to AI models, and extend the launcher with plugins.
+Wox is a keyboard-first launcher for Windows, macOS, and Linux. Use it to open apps, find files, capture notes, take screenshots, search the web, reuse clipboard history, talk to AI models, and extend the launcher with plugins.
 
 Read [Rediscover Wox v2](/blog/rediscover-wox-v2) for the story behind the rewrite and a look at what Wox can do today.
 
@@ -10,7 +10,7 @@ The core app stays small. Built-in plugins cover daily work; the store and SDKs 
 
 - **Opening things quickly**: apps, folders, files, bookmarks, URLs, and system actions.
 - **Finishing the next step**: every result can expose actions such as copy, reveal, paste, save to Notes, or open in another tool.
-- **Keeping local workflows close**: clipboard history, calculator, converter, file search, notes, screenshots, timers, dictation, and window layouts are built in.
+- **Keeping local workflows close**: clipboard history, calculator, converter, file search, notes, screenshots, and window layouts are built in.
 - **Letting plugins do the custom work**: install community plugins, or ask an AI agent to [create one](/development/).
 - **Staying portable**: Wox stores user data under `~/.wox` on macOS/Linux and `%USERPROFILE%\.wox` on Windows.
 
@@ -25,7 +25,6 @@ Some plugins listen globally. App search, calculator, converter, and web search 
 | `f invoice` | Search files |
 | `cb token` | Search clipboard history |
 | `note meeting` | Search notes |
-| `timer 5m` | Start a countdown |
 | `wpm install` | Search the plugin store |
 | `chat explain this` | Start an AI chat |
 

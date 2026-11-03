@@ -21,6 +21,7 @@ function loadSource(name) {
   return module.exports
 }
 mocks["./resultActions"] = loadSource("resultActions.ts")
+mocks["./pluginWindow"] = loadSource("pluginWindow.ts")
 const { PluginAPI } = loadSource("pluginAPI.ts")
 mocks["./pluginAPI"] = { PluginAPI }
 mocks["./singleFile"] = {}

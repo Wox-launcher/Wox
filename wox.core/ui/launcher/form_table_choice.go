@@ -1,7 +1,9 @@
 package launcher
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
@@ -46,7 +48,11 @@ func (c *formTableController) openFocusedFormTableRowChoice(index int) {
 	if host != nil {
 		anchor, _ = host.BoundsForKey(woxwidget.Key(fmt.Sprintf("form-table-row-field-%d", index)))
 	}
-	c.openFormTableRowChoice(index, anchor)
+	if state := c.activeFormTableEditor(); state != nil && state.rowForm != nil && index >= 0 && index < len(state.rowForm.definitions) && state.rowForm.definitions[index].Type == "selectAIModel" {
+		c.openFormTableAIModelChoice(index, false, anchor)
+	} else {
+		c.openFormTableRowChoice(index, anchor)
+	}
 }
 
 // openFormTableRowChoice opens the menu at the exact field bounds captured by pointer hit testing.
@@ -78,6 +84,9 @@ func formTableChoicePickerFilterable(state *formTableEditorState) bool {
 	if index < 0 || index >= len(state.rowForm.definitions) {
 		return false
 	}
+	if state.choicePicker.options != nil {
+		return state.choicePicker.filterable
+	}
 	return state.rowForm.definitions[index].Value.Filterable
 }
 
@@ -106,11 +115,28 @@ func (c *formTableController) chooseFormTableChoice(index int) {
 		return
 	}
 	definition := state.rowForm.definitions[fieldIndex]
-	if index >= len(definition.Value.Options) {
+	options := definition.Value.Options
+	if state.choicePicker.options != nil {
+		options = state.choicePicker.options
+	}
+	if index >= len(options) {
 		return
 	}
 	c.setSettingChoiceTooltip(false, "", woxui.Rect{})
-	state.rowForm.values[definition.Value.Key] = definition.Value.Options[index].Value
+	value := options[index].Value
+	if state.choicePicker.aiProvider {
+		for _, model := range aiModelsFromOptions(definition.Value.Options) {
+			if aiModelProviderKey(model) == value {
+				encoded, err := json.Marshal(model)
+				if err != nil {
+					return
+				}
+				value = string(encoded)
+				break
+			}
+		}
+	}
+	state.rowForm.values[definition.Value.Key] = value
 	setFormFieldsFocusLocked(state.rowForm, fieldIndex)
 	if definition.Value.Key == "Name" {
 		applyAIProviderDefaultHostLocked(state, true, c.aiSettings().ProviderCatalog())
@@ -122,4 +148,102 @@ func (c *formTableController) chooseFormTableChoice(index int) {
 	clearFormTableRowValidationLocked(state)
 	c.updateFormTableTextInput(false)
 	c.invalidateFormTableWindow()
+}
+
+// openFormTableAIModelChoice presents providers or models within the active table overlay.
+func (c *formTableController) openFormTableAIModelChoice(index int, provider bool, anchor woxui.Rect) {
+	state := c.activeFormTableEditor()
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
+		return
+	}
+	definition := state.rowForm.definitions[index]
+	if definition.Type != "selectAIModel" {
+		return
+	}
+	var selected aiModel
+	_ = json.Unmarshal([]byte(state.rowForm.values[definition.Value.Key]), &selected)
+	options := make([]formOption, 0)
+	seen := map[string]bool{}
+	for _, model := range aiModelsFromOptions(definition.Value.Options) {
+		key := aiModelProviderKey(model)
+		if provider {
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			label := model.Provider
+			if model.ProviderAlias != "" {
+				label = model.ProviderAlias
+			}
+			options = append(options, formOption{Value: key, Label: label})
+		} else if selected.Provider == "" || key == aiModelProviderKey(selected) {
+			encoded, err := json.Marshal(model)
+			if err == nil {
+				options = append(options, formOption{Value: string(encoded), Label: model.Name})
+			}
+		}
+	}
+	if len(options) == 0 {
+		return
+	}
+	syncFormFieldsEditorLocked(state.rowForm)
+	setFormFieldsFocusLocked(state.rowForm, index)
+	current := state.rowForm.values[definition.Value.Key]
+	if provider {
+		current = aiModelProviderKey(selected)
+	}
+	state.appPicker = nil
+	state.choicePicker = &formTableChoicePickerState{fieldIndex: index, anchor: anchor, options: options, currentValue: current, filterable: !provider, aiProvider: provider}
+	clearFormTableRowValidationLocked(state)
+	c.updateFormTableTextInput(false)
+	c.invalidateFormTableWindow()
+}
+
+func (c *formTableController) setFormTableAIModelName(index int, name string) {
+	state := c.activeFormTableEditor()
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || strings.TrimSpace(name) == "" {
+		return
+	}
+	key := state.rowForm.definitions[index].Value.Key
+	var model aiModel
+	if json.Unmarshal([]byte(state.rowForm.values[key]), &model) != nil || model.Provider == "" {
+		return
+	}
+	model.Name = name
+	if encoded, err := json.Marshal(model); err == nil {
+		state.rowForm.values[key] = string(encoded)
+		clearFormTableRowValidationLocked(state)
+		c.invalidateFormTableWindow()
+	}
+}
+
+// finishFormTableAIModelEdit restores a configured model when leaving custom-name mode.
+func (c *formTableController) finishFormTableAIModelEdit(index int, name string) {
+	state := c.activeFormTableEditor()
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) {
+		return
+	}
+	definition := state.rowForm.definitions[index]
+	var selected aiModel
+	_ = json.Unmarshal([]byte(state.rowForm.values[definition.Value.Key]), &selected)
+	var first *aiModel
+	for _, model := range aiModelsFromOptions(definition.Value.Options) {
+		if aiModelProviderKey(model) != aiModelProviderKey(selected) {
+			continue
+		}
+		if first == nil {
+			copy := model
+			first = &copy
+		}
+		if model.Name == name {
+			first = &model
+			break
+		}
+	}
+	if first != nil {
+		if encoded, err := json.Marshal(first); err == nil {
+			state.rowForm.values[definition.Value.Key] = string(encoded)
+		}
+		c.invalidateFormTableWindow()
+	}
 }

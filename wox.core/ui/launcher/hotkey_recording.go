@@ -10,13 +10,14 @@ import (
 
 	corehotkey "wox/hotkey"
 	"wox/setting"
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	"wox/util"
 	utilhotkey "wox/util/hotkey"
 )
 
 var defaultHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo"}
-var dictationHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
+var globalHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
 
 type hotkeyRecordingState struct {
 	diagnosticCtx   context.Context
@@ -70,14 +71,11 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 	if rec := c.Recording(); rec != nil && rec.target == target && rec.fieldIndex == index && !rec.statusError {
 		return
 	}
-	if target == nil || index < 0 || index >= len(target.definitions) || (target.definitions[index].Type != "hotkey" && target.definitions[index].Type != "dictationHotkey") || !c.targetCurrent(target) {
+	if target == nil || index < 0 || index >= len(target.definitions) || target.definitions[index].Type != "hotkey" || !c.targetCurrent(target) {
 		return
 	}
 	setFormFieldsFocusLocked(target, index)
-	hint := c.hotkeyRecordingHint(target.definitions[index], allowedKinds)
-	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
-		hint = c.language.translate("i18n:ui_hotkey_windows_key_hint")
-	}
+	hint := c.language.translate("i18n:ui_hotkey_recording")
 	key := target.definitions[index].Value.Key
 	state := &hotkeyRecordingState{
 		diagnosticCtx: util.NewTraceContext(),
@@ -90,8 +88,8 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 	c.invalidate()
 
 	purpose := "normal"
-	if target.definitions[index].Type == "dictationHotkey" {
-		purpose = "dictation"
+	if target.definitions[index].Value.HotkeyScope == "global" {
+		purpose = "global"
 	}
 	util.Go(c.lifecycleCtx, "start hotkey recording", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -107,6 +105,7 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 					state.raw = capability.RawRecorderAvailable
 					state.fallback = containsString(capability.FallbackAllowedKinds, "normalCombo")
 					state.ready = true
+					state.hint = c.hotkeyRecordingHint(recordableHotkeyKinds(allowedKinds, capability), runtime.GOOS == "windows" && persistKey == "MainHotkey")
 					state.status = state.hint
 					state.statusError = false
 					if !state.raw && !state.fallback {
@@ -123,14 +122,39 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 	})
 }
 
-func (c *hotkeyRecordingController) hotkeyRecordingHint(definition formDefinition, allowedKinds []string) string {
-	if definition.Type == "dictationHotkey" {
-		return c.language.translate("i18n:ui_hotkey_dictation_press_hint")
+// recordableHotkeyKinds limits hints to the recorder's actual fallback capability.
+func recordableHotkeyKinds(allowed []string, capability contract.HotkeyRecordingCapability) []string {
+	if capability.RawRecorderAvailable {
+		return allowed
 	}
-	if containsString(allowedKinds, "pressModifier") {
-		return c.language.translate("i18n:ui_hotkey_modifier_press_hint")
+	var kinds []string
+	for _, kind := range allowed {
+		if containsString(capability.FallbackAllowedKinds, kind) {
+			kinds = append(kinds, kind)
+		}
 	}
-	return c.language.translate("i18n:ui_hotkey_press_hint")
+	return kinds
+}
+
+// hotkeyRecordingHint lists independent actions so arbitrary supported subsets remain accurate in every locale.
+func (c *hotkeyRecordingController) hotkeyRecordingHint(allowedKinds []string, windowsMain bool) string {
+	var hints []string
+	for _, item := range []struct{ kind, key string }{
+		{"normalCombo", "ui_hotkey_hint_normal_combo"},
+		{"doubleModifier", "ui_hotkey_hint_double_modifier"},
+		{"capsLockCombo", "ui_hotkey_hint_caps_lock_combo"},
+		{"pressModifier", "ui_hotkey_hint_press_modifier"},
+		{"holdModifier", "ui_hotkey_hint_hold_modifier"},
+	} {
+		if !containsString(allowedKinds, item.kind) {
+			continue
+		}
+		if item.kind == "pressModifier" && windowsMain {
+			item.key = "ui_hotkey_hint_press_win"
+		}
+		hints = append(hints, c.language.translate("i18n:"+item.key))
+	}
+	return strings.Join(hints, " · ")
 }
 
 func containsString(values []string, target string) bool {
@@ -175,6 +199,26 @@ func (c *hotkeyRecordingController) stopHotkeyRecordingForDifferentField(target 
 	if stop {
 		c.stopHotkeyRecording()
 	}
+}
+
+// retargetHotkeyRecording keeps capture attached when a plugin form is refreshed.
+func (c *hotkeyRecordingController) retargetHotkeyRecording(previous, current *formFieldsState) {
+	state := c.Recording()
+	if state == nil || previous == nil || state.target != previous {
+		return
+	}
+	if current != nil && state.fieldIndex >= 0 && state.fieldIndex < len(previous.definitions) {
+		old := previous.definitions[state.fieldIndex]
+		for index, field := range current.definitions {
+			if field.Type == old.Type && field.Value.Key != "" && field.Value.Key == old.Value.Key {
+				state.target = current
+				state.fieldIndex = index
+				setFormFieldsFocusLocked(current, index)
+				return
+			}
+		}
+	}
+	c.stopHotkeyRecording()
 }
 
 // commitHotkeyRecordingValue copies the last shown combo into the field before Save.
@@ -309,6 +353,16 @@ func (c *hotkeyRecordingController) checkRecordedHotkey(state *hotkeyRecordingSt
 				c.acceptRecordedHotkey(state, hotkey)
 				return
 			}
+			form := c.pluginSettings().Form()
+			if availability.ConflictType == "plugin" && state.idPrefix == "plugin-settings" && form != nil && state.target == &form.formFieldsState &&
+				availability.PluginID == form.pluginID && availability.SettingKey == form.definitions[state.fieldIndex].Value.Key && availability.ItemID == "" && availability.ColumnKey == "" {
+				c.acceptRecordedHotkey(state, hotkey)
+				return
+			}
+			if sameTableHotkeyOwner(availability, form, c.formTables.activeFormTableEditor(), state) {
+				c.acceptRecordedHotkey(state, hotkey)
+				return
+			}
 			state.display = hotkey
 			state.status = c.hotkeyConflictMessage(availability.ConflictType, availability.ConflictValue)
 			state.statusError = true
@@ -317,6 +371,19 @@ func (c *hotkeyRecordingController) checkRecordedHotkey(state *hotkeyRecordingSt
 		}
 		c.acceptRecordedHotkey(state, hotkey)
 	})
+}
+
+// sameTableHotkeyOwner identifies the original row, never a cloned or newly created row.
+func sameTableHotkeyOwner(availability contract.HotkeyAvailability, form *pluginSettingsFormState, editor *formTableEditorState, state *hotkeyRecordingState) bool {
+	if availability.ConflictType != "plugin" || state.idPrefix != "form-table-row" || form == nil || editor == nil || editor.target != &form.formFieldsState || editor.rowForm != state.target || editor.rowIndex < 0 {
+		return false
+	}
+	identityKey := editor.definition.Value.HotkeyIdentityField
+	if identityKey == "" {
+		identityKey = "id"
+	}
+	itemID, _ := editor.rowBase[identityKey].(string)
+	return itemID != "" && availability.PluginID == form.pluginID && availability.SettingKey == editor.definition.Value.Key && availability.ItemID == itemID && availability.ColumnKey == state.target.definitions[state.fieldIndex].Value.Key
 }
 
 func (c *hotkeyRecordingController) hotkeyConflictMessage(kind, value string) string {
@@ -360,6 +427,7 @@ func (c *hotkeyRecordingController) acceptRecordedHotkey(state *hotkeyRecordingS
 		return
 	}
 	if state.idPrefix == "plugin-settings" {
+		clearPluginFormFieldError(c.pluginSettings().Form(), state.fieldIndex)
 		c.pluginSettings().submitPluginSettings()
 	}
 	if state.persistKey != "" {
@@ -492,7 +560,7 @@ func fallbackHotkeyString(event woxui.KeyEvent) string {
 	if !event.Down || event.Repeat || event.Key == woxui.KeyUnknown || (event.Modifiers == 0 && !isFunctionKeyEvent(event.Key)) {
 		return ""
 	}
-	// Modifier presses belong to the raw dictation/double-modifier recorder.
+	// Modifier presses belong to the raw global hotkey recorder.
 	// They carry their own modifier flag and would otherwise become cmd+meta.
 	switch event.Key {
 	case woxui.KeyAlt, woxui.KeyMeta, woxui.Key("shift"), woxui.Key("ctrl"), woxui.Key("control"):
@@ -561,6 +629,9 @@ func (c *hotkeyRecordingController) recordFormTableRowHotkey(index int) {
 	for _, column := range state.definition.Value.Columns {
 		if column.Key == key {
 			allowed = append([]string(nil), column.AllowedHotkeyKinds...)
+			if len(allowed) == 0 && column.HotkeyScope == "global" {
+				allowed = globalHotkeyRecordingKinds
+			}
 			break
 		}
 	}

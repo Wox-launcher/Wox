@@ -1230,3 +1230,16 @@ func platformConfigureSoftwareRendering(enabled bool) {
 		}
 	}
 }
+
+// showInactive displays a focusable window without activating it.
+func (w *platformWindow) showInactive() (FocusEpoch, error) {
+	native, err := w.openNative()
+	if err != nil {
+		return 0, err
+	}
+	epoch := C.wox_linux_window_show_inactive(native)
+	if epoch == 0 {
+		return 0, errors.New("could not show inactive window")
+	}
+	return FocusEpoch(epoch), nil
+}

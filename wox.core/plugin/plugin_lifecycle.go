@@ -365,6 +365,9 @@ func (l *pluginLifecycle) activatePlugin(ctx context.Context, pluginInstance *In
 // clearRuntimeCallbacks drops callbacks registered during Init so a later
 // enable starts from a clean plugin lifecycle.
 func (l *pluginLifecycle) clearRuntimeCallbacks(pluginInstance *Instance) {
+	if api, ok := pluginInstance.API.(*APIImpl); ok {
+		api.stopHotkeys()
+	}
 	pluginInstance.toastEpoch.Add(1)
 	if l.releasePresentation != nil {
 		l.releasePresentation(pluginInstance.Metadata.Id)

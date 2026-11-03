@@ -8,6 +8,16 @@ import (
 	utilhotkey "wox/util/hotkey"
 )
 
+// TestPluginHotkeysCannotReplaceOtherOwners covers native special bindings that could otherwise overwrite callbacks.
+func TestPluginHotkeysCannotReplaceOtherOwners(t *testing.T) {
+	for _, source := range []EntrySource{SourcePlugin, SourceSelection, SourceQuery} {
+		entries := []Entry{{Source: source, ID: "existing", CombineKey: "right_alt"}, {Source: SourcePlugin, ID: "incoming", CombineKey: "hold:right_alt"}}
+		if err := validateHotkeyConflicts(entries); err == nil {
+			t.Fatalf("accepted plugin conflict with %s", source)
+		}
+	}
+}
+
 // TestQueryReleasePolicyIsEvaluatedAtTrigger keeps live routing changes out of registration snapshots.
 func TestQueryReleasePolicyIsEvaluatedAtTrigger(t *testing.T) {
 	allow := false
@@ -58,10 +68,26 @@ func TestRegisteredHotkeyStateKeepsOnlySuccessfulEntries(t *testing.T) {
 	}
 }
 
-func TestResultHotkeyConflictsIncludeDictationAndModifierOrder(t *testing.T) {
-	entries := []Entry{{Source: SourceDictation, ID: "dictate", CombineKey: "Ctrl+Alt+K"}, {Source: SourceResult, ID: "result", CombineKey: "alt+ctrl+k"}}
+func TestRegisteredHotkeyStateMatchesHoldBindingAndSkippedEmptyEntry(t *testing.T) {
+	entries := []Entry{
+		{Source: SourceMain, ID: "empty"},
+		{Source: SourcePlugin, ID: "hold", CombineKey: "hold:right_shift", OnPress: func() {}, OnRelease: func() {}},
+		{Source: SourcePlugin, ID: "other", CombineKey: "ctrl+k", OnPress: func() {}},
+	}
+	specs, err := buildHotkeySpecs(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registeredSpecs, registered := registeredHotkeyState(specs, entries, []string{"right_shift"})
+	if len(registered) != 1 || registered[0].ID != "hold" || len(registeredSpecs) != 1 || registeredSpecs[0].CombineKey != "right_shift" {
+		t.Fatalf("registered entries = %+v, specs = %+v", registered, registeredSpecs)
+	}
+}
+
+func TestResultHotkeyConflictsIncludePluginAndModifierOrder(t *testing.T) {
+	entries := []Entry{{Source: SourcePlugin, ID: "plugin", CombineKey: "Ctrl+Alt+K"}, {Source: SourceResult, ID: "result", CombineKey: "alt+ctrl+k"}}
 	if err := validateHotkeyConflicts(entries); err == nil {
-		t.Fatal("dictation conflict was accepted")
+		t.Fatal("plugin conflict was accepted")
 	}
 	entries[0].CombineKey = "hold:left_alt"
 	entries[1].CombineKey = "left_alt"
@@ -104,16 +130,5 @@ func TestSyncedResultConflictKeepsOtherHotkeys(t *testing.T) {
 	got := usableResultHotkeys(context.Background(), entries)
 	if len(got) != 2 || got[0].Source != SourceMain || got[1].ID != "valid" {
 		t.Fatalf("unrelated hotkeys were lost: %+v", got)
-	}
-}
-
-// TestMainDictationConflict checks both configuration orders.
-func TestMainDictationConflict(t *testing.T) {
-	entries := []Entry{{Source: SourceMain, CombineKey: "left_win"}, {Source: SourceDictation, CombineKey: "left_cmd"}}
-	for i := 0; i < 2; i++ {
-		if err := validateHotkeyConflicts(entries); err == nil {
-			t.Fatal("main/dictation conflict accepted")
-		}
-		entries[0], entries[1] = entries[1], entries[0]
 	}
 }

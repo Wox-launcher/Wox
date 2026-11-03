@@ -1,3 +1,6 @@
+import type { HotkeyEvent, OnHotkeyOption, OnHotkeyResult } from "@wox-launcher/wox-plugin"
+import { WindowProxy } from "./pluginWindow"
+import type { CreateWindowOption, CreateWindowResult } from "@wox-launcher/wox-plugin"
 import { ResultActions } from "./resultActions"
 import {
   ChangeQueryParam,
@@ -98,6 +101,49 @@ function aiChatOptionsPayload(options: AI.ChatOptions | undefined): Record<strin
 }
 
 export class PluginAPI implements PublicAPI {
+  hotkeyCallbacks = new Map<string, (ctx: Context, event: HotkeyEvent) => void | Promise<void>>()
+  /** Subscribe once; Core owns bindings declared by settings. */
+  async OnHotkey(ctx: Context, option: OnHotkeyOption): Promise<OnHotkeyResult> {
+    if (typeof option.Callback !== "function") return { Success: false, ErrMsg: "hotkey callback is required" }
+    const callbackID = crypto.randomUUID()
+    this.hotkeyCallbacks.set(callbackID, option.Callback)
+    try {
+      const result = (await this.invokeMethod(ctx, "OnHotkey", { option: JSON.stringify({ CallbackID: callbackID }) })) as OnHotkeyResult
+      if (!result.Success) this.hotkeyCallbacks.delete(callbackID)
+      return result
+    } catch (error) {
+      this.hotkeyCallbacks.delete(callbackID)
+      throw error
+    }
+  }
+  windowCallbacks = new Map<string, WindowProxy>()
+  releaseHotkeys(): void {
+    this.hotkeyCallbacks.clear()
+  }
+  releaseWindows(): void {
+    this.windowCallbacks.forEach(w => w.release())
+    this.windowCallbacks.clear()
+  }
+  /** Register the callback before Core can finish loading the native document. */
+  async CreateWindow(ctx: Context, option: CreateWindowOption): Promise<CreateWindowResult> {
+    const callbackID = crypto.randomUUID()
+    const window = new WindowProxy(this.invokeMethod.bind(this), option.OnEvent)
+    this.windowCallbacks.set(callbackID, window)
+    try {
+      const result = (await this.invokeMethod(ctx, "CreateWindow", { option: JSON.stringify({ ...option, OnEvent: undefined, CallbackID: callbackID }) })) as CreateWindowResult
+      if (!result.Success) {
+        window.release()
+        this.windowCallbacks.delete(callbackID)
+        return result
+      }
+      window.ID = result.WindowID!
+      return { ...result, Window: window }
+    } catch (error) {
+      window.release()
+      this.windowCallbacks.delete(callbackID)
+      throw error
+    }
+  }
   toastCallbacks = new Map<string, NonNullable<ShowToastMsgOption["Action"]>["Action"]>()
   pluginId: string
   pluginName: string

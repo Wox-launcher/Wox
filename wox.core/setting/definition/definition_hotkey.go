@@ -4,13 +4,21 @@ import (
 	"context"
 )
 
-// PluginSettingValueHotkey is a Wox-internal hotkey recorder for action forms
-// and other core-owned surfaces. It is not part of the public plugin SDK.
+type HotkeyScope string
+
+const (
+	HotkeyScopeLocal  HotkeyScope = "local"
+	HotkeyScopeGlobal HotkeyScope = "global"
+)
+
+// PluginSettingValueHotkey opts into automatic registration only with global scope.
 type PluginSettingValueHotkey struct {
-	Key          string
-	Label        string
-	Tooltip      string
-	DefaultValue string
+	Key                string
+	Label              string
+	Tooltip            string
+	DefaultValue       string
+	Scope              HotkeyScope
+	AllowedHotkeyKinds []string
 
 	Style PluginSettingValueStyle `json:"-"`
 }

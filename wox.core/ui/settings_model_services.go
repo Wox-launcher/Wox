@@ -5,35 +5,16 @@ import (
 	"errors"
 	"fmt"
 
-	"wox/common"
 	"wox/network"
-	"wox/plugin"
-	dictationplugin "wox/plugin/system/dictation"
 	"wox/ui/contract"
 	"wox/util"
 	"wox/util/ocr"
 )
 
-const dictationPluginID = common.DictationPluginID
-
 // ManagedModelStatuses returns live download state for one model family.
 func (s *CoreServices) ManagedModelStatuses(ctx context.Context, sessionID string, kind contract.ManagedModelKind) ([]contract.ManagedModelStatus, error) {
 	ctx = uiServiceContext(ctx, sessionID)
 	switch kind {
-	case contract.ManagedModelDictation:
-		dictation, err := getDictationPlugin()
-		if err != nil {
-			return nil, err
-		}
-		statuses := dictation.GetModelStatuses(ctx)
-		result := make([]contract.ManagedModelStatus, len(statuses))
-		for index, status := range statuses {
-			result[index] = contract.ManagedModelStatus{
-				ID: status.ID, DisplayName: status.DisplayName, Description: status.Description, Languages: status.Languages,
-				Recommended: status.Recommended, Status: status.Status, DownloadProgress: status.DownloadProgress, SizeMB: status.SizeMB, Error: status.Error,
-			}
-		}
-		return result, nil
 	case contract.ManagedModelOCR:
 		status, err := ocr.GetPaddleModelStatus()
 		if err != nil {
@@ -52,13 +33,6 @@ func (s *CoreServices) ManagedModelStatuses(ctx context.Context, sessionID strin
 func (s *CoreServices) ManagedModelEngineStatus(ctx context.Context, sessionID string, kind contract.ManagedModelKind) (contract.ManagedModelEngineStatus, error) {
 	ctx = uiServiceContext(ctx, sessionID)
 	switch kind {
-	case contract.ManagedModelDictation:
-		dictation, err := getDictationPlugin()
-		if err != nil {
-			return contract.ManagedModelEngineStatus{}, err
-		}
-		status := dictation.GetNativeLibStatus(ctx)
-		return contract.ManagedModelEngineStatus{State: status.State, Progress: status.Progress, Error: status.Error, Ready: status.Ready}, nil
 	case contract.ManagedModelOCR:
 		status, err := ocr.GetPaddleEngineStatus()
 		if err != nil {
@@ -70,34 +44,13 @@ func (s *CoreServices) ManagedModelEngineStatus(ctx context.Context, sessionID s
 	}
 }
 
-// OperateManagedModel starts one asynchronous download or deletes a local dictation model.
+// OperateManagedModel starts one asynchronous download or operates on a managed model.
 func (s *CoreServices) OperateManagedModel(ctx context.Context, sessionID string, kind contract.ManagedModelKind, operation contract.ManagedModelOperation, modelID string) error {
 	if network.IsOffline() && (operation == contract.ManagedModelOperationDownload || operation == contract.ManagedModelOperationDownloadEngine) {
 		return network.ErrOffline
 	}
 	ctx = uiServiceContext(ctx, sessionID)
 	switch kind {
-	case contract.ManagedModelDictation:
-		dictation, err := getDictationPlugin()
-		if err != nil {
-			return err
-		}
-		switch operation {
-		case contract.ManagedModelOperationDownload:
-			if modelID == "" {
-				return errors.New("modelId is required")
-			}
-			return dictation.StartModelDownload(ctx, modelID)
-		case contract.ManagedModelOperationDelete:
-			if modelID == "" {
-				return errors.New("modelId is required")
-			}
-			return dictation.DeleteModel(ctx, modelID)
-		case contract.ManagedModelOperationDownloadEngine:
-			return dictation.StartNativeLibDownload(ctx)
-		default:
-			return fmt.Errorf("unsupported managed model operation %q", operation)
-		}
 	case contract.ManagedModelOCR:
 		switch operation {
 		case contract.ManagedModelOperationDownload:
@@ -125,16 +78,4 @@ func (s *CoreServices) OperateManagedModel(ctx context.Context, sessionID string
 	default:
 		return fmt.Errorf("unsupported managed model kind %q", kind)
 	}
-}
-
-func getDictationPlugin() (*dictationplugin.DictationPlugin, error) {
-	systemPlugin := plugin.GetPluginManager().GetSystemPlugin(dictationPluginID)
-	if systemPlugin == nil {
-		return nil, errors.New("dictation plugin not found")
-	}
-	dictation, ok := systemPlugin.(*dictationplugin.DictationPlugin)
-	if !ok {
-		return nil, errors.New("dictation plugin type assertion failed")
-	}
-	return dictation, nil
 }

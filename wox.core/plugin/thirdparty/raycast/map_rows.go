@@ -45,9 +45,6 @@ type woxSnapshot struct {
 	UIDensityKnown            bool
 	MCPServers                []common.AIChatMCPServerConfig
 	AppDirectories            []string
-	DictationSound            bool
-	DictationSoundKnown       bool
-	DictationPhrases          []string
 	EmojiAction               string
 	EmojiActionKnown          bool
 	EmojiUsed                 []string
@@ -58,8 +55,6 @@ type woxSnapshot struct {
 	ScreenshotDaysKnown       bool
 	IgnoredClipboardApps      []ignoredClipboardApp
 	Skills                    []common.Skill
-	DictationDuck             bool
-	DictationDuckKnown        bool
 	ResultAliases             []setting.ResultBinding
 	ClipboardTrigger          string
 	EmojiTrigger              string

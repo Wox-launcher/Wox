@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 )
 
 var ErrStaleBuild = errors.New("column state changed during build")
@@ -28,34 +29,43 @@ type manifest struct {
 // Store serializes durable mutations and lends read leases across base/delta traversal.
 // Its directory belongs to exactly one live engine instance.
 type Store struct {
-	mu                       sync.RWMutex
-	dir                      string
-	manifest                 manifest
-	base                     *Snapshot
-	delta                    map[uint64]Change
-	cursor                   string
-	log                      *os.File
-	revision                 uint64
-	closed                   bool
-	writeErr                 error
-	unsynced                 bool // log holds ApplyUnsynced frames not yet fsynced
-	query                    *QueryOverlay
-	queryMu                  sync.Mutex // serializes lazy preparation within concurrent read leases
-	prepareSnapshot          func(*Snapshot) error
-	countsMu                 sync.Mutex
-	countsValid              bool
-	countsRevision           uint64
-	countFiles, countEntries int64
+	mu              sync.RWMutex
+	dir             string
+	manifest        manifest
+	base            *Snapshot
+	delta           map[uint64]Change
+	cursor          string
+	log             *os.File
+	revision        uint64
+	closed          bool
+	writeErr        error
+	unsynced        bool // log holds ApplyUnsynced frames not yet fsynced
+	query           *QueryOverlay
+	queryMu         sync.Mutex // serializes lazy preparation within concurrent read leases
+	prepareSnapshot func(*Snapshot) error
+	countsMu        sync.Mutex
+	countsValid     bool
+	countsRevision  uint64
+	countRevision   uint64 // changes only when visible counts may change; protected by mu
+	// Exact counts apply only to countsRevision; estimates are updated between reconciliations.
+	exactFiles, exactEntries int64
+	estimateValid            bool
+	estimateDirty            bool
+	estimateAt               time.Time
+	// Directory subtree changes can leave estimates approximate until reconciliation.
+	estimateFiles   int64
+	estimateEntries int64
 }
 
-// Counts caches a coherent revision's visible counts without constructing paths.
-// Repeated Settings/status reads are constant time until the source changes.
+const countReconcileInterval = 5 * time.Minute
+
+// Counts caches visible counts until membership or ancestry changes.
 func (s *Store) Counts(ctx context.Context) (files, entries int64, err error) {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	err = s.Read(func(view View) error {
-		if s.countsValid && s.countsRevision == view.Revision {
-			files, entries = s.countFiles, s.countEntries
+		if s.countsValid && s.countsRevision == s.countRevision {
+			files, entries = s.exactFiles, s.exactEntries
 			return nil
 		}
 		var err error
@@ -63,8 +73,33 @@ func (s *Store) Counts(ctx context.Context) (files, entries int64, err error) {
 		if err != nil {
 			return err
 		}
-		s.countsRevision, s.countFiles, s.countEntries = view.Revision, files, entries
+		s.countsRevision, s.exactFiles, s.exactEntries = s.countRevision, files, entries
 		s.countsValid = true
+		s.estimateFiles, s.estimateEntries = files, entries
+		s.estimateAt, s.estimateValid, s.estimateDirty = time.Now(), true, false
+		return nil
+	})
+	return
+}
+
+// EstimatedCounts updates cheaply with changes and reconciles on a later read, without an idle timer.
+func (s *Store) EstimatedCounts(ctx context.Context) (files, entries int64, err error) {
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
+	err = s.Read(func(view View) error {
+		if s.estimateValid && (!s.estimateDirty || time.Since(s.estimateAt) < countReconcileInterval) {
+			files, entries = s.estimateFiles, s.estimateEntries
+			return nil
+		}
+		var err error
+		files, entries, err = countVisibleEntries(ctx, view)
+		if err != nil {
+			return err
+		}
+		s.countsRevision, s.exactFiles, s.exactEntries = s.countRevision, files, entries
+		s.countsValid = true
+		s.estimateFiles, s.estimateEntries = files, entries
+		s.estimateAt, s.estimateValid, s.estimateDirty = time.Now(), true, false
 		return nil
 	})
 	return
@@ -362,6 +397,8 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	if closeErr != nil {
 		return closeErr
 	}
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -386,6 +423,8 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	s.query = nil
 	s.unsynced = false
 	s.revision++
+	s.countRevision++
+	s.estimateValid = false
 	// A directory fsync can fail after rename succeeded. Keep the published files
 	// and in-memory generation aligned instead of deleting the now-referenced data.
 	s.writeErr = publishErr
@@ -424,6 +463,9 @@ func (s *Store) apply(changes []Change, cursor string, sync bool) error {
 
 // applyJournal appends one frame and then exposes it in the overlay.
 func (s *Store) applyJournal(changes []Change, cursor string, sync bool) error {
+	// Counts takes these locks in the same order while traversing a read lease.
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -508,6 +550,7 @@ func (s *Store) validateChanges(changes []Change) error {
 }
 
 func (s *Store) applyMemory(changes []Change, cursor string) {
+	countsChanged := false
 	for _, change := range changes {
 		if old, ok := s.delta[change.ID]; ok {
 			if change.Version != 0 && old.Version > change.Version || old == change {
@@ -515,6 +558,28 @@ func (s *Store) applyMemory(changes []Change, cursor string) {
 			}
 		} else if row, ok := s.base.Row(change.ID); ok && len(s.base.Versions) != 0 && change.Version != 0 && s.base.Versions[row] > change.Version {
 			continue
+		}
+		// Version, name and metadata changes do not affect reachability or counts.
+		view := View{Base: s.base, Delta: s.delta}
+		old, exists := view.Lookup(change.ID)
+		if exists != !change.Deleted || (exists && !change.Deleted && (old.ParentID != change.ParentID || (old.Flags^change.Flags)&(Directory|Structural) != 0)) {
+			countsChanged = true
+			if s.estimateValid {
+				// A moved or removed directory can hide descendants; reconciliation repairs that drift.
+				if exists && visibleCountRecord(view, old) {
+					s.estimateEntries--
+					if old.Flags&Directory == 0 {
+						s.estimateFiles--
+					}
+				}
+				if !change.Deleted && visibleCountRecord(view, change.Record) {
+					s.estimateEntries++
+					if change.Flags&Directory == 0 {
+						s.estimateFiles++
+					}
+				}
+				s.estimateDirty = true
+			}
 		}
 		change.Name = strings.Clone(change.Name)
 		s.delta[change.ID] = change
@@ -524,6 +589,23 @@ func (s *Store) applyMemory(changes []Change, cursor string) {
 	}
 	s.cursor = cursor
 	s.revision++
+	if countsChanged {
+		s.countRevision++
+		s.estimateFiles = max(0, s.estimateFiles)
+		s.estimateEntries = max(0, s.estimateEntries)
+	}
+}
+
+// visibleCountRecord checks a record's parent without materializing its path.
+func visibleCountRecord(view View, record Record) bool {
+	if record.Flags&Structural != 0 {
+		return false
+	}
+	if record.ParentID == view.Base.IDs[0] {
+		return true
+	}
+	parent, ok := view.Lookup(record.ParentID)
+	return ok && parent.Flags&Directory != 0 && view.Reachable(record.ParentID)
 }
 
 // Lookup overlays mutations by stable entry identity, including directory renames.

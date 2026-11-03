@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"mime"
 	"os"
@@ -101,8 +102,12 @@ type formTableAppPickerSnapshot struct {
 }
 
 type formTableChoicePickerState struct {
-	fieldIndex int
-	anchor     woxui.Rect
+	fieldIndex   int
+	anchor       woxui.Rect
+	options      []formOption
+	currentValue string
+	filterable   bool
+	aiProvider   bool
 }
 
 type formTableChoicePickerSnapshot struct {
@@ -274,6 +279,11 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 			fieldIndex: state.choicePicker.fieldIndex, anchor: state.choicePicker.anchor, title: definition.Value.Label,
 			currentValue: state.rowForm.values[definition.Value.Key], options: append([]formOption(nil), definition.Value.Options...),
 			filterable: definition.Value.Filterable,
+		}
+		if state.choicePicker.options != nil {
+			choicePicker.options = append([]formOption(nil), state.choicePicker.options...)
+			choicePicker.currentValue = state.choicePicker.currentValue
+			choicePicker.filterable = state.choicePicker.filterable
 		}
 	}
 	var queryVariable *formTableQueryVariablePickerSnapshot
@@ -501,6 +511,8 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 	case "selectAIModel":
 		return formDefinition{Type: "selectAIModel", Value: value}, true
 	case "hotkey":
+		value.HotkeyScope = column.HotkeyScope
+		value.AllowedHotkeyKinds = append([]string(nil), column.AllowedHotkeyKinds...)
 		return formDefinition{Type: "hotkey", Value: value}, true
 	case "woxImage":
 		value.MaxLines = 1
@@ -703,6 +715,19 @@ func (c *formTableController) beginFormTableRowEdit(index int, rowEditorOnly, cl
 	}
 	if cloneRow {
 		index = -1
+	}
+	// Stable IDs are generated only in an explicit row edit, never while reading saved settings.
+	for _, column := range state.definition.Value.Columns {
+		if column.Type == "hotkey" && column.HotkeyScope == "global" {
+			key := state.definition.Value.HotkeyIdentityField
+			if key == "" {
+				key = "id"
+			}
+			if id, _ := base[key].(string); id == "" || cloneRow {
+				base[key] = uuid.NewString()
+			}
+			break
+		}
 	}
 	fields, _ := formTableRowFields(state.definition, base)
 	state.collapsedGroups = defaultFormTableCollapsedGroups(state.definition)
@@ -2169,7 +2194,7 @@ func (c *formTableController) onFormTableKey(event woxui.KeyEvent) bool {
 		c.saveFormTableRowEdit()
 		return true
 	}
-	if fieldType == "hotkey" || fieldType == "dictationHotkey" {
+	if fieldType == "hotkey" {
 		return false
 	}
 	if textEditable {

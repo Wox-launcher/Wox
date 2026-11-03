@@ -2,6 +2,7 @@ package preview
 
 import (
 	woxcomponent "wox/ui/launcher/component"
+	"wox/ui/previewcontent"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -25,26 +26,11 @@ type WebViewPreviewProps struct {
 
 // WebViewPreview paints the portable backdrop and reports native content bounds.
 func WebViewPreview(props WebViewPreviewProps) woxwidget.Widget {
-	return woxwidget.Focusable{
-		Key: WebViewPreviewFocusKey, SkipTraversal: true,
-		OnKey: func(event woxui.KeyEvent) bool {
-			if !event.Down || event.Repeat || event.Composing || event.Modifiers != 0 || event.Key != woxui.KeyEscape {
-				return false
-			}
-			if props.OnEscape == nil {
-				return false
-			}
-			props.OnEscape()
-			return true
-		},
-		Child: woxwidget.Gesture{ID: "webview-preview-input", OnPointer: props.OnPointer, Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			displayList.FillRoundedRect(bounds, props.CornerRadius, props.Theme.QueryBackground)
-			displayList.DeferEmbeddedSurfaceOverlay(bounds)
-			if props.OnBounds != nil && bounds.Width > 0 && bounds.Height > 0 {
-				props.OnBounds(bounds)
-			}
-		}}},
-	}
+	return previewcontent.WebViewSurface(previewcontent.WebViewSurfaceProps{
+		Key: WebViewPreviewFocusKey, Width: props.Width, Height: props.Height,
+		CornerRadius: props.CornerRadius, Background: props.Theme.QueryBackground,
+		OnBounds: props.OnBounds, OnPointer: props.OnPointer, OnEscape: props.OnEscape,
+	})
 }
 
 // WebViewPreviewMessage builds a portable WebView error or unavailable-state surface.

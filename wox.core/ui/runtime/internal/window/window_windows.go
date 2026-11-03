@@ -2747,3 +2747,17 @@ func (w *platformWindow) setRunError(err error) {
 
 // Windows reads the preference when creating D3D devices.
 func platformConfigureSoftwareRendering(bool) {}
+
+// showInactive suppresses activation only during the UI-thread show operation.
+func (w *platformWindow) showInactive() (epoch FocusEpoch, err error) {
+	dispatchErr := platformCall(func() {
+		previous := w.options.Nonactivating
+		w.options.Nonactivating = true
+		defer func() { w.options.Nonactivating = previous }()
+		epoch, err = w.showNative()
+	})
+	if dispatchErr != nil {
+		return 0, dispatchErr
+	}
+	return
+}

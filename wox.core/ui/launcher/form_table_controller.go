@@ -45,9 +45,10 @@ type formTableController struct {
 	pluginSettings func() *pluginSettingsController
 	hotkeySettings func() *hotkeySettingsController
 
-	imageForTint    func(woxImage, *woxui.Color, int) *woxui.Image
-	imageForSurface func(woxImage, int, woxui.Color) *woxui.Image
-	usePinYin       func() bool
+	imageForTint      func(woxImage, *woxui.Color, int) *woxui.Image
+	imageForSurface   func(woxImage, int, woxui.Color) *woxui.Image
+	buildAIModelField func(formFieldsSnapshot, formFieldCallbacks, woxcomponent.ControlTheme, int, formDefinition, float32, float32) woxwidget.Widget
+	usePinYin         func() bool
 
 	targetCurrent      func(*formFieldsState) bool
 	targetUsesSettings func(*formFieldsState) bool
@@ -108,6 +109,7 @@ func (a *App) bindFormTables() {
 	c.hotkeySettings = func() *hotkeySettingsController { return a.hotkeySettings }
 
 	c.imageForTint = a.imageForTint
+	c.buildAIModelField = a.buildFormAIModelField
 	c.imageForSurface = a.imageForSurface
 	c.usePinYin = a.usePinYin
 

@@ -439,11 +439,16 @@ func TestFormTableHotkeySemantics(t *testing.T) {
 }
 
 func TestFormTableHotkeyStatusUsesRemainingControlWidth(t *testing.T) {
+	theme := woxcomponent.ControlTheme{Warning: woxui.Color{R: 253, G: 186, B: 116, A: 255}}
 	control := formTableRowControl(FormTableRowFieldProps{
-		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: woxcomponent.ControlTheme{},
+		ID: "hotkey", Kind: "hotkey", Recording: true, RecordingStatus: "Press a key", Theme: theme,
 	}, 400, 40).(woxwidget.Flex)
 	if _, ok := control.Children[1].(woxwidget.Expanded); !ok {
 		t.Fatalf("hotkey recording status slot = %T, want Expanded", control.Children[1])
+	}
+	status := control.Children[1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	if status.Color != theme.Warning || status.Style.Weight != woxui.FontWeightSemibold {
+		t.Fatalf("recording status = %#v, want emphasized warm text", status)
 	}
 }
 

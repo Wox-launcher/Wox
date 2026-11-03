@@ -8,7 +8,7 @@ import (
 	"time"
 	"wox/common"
 	"wox/plugin"
-	"wox/setting/definition"
+	"wox/plugin/plugintest"
 	"wox/util/overlay/textoverlay"
 	"wox/util/selection"
 
@@ -16,6 +16,8 @@ import (
 )
 
 type aiCommandTestAPI struct {
+	plugintest.StubAPI
+
 	settings map[string]string
 
 	mu           sync.Mutex
@@ -39,37 +41,15 @@ func newAICommandTestAPI(t *testing.T, commands []map[string]any) *aiCommandTest
 	}
 }
 
-func (a *aiCommandTestAPI) streamCallCount() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.streamCalls
-}
-
-func (a *aiCommandTestAPI) waitForNotification(t *testing.T) string {
-	t.Helper()
-
-	select {
-	case notification := <-a.notifyCh:
-		return notification
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for notification")
-		return ""
-	}
-}
-
-func (a *aiCommandTestAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {}
-func (a *aiCommandTestAPI) HideApp(ctx context.Context)                              {}
-func (a *aiCommandTestAPI) ShowApp(ctx context.Context)                              {}
 func (a *aiCommandTestAPI) Notify(ctx context.Context, description string) {
 	select {
 	case a.notifyCh <- description:
 	default:
 	}
 }
-func (a *aiCommandTestAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {}
-func (a *aiCommandTestAPI) Log(ctx context.Context, level plugin.LogLevel, msg string)             {}
-func (a *aiCommandTestAPI) GetTranslation(ctx context.Context, key string) string                  { return key }
-func (a *aiCommandTestAPI) GetSetting(ctx context.Context, key string) string                      { return a.settings[key] }
+
+func (a *aiCommandTestAPI) GetTranslation(ctx context.Context, key string) string { return key }
+func (a *aiCommandTestAPI) GetSetting(ctx context.Context, key string) string     { return a.settings[key] }
 func (a *aiCommandTestAPI) SaveSetting(ctx context.Context, key string, value string, isPlatformSpecific bool) {
 	a.settings[key] = value
 }
@@ -77,39 +57,7 @@ func (a *aiCommandTestAPI) SetSetting(ctx context.Context, option plugin.SetSett
 	a.settings[option.Key] = option.Value
 	return plugin.SetSettingResult{Success: true}
 }
-func (a *aiCommandTestAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
-}
-func (a *aiCommandTestAPI) OnGetDynamicSetting(ctx context.Context, callback func(ctx context.Context, key string) definition.PluginSettingDefinitionItem) {
-}
-func (a *aiCommandTestAPI) OnDeepLink(ctx context.Context, callback func(ctx context.Context, arguments map[string]string)) {
-}
-func (a *aiCommandTestAPI) OnUnload(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *aiCommandTestAPI) OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData plugin.MRUData) (*plugin.QueryResult, error)) {
-}
-func (a *aiCommandTestAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
-	return plugin.RegisterPluginToolResult{}
-}
-func (a *aiCommandTestAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
-	return plugin.UnregisterPluginToolResult{}
-}
-func (a *aiCommandTestAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
-	return plugin.ListPluginToolsResult{}
-}
-func (a *aiCommandTestAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
-	return plugin.InvokePluginToolResult{}
-}
-func (a *aiCommandTestAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) {}
-func (a *aiCommandTestAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)  {}
-func (a *aiCommandTestAPI) OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *aiCommandTestAPI) OnLeavePluginQuery(ctx context.Context, callback func(ctx context.Context)) {
-}
-func (a *aiCommandTestAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
-	return plugin.DragOutListenResult{}
-}
-func (a *aiCommandTestAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
-}
+
 func (a *aiCommandTestAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	if a.beforeStream != nil {
 		a.beforeStream()
@@ -155,26 +103,6 @@ func (a *aiCommandTestAPI) GetUpdatableResult(ctx context.Context, resultId stri
 }
 func (a *aiCommandTestAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
 	return true
-}
-func (a *aiCommandTestAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
-	return false
-}
-func (a *aiCommandTestAPI) IsVisible(ctx context.Context) bool { return false }
-func (a *aiCommandTestAPI) RefreshQuery(ctx context.Context, param plugin.RefreshQueryParam) {
-}
-func (a *aiCommandTestAPI) RefreshGlance(ctx context.Context, ids []string) {
-}
-func (a *aiCommandTestAPI) Copy(ctx context.Context, params plugin.CopyParams) {
-}
-func (a *aiCommandTestAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-func (a *aiCommandTestAPI) GetCacheFolder(ctx context.Context) string {
-	return ""
-}
-
-func (a *aiCommandTestAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
-	return plugin.GetThemeColorsResult{}
 }
 
 func aiCommandTestCommand(defaultAction string) map[string]any {
@@ -379,14 +307,25 @@ func TestAICommandSelectionUsesExplicitActionsAndSkipsPasteForVision(t *testing.
 	})
 }
 
-func (a *aiCommandTestAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
-	return plugin.RegisterTriggerKeywordResult{Success: true}
-}
-func (a *aiCommandTestAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
-	return plugin.UnregisterTriggerKeywordResult{Success: true}
-}
-
 func (api *aiCommandTestAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
 	api.Notify(ctx, option.Message)
 	return plugin.ShowToastMsgResult{Success: true}
+}
+
+func (a *aiCommandTestAPI) streamCallCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.streamCalls
+}
+
+func (a *aiCommandTestAPI) waitForNotification(t *testing.T) string {
+	t.Helper()
+
+	select {
+	case notification := <-a.notifyCh:
+		return notification
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for notification")
+		return ""
+	}
 }

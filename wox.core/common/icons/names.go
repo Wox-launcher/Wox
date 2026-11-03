@@ -35,7 +35,6 @@ const (
 	PluginFeedback      = "plugin.feedback"
 	PluginWindowManager = "plugin.window-manager"
 	PluginCloudSync     = "plugin.cloudsync"
-	PluginDictation     = "plugin.dictation"
 	PluginQuickJump     = "plugin.quickjump"
 	PluginFolder        = "plugin.folder"
 

@@ -23,6 +23,7 @@
 #include "native_windows.h"
 #include "renderer_windows.h"
 
+extern "C" void woxGoWindowsWebViewMessage(uintptr_t owner, const char *message);
 extern "C" int32_t woxGoWindowsWebViewEscape(uintptr_t owner);
 extern "C" void woxGoWindowsWebViewInitializationDiagnostic(uintptr_t owner, const char *stage, uint64_t elapsed_ms, int32_t result);
 extern "C" void woxGoWindowsWebViewEscapeDiagnostic(uintptr_t owner, const char *detail);
@@ -1345,7 +1346,7 @@ struct WoxWindowsWebView {
     return webview_method<SendMouseInput>(active->composition_controller, kCompositionControllerSendMouseInputMethod)(active->composition_controller, event_kind, virtual_keys, mouse_data, point);
   }
 
-  void web_message_received(IUnknown *args) {
+  void web_message_received(IUnknown *sender, IUnknown *args) {
     if (closing || args == nullptr) {
       return;
     }
@@ -1355,7 +1356,12 @@ struct WoxWindowsWebView {
     webview_debug("web message received 0x%08X value=%ls", static_cast<unsigned int>(result), message != nullptr ? message : L"");
     constexpr wchar_t escape_diagnostic_prefix[] = L"wox-escape-diagnostic:";
     constexpr size_t escape_diagnostic_prefix_length = (sizeof(escape_diagnostic_prefix) / sizeof(wchar_t)) - 1;
-    if (SUCCEEDED(result) && message != nullptr && wcsncmp(message, escape_diagnostic_prefix, escape_diagnostic_prefix_length) == 0) {
+    if (SUCCEEDED(result) && message != nullptr && wcsncmp(message, L"wox-message:", 12) == 0) {
+      if (active != nullptr && active->core == sender && active->visible) {
+        std::string payload = wide_to_utf8(message + 12);
+        woxGoWindowsWebViewMessage(reinterpret_cast<uintptr_t>(owner), payload.c_str());
+      }
+    } else if (SUCCEEDED(result) && message != nullptr && wcsncmp(message, escape_diagnostic_prefix, escape_diagnostic_prefix_length) == 0) {
       std::string detail = wide_to_utf8(message + escape_diagnostic_prefix_length);
       woxGoWindowsWebViewEscapeDiagnostic(reinterpret_cast<uintptr_t>(owner), detail.c_str());
     } else if (SUCCEEDED(result) && message != nullptr && wcscmp(message, L"wox-unhandled-escape") == 0) {
@@ -1745,8 +1751,8 @@ ULONG WoxWebMessageHandler::Release() {
   }
   return remaining;
 }
-HRESULT WoxWebMessageHandler::Invoke(IUnknown *, IUnknown *args) {
-  owner_->web_message_received(args);
+HRESULT WoxWebMessageHandler::Invoke(IUnknown *sender, IUnknown *args) {
+  owner_->web_message_received(sender, args);
   return S_OK;
 }
 

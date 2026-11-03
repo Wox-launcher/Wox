@@ -104,6 +104,26 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return formAction(ctx, request)
     case "toolbarMsgAction":
       return toolbarMsgAction(ctx, request)
+    case "hotkeyEvent": {
+      const callback = pluginInstances.get(request.PluginId)?.API?.hotkeyCallbacks.get(request.Params.CallbackID)
+      if (callback) {
+        try {
+          void Promise.resolve(callback(ctx, JSON.parse(request.Params.Event))).catch(error => logger.error(ctx, `hotkey callback failed: ${String(error)}`))
+        } catch (error) {
+          logger.error(ctx, `hotkey callback failed: ${String(error)}`)
+        }
+      }
+      return
+    }
+    case "windowEvent": {
+      const api = pluginInstances.get(request.PluginId)?.API
+      const window = api?.windowCallbacks.get(request.Params.CallbackID)
+      if (request.Params.Release === "true") {
+        window?.release()
+        api?.windowCallbacks.delete(request.Params.CallbackID)
+      } else if (window) await window.event(ctx, JSON.parse(request.Params.Event))
+      return
+    }
     case "toastMsgAction": {
       const api = pluginInstances.get(request.PluginId)?.API
       const callback = api?.toastCallbacks.get(request.Params.CallbackId)
@@ -181,6 +201,8 @@ async function unloadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
   await pluginInstance.API?.stopPluginTools()
   pluginInstance.ResultActions.close()
   pluginInstance.API?.toastCallbacks.clear()
+  pluginInstance.API?.releaseHotkeys()
+  pluginInstance.API?.releaseWindows()
   pluginInstance.API?.pluginToolCallbacks?.clear()
   pluginInstance.API?.pluginToolCallbackIds?.clear()
   evictCommonJSModule(pluginInstance.ModulePath)
@@ -272,6 +294,8 @@ async function onUnload(ctx: Context, request: PluginJsonRpcRequest) {
   const callbackId = request.Params.CallbackId
   await plugin.API.stopPluginTools()
   plugin.API.toastCallbacks.clear()
+  plugin.API.releaseHotkeys()
+  plugin.API.releaseWindows()
   await plugin.API.unloadCallbacks.get(callbackId)?.(ctx)
 }
 

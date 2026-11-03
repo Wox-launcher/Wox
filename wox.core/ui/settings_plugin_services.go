@@ -147,14 +147,14 @@ func (s *CoreServices) UpdatePluginSettings(ctx context.Context, sessionID strin
 				err = plugin.GetPluginManager().EnablePlugin(ctx, pluginID)
 			}
 			if err != nil {
-				return fmt.Errorf("update plugin setting %q: %w", key, err)
+				return &contract.PluginSettingUpdateError{Key: key, Err: err}
 			}
 		case "TriggerKeywords":
 			keywords := strings.Split(value, ",")
 			woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 			if woxSetting != nil && woxSetting.ResultBindings != nil {
 				if err := plugin.ValidateTriggerKeywordsAgainstAliases(keywords, woxSetting.ResultBindings.Get()); err != nil {
-					return err
+					return &contract.PluginSettingUpdateError{Key: key, Err: err}
 				}
 			}
 			instance.Setting.TriggerKeywords.Set(keywords)
@@ -165,7 +165,7 @@ func (s *CoreServices) UpdatePluginSettings(ctx context.Context, sessionID strin
 			}); ok {
 				handled, err := handler.HandleSettingUpdate(ctx, key, value)
 				if err != nil {
-					return err
+					return &contract.PluginSettingUpdateError{Key: key, Err: err}
 				}
 				if handled {
 					continue
@@ -178,7 +178,10 @@ func (s *CoreServices) UpdatePluginSettings(ctx context.Context, sessionID strin
 					break
 				}
 			}
-			instance.API.SaveSetting(ctx, key, value, isPlatformSpecific)
+			result := instance.API.SetSetting(ctx, plugin.SetSettingOption{Key: key, Value: value, PlatformSpecific: isPlatformSpecific})
+			if !result.Success {
+				return &contract.PluginSettingUpdateError{Key: key, Err: fmt.Errorf("%s", result.ErrMsg)}
+			}
 		}
 	}
 	return nil

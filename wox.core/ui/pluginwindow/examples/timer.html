@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; font: 16px system-ui; }
+  body { margin: 0; display: grid; place-items: center; height: 100vh; }
+  main { display: flex; align-items: center; gap: 24px; }
+  output { font-size: 36px; font-variant-numeric: tabular-nums; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; }
+</style>
+<main><output id="remaining">01:00</output><button id="cancel">Cancel</button></main>
+<script>
+  let deadline = Date.now() + 60000
+  let finished = false
+  woxWindow.onMessage(state => {
+    if (typeof state.remaining === "number") {
+      deadline = Date.now() + state.remaining * 1000
+      finished = false
+    }
+  })
+  document.querySelector("#cancel").onclick = () => woxWindow.postMessage({ action: "cancel" })
+  setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+    document.querySelector("#remaining").textContent =
+      String(Math.floor(remaining / 60)).padStart(2, "0") + ":" + String(remaining % 60).padStart(2, "0")
+    if (remaining === 0 && !finished) {
+      finished = true
+      woxWindow.postMessage({ action: "finished" })
+    }
+  }, 100)
+</script>
+</html>

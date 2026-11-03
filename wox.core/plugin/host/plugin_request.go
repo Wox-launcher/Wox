@@ -99,6 +99,14 @@ func (w *WebsocketHost) sendPluginResponse(ctx context.Context, request JsonRpcR
 type pluginRequestHandler func(*WebsocketHost, context.Context, *plugin.Instance, JsonRpcRequest) (any, error)
 
 var pluginRequestHandlers = map[string]pluginRequestHandler{
+	"CreateWindow":      (*WebsocketHost).handleCreateWindow,
+	"WindowShow":        (*WebsocketHost).handleWindowOperation,
+	"WindowHide":        (*WebsocketHost).handleWindowOperation,
+	"WindowClose":       (*WebsocketHost).handleWindowOperation,
+	"WindowSetOptions":  (*WebsocketHost).handleWindowOperation,
+	"WindowContentSet":  (*WebsocketHost).handleWindowOperation,
+	"WindowPostMessage": (*WebsocketHost).handleWindowOperation,
+
 	"HideApp":                  (*WebsocketHost).handleHideApp,
 	"ShowApp":                  (*WebsocketHost).handleShowApp,
 	"IsVisible":                (*WebsocketHost).handleIsVisible,
@@ -118,6 +126,7 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"GetSetting":               (*WebsocketHost).handleGetSetting,
 	"SaveSetting":              (*WebsocketHost).handleSaveSetting,
 	"SetSetting":               (*WebsocketHost).handleSetSetting,
+	"OnHotkey":                 (*WebsocketHost).handleOnHotkey,
 	"OnPluginSettingChanged":   (*WebsocketHost).handleOnPluginSettingChanged,
 	"OnGetDynamicSetting":      (*WebsocketHost).handleOnGetDynamicSetting,
 	"OnDeepLink":               (*WebsocketHost).handleOnDeepLink,

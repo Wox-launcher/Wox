@@ -144,7 +144,7 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		return a.buildFormTextbox(fields, callbacks, palette, index, definition, width, height)
 	case "checkbox":
 		return a.buildFormChoice(fields, callbacks, palette, index, definition, width, height, fields.values[value.Key] == "true", "")
-	case "hotkey", "dictationHotkey":
+	case "hotkey":
 		return a.buildFormHotkey(fields, callbacks, palette, index, definition, width, height)
 	case "app":
 		return a.buildFormApp(fields, callbacks, palette, index, definition, width, height)
@@ -182,7 +182,7 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		return a.buildFormChoice(fields, callbacks, palette, index, definition, width, height, false, selectedLabel)
 	case "table":
 		return a.formTables.buildFormTableField(fields, callbacks, palette, index, definition, width, height)
-	case "dictationModel", "ocrModel":
+	case "ocrModel":
 		return a.buildFormModelField(fields, callbacks, palette, index, definition, width, height)
 	default:
 		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: fmt.Sprintf("Unsupported form field: %s", definition.Type), Kind: "unsupported", Theme: palette})
@@ -257,7 +257,7 @@ func (a *App) buildFormModelField(fields formFieldsSnapshot, callbacks formField
 		break
 	}
 	if strings.TrimSpace(selectedLabel) == "" {
-		selectedLabel = a.language.translate("i18n:plugin_dictation_model_select_hint")
+		selectedLabel = a.language.translate("i18n:ui_ai_model_selector_not_selected")
 	}
 	return launcherview.FormModelField(launcherview.FormModelFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.language.translate(definition.Value.Label), Description: a.language.translate(definition.Value.Tooltip), Value: selectedLabel,
@@ -317,7 +317,8 @@ func (a *App) buildFormHotkey(fields formFieldsSnapshot, callbacks formFieldCall
 	return launcherview.FormHotkeyField(launcherview.FormHotkeyFieldProps{
 		ID: fmt.Sprintf("%s-field-%d", callbacks.idPrefix, index), Label: a.language.translate(definition.Value.Label), Description: a.language.translate(definition.Value.Tooltip),
 		Value: value, Labels: formatHotkeyLabels(value), Placeholder: placeholder, Status: presentation.Status, StatusPlacement: placement, Recording: presentation.Active, Error: presentation.Error,
-		Hold: hold, HoldPrefix: a.language.translate("i18n:ui_hotkey_hold_prefix"),
+		FieldError: callbacks.fieldErrors[definition.Value.Key],
+		Hold:       hold, HoldPrefix: a.language.translate("i18n:ui_hotkey_hold_prefix"),
 		Width: width, Height: height, LabelWidth: callbacks.labelWidth, SettingsLayout: callbacks.settingsLayout, AlignRecorderRight: callbacks.alignHotkeyRight,
 		Window: a.formFieldNativeWindow(callbacks.idPrefix), Theme: palette,
 		OnOpenLink: callbacks.openLink,

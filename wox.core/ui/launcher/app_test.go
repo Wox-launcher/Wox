@@ -61,7 +61,7 @@ func TestLauncherQueryWindowLeavesOverlayBandOnLinuxAndMac(t *testing.T) {
 		t.Fatal("Windows query window must stay HWND_TOPMOST above other apps")
 	}
 	if launcherQueryWindowTopmost("linux") {
-		t.Fatal("Linux query window must stay on layer-shell TOP so timer overlays can cover it")
+		t.Fatal("Linux query window must stay on layer-shell TOP so topmost overlays can cover it")
 	}
 	if launcherQueryWindowTopmost("darwin") {
 		t.Fatal("macOS query window must stay at floating level so Topmost overlays can cover it")

@@ -104,6 +104,7 @@ func (s *CoreServices) CheckHotkeyAvailability(ctx context.Context, sessionID st
 	availability := GetUIManager().CheckHotkeyAvailability(uiServiceContext(ctx, sessionID), hotkey)
 	return contract.HotkeyAvailability{
 		Available: availability.Available, ConflictType: availability.ConflictType, ConflictValue: availability.ConflictValue,
+		PluginID: availability.PluginID, SettingKey: availability.SettingKey, ItemID: availability.ItemID, ColumnKey: availability.ColumnKey,
 	}, nil
 }
 

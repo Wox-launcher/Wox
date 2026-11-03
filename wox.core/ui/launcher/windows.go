@@ -372,7 +372,6 @@ func (a *App) onOnboardingWindowKey(event woxui.KeyEvent) bool {
 func (a *App) onLauncherWindowClosed() {
 	a.previews.releasePinnedPreviewImage()
 	wasVisible := a.visible
-	a.dictation.deactivateDictationAudio()
 	a.launcher = nil
 	a.host = nil
 	a.visible = false

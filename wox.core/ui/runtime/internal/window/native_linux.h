@@ -96,4 +96,6 @@ int32_t wox_linux_test_window_requests_background_blur(int32_t screenshot, int32
 float wox_linux_test_custom_chrome_corner_radius(int32_t custom, float requested);
 int32_t wox_linux_test_window_uses_per_pixel_alpha(int32_t application, int32_t nonactivating, int32_t screenshot, int32_t blur_available);
 
+uint64_t wox_linux_window_show_inactive(WoxLinuxWindow *window);
+
 #endif

@@ -387,7 +387,7 @@ func (i *ntfsNameIndex) Status(ctx context.Context) (StatusSnapshot, IndexStatsS
 	i.directory.mu.RLock()
 	defer i.directory.mu.RUnlock()
 	for _, shard := range i.directory.shards {
-		files, entries, err := shard.store.Counts(ctx)
+		files, entries, err := shard.store.EstimatedCounts(ctx)
 		if errors.Is(err, column.ErrNotReady) {
 			status.IsIndexing = true
 		}

@@ -1320,7 +1320,7 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		return formTableRowAppControl(props, width, height)
 	case "select", "selectAIModel":
 		return formTableRowSelectControl(props, width, height)
-	case "hotkey", "dictationHotkey":
+	case "hotkey":
 		recorder, recorderWidth := woxcomponent.WoxHotkeyRecorder(woxcomponent.HotkeyRecorderProps{
 			ID: props.ID, Labels: props.HotkeyLabels, Placeholder: props.Placeholder, Focused: props.Focused, Error: props.RecordingError, Hold: props.Hold, HoldPrefix: props.HoldPrefix,
 			Window: props.Window, Theme: props.Theme, OnFocusChange: props.OnFocusChange, OnKey: props.OnKey,
@@ -1341,14 +1341,11 @@ func formTableRowControl(props FormTableRowFieldProps, width, height float32) wo
 		if !props.Recording || props.RecordingStatus == "" || width-recorderWidth <= 8 {
 			return recorder
 		}
-		statusColor := props.Theme.TextSecondary
-		if props.RecordingError {
-			statusColor = props.Theme.Error
-		}
+		statusColor := hotkeyStatusColor(props.Theme, props.RecordingError)
 		return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: []woxwidget.Widget{
 			recorder,
 			woxwidget.Expanded{Child: woxwidget.Align{Height: height, Vertical: 0.5, Child: woxwidget.Text{
-				Value: props.RecordingStatus, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: statusColor,
+				Value: props.RecordingStatus, Style: woxui.TextStyle{Size: props.Theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: statusColor,
 			}}},
 		}}
 	case "label":

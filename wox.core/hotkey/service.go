@@ -19,9 +19,6 @@ type Callbacks struct {
 	OnQuery                      func(combineKey string, queryHotkey setting.QueryHotkey)
 	QueryCanTriggerBeforeRelease func(queryHotkey setting.QueryHotkey) bool
 	OnResult                     func(combineKey string, binding setting.ResultBinding)
-	OnDictationHoldPress         func(ctx context.Context, actionID string)
-	OnDictationHoldRelease       func(ctx context.Context, actionID string)
-	OnDictationPressAction       func(ctx context.Context, actionID string)
 }
 
 // WoxConfig is the hotkey subset of Wox settings used by the service.
@@ -30,12 +27,6 @@ type WoxConfig struct {
 	SelectionHotkey string
 	QueryHotkeys    []setting.QueryHotkey
 	ResultBindings  []setting.ResultBinding
-}
-
-// DictationBinding is the runtime hotkey binding for one dictation action.
-type DictationBinding struct {
-	ActionID string
-	Hotkey   string
 }
 
 // Service is the Wox business-layer registry for global hotkeys.
@@ -99,30 +90,6 @@ func (s *Service) UpdateWoxConfig(ctx context.Context, config WoxConfig, restore
 			s.collector.restore(previousEntries)
 		}
 		return err
-	}
-	return nil
-}
-
-// UpdateDictationBindings replaces dictation action bindings and optionally
-// re-registers the whole Wox hotkey set immediately.
-func (s *Service) UpdateDictationBindings(ctx context.Context, bindings []DictationBinding, registerNow bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	previousEntries := s.collector.snapshot()
-	if err := s.collectDictationBindings(ctx, bindings); err != nil {
-		s.collector.restore(previousEntries)
-		return err
-	}
-	if registerNow {
-		if err := validateHotkeyConflicts(s.collector.snapshot()); err != nil {
-			s.collector.restore(previousEntries)
-			return err
-		}
-		if err := s.registerAllLocked(ctx); err != nil {
-			s.collector.restore(previousEntries)
-			return err
-		}
 	}
 	return nil
 }
@@ -197,6 +164,7 @@ func buildHotkeySpecs(entries []Entry) ([]utilhotkey.Spec, error) {
 			CombineKey:              parsed.CombineKey,
 			Callback:                e.OnPress,
 			CanTriggerBeforeRelease: e.CanTriggerBeforeRelease,
+			OnHoldTransition:        e.OnHoldTransition,
 		}
 		if parsed.Trigger == utilhotkey.TriggerHold {
 			if !utilhotkey.IsModifierChordHotkeyString(parsed.CombineKey) {
@@ -258,12 +226,20 @@ func registeredHotkeyState(specs []utilhotkey.Spec, entries []Entry, registeredC
 
 	registeredSpecs := make([]utilhotkey.Spec, 0, len(registeredCombineKeys))
 	registeredEntries := make([]Entry, 0, len(registeredCombineKeys))
-	for index, entry := range entries {
-		if remaining[entry.CombineKey] == 0 {
+	specIndex := 0
+	for _, entry := range entries {
+		binding, err := utilhotkey.ParseBinding(entry.CombineKey)
+		if err != nil || binding.CombineKey == "" {
 			continue
 		}
-		remaining[entry.CombineKey]--
-		registeredSpecs = append(registeredSpecs, specs[index])
+		spec := specs[specIndex]
+		specIndex++
+		// Registered keys omit the persisted hold: prefix, as do the native specs.
+		if remaining[spec.CombineKey] == 0 {
+			continue
+		}
+		remaining[spec.CombineKey]--
+		registeredSpecs = append(registeredSpecs, spec)
 		registeredEntries = append(registeredEntries, entry)
 	}
 	return registeredSpecs, registeredEntries
@@ -333,46 +309,6 @@ func (s *Service) collectWoxConfig(ctx context.Context, config WoxConfig) {
 	s.collectResultBindings(config.ResultBindings)
 }
 
-func (s *Service) collectDictationBindings(ctx context.Context, bindings []DictationBinding) error {
-	entries := make([]Entry, 0, len(bindings))
-	for _, binding := range bindings {
-		actionID := strings.TrimSpace(binding.ActionID)
-		hotkeyStr := strings.TrimSpace(binding.Hotkey)
-		if actionID == "" || hotkeyStr == "" {
-			continue
-		}
-		parsed, parseErr := utilhotkey.ParseBinding(hotkeyStr)
-		if parseErr != nil {
-			return fmt.Errorf("invalid dictation hotkey: action=%s key=%s: %w", actionID, hotkeyStr, parseErr)
-		}
-		if parsed.CombineKey == "" {
-			continue
-		}
-
-		entry := Entry{
-			ID:         actionID,
-			CombineKey: hotkeyStr,
-			OnPress: func() {
-				cbCtx := util.NewTraceContext()
-				if parsed.Trigger == utilhotkey.TriggerHold {
-					s.callbacks.OnDictationHoldPress(cbCtx, actionID)
-				} else {
-					s.callbacks.OnDictationPressAction(cbCtx, actionID)
-				}
-			},
-		}
-		if parsed.Trigger == utilhotkey.TriggerHold {
-			entry.OnRelease = func() {
-				cbCtx := util.NewTraceContext()
-				s.callbacks.OnDictationHoldRelease(cbCtx, actionID)
-			}
-		}
-		entries = append(entries, entry)
-	}
-	s.collector.replaceSource(SourceDictation, entries)
-	return nil
-}
-
 func cloneQueryHotkeys(queryHotkeys []setting.QueryHotkey) []setting.QueryHotkey {
 	if len(queryHotkeys) == 0 {
 		return nil
@@ -388,7 +324,7 @@ func resultBindingsFromSetting(woxSetting *setting.WoxSetting) []setting.ResultB
 	return setting.CloneResultBindings(woxSetting.ResultBindings.Get())
 }
 
-// validateHotkeyConflicts checks all owners, including dictation, before
+// validateHotkeyConflicts checks all owners before
 // native registration can silently skip or overwrite a duplicate chord.
 func validateHotkeyConflicts(entries []Entry) error {
 	seen := make(map[string]Entry, len(entries))
@@ -404,7 +340,7 @@ func validateHotkeyConflicts(entries []Entry) error {
 			continue
 		}
 		if previous, found := seen[key]; found {
-			if entry.Source == SourceResult || previous.Source == SourceResult {
+			if entry.Source == SourceResult || previous.Source == SourceResult || entry.Source == SourcePlugin || previous.Source == SourcePlugin {
 				return fmt.Errorf("i18n:plugin_manager_result_hotkey_conflict")
 			}
 			if entry.Source == SourceMain || previous.Source == SourceMain {
@@ -498,7 +434,7 @@ func (s *Service) collectResultBindings(bindings []setting.ResultBinding) {
 }
 
 // usableResultHotkeys isolates invalid or conflicting synced bindings so they
-// cannot disable main, selection, query, or dictation hotkeys on this device.
+// cannot disable main, selection, query, or plugin hotkeys on this device.
 func usableResultHotkeys(ctx context.Context, entries []Entry) []Entry {
 	used := make(map[string]bool, len(entries))
 	for _, entry := range entries {

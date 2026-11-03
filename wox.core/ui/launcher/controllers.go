@@ -15,7 +15,6 @@ func (app *App) bindControllers() {
 	app.bindNativeFilePreview()
 	app.bindWebViewPreview()
 	app.bindTerminal()
-	app.bindDictationPreview()
 	app.bindActions()
 	app.bindQuery()
 	app.bindChat()
@@ -64,7 +63,6 @@ func (a *App) disposeControllers() {
 	a.settingsWindow.clearFlashLocked()
 	a.notes.dispose()
 	a.tooltips.disposeOnUI()
-	a.dictation.dispose()
 	a.chat.cancelChatAttachmentImports()
 	a.toolbar.toolbarRevision++
 	a.previews.releasePinnedPreviewImage()

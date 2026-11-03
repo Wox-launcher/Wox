@@ -36,7 +36,6 @@ Common built-in keywords:
 | `cb` | Clipboard history |
 | `note` | Notes |
 | `screenshot` | Screenshot |
-| `timer` | Timer |
 | `jump` | Quick Jump |
 | `emoji` | Emoji search |
 | `chat` | AI chat |

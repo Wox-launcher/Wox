@@ -184,3 +184,5 @@ func (w *platformWindow) close() error {
 
 // Unsupported platforms have no native renderer to configure.
 func platformConfigureSoftwareRendering(bool) {}
+
+func (w *platformWindow) showInactive() (FocusEpoch, error) { return 0, ErrPlatformUnsupported }

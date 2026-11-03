@@ -31,6 +31,7 @@ function loadSource(name) {
 mocks["./resultActions"] = loadSource("resultActions.ts")
 const { ResultActions } = mocks["./resultActions"]
 mocks["./jsonrpc"] = { pluginInstances: new Map() }
+mocks["./pluginWindow"] = loadSource("pluginWindow.ts")
 const { PluginAPI } = loadSource("pluginAPI.ts")
 mocks["./pluginAPI"] = { PluginAPI }
 const rpc = loadSource("jsonrpc.ts")

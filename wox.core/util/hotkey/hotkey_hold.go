@@ -35,13 +35,14 @@ type holdCallback struct {
 // the full hold duration. Pressing another key (e.g. space while holding cmd
 // for cmd+space) cancels the action.
 type holdModifierCallback struct {
-	onPress    func()
-	onRelease  func()
-	keys       []keyboard.Key
-	combo      string
-	pressTimer *time.Timer
-	pressFired bool
-	pressSeq   int64
+	onTransition func(HoldTransition)
+	onPress      func()
+	onRelease    func()
+	keys         []keyboard.Key
+	combo        string
+	pressTimer   *time.Timer
+	pressFired   bool
+	pressSeq     int64
 	// Keep Win masking until Win releases, even if another chord key releases first.
 	winMatched bool
 }
@@ -199,6 +200,9 @@ func armHoldModifierPress(mcb *holdModifierCallback) {
 		}
 		mcb.pressTimer = nil
 		mcb.pressFired = true
+		if mcb.onTransition != nil {
+			mcb.onTransition(HoldTransition{Started: true})
+		}
 		combo := mcb.combo
 		onPress := mcb.onPress
 		holdTrackerMu.Unlock()
@@ -223,7 +227,7 @@ func cancelHoldModifierPressesForExternalKey(key keyboard.Key) []holdModifierRel
 		if key != keyboard.KeyUnknown && containsRelatedHoldModifierKey(mcb.keys, key) {
 			return true
 		}
-		releases = append(releases, resetHoldModifierCallback(mcb)...)
+		releases = append(releases, resetHoldModifierCallbackWithReason(mcb, HoldEndInterrupted)...)
 		return true
 	})
 
@@ -256,6 +260,11 @@ func releaseHoldModifierPressesForKey(key keyboard.Key) []holdModifierRelease {
 // resetHoldModifierCallback stops a pending hold or prepares a release callback
 // for an already-fired hold. The caller must hold holdTrackerMu.
 func resetHoldModifierCallback(mcb *holdModifierCallback) []holdModifierRelease {
+	return resetHoldModifierCallbackWithReason(mcb, HoldEndReleased)
+}
+
+// resetHoldModifierCallbackWithReason preserves the actual termination cause.
+func resetHoldModifierCallbackWithReason(mcb *holdModifierCallback, reason HoldEndReason) []holdModifierRelease {
 	if mcb.pressTimer != nil {
 		mcb.pressTimer.Stop()
 		mcb.pressTimer = nil
@@ -264,6 +273,9 @@ func resetHoldModifierCallback(mcb *holdModifierCallback) []holdModifierRelease 
 		return nil
 	}
 	if mcb.pressFired {
+		if mcb.onTransition != nil {
+			mcb.onTransition(HoldTransition{Reason: reason})
+		}
 		mcb.pressFired = false
 		mcb.pressSeq++
 		if mcb.onRelease != nil {
@@ -500,7 +512,7 @@ func stopHoldModifierTracking(keys []keyboard.Key) {
 
 	combo := holdModifierComboString(keys)
 	if mcb, ok := holdModifierCallbacks.Load(combo); ok && mcb != nil {
-		resetHoldModifierCallback(mcb)
+		resetHoldModifierCallbackWithReason(mcb, HoldEndUnavailable)
 	}
 	holdModifierCallbacks.Delete(combo)
 	closeHoldKeyListenerIfIdle()
@@ -525,16 +537,22 @@ func closeHoldKeyListenerIfIdle() {
 // A minimum hold duration is enforced before onPress fires, and the action is
 // suppressed if any key outside the chord is pressed during that window.
 func startHoldModifierTracking(keys []keyboard.Key, onPress func(), onRelease func()) error {
+	return startHoldModifierTrackingWithEvents(keys, onPress, onRelease, nil)
+}
+
+// startHoldModifierTrackingWithEvents lets higher layers enqueue ordered lifecycle events.
+func startHoldModifierTrackingWithEvents(keys []keyboard.Key, onPress func(), onRelease func(), transition func(HoldTransition)) error {
 	holdTrackerMu.Lock()
 	defer holdTrackerMu.Unlock()
 
 	canonicalKeys := canonicalHoldModifierKeys(keys)
 	combo := holdModifierComboString(canonicalKeys)
 	holdModifierCallbacks.Store(combo, &holdModifierCallback{
-		onPress:   onPress,
-		onRelease: onRelease,
-		keys:      canonicalKeys,
-		combo:     combo,
+		onTransition: transition,
+		onPress:      onPress,
+		onRelease:    onRelease,
+		keys:         canonicalKeys,
+		combo:        combo,
 	})
 
 	return ensureHoldKeyListener()

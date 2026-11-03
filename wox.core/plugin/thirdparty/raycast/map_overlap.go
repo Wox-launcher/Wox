@@ -18,7 +18,6 @@ type ignoredClipboardApp struct {
 }
 
 const (
-	raycastDictationExtensionID  = "e:r:dictation"
 	raycastEmojiExtensionID      = "e:r:emoji-picker"
 	raycastScreenshotExtensionID = "e:r:screenshots"
 	raycastApplicationsID        = "e:r:applications"
@@ -35,7 +34,6 @@ func mapOverlapSettings(payload Payload, current woxSnapshot) []mappedSetting {
 	rows = append(rows, mapWindowDensity(payload.Settings.General, current)...)
 	rows = append(rows, mapAppDirectories(payload, current)...)
 	rows = append(rows, mapMCPServers(payload, current)...)
-	rows = append(rows, mapDictationSettings(payload, current)...)
 	rows = append(rows, mapSkillDirectories(payload, current)...)
 	rows = append(rows, mapEmojiSettings(payload, current)...)
 	rows = append(rows, mapScreenshotSettings(payload, current)...)
@@ -225,83 +223,6 @@ func mcpExists(current []common.AIChatMCPServerConfig, incoming common.AIChatMCP
 		}
 	}
 	return false
-}
-
-func mapDictationSettings(payload Payload, current woxSnapshot) []mappedSetting {
-	meta, ok := extensionMeta(payload, raycastDictationExtensionID)
-	if !ok {
-		return nil
-	}
-	var rows []mappedSetting
-	if raw, exists := meta["sounds"]; exists {
-		var sounds bool
-		if json.Unmarshal(raw, &sounds) == nil {
-			row := boolMappedSetting("setting:dictation_sound", "dictation_sound", "playSound", sounds, current.DictationSoundKnown, current.DictationSound)
-			row.pluginID = common.DictationPluginID
-			rows = append(rows, row)
-		}
-	}
-	if raw, exists := meta["muteWhileRecording"]; exists {
-		var mute bool
-		if json.Unmarshal(raw, &mute) == nil {
-			row := boolMappedSetting("setting:dictation_pause_media", "dictation_pause_media", "duckVolume", mute, current.DictationDuckKnown, current.DictationDuck)
-			row.pluginID = common.DictationPluginID
-			rows = append(rows, row)
-		}
-	}
-	var phrases []string
-	if json.Unmarshal(meta["customVocabulary"], &phrases) == nil {
-		if row, ok := dictationVocabulary(phrases, current); ok {
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-func dictationVocabulary(phrases []string, current woxSnapshot) (mappedSetting, bool) {
-	var added []string
-	seen := map[string]struct{}{}
-	for _, phrase := range current.DictationPhrases {
-		seen[normalizePhrase(phrase)] = struct{}{}
-	}
-	for _, phrase := range phrases {
-		phrase = strings.TrimSpace(phrase)
-		key := normalizePhrase(phrase)
-		if phrase == "" || key == "" {
-			continue
-		}
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		added = append(added, phrase)
-	}
-	if len(added) == 0 {
-		return mappedSetting{}, false
-	}
-	type entry struct {
-		ID     string `json:"id"`
-		Phrase string `json:"phrase"`
-	}
-	merged := make([]entry, 0, len(current.DictationPhrases)+len(added))
-	for _, phrase := range current.DictationPhrases {
-		phrase = strings.TrimSpace(phrase)
-		if phrase == "" {
-			continue
-		}
-		merged = append(merged, entry{ID: "existing:" + normalizePhrase(phrase), Phrase: phrase})
-	}
-	for _, phrase := range added {
-		merged = append(merged, entry{ID: "raycast:" + normalizePhrase(phrase), Phrase: phrase})
-	}
-	raw, err := json.Marshal(merged)
-	if err != nil {
-		return mappedSetting{}, false
-	}
-	return mappedSetting{
-		id: "setting:dictation_vocabulary", titleKey: "dictation_vocabulary", key: "dictionary", value: string(raw),
-		detailKey: "dictation_phrases", detail: strconv.Itoa(len(added)), pluginID: common.DictationPluginID, selectable: true,
-	}, true
 }
 
 // mapSkillDirectories adds Raycast skill folders as local AI skill roots.

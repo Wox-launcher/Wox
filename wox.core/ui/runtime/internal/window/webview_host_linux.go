@@ -11,6 +11,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"runtime/cgo"
 	"unsafe"
 
 	webviewruntime "wox/ui/runtime/internal/webview"
@@ -182,4 +183,14 @@ func (d *linuxWebViewDriver) Evaluate(script string, done func(string, error)) e
 		finishScriptCallback(id, "", errors.New("native WebView evaluation failed"))
 	}
 	return nil
+}
+
+// woxGoLinuxWebViewMessage delivers messages from the active WebView manager.
+//
+//export woxGoLinuxWebViewMessage
+func woxGoLinuxWebViewMessage(contextID C.uintptr_t, message *C.char) {
+	window := cgo.Handle(contextID).Value().(*platformWindow)
+	if callback := window.options.OnWebViewMessage; callback != nil {
+		callback(C.GoString(message))
+	}
 }

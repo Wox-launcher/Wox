@@ -295,7 +295,13 @@ func (w *ManagedWindow) Lifecycle() WindowLifecycle {
 }
 
 // Show presents and focuses this window while retaining the same native instance.
-func (w *ManagedWindow) Show() (FocusEpoch, error) {
+func (w *ManagedWindow) Show() (FocusEpoch, error) { return w.show(true) }
+
+// ShowInactive presents this window without activating its focus domain.
+func (w *ManagedWindow) ShowInactive() (FocusEpoch, error) { return w.show(false) }
+
+// show shares lifecycle transitions for activating and passive presentations.
+func (w *ManagedWindow) show(activate bool) (FocusEpoch, error) {
 	if w == nil || w.window == nil {
 		return 0, errors.New("managed window is not initialized")
 	}
@@ -306,7 +312,13 @@ func (w *ManagedWindow) Show() (FocusEpoch, error) {
 	if changed {
 		w.manager.emitLifecycle(WindowLifecycleEvent{ID: w.id, Previous: previous, Current: WindowLifecyclePresenting})
 	}
-	epoch, showErr := w.window.Show()
+	var epoch FocusEpoch
+	var showErr error
+	if activate {
+		epoch, showErr = w.window.Show()
+	} else {
+		epoch, showErr = w.window.ShowInactive()
+	}
 	if showErr != nil {
 		w.finishTransition(previous)
 		return 0, showErr

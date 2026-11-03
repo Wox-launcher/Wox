@@ -81,6 +81,25 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         return await init_plugin(ctx, request, ws)
     elif method == "toolbarMsgAction":
         return await toolbar_msg_action(ctx, request)
+    elif method == "hotkeyEvent":
+        hotkey_instance = plugin_instances.get(request.get("PluginId", ""))
+        params = request.get("Params", {})
+        if hotkey_instance and isinstance(hotkey_instance.api, PluginAPI):
+            hotkey_instance.api.dispatch_hotkey(ctx, params.get("CallbackID", ""), json.loads(params["Event"]))
+        return None
+    elif method == "windowEvent":
+        window_instance = plugin_instances.get(request.get("PluginId", ""))
+        api = window_instance.api if window_instance else None
+        params = request.get("Params", {})
+        if isinstance(api, PluginAPI):
+            window = api.window_callbacks.get(params.get("CallbackID", ""))
+            if params.get("Release") == "true":
+                if window:
+                    window.release()
+                api.window_callbacks.pop(params.get("CallbackID", ""), None)
+            elif window:
+                await window.event(ctx, json.loads(params["Event"]))
+        return None
     elif method == "toastMsgAction":
         toast_instance = plugin_instances.get(request.get("PluginId", ""))
         api = toast_instance.api if toast_instance else None
@@ -479,6 +498,8 @@ async def unload_plugin(ctx: Context, request: Dict[str, Any]) -> None:
         # Remove plugin from instances
         if isinstance(plugin_instance.api, PluginAPI):
             plugin_instance.api.toast_callbacks.clear()
+            plugin_instance.api.release_hotkeys()
+            plugin_instance.api.release_windows()
             await plugin_instance.api.stop_plugin_tools()
         del plugin_instances[plugin_id]
 
@@ -721,6 +742,8 @@ async def on_unload(ctx: Context, request: Dict[str, Any]) -> None:
         raise Exception(f"unload callback not found: {callback_id}")
 
     api.toast_callbacks.clear()
+    api.release_hotkeys()
+    api.release_windows()
     await api.stop_plugin_tools()
     try:
         result = callback(ctx)

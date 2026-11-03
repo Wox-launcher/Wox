@@ -42,6 +42,7 @@ extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxCloseRequested(uintptr_t context);
 extern int32_t woxGoLinuxKey(uintptr_t context, const char *key, uint8_t modifiers, int32_t down, int32_t repeat, int32_t composing);
+extern void woxGoLinuxWebViewMessage(uintptr_t context, const char *message);
 extern void woxGoLinuxWebViewEscapeDiagnostic(uintptr_t context, const char *detail);
 extern void woxGoLinuxTextInput(uintptr_t context, uint8_t kind, const char *text);
 extern void woxGoLinuxPointer(uintptr_t context, uint8_t kind, float x, float y, uint8_t button, float scroll_x, float scroll_y, uint8_t modifiers);
@@ -632,6 +633,16 @@ static void on_webview_cursor_message(gpointer manager, gpointer javascript_resu
   }
 }
 
+static void on_webview_message(gpointer manager, gpointer result, gpointer data) {
+  WoxLinuxWindow *window = data;
+  if (window == NULL || window->closed || window->context == 0 || window->active_web_view == NULL ||
+      wox_webkit.get_user_content_manager == NULL || wox_webkit.get_user_content_manager(window->active_web_view) != manager ||
+      wox_webkit.javascript_result_get_js_value == NULL || wox_webkit.jsc_value_to_string == NULL) return;
+  gpointer value = wox_webkit.javascript_result_get_js_value(result);
+  gchar *message = value != NULL ? wox_webkit.jsc_value_to_string(value) : NULL;
+  if (message != NULL) { woxGoLinuxWebViewMessage(window->context, message); g_free(message); }
+}
+
 static void on_webview_script_message(gpointer manager, gpointer javascript_result, gpointer data) {
   (void)manager;
   (void)javascript_result;
@@ -833,6 +844,9 @@ static GtkWidget *create_web_view(WoxLinuxWindow *window, const char *inject_css
         }
       }
       bool supports_scripts = wox_webkit.script_new != NULL && wox_webkit.manager_add_script != NULL && wox_webkit.script_unref != NULL && wox_webkit.register_script_message_handler != NULL;
+      if (supports_scripts && wox_webkit.register_script_message_handler(manager, "woxMessage")) {
+        g_signal_connect(manager, "script-message-received::woxMessage", G_CALLBACK(on_webview_message), window);
+      }
       bool cursor_handler_registered = supports_scripts && wox_webkit.get_user_content_manager != NULL && wox_webkit.javascript_result_get_js_value != NULL && wox_webkit.jsc_value_to_string != NULL &&
                                        wox_webkit.register_script_message_handler(manager, "woxWebViewCursor");
       bool handlers_registered = supports_scripts &&
@@ -6483,4 +6497,20 @@ int32_t wox_linux_webview_evaluate(WoxLinuxWindow *target, const char *script, u
   *handle = callback;
   wox_webkit.run_javascript(target->active_web_view, script, NULL, (gpointer)wox_script_finished, handle);
   return 0;
+}
+
+static void show_inactive_main(void *data) {
+  WoxWindowCall *call = data;
+  bool previous = call->window->nonactivating;
+  call->window->nonactivating = true;
+  gtk_window_set_focus_on_map(GTK_WINDOW(call->window->window), FALSE);
+  show_main(data);
+  call->window->nonactivating = previous;
+  gtk_window_set_focus_on_map(GTK_WINDOW(call->window->window), !previous);
+}
+uint64_t wox_linux_window_show_inactive(WoxLinuxWindow *window) {
+  if (window == NULL) return 0;
+  WoxWindowCall call = {.window = window};
+  if (!run_on_main_sync(show_inactive_main, &call) || call.result != 0) return 0;
+  return call.epoch;
 }

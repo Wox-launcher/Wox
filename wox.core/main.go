@@ -82,8 +82,6 @@ import (
 
 	_ "wox/plugin/system/window_manager"
 
-	_ "wox/plugin/system/dictation"
-
 	_ "wox/plugin/system/wox_memory"
 )
 
@@ -428,13 +426,10 @@ func run() {
 	shareUI := ui.GetUIManager().GetUI(ctx)
 	clipboard.SetNativeImageFileWriter(shareUI.WriteClipboardImageFile)
 
-	// Discovery phase: publish Wox-setting hotkeys (main, selection, query) to
-	// the hotkey service. Dictation hotkeys are collected during plugin loading
-	// (dictation.Init calls reloadActions).
+	// Collect Wox-setting hotkeys before plugin startup.
 	ui.GetUIManager().CollectWoxSettingHotkeys(ctx, woxSetting)
 
-	// Start plugins (dictation.Init collects dictation hotkeys via the registrar;
-	// registration stays deferred until the unified pass below).
+	// Start plugins before registering the collected hotkeys.
 	plugin.GetPluginManager().Start(ctx, shareUI)
 
 	selection.InitSelection()
@@ -462,8 +457,7 @@ func run() {
 	}
 
 	// Registration phase: bind all collected hotkeys to the platform in one pass.
-	// This runs after plugin.Start so dictation hotkeys are already in the
-	// collector. On Wayland-portal, all normal combos go into one portal session
+	// On Wayland-portal, all normal combos go into one portal session
 	// (one permission dialog). On other platforms, each hotkey is registered
 	// individually.
 	registerErr := ui.GetUIManager().RegisterAllHotkeys(ctx)

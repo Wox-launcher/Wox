@@ -68,6 +68,13 @@ func (i *Instance) beginInitCycle() {
 	if i == nil {
 		return
 	}
+	// Reopen window admission only when a new plugin initialization starts.
+	if api, ok := i.API.(*APIImpl); ok {
+		api.windowSuspended.Store(false)
+		api.hotkeyMu.Lock()
+		api.hotkeysStopped = false
+		api.hotkeyMu.Unlock()
+	}
 	i.pluginToolsMu.Lock()
 	i.pluginToolsStopping = false
 	i.pluginToolsMu.Unlock()

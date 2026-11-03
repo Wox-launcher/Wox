@@ -126,6 +126,7 @@ type WindowOptions struct {
 	OnPointer                  func(event PointerEvent)
 	OnFileDrop                 func(paths []string)
 	OnFileDragEnded            func(status FileDragStatus)
+	OnWebViewMessage           func(message string)
 	OnWebViewHideRequested     func()
 	OnWebViewTooltip           func(event WebViewTooltipEvent)
 	OnWebViewNavigationChanged func(state WebViewNavigationState)
@@ -749,4 +750,12 @@ func (w *Window) SetWindowChrome(custom bool, radius *int, backgroundBlur ...boo
 		value = float32(*radius)
 	}
 	return w.native.setWindowChrome(custom, value, backgroundBlur...)
+}
+
+// ShowInactive displays the native window without stealing the foreground focus.
+func (w *Window) ShowInactive() (FocusEpoch, error) {
+	if w == nil || w.native == nil {
+		return 0, errWindowClosed
+	}
+	return w.native.showInactive()
 }

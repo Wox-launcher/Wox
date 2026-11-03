@@ -40,7 +40,6 @@ type previewController struct {
 	nativeFile                       *nativeFilePreviewController
 	webView                          *webViewPreviewController
 	terminal                         *terminalController
-	dictation                        *dictationPreviewController
 	chat                             *chatController
 	window                           func() *woxui.Window
 	runOnUI                          func(string, func()) error
@@ -84,7 +83,6 @@ func (a *App) bindPreviews() {
 	c.nativeFile = &a.nativeFile
 	c.webView = &a.webView
 	c.terminal = &a.terminal
-	c.dictation = &a.dictation
 	c.chat = &a.chat
 	c.window = func() *woxui.Window { return a.window }
 	c.runOnUI = a.runOnUI

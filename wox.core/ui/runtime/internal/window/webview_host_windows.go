@@ -622,3 +622,14 @@ func (d *windowsWebViewDriver) Evaluate(script string, done func(string, error))
 	}
 	return nil
 }
+
+// woxGoWindowsWebViewMessage delivers messages from the active top-level page.
+//
+//export woxGoWindowsWebViewMessage
+func woxGoWindowsWebViewMessage(owner C.uintptr_t, message *C.char) {
+	if value, ok := nativeWindows.Load(uintptr(owner)); ok {
+		if callback := value.(*platformWindow).options.OnWebViewMessage; callback != nil {
+			callback(C.GoString(message))
+		}
+	}
+}

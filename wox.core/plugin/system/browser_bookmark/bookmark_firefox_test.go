@@ -6,9 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"wox/common"
 	"wox/plugin"
-	"wox/setting/definition"
+	"wox/plugin/plugintest"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +62,9 @@ func TestBrowserBookmarkPlugin_LoadFirefoxBookmarksFromLocalProfile(t *testing.T
 }
 
 // Mock API for testing
-type mockAPI struct{}
+type mockAPI struct {
+	plugintest.StubAPI
+}
 
 func (m *mockAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 	// Output log messages during testing
@@ -71,106 +72,5 @@ func (m *mockAPI) Log(ctx context.Context, level plugin.LogLevel, msg string) {
 		println("LOG:", msg)
 	}
 }
-func (m *mockAPI) Notify(ctx context.Context, msg string)                                 {}
-func (m *mockAPI) PushAttention(ctx context.Context, request plugin.PushAttentionRequest) {}
-func (m *mockAPI) GetTranslation(ctx context.Context, key string) string                  { return key }
-func (m *mockAPI) GetSetting(ctx context.Context, key string) string                      { return "" }
-func (m *mockAPI) SaveSetting(ctx context.Context, key string, value string, isGlobal bool) {
-}
-func (m *mockAPI) SetSetting(ctx context.Context, option plugin.SetSettingOption) plugin.SetSettingResult {
-	return plugin.SetSettingResult{Success: true}
-}
-func (m *mockAPI) GetAllSettings(ctx context.Context) map[string]string     { return nil }
-func (m *mockAPI) OpenSettingDialog(ctx context.Context)                    {}
-func (m *mockAPI) HideApp(ctx context.Context)                              {}
-func (m *mockAPI) ShowApp(ctx context.Context)                              {}
-func (m *mockAPI) ChangeQuery(ctx context.Context, query common.PlainQuery) {}
-func (m *mockAPI) RestartApp(ctx context.Context)                           {}
-func (m *mockAPI) ReloadPlugin(ctx context.Context, pluginId string)        {}
-func (m *mockAPI) RemovePlugin(ctx context.Context, pluginId string)        {}
-func (m *mockAPI) OnSettingChanged(ctx context.Context, callback func(ctx context.Context, key string, value string)) {
-}
-func (m *mockAPI) OnGetDynamicSetting(
-	context.Context,
-	func(context.Context, string) definition.PluginSettingDefinitionItem,
-) {
-}
-func (m *mockAPI) OnDeepLink(ctx context.Context, callback func(context.Context, map[string]string)) {
-}
-func (m *mockAPI) OnUnload(ctx context.Context, callback func(context.Context))           {}
-func (m *mockAPI) ShowToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg)              {}
-func (m *mockAPI) ClearToolbarMsg(ctx context.Context, toolbarMsgId string)               {}
-func (m *mockAPI) OnEnterPluginQuery(ctx context.Context, callback func(context.Context)) {}
-func (m *mockAPI) OnLeavePluginQuery(ctx context.Context, callback func(context.Context)) {}
-func (m *mockAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOption) plugin.DragOutListenResult {
-	return plugin.DragOutListenResult{}
-}
-func (m *mockAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {}
-func (m *mockAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
-	return nil
-}
-func (m *mockAPI) OnMRURestore(
-	ctx context.Context,
-	callback func(context.Context, plugin.MRUData) (*plugin.QueryResult, error),
-) {
-}
-func (m *mockAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
-	return plugin.RegisterPluginToolResult{}
-}
-func (m *mockAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
-	return plugin.UnregisterPluginToolResult{}
-}
-func (m *mockAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
-	return plugin.ListPluginToolsResult{}
-}
-func (m *mockAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
-	return plugin.InvokePluginToolResult{}
-}
-func (m *mockAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult) bool {
-	return false
-}
 
-func (m *mockAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
-	return false
-}
-
-func (m *mockAPI) GetUpdatableResult(ctx context.Context, resultId string) *plugin.UpdatableResult {
-	return nil
-}
-
-func (m *mockAPI) IsVisible(ctx context.Context) bool {
-	return false
-}
-
-func (e *mockAPI) RefreshQuery(ctx context.Context, params plugin.RefreshQueryParam) {
-}
-
-func (m *mockAPI) RefreshGlance(ctx context.Context, ids []string) {
-}
-
-func (m *mockAPI) Copy(ctx context.Context, params plugin.CopyParams) {
-}
-
-func (m *mockAPI) Screenshot(ctx context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-
-func (m *mockAPI) GetCacheFolder(ctx context.Context) string {
-	return ""
-}
-
-func (m *mockAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
-	return plugin.GetThemeColorsResult{}
-}
-
-func (m *mockAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
-	return plugin.RegisterTriggerKeywordResult{Success: true}
-}
-func (m *mockAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
-	return plugin.UnregisterTriggerKeywordResult{Success: true}
-}
-
-func (api *mockAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
-	api.Notify(ctx, option.Message)
-	return plugin.ShowToastMsgResult{Success: true}
-}
+func (m *mockAPI) GetTranslation(ctx context.Context, key string) string { return key }

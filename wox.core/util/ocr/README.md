@@ -14,4 +14,4 @@ The local layout is:
 
 The PaddleOCR model downloader verifies the size and SHA-256 of every upstream ONNX/config file before atomically replacing the installed model. The PP-OCRv6 recognition character dictionary is generated from the verified `inference.yml` file.
 
-ONNX Runtime is shared with dictation. The current signed Wox native release delivers ONNX Runtime together with sherpa-onnx; the runtime manager separates the installed files by runtime ownership. Native libraries intentionally remain loaded after first use because both ONNX Runtime and sherpa-onnx keep process-wide state.
+The current signed Wox native release delivers ONNX Runtime together with sherpa-onnx; the runtime manager separates the installed files by runtime ownership. Native libraries intentionally remain loaded after first use because ONNX Runtime and sherpa-onnx keep process-wide state.

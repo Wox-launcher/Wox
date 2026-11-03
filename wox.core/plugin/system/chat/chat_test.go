@@ -12,7 +12,7 @@ import (
 	"wox/ai"
 	"wox/common"
 	"wox/plugin"
-	"wox/setting/definition"
+	"wox/plugin/plugintest"
 	"wox/util/selection"
 )
 
@@ -70,75 +70,8 @@ func (a *chatTestAPI) ShowApp(context.Context) {
 	a.shown = true
 }
 
-type emptyChatAPI struct{}
-
-func (emptyChatAPI) ChangeQuery(context.Context, common.PlainQuery) {}
-func (emptyChatAPI) HideApp(context.Context)                        {}
-func (emptyChatAPI) ShowApp(context.Context)                        {}
-func (emptyChatAPI) Notify(context.Context, string)                 {}
-func (emptyChatAPI) PushAttention(context.Context, plugin.PushAttentionRequest) {
-}
-func (emptyChatAPI) Log(context.Context, plugin.LogLevel, string)  {}
-func (emptyChatAPI) GetTranslation(context.Context, string) string { return "" }
-func (emptyChatAPI) GetSetting(context.Context, string) string     { return "" }
-func (emptyChatAPI) SaveSetting(context.Context, string, string, bool) {
-}
-func (emptyChatAPI) SetSetting(context.Context, plugin.SetSettingOption) plugin.SetSettingResult {
-	return plugin.SetSettingResult{Success: true}
-}
-func (emptyChatAPI) OnSettingChanged(context.Context, func(context.Context, string, string)) {
-}
-func (emptyChatAPI) OnGetDynamicSetting(context.Context, func(context.Context, string) definition.PluginSettingDefinitionItem) {
-}
-func (emptyChatAPI) OnDeepLink(context.Context, func(context.Context, map[string]string)) {
-}
-func (emptyChatAPI) OnUnload(context.Context, func(context.Context)) {}
-func (emptyChatAPI) OnMRURestore(context.Context, func(context.Context, plugin.MRUData) (*plugin.QueryResult, error)) {
-}
-func (emptyChatAPI) RegisterPluginTool(context.Context, plugin.RegisterPluginToolOption) plugin.RegisterPluginToolResult {
-	return plugin.RegisterPluginToolResult{}
-}
-func (emptyChatAPI) UnregisterPluginTool(context.Context, plugin.UnregisterPluginToolOption) plugin.UnregisterPluginToolResult {
-	return plugin.UnregisterPluginToolResult{}
-}
-func (emptyChatAPI) ListPluginTools(context.Context, plugin.ListPluginToolsOption) plugin.ListPluginToolsResult {
-	return plugin.ListPluginToolsResult{}
-}
-func (emptyChatAPI) InvokePluginTool(context.Context, plugin.InvokePluginToolOption) plugin.InvokePluginToolResult {
-	return plugin.InvokePluginToolResult{}
-}
-func (emptyChatAPI) ShowToolbarMsg(context.Context, plugin.ToolbarMsg) {}
-func (emptyChatAPI) ClearToolbarMsg(context.Context, string)           {}
-func (emptyChatAPI) OnEnterPluginQuery(context.Context, func(context.Context)) {
-}
-func (emptyChatAPI) OnLeavePluginQuery(context.Context, func(context.Context)) {
-}
-func (emptyChatAPI) OnDragOut(context.Context, plugin.DragOutListenOption) plugin.DragOutListenResult {
-	return plugin.DragOutListenResult{}
-}
-func (emptyChatAPI) RegisterQueryCommands(context.Context, []plugin.MetadataCommand) {
-}
-func (emptyChatAPI) AIChatStream(context.Context, common.Model, []common.Conversation, common.ChatOptions, common.ChatStreamFunc) error {
-	return nil
-}
-func (emptyChatAPI) GetUpdatableResult(context.Context, string) *plugin.UpdatableResult {
-	return nil
-}
-func (emptyChatAPI) UpdateResult(context.Context, plugin.UpdatableResult) bool { return false }
-func (emptyChatAPI) PushResults(context.Context, plugin.Query, []plugin.QueryResult) bool {
-	return false
-}
-func (emptyChatAPI) IsVisible(context.Context) bool { return false }
-func (emptyChatAPI) RefreshQuery(context.Context, plugin.RefreshQueryParam) {
-}
-func (emptyChatAPI) RefreshGlance(context.Context, []string) {}
-func (emptyChatAPI) Copy(context.Context, plugin.CopyParams) {}
-func (emptyChatAPI) Screenshot(context.Context, plugin.ScreenshotOption) plugin.ScreenshotResult {
-	return plugin.ScreenshotResult{}
-}
-func (emptyChatAPI) GetCacheFolder(context.Context) string { return "" }
-func (emptyChatAPI) GetThemeColors(context.Context, plugin.GetThemeColorsOption) plugin.GetThemeColorsResult {
-	return plugin.GetThemeColorsResult{}
+type emptyChatAPI struct {
+	plugintest.StubAPI
 }
 
 func TestAIChatPluginDeclaresSelectionQuery(t *testing.T) {
@@ -364,16 +297,4 @@ func TestAIChatMRURestoreTargetsSavedChat(t *testing.T) {
 	if api.changed.QueryType != plugin.QueryTypeInput || api.changed.QueryText != "" || api.changed.QueryScope.Identity() != common.AIChatPluginID || api.changed.ContextData["ai_chat_active_id"] != "saved-chat" {
 		t.Fatalf("restored chat query = %+v", api.changed)
 	}
-}
-
-func (emptyChatAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
-	return plugin.RegisterTriggerKeywordResult{Success: true}
-}
-func (emptyChatAPI) UnregisterTriggerKeyword(context.Context, plugin.UnregisterTriggerKeywordOption) plugin.UnregisterTriggerKeywordResult {
-	return plugin.UnregisterTriggerKeywordResult{Success: true}
-}
-
-func (api emptyChatAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
-	api.Notify(ctx, option.Message)
-	return plugin.ShowToastMsgResult{Success: true}
 }

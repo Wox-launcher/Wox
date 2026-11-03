@@ -92,12 +92,13 @@ type pluginSettingsController struct {
 	stopHotkeyRecording                  func()
 	stopHotkeyRecordingForDifferentField func(target *formFieldsState, index int)
 	startHotkeyRecording                 func(idPrefix string, target *formFieldsState, index int, persistKey string, allowedKinds []string, onKey func(woxui.KeyEvent) bool)
+	retargetHotkeyRecording              func(previous, current *formFieldsState)
 
 	loadAIModels          func()
 	loadAIProviderCatalog func()
 	openFormTable         func(index int)
 
-	// modelManager is the modal download manager opened from dictation and OCR model fields.
+	// modelManager is the modal download manager opened from OCR model fields.
 	modelManager *modelManagerState
 
 	// nativeSettingsPluginID disables the native settings button while that plugin's own window is open.
@@ -172,6 +173,7 @@ func (a *App) bindPluginSettings() {
 	c.stopHotkeyRecording = a.hotkeyRecording.stopHotkeyRecording
 	c.stopHotkeyRecordingForDifferentField = a.hotkeyRecording.stopHotkeyRecordingForDifferentField
 	c.startHotkeyRecording = a.hotkeyRecording.startHotkeyRecording
+	c.retargetHotkeyRecording = a.hotkeyRecording.retargetHotkeyRecording
 
 	c.loadAIModels = a.loadAIModels
 	c.loadAIProviderCatalog = func() { a.aiSettings.loadAIProviderCatalog() }
