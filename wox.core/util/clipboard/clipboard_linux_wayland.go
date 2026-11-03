@@ -178,6 +178,17 @@ func runWaylandClipboardCommand(bin string, args []string, stdin []byte) ([]byte
 }
 
 func runWaylandClipboardCommandErr(bin string, args []string, stdin []byte) error {
-	_, err := runWaylandClipboardCommand(bin, args, stdin)
+	ctx, cancel := context.WithTimeout(context.Background(), waylandClipboardCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	// wl-copy forks a selection owner that keeps stderr open until the next
+	// clipboard change. Do not capture it through a pipe that Run would wait on.
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("clipboard: Wayland clipboard command timed out: %s", bin)
+	}
 	return err
 }

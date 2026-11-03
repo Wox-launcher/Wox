@@ -4,6 +4,7 @@ package clipboard
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,6 +70,28 @@ func TestX11ClipboardWriteDoesNotWaitForSelectionOwner(t *testing.T) {
 	started := time.Now()
 	require.NoError(t, runX11ClipboardCommandErr("sh", []string{"-c", "(sleep 2) &"}, []byte("clipboard")))
 	require.Less(t, time.Since(started), time.Second)
+}
+
+// TestWaylandClipboardWriteDoesNotWaitForSelectionOwner models wl-copy's inherited stderr.
+func TestWaylandClipboardWriteDoesNotWaitForSelectionOwner(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "clipboard")
+	payload := []byte("hello 世界\x00")
+	started := time.Now()
+	require.NoError(t, runWaylandClipboardCommandErr("sh", []string{"-c", "cat > \"$1\"; (sleep 2 > /dev/null) &", "sh", output}, payload))
+	require.Less(t, time.Since(started), time.Second)
+	actual, err := os.ReadFile(output)
+	require.NoError(t, err)
+	require.Equal(t, payload, actual)
+}
+
+func TestWaylandClipboardWriteReportsCommandFailure(t *testing.T) {
+	err := runWaylandClipboardCommandErr("sh", []string{"-c", "cat > /dev/null; exit 42"}, []byte("clipboard"))
+	require.ErrorContains(t, err, "exit status 42")
+}
+
+func TestWaylandClipboardWriteTimesOut(t *testing.T) {
+	err := runWaylandClipboardCommandErr("sh", []string{"-c", "exec sleep 5"}, nil)
+	require.ErrorContains(t, err, "Wayland clipboard command timed out")
 }
 
 func TestLinuxDataControlLiveRead(t *testing.T) {
