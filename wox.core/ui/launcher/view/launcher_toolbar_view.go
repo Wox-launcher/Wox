@@ -117,7 +117,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 		if props.Label != "" && (labelWidth > 0 || !props.StatusInteractive) {
 			leftWidgets = append(leftWidgets, woxwidget.Align{
 				Width: labelWidth, Height: contentHeight, Vertical: 0.5,
-				Child: woxwidget.TextBlock{Value: props.Label, Width: labelWidth, Height: contentHeight, LineHeight: contentHeight, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
+				Child: woxwidget.TextBlock{Value: props.Label, Width: labelWidth, Height: contentHeight, LineHeight: contentHeight, MaxLines: 1, HardEllipsis: true, AlignmentY: 0.5, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
 			})
 		}
 		if progressVisible {

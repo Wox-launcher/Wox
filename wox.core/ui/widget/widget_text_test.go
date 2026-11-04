@@ -208,3 +208,43 @@ func TestSingleLineTextBlockAddsEllipsisOnlyWhenTruncated(t *testing.T) {
 		t.Fatalf("wide text = %v, want the complete message", wide.Lines)
 	}
 }
+
+// TestHardEllipsisUsesAvailableWidth keeps long paths visible without splitting graphemes.
+func TestHardEllipsisUsesAvailableWidth(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 2}
+	for _, test := range []struct {
+		name, value, want string
+		width             float32
+	}{
+		{"long path", `error: C:\LongFolder\missing`, `error: C:\LongF…`, 16},
+		{"exact fit", "short text", "short text", 10},
+		{"newline", "hello\nworld", "hello…", 10},
+		{"grapheme", "A👩‍💻BCDE", "A👩‍💻B…", 6},
+		{"ellipsis only", "too long", "…", 1},
+		{"no room", "too long", "", 0.5},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ellipsizeSingleLine(measurer, test.value, style, test.width); got != test.want {
+				t.Fatalf("ellipsized text = %q, want %q", got, test.want)
+			}
+		})
+	}
+
+	value := `error: C:\LongFolder\missing`
+	precomputed := layoutTextBlock(measurer, value, style, 16, 1, 10)
+	for _, layout := range []*TextBlockLayout{nil, &precomputed} {
+		root := (TextBlock{Value: value, Style: style, Width: 16, Height: 10, LineHeight: 10, MaxLines: 1, HardEllipsis: true, Layout: layout}).layout(
+			context{window: measurer}, constraints{width: 16, height: 10},
+		)
+		actual, expected := &woxui.DisplayList{}, &woxui.DisplayList{}
+		root.draw(actual, 0, 0, false, false, false, nil)
+		expected.DrawText(`error: C:\LongF…`, woxui.Rect{Width: 16, Height: 10}, style, woxui.Color{})
+		if err := actual.Compare(expected); err != nil {
+			t.Fatalf("hard-ellipsized text rendering with precomputed=%t: %v", layout != nil, err)
+		}
+	}
+	if normal := wrapTextLines(measurer, value, style, 16, 1); len(normal) != 1 || normal[0] != "error:…" {
+		t.Fatalf("word-wrapped text changed: %v", normal)
+	}
+}

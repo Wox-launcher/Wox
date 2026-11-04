@@ -58,7 +58,7 @@ func TestToolbarTextOnlyCount(t *testing.T) {
 					t.Fatalf("text-only status contains an icon or placeholder: %+v", status)
 				}
 				label := status.Children[0].(woxwidget.Align).Child.(woxwidget.TextBlock)
-				if label.Value != props.Label || label.Color != color || label.Style.Size != scaledLauncherSize(woxcomponent.ToolbarFontSize, scale) || label.MaxLines != 1 {
+				if label.Value != props.Label || label.Color != color || label.Style.Size != scaledLauncherSize(woxcomponent.ToolbarFontSize, scale) || label.MaxLines != 1 || !label.HardEllipsis {
 					t.Fatalf("label lost toolbar typography or theme: %+v", label)
 				}
 				right := row.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
