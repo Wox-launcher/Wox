@@ -2064,6 +2064,9 @@
     "IconUrl": "https://raw.githubusercontent.com/designstudio/MultiTranslate-for-Wox/main/assets/icon.png",
     "Website": "https://github.com/designstudio/MultiTranslate-for-Wox",
     "DownloadUrl": "https://github.com/designstudio/MultiTranslate-for-Wox/releases/latest/download/MultiTranslate-for-Wox.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/designstudio/MultiTranslate-for-Wox/main/assets/screenshot.png"
+    ],
     "SupportedOS": [
       "Windows",
       "Darwin",
