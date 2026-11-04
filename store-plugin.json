@@ -2173,8 +2173,28 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 17:00:42",
-    "DateUpdated": "2026-11-03 17:00:42",
-    "StarCount": 0,
-    "DownloadCount": 13
+    "DateUpdated": "2026-11-03 17:00:42"
+  },
+  {
+    "Id": "e1dfeb8d-6469-4762-8f3e-7c739f54cc12",
+    "Name": "MultiTranslate for Wox",
+    "Author": "designstudio",
+    "Version": "0.3.8",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Multi-provider translation for Wox. Google, Microsoft, DeepL and more. UI follows the Wox language automatically.",
+    "IconUrl": "https://raw.githubusercontent.com/designstudio/MultiTranslate-for-Wox/main/assets/icon.png",
+    "Website": "https://github.com/designstudio/MultiTranslate-for-Wox",
+    "DownloadUrl": "https://github.com/designstudio/MultiTranslate-for-Wox/releases/latest/download/MultiTranslate-for-Wox.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/designstudio/MultiTranslate-for-Wox/main/assets/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-11-03 00:00:00",
+    "DateUpdated": "2026-11-03 17:00:42"
   }
 ]
