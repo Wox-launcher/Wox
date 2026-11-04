@@ -122,6 +122,8 @@ type UI interface {
 	// Returns false if the result is no longer visible (caller should stop updating).
 	// The result parameter should be plugin.UpdatableResult, but we use interface{} to avoid circular dependency.
 	UpdateResult(ctx context.Context, result interface{}) bool
+	// RemoveResult removes a visible plugin result. The payload is plugin.RemoveResultOption.
+	RemoveResult(ctx context.Context, option interface{}) bool
 	// PushResults pushes additional results for the current query.
 	// Returns true if results were accepted by UI, false if query is no longer active.
 	// The payload should be plugin.PushResultsPayload, but we use interface{} to avoid circular dependency.

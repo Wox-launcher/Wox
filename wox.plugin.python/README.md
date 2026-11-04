@@ -289,3 +289,15 @@ Declare `Type: "hotkey"`, `Scope: "global"` in static plugin settings, then subs
 with `OnHotkey` (`on_hotkey` in Python) during init. Wox manages registration, conflicts
 and cleanup. See the [contract and examples](../wox.core/plugin/hotkey.md) for gesture
 kinds, paired hold events, stable table IDs and asynchronous callback handling.
+
+### Removing a result
+
+```python
+from wox_plugin import RemoveResultOption
+
+removed = await api.remove_result(ctx, RemoveResultOption(
+    result_id=action_context.result_id, selected_result_id=next_result_id
+))
+```
+
+Use the original query context and a result owned by your plugin. `selected_result_id` is optional; if it is absent or unavailable, Wox preserves the current selection or selects the nearest remaining row. `removed.success` indicates whether the result was visible and removed.

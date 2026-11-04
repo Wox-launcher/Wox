@@ -852,6 +852,17 @@ export interface ResultTail {
   ContextData?: MapString
 }
 
+/** Options for removing one visible result from its originating query. */
+export interface RemoveResultOption {
+  ResultId: string
+  /** Select this remaining result; if absent or unavailable, preserve the selection or select the nearest row. */
+  SelectedResultId?: string
+}
+
+export interface RemoveResultResult {
+  Success: boolean
+}
+
 /**
  * Result that can be updated directly in the UI.
  *
@@ -1820,6 +1831,9 @@ export interface PublicAPI {
    * @returns True if accepted, false if rejected
    */
   UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
+
+  /** Remove a result owned by this plugin. Keep the original query context. */
+  RemoveResult: (ctx: Context, option: RemoveResultOption) => Promise<RemoveResultResult>
 
   /**
    * Push additional results for the current query.

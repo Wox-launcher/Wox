@@ -133,6 +133,10 @@ type API interface {
 	// updates when it returns false; use PreventHideAfterAction if an action needs the result to stay visible.
 	UpdateResult(ctx context.Context, result UpdatableResult) bool
 
+	// RemoveResult removes a visible result owned by this plugin. SelectedResultId, when present,
+	// selects another visible result; otherwise the current selection or nearest row is retained.
+	RemoveResult(ctx context.Context, option RemoveResultOption) RemoveResultResult
+
 	// OnMRURestore registers a callback that reconstructs a result from its MRU data. The plugin must
 	// declare the MRU feature.
 	OnMRURestore(ctx context.Context, callback func(ctx context.Context, mruData MRUData) (*QueryResult, error))
@@ -1106,6 +1110,32 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
 	return success
+}
+
+// RemoveResult removes only this plugin's result from the query that produced it.
+func (a *APIImpl) RemoveResult(ctx context.Context, option RemoveResultOption) RemoveResultResult {
+	manager := GetPluginManager()
+	sessionID, queryID := util.GetContextSessionId(ctx), util.GetContextQueryId(ctx)
+	var cache *QueryResultCache
+	var found bool
+	if sessionID != "" {
+		cache, found = manager.resultStore.findInSession(sessionID, queryID, option.ResultId)
+	} else if queryID == "" {
+		cache, found = manager.resultStore.findByID(option.ResultId)
+	}
+	if !found || cache.PluginInstance != a.pluginInstance {
+		return RemoveResultResult{}
+	}
+	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, cache.Query.SessionId), cache.Query.Id)
+	if !manager.GetUI().RemoveResult(ctx, option) {
+		return RemoveResultResult{}
+	}
+	if set, ok := manager.resultStore.getQuery(cache.Query.SessionId, cache.Query.Id); ok {
+		set.Results.Compute(option.ResultId, func(current *QueryResultCache, exists bool) (*QueryResultCache, bool) {
+			return current, exists && current != cache
+		})
+	}
+	return RemoveResultResult{Success: true}
 }
 
 func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryResult) bool {

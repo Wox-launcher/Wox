@@ -87,6 +87,7 @@ type View interface {
 	CloudSyncProgressChanged(ctx context.Context, progress cloudsync.CloudSyncProgress) error
 	RefreshAccountStatus(ctx context.Context) error
 	UpdateResult(ctx context.Context, result plugin.UpdatableResult) (bool, error)
+	RemoveResult(ctx context.Context, option plugin.RemoveResultOption) (bool, error)
 	PushResults(ctx context.Context, payload plugin.PushResultsPayload) (bool, error)
 	ToggleRecordingMode(ctx context.Context) (bool, error)
 	ToggleRepaintDebugMode(ctx context.Context) (string, error)

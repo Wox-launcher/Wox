@@ -100,6 +100,10 @@ func (e StubAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult
 	return false
 }
 
+func (e StubAPI) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) plugin.RemoveResultResult {
+	return plugin.RemoveResultResult{}
+}
+
 func (e StubAPI) PushResults(ctx context.Context, query plugin.Query, results []plugin.QueryResult) bool {
 	return false
 }

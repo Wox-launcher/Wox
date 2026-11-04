@@ -534,6 +534,17 @@ type QueryResponseUI struct {
 	QueryStartTimestamp int64 // end-to-end query start timestamp, preferably from UI request send time
 }
 
+// RemoveResultOption identifies the result to remove and an optional selection after removal.
+type RemoveResultOption struct {
+	ResultId         string
+	SelectedResultId string
+}
+
+// RemoveResultResult reports whether the visible result was removed.
+type RemoveResultResult struct {
+	Success bool
+}
+
 // PushResultsPayload is used to push additional results to UI for a query.
 type PushResultsPayload struct {
 	QueryId string

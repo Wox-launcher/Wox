@@ -259,6 +259,25 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	return success
 }
 
+// RemoveResult routes a result removal to the owning launcher session.
+func (u *uiImpl) RemoveResult(ctx context.Context, option interface{}) bool {
+	typed, ok := option.(plugin.RemoveResultOption)
+	if !ok {
+		return false
+	}
+	view, err := u.getView(ctx)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("RemoveResult error: %s", err.Error()))
+		return false
+	}
+	success, err := view.RemoveResult(ctx, typed)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("RemoveResult error: %s", err.Error()))
+		return false
+	}
+	return success
+}
+
 func (u *uiImpl) PushResults(ctx context.Context, payload interface{}) bool {
 	typedPayload, ok := payload.(plugin.PushResultsPayload)
 	if !ok {

@@ -144,6 +144,7 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"InvokePluginTool":         (*WebsocketHost).handleInvokePluginTool,
 	"GetUpdatableResult":       (*WebsocketHost).handleGetUpdatableResult,
 	"UpdateResult":             (*WebsocketHost).handleUpdateResult,
+	"RemoveResult":             (*WebsocketHost).handleRemoveResult,
 	"PushResults":              (*WebsocketHost).handlePushResults,
 	"ExecuteToolbarMsgAction":  (*WebsocketHost).handleExecuteToolbarMsgAction,
 	"AIChatStream":             (*WebsocketHost).handleAIChatStream,

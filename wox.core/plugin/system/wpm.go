@@ -767,6 +767,7 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 								fmt.Sprintf("%s: %s", pluginName, err.Error()),
 							), false)
 						} else {
+							w.api.RemoveResult(ctx, plugin.RemoveResultOption{ResultId: actionContext.ResultId})
 							w.showUpgradeStatus(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 								pluginName,

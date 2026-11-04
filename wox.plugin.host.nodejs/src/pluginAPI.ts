@@ -37,7 +37,9 @@ import {
   SetSettingResult,
   ShowToastMsgOption,
   ShowToastMsgResult,
-  UpdatableResult
+  UpdatableResult,
+  RemoveResultOption,
+  RemoveResultResult
 } from "@wox-launcher/wox-plugin"
 import { WebSocket } from "ws"
 import * as crypto from "crypto"
@@ -506,6 +508,12 @@ export class PluginAPI implements PublicAPI {
 
     const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
     return response === true
+  }
+
+  async RemoveResult(ctx: Context, option: RemoveResultOption): Promise<RemoveResultResult> {
+    const response = await this.invokeMethod(ctx, "RemoveResult", { option: JSON.stringify(option) }) as RemoveResultResult | null
+    if (response?.Success) this.resultActions.forContext(ctx, option.ResultId)?.results.delete(option.ResultId)
+    return response ?? { Success: false }
   }
 
   async PushResults(ctx: Context, query: Query, results: Result[]): Promise<boolean> {

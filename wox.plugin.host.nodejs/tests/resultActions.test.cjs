@@ -173,3 +173,19 @@ test("ambiguous updates warn without replacing either query's callbacks", async 
   assert.equal(callbacks.find("a", "new", "row").results.get("row").get("open").Action, replacement)
   assert.equal(warnings.length, 1)
 })
+test("removeResult releases callbacks only after an accepted removal", async () => {
+  const { api, callbacks } = fixture(async () => ({ Results: [] }))
+  for (const query of ["old", "current"]) callbacks.begin("a", query, true).cache({ Id: "row", Actions: [] })
+  const ctx = context("a", "current")
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "RemoveResult")
+    assert.deepEqual(JSON.parse(params.option), { ResultId: "row", SelectedResultId: "next" })
+    return { Success: false }
+  }
+  assert.equal((await api.RemoveResult(ctx, { ResultId: "row", SelectedResultId: "next" })).Success, false)
+  assert.ok(callbacks.find("a", "current", "row").results.has("row"))
+  api.invokeMethod = async () => ({ Success: true })
+  assert.equal((await api.RemoveResult(ctx, { ResultId: "row" })).Success, true)
+  assert.equal(callbacks.find("a", "current", "row").results.has("row"), false)
+  assert.ok(callbacks.find("a", "old", "row").results.has("row"))
+})

@@ -114,6 +114,8 @@ func TestPluginRequestInvalidArgumentsReply(t *testing.T) {
 		{"GetTranslation", nil, `"key"`},
 		{"GetUpdatableResult", nil, `"resultId"`},
 		{"UpdateResult", nil, `"result"`},
+		{"RemoveResult", nil, `"option"`},
+		{"RemoveResult", map[string]string{"option": "{"}, "unmarshal remove result option"},
 		{"PushResults", nil, `"query"`},
 		{"PushResults", map[string]string{"query": "{}"}, `"results"`},
 		{"ExecuteToolbarMsgAction", nil, `"toolbarMsgId"`},
@@ -162,6 +164,7 @@ type requestTestAPI struct {
 	copy                                   plugin.CopyParams
 	screenshot                             plugin.ScreenshotOption
 	result                                 *plugin.UpdatableResult
+	remove                                 plugin.RemoveResultOption
 	settingChanged                         func(context.Context, string, string)
 	toast                                  plugin.ShowToastMsgOption
 }
@@ -196,6 +199,10 @@ func (a *requestTestAPI) Copy(_ context.Context, option plugin.CopyParams) { a.c
 func (a *requestTestAPI) Screenshot(_ context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	a.screenshot = option
 	return plugin.ScreenshotResult{Success: true, ScreenshotPath: "capture.png"}
+}
+func (a *requestTestAPI) RemoveResult(_ context.Context, option plugin.RemoveResultOption) plugin.RemoveResultResult {
+	a.remove = option
+	return plugin.RemoveResultResult{Success: true}
 }
 func (a *requestTestAPI) GetUpdatableResult(context.Context, string) *plugin.UpdatableResult {
 	return a.result
@@ -242,6 +249,10 @@ func TestPluginRequestPreservesLegacyWireValues(t *testing.T) {
 	call("RefreshQuery", map[string]string{"preserveSelectedIndex": "true", "SelectedResultId": " row "})
 	if !api.refresh.PreserveSelectedIndex || api.refresh.SelectedResultId != "row" {
 		t.Fatalf("legacy refresh aliases lost: %+v", api.refresh)
+	}
+	resultRemove := call("RemoveResult", map[string]string{"option": `{"ResultId":"row","SelectedResultId":"next"}`}).(map[string]any)
+	if resultRemove["Success"] != true || api.remove.ResultId != "row" || api.remove.SelectedResultId != "next" {
+		t.Fatalf("remove option or result lost: %+v %+v", api.remove, resultRemove)
 	}
 	call("Copy", map[string]string{"type": "text", "text": "keep text", "woxImage": "{"})
 	if api.copy.Text != "keep text" || api.copy.WoxImage != nil {

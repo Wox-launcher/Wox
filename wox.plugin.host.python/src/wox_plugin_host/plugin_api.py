@@ -22,6 +22,8 @@ from wox_plugin import (
     MRUData,
     PluginSettingDefinitionItem,
     PublicAPI,
+    RemoveResultOption,
+    RemoveResultResult,
     Query,
     RefreshQueryParam,
     Result,
@@ -535,6 +537,27 @@ class PluginAPI(PublicAPI):
 
         response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
         return bool(response) if response is not None else False
+
+    async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:
+        """Remove a visible result and its host callbacks when core accepts it."""
+        response = await self.invoke_method(
+            ctx,
+            "RemoveResult",
+            {
+                "option": json.dumps(
+                    {
+                        "ResultId": option.result_id,
+                        "SelectedResultId": option.selected_result_id,
+                    }
+                )
+            },
+        )
+        success = isinstance(response, dict) and bool(response.get("Success"))
+        if success:
+            callbacks = self.result_actions.for_context(ctx, option.result_id)
+            if callbacks is not None:
+                callbacks.results.pop(option.result_id, None)
+        return RemoveResultResult(success=success)
 
     async def push_results(self, ctx: Context, query: Query, results: list[Result]) -> bool:
         """Push additional results for the current query"""

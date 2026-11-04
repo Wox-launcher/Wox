@@ -410,6 +410,33 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 	return updated, err
 }
 
+// RemoveResult deletes a row only while its originating query is still displayed.
+func (a *App) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) (bool, error) {
+	removed := false
+	err := a.runOnUI("remove result", func() {
+		if util.GetContextSessionId(ctx) != a.sessionID || util.GetContextQueryId(ctx) != a.querySession.query.QueryID || util.GetContextQueryId(ctx) != a.resultList.resultsQueryID {
+			return
+		}
+		if !a.resultList.removeResult(option) {
+			return
+		}
+		selected := a.resultList.selected
+		a.resultList.selected = -1
+		if selected >= 0 {
+			a.selectResult(selected)
+		} else {
+			a.actions.resetActionPanelLocked()
+			a.forms.form = nil
+			a.notifySelectedResult()
+			a.previews.reconcileSelectedPreview()
+			_ = a.applyWindowBounds()
+			_ = a.window.Invalidate()
+		}
+		removed = true
+	})
+	return removed, err
+}
+
 // PushResults appends a typed result batch only when its query is still visible.
 func (a *App) PushResults(_ context.Context, payload plugin.PushResultsPayload) (bool, error) {
 	results := make([]queryResult, len(payload.Results))

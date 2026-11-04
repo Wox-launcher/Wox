@@ -44,6 +44,21 @@ from .models.plugin_tool import (
 
 
 @dataclass
+class RemoveResultOption:
+    """Result to remove and optional remaining result to select."""
+
+    result_id: str
+    selected_result_id: str = ""
+
+
+@dataclass
+class RemoveResultResult:
+    """Whether the visible result was removed."""
+
+    success: bool = False
+
+
+@dataclass
 class ScreenshotOption:
     """
     Options for the built-in screenshot workflow.
@@ -781,6 +796,13 @@ class PublicAPI(Protocol):
                     title="Processing...",
                     tails=[ResultTail(...)]
                 ))
+        """
+        ...
+
+    async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:
+        """Remove a result owned by this plugin, using its original query context.
+
+        If the requested selection is unavailable, the current selection or nearest row is used.
         """
         ...
 

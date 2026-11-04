@@ -147,6 +147,19 @@ func (w *WebsocketHost) handleUpdateResult(ctx context.Context, pluginInstance *
 	return success, nil
 }
 
+// handleRemoveResult adapts the removal option to the plugin API.
+func (w *WebsocketHost) handleRemoveResult(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	optionStr, err := requirePluginParam(request.Params, "option")
+	if err != nil {
+		return nil, err
+	}
+	var option plugin.RemoveResultOption
+	if err := json.Unmarshal([]byte(optionStr), &option); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal remove result option: %w", err)
+	}
+	return pluginInstance.API.RemoveResult(ctx, option), nil
+}
+
 // handlePushResults adapts the PushResults wire call to the plugin API.
 func (w *WebsocketHost) handlePushResults(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	queryStr, err := requirePluginParam(request.Params, "query")
