@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
+	"wox/common/icons"
 	"wox/network"
 
 	woxplugin "wox/plugin"
@@ -103,11 +105,21 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		index := entry.index
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
-		if plugins.PluginsStore && plugin.StarCount != nil {
-			status += fmt.Sprintf("  ★ %d", *plugin.StarCount)
-		}
-		if plugins.PluginsStore && plugin.DownloadCount != nil {
-			status += fmt.Sprintf("  ↓ %d", *plugin.DownloadCount)
+		if plugins.PluginsStore {
+			switch plugins.PluginFilters.storeSort {
+			case pluginStoreSortStars:
+				if plugin.StarCount != nil {
+					status += fmt.Sprintf("  ★ %d", *plugin.StarCount)
+				}
+			case pluginStoreSortDefault, pluginStoreSortDownloads:
+				if plugin.DownloadCount != nil {
+					status += fmt.Sprintf("  ↓ %d", *plugin.DownloadCount)
+				}
+			case pluginStoreSortUpdated:
+				if updated, err := time.Parse("2006-01-02 15:04:05", plugin.DateUpdated); err == nil {
+					status += "  " + updated.Format("2006-01-02")
+				}
+			}
 		}
 		if plugin.IsUpgradable {
 			status = c.language.translate("i18n:ui_update") + "  " + status
@@ -360,7 +372,7 @@ func pluginSettingKeepVisibleKey(fields formFieldsSnapshot, firstVisible int) wo
 
 func (c *pluginSettingsController) pluginHeaderProps(snapshot settingsSnapshot, plugin pluginSettingsPlugin, imageScale float32) launcherview.PluginHeaderProps {
 	props := launcherview.PluginHeaderProps{
-		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author,
+		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Statistics: c.pluginHeaderStatistics(snapshot, plugin, imageScale),
 		Icon: c.imageForSurface(plugin.Icon, 256, settingsPalette().Background), FallbackColor: resultColors[snapshot.plugins.PluginSelected%len(resultColors)],
 		MetadataActions: c.pluginMetadataActions(snapshot, plugin, imageScale), Management: c.pluginManagementActions(snapshot, plugin),
 	}
@@ -368,6 +380,30 @@ func (c *pluginSettingsController) pluginHeaderProps(snapshot settingsSnapshot, 
 		props.DisabledLabel = c.language.translate("i18n:ui_plugin_filter_disabled")
 	}
 	return props
+}
+
+// pluginHeaderStatistics prepares optional catalog counts and their accessible hover labels.
+func (c *pluginSettingsController) pluginHeaderStatistics(snapshot settingsSnapshot, plugin pluginSettingsPlugin, imageScale float32) []launcherview.PluginHeaderStatistic {
+	statistics := make([]launcherview.PluginHeaderStatistic, 0, 2)
+	for _, item := range []struct {
+		id, icon, label string
+		count           *int
+	}{
+		{"stars", icons.ControlStarFilled, "i18n:ui_plugin_store_sort_stars", plugin.StarCount},
+		{"downloads", icons.ControlDownload, "i18n:ui_plugin_store_sort_downloads", plugin.DownloadCount},
+	} {
+		if item.count == nil {
+			continue
+		}
+		value := fmt.Sprint(*item.count)
+		label := c.language.translate(item.label) + ": " + value
+		tint := snapshot.palette.TextSecondary
+		statistics = append(statistics, launcherview.PluginHeaderStatistic{
+			ID: item.id, Value: value, Icon: c.imageForTint(fromCoreImage(icons.Get(item.icon)), &tint, physicalImageSize(int(snapshot.palette.Scaled(14)+0.5), imageScale)),
+			OnHover: func(inside bool, anchor woxui.Rect) { c.setSettingChoiceTooltip(inside, label, anchor) },
+		})
+	}
+	return statistics
 }
 
 func (c *pluginSettingsController) pluginDetailIntroFormProps(snapshot settingsSnapshot, imageScale float32, intro string, rows []woxwidget.Widget, accent woxui.Color) *launcherview.PluginFormProps {
@@ -719,7 +755,7 @@ func (c *pluginSettingsController) pluginStoreDetailProps(snapshot settingsSnaps
 	contentWidth := max(float32(0), width-32)
 	metadata := c.pluginMetadataProps(plugin, "privacy")
 	props := &launcherview.PluginStoreDetailProps{
-		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel,
+		Name: plugin.Name, Version: plugin.Version, Author: plugin.Author, Description: plugin.Description, Runtime: runtimeLabel, Statistics: c.pluginHeaderStatistics(snapshot, plugin, imageScale),
 		WebsiteLabel: websiteLabel, WebsiteChipLabel: websiteChipLabel,
 		Icon: c.imageForSurface(plugin.Icon, 256, settingsPalette().Background), ExternalIcon: externalIcon, RuntimeIcon: runtimeIcon, WebsiteIcon: websiteIcon,
 		OnRuntimeHover: onRuntimeHover,
@@ -828,7 +864,7 @@ func (c *pluginSettingsController) pluginFilterChoices(id string) []settingChoic
 	all := settingChoice{value: pluginFilterAll, label: c.language.translate("i18n:ui_all")}
 	switch id {
 	case "sort":
-		return []settingChoice{{value: pluginFilterAll, label: c.language.translate("i18n:ui_plugin_store_sort_default")}, {value: string(pluginStoreSortStars), label: c.language.translate("i18n:ui_plugin_store_sort_stars")}, {value: string(pluginStoreSortDownloads), label: c.language.translate("i18n:ui_plugin_store_sort_downloads")}}
+		return []settingChoice{{value: pluginFilterAll, label: c.language.translate("i18n:ui_plugin_store_sort_downloads")}, {value: string(pluginStoreSortName), label: c.language.translate("i18n:ui_plugin_store_sort_default")}, {value: string(pluginStoreSortStars), label: c.language.translate("i18n:ui_plugin_store_sort_stars")}, {value: string(pluginStoreSortUpdated), label: c.language.translate("i18n:ui_plugin_store_sort_updated")}}
 	case "enabled":
 		return []settingChoice{all, {value: pluginFilterEnabled, label: c.language.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: c.language.translate("i18n:ui_plugin_filter_disabled")}}
 	case "upgrade":

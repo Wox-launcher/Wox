@@ -464,6 +464,7 @@ type PluginCatalogItem struct {
 	Store              string
 	StarCount          *int
 	DownloadCount      *int
+	DateUpdated        string
 	SettingDefinitions definition.PluginSettingDefinitions
 	Setting            PluginSetting
 	HasNativeSettings  bool

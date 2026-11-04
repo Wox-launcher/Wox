@@ -3554,5 +3554,6 @@
   "ui_plugin_store_sort": "並べ替え",
   "ui_plugin_store_sort_default": "名前",
   "ui_plugin_store_sort_stars": "GitHub スター",
-  "ui_plugin_store_sort_downloads": "ダウンロード数"
+  "ui_plugin_store_sort_downloads": "ダウンロード数",
+  "ui_plugin_store_sort_updated": "更新日時"
 }

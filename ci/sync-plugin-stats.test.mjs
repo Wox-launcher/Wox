@@ -68,7 +68,7 @@ test("batches repositories and paginates releases without mixing zero and missin
     if (calls === 1) {
       assert.match(query, /orderBy: \{field: CREATED_AT, direction: DESC\}/);
       assert.match(query, /releaseAssets\(first: 1, name: "plugin.wox"\)/);
-      return { ok: true, json: async () => ({ data: { p0: page([release("plugin.wox", 3), release("plugin.wox", 100, true)], true, "next"), p1: page([release("zero.wox", 0)], false, "z"), p2: page([], false, null) } }) };
+      return { ok: true, json: async () => ({ data: { p0: page([release("Plugin.Wox", 3), release("plugin.wox", 100, true)], true, "next"), p1: page([release("zero.wox", 0)], false, "z"), p2: page([], false, null) } }) };
     }
     assert.match(query, /after: "next"/);
     return { ok: true, json: async () => ({ data: { p0: page([release("plugin.wox", 5)], true, "end") } }) };

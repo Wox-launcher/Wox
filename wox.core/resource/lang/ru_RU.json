@@ -3293,5 +3293,6 @@
   "ui_plugin_store_sort": "Сортировка",
   "ui_plugin_store_sort_default": "Название",
   "ui_plugin_store_sort_stars": "Звёзды GitHub",
-  "ui_plugin_store_sort_downloads": "Загрузки"
+  "ui_plugin_store_sort_downloads": "Загрузки",
+  "ui_plugin_store_sort_updated": "Недавно обновлённые"
 }

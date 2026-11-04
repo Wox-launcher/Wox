@@ -3552,5 +3552,6 @@
   "ui_plugin_store_sort": "정렬 기준",
   "ui_plugin_store_sort_default": "이름",
   "ui_plugin_store_sort_stars": "GitHub 스타",
-  "ui_plugin_store_sort_downloads": "다운로드"
+  "ui_plugin_store_sort_downloads": "다운로드",
+  "ui_plugin_store_sort_updated": "최근 업데이트"
 }

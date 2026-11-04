@@ -407,11 +407,20 @@ type PluginAction struct {
 	OnTap   func()
 }
 
+// PluginHeaderStatistic contains one optional count shown beside the plugin author.
+type PluginHeaderStatistic struct {
+	ID      string
+	Value   string
+	Icon    *woxui.Image
+	OnHover func(bool, woxui.Rect)
+}
+
 // PluginHeaderProps contains the selected plugin identity and actions.
 type PluginHeaderProps struct {
 	Name            string
 	Version         string
 	Author          string
+	Statistics      []PluginHeaderStatistic
 	DisabledLabel   string
 	Icon            *woxui.Image
 	FallbackColor   woxui.Color
@@ -468,6 +477,7 @@ type PluginStoreDetailProps struct {
 	DisabledLabel     string
 	Description       string
 	Runtime           string
+	Statistics        []PluginHeaderStatistic
 	WebsiteLabel      string
 	WebsiteChipLabel  string
 	Icon              *woxui.Image
@@ -604,6 +614,18 @@ func pluginDetailHeader(props PluginHeaderProps, width, height float32, theme wo
 		}}},
 	}}}
 	authorItems := []woxwidget.Widget{woxwidget.Text{Value: props.Author, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary}}
+	if len(props.Statistics) > 0 {
+		// Let long author names yield space to the counts in narrow detail panes.
+		authorItems[0] = woxwidget.Flexible{Child: woxwidget.TextBlock{Value: props.Author, MaxLines: 1, ShrinkWrap: true, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary}}
+	}
+	for _, statistic := range props.Statistics {
+		children := []woxwidget.Widget{}
+		if statistic.Icon != nil {
+			children = append(children, woxwidget.Image{Source: statistic.Icon, Width: theme.Scaled(14), Height: theme.Scaled(14), Fit: woxwidget.ImageFitContain})
+		}
+		children = append(children, woxwidget.Text{Value: statistic.Value, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary})
+		authorItems = append(authorItems, woxwidget.Gesture{ID: "plugin-statistic-" + statistic.ID, OnHoverAt: statistic.OnHover, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}})
+	}
 	if props.DisabledLabel != "" {
 		tagTheme := theme
 		tagTheme.Text = theme.Warning
@@ -634,7 +656,7 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 // pluginStoreDetail supplies read-only content to the same detail surface as installed plugins.
 func pluginStoreDetail(props PluginStoreDetailProps, width, height float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
 	return pluginEditor(PluginEditorProps{
-		Header:   PluginHeaderProps{Name: props.Name, Version: props.Version, Author: props.Author, DisabledLabel: props.DisabledLabel, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management},
+		Header:   PluginHeaderProps{Name: props.Name, Version: props.Version, Author: props.Author, Statistics: props.Statistics, DisabledLabel: props.DisabledLabel, Icon: props.Icon, FallbackColor: props.FallbackColor, Management: props.Management},
 		ScrollID: props.ScrollID, DescriptionDetail: &props, Keywords: props.Keywords, Commands: props.Commands, Metadata: props.Metadata, Error: props.Error,
 	}, width, height, theme)
 }

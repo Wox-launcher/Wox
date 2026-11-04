@@ -3553,5 +3553,6 @@
   "ui_plugin_store_sort": "排序方式",
   "ui_plugin_store_sort_default": "名称",
   "ui_plugin_store_sort_stars": "GitHub Star 数量",
-  "ui_plugin_store_sort_downloads": "下载量"
+  "ui_plugin_store_sort_downloads": "下载量",
+  "ui_plugin_store_sort_updated": "更新时间"
 }

@@ -36,6 +36,7 @@ type PluginDto struct {
 	Store              string
 	StarCount          *int
 	DownloadCount      *int
+	DateUpdated        string
 	HasNativeSettings  bool
 }
 

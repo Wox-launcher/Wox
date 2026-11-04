@@ -47,6 +47,7 @@ type pluginSettingsPlugin struct {
 	Store              string             `json:"Store"`
 	StarCount          *int               `json:"StarCount"`
 	DownloadCount      *int               `json:"DownloadCount"`
+	DateUpdated        string             `json:"DateUpdated"`
 	SettingDefinitions []formDefinition   `json:"SettingDefinitions"`
 	Setting            pluginSettingsData `json:"Setting"`
 	HasNativeSettings  bool               `json:"HasNativeSettings"`
@@ -97,7 +98,9 @@ type pluginStoreSort string
 const (
 	pluginStoreSortDefault   pluginStoreSort = ""
 	pluginStoreSortStars     pluginStoreSort = "stars"
+	pluginStoreSortName      pluginStoreSort = "name"
 	pluginStoreSortDownloads pluginStoreSort = "downloads"
+	pluginStoreSortUpdated   pluginStoreSort = "updated"
 )
 
 // pluginFilterState stores exclusive catalog dropdowns. Empty or "all" means no restriction.
@@ -146,11 +149,21 @@ func storePluginLess(left, right pluginSettingsPlugin, order pluginStoreSort) bo
 	if leftStore != rightStore {
 		return pluginStoreSectionLess(leftStore, rightStore)
 	}
+	if order == pluginStoreSortUpdated {
+		leftDate, leftErr := time.Parse("2006-01-02 15:04:05", left.DateUpdated)
+		rightDate, rightErr := time.Parse("2006-01-02 15:04:05", right.DateUpdated)
+		if (leftErr == nil) != (rightErr == nil) {
+			return leftErr == nil
+		}
+		if leftErr == nil && !leftDate.Equal(rightDate) {
+			return leftDate.After(rightDate)
+		}
+	}
 	var a, b *int
 	switch order {
 	case pluginStoreSortStars:
 		a, b = left.StarCount, right.StarCount
-	case pluginStoreSortDownloads:
+	case pluginStoreSortDefault, pluginStoreSortDownloads:
 		a, b = left.DownloadCount, right.DownloadCount
 	}
 	if a != nil && b == nil {

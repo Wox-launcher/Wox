@@ -434,3 +434,17 @@ func TestFullscreenIconUsesThemeColor(t *testing.T) {
 		}
 	}
 }
+
+func TestFilledStarIconUsesThemeColor(t *testing.T) {
+	icon := Get(ControlStarFilled)
+	if !strings.Contains(icon.ImageData, `fill="var(--wox-theme-icon-color)"`) {
+		t.Fatal("filled star must use the Wox theme icon color")
+	}
+	image, err := woxsvg.Render(strings.ReplaceAll(icon.ImageData, "var(--wox-theme-icon-color)", "#ffffff"), 24, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if image.RGBAAt(12, 12).A == 0 {
+		t.Fatal("star center must be filled")
+	}
+}

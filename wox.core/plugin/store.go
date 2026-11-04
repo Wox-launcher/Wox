@@ -211,7 +211,7 @@ func (s *Store) setPluginManifests(ctx context.Context, manifests []StorePluginM
 func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
 	items := make([]string, 0, len(manifests))
 	for _, m := range manifests {
-		items = append(items, fmt.Sprintf("%s@%s:%s:%s", m.Id, m.Version, storeStatSignature(m.StarCount), storeStatSignature(m.DownloadCount)))
+		items = append(items, fmt.Sprintf("%s@%s:%s:%s:%s", m.Id, m.Version, storeStatSignature(m.StarCount), storeStatSignature(m.DownloadCount), m.DateUpdated))
 	}
 	sort.Strings(items)
 	return strings.Join(items, ";")

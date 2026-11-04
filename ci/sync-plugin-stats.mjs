@@ -93,7 +93,8 @@ export async function fetchPluginDownloads(plugins, token, fetchImpl = fetch) {
       for (const release of releases.nodes) {
         if (release.isDraft) continue;
         for (const asset of release.releaseAssets.nodes) {
-          if (asset.name === item.source.name) {
+          // GitHub matches release asset names without regard to case.
+          if (asset.name.toLowerCase() === item.source.name.toLowerCase()) {
             if (!Number.isSafeInteger(asset.downloadCount) || asset.downloadCount < 0) throw new Error(`Invalid download count for ${item.source.owner}/${item.source.repo}/${item.source.name}`);
             item.total += asset.downloadCount;
             item.matched = true;

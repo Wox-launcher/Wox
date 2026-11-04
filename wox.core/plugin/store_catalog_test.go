@@ -50,3 +50,12 @@ func TestPluginStoreStatisticsChangeSignature(t *testing.T) {
 		t.Fatal("statistics changes must refresh the store catalog")
 	}
 }
+
+func TestPluginStoreUpdatedDateChangesSignature(t *testing.T) {
+	store := &Store{}
+	before := []StorePluginManifest{{Id: "a", Version: "1", DateUpdated: "2025-01-01 00:00:00"}}
+	after := []StorePluginManifest{{Id: "a", Version: "1", DateUpdated: "2026-01-01 00:00:00"}}
+	if store.buildManifestSignature(before) == store.buildManifestSignature(after) {
+		t.Fatal("updated date changes must refresh the store catalog")
+	}
+}

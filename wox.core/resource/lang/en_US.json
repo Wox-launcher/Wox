@@ -3554,5 +3554,6 @@
   "ui_plugin_store_sort": "Sort by",
   "ui_plugin_store_sort_default": "Name",
   "ui_plugin_store_sort_stars": "GitHub stars",
-  "ui_plugin_store_sort_downloads": "Downloads"
+  "ui_plugin_store_sort_downloads": "Downloads",
+  "ui_plugin_store_sort_updated": "Recently updated"
 }
