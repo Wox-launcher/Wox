@@ -3,10 +3,7 @@ package migration
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"gorm.io/gorm"
-	"os"
-	"path/filepath"
 	"testing"
 	"wox/database"
 )
@@ -27,10 +24,9 @@ func TestStandalonePluginMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	root := t.TempDir()
 	for range 2 {
 		if err := db.Transaction(func(tx *gorm.DB) error {
-			return migrateStandalonePlugins(context.Background(), tx, filepath.Join(root, "source"), filepath.Join(root, "destination"))
+			return (&standalonePluginsMigration{}).Up(context.Background(), tx)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -65,47 +61,6 @@ func TestStandalonePluginMigration(t *testing.T) {
 	}
 }
 
-// TestStandaloneMigrationRetriesAfterDatabaseRollback keeps copied files when the transaction fails.
-func TestStandaloneMigrationRetriesAfterDatabaseRollback(t *testing.T) {
-	db := openQuickJumpMigrationDB(t)
-	if err := db.Create(&database.PluginSetting{PluginID: oldDictationPluginID, Key: "history", Value: "history"}).Error; err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	source, destination := filepath.Join(root, "source"), filepath.Join(root, "destination")
-	model := "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17"
-	if err := os.MkdirAll(filepath.Join(source, model), 0755); err != nil {
-		t.Fatal(err)
-	}
-	for _, file := range []string{"model.int8.onnx", "tokens.txt"} {
-		if err := os.WriteFile(filepath.Join(source, model, file), []byte(file), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	failure := errors.New("rollback")
-	err := db.Transaction(func(tx *gorm.DB) error {
-		if err := migrateStandalonePlugins(context.Background(), tx, source, destination); err != nil {
-			return err
-		}
-		return failure
-	})
-	if !errors.Is(err, failure) {
-		t.Fatalf("expected rollback, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(destination, model, "model.int8.onnx")); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		return migrateStandalonePlugins(context.Background(), tx, source, destination)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	var row database.PluginSetting
-	if err := db.Where("plugin_id = ? AND key = ?", newDictationPluginID, "history").First(&row).Error; err != nil || row.Value != "history" {
-		t.Fatalf("settings were not retried: %+v, %v", row, err)
-	}
-}
-
 // TestStandaloneMigrationRollsBackWhenLegacyActionsAreInvalid keeps the old data intact.
 func TestStandaloneMigrationRollsBackWhenLegacyActionsAreInvalid(t *testing.T) {
 	db := openQuickJumpMigrationDB(t)
@@ -117,9 +72,8 @@ func TestStandaloneMigrationRollsBackWhenLegacyActionsAreInvalid(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	root := t.TempDir()
 	err := db.Transaction(func(tx *gorm.DB) error {
-		return migrateStandalonePlugins(context.Background(), tx, filepath.Join(root, "source"), filepath.Join(root, "destination"))
+		return (&standalonePluginsMigration{}).Up(context.Background(), tx)
 	})
 	if err == nil {
 		t.Fatal("invalid actions were accepted")
