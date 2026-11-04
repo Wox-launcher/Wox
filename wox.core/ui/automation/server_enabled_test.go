@@ -25,6 +25,7 @@ type fakeController struct {
 	keyEvent       woxui.KeyEvent
 	settingsPath   string
 	selectionText  string
+	selectionPaths []string
 	reset          bool
 	metricsReset   bool
 	frameRequested bool
@@ -102,6 +103,10 @@ func (f *fakeController) ResetAutomationState() error {
 func (*fakeController) ShowAutomationWindow() error { return nil }
 func (f *fakeController) OpenAutomationSelectionQuery(text string) error {
 	f.selectionText = text
+	return nil
+}
+func (f *fakeController) OpenAutomationFileSelectionQuery(paths []string) error {
+	f.selectionPaths = paths
 	return nil
 }
 func (*fakeController) OpenAutomationQuickJumpQuery(string) error { return nil }
@@ -257,6 +262,10 @@ func TestHandlerDispatchesSemanticActionAndRejectsUnknownMethod(t *testing.T) {
 	selectionResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"selection","method":"window.open_selection_query","params":{"text":"selected text"}}`)
 	if selectionResponse.Code != http.StatusOK || controller.selectionText != "selected text" {
 		t.Fatalf("selection query was not dispatched: status=%d text=%q", selectionResponse.Code, controller.selectionText)
+	}
+	fileSelectionResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"files","method":"window.open_file_selection_query","params":{"paths":["example.wox"]}}`)
+	if fileSelectionResponse.Code != http.StatusOK || len(controller.selectionPaths) != 1 || controller.selectionPaths[0] != "example.wox" {
+		t.Fatalf("file selection was not dispatched: status=%d paths=%v", fileSelectionResponse.Code, controller.selectionPaths)
 	}
 	stateResponse := rpcRequestRecorder(t, handler, "secret-token", `{"jsonrpc":"2.0","id":"state","method":"window.state","params":{"instanceName":"selection"}}`)
 	var stateResult struct {

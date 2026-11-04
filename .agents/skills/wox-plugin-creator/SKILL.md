@@ -16,6 +16,35 @@ description: Create, scaffold, implement, design logos for, and package Wox plug
   - Explicit Node.js: `python3 scripts/scaffold_wox_plugin.py --type singlefile-nodejs --name "Weather" --trigger-keywords weather`
   - Explicit Python: `python3 scripts/scaffold_wox_plugin.py --type singlefile-python --name "Weather" --trigger-keywords weather`
 
+## Toolbar status and Toast notifications
+
+Choose the API by lifetime and scope:
+
+- `ShowToolbarMsg` / `show_toolbar_msg` displays immediate status in the current
+  launcher toolbar. It is available while the plugin owns the current context:
+  a trigger-keyword query, a query scoped to this one plugin, or a global query
+  while one of this plugin's results is selected. The same selected-result
+  rule applies to ownerless selection and multi-plugin scoped queries. This includes plugins whose
+  only trigger keyword is `*`. For global results, use `OnEnterPluginQuery` /
+  `on_enter_plugin_query` and its callback context to publish the status once
+  a result is selected; the initial global `query` runs before selection.
+  Result actions also receive the selected result's context.
+- A toolbar message has no automatic timeout. Updating it does not close it.
+  When the status is no longer needed while the plugin context is still active,
+  the plugin must explicitly call `ClearToolbarMsg(ctx, id)` /
+  `clear_toolbar_msg(ctx, id)` with the message ID. Otherwise, Wox automatically
+  clears it when the user leaves the plugin context. In a global or other
+  ownerless query, selecting another plugin or having no selected result leaves
+  that context; switching between results from the same plugin keeps the message.
+  Preserve the original
+  session and query context for asynchronous updates. If the user leaves a plugin
+  and later returns to it in the same query, an earlier callback can still update
+  the toolbar; name the relevant object in messages about a particular item.
+- `ShowToastMsg` / `show_toast_msg` displays an independent global notification
+  and does not require an active plugin context. Use it for one-off events and
+  optional notification actions. The legacy `Notify` / `notify` API is
+  deprecated and also displays a Toast.
+
 ## Choose a plugin type
 
 - **Single-file SDK plugin**: one `.py` or CommonJS `.js` file with full Public API, loaded into the existing Python/Node runtime host. No extra process per query. Create and edit **only** `~/.wox/wox-user/plugins/single-file/Wox.Plugin.<Name>.js` (or `.py`); Wox watches that directory and reloads on save. Requires Wox 2.4.2+; header `MinWoxVersion` must be `"2.4.2"`.

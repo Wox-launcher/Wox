@@ -78,3 +78,6 @@ dispatcher's silent exits from stranding requests while the connection is alive.
 Run `go test ./plugin/host` from `wox.core` for protocol tests. The WebSocket tests
 cover error delivery, correlation, legacy defaults and callback behavior without
 launching plugin processes or changing user settings.
+
+Legacy plugin `Notify` requests and script `notify` actions display a Toast via
+`ShowToastMsg`; they do not replace or depend on the launcher toolbar message.

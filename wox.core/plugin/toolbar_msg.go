@@ -55,5 +55,6 @@ type ToolbarMsgUI struct {
 	Progress      *int
 	Indeterminate bool
 	Actions       []ToolbarMsgActionUI
-	Fallback      bool // Fallback messages reappear after query-owned toolbar messages clear.
+	IsCurrent     func() bool `json:"-"`
+	CanShow       func() bool `json:"-"`
 }

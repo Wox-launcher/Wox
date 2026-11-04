@@ -534,3 +534,81 @@ func TestActionPanelSearchHidesSeparator(t *testing.T) {
 		}
 	}
 }
+
+// TestToolbarPanelKeepsMessageActionsSeparateAndTracksLifecycle exercises the shared panel controller.
+func TestToolbarPanelKeepsMessageActionsSeparateAndTracksLifecycle(t *testing.T) {
+	app := bindTestApp(&App{
+		querySession: queryController{editor: woxui.NewTextEditor("")},
+		resultList:   resultController{results: []queryResult{{Actions: []resultAction{{ID: "result", Name: "Result"}}}}},
+		toolbar:      toolbarController{toolbarMsg: &toolbarMessage{ID: "one", Title: "A long error", Actions: []toolbarMessageAction{{ID: "first", Name: "First"}, {ID: "second", Name: "Second"}}}},
+	})
+	result := app.resultActionPanelEntries()
+	if len(result) != 1 || result[0].Source != actionPanelSourceResult {
+		t.Fatalf("result entries: %+v", result)
+	}
+	modifier := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifier = woxui.KeyModifierMeta
+	}
+	key := woxui.KeyEvent{Key: "t", Modifiers: modifier, Down: true}
+	if !app.actions.onActionKey(key) || app.actions.actionPanelPurpose != actionPanelPurposeToolbar {
+		t.Fatal("message shortcut did not open the panel")
+	}
+	entries := app.actions.currentActionPanelEntries()
+	if len(entries) != 3 || entries[0].Name != "First" || entries[1].Name != "Second" || entries[2].ID != "toolbar-copy-message" {
+		t.Fatalf("toolbar entries: %+v", entries)
+	}
+	if got := actionPanelHeaderLabel(viewSnapshot{actionPanelPurpose: actionPanelPurposeToolbar, toolbarMsg: app.toolbar.toolbarMsg}, "Actions", "About"); got != "Actions" {
+		t.Fatalf("header = %q", got)
+	}
+	app.actions.toggleActionPanel()
+	if app.actions.actionPanelPurpose != actionPanelPurposeResult {
+		t.Fatal("result panel did not replace message panel")
+	}
+	app.toggleToolbarPanel()
+	if !app.actions.onActionKey(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || app.actions.actionPanel {
+		t.Fatal("escape did not close message panel")
+	}
+	app.toggleToolbarPanel()
+	app.toolbar.applyToolbarMessage(toolbarMessage{ID: "two", Title: "Replacement"})
+	if app.actions.actionPanel {
+		t.Fatal("replacing the message must close its panel")
+	}
+}
+
+func TestToolbarPanelShortcutRequiresActions(t *testing.T) {
+	app := bindTestApp(&App{toolbar: toolbarController{toolbarMsg: &toolbarMessage{ID: "msg", Title: "Status"}}})
+	modifier := woxui.KeyModifierControl
+	if runtime.GOOS == "darwin" {
+		modifier = woxui.KeyModifierMeta
+	}
+	if app.actions.onActionKey(woxui.KeyEvent{Key: "t", Modifiers: modifier, Down: true}) {
+		t.Fatal("message without actions must not claim the shortcut")
+	}
+}
+
+func TestCopyToolbarMessageUsesFullText(t *testing.T) {
+	const message = "A long error that does not fit in the toolbar but must be copied in full"
+	app := bindTestApp(&App{querySession: queryController{editor: woxui.NewTextEditor("")}, toolbar: toolbarController{toolbarMsg: &toolbarMessage{ID: "error", Title: message, Actions: []toolbarMessageAction{{ID: "action"}}}}})
+	copied := ""
+	app.toolbar.writeClipboard = func(text string) error { copied = text; return nil }
+	app.toggleToolbarPanel()
+	app.copyToolbarMessage()
+	if copied != message || app.actions.actionPanel {
+		t.Fatalf("copied %q; panel open %v", copied, app.actions.actionPanel)
+	}
+}
+
+func TestToolbarPanelShortcutOverridesConflictingActionLabels(t *testing.T) {
+	hotkey := primaryHotkey("t")
+	message := &toolbarMessage{ID: "msg", Title: "Status", Actions: []toolbarMessageAction{{ID: "toolbar", Hotkey: hotkey}}}
+	results := []queryResult{{Actions: []resultAction{{ID: "result", Hotkey: hotkey}}}}
+	entries := unifiedActionPanelEntries(results, 0, message)
+	if len(entries) != 2 || entries[0].Hotkey != "" || entries[1].Hotkey != "" {
+		t.Fatalf("conflicting shortcuts remain visible: %+v", entries)
+	}
+	entries = unifiedActionPanelEntries(results, 0, nil)
+	if len(entries) != 1 || entries[0].Hotkey != hotkey {
+		t.Fatalf("result shortcut not restored: %+v", entries)
+	}
+}

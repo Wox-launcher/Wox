@@ -318,7 +318,8 @@ func (a *App) ResetAutomationState() error {
 		a.resetQuery(plainQuery{})
 		a.querySession.queryHistories = nil
 		a.toolbar.toolbarMsg = nil
-		a.toolbar.toolbarFallbackMsg = nil
+		a.toolbar.systemMessages = nil
+		a.toolbar.systemMessageRevision++
 		a.toolbar.toolbarRevision++
 		a.resetAutomationPerfCatalog()
 		resetErr = a.hideWindow(true)
@@ -381,6 +382,22 @@ func (a *App) OpenAutomationSelectionQuery(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return provider.AutomationOpenSelectionQuery(ctx, a.sessionID, text)
+}
+
+// OpenAutomationFileSelectionQuery enters the production selection flow with captured file paths.
+func (a *App) OpenAutomationFileSelectionQuery(paths []string) error {
+	if len(paths) == 0 {
+		return errors.New("selection paths are required")
+	}
+	provider, ok := a.services.(interface {
+		AutomationOpenFileSelectionQuery(context.Context, string, []string) error
+	})
+	if !ok {
+		return errors.New("file selection query automation is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return provider.AutomationOpenFileSelectionQuery(ctx, a.sessionID, paths)
 }
 
 // OpenAutomationQuickJumpQuery opens the Quick Jump secondary with bottom-anchored chrome.

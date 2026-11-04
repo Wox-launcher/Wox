@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"wox/common"
+	"wox/common/icons"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -34,6 +37,7 @@ type actionPanelPurpose uint8
 const (
 	actionPanelPurposeResult actionPanelPurpose = iota
 	actionPanelPurposeAbout
+	actionPanelPurposeToolbar
 )
 
 const (
@@ -149,12 +153,65 @@ func (a *actionPanelController) currentActionPanelEntries() []actionPanelEntry {
 	if a.actionPanelPurpose == actionPanelPurposeAbout {
 		return aboutMenuEntries(a.runningVersion())
 	}
+	if a.actionPanelPurpose == actionPanelPurposeToolbar {
+		return a.toolbarActionPanelEntries()
+	}
 	return a.resultActionPanelEntries()
 }
 
 // resultActionPanelEntries is the right-hand Action Panel list, independent of About Menu.
 func (a *App) resultActionPanelEntries() []actionPanelEntry {
-	return unifiedActionPanelEntriesWithHide(a.resultList.results, a.resultList.selected, a.toolbar.toolbarMsg, a.webView.canHideWebViewPage())
+	entries := unifiedActionPanelEntriesWithHide(a.resultList.results, a.resultList.selected, a.toolbar.toolbarMsg, a.webView.canHideWebViewPage())
+	entries = slices.DeleteFunc(entries, func(entry actionPanelEntry) bool { return entry.Source == actionPanelSourceToolbar })
+	if a.toolbar.effectiveToolbarMessage() != nil && a.toolbar.messageTruncated {
+		for index := range entries {
+			if toolbarPanelShortcutMatches(entries[index].Hotkey) {
+				entries[index].Hotkey = ""
+			}
+		}
+	}
+	return entries
+}
+
+// toolbarPanelShortcutMatches recognizes aliases such as ctrl and control.
+func toolbarPanelShortcutMatches(value string) bool {
+	candidate, ok := woxui.ParseHotkey(value)
+	if !ok {
+		return false
+	}
+	reserved, ok := woxui.ParseHotkey(primaryHotkey("t"))
+	return ok && candidate == reserved
+}
+
+// toolbarActionPanelEntries keeps message operations separate from result actions.
+func (a *App) toolbarActionPanelEntries() []actionPanelEntry {
+	message := a.toolbar.effectiveToolbarMessage()
+	if message == nil || (len(message.Actions) == 0 && !a.toolbar.messageTruncated && !(a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar)) {
+		return nil
+	}
+	entries := unifiedActionPanelEntries(nil, -1, message)
+	entries = append(entries, actionPanelEntry{Key: "toolbar:copy-message", ID: "toolbar-copy-message", Name: "i18n:ui_ai_chat_copy_message", Icon: fromCoreImage(icons.Get(icons.ActionCopy)), Source: actionPanelSourceLocal})
+	showFull := a.toolbar.messageTruncated
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar {
+		showFull = a.actions.toolbarPanelHasFullMessage
+	}
+	if showFull {
+		entries = append(entries, actionPanelEntry{Key: "toolbar:show-message", ID: "toolbar-show-message", Name: "i18n:ui_toolbar_show_full_message", Icon: fromCoreImage(icons.Get(icons.ActionOpen)), Source: actionPanelSourceLocal})
+	}
+	return entries
+}
+
+// toggleToolbarPanel opens the message's own action list.
+func (a *App) toggleToolbarPanel() {
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar {
+		a.actions.hideActionPanel()
+		return
+	}
+	if message := a.toolbar.effectiveToolbarMessage(); message == nil || (len(message.Actions) == 0 && !a.toolbar.messageTruncated) {
+		return
+	}
+	a.actions.toolbarPanelHasFullMessage = a.toolbar.messageTruncated
+	a.actions.openActionPanel(actionPanelPurposeToolbar)
 }
 
 // unifiedActionPanelEntries mirrors Flutter's local-and-toolbar-before-plugin ordering and hotkey conflict handling.
@@ -181,9 +238,13 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 	}
 	if message != nil {
 		for index, action := range message.Actions {
+			hotkey := action.Hotkey
+			if len(message.Actions) > 0 && toolbarPanelShortcutMatches(hotkey) {
+				hotkey = ""
+			}
 			entries = append(entries, actionPanelEntry{
 				Key: fmt.Sprintf("toolbar:%s:%s:%d", message.ID, action.ID, index), ID: fmt.Sprintf("toolbar-%s-%d", action.ID, index),
-				Name: action.Name, Icon: action.Icon, Hotkey: action.Hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceToolbar,
+				Name: action.Name, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceToolbar,
 				// Toolbar message actions are explicitly supplied for the footer.
 				ShowInToolbar: true, ToolbarMessageID: message.ID, ToolbarMessageAction: action,
 			})
@@ -207,7 +268,7 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 	appendResultAction := func(index int) {
 		action := result.Actions[index]
 		hotkey := action.Hotkey
-		if _, conflicted := reservedHotkeys[normalizeToolbarHotkey(hotkey)]; conflicted && strings.TrimSpace(hotkey) != "" {
+		if _, conflicted := reservedHotkeys[normalizeToolbarHotkey(hotkey)]; (conflicted && strings.TrimSpace(hotkey) != "") || (toolbarCount > 0 && toolbarPanelShortcutMatches(hotkey)) {
 			hotkey = ""
 		}
 		entries = append(entries, actionPanelEntry{
@@ -389,6 +450,9 @@ func aboutMenuItemTail(action actionPanelEntry, translate func(string) string) s
 }
 
 func actionPanelHeaderLabel(snapshot viewSnapshot, actionsLabel, aboutLabel string) string {
+	if snapshot.actionPanelPurpose == actionPanelPurposeToolbar && snapshot.aboutMenuError != "" {
+		return snapshot.aboutMenuError
+	}
 	if snapshot.actionPanelPurpose == actionPanelPurposeAbout {
 		if snapshot.aboutMenuError != "" {
 			return snapshot.aboutMenuError
@@ -401,6 +465,12 @@ func actionPanelHeaderLabel(snapshot viewSnapshot, actionsLabel, aboutLabel stri
 func (a *actionPanelController) onActionKey(event woxui.KeyEvent) bool {
 	if !event.Down || event.Composing {
 		return false
+	}
+	if a.toolbarPanelAvailable != nil && a.toolbarPanelAvailable() && hotkeyMatches(primaryHotkey("t"), event) {
+		if !event.Repeat {
+			a.toggleToolbarPanel()
+		}
+		return true
 	}
 	if hotkeyMatches(aboutMenuHotkey(), event) {
 		if event.Repeat {
@@ -506,7 +576,7 @@ func actionPanelEntryForHotkey(entries []actionPanelEntry, event woxui.KeyEvent)
 }
 
 func (a *actionPanelController) toggleActionPanel() {
-	if a.actionPanel && a.actionPanelPurpose == actionPanelPurposeAbout {
+	if a.actionPanel && a.actionPanelPurpose != actionPanelPurposeResult {
 		if len(a.resultActionPanelEntries()) == 0 {
 			return
 		}
@@ -528,6 +598,9 @@ func (a *actionPanelController) openActionPanel(purpose actionPanelPurpose) {
 	a.beforeOpen()
 	a.actionPanel = true
 	a.actionPanelPurpose = purpose
+	if purpose != actionPanelPurposeToolbar {
+		a.toolbarPanelHasFullMessage = false
+	}
 	a.aboutMenuError = ""
 	a.actionSelected = -1
 	a.actionSelectionKey = ""
@@ -574,16 +647,16 @@ func (a *actionPanelController) resetActionPanelLocked() bool {
 func (a *actionPanelController) clearActionPanelStateLocked() {
 	a.actionPanel = false
 	a.actionPanelPurpose = actionPanelPurposeResult
+	a.toolbarPanelHasFullMessage = false
 	a.aboutMenuError = ""
 	a.actionSelected = 0
 	a.actionSelectionKey = ""
 	a.actionFilter = nil
 }
 
-// shouldSyncActionPanelWithResults is false while About Menu is open so result and
-// toolbar updates cannot close the panel or rewrite its selection.
+// shouldSyncActionPanelWithResults limits result reconciliation to the result panel.
 func (a *actionPanelController) shouldSyncActionPanelWithResults() bool {
-	return a.actionPanel && a.actionPanelPurpose != actionPanelPurposeAbout
+	return a.actionPanel && a.actionPanelPurpose == actionPanelPurposeResult
 }
 
 func (a *actionPanelController) moveActionSelection(delta int) {
@@ -779,6 +852,17 @@ func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
 		return
 	}
 	if entry.Source == actionPanelSourceToolbar {
+		message := a.toolbar.effectiveToolbarMessage()
+		if message != nil && message.System && message.ID == entry.ToolbarMessageID && entry.ToolbarMessageAction.SettingsPath != "" {
+			a.actions.hideActionPanel()
+			action := entry.ToolbarMessageAction
+			util.Go(a.lifecycleCtx, "open toolbar settings", func() {
+				if err := a.toolbar.openSettings(a.lifecycleCtx, common.SettingWindowContext{Path: action.SettingsPath, Param: action.SettingsParam}); err != nil {
+					util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open toolbar settings: %v", err))
+				}
+			})
+			return
+		}
 		a.toolbar.activateToolbarActionForMessage(entry.ToolbarMessageID, entry.ToolbarMessageAction)
 		return
 	}
@@ -787,6 +871,14 @@ func (a *App) activateActionPanelEntry(entry actionPanelEntry) {
 
 // activateLocalActionPanelEntry dispatches preview-owned actions without crossing the plugin action API.
 func (a *App) activateLocalActionPanelEntry(entry actionPanelEntry) {
+	if entry.ID == "toolbar-show-message" {
+		a.showFullToolbarMessage()
+		return
+	}
+	if entry.ID == "toolbar-copy-message" {
+		a.copyToolbarMessage()
+		return
+	}
 	if a.activateAboutMenuEntry(entry) {
 		return
 	}

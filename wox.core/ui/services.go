@@ -203,6 +203,7 @@ func (s *CoreServices) StartQuery(ctx context.Context, request contract.QueryReq
 		return errors.New("query session and query id are required")
 	}
 	ctx = util.WithQueryIdContext(uiServiceContext(ctx, request.SessionID), request.Query.QueryId)
+	plugin.GetPluginManager().BeginSessionQuery(request.SessionID, request.Query.QueryId)
 	util.Go(ctx, "handle typed UI query", func() {
 		runUIQuery(ctx, request, view)
 	})
@@ -300,4 +301,14 @@ func uiServiceContext(ctx context.Context, sessionID string) context.Context {
 // ResolveQueryHint matches a declaration without invoking a plugin query.
 func (s *CoreServices) ResolveQueryHint(ctx context.Context, text string) *common.QueryHint {
 	return plugin.GetPluginManager().ResolveQueryHint(ctx, text)
+}
+
+// SelectedResultChanged updates selected-result plugin ownership for one launcher session.
+func (s *CoreServices) SelectedResultChanged(ctx context.Context, sessionID, queryID, resultID string) {
+	plugin.GetPluginManager().SelectResultContext(uiServiceContext(ctx, sessionID), sessionID, queryID, resultID)
+}
+
+// BeginSessionQuery invalidates stale results before asynchronous MRU restoration starts.
+func (s *CoreServices) BeginSessionQuery(_ context.Context, sessionID, queryID string) {
+	plugin.GetPluginManager().BeginSessionQuery(sessionID, queryID)
 }

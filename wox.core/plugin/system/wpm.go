@@ -753,25 +753,25 @@ func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []
 					PreventHideAfterAction: true,
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						pluginName := pluginInstance.GetName(ctx)
-						w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+						w.showUpgradeStatus(ctx, fmt.Sprintf(
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
 							pluginName,
-						)})
+						), true)
 						if err := plugin.GetStoreManager().UninstallWithProgress(ctx, pluginInstance, false, func(message string) {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
+							w.showUpgradeStatus(ctx, fmt.Sprintf("%s: %s", pluginName, message), true)
 						}); err != nil {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+							w.showUpgradeStatus(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
 								fmt.Sprintf("%s: %s", pluginName, err.Error()),
-							)})
+							), false)
 						} else {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+							w.showUpgradeStatus(ctx, fmt.Sprintf(
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 								pluginName,
 								w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
-							)})
+							), false)
 						}
 					},
 				},
@@ -870,14 +870,14 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 
 			util.Go(ctx, "install plugin", func() {
 				pluginName := pluginManifest.GetName(ctx)
-				w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+				w.showUpgradeStatus(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
 					pluginName,
-				)})
+				), true)
 
 				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
+					w.showUpgradeStatus(ctx, fmt.Sprintf("%s: %s", pluginName, message), true)
 				})
 
 				if installErr != nil {
@@ -889,11 +889,11 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 						updatable.Preview = &restoredPreview
 						w.api.UpdateResult(ctx, *updatable)
 					}
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+					w.showUpgradeStatus(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_install"),
 						formatStorePluginInstallError(ctx, w.api, pluginManifest, installErr),
-					)})
+					), false)
 					return
 				}
 
@@ -908,14 +908,19 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 					w.api.UpdateResult(ctx, *updatable)
 				}
 
-				w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+				w.showUpgradeStatus(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 					pluginName,
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_install_past"),
-				)})
+				), false)
 			})
 		},
 	}
+}
+
+// showUpgradeStatus keeps installation progress and its outcome in the active WPM toolbar.
+func (w *WPMPlugin) showUpgradeStatus(ctx context.Context, message string, inProgress bool) {
+	showPluginInstallStatus(ctx, w.api, message, inProgress)
 }
 
 // createUpgradeAction creates an upgrade action with the same UI-lock pattern
@@ -941,41 +946,42 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 
 			util.Go(ctx, "upgrade plugin", func() {
 				pluginName := pluginManifest.GetName(ctx)
-				w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+				w.showUpgradeStatus(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 					pluginName,
-				)})
+				), true)
 
 				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, pluginManifest, func(message string) {
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
+					w.showUpgradeStatus(ctx, fmt.Sprintf("%s: %s", pluginName, message), true)
 				})
 
 				if installErr != nil {
 					// Restore upgrade + uninstall actions so the user can retry.
 					if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-						restoredActions := []plugin.QueryResultAction{w.createUpgradeAction(pluginManifest, showPreview), w.createUninstallAction(pluginManifest)}
-						updatable.Actions = &restoredActions
+						restoredActions := []plugin.QueryResultAction{w.createUpgradeAction(pluginManifest, showPreview)}
 						if showPreview {
+							restoredActions = append(restoredActions, w.createUninstallAction(pluginManifest))
 							restoredPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
 							updatable.Preview = &restoredPreview
-						} else {
-							restoredActions = restoredActions[:1]
 						}
+						updatable.Actions = &restoredActions
 						w.api.UpdateResult(ctx, *updatable)
 					}
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+					w.showUpgradeStatus(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 						formatStorePluginInstallError(ctx, w.api, pluginManifest, installErr),
-					)})
+					), false)
 					return
 				}
 
 				// Update tails, preview, and actions to the installed state.
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
 					if !showPreview {
-						w.api.RefreshQuery(ctx, plugin.RefreshQueryParam{})
+						tails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
+						updatable.Tails = &tails
+						w.api.UpdateResult(ctx, *updatable)
 					} else {
 						newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
 						updatable.Tails = &newTails
@@ -987,11 +993,11 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 					}
 				}
 
-				w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+				w.showUpgradeStatus(ctx, fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 					pluginName,
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
-				)})
+				), false)
 			})
 		},
 	}
@@ -1008,21 +1014,21 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 			instances := plugin.GetPluginManager().GetPluginInstances()
 			if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
 				util.Go(ctx, "uninstall plugin", func() {
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+					w.showUpgradeStatus(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
 						pluginName,
-					)})
+					), true)
 
 					uninstallErr := plugin.GetStoreManager().UninstallWithProgress(ctx, inst, false, func(message string) {
-						w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
+						w.showUpgradeStatus(ctx, fmt.Sprintf("%s: %s", pluginName, message), true)
 					})
 					if uninstallErr != nil {
-						w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+						w.showUpgradeStatus(ctx, fmt.Sprintf(
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 							w.api.GetTranslation(ctx, "i18n:plugin_installer_uninstall"),
 							fmt.Sprintf("%s(%s): %s", pluginName, pluginManifest.Version, uninstallErr.Error()),
-						)})
+						), false)
 						return
 					}
 
@@ -1037,11 +1043,11 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 						w.api.UpdateResult(ctx, *updatable)
 					}
 
-					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+					w.showUpgradeStatus(ctx, fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 						pluginName,
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
-					)})
+					), false)
 				})
 			}
 		},
@@ -1173,26 +1179,37 @@ func (w *WPMPlugin) updateCommand(ctx context.Context, query plugin.Query) []plu
 		Actions: []plugin.QueryResultAction{{
 			Name: "i18n:plugin_wpm_upgrade_all", Icon: icons.Get(icons.ActionUpdate), PreventHideAfterAction: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				var retryActions []plugin.QueryResultAction
 				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+					if updatable.Actions != nil {
+						retryActions = append(retryActions, (*updatable.Actions)...)
+					}
 					empty := []plugin.QueryResultAction{}
 					updatable.Actions = &empty
 					w.api.UpdateResult(ctx, *updatable)
 				}
 				util.Go(ctx, "upgrade all plugins", func() {
-					for _, manifest := range upgrades {
+					var failures []string
+					for _, manifest := range wpmUpgradeablePlugins(upgrades, w.buildInstalledPluginLookup()) {
 						name := manifest.GetName(ctx)
-						w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), name)})
+						w.showUpgradeStatus(ctx, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), name), true)
 						err := plugin.GetStoreManager().InstallWithProgress(ctx, manifest, func(message string) {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", name, message)})
+							w.showUpgradeStatus(ctx, fmt.Sprintf("%s: %s", name, message), true)
 						})
 						if err != nil {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), formatStorePluginInstallError(ctx, w.api, manifest, err))})
+							failures = append(failures, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"), w.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"), formatStorePluginInstallError(ctx, w.api, manifest, err)))
 							continue
 						}
-						w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"), name, w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"))})
+						w.showUpgradeStatus(ctx, fmt.Sprintf(w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"), name, w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past")), false)
 					}
-					if w.api.GetUpdatableResult(ctx, actionContext.ResultId) != nil {
-						w.api.RefreshQuery(ctx, plugin.RefreshQueryParam{})
+					if len(failures) == 0 {
+						w.showUpgradeStatus(ctx, w.api.GetTranslation(ctx, "i18n:plugin_wpm_all_up_to_date"), false)
+					} else {
+						w.showUpgradeStatus(ctx, strings.Join(failures, "; "), false)
+						if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
+							updatable.Actions = &retryActions
+							w.api.UpdateResult(ctx, *updatable)
+						}
 					}
 				})
 			},

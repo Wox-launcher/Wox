@@ -879,5 +879,5 @@ func aliasMatchForQuery(ctx context.Context, alias string, search string) aliasM
 // notifyResultBindingFailure reports explicit hotkey failures without opening Wox.
 func notifyResultBindingFailure(message string) {
 	woxIcon, _ := icons.Get(icons.BrandWox).ToImage()
-	notifier.Notify(woxIcon, i18n.GetI18nManager().TranslateWox(context.Background(), strings.TrimPrefix(message, "i18n:")))
+	notifier.ShowToastAsync(context.Background(), notifier.Toast{Icon: woxIcon, Message: i18n.GetI18nManager().TranslateWox(context.Background(), strings.TrimPrefix(message, "i18n:"))})
 }

@@ -46,6 +46,15 @@ Other plugins and query-session routing are preserved. Existing Glance refresh,
 Toolbar replacement and session-leave cleanup remain in this owner; result-query
 callbacks remain in the result store.
 
+Toolbar messages are session-owned and stay visible until explicitly cleared or
+until their plugin context ends. A trigger or single-plugin scoped query owns a
+context directly; global and other multi-plugin queries use the selected result's
+owner, including `*`-only plugins. Selecting another result from the same plugin
+keeps its context and message; selecting another plugin or no result clears it.
+Session and query identity reject updates from old queries and other windows.
+A late callback from the same query can be accepted if its plugin becomes active
+again, so status about a particular object should identify that object.
+
 `ShowToastMsg` displays one independent transient overlay. Its optional action
 is invalidated on dismissal, replacement, or plugin unload and runs outside the
 UI thread. Existing Node.js and Python plugins keep the legacy `Notify` wire

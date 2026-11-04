@@ -15,6 +15,8 @@ Settings uses the fixed Glass-derived dark palette in `launcher/settings_theme.g
 
 macOS caption controls use AppKit's standard window buttons through `WindowOptions.TitleBarControls` and `Window.SetTitleBarControls`. They retain the running OS's appearance, including macOS 27 glass, while Go title bars reserve their layout space. Close and maximize requests flow through the host callbacks; Settings keeps zoom disabled. Ordinary launcher, onboarding, and screenshot windows leave captions hidden. Caption coordinates are AppKit points and do not use the display's backing pixel scale.
 
+Core callers choose `ShowToast` for transient notifications or `ShowToolbarMsg` for toolbar state. Toasts do not inspect or replace toolbar messages; plugin Toasts use the `ShowToastMsg` API so their ownership and callbacks follow the plugin lifecycle. System ToolbarMsg calls are independent of plugin contexts and take priority over plugin status. System messages are retained by ID; higher priority wins, with the newest message breaking ties. Update confirmation outranks the persistent main-hotkey warning and expires after five seconds. Clearing or expiring a system message reveals the next system message, or the latest still-valid plugin status.
+
 ## Architecture contract
 
 `runtime` keeps the stable UI API as a small facade. Implementations, native bridges and tests are grouped under its `internal/input`, `internal/graphics`, `internal/capture`, `internal/window` and `internal/webview` directories. See [runtime layout](runtime/README.md) for responsibilities and dependency direction.

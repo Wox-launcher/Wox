@@ -166,6 +166,9 @@ func GetStoreManager() *Store {
 }
 
 func (s *Store) getStoreManifests(ctx context.Context) []storeManifest {
+	if url := automationStoreManifestURL(); url != "" {
+		return []storeManifest{{Name: "Wox Smoke Plugin Store", Url: url}}
+	}
 	return []storeManifest{
 		{
 			Name: "Wox Official Plugin Store",

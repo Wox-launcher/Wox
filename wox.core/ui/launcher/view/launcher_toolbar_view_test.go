@@ -57,8 +57,8 @@ func TestToolbarTextOnlyCount(t *testing.T) {
 				if len(status.Children) != 1 {
 					t.Fatalf("text-only status contains an icon or placeholder: %+v", status)
 				}
-				label := status.Children[0].(woxwidget.Align).Child.(woxwidget.Text)
-				if label.Value != props.Label || label.Color != color || label.Style.Size != scaledLauncherSize(woxcomponent.ToolbarFontSize, scale) {
+				label := status.Children[0].(woxwidget.Align).Child.(woxwidget.TextBlock)
+				if label.Value != props.Label || label.Color != color || label.Style.Size != scaledLauncherSize(woxcomponent.ToolbarFontSize, scale) || label.MaxLines != 1 {
 					t.Fatalf("label lost toolbar typography or theme: %+v", label)
 				}
 				right := row.Children[2].(woxwidget.Container).Child.(woxwidget.Flex)
@@ -422,5 +422,26 @@ func TestToolbarTextureUsesRoundedMaterial(t *testing.T) {
 	body := layers.Children[1].Child.(woxwidget.Container)
 	if backdrop.Surface != texture || backdrop.Radius != 16 || body.Surface != nil {
 		t.Fatal("toolbar texture must follow rounded backdrop instead of rectangular body")
+	}
+}
+
+func TestLauncherToolbarInteractiveStatusSemantics(t *testing.T) {
+	tapped := false
+	built := LauncherToolbarView(LauncherToolbarProps{Width: 300, Height: 40, Window: &woxui.Window{}, DensityScale: 1, Label: "Long error message", StatusInteractive: true, StatusActive: true, StatusHotkeyLabels: []string{"Ctrl", "T"}, OnStatusTap: func() { tapped = true }}).(woxwidget.Stack)
+	row := built.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	status := row.Children[0].(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
+	if status.Role != woxui.AccessibilityRoleButton || !status.Expanded || status.Value != "Long error message" {
+		t.Fatalf("status semantics: %+v", status)
+	}
+	if err := status.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !tapped {
+		t.Fatalf("activate status: tapped %v err %v", tapped, err)
+	}
+}
+
+func TestLauncherToolbarActionWithoutHotkeyDoesNotAddEmptyChip(t *testing.T) {
+	surface, _ := launcherToolbarActionSurface(LauncherToolbarAction{ID: "settings", Label: "Change hotkey"}, woxcomponent.Theme{}, &woxui.Window{}, 1, false)
+	children := surface.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(children) != 1 {
+		t.Fatalf("action children = %d, want only the label", len(children))
 	}
 }

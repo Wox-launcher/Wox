@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"wox/common"
 	"wox/common/icons"
 	"wox/database"
@@ -12,6 +13,7 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/permission"
+	"wox/util/shell"
 )
 
 type DoctorCheckType string
@@ -277,7 +279,7 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 	if !passed {
 		actionName = "i18n:plugin_doctor_database_repair_action"
 		action = func(ctx context.Context, actionContext ActionContext) {
-			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{
+			GetPluginManager().GetUI().ShowToast(ctx, common.ToastMsg{
 				Text:           i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_start"),
 				Icon:           icons.Get(icons.PluginDoctor).String(),
 				DisplaySeconds: 6,
@@ -288,23 +290,23 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 				util.GetLogger().Error(ctx, fmt.Sprintf("database repair failed: %v", err))
 				if result.RecoveredPath != "" && !result.Swapped {
 					msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
-					GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
+					GetPluginManager().GetUI().ShowToast(ctx, databaseRecoveryManualNotify(msg, result.RecoveredPath))
 					return
 				}
 				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_failed")
-				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
+				GetPluginManager().GetUI().ShowToast(ctx, common.ToastMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 				GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/data"})
 				return
 			}
 
 			if result.Swapped {
 				msg := i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_success")
-				GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
+				GetPluginManager().GetUI().ShowToast(ctx, common.ToastMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
 				return
 			}
 
 			msg := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_doctor_database_repair_manual"), result.RecoveredPath)
-			GetPluginManager().GetUI().Notify(ctx, common.NotifyMsg{Text: msg, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6})
+			GetPluginManager().GetUI().ShowToast(ctx, databaseRecoveryManualNotify(msg, result.RecoveredPath))
 		}
 	}
 
@@ -317,4 +319,17 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		PreventHideAfterAction: !passed,
 		Action:                 action,
 	}
+}
+
+// databaseRecoveryManualNotify lets the user locate a recovered database without replacing it automatically.
+func databaseRecoveryManualNotify(message, path string) common.ToastMsg {
+	notice := common.ToastMsg{Text: message, Icon: icons.Get(icons.PluginDoctor).String(), DisplaySeconds: 6}
+	if strings.TrimSpace(path) != "" {
+		notice.Action = &common.ToastAction{Name: "i18n:ui_toolbar_show_recovered_file", Action: func(ctx context.Context) {
+			if err := shell.OpenFileInFolder(path); err != nil {
+				util.GetLogger().Error(ctx, "open recovered database folder: "+err.Error())
+			}
+		}}
+	}
+	return notice
 }

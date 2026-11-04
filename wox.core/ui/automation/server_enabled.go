@@ -349,6 +349,21 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			return nil, invalidParams(errors.New("selection text is required"))
 		}
 		return resultOrError(true, controller.OpenAutomationSelectionQuery(params.Text))
+	case "window.open_file_selection_query":
+		var params struct {
+			Paths []string `json:"paths"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		if len(params.Paths) == 0 {
+			return nil, invalidParams(errors.New("selection paths are required"))
+		}
+		provider, ok := controller.(interface{ OpenAutomationFileSelectionQuery([]string) error })
+		if !ok {
+			return resultOrError(false, errors.New("file selection query automation is unavailable"))
+		}
+		return resultOrError(true, provider.OpenAutomationFileSelectionQuery(params.Paths))
 	case "window.open_quickjump_query":
 		var params struct {
 			Query string `json:"query"`

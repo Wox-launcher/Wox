@@ -2,6 +2,7 @@ package widget
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	woxui "wox/ui/runtime"
@@ -192,4 +193,18 @@ type tallLineMeasurer struct {
 
 func (m tallLineMeasurer) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
 	return woxui.TextMetrics{Size: woxui.Size{Width: float32(len([]rune(text))) * max(style.Size/2, 1), Height: m.height}}, nil
+}
+
+func TestSingleLineTextBlockAddsEllipsisOnlyWhenTruncated(t *testing.T) {
+	measurer := &fakeHostServices{}
+	style := woxui.TextStyle{Size: 10}
+	value := "A long message that needs truncation"
+	narrow := layoutTextBlock(measurer, value, style, 80, 1, 18)
+	if len(narrow.Lines) != 1 || !strings.HasSuffix(narrow.Lines[0], "…") {
+		t.Fatalf("narrow text = %v, want an ellipsis", narrow.Lines)
+	}
+	wide := layoutTextBlock(measurer, value, style, 400, 1, 18)
+	if len(wide.Lines) != 1 || wide.Lines[0] != value {
+		t.Fatalf("wide text = %v, want the complete message", wide.Lines)
+	}
 }

@@ -540,10 +540,10 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			Icon:  icons.Get(icons.ActionCPUProfile),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				img, _ := icons.Get(icons.BrandWox).ToImage()
-				notifier.Notify(img, "This is a very long notification message to test the notification system in Wox.\n"+
-					"If you see this message, the notification system is working properly.\n"+
-					"You can customize the duration, appearance, and behavior of notifications as needed.\n"+
-					"Enjoy using Wox!\n"+time.Now().String())
+				notifier.ShowToastAsync(ctx, notifier.Toast{Icon: img, Message: "This is a very long notification message to test the notification system in Wox.\n" +
+					"If you see this message, the notification system is working properly.\n" +
+					"You can customize the duration, appearance, and behavior of notifications as needed.\n" +
+					"Enjoy using Wox!\n" + time.Now().String()})
 			},
 		},
 
@@ -552,7 +552,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			Icon:  icons.Get(icons.ActionCPUProfile),
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				img, _ := icons.Get(icons.BrandWox).ToImage()
-				notifier.Notify(img, `This is a very short notification.`+time.Now().String())
+				notifier.ShowToastAsync(ctx, notifier.Toast{Icon: img, Message: `This is a very short notification.` + time.Now().String()})
 			},
 		},
 
@@ -576,6 +576,34 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 		},
 
 		{
+			ID:                     "test_toolbar_actions",
+			Title:                  "i18n:plugin_sys_test_toolbar_actions",
+			SubTitle:               "i18n:plugin_sys_test_toolbar_actions_subtitle",
+			Icon:                   icons.Get(icons.ActionCPUProfile),
+			Aliases:                []string{"debug toolbar", "test toolbar actions", "toolbar message"},
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				manager := plugin.GetPluginManager()
+				if instance := manager.GetPluginInstanceById(common.SysPluginID); instance != nil {
+					manager.ShowSessionToolbarMsg(ctx, instance, plugin.ToolbarMsg{
+						Id: "sys-test-toolbar-actions", Title: r.api.GetTranslation(ctx, "plugin_sys_test_toolbar_message"), Icon: sysIcon,
+						Actions: []plugin.ToolbarMsgAction{
+							{Id: "first", Name: "i18n:plugin_sys_test_toolbar_first", Hotkey: util.PrimaryHotkey("shift+1"), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
+								r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_test_toolbar_first"})
+							}},
+							{Id: "second", Name: "i18n:plugin_sys_test_toolbar_second", Hotkey: util.PrimaryHotkey("shift+2"), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
+								r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_test_toolbar_second"})
+							}},
+							{Id: "clear", Name: "i18n:plugin_sys_test_toolbar_clear", Icon: icons.Get(icons.ActionDelete), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
+								manager.ClearToolbarMsg(ctx, instance, "sys-test-toolbar-actions")
+							}},
+						},
+					})
+				}
+			},
+		},
+
+		{
 			ID:                     "test_toolbar_progress",
 			Title:                  "test toolbar progress",
 			SubTitle:               "Preview indeterminate and determinate toolbar progress",
@@ -585,7 +613,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 				toolbarMsgId := uuid.New().String()
 				toolbarUI := plugin.GetPluginManager().GetUI()
-				// Global sys results do not own the wildcard query, so the dev preview targets the action's session directly.
+				// The development preview targets the originating session directly.
 				toolbarUI.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
 					Id:            toolbarMsgId,
 					Title:         "Testing indeterminate toolbar progress",

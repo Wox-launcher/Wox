@@ -34,31 +34,40 @@ func (a LauncherToolbarAction) Equal(other LauncherToolbarAction) bool {
 
 // LauncherToolbarProps contains the launcher status and available result actions.
 type LauncherToolbarProps struct {
-	Width         float32
-	Height        float32
-	Padding       woxwidget.Insets
-	Theme         woxcomponent.Theme
-	Window        *woxui.Window
-	DensityScale  float32
-	Label         string
-	Icon          *woxui.Image
-	Progress      int
-	HasProgress   bool
-	Indeterminate bool
-	Actions       []LauncherToolbarAction
-	MenuVisible   bool
-	MenuActive    bool
-	MenuLabel     string
-	MenuIcon      *woxui.Image
-	OnMenuTap     func()                 `boundary:"stable"`
-	OnMenuHoverAt func(bool, woxui.Rect) `boundary:"stable"`
-	OnDragStart   func()                 `boundary:"stable"`
+	Width              float32
+	Height             float32
+	Padding            woxwidget.Insets
+	Theme              woxcomponent.Theme
+	Window             *woxui.Window
+	DensityScale       float32
+	Label              string
+	Icon               *woxui.Image
+	Progress           int
+	HasProgress        bool
+	Indeterminate      bool
+	Actions            []LauncherToolbarAction
+	StatusHotkeyLabels []string
+	StatusInteractive  bool
+	StatusActive       bool
+	OnStatusTap        func() `boundary:"stable"`
+	MenuVisible        bool
+	MenuActive         bool
+	MenuLabel          string
+	MenuIcon           *woxui.Image
+	OnMenuTap          func()                 `boundary:"stable"`
+	OnMenuHoverAt      func(bool, woxui.Rect) `boundary:"stable"`
+	OnDragStart        func()                 `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the launcher toolbar section.
 func (p LauncherToolbarProps) Equal(other LauncherToolbarProps) bool {
-	if p.Width != other.Width || p.Height != other.Height || p.Padding != other.Padding || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Label != other.Label || p.Icon != other.Icon || p.Progress != other.Progress || p.HasProgress != other.HasProgress || p.Indeterminate != other.Indeterminate || len(p.Actions) != len(other.Actions) || p.MenuVisible != other.MenuVisible || p.MenuActive != other.MenuActive || p.MenuLabel != other.MenuLabel || p.MenuIcon != other.MenuIcon {
+	if p.Width != other.Width || p.Height != other.Height || p.Padding != other.Padding || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || p.Label != other.Label || p.Icon != other.Icon || p.Progress != other.Progress || p.HasProgress != other.HasProgress || p.Indeterminate != other.Indeterminate || len(p.Actions) != len(other.Actions) || p.StatusInteractive != other.StatusInteractive || p.StatusActive != other.StatusActive || len(p.StatusHotkeyLabels) != len(other.StatusHotkeyLabels) || p.MenuVisible != other.MenuVisible || p.MenuActive != other.MenuActive || p.MenuLabel != other.MenuLabel || p.MenuIcon != other.MenuIcon {
 		return false
+	}
+	for index := range p.StatusHotkeyLabels {
+		if p.StatusHotkeyLabels[index] != other.StatusHotkeyLabels[index] {
+			return false
+		}
 	}
 	for index := range p.Actions {
 		if !p.Actions[index].Equal(other.Actions[index]) {
@@ -86,54 +95,18 @@ type measuredLauncherToolbarAction struct {
 
 // LauncherToolbarView builds the status footer and the actions that fit its current width.
 func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
-	contentHeight := launcherToolbarContentHeight(props.DensityScale)
-	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
-	// Hover padding is 8px on each side, so a 0 Flex gap keeps 16px between
-	// action contents. Stacking the previous 16px gap on that padding doubled
-	// the visible spacing.
-	actionGap := float32(0)
-	statusActionGap := scaledLauncherSize(16, props.DensityScale)
-	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
+	layout := launcherToolbarLayoutFor(props)
+	contentHeight, fontSize := layout.contentHeight, layout.fontSize
+	contentWidth, leftWidth, rightWidth, labelWidth := layout.contentWidth, layout.leftWidth, layout.rightWidth, layout.labelWidth
 	progressVisible := props.HasProgress || props.Indeterminate
-	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
-	for _, action := range props.Actions {
-		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
-		measured = append(measured, measuredLauncherToolbarAction{id: action.ID, widget: widget, width: width, pinned: action.Pinned})
-	}
-	naturalLeft := float32(0)
-	labelWidth := float32(0)
-	menuWidth := float32(0)
-	if props.MenuVisible {
-		menuWidth = contentHeight
-		naturalLeft = menuWidth
-	} else if props.Label != "" {
-		metrics, _ := props.Window.MeasureText(props.Label, woxui.TextStyle{Size: fontSize})
-		labelWidth = metrics.Size.Width
-		naturalLeft = labelWidth
-		if props.Icon != nil {
-			naturalLeft += scaledLauncherSize(26, props.DensityScale)
-		}
-		if progressVisible {
-			naturalLeft += scaledLauncherSize(22, props.DensityScale)
-		}
-	}
-	leftWidth, rightAvailable := launcherToolbarSplit(contentWidth, naturalLeft, toolbarReservedActionsWidth(measured, actionGap), statusActionGap)
-	shown, rightWidth := fitLauncherToolbarActions(measured, actionGap, rightAvailable)
-	rightChildren := make([]woxwidget.Widget, 0, len(shown))
-	for _, action := range shown {
+	statusHotkey := layout.statusHotkey
+	rightChildren := make([]woxwidget.Widget, 0, len(layout.shown))
+	for _, action := range layout.shown {
 		rightChildren = append(rightChildren, action.widget)
 	}
-	extraWidth := float32(0)
-	if props.Icon != nil {
-		extraWidth += scaledLauncherSize(26, props.DensityScale)
-	}
-	if progressVisible {
-		extraWidth += scaledLauncherSize(22, props.DensityScale)
-	}
-	labelWidth = max(float32(0), leftWidth-extraWidth)
 	leftWidgets := make([]woxwidget.Widget, 0, 3)
 	if props.MenuVisible {
-		leftWidgets = append(leftWidgets, launcherToolbarAboutMenuButton(props, contentHeight, menuWidth))
+		leftWidgets = append(leftWidgets, launcherToolbarAboutMenuButton(props, contentHeight, contentHeight))
 	} else {
 		if props.Icon != nil {
 			iconSize := scaledLauncherSize(18, props.DensityScale)
@@ -141,10 +114,10 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 				Width: iconSize, Height: contentHeight, Vertical: 0.5, Child: woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
 			})
 		}
-		if props.Label != "" {
+		if props.Label != "" && (labelWidth > 0 || !props.StatusInteractive) {
 			leftWidgets = append(leftWidgets, woxwidget.Align{
 				Width: labelWidth, Height: contentHeight, Vertical: 0.5,
-				Child: woxwidget.Text{Value: props.Label, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
+				Child: woxwidget.TextBlock{Value: props.Label, Width: labelWidth, Height: contentHeight, LineHeight: contentHeight, MaxLines: 1, AlignmentY: 0.5, Style: woxui.TextStyle{Size: fontSize}, Color: props.Theme.ToolbarText},
 			})
 		}
 		if progressVisible {
@@ -159,9 +132,32 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			})
 		}
 	}
+	if props.StatusInteractive && !props.MenuVisible {
+		leftWidgets = append(leftWidgets, statusHotkey)
+		content := leftWidgets
+		leftWidgets = []woxwidget.Widget{woxcomponent.Hoverable("launcher-toolbar-status-hover", false, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
+			background := woxui.Color{}
+			if hovered || props.StatusActive {
+				background = woxcomponent.ControlHoverColor(props.Theme.ToolbarBackground, props.Theme.ToolbarText)
+			}
+			return woxwidget.Gesture{ID: "launcher-toolbar-status", OnTap: props.OnStatusTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{Width: leftWidth, Height: contentHeight, Radius: scaledLauncherSize(4, props.DensityScale), Color: background, Padding: woxwidget.Insets{Left: scaledLauncherSize(8, props.DensityScale), Right: scaledLauncherSize(8, props.DensityScale)}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: content}}}
+		})}
+	}
 	if props.Label != "" && !props.MenuVisible {
+		role := woxui.AccessibilityRoleGroup
+		var semanticActions []woxui.AccessibilityAction
+		if props.StatusInteractive {
+			role = woxui.AccessibilityRoleButton
+			semanticActions = []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
+		}
 		leftWidgets = []woxwidget.Widget{woxwidget.Semantics{
-			Key: "launcher-toolbar-status-key", AutomationID: "launcher.toolbar.status", Role: woxui.AccessibilityRoleGroup,
+			Key: "launcher-toolbar-status-key", AutomationID: "launcher.toolbar.status", Role: role, Actions: semanticActions, Expanded: props.StatusActive, OnAction: func(action woxui.AccessibilityAction, _ string) error {
+				if action != woxui.AccessibilityActionActivate || props.OnStatusTap == nil {
+					return fmt.Errorf("unsupported status action %q", action)
+				}
+				props.OnStatusTap()
+				return nil
+			},
 			Label: props.Label, Value: props.Label, LiveRegion: woxui.AccessibilityLiveRegionPolite,
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: scaledLauncherSize(8, props.DensityScale), Children: leftWidgets},
 		}}
@@ -174,7 +170,7 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			woxwidget.Gesture{ID: "launcher-toolbar-drag-area", OnDragStart: props.OnDragStart, Child: woxwidget.Container{
 				Width: max(float32(0), contentWidth-leftWidth-rightWidth), Height: contentHeight,
 			}},
-			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: actionGap, Children: rightChildren}},
+			woxwidget.Container{Width: rightWidth, Height: contentHeight, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 0, Children: rightChildren}},
 		}}},
 	}
 	var surface woxwidget.Widget = body
@@ -196,6 +192,80 @@ func LauncherToolbarView(props LauncherToolbarProps) woxwidget.Widget {
 			}
 		}}},
 	}}
+}
+
+// launcherToolbarLayout is shared by drawing and truncation detection so the shortcut uses the same geometry as the rendered message.
+type launcherToolbarLayout struct {
+	contentHeight, fontSize, contentWidth, leftWidth, rightWidth, labelWidth, naturalLabelWidth float32
+	statusHotkey                                                                                woxwidget.Widget
+	shown                                                                                       []measuredLauncherToolbarAction
+}
+
+// LauncherToolbarStatusTruncated reports whether the message will be ellipsized at this width.
+func LauncherToolbarStatusTruncated(props LauncherToolbarProps) bool {
+	if props.Label == "" || props.MenuVisible {
+		return false
+	}
+	layout := launcherToolbarLayoutFor(props)
+	return strings.ContainsAny(props.Label, "\r\n") || layout.naturalLabelWidth > layout.labelWidth
+}
+
+// launcherToolbarLayoutFor measures the footer once using logical launcher dimensions.
+func launcherToolbarLayoutFor(props LauncherToolbarProps) launcherToolbarLayout {
+	contentHeight := launcherToolbarContentHeight(props.DensityScale)
+	fontSize := scaledLauncherSize(woxcomponent.ToolbarFontSize, props.DensityScale)
+	actionGap := float32(0)
+	statusActionGap := scaledLauncherSize(16, props.DensityScale)
+	contentWidth := max(float32(0), props.Width-props.Padding.Left-props.Padding.Right)
+	progressVisible := props.HasProgress || props.Indeterminate
+	measured := make([]measuredLauncherToolbarAction, 0, len(props.Actions))
+	for _, action := range props.Actions {
+		widget, width := launcherToolbarActionView(action, props.Theme, props.Window, props.DensityScale)
+		measured = append(measured, measuredLauncherToolbarAction{id: action.ID, widget: widget, width: width, pinned: action.Pinned})
+	}
+	naturalLeft, naturalLabelWidth := float32(0), float32(0)
+	if props.MenuVisible {
+		naturalLeft = contentHeight
+	} else if props.Label != "" {
+		metrics, _ := props.Window.MeasureText(props.Label, woxui.TextStyle{Size: fontSize})
+		naturalLabelWidth = metrics.Size.Width
+		naturalLeft = naturalLabelWidth
+		if props.Icon != nil {
+			naturalLeft += scaledLauncherSize(26, props.DensityScale)
+		}
+		if progressVisible {
+			naturalLeft += scaledLauncherSize(22, props.DensityScale)
+		}
+	}
+	var statusHotkey woxwidget.Widget
+	statusHotkeyWidth := float32(0)
+	if props.StatusInteractive && !props.MenuVisible {
+		statusHotkey, statusHotkeyWidth = woxcomponent.WoxHotkey(woxcomponent.HotkeyProps{Theme: &props.Theme, Toolbar: true, Labels: props.StatusHotkeyLabels, Foreground: props.Theme.ToolbarText, Background: props.Theme.ToolbarBackground, FontSize: scaledLauncherSize(woxcomponent.TailFontSize, props.DensityScale), Compact: props.DensityScale < 1, Window: props.Window})
+		statusHotkeyWidth += scaledLauncherSize(24, props.DensityScale)
+		naturalLeft += statusHotkeyWidth
+	}
+	leftWidth, rightAvailable := launcherToolbarSplit(contentWidth, naturalLeft, toolbarReservedActionsWidth(measured, actionGap), statusActionGap)
+	minimumStatusWidth := statusHotkeyWidth
+	if props.Icon != nil {
+		minimumStatusWidth += scaledLauncherSize(26, props.DensityScale)
+	}
+	if progressVisible {
+		minimumStatusWidth += scaledLauncherSize(22, props.DensityScale)
+	}
+	if props.StatusInteractive && !props.MenuVisible && leftWidth < min(contentWidth, minimumStatusWidth) {
+		leftWidth = min(contentWidth, minimumStatusWidth)
+		rightAvailable = max(float32(0), contentWidth-leftWidth-statusActionGap)
+	}
+	shown, rightWidth := fitLauncherToolbarActions(measured, actionGap, rightAvailable)
+	extraWidth := float32(0)
+	if props.Icon != nil {
+		extraWidth += scaledLauncherSize(26, props.DensityScale)
+	}
+	if progressVisible {
+		extraWidth += scaledLauncherSize(22, props.DensityScale)
+	}
+	labelWidth := max(float32(0), leftWidth-extraWidth-statusHotkeyWidth)
+	return launcherToolbarLayout{contentHeight, fontSize, contentWidth, leftWidth, rightWidth, labelWidth, naturalLabelWidth, statusHotkey, shown}
 }
 
 // launcherToolbarAboutMenuButton is the compact left-side About Menu control.
@@ -289,16 +359,19 @@ func launcherToolbarActionSurface(action LauncherToolbarAction, theme woxcompone
 	horizontalPadding := scaledLauncherSize(8, densityScale)
 	verticalPadding := scaledLauncherSize(2, densityScale)
 	contentHeight := launcherToolbarContentHeight(densityScale)
-	children := []woxwidget.Widget{chip}
-	width := horizontalPadding*2 + chipWidth
-	// Skip empty labels. Align{Width: 0} means fill-available, so a blank
-	// doctor/default action would push Enter onto the next toolbar action.
+	children := make([]woxwidget.Widget, 0, 2)
+	width := horizontalPadding * 2
 	if strings.TrimSpace(action.Label) != "" {
-		children = []woxwidget.Widget{
-			woxwidget.Text{Value: action.Label, Style: labelStyle, Color: labelColor},
-			chip,
+		children = append(children, woxwidget.Text{Value: action.Label, Style: labelStyle, Color: labelColor})
+		width += labelMetrics.Size.Width
+	}
+	// A zero-width hotkey widget fills the remaining space, so omit it entirely.
+	if len(action.HotkeyLabels) > 0 {
+		if len(children) > 0 {
+			width += gap
 		}
-		width += labelMetrics.Size.Width + gap
+		children = append(children, chip)
+		width += chipWidth
 	}
 	return woxwidget.Container{
 		Width: width, Height: contentHeight, Radius: scaledLauncherSize(4, densityScale), Color: background,

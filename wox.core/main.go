@@ -382,33 +382,37 @@ func run() {
 
 	for _, arg := range os.Args {
 		if arg == "--updated" {
-			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
-				Icon:           icons.Get(icons.StatusInstalled).String(),
-				Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_update_success"),
-				DisplaySeconds: 5,
-				Confetti:       true,
-			})
+			ui.GetUIManager().SetStartupConfetti()
 			break
 		}
 	}
 	if incident, ok := supervisor.GetManager().TakePendingCrashIncident(); ok {
-		ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+		ui.GetUIManager().SetStartupToast(common.ToastMsg{
 			Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_previous_crash_github_issue"),
 			DisplaySeconds: 60,
+			Action: &common.ToastAction{Name: "i18n:ui_toolbar_view_crash_report", Action: func(actionCtx context.Context) {
+				ui.GetUIManager().GetUI(actionCtx).ShowApp(actionCtx, common.ShowContext{})
+				ui.GetUIManager().GetUI(actionCtx).ChangeQuery(actionCtx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "feedback crash "})
+			}},
 		})
 		util.GetLogger().Info(ctx, fmt.Sprintf("pending crash report is ready for a GitHub issue: %s", incident.ReportPath))
 	}
 	if result, ok := supervisor.TakeTaskResult(); ok && result.Type == supervisor.TaskRestore {
 		if result.OK {
-			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+			ui.GetUIManager().SetStartupToast(common.ToastMsg{
 				Icon:           icons.Get(icons.StatusInstalled).String(),
 				Text:           i18n.GetI18nManager().TranslateWox(ctx, "ui_data_backup_restore_restarted"),
 				DisplaySeconds: 5,
 			})
 		} else {
-			ui.GetUIManager().SetStartupNotify(common.NotifyMsg{
+			ui.GetUIManager().SetStartupToast(common.ToastMsg{
 				Text:           fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "ui_data_backup_restore_failed"), result.Error),
 				DisplaySeconds: 8,
+				Action: &common.ToastAction{Name: "i18n:ui_toolbar_copy_error", Action: func(actionCtx context.Context) {
+					if err := clipboard.WriteText(result.Error); err != nil {
+						util.GetLogger().Error(actionCtx, "copy backup restore error: "+err.Error())
+					}
+				}},
 			})
 		}
 	}

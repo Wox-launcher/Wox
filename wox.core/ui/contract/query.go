@@ -48,3 +48,9 @@ type QueryServices interface {
 	SubmitFormAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string, values map[string]string) error
 	AcceptQueryCompletionHint(ctx context.Context, sessionID string, inputPrefix string, completionText string, source string) error
 }
+
+// QuerySelectionServices synchronizes selected-result context with core.
+type QuerySelectionServices interface {
+	BeginSessionQuery(ctx context.Context, sessionID, queryID string)
+	SelectedResultChanged(ctx context.Context, sessionID, queryID, resultID string)
+}

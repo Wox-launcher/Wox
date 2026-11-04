@@ -73,8 +73,9 @@ type View interface {
 	RefreshNotes(ctx context.Context, noteID string) error
 	OpenMacOSPermissionFlow(ctx context.Context, permissionType string) error
 	ShowToolbarMessage(ctx context.Context, message plugin.ToolbarMsgUI) error
-	ShowNotificationMessage(ctx context.Context, message common.NotifyMsg) error
 	ClearToolbarMessage(ctx context.Context, toolbarMessageID string) error
+	ShowSystemToolbarMessage(ctx context.Context, message common.SystemToolbarMsg) error
+	ClearSystemToolbarMessage(ctx context.Context, id string) error
 	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) error
 	SendChatResponse(ctx context.Context, chat common.AIChatData) error
 	RemoveChat(ctx context.Context, chatID string) error

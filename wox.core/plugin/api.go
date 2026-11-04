@@ -97,7 +97,8 @@ type API interface {
 	// primary launcher, without counting secondary panels.
 	IsVisible(ctx context.Context) bool
 
-	// OnEnterPluginQuery registers a callback that fires once when a session enters this plugin's query context.
+	// OnEnterPluginQuery fires when a session enters this plugin's query context,
+	// including selection of its first result in a multi-plugin query.
 	OnEnterPluginQuery(ctx context.Context, callback func(ctx context.Context))
 
 	// OnLeavePluginQuery registers a callback that fires once when a session leaves this plugin's query context.
@@ -153,8 +154,9 @@ type API interface {
 	// PushAttention persists a plugin-owned attention item and refreshes the unread badge.
 	PushAttention(ctx context.Context, request PushAttentionRequest)
 
-	// ShowToolbarMsg creates or updates a toolbar message while this plugin is active in the current
-	// query session. It is cleared when the session leaves the plugin's query context.
+	// ShowToolbarMsg creates or updates a persistent toolbar message in the plugin's active context.
+	// Use the enter or action callback context for a selected result in a multi-plugin query.
+	// ClearToolbarMsg closes it explicitly; leaving the context also clears it.
 	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
 
 	// ClearToolbarMsg removes a toolbar message previously shown by this plugin by ID.

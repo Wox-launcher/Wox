@@ -372,6 +372,22 @@ func TestNormalizeToolbarMsgUsesPluginIconWhenMsgIconMissing(t *testing.T) {
 	assert.Equal(t, pluginIcon, normalized.Icon)
 }
 
+// TestNormalizeToolbarMsgActionIcons supplies a default while preserving explicit action icons.
+func TestNormalizeToolbarMsgActionIcons(t *testing.T) {
+	customIcon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>`)
+	instance := &Instance{}
+	normalized := (&Manager{}).presentation.normalizeToolbarMsg(context.Background(), instance, ToolbarMsg{
+		Id: "status", HideIcon: true, Actions: []ToolbarMsgAction{{Name: "Default"}, {Name: "Custom", Icon: customIcon}},
+	})
+	assert.True(t, normalized.Icon.IsEmpty())
+	require.Len(t, normalized.Actions, 2)
+	assert.Equal(t, icons.Get(icons.ActionExecute), normalized.Actions[0].Icon)
+	assert.Equal(t, customIcon, normalized.Actions[1].Icon)
+	ui := normalized.toToolbarMsgUI()
+	assert.Equal(t, normalized.Actions[0].Icon, ui.Actions[0].Icon)
+	assert.Equal(t, customIcon, ui.Actions[1].Icon)
+}
+
 // TestNormalizeToolbarMsgHideIcon preserves text-only messages through the UI payload.
 func TestNormalizeToolbarMsgHideIcon(t *testing.T) {
 	pluginIcon := common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg"/>`)

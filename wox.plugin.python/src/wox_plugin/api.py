@@ -331,8 +331,12 @@ class PublicAPI(Protocol):
         Show or update a toolbar message for the current plugin.
 
         Reusing the same msg id replaces the previous content.
-        Messages are only accepted while the user stays in this plugin query and
-        are cleared when the session leaves that query context.
+        Messages persist until cleared explicitly or the plugin context is left.
+        Context includes a trigger or single-plugin scoped query, or the selected
+        plugin result in a global or other multi-plugin query. Switching between
+        the same plugin's results preserves its message. Preserve callback context
+        for asynchronous work, and name the relevant object because an earlier
+        update may arrive after returning to the plugin in the same query.
 
         Args:
             ctx: Context

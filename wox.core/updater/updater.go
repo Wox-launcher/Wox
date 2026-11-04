@@ -424,6 +424,9 @@ func buildUpdateInfoFromManifest(ctx context.Context, currentVersion string, rel
 }
 
 func manifestURLForReleaseChannel(releaseChannel setting.ReleaseChannel) string {
+	if url := automationManifestURL(); url != "" {
+		return url
+	}
 	switch setting.NormalizeReleaseChannel(string(releaseChannel)) {
 	case setting.ReleaseChannelBeta:
 		return betaVersionManifestUrl

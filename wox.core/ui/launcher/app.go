@@ -1325,6 +1325,9 @@ func (a *App) requestMRU() error {
 	}); err != nil {
 		return err
 	}
+	if services, ok := a.services.(contract.QuerySelectionServices); ok {
+		services.BeginSessionQuery(a.lifecycleCtx, a.sessionID, queryID)
+	}
 	util.Go(a.lifecycleCtx, "load MRU results", func() {
 		a.loadTypedMRU(queryID)
 	})
@@ -1379,6 +1382,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		a.glance.stopGlanceLocked(true)
 	}
 	a.resultList.restoreSelection(queryID, complete)
+	a.notifySelectedResult()
 	closedActionPanel := false
 	if a.actions.shouldSyncActionPanelWithResults() && len(a.actions.currentActionPanelEntries()) == 0 {
 		closedActionPanel = a.actions.resetActionPanelLocked()
@@ -2217,6 +2221,7 @@ func (a *App) moveSelection(delta int) {
 	}
 	if target != a.resultList.selected {
 		a.resultList.selected = target
+		a.notifySelectedResult()
 		a.resultList.resultScrollDetached = false
 		a.actions.clearActionPanelStateLocked()
 		a.chat.chatFullscreen = false
@@ -2242,6 +2247,7 @@ func (a *App) moveSelectionByGroup(direction int) {
 	}
 	if target != a.resultList.selected {
 		a.resultList.selected = target
+		a.notifySelectedResult()
 		a.resultList.resultScrollDetached = false
 		a.actions.clearActionPanelStateLocked()
 		a.chat.chatFullscreen = false
@@ -2262,6 +2268,9 @@ func (a *App) selectResult(index int) {
 		a.cancelQuerySelectionRestore(index)
 		changed := a.resultList.selected != index
 		a.resultList.selected = index
+		if changed {
+			a.notifySelectedResult()
+		}
 		closedPanel = a.actions.resetActionPanelLocked()
 		closedForm = a.forms.form != nil
 		a.forms.form = nil
@@ -2290,7 +2299,7 @@ func (a *App) activateResult(index int) {
 	if len(a.resultList.results) > 0 && (index < 0 || index >= len(a.resultList.results) || a.resultList.results[index].IsGroup) {
 		return
 	}
-	entries := unifiedActionPanelEntries(a.resultList.results, index, a.toolbar.toolbarMsg)
+	entries := unifiedActionPanelEntries(a.resultList.results, index, nil)
 	if len(entries) == 0 {
 		return
 	}
@@ -2492,5 +2501,19 @@ func (a *App) cancelQuerySelectionRestore(index int) {
 		a.resultList.pendingSelection = &pendingResultSelection{
 			queryID: a.querySession.query.QueryID, index: index, resultID: a.resultList.results[index].ID, preserveIndex: true,
 		}
+	}
+}
+
+// notifySelectedResult keeps ownerless-query ownership aligned with the selected row.
+func (a *App) notifySelectedResult() {
+	if a.services == nil || !a.querySession.queryContextKnown || (!a.querySession.queryContext.IsGlobalQuery && a.querySession.queryContext.PluginID != "") || a.resultList.resultsQueryID != a.querySession.query.QueryID {
+		return
+	}
+	id := ""
+	if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) && !a.resultList.results[a.resultList.selected].IsGroup {
+		id = a.resultList.results[a.resultList.selected].ID
+	}
+	if services, ok := a.services.(contract.QuerySelectionServices); ok {
+		services.SelectedResultChanged(a.lifecycleCtx, a.sessionID, a.querySession.query.QueryID, id)
 	}
 }
