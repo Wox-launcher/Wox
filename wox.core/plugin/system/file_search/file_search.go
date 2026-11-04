@@ -23,6 +23,7 @@ import (
 	"wox/setting/definition"
 	"wox/setting/validator"
 	"wox/util"
+	"wox/util/clipboard"
 	"wox/util/fileicon"
 	"wox/util/filesearch"
 	"wox/util/filesearchservice"
@@ -769,7 +770,11 @@ func (c *FileSearchPlugin) startPendingContentCrawl(ctx context.Context) {
 		err := <-done
 		if err != nil && !errors.Is(err, context.Canceled) && c.isContentSearchCurrent(runningCtx, generation) {
 			c.api.Log(runningCtx, plugin.LogLevelError, "Content index failed: "+err.Error())
-			c.clearContentToolbarMsg(runningCtx, 0)
+			status := filesearch.StatusSnapshot{ErrorRootCount: 1, LastError: err.Error()}
+			c.showContentToolbarMsg(runningCtx, plugin.ToolbarMsg{
+				Id: contentSearchToolbarMsgID, Title: c.api.GetTranslation(runningCtx, "plugin_file_content_index_failed"), Icon: icons.Get(icons.ActionError),
+				Actions: c.toolbarMsgActions(runningCtx, status, false),
+			})
 			c.api.ShowToastMsg(runningCtx, plugin.ShowToastMsgOption{Message: "i18n:plugin_file_content_index_failed"})
 		}
 		c.finishContentCrawl(runningCtx, generation)
@@ -2066,7 +2071,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 		}, true
 	}
 
-	if !includeReady && !status.IsIndexing && status.ErrorRootCount == 0 {
+	if !includeReady && !status.IsIndexing && !statusHasToolbarError(status) {
 		return plugin.ToolbarMsg{}, false
 	}
 
@@ -2092,11 +2097,11 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 		indeterminate = true
 	} else if hasPermissionError {
 		title = c.api.GetTranslation(ctx, "plugin_file_status_permission")
-	} else if status.ErrorRootCount == 0 {
+	} else if !statusHasToolbarError(status) {
 		return plugin.ToolbarMsg{}, false
 	}
 
-	if status.ErrorRootCount > 0 && !status.IsIndexing {
+	if statusHasToolbarError(status) && !status.IsIndexing {
 		title = c.decorateRootErrorToolbarTitle(ctx, title, status)
 	}
 
@@ -2106,7 +2111,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 		Icon:          icon,
 		Progress:      progress,
 		Indeterminate: indeterminate,
-		Actions:       c.toolbarMsgActions(ctx, hasPermissionError),
+		Actions:       c.toolbarMsgActions(ctx, status, hasPermissionError),
 	}, true
 }
 
@@ -2126,7 +2131,7 @@ func shouldSuppressShortIncrementalToolbar(status filesearch.StatusSnapshot) boo
 func isFullIndexCompletionSummary(status filesearch.StatusSnapshot) bool {
 	return status.ActiveRunKind == filesearch.RunKindFull &&
 		status.ActiveRunStatus == filesearch.RunStatusCompleted &&
-		status.ActiveRunElapsedMs > 0
+		status.ActiveRunElapsedMs > 0 && !statusHasToolbarError(status)
 }
 
 func statusHasToolbarError(status filesearch.StatusSnapshot) bool {
@@ -2417,6 +2422,7 @@ func buildToolbarMsgSignature(msg plugin.ToolbarMsg) string {
 		actionParts = append(actionParts, strings.Join([]string{
 			action.Id,
 			action.Name,
+			action.ContextData["details"],
 			action.Icon.String(),
 			action.Hotkey,
 			fmt.Sprintf("%t", action.IsDefault),
@@ -2692,21 +2698,40 @@ func lastToolbarErrorSegment(message string) string {
 	return message
 }
 
-func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, hasPermissionError bool) []plugin.ToolbarMsgAction {
-	if !hasPermissionError || !util.IsMacOS() {
+// toolbarMsgActions offers recovery and copies the original scanner details rather than the abbreviated title.
+func (c *FileSearchPlugin) toolbarMsgActions(ctx context.Context, status filesearch.StatusSnapshot, hasPermissionError bool) []plugin.ToolbarMsgAction {
+	if status.IsIndexing || !statusHasToolbarError(status) {
 		return nil
 	}
-
-	return []plugin.ToolbarMsgAction{
-		{
-			Name:   "i18n:plugin_file_status_open_privacy_settings",
-			Icon:   icons.Get(icons.ActionRunAsAdministrator),
-			Hotkey: util.PrimaryHotkey("enter"),
-			Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
+	actions := []plugin.ToolbarMsgAction{}
+	if hasPermissionError && util.IsMacOS() {
+		actions = append(actions, plugin.ToolbarMsgAction{
+			Id: "open-privacy", Name: "i18n:plugin_file_status_open_privacy_settings", Icon: icons.Get(icons.ActionRunAsAdministrator), Hotkey: util.PrimaryHotkey("enter"),
+			Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
 				permission.OpenPrivacySecuritySettings(ctx)
 			},
-		},
+		})
 	}
+	actions = append(actions, plugin.ToolbarMsgAction{
+		Id: "open-settings", Name: "i18n:plugin_file_status_open_settings", Icon: icons.Get(icons.ActionSettings), PreventHideAfterAction: true,
+		Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
+			plugin.GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/plugin/setting", Param: PluginID})
+		},
+	})
+	details := strings.TrimSpace(strings.Join([]string{status.ErrorRootPath, status.LastError}, "\n"))
+	if details != "" {
+		actions = append(actions, plugin.ToolbarMsgAction{
+			Id: "copy-error", Name: "i18n:plugin_file_status_copy_error", Icon: icons.Get(icons.ActionCopy), PreventHideAfterAction: true,
+			ContextData: common.ContextData{"details": details},
+			Action: func(ctx context.Context, actionContext plugin.ToolbarMsgActionContext) {
+				if err := clipboard.WriteText(actionContext.ContextData["details"]); err != nil {
+					util.GetLogger().Error(ctx, "copy file index error: "+err.Error())
+					c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:ui_toolbar_copy_failed"})
+				}
+			},
+		})
+	}
+	return actions
 }
 
 func isFileAccessPermissionError(message string) bool {

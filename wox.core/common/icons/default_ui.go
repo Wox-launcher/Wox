@@ -102,6 +102,7 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlEmoji:             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>`),
 	ControlUpload:            newMonochromeUIIcon(`<path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5"/>`),
 	ControlDownload:          newMonochromeUIIcon(`<path d="M12 4v12M8 12l4 4 4-4M5 20h14"/>`),
+	ControlStarFilled:        common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" d="M12 2.5 15 8.7l6.8 1-4.9 4.8 1.2 6.8-6.1-3.2-6.1 3.2 1.2-6.8-4.9-4.8 6.8-1z"/></svg>`),
 	ControlError:             newMonochromeUIIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/>`),
 	ControlWarning:           newMonochromeUIIcon(`<path d="M12 3 2.8 20h18.4z"/><path d="M12 9v5M12 17h.01"/>`),
 	ControlRefresh:           newActionIcon(`<path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/>`),

@@ -1,4 +1,19 @@
 {
+  "ui_toolbar_open_result_hotkeys": "結果のホットキー設定を開く",
+  "ui_toolbar_view_crash_report": "クラッシュレポートを表示",
+  "ui_toolbar_copy_error": "エラーの詳細をコピー",
+  "ui_toolbar_show_recovered_file": "復元したファイルを表示",
+  "ui_toolbar_change_main_hotkey": "メインホットキーを変更",
+  "ui_toolbar_show_full_message": "メッセージ全体を表示",
+  "plugin_file_status_open_settings": "ファイル検索の設定を開く",
+  "plugin_file_status_copy_error": "エラーの詳細をコピー",
+  "ui_toolbar_copy_failed": "メッセージをコピーできません",
+  "plugin_sys_test_toolbar_actions": "ツールバーメッセージ操作のテスト",
+  "plugin_sys_test_toolbar_actions_subtitle": "複数の操作を持つ長いツールバーメッセージを表示",
+  "plugin_sys_test_toolbar_message": "これは長いツールバーメッセージのテストです。省略されたメッセージ全体を操作パネルからコピーできます。",
+  "plugin_sys_test_toolbar_first": "最初のテスト操作",
+  "plugin_sys_test_toolbar_second": "2番目のテスト操作",
+  "plugin_sys_test_toolbar_clear": "テストメッセージを消去",
   "ui_global_hotkeys": "グローバルホットキー",
   "ui_in_app_hotkeys": "アプリ内ホットキー",
   "ui_refinement_hotkey": "フィルターのホットキー",
@@ -3550,5 +3565,10 @@
   "notes_sidebar_cancel": "キャンセル",
   "notes_group_delete_message": "このグループを削除しますか？ノートとサブグループは親グループに移動し、ノートは削除されません。",
   "notes_organize_failed": "ノートを整理できませんでした。もう一度お試しください。",
-  "notes_note_delete_message": "このノートを完全に削除しますか？"
+  "notes_note_delete_message": "このノートを完全に削除しますか？",
+  "ui_plugin_store_sort": "並べ替え",
+  "ui_plugin_store_sort_default": "名前",
+  "ui_plugin_store_sort_stars": "GitHub スター",
+  "ui_plugin_store_sort_downloads": "ダウンロード数",
+  "ui_plugin_store_sort_updated": "更新日時"
 }

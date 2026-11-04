@@ -3,17 +3,52 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"wox/setting"
 	"wox/test/smokeperf"
 	"wox/test/smokereport"
 )
+
+// TestSeedSmokeMainHotkey keeps smoke registration separate from a running user's default hotkey.
+func TestSeedSmokeMainHotkey(t *testing.T) {
+	directory := t.TempDir()
+	if err := seedSmokeMainHotkey(directory); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite3", filepath.Join(directory, "wox.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var value string
+	if err := db.QueryRow("SELECT value FROM wox_settings WHERE key = ?", "MainHotkey@"+runtime.GOOS).Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	if value != "ctrl+shift+alt+f12" {
+		t.Fatalf("main hotkey = %q", value)
+	}
+	if err := db.QueryRow("SELECT value FROM wox_settings WHERE key = ?", "ActionPanelHotkey@"+runtime.GOOS).Scan(&value); err != nil || value != setting.DefaultActionPanelHotkey() {
+		t.Fatalf("action panel hotkey = %q, err=%v", value, err)
+	}
+	if _, err := db.Exec("UPDATE wox_settings SET value = ? WHERE key = ?", "f12", "MainHotkey@"+runtime.GOOS); err != nil {
+		t.Fatal(err)
+	}
+	if err := seedSmokeMainHotkey(directory); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT value FROM wox_settings WHERE key = ?", "MainHotkey@"+runtime.GOOS).Scan(&value); err != nil || value != "f12" {
+		t.Fatalf("existing main hotkey = %q, err=%v", value, err)
+	}
+}
 
 // TestSuiteControlAddressSeparatesLaunches covers the Windows pipe and Unix socket naming policy.
 func TestSuiteControlAddressSeparatesLaunches(t *testing.T) {

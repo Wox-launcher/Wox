@@ -133,7 +133,7 @@ var (
 
 // SendNativeKeyChord posts one chord through the real Windows input path.
 func SendNativeKeyChord(keys ...string) error {
-	keyCodes := map[string]C.ushort{"ctrl": 0x11, "alt": 0x12, "space": 0x20, "a": 0x41, "c": 0x43, "f12": 0x7B}
+	keyCodes := map[string]C.ushort{"ctrl": 0x11, "shift": 0x10, "alt": 0x12, "space": 0x20, "a": 0x41, "c": 0x43, "f11": 0x7A, "f12": 0x7B}
 	resolved := make([]C.ushort, 0, len(keys))
 	for _, key := range keys {
 		code, ok := keyCodes[strings.ToLower(key)]

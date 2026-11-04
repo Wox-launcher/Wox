@@ -143,7 +143,7 @@ Methods for interacting with Wox:
 - **Settings**: `GetSetting()`, `SetSetting()`, `OnSettingChanged()`; legacy `SaveSetting()` remains available but is deprecated
 - **Logging**: `log()`
 - **i18n**: `getTranslation()`
-- **Results**: `getUpdatableResult()`, `updateResult()`
+- **Results**: `getUpdatableResult()`, `updateResult()`, `RemoveResult()`
 - **AI**: `llmStream()`
 - **MRU**: `onMruRestore()`
 - **Callbacks**: `onUnload()`, `onDeepLink()`
@@ -468,3 +468,11 @@ Declare `Type: "hotkey"`, `Scope: "global"` in static plugin settings, then subs
 with `OnHotkey` (`on_hotkey` in Python) during init. Wox manages registration, conflicts
 and cleanup. See the [contract and examples](../wox.core/plugin/hotkey.md) for gesture
 kinds, paired hold events, stable table IDs and asynchronous callback handling.
+
+### Removing a result
+
+```typescript
+const removed = await api.RemoveResult(ctx, { ResultId: actionContext.ResultId, SelectedResultId: nextResultId })
+```
+
+Use the original query context and a result owned by your plugin. `SelectedResultId` is optional; if it is absent or unavailable, Wox preserves the current selection or selects the nearest remaining row. `removed.Success` indicates whether the result was visible and removed.

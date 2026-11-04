@@ -58,7 +58,7 @@ Methods for interacting with Wox:
 - **Settings**: `get_setting()`, `set_setting()`, `on_setting_changed()`; legacy `save_setting()` is deprecated
 - **Logging**: `log()`
 - **i18n**: `get_translation()`
-- **Results**: `get_updatable_result()`, `update_result()`
+- **Results**: `get_updatable_result()`, `update_result()`, `remove_result()`
 - **AI**: `ai_chat_stream()`
 - **MRU**: `on_mru_restore()`
 - **Callbacks**: `on_unload()`, `on_deep_link()`
@@ -229,6 +229,8 @@ from .models.setting import PluginSettingValueHotkey
 from .api import (
     ChatStreamCallback,
     PublicAPI,
+    RemoveResultOption,
+    RemoveResultResult,
     GetThemeColorsOption,
     GetThemeColorsResult,
     ScreenshotOption,
@@ -322,6 +324,7 @@ from .models.setting import (
     PluginSettingDefinitionType,
     PluginSettingDefinitionValue,
     PluginSettingValueCheckBox,
+    PluginSettingValueFilePath,
     PluginSettingValueLabel,
     PluginSettingValueStyle,
     PluginSettingValueTable,
@@ -383,6 +386,8 @@ __all__: List[str] = [
     "ChatStreamCallback",
     "ScreenshotOption",
     "ScreenshotResult",
+    "RemoveResultOption",
+    "RemoveResultResult",
     "GetThemeColorsOption",
     "GetThemeColorsResult",
     "SetSettingOption",
@@ -501,6 +506,7 @@ __all__: List[str] = [
     "PluginSettingValueStyle",
     "PluginSettingValueTextBox",
     "PluginSettingValueCheckBox",
+    "PluginSettingValueFilePath",
     "PluginSettingValueLabel",
     "PluginSettingValueTable",
     "PluginSettingValueTableColumn",

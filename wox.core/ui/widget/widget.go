@@ -1216,7 +1216,9 @@ type TextBlock struct {
 	AlignmentY float32
 	// ShrinkWrap keeps short text at its measured width while preserving Width as the truncation limit.
 	ShrinkWrap bool
-	Layout     *TextBlockLayout
+	// HardEllipsis truncates a single line at a grapheme boundary instead of a word boundary.
+	HardEllipsis bool
+	Layout       *TextBlockLayout
 }
 
 // TextBlockLayout is the portable line layout used by TextBlock and scroll containers.
@@ -1343,17 +1345,24 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 			maxLines = visibleLines
 		}
 	}
+	buildLayout := func() TextBlockLayout {
+		if w.HardEllipsis && maxLines == 1 {
+			return TextBlockLayout{Lines: []string{ellipsizeSingleLine(ctx.window, w.Value, w.Style, width)}, Size: woxui.Size{Width: width, Height: lineHeight}, LineHeight: lineHeight, ConstraintWidth: width, HasConstraintWidth: true}
+		}
+		return layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
+	}
 	textLayout := TextBlockLayout{}
-	if w.Layout != nil {
+	// Precomputed layouts do not record truncation policy, so hard ellipsis must be laid out again.
+	if w.Layout != nil && !(w.HardEllipsis && maxLines == 1) {
 		textLayout = *w.Layout
 		if textLayout.HasConstraintWidth && float32(math.Abs(float64(textLayout.ConstraintWidth-width))) > 0.5 {
 			if ctx.debug != nil && ctx.elements != nil {
 				ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("text layout measured at width %.1f was reflowed for width %.1f", textLayout.ConstraintWidth, width))
 			}
-			textLayout = layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
+			textLayout = buildLayout()
 		}
 	} else {
-		textLayout = layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
+		textLayout = buildLayout()
 	}
 	height := min(heightLimit, textLayout.Size.Height)
 	if w.Height > 0 {
@@ -1406,6 +1415,36 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 			}
 		},
 	}
+}
+
+// ellipsizeSingleLine fills the available width without splitting a grapheme.
+func ellipsizeSingleLine(window textMeasurer, value string, style woxui.TextStyle, width float32) string {
+	value = strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
+	line, _, hasNextLine := strings.Cut(value, "\n")
+	metrics, _ := window.MeasureText(line, style)
+	if !hasNextLine && metrics.Size.Width <= width {
+		return line
+	}
+	ellipsis, _ := window.MeasureText("…", style)
+	if ellipsis.Size.Width > width {
+		return ""
+	}
+	runes := []rune(line)
+	spans := woxui.GraphemeSpans(line)
+	low, high := 0, len(spans)
+	for low < high {
+		mid := low + (high-low+1)/2
+		metrics, _ := window.MeasureText(string(runes[:spans[mid-1].End])+"…", style)
+		if metrics.Size.Width <= width {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+	if low == 0 {
+		return "…"
+	}
+	return strings.TrimRightFunc(string(runes[:spans[low-1].End]), unicode.IsSpace) + "…"
 }
 
 // alignedTextLineBounds places a measured line box inside an authored slot.

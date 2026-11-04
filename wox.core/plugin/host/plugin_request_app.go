@@ -86,22 +86,13 @@ func (w *WebsocketHost) handleGetThemeColors(ctx context.Context, pluginInstance
 	return result, nil
 }
 
-// legacyNotifyMessage preserves the original notification routing and presentation for old hosts.
-func legacyNotifyMessage(ctx context.Context, instance *plugin.Instance, message string) common.NotifyMsg {
-	icon := instance.Metadata.Icon
-	if parsed, err := common.ParseWoxImage(icon); err == nil {
-		icon = instance.ConvertIcon(ctx, parsed).String()
-	}
-	return common.NotifyMsg{PluginId: instance.Metadata.Id, Text: instance.API.GetTranslation(ctx, message), Icon: icon, DisplaySeconds: 5}
-}
-
-// handleNotify retains the legacy wire method without exposing it on the Go plugin API.
+// handleNotify preserves the legacy wire method while always displaying a toast.
 func (w *WebsocketHost) handleNotify(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	message, err := requirePluginParam(request.Params, "message")
 	if err != nil {
 		return nil, err
 	}
-	plugin.GetPluginManager().GetUI().Notify(ctx, legacyNotifyMessage(ctx, pluginInstance, message))
+	pluginInstance.API.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: message})
 	return "", nil
 }
 

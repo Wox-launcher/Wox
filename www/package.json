@@ -7,13 +7,15 @@
         "docs:dev": "node scripts/generate-changelog-pages.mjs && vitepress dev docs",
         "docs:build": "node scripts/generate-changelog-pages.mjs --check-readme && vitepress build docs",
         "docs:preview": "vitepress preview docs",
-        "test:plugin-seo": "node scripts/test-plugin-seo.mjs"
+        "test:plugin-seo": "node scripts/test-plugin-seo.mjs",
+        "test:plugin-catalog": "node --test scripts/test-plugin-catalog.mjs scripts/test-plugin-sort.mjs"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "devDependencies": {
-        "vitepress": "^1.0.0"
+        "vitepress": "^1.0.0",
+        "vue": "3.5.39"
     },
     "packageManager": "pnpm@11.9.0"
 }

@@ -171,7 +171,7 @@ func (a *App) loadTypedMRU(queryID string) {
 		converted[index].QueryID = queryID
 	}
 	if err := a.runOnUI("apply MRU results", func() {
-		a.applyResults(queryID, converted, &queryLayout{}, nil, nil, 0, true)
+		a.applyResults(queryID, converted, &queryLayout{}, nil, &queryContext{IsGlobalQuery: true}, 0, true)
 	}); err != nil {
 		log.Printf("dispatch MRU results: %v", err)
 	}
@@ -303,6 +303,8 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, Suffix: value.Suffix, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip, MaxLines: value.MaxLines, Validators: fromCoreValidators(value.Validators)}
 	case *definition.PluginSettingValueDirPath:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip, Validators: fromCoreValidators(value.Validators)}
+	case *definition.PluginSettingValueFilePath:
+		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip, Extensions: append([]string(nil), value.Extensions...), Validators: fromCoreValidators(value.Validators)}
 	case *definition.PluginSettingValueCheckBox:
 		converted.Value = formDefinitionValue{Key: value.Key, Label: value.Label, DefaultValue: value.DefaultValue, Tooltip: value.Tooltip}
 	case *definition.PluginSettingValueSelect:
@@ -319,7 +321,7 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 				validators = optionalIntegerValidatorsForEmptyAsZero(validators)
 			}
 			columns[index] = formTableColumn{
-				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type, HotkeyScope: string(column.Scope),
+				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type, HotkeyScope: string(column.Scope), Extensions: append([]string(nil), column.Extensions...),
 				Validators: validators, SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
 				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind,

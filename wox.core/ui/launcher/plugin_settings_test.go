@@ -229,6 +229,7 @@ func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
 		enabledStatus: pluginFilterDisabled,
 		pluginType:    pluginFilterThirdParty,
 		runtime:       pluginFilterRuntimePython,
+		storeSort:     pluginStoreSortStars,
 	})
 	app.pluginSettings.resetPluginFilters()
 	if got := app.pluginSettings.Filters(); got != (pluginFilterState{}) {
@@ -275,7 +276,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 		{index: 3, plugin: pluginSettingsPlugin{ID: "flow-a", Name: "Alpine", Store: "FLOW"}},
 		{index: 4, plugin: pluginSettingsPlugin{ID: "wox-a", Name: "Alpha"}},
 	}
-	got := groupStorePlugins(filtered)
+	got := groupStorePlugins(filtered, pluginStoreSortDefault)
 	if len(got) != 3 || got[0].ID != plugin.OfficialPluginStoreID || got[1].ID != "acme" || got[2].ID != "flow" {
 		t.Fatalf("sections = %#v", got)
 	}
@@ -285,7 +286,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 	if ids := installedSectionPluginIDs(installedPluginSection{Plugins: got[2].Plugins}); !reflect.DeepEqual(ids, []string{"flow-a", "flow-b"}) {
 		t.Fatalf("flow order = %v", ids)
 	}
-	if got := groupStorePlugins(nil); len(got) != 0 {
+	if got := groupStorePlugins(nil, pluginStoreSortDefault); len(got) != 0 {
 		t.Fatalf("empty filter = %#v", got)
 	}
 	if !pluginCatalogLess(pluginSettingsPlugin{Name: "Zebra", Store: "wox"}, pluginSettingsPlugin{Name: "Alpha", Store: "flow"}, true) {
@@ -1474,5 +1475,74 @@ func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
 		if (props.OnWebsite != nil) != (test.website != "") {
 			t.Fatalf("website %q has incorrect button availability", test.website)
 		}
+	}
+}
+
+func TestStorePluginStatisticsSorting(t *testing.T) {
+	zero, two, ten := 0, 2, 10
+	plugins := []pluginSettingsPlugin{
+		{ID: "unknown", Name: "A", DateUpdated: "invalid"},
+		{ID: "zero", Name: "B", StarCount: &zero, DownloadCount: &ten, DateUpdated: "2025-01-01 12:00:00"},
+		{ID: "high", Name: "C", StarCount: &ten, DownloadCount: &two, DateUpdated: "2026-01-01 12:00:00"},
+		{ID: "other", Name: "D", Store: "other", StarCount: &ten},
+	}
+	for _, tc := range []struct {
+		order pluginStoreSort
+		want  []string
+	}{
+		{pluginStoreSortDefault, []string{"zero", "high", "unknown", "other"}},
+		{pluginStoreSortName, []string{"unknown", "zero", "high", "other"}},
+		{pluginStoreSortStars, []string{"high", "zero", "unknown", "other"}},
+		{pluginStoreSortDownloads, []string{"zero", "high", "unknown", "other"}},
+		{pluginStoreSortUpdated, []string{"high", "zero", "unknown", "other"}},
+	} {
+		filtered := filterPlugins(plugins, "", pluginFilterState{storeSort: tc.order}, true, false)
+		got := installedSectionPluginIDs(installedPluginSection{Plugins: filtered})
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("order %q = %v, want %v", tc.order, got, tc.want)
+		}
+		sections := groupStorePlugins(filtered, tc.order)
+		if ids := installedSectionPluginIDs(installedPluginSection{Plugins: sections[0].Plugins}); !reflect.DeepEqual(ids, tc.want[:3]) {
+			t.Fatalf("visible order %q = %v, want %v", tc.order, ids, tc.want[:3])
+		}
+	}
+}
+
+func TestStorePluginStatisticsFollowSortAndAppearInDetails(t *testing.T) {
+	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
+	defer app.cancel()
+	choices := app.pluginSettings.pluginFilterChoices("sort")
+	if len(choices) != 4 || choices[0].value != pluginFilterAll || choices[0].label != app.pluginSettings.language.translate("i18n:ui_plugin_store_sort_downloads") || choices[2].value != string(pluginStoreSortStars) {
+		t.Fatalf("sort choices = %#v", choices)
+	}
+	stars, downloads := 0, 1234
+	item := pluginSettingsPlugin{ID: "example", Name: "Example", Version: "1.0", Author: "Author", StarCount: &stars, DownloadCount: &downloads, DateUpdated: "2026-01-02 03:04:05"}
+	for _, test := range []struct {
+		order pluginStoreSort
+		want  string
+	}{
+		{pluginStoreSortDefault, "1.0  Author  ↓ 1234"},
+		{pluginStoreSortStars, "1.0  Author  ★ 0"},
+		{pluginStoreSortDownloads, "1.0  Author  ↓ 1234"},
+		{pluginStoreSortUpdated, "1.0  Author  2026-01-02"},
+		{pluginStoreSortName, "1.0  Author"},
+	} {
+		snapshot := settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: true, PluginFilters: pluginFilterState{storeSort: test.order}}}
+		entries := app.pluginSettings.pluginListEntries(snapshot, []filteredPlugin{{plugin: item}}, 1)
+		if got := entries[0].Item.Status; got != test.want {
+			t.Errorf("sort %q status = %q, want %q", test.order, got, test.want)
+		}
+	}
+
+	detail := app.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, item, 600, 1)
+	if len(detail.Statistics) != 2 || detail.Statistics[0].ID != "stars" || detail.Statistics[0].Value != "0" || detail.Statistics[1].ID != "downloads" || detail.Statistics[1].Value != "1234" {
+		t.Fatalf("detail statistics = %#v", detail.Statistics)
+	}
+	header := app.pluginSettings.pluginHeaderProps(settingsSnapshot{}, item, 1)
+	if len(header.Statistics) != 2 || header.Statistics[0].Value != "0" || header.Statistics[1].Value != "1234" {
+		t.Fatalf("installed detail statistics = %#v", header.Statistics)
+	}
+	if got := app.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, pluginSettingsPlugin{}, 600, 1).Statistics; len(got) != 0 {
+		t.Fatalf("unknown statistics = %#v", got)
 	}
 }

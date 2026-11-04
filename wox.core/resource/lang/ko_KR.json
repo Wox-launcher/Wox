@@ -1,4 +1,19 @@
 {
+  "ui_toolbar_open_result_hotkeys": "결과 단축키 설정 열기",
+  "ui_toolbar_view_crash_report": "충돌 보고서 보기",
+  "ui_toolbar_copy_error": "오류 세부 정보 복사",
+  "ui_toolbar_show_recovered_file": "복구된 파일 표시",
+  "ui_toolbar_change_main_hotkey": "기본 단축키 변경",
+  "ui_toolbar_show_full_message": "전체 메시지 표시",
+  "plugin_file_status_open_settings": "파일 검색 설정 열기",
+  "plugin_file_status_copy_error": "오류 세부 정보 복사",
+  "ui_toolbar_copy_failed": "메시지를 복사할 수 없습니다",
+  "plugin_sys_test_toolbar_actions": "도구 모음 메시지 작업 테스트",
+  "plugin_sys_test_toolbar_actions_subtitle": "여러 작업이 포함된 긴 도구 모음 메시지 표시",
+  "plugin_sys_test_toolbar_message": "긴 도구 모음 테스트 메시지입니다. 잘린 메시지의 전체 내용을 작업 패널에서 복사할 수 있습니다.",
+  "plugin_sys_test_toolbar_first": "첫 번째 테스트 작업",
+  "plugin_sys_test_toolbar_second": "두 번째 테스트 작업",
+  "plugin_sys_test_toolbar_clear": "테스트 메시지 지우기",
   "ui_global_hotkeys": "전역 단축키",
   "ui_in_app_hotkeys": "앱 내 단축키",
   "ui_refinement_hotkey": "필터 단축키",
@@ -3548,5 +3563,10 @@
   "notes_sidebar_cancel": "취소",
   "notes_group_delete_message": "이 그룹을 삭제할까요? 노트와 하위 그룹은 상위 그룹으로 이동하며 노트는 삭제되지 않습니다.",
   "notes_organize_failed": "노트를 정리하지 못했습니다. 다시 시도해 주세요.",
-  "notes_note_delete_message": "이 노트를 영구적으로 삭제할까요?"
+  "notes_note_delete_message": "이 노트를 영구적으로 삭제할까요?",
+  "ui_plugin_store_sort": "정렬 기준",
+  "ui_plugin_store_sort_default": "이름",
+  "ui_plugin_store_sort_stars": "GitHub 스타",
+  "ui_plugin_store_sort_downloads": "다운로드",
+  "ui_plugin_store_sort_updated": "최근 업데이트"
 }

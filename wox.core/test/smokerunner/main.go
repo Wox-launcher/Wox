@@ -11,6 +11,8 @@ import (
 	"io"
 	"io/fs"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -22,11 +24,13 @@ import (
 	"syscall"
 	"time"
 
+	"wox/setting"
 	"wox/test/automationdriver"
 	"wox/test/smokefixture"
 	"wox/test/smokeperf"
 	"wox/test/smokereport"
 	"wox/util"
+	utilhotkey "wox/util/hotkey"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -38,6 +42,8 @@ const smokeArtifactDirEnvironment = "WOX_SMOKE_ARTIFACT_DIR"
 // smokeModulePath is the wox.core module path. Compiled test summaries use it so
 // package lines stay identical to a direct go test run.
 const smokeModulePath = "wox"
+
+const smokeMainHotkey = "ctrl+shift+alt+f12"
 
 // smokePackageTimeout matches go test's default budget for one package binary.
 const smokePackageTimeout = "10m"
@@ -123,6 +129,10 @@ func run(caseSelector string) (int, error) {
 	}
 	woxDataDirectory := filepath.Join(suiteDirectory, "wox-data")
 	userDataDirectory := filepath.Join(woxDataDirectory, "user-data")
+	if err := seedSmokeMainHotkey(userDataDirectory); err != nil {
+		retainSuiteDirectory = true
+		return 1, err
+	}
 	if caseSelector == "" || caseSelector == "launcher/plugin/url" || strings.HasPrefix(caseSelector, "launcher/plugin/url/") {
 		if err := seedMissingFaviconURLHistoryFixture(woxDataDirectory, userDataDirectory); err != nil {
 			retainSuiteDirectory = true
@@ -233,6 +243,72 @@ func run(caseSelector string) (int, error) {
 			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 			supervisorOwned = smokePackageUsesSupervisor(target.dir)
 		}
+		// This case must start Wox while another process owns its configured hotkey.
+		var occupiedHotkey *utilhotkey.Hotkey
+		if target.dir == "test/smoke/setting/hotkeywarning" && runtime.GOOS == "windows" {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox before hotkey conflict: %w", err)
+			}
+			if err := restoreSmokeMainHotkey(userDataDirectory); err != nil {
+				retainSuiteDirectory = true
+				return 1, err
+			}
+			occupiedHotkey = &utilhotkey.Hotkey{}
+			if err := occupiedHotkey.Register(ctx, smokeMainHotkey, func() {}); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("reserve conflicting smoke hotkey: %w", err)
+			}
+			defer occupiedHotkey.Unregister(context.Background())
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("launch Wox with conflicting hotkey: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		var updateServer *httptest.Server
+		var environmentBeforeUpdate []string
+		if target.dir == "test/smoke/launcher/plugin/update" {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox before update fixture: %w", err)
+			}
+			updateServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("wox-smoke-invalid-update-manifest"))
+			}))
+			defer updateServer.Close()
+			environmentBeforeUpdate = append([]string(nil), launchOptions.Environment...)
+			launchOptions.Environment = replaceEnvironment(launchOptions.Environment, "WOX_AUTOMATION_UPDATE_MANIFEST_URL", updateServer.URL)
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("launch Wox with local update fixture: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		var storeServer *httptest.Server
+		var environmentBeforeStore []string
+		if target.dir == "test/smoke/launcher/plugin/wpm/storestatus" {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox before store fixture: %w", err)
+			}
+			storeServer, err = smokefixture.NewStoreServer()
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, err
+			}
+			defer storeServer.Close()
+			environmentBeforeStore = append([]string(nil), launchOptions.Environment...)
+			launchOptions.Environment = replaceEnvironment(launchOptions.Environment, "WOX_AUTOMATION_PLUGIN_STORE_URL", storeServer.URL+"/store.json")
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("launch Wox with local store fixture: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
 		phaseCount := 1
 		// ponytail: privacy is the only multi-phase restart case; add lifecycle descriptors when another case needs phases.
 		if target.dir == "test/smoke/setting/privacy" {
@@ -312,6 +388,51 @@ func run(caseSelector string) (int, error) {
 			if err != nil {
 				retainSuiteDirectory = true
 				return 1, fmt.Errorf("restart Wox after lifecycle phase %d: %w", phase, err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		if occupiedHotkey != nil {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox after hotkey conflict: %w", err)
+			}
+			occupiedHotkey.Unregister(ctx)
+			if err := restoreSmokeMainHotkey(userDataDirectory); err != nil {
+				retainSuiteDirectory = true
+				return 1, err
+			}
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("restart Wox after hotkey conflict: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		if updateServer != nil {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox after update fixture: %w", err)
+			}
+			updateServer.Close()
+			launchOptions.Environment = environmentBeforeUpdate
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("restart Wox after update fixture: %w", err)
+			}
+			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
+		}
+		if storeServer != nil {
+			if err := process.Close(); err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("close Wox after store fixture: %w", err)
+			}
+			storeServer.Close()
+			launchOptions.Environment = environmentBeforeStore
+			process, err = launchProcess(woxDataDirectory)
+			if err != nil {
+				retainSuiteDirectory = true
+				return 1, fmt.Errorf("restart Wox after store fixture: %w", err)
 			}
 			testEnvironment = replaceEnvironment(testEnvironment, automationdriver.SharedInfoFileEnvironment, process.InfoFile())
 		}
@@ -397,6 +518,41 @@ func waitForPrivacyCleanup(ctx context.Context, root string) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// seedSmokeMainHotkey avoids competing with a user's running Wox for its default shortcut.
+func seedSmokeMainHotkey(userDataDirectory string) error {
+	if err := os.MkdirAll(userDataDirectory, 0o755); err != nil {
+		return fmt.Errorf("create smoke user data directory: %w", err)
+	}
+	db, err := sql.Open("sqlite3", filepath.Join(userDataDirectory, "wox.db"))
+	if err != nil {
+		return fmt.Errorf("open smoke user database: %w", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS wox_settings (key TEXT PRIMARY KEY, value TEXT)`); err != nil {
+		return fmt.Errorf("create smoke settings table: %w", err)
+	}
+	if _, err := db.Exec(`INSERT OR IGNORE INTO wox_settings(key, value) VALUES (?, ?)`, "MainHotkey@"+runtime.GOOS, smokeMainHotkey); err != nil {
+		return fmt.Errorf("seed smoke main hotkey: %w", err)
+	}
+	// Seeding a setting makes the migration treat the database as an existing
+	// install; retain the fresh-install Action Panel default used by smoke cases.
+	if _, err := db.Exec(`INSERT OR IGNORE INTO wox_settings(key, value) VALUES (?, ?)`, "ActionPanelHotkey@"+runtime.GOOS, setting.DefaultActionPanelHotkey()); err != nil {
+		return fmt.Errorf("seed smoke action panel hotkey: %w", err)
+	}
+	return nil
+}
+
+// restoreSmokeMainHotkey restores the isolated suite setting after the conflict case.
+func restoreSmokeMainHotkey(userDataDirectory string) error {
+	db, err := sql.Open("sqlite3", filepath.Join(userDataDirectory, "wox.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`UPDATE wox_settings SET value = ? WHERE key = ?`, smokeMainHotkey, "MainHotkey@"+runtime.GOOS)
+	return err
 }
 
 // seedMissingFaviconURLHistoryFixture prepares persisted URL history before the shared Wox process starts.

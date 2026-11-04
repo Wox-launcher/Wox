@@ -82,7 +82,8 @@ All methods are async and require `ctx`.
 - `change_query(ctx, query: PlainQuery)`: Update search bar.
 - `hide_app(ctx)`: Hide Wox.
 - `show_app(ctx)`: Show Wox.
-- `notify(ctx, message)`: Show notification.
+- `show_toast_msg(ctx, option)`: Show an independent global Toast without requiring an active plugin context. Legacy `notify(ctx, message)` is deprecated and also shows a Toast.
+- `show_toolbar_msg(ctx, msg)`: Show status in the active plugin context with no automatic timeout. Call `clear_toolbar_msg(ctx, id)` when it is no longer needed, or Wox clears it when the plugin context is left. Updating a message does not close it. For a selected global result, publish from `on_enter_plugin_query` using its context. See the skill's Toolbar status section.
 - `log(ctx, level, msg)`: Write log. Levels: `"Info"`, `"Error"`.
 - `copy(ctx, params: CopyParams)`: Copy text/image.
 - `is_visible(ctx)`: Check visibility.

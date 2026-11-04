@@ -1,4 +1,19 @@
 {
+  "ui_toolbar_open_result_hotkeys": "Open result hotkeys",
+  "ui_toolbar_view_crash_report": "View crash report",
+  "ui_toolbar_copy_error": "Copy error details",
+  "ui_toolbar_show_recovered_file": "Show recovered file",
+  "ui_toolbar_change_main_hotkey": "Change main hotkey",
+  "ui_toolbar_show_full_message": "Show full message",
+  "plugin_file_status_open_settings": "Open File Search settings",
+  "plugin_file_status_copy_error": "Copy error details",
+  "ui_toolbar_copy_failed": "Could not copy message",
+  "plugin_sys_test_toolbar_actions": "Test toolbar message actions",
+  "plugin_sys_test_toolbar_actions_subtitle": "Show a long toolbar message with multiple actions",
+  "plugin_sys_test_toolbar_message": "This is a long test toolbar message. It demonstrates how an error can be truncated in the toolbar while its full content remains available to copy from the message action panel.",
+  "plugin_sys_test_toolbar_first": "First test action",
+  "plugin_sys_test_toolbar_second": "Second test action",
+  "plugin_sys_test_toolbar_clear": "Clear test message",
   "ui_global_hotkeys": "Global Hotkeys",
   "ui_in_app_hotkeys": "In-App Hotkeys",
   "ui_refinement_hotkey": "Filter Hotkey",
@@ -3550,5 +3565,10 @@
   "notes_sidebar_cancel": "Cancel",
   "notes_group_delete_message": "Delete this group? Its notes and subgroups will move to the parent group. No notes will be deleted.",
   "notes_organize_failed": "Could not organize notes. Please try again.",
-  "notes_note_delete_message": "Permanently delete this note?"
+  "notes_note_delete_message": "Permanently delete this note?",
+  "ui_plugin_store_sort": "Sort by",
+  "ui_plugin_store_sort_default": "Name",
+  "ui_plugin_store_sort_stars": "GitHub stars",
+  "ui_plugin_store_sort_downloads": "Downloads",
+  "ui_plugin_store_sort_updated": "Recently updated"
 }

@@ -114,6 +114,8 @@ func TestPluginRequestInvalidArgumentsReply(t *testing.T) {
 		{"GetTranslation", nil, `"key"`},
 		{"GetUpdatableResult", nil, `"resultId"`},
 		{"UpdateResult", nil, `"result"`},
+		{"RemoveResult", nil, `"option"`},
+		{"RemoveResult", map[string]string{"option": "{"}, "unmarshal remove result option"},
 		{"PushResults", nil, `"query"`},
 		{"PushResults", map[string]string{"query": "{}"}, `"results"`},
 		{"ExecuteToolbarMsgAction", nil, `"toolbarMsgId"`},
@@ -162,6 +164,7 @@ type requestTestAPI struct {
 	copy                                   plugin.CopyParams
 	screenshot                             plugin.ScreenshotOption
 	result                                 *plugin.UpdatableResult
+	remove                                 plugin.RemoveResultOption
 	settingChanged                         func(context.Context, string, string)
 	toast                                  plugin.ShowToastMsgOption
 }
@@ -182,14 +185,6 @@ func (a *requestTestAPI) GetTranslation(_ context.Context, key string) string {
 	return "translated:" + key
 }
 
-func TestLegacyNotifyMessageKeepsPluginPresentation(t *testing.T) {
-	instance := &plugin.Instance{Metadata: plugin.Metadata{Id: "plugin-id"}, API: &requestTestAPI{}}
-	got := legacyNotifyMessage(context.Background(), instance, "message")
-	if got.PluginId != "plugin-id" || got.Text != "translated:message" || got.DisplaySeconds != 5 || got.Icon != "" {
-		t.Fatalf("legacy notification changed: %+v", got)
-	}
-}
-
 // SaveSetting records empty values and originating query identity without touching persisted settings.
 func (a *requestTestAPI) SaveSetting(ctx context.Context, key, value string, platform bool) {
 	a.savedKey, a.savedValue, a.savedPlatform = key, value, platform
@@ -204,6 +199,10 @@ func (a *requestTestAPI) Copy(_ context.Context, option plugin.CopyParams) { a.c
 func (a *requestTestAPI) Screenshot(_ context.Context, option plugin.ScreenshotOption) plugin.ScreenshotResult {
 	a.screenshot = option
 	return plugin.ScreenshotResult{Success: true, ScreenshotPath: "capture.png"}
+}
+func (a *requestTestAPI) RemoveResult(_ context.Context, option plugin.RemoveResultOption) plugin.RemoveResultResult {
+	a.remove = option
+	return plugin.RemoveResultResult{Success: true}
 }
 func (a *requestTestAPI) GetUpdatableResult(context.Context, string) *plugin.UpdatableResult {
 	return a.result
@@ -233,6 +232,9 @@ func TestPluginRequestPreservesLegacyWireValues(t *testing.T) {
 	if got := call("SaveSetting", map[string]string{"key": "", "value": "", "isPlatformSpecific": "TRUE"}); got != "" || api.savedKey != "" || api.savedValue != "" || !api.savedPlatform || api.session != "launcher-2" || api.queryID != "query-7" {
 		t.Fatalf("legacy save acknowledgement or context changed: result=%#v api=%+v", got, api)
 	}
+	if got := call("Notify", map[string]string{"message": "legacy message"}); got != "" || api.toast.Message != "legacy message" {
+		t.Fatalf("legacy Notify did not choose toast: result=%#v option=%+v", got, api.toast)
+	}
 	if got := call("GetSetting", map[string]string{"key": ""}); got != "value:" {
 		t.Fatalf("empty key response = %#v", got)
 	}
@@ -247,6 +249,10 @@ func TestPluginRequestPreservesLegacyWireValues(t *testing.T) {
 	call("RefreshQuery", map[string]string{"preserveSelectedIndex": "true", "SelectedResultId": " row "})
 	if !api.refresh.PreserveSelectedIndex || api.refresh.SelectedResultId != "row" {
 		t.Fatalf("legacy refresh aliases lost: %+v", api.refresh)
+	}
+	resultRemove := call("RemoveResult", map[string]string{"option": `{"ResultId":"row","SelectedResultId":"next"}`}).(map[string]any)
+	if resultRemove["Success"] != true || api.remove.ResultId != "row" || api.remove.SelectedResultId != "next" {
+		t.Fatalf("remove option or result lost: %+v %+v", api.remove, resultRemove)
 	}
 	call("Copy", map[string]string{"type": "text", "text": "keep text", "woxImage": "{"})
 	if api.copy.Text != "keep text" || api.copy.WoxImage != nil {
@@ -350,5 +356,17 @@ func TestPluginRequestCallbacksKeepTheirProtocol(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("missing stream error callback")
+	}
+}
+
+// TestScriptNotifyUsesToast covers the legacy script action without changing its wire format.
+func TestScriptNotifyUsesToast(t *testing.T) {
+	api := &requestTestAPI{}
+	script := &ScriptPlugin{api: api}
+	if !script.handleBuiltInAction(t.Context(), "notify", map[string]interface{}{"message": "script message"}) {
+		t.Fatal("legacy notify action was not handled")
+	}
+	if api.toast.Message != "script message" {
+		t.Fatalf("toast message = %q", api.toast.Message)
 	}
 }

@@ -41,7 +41,7 @@ int32_t wox_linux_window_set_window_chrome(WoxLinuxWindow *window, int32_t custo
 int32_t wox_linux_window_set_topmost(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_set_min_size(WoxLinuxWindow *window, float width, float height);
 int32_t wox_linux_window_set_icon(WoxLinuxWindow *window, const uint8_t *pixels, int32_t width, int32_t height, int32_t row_stride);
-int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path);
+int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, const char *filter, char **path);
 int32_t wox_linux_window_save_file(WoxLinuxWindow *window, const char *title, const char *default_name, const char *extension, char **path);
 int32_t wox_linux_window_set_keyboard_exclusive(WoxLinuxWindow *window, int32_t enabled);
 int32_t wox_linux_window_set_pointer_passthrough(WoxLinuxWindow *window, int32_t enabled);

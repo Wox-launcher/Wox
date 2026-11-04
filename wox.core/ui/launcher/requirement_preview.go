@@ -77,7 +77,7 @@ func (a *App) buildRequirementPreview(result queryResult, preview queryPreview, 
 	callbacks := formFieldCallbacks{
 		idPrefix: "requirement-form", focus: a.requirements.focusRequirementFormField, change: a.requirements.changeRequirementFormChoice,
 		setText: a.requirements.setRequirementFormText, onKey: a.requirements.onRequirementFormKey, openTable: a.openRequirementFormTable,
-		openLink: a.requirements.openRequirementFormLink, fieldErrors: form.fieldErrors,
+		openLink: a.requirements.openRequirementFormLink, pickPath: a.requirements.pickRequirementFormPath, fieldErrors: form.fieldErrors,
 	}
 	rows := make([]woxwidget.Widget, 0, len(form.definitions))
 	for index, definition := range form.definitions {
@@ -311,7 +311,7 @@ func (a *requirementController) onRequirementFormKey(event woxui.KeyEvent) bool 
 		a.deactivateRequirementForm()
 		return true
 	}
-	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath" || fieldType == "filePath"
 	if textEditable {
 		switch event.Key {
 		case woxui.KeyTab:
@@ -453,6 +453,28 @@ func (a *requirementController) setRequirementFormText(index int, value string) 
 	}
 	if changed {
 		_ = a.window().Invalidate()
+	}
+}
+
+// pickRequirementFormPath fills a required path without saving the form prematurely.
+func (a *requirementController) pickRequirementFormPath(index int) {
+	state := a.requirementForm
+	if state == nil || !state.active || state.saving || index < 0 || index >= len(state.definitions) {
+		return
+	}
+	definition := state.definitions[index]
+	if definition.Type != "filePath" && definition.Type != "dirPath" {
+		return
+	}
+	path, err := a.window().PickFile(formPathDialogOptions(definition))
+	if a.requirementForm != state {
+		return
+	}
+	if err != nil {
+		state.error = err.Error()
+		_ = a.window().Invalidate()
+	} else if path != "" {
+		a.setRequirementFormText(index, path)
 	}
 }
 

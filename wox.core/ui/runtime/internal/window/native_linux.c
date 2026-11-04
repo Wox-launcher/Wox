@@ -4167,6 +4167,7 @@ int32_t wox_linux_window_set_icon(WoxLinuxWindow *window, const uint8_t *pixels,
 typedef struct {
   WoxLinuxWindow *window;
   bool directory;
+  const char *filter;
   char *path;
   int32_t result;
 } WoxFileDialogCall;
@@ -4191,6 +4192,16 @@ static void pick_file_main(void *data) {
     return;
   }
   gtk_native_dialog_set_modal(GTK_NATIVE_DIALOG(dialog), TRUE);
+  if (!call->directory && call->filter != NULL && call->filter[0] != '\0') {
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, call->filter);
+    gchar **patterns = g_strsplit(call->filter, ";", -1);
+    for (gchar **pattern = patterns; *pattern != NULL; pattern++) {
+      if (**pattern != '\0') gtk_file_filter_add_pattern(filter, *pattern);
+    }
+    g_strfreev(patterns);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+  }
 
   // Keep the transient picker inside the Wox focus domain while GTK runs its nested dialog loop.
   window->native_dialog_active = true;
@@ -4212,11 +4223,11 @@ static void pick_file_main(void *data) {
   }
 }
 
-int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, char **path) {
+int32_t wox_linux_window_pick_file(WoxLinuxWindow *window, int32_t directory, const char *filter, char **path) {
   if (window == NULL || path == NULL) {
     return -1;
   }
-  WoxFileDialogCall call = {.window = window, .directory = directory != 0};
+  WoxFileDialogCall call = {.window = window, .directory = directory != 0, .filter = filter};
   if (!run_on_main_sync(pick_file_main, &call)) {
     return -1;
   }

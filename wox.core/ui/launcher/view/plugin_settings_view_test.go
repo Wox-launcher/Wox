@@ -1263,3 +1263,53 @@ func TestCatalogTagsFitTranslatedLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginDetailHeaderShowsStatisticsAfterAuthor(t *testing.T) {
+	icon := &woxui.Image{Width: 14, Height: 14}
+	statistics := []PluginHeaderStatistic{{ID: "stars", Value: "0", Icon: icon}, {ID: "downloads", Value: "1234", Icon: icon}}
+	for _, store := range []bool{false, true} {
+		var header woxwidget.Container
+		if store {
+			page := pluginStoreDetail(PluginStoreDetailProps{Author: "Author", Statistics: statistics}, 600, 500, woxcomponent.ControlTheme{}).(woxwidget.Container)
+			header = page.Child.(woxwidget.Flex).Children[0].(woxwidget.Container)
+		} else {
+			header = pluginDetailHeader(PluginHeaderProps{Author: "Author", Statistics: statistics}, 600, 80, woxcomponent.ControlTheme{}).(woxwidget.Container)
+		}
+		identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+		row := identity.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+		if len(row.Children) != 3 || row.Children[0].(woxwidget.Flexible).Child.(woxwidget.TextBlock).Value != "Author" {
+			t.Fatalf("store=%v: author row = %#v", store, row.Children)
+		}
+		for i, want := range statistics {
+			gesture := row.Children[i+1].(woxwidget.Gesture)
+			items := gesture.Child.(woxwidget.Flex).Children
+			if gesture.ID != "plugin-statistic-"+want.ID || len(items) != 2 || items[0].(woxwidget.Image).Source != icon || items[1].(woxwidget.Text).Value != want.Value {
+				t.Fatalf("store=%v: statistic = %#v", store, gesture)
+			}
+		}
+	}
+}
+
+func TestPluginHeaderStatisticsFitBesideLongAuthor(t *testing.T) {
+	icon := &woxui.Image{Width: 14, Height: 14}
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		theme := woxcomponent.ControlTheme{DensityScale: scale}
+		header := pluginDetailHeader(PluginHeaderProps{Author: "A very long plugin author name", Statistics: []PluginHeaderStatistic{
+			{ID: "stars", Value: "123", Icon: icon}, {ID: "downloads", Value: "12345", Icon: icon},
+		}}, 260, 80, theme).(woxwidget.Container)
+		identity := header.Child.(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.Flex)
+		row := identity.Children[1].(woxwidget.Container).Child.(woxwidget.Flex)
+		row.Children[1] = woxwidget.Semantics{Key: "stars", Child: row.Children[1]}
+		row.Children[2] = woxwidget.Semantics{Key: "downloads", Child: row.Children[2]}
+		host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return row })
+		host.AttachServices(translatedLabelHostServices{})
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: 180, Height: 32}})
+		for _, key := range []woxwidget.Key{"stars", "downloads"} {
+			bounds, ok := host.BoundsForKey(key)
+			if !ok || bounds.Width <= 0 || bounds.X+bounds.Width > 180 {
+				t.Fatalf("scale %v: %s bounds = %+v, present %v", scale, key, bounds, ok)
+			}
+		}
+		host.Dispose()
+	}
+}

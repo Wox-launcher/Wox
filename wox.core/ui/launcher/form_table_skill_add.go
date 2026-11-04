@@ -249,7 +249,7 @@ func (c *formTableController) buildFormTableSkillAddDialog(snapshot *formTableSk
 		focus:      c.focusFormTableSkillAddField,
 		setText:    c.setFormTableSkillAddText,
 		onKey:      c.onFormTableKey,
-		pickDir:    c.pickFormTableSkillAddDirectory,
+		pickPath:   c.pickFormTableSkillAddDirectory,
 	}
 	theme := palette
 	cancelLabel := c.language.translate("i18n:ui_cancel")

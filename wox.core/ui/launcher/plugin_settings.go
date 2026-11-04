@@ -45,6 +45,9 @@ type pluginSettingsPlugin struct {
 	IsDisable          bool               `json:"IsDisable"`
 	IsUpgradable       bool               `json:"IsUpgradable"`
 	Store              string             `json:"Store"`
+	StarCount          *int               `json:"StarCount"`
+	DownloadCount      *int               `json:"DownloadCount"`
+	DateUpdated        string             `json:"DateUpdated"`
 	SettingDefinitions []formDefinition   `json:"SettingDefinitions"`
 	Setting            pluginSettingsData `json:"Setting"`
 	HasNativeSettings  bool               `json:"HasNativeSettings"`
@@ -90,6 +93,16 @@ const (
 	pluginFilterRuntimeScript = "script"
 )
 
+type pluginStoreSort string
+
+const (
+	pluginStoreSortDefault   pluginStoreSort = ""
+	pluginStoreSortStars     pluginStoreSort = "stars"
+	pluginStoreSortName      pluginStoreSort = "name"
+	pluginStoreSortDownloads pluginStoreSort = "downloads"
+	pluginStoreSortUpdated   pluginStoreSort = "updated"
+)
+
 // pluginFilterState stores exclusive catalog dropdowns. Empty or "all" means no restriction.
 type pluginFilterState struct {
 	enabledStatus string
@@ -97,6 +110,7 @@ type pluginFilterState struct {
 	pluginType    string
 	runtime       string
 	installStatus string
+	storeSort     pluginStoreSort
 }
 
 func pluginFilterIsAll(value string) bool {
@@ -105,7 +119,7 @@ func pluginFilterIsAll(value string) bool {
 
 func (filters pluginFilterState) applied(store bool) bool {
 	if store {
-		return !pluginFilterIsAll(filters.installStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
+		return filters.storeSort != pluginStoreSortDefault || !pluginFilterIsAll(filters.installStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 	}
 	return !pluginFilterIsAll(filters.enabledStatus) || !pluginFilterIsAll(filters.upgradeStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 }
@@ -121,7 +135,47 @@ func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginF
 			filtered = append(filtered, filteredPlugin{index: index, plugin: plugin})
 		}
 	}
+	if store {
+		sort.SliceStable(filtered, func(i, j int) bool {
+			return storePluginLess(filtered[i].plugin, filtered[j].plugin, filters.storeSort)
+		})
+	}
 	return filtered
+}
+
+// storePluginLess keeps catalog groups stable and puts known statistics before unknown values.
+func storePluginLess(left, right pluginSettingsPlugin, order pluginStoreSort) bool {
+	leftStore, rightStore := pluginStoreSectionID(left.Store), pluginStoreSectionID(right.Store)
+	if leftStore != rightStore {
+		return pluginStoreSectionLess(leftStore, rightStore)
+	}
+	if order == pluginStoreSortUpdated {
+		leftDate, leftErr := time.Parse("2006-01-02 15:04:05", left.DateUpdated)
+		rightDate, rightErr := time.Parse("2006-01-02 15:04:05", right.DateUpdated)
+		if (leftErr == nil) != (rightErr == nil) {
+			return leftErr == nil
+		}
+		if leftErr == nil && !leftDate.Equal(rightDate) {
+			return leftDate.After(rightDate)
+		}
+	}
+	var a, b *int
+	switch order {
+	case pluginStoreSortStars:
+		a, b = left.StarCount, right.StarCount
+	case pluginStoreSortDefault, pluginStoreSortDownloads:
+		a, b = left.DownloadCount, right.DownloadCount
+	}
+	if a != nil && b == nil {
+		return true
+	}
+	if a == nil && b != nil {
+		return false
+	}
+	if a != nil && b != nil && *a != *b {
+		return *a > *b
+	}
+	return strings.ToLower(left.Name) < strings.ToLower(right.Name)
 }
 
 const (
@@ -199,7 +253,7 @@ type storePluginSection struct {
 
 // groupStorePlugins splits the visible store catalog by publishing store.
 // The official store stays first. Empty groups are omitted.
-func groupStorePlugins(filtered []filteredPlugin) []storePluginSection {
+func groupStorePlugins(filtered []filteredPlugin, orderBy pluginStoreSort) []storePluginSection {
 	order := make([]string, 0)
 	grouped := map[string][]filteredPlugin{}
 	for _, entry := range filtered {
@@ -215,7 +269,7 @@ func groupStorePlugins(filtered []filteredPlugin) []storePluginSection {
 	sections := make([]storePluginSection, 0, len(order))
 	for _, id := range order {
 		plugins := grouped[id]
-		sortInstalledPluginsByName(plugins)
+		sort.SliceStable(plugins, func(i, j int) bool { return storePluginLess(plugins[i].plugin, plugins[j].plugin, orderBy) })
 		sections = append(sections, storePluginSection{ID: id, Plugins: plugins})
 	}
 	return sections
@@ -1016,6 +1070,8 @@ func (c *pluginSettingsController) setPluginFilter(id, value string) {
 		filters.runtime = value
 	case "install":
 		filters.installStatus = value
+	case "sort":
+		filters.storeSort = pluginStoreSort(value)
 	default:
 		return
 	}
@@ -1197,7 +1253,7 @@ func (c *pluginSettingsController) onPluginSettingsKey(event woxui.KeyEvent) boo
 		c.deactivatePluginForm()
 		return true
 	}
-	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath" || fieldType == "filePath"
 	if textEditable {
 		switch event.Key {
 		case woxui.KeyTab:
@@ -1888,24 +1944,23 @@ func (c *pluginSettingsController) setPluginFormText(index int, value string) {
 	form.status = ""
 	clearPluginFormFieldError(form, index)
 	c.settings.invalidateSettingsWindow()
-	// dirPath is a completed folder, like a select: persist immediately so the next
-	// launcher query does not keep using the previous directory.
-	if form.definitions[index].Type == "dirPath" {
+	// A picked path is complete, so persist it before the next launcher query.
+	if form.definitions[index].Type == "dirPath" || form.definitions[index].Type == "filePath" {
 		c.submitPluginSettings()
 	}
 }
 
-// pickPluginFormDirectory fills a plugin dirPath setting from the native folder picker.
-func (c *pluginSettingsController) pickPluginFormDirectory(index int) {
+// pickPluginFormPath fills a plugin path setting from the native picker.
+func (c *pluginSettingsController) pickPluginFormPath(index int) {
 	form := c.Form()
-	if form == nil || index < 0 || index >= len(form.definitions) || form.definitions[index].Type != "dirPath" {
+	if form == nil || index < 0 || index >= len(form.definitions) || (form.definitions[index].Type != "dirPath" && form.definitions[index].Type != "filePath") {
 		return
 	}
 	window := c.settings.settingsNativeWindow()
 	if window == nil {
 		return
 	}
-	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
+	path, err := window.PickFile(formPathDialogOptions(form.definitions[index]))
 	if c.Form() != form {
 		return
 	}

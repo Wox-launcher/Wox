@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 	woxcomponent "wox/ui/launcher/component"
 
 	"wox/ai"
@@ -18,7 +19,6 @@ import (
 	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
 	"wox/util"
-	"wox/util/overlay/confettioverlay"
 )
 
 // SessionID identifies the launcher instance receiving core push updates.
@@ -236,33 +236,40 @@ func (a *App) OpenMacOSPermissionFlow(_ context.Context, permissionType string) 
 // ShowToolbarMessage displays a plugin-owned persistent toolbar snapshot.
 func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI) error {
 	converted := fromCoreToolbarMessage(message)
+	converted.IsCurrent = message.IsCurrent
 	return a.runOnUI("show toolbar message", func() {
-		if message.Fallback {
-			a.toolbar.applyToolbarFallbackMessage(converted)
+		if message.CanShow != nil && !message.CanShow() {
+			return
+		}
+		if message.CanShow == nil && message.IsCurrent != nil && !message.IsCurrent() {
 			return
 		}
 		a.toolbar.applyToolbarMessage(converted)
 	})
 }
 
-// ShowNotificationMessage displays one transient notification in the launcher toolbar.
-func (a *App) ShowNotificationMessage(ctx context.Context, message common.NotifyMsg) error {
-	converted := toolbarMessage{Text: message.Text, Icon: imageFromString(message.Icon), DisplaySeconds: message.DisplaySeconds}
-	return a.runOnUI("show notification message", func() {
-		a.toolbar.applyToolbarMessage(converted)
-		if message.Confetti {
-			if err := confettioverlay.Show(); err != nil {
-				util.GetLogger().Warn(ctx, "show notification confetti: "+err.Error())
-			}
-		}
-	})
-}
-
 // ClearToolbarMessage removes the matching plugin-owned toolbar snapshot.
 func (a *App) ClearToolbarMessage(_ context.Context, toolbarMessageID string) error {
 	return a.runOnUI("clear toolbar message", func() {
+		message := a.toolbar.toolbarMsg
+		if message != nil && message.ID == toolbarMessageID && message.IsCurrent != nil && message.IsCurrent() {
+			return
+		}
 		a.toolbar.clearToolbarMessageByID(toolbarMessageID)
 	})
+}
+
+// ShowSystemToolbarMessage displays a prioritized system message independently of plugin state.
+func (a *App) ShowSystemToolbarMessage(_ context.Context, message common.SystemToolbarMsg) error {
+	converted := fromSystemToolbarMessage(message)
+	return a.runOnUI("show system toolbar message", func() {
+		a.toolbar.applySystemToolbarMessage(converted, message.Priority, time.Duration(message.DisplaySeconds)*time.Second)
+	})
+}
+
+// ClearSystemToolbarMessage removes only the named system message.
+func (a *App) ClearSystemToolbarMessage(_ context.Context, id string) error {
+	return a.runOnUI("clear system toolbar message", func() { a.toolbar.clearSystemToolbarMessage(id) })
 }
 
 // UpdateAttentionUnreadCount shows or hides the query-box unread decoration beside Glance.
@@ -401,6 +408,33 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 		err = a.applyWindowBounds()
 	}
 	return updated, err
+}
+
+// RemoveResult deletes a row only while its originating query is still displayed.
+func (a *App) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) (bool, error) {
+	removed := false
+	err := a.runOnUI("remove result", func() {
+		if util.GetContextSessionId(ctx) != a.sessionID || util.GetContextQueryId(ctx) != a.querySession.query.QueryID || util.GetContextQueryId(ctx) != a.resultList.resultsQueryID {
+			return
+		}
+		if !a.resultList.removeResult(option) {
+			return
+		}
+		selected := a.resultList.selected
+		a.resultList.selected = -1
+		if selected >= 0 {
+			a.selectResult(selected)
+		} else {
+			a.actions.resetActionPanelLocked()
+			a.forms.form = nil
+			a.notifySelectedResult()
+			a.previews.reconcileSelectedPreview()
+			_ = a.applyWindowBounds()
+			_ = a.window.Invalidate()
+		}
+		removed = true
+	})
+	return removed, err
 }
 
 // PushResults appends a typed result batch only when its query is still visible.
@@ -693,15 +727,13 @@ func fromCoreToolbarMessage(message plugin.ToolbarMsgUI) toolbarMessage {
 	return toolbarMessage{ID: message.Id, Title: message.Title, Icon: fromCoreImage(message.Icon), Progress: message.Progress, Indeterminate: message.Indeterminate, Actions: actions}
 }
 
-func imageFromString(value string) woxImage {
-	if value == "" {
-		return woxImage{}
+// fromSystemToolbarMessage adapts internal settings actions without exposing them to plugins.
+func fromSystemToolbarMessage(message common.SystemToolbarMsg) toolbarMessage {
+	actions := make([]toolbarMessageAction, len(message.Actions))
+	for index, action := range message.Actions {
+		actions[index] = toolbarMessageAction{ID: action.Id, Name: action.Name, Icon: fromCoreImage(action.Icon), SettingsPath: action.SettingsPath, SettingsParam: action.SettingsParam, PreventHideAfterAction: true}
 	}
-	imageType, imageData, ok := strings.Cut(value, ":")
-	if !ok {
-		return woxImage{}
-	}
-	return woxImage{ImageType: imageType, ImageData: imageData}
+	return toolbarMessage{ID: message.Id, Title: message.Title, Icon: fromCoreImage(message.Icon), Actions: actions, System: true}
 }
 
 func fromCoreChatData(chat common.AIChatData) chatData {
@@ -912,6 +944,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	} else if a.resultList.selected < 0 {
 		a.resultList.selected = selectableIndex(a.resultList.results)
 	}
+	a.notifySelectedResult()
 	a.previews.reconcileSelectedPreview()
 	if err := a.applyWindowBounds(); err != nil {
 		return false, err

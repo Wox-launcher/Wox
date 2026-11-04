@@ -39,7 +39,7 @@ func storeManifestDTOs(manifests []plugin.StorePluginManifest) []dto.PluginDto {
 			Version: manifest.Version, MinWoxVersion: manifest.MinWoxVersion,
 			Runtime: string(manifest.Runtime), Description: manifest.Description,
 			Website: manifest.Website, ScreenshotUrls: manifest.ScreenshotUrls,
-			SupportedOS: manifest.SupportedOS, Store: manifest.Store,
+			SupportedOS: manifest.SupportedOS, Store: manifest.Store, StarCount: manifest.StarCount, DownloadCount: manifest.DownloadCount, DateUpdated: manifest.DateUpdated,
 		}
 	}
 	return plugins
@@ -61,6 +61,9 @@ func convertPluginInstanceToDto(ctx context.Context, pluginInstance *plugin.Inst
 
 	storePlugin, storeErr := plugin.GetStoreManager().GetStorePluginManifestById(ctx, pluginInstance.Metadata.Id)
 	if storeErr == nil {
+		installedPlugin.StarCount = storePlugin.StarCount
+		installedPlugin.DownloadCount = storePlugin.DownloadCount
+		installedPlugin.DateUpdated = storePlugin.DateUpdated
 		installedPlugin.Website = storePlugin.Website
 		installedPlugin.ScreenshotUrls = storePlugin.ScreenshotUrls
 		installedPlugin.IsUpgradable = plugin.IsVersionUpgradable(pluginInstance.Metadata.Version, storePlugin.Version)

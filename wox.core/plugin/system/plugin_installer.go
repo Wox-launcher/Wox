@@ -21,6 +21,7 @@ import (
 	"wox/util/selection"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 )
 
@@ -31,6 +32,8 @@ func init() {
 type PluginInstallerPlugin struct {
 	api plugin.API
 }
+
+const invalidPluginPackageResultPrefix = "invalid-plugin-package-"
 
 func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
@@ -69,6 +72,20 @@ func (i *PluginInstallerPlugin) GetMetadata() plugin.Metadata {
 func (i *PluginInstallerPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 	i.api = initParams.API
 	i.api.OnMRURestore(ctx, i.handleMRURestore)
+	i.api.OnEnterPluginQuery(ctx, func(callbackCtx context.Context) {
+		resultID := plugin.GetPluginManager().SelectedResultID(callbackCtx, common.PluginInstallerPluginID)
+		i.showInvalidPackageStatus(callbackCtx, resultID)
+	})
+}
+
+// showInvalidPackageStatus publishes a parse failure only when its result is selected.
+func (i *PluginInstallerPlugin) showInvalidPackageStatus(ctx context.Context, resultID string) {
+	if !strings.HasPrefix(resultID, invalidPluginPackageResultPrefix) {
+		return
+	}
+	if result := i.api.GetUpdatableResult(ctx, resultID); result != nil && result.SubTitle != nil {
+		showPluginInstallStatus(ctx, i.api, *result.SubTitle, false)
+	}
 }
 
 func (i *PluginInstallerPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
@@ -101,8 +118,8 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 
 	pluginMetadata, err := plugin.GetStoreManager().ParsePluginManifestFromLocal(ctx, filePath)
 	if err != nil {
-		i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to parse plugin manifest: %s", err.Error())})
-		return results
+		message := fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), i.api.GetTranslation(ctx, "plugin_installer_install"), fmt.Sprintf("%s: %s", filepath.Base(filePath), err.Error()))
+		return []plugin.QueryResult{{Id: invalidPluginPackageResultPrefix + uuid.NewString(), Title: message, SubTitle: message, Icon: icons.Get(icons.ActionError), Score: 3000}}
 	}
 
 	// Check if plugin is already installed
@@ -170,13 +187,13 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					util.Go(ctx, "install plugin from local", func() {
 						// notify starting
-						i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx))})
+						showPluginInstallStatus(ctx, i.api, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_start"), actionButtonName, pluginMetadata.GetName(ctx)), true)
 
 						installErr := plugin.GetStoreManager().InstallFromLocalWithProgress(ctx, filePath, func(message string) {
-							i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), message)})
+							showPluginInstallStatus(ctx, i.api, fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), message), true)
 						})
 						if installErr != nil {
-							i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), installErr.Error())})
+							showPluginInstallStatus(ctx, i.api, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_failed"), strings.ToLower(actionButtonName), fmt.Sprintf("%s: %s", pluginMetadata.GetName(ctx), installErr.Error())), false)
 							return
 						}
 
@@ -213,7 +230,7 @@ func (i *PluginInstallerPlugin) queryForSelectionFile(ctx context.Context, fileP
 						// success
 						actionVerbKey := fmt.Sprintf("plugin_installer_verb_%s_past", strings.ToLower(actionButtonName))
 						actionVerb := i.api.GetTranslation(ctx, actionVerbKey)
-						i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.GetName(ctx), actionVerb)})
+						showPluginInstallStatus(ctx, i.api, fmt.Sprintf(i.api.GetTranslation(ctx, "plugin_installer_action_success"), pluginMetadata.GetName(ctx), actionVerb), false)
 					})
 				},
 			},

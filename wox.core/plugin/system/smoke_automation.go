@@ -12,6 +12,7 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
+	"wox/ui"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -23,8 +24,11 @@ const (
 	smokeAutomationStreamingCommand        = "streaming-preview"
 	smokeAutomationToolbarCommand          = "toolbar"
 	smokeAutomationToolbarLongCommand      = "toolbar-long"
+	smokeAutomationToolbarPlainCommand     = "toolbar-long-plain"
 	smokeAutomationToastCommand            = "toast"
 	smokeAutomationToastResultCommand      = "toast-result"
+	smokeAutomationSystemToastCommand      = "system-toast"
+	smokeAutomationStartupUpdateCommand    = "startup-update"
 	smokeAutomationAttentionCommand        = "attention"
 	smokeAutomationQuickSelectCommand      = "quick-select"
 	smokeAutomationPinRankingCommand       = "pin-ranking"
@@ -49,7 +53,7 @@ const (
 )
 
 func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &smokeAutomationPlugin{})
+	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &smokeAutomationPlugin{}, &globalToolbarSmokePlugin{})
 }
 
 type smokeAutomationPlugin struct {
@@ -76,8 +80,11 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationStreamingCommand, Description: "Streaming preview fixture"},
 			{Command: smokeAutomationToolbarCommand, Description: "Toolbar message fixture"},
 			{Command: smokeAutomationToolbarLongCommand, Description: "Long toolbar message fixture"},
+			{Command: smokeAutomationToolbarPlainCommand, Description: "Long toolbar message without actions"},
 			{Command: smokeAutomationToastCommand, Description: "Toast notification fixture"},
 			{Command: smokeAutomationToastResultCommand, Description: "Toast action result fixture"},
+			{Command: smokeAutomationSystemToastCommand, Description: "System toast with toolbar fixture"},
+			{Command: smokeAutomationStartupUpdateCommand, Description: "Startup update confirmation fixture"},
 			{Command: smokeAutomationAttentionCommand, Description: "Persistent attention fixture"},
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
@@ -101,6 +108,9 @@ func (p *smokeAutomationPlugin) Init(ctx context.Context, initParams plugin.Init
 // Query dispatches the deterministic native smoke behaviors by metadata command.
 func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	if query.IsGlobalQuery() {
+		if strings.TrimSpace(query.Search) == "wox-global-toolbar-smoke" {
+			return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Other global fixture", Icon: icons.Get(icons.PluginApp)}})
+		}
 		if strings.TrimSpace(query.Search) == "wox-preview-scope-smoke" {
 			return p.queryPreviewScope()
 		}
@@ -117,6 +127,26 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return p.queryToolbar(ctx)
 	case smokeAutomationToolbarLongCommand:
 		return p.queryToolbarLong(ctx)
+	case smokeAutomationToolbarPlainCommand:
+		p.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{Id: smokeAutomationToolbarMessageID, Title: smokeAutomationLongToolbarTitle})
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Toolbar plain fixture", Icon: icons.Get(icons.PluginApp)}})
+	case smokeAutomationStartupUpdateCommand:
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Arm update confirmation fixture", Icon: icons.Get(icons.PluginApp), Actions: []plugin.QueryResultAction{{
+			Name: "Arm update confirmation", IsDefault: true, PreventHideAfterAction: true,
+			Action: func(context.Context, plugin.ActionContext) { ui.GetUIManager().SetStartupConfetti() },
+		}}}})
+	case smokeAutomationSystemToastCommand:
+		p.showToolbarMessage(ctx, "Toolbar fixture ready")
+		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Show system toast fixture", Icon: icons.Get(icons.PluginApp), Actions: []plugin.QueryResultAction{{
+			Name: "Show system toast", IsDefault: true, PreventHideAfterAction: true,
+			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
+				plugin.GetPluginManager().GetUI().ShowToast(actionCtx, common.ToastMsg{Text: "System toast fixture", DisplaySeconds: 30, Action: &common.ToastAction{
+					Name: "Open fixture", Action: func(callbackCtx context.Context) {
+						p.api.ChangeQuery(callbackCtx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: "wox-smoke toast-result "})
+					},
+				}})
+			},
+		}}}})
 	case smokeAutomationToastResultCommand:
 		return plugin.NewQueryResponse([]plugin.QueryResult{{Title: "Toast action completed", Icon: icons.Get(icons.PluginApp)}})
 	case smokeAutomationToastCommand:
@@ -477,5 +507,34 @@ func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title st
 				},
 			},
 		},
+	})
+}
+
+// globalToolbarSmokePlugin exercises selection ownership for a plugin with no explicit trigger keyword.
+type globalToolbarSmokePlugin struct{ api plugin.API }
+
+func (*globalToolbarSmokePlugin) GetMetadata() plugin.Metadata {
+	return plugin.Metadata{Id: "21337763-d36e-424e-a20e-c661c9a5c1f9", Name: "Global Toolbar Smoke", Runtime: "Go", Version: "1.0.0", TriggerKeywords: []string{"*"}, SupportedOS: []string{util.PlatformMacOS, util.PlatformWindows, util.PlatformLinux}}
+}
+
+func (p *globalToolbarSmokePlugin) Init(ctx context.Context, params plugin.InitParams) {
+	p.api = params.API
+	p.api.OnEnterPluginQuery(ctx, func(callbackCtx context.Context) {
+		p.api.ShowToolbarMsg(callbackCtx, plugin.ToolbarMsg{Id: "global-selection-status", Title: "Global selection toolbar"})
+	})
+}
+
+func (p *globalToolbarSmokePlugin) Query(_ context.Context, query plugin.Query) plugin.QueryResponse {
+	if !query.IsGlobalQuery() || strings.TrimSpace(query.Search) != "wox-global-toolbar-smoke" {
+		return plugin.QueryResponse{}
+	}
+	return plugin.NewQueryResponse([]plugin.QueryResult{
+		{Title: "Global toolbar fixture", Icon: icons.Get(icons.PluginApp), Actions: []plugin.QueryResultAction{{
+			Name: "Run global operation", IsDefault: true, PreventHideAfterAction: true,
+			Action: func(ctx context.Context, _ plugin.ActionContext) {
+				p.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{Id: "global-selection-status", Title: "Global fixture operation completed"})
+			},
+		}}},
+		{Title: "Global toolbar second fixture", Icon: icons.Get(icons.PluginApp)},
 	})
 }

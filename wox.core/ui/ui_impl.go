@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"strings"
 	"sync"
 	"wox/cloudsync"
@@ -13,7 +12,6 @@ import (
 	"wox/setting"
 	"wox/ui/contract"
 	"wox/util"
-	"wox/util/notifier"
 	"wox/util/timetracking"
 )
 
@@ -152,74 +150,9 @@ func (u *uiImpl) RestoreTheme(ctx context.Context) {
 	GetUIManager().RestoreTheme(ctx)
 }
 
-func (u *uiImpl) Notify(ctx context.Context, msg common.NotifyMsg) {
-	// In-app notifications only when the primary launcher is showing; secondary
-	// panels should not swallow system notifications.
-	primaryVisible := u.IsVisible(context.Background())
-	inManagement := u.IsInManagementView()
-	toolbarOwners := plugin.GetPluginManager().VisibleToolbarMsgOwners()
-	hasToolbarMsg := len(toolbarOwners) > 0
-	hotkeyWarning := GetUIManager().mainHotkeyToolbarWarning()
-	useToolbar := primaryVisible && !inManagement && !hasToolbarMsg && hotkeyWarning == ""
-
-	notifySession := util.GetContextSessionId(ctx)
-	u.sessionMu.RLock()
-	primarySession := u.primarySessionID
-	notifySessionVisible := "n/a"
-	if notifySession != "" {
-		if visible, ok := u.sessionVisible[notifySession]; ok {
-			notifySessionVisible = fmt.Sprintf("%t", visible)
-		} else {
-			notifySessionVisible = "unknown"
-		}
-	}
-	u.sessionMu.RUnlock()
-
-	failed := "none"
-	route := "toolbar"
-	if !useToolbar {
-		route = "overlay"
-		reasons := make([]string, 0, 4)
-		if !primaryVisible {
-			reasons = append(reasons, "primaryVisible")
-		}
-		if inManagement {
-			reasons = append(reasons, "inManagement")
-		}
-		if hasToolbarMsg {
-			reasons = append(reasons, "toolbarMsg")
-		}
-		if hotkeyWarning != "" {
-			reasons = append(reasons, "hotkeyWarning")
-		}
-		failed = strings.Join(reasons, ",")
-	}
-	logger.Debug(ctx, fmt.Sprintf(
-		"notify route=%s failed=%s text=%q plugin=%s primaryVisible=%t inManagement=%t toolbarMsg=%t toolbarOwners=%s hotkeyWarning=%q notifySession=%s notifySessionVisible=%s primarySession=%s",
-		route, failed, msg.Text, msg.PluginId,
-		primaryVisible, inManagement, hasToolbarMsg, strings.Join(toolbarOwners, ","),
-		hotkeyWarning, notifySession, notifySessionVisible, primarySession,
-	))
-
-	if useToolbar {
-		u.applyView(ctx, "show notification message", func(view contract.View) error { return view.ShowNotificationMessage(ctx, msg) })
-	} else {
-		var icon image.Image
-		if msg.Icon != "" {
-			wimg, parseErr := common.ParseWoxImage(msg.Icon)
-			if parseErr == nil {
-				// System notifications should appear as soon as the action succeeds. The previous path used
-				// ToImage(), which could synchronously download Twemoji assets for emoji icons and delay the
-				// success notification by seconds on a cold cache. Keep the notify path local-only and let the
-				// notifier fall back to the default Wox icon when the plugin icon is not already cached.
-				img, imgErr := wimg.ToImageWithoutRemoteFetch()
-				if imgErr == nil {
-					icon = img
-				}
-			}
-		}
-		notifier.Notify(icon, msg.Text)
-	}
+// ShowToast displays an independent notification, regardless of launcher state.
+func (u *uiImpl) ShowToast(ctx context.Context, msg common.ToastMsg) {
+	showToast(ctx, msg)
 }
 
 func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int) {
@@ -239,11 +172,17 @@ func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {
 	u.applyView(ctx, "clear toolbar message", func(view contract.View) error { return view.ClearToolbarMessage(ctx, toolbarMsgId) })
 }
 
-func (u *uiImpl) IsInSettingView() bool {
-	return u.isInSettingView
+// ShowSystemToolbarMsg displays an internal message without requiring a plugin context.
+func (u *uiImpl) ShowSystemToolbarMsg(ctx context.Context, msg common.SystemToolbarMsg) {
+	u.applyView(ctx, "show system toolbar message", func(view contract.View) error { return view.ShowSystemToolbarMessage(ctx, msg) })
 }
 
-func (u *uiImpl) IsInManagementView() bool {
+// ClearSystemToolbarMsg removes only the matching system message.
+func (u *uiImpl) ClearSystemToolbarMsg(ctx context.Context, id string) {
+	u.applyView(ctx, "clear system toolbar message", func(view contract.View) error { return view.ClearSystemToolbarMessage(ctx, id) })
+}
+
+func (u *uiImpl) IsInSettingView() bool {
 	return u.isInSettingView
 }
 
@@ -315,6 +254,25 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	success, err := view.UpdateResult(ctx, typedResult)
 	if err != nil {
 		logger.Error(ctx, fmt.Sprintf("UpdateResult error: %s", err.Error()))
+		return false
+	}
+	return success
+}
+
+// RemoveResult routes a result removal to the owning launcher session.
+func (u *uiImpl) RemoveResult(ctx context.Context, option interface{}) bool {
+	typed, ok := option.(plugin.RemoveResultOption)
+	if !ok {
+		return false
+	}
+	view, err := u.getView(ctx)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("RemoveResult error: %s", err.Error()))
+		return false
+	}
+	success, err := view.RemoveResult(ctx, typed)
+	if err != nil {
+		logger.Error(ctx, fmt.Sprintf("RemoveResult error: %s", err.Error()))
 		return false
 	}
 	return success

@@ -1583,7 +1583,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 						executeErr := m.ExecuteAction(actionCtx, query.SessionId, query.Id, result.Id, action.Id)
 						if executeErr != nil {
 							logger.Error(ctx, fmt.Sprintf("silent query execute failed: %s", executeErr.Error()))
-							notifier.Notify(woxIcon, fmt.Sprintf("Silent query execute failed: %s", executeErr.Error()))
+							notifier.ShowToastAsync(ctx, notifier.Toast{Icon: woxIcon, Message: fmt.Sprintf("Silent query execute failed: %s", executeErr.Error())})
 							return false
 						}
 
@@ -1591,7 +1591,7 @@ func (m *Manager) QuerySilent(ctx context.Context, query Query) bool {
 					}
 				}
 			} else {
-				notifier.Notify(woxIcon, fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results)))
+				notifier.ShowToastAsync(ctx, notifier.Toast{Icon: woxIcon, Message: fmt.Sprintf("Silent query failed, there shouldbe only one result, but got %d", len(results))})
 			}
 
 			return false

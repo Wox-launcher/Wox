@@ -114,7 +114,8 @@ The `ctx` object is required for all API calls.
 - `ChangeQuery(ctx, query: ChangeQueryParam)`: Update the search bar text or provide a complete `QueryHint`.
 - `HideApp(ctx)`: Hide the Wox window.
 - `ShowApp(ctx)`: Show the Wox window.
-- `Notify(ctx, message)`: Display a system notification.
+- `ShowToastMsg(ctx, option)`: Show an independent global Toast; no plugin query context is required. Legacy `Notify(ctx, message)` is deprecated and also shows a Toast.
+- `ShowToolbarMsg(ctx, msg)`: Show status in the active plugin context with no automatic timeout. Call `ClearToolbarMsg(ctx, id)` when it is no longer needed, or Wox clears it when the plugin context is left. Updating a message does not close it. For a selected global result, publish from `OnEnterPluginQuery` using its context. See the skill's Toolbar status section.
 - `Log(ctx, level, msg)`: Write to plugin logs. Levels: `"Info"`, `"Error"`, `"Debug"`, `"Warning"`.
 - `Copy(ctx, params: CopyParams)`: Copy text or image to clipboard.
 - `IsVisible(ctx)`: Check if Wox window is visible.

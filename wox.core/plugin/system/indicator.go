@@ -396,33 +396,47 @@ func (i *IndicatorPlugin) createIndicatorUpgradeAction(storePlugin plugin.StoreP
 		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			pluginName := storePlugin.GetName(ctx)
-			i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+			showPluginInstallStatus(ctx, i.api, fmt.Sprintf(
 				i.api.GetTranslation(ctx, "i18n:plugin_installer_action_start"),
 				i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 				pluginName,
-			)})
+			), true)
 
 			util.Go(ctx, "upgrade plugin from indicator", func() {
 				pluginName := storePlugin.GetName(ctx)
 				installErr := plugin.GetStoreManager().InstallWithProgress(ctx, storePlugin, func(message string) {
-					i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("%s: %s", pluginName, message)})
+					showPluginInstallStatus(ctx, i.api, fmt.Sprintf("%s: %s", pluginName, message), true)
 				})
 
 				if installErr != nil {
-					i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+					showPluginInstallStatus(ctx, i.api, fmt.Sprintf(
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_action_failed"),
 						i.api.GetTranslation(ctx, "i18n:plugin_installer_upgrade"),
 						formatStorePluginInstallError(ctx, i.api, storePlugin, installErr),
-					)})
+					), false)
 					return
 				}
 
-				i.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(
+				showPluginInstallStatus(ctx, i.api, fmt.Sprintf(
 					i.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 					pluginName,
 					i.api.GetTranslation(ctx, "i18n:plugin_installer_verb_upgrade_past"),
-				)})
-				i.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+				), false)
+				// Keep the selected result and its status visible while removing the completed upgrade action.
+				if result := i.api.GetUpdatableResult(ctx, actionContext.ResultId); result != nil {
+					if result.Actions != nil {
+						actions := make([]plugin.QueryResultAction, 0, len(*result.Actions))
+						for _, action := range *result.Actions {
+							if action.Id != actionContext.ResultActionId {
+								actions = append(actions, action)
+							}
+						}
+						result.Actions = &actions
+					}
+					tails := []plugin.QueryResultTail{}
+					result.Tails = &tails
+					i.api.UpdateResult(ctx, *result)
+				}
 			})
 		},
 	}

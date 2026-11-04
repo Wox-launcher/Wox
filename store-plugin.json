@@ -19,7 +19,9 @@
       "Linux"
     ],
     "DateCreated": "2023-08-29 00:00:00",
-    "DateUpdated": "2026-09-01 15:05:17"
+    "DateUpdated": "2026-09-01 15:05:17",
+    "StarCount": 5,
+    "DownloadCount": 2206
   },
   {
     "Id": "bf145a9f-4976-4486-a671-d44eb64c7cd0",
@@ -41,7 +43,9 @@
       "Linux"
     ],
     "DateCreated": "2024-02-03 15:49:00",
-    "DateUpdated": "2024-03-02 09:57:37"
+    "DateUpdated": "2024-03-02 09:57:37",
+    "StarCount": 1,
+    "DownloadCount": 1399
   },
   {
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae69f",
@@ -63,7 +67,9 @@
       "Linux"
     ],
     "DateCreated": "2024-02-23 19:09:00",
-    "DateUpdated": "2026-03-15 15:06:11"
+    "DateUpdated": "2026-03-15 15:06:11",
+    "StarCount": 1,
+    "DownloadCount": 2629
   },
   {
     "Id": "84cb8c8f-1156-489d-a490-6d04fbc85d52",
@@ -83,7 +89,9 @@
       "Darwin"
     ],
     "DateCreated": "2024-05-07 13:02:00",
-    "DateUpdated": "2024-05-21 22:51:11"
+    "DateUpdated": "2024-05-21 22:51:11",
+    "StarCount": 4,
+    "DownloadCount": 1014
   },
   {
     "Id": "09ea2847-929c-440a-aa2c-9b74bcaae88f",
@@ -103,7 +111,9 @@
       "Darwin"
     ],
     "DateCreated": "2024-05-21 15:50:00",
-    "DateUpdated": "2025-11-13 16:25:10"
+    "DateUpdated": "2025-11-13 16:25:10",
+    "StarCount": 0,
+    "DownloadCount": 808
   },
   {
     "Id": "b5f1cd20-c38f-4c5f-8450-fdd066928e98",
@@ -125,7 +135,9 @@
       "Linux"
     ],
     "DateCreated": "2024-06-06 23:51:00",
-    "DateUpdated": "2024-06-06 23:51:00"
+    "DateUpdated": "2024-06-06 23:51:00",
+    "StarCount": 0,
+    "DownloadCount": 1443
   },
   {
     "Id": "aeb94d3d-9c39-4917-9cd0-a4cde95433a2",
@@ -147,7 +159,9 @@
       "Linux"
     ],
     "DateCreated": "2024-07-05 15:00:00",
-    "DateUpdated": "2026-10-15 15:05:45"
+    "DateUpdated": "2026-10-15 15:05:45",
+    "StarCount": 4,
+    "DownloadCount": 1902
   },
   {
     "Id": "9575a1fc-d81b-4947-bcce-bd075f118f3e",
@@ -169,7 +183,9 @@
       "Linux"
     ],
     "DateCreated": "2024-08-07 14:00:00",
-    "DateUpdated": "2026-08-24 15:13:12"
+    "DateUpdated": "2026-08-24 15:13:12",
+    "StarCount": 1,
+    "DownloadCount": 1414
   },
   {
     "Id": "09785021-7f9e-4482-903a-51c90a585a7d",
@@ -191,7 +207,9 @@
       "Linux"
     ],
     "DateCreated": "2025-04-17 11:00:00",
-    "DateUpdated": "2025-04-17 23:02:38"
+    "DateUpdated": "2025-04-17 23:02:38",
+    "StarCount": 3,
+    "DownloadCount": 1907
   },
   {
     "Id": "6f920562-1570-4e63-991b-0b39e7d4a2e9",
@@ -213,7 +231,8 @@
       "Linux"
     ],
     "DateCreated": "2025-08-25 21:15:00",
-    "DateUpdated": "2026-08-27 15:39:10"
+    "DateUpdated": "2026-08-27 15:39:10",
+    "StarCount": 0
   },
   {
     "Id": "25cb95b8-af4c-4ccb-82d6-38843a9999c1",
@@ -235,7 +254,8 @@
       "Linux"
     ],
     "DateCreated": "2025-11-15 23:15:00",
-    "DateUpdated": "2025-11-15 23:15:00"
+    "DateUpdated": "2025-11-15 23:15:00",
+    "StarCount": 0
   },
   {
     "Id": "36fa2371-144c-4f53-98bb-874f77b21849",
@@ -255,7 +275,9 @@
       "Darwin"
     ],
     "DateCreated": "2025-11-26 22:15:00",
-    "DateUpdated": "2026-04-27 06:50:15"
+    "DateUpdated": "2026-04-27 06:50:15",
+    "StarCount": 1,
+    "DownloadCount": 729
   },
   {
     "Id": "d4cf7d41-5cc2-4c21-8ee6-fbd6ca950c6a",
@@ -275,7 +297,8 @@
       "windows"
     ],
     "DateCreated": "2025-12-12 21:06:00",
-    "DateUpdated": "2025-12-12 21:06:00"
+    "DateUpdated": "2025-12-12 21:06:00",
+    "StarCount": 0
   },
   {
     "Id": "8b8a1b35-3d9e-4d7d-9f2e-3b1d0b7f9e10",
@@ -298,7 +321,8 @@
       "linux"
     ],
     "DateCreated": "2025-12-13 15:12:00",
-    "DateUpdated": "2026-01-08 20:06:18"
+    "DateUpdated": "2026-01-08 20:06:18",
+    "StarCount": 0
   },
   {
     "Id": "9014abc5-7a57-46c4-8961-abf3d8f1b008",
@@ -329,7 +353,9 @@
         "plugin_name": "取色器",
         "plugin_desc": "Wox 取色器插件"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1614
   },
   {
     "Id": "c6f8712d-18a5-46f2-92e1-603964f4dd00",
@@ -359,7 +385,9 @@
       "zh_CN": {
         "plugin_description": "一个与 Strava 运动交互的插件"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1195
   },
   {
     "Id": "cb491ba6-e73f-4434-922e-738a55f87558",
@@ -391,7 +419,9 @@
         "plugin_name": "进程杀手",
         "plugin_description": "通过进程名称或 ID 终止正在运行的进程"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 2293
   },
   {
     "Id": "407fdbba-bdab-4bc1-aa09-b46e811155a6",
@@ -421,7 +451,9 @@
       "zh_CN": {
         "plugin_description": "通过 LocalSend 协议共享文件"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1708
   },
   {
     "Id": "66c21ce1-f296-49dd-b75b-f05e76743c93",
@@ -451,7 +483,9 @@
       "zh_CN": {
         "plugin_description": "Memos - 查看列表，搜索和创建备忘录"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1414
   },
   {
     "Id": "e201dc19-34fb-4ad8-8829-bfb2b2eb25d0",
@@ -481,7 +515,9 @@
       "zh_CN": {
         "plugin_description": "追踪你的加密货币投资组合"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1253
   },
   {
     "Id": "4da3959b-cb61-43a7-865c-7fde658340fa",
@@ -506,7 +542,9 @@
       "Linux"
     ],
     "DateCreated": "2026-02-27 00:00:00",
-    "DateUpdated": "2026-02-27 12:07:48"
+    "DateUpdated": "2026-02-27 12:07:48",
+    "StarCount": 0,
+    "DownloadCount": 1760
   },
   {
     "Id": "8f8d2954-4ef6-4b0f-ba53-a816fe095acc",
@@ -536,7 +574,9 @@
       "zh_CN": {
         "plugin_description": "搜索 Iconify 图标资源"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1503
   },
   {
     "Id": "2f326a0c-cd9f-4ddf-9b45-f8abf082283f",
@@ -568,7 +608,9 @@
         "plugin_name": "AI额度",
         "plugin_desc": "在 Wox 中显示 AI 限额用量"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1397
   },
   {
     "Id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
@@ -600,7 +642,9 @@
         "plugin_name": "Git 项目",
         "plugin_description": "快速搜索和管理本地 Git 项目"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1464
   },
   {
     "Id": "6dd42f91-009d-4d14-909c-97f25454eea7",
@@ -632,7 +676,9 @@
         "plugin_name": "Awake",
         "plugin_description": "保持电脑唤醒，阻止休眠"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1924
   },
   {
     "Id": "c14b9877-d896-462a-9eac-cc9dc7f0d48b",
@@ -652,7 +698,9 @@
       "Windows"
     ],
     "DateCreated": "2026-03-26 00:00:00",
-    "DateUpdated": "2026-03-26 00:00:00"
+    "DateUpdated": "2026-03-26 00:00:00",
+    "StarCount": 0,
+    "DownloadCount": 800
   },
   {
     "Id": "7487f0be-1afd-49a8-b257-c41459c5afa9",
@@ -674,14 +722,16 @@
       "Darwin"
     ],
     "DateCreated": "2026-03-30 00:00:00",
-    "DateUpdated": "2026-04-01 15:27:18"
+    "DateUpdated": "2026-04-01 15:27:18",
+    "StarCount": 0,
+    "DownloadCount": 1416
   },
   {
     "Id": "6987b7b1-89da-41ef-bab3-d1ba2e3daba0",
     "Name": "Everything",
     "Author": "qianlifeng",
-    "Version": "0.1.3",
-    "MinWoxVersion": "2.0.0",
+    "Version": "0.1.4",
+    "MinWoxVersion": "2.4.9",
     "Runtime": "nodejs",
     "Description": "Search files with Everything on Windows",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Everything/main/images/app.png",
@@ -694,7 +744,9 @@
       "Windows"
     ],
     "DateCreated": "2026-04-22 20:40:30",
-    "DateUpdated": "2026-10-05 08:30:20"
+    "DateUpdated": "2026-11-04 06:06:01",
+    "StarCount": 1,
+    "DownloadCount": 5773
   },
   {
     "Id": "0057ebd4-1a85-4653-8bfa-d51557c0c7a1",
@@ -726,7 +778,9 @@
         "plugin_name": "Unsplash 壁纸",
         "plugin_description": "搜索 Unsplash 图片并设置为桌面壁纸"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1573
   },
   {
     "Id": "263fa95c-db99-4dc8-be68-784b5ae421f8",
@@ -762,7 +816,9 @@
         "plugin_name": "LuxTranslate",
         "plugin_description": "在 Wox 中使用免配置翻译源和大模型翻译文本"
       }
-    }
+    },
+    "StarCount": 2,
+    "DownloadCount": 1784
   },
   {
     "Id": "76d3be7c-7f4d-4a9d-9f8a-1e8d4c6b5a2f",
@@ -794,13 +850,15 @@
         "plugin_name": "截图 OCR",
         "plugin_description": "截图或读取图片，使用在线 OCR 识别文字，并发送给 LuxTranslate 翻译"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1174
   },
   {
     "Id": "ea521bb8-4414-44be-bf42-4b2851ae32ad",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "0.0.1",
+    "Version": "0.1.0",
     "MinWoxVersion": "2.0.4",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
@@ -816,7 +874,7 @@
       "Linux"
     ],
     "DateCreated": "2026-05-06 19:48:30",
-    "DateUpdated": "2026-10-15 15:05:57",
+    "DateUpdated": "2026-11-04 03:03:57",
     "I18n": {
       "en_US": {
         "plugin_name": "RImage",
@@ -826,7 +884,9 @@
         "plugin_name": "RImage",
         "plugin_description": "使用 rimage 压缩选中的图片"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1320
   },
   {
     "Id": "94fbbf13-3bd3-4a26-b710-96e8ecda59ac",
@@ -857,7 +917,9 @@
         "plugin_name": "HotkeyTrigger",
         "plugin_description": "一堆软件快捷键记不住？通过 Wox 查询并触发已配置的系统快捷键"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1192
   },
   {
     "Id": "2662238b-f605-4f99-a90e-e08e1dec2772",
@@ -889,7 +951,9 @@
         "plugin_name": "世界杯",
         "plugin_description": "查看 FIFA 2026 世界杯赛程、赛果和实时比分。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1213
   },
   {
     "Id": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
@@ -911,7 +975,8 @@
       "Linux"
     ],
     "DateCreated": "2026-06-26 00:00:00",
-    "DateUpdated": "2026-06-26 00:00:00"
+    "DateUpdated": "2026-06-26 00:00:00",
+    "StarCount": 0
   },
   {
     "Id": "44f8e41d-afb9-4a66-8fee-30520957790d",
@@ -930,7 +995,9 @@
       "Linux"
     ],
     "DateCreated": "2026-07-25 02:10:59",
-    "DateUpdated": "2026-07-25 21:17:02"
+    "DateUpdated": "2026-07-25 21:17:02",
+    "StarCount": 0,
+    "DownloadCount": 1252
   },
   {
     "Id": "d30c9661-fa55-4ea6-b6f1-bc61e7aa8586",
@@ -953,7 +1020,9 @@
       "Linux"
     ],
     "DateCreated": "2026-08-28 21:27:52",
-    "DateUpdated": "2026-09-03 09:06:44"
+    "DateUpdated": "2026-09-03 09:06:44",
+    "StarCount": 0,
+    "DownloadCount": 1212
   },
   {
     "Id": "5e693e9d-4683-4982-8929-d4ea5e364c5b",
@@ -985,7 +1054,9 @@
         "plugin_name": "Nextcloud 密码",
         "plugin_description": "搜索、查看、复制和修改 Nextcloud Passwords 中保存的密码"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1193
   },
   {
     "Id": "c3e8a1d4-7b2f-4f19-9e6a-2d5c8b1a4f70",
@@ -1008,7 +1079,8 @@
       "Linux"
     ],
     "DateCreated": "2026-08-31 18:54:00",
-    "DateUpdated": "2026-08-31 18:54:00"
+    "DateUpdated": "2026-08-31 18:54:00",
+    "StarCount": 0
   },
   {
     "Id": "c3e8a7d2-4b1f-4e6a-9d2c-8f5a1b0e7c34",
@@ -1038,14 +1110,15 @@
         "plugin_name": "Scoop",
         "plugin_description": "用 Scoop 搜索和管理 Windows 应用"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "b8e3d1a4-6c2f-4a9e-8d71-3f5c0a2e9b16",
     "Name": "i18n:plugin_name",
     "Author": "qianlifeng",
-    "Version": "1.1.0",
-    "MinWoxVersion": "2.4.8",
+    "Version": "1.1.1",
+    "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.VideoDownloader/main/images/app.svg",
@@ -1060,7 +1133,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-01 23:00:00",
-    "DateUpdated": "2026-10-28 20:45:39",
+    "DateUpdated": "2026-11-04 03:04:00",
     "I18n": {
       "en_US": {
         "plugin_name": "Video Downloader",
@@ -1070,7 +1143,9 @@
         "plugin_name": "视频下载",
         "plugin_description": "用 yt-dlp 从 1000+ 网站下载视频和音频"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 120
   },
   {
     "Id": "a7c3e9f2-4b81-4d6e-9f1a-2c8d5e0b7a13",
@@ -1102,7 +1177,8 @@
         "plugin_name": "Hacker News",
         "plugin_description": "浏览 Hacker News 首页、话题和讨论"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "e6c4a8b1-2f7d-4c19-9a5e-8d3b1f0e6a24",
@@ -1134,7 +1210,8 @@
         "plugin_name": "Speedtest",
         "plugin_description": "通过 HTTP 下载、上传和延迟测试网速"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "a7f3b2c1-9d4e-4f6a-8b2c-1e5d9a3f7b24",
@@ -1166,7 +1243,8 @@
         "plugin_name": "声音切换",
         "plugin_description": "快速切换音频输入和输出设备"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "a8c4e2b1-6d3f-4a19-9e7c-2b5f0d8a1c63",
@@ -1198,7 +1276,8 @@
         "plugin_name": "GIF 搜索",
         "plugin_description": "从 GIPHY 和 The Finer Gifs Club 搜索 GIF 动图"
       }
-    }
+    },
+    "StarCount": 1
   },
   {
     "Id": "9d7b4e96-a81d-44a3-a75a-bc828cf5668e",
@@ -1230,7 +1309,9 @@
         "plugin_name": "Linkding",
         "plugin_description": "在 Linkding 中搜索、保存和管理书签"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1187
   },
   {
     "Id": "35E4296B-89E2-492E-977B-0120ECCB5C95",
@@ -1262,7 +1343,9 @@
         "plugin_name": "GitHub",
         "plugin_description": "管理 GitHub 的 issues 和通知"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 1229
   },
   {
     "Id": "73c73b8b-ef35-4d50-a2ca-e53484cd9561",
@@ -1285,7 +1368,9 @@
       "Linux"
     ],
     "DateCreated": "2026-09-08 12:57:47",
-    "DateUpdated": "2026-09-08 12:57:47"
+    "DateUpdated": "2026-09-08 12:57:47",
+    "StarCount": 0,
+    "DownloadCount": 1189
   },
   {
     "Id": "b7e2c4a1-8f3d-4e91-9c6a-2d5b1a0e8f47",
@@ -1317,7 +1402,8 @@
         "plugin_name": "锁定键盘",
         "plugin_description": "锁定键盘，方便擦拭按键且不会误触快捷键"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "7c3e9a14-6b2d-4f81-9e5a-1d8c4b0f2a67",
@@ -1349,7 +1435,8 @@
         "plugin_name": "Droppy",
         "plugin_description": "随时打开的文件盒子：拖进去暂存，再到别处拖出去。"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "b81045ca-d93b-4866-9e90-8e10b10f2df1",
@@ -1371,7 +1458,9 @@
       "Windows"
     ],
     "DateCreated": "2026-09-16 18:41:00",
-    "DateUpdated": "2026-09-25 19:30:00"
+    "DateUpdated": "2026-09-25 19:30:00",
+    "StarCount": 2,
+    "DownloadCount": 553
   },
   {
     "Id": "955c78fd-35f4-470c-975c-474e1dc96d5a",
@@ -1403,7 +1492,8 @@
         "plugin_name": "JSON 格式化",
         "plugin_description": "从查询、选中内容或文件格式化、压缩并校验 JSON"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "cd22fbe8-af21-47c9-8ead-9484ad5abc2b",
@@ -1435,7 +1525,8 @@
         "plugin_name": "随机数据生成",
         "plugin_description": "生成随机数字、UUID、密码、邮箱、姓名、颜色等。可指定数量，例如 random number 10"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "a0d52aa9-0401-492a-aeda-7a64e16ac2e9",
@@ -1467,7 +1558,8 @@
         "plugin_name": "YouTube",
         "plugin_description": "搜索 YouTube 视频并在浏览器中打开"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "074ff6c9-50d1-4c26-9583-c6e48b3c48f2",
@@ -1499,7 +1591,8 @@
         "plugin_name": "股票",
         "plugin_description": "查询 A 股、港股和美股报价。"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "1a1827d1-63ef-463b-8741-1cb2bf0ad10e",
@@ -1523,7 +1616,9 @@
       "Linux"
     ],
     "DateCreated": "2026-09-23 16:58:10",
-    "DateUpdated": "2026-09-23 16:58:10"
+    "DateUpdated": "2026-09-23 16:58:10",
+    "StarCount": 0,
+    "DownloadCount": 896
   },
   {
     "Id": "7c1a0e4e-6b2d-4f5a-9c31-2a8e5d0b7f14",
@@ -1555,7 +1650,8 @@
         "plugin_name": "天气",
         "plugin_description": "用 wttr.in 查看当前天气和未来几天。"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "32457cd4-8e0d-4826-a9f6-1656d7197202",
@@ -1587,7 +1683,8 @@
         "plugin_name": "词数统计",
         "plugin_description": "统计查询文本或选中文本中的词数及文本信息"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "c3a91e47-8d2b-4f65-a1c0-6e9b4d7f2a18",
@@ -1617,7 +1714,9 @@
         "plugin_name": "游戏",
         "plugin_description": "搜索 Steam、Epic、GOG、Ubisoft Connect、EA、Battle.net、Xbox 和 itch.io 里已安装的游戏。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 572
   },
   {
     "Id": "9d778a44-0185-4cd5-81eb-b7b019fd7c3f",
@@ -1639,7 +1738,8 @@
       "Linux"
     ],
     "DateCreated": "2026-09-30 20:31:39",
-    "DateUpdated": "2026-09-30 20:31:39"
+    "DateUpdated": "2026-09-30 20:31:39",
+    "StarCount": 0
   },
   {
     "Id": "c4a8e2b7-1d63-4f90-8a55-6e0b9d3c7f21",
@@ -1671,7 +1771,8 @@
         "plugin_name": "Clash Verge",
         "plugin_description": "查看本机 Clash Verge 运行状态，并切换代理节点。"
       }
-    }
+    },
+    "StarCount": 0
   },
   {
     "Id": "ad468a1d-fdb5-4fb0-88a9-d6778bb11d96",
@@ -1697,7 +1798,9 @@
       "https://github.com/user-attachments/assets/77ac4d4e-692c-44e2-bd92-7e70145fa3e4",
       "https://github.com/user-attachments/assets/edfa8e00-5d80-44df-a662-e9c4bd6be299",
       "https://github.com/user-attachments/assets/c2f5aeef-1310-4496-b82c-87e56f7aab03"
-    ]
+    ],
+    "StarCount": 0,
+    "DownloadCount": 536
   },
   {
     "Id": "44ebc063-a997-473b-a70e-885fa28170ee",
@@ -1719,7 +1822,9 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-13 21:19:11",
-    "DateUpdated": "2026-10-24 00:13:15"
+    "DateUpdated": "2026-10-24 00:13:15",
+    "StarCount": 0,
+    "DownloadCount": 539
   },
   {
     "Id": "1ed04e7b-5a94-481e-ac27-74c11e34ec63",
@@ -1747,7 +1852,9 @@
       "zh_CN": {
         "plugin_desc": "允许用户从 Wox 启动某些 PowerToys 程序。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 465
   },
   {
     "Id": "84a696e0-e250-4cf4-b9cc-e45115bb4119",
@@ -1777,7 +1884,9 @@
       "zh_CN": {
         "plugin_desc": "生成二维码 / 截图识别二维码。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 600
   },
   {
     "Id": "24fe7e7c-60c7-4b57-82e7-f30e6a29e040",
@@ -1809,7 +1918,9 @@
         "plugin_name": "端口生成器",
         "plugin_description": "检查端口占用 / 生成随机可用端口。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 535
   },
   {
     "Id": "242ec423-0ac0-47d9-8c93-e72c4d509eb2",
@@ -1843,7 +1954,9 @@
         "plugin_name": "ASCII 艺术字生成器",
         "plugin_description": "生成 ASCII 艺术字符串。"
       }
-    }
+    },
+    "StarCount": 1,
+    "DownloadCount": 283
   },
   {
     "Id": "9f479da0-2c9f-412c-80f1-02f2bdc10263",
@@ -1879,7 +1992,9 @@
         "plugin_name": "颜文字",
         "plugin_desc": "搜索并复制颜文字。"
       }
-    }
+    },
+    "StarCount": 0,
+    "DownloadCount": 245
   },
   {
     "Id": "c2d3f97d-ff20-4e27-8813-54f2c2192c6d",
@@ -1903,7 +2018,9 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-25 15:43:51",
-    "DateUpdated": "2026-10-25 15:43:51"
+    "DateUpdated": "2026-10-25 15:43:51",
+    "StarCount": 0,
+    "DownloadCount": 190
   },
   {
     "Id": "ef529aa0-1288-4a8c-b061-b98389491b4e",
@@ -1935,7 +2052,9 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-26 17:12:00",
-    "DateUpdated": "2026-10-26 17:12:00"
+    "DateUpdated": "2026-10-26 17:12:00",
+    "StarCount": 0,
+    "DownloadCount": 124
   },
   {
     "Id": "c5dfb872-03a5-413a-96e3-438339e4d238",
@@ -1955,7 +2074,8 @@
       "Windows"
     ],
     "DateCreated": "2026-10-29 19:02:24",
-    "DateUpdated": "2026-10-29 22:38:13"
+    "DateUpdated": "2026-10-29 22:38:13",
+    "StarCount": 0
   },
   {
     "Id": "b18d674a-0ae0-4d20-bd11-c5268b069306",
@@ -2003,7 +2123,9 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 16:57:33",
-    "DateUpdated": "2026-11-03 16:57:33"
+    "DateUpdated": "2026-11-03 16:57:33",
+    "StarCount": 0,
+    "DownloadCount": 13
   },
   {
     "Id": "eaadbcea-c907-4efe-b09b-dfc56e1dc758",
@@ -2073,6 +2195,6 @@
       "Linux"
     ],
     "DateCreated": "2026-11-03 00:00:00",
-    "DateUpdated": "2026-11-03 00:00:00"
+    "DateUpdated": "2026-11-03 17:00:42"
   }
 ]

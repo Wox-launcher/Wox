@@ -175,3 +175,15 @@ func TestRestartWoxCommandIsDiscoverable(t *testing.T) {
 	}
 	t.Fatal("restart Wox command is missing")
 }
+
+func TestDevCommandsIncludeToolbarActionsPreview(t *testing.T) {
+	for _, command := range (&SysPlugin{}).buildDevCommands() {
+		if command.ID == "test_toolbar_actions" {
+			if command.Action == nil || !command.PreventHideAfterAction {
+				t.Fatal("toolbar actions preview must stay visible and executable")
+			}
+			return
+		}
+	}
+	t.Fatal("toolbar actions preview command is missing")
+}

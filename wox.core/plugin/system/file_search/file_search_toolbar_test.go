@@ -170,3 +170,40 @@ func assertFileSearchCopyAction(t *testing.T, api *fileSearchStatusCopyAPI, acti
 	}
 	t.Fatalf("missing action %s in %#v", name, actions)
 }
+
+func TestFileIndexErrorActionsPreserveOriginalDetails(t *testing.T) {
+	c := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
+	status := filesearch.StatusSnapshot{ErrorRootCount: 1, ErrorRootPath: "/long/index/root", LastError: "scanner: wrapped: permission denied"}
+	msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false)
+	if !found || len(msg.Actions) < 2 {
+		t.Fatalf("error toolbar message = %+v", msg)
+	}
+	var settings, copy bool
+	for _, action := range msg.Actions {
+		if action.Id == "open-settings" {
+			settings = action.Action != nil
+		}
+		if action.Id == "copy-error" {
+			copy = action.Action != nil && action.ContextData["details"] == status.ErrorRootPath+"\n"+status.LastError
+		}
+	}
+	if !settings || !copy {
+		t.Fatalf("missing recovery or full diagnostic action: %+v", msg.Actions)
+	}
+	original := buildToolbarMsgSignature(msg)
+	status.LastError = "another scanner: wrapped: permission denied"
+	updated, _ := c.buildToolbarMsgFromStatus(context.Background(), status, false)
+	if buildToolbarMsgSignature(updated) == original {
+		t.Fatal("changed full details must refresh callbacks even if the short title is unchanged")
+	}
+	status.ActiveRunKind = filesearch.RunKindFull
+	status.ActiveRunStatus = filesearch.RunStatusCompleted
+	status.ActiveRunElapsedMs = 1000
+	if msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false); !found || len(msg.Actions) < 2 {
+		t.Fatalf("completed index with failed roots must remain actionable: %+v", msg)
+	}
+	status = filesearch.StatusSnapshot{LastError: "index database failure"}
+	if msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false); !found || len(msg.Actions) < 2 {
+		t.Fatalf("unscoped index error = %+v, found %v", msg, found)
+	}
+}

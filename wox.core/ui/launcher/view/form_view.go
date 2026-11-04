@@ -507,7 +507,7 @@ func FormButtonField(props FormButtonFieldProps) woxwidget.Widget {
 // FormSwitchField builds a real switch instead of exposing the boolean as text.
 func FormSwitchField(props FormSwitchFieldProps) woxwidget.Widget {
 	control := woxcomponent.WoxSwitch(woxcomponent.SwitchProps{ID: props.ID, Label: props.Label, Value: props.Checked, OnChange: props.OnChange, Theme: props.Theme})
-	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, control, props.Theme), 22, props.Theme, props.OnOpenLink, nil)
+	return formFieldLayout(props.ID, props.Label, props.Description, props.Width, props.Height, props.LabelWidth, formFieldControlWithError(props.ID, props.Error, control, props.Theme), 24, props.Theme, props.OnOpenLink, nil)
 }
 
 // FormSelectFieldProps contains one outlined form dropdown.
@@ -822,8 +822,12 @@ func formFieldLayout(id, label, description string, width, height, labelWidth fl
 	if height <= 0 {
 		padding.Bottom = 10
 	}
+	// Align against the first control line, including for multiline inputs.
+	labelHeight := theme.Scaled(min(controlHeight, woxcomponent.SettingsControlHeight))
 	return woxwidget.Container{Width: width, Height: height, Padding: padding, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: gap, Children: []woxwidget.Widget{
-		formFieldLabel(label, labelWidth, controlHeight, 6, theme, woxui.FontWeightRegular),
+		woxwidget.Container{Width: labelWidth, Height: labelHeight, Child: woxwidget.Align{Width: labelWidth, Height: labelHeight, Vertical: 0.5, Child: woxwidget.Text{
+			Value: label, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsLabelFontSize)}, Color: theme.Text,
+		}}},
 		woxwidget.Expanded{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: rightChildren}},
 	}}}
 }

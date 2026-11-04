@@ -2,11 +2,13 @@ package launcher
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"runtime"
 	"strings"
 	"time"
 
+	"wox/common"
 	"wox/setting"
 	woxui "wox/ui/runtime"
 	"wox/util"
@@ -44,17 +46,19 @@ func normalizeToolbarHotkey(hotkey string) string {
 }
 
 type toolbarMessage struct {
-	ID             string                 `json:"Id"`
-	Title          string                 `json:"Title"`
-	Text           string                 `json:"Text"`
-	Icon           woxImage               `json:"Icon"`
-	Progress       *int                   `json:"Progress"`
-	Indeterminate  bool                   `json:"Indeterminate"`
-	Actions        []toolbarMessageAction `json:"Actions"`
-	DisplaySeconds int                    `json:"DisplaySeconds"`
+	IsCurrent     func() bool
+	ID            string                 `json:"Id"`
+	Title         string                 `json:"Title"`
+	Icon          woxImage               `json:"Icon"`
+	Progress      *int                   `json:"Progress"`
+	Indeterminate bool                   `json:"Indeterminate"`
+	Actions       []toolbarMessageAction `json:"Actions"`
+	System        bool
 }
 
 type toolbarMessageAction struct {
+	SettingsPath           string
+	SettingsParam          string
 	ID                     string            `json:"Id"`
 	Name                   string            `json:"Name"`
 	Icon                   woxImage          `json:"Icon"`
@@ -64,42 +68,122 @@ type toolbarMessageAction struct {
 	ContextData            map[string]string `json:"ContextData"`
 }
 
-func (m toolbarMessage) persistent() bool {
-	return m.ID != "" || m.Title != "" || m.Progress != nil || m.Indeterminate || len(m.Actions) > 0
+// systemToolbarEntry belongs to one launcher UI thread; later equal-priority messages win.
+type systemToolbarEntry struct {
+	message  toolbarMessage
+	priority common.SystemToolbarPriority
+	revision uint64
 }
 
-func (m toolbarMessage) displayText() string {
-	if m.persistent() {
-		return m.Title
+func (a *toolbarController) effectiveSystemToolbarMessage() *toolbarMessage {
+	var selected *systemToolbarEntry
+	for _, entry := range a.systemMessages {
+		if selected == nil || entry.priority > selected.priority || (entry.priority == selected.priority && entry.revision > selected.revision) {
+			selected = entry
+		}
 	}
-	return m.Text
+	if selected == nil {
+		return nil
+	}
+	return &selected.message
 }
 
 func (a *toolbarController) effectiveToolbarMessage() *toolbarMessage {
-	if a.toolbarMsg != nil {
+	if message := a.effectiveSystemToolbarMessage(); message != nil {
+		return message
+	}
+	if a.toolbarMsg != nil && (a.toolbarMsg.IsCurrent == nil || a.toolbarMsg.IsCurrent()) {
 		return a.toolbarMsg
 	}
-	return a.toolbarFallbackMsg
+	return nil
 }
 
-// applyToolbarFallbackMessage keeps a launcher-wide warning behind query-owned toolbar state.
-func (a *toolbarController) applyToolbarFallbackMessage(message toolbarMessage) {
-	a.toolbarFallbackMsg = &message
+// applySystemToolbarMessage saves each system message independently and starts its own expiry.
+func (a *toolbarController) applySystemToolbarMessage(message toolbarMessage, priority common.SystemToolbarPriority, duration time.Duration) {
+	if message.ID == "" {
+		return
+	}
+	before := a.effectiveToolbarMessage()
+	if a.systemMessages == nil {
+		a.systemMessages = make(map[string]*systemToolbarEntry)
+	}
+	a.systemMessageRevision++
+	revision := a.systemMessageRevision
+	a.systemMessages[message.ID] = &systemToolbarEntry{message: message, priority: priority, revision: revision}
+	a.systemToolbarMessageChanged(before)
+	if duration <= 0 {
+		return
+	}
+	util.Go(a.lifecycleCtx, "expire system toolbar message", func() {
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+		select {
+		case <-a.lifecycleCtx.Done():
+			return
+		case <-timer.C:
+		}
+		if err := a.runOnUI("expire system toolbar message", func() {
+			if a.lifecycleCtx.Err() == nil {
+				a.expireSystemToolbarMessage(message.ID, revision)
+			}
+		}); err != nil {
+			util.GetLogger().Warn(a.lifecycleCtx, "expire system toolbar message: "+err.Error())
+		}
+	})
+}
+
+// expireSystemToolbarMessage ignores timers for a replaced message with the same ID.
+func (a *toolbarController) expireSystemToolbarMessage(id string, revision uint64) {
+	entry := a.systemMessages[id]
+	if entry == nil || entry.revision != revision {
+		return
+	}
+	a.clearSystemToolbarMessage(id)
+}
+
+func (a *toolbarController) clearSystemToolbarMessage(id string) {
+	if a.systemMessages[id] == nil {
+		return
+	}
+	before := a.effectiveToolbarMessage()
+	delete(a.systemMessages, id)
+	a.systemToolbarMessageChanged(before)
+}
+
+// systemToolbarMessageChanged leaves an open panel alone when a lower-priority message changes.
+func (a *toolbarController) systemToolbarMessageChanged(before *toolbarMessage) {
+	if before != a.effectiveToolbarMessage() {
+		if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar {
+			a.actions.hideActionPanel()
+		}
+		a.messageTruncated = false
+	}
 	a.toolbarRevision++
 	_ = a.applyWindowBounds()
 	_ = a.window().Invalidate()
 }
 
 func (a *toolbarController) applyToolbarMessage(message toolbarMessage) {
-	if !message.persistent() && a.effectiveToolbarMessage() != nil && a.effectiveToolbarMessage().persistent() {
+	if a.effectiveSystemToolbarMessage() != nil {
+		a.toolbarMsg = &message
+		a.toolbarRevision++
+		_ = a.window().Invalidate()
 		return
 	}
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar && (a.toolbarMsg == nil || a.toolbarMsg.ID != message.ID) {
+		a.actions.hideActionPanel()
+	}
+	if a.toolbarMsg == nil || a.toolbarMsg.ID != message.ID {
+		a.messageTruncated = false
+	}
 	a.toolbarRevision++
-	revision := a.toolbarRevision
 	a.toolbarMsg = &message
+	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar {
+		a.actions.normalizeActionSelectionLocked()
+	}
 	panelVisible := a.actions.actionPanel
 	panelClosed := false
-	// About Menu only defers presenting the latest message; expiry and replacement keep running.
+	// About Menu defers presenting the latest toolbar message until it closes.
 	if a.actions.shouldSyncActionPanelWithResults() {
 		if len(a.actions.currentActionPanelEntries()) == 0 {
 			panelClosed = a.actions.resetActionPanelLocked()
@@ -114,36 +198,23 @@ func (a *toolbarController) applyToolbarMessage(message toolbarMessage) {
 		a.restoreQueryTextInput()
 	}
 	_ = a.window().Invalidate()
-	if !message.persistent() && message.DisplaySeconds > 0 {
-		util.Go(a.lifecycleCtx, "expire transient toolbar message", func() {
-			timer := time.NewTimer(time.Duration(message.DisplaySeconds) * time.Second)
-			defer timer.Stop()
-			select {
-			case <-a.lifecycleCtx.Done():
-				return
-			case <-timer.C:
-			}
-			if err := a.runOnUI("expire transient toolbar message", func() {
-				if a.lifecycleCtx.Err() != nil {
-					return
-				}
-				if a.toolbarRevision == revision && a.toolbarMsg != nil && a.toolbarMsg.Text == message.Text {
-					a.toolbarMsg = nil
-					a.toolbarRevision++
-				}
-				_ = a.window().Invalidate()
-			}); err != nil {
-				log.Printf("dispatch toolbar message expiry: %v", err)
-			}
-		})
-	}
 }
 
 func (a *toolbarController) clearToolbarMessageByID(toolbarMessageID string) {
 	changed := false
 	panelClosed := false
-	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID {
+	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID && a.effectiveSystemToolbarMessage() != nil {
 		a.toolbarMsg = nil
+		a.toolbarRevision++
+		_ = a.window().Invalidate()
+		return
+	}
+	if a.toolbarMsg != nil && a.toolbarMsg.ID == toolbarMessageID {
+		if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar {
+			a.actions.hideActionPanel()
+		}
+		a.toolbarMsg = nil
+		a.messageTruncated = false
 		a.toolbarRevision++
 		changed = true
 		if a.actions.shouldSyncActionPanelWithResults() {
@@ -154,11 +225,7 @@ func (a *toolbarController) clearToolbarMessageByID(toolbarMessageID string) {
 			}
 		}
 	}
-	if a.toolbarFallbackMsg != nil && a.toolbarFallbackMsg.ID == toolbarMessageID {
-		a.toolbarFallbackMsg = nil
-		a.toolbarRevision++
-		changed = true
-	}
+
 	if changed {
 		_ = a.applyWindowBounds()
 	}
@@ -168,7 +235,42 @@ func (a *toolbarController) clearToolbarMessageByID(toolbarMessageID string) {
 	_ = a.window().Invalidate()
 }
 
+// copyToolbarMessage copies the full, untruncated message shown by the launcher.
+func (a *App) copyToolbarMessage() {
+	message := a.toolbar.effectiveToolbarMessage()
+	if message == nil || a.toolbar.writeClipboard == nil {
+		return
+	}
+	if err := a.toolbar.writeClipboard(message.Title); err != nil {
+		util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("copy toolbar message: %v", err))
+		a.actions.aboutMenuError = a.language.translate("i18n:ui_toolbar_copy_failed")
+		if a.window != nil {
+			_ = a.window.Invalidate()
+		}
+		return
+	}
+	a.actions.hideActionPanel()
+}
+
+// showFullToolbarMessage opens a persistent, scrollable toast with the actual message text.
+func (a *App) showFullToolbarMessage() {
+	message := a.toolbar.effectiveToolbarMessage()
+	if message == nil || message.Title == "" || a.toolbar.showFullMessage == nil {
+		return
+	}
+	text := message.Title
+	a.actions.hideActionPanel()
+	util.Go(a.lifecycleCtx, "show full toolbar message", func() {
+		if !a.toolbar.showFullMessage(text) {
+			util.GetLogger().Error(a.lifecycleCtx, "show full toolbar message failed")
+		}
+	})
+}
+
 func (a *toolbarController) onToolbarKey(event woxui.KeyEvent) bool {
+	if a.effectiveSystemToolbarMessage() != nil {
+		return false
+	}
 	message := a.toolbarMsg
 	panelVisible := a.actions.actionPanel
 	if message == nil || panelVisible {

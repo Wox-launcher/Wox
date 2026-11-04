@@ -142,6 +142,7 @@ type WoxImage struct {
 type WoxLazyLoadImagePayload struct {
 	Token       string    `json:"token,omitempty"`
 	CacheKey    string    `json:"cacheKey,omitempty"`
+	QueryID     string    `json:"queryId,omitempty"`
 	Placeholder WoxImage  `json:"placeholder"`
 	TargetSize  int       `json:"targetSize"`
 	Source      *WoxImage `json:"source,omitempty"`
@@ -836,13 +837,14 @@ func NewWoxImageEmoji(emoji string) WoxImage {
 	}
 }
 
-func NewWoxImageLazyLoad(token string, cacheKey string, placeholder WoxImage, targetSize int) WoxImage {
+func NewWoxImageLazyLoad(token string, cacheKey string, queryID string, placeholder WoxImage, targetSize int) WoxImage {
 	// LazyLoad is an internal image type: core serializes the placeholder and
 	// token together so UI can render immediately, then ask core for the
 	// resized raster only when the image widget is built.
 	payload, _ := json.Marshal(WoxLazyLoadImagePayload{
 		Token:       token,
 		CacheKey:    cacheKey,
+		QueryID:     queryID,
 		Placeholder: placeholder,
 		TargetSize:  targetSize,
 	})

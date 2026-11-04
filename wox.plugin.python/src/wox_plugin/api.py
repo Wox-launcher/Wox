@@ -44,6 +44,21 @@ from .models.plugin_tool import (
 
 
 @dataclass
+class RemoveResultOption:
+    """Result to remove and optional remaining result to select."""
+
+    result_id: str
+    selected_result_id: str = ""
+
+
+@dataclass
+class RemoveResultResult:
+    """Whether the visible result was removed."""
+
+    success: bool = False
+
+
+@dataclass
 class ScreenshotOption:
     """
     Options for the built-in screenshot workflow.
@@ -331,8 +346,12 @@ class PublicAPI(Protocol):
         Show or update a toolbar message for the current plugin.
 
         Reusing the same msg id replaces the previous content.
-        Messages are only accepted while the user stays in this plugin query and
-        are cleared when the session leaves that query context.
+        Messages persist until cleared explicitly or the plugin context is left.
+        Context includes a trigger or single-plugin scoped query, or the selected
+        plugin result in a global or other multi-plugin query. Switching between
+        the same plugin's results preserves its message. Preserve callback context
+        for asynchronous work, and name the relevant object because an earlier
+        update may arrive after returning to the plugin in the same query.
 
         Args:
             ctx: Context
@@ -777,6 +796,13 @@ class PublicAPI(Protocol):
                     title="Processing...",
                     tails=[ResultTail(...)]
                 ))
+        """
+        ...
+
+    async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:
+        """Remove a result owned by this plugin, using its original query context.
+
+        If the requested selection is unavailable, the current selection or nearest row is used.
         """
         ...
 

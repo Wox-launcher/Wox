@@ -111,15 +111,19 @@ type UI interface {
 	InstallTheme(ctx context.Context, theme Theme)
 	UninstallTheme(ctx context.Context, theme Theme)
 	RestoreTheme(ctx context.Context)
-	Notify(ctx context.Context, msg NotifyMsg)
+	ShowToast(ctx context.Context, msg ToastMsg)
 	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)
 	ShowToolbarMsg(ctx context.Context, msg interface{})
 	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
+	ShowSystemToolbarMsg(ctx context.Context, msg SystemToolbarMsg)
+	ClearSystemToolbarMsg(ctx context.Context, id string)
 	// UpdateResult updates a result that is currently displayed in the UI.
 	// Returns true if the result was successfully updated (still visible in UI).
 	// Returns false if the result is no longer visible (caller should stop updating).
 	// The result parameter should be plugin.UpdatableResult, but we use interface{} to avoid circular dependency.
 	UpdateResult(ctx context.Context, result interface{}) bool
+	// RemoveResult removes a visible plugin result. The payload is plugin.RemoveResultOption.
+	RemoveResult(ctx context.Context, option interface{}) bool
 	// PushResults pushes additional results for the current query.
 	// Returns true if results were accepted by UI, false if query is no longer active.
 	// The payload should be plugin.PushResultsPayload, but we use interface{} to avoid circular dependency.
@@ -361,10 +365,43 @@ func DefaultCaptureScreenshotRequest() CaptureScreenshotRequest {
 	}
 }
 
-type NotifyMsg struct {
-	PluginId       string // can be empty
-	Icon           string // WoxImage.String(), can be empty
-	Text           string // can be empty
-	DisplaySeconds int    // 0 means display forever
-	Confetti       bool   // play a fullscreen confetti overlay when shown in-app
+// ToastAction is the optional action for an internal Wox toast.
+type ToastAction struct {
+	Name   string
+	Action func(context.Context)
+}
+
+// ToastMsg describes an independent, transient notification.
+type ToastMsg struct {
+	Icon           string
+	Text           string
+	DisplaySeconds int // 0 uses the default toast duration.
+	Action         *ToastAction
+}
+
+// SystemToolbarPriority orders independent system messages above plugin toolbar state.
+type SystemToolbarPriority int
+
+const (
+	SystemToolbarPriorityWarning      SystemToolbarPriority = 10
+	SystemToolbarPriorityConfirmation SystemToolbarPriority = 20
+)
+
+// SystemToolbarAction describes an internal settings action.
+type SystemToolbarAction struct {
+	Id            string
+	Name          string
+	Icon          WoxImage
+	SettingsPath  string
+	SettingsParam string
+}
+
+// SystemToolbarMsg describes a plugin-independent system message; zero duration stays until cleared.
+type SystemToolbarMsg struct {
+	Id             string
+	Title          string
+	Icon           WoxImage
+	Priority       SystemToolbarPriority
+	DisplaySeconds int
+	Actions        []SystemToolbarAction
 }

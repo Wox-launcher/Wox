@@ -173,7 +173,7 @@ extern "C" int32_t wox_windows_pick_file(uintptr_t owner, int32_t directory, con
   }
   if (SUCCEEDED(result) && directory == 0 && filter != nullptr && filter[0] != L'\0') {
     COMDLG_FILTERSPEC specs[2] = {};
-    specs[0].pszName = L"Raycast export";
+    specs[0].pszName = filter;
     specs[0].pszSpec = filter;
     specs[1].pszName = L"All files";
     specs[1].pszSpec = L"*.*";

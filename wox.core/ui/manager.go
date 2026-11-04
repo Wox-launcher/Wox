@@ -95,7 +95,8 @@ type Manager struct {
 	activeWindowSnapshot        common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu      sync.RWMutex
 	activeWindowSnapshotSeq     uint64
-	pendingStartupNotify        *common.NotifyMsg
+	pendingStartupToast         *common.ToastMsg
+	pendingStartupConfetti      bool
 	mainHotkeyWarningMu         sync.RWMutex
 	mainHotkeyWarning           string
 	mainHotkeyRegistrationError string
@@ -284,7 +285,7 @@ func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
 	err := m.hotkeyService.RegisterAll(ctx)
 	if bindingErr := m.hotkeyService.ResultBindingRegistrationError(); bindingErr != nil {
 		util.GetLogger().Warn(ctx, bindingErr.Error())
-		m.ui.Notify(ctx, common.NotifyMsg{Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_result_hotkey_registration_failed"), DisplaySeconds: 5})
+		m.notifyResultHotkeyRegistrationFailure(ctx)
 	}
 	mainHotkey := setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
 	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey, err)
@@ -648,7 +649,17 @@ func (m *Manager) registerWoxHotkeys(ctx context.Context, config corehotkey.WoxC
 	return err
 }
 
-// syncMainHotkeyToolbarWarning tracks registration health and updates an attached launcher immediately.
+// notifyResultHotkeyRegistrationFailure links the warning to the relevant settings table.
+func (m *Manager) notifyResultHotkeyRegistrationFailure(ctx context.Context) {
+	m.ui.ShowToast(ctx, common.ToastMsg{
+		Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_result_hotkey_registration_failed"), DisplaySeconds: 5,
+		Action: &common.ToastAction{Name: "i18n:ui_toolbar_open_result_hotkeys", Action: func(ctx context.Context) {
+			m.ui.OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/hotkeys", Param: "ResultBindings"})
+		}},
+	})
+}
+
+// syncMainHotkeyToolbarWarning tracks registration health and updates all attached launchers.
 func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey string, registerErr error) {
 	mainHotkey = strings.TrimSpace(mainHotkey)
 	if mainHotkey != "" && m.hotkeyService.IsRegistered(corehotkey.SourceMain, "main") {
@@ -663,14 +674,26 @@ func (m *Manager) syncMainHotkeyToolbarWarning(ctx context.Context, mainHotkey s
 	}
 	m.mainHotkeyWarningMu.Unlock()
 
-	if m.getView() == nil {
-		return
+	m.viewMu.RLock()
+	sessionIDs := make([]string, 0, len(m.views)+1)
+	for sessionID := range m.views {
+		sessionIDs = append(sessionIDs, sessionID)
 	}
-	if mainHotkey == "" {
-		m.ui.ClearToolbarMsg(ctx, mainHotkeyRegistrationToolbarMessageID)
-		return
+	if m.primaryView != nil {
+		primarySessionID := m.primaryView.SessionID()
+		if _, registered := m.views[primarySessionID]; !registered {
+			sessionIDs = append(sessionIDs, primarySessionID)
+		}
 	}
-	m.showMainHotkeyToolbarWarning(ctx)
+	m.viewMu.RUnlock()
+	for _, sessionID := range sessionIDs {
+		sessionCtx := util.WithSessionContext(ctx, sessionID)
+		if mainHotkey == "" {
+			m.ui.ClearSystemToolbarMsg(sessionCtx, mainHotkeyRegistrationToolbarMessageID)
+		} else {
+			m.showMainHotkeyToolbarWarning(sessionCtx)
+		}
+	}
 }
 
 // showMainHotkeyToolbarWarning presents the current non-expiring launcher fallback, if any.
@@ -688,11 +711,10 @@ func (m *Manager) showMainHotkeyToolbarWarning(ctx context.Context) {
 	if registrationError == "i18n:ui_hotkey_registration_unsupported" {
 		title = i18n.GetI18nManager().TranslateWox(ctx, registrationError)
 	}
-	m.ui.ShowToolbarMsg(ctx, plugin.ToolbarMsgUI{
-		Id:       mainHotkeyRegistrationToolbarMessageID,
-		Title:    title,
-		Icon:     icons.Get(icons.ActionError),
-		Fallback: true,
+	m.ui.ShowSystemToolbarMsg(ctx, common.SystemToolbarMsg{
+		Id: mainHotkeyRegistrationToolbarMessageID, Title: title, Icon: icons.Get(icons.ActionError),
+		Priority: common.SystemToolbarPriorityWarning,
+		Actions:  []common.SystemToolbarAction{{Id: "open-main-hotkey-settings", Name: "i18n:ui_toolbar_change_main_hotkey", Icon: icons.Get(icons.ActionSettings), SettingsPath: "/hotkeys", SettingsParam: "MainHotkey"}},
 	})
 }
 
@@ -1160,6 +1182,7 @@ func (m *Manager) PostUIReady(ctx context.Context) {
 }
 
 func (m *Manager) PostOnShow(ctx context.Context) {
+	isPrimary := true
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		sessionID := util.GetContextSessionId(ctx)
@@ -1168,7 +1191,7 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 			impl.sessionVisible = map[string]bool{}
 		}
 		impl.sessionVisible[sessionID] = true
-		isPrimary := sessionID == "" || sessionID == impl.primarySessionID
+		isPrimary = sessionID == "" || sessionID == impl.primarySessionID
 		impl.sessionMu.Unlock()
 		if isPrimary {
 			impl.isVisible = true
@@ -1180,24 +1203,38 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 	analytics.TrackUIOpened(ctx)
 	m.showMainHotkeyToolbarWarning(ctx)
 
-	if m.pendingStartupNotify != nil {
-		msg := *m.pendingStartupNotify
-		playConfetti := msg.Confetti
-		msg.Confetti = false
-		logger.Info(ctx, "showing pending startup notify")
-		m.ui.Notify(ctx, msg)
-		if playConfetti {
-			if err := confettioverlay.Show(); err != nil {
-				logger.Warn(ctx, "show startup confetti: "+err.Error())
-			}
+	if m.pendingStartupToast != nil {
+		logger.Info(ctx, "showing pending startup toast")
+		m.ui.ShowToast(ctx, *m.pendingStartupToast)
+		m.pendingStartupToast = nil
+	}
+	if isPrimary && m.showPendingUpdateNotice(ctx) {
+		if err := confettioverlay.Show(); err != nil {
+			logger.Warn(ctx, "show startup confetti: "+err.Error())
 		}
-		m.pendingStartupNotify = nil
 	}
 }
 
-func (m *Manager) SetStartupNotify(msg common.NotifyMsg) {
-	logger.Info(util.NewTraceContext(), "setting pending startup notify")
-	m.pendingStartupNotify = &msg
+// SetStartupToast queues a toast until the launcher is first shown.
+func (m *Manager) SetStartupToast(msg common.ToastMsg) {
+	logger.Info(util.NewTraceContext(), "setting pending startup toast")
+	m.pendingStartupToast = &msg
+}
+
+// SetStartupConfetti queues the update confirmation and celebration for the primary launcher.
+func (m *Manager) SetStartupConfetti() { m.pendingStartupConfetti = true }
+
+// showPendingUpdateNotice delivers the one-shot confirmation independently of plugin messages.
+func (m *Manager) showPendingUpdateNotice(ctx context.Context) bool {
+	if !m.pendingStartupConfetti {
+		return false
+	}
+	m.pendingStartupConfetti = false
+	m.ui.ShowSystemToolbarMsg(ctx, common.SystemToolbarMsg{
+		Id: "wox-update-success", Title: i18n.GetI18nManager().TranslateWox(ctx, "ui_update_success"),
+		Icon: icons.Get(icons.StatusInstalled), Priority: common.SystemToolbarPriorityConfirmation, DisplaySeconds: 5,
+	})
+	return true
 }
 
 func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
@@ -1464,7 +1501,7 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 		}
 		if err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("failed to update result bindings: %v", err))
-			m.ui.Notify(ctx, common.NotifyMsg{Text: i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_result_hotkey_registration_failed"), DisplaySeconds: 5})
+			m.notifyResultHotkeyRegistrationFailure(ctx)
 		}
 	case "TrayQueries":
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)

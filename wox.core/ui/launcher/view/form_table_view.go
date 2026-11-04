@@ -1141,7 +1141,7 @@ func FormTableRowFieldHeightFor(kind, description, errorMessage string, maxLines
 		return 32 + descriptionHeight + errorHeight
 	case "app":
 		return 46 + descriptionHeight + errorHeight
-	case "textbox", "password", "dirPath":
+	case "textbox", "password", "dirPath", "filePath":
 		controlHeight := woxcomponent.SettingsControlHeight
 		if maxLines > 1 {
 			controlHeight = 14 + float32(min(maxLines, 8))*20
@@ -1296,7 +1296,7 @@ func formTableRowControlHeight(props FormTableRowFieldProps) float32 {
 		return 20
 	case "app":
 		return 42
-	case "textbox", "password", "dirPath":
+	case "textbox", "password", "dirPath", "filePath":
 		if props.MaxLines > 1 {
 			return 14 + float32(min(props.MaxLines, 8))*20
 		}
@@ -1310,7 +1310,7 @@ func formTableRowControlHeight(props FormTableRowFieldProps) float32 {
 
 func formTableRowControl(props FormTableRowFieldProps, width, height float32) woxwidget.Widget {
 	switch props.Kind {
-	case "textbox", "password", "dirPath":
+	case "textbox", "password", "dirPath", "filePath":
 		return formTableRowTextControl(props, width, height)
 	case "checkbox":
 		return formTableRowCheckboxControl(props)

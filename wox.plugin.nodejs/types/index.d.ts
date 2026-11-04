@@ -852,6 +852,17 @@ export interface ResultTail {
   ContextData?: MapString
 }
 
+/** Options for removing one visible result from its originating query. */
+export interface RemoveResultOption {
+  ResultId: string
+  /** Select this remaining result; if absent or unavailable, preserve the selection or select the nearest row. */
+  SelectedResultId?: string
+}
+
+export interface RemoveResultResult {
+  Success: boolean
+}
+
 /**
  * Result that can be updated directly in the UI.
  *
@@ -1249,7 +1260,7 @@ export interface ToolbarMsgAction {
    */
   Name: string
   /**
-   * Optional action icon.
+   * Optional action icon. Defaults to Wox's execute icon when omitted.
    */
   Icon?: WoxImage
   /**
@@ -1618,8 +1629,12 @@ export interface PublicAPI {
    * Show or update a toolbar msg.
    *
    * Reusing the same Id updates the current status instead of creating a duplicate.
-   * Plugin-scoped status is only accepted while the user stays in this plugin query
-   * and is cleared when the session leaves that query context.
+   * The message persists until ClearToolbarMsg or context exit. Context includes
+   * a trigger or single-plugin scoped query, or a selected plugin result in a
+   * global or other multi-plugin query. Switching rows of the same plugin
+   * preserves its message. Preserve the callback context for asynchronous work;
+   * include the relevant object name because an earlier update may arrive after
+   * returning to the plugin in the same query.
    */
   ShowToolbarMsg: (ctx: Context, status: ToolbarMsg) => Promise<void>
 
@@ -1816,6 +1831,9 @@ export interface PublicAPI {
    * @returns True if accepted, false if rejected
    */
   UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
+
+  /** Remove a result owned by this plugin. Keep the original query context. */
+  RemoveResult: (ctx: Context, option: RemoveResultOption) => Promise<RemoveResultResult>
 
   /**
    * Push additional results for the current query.

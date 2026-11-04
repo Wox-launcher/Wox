@@ -1,11 +1,10 @@
 package launcher
 
 import (
-	"context"
 	"fmt"
 	"runtime"
 	"testing"
-	"time"
+	"wox/common"
 	"wox/common/icons"
 
 	launcherview "wox/ui/launcher/view"
@@ -198,7 +197,7 @@ func TestToolbarAndResultUpdatesKeepAboutMenu(t *testing.T) {
 	}
 	app.actions.actionFilter.SetText("guide", false)
 	app.querySession.query = plainQuery{QueryID: "about-query", QueryText: "example"}
-	app.toolbar.applyToolbarFallbackMessage(toolbarMessage{ID: "fallback", Title: "Warning"})
+	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "fallback", Title: "Warning"}, common.SystemToolbarPriorityWarning, 0)
 	app.toolbar.applyToolbarMessage(toolbarMessage{Title: "Indexing", ID: "msg-a"})
 	if !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout || app.actions.actionSelectionKey != "about:guide" {
 		t.Fatal("storing a toolbar message must not change the open about menu")
@@ -217,8 +216,12 @@ func TestToolbarAndResultUpdatesKeepAboutMenu(t *testing.T) {
 		t.Fatal("open about menu should keep the toolbar button while a newer message is stored")
 	}
 	app.actions.hideActionPanel()
+	if app.toolbar.effectiveToolbarMessage() == nil || app.toolbar.effectiveToolbarMessage().ID != "fallback" {
+		t.Fatal("system warning must remain visible over the plugin message")
+	}
+	app.toolbar.clearSystemToolbarMessage("fallback")
 	if app.toolbar.effectiveToolbarMessage() == nil || app.toolbar.effectiveToolbarMessage().ID != "msg-b" {
-		t.Fatal("closing the about menu should present the latest stored message")
+		t.Fatal("clearing the system warning should reveal the latest plugin message")
 	}
 }
 
@@ -274,29 +277,6 @@ func TestAboutMenuErrorIsVisibleWithoutReplacingToolbarMessage(t *testing.T) {
 	app.actions.hideActionPanel()
 	if app.actions.aboutMenuError != "" {
 		t.Fatal("closing must clear the error")
-	}
-}
-
-func TestAboutMenuMessageExpiresThroughUIWhileOpen(t *testing.T) {
-	app := bindTestApp(&App{
-		lifecycleCtx:    context.Background(),
-		generalSettings: &generalSettingsController{},
-		querySession:    queryController{editor: woxui.NewTextEditor("")},
-	})
-	app.toggleAboutMenu()
-	dispatched := make(chan func(), 2)
-	app.uiCall = func(fn func()) error { dispatched <- fn; return nil }
-	app.toolbar.applyToolbarMessage(toolbarMessage{Text: "Temporary", DisplaySeconds: 1})
-	// Apply the synchronous bounds callback on the test's UI goroutine.
-	(<-dispatched)()
-	select {
-	case fn := <-dispatched:
-		fn()
-	case <-time.After(3 * time.Second):
-		t.Fatal("message expiry was not dispatched")
-	}
-	if app.toolbar.toolbarMsg != nil || !app.actions.actionPanel || app.actions.actionPanelPurpose != actionPanelPurposeAbout {
-		t.Fatal("expiry must clear only the message")
 	}
 }
 

@@ -468,8 +468,10 @@ func (w *platformWindow) pickFile(options FileDialogOptions) (string, error) {
 	if options.Directory {
 		directory = 1
 	}
+	filter := C.CString(options.Filter)
+	defer C.free(unsafe.Pointer(filter))
 	var path *C.char
-	result := C.wox_darwin_window_pick_file(native, directory, &path)
+	result := C.wox_darwin_window_pick_file(native, directory, filter, &path)
 	if result == 1 {
 		return "", nil
 	}

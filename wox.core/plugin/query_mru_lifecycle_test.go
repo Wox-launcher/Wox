@@ -41,9 +41,10 @@ func TestQueryMRULeavesPluginContext(t *testing.T) {
 
 	ui.beforeRestore = func() {
 		require.False(t, manager.presentation.isPluginActiveInSession("launcher", instance.Metadata.Id))
-		require.Empty(t, manager.VisibleToolbarMsgOwners())
+		require.Zero(t, manager.presentation.pluginToolbarMsgIds.Len())
 		require.Equal(t, []string{count.Id}, ui.cleared)
 	}
+	manager.BeginSessionQuery("launcher", "home-query")
 	manager.QueryMRU(ctx, "launcher", "home-query")
 	select {
 	case <-left:
@@ -53,13 +54,16 @@ func TestQueryMRULeavesPluginContext(t *testing.T) {
 	// A background status update arriving after returning home must be ignored.
 	manager.ShowToolbarMsg(ctx, instance, count)
 	require.Len(t, ui.shown, 1)
+	manager.BeginSessionQuery("launcher", "home-refresh")
 	manager.QueryMRU(ctx, "launcher", "home-refresh")
 	require.Equal(t, []string{count.Id}, ui.cleared)
 
 	fileQuery.Id = "file-query-again"
+	manager.BeginSessionQuery("launcher", fileQuery.Id)
 	manager.HandleQueryLifecycle(ctx, fileQuery, instance)
 	manager.ShowToolbarMsg(ctx, instance, count)
 	require.Len(t, ui.shown, 2)
+	manager.BeginSessionQuery("launcher", "global-query")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "global-query", SessionId: "launcher", Type: QueryTypeInput}, nil)
 	require.Equal(t, []string{count.Id, count.Id}, ui.cleared)
 	select {

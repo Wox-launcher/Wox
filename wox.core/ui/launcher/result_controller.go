@@ -1,7 +1,10 @@
 package launcher
 
 import (
+	"slices"
 	"sync/atomic"
+
+	"wox/plugin"
 
 	woxui "wox/ui/runtime"
 )
@@ -92,4 +95,38 @@ func (a *resultController) restoreSelection(queryID string, complete bool) {
 	if !preserved {
 		a.resultScrollDetached = false
 	}
+}
+
+// removeResult updates the rows and chooses a remaining selectable result.
+func (a *resultController) removeResult(option plugin.RemoveResultOption) bool {
+	index := resultIndexByID(a.results, option.ResultId)
+	if index < 0 {
+		return false
+	}
+	selectedID := ""
+	if a.selected >= 0 && a.selected < len(a.results) {
+		selectedID = a.results[a.selected].ID
+	}
+	a.results = slices.Delete(a.results, index, index+1)
+	// A group header without a following result is no longer useful.
+	for i := len(a.results) - 1; i >= 0; i-- {
+		if a.results[i].IsGroup && (i+1 == len(a.results) || a.results[i+1].IsGroup) {
+			a.results = slices.Delete(a.results, i, i+1)
+			if i < index {
+				index--
+			}
+		}
+	}
+	selected := resultIndexByID(a.results, option.SelectedResultId)
+	if selected < 0 && selectedID != option.ResultId {
+		selected = resultIndexByID(a.results, selectedID)
+	}
+	if selected < 0 {
+		selected = selectableIndexFrom(a.results, index)
+	}
+	a.selected = selected
+	a.resultsSectionRevision++
+	a.hoveredResult = -1
+	a.pendingSelection = nil
+	return true
 }

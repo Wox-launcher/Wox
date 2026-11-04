@@ -1,21 +1,20 @@
 package launcher
 
-import "testing"
+import (
+	"context"
+	"testing"
 
-func TestEffectiveToolbarMessageRestoresFallback(t *testing.T) {
-	fallback := &toolbarMessage{ID: "fallback", Title: "Main hotkey unavailable"}
-	pluginMessage := &toolbarMessage{ID: "plugin", Title: "Indexing"}
-	app := bindTestApp(&App{toolbar: toolbarController{toolbarFallbackMsg: fallback}})
+	"wox/common"
+)
 
-	if got := app.toolbar.effectiveToolbarMessage(); got != fallback {
-		t.Fatalf("effective toolbar message = %+v, want fallback", got)
+func TestSystemToolbarMessageTakesPriorityOverPlugin(t *testing.T) {
+	app := bindTestApp(&App{lifecycleCtx: context.Background(), toolbar: toolbarController{toolbarMsg: &toolbarMessage{ID: "plugin", Title: "Indexing"}}})
+	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "warning", Title: "Main hotkey unavailable"}, common.SystemToolbarPriorityWarning, 0)
+	if got := app.toolbar.effectiveToolbarMessage(); got == nil || got.ID != "warning" {
+		t.Fatalf("system message = %+v", got)
 	}
-	app.toolbar.toolbarMsg = pluginMessage
-	if got := app.toolbar.effectiveToolbarMessage(); got != pluginMessage {
-		t.Fatalf("effective toolbar message = %+v, want plugin message", got)
-	}
-	app.toolbar.toolbarMsg = nil
-	if got := app.toolbar.effectiveToolbarMessage(); got != fallback {
-		t.Fatalf("effective toolbar message after clear = %+v, want fallback", got)
+	app.toolbar.clearSystemToolbarMessage("warning")
+	if got := app.toolbar.effectiveToolbarMessage(); got == nil || got.ID != "plugin" {
+		t.Fatalf("restored plugin message = %+v", got)
 	}
 }

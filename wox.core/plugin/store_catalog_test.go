@@ -38,3 +38,24 @@ func TestPluginStorePresentation(t *testing.T) {
 		t.Fatalf("unknown presentation = %q empty=%v", label, icon.IsEmpty())
 	}
 }
+
+func TestPluginStoreStatisticsChangeSignature(t *testing.T) {
+	store := &Store{}
+	zero, one := 0, 1
+	base := []StorePluginManifest{{Id: "a", Version: "1"}}
+	withZero := []StorePluginManifest{{Id: "a", Version: "1", StarCount: &zero}}
+	withOne := []StorePluginManifest{{Id: "a", Version: "1", StarCount: &one}}
+	withDownloads := []StorePluginManifest{{Id: "a", Version: "1", DownloadCount: &zero}}
+	if store.buildManifestSignature(base) == store.buildManifestSignature(withZero) || store.buildManifestSignature(withZero) == store.buildManifestSignature(withOne) || store.buildManifestSignature(base) == store.buildManifestSignature(withDownloads) {
+		t.Fatal("statistics changes must refresh the store catalog")
+	}
+}
+
+func TestPluginStoreUpdatedDateChangesSignature(t *testing.T) {
+	store := &Store{}
+	before := []StorePluginManifest{{Id: "a", Version: "1", DateUpdated: "2025-01-01 00:00:00"}}
+	after := []StorePluginManifest{{Id: "a", Version: "1", DateUpdated: "2026-01-01 00:00:00"}}
+	if store.buildManifestSignature(before) == store.buildManifestSignature(after) {
+		t.Fatal("updated date changes must refresh the store catalog")
+	}
+}

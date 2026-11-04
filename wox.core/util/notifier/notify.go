@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"context"
 	"image"
 	"wox/common/icons"
 	woxui "wox/ui/runtime"
@@ -16,21 +17,27 @@ const (
 
 // Toast carries the content and completion callback for one transient notification.
 type Toast struct {
-	PluginID    string
-	Icon        image.Image
-	Title       string
-	Message     string
-	ActionLabel string
-	OnDone      func(clicked bool)
-	IsValid     func() bool
+	PluginID       string
+	Icon           image.Image
+	Title          string
+	Message        string
+	Persistent     bool
+	DisplaySeconds int
+	ActionLabel    string
+	OnDone         func(clicked bool)
+	IsValid        func() bool
 }
 
 // activeToast is only accessed on the UI thread.
 var activeToast *Toast
 
-// Notify displays the legacy notification without an action.
-func Notify(icon image.Image, message string) {
-	util.Go(util.NewTraceContext(), "show notification", func() { ShowToast(Toast{Icon: icon, Message: message}) })
+// ShowToastAsync displays a toast without blocking the caller on the UI thread.
+func ShowToastAsync(ctx context.Context, toast Toast) {
+	util.Go(ctx, "show toast", func() {
+		if !ShowToast(toast) {
+			util.GetLogger().Warn(ctx, "failed to show toast")
+		}
+	})
 }
 
 // ShowToast replaces the current notification on the UI thread.
@@ -50,10 +57,17 @@ func ShowToast(toast Toast) bool {
 			finishToast(activeToast, false)
 		}
 		activeToast = &toast
+		autoCloseSeconds := toast.DisplaySeconds
+		if autoCloseSeconds <= 0 {
+			autoCloseSeconds = 5
+		}
+		if toast.Persistent {
+			autoCloseSeconds = 0
+		}
 		shown = textoverlay.ShowWithResult(textoverlay.Options{
 			Window: overlay.WindowOptions{ID: defaultNotificationName, Anchor: overlay.AnchorBottomCenter, OffsetY: -80, Movable: true, MaxWidth: defaultToastMaxWidth,
 				OnClose: func() { finishToast(&toast, false) }},
-			Closable: true, AutoCloseSeconds: 5, Message: toast.Message, Icon: toast.Icon, IconSize: 20, IconTextGap: 16,
+			Closable: true, AutoCloseSeconds: autoCloseSeconds, Message: toast.Message, Icon: toast.Icon, IconSize: 20, IconTextGap: 16,
 			ToastTitle: toast.Title, ToastActionLabel: toast.ActionLabel,
 			OnToastAction: func() {
 				if activeToast == &toast {

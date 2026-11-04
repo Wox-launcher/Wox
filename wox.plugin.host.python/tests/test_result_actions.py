@@ -176,3 +176,20 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
         await self.api.update_result(context("a", "new"), update)
         self.assertIs(self.callbacks.find("a", "new", "row").results["row"]["open"].action, replacement)
         jsonrpc.logger.warning.assert_awaited_once()
+
+    async def test_remove_result_releases_only_accepted_query_callbacks(self):
+        from wox_plugin import RemoveResultOption
+
+        for query in ("old", "current"):
+            self.callbacks.begin("a", query, True).cache(result("row", lambda *_: None))
+        ctx = context("a", "current")
+        option = RemoveResultOption(result_id="row", selected_result_id="next")
+        self.api.invoke_method.return_value = {"Success": False}
+        self.assertFalse((await self.api.remove_result(ctx, option)).success)
+        self.assertIn("row", self.callbacks.find("a", "current", "row").results)
+        payload = self.api.invoke_method.call_args.args[2]
+        self.assertEqual(json.loads(payload["option"]), {"ResultId": "row", "SelectedResultId": "next"})
+        self.api.invoke_method.return_value = {"Success": True}
+        self.assertTrue((await self.api.remove_result(ctx, option)).success)
+        self.assertNotIn("row", self.callbacks.find("a", "current", "row").results)
+        self.assertIn("row", self.callbacks.find("a", "old", "row").results)

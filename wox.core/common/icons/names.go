@@ -250,6 +250,7 @@ const (
 	ControlEmoji               = "control.emoji"
 	ControlUpload              = "control.upload"
 	ControlDownload            = "control.download"
+	ControlStarFilled          = "control.star-filled"
 	ControlError               = "control.error"
 	ControlWarning             = "control.warning"
 	ControlRefresh             = "control.refresh"

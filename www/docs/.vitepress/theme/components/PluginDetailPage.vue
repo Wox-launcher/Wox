@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, useStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
 
 const { lang, params } = useData();
-const plugins = computed(() => fetchStorePlugins().map((item) => localizePlugin(item, lang.value)));
+const storePlugins = useStorePlugins();
+const plugins = computed(() => storePlugins.value.map((item) => localizePlugin(item, lang.value)));
 const isLoading = ref(!params.value?.id);
 const activeScreenshot = ref(0);
 const currentPluginId = ref(String(params.value?.id || ""));
@@ -27,6 +28,8 @@ const uiText = computed(() => {
       compatibility: "兼容平台",
       author: "作者",
       version: "版本",
+      stars: "Star 数量",
+      downloads: "下载量",
       runtime: "运行时",
       minWoxVersion: "最低 Wox 版本",
       pluginId: "插件 ID",
@@ -51,6 +54,8 @@ const uiText = computed(() => {
     compatibility: "Compatibility",
     author: "Author",
     version: "Version",
+    stars: "Stars",
+    downloads: "Downloads",
     runtime: "Runtime",
     minWoxVersion: "Min Wox Version",
     pluginId: "Plugin ID",
@@ -102,6 +107,8 @@ const metadataRows = computed(() => {
   return [
     { label: uiText.value.author, value: plugin.value.Author },
     { label: uiText.value.version, value: plugin.value.Version ? `v${plugin.value.Version}` : "" },
+    { label: uiText.value.stars, value: plugin.value.StarCount?.toLocaleString("en-US") ?? "" },
+    { label: uiText.value.downloads, value: plugin.value.DownloadCount?.toLocaleString("en-US") ?? "" },
     { label: uiText.value.runtime, value: plugin.value.Runtime?.toUpperCase() || "" },
     { label: uiText.value.minWoxVersion, value: plugin.value.MinWoxVersion || "" },
     { label: uiText.value.pluginId, value: plugin.value.Id },

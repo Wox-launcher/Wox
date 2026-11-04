@@ -503,7 +503,7 @@ func pluginSettingsPluginsFromContract(items []contract.PluginCatalogItem) ([]pl
 		plugins[index] = pluginSettingsPlugin{
 			ID: item.ID, Name: item.Name, NameEn: item.NameEn, Description: item.Description, DescriptionEn: item.DescriptionEn,
 			Author: item.Author, Website: item.Website, Version: item.Version,
-			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory, Store: item.Store,
+			Runtime: item.Runtime, Entry: item.Entry, PluginDirectory: item.PluginDirectory, Store: item.Store, StarCount: item.StarCount, DownloadCount: item.DownloadCount, DateUpdated: item.DateUpdated,
 			Icon:           woxImage{ImageType: item.Icon.ImageType, ImageData: item.Icon.ImageData},
 			ScreenshotURLs: append([]string(nil), item.ScreenshotURLs...), TriggerKeywords: append([]string(nil), item.TriggerKeywords...),
 			Commands: commands, SupportedOS: append([]string(nil), item.SupportedOS...), Features: features, Glances: glances,

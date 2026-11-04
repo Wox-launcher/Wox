@@ -3,7 +3,10 @@ package launcher
 import (
 	"context"
 
+	"wox/common"
+
 	woxui "wox/ui/runtime"
+	"wox/util/notifier"
 )
 
 type toolbarServices interface {
@@ -13,6 +16,9 @@ type toolbarServices interface {
 // toolbarController owns persistent and transient messages and their expiry generation.
 type toolbarController struct {
 	services              toolbarServices
+	writeClipboard        func(string) error
+	showFullMessage       func(string) bool
+	openSettings          func(context.Context, common.SettingWindowContext) error
 	sessionID             string
 	lifecycleCtx          context.Context
 	runOnUI               func(string, func()) error
@@ -22,14 +28,19 @@ type toolbarController struct {
 	restoreQueryTextInput func()
 	hideWindow            func(bool) error
 	toolbarMsg            *toolbarMessage
-	toolbarFallbackMsg    *toolbarMessage
+	systemMessages        map[string]*systemToolbarEntry
+	systemMessageRevision uint64
 	toolbarRevision       uint64
+	messageTruncated      bool
 }
 
 // bindToolbar supplies action-panel reconciliation and launcher visibility commands.
 func (a *App) bindToolbar() {
 	c := &a.toolbar
 	c.services = a.services
+	c.openSettings = a.OpenSetting
+	c.writeClipboard = func(text string) error { return a.window.WriteClipboardText(text) }
+	c.showFullMessage = func(text string) bool { return notifier.ShowToast(notifier.Toast{Message: text, Persistent: true}) }
 	c.sessionID = a.sessionID
 	c.lifecycleCtx = a.lifecycleCtx
 	c.runOnUI = a.runOnUI

@@ -488,7 +488,7 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 }
 
 func formTableColumnDefinition(column formTableColumn, row map[string]any) (formDefinition, bool) {
-	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest, Group: column.Group}
+	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, Extensions: column.Extensions, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest, Group: column.Group}
 	switch column.Type {
 	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)
@@ -496,9 +496,9 @@ func formTableColumnDefinition(column formTableColumn, row map[string]any) (form
 	case "password":
 		value.MaxLines = 1
 		return formDefinition{Type: "password", Value: value}, true
-	case "dirPath":
+	case "dirPath", "filePath":
 		value.MaxLines = 1
-		return formDefinition{Type: "dirPath", Value: value}, true
+		return formDefinition{Type: column.Type, Value: value}, true
 	case "textList", "queryVariableList":
 		value.MaxLines = max(4, column.TextMaxLines)
 		return formDefinition{Type: "textbox", Value: value}, true
@@ -890,7 +890,7 @@ func formTableRowFromFields(definition formDefinition, fields *formFieldsState, 
 				}
 			}
 			row[column.Key] = items
-		case "text", "password", "dirPath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable", "select", "selectAIModel", "hotkey":
+		case "text", "password", "dirPath", "filePath", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable", "select", "selectAIModel", "hotkey":
 			row[column.Key] = value
 		case "woxImage":
 			image, _ := parseFormTableWoxImage(value)
@@ -2003,15 +2003,15 @@ func (c *formTableController) pickFormTableRowImage(index int) {
 	c.invalidateFormTableWindow()
 }
 
-// pickFormTableRowDirectory uses the platform window adapter while keeping the selected path in the shared row form.
-func (c *formTableController) pickFormTableRowDirectory(index int) {
+// pickFormTableRowPath keeps the selected path in the shared row form.
+func (c *formTableController) pickFormTableRowPath(index int) {
 	state := c.activeFormTableEditor()
-	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || state.rowForm.definitions[index].Type != "dirPath" {
+	if state == nil || state.rowForm == nil || index < 0 || index >= len(state.rowForm.definitions) || (state.rowForm.definitions[index].Type != "dirPath" && state.rowForm.definitions[index].Type != "filePath") {
 		return
 	}
 	rowForm := state.rowForm
 	c.updateFormTableTextInput(false)
-	path, err := c.formTableNativeWindow().PickFile(woxui.FileDialogOptions{Directory: true})
+	path, err := c.formTableNativeWindow().PickFile(formPathDialogOptions(rowForm.definitions[index]))
 	if c.activeFormTableEditor() != state || state.rowForm != rowForm {
 		return
 	}

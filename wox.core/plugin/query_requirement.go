@@ -176,6 +176,10 @@ func (m *Manager) getEffectiveQueryRequirementValidators(requirement MetadataQue
 	switch v := item.Value.(type) {
 	case *definition.PluginSettingValueTextBox:
 		fromSetting = v.Validators
+	case *definition.PluginSettingValueFilePath:
+		fromSetting = v.Validators
+	case *definition.PluginSettingValueDirPath:
+		fromSetting = v.Validators
 	case *definition.PluginSettingValueSelect:
 		fromSetting = v.Validators
 	case *definition.PluginSettingValueSelectAIModel:
@@ -191,6 +195,14 @@ func (m *Manager) withEffectiveRequirementValidators(item definition.PluginSetti
 
 	switch v := item.Value.(type) {
 	case *definition.PluginSettingValueTextBox:
+		copy := *v
+		copy.Validators = validators
+		item.Value = &copy
+	case *definition.PluginSettingValueFilePath:
+		copy := *v
+		copy.Validators = validators
+		item.Value = &copy
+	case *definition.PluginSettingValueDirPath:
 		copy := *v
 		copy.Validators = validators
 		item.Value = &copy

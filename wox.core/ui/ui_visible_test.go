@@ -46,9 +46,6 @@ func TestOnboardingRemainsVisibleWhenLauncherHides(t *testing.T) {
 	if !impl.isInOnboardingView || !impl.isVisible {
 		t.Fatalf("onboarding state after launcher hide = open %v visible %v", impl.isInOnboardingView, impl.isVisible)
 	}
-	if impl.IsInManagementView() {
-		t.Fatal("independent onboarding must not suppress launcher notifications")
-	}
 	manager.PostOnOnboarding(context.Background(), false)
 	if impl.isVisible {
 		t.Fatal("closing onboarding must leave the hidden launcher hidden")

@@ -88,7 +88,7 @@ func (s *queryResultStore) registerLazyIcon(ctx context.Context, pluginInstance 
 			cacheKey += fmt.Sprintf("-%d", info.ModTime().UnixNano())
 		}
 	}
-	return common.NewWoxImageLazyLoad(token, cacheKey, icons.Get(icons.StatusImagePlaceholder), size)
+	return common.NewWoxImageLazyLoad(token, cacheKey, query.Id, icons.Get(icons.StatusImagePlaceholder), size)
 }
 
 // loadLazyIcon validates query ownership before resolving and publishing the image.

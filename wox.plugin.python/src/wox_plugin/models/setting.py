@@ -40,6 +40,8 @@ class PluginSettingDefinitionType(str, Enum):
     single-line (default) or multi-line input.
     """
 
+    FILE_PATH = "filePath"
+
     PASSWORD = "password"
     """
     Single-line password input field with masked display.
@@ -387,6 +389,20 @@ class PluginSettingValueTextBox(PluginSettingDefinitionValue):
 
 
 @dataclass
+class PluginSettingValueFilePath(PluginSettingDefinitionValue):
+    """A file path with optional picker extensions such as ["png", "jpg"]."""
+
+    label: str = ""
+    tooltip: str = ""
+    extensions: List[str] = field(default_factory=list)
+    validators: List[Dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"Key": self.key, "Label": self.label, "DefaultValue": self.default_value,
+                "Tooltip": self.tooltip, "Extensions": self.extensions, "Validators": self.validators}
+
+
+@dataclass
 class PluginSettingValueCheckBox(PluginSettingDefinitionValue):
     """
     Checkbox setting for boolean on/off values.
@@ -560,6 +576,7 @@ class PluginSettingValueTableColumn:
     scope: str = ""
     allowed_hotkey_kinds: List[str] = field(default_factory=list)
     empty_as_zero: bool = False
+    extensions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -570,6 +587,7 @@ class PluginSettingValueTableColumn:
             "Type": self.type,
             "Validators": self.validators,
             "SelectOptions": self.select_options,
+            "Extensions": self.extensions,
             "TextMaxLines": self.text_max_lines,
             "HideInTable": self.hide_in_table,
             "HideInUpdate": self.hide_in_update,
@@ -590,6 +608,7 @@ class PluginSettingValueTableColumn:
             type=data.get("Type", "text"),
             validators=data.get("Validators", []),
             select_options=data.get("SelectOptions", []),
+            extensions=data.get("Extensions", []),
             text_max_lines=data.get("TextMaxLines", 0),
             hide_in_table=data.get("HideInTable", False),
             hide_in_update=data.get("HideInUpdate", False),
@@ -785,6 +804,12 @@ class PluginSettingDefinitionItem:
                 default_value=value_data.get("DefaultValue", ""),
                 tooltip=value_data.get("Tooltip", ""),
                 max_lines=value_data.get("MaxLines", 1),
+            )
+        elif setting_type == PluginSettingDefinitionType.FILE_PATH:
+            value = PluginSettingValueFilePath(
+                key=value_data.get("Key", ""), label=value_data.get("Label", ""),
+                default_value=value_data.get("DefaultValue", ""), tooltip=value_data.get("Tooltip", ""),
+                extensions=value_data.get("Extensions", []), validators=value_data.get("Validators", []),
             )
         elif setting_type == PluginSettingDefinitionType.HOTKEY:
             value = PluginSettingValueHotkey.from_dict(value_data)

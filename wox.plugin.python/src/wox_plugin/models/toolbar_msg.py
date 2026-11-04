@@ -48,7 +48,7 @@ class ToolbarMsgAction:
     action: Optional[Callable[[Context, ToolbarMsgActionContext], Awaitable[None] | None]] = None
     #: Unique action id. Wox will backfill one when omitted.
     id: str = field(default="")
-    #: Optional action icon.
+    #: Optional action icon. Defaults to Wox's execute icon when omitted.
     icon: WoxImage = field(default_factory=WoxImage)
     #: Optional hotkey label shown in the toolbar.
     hotkey: str = field(default="")

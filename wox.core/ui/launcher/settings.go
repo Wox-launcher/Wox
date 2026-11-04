@@ -470,6 +470,13 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 	}
 	a.updateSettingsTextInput(false)
 	util.Go(a.lifecycleCtx, "load settings search plugins", a.settingsSearch.loadSettingsSearchPlugins)
+	if tab == "hotkey" && (windowContext.Param == "MainHotkey" || windowContext.Param == "ResultBindings") {
+		if err := a.runOnUI("focus hotkey setting", func() {
+			a.focusHotkeySetting(windowContext.Param)
+		}); err != nil {
+			return err
+		}
+	}
 	if rowIndex, ok := trayQueryRowIndexFromParam(windowContext.Param); ok {
 		if err := a.runOnUI("open tray query editor", func() {
 			a.hotkeySettings.openTrayQueryEditor(rowIndex)
@@ -478,6 +485,19 @@ func (a *App) openSettings(windowContext settingWindowContext) error {
 		}
 	}
 	return settingsWindow.Invalidate()
+}
+
+// focusHotkeySetting selects and scrolls the requested setting after the window opens.
+func (a *App) focusHotkeySetting(key string) {
+	if form := a.hotkeySettings.Form(); form != nil {
+		for index, field := range form.definitions {
+			if field.Value.Key == key {
+				a.settingsSearch.SetFocused(false)
+				a.hotkeySettings.focusHotkeySettingsField(index)
+				return
+			}
+		}
+	}
 }
 
 // reloadSettings refreshes the shared settings snapshot and language catalog. Settings

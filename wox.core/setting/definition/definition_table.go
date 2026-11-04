@@ -12,6 +12,7 @@ const (
 	PluginSettingValueTableColumnTypeTextList               PluginSettingValueTableColumnType = "textList"
 	PluginSettingValueTableColumnTypeCheckbox               PluginSettingValueTableColumnType = "checkbox"
 	PluginSettingValueTableColumnTypeDirPath                PluginSettingValueTableColumnType = "dirPath"
+	PluginSettingValueTableColumnTypeFilePath               PluginSettingValueTableColumnType = "filePath"
 	PluginSettingValueTableColumnTypeHotkey                 PluginSettingValueTableColumnType = "hotkey"
 	PluginSettingValueTableColumnTypeSelect                 PluginSettingValueTableColumnType = "select"
 	PluginSettingValueTableColumnTypeSelectAIModel          PluginSettingValueTableColumnType = "selectAIModel"
@@ -79,6 +80,7 @@ type PluginSettingValueTableColumn struct {
 	Tooltip            string
 	Width              int
 	Type               PluginSettingValueTableColumnType
+	Extensions         []string                           // File extensions for filePath columns.
 	Validators         []validator.PluginSettingValidator // validators for this setting, every validator should be satisfied
 	SelectOptions      []PluginSettingValueSelectOption   // Only used when Type is PluginSettingValueTableColumnTypeSelect
 	TextMaxLines       int                                // Only used by text-like table columns

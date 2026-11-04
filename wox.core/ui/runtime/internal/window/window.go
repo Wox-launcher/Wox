@@ -46,8 +46,8 @@ type FocusEpoch uint64
 // FileDialogOptions configures a single-selection native file dialog.
 type FileDialogOptions struct {
 	Directory bool
-	// Filter is a wildcard such as "*.rayconfig". Empty accepts every file.
-	// Windows shows that pattern plus all files. Other platforms keep the system dialog.
+	// Filter is a semicolon-separated list of extension patterns such as "*.png;*.jpg".
+	// Empty accepts every file. Filtering only affects the picker, not typed paths.
 	Filter string
 }
 

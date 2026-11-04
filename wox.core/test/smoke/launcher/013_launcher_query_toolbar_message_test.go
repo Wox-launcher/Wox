@@ -70,7 +70,21 @@ func activateToolbarFixtureAction(t *testing.T, ctx context.Context, client *aut
 		}
 		return
 	}
-	smoke.ActivateSelectedResultAction(t, ctx, client, panelPrefix)
+	if err := client.Perform(ctx, "launcher.toolbar.status", woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("open toolbar message actions: %v", err)
+	}
+	snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+		_, found := automationdriver.FindByAutomationIDPrefix(snapshot, panelPrefix)
+		return found
+	})
+	if err != nil {
+		t.Fatalf("wait for toolbar message action %q: %v", panelPrefix, err)
+	}
+	smoke.AssertNoDiagnostics(t, snapshot)
+	action, _ := automationdriver.FindByAutomationIDPrefix(snapshot, panelPrefix)
+	if err := client.Perform(ctx, action.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
+		t.Fatalf("activate toolbar message action %q: %v", panelPrefix, err)
+	}
 }
 
 // waitForToolbarFixtureGone waits until the smoke fixture status is gone. A

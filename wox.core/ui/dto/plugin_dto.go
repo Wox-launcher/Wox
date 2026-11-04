@@ -34,6 +34,9 @@ type PluginDto struct {
 	IsDisable          bool // only available when plugin is installed
 	IsUpgradable       bool
 	Store              string
+	StarCount          *int
+	DownloadCount      *int
+	DateUpdated        string
 	HasNativeSettings  bool
 }
 
