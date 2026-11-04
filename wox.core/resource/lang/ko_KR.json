@@ -3548,5 +3548,9 @@
   "notes_sidebar_cancel": "취소",
   "notes_group_delete_message": "이 그룹을 삭제할까요? 노트와 하위 그룹은 상위 그룹으로 이동하며 노트는 삭제되지 않습니다.",
   "notes_organize_failed": "노트를 정리하지 못했습니다. 다시 시도해 주세요.",
-  "notes_note_delete_message": "이 노트를 영구적으로 삭제할까요?"
+  "notes_note_delete_message": "이 노트를 영구적으로 삭제할까요?",
+  "ui_plugin_store_sort": "정렬 기준",
+  "ui_plugin_store_sort_default": "이름",
+  "ui_plugin_store_sort_stars": "GitHub 스타",
+  "ui_plugin_store_sort_downloads": "다운로드"
 }

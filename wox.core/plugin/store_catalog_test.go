@@ -38,3 +38,15 @@ func TestPluginStorePresentation(t *testing.T) {
 		t.Fatalf("unknown presentation = %q empty=%v", label, icon.IsEmpty())
 	}
 }
+
+func TestPluginStoreStatisticsChangeSignature(t *testing.T) {
+	store := &Store{}
+	zero, one := 0, 1
+	base := []StorePluginManifest{{Id: "a", Version: "1"}}
+	withZero := []StorePluginManifest{{Id: "a", Version: "1", StarCount: &zero}}
+	withOne := []StorePluginManifest{{Id: "a", Version: "1", StarCount: &one}}
+	withDownloads := []StorePluginManifest{{Id: "a", Version: "1", DownloadCount: &zero}}
+	if store.buildManifestSignature(base) == store.buildManifestSignature(withZero) || store.buildManifestSignature(withZero) == store.buildManifestSignature(withOne) || store.buildManifestSignature(base) == store.buildManifestSignature(withDownloads) {
+		t.Fatal("statistics changes must refresh the store catalog")
+	}
+}

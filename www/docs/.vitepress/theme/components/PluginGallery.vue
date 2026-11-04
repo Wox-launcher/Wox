@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, localizePlugin, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, useStorePlugins, localizePlugin, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
 
 
 const searchQuery = ref("");
+const sortOrder = ref("default");
 const { lang } = useData();
 
 const uiText = computed(() => {
@@ -17,6 +18,12 @@ const uiText = computed(() => {
       install: "安装",
       source: "官网",
       empty: "没有找到匹配的插件。",
+      sort: "排序方式",
+      defaultSort: "默认排序",
+      starsSort: "Star 数量",
+      stars: "GitHub star 数量",
+      downloadsSort: "下载量",
+      downloads: "下载量",
     };
   }
 
@@ -26,18 +33,29 @@ const uiText = computed(() => {
     install: "Install",
     source: "Website",
     empty: "No plugins match your search.",
+    sort: "Sort by",
+    defaultSort: "Default order",
+    starsSort: "Stars",
+    stars: "GitHub stars",
+    downloadsSort: "Downloads",
+    downloads: "Downloads",
   };
 });
 
-const plugins = computed(() => fetchStorePlugins().map((plugin) => localizePlugin(plugin, lang.value)));
+const storePlugins = useStorePlugins();
+const plugins = computed(() => storePlugins.value.map((plugin) => localizePlugin(plugin, lang.value)));
 
 const filteredPlugins = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return plugins.value;
-
-  return plugins.value.filter((plugin) => {
-    return [plugin.LocalizedName, plugin.LocalizedDescription, plugin.Author, plugin.Runtime].filter(Boolean).some((value) => value!.toLowerCase().includes(query));
+  const matching = plugins.value.filter((plugin) => {
+    return !query || [plugin.LocalizedName, plugin.LocalizedDescription, plugin.Author, plugin.Runtime].filter(Boolean).some((value) => value!.toLowerCase().includes(query));
   });
+  if (sortOrder.value === "stars") {
+    matching.sort((left, right) => (right.StarCount ?? -1) - (left.StarCount ?? -1));
+  } else if (sortOrder.value === "downloads") {
+    matching.sort((left, right) => (right.DownloadCount ?? -1) - (left.DownloadCount ?? -1));
+  }
+  return matching;
 });
 
 function pluginDetailHref(pluginId: string) {
@@ -52,7 +70,12 @@ function installHref(plugin: LocalizedStorePluginManifest) {
 <template>
   <div class="gallery-container">
     <div class="search-bar">
-      <input v-model="searchQuery" type="text" :placeholder="uiText.searchPlaceholder" class="search-input" />
+      <input v-model="searchQuery" type="search" :placeholder="uiText.searchPlaceholder" :aria-label="uiText.searchPlaceholder" class="search-input" />
+      <select v-model="sortOrder" class="sort-select" :aria-label="uiText.sort">
+        <option value="default">{{ uiText.defaultSort }}</option>
+        <option value="stars">{{ uiText.starsSort }}</option>
+        <option value="downloads">{{ uiText.downloadsSort }}</option>
+      </select>
     </div>
 
     <div v-if="filteredPlugins.length" class="grid">
@@ -72,7 +95,11 @@ function installHref(plugin: LocalizedStorePluginManifest) {
         <p class="description">{{ plugin.LocalizedDescription }}</p>
 
         <div class="footer">
-          <span class="version">v{{ plugin.Version }}</span>
+          <div class="card-meta">
+            <span class="version">v{{ plugin.Version }}</span>
+            <span v-if="plugin.StarCount !== undefined" class="stars" :aria-label="`${uiText.stars}: ${plugin.StarCount}`"><span aria-hidden="true">★</span> {{ plugin.StarCount.toLocaleString("en-US") }}</span>
+            <span v-if="plugin.DownloadCount !== undefined" class="downloads" :aria-label="`${uiText.downloads}: ${plugin.DownloadCount}`" :title="uiText.downloads"><span aria-hidden="true">↓</span> {{ plugin.DownloadCount.toLocaleString("en-US") }}</span>
+          </div>
 
           <div class="actions">
             <a v-if="plugin.Website" :href="plugin.Website" class="secondary-btn" target="_blank" rel="noreferrer" @click.stop>
@@ -94,10 +121,40 @@ function installHref(plugin: LocalizedStorePluginManifest) {
 }
 
 .search-bar {
+  display: flex;
+  gap: 12px;
   margin-bottom: 24px;
 }
 
+.sort-select {
+  flex: none;
+  padding: 0 36px 0 14px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-alt);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+}
+
+.sort-select:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .search-bar {
+    flex-wrap: wrap;
+  }
+
+  .sort-select {
+    min-height: 44px;
+    width: 100%;
+  }
+}
+
 .search-input {
+  flex: 1;
+  min-width: 0;
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--vp-c-divider);
@@ -233,6 +290,24 @@ function installHref(plugin: LocalizedStorePluginManifest) {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stars,
+.downloads {
+  color: var(--vp-c-text-2);
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.stars span {
+  color: #bb8417;
 }
 
 .version {

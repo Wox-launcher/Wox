@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useData, withBase } from "vitepress";
-import { englishPluginName, fetchStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
+import { englishPluginName, useStorePlugins, formatStoreDate, localizePlugin, normalizeOsLabel, pluginDetailPath, type LocalizedStorePluginManifest } from "./pluginStore";
 
 const { lang, params } = useData();
-const plugins = computed(() => fetchStorePlugins().map((item) => localizePlugin(item, lang.value)));
+const storePlugins = useStorePlugins();
+const plugins = computed(() => storePlugins.value.map((item) => localizePlugin(item, lang.value)));
 const isLoading = ref(!params.value?.id);
 const activeScreenshot = ref(0);
 const currentPluginId = ref(String(params.value?.id || ""));

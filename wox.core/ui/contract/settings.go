@@ -462,6 +462,8 @@ type PluginCatalogItem struct {
 	IsDisable          bool
 	IsUpgradable       bool
 	Store              string
+	StarCount          *int
+	DownloadCount      *int
 	SettingDefinitions definition.PluginSettingDefinitions
 	Setting            PluginSetting
 	HasNativeSettings  bool

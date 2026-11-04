@@ -3550,5 +3550,9 @@
   "notes_sidebar_cancel": "キャンセル",
   "notes_group_delete_message": "このグループを削除しますか？ノートとサブグループは親グループに移動し、ノートは削除されません。",
   "notes_organize_failed": "ノートを整理できませんでした。もう一度お試しください。",
-  "notes_note_delete_message": "このノートを完全に削除しますか？"
+  "notes_note_delete_message": "このノートを完全に削除しますか？",
+  "ui_plugin_store_sort": "並べ替え",
+  "ui_plugin_store_sort_default": "名前",
+  "ui_plugin_store_sort_stars": "GitHub スター",
+  "ui_plugin_store_sort_downloads": "ダウンロード数"
 }

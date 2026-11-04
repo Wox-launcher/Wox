@@ -3549,5 +3549,9 @@
   "notes_sidebar_cancel": "取消",
   "notes_group_delete_message": "删除此分组？其中的笔记和子分组会移到上一级，不会删除任何笔记。",
   "notes_organize_failed": "整理笔记失败，请重试。",
-  "notes_note_delete_message": "永久删除此笔记？"
+  "notes_note_delete_message": "永久删除此笔记？",
+  "ui_plugin_store_sort": "排序方式",
+  "ui_plugin_store_sort_default": "名称",
+  "ui_plugin_store_sort_stars": "GitHub Star 数量",
+  "ui_plugin_store_sort_downloads": "下载量"
 }

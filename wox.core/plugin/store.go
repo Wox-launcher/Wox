@@ -52,6 +52,8 @@ type StorePluginManifest struct {
 	SupportedOS    []string
 	DateCreated    string
 	DateUpdated    string
+	StarCount      *int
+	DownloadCount  *int
 	// Store is the catalog that published this manifest. It is assigned while
 	// catalogs are merged and is not part of the downloaded JSON.
 	Store string `json:"-"`
@@ -209,10 +211,18 @@ func (s *Store) setPluginManifests(ctx context.Context, manifests []StorePluginM
 func (s *Store) buildManifestSignature(manifests []StorePluginManifest) string {
 	items := make([]string, 0, len(manifests))
 	for _, m := range manifests {
-		items = append(items, fmt.Sprintf("%s@%s", m.Id, m.Version))
+		items = append(items, fmt.Sprintf("%s@%s:%s:%s", m.Id, m.Version, storeStatSignature(m.StarCount), storeStatSignature(m.DownloadCount)))
 	}
 	sort.Strings(items)
 	return strings.Join(items, ";")
+}
+
+// storeStatSignature distinguishes missing statistics from a known zero.
+func storeStatSignature(value *int) string {
+	if value == nil {
+		return "unknown"
+	}
+	return fmt.Sprint(*value)
 }
 
 func (s *Store) GetStorePluginManifests(ctx context.Context) []StorePluginManifest {

@@ -3288,5 +3288,9 @@
   "notes_sidebar_cancel": "Cancelar",
   "notes_group_delete_message": "Excluir este grupo? As notas e subgrupos serão movidos para o grupo pai. Nenhuma nota será excluída.",
   "notes_organize_failed": "Não foi possível organizar as notas. Tente novamente.",
-  "notes_note_delete_message": "Excluir esta nota permanentemente?"
+  "notes_note_delete_message": "Excluir esta nota permanentemente?",
+  "ui_plugin_store_sort": "Ordenar por",
+  "ui_plugin_store_sort_default": "Nome",
+  "ui_plugin_store_sort_stars": "Estrelas no GitHub",
+  "ui_plugin_store_sort_downloads": "Downloads"
 }

@@ -103,6 +103,12 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		index := entry.index
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
+		if plugins.PluginsStore && plugin.StarCount != nil {
+			status += fmt.Sprintf("  ★ %d", *plugin.StarCount)
+		}
+		if plugins.PluginsStore && plugin.DownloadCount != nil {
+			status += fmt.Sprintf("  ↓ %d", *plugin.DownloadCount)
+		}
 		if plugin.IsUpgradable {
 			status = c.language.translate("i18n:ui_update") + "  " + status
 		}
@@ -128,7 +134,7 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		})
 	}
 	if plugins.PluginsStore {
-		sections := groupStorePlugins(filtered)
+		sections := groupStorePlugins(filtered, plugins.PluginFilters.storeSort)
 		showHeaders := len(sections) > 1
 		entries := make([]launcherview.PluginListEntry, 0, len(filtered)+len(sections))
 		for _, section := range sections {
@@ -760,6 +766,8 @@ func (c *pluginSettingsController) pluginFilterFields(filters pluginFilterState,
 	fields := make([]launcherview.PluginFilterField, 0, 4)
 	if store {
 		fields = append(fields, launcherview.PluginFilterField{
+			ID: "sort", Label: c.language.translate("i18n:ui_plugin_store_sort"), Value: c.pluginFilterChoiceLabel("sort", string(filters.storeSort)),
+		}, launcherview.PluginFilterField{
 			ID: "install", Label: c.language.translate("i18n:ui_plugin_filter_install_status"), Value: c.pluginFilterChoiceLabel("install", filters.installStatus),
 		})
 	} else {
@@ -789,6 +797,8 @@ func (c *pluginSettingsController) pluginFilterChoiceItem(id string) settingItem
 		title, value = c.language.translate("i18n:ui_plugin_filter_plugin_type"), filters.pluginType
 	case "runtime":
 		title, value = c.language.translate("i18n:ui_plugin_filter_runtime"), filters.runtime
+	case "sort":
+		title, value = c.language.translate("i18n:ui_plugin_store_sort"), string(filters.storeSort)
 	case "install":
 		title, value = c.language.translate("i18n:ui_plugin_filter_install_status"), filters.installStatus
 	default:
@@ -817,6 +827,8 @@ func (c *pluginSettingsController) pluginFilterChoiceLabel(id, value string) str
 func (c *pluginSettingsController) pluginFilterChoices(id string) []settingChoice {
 	all := settingChoice{value: pluginFilterAll, label: c.language.translate("i18n:ui_all")}
 	switch id {
+	case "sort":
+		return []settingChoice{{value: pluginFilterAll, label: c.language.translate("i18n:ui_plugin_store_sort_default")}, {value: string(pluginStoreSortStars), label: c.language.translate("i18n:ui_plugin_store_sort_stars")}, {value: string(pluginStoreSortDownloads), label: c.language.translate("i18n:ui_plugin_store_sort_downloads")}}
 	case "enabled":
 		return []settingChoice{all, {value: pluginFilterEnabled, label: c.language.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: c.language.translate("i18n:ui_plugin_filter_disabled")}}
 	case "upgrade":

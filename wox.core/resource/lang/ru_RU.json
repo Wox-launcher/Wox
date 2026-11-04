@@ -3289,5 +3289,9 @@
   "notes_sidebar_cancel": "Отмена",
   "notes_group_delete_message": "Удалить эту группу? Заметки и подгруппы будут перемещены на уровень выше. Заметки не будут удалены.",
   "notes_organize_failed": "Не удалось упорядочить заметки. Повторите попытку.",
-  "notes_note_delete_message": "Удалить эту заметку навсегда?"
+  "notes_note_delete_message": "Удалить эту заметку навсегда?",
+  "ui_plugin_store_sort": "Сортировка",
+  "ui_plugin_store_sort_default": "Название",
+  "ui_plugin_store_sort_stars": "Звёзды GitHub",
+  "ui_plugin_store_sort_downloads": "Загрузки"
 }

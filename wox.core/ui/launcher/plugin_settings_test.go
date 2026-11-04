@@ -275,7 +275,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 		{index: 3, plugin: pluginSettingsPlugin{ID: "flow-a", Name: "Alpine", Store: "FLOW"}},
 		{index: 4, plugin: pluginSettingsPlugin{ID: "wox-a", Name: "Alpha"}},
 	}
-	got := groupStorePlugins(filtered)
+	got := groupStorePlugins(filtered, pluginStoreSortDefault)
 	if len(got) != 3 || got[0].ID != plugin.OfficialPluginStoreID || got[1].ID != "acme" || got[2].ID != "flow" {
 		t.Fatalf("sections = %#v", got)
 	}
@@ -285,7 +285,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 	if ids := installedSectionPluginIDs(installedPluginSection{Plugins: got[2].Plugins}); !reflect.DeepEqual(ids, []string{"flow-a", "flow-b"}) {
 		t.Fatalf("flow order = %v", ids)
 	}
-	if got := groupStorePlugins(nil); len(got) != 0 {
+	if got := groupStorePlugins(nil, pluginStoreSortDefault); len(got) != 0 {
 		t.Fatalf("empty filter = %#v", got)
 	}
 	if !pluginCatalogLess(pluginSettingsPlugin{Name: "Zebra", Store: "wox"}, pluginSettingsPlugin{Name: "Alpha", Store: "flow"}, true) {
@@ -1473,6 +1473,34 @@ func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
 		}
 		if (props.OnWebsite != nil) != (test.website != "") {
 			t.Fatalf("website %q has incorrect button availability", test.website)
+		}
+	}
+}
+
+func TestStorePluginStatisticsSorting(t *testing.T) {
+	zero, two, ten := 0, 2, 10
+	plugins := []pluginSettingsPlugin{
+		{ID: "unknown", Name: "A"},
+		{ID: "zero", Name: "B", StarCount: &zero, DownloadCount: &ten},
+		{ID: "high", Name: "C", StarCount: &ten, DownloadCount: &two},
+		{ID: "other", Name: "D", Store: "other", StarCount: &ten},
+	}
+	for _, tc := range []struct {
+		order pluginStoreSort
+		want  []string
+	}{
+		{pluginStoreSortDefault, []string{"unknown", "zero", "high", "other"}},
+		{pluginStoreSortStars, []string{"high", "zero", "unknown", "other"}},
+		{pluginStoreSortDownloads, []string{"zero", "high", "unknown", "other"}},
+	} {
+		filtered := filterPlugins(plugins, "", pluginFilterState{storeSort: tc.order}, true, false)
+		got := installedSectionPluginIDs(installedPluginSection{Plugins: filtered})
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("order %q = %v, want %v", tc.order, got, tc.want)
+		}
+		sections := groupStorePlugins(filtered, tc.order)
+		if ids := installedSectionPluginIDs(installedPluginSection{Plugins: sections[0].Plugins}); !reflect.DeepEqual(ids, tc.want[:3]) {
+			t.Fatalf("visible order %q = %v, want %v", tc.order, ids, tc.want[:3])
 		}
 	}
 }

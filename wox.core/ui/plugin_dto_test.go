@@ -77,3 +77,11 @@ func TestStoreManifestDTOEmptyValues(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreManifestDTOStatistics(t *testing.T) {
+	stars, downloads := 0, 42
+	got := storeManifestDTOs([]plugin.StorePluginManifest{{StarCount: &stars, DownloadCount: &downloads}})[0]
+	if got.StarCount == nil || *got.StarCount != 0 || got.DownloadCount == nil || *got.DownloadCount != 42 {
+		t.Fatalf("statistics not preserved: %+v", got)
+	}
+}

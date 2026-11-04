@@ -1,3 +1,5 @@
+import { onMounted, shallowRef } from "vue";
+import { fetchRemotePluginCatalog } from "./remotePluginCatalog.mjs";
 import storePluginData from "../../../../../store-plugin.json";
 
 export type StorePluginManifest = {
@@ -16,6 +18,8 @@ export type StorePluginManifest = {
   SupportedOS?: string[];
   DateCreated?: string;
   DateUpdated?: string;
+  StarCount?: number;
+  DownloadCount?: number;
   I18n?: Record<string, Record<string, string>>;
 };
 
@@ -26,6 +30,19 @@ export type LocalizedStorePluginManifest = StorePluginManifest & {
 
 export function fetchStorePlugins() {
   return storePluginData as StorePluginManifest[];
+}
+
+// Keep pre-rendered content for SEO and offline fallback, then refresh from the shared catalog.
+export function useStorePlugins() {
+  const plugins = shallowRef(fetchStorePlugins());
+  onMounted(async () => {
+    try {
+      plugins.value = await fetchRemotePluginCatalog();
+    } catch (error) {
+      console.warn("Could not refresh the plugin catalog; using the built-in snapshot.", error);
+    }
+  });
+  return plugins;
 }
 
 export function getCurrentLangCode(lang: string) {
