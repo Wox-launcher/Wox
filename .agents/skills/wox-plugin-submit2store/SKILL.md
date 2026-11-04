@@ -107,6 +107,7 @@ Use the field template and sourcing rules in [references/store-plugin-entry.md](
 Apply these rules while building the JSON object:
 
 - Keep `Id`, `Name`, `Author`, `Version`, `MinWoxVersion`, and `Runtime` aligned with local plugin metadata.
+- Omit `StarCount` and `DownloadCount` from new entries, including zero values; Wox automatically synchronizes these statistics. Preserve those fields in existing entries.
 - Prefer a plain `Description` string when no i18n payload exists.
 - Add `I18n` only when the repository already has trustworthy localized copy.
 - Convert local OS names to the store style: `Windows`, `Darwin`, `Linux` (`Macos` in plugin headers becomes `Darwin`).

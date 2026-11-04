@@ -14,7 +14,8 @@
     "author": "",
     "license": "ISC",
     "devDependencies": {
-        "vitepress": "^1.0.0"
+        "vitepress": "^1.0.0",
+        "vue": "3.5.39"
     },
     "packageManager": "pnpm@11.9.0"
 }

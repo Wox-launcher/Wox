@@ -11,6 +11,9 @@ importers:
       vitepress:
         specifier: ^1.0.0
         version: 1.6.4(@algolia/client-search@5.55.1)(postcss@8.5.15)(search-insights@2.17.3)
+      vue:
+        specifier: 3.5.39
+        version: 3.5.39
 
 packages:
 
