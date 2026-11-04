@@ -3084,7 +3084,7 @@ int32_t wox_darwin_window_set_appearance(WoxDarwinWindow *window, int32_t is_dar
   return result;
 }
 
-int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, char **path) {
+int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, const char *filter, char **path) {
   if (window == NULL || path == NULL) {
     return -1;
   }
@@ -3101,6 +3101,17 @@ int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, 
     panel.canChooseFiles = directory == 0;
     panel.allowsMultipleSelection = NO;
     panel.resolvesAliases = YES;
+    if (directory == 0 && filter != NULL && filter[0] != '\0') {
+      NSMutableArray<NSString *> *extensions = [NSMutableArray array];
+      for (NSString *pattern in [[NSString stringWithUTF8String:filter] componentsSeparatedByString:@";"]) {
+        if ([pattern hasPrefix:@"*."] && pattern.length > 2) {
+          [extensions addObject:[pattern substringFromIndex:2]];
+        }
+      }
+      if (extensions.count > 0) {
+        panel.allowedFileTypes = extensions;
+      }
+    }
 
     // Keep the native picker inside the Wox focus domain so hide-on-blur does not close its owner.
     window->native_dialog_active = true;

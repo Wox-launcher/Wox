@@ -1197,7 +1197,7 @@ func (c *pluginSettingsController) onPluginSettingsKey(event woxui.KeyEvent) boo
 		c.deactivatePluginForm()
 		return true
 	}
-	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath" || fieldType == "filePath"
 	if textEditable {
 		switch event.Key {
 		case woxui.KeyTab:
@@ -1888,24 +1888,23 @@ func (c *pluginSettingsController) setPluginFormText(index int, value string) {
 	form.status = ""
 	clearPluginFormFieldError(form, index)
 	c.settings.invalidateSettingsWindow()
-	// dirPath is a completed folder, like a select: persist immediately so the next
-	// launcher query does not keep using the previous directory.
-	if form.definitions[index].Type == "dirPath" {
+	// A picked path is complete, so persist it before the next launcher query.
+	if form.definitions[index].Type == "dirPath" || form.definitions[index].Type == "filePath" {
 		c.submitPluginSettings()
 	}
 }
 
-// pickPluginFormDirectory fills a plugin dirPath setting from the native folder picker.
-func (c *pluginSettingsController) pickPluginFormDirectory(index int) {
+// pickPluginFormPath fills a plugin path setting from the native picker.
+func (c *pluginSettingsController) pickPluginFormPath(index int) {
 	form := c.Form()
-	if form == nil || index < 0 || index >= len(form.definitions) || form.definitions[index].Type != "dirPath" {
+	if form == nil || index < 0 || index >= len(form.definitions) || (form.definitions[index].Type != "dirPath" && form.definitions[index].Type != "filePath") {
 		return
 	}
 	window := c.settings.settingsNativeWindow()
 	if window == nil {
 		return
 	}
-	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
+	path, err := window.PickFile(formPathDialogOptions(form.definitions[index]))
 	if c.Form() != form {
 		return
 	}

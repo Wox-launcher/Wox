@@ -658,7 +658,7 @@ func (c *formTableController) buildFormTableList(snapshot *formTableEditorSnapsh
 
 func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	rowForm := snapshot.rowForm
-	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: c.focusFormTableRowField, change: c.changeFormTableRowChoice, setText: c.setFormTableRowText, onKey: c.onFormTableKey, openChoice: c.openFormTableRowChoice, pickDir: c.pickFormTableRowDirectory, pickApp: c.openFormTableAppPicker, recordKey: c.recordFormTableRowHotkey,
+	callbacks := formFieldCallbacks{idPrefix: "form-table-row", imageScale: imageScale, focus: c.focusFormTableRowField, change: c.changeFormTableRowChoice, setText: c.setFormTableRowText, onKey: c.onFormTableKey, openChoice: c.openFormTableRowChoice, pickPath: c.pickFormTableRowPath, pickApp: c.openFormTableAppPicker, recordKey: c.recordFormTableRowHotkey,
 		openAIModelChoice: c.openFormTableAIModelChoice, setAIModelName: c.setFormTableAIModelName, finishAIModelEdit: c.finishFormTableAIModelEdit, openAISettings: func() { c.selectSettingTab("ai") }, openLink: c.openAboutLink, fieldErrors: snapshot.fieldErrors}
 	definitions := rowForm.definitions
 	if snapshot.definition.Value.Key == "QueryHotkeys" {
@@ -918,8 +918,8 @@ func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, 
 				c.stopHotkeyRecording()
 			}
 		}
-	case "dirPath":
-		props.OnBrowse = func() { callbacks.pickDir(index) }
+	case "dirPath", "filePath":
+		props.OnBrowse = func() { callbacks.pickPath(index) }
 	case "app":
 		var app ignoredHotkeyApp
 		_ = json.Unmarshal([]byte(fieldValue), &app)

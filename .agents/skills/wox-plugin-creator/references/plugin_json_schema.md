@@ -338,12 +338,21 @@ Supported table column types include:
 - `queryVariableList`
 - `checkbox`
 - `dirPath`
+- `filePath`
 - `select`
 - `selectAIModel`
 - `aiModelStatus`
 - `aiMCPServerTools`
 - `aiSelectMCPServerTools`
 - `woxImage`
+
+A standalone file path setting and a table column can use `filePath`:
+
+```json
+{ "Type": "filePath", "IsPlatformSpecific": true, "Value": { "Key": "config", "Label": "Config file", "Extensions": ["json", "yaml"] } }
+```
+
+`Extensions` is optional and contains extensions without dots. An empty list shows all files. The filter applies to the native picker only; Windows also offers an all-files option. Manually entered paths remain editable and should be validated by the plugin when needed. File paths normally use `IsPlatformSpecific: true`. Table columns use the same `Extensions` property.
 
 Table column notes:
 

@@ -67,7 +67,7 @@ func (s *imageStore) retryErrors() {
 	s.imageMu.Lock()
 	defer s.imageMu.Unlock()
 	for key := range s.imageErrors {
-		delete(s.imageRequested, key)
+		s.removeImageLocked(key)
 	}
 	clear(s.imageErrors)
 }

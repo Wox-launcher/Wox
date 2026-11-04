@@ -78,6 +78,7 @@ func (w *woxImage) UnmarshalJSON(data []byte) error {
 type lazyImagePayload struct {
 	Token       string   `json:"token"`
 	CacheKey    string   `json:"cacheKey"`
+	QueryID     string   `json:"queryId"`
 	Placeholder woxImage `json:"placeholder"`
 }
 
@@ -372,7 +373,15 @@ func (a *imageStore) imageForTintAppearance(source woxImage, tint *woxui.Color, 
 		image = a.images[a.imageVariants[variantKey]]
 	}
 	requestedSource, requested := a.imageRequested[key]
-	if cachedImage != nil || requested && requestedSource == source.ImageData {
+	retryLazy := false
+	if source.ImageType == "lazyloadimage" && requested && a.imageErrors[key] != "" {
+		var previous, current lazyImagePayload
+		if json.Unmarshal([]byte(requestedSource), &previous) == nil && json.Unmarshal([]byte(source.ImageData), &current) == nil {
+			// Tokens differ per row, so retry only for a new query, not every failed row.
+			retryLazy = current.QueryID != "" && previous.QueryID != "" && current.QueryID != previous.QueryID
+		}
+	}
+	if !retryLazy && (cachedImage != nil || requested && requestedSource == source.ImageData) {
 		a.imageMu.Unlock()
 		return image
 	}
@@ -382,7 +391,7 @@ func (a *imageStore) imageForTintAppearance(source woxImage, tint *woxui.Color, 
 	util.Go(a.lifecycleCtx, "load launcher image", func() {
 		a.loadImage(key, source, tint, svgWidth, svgHeight, dark, themeIconColor)
 	})
-	return nil
+	return image
 }
 
 func (a *imageStore) loadImage(key string, source woxImage, tint *woxui.Color, svgWidth, svgHeight int, dark bool, themeIconColor *woxui.Color) {

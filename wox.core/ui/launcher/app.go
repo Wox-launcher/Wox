@@ -284,6 +284,7 @@ type formDefinition struct {
 }
 
 type formDefinitionValue struct {
+	Extensions          []string `json:"Extensions"`
 	HotkeyScope         string   `json:"Scope"`
 	AllowedHotkeyKinds  []string `json:"AllowedHotkeyKinds"`
 	HotkeyIdentityField string   `json:"HotkeyIdentityField"`
@@ -340,6 +341,7 @@ type formStatsRow struct {
 }
 
 type formTableColumn struct {
+	Extensions    []string        `json:"Extensions"`
 	HotkeyScope   string          `json:"Scope"`
 	Key           string          `json:"Key"`
 	Label         string          `json:"Label"`

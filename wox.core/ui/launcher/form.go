@@ -221,13 +221,13 @@ func formDefinitionFocusable(definition formDefinition) bool {
 }
 
 func formDefinitionTextEditable(definition formDefinition) bool {
-	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath"
+	return definition.Type == "textbox" || definition.Type == "password" || definition.Type == "dirPath" || definition.Type == "filePath"
 }
 
 // formDefinitionValueEditable identifies fields whose values participate in settings saves.
 func formDefinitionValueEditable(definition formDefinition) bool {
 	switch definition.Type {
-	case "textbox", "password", "dirPath", "checkbox", "select", "selectAIModel", "table", "ocrModel", "hotkey":
+	case "textbox", "password", "dirPath", "filePath", "checkbox", "select", "selectAIModel", "table", "ocrModel", "hotkey":
 		return true
 	default:
 		return false
@@ -387,7 +387,7 @@ func (a *formActionController) onFormKey(event woxui.KeyEvent) bool {
 		// Leave recordable combos to the recorder after Save has had a chance.
 		return false
 	}
-	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath"
+	textEditable := fieldType == "textbox" || fieldType == "password" || fieldType == "dirPath" || fieldType == "filePath"
 	if textEditable {
 		switch event.Key {
 		case woxui.KeyTab:
@@ -469,9 +469,9 @@ func (a *formActionController) setFormText(index int, value string) {
 	}
 }
 
-// pickFormActionDirectory fills a launcher action dirPath field from the native folder picker.
-func (a *formActionController) pickFormActionDirectory(index int) {
-	if a.form == nil || index < 0 || index >= len(a.form.definitions) || a.form.definitions[index].Type != "dirPath" {
+// pickFormActionPath fills an action path field from the native picker.
+func (a *formActionController) pickFormActionPath(index int) {
+	if a.form == nil || index < 0 || index >= len(a.form.definitions) || (a.form.definitions[index].Type != "dirPath" && a.form.definitions[index].Type != "filePath") {
 		return
 	}
 	form := a.form
@@ -479,7 +479,7 @@ func (a *formActionController) pickFormActionDirectory(index int) {
 	if window == nil {
 		return
 	}
-	path, err := window.PickFile(woxui.FileDialogOptions{Directory: true})
+	path, err := window.PickFile(formPathDialogOptions(form.definitions[index]))
 	if a.form != form {
 		return
 	}

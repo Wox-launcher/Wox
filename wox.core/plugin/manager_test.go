@@ -493,7 +493,7 @@ func TestLoadLazyResultIconHydratesRemoteGIF(t *testing.T) {
 	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-gif-token"
 	source := common.NewWoxImageUrl(server.URL + "/doge.gif")
-	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), "", icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
 	cachedResult, found := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")
@@ -557,7 +557,7 @@ func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
 	manager.resultStore.lazyResultIcons = util.NewHashMap[string, *lazyResultIconEntry]()
 	token := "remote-icon-token"
 	source := common.NewWoxImageUrl(server.URL + "/icon.png")
-	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
+	lazyIcon := common.NewWoxImageLazyLoad(token, source.Hash(), "", icons.Get(icons.StatusImagePlaceholder), common.ResultListIconSize)
 	cachedResult, found := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
 	if !found {
 		t.Fatal("expected cached result")

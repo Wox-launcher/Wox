@@ -17,7 +17,7 @@ import { Platform } from "./index.js"
  * const settingType: PluginSettingDefinitionType = "textbox"
  * ```
  */
-export type PluginSettingDefinitionType = "hotkey" | "head" | "textbox" | "password" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
+export type PluginSettingDefinitionType = "hotkey" | "head" | "textbox" | "password" | "dirPath" | "filePath" | "checkbox" | "select" | "label" | "newline" | "table" | "dynamic"
 
 /**
  * Visual styling properties for a setting element.
@@ -177,6 +177,17 @@ export interface PluginQueryRequirements {
   AnyQuery?: PluginQueryRequirement[]
   QueryWithoutCommand?: PluginQueryRequirement[]
   QueryWithCommand?: Record<string, PluginQueryRequirement[]>
+}
+
+/** A single file path with an optional native picker extension filter. */
+export interface PluginSettingValueFilePath extends PluginSettingDefinitionValue {
+  Key: string
+  Label: string
+  DefaultValue?: string
+  Tooltip?: string
+  /** Extensions without dots, e.g. ["png", "jpg"]. Empty accepts all files. */
+  Extensions?: string[]
+  Validators?: PluginSettingValidator[]
 }
 
 /**
@@ -467,7 +478,7 @@ export interface PluginSettingValueSelectOption {
 /**
  * Column type for an editable settings table.
  */
-export type PluginSettingValueTableColumnType = "text" | "textList" | "queryVariable" | "queryVariableList" | "checkbox" | "dirPath" | "hotkey" | "select" | "selectAIModel" | "woxImage"
+export type PluginSettingValueTableColumnType = "text" | "textList" | "queryVariable" | "queryVariableList" | "checkbox" | "dirPath" | "filePath" | "hotkey" | "select" | "selectAIModel" | "woxImage"
 
 /**
  * A collapsible section in the table add/edit dialog.
@@ -520,6 +531,8 @@ export interface PluginSettingValueTableColumn {
    * Editor control type for this column.
    */
   Type: PluginSettingValueTableColumnType
+  /** Extension filter for filePath columns, e.g. ["png", "jpg"]. */
+  Extensions?: string[]
   /**
    * Validation rules for the add/edit dialog.
    */

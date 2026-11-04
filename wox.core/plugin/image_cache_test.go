@@ -15,6 +15,8 @@ import (
 // TestGridFileIconCacheKeySurvivesQueriesButNotAppUpdates protects UI reuse
 // without retaining stale artwork when a binary at the same path changes.
 func TestGridFileIconCacheKeySurvivesQueriesButNotAppUpdates(t *testing.T) {
+	// Keep the process-wide crash log outside the disposable test directory on Windows.
+	util.GetLogger()
 	initSingleFileTestLocation(t)
 	file, err := os.CreateTemp(t.TempDir(), "app-*.exe")
 	if err != nil {
@@ -28,13 +30,13 @@ func TestGridFileIconCacheKeySurvivesQueriesButNotAppUpdates(t *testing.T) {
 	layout := QueryLayout{GridLayout: &MetadataFeatureParamsGridLayout{}}
 	first := manager.convertResultIcon(context.Background(), instance, query, layout, "row", "App", source)
 	a, err := common.ParseWoxLazyLoadImagePayload(first)
-	if err != nil || a.Token == "" || a.TargetSize != common.ResultGridIconSize {
+	if err != nil || a.Token == "" || a.QueryID != "first" || a.TargetSize != common.ResultGridIconSize {
 		t.Fatalf("grid icon not registered: %+v, %v", a, err)
 	}
 	query.Id = "second"
 	second := manager.convertResultIcon(context.Background(), instance, query, layout, "row", "App", source)
 	b, err := common.ParseWoxLazyLoadImagePayload(second)
-	if err != nil || a.CacheKey != b.CacheKey || a.Token == b.Token {
+	if err != nil || a.CacheKey != b.CacheKey || a.Token == b.Token || b.QueryID != "second" {
 		t.Fatalf("query token changed image cache identity: %+v, %v", b, err)
 	}
 	updated := time.Now().Add(time.Hour)

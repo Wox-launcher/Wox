@@ -29,7 +29,7 @@ type formFieldCallbacks struct {
 	setAIModelName    func(index int, value string)
 	finishAIModelEdit func(index int, value string)
 	openAISettings    func()
-	pickDir           func(index int)
+	pickPath          func(index int)
 	pickApp           func(index int)
 	recordKey         func(index int)
 	openModel         func(index int, anchor woxui.Rect)
@@ -75,7 +75,7 @@ func (a *App) buildFormPanel(snapshot viewSnapshot, windowWidth float32) (woxwid
 }
 
 func (a *App) buildFormDefinition(snapshot viewSnapshot, index int, definition formDefinition, width, labelWidth, height float32) woxwidget.Widget {
-	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.forms.focusFormField, change: a.forms.changeFormChoice, setText: a.forms.setFormText, onKey: a.forms.onFormKey, openTable: a.openActionFormTable, pickDir: a.forms.pickFormActionDirectory, recordKey: a.forms.recordActionFormHotkey}
+	callbacks := formFieldCallbacks{idPrefix: "action-form", labelWidth: labelWidth, focus: a.forms.focusFormField, change: a.forms.changeFormChoice, setText: a.forms.setFormText, onKey: a.forms.onFormKey, openTable: a.openActionFormTable, pickPath: a.forms.pickFormActionPath, recordKey: a.forms.recordActionFormHotkey}
 	return a.buildFormField(snapshot.form.formFieldsSnapshot, callbacks, a.formControlTheme(snapshot), index, definition, width, height)
 }
 
@@ -140,7 +140,7 @@ func (a *App) buildFormField(fields formFieldsSnapshot, callbacks formFieldCallb
 		})
 	case "head", "label", "newline":
 		return launcherview.FormStaticField(launcherview.FormStaticFieldProps{Width: width, Height: height, Value: a.language.translate(value.Content), Kind: definition.Type, Theme: palette})
-	case "textbox", "password", "dirPath":
+	case "textbox", "password", "dirPath", "filePath":
 		return a.buildFormTextbox(fields, callbacks, palette, index, definition, width, height)
 	case "checkbox":
 		return a.buildFormChoice(fields, callbacks, palette, index, definition, width, height, fields.values[value.Key] == "true", "")
@@ -384,10 +384,10 @@ func (a *App) buildFormTextbox(fields formFieldsSnapshot, callbacks formFieldCal
 	}
 	maxLines := min(8, max(1, definition.Value.MaxLines))
 	var onBrowse func()
-	if definition.Type == "dirPath" {
+	if definition.Type == "dirPath" || definition.Type == "filePath" {
 		onBrowse = func() {
-			if callbacks.pickDir != nil {
-				callbacks.pickDir(index)
+			if callbacks.pickPath != nil {
+				callbacks.pickPath(index)
 			}
 		}
 	}
