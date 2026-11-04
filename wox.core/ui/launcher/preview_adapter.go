@@ -478,11 +478,12 @@ func (a *previewController) buildListPreview(data previewListData, palette uiPal
 			tail = item.Tails[0].Text
 		}
 		var icon = (*woxui.Image)(nil)
-		if item.Icon != nil {
+		loading := item.Icon != nil && isLoadingIcon(*item.Icon)
+		if item.Icon != nil && !loading {
 			icon = a.imageFor(*item.Icon)
 		}
 		items = append(items, previewview.PreviewListItem{
-			Title: item.Title, Subtitle: item.Subtitle, Tail: tail, Icon: icon, FallbackColor: resultColors[index%len(resultColors)],
+			Title: item.Title, Subtitle: item.Subtitle, Tail: tail, Icon: icon, Loading: loading, FallbackColor: resultColors[index%len(resultColors)],
 		})
 	}
 	return previewview.PreviewList(previewview.PreviewListProps{Width: width, Height: height, Items: items, Theme: palette.componentTheme()})

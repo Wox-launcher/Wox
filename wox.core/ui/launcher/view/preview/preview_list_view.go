@@ -12,6 +12,7 @@ type PreviewListItem struct {
 	Subtitle      string
 	Tail          string
 	Icon          *woxui.Image
+	Loading       bool
 	FallbackColor woxui.Color
 }
 
@@ -34,16 +35,18 @@ func PreviewList(props PreviewListProps) woxwidget.Widget {
 	for index := 0; index < visibleCount; index++ {
 		item := props.Items[index]
 		var icon woxwidget.Widget = woxwidget.Container{Width: 30, Height: 30, Radius: 7, Color: item.FallbackColor}
-		if item.Icon != nil {
+		if item.Loading {
+			icon = woxcomponent.WoxLoadingIndicator(30, props.Theme.Cursor)
+		} else if item.Icon != nil {
 			icon = woxwidget.Image{Source: item.Icon, Width: 30, Height: 30}
 		}
 		tailWidth := float32(0)
 		var tail woxwidget.Widget
 		if item.Tail != "" {
 			tailWidth = 78
-			tail = woxwidget.Align{Width: tailWidth, Height: 30, Vertical: 0.5, Child: woxwidget.Text{Value: item.Tail, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}}
+			tail = woxwidget.Align{Width: tailWidth, Height: 30, Horizontal: 1, Vertical: 0.5, Child: woxwidget.Text{Value: item.Tail, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle}}
 		}
-		rows = append(rows, woxwidget.Container{Width: max(float32(0), props.Width-20), Height: rowHeight, Padding: woxwidget.Insets{Left: 10, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
+		rows = append(rows, woxwidget.Container{Width: props.Width, Height: rowHeight, Padding: woxwidget.Insets{Left: 10, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			icon,
 			woxwidget.Expanded{Child: woxwidget.Container{Height: 36, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},

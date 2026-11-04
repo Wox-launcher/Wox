@@ -115,6 +115,20 @@ func TestFormSwitchFieldUsesAccessibleSwitch(t *testing.T) {
 	}
 }
 
+func TestFormSwitchFieldLabelHasRoomForTextAtEachDensity(t *testing.T) {
+	for _, density := range []float32{0.9, 1, 1.1} {
+		theme := woxcomponent.ControlTheme{DensityScale: density}
+		field := FormSwitchField(FormSwitchFieldProps{Label: "Replace originals", Width: 400, LabelWidth: 150, Theme: theme})
+		row := field.(woxwidget.Container).Child.(woxwidget.Flex)
+		label := row.Children[0].(woxwidget.Container)
+		alignment := label.Child.(woxwidget.Align)
+		text := alignment.Child.(woxwidget.Text)
+		if label.Height != theme.Scaled(24) || alignment.Height != label.Height || alignment.Vertical != 0.5 || text.Style.Size != theme.Scaled(woxcomponent.SettingsLabelFontSize) {
+			t.Fatalf("density %.1f: label height %.0f, alignment %#v, font size %.0f", density, label.Height, alignment, text.Style.Size)
+		}
+	}
+}
+
 func TestFormSelectFieldOutlineUsesValueText(t *testing.T) {
 	text := woxui.Color{R: 230, G: 234, B: 240, A: 255}
 	field := FormSelectField(FormSelectFieldProps{
@@ -565,7 +579,7 @@ func TestFormServiceFieldUsesSwitchRowLayout(t *testing.T) {
 		t.Fatalf("service semantics = role %q label %q", semantics.Role, semantics.Label)
 	}
 	row := semantics.Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	label := row.Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	label := row.Children[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
 	if label.Value != "Fast indexing" {
 		t.Fatalf("service label = %q, want the shared form label column", label.Value)
 	}
