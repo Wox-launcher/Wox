@@ -1994,7 +1994,7 @@ func (a *ApplicationPlugin) syncAppIndexToolbar(ctx context.Context) {
 		return
 	}
 
-	msg := plugin.ToolbarMsg{Id: appIndexToolbarMsgID, Title: a.api.GetTranslation(ctx, status.titleKey), Icon: appIcon}
+	msg := plugin.ToolbarMsg{Id: appIndexToolbarMsgID, Title: a.api.GetTranslation(ctx, status.titleKey), Icon: appIcon, IsPersist: true}
 	seconds := appIndexElapsedSeconds(time.Since(status.startedAt))
 	if status.total <= 0 {
 		msg.Indeterminate = true

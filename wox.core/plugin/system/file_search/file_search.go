@@ -2065,9 +2065,10 @@ func (c *FileSearchPlugin) syncToolbarMsgWithStatus(ctx context.Context, status 
 func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status filesearch.StatusSnapshot, includeReady bool) (plugin.ToolbarMsg, bool) {
 	if isFullIndexCompletionSummary(status) {
 		return plugin.ToolbarMsg{
-			Id:    fileSearchToolbarMsgID,
-			Title: c.buildFullIndexCompletedToolbarTitle(ctx, status),
-			Icon:  fileIcon,
+			Id:        fileSearchToolbarMsgID,
+			IsPersist: true,
+			Title:     c.buildFullIndexCompletedToolbarTitle(ctx, status),
+			Icon:      fileIcon,
 		}, true
 	}
 
@@ -2107,6 +2108,7 @@ func (c *FileSearchPlugin) buildToolbarMsgFromStatus(ctx context.Context, status
 
 	return plugin.ToolbarMsg{
 		Id:            fileSearchToolbarMsgID,
+		IsPersist:     true,
 		Title:         title,
 		Icon:          icon,
 		Progress:      progress,

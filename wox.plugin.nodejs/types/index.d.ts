@@ -1317,6 +1317,8 @@ export interface ToolbarMsg {
    * Optional toolbar actions rendered on the right side of the toolbar.
    */
   Actions?: ToolbarMsgAction[]
+  /** Keep the message until explicitly cleared or the plugin context is left. */
+  IsPersist?: boolean
 }
 
 /**
@@ -1629,7 +1631,8 @@ export interface PublicAPI {
    * Show or update a toolbar msg.
    *
    * Reusing the same Id updates the current status instead of creating a duplicate.
-   * The message persists until ClearToolbarMsg or context exit. Context includes
+   * Messages disappear after 10 seconds by default; updates reset the timer.
+   * IsPersist keeps them until ClearToolbarMsg or context exit. Context includes
    * a trigger or single-plugin scoped query, or a selected plugin result in a
    * global or other multi-plugin query. Switching rows of the same plugin
    * preserves its message. Preserve the callback context for asynchronous work;

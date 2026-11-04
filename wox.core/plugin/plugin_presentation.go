@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"wox/common"
 	"wox/common/icons"
@@ -18,25 +19,29 @@ import (
 // pluginPresentation owns Glance/Toolbar callbacks and active query-session routing.
 // It receives only instance lookup and UI capabilities, never a Manager reference.
 type pluginPresentation struct {
-	toolbarMsgActions    *util.HashMap[string, *toolbarMsgActionEntry]
-	pluginToolbarMsgIds  *util.HashMap[string, *toolbarMsgActionEntry]
-	glanceActions        *util.HashMap[string, GlanceAction]
-	sessionPluginQueries *util.HashMap[string, *sessionPluginQueryState]
-	latestSessionQueries *util.HashMap[string, string]
-	lookup               func(string) *Instance
-	currentUI            func() common.UI
+	toolbarMsgActions     *util.HashMap[string, *toolbarMsgActionEntry]
+	pluginToolbarMsgIds   *util.HashMap[string, *toolbarMsgActionEntry]
+	glanceActions         *util.HashMap[string, GlanceAction]
+	sessionPluginQueries  *util.HashMap[string, *sessionPluginQueryState]
+	latestSessionQueries  *util.HashMap[string, string]
+	lookup                func(string) *Instance
+	currentUI             func() common.UI
+	scheduleToolbarExpiry func(time.Duration, func())
 }
+
+const toolbarMsgDefaultDuration = 10 * time.Second
 
 // newPluginPresentation receives live capabilities without retaining a second UI reference.
 func newPluginPresentation(lookup func(string) *Instance, currentUI func() common.UI) pluginPresentation {
 	return pluginPresentation{
-		lookup:               lookup,
-		currentUI:            currentUI,
-		toolbarMsgActions:    util.NewHashMap[string, *toolbarMsgActionEntry](),
-		pluginToolbarMsgIds:  util.NewHashMap[string, *toolbarMsgActionEntry](),
-		glanceActions:        util.NewHashMap[string, GlanceAction](),
-		sessionPluginQueries: util.NewHashMap[string, *sessionPluginQueryState](),
-		latestSessionQueries: util.NewHashMap[string, string](),
+		lookup:                lookup,
+		currentUI:             currentUI,
+		scheduleToolbarExpiry: func(delay time.Duration, expire func()) { time.AfterFunc(delay, expire) },
+		toolbarMsgActions:     util.NewHashMap[string, *toolbarMsgActionEntry](),
+		pluginToolbarMsgIds:   util.NewHashMap[string, *toolbarMsgActionEntry](),
+		glanceActions:         util.NewHashMap[string, GlanceAction](),
+		sessionPluginQueries:  util.NewHashMap[string, *sessionPluginQueryState](),
+		latestSessionQueries:  util.NewHashMap[string, string](),
 	}
 }
 
@@ -311,6 +316,16 @@ func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, 
 		return valid
 	}
 	p.currentUI().ShowToolbarMsg(resolvedCtx, uiMsg)
+	if !normalized.IsPersist {
+		p.scheduleToolbarExpiry(toolbarMsgDefaultDuration, func() {
+			ctx := util.WithSessionContext(util.NewTraceContext(), sessionID)
+			if removed := p.removePluginToolbarMsgAction(ctx, actionEntry.PluginId, actionEntry); removed != nil {
+				if ui := p.currentUI(); ui != nil {
+					ui.ClearToolbarMsg(ctx, removed.MessageId)
+				}
+			}
+		})
+	}
 }
 
 // ClearToolbarMsg removes the toolbar msg action callbacks owned by the current plugin and asks UI
@@ -331,7 +346,11 @@ func (p *pluginPresentation) ClearToolbarMsg(ctx context.Context, pluginInstance
 	if !found || entry.MessageId != toolbarMsgId || (!ok && entry.RequireActive) {
 		return
 	}
-	p.clearCurrentPluginToolbarMsg(resolvedCtx, pluginInstance.Metadata.Id)
+	if removed := p.removePluginToolbarMsgAction(resolvedCtx, pluginInstance.Metadata.Id, entry); removed != nil {
+		if ui := p.currentUI(); ui != nil {
+			ui.ClearToolbarMsg(resolvedCtx, removed.MessageId)
+		}
+	}
 }
 
 // ExecuteToolbarMsgAction resolves the current toolbar msg action callback and invokes it.
@@ -381,6 +400,11 @@ func (p *pluginPresentation) ExecuteToolbarMsgAction(ctx context.Context, sessio
 }
 
 func (p *pluginPresentation) clearCurrentPluginToolbarMsgAction(ctx context.Context, pluginId string) *toolbarMsgActionEntry {
+	return p.removePluginToolbarMsgAction(ctx, pluginId, nil)
+}
+
+// removePluginToolbarMsgAction only expires the expected snapshot, so an old timer cannot remove its replacement.
+func (p *pluginPresentation) removePluginToolbarMsgAction(ctx context.Context, pluginId string, expected *toolbarMsgActionEntry) *toolbarMsgActionEntry {
 	if pluginId == "" {
 		return nil
 	}
@@ -388,8 +412,8 @@ func (p *pluginPresentation) clearCurrentPluginToolbarMsgAction(ctx context.Cont
 	key := toolbarSessionKey(sessionID, pluginId)
 	var removed *toolbarMsgActionEntry
 	p.pluginToolbarMsgIds.Compute(key, func(entry *toolbarMsgActionEntry, found bool) (*toolbarMsgActionEntry, bool) {
-		if !found {
-			return nil, false
+		if !found || (expected != nil && entry != expected) {
+			return entry, found
 		}
 
 		removed = entry
@@ -462,6 +486,7 @@ func (p *pluginPresentation) normalizeToolbarMsg(ctx context.Context, pluginInst
 		HideIcon:      msg.HideIcon,
 		Progress:      msg.Progress,
 		Indeterminate: msg.Indeterminate,
+		IsPersist:     msg.IsPersist,
 		Actions:       make([]ToolbarMsgAction, 0, len(msg.Actions)),
 	}
 

@@ -13,3 +13,7 @@ class ToolbarMsgTests(unittest.TestCase):
         positional = ToolbarMsg("status", "Working", default.icon, 50, True, [])
         self.assertFalse(positional.hide_icon)
         self.assertEqual(json.loads(positional.to_json())["Progress"], 50)
+
+    def test_persistence_is_opt_in(self):
+        self.assertFalse(json.loads(ToolbarMsg("status", "Working").to_json())["IsPersist"])
+        self.assertTrue(json.loads(ToolbarMsg("status", "Working", is_persist=True).to_json())["IsPersist"])

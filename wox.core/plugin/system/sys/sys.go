@@ -586,7 +586,7 @@ func (r *SysPlugin) buildDevCommands() []SysCommand {
 				manager := plugin.GetPluginManager()
 				if instance := manager.GetPluginInstanceById(common.SysPluginID); instance != nil {
 					manager.ShowSessionToolbarMsg(ctx, instance, plugin.ToolbarMsg{
-						Id: "sys-test-toolbar-actions", Title: r.api.GetTranslation(ctx, "plugin_sys_test_toolbar_message"), Icon: sysIcon,
+						Id: "sys-test-toolbar-actions", Title: r.api.GetTranslation(ctx, "plugin_sys_test_toolbar_message"), Icon: sysIcon, IsPersist: true,
 						Actions: []plugin.ToolbarMsgAction{
 							{Id: "first", Name: "i18n:plugin_sys_test_toolbar_first", Hotkey: util.PrimaryHotkey("shift+1"), PreventHideAfterAction: true, Action: func(ctx context.Context, _ plugin.ToolbarMsgActionContext) {
 								r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_sys_test_toolbar_first"})

@@ -38,9 +38,10 @@ func (c *FileSearchPlugin) serviceUpdateToolbarMsg(ctx context.Context) (plugin.
 		return plugin.ToolbarMsg{}, false
 	}
 	return plugin.ToolbarMsg{
-		Id:    fileSearchToolbarMsgID,
-		Title: fmt.Sprintf("%s (%s → %s)", c.api.GetTranslation(ctx, "plugin_file_service_update_notice"), status.InstalledVersion, status.EmbeddedVersion),
-		Icon:  fileIcon,
+		Id:        fileSearchToolbarMsgID,
+		IsPersist: true,
+		Title:     fmt.Sprintf("%s (%s → %s)", c.api.GetTranslation(ctx, "plugin_file_service_update_notice"), status.InstalledVersion, status.EmbeddedVersion),
+		Icon:      fileIcon,
 		Actions: []plugin.ToolbarMsgAction{{
 			Id: "open-service-settings", Name: "i18n:plugin_file_setting_service_update", Icon: icons.Get(icons.ActionSettings), IsDefault: true, PreventHideAfterAction: true,
 			Hotkey: util.PrimaryHotkey("enter"),

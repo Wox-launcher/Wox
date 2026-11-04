@@ -61,7 +61,7 @@ func (c *FileSearchPlugin) syncIndexedFileCount(ctx context.Context, index fileS
 		util.GetLogger().Warn(ctx, "Failed to load file search toolbar count: "+err.Error())
 	}
 	msg := plugin.ToolbarMsg{
-		Id: fileSearchToolbarMsgID, HideIcon: true,
+		Id: fileSearchToolbarMsgID, HideIcon: true, IsPersist: true,
 		Title: fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_status_indexed_files"), formatFileSearchCount(stats.FileCount)),
 	}
 	signature := ""
@@ -83,6 +83,7 @@ func (c *FileSearchPlugin) syncIndexedFileCount(ctx context.Context, index fileS
 
 // showContentToolbarMsg reserves the idle slot while content work owns the toolbar.
 func (c *FileSearchPlugin) showContentToolbarMsg(ctx context.Context, msg plugin.ToolbarMsg) uint64 {
+	msg.IsPersist = true
 	c.toolbarMsgStateMu.Lock()
 	defer c.toolbarMsgStateMu.Unlock()
 	c.contentToolbarMsg = &msg

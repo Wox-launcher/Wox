@@ -48,7 +48,7 @@ func TestIndexedFileCountVisits(t *testing.T) {
 		t.Fatalf("identical counts produced %d messages", len(api.messages))
 	}
 	msg := api.messages[0]
-	if msg.Title != "20,646 files" || !msg.HideIcon || !msg.Icon.IsEmpty() || msg.Indeterminate || msg.Progress != nil || len(msg.Actions) != 0 {
+	if msg.Title != "20,646 files" || !msg.HideIcon || !msg.IsPersist || !msg.Icon.IsEmpty() || msg.Indeterminate || msg.Progress != nil || len(msg.Actions) != 0 {
 		t.Fatalf("expected a text-only file count: %+v", msg)
 	}
 	c.resetToolbarMsgState()
@@ -148,6 +148,9 @@ func TestIndexedFileCountRestoresAfterHolds(t *testing.T) {
 	}
 	old := c.showContentToolbarMsg(ctx, plugin.ToolbarMsg{Id: contentSearchToolbarMsgID, Title: "content"})
 	current := c.showContentToolbarMsg(ctx, plugin.ToolbarMsg{Id: contentSearchToolbarMsgID, Title: "content complete"})
+	if !api.messages[len(api.messages)-1].IsPersist {
+		t.Fatal("content status must remain visible until its owner clears it")
+	}
 	c.clearContentToolbarMsg(ctx, old)
 	c.syncIndexedFileCount(ctx, index, 0)
 	if api.messages[len(api.messages)-1].Title != "content complete" || reads != 1 {

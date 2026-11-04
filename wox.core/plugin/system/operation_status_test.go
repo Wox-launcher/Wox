@@ -69,18 +69,18 @@ func TestOperationStatusesReplaceProgressWithOutcomes(t *testing.T) {
 	ctx := context.Background()
 	showPluginInstallStatus(ctx, api, "installing", true)
 	showPluginInstallStatus(ctx, api, "installed", false)
-	if len(api.messages) != 2 || api.messages[0].Id != api.messages[1].Id || !api.messages[0].Indeterminate || api.messages[1].Indeterminate {
+	if len(api.messages) != 2 || api.messages[0].Id != api.messages[1].Id || !api.messages[0].Indeterminate || !api.messages[0].IsPersist || api.messages[1].Indeterminate || api.messages[1].IsPersist {
 		t.Fatalf("install statuses: %+v", api.messages)
 	}
 	update := &UpdatePlugin{api: api}
 	update.notifyUpdate(ctx, updater.UpdateInfo{Status: updater.UpdateStatusDownloading})
 	update.notifyUpdate(ctx, updater.UpdateInfo{Status: updater.UpdateStatusError, UpdateError: errors.New("disk failure")})
 	progress, failure := api.messages[2], api.messages[3]
-	if progress.Id != failure.Id || !progress.Indeterminate || failure.Indeterminate || !strings.Contains(failure.Title, "disk failure") || len(failure.Actions) != 1 {
+	if progress.Id != failure.Id || !progress.Indeterminate || !progress.IsPersist || failure.Indeterminate || !failure.IsPersist || !strings.Contains(failure.Title, "disk failure") || len(failure.Actions) != 1 {
 		t.Fatalf("update statuses: %+v %+v", progress, failure)
 	}
 	update.notifyUpdate(ctx, updater.UpdateInfo{Status: updater.UpdateStatusReady})
-	if last := api.messages[len(api.messages)-1]; last.Indeterminate || len(last.Actions) != 0 {
+	if last := api.messages[len(api.messages)-1]; last.Indeterminate || last.IsPersist || len(last.Actions) != 0 {
 		t.Fatalf("ready status: %+v", last)
 	}
 }

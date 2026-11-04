@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"wox/common"
 	"wox/util"
@@ -24,6 +25,47 @@ func (ui *presentationTestUI) ShowToolbarMsg(_ context.Context, msg interface{})
 
 func (ui *presentationTestUI) ClearToolbarMsg(_ context.Context, id string) {
 	ui.cleared = append(ui.cleared, id)
+}
+
+// TestToolbarMessageExpiry protects replacement snapshots and persistent messages from old timers.
+func TestToolbarMessageExpiry(t *testing.T) {
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	instance := newInitTestInstance(&fakeLifecyclePlugin{})
+	instance.Metadata.Id = "expiry"
+	ctx := util.WithSessionContext(context.Background(), "one")
+	otherCtx := util.WithSessionContext(context.Background(), "two")
+	var timers []func()
+	manager.presentation.scheduleToolbarExpiry = func(delay time.Duration, expire func()) {
+		require.Equal(t, 10*time.Second, delay)
+		timers = append(timers, expire)
+	}
+	message := ToolbarMsg{Id: "status", Actions: []ToolbarMsgAction{{Id: "run", Action: func(context.Context, ToolbarMsgActionContext) {}}}}
+	manager.ShowSessionToolbarMsg(ctx, instance, message)
+	manager.ShowSessionToolbarMsg(otherCtx, instance, message)
+	require.Len(t, timers, 2)
+
+	// Updating the same ID restarts its lifetime; an earlier timer cannot clear it.
+	manager.ShowSessionToolbarMsg(ctx, instance, message)
+	require.Len(t, timers, 3)
+	timers[0]()
+	require.Empty(t, ui.cleared)
+	require.NoError(t, manager.ExecuteToolbarMsgAction(ctx, "one", "status", "run"))
+	timers[2]()
+	require.Equal(t, []string{"status"}, ui.cleared)
+	require.Error(t, manager.ExecuteToolbarMsgAction(ctx, "one", "status", "run"))
+	require.NoError(t, manager.ExecuteToolbarMsgAction(ctx, "two", "status", "run"))
+
+	message.IsPersist = true
+	manager.ShowSessionToolbarMsg(otherCtx, instance, message)
+	require.Len(t, timers, 3)
+	timers[1]()
+	require.Len(t, ui.cleared, 1)
+	require.NoError(t, manager.ExecuteToolbarMsgAction(ctx, "two", "status", "run"))
+	manager.ClearToolbarMsg(otherCtx, instance, "status")
+	require.Equal(t, []string{"status", "status"}, ui.cleared)
+	require.Error(t, manager.ExecuteToolbarMsgAction(ctx, "two", "status", "run"))
 }
 
 // TestPresentationCallbacksFollowPluginLifetime exercises the public Manager wiring and owner isolation.

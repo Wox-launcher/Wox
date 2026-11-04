@@ -29,11 +29,11 @@ Choose the API by lifetime and scope:
   `on_enter_plugin_query` and its callback context to publish the status once
   a result is selected; the initial global `query` runs before selection.
   Result actions also receive the selected result's context.
-- A toolbar message has no automatic timeout. Updating it does not close it.
-  When the status is no longer needed while the plugin context is still active,
-  the plugin must explicitly call `ClearToolbarMsg(ctx, id)` /
-  `clear_toolbar_msg(ctx, id)` with the message ID. Otherwise, Wox automatically
-  clears it when the user leaves the plugin context. In a global or other
+- A toolbar message disappears after 10 seconds by default; each update resets
+  the timer. For ongoing work or actionable errors, set `IsPersist: true` /
+  `is_persist=True` and explicitly call `ClearToolbarMsg(ctx, id)` /
+  `clear_toolbar_msg(ctx, id)` when it is no longer needed. Wox also automatically
+  clears messages when the user leaves the plugin context. In a global or other
   ownerless query, selecting another plugin or having no selected result leaves
   that context; switching between results from the same plugin keeps the message.
   Preserve the original

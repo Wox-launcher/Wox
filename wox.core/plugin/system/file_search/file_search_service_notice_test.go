@@ -39,7 +39,7 @@ func TestServiceUpdateNoticesOnlyForInstalledOlderVersions(t *testing.T) {
 			if !want {
 				return
 			}
-			if len(msg.Actions) != 1 || api.attention[0].Key != "file-index-service-update-2.8.2" {
+			if !msg.IsPersist || len(msg.Actions) != 1 || api.attention[0].Key != "file-index-service-update-2.8.2" {
 				t.Fatal("missing settings action or version deduplication key")
 			}
 			if msg.Actions[0].Hotkey != util.PrimaryHotkey("enter") {

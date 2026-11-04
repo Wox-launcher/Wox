@@ -483,6 +483,7 @@ func (p *smokeAutomationPlugin) queryToolbarWithStatus(ctx context.Context, titl
 func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title string) {
 	p.api.ShowToolbarMsg(ctx, plugin.ToolbarMsg{
 		Id:            smokeAutomationToolbarMessageID,
+		IsPersist:     true,
 		Title:         title,
 		Icon:          icons.Get(icons.PluginApp),
 		Indeterminate: true,

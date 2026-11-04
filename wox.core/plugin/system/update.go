@@ -362,7 +362,7 @@ func (p *UpdatePlugin) notifyUpdate(ctx context.Context, info updater.UpdateInfo
 
 // showUpdateStatus keeps progress and its final outcome in the update query context.
 func (p *UpdatePlugin) showUpdateStatus(ctx context.Context, message string, inProgress bool, errorText string) {
-	status := plugin.ToolbarMsg{Id: "wox-update-status", Title: message, Indeterminate: inProgress}
+	status := plugin.ToolbarMsg{Id: "wox-update-status", Title: message, Indeterminate: inProgress, IsPersist: inProgress || errorText != ""}
 	if errorText != "" {
 		status.Actions = []plugin.ToolbarMsgAction{{Name: "i18n:ui_toolbar_copy_error", Icon: icons.Get(icons.ActionCopy), PreventHideAfterAction: true, Action: func(actionCtx context.Context, _ plugin.ToolbarMsgActionContext) {
 			if err := clipboard.WriteText(errorText); err != nil {

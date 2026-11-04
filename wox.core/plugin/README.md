@@ -46,8 +46,9 @@ Other plugins and query-session routing are preserved. Existing Glance refresh,
 Toolbar replacement and session-leave cleanup remain in this owner; result-query
 callbacks remain in the result store.
 
-Toolbar messages are session-owned and stay visible until explicitly cleared or
-until their plugin context ends. A trigger or single-plugin scoped query owns a
+Toolbar messages are session-owned and expire 10 seconds after being shown or
+updated by default. `IsPersist` keeps a message until it is explicitly cleared;
+leaving the plugin context clears either kind. A trigger or single-plugin scoped query owns a
 context directly; global and other multi-plugin queries use the selected result's
 owner, including `*`-only plugins. Selecting another result from the same plugin
 keeps its context and message; selecting another plugin or no result clears it.

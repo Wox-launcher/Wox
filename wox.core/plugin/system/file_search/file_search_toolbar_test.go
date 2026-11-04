@@ -67,8 +67,8 @@ func TestIncrementalToolbarMessageWaitsForMinimumVisibleDuration(t *testing.T) {
 	if !found {
 		t.Fatal("expected one-second incremental indexing to show toolbar status")
 	}
-	if !msg.Indeterminate {
-		t.Fatal("expected incremental indexing toolbar status to keep spinner")
+	if !msg.Indeterminate || !msg.IsPersist {
+		t.Fatal("expected incremental indexing toolbar status to keep spinner and remain visible")
 	}
 	if !strings.Contains(msg.Title, "Incremental indexing") {
 		t.Fatalf("expected incremental indexing title, got %q", msg.Title)
@@ -81,7 +81,7 @@ func TestFullIndexToolbarKeepsElapsedDuringSaving(t *testing.T) {
 	c := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
 	status := filesearch.StatusSnapshot{IsIndexing: true, ActiveRunKind: filesearch.RunKindFull, ActiveRunStatus: filesearch.RunStatusPlanning}
 	msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false)
-	if !found || !msg.Indeterminate || !strings.Contains(msg.Title, "0 files") || !strings.Contains(msg.Title, "0s") {
+	if !found || !msg.Indeterminate || !msg.IsPersist || !strings.Contains(msg.Title, "0 files") || !strings.Contains(msg.Title, "0s") {
 		t.Fatalf("initial progress: %+v", msg)
 	}
 	status.ActiveRunFileCount, status.ActiveRunElapsedMs = 12345, 5000
@@ -175,7 +175,7 @@ func TestFileIndexErrorActionsPreserveOriginalDetails(t *testing.T) {
 	c := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
 	status := filesearch.StatusSnapshot{ErrorRootCount: 1, ErrorRootPath: "/long/index/root", LastError: "scanner: wrapped: permission denied"}
 	msg, found := c.buildToolbarMsgFromStatus(context.Background(), status, false)
-	if !found || len(msg.Actions) < 2 {
+	if !found || !msg.IsPersist || len(msg.Actions) < 2 {
 		t.Fatalf("error toolbar message = %+v", msg)
 	}
 	var settings, copy bool

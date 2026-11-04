@@ -158,7 +158,8 @@ type API interface {
 	// PushAttention persists a plugin-owned attention item and refreshes the unread badge.
 	PushAttention(ctx context.Context, request PushAttentionRequest)
 
-	// ShowToolbarMsg creates or updates a persistent toolbar message in the plugin's active context.
+	// ShowToolbarMsg creates or updates a toolbar message in the plugin's active context.
+	// Messages expire after 10 seconds unless IsPersist is true; updates reset the timer.
 	// Use the enter or action callback context for a selected result in a multi-plugin query.
 	// ClearToolbarMsg closes it explicitly; leaving the context also clears it.
 	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)

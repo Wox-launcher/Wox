@@ -346,7 +346,8 @@ class PublicAPI(Protocol):
         Show or update a toolbar message for the current plugin.
 
         Reusing the same msg id replaces the previous content.
-        Messages persist until cleared explicitly or the plugin context is left.
+        Messages disappear after 10 seconds by default; updating resets the timer.
+        Set is_persist=True for messages cleared explicitly or on context exit.
         Context includes a trigger or single-plugin scoped query, or the selected
         plugin result in a global or other multi-plugin query. Switching between
         the same plugin's results preserves its message. Preserve callback context

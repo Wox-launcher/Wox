@@ -90,6 +90,8 @@ class ToolbarMsg:
     actions: List[ToolbarMsgAction] = field(default_factory=list)
     #: Suppress both an explicit icon and the default plugin icon.
     hide_icon: bool = field(default=False)
+    #: Keep the message until explicitly cleared or the plugin context is left.
+    is_persist: bool = field(default=False)
 
     def to_json(self) -> str:
         """Serialize the toolbar msg to the host payload format."""
@@ -101,6 +103,7 @@ class ToolbarMsg:
                 "HideIcon": self.hide_icon,
                 "Progress": self.progress,
                 "Indeterminate": self.indeterminate,
+                "IsPersist": self.is_persist,
                 "Actions": [action.to_dict() for action in self.actions],
             }
         )
