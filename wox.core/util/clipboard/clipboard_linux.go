@@ -109,11 +109,19 @@ func readImageSnapshot() (*ImageSnapshot, error) {
 }
 
 func writeTextData(text string) error {
-	return linuxClipboardBackend().writeText(text)
+	if err := linuxClipboardBackend().writeText(text); err != nil {
+		return err
+	}
+	invalidateDataControlCache()
+	return nil
 }
 
 func writeFilePaths(filePaths []string) error {
-	return linuxClipboardBackend().writeFilePaths(filePaths)
+	if err := linuxClipboardBackend().writeFilePaths(filePaths); err != nil {
+		return err
+	}
+	invalidateDataControlCache()
+	return nil
 }
 
 func writeImageData(img image.Image) error {
@@ -131,7 +139,11 @@ func writeImageBytes(pngData []byte, dibData []byte) error {
 	if len(pngData) == 0 {
 		return errors.New("clipboard: PNG data is empty")
 	}
-	return linuxClipboardBackend().writeImageBytes(pngData)
+	if err := linuxClipboardBackend().writeImageBytes(pngData); err != nil {
+		return err
+	}
+	invalidateDataControlCache()
+	return nil
 }
 
 func writeAnimatedGIFFile(filePath string) error {
@@ -152,6 +164,7 @@ func writeAnimatedGIFFile(filePath string) error {
 		cmd := exec.Command(bin, "--type", "image/gif", "--")
 		cmd.Stdin = bytes.NewReader(gifData)
 		if runErr := cmd.Run(); runErr == nil {
+			invalidateDataControlCache()
 			return nil
 		}
 	}
@@ -159,11 +172,19 @@ func writeAnimatedGIFFile(filePath string) error {
 	if bin, lookErr := exec.LookPath("xclip"); lookErr == nil {
 		cmd := exec.Command(bin, "-selection", "clipboard", "-t", "image/gif", "-i", filePath)
 		if runErr := cmd.Run(); runErr == nil {
+			invalidateDataControlCache()
 			return nil
 		}
 	}
 
 	return writeFilePaths([]string{filePath})
+}
+
+// invalidateDataControlCache prevents a successful local write from being hidden by an earlier snapshot.
+func invalidateDataControlCache() {
+	dataControlMu.Lock()
+	linuxDataControl.capturedAt = time.Time{}
+	dataControlMu.Unlock()
 }
 
 func isClipboardChanged() bool {
@@ -179,7 +200,7 @@ func buildWatchSnapshot() string {
 }
 
 func dataControlReadContentType() Type {
-	selection, err := readDataControlSelectionLocked(false)
+	selection, err := readDataControlSelectionLocked(true)
 	if err != nil {
 		return ""
 	}
@@ -187,7 +208,7 @@ func dataControlReadContentType() Type {
 }
 
 func dataControlReadText() (string, error) {
-	selection, err := readDataControlSelectionLocked(false)
+	selection, err := readDataControlSelectionLocked(true)
 	if err != nil {
 		return "", err
 	}
@@ -202,7 +223,7 @@ func dataControlReadText() (string, error) {
 }
 
 func dataControlReadFilePaths() ([]string, error) {
-	selection, err := readDataControlSelectionLocked(false)
+	selection, err := readDataControlSelectionLocked(true)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +238,7 @@ func dataControlReadFilePaths() ([]string, error) {
 }
 
 func dataControlReadImageSnapshot() (*ImageSnapshot, error) {
-	selection, err := readDataControlSelectionLocked(false)
+	selection, err := readDataControlSelectionLocked(true)
 	if err != nil {
 		return nil, err
 	}
@@ -260,8 +281,8 @@ func dataControlWatchSnapshot() string {
 	)
 }
 
-// readDataControlSelectionLocked caches one short-lived snapshot so Read can inspect
-// its type and payload without opening two independent Wayland selections.
+// readDataControlSelectionLocked only reuses snapshots for diagnostics. Clipboard
+// reads must refresh because another process can change the selection at any time.
 func readDataControlSelectionLocked(force bool) (dataControlSelection, error) {
 	dataControlMu.Lock()
 	defer dataControlMu.Unlock()

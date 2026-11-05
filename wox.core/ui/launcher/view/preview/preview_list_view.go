@@ -29,8 +29,8 @@ func PreviewList(props PreviewListProps) woxwidget.Widget {
 	if len(props.Items) == 0 {
 		return woxwidget.Container{Width: props.Width, Height: props.Height, Radius: 10, Color: props.Theme.QueryBackground, Padding: woxwidget.UniformInsets(14), Child: woxwidget.Text{Value: "No items", Style: woxui.TextStyle{Size: 13}, Color: props.Theme.ResultSubtitle}}
 	}
-	const rowHeight = float32(54)
-	visibleCount := min(len(props.Items), max(1, int(props.Height/rowHeight)))
+	const rowHeight = float32(58)
+	visibleCount := min(len(props.Items), max(1, int(max(0, props.Height-4)/rowHeight)))
 	rows := make([]woxwidget.Widget, 0, visibleCount)
 	for index := 0; index < visibleCount; index++ {
 		item := props.Items[index]
@@ -48,7 +48,8 @@ func PreviewList(props PreviewListProps) woxwidget.Widget {
 		}
 		rows = append(rows, woxwidget.Container{Width: props.Width, Height: rowHeight, Padding: woxwidget.Insets{Left: 10, Top: 10, Right: 10, Bottom: 8}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			icon,
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 36, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
+			// Native font metrics can make the two lines taller than 36 logical units.
+			woxwidget.Expanded{Child: woxwidget.Container{Height: 40, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
 				woxwidget.Text{Value: item.Title, Style: woxui.TextStyle{Size: 13, Weight: woxui.FontWeightSemibold}, Color: props.Theme.PreviewText},
 				woxwidget.Text{Value: item.Subtitle, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.ResultSubtitle},
 			}}}},

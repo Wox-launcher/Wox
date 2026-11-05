@@ -43,8 +43,9 @@ func Test004NotesViewportImagesStayLoaded(t *testing.T) {
 	for _, name := range names {
 		fmt.Fprintf(&markdown, "![%s](notes-image:wox-smoke-viewport-%s.png?scale=20&width=%d&height=%d)\n\n", name, name, edge, edge)
 	}
-	// The caret opens on the trailing text, so the editor must be tall enough to park every picture above the viewport.
-	markdown.WriteString(strings.Repeat("spacer\n", 40))
+	// The window can auto-fit its content before a resize is acknowledged. Keep
+	// enough trailing text to scroll every picture out even in a tall viewport.
+	markdown.WriteString(strings.Repeat("spacer\n", 200))
 
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		openNewNoteEditor(t, ctx, client)

@@ -170,6 +170,7 @@ func (a *toolbarController) applyToolbarMessage(message toolbarMessage) {
 		_ = a.window().Invalidate()
 		return
 	}
+	wasVisible := a.effectiveToolbarMessage() != nil
 	if a.actions.actionPanel && a.actions.actionPanelPurpose == actionPanelPurposeToolbar && (a.toolbarMsg == nil || a.toolbarMsg.ID != message.ID) {
 		a.actions.hideActionPanel()
 	}
@@ -191,7 +192,8 @@ func (a *toolbarController) applyToolbarMessage(message toolbarMessage) {
 			a.actions.normalizeActionSelectionLocked()
 		}
 	}
-	if panelVisible {
+	// A newly visible status needs its own footer space even with no results.
+	if panelVisible || wasVisible != (a.effectiveToolbarMessage() != nil) {
 		_ = a.applyWindowBounds()
 	}
 	if panelClosed {

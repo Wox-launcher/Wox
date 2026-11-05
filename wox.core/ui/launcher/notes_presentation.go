@@ -50,7 +50,8 @@ func (c *notesWindowController) buildNotes(frame woxui.FrameInfo) woxwidget.Widg
 			Width: frame.Size.Width, Height: editorHeight, Padding: c.findEditorPadding(),
 			Style: c.editorStyle(), LineHeight: notesEditorLineHeight * c.zoom, Zoom: c.zoom, TextColor: theme.PreviewText, Theme: theme.Controls,
 			Window: c.managed.Window(), ReadOnly: c.record.DeletedAt > 0, Autofocus: true, Controller: c.editor,
-			FocusNode: c.editorFocus, Focused: (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
+			// Opening the sidebar can rebuild the editor before the search field takes focus.
+			FocusNode: c.editorFocus, Focused: !c.searchOpen && (c.editorFocus.HasFocus() || c.requestTextFocus) && c.focusedTableBlock < 0 && c.focusedImageBlock < 0, Selection: c.selection,
 			RevealCaret:        c.revealEditorCaret,
 			ActiveSegmentStart: c.activeTextSegment.Start, OnTextFocus: c.focusNoteText,
 			OnChanged: c.onSegmentChanged, OnSelectionChanged: c.onEditorSelectionChanged,

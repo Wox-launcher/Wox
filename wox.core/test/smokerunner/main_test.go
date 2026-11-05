@@ -77,8 +77,8 @@ func TestSuiteArtifactRootCreatesConfiguredDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if root != "" {
-		t.Fatalf("unset artifact root = %q, want the OS temp directory", root)
+	if root != defaultSmokeArtifactRoot() {
+		t.Fatalf("unset artifact root = %q, want %q", root, defaultSmokeArtifactRoot())
 	}
 
 	configured := filepath.Join(t.TempDir(), "artifacts", "smoke")

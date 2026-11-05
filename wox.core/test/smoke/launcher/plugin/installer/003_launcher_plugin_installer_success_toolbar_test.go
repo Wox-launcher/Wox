@@ -74,9 +74,12 @@ func Test003LauncherPluginInstallerSuccessToolbar(t *testing.T) {
 			if err := client.FocusInstance(ctx, "selection"); err != nil {
 				t.Fatal(err)
 			}
+			var resultID string
 			snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 				for _, node := range snapshot.Tree.Nodes {
-					if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.Contains(node.Label, name) && node.Selected {
+					// The previous package can remain visible until the new query completes.
+					if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.Contains(node.Label, name) && strings.Contains(node.Description, version) && node.Selected {
+						resultID = node.AutomationID
 						return true
 					}
 				}
@@ -85,13 +88,8 @@ func Test003LauncherPluginInstallerSuccessToolbar(t *testing.T) {
 			if err != nil {
 				t.Fatalf("wait for %s package: %v", version, err)
 			}
-			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "launcher.result.") && strings.Contains(node.Label, name) && node.Selected {
-					if err := client.Perform(ctx, node.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
-						t.Fatal(err)
-					}
-					break
-				}
+			if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
+				t.Fatal(err)
 			}
 			verbs := map[string]bool{}
 			for _, lang := range i18n.GetSupportedLanguages() {

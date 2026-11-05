@@ -246,6 +246,11 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		titleBarHeight = launcherview.SettingsTitleBarHeight
 		titleBar = a.buildPreviewTitleBar(snapshot, width, frame.WindowFocused)
 	}
+	// Window resize is asynchronous; avoid laying out the footer against the
+	// previous smaller frame while the new launcher geometry is being applied.
+	if height < queryHeight+refinementHeight+titleBarHeight+toolbarHeight {
+		toolbarHeight = 0
+	}
 	contentHeight := max(0, height-queryHeight-refinementHeight-toolbarHeight-titleBarHeight)
 	// Only results extend behind the footer; previews and bottom query chrome
 	// retain their usable height so native children never cover the toolbar.

@@ -89,6 +89,47 @@ func TestWaylandClipboardWriteReportsCommandFailure(t *testing.T) {
 	require.ErrorContains(t, err, "exit status 42")
 }
 
+// TestWaylandPasteTextPreservesNewlines exercises the wl-paste fallback without a desktop session.
+func TestWaylandPasteTextPreservesNewlines(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nif [ \"$1\" != \"--no-newline\" ]; then exit 1; fi\nprintf '\\r\\nthree\\r\\nfour\\rfive\\nsix\\r\\n'\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "wl-paste"), []byte(script), 0755))
+	t.Setenv("PATH", dir)
+
+	text, err := waylandPasteText()
+	require.NoError(t, err)
+	require.Equal(t, "\r\nthree\r\nfour\rfive\nsix\r\n", text)
+}
+
+type testLinuxClipboardWriter struct {
+	linuxClipboard
+}
+
+func (testLinuxClipboardWriter) writeText(string) error { return nil }
+
+func TestLinuxClipboardWriteInvalidatesCachedSelection(t *testing.T) {
+	previousBackend := linuxClipboardBackend()
+	linuxBackend = testLinuxClipboardWriter{linuxClipboard: previousBackend}
+	t.Cleanup(func() { linuxBackend = previousBackend })
+
+	dataControlMu.Lock()
+	previousCache := linuxDataControl
+	linuxDataControl.capturedAt = time.Now()
+	linuxDataControl.latest = dataControlSelection{mimeType: portalMimeTextUTF8, data: []byte("old")}
+	dataControlMu.Unlock()
+	t.Cleanup(func() {
+		dataControlMu.Lock()
+		linuxDataControl = previousCache
+		dataControlMu.Unlock()
+	})
+
+	require.NoError(t, writeTextData("new"))
+	dataControlMu.Lock()
+	cachedAt := linuxDataControl.capturedAt
+	dataControlMu.Unlock()
+	require.True(t, cachedAt.IsZero(), "a write must invalidate the old selection")
+}
+
 func TestWaylandClipboardWriteTimesOut(t *testing.T) {
 	err := runWaylandClipboardCommandErr("sh", []string{"-c", "exec sleep 5"}, nil)
 	require.ErrorContains(t, err, "Wayland clipboard command timed out")

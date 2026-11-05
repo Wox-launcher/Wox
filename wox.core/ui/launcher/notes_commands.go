@@ -176,10 +176,10 @@ func (c *notesWindowController) fail(err error) {
 
 // toggleSearch switches focus between the editor and keyboard-first note browser.
 func (c *notesWindowController) toggleSearch() {
+	c.searchOpen, c.moreOpen, c.linkOpen = true, false, false
 	if !c.sidebar.open {
 		c.toggleSidebar()
 	}
-	c.searchOpen, c.moreOpen, c.linkOpen = true, false, false
 	c.searchIndex = 0
 	_ = c.reloadSummaries()
 	c.searchFocus.RequestFocus()

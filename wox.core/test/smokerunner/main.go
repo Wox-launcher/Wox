@@ -35,8 +35,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// smokeArtifactDirEnvironment relocates retained failure artifacts out of the OS
-// temp directory so CI can upload them.
+// smokeArtifactDirEnvironment relocates retained failure artifacts so CI can upload them.
 const smokeArtifactDirEnvironment = "WOX_SMOKE_ARTIFACT_DIR"
 
 // smokeModulePath is the wox.core module path. Compiled test summaries use it so
@@ -451,7 +450,10 @@ func run(caseSelector string) (int, error) {
 func suiteArtifactRoot() (string, error) {
 	root := strings.TrimSpace(os.Getenv(smokeArtifactDirEnvironment))
 	if root == "" {
-		return "", nil
+		root = defaultSmokeArtifactRoot()
+		if root == "" {
+			return "", nil
+		}
 	}
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return "", fmt.Errorf("create smoke artifact directory %q: %w", root, err)

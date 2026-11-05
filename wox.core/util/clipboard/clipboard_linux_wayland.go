@@ -143,7 +143,8 @@ func waylandPaste(mimeTypes ...string) ([]byte, error) {
 	}
 	var lastErr error
 	for _, mimeType := range mimeTypes {
-		output, pasteErr := runWaylandClipboardCommand(bin, []string{"--type", mimeType}, nil)
+		// wl-paste otherwise appends a newline to text, changing clipboard contents.
+		output, pasteErr := runWaylandClipboardCommand(bin, []string{"--no-newline", "--type", mimeType}, nil)
 		if pasteErr != nil {
 			lastErr = pasteErr
 			continue

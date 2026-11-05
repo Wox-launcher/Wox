@@ -9,11 +9,13 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 // Test005NotesSidebarTree exercises nested organization through the native window and pointer routing.
@@ -366,12 +368,25 @@ func Test005NotesSidebarTree(t *testing.T) {
 		if err = client.SetBounds(ctx, bounds); err != nil {
 			t.Fatal(err)
 		}
+		resizeCtx, cancelResize := context.WithTimeout(ctx, time.Second)
+		_, resizeErr := client.WaitFor(resizeCtx, func(s woxwidget.AutomationSnapshot) bool {
+			window, found := automationdriver.Find(s, "notes.window")
+			return found && window.Bounds.Width <= 460
+		})
+		cancelResize()
+		canResize := resizeErr == nil
+		if !canResize {
+			if runtime.GOOS != "linux" || !util.IsLinuxWaylandSession() {
+				t.Fatalf("could not resize the Notes window: %v", resizeErr)
+			}
+			t.Log("Wayland compositor did not apply the requested window size; skipping minimum-width geometry checks")
+		}
 		activate("notes.toolbar.sidebar")
 		if _, err = client.WaitForWindowState(ctx, "notes", func(state automationdriver.WindowState) bool { return state.Exists && state.Visible }); err != nil {
 			t.Fatal(err)
 		}
 		bounds, err = client.Bounds(ctx)
-		if err != nil || bounds.Width < 716 {
+		if err != nil || (canResize && bounds.Width < 716) {
 			t.Fatalf("sidebar did not expand minimum width: %+v %v", bounds, err)
 		}
 		if _, err = client.WaitFor(ctx, func(s woxwidget.AutomationSnapshot) bool {
@@ -394,13 +409,26 @@ func Test005NotesSidebarTree(t *testing.T) {
 			t.Fatalf("sidebar disappeared after selecting a note: %v", err)
 		}
 		activate("notes.toolbar.sidebar")
+		if _, err = client.WaitFor(ctx, func(s woxwidget.AutomationSnapshot) bool {
+			_, visible := automationdriver.Find(s, "notes.sidebar.tree")
+			return !visible
+		}); err != nil {
+			t.Fatalf("wait for sidebar to close: %v", err)
+		}
 		bounds.Width = 460
 		if err = client.SetBounds(ctx, bounds); err != nil {
 			t.Fatal(err)
 		}
-		bounds, err = client.Bounds(ctx)
-		if err != nil || bounds.Width > 460 {
-			t.Fatalf("closed sidebar did not restore minimum width: %+v %v", bounds, err)
+		// Wayland applies resize requests asynchronously; wait for the rendered size.
+		if canResize {
+			_, err = client.WaitFor(ctx, func(s woxwidget.AutomationSnapshot) bool {
+				window, found := automationdriver.Find(s, "notes.window")
+				return found && window.Bounds.Width <= 460
+			})
+			if err != nil {
+				bounds, _ = client.Bounds(ctx)
+				t.Fatalf("closed sidebar did not restore minimum width: %+v: %v", bounds, err)
+			}
 		}
 		activate("notes.toolbar.sidebar")
 		row("Sidebar nested note")

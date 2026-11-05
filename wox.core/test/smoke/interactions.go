@@ -272,6 +272,7 @@ func selectLauncherResult(t *testing.T, ctx context.Context, client *automationd
 			return snapshot
 		}
 		generation := snapshot.Tree.Generation
+		previousSelectedIndex := selectedIndex
 		key := woxui.KeyArrowDown
 		if targetIndex < selectedIndex {
 			key = woxui.KeyArrowUp
@@ -281,7 +282,8 @@ func selectLauncherResult(t *testing.T, ctx context.Context, client *automationd
 		}
 		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			_, selectedIndex, targetIndex = launcherResultMatchIndexes(snapshot, match)
-			return snapshot.Tree.Generation > generation && selectedIndex >= 0 && targetIndex >= 0
+			// Repaints can advance the generation before the key changes selection.
+			return snapshot.Tree.Generation > generation && selectedIndex >= 0 && selectedIndex != previousSelectedIndex && targetIndex >= 0
 		})
 		if err != nil {
 			t.Fatalf("wait for launcher result %q while selecting: %v", description, err)
