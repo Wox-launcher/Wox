@@ -352,7 +352,8 @@ class PublicAPI(Protocol):
         plugin result in a global or other multi-plugin query. Switching between
         the same plugin's results preserves its message, including across query
         refreshes. Selection changes hold the previous message briefly while results
-        settle. Preserve callback context for asynchronous work, and name the relevant
+        settle. Global text searches show messages only after an action on the plugin's
+        result. Preserve callback context for asynchronous work, and name the relevant
         object because an earlier update may arrive after returning to the same plugin.
 
         Args:

@@ -1636,7 +1636,8 @@ export interface PublicAPI {
    * a trigger or single-plugin scoped query, or a selected plugin result in a
    * global or other multi-plugin query. Switching rows of the same plugin
    * preserves its message, including across query refreshes. Selection changes
-   * hold the previous message briefly while results settle. Preserve the callback
+   * hold the previous message briefly while results settle. In global text searches,
+   * messages appear only after an action on the plugin's result. Preserve the callback
    * context for asynchronous work; include the relevant object name because an
    * earlier update may arrive after returning to the same plugin.
    */

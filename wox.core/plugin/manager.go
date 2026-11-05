@@ -1919,6 +1919,7 @@ func (m *Manager) ExecuteAction(ctx context.Context, sessionId string, queryId s
 	meta := resultCache.PluginInstance.Metadata
 	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
 
+	m.presentation.allowGlobalToolbarForAction(sessionId, queryId, meta.Id)
 	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, resultCache.Query.SessionId), resultCache.Query.Id)
 	actionCache.Action(actionCtx, ActionContext{
 		ResultId:       resultId,
@@ -1961,6 +1962,7 @@ func (m *Manager) SubmitFormAction(ctx context.Context, sessionId string, queryI
 	meta := resultCache.PluginInstance.Metadata
 	analytics.TrackActionExecuted(ctx, meta.Id, resultCache.PluginInstance.GetName(ctx))
 
+	m.presentation.allowGlobalToolbarForAction(sessionId, queryId, meta.Id)
 	actionCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, resultCache.Query.SessionId), resultCache.Query.Id)
 	actionCache.OnSubmit(actionCtx, FormActionContext{
 		ActionContext: ActionContext{

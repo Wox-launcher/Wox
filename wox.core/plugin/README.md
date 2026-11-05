@@ -54,7 +54,9 @@ owner, including `*`-only plugins. A change of owner keeps the old toolbar messa
 for at most 1.2 seconds while selection settles. Returning to the same plugin keeps
 its message; otherwise the old message is cleared and the new owner's latest queued
 message is shown at the deadline. Enter and leave callbacks still follow the actual
-selection immediately. Messages are scoped to the window and plugin rather than the
+selection immediately. In global text searches, plugin messages require an action
+on that plugin's result before they can appear; selecting a result alone stays quiet.
+Messages are scoped to the window and plugin rather than the
 query that started an operation; object-specific status should identify that object.
 
 `ShowToastMsg` displays one independent transient overlay. Its optional action

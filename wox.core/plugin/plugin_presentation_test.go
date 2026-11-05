@@ -145,6 +145,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 		manager.BeginSessionQuery(session, "query")
 		manager.HandleQueryLifecycle(ctx, Query{Id: "query", SessionId: session, Type: QueryTypeInput}, nil)
 		manager.presentation.selectResultContext(ctx, session, "query", "result", instance.Metadata.Id)
+		manager.presentation.allowGlobalToolbarForAction(session, "query", instance.Metadata.Id)
 	}
 	first, second := <-entered, <-entered
 	if util.GetContextSessionId(first) != "one" {
@@ -186,6 +187,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 	require.Len(t, ui.shown, 3)
 	manager.presentation.selectResultContext(ctx, "one", "query", "result", instance.Metadata.Id)
 	fresh := <-entered
+	manager.presentation.allowGlobalToolbarForAction("one", "query", instance.Metadata.Id)
 	// A previous callback from the same query is accepted after returning to its plugin.
 	manager.ShowToolbarMsg(first, instance, ToolbarMsg{Id: "same-id", Title: "late from A"})
 	require.Len(t, ui.shown, 4)
@@ -199,6 +201,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 	require.Equal(t, []string{"same-id", "same-id", "same-id"}, ui.cleared)
 	manager.presentation.selectResultContext(ctx, "one", "query", "result", instance.Metadata.Id)
 	fresh = <-entered
+	manager.presentation.allowGlobalToolbarForAction("one", "query", instance.Metadata.Id)
 	manager.ShowToolbarMsg(fresh, instance, ToolbarMsg{Id: "same-id", Title: "selected again"})
 	require.Len(t, ui.shown, 6)
 	manager.BeginSessionQuery("one", "next")
@@ -248,7 +251,6 @@ func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	require.True(t, ui.shown[1].CanShow(), "the same plugin owns the refreshed query")
 	manager.BeginSessionQuery("window", "other-query")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "other-query", SessionId: "window", Type: QueryTypeInput}, nil)
-	holds[1]()
 	require.Equal(t, []string{"install", "scope"}, ui.cleared)
 }
 
@@ -382,7 +384,120 @@ func TestUnscopedToolbarMessageUsesOnlyUnambiguousActivePluginSession(t *testing
 	manager.BeginSessionQuery("window", "query")
 	manager.HandleQueryLifecycle(context.Background(), Query{Id: "query", SessionId: "window", Type: QueryTypeInput}, nil)
 	manager.presentation.selectResultContext(context.Background(), "window", "query", "result", instance.Metadata.Id)
+	manager.presentation.allowGlobalToolbarForAction("window", "query", instance.Metadata.Id)
 	manager.ShowToolbarMsg(context.Background(), instance, ToolbarMsg{Id: "background", Title: "Plugin status"})
 	require.Len(t, ui.shown, 1)
 	require.True(t, ui.shown[0].IsCurrent())
+}
+
+// TestGlobalToolbarRequiresResultAction checks real action execution and session-scoped eligibility.
+func TestGlobalToolbarRequiresResultAction(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	instance := newInitTestInstance(&fakeLifecyclePlugin{})
+	instance.Metadata.Id = "file-search"
+	manager.lifecycle.appendPluginInstance(instance)
+	query := Query{Id: "query", SessionId: "one", Type: QueryTypeInput}
+	manager.BeginSessionQuery(query.SessionId, query.Id)
+	manager.HandleQueryLifecycle(context.Background(), query, nil)
+	manager.presentation.selectResultContext(context.Background(), query.SessionId, query.Id, "result", instance.Metadata.Id)
+	ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "one"), "query")
+	manager.ShowToolbarMsg(ctx, instance, ToolbarMsg{Id: "status", Title: "background", IsPersist: true})
+	manager.ShowToolbarMsg(context.Background(), instance, ToolbarMsg{Id: "status", Title: "unscoped", IsPersist: true})
+	require.Empty(t, ui.shown, "selection and background callbacks alone stay quiet")
+
+	manager.resultStore.startQuery(query)
+	set, ok := manager.resultStore.getQuery(query.SessionId, query.Id)
+	require.True(t, ok)
+	result := QueryResult{Id: "result", Actions: []QueryResultAction{{Id: systemActionPinInQueryID, Action: func(actionCtx context.Context, _ ActionContext) {
+		manager.ShowToolbarMsg(actionCtx, instance, ToolbarMsg{Id: "status", Title: "action completed", IsPersist: true})
+	}}}}
+	set.Results.Store(result.Id, &QueryResultCache{Result: result, Query: query, PluginInstance: instance})
+	require.Error(t, manager.ExecuteAction(ctx, "one", "query", "result", "missing"))
+	manager.ShowToolbarMsg(ctx, instance, ToolbarMsg{Id: "status", Title: "still blocked", IsPersist: true})
+	require.Empty(t, ui.shown, "invalid actions must not enable messages")
+	require.NoError(t, manager.ExecuteAction(ctx, "one", "query", "result", systemActionPinInQueryID))
+	require.Len(t, ui.shown, 1)
+	require.Equal(t, "action completed", ui.shown[0].Title)
+
+	manager.BeginSessionQuery("two", "query")
+	manager.HandleQueryLifecycle(context.Background(), Query{Id: "query", SessionId: "two", Type: QueryTypeInput}, nil)
+	manager.presentation.selectResultContext(context.Background(), "two", "query", "result", instance.Metadata.Id)
+	manager.ShowToolbarMsg(util.WithSessionContext(context.Background(), "two"), instance, ToolbarMsg{Id: "status", Title: "other window"})
+	require.Len(t, ui.shown, 1, "an action in another window grants no permission")
+
+	formQuery := Query{Id: "query", SessionId: "two", Type: QueryTypeInput}
+	manager.resultStore.startQuery(formQuery)
+	formSet, ok := manager.resultStore.getQuery("two", "query")
+	require.True(t, ok)
+	form := QueryResult{Id: "result", Actions: []QueryResultAction{{Id: systemActionPinInQueryID, Type: QueryResultActionTypeForm, OnSubmit: func(actionCtx context.Context, _ FormActionContext) {
+		manager.ShowToolbarMsg(actionCtx, instance, ToolbarMsg{Id: "status", Title: "form submitted", IsPersist: true})
+	}}}}
+	formSet.Results.Store(form.Id, &QueryResultCache{Result: form, Query: formQuery, PluginInstance: instance})
+	require.NoError(t, manager.SubmitFormAction(context.Background(), "two", "query", "result", systemActionPinInQueryID, nil))
+	require.Len(t, ui.shown, 2)
+	require.Equal(t, "form submitted", ui.shown[1].Title)
+}
+
+// TestGlobalToolbarActionPermissionSurvivesRefreshOnlyForTheSamePlugin protects long-running actions.
+func TestGlobalToolbarActionPermissionSurvivesRefreshOnlyForTheSamePlugin(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	var expire func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, callback func()) { expire = callback }
+	a, b := newInitTestInstance(&fakeLifecyclePlugin{}), newInitTestInstance(&fakeLifecyclePlugin{})
+	a.Metadata.Id, b.Metadata.Id = "first", "second"
+	ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "window"), "old")
+	manager.BeginSessionQuery("window", "old")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "old", SessionId: "window", Type: QueryTypeInput}, nil)
+	manager.presentation.selectResultContext(ctx, "window", "old", "first", a.Metadata.Id)
+	manager.presentation.allowGlobalToolbarForAction("window", "old", a.Metadata.Id)
+	manager.BeginSessionQuery("window", "refresh")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "refresh", SessionId: "window", Type: QueryTypeInput}, nil)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "status", Title: "in progress", IsPersist: true})
+	require.Len(t, ui.shown, 1, "an action may finish while refreshed results are pending")
+	manager.presentation.selectResultContext(ctx, "window", "refresh", "first-new", a.Metadata.Id)
+	expire()
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "status", Title: "completed", IsPersist: true})
+	require.Equal(t, "completed", ui.shown[1].Title)
+	manager.presentation.selectResultContext(ctx, "window", "refresh", "other", b.Metadata.Id)
+	manager.ShowToolbarMsg(util.WithSessionContext(context.Background(), "window"), b, ToolbarMsg{Id: "other", Title: "uninvoked"})
+	require.Len(t, ui.shown, 2)
+	expire()
+	manager.presentation.selectResultContext(ctx, "window", "refresh", "first", a.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "status", Title: "old permission"})
+	require.Len(t, ui.shown, 2, "returning after leaving requires another action")
+}
+
+// TestGlobalToolbarQueuesActionDuringAnotherOwnersHold covers refresh while the previous toolbar is still visible.
+func TestGlobalToolbarQueuesActionDuringAnotherOwnersHold(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	var expire func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, callback func()) { expire = callback }
+	a, b := newInitTestInstance(&fakeLifecyclePlugin{}), newInitTestInstance(&fakeLifecyclePlugin{})
+	a.Metadata.Id, b.Metadata.Id = "first", "second"
+	ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "window"), "old")
+	manager.BeginSessionQuery("window", "old")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "old", SessionId: "window", Type: QueryTypeInput}, nil)
+	manager.presentation.selectResultContext(ctx, "window", "old", "first", a.Metadata.Id)
+	manager.presentation.allowGlobalToolbarForAction("window", "old", a.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "first", Title: "old", IsPersist: true})
+	manager.presentation.selectResultContext(ctx, "window", "old", "second", b.Metadata.Id)
+	manager.presentation.allowGlobalToolbarForAction("window", "old", b.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, b, ToolbarMsg{Id: "second", Title: "started", IsPersist: true})
+	manager.BeginSessionQuery("window", "refresh")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "refresh", SessionId: "window", Type: QueryTypeInput}, nil)
+	manager.ShowToolbarMsg(ctx, b, ToolbarMsg{Id: "second", Title: "finished", IsPersist: true})
+	manager.presentation.selectResultContext(ctx, "window", "refresh", "second-new", b.Metadata.Id)
+	require.Len(t, ui.shown, 1)
+	expire()
+	require.Len(t, ui.shown, 2)
+	require.Equal(t, "finished", ui.shown[1].Title)
 }

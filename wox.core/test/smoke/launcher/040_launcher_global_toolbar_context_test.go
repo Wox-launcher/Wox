@@ -12,9 +12,9 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-// Test040LauncherGlobalToolbarContext verifies a global-only plugin owns toolbar status while its result is selected.
+// Test040LauncherGlobalToolbarContext requires an action before showing a global result's toolbar status.
 // Flow: select a global-only plugin result -> execute its action -> select its other result -> select another plugin -> return.
-// Evidence: the status survives the same-plugin selection, clears on plugin exit, and returns on re-entry.
+// Evidence: selection alone stays quiet, while action status survives same-plugin selection and clears on exit.
 func Test040LauncherGlobalToolbarContext(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
@@ -32,7 +32,7 @@ func Test040LauncherGlobalToolbarContext(t *testing.T) {
 			t.Fatal("other plugin result not found")
 		}
 		smoke.SelectLauncherResult(t, ctx, client, globalID)
-		waitGlobalToolbar(t, ctx, client, "Global selection toolbar", true)
+		waitGlobalToolbar(t, ctx, client, "Global selection toolbar", false)
 		if err := client.Perform(ctx, globalID, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatal(err)
 		}
@@ -42,7 +42,7 @@ func Test040LauncherGlobalToolbarContext(t *testing.T) {
 		smoke.SelectLauncherResult(t, ctx, client, otherID)
 		waitGlobalToolbar(t, ctx, client, "Global fixture operation completed", false)
 		smoke.SelectLauncherResult(t, ctx, client, globalID)
-		waitGlobalToolbar(t, ctx, client, "Global selection toolbar", true)
+		waitGlobalToolbar(t, ctx, client, "Global selection toolbar", false)
 	})
 }
 

@@ -160,6 +160,7 @@ type API interface {
 
 	// ShowToolbarMsg creates or updates a toolbar message in the plugin's active context.
 	// Messages expire after 10 seconds unless IsPersist is true; updates reset the timer.
+	// In global text searches, messages appear only after an action on the plugin's result.
 	// Use the enter or action callback context for a selected result in a multi-plugin query.
 	// ClearToolbarMsg closes it explicitly; leaving the context also clears it.
 	ShowToolbarMsg(ctx context.Context, msg ToolbarMsg)
