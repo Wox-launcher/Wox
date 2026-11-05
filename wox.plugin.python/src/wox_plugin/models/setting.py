@@ -398,8 +398,14 @@ class PluginSettingValueFilePath(PluginSettingDefinitionValue):
     validators: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"Key": self.key, "Label": self.label, "DefaultValue": self.default_value,
-                "Tooltip": self.tooltip, "Extensions": self.extensions, "Validators": self.validators}
+        return {
+            "Key": self.key,
+            "Label": self.label,
+            "DefaultValue": self.default_value,
+            "Tooltip": self.tooltip,
+            "Extensions": self.extensions,
+            "Validators": self.validators,
+        }
 
 
 @dataclass
@@ -807,9 +813,12 @@ class PluginSettingDefinitionItem:
             )
         elif setting_type == PluginSettingDefinitionType.FILE_PATH:
             value = PluginSettingValueFilePath(
-                key=value_data.get("Key", ""), label=value_data.get("Label", ""),
-                default_value=value_data.get("DefaultValue", ""), tooltip=value_data.get("Tooltip", ""),
-                extensions=value_data.get("Extensions", []), validators=value_data.get("Validators", []),
+                key=value_data.get("Key", ""),
+                label=value_data.get("Label", ""),
+                default_value=value_data.get("DefaultValue", ""),
+                tooltip=value_data.get("Tooltip", ""),
+                extensions=value_data.get("Extensions", []),
+                validators=value_data.get("Validators", []),
             )
         elif setting_type == PluginSettingDefinitionType.HOTKEY:
             value = PluginSettingValueHotkey.from_dict(value_data)
