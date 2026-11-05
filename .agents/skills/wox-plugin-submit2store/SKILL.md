@@ -70,7 +70,7 @@ Extract or derive these values:
 - `Runtime`
 - `Description`
 - `Website` (gist HTML URL, or GitHub repository URL)
-- `DownloadUrl` (gist raw `.js`/`.py` URL, or `.wox` release asset)
+- `DownloadUrl` (unversioned gist raw `.js`/`.py` URL, or a GitHub latest-release `.wox` asset URL)
 - public icon URL
 - required screenshot URLs: at least one public image of the plugin running in Wox
 - supported operating systems
@@ -111,9 +111,9 @@ Apply these rules while building the JSON object:
 - Prefer a plain `Description` string when no i18n payload exists.
 - Add `I18n` only when the repository already has trustworthy localized copy.
 - Convert local OS names to the store style: `Windows`, `Darwin`, `Linux` (`Macos` in plugin headers becomes `Darwin`).
-- Set `DateCreated` and `DateUpdated` to the current local timestamp in `YYYY-MM-DD HH:MM:SS`.
-- For a gist-hosted single-file plugin: `Website` is the gist HTML URL, `DownloadUrl` is the gist raw URL including the `.js` or `.py` filename, and `IconUrl` / `ScreenshotUrls` are `https://gist.github.com/user-attachments/assets/<id>` links. Runtime is lowercase `nodejs` or `python`.
-- For a packaged plugin: use the canonical repository URL for `Website`, the latest `.wox` release asset for `DownloadUrl`, and public raw image URLs for `IconUrl` / `ScreenshotUrls`.
+- Set `DateCreated` to the current local timestamp in `YYYY-MM-DD HH:MM:SS`. For a packaged plugin, set `DateUpdated` to the latest release's publication time in UTC using the same format; for a single-file plugin, use the current UTC timestamp.
+- For a gist-hosted single-file plugin: `Website` is the gist HTML URL and `DownloadUrl` is `https://gist.githubusercontent.com/<user>/<gist-id>/raw/<filename>.js` (or `.py`), without a revision hash so it tracks the current gist content. The GitHub Release `latest` URL rule does not apply to gists. Use `https://gist.github.com/user-attachments/assets/<id>` links for `IconUrl` / `ScreenshotUrls`. Runtime is lowercase `nodejs` or `python`.
+- For a packaged plugin: use the canonical repository URL for `Website` and `https://github.com/<owner>/<repo>/releases/latest/download/<asset>.wox` for `DownloadUrl`. Do not use a version-pinned release URL. The asset filename must remain the same across releases; a filename containing the version will break the latest URL and automatic updates. Verify the latest release contains that asset and its plugin metadata matches the store entry. If a stable asset is unavailable, stop and explain that the release needs one. Use public raw image URLs for `IconUrl` / `ScreenshotUrls`.
 - `ScreenshotUrls` must contain at least one public URL. Do not omit the field, submit `[]`, or continue while telling the user that no screenshot is included yet. Ask for a screenshot and stop until one is uploaded. Use a cropped Wox launcher screenshot that shows the query and the plugin's real results, like https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.ColorPicker/main/images/screenshot1.png. Do not submit an icon, a README image, source code, or a full-desktop capture.
 
 Before editing `store-plugin.json`, re-check that the generated URLs and filenames match the gist file name or the packaged repository layout.

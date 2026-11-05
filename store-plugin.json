@@ -1448,7 +1448,7 @@
     "Description": "Fast local library search & catalog lookup for Stremio",
     "IconUrl": "https://raw.githubusercontent.com/NubPlayz/Stremio.Search.Wox.Plugin/main/assets/icon.png",
     "Website": "https://github.com/NubPlayz/Stremio.Search.Wox.Plugin",
-    "DownloadUrl": "https://github.com/NubPlayz/Stremio.Search.Wox.Plugin/releases/download/v1.0.2/Wox.Plugin.StremioSearch-v1.0.2.wox",
+    "DownloadUrl": "https://github.com/NubPlayz/Stremio.Search.Wox.Plugin/releases/latest/download/Wox.Plugin.StremioSearch-v1.0.2.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/NubPlayz/Stremio.Search.Wox.Plugin/main/images/Stremio_search1.png",
       "https://raw.githubusercontent.com/NubPlayz/Stremio.Search.Wox.Plugin/main/images/Stremio_search2.png",
@@ -1784,7 +1784,7 @@
     "Description": "Continuous focus and deep focus, three Pomodoro variants, meditation and countdown timers with configurable singing-bowl chimes and activity prompts.",
     "IconUrl": "https://raw.githubusercontent.com/Archetype444/Wox.Plugin.Manasikara/main/assets/icon.svg",
     "Website": "https://github.com/Archetype444/Wox.Plugin.Manasikara",
-    "DownloadUrl": "https://github.com/Archetype444/Wox.Plugin.Manasikara/releases/download/v2.0.1/Manasikara-v2.0.1.wox",
+    "DownloadUrl": "https://github.com/Archetype444/Wox.Plugin.Manasikara/releases/latest/download/Manasikara-v2.0.1.wox",
     "SupportedOS": [
       "Windows",
       "Linux",
@@ -2113,7 +2113,7 @@
     },
     "IconUrl": "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Timer/main/images/app.svg",
     "Website": "https://github.com/Wox-launcher/Wox.Plugin.Timer",
-    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Timer/releases/download/v1.0.1/wox.plugin.timer.wox",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Plugin.Timer/releases/latest/download/wox.plugin.timer.wox",
     "ScreenshotUrls": [
       "https://raw.githubusercontent.com/Wox-launcher/Wox.Plugin.Timer/main/screenshot.png"
     ],
