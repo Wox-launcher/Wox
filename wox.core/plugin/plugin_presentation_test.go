@@ -130,6 +130,8 @@ func TestSessionToolbarMessageActionsWithoutScopedQuery(t *testing.T) {
 func TestGlobalResultToolbarContext(t *testing.T) {
 	logger = util.GetLogger()
 	manager := newManager()
+	var holds []func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, expire func()) { holds = append(holds, expire) }
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -174,6 +176,8 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 	manager.ShowToolbarMsg(first, instance, ToolbarMsg{Id: "same-id", Title: "second result"})
 	require.Len(t, ui.shown, 3)
 	manager.presentation.selectResultContext(ctx, "one", "query", "other", "other-plugin")
+	require.True(t, ui.shown[2].IsCurrent())
+	holds[0]()
 	require.False(t, ui.shown[2].IsCurrent())
 	require.Equal(t, []string{"same-id"}, ui.cleared)
 	require.Error(t, manager.ExecuteToolbarMsgAction(ctx, "one", "same-id", "run"))
@@ -190,6 +194,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 	manager.ShowToolbarMsg(fresh, instance, ToolbarMsg{Id: "same-id", Title: "working again"})
 	require.Len(t, ui.shown, 5)
 	manager.presentation.selectResultContext(ctx, "one", "query", "", "")
+	holds[1]()
 	require.False(t, ui.shown[4].IsCurrent())
 	require.Equal(t, []string{"same-id", "same-id", "same-id"}, ui.cleared)
 	manager.presentation.selectResultContext(ctx, "one", "query", "result", instance.Metadata.Id)
@@ -198,7 +203,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 	require.Len(t, ui.shown, 6)
 	manager.BeginSessionQuery("one", "next")
 	manager.ShowToolbarMsg(fresh, instance, ToolbarMsg{Id: "late", Title: "stale query"})
-	require.Len(t, ui.shown, 6)
+	require.Len(t, ui.shown, 7)
 	manager.presentation.selectResultContext(ctx, "one", "query", "other", "")
 	require.True(t, manager.presentation.isPluginActiveInSession("one", instance.Metadata.Id))
 }
@@ -207,6 +212,8 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	logger = util.GetLogger()
 	manager := newManager()
+	var holds []func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, expire func()) { holds = append(holds, expire) }
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -228,6 +235,7 @@ func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	require.True(t, ui.shown[0].IsCurrent())
 	manager.presentation.selectResultContext(ctx, "window", "selection", "different", "")
 	require.Empty(t, manager.SelectedResultID(selected, instance.Metadata.Id))
+	holds[0]()
 	require.Equal(t, []string{"install"}, ui.cleared)
 
 	manager.BeginSessionQuery("window", "scoped-one")
@@ -237,10 +245,130 @@ func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	manager.BeginSessionQuery("window", "scoped-two")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "scoped-two", SessionId: "window", Type: QueryTypeInput, TriggerKeyword: "installer"}, instance)
 	require.True(t, ui.shown[1].IsCurrent(), "visible message survives a new query in the same plugin context")
-	require.False(t, ui.shown[1].CanShow(), "an old queued update cannot appear after the query changes")
+	require.True(t, ui.shown[1].CanShow(), "the same plugin owns the refreshed query")
 	manager.BeginSessionQuery("window", "other-query")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "other-query", SessionId: "window", Type: QueryTypeInput}, nil)
+	holds[1]()
 	require.Equal(t, []string{"install", "scope"}, ui.cleared)
+}
+
+// TestToolbarSelectionHold covers refresh, replacement, timeout, and session isolation.
+func TestToolbarSelectionHold(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	var holds []func()
+	manager.presentation.scheduleToolbarHold = func(delay time.Duration, expire func()) {
+		require.Equal(t, toolbarSelectionHoldDuration, delay)
+		holds = append(holds, expire)
+	}
+	a, b := newInitTestInstance(&fakeLifecyclePlugin{}), newInitTestInstance(&fakeLifecyclePlugin{})
+	a.Metadata.Id, b.Metadata.Id = "installer", "other"
+	manager.lifecycle.appendPluginInstance(a)
+	manager.lifecycle.appendPluginInstance(b)
+	ctx := context.Background()
+	for _, session := range []string{"one", "two"} {
+		manager.BeginSessionQuery(session, "first")
+		manager.HandleQueryLifecycle(ctx, Query{Id: "first", SessionId: session, Type: QueryTypeSelection}, nil)
+		manager.presentation.selectResultContext(ctx, session, "first", "file", a.Metadata.Id)
+		manager.ShowToolbarMsg(util.WithQueryIdContext(util.WithSessionContext(ctx, session), "first"), a, ToolbarMsg{Id: "install", Title: session, IsPersist: true})
+	}
+	oldCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, "one"), "first")
+	manager.BeginSessionQuery("one", "refresh")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "refresh", SessionId: "one", Type: QueryTypeSelection}, nil)
+	require.True(t, ui.shown[0].IsCurrent())
+	require.Empty(t, ui.cleared)
+	manager.ShowToolbarMsg(oldCtx, a, ToolbarMsg{Id: "install", Title: "completed", IsPersist: true})
+	require.Equal(t, "completed", ui.shown[2].Title)
+	manager.presentation.selectResultContext(ctx, "one", "refresh", "file-new", a.Metadata.Id)
+	holds[0]()
+	require.True(t, ui.shown[2].IsCurrent(), "old timer must not clear a restored owner")
+	require.True(t, ui.shown[1].IsCurrent(), "other session remains untouched")
+	require.Empty(t, ui.cleared)
+
+	manager.presentation.selectResultContext(ctx, "one", "refresh", "other", b.Metadata.Id)
+	manager.ShowToolbarMsg(util.WithSessionContext(ctx, "one"), b, ToolbarMsg{Id: "other-status", Title: "new owner", IsPersist: true})
+	require.Len(t, ui.shown, 3, "new owner is held until the deadline")
+	require.True(t, ui.shown[2].IsCurrent())
+	manager.ClearToolbarMsg(util.WithSessionContext(ctx, "one"), b, "other-status")
+	manager.BeginSessionQuery("one", "next")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "next", SessionId: "one", Type: QueryTypeSelection}, nil)
+	manager.presentation.selectResultContext(ctx, "one", "next", "other-new", b.Metadata.Id)
+	manager.ShowToolbarMsg(util.WithSessionContext(ctx, "one"), b, ToolbarMsg{Id: "other-status", Title: "latest", IsPersist: true})
+	require.Len(t, holds, 2, "refreshes cannot extend the original deadline")
+	holds[1]()
+	require.Equal(t, []string{"install"}, ui.cleared)
+	require.Len(t, ui.shown, 4)
+	require.Equal(t, "latest", ui.shown[3].Title)
+	require.True(t, ui.shown[3].IsCurrent())
+	require.True(t, ui.shown[1].IsCurrent())
+
+	manager.presentation.selectResultContext(ctx, "one", "next", "", "")
+	require.True(t, ui.shown[3].IsCurrent())
+	holds[2]()
+	require.False(t, ui.shown[3].IsCurrent())
+	require.Equal(t, []string{"install", "other-status"}, ui.cleared)
+}
+
+// TestToolbarSelectionHoldDoesNotReplayClearedOrClosedSessions protects deferred messages.
+func TestToolbarSelectionHoldDoesNotReplayClearedOrClosedSessions(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	var expire func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, callback func()) { expire = callback }
+	a, b := newInitTestInstance(&fakeLifecyclePlugin{}), newInitTestInstance(&fakeLifecyclePlugin{})
+	a.Metadata.Id, b.Metadata.Id = "first", "second"
+	manager.lifecycle.appendPluginInstance(a)
+	manager.lifecycle.appendPluginInstance(b)
+	ctx := util.WithSessionContext(context.Background(), "window")
+	manager.BeginSessionQuery("window", "query")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "query", SessionId: "window", Type: QueryTypeSelection}, nil)
+	manager.presentation.selectResultContext(ctx, "window", "query", "first", a.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "first", IsPersist: true})
+	manager.presentation.selectResultContext(ctx, "window", "query", "second", b.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, b, ToolbarMsg{Id: "second", IsPersist: true})
+	manager.ClearToolbarMsg(ctx, b, "second")
+	expire()
+	require.Len(t, ui.shown, 1, "a cleared deferred message must not reappear")
+	require.Equal(t, []string{"first"}, ui.cleared)
+
+	manager.ShowToolbarMsg(ctx, b, ToolbarMsg{Id: "second", IsPersist: true})
+	manager.presentation.selectResultContext(ctx, "window", "query", "first", a.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "first", IsPersist: true})
+	manager.BeginSessionQuery("window", "empty")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "empty", SessionId: "window", Type: QueryTypeSelection}, nil)
+	manager.ClearSessionState(ctx, "window")
+	expire()
+	require.Len(t, ui.shown, 2, "destroying a session must discard its deferred message")
+	require.Equal(t, []string{"first", "second"}, ui.cleared)
+}
+
+// TestToolbarSelectionHoldDiscardsUnloadedPlugin checks the deferred callback lifetime.
+func TestToolbarSelectionHoldDiscardsUnloadedPlugin(t *testing.T) {
+	logger = util.GetLogger()
+	manager := newManager()
+	ui := &presentationTestUI{}
+	manager.AttachUI(ui)
+	var expire func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, callback func()) { expire = callback }
+	a, b := newInitTestInstance(&fakeLifecyclePlugin{}), newInitTestInstance(&fakeLifecyclePlugin{})
+	a.Metadata.Id, b.Metadata.Id = "first", "second"
+	manager.lifecycle.appendPluginInstance(a)
+	manager.lifecycle.appendPluginInstance(b)
+	ctx := util.WithSessionContext(context.Background(), "window")
+	manager.BeginSessionQuery("window", "query")
+	manager.HandleQueryLifecycle(ctx, Query{Id: "query", SessionId: "window", Type: QueryTypeSelection}, nil)
+	manager.presentation.selectResultContext(ctx, "window", "query", "first", a.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, a, ToolbarMsg{Id: "first", IsPersist: true})
+	manager.presentation.selectResultContext(ctx, "window", "query", "second", b.Metadata.Id)
+	manager.ShowToolbarMsg(ctx, b, ToolbarMsg{Id: "second", IsPersist: true})
+	manager.presentation.releasePlugin(b.Metadata.Id)
+	expire()
+	require.Len(t, ui.shown, 1)
+	require.Equal(t, []string{"first"}, ui.cleared)
 }
 
 // TestUnscopedToolbarMessageUsesOnlyUnambiguousActivePluginSession covers background status calls.

@@ -50,11 +50,12 @@ Toolbar messages are session-owned and expire 10 seconds after being shown or
 updated by default. `IsPersist` keeps a message until it is explicitly cleared;
 leaving the plugin context clears either kind. A trigger or single-plugin scoped query owns a
 context directly; global and other multi-plugin queries use the selected result's
-owner, including `*`-only plugins. Selecting another result from the same plugin
-keeps its context and message; selecting another plugin or no result clears it.
-Session and query identity reject updates from old queries and other windows.
-A late callback from the same query can be accepted if its plugin becomes active
-again, so status about a particular object should identify that object.
+owner, including `*`-only plugins. A change of owner keeps the old toolbar message
+for at most 1.2 seconds while selection settles. Returning to the same plugin keeps
+its message; otherwise the old message is cleared and the new owner's latest queued
+message is shown at the deadline. Enter and leave callbacks still follow the actual
+selection immediately. Messages are scoped to the window and plugin rather than the
+query that started an operation; object-specific status should identify that object.
 
 `ShowToastMsg` displays one independent transient overlay. Its optional action
 is invalidated on dismissal, replacement, or plugin unload and runs outside the

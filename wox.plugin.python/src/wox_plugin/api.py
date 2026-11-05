@@ -350,9 +350,10 @@ class PublicAPI(Protocol):
         Set is_persist=True for messages cleared explicitly or on context exit.
         Context includes a trigger or single-plugin scoped query, or the selected
         plugin result in a global or other multi-plugin query. Switching between
-        the same plugin's results preserves its message. Preserve callback context
-        for asynchronous work, and name the relevant object because an earlier
-        update may arrive after returning to the plugin in the same query.
+        the same plugin's results preserves its message, including across query
+        refreshes. Selection changes hold the previous message briefly while results
+        settle. Preserve callback context for asynchronous work, and name the relevant
+        object because an earlier update may arrive after returning to the same plugin.
 
         Args:
             ctx: Context

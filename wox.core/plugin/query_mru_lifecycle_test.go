@@ -25,6 +25,8 @@ func (ui *mruLifecycleTestUI) GetActiveWindowSnapshot(context.Context) common.Ac
 func TestQueryMRULeavesPluginContext(t *testing.T) {
 	initPluginManagerLoadTest(t)
 	manager := newManager()
+	var holds []func()
+	manager.presentation.scheduleToolbarHold = func(_ time.Duration, expire func()) { holds = append(holds, expire) }
 	ui := &mruLifecycleTestUI{}
 	manager.AttachUI(ui)
 	ctx := util.WithSessionContext(context.Background(), "launcher")
@@ -41,6 +43,8 @@ func TestQueryMRULeavesPluginContext(t *testing.T) {
 
 	ui.beforeRestore = func() {
 		require.False(t, manager.presentation.isPluginActiveInSession("launcher", instance.Metadata.Id))
+		require.NotEmpty(t, holds)
+		holds[len(holds)-1]()
 		require.Zero(t, manager.presentation.pluginToolbarMsgIds.Len())
 		require.Equal(t, []string{count.Id}, ui.cleared)
 	}
@@ -65,6 +69,7 @@ func TestQueryMRULeavesPluginContext(t *testing.T) {
 	require.Len(t, ui.shown, 2)
 	manager.BeginSessionQuery("launcher", "global-query")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "global-query", SessionId: "launcher", Type: QueryTypeInput}, nil)
+	holds[len(holds)-1]()
 	require.Equal(t, []string{count.Id, count.Id}, ui.cleared)
 	select {
 	case <-left:

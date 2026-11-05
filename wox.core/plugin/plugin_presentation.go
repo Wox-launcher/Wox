@@ -27,9 +27,11 @@ type pluginPresentation struct {
 	lookup                func(string) *Instance
 	currentUI             func() common.UI
 	scheduleToolbarExpiry func(time.Duration, func())
+	scheduleToolbarHold   func(time.Duration, func())
 }
 
 const toolbarMsgDefaultDuration = 10 * time.Second
+const toolbarSelectionHoldDuration = 1200 * time.Millisecond
 
 // newPluginPresentation receives live capabilities without retaining a second UI reference.
 func newPluginPresentation(lookup func(string) *Instance, currentUI func() common.UI) pluginPresentation {
@@ -37,6 +39,7 @@ func newPluginPresentation(lookup func(string) *Instance, currentUI func() commo
 		lookup:                lookup,
 		currentUI:             currentUI,
 		scheduleToolbarExpiry: func(delay time.Duration, expire func()) { time.AfterFunc(delay, expire) },
+		scheduleToolbarHold:   func(delay time.Duration, expire func()) { time.AfterFunc(delay, expire) },
 		toolbarMsgActions:     util.NewHashMap[string, *toolbarMsgActionEntry](),
 		pluginToolbarMsgIds:   util.NewHashMap[string, *toolbarMsgActionEntry](),
 		glanceActions:         util.NewHashMap[string, GlanceAction](),
@@ -63,6 +66,17 @@ func (p *pluginPresentation) releasePlugin(pluginID string) {
 			api.stopHotkeys()
 			api.closeWindows()
 		}
+	}
+	for _, sessionID := range p.sessionPluginQueries.Keys() {
+		p.sessionPluginQueries.Compute(sessionID, func(state *sessionPluginQueryState, found bool) (*sessionPluginQueryState, bool) {
+			if found && state.ToolbarHold != nil && state.ToolbarHold.queued != nil && state.ToolbarHold.queued.instance.Metadata.Id == pluginID {
+				copyState, copyHold := *state, *state.ToolbarHold
+				copyHold.queued = nil
+				copyState.ToolbarHold = &copyHold
+				return &copyState, true
+			}
+			return state, found
+		})
 	}
 	// Clear the visible message along with its callbacks, including persistent messages.
 	for _, key := range p.pluginToolbarMsgIds.Keys() {
@@ -222,6 +236,22 @@ type sessionPluginQueryState struct {
 	QueryId       string
 	SelectedOwner bool
 	ResultId      string
+	ToolbarHold   *toolbarSelectionHold
+}
+
+// toolbarSelectionHold keeps the displayed owner stable while selection settles.
+type toolbarSelectionHold struct {
+	token  *toolbarHoldToken
+	owner  string
+	queued *queuedToolbarMessage
+}
+
+type toolbarHoldToken struct{ marker byte }
+
+type queuedToolbarMessage struct {
+	ctx      context.Context
+	instance *Instance
+	message  ToolbarMsg
 }
 
 func toolbarSessionKey(sessionID, id string) string { return sessionID + "\x00" + id }
@@ -236,11 +266,11 @@ func (p *pluginPresentation) ShowToolbarMsg(ctx context.Context, pluginInstance 
 	if !ok {
 		return
 	}
-	p.showSessionToolbarMsg(resolvedCtx, pluginInstance, msg, true)
+	p.showSessionToolbarMsg(resolvedCtx, pluginInstance, msg, true, false)
 }
 
 // showSessionToolbarMsg publishes a message after its session has been resolved.
-func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, pluginInstance *Instance, msg ToolbarMsg, requireActive bool) {
+func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, pluginInstance *Instance, msg ToolbarMsg, requireActive, onlyIfAbsent bool) {
 	if msg.Id == "" {
 		msg.Id = uuid.NewString()
 	}
@@ -269,11 +299,16 @@ func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, 
 		// Commit under the same session state locks as a selection change so an
 		// old asynchronous update cannot overwrite another plugin's current status.
 		p.latestSessionQueries.Compute(sessionID, func(latest string, exists bool) (string, bool) {
-			if exists && latest != actionEntry.QueryId {
-				return latest, true
-			}
 			p.sessionPluginQueries.Compute(sessionID, func(state *sessionPluginQueryState, found bool) (*sessionPluginQueryState, bool) {
-				if found && state.PluginId == actionEntry.PluginId && state.QueryId == actionEntry.QueryId {
+				if found && state.ToolbarHold != nil && state.PluginId == actionEntry.PluginId && state.ToolbarHold.owner != state.PluginId {
+					copyState, copyHold := *state, *state.ToolbarHold
+					copyHold.queued = &queuedToolbarMessage{ctx: resolvedCtx, instance: pluginInstance, message: normalized}
+					copyState.ToolbarHold = &copyHold
+					return &copyState, true
+				}
+				owner := found && (state.PluginId == actionEntry.PluginId && state.ToolbarHold == nil || state.ToolbarHold != nil && state.ToolbarHold.owner == actionEntry.PluginId)
+				_, alreadyShown := p.pluginToolbarMsgIds.Load(key)
+				if owner && (!onlyIfAbsent || !alreadyShown) {
 					commit()
 					committed = true
 				}
@@ -297,24 +332,16 @@ func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, 
 			return true
 		}
 		state, active := p.sessionPluginQueries.Load(sessionID)
-		if !active || state.PluginId != actionEntry.PluginId {
+		if !active {
 			return false
 		}
-		latest, exists := p.latestSessionQueries.Load(sessionID)
-		return !exists || latest == state.QueryId
-	}
-	// A queued message from an older query must not appear after the query changes,
-	// even though an already visible message may survive within the same plugin context.
-	uiMsg.CanShow = func() bool {
-		if !uiMsg.IsCurrent() {
-			return false
+		if state.ToolbarHold != nil {
+			return state.ToolbarHold.owner == actionEntry.PluginId
 		}
-		if !actionEntry.RequireActive {
-			return true
-		}
-		_, valid := p.resolveActiveToolbarMsgContext(resolvedCtx, actionEntry.PluginId)
-		return valid
+		return state.PluginId == actionEntry.PluginId
 	}
+	// Selection ownership, not the query that started an operation, controls visibility.
+	uiMsg.CanShow = uiMsg.IsCurrent
 	p.currentUI().ShowToolbarMsg(resolvedCtx, uiMsg)
 	if !normalized.IsPersist {
 		p.scheduleToolbarExpiry(toolbarMsgDefaultDuration, func() {
@@ -333,6 +360,17 @@ func (p *pluginPresentation) showSessionToolbarMsg(resolvedCtx context.Context, 
 func (p *pluginPresentation) ClearToolbarMsg(ctx context.Context, pluginInstance *Instance, toolbarMsgId string) {
 	if pluginInstance == nil || toolbarMsgId == "" {
 		return
+	}
+	if sessionID := util.GetContextSessionId(ctx); sessionID != "" {
+		p.sessionPluginQueries.Compute(sessionID, func(state *sessionPluginQueryState, found bool) (*sessionPluginQueryState, bool) {
+			if found && state.ToolbarHold != nil && state.ToolbarHold.queued != nil && state.ToolbarHold.queued.instance.Metadata.Id == pluginInstance.Metadata.Id && state.ToolbarHold.queued.message.Id == toolbarMsgId {
+				copyState, copyHold := *state, *state.ToolbarHold
+				copyHold.queued = nil
+				copyState.ToolbarHold = &copyHold
+				return &copyState, true
+			}
+			return state, found
+		})
 	}
 	resolvedCtx, ok := p.resolveActiveToolbarMsgContext(ctx, pluginInstance.Metadata.Id)
 	if !ok {
@@ -442,14 +480,10 @@ func (p *pluginPresentation) resolveActiveToolbarMsgContext(ctx context.Context,
 	sessionId := util.GetContextSessionId(ctx)
 	if sessionId != "" {
 		state, found := p.sessionPluginQueries.Load(sessionId)
-		if !found || state.PluginId != pluginId || (util.GetContextQueryId(ctx) != "" && util.GetContextQueryId(ctx) != state.QueryId) {
+		if !found || (state.PluginId != pluginId && (state.ToolbarHold == nil || state.ToolbarHold.owner != pluginId)) {
 			return nil, false
 		}
-		if latest, ok := p.latestSessionQueries.Load(sessionId); ok && latest != state.QueryId {
-			return nil, false
-		}
-
-		if util.GetContextQueryId(ctx) == "" && state.QueryId != "" {
+		if state.QueryId != "" {
 			ctx = util.WithQueryIdContext(ctx, state.QueryId)
 		}
 		return ctx, true
@@ -552,6 +586,7 @@ func (p *pluginPresentation) HandleQueryLifecycle(ctx context.Context, query Que
 	next := &sessionPluginQueryState{PluginId: owner, QueryId: query.Id, SelectedOwner: owner == ""}
 	var previous *sessionPluginQueryState
 	var removed *toolbarMsgActionEntry
+	var started *toolbarSelectionHold
 	accepted := false
 	p.latestSessionQueries.Compute(query.SessionId, func(latest string, exists bool) (string, bool) {
 		if exists && latest != query.Id {
@@ -560,9 +595,7 @@ func (p *pluginPresentation) HandleQueryLifecycle(ctx context.Context, query Que
 		p.sessionPluginQueries.Compute(query.SessionId, func(state *sessionPluginQueryState, found bool) (*sessionPluginQueryState, bool) {
 			if found {
 				previous = state
-				if state.PluginId != "" && state.PluginId != owner {
-					removed = p.clearCurrentPluginToolbarMsgAction(util.WithSessionContext(ctx, query.SessionId), state.PluginId)
-				}
+				started, removed = p.transitionToolbarOwner(ctx, query.SessionId, state, next, query.Id != "" && (state.SelectedOwner || next.SelectedOwner))
 			}
 			return next, next.QueryId != "" || next.PluginId != ""
 		})
@@ -571,6 +604,7 @@ func (p *pluginPresentation) HandleQueryLifecycle(ctx context.Context, query Que
 	})
 	if accepted {
 		p.dispatchSessionOwnerChange(ctx, query.SessionId, previous, next, removed)
+		p.startToolbarSelectionHold(query.SessionId, started)
 	}
 }
 
@@ -578,6 +612,7 @@ func (p *pluginPresentation) HandleQueryLifecycle(ctx context.Context, query Que
 func (p *pluginPresentation) selectResultContext(ctx context.Context, sessionID, queryID, resultID, pluginID string) {
 	var previous, next *sessionPluginQueryState
 	var removed *toolbarMsgActionEntry
+	var started *toolbarSelectionHold
 	p.latestSessionQueries.Compute(sessionID, func(latest string, exists bool) (string, bool) {
 		if exists && latest != queryID {
 			return latest, true
@@ -587,31 +622,91 @@ func (p *pluginPresentation) selectResultContext(ctx context.Context, sessionID,
 				return state, found
 			}
 			previous = state
-			if state.PluginId != "" && state.PluginId != pluginID {
-				removed = p.clearCurrentPluginToolbarMsgAction(util.WithSessionContext(ctx, sessionID), state.PluginId)
-			}
 			next = &sessionPluginQueryState{PluginId: pluginID, QueryId: queryID, SelectedOwner: true, ResultId: resultID}
+			started, removed = p.transitionToolbarOwner(ctx, sessionID, state, next, true)
 			return next, true
 		})
 		return latest, exists
 	})
 	if next != nil {
 		p.dispatchSessionOwnerChange(ctx, sessionID, previous, next, removed)
+		p.startToolbarSelectionHold(sessionID, started)
 	}
+}
+
+// transitionToolbarOwner delays only toolbar replacement; plugin enter and leave callbacks remain immediate.
+func (p *pluginPresentation) transitionToolbarOwner(ctx context.Context, sessionID string, previous, next *sessionPluginQueryState, allowHold bool) (*toolbarSelectionHold, *toolbarMsgActionEntry) {
+	hold := previous.ToolbarHold
+	if hold != nil {
+		if allowHold && next.PluginId != hold.owner {
+			copyHold := *hold
+			if next.PluginId != previous.PluginId {
+				copyHold.queued = nil
+			}
+			next.ToolbarHold = &copyHold
+			return nil, nil
+		}
+		if next.PluginId == hold.owner && allowHold {
+			return nil, nil
+		}
+		return nil, p.clearCurrentPluginToolbarMsgAction(util.WithSessionContext(ctx, sessionID), hold.owner)
+	}
+	if previous.PluginId == "" || previous.PluginId == next.PluginId {
+		return nil, nil
+	}
+	entry, exists := p.pluginToolbarMsgIds.Load(toolbarSessionKey(sessionID, previous.PluginId))
+	if allowHold && exists && entry.RequireActive {
+		hold = &toolbarSelectionHold{token: &toolbarHoldToken{}, owner: previous.PluginId}
+		next.ToolbarHold = hold
+		return hold, nil
+	}
+	return nil, p.clearCurrentPluginToolbarMsgAction(util.WithSessionContext(ctx, sessionID), previous.PluginId)
+}
+
+// startToolbarSelectionHold uses one deadline even if subsequent queries change selection again.
+func (p *pluginPresentation) startToolbarSelectionHold(sessionID string, hold *toolbarSelectionHold) {
+	if hold == nil {
+		return
+	}
+	p.scheduleToolbarHold(toolbarSelectionHoldDuration, func() {
+		ctx := util.WithSessionContext(util.NewTraceContext(), sessionID)
+		var removed *toolbarMsgActionEntry
+		var queued *queuedToolbarMessage
+		p.sessionPluginQueries.Compute(sessionID, func(state *sessionPluginQueryState, found bool) (*sessionPluginQueryState, bool) {
+			if !found || state.ToolbarHold == nil || state.ToolbarHold.token != hold.token {
+				return state, found
+			}
+			removed = p.clearCurrentPluginToolbarMsgAction(ctx, state.ToolbarHold.owner)
+			queued = state.ToolbarHold.queued
+			next := *state
+			next.ToolbarHold = nil
+			return &next, true
+		})
+		if removed != nil && p.currentUI() != nil {
+			p.currentUI().ClearToolbarMsg(ctx, removed.MessageId)
+		}
+		if queued != nil {
+			resolvedCtx, ok := p.resolveActiveToolbarMsgContext(queued.ctx, queued.instance.Metadata.Id)
+			if ok {
+				// A newer status may have arrived after the hold was released.
+				p.showSessionToolbarMsg(resolvedCtx, queued.instance, queued.message, true, true)
+			}
+		}
+	})
 }
 
 // dispatchSessionOwnerChange clears only this session and invokes plugin callbacks off the UI thread.
 func (p *pluginPresentation) dispatchSessionOwnerChange(ctx context.Context, sessionID string, previous, next *sessionPluginQueryState, removed *toolbarMsgActionEntry) {
+	if removed != nil {
+		if ui := p.currentUI(); ui != nil {
+			ui.ClearToolbarMsg(util.WithSessionContext(ctx, sessionID), removed.MessageId)
+		}
+	}
 	if previous != nil && previous.PluginId == next.PluginId {
 		return
 	}
 	if previous != nil && previous.PluginId != "" {
 		leaveCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionID), previous.QueryId)
-		if removed != nil {
-			if ui := p.currentUI(); ui != nil {
-				ui.ClearToolbarMsg(leaveCtx, removed.MessageId)
-			}
-		}
 		if instance := p.activePlugin(previous.PluginId); instance != nil {
 			for _, callback := range instance.LeavePluginQueryCallbacks {
 				util.Go(leaveCtx, fmt.Sprintf("[%s] leave plugin query callback", instance.GetName(leaveCtx)), func() { callback(leaveCtx) })
