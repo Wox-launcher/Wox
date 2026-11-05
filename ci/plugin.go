@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -55,7 +56,7 @@ func checkPluginNewVersion() error {
 		return err
 	}
 
-	updated, err := updatePluginStore(fileStr, getLatestPluginMetadata)
+	updated, err := updatePluginStore(fileStr, getLatestPluginMetadata, getPluginRelease)
 	if err != nil {
 		return err
 	}
@@ -66,7 +67,7 @@ func checkPluginNewVersion() error {
 }
 
 // updatePluginStore synchronizes version requirements without rewriting unrelated catalog fields.
-func updatePluginStore(fileStr []byte, loadMetadata func(string) (storePluginManifest, error)) ([]byte, error) {
+func updatePluginStore(fileStr []byte, loadMetadata func(string) (storePluginManifest, error), loadRelease func(string) (*pluginRelease, error)) ([]byte, error) {
 	var plugins []storePluginManifest
 	unmarshalErr := json.Unmarshal(fileStr, &plugins)
 	if unmarshalErr != nil {
@@ -110,7 +111,26 @@ func updatePluginStore(fileStr []byte, loadMetadata func(string) (storePluginMan
 
 		// Equal versions must still repair compatibility metadata missed by older CI runs.
 		if currentVersion.GreaterThan(existVersion) || (currentVersion.Equal(existVersion) && minimum != plugin.MinWoxVersion) {
-			updatedAt := time.Now().Format("2006-01-02 15:04:05")
+			updatedAt := plugin.DateUpdated
+			if currentVersion.GreaterThan(existVersion) {
+				release, releaseErr := loadRelease(plugin.DownloadUrl)
+				if releaseErr != nil {
+					fmt.Printf("[%s] Get plugin release err: %s\n", plugin.Name, releaseErr)
+					continue
+				}
+				if release == nil {
+					// Downloads without a GitHub release retain their existing update-time behavior.
+					updatedAt = time.Now().UTC().Format("2006-01-02 15:04:05")
+				} else {
+					// A latest URL can change between requests; verify the timestamp belongs to the artifact we inspected.
+					pinned, pinnedErr := loadMetadata(release.DownloadURL)
+					if pinnedErr != nil || pinned.Id != metadata.Id || pinned.Version != metadata.Version || pinned.MinWoxVersion != metadata.MinWoxVersion {
+						fmt.Printf("[%s] Release artifact changed or could not be verified: %v\n", plugin.Name, pinnedErr)
+						continue
+					}
+					updatedAt = release.PublishedAt.UTC().Format("2006-01-02 15:04:05")
+				}
+			}
 
 			// Update only the fields we need, keeping the original JSON structure
 			// (avoid marshaling the whole manifest which would introduce missing optional fields).
@@ -135,6 +155,82 @@ func updatePluginStore(fileStr []byte, loadMetadata func(string) (storePluginMan
 	}
 
 	return fileStr, nil
+}
+
+type pluginRelease struct {
+	DownloadURL string
+	PublishedAt time.Time
+}
+
+// getPluginRelease resolves a GitHub release asset to its fixed URL and publication time.
+func getPluginRelease(downloadURL string) (*pluginRelease, error) {
+	return fetchPluginRelease(downloadURL, "https://api.github.com", &http.Client{Timeout: time.Minute})
+}
+
+// fetchPluginRelease returns nil for non-release URLs, which have no release date.
+func fetchPluginRelease(downloadURL, apiBase string, client *http.Client) (*pluginRelease, error) {
+	u, err := url.Parse(downloadURL)
+	if err != nil || u.Scheme != "https" || u.Host != "github.com" {
+		return nil, nil
+	}
+	parts := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
+	if len(parts) != 6 || parts[2] != "releases" {
+		return nil, nil
+	}
+	var endpoint string
+	switch {
+	case parts[3] == "latest" && parts[4] == "download":
+		endpoint = "latest"
+	case parts[3] == "download":
+		endpoint = "tags/" + parts[4]
+	default:
+		return nil, nil
+	}
+	assetName, err := url.PathUnescape(parts[5])
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequest(http.MethodGet, apiBase+"/repos/"+parts[0]+"/"+parts[1]+"/releases/"+endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("User-Agent", "Wox-plugin-store")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub release: HTTP %d", response.StatusCode)
+	}
+	var release struct {
+		TagName     string `json:"tag_name"`
+		PublishedAt string `json:"published_at"`
+		Draft       bool   `json:"draft"`
+		Assets      []struct {
+			Name string `json:"name"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+	published, err := time.Parse(time.RFC3339, release.PublishedAt)
+	if err != nil || release.Draft || release.TagName == "" {
+		return nil, fmt.Errorf("release has no valid publication time or tag")
+	}
+	for _, asset := range release.Assets {
+		if strings.EqualFold(asset.Name, assetName) {
+			return &pluginRelease{
+				DownloadURL: "https://github.com/" + parts[0] + "/" + parts[1] + "/releases/download/" + url.PathEscape(release.TagName) + "/" + url.PathEscape(asset.Name),
+				PublishedAt: published,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("release does not contain asset %q", assetName)
 }
 
 // getLatestPluginMetadata reads packaged or inline metadata from the catalog's download URL.

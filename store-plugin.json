@@ -19,7 +19,7 @@
       "Linux"
     ],
     "DateCreated": "2023-08-29 00:00:00",
-    "DateUpdated": "2026-09-01 15:05:17",
+    "DateUpdated": "2026-09-01 14:00:38",
     "StarCount": 5,
     "DownloadCount": 2238
   },
@@ -43,7 +43,7 @@
       "Linux"
     ],
     "DateCreated": "2024-02-03 15:49:00",
-    "DateUpdated": "2024-03-02 09:57:37",
+    "DateUpdated": "2024-03-02 01:53:37",
     "StarCount": 1,
     "DownloadCount": 1426
   },
@@ -67,7 +67,7 @@
       "Linux"
     ],
     "DateCreated": "2024-02-23 19:09:00",
-    "DateUpdated": "2026-03-15 15:06:11",
+    "DateUpdated": "2026-03-15 14:17:07",
     "StarCount": 1,
     "DownloadCount": 2659
   },
@@ -89,7 +89,7 @@
       "Darwin"
     ],
     "DateCreated": "2024-05-07 13:02:00",
-    "DateUpdated": "2024-05-21 22:51:11",
+    "DateUpdated": "2024-05-21 14:04:57",
     "StarCount": 4,
     "DownloadCount": 1037
   },
@@ -111,7 +111,7 @@
       "Darwin"
     ],
     "DateCreated": "2024-05-21 15:50:00",
-    "DateUpdated": "2025-11-13 16:25:10",
+    "DateUpdated": "2024-05-28 13:30:08",
     "StarCount": 0,
     "DownloadCount": 831
   },
@@ -135,7 +135,7 @@
       "Linux"
     ],
     "DateCreated": "2024-06-06 23:51:00",
-    "DateUpdated": "2024-06-06 23:51:00",
+    "DateUpdated": "2024-06-06 15:46:47",
     "StarCount": 0,
     "DownloadCount": 1470
   },
@@ -159,7 +159,7 @@
       "Linux"
     ],
     "DateCreated": "2024-07-05 15:00:00",
-    "DateUpdated": "2026-10-15 15:05:45",
+    "DateUpdated": "2026-09-06 02:13:29",
     "StarCount": 4,
     "DownloadCount": 1932
   },
@@ -183,7 +183,7 @@
       "Linux"
     ],
     "DateCreated": "2024-08-07 14:00:00",
-    "DateUpdated": "2026-08-24 15:13:12",
+    "DateUpdated": "2026-08-24 13:37:04",
     "StarCount": 1,
     "DownloadCount": 1442
   },
@@ -207,7 +207,7 @@
       "Linux"
     ],
     "DateCreated": "2025-04-17 11:00:00",
-    "DateUpdated": "2025-04-17 23:02:38",
+    "DateUpdated": "2025-04-17 13:32:53",
     "StarCount": 3,
     "DownloadCount": 1936
   },
@@ -275,7 +275,7 @@
       "Darwin"
     ],
     "DateCreated": "2025-11-26 22:15:00",
-    "DateUpdated": "2026-04-27 06:50:15",
+    "DateUpdated": "2026-04-27 06:00:49",
     "StarCount": 1,
     "DownloadCount": 754
   },
@@ -343,7 +343,7 @@
       "darwin"
     ],
     "DateCreated": "2025-12-15 16:47:00",
-    "DateUpdated": "2026-04-29 04:12:17",
+    "DateUpdated": "2026-04-29 00:33:11",
     "I18n": {
       "en_US": {
         "plugin_name": "Color Picker",
@@ -377,7 +377,7 @@
       "linux"
     ],
     "DateCreated": "2025-12-26 14:47:00",
-    "DateUpdated": "2025-12-26 14:47:00",
+    "DateUpdated": "2025-12-26 06:54:49",
     "I18n": {
       "en_US": {
         "plugin_description": "A plugin to interact with Strava workouts"
@@ -409,7 +409,7 @@
       "linux"
     ],
     "DateCreated": "2025-12-27 19:55:00",
-    "DateUpdated": "2026-09-16 06:10:08",
+    "DateUpdated": "2026-09-16 04:57:30",
     "I18n": {
       "en_US": {
         "plugin_name": "Kill Process",
@@ -443,7 +443,7 @@
       "linux"
     ],
     "DateCreated": "2026-01-02 22:40:00",
-    "DateUpdated": "2026-11-01 15:03:09",
+    "DateUpdated": "2026-11-01 12:14:04",
     "I18n": {
       "en_US": {
         "plugin_description": "Share files via LocalSend protocol"
@@ -475,7 +475,7 @@
       "linux"
     ],
     "DateCreated": "2026-01-05 15:40:00",
-    "DateUpdated": "2026-01-05 15:40:00",
+    "DateUpdated": "2026-01-05 07:46:28",
     "I18n": {
       "en_US": {
         "plugin_description": "Memos - View list, search, and create memos"
@@ -507,7 +507,7 @@
       "linux"
     ],
     "DateCreated": "2026-01-09 16:40:00",
-    "DateUpdated": "2026-08-30 09:05:03",
+    "DateUpdated": "2026-08-30 08:19:19",
     "I18n": {
       "en_US": {
         "plugin_description": "Track your crypto portfolio"
@@ -542,7 +542,7 @@
       "Linux"
     ],
     "DateCreated": "2026-02-27 00:00:00",
-    "DateUpdated": "2026-02-27 12:07:48",
+    "DateUpdated": "2026-02-27 04:10:57",
     "StarCount": 0,
     "DownloadCount": 1790
   },
@@ -566,7 +566,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-10-15 15:05:52",
+    "DateUpdated": "2026-09-30 04:54:34",
     "I18n": {
       "en_US": {
         "plugin_description": "Search Iconify icons - Home of open source icon sets"
@@ -598,7 +598,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-08 15:56:00",
-    "DateUpdated": "2026-10-15 15:05:52",
+    "DateUpdated": "2026-09-19 00:40:32",
     "I18n": {
       "en_US": {
         "plugin_name": "AI Quota",
@@ -632,7 +632,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-17 21:20:46",
-    "DateUpdated": "2026-06-18 13:05:12",
+    "DateUpdated": "2026-06-18 07:37:56",
     "I18n": {
       "en_US": {
         "plugin_name": "Git Projects",
@@ -666,7 +666,7 @@
       "Linux"
     ],
     "DateCreated": "2026-03-18 11:14:02",
-    "DateUpdated": "2026-10-31 15:03:25",
+    "DateUpdated": "2026-10-31 14:20:18",
     "I18n": {
       "en_US": {
         "plugin_name": "Awake",
@@ -698,7 +698,7 @@
       "Windows"
     ],
     "DateCreated": "2026-03-26 00:00:00",
-    "DateUpdated": "2026-03-26 00:00:00",
+    "DateUpdated": "2026-03-25 08:57:43",
     "StarCount": 0,
     "DownloadCount": 824
   },
@@ -722,7 +722,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-03-30 00:00:00",
-    "DateUpdated": "2026-04-01 15:27:18",
+    "DateUpdated": "2026-03-31 08:28:24",
     "StarCount": 0,
     "DownloadCount": 1443
   },
@@ -744,7 +744,7 @@
       "Windows"
     ],
     "DateCreated": "2026-04-22 20:40:30",
-    "DateUpdated": "2026-11-04 06:06:01",
+    "DateUpdated": "2026-11-04 03:16:51",
     "StarCount": 1,
     "DownloadCount": 5841
   },
@@ -768,7 +768,7 @@
       "Linux"
     ],
     "DateCreated": "2026-04-26 15:15:06",
-    "DateUpdated": "2026-10-15 15:05:55",
+    "DateUpdated": "2026-09-30 07:18:46",
     "I18n": {
       "en_US": {
         "plugin_name": "Unsplash",
@@ -806,7 +806,7 @@
       "Linux"
     ],
     "DateCreated": "2026-04-28 13:05:57",
-    "DateUpdated": "2026-11-03 06:05:39",
+    "DateUpdated": "2026-11-03 04:46:01",
     "I18n": {
       "en_US": {
         "plugin_name": "LuxTranslate",
@@ -840,7 +840,7 @@
       "Windows"
     ],
     "DateCreated": "2026-04-28 20:07:14",
-    "DateUpdated": "2026-04-28 20:07:14",
+    "DateUpdated": "2026-04-28 11:12:38",
     "I18n": {
       "en_US": {
         "plugin_name": "Screenshot OCR",
@@ -874,7 +874,7 @@
       "Linux"
     ],
     "DateCreated": "2026-05-06 19:48:30",
-    "DateUpdated": "2026-11-04 03:03:57",
+    "DateUpdated": "2026-11-04 01:22:32",
     "I18n": {
       "en_US": {
         "plugin_name": "RImage",
@@ -907,7 +907,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-05-20 21:29:31",
-    "DateUpdated": "2026-05-20 21:29:31",
+    "DateUpdated": "2026-05-20 13:25:35",
     "I18n": {
       "en_US": {
         "plugin_name": "HotkeyTrigger",
@@ -941,7 +941,7 @@
       "Linux"
     ],
     "DateCreated": "2026-06-12 20:40:00",
-    "DateUpdated": "2026-06-12 20:40:00",
+    "DateUpdated": "2026-06-12 12:38:24",
     "I18n": {
       "en_US": {
         "plugin_name": "World Cup",
@@ -995,7 +995,7 @@
       "Linux"
     ],
     "DateCreated": "2026-07-25 02:10:59",
-    "DateUpdated": "2026-07-25 21:17:02",
+    "DateUpdated": "2026-07-25 17:08:42",
     "StarCount": 0,
     "DownloadCount": 1280
   },
@@ -1020,7 +1020,7 @@
       "Linux"
     ],
     "DateCreated": "2026-08-28 21:27:52",
-    "DateUpdated": "2026-09-03 09:06:44",
+    "DateUpdated": "2026-09-03 08:32:11",
     "StarCount": 0,
     "DownloadCount": 1242
   },
@@ -1044,7 +1044,7 @@
       "Linux"
     ],
     "DateCreated": "2026-08-29 10:22:22",
-    "DateUpdated": "2026-08-29 10:22:22",
+    "DateUpdated": "2026-08-29 02:19:49",
     "I18n": {
       "en_US": {
         "plugin_name": "Nextcloud Passwords",
@@ -1133,7 +1133,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-01 23:00:00",
-    "DateUpdated": "2026-11-04 03:04:00",
+    "DateUpdated": "2026-11-04 00:20:00",
     "I18n": {
       "en_US": {
         "plugin_name": "Video Downloader",
@@ -1299,7 +1299,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-05 22:20:00",
-    "DateUpdated": "2026-10-21 09:06:57",
+    "DateUpdated": "2026-10-21 07:13:49",
     "I18n": {
       "en_US": {
         "plugin_name": "Linkding",
@@ -1333,7 +1333,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-06 18:03:00",
-    "DateUpdated": "2026-09-29 21:05:56",
+    "DateUpdated": "2026-09-29 15:45:47",
     "I18n": {
       "en_US": {
         "plugin_name": "GitHub",
@@ -1368,7 +1368,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-08 12:57:47",
-    "DateUpdated": "2026-09-08 12:57:47",
+    "DateUpdated": "2026-09-08 12:55:14",
     "StarCount": 0,
     "DownloadCount": 1216
   },
@@ -1458,7 +1458,7 @@
       "Windows"
     ],
     "DateCreated": "2026-09-16 18:41:00",
-    "DateUpdated": "2026-09-25 19:30:00",
+    "DateUpdated": "2026-09-25 13:55:41",
     "StarCount": 2,
     "DownloadCount": 577
   },
@@ -1616,7 +1616,7 @@
       "Linux"
     ],
     "DateCreated": "2026-09-23 16:58:10",
-    "DateUpdated": "2026-09-23 16:58:10",
+    "DateUpdated": "2026-09-23 16:55:34",
     "StarCount": 0,
     "DownloadCount": 924
   },
@@ -1704,7 +1704,7 @@
       "Windows"
     ],
     "DateCreated": "2026-09-27 18:21:26",
-    "DateUpdated": "2026-10-04 08:01:06",
+    "DateUpdated": "2026-10-04 06:56:06",
     "I18n": {
       "en_US": {
         "plugin_name": "Games",
@@ -1791,7 +1791,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-11 18:38:36",
-    "DateUpdated": "2026-10-11 18:38:36",
+    "DateUpdated": "2026-10-11 17:37:30",
     "ScreenshotUrls": [
       "https://github.com/user-attachments/assets/f70a5376-fb4e-40b5-bb34-d14d56f211c9",
       "https://github.com/user-attachments/assets/5deec5d6-1a29-4816-a96e-7e96e67a51e9",
@@ -1822,7 +1822,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-13 21:19:11",
-    "DateUpdated": "2026-10-24 00:13:15",
+    "DateUpdated": "2026-10-23 10:07:23",
     "StarCount": 0,
     "DownloadCount": 567
   },
@@ -1844,7 +1844,7 @@
       "Windows"
     ],
     "DateCreated": "2026-10-13 23:35:27",
-    "DateUpdated": "2026-10-21 15:05:56",
+    "DateUpdated": "2026-10-21 14:40:11",
     "I18n": {
       "en_US": {
         "plugin_desc": "Allows the user to launch some PowerToys from Wox."
@@ -1876,7 +1876,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-14 20:40:31",
-    "DateUpdated": "2026-10-15 12:08:39",
+    "DateUpdated": "2026-10-15 10:07:40",
     "I18n": {
       "en_US": {
         "plugin_desc": "Generate a QR Code / Screenshot to scan and recognize the QR Code."
@@ -1908,7 +1908,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-15 22:44:32",
-    "DateUpdated": "2026-10-15 22:44:32",
+    "DateUpdated": "2026-10-15 14:39:49",
     "I18n": {
       "en_US": {
         "plugin_name": "PortGenerator",
@@ -1944,7 +1944,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-21 19:59:21",
-    "DateUpdated": "2026-10-25 15:04:49",
+    "DateUpdated": "2026-10-25 14:43:34",
     "I18n": {
       "en_US": {
         "plugin_name": "ASCII Art Generator",
@@ -1978,7 +1978,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-22 21:03:56",
-    "DateUpdated": "2026-10-25 15:04:49",
+    "DateUpdated": "2026-10-25 13:52:51",
     "I18n": {
       "en_US": {
         "plugin_name": "Kaomoji",
@@ -2018,7 +2018,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-25 15:43:51",
-    "DateUpdated": "2026-10-25 15:43:51",
+    "DateUpdated": "2026-10-25 14:39:51",
     "StarCount": 0,
     "DownloadCount": 205
   },
@@ -2052,7 +2052,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-10-26 17:12:00",
-    "DateUpdated": "2026-10-26 17:12:00",
+    "DateUpdated": "2026-10-26 09:08:38",
     "StarCount": 0,
     "DownloadCount": 133
   },
@@ -2123,7 +2123,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 16:57:33",
-    "DateUpdated": "2026-11-03 16:57:33",
+    "DateUpdated": "2026-11-03 08:57:33",
     "StarCount": 0,
     "DownloadCount": 22
   },
@@ -2173,7 +2173,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 17:00:42",
-    "DateUpdated": "2026-11-03 17:00:42",
+    "DateUpdated": "2026-11-03 09:00:42",
     "StarCount": 0,
     "DownloadCount": 22
   },
@@ -2197,7 +2197,7 @@
       "Linux"
     ],
     "DateCreated": "2026-11-03 00:00:00",
-    "DateUpdated": "2026-11-03 17:00:42",
+    "DateUpdated": "2026-11-03 20:42:37",
     "StarCount": 0,
     "DownloadCount": 9
   }

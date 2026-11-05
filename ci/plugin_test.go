@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestUpdatePluginStore covers upgrades and compatibility repairs without altering other fields.
@@ -36,7 +37,7 @@ func TestUpdatePluginStore(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			updated, err := updatePluginStore([]byte(original), func(string) (storePluginManifest, error) {
 				return tc.metadata, tc.loadErr
-			})
+			}, func(string) (*pluginRelease, error) { return nil, nil })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -53,13 +54,99 @@ func TestUpdatePluginStore(t *testing.T) {
 			if err := json.Unmarshal(updated, &plugins); err != nil {
 				t.Fatal(err)
 			}
-			if plugins[0].Version != tc.metadata.Version || plugins[0].MinWoxVersion != tc.wantMin || plugins[0].DateUpdated == "old" {
+			if plugins[0].Version != tc.metadata.Version || plugins[0].MinWoxVersion != tc.wantMin || (plugins[0].DateUpdated == "old") != (tc.name == "repair same version") {
 				t.Fatalf("unexpected updated manifest: %+v", plugins[0])
 			}
 			if !plugins[0].Custom["keep"] || !strings.Contains(string(updated), `"Custom":{"keep":true}`) {
 				t.Fatalf("unrelated field was changed: %s", updated)
 			}
 		})
+	}
+}
+
+func TestUpdatePluginStoreReleaseDate(t *testing.T) {
+	const original = `[{"Id":"test","Version":"1.0.0","MinWoxVersion":"2.0.0","DateUpdated":"2020-01-01 00:00:00","DownloadUrl":"latest"}]`
+	metadata := storePluginManifest{Id: "test", Version: "1.1.0", MinWoxVersion: "2.0.0"}
+	published := time.Date(2026, 11, 4, 1, 22, 32, 0, time.UTC)
+	for _, tc := range []struct {
+		name       string
+		releaseErr error
+		pinned     storePluginManifest
+		pinnedErr  error
+		wantUpdate bool
+	}{
+		{name: "release date", pinned: metadata, wantUpdate: true},
+		{name: "release lookup failed", releaseErr: fmt.Errorf("offline"), pinned: metadata},
+		{name: "release changed", pinned: storePluginManifest{Id: "test", Version: "1.2.0", MinWoxVersion: "2.0.0"}},
+		{name: "pinned download failed", pinnedErr: fmt.Errorf("offline")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			updated, err := updatePluginStore([]byte(original), func(url string) (storePluginManifest, error) {
+				if url == "latest" {
+					return metadata, nil
+				}
+				if url != "pinned" {
+					t.Fatalf("unexpected URL %q", url)
+				}
+				return tc.pinned, tc.pinnedErr
+			}, func(string) (*pluginRelease, error) {
+				return &pluginRelease{DownloadURL: "pinned", PublishedAt: published}, tc.releaseErr
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !tc.wantUpdate && string(updated) != original {
+				t.Fatalf("unexpected update: %s", updated)
+			}
+			if tc.wantUpdate && (!strings.Contains(string(updated), `"Version":"1.1.0"`) || !strings.Contains(string(updated), `"DateUpdated":"2026-11-04 01:22:32"`)) {
+				t.Fatalf("wrong release update: %s", updated)
+			}
+		})
+	}
+}
+
+func TestFetchPluginRelease(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "test-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/owner/repo/releases/latest" && r.URL.Path != "/repos/owner/repo/releases/tags/v1.0" {
+			t.Errorf("unexpected API path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Error("GitHub token was not sent")
+		}
+		fmt.Fprint(w, `{"tag_name":"v1.0","published_at":"2026-11-04T09:22:32+08:00","assets":[{"name":"plugin.wox"}]}`)
+	}))
+	defer server.Close()
+	for _, downloadURL := range []string{
+		"https://github.com/owner/repo/releases/latest/download/plugin.wox",
+		"https://github.com/owner/repo/releases/download/v1.0/plugin.wox",
+	} {
+		release, err := fetchPluginRelease(downloadURL, server.URL, server.Client())
+		if err != nil || release == nil || release.DownloadURL != "https://github.com/owner/repo/releases/download/v1.0/plugin.wox" || release.PublishedAt.UTC().Format(time.RFC3339) != "2026-11-04T01:22:32Z" {
+			t.Fatalf("release for %q = %+v, %v", downloadURL, release, err)
+		}
+	}
+	if release, err := fetchPluginRelease("https://gist.github.com/owner/123", server.URL, server.Client()); err != nil || release != nil {
+		t.Fatalf("non-release URL = %+v, %v", release, err)
+	}
+	if _, err := fetchPluginRelease("https://github.com/owner/repo/releases/latest/download/missing.wox", server.URL, server.Client()); err == nil {
+		t.Fatal("missing asset must fail")
+	}
+}
+
+func TestFetchPluginReleaseRejectsUnpublishedRelease(t *testing.T) {
+	for _, body := range []string{
+		`{"tag_name":"v1.0","published_at":null,"assets":[{"name":"plugin.wox"}]}`,
+		`{"tag_name":"v1.0","published_at":"2026-11-04T01:22:32Z","draft":true,"assets":[{"name":"plugin.wox"}]}`,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, body)
+		}))
+		_, err := fetchPluginRelease("https://github.com/owner/repo/releases/latest/download/plugin.wox", server.URL, server.Client())
+		server.Close()
+		if err == nil {
+			t.Fatalf("expected an error for %s", body)
+		}
 	}
 }
 

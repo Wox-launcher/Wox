@@ -19,6 +19,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Check plugin updates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make plugins
       - name: Create Pull Request
         # v8 runs on Node 24; v6 still used Node 20 and would reintroduce the action-runtime deprecation warning.
