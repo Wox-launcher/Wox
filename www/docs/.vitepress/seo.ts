@@ -29,7 +29,7 @@ export function applySeo(pageData: PageData): void {
   pageData.frontmatter.head ??= [];
   const head = pageData.frontmatter.head as Array<[string, Record<string, string>]>;
   head.push(["link", { rel: "canonical", href: canonical }]);
-  if (/^(?:zh\/)?store\/plugin\.md$/.test(pageData.relativePath)) {
+  if (/^(?:zh\/)?store\/(?:plugin|theme)\.md$/.test(pageData.relativePath)) {
     head.push(["meta", { name: "robots", content: "noindex, follow" }]);
   }
   if (redirect) {
@@ -37,10 +37,21 @@ export function applySeo(pageData: PageData): void {
     head.push(["meta", { "http-equiv": "refresh", content: `0; url=${redirect}` }]);
     return;
   }
+  const image = new URL(String(pageData.frontmatter.socialImage || pageData.frontmatter.cover || "/images/poster.png"), SITE).href;
+  const imageAlt = String(pageData.frontmatter.coverAlt || title);
+  head.push(["meta", { property: "og:type", content: /^(?:zh\/)?blog\//.test(pageData.relativePath) ? "article" : "website" }]);
+  head.push(["meta", { property: "og:site_name", content: "Wox" }]);
+  head.push(["meta", { property: "og:image", content: image }]);
+  head.push(["meta", { property: "og:image:alt", content: imageAlt }]);
+  head.push(["meta", { name: "twitter:card", content: "summary_large_image" }]);
+  head.push(["meta", { name: "twitter:title", content: title }]);
+  head.push(["meta", { name: "twitter:image", content: image }]);
+  head.push(["meta", { name: "twitter:image:alt", content: imageAlt }]);
   head.push(["meta", { property: "og:title", content: title }]);
   head.push(["meta", { property: "og:url", content: canonical }]);
   if (description) {
     head.push(["meta", { property: "og:description", content: description }]);
+    head.push(["meta", { name: "twitter:description", content: description }]);
   }
 
   const alternate = alternateRelativePath(pageData.relativePath);

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useData, withBase } from "vitepress";
 import ThemeSwatch from "./ThemeSwatch.vue";
-import { englishThemeName, fetchStoreThemes, hasThemeSwatch, localizeTheme, type LocalizedStoreThemeManifest } from "./themeStore";
+import { englishThemeName, fetchStoreThemes, hasThemeSwatch, localizeTheme, themeDetailPath, type LocalizedStoreThemeManifest } from "./themeStore";
 
 const themes = ref<LocalizedStoreThemeManifest[]>([]);
 const searchQuery = ref("");
@@ -51,8 +51,7 @@ const filteredThemes = computed(() => {
 });
 
 function themeDetailHref(themeId: string) {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/theme.html" : "/store/theme.html";
-  return withBase(`${prefix}?id=${encodeURIComponent(themeId)}`);
+  return withBase(themeDetailPath(themeId, lang.value));
 }
 
 function installHref(theme: LocalizedStoreThemeManifest) {

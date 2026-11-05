@@ -2,6 +2,8 @@ import { defineConfig } from "vitepress";
 import { generateChangelogPages, getLatestRelease } from "../../scripts/release-meta.mjs";
 import { applySeo } from "./seo";
 import { fetchStorePlugins, localizePlugin } from "./theme/components/pluginStore";
+import { fetchStoreThemes, localizeTheme } from "./theme/components/themeStore";
+import { queueSocialCard, socialCardsDevPlugin, writeSocialCards } from "../../scripts/social-cards.mjs";
 
 generateChangelogPages();
 
@@ -23,24 +25,40 @@ export default defineConfig({
   },
   sitemap: {
     hostname: "https://www.woxlauncher.com",
-    transformItems: (items) => items.filter((item) => !/^(?:zh\/)?(?:compare\/(?:index\.html)?|store\/plugin\.html)$/.test(item.url)),
+    transformItems: (items) => items.filter((item) => !/^(?:zh\/)?(?:compare\/(?:index\.html)?|store\/(?:plugin|theme)\.html)$/.test(item.url)),
   },
   transformPageData(pageData) {
-    if (pageData.params?.id) {
-      const plugin = fetchStorePlugins().find((item) => item.Id === pageData.params?.id);
+    const id = pageData.params?.id;
+    const language = pageData.relativePath.startsWith("zh/") ? "zh-CN" : "en-US";
+    if (id && /^(?:zh\/)?store\/plugins\//.test(pageData.relativePath)) {
+      const plugin = fetchStorePlugins().find((item) => item.Id === id);
       if (plugin) {
-        const localized = localizePlugin(plugin, pageData.relativePath.startsWith("zh/") ? "zh-CN" : "en-US");
-        pageData.title = pageData.frontmatter.title = pageData.relativePath.startsWith("zh/") ? `${localized.LocalizedName} 插件` : `${localized.LocalizedName} Plugin`;
+        const localized = localizePlugin(plugin, language);
+        pageData.title = pageData.frontmatter.title = language === "zh-CN" ? `${localized.LocalizedName} 插件` : `${localized.LocalizedName} Plugin`;
         pageData.description = pageData.frontmatter.description = localized.LocalizedDescription;
+        pageData.frontmatter.socialImage = plugin.ScreenshotUrls?.[0];
+      }
+    } else if (id && /^(?:zh\/)?store\/themes\//.test(pageData.relativePath)) {
+      const theme = fetchStoreThemes().find((item) => item.Id === id);
+      if (theme) {
+        const localized = localizeTheme(theme, language);
+        pageData.title = pageData.frontmatter.title = language === "zh-CN" ? `${localized.LocalizedName} 主题` : `${localized.LocalizedName} Theme`;
+        pageData.description = pageData.frontmatter.description = localized.LocalizedDescription;
+        pageData.frontmatter.socialImage = theme.ScreenshotUrls?.[0];
       }
     }
+    queueSocialCard(pageData);
     applySeo(pageData);
     if (!keepsGuideChrome(pageData.relativePath)) {
       pageData.frontmatter.aside = false;
       pageData.frontmatter.outline = false;
     }
   },
+  async buildEnd(siteConfig) {
+    await writeSocialCards(siteConfig.outDir);
+  },
   vite: {
+    plugins: [socialCardsDevPlugin()],
     define: {
       __WOX_LATEST_RELEASE__: JSON.stringify(latestRelease),
     },

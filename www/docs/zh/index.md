@@ -3,6 +3,7 @@ layout: home
 title: Wox — 仍在更新的跨平台启动器（Windows / macOS / Linux）
 titleTemplate: false
 description: "适用于 Windows、macOS 和 Linux 的原生开源启动器。"
+socialImage: https://repository-images.githubusercontent.com/15315789/d33f10a3-fc19-4403-8680-8bbb74213a53
 ---
 
 <main class="wox-home wox-home-zh">

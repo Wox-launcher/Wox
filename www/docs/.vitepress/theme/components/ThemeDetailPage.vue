@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useData, withBase } from "vitepress";
 import ThemeSwatch from "./ThemeSwatch.vue";
-import { englishThemeName, fetchStoreThemes, formatStoreDate, hasThemeSwatch, localizeTheme, type LocalizedStoreThemeManifest } from "./themeStore";
+import { englishThemeName, fetchStoreThemes, formatStoreDate, hasThemeSwatch, localizeTheme, themeDetailPath, type LocalizedStoreThemeManifest } from "./themeStore";
 
-const { lang } = useData();
-const themes = ref<LocalizedStoreThemeManifest[]>([]);
-const isLoading = ref(true);
+const { lang, params } = useData();
+const themes = computed<LocalizedStoreThemeManifest[]>(() => fetchStoreThemes().map((item) => localizeTheme(item, lang.value)));
+const isLoading = ref(!params.value?.id);
 const activeScreenshot = ref(0);
-const currentThemeId = ref("");
+const currentThemeId = ref(String(params.value?.id || ""));
 const lastThemeStorageKey = "wox-store:last-theme-id";
 const themeDetailBodyClass = "theme-detail-page";
 
@@ -104,17 +104,15 @@ const shareText = computed(() => {
 
   const themeUrl = window.location.href;
   const description = theme.value.LocalizedDescription?.trim();
-  const preview = screenshotUrls.value[activeScreenshot.value] || screenshotUrls.value[0] || "";
-  const previewLine = preview ? `\n${preview}` : "";
   const normalizedLang = (lang.value || "").toLowerCase();
 
   if (normalizedLang.startsWith("zh")) {
     const summary = description ? `\n${description}` : "";
-    return `我发现了一个很好看的 Wox 主题：${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}${previewLine}`;
+    return `我发现了一个很好看的 Wox 主题：${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}`;
   }
 
   const summary = description ? `\n${description}` : "";
-  return `I found a great Wox theme: ${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}${previewLine}`;
+  return `I found a great Wox theme: ${theme.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher\n${themeUrl}`;
 });
 
 const shareHref = computed(() => {
@@ -126,8 +124,7 @@ const shareHref = computed(() => {
 });
 
 function themeDetailHref(themeId: string) {
-  const prefix = (lang.value || "").toLowerCase().startsWith("zh") ? "/zh/store/theme.html" : "/store/theme.html";
-  return withBase(`${prefix}?id=${encodeURIComponent(themeId)}`);
+  return withBase(themeDetailPath(themeId, lang.value));
 }
 
 function installHref(theme: LocalizedStoreThemeManifest) {
@@ -156,37 +153,26 @@ function syncCurrentThemeIdFromUrl(replaceHistory = false) {
   }
 }
 
-function openThemeDetail(themeId: string) {
-  if (typeof window === "undefined" || !themeId) return;
-  if (currentThemeId.value === themeId) return;
-
-  currentThemeId.value = themeId;
-  activeScreenshot.value = 0;
-  window.sessionStorage.setItem(lastThemeStorageKey, themeId);
-
-  const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.set("id", themeId);
-  window.history.pushState({}, "", currentUrl.toString());
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-async function loadThemes() {
-  isLoading.value = true;
-
-  try {
-    const storeThemes = await fetchStoreThemes();
-    themes.value = storeThemes.map((item) => localizeTheme(item, lang.value));
-    syncCurrentThemeIdFromUrl(true);
-    activeScreenshot.value = 0;
-  } catch (error) {
-    console.error(error);
-  } finally {
-    isLoading.value = false;
+// Old query-based links still open the same theme, then move to its shareable page.
+function loadThemes() {
+  if (params.value?.id) return;
+  syncCurrentThemeIdFromUrl(true);
+  isLoading.value = false;
+  if (theme.value) {
+    window.location.replace(themeDetailHref(theme.value.Id));
   }
 }
 
+watch(params, (value) => {
+  if (value?.id) {
+    currentThemeId.value = String(value.id);
+    if (typeof window !== "undefined") window.sessionStorage.setItem(lastThemeStorageKey, currentThemeId.value);
+    activeScreenshot.value = 0;
+  }
+});
+
 function handlePopState() {
-  syncCurrentThemeIdFromUrl();
+  if (!params.value?.id) syncCurrentThemeIdFromUrl();
   activeScreenshot.value = 0;
 }
 
@@ -199,6 +185,7 @@ onMounted(() => {
     window.addEventListener("popstate", handlePopState);
   }
 
+  if (params.value?.id) window.sessionStorage.setItem(lastThemeStorageKey, currentThemeId.value);
   loadThemes();
 });
 
@@ -333,7 +320,7 @@ onUnmounted(() => {
       </div>
 
       <div class="related-grid">
-        <a v-for="item in relatedThemes" :key="item.Id" :href="themeDetailHref(item.Id)" class="related-card" @click.prevent="openThemeDetail(item.Id)">
+        <a v-for="item in relatedThemes" :key="item.Id" :href="themeDetailHref(item.Id)" class="related-card">
           <div class="related-top">
             <ThemeSwatch v-if="hasThemeSwatch(item.IconColors)" class="related-icon" :colors="item.IconColors" :size="48" />
             <div v-else class="related-icon related-placeholder">◐</div>

@@ -3,6 +3,7 @@ layout: home
 title: Wox — Cross-platform launcher for Windows, macOS, Linux
 titleTemplate: false
 description: "A native, open-source Raycast / Alfred alternative for Windows, macOS, and Linux."
+socialImage: https://repository-images.githubusercontent.com/15315789/d33f10a3-fc19-4403-8680-8bbb74213a53
 ---
 
 <main class="wox-home">

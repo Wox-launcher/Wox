@@ -127,17 +127,15 @@ const shareText = computed(() => {
 
   const pluginUrl = window.location.href;
   const description = plugin.value.LocalizedDescription?.trim();
-  const preview = screenshotUrls.value[activeScreenshot.value] || screenshotUrls.value[0] || "";
-  const previewLine = preview ? `\n${preview}` : "";
   const normalizedLang = (lang.value || "").toLowerCase();
 
   if (normalizedLang.startsWith("zh")) {
     const summary = description ? `\n${description}` : "";
-    return `我发现了一个很好用的 Wox 插件：${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}${previewLine}`;
+    return `我发现了一个很好用的 Wox 插件：${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}`;
   }
 
   const summary = description ? `\n${description}` : "";
-  return `I found a great Wox plugin: ${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}${previewLine}`;
+  return `I found a great Wox plugin: ${plugin.value.LocalizedName}${summary}\n\n#Wox #WoxLauncher #WoxLauncherPlugin\n${pluginUrl}`;
 });
 
 const shareHref = computed(() => {

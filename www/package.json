@@ -8,6 +8,7 @@
         "docs:build": "node scripts/generate-changelog-pages.mjs --check-readme && vitepress build docs",
         "docs:preview": "vitepress preview docs",
         "test:plugin-seo": "node scripts/test-plugin-seo.mjs",
+        "test:social-cards": "node scripts/test-social-cards.mjs",
         "test:plugin-catalog": "node --test scripts/test-plugin-catalog.mjs scripts/test-plugin-sort.mjs",
         "test:release-pages": "node --test scripts/test-release-pages.mjs"
     },
@@ -15,6 +16,7 @@
     "author": "",
     "license": "ISC",
     "devDependencies": {
+        "sharp": "^0.35.5",
         "vitepress": "^1.0.0",
         "vue": "3.5.39"
     },

@@ -36,7 +36,7 @@ export type LocalizedStoreThemeManifest = StoreThemeManifest & {
   LocalizedDescription: string;
 };
 
-export async function fetchStoreThemes() {
+export function fetchStoreThemes() {
   return storeThemeData as StoreThemeManifest[];
 }
 
@@ -89,4 +89,9 @@ export function formatStoreDate(dateText: string | undefined, lang: string) {
     month: "short",
     day: "numeric",
   }).format(parsed);
+}
+
+export function themeDetailPath(themeId: string, lang: string) {
+  const prefix = (lang || "").toLowerCase().startsWith("zh") ? "/zh" : "";
+  return `${prefix}/store/themes/${encodeURIComponent(themeId)}.html`;
 }

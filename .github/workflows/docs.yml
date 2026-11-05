@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies
         run: cd www && pnpm install --frozen-lockfile
 
+      - name: Install social card fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
+
       - name: Test plugin catalog loading
         run: cd www && pnpm test:plugin-catalog
 
@@ -55,6 +58,9 @@ jobs:
 
       - name: Test release pages
         run: cd www && pnpm test:release-pages
+
+      - name: Test social cards
+        run: cd www && pnpm test:social-cards
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
