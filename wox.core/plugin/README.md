@@ -48,7 +48,10 @@ callbacks remain in the result store.
 
 Toolbar messages are session-owned and expire 10 seconds after being shown or
 updated by default. `IsPersist` keeps a message until it is explicitly cleared;
-leaving the plugin context clears either kind. A trigger or single-plugin scoped query owns a
+each plugin has one current message per window, and any new ID replaces the old
+message. Clear only affects the matching current ID. Indeterminate progress takes
+precedence over a percentage; percentages are clamped to 0–100. Leaving the plugin
+context clears either kind. A trigger or single-plugin scoped query owns a
 context directly; global and other multi-plugin queries use the selected result's
 owner, including `*`-only plugins. A change of owner keeps the old toolbar message
 for at most 1.2 seconds while selection settles. Returning to the same plugin keeps

@@ -167,6 +167,65 @@ type requestTestAPI struct {
 	remove                                 plugin.RemoveResultOption
 	settingChanged                         func(context.Context, string, string)
 	toast                                  plugin.ShowToastMsgOption
+	toolbar                                plugin.ToolbarMsg
+}
+
+func (a *requestTestAPI) ShowToolbarMsg(_ context.Context, msg plugin.ToolbarMsg) {
+	a.toolbar = msg
+}
+
+// TestToolbarWireKeepsPublicActionIDsSeparateFromManagedHostSnapshots preserves legacy payloads.
+func TestToolbarWireKeepsPublicActionIDsSeparateFromManagedHostSnapshots(t *testing.T) {
+	api := &requestTestAPI{}
+	instance := &plugin.Instance{API: api}
+	host := &WebsocketHost{}
+	msg := `{"Id":"status","Title":"Ready","HostSnapshotId":"snapshot","Actions":[{"Id":"run","Name":"Run"}]}`
+	for _, managed := range []bool{false, true} {
+		request := JsonRpcRequest{Params: common.ContextData{"msg": msg}}
+		if managed {
+			request.Params["managedToolbar"] = "true"
+		}
+		if _, err := host.handleShowToolbarMsg(context.Background(), instance, request); err != nil {
+			t.Fatal(err)
+		}
+		if api.toolbar.Id != "status" || len(api.toolbar.Actions) != 1 || api.toolbar.Actions[0].Id != "run" {
+			t.Fatalf("toolbar payload = %+v", api.toolbar)
+		}
+		want := ""
+		if managed {
+			want = "snapshot"
+		}
+		if api.toolbar.HostSnapshotId != want {
+			t.Fatalf("callback token = %q, want %q", api.toolbar.HostSnapshotId, want)
+		}
+	}
+}
+
+// TestToolbarCallbackReleaseUsesHostRPCWhileOffline keeps local cleanup independent of network policy.
+func TestToolbarCallbackReleaseUsesHostRPCWhileOffline(t *testing.T) {
+	host, _, callbacks := newPluginRequestPeer(t)
+	network.Default.SetOffline(true)
+	proxy := NewWebsocketPlugin(plugin.Metadata{Id: "owner", Name: "Owner"}, host)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		proxy.RetireToolbarSnapshot(ctx, "snapshot")
+		close(done)
+	}()
+	select {
+	case request := <-callbacks:
+		if request.Method != "retireToolbarSnapshot" || request.PluginId != "owner" || request.Params["HostSnapshotId"] != "snapshot" {
+			t.Fatalf("unexpected cleanup request: %+v", request)
+		}
+	case <-ctx.Done():
+		t.Fatal("toolbar cleanup was not sent")
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("toolbar cleanup did not complete")
+	}
 }
 
 func (a *requestTestAPI) ShowToastMsg(_ context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {

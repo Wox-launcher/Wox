@@ -15,7 +15,7 @@ package = importlib.util.module_from_spec(spec)
 package.__path__ = [str(package_path)]
 sys.modules.setdefault("wox_plugin_host", package)
 
-from wox_plugin import Context, Query, Result, ResultAction, ResultActionType, UpdatableResult, WoxImage  # noqa: E402
+from wox_plugin import Context, Query, Result, ResultAction, ResultActionType, ToolbarMsg, ToolbarMsgAction, UpdatableResult, WoxImage  # noqa: E402
 from wox_plugin_host import jsonrpc  # noqa: E402
 from wox_plugin_host.plugin_api import PluginAPI  # noqa: E402
 from wox_plugin_host.plugin_manager import PluginInstance, plugin_instances  # noqa: E402
@@ -92,6 +92,58 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
         await self.call("action", "a", "missing", ResultId="one", ActionId="open")
         await self.call("action", "", "", ResultId="one", ActionId="open")
         self.assertEqual(len(self.calls), 3)
+
+    async def test_toolbar_callbacks_are_isolated_and_retired_by_snapshot(self):
+        for session in ("one", "two"):
+            msg = ToolbarMsg(
+                id="status",
+                title="status",
+                actions=[
+                    ToolbarMsgAction(
+                        id="open",
+                        name="Open",
+                        action=lambda _ctx, action, session=session: self.calls.append((session, action.toolbar_msg_action_id)),
+                    )
+                ],
+            )
+            await self.api.show_toolbar_msg(context(session), msg)
+        first, second = (call.args[2]["msg"] for call in self.api.invoke_method.await_args_list)
+        self.assertEqual(first["Actions"][0]["Id"], "open")
+        self.assertEqual(second["Actions"][0]["Id"], "open")
+        self.assertNotEqual(first["HostSnapshotId"], second["HostSnapshotId"])
+        for session, action in (("one", first), ("two", second)):
+            await self.call(
+                "toolbarMsgAction",
+                session,
+                "",
+                ActionId="open",
+                HostSnapshotId=action["HostSnapshotId"],
+                ToolbarMsgId="status",
+                ToolbarMsgActionId="open",
+            )
+        self.assertEqual(self.calls, [("one", "open"), ("two", "open")])
+        await self.call("retireToolbarSnapshot", "one", "", HostSnapshotId=first["HostSnapshotId"])
+        callbacks = plugin_instances["owner"].toolbar_msg_actions
+        self.assertNotIn(first["HostSnapshotId"], callbacks)
+        self.assertIn(second["HostSnapshotId"], callbacks)
+
+    async def test_failed_toolbar_request_releases_callbacks(self):
+        self.api.invoke_method.side_effect = RuntimeError("disconnected")
+        with self.assertRaises(RuntimeError):
+            await self.api.show_toolbar_msg(
+                context("one"),
+                ToolbarMsg(id="status", title="status", actions=[ToolbarMsgAction(id="run", name="Run", action=lambda *_: None)]),
+            )
+        self.assertFalse(plugin_instances["owner"].toolbar_msg_actions)
+
+    async def test_toolbar_without_callback_cannot_invoke_older_snapshot(self):
+        for action in (lambda *_: self.calls.append("old"), None):
+            await self.api.show_toolbar_msg(
+                context("one"), ToolbarMsg(id="status", title="status", actions=[ToolbarMsgAction(id="run", name="Run", action=action)])
+            )
+        snapshot = self.api.invoke_method.await_args_list[-1].args[2]["msg"]["HostSnapshotId"]
+        await self.call("toolbarMsgAction", "one", "", ActionId="run", HostSnapshotId=snapshot)
+        self.assertFalse(self.calls)
 
     async def test_out_of_order_and_released_late_responses(self):
         pending = {}

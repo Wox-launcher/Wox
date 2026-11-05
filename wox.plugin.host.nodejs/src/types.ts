@@ -13,7 +13,7 @@ export interface PluginInstance {
   API: PluginAPI
   ModulePath: string
   ResultActions: ResultActions
-  ToolbarMsgActions: Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>
+  ToolbarMsgActions: Map<string, Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>>
 }
 
 export interface PluginJsonRpcRequest {

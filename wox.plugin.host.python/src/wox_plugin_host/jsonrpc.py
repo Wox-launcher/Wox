@@ -65,6 +65,11 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         for instance in plugin_instances.values():
             instance.result_actions.release(request.get("SessionId", ""), request.get("QueryId", ""))
         return None
+    if method == "retireToolbarSnapshot":
+        instance = plugin_instances.get(request.get("PluginId", ""))
+        if instance:
+            instance.toolbar_msg_actions.pop(request.get("Params", {}).get("HostSnapshotId", ""), None)
+        return None
     if method == "query":
         return await query(ctx, request)
     if method == "onMRURestore":
@@ -405,7 +410,14 @@ async def toolbar_msg_action(ctx: Context, request: Dict[str, Any]) -> None:
         toolbar_msg_action_id = params.get("ToolbarMsgActionId", "")
         context_data = _parse_context_data(params.get("ContextData", ""))
 
-        action_func = plugin_instance.toolbar_msg_actions.get(action_id)
+        snapshot_id = params.get("HostSnapshotId", "")
+        if snapshot_id:
+            action_func = plugin_instance.toolbar_msg_actions.get(snapshot_id, {}).get(action_id)
+        else:
+            action_func = next(
+                (actions[action_id] for actions in reversed(list(plugin_instance.toolbar_msg_actions.values())) if action_id in actions),
+                None,
+            )
         if action_func:
             result = action_func(
                 ctx,

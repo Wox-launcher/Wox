@@ -89,6 +89,10 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
     }
     return
   }
+  if (request.Method === "retireToolbarSnapshot") {
+    pluginInstances.get(request.PluginId)?.ToolbarMsgActions.delete(request.Params.HostSnapshotId)
+    return
+  }
   logger.info(ctx, `invoke <${request.PluginName}> method: ${request.Method}`)
 
   switch (request.Method) {
@@ -172,7 +176,7 @@ async function loadPlugin(ctx: Context, request: PluginJsonRpcRequest) {
     API: {} as PluginAPI,
     ModulePath: modulePath,
     ResultActions: new ResultActions(),
-    ToolbarMsgActions: new Map<string, (ctx: Context, actionContext: ToolbarMsgActionContext) => Promise<void> | void>()
+    ToolbarMsgActions: new Map()
   })
 }
 
@@ -462,7 +466,11 @@ async function toolbarMsgAction(ctx: Context, request: PluginJsonRpcRequest) {
     throw new Error(`plugin not found: ${request.PluginName}, forget to load plugin?`)
   }
 
-  const pluginAction = plugin.ToolbarMsgActions.get(request.Params.ActionId)
+  const snapshots = plugin.ToolbarMsgActions
+  const snapshotId = request.Params.HostSnapshotId
+  const pluginAction = snapshotId
+    ? snapshots.get(snapshotId)?.get(request.Params.ActionId)
+    : Array.from(snapshots.values()).reverse().map(actions => actions.get(request.Params.ActionId)).find(Boolean)
   if (pluginAction === undefined || pluginAction === null) {
     logger.error(ctx, `<${request.PluginName}> toolbar msg action not found: ${request.Params.ActionId}`)
     return

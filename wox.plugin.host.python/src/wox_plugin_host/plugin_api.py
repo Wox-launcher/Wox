@@ -264,15 +264,28 @@ class PluginAPI(PublicAPI):
         from .plugin_manager import plugin_instances
 
         plugin_instance = plugin_instances.get(self.plugin_id)
+        snapshot_id = ""
+        wire_msg = json.loads(msg.to_json())
         if plugin_instance:
-            for action in msg.actions:
+            callbacks = {}
+            for action, wire_action in zip(msg.actions, wire_msg["Actions"]):
                 action_id = action.id or str(uuid.uuid4())
                 action.id = action_id
+                wire_action["Id"] = action_id
                 callback = action.action
                 if callable(callback):
-                    plugin_instance.toolbar_msg_actions[action_id] = callback
+                    callbacks[action_id] = callback
+            if msg.actions:
+                snapshot_id = str(uuid.uuid4())
+                plugin_instance.toolbar_msg_actions[snapshot_id] = callbacks
+                wire_msg["HostSnapshotId"] = snapshot_id
 
-        await self.invoke_method(ctx, "ShowToolbarMsg", {"msg": json.loads(msg.to_json())})
+        try:
+            await self.invoke_method(ctx, "ShowToolbarMsg", {"msg": wire_msg, "managedToolbar": "true"})
+        except Exception:
+            if plugin_instance and snapshot_id:
+                plugin_instance.toolbar_msg_actions.pop(snapshot_id, None)
+            raise
 
     async def clear_toolbar_msg(self, ctx: Context, toolbar_msg_id: str) -> None:
         await self.invoke_method(ctx, "ClearToolbarMsg", {"toolbarMsgId": toolbar_msg_id})

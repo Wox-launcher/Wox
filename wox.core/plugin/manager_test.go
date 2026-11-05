@@ -401,6 +401,25 @@ func TestNormalizeToolbarMsgHideIcon(t *testing.T) {
 	}
 }
 
+// TestNormalizeToolbarProgress defines the public precedence and clamps without mutating the caller.
+func TestNormalizeToolbarProgress(t *testing.T) {
+	for _, tc := range []struct {
+		input         int
+		indeterminate bool
+		want          int
+	}{{-5, false, 0}, {45, false, 45}, {150, false, 100}, {45, true, 0}} {
+		value := tc.input
+		msg := (&Manager{}).presentation.normalizeToolbarMsg(context.Background(), &Instance{}, ToolbarMsg{HideIcon: true, Progress: &value, Indeterminate: tc.indeterminate})
+		if tc.indeterminate {
+			require.Nil(t, msg.Progress)
+		} else {
+			require.NotNil(t, msg.Progress)
+			require.Equal(t, tc.want, *msg.Progress)
+		}
+		require.Equal(t, tc.input, value)
+	}
+}
+
 func TestAppendActionEnglishAliasPreservesCustomAliases(t *testing.T) {
 	pluginInstance := &Instance{Metadata: Metadata{I18n: map[string]map[string]string{
 		"en_US": {"copy_path": "Copy Path"},

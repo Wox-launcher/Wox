@@ -58,9 +58,52 @@ function fixture(query) {
   const callbacks = new ResultActions()
   const api = new PluginAPI({}, "owner", "Owner", callbacks)
   api.invokeMethod = async () => true
-  rpc.pluginInstances.set("owner", { Plugin: { query }, API: api, ResultActions: callbacks, ModulePath: "unused" })
+  rpc.pluginInstances.set("owner", { Plugin: { query }, API: api, ResultActions: callbacks, ToolbarMsgActions: new Map(), ModulePath: "unused" })
   return { callbacks, api }
 }
+
+test("toolbar callbacks with the same public ID stay isolated and retire by snapshot", async () => {
+  const { api } = fixture(async () => [])
+  const calls = []
+  const sent = []
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "ShowToolbarMsg")
+    assert.equal(params.managedToolbar, "true")
+    sent.push(JSON.parse(params.msg))
+  }
+  for (const session of ["one", "two"]) {
+    await api.ShowToolbarMsg(context(session), { Id: "status", Actions: [{ Id: "open", Action: (_ctx, action) => calls.push(`${session}/${action.ToolbarMsgActionId}`) }] })
+  }
+  const first = sent[0]
+  const second = sent[1]
+  assert.equal(first.Actions[0].Id, "open")
+  assert.equal(second.Actions[0].Id, "open")
+  assert.notEqual(first.HostSnapshotId, second.HostSnapshotId)
+  await call("toolbarMsgAction", "one", "", { ActionId: "open", HostSnapshotId: first.HostSnapshotId, ToolbarMsgId: "status", ToolbarMsgActionId: "open" })
+  await call("toolbarMsgAction", "two", "", { ActionId: "open", HostSnapshotId: second.HostSnapshotId, ToolbarMsgId: "status", ToolbarMsgActionId: "open" })
+  assert.deepEqual(calls, ["one/open", "two/open"])
+  await call("retireToolbarSnapshot", "one", "", { HostSnapshotId: first.HostSnapshotId })
+  assert.equal(rpc.pluginInstances.get("owner").ToolbarMsgActions.has(first.HostSnapshotId), false)
+  assert.equal(rpc.pluginInstances.get("owner").ToolbarMsgActions.has(second.HostSnapshotId), true)
+})
+
+test("failed toolbar requests discard newly registered callbacks", async () => {
+  const { api } = fixture(async () => [])
+  api.invokeMethod = async () => { throw new Error("disconnected") }
+  await assert.rejects(api.ShowToolbarMsg(context("one"), { Id: "status", Actions: [{ Id: "run", Action: () => {} }] }))
+  assert.equal(rpc.pluginInstances.get("owner").ToolbarMsgActions.size, 0)
+})
+
+test("a managed message without a callback cannot invoke an older snapshot", async () => {
+  const { api } = fixture(async () => [])
+  const sent = []
+  let invoked = false
+  api.invokeMethod = async (_ctx, _method, params) => sent.push(JSON.parse(params.msg))
+  await api.ShowToolbarMsg(context("one"), { Id: "old", Actions: [{ Id: "run", Action: () => { invoked = true } }] })
+  await api.ShowToolbarMsg(context("one"), { Id: "new", Actions: [{ Id: "run" }] })
+  await call("toolbarMsgAction", "one", "", { ActionId: "run", HostSnapshotId: sent[1].HostSnapshotId })
+  assert.equal(invoked, false)
+})
 
 test("two windows and two rows may reuse action IDs without losing or crossing callbacks", async () => {
   const calls = []

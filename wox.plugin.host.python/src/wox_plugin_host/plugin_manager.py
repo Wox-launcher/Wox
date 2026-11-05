@@ -11,7 +11,7 @@ class PluginInstance:
     api: Optional[PublicAPI]
     plugin_dir: str
     module_name: str
-    toolbar_msg_actions: Dict[str, Callable[[Context, ToolbarMsgActionContext], Awaitable[None] | None]]
+    toolbar_msg_actions: Dict[str, Dict[str, Callable[[Context, ToolbarMsgActionContext], Awaitable[None] | None]]]
     sys_paths: list[str]
     result_actions: ResultActions = field(default_factory=ResultActions)
 

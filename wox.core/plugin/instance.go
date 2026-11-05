@@ -13,6 +13,7 @@ import (
 
 type Instance struct {
 	toastEpoch       atomic.Uint64
+	toolbarEpoch     atomic.Uint64
 	imageMu          sync.RWMutex
 	imageCacheClosed bool
 

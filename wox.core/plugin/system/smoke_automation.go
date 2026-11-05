@@ -512,7 +512,10 @@ func (p *smokeAutomationPlugin) showToolbarMessage(ctx context.Context, title st
 }
 
 // globalToolbarSmokePlugin exercises selection ownership for a plugin with no explicit trigger keyword.
-type globalToolbarSmokePlugin struct{ api plugin.API }
+type globalToolbarSmokePlugin struct {
+	api           plugin.API
+	silentQueries *util.HashMap[string, string]
+}
 
 func (*globalToolbarSmokePlugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{Id: "21337763-d36e-424e-a20e-c661c9a5c1f9", Name: "Global Toolbar Smoke", Runtime: "Go", Version: "1.0.0", TriggerKeywords: []string{"*"}, SupportedOS: []string{util.PlatformMacOS, util.PlatformWindows, util.PlatformLinux}}
@@ -520,7 +523,11 @@ func (*globalToolbarSmokePlugin) GetMetadata() plugin.Metadata {
 
 func (p *globalToolbarSmokePlugin) Init(ctx context.Context, params plugin.InitParams) {
 	p.api = params.API
+	p.silentQueries = util.NewHashMap[string, string]()
 	p.api.OnEnterPluginQuery(ctx, func(callbackCtx context.Context) {
+		if queryID, found := p.silentQueries.Load(util.GetContextSessionId(callbackCtx)); found && queryID == util.GetContextQueryId(callbackCtx) {
+			return
+		}
 		p.api.ShowToolbarMsg(callbackCtx, plugin.ToolbarMsg{Id: "global-selection-status", Title: "Global selection toolbar"})
 	})
 }
@@ -528,6 +535,12 @@ func (p *globalToolbarSmokePlugin) Init(ctx context.Context, params plugin.InitP
 func (p *globalToolbarSmokePlugin) Query(_ context.Context, query plugin.Query) plugin.QueryResponse {
 	if !query.IsGlobalQuery() || strings.TrimSpace(query.Search) != "wox-global-toolbar-smoke" {
 		return plugin.QueryResponse{}
+	}
+	// A trailing space exercises a refresh where the plugin does not replace its prior status.
+	if strings.HasSuffix(query.RawQuery, " ") {
+		p.silentQueries.Store(query.SessionId, query.Id)
+	} else {
+		p.silentQueries.Delete(query.SessionId)
 	}
 	return plugin.NewQueryResponse([]plugin.QueryResult{
 		{Title: "Global toolbar fixture", Icon: icons.Get(icons.PluginApp), Actions: []plugin.QueryResultAction{{

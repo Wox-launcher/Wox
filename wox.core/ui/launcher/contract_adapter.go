@@ -238,10 +238,7 @@ func (a *App) ShowToolbarMessage(_ context.Context, message plugin.ToolbarMsgUI)
 	converted := fromCoreToolbarMessage(message)
 	converted.IsCurrent = message.IsCurrent
 	return a.runOnUI("show toolbar message", func() {
-		if message.CanShow != nil && !message.CanShow() {
-			return
-		}
-		if message.CanShow == nil && message.IsCurrent != nil && !message.IsCurrent() {
+		if message.IsCurrent != nil && !message.IsCurrent() {
 			return
 		}
 		a.toolbar.applyToolbarMessage(converted)

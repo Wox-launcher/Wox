@@ -54,6 +54,14 @@ callback until core sends `toastMsgAction` to invoke or release it; failed
 requests and plugin unload also release the host callback. Legacy `Notify`
 requests keep their existing route.
 
+For toolbar messages, bundled hosts retain action callbacks as a private snapshot
+per message, independently of public action IDs. Core retires the snapshot when
+its message is replaced, rejected, cleared, expires, or leaves the session;
+in-flight actions finish first. A discarded pending message is retired too.
+System toolbar messages only cover plugin messages and do not retire snapshots.
+Cleanup retries while the same host reconnects and stops when that host is replaced.
+Older hosts without managed snapshots retain the existing wire behavior.
+
 Core-to-host query and MRU requests carry the optional internal `ManagedQuery`
 flag. Core releases those callbacks with `releaseQueryResults`, scoped by the
 envelope's `SessionId` and `QueryId`, after evicting the result set. This message

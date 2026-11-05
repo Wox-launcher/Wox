@@ -19,8 +19,8 @@ type presentationTestUI struct {
 	cleared []string
 }
 
-func (ui *presentationTestUI) ShowToolbarMsg(_ context.Context, msg interface{}) {
-	ui.shown = append(ui.shown, msg.(ToolbarMsgUI))
+func (ui *presentationTestUI) ShowToolbarMsg(_ context.Context, msg common.ToolbarMsgUI) {
+	ui.shown = append(ui.shown, msg)
 }
 
 func (ui *presentationTestUI) ClearToolbarMsg(_ context.Context, id string) {
@@ -248,7 +248,6 @@ func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	manager.BeginSessionQuery("window", "scoped-two")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "scoped-two", SessionId: "window", Type: QueryTypeInput, TriggerKeyword: "installer"}, instance)
 	require.True(t, ui.shown[1].IsCurrent(), "visible message survives a new query in the same plugin context")
-	require.True(t, ui.shown[1].CanShow(), "the same plugin owns the refreshed query")
 	manager.BeginSessionQuery("window", "other-query")
 	manager.HandleQueryLifecycle(ctx, Query{Id: "other-query", SessionId: "window", Type: QueryTypeInput}, nil)
 	require.Equal(t, []string{"install", "scope"}, ui.cleared)

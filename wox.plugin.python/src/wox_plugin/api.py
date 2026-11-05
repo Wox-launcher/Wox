@@ -345,7 +345,8 @@ class PublicAPI(Protocol):
         """
         Show or update a toolbar message for the current plugin.
 
-        Reusing the same msg id replaces the previous content.
+        Each plugin has one current message per window; any new message replaces it.
+        Only the current message's id can be cleared.
         Messages disappear after 10 seconds by default; updating resets the timer.
         Set is_persist=True for messages cleared explicitly or on context exit.
         Context includes a trigger or single-plugin scoped query, or the selected
@@ -368,7 +369,7 @@ class PublicAPI(Protocol):
 
         Args:
             ctx: Context
-            toolbar_msg_id: Id of the toolbar msg owned by the current plugin
+            toolbar_msg_id: Id of the plugin's current message in this session
         """
         ...
 

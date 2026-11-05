@@ -1292,7 +1292,8 @@ export interface ToolbarMsg {
   /**
    * Unique toolbar msg id within the current plugin.
    *
-   * Reusing the same id updates the existing toolbar msg in place.
+   * Each plugin has one current message per window. Any new message replaces it;
+   * reusing the same id updates it, and only the current id can be cleared.
    */
   Id: string
   /**
@@ -1306,7 +1307,7 @@ export interface ToolbarMsg {
   /** Suppresses both an explicit icon and the default plugin icon. Defaults to false. */
   HideIcon?: boolean
   /**
-   * Optional 0-100 progress value for determinate progress.
+   * Optional determinate progress, clamped to 0-100. Indeterminate takes precedence.
    */
   Progress?: number
   /**
@@ -1630,7 +1631,7 @@ export interface PublicAPI {
   /**
    * Show or update a toolbar msg.
    *
-   * Reusing the same Id updates the current status instead of creating a duplicate.
+   * Each plugin has one current message per window; any new message replaces it.
    * Messages disappear after 10 seconds by default; updates reset the timer.
    * IsPersist keeps them until ClearToolbarMsg or context exit. Context includes
    * a trigger or single-plugin scoped query, or a selected plugin result in a
@@ -1646,7 +1647,7 @@ export interface PublicAPI {
   /**
    * Clear a toolbar msg by Id.
    *
-   * The toolbar msg must belong to the current plugin.
+   * Only the current message of this plugin in the session can be cleared.
    */
   ClearToolbarMsg: (ctx: Context, toolbarMsgId: string) => Promise<void>
 

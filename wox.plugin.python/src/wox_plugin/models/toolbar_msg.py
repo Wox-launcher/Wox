@@ -76,13 +76,13 @@ class ToolbarMsgAction:
 class ToolbarMsg:
     """Toolbar msg payload sent through PublicAPI.show_toolbar_msg()."""
 
-    #: Unique toolbar msg id within the current plugin. Reusing it updates the msg in place.
+    #: Each plugin has one current message per window; a new message replaces it regardless of id.
     id: str
     #: Primary text shown in the toolbar.
     title: str
     #: Optional icon shown before the title.
     icon: WoxImage = field(default_factory=WoxImage)
-    #: Optional 0-100 progress value for determinate progress.
+    #: Optional determinate progress, clamped to 0-100; indeterminate takes precedence.
     progress: Optional[int] = field(default=None)
     #: Show an indeterminate spinner when progress is ongoing but no percentage is available.
     indeterminate: bool = field(default=False)

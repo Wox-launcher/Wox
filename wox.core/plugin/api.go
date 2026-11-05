@@ -160,6 +160,9 @@ type API interface {
 
 	// ShowToolbarMsg creates or updates a toolbar message in the plugin's active context.
 	// Messages expire after 10 seconds unless IsPersist is true; updates reset the timer.
+	// Each plugin owns one current message per window; a new message replaces it even if its ID differs.
+	// ClearToolbarMsg only clears the current matching ID. Indeterminate takes precedence over Progress,
+	// and determinate progress is clamped to 0–100.
 	// In global text searches, messages appear only after an action on the plugin's result.
 	// Use the enter or action callback context for a selected result in a multi-plugin query.
 	// ClearToolbarMsg closes it explicitly; leaving the context also clears it.

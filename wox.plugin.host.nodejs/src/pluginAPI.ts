@@ -278,22 +278,35 @@ export class PluginAPI implements PublicAPI {
 
   async ShowToolbarMsg(ctx: Context, msg: unknown): Promise<void> {
     const pluginInstance = pluginInstances.get(this.pluginId)
+    let snapshotId = ""
+    let wireMsg = msg
     if (pluginInstance && msg && typeof msg === "object") {
       const maybeMsg = msg as { Actions?: Array<{ Id?: string; Action?: unknown }> }
-      for (const action of maybeMsg.Actions ?? []) {
+      const callbacks = new Map<string, (ctx: Context, actionContext: { ToolbarMsgId: string; ToolbarMsgActionId: string; ContextData: MapString }) => Promise<void> | void>()
+      const actions = (maybeMsg.Actions ?? []).map(action => {
         if (!action.Id) {
           action.Id = crypto.randomUUID()
         }
         if (typeof action.Action === "function") {
-          pluginInstance.ToolbarMsgActions.set(
+          callbacks.set(
             action.Id,
             action.Action as (ctx: Context, actionContext: { ToolbarMsgId: string; ToolbarMsgActionId: string; ContextData: MapString }) => Promise<void> | void
           )
         }
+        return action
+      })
+      if (actions.length > 0) {
+        snapshotId = crypto.randomUUID()
+        pluginInstance.ToolbarMsgActions.set(snapshotId, callbacks)
       }
+      wireMsg = { ...maybeMsg, Actions: actions, HostSnapshotId: snapshotId }
     }
-
-    await this.invokeMethod(ctx, "ShowToolbarMsg", { msg: JSON.stringify(msg) })
+    try {
+      await this.invokeMethod(ctx, "ShowToolbarMsg", { msg: JSON.stringify(wireMsg), managedToolbar: "true" })
+    } catch (error) {
+      if (snapshotId) pluginInstance?.ToolbarMsgActions.delete(snapshotId)
+      throw error
+    }
   }
 
   async ClearToolbarMsg(ctx: Context, toolbarMsgId: string): Promise<void> {

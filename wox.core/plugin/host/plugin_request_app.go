@@ -149,6 +149,12 @@ func (w *WebsocketHost) handlePushAttention(ctx context.Context, pluginInstance 
 	return "", nil
 }
 
+// toolbarMsgWire keeps the transport-only callback snapshot out of JSON plugin payloads.
+type toolbarMsgWire struct {
+	plugin.ToolbarMsg
+	HostSnapshotId string `json:"HostSnapshotId"`
+}
+
 // handleShowToolbarMsg adapts the ShowToolbarMsg wire call to the plugin API.
 func (w *WebsocketHost) handleShowToolbarMsg(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	rawMsg, err := requirePluginParam(request.Params, "msg")
@@ -156,9 +162,13 @@ func (w *WebsocketHost) handleShowToolbarMsg(ctx context.Context, pluginInstance
 		return nil, err
 	}
 
-	var msg plugin.ToolbarMsg
-	if err := json.Unmarshal([]byte(rawMsg), &msg); err != nil {
+	var wire toolbarMsgWire
+	if err := json.Unmarshal([]byte(rawMsg), &wire); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal toolbar msg: %w", err)
+	}
+	msg := wire.ToolbarMsg
+	if request.Params["managedToolbar"] == "true" {
+		msg.HostSnapshotId = wire.HostSnapshotId
 	}
 
 	pluginInstance.API.ShowToolbarMsg(ctx, msg)

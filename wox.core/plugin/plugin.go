@@ -60,6 +60,16 @@ type ToolbarMsgActionProxyCreator interface {
 	CreateToolbarMsgActionProxy(actionId string) func(context.Context, ToolbarMsgActionContext)
 }
 
+// ManagedToolbarMsgActionProxyCreator routes actions through a host-owned message snapshot.
+type ManagedToolbarMsgActionProxyCreator interface {
+	CreateManagedToolbarMsgActionProxy(actionId, snapshotId string) func(context.Context, ToolbarMsgActionContext)
+}
+
+// ToolbarSnapshotRetirer discards a host-owned snapshot after its message leaves the session.
+type ToolbarSnapshotRetirer interface {
+	RetireToolbarSnapshot(context.Context, string)
+}
+
 type InitParams struct {
 	API             API
 	PluginDirectory string

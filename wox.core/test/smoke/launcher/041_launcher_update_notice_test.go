@@ -14,8 +14,8 @@ import (
 )
 
 // Test041LauncherUpdateNotice verifies the update confirmation appears on the next primary show.
-// Flow: arm the confirmation -> hide and show the primary launcher -> publish a plugin status -> let the notice expire -> leave the plugin.
-// Evidence: the success message appears first; after expiry the warning or plugin status appears according to priority.
+// Flow: arm the confirmation -> hide and show the primary launcher -> update the plugin status while covered -> let the notice expire -> execute the restored action.
+// Evidence: the notice retains priority, then the latest plugin status and its callback work unless a higher-priority warning remains.
 func Test041LauncherUpdateNotice(t *testing.T) {
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		smoke.ShowLauncher(t, ctx, client)
@@ -54,7 +54,13 @@ func Test041LauncherUpdateNotice(t *testing.T) {
 			t.Fatalf("wait for update confirmation: %v", err)
 		}
 		smoke.AssertNoDiagnostics(t, observed)
-		smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "wox-smoke toolbar ")
+		for _, query := range []string{toolbarLongSmokeQuery, toolbarSmokeQuery} {
+			snapshot := smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, query)
+			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
+			if !found || !values[status.Value] {
+				t.Fatalf("system notice stopped covering plugin update for %q: found=%t status=%q", query, found, status.Value)
+			}
+		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
 			if previous != "" {
@@ -63,6 +69,17 @@ func Test041LauncherUpdateNotice(t *testing.T) {
 			return found && status.Value == "Toolbar fixture ready"
 		}); err != nil {
 			t.Fatalf("system or plugin status not restored after notice: %v", err)
+		}
+		if previous == "" {
+			activateToolbarFixtureAction(t, ctx, client, "toolbar-action-toolbar-keep-open-", "action-toolbar-keep-open-")
+			updated, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+				status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
+				return found && status.Value == "Toolbar fixture keep-open: context-round-trip"
+			})
+			if err != nil {
+				t.Fatalf("restored plugin callback did not update its status: %v", err)
+			}
+			smoke.AssertNoDiagnostics(t, updated)
 		}
 		smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "1+1")
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {

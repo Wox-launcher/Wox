@@ -113,7 +113,7 @@ type UI interface {
 	RestoreTheme(ctx context.Context)
 	ShowToast(ctx context.Context, msg ToastMsg)
 	UpdateAttentionUnreadCount(ctx context.Context, unreadCount int)
-	ShowToolbarMsg(ctx context.Context, msg interface{})
+	ShowToolbarMsg(ctx context.Context, msg ToolbarMsgUI)
 	ClearToolbarMsg(ctx context.Context, toolbarMsgId string)
 	ShowSystemToolbarMsg(ctx context.Context, msg SystemToolbarMsg)
 	ClearSystemToolbarMsg(ctx context.Context, id string)

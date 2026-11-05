@@ -108,13 +108,13 @@ func TestDelayedToolbarClearPreservesNewMessage(t *testing.T) {
 func TestSystemToolbarMessagePriorityAndRestoration(t *testing.T) {
 	app := bindTestApp(&App{lifecycleCtx: context.Background(), querySession: queryController{editor: woxui.NewTextEditor("")}})
 	valid := true
-	app.toolbar.applyToolbarMessage(toolbarMessage{ID: "plugin", Title: "Initial", IsCurrent: func() bool { return valid }})
+	app.toolbar.applyToolbarMessage(toolbarMessage{ID: "plugin-old", Title: "Initial", Actions: []toolbarMessageAction{{ID: "old-action"}}, IsCurrent: func() bool { return valid }})
 	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "warning", Title: "Hotkey failed"}, common.SystemToolbarPriorityWarning, 0)
 	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "updated", Title: "Updated"}, common.SystemToolbarPriorityConfirmation, 0)
 	firstRevision := app.toolbar.systemMessages["updated"].revision
 	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "updated", Title: "Updated again"}, common.SystemToolbarPriorityConfirmation, 0)
 	app.toolbar.expireSystemToolbarMessage("updated", firstRevision)
-	app.toolbar.applyToolbarMessage(toolbarMessage{ID: "plugin", Title: "Latest", IsCurrent: func() bool { return valid }})
+	app.toolbar.applyToolbarMessage(toolbarMessage{ID: "plugin-new", Title: "Latest", Actions: []toolbarMessageAction{{ID: "new-action"}}, IsCurrent: func() bool { return valid }})
 	if message := app.toolbar.effectiveToolbarMessage(); message == nil || message.Title != "Updated again" {
 		t.Fatalf("confirmation lost priority: %+v", message)
 	}
@@ -123,7 +123,7 @@ func TestSystemToolbarMessagePriorityAndRestoration(t *testing.T) {
 		t.Fatalf("warning not restored: %+v", message)
 	}
 	app.toolbar.clearSystemToolbarMessage("warning")
-	if message := app.toolbar.effectiveToolbarMessage(); message == nil || message.Title != "Latest" {
+	if message := app.toolbar.effectiveToolbarMessage(); message == nil || message.ID != "plugin-new" || message.Title != "Latest" || len(message.Actions) != 1 || message.Actions[0].ID != "new-action" {
 		t.Fatalf("latest plugin status not restored: %+v", message)
 	}
 	app.toolbar.applySystemToolbarMessage(toolbarMessage{ID: "warning", Title: "Hotkey failed"}, common.SystemToolbarPriorityWarning, 0)

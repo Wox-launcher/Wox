@@ -159,13 +159,8 @@ func (u *uiImpl) UpdateAttentionUnreadCount(ctx context.Context, unreadCount int
 	u.applyView(ctx, "update attention unread count", func(view contract.View) error { return view.UpdateAttentionUnreadCount(ctx, unreadCount) })
 }
 
-func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg interface{}) {
-	message, ok := msg.(plugin.ToolbarMsgUI)
-	if !ok {
-		logger.Error(ctx, fmt.Sprintf("invalid toolbar message type: %T", msg))
-		return
-	}
-	u.applyView(ctx, "show toolbar message", func(view contract.View) error { return view.ShowToolbarMessage(ctx, message) })
+func (u *uiImpl) ShowToolbarMsg(ctx context.Context, msg common.ToolbarMsgUI) {
+	u.applyView(ctx, "show toolbar message", func(view contract.View) error { return view.ShowToolbarMessage(ctx, msg) })
 }
 
 func (u *uiImpl) ClearToolbarMsg(ctx context.Context, toolbarMsgId string) {

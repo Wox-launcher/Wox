@@ -34,7 +34,7 @@ func (m *Manager) ShowSessionToolbarMsg(ctx context.Context, pluginInstance *Ins
 	if pluginInstance == nil || util.GetContextSessionId(ctx) == "" {
 		return
 	}
-	m.presentation.showSessionToolbarMsg(ctx, pluginInstance, msg, false, false)
+	m.presentation.showSessionToolbarMsg(ctx, pluginInstance, msg, false, false, pluginInstance.toolbarEpoch.Load())
 }
 
 // BeginSessionQuery marks older asynchronous query updates as stale immediately.
