@@ -1,0 +1,218 @@
+{
+  "v2.4.0-beta.3": {
+    "sourceSha256": "3bf2f62f474bd3f2e066f6132fce85130c1ffa44fc865911aa7614e4138ad5bf",
+    "body": "此 Beta 版稳定了 beta.2 中引入的原生 UI，修复了 Flutter UI 更换后出现的设置渲染、控制交互、叠加、预览和显示恢复问题。\n\n- 改进\n  - [`Settings`] 改进设置页面之间的设置控件大小调整、悬停反馈、禁用表格状态、对话框操作和表单布局一致性。 #4503\n  - [`Preview`] 通过可拖动的标题栏控件和更清晰的窗口镶边改进 AI 聊天预览。\n  - [`Launcher`] 改进查询编辑，以便插件结果布局在查询文本更改时保持稳定。\n  - [`Overlay`] 通过可拖动标题栏和粘性主机窗口跟踪改进可移动叠加层，以便叠加层在窗口移动期间保持对齐。\n  - [`Screenshot`] 改进截图编辑器 UI 缩放、滚动捕获边框和屏幕录制控件。\n  - [`Hotkey`] 当无法注册快捷方式时，通过更清晰的后备消息来改进主热键注册。\n  - [`Onboarding`] 使用主热键、选择热键和特定于平台的托盘设置步骤扩展首次运行入门。\n  - [`Query`] 使用范围查询改进启动器查询路由，将结果固定到特定插件并在查询 UI 中显示范围图标。\n  - [`Shell`] 支持在 Windows 上以管理员身份运行 shell 命令并进行 UAC 提升。\n  - [`Linux`] 添加 `.deb` 和 `.rpm` 软件包构建以及更新的安装文档。\n\n- 修复\n  - [`Settings`] 修复 Hyprland 上的设置页面渲染。\n  - [`Windows`] 修复显示设备移除后 GPU 渲染器恢复 #4502\n  - [`Linux`] 修复 Hyprland 热键注册和剪贴板处理。\n  - [`Explorer`] 修复 Windows #4504 上的输入即搜索功能键处理和文件对话框窗口检测\n  - [`Bookmark`] 修复 Chromium 书签加载 #4501\n  - [`Plugin`] 修复插件主机恢复和废纸篓删除操作的可靠性。"
+  },
+  "v2.4.0-beta.2": {
+    "sourceSha256": "e631ebb3b09a0c41f2b1be45456b67e6aba0e06c4dd4fa2085fd439431ba9488",
+    "body": "此测试版用嵌入式原生 UI 取代了 Flutter UI，以实现单进程启动器和设置体验，将日常使用中的典型内存使用量减少了大约一半，达到约 150 MB，并为临时会话添加了倒计时器和私人模式。  \n\n![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/timer.png)\n\n- 添加\n  - [`UI`] 将 Flutter UI 替换为嵌入式原生 UI，该 UI 拥有窗口、焦点、小部件和 GPU 进程内渲染，删除了单独的 Flutter 进程，将日常使用中的典型内存使用量减少了一半，约为 150 MB，并使启动器和设置工作流程在 Windows、macOS 和 Linux 上保持一致。\n  - [`Timer`] 添加带有暂停/恢复、可选注释、桌面覆盖和重新启动持久性的内置倒计时器，以便用户可以从启动器启动 `timer 5m` 或 `timer 1h meeting` 等计时器。 #4495\n  - [`Privacy`] 添加私人模式以在共享计算机上临时使用：启用后，Wox 会在退出后清除本地数据，同时保留语言和热键等非敏感设置。\n\n- 改进\n  - [`OCR`] 支持可下载的离线 PaddleOCR 模型以及系统 OCR，并为截图和剪贴板提供按功能模型选择。\n  - [`Screenshot`] 通过跨平台的光标包含、编号标记和阴影固定覆盖来改进捕获和注释。\n  - [`Preview`] 改进本机文件预览、带有标题栏控件的 WebView 预览、用户代理预设、URL 验证、圆角半径和鼠标按钮导航，以及 Markdown 和可滚动元数据。\n  - [`Dictation`] 通过音频播放控件改进历史预览。\n  - [`Launcher`] 通过多行输入、剪贴板操作、上下文菜单、辅助点击操作以及慢速查询的加载指示器来改进查询编辑。\n  - [`Query`] 自动将成功的仅显示查询（例如计算器和转换器结果）记录到查询历史记录中。\n  - [`Hotkey`] 注册热键时支持 F 键，并为热键录制提示添加中左和中右位置#4496\n  - [`App`] 支持从启动器结果中以管理员身份运行 Windows 应用程序 #4498\n  - [`Converter`] 在获取加密货币价格之前进行提示，以便用户可以确认网络请求 #4480\n  - [`Diagnostic`] 使用更可靠的 Windows 崩溃工件捕获错误报告的崩溃事件。\n  - [`Plugin`] 通过恢复不健康主机进程的看门狗提高插件主机可靠性。\n  - [`Linux`] 改进 Hyprland 层外壳启动器渲染、指针和滚动捕获、窗口内工具提示以及云同步/设置镶边对齐。\n  - [`Windows`] 改进 CJK 文本渲染、任务管理器应用程序分组、背景和深色外观同步以及 DPI 转换稳定性。\n  - [`macOS`] 改进隐藏窗口内存释放并保持管理窗口跨空间可用。\n\n- 修复\n  - [`Calculator`] 通过在表达式 #4497 中保留精确算术来修复浮点显示伪影\n  - [`Input`] 修复打开启动器 #4493 时重置 IME 模式的问题\n  - [`Linux`] 通过在 GTK #4481 之前初始化 Xlib 线程支持来修复启动崩溃\n  - [`Launcher`] 修复切换启动模式时预览面板大小和查询状态 #4474\n  - [`Settings`] 修复 macOS 上关闭设置窗口后的内存累积问题\n  - [`Cloud Sync`] 修复更新检查阻止恢复流程\n  - [`Plugin`] 修复禁用的系统插件仍然出现在结果中的问题"
+  },
+  "v2.4.0-beta.1": {
+    "sourceSha256": "5f9ebcbde9c8153208506e3264bcf8f0f3407794dac7b0fd81844ddf6a1592ee",
+    "body": "此测试版引入了本地离线听写功能，可实现快速语音到文本的工作流程，以及文件内容搜索和功能更强大的AI聊天体验。\n![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation_setting.png)\n\n\n- 添加\n  - [`Dictation`] 添加本地语音到文本听写，包括可下载的离线模型、可配置的麦克风和模型加载、按下、双击和按住热键、实时状态叠加、音频闪避、保留原始和 AI 精炼转录的可搜索历史记录，以及可以使用 AI 精炼语音的自定义操作、在活动窗口中键入内容、显示叠加或启动 AI 聊天。  \n\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/dictation.png)\n  - [`File Search`] 添加可选的文件内容索引和搜索，以便用户可以通过其中的单词查找受支持的文本、PDF 和 Office 文件，选择索引扩展名，跟踪索引进度，使用引用的短语，受益于更快的并行索引和更可靠的索引协调，并打开具有明确大文件限制的主题感知预览。  \n\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/file_content_search.png)\n\n- 改进\n  - [`AI Chat`] 通过可重用的本地和远程技能、内置工具、内联模型和技能选择、可配置的工具使用、可取消的流式传输、汇总的对话历史记录以及后备搜索操作来改进 AI 聊天。\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/ai_chat.mp4)\n  - [`Hotkey`] 通过左/右特定修改键、多键按住快捷键以及更可靠的按下、双击、按住和 Caps Lock 组合处理来改进热键记录和注册。\n  - [`Media Player`] 通过图稿、专用预览、实时进度、播放控件以及打开完整媒体播放器视图的操作来改进当前播放的结果，同时通过 MPRIS 扩展 Linux 支持。\n  - [`Explorer`] 通过当前文件夹之外的索引结果、Windows 打开/保存对话框中更快的就地导航和项目选择以及 macOS 上的 Cmd+G 搜索提示来改进输入即搜索。\n  - [`Window Manager`] 通过跨分辨率更改的更可靠的显示匹配以及更快地放置新启动的应用程序，改进工作区恢复。\n  - [`Cloud Sync`] 改进登录后的设置指导，使每个项目的同步进度更加清晰。\n  - [`Converter`] 通过本地化的工作日和单位、24 小时格式以及更可靠的日期和时区计算来改进时间和持续时间结果。\n  - [`AI`] 支持 Ollama Cloud 及其默认端点，并提高与 OpenAI 兼容中继 #4473 的兼容性\n  - [`Indicator`] 让插件结果直接打开对应的插件设置。\n  - [`Theme`] 通过更可靠的 JSON 提取和更清晰的预览指导来改进 AI 生成的主题。\n\n- 修复\n  - [`Updater`] 当下载的可执行文件和 Wox 安装位于不同驱动器上时修复 Windows 更新 #4471\n  - [`Plugin`] 通过回退到插件图标来修复没有显式图标的工具栏消息。\n  - [`Overlay`] 修复文本叠加大小并改进关闭按钮和焦点行为。\n  - [`Settings`] 修复直接导航到插件时插件列表导航滚动到错误位置的问题。\n  - [`Emoji`] 修复了AI辅助表情符号与默认启用思考的模型的匹配问题。"
+  },
+  "v2.3.0-beta.2": {
+    "sourceSha256": "2920b4058444d941a62a615edeb170fca8c5c30d50e49fa2485eac855b62c8fb",
+    "body": "此测试版提高了 Linux 和 Wayland 的可靠性，同时扩展了文件预览、文件搜索控件和选定文件夹 Shell 工作流程。\n\n- 改进\n  - [`Linux`] 通过 wlroots 层 shell 检测、Hyprland 热键、KDE 图像剪贴板处理、桌面启动环境修复、可拖动窗口状态处理、截图监视器捕获以及禁用窗口动画的常见问题解答指南来改进 Wayland 和 Hyprland 支持 #4458\n  - [`Hotkey`] 通过 Double Ctrl、Caps Lock 组合键、Backspace 注入、更好的输入权限检查和更清晰的Doctor 诊断来扩展 Linux 热键支持。还支持跨平台的反引号和波形符热键。\n  - [`Preview`] 通过按需加载、macOS 快速查看支持、PDF 和大文件处理以及用于控制是否显示预览的文件搜索设置来改进文件预览 #4463\n  - [`File Search`] 改进索引性能、重新构建索引时的批量同步、直接条目插入和用户主路径规范化，以实现更快、更可靠的搜索。\n  - [`Window`] 改进 Windows 显示器检测、DPI 缩放窗口定位和启动器焦点诊断 #4436\n  - [`Cloud Sync`] 改进帐户令牌恢复和过期会话反馈，以便同步操作更清楚地处理刷新失败。\n  - [`Settings`] 改进响应式设置布局、标签处理和运行时语言更新，以便设置页面在调整大小或切换语言后保持可读性。\n  - [`Doctor`] 改进Doctor 检查严重性处理，以便更新和环境检查可以区分警告和阻塞问题 #4459\n  - [`Theme`] 改进 macOS 壁纸检索和缓存处理，以实现壁纸感知主题预览。\n\n- 修复\n  - [`Clipboard`] 修复 KDE Wayland 桌面会话上的图像粘贴支持。"
+  },
+  "v2.3.0-beta.1": {
+    "sourceSha256": "ed79f6514c434012149247f1a5d181e15a781c100aa8ca663f7e761a333f0548",
+    "body": "此测试版引入了云同步，为用户提供跨设备设置、已安装插件和主题的加密备份和恢复。  \n\n![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/cloud_sync.png)\n\n- 添加\n  - [`Cloud Sync`] 为设置、安装的插件和主题添加加密云同步，以及恢复代码设置、本地快照、同步历史记录、帐户计划和设备管理、设备加入和撤销流程以及计划感知自动同步。"
+  },
+  "v2.1.2-beta.2": {
+    "sourceSha256": "c0df662556982c329fa0c91cba40d5f86d05ff81b5589d33a63da399e63d5006",
+    "body": "- 改进\n  - [`Media Player`] 改进 Windows 媒体会话集成，以便用户可以查看当前曲目、查看插图并通过 Wox 的播放、暂停、下一个和上一个操作来控制播放。\n  - [`Explorer`] 通过输入即搜索提示、更快的对话框路径检测、快速文件夹跳转以及活动对话框内的选择突出显示来改进打开/保存对话框工作流程。\n  - [`Preview`] 通过在 AI 命令、剪贴板、选择、Shell、更新、媒体播放器和 Node.js 插件 SDK 预览中使用标签样式来改进预览元数据。\n  - [`PDF`] 通过共享 WebView 预览路径渲染 PDF，改进 PDF 文件预览。\n  - [`System`] 通过复制版本操作改进系统命令，以快速共享当前的 Wox 版本。\n  - [`Update`] 改进手动更新检查，以便可见的更新预览和发布通道操作在检查后刷新。\n  - [`Logging`] 改进日志文件命名和错误报告指导，方便用户查找并上传 `wox.log` #4446\n\n- 修复\n  - [`Shell`] 修复 Windows 打开操作以直接使用 ShellExecute，并避免在启动文件、URL 或文件夹时发生阻塞。\n  - [`Hotkey`] 修复热键记录，以便残留的 Windows 修饰键状态不会泄漏到下一个记录的快捷方式中。"
+  },
+  "v2.1.2-beta.1": {
+    "sourceSha256": "0cca72a2557142c2bf90dd39b137e290134545efe32f855ef13fa2b1d486c568",
+    "body": "- 添加\n  - [`Theme`] 添加主题编辑器，具有实时启动器预览、颜色控制、另存为和覆盖流程以及壁纸感知预览，用于自定义 Wox 主题 #4421\n  - [`Window Manager`] 添加窗口管理器插件，以通过启动器命令在显示器之间移动、调整大小、最小化、最大化、恢复和发送活动窗口。\n  - [`Selection`] 在 Windows 上添加空格快速查看，以便用户可以从文件资源管理器预览选定的文件或通过按空格键打开/保存对话框。\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/selection_quick_look.mp4)\n  - [`Attention`] 添加持久的注意项目，以便插件可以使用未读徽章和收件箱来显示后续任务，该收件箱会保留项目直到用户打开或将其标记为已读。\n  - [`Result Drag`] 为启动器结果添加本机文件拖动导出，允许将剪贴板和插件中的文件支持结果直接拖动到文件夹或其他应用程序。\n  - [`Update`] 添加更新渠道，以便用户可以继续使用稳定版本或选择 Beta 预发布。\n\n- 改进\n  - [`Preview`] 将文件预览支持扩展到代码、可执行文件、图像、Markdown、PDF、快捷方式、视频、zip、Office、音频、字体、日历/联系人、分隔数据和 RDP 文件，并具有更宽的默认预览面板。\n  - [`Query Hotkey`] 通过专用对话框、名称、工具提示、预设文档和更清晰的变量编辑来改进查询热键设置。\n  - [`Converter`] 使用十进制和二进制字节别名、单位符号尾部和更广泛的时区别名改进存储和时间转换。\n  - [`Search`] 通过最佳对齐评分改进短文本的模糊匹配。\n  - [`Query Box`] 提高跨界面尺寸的文本输入和布局一致性 #4423\n  - [`Clipboard`] 通过支持多个文件路径和可拖动文件有效负载改进文件剪贴板记录。\n  - [`Image`] 通过缓存和下载支持改进表情符号和 URL 图像加载。\n  - [`Update`] 改进跨语言的更新可用通知措辞。\n\n- 修复\n  - [`Screenshot`] 使用本地化通知修复拒绝权限的捕获反馈 #4433\n  - [`Hotkey`] 修复平台报告备用键名称时的箭头键热键识别问题。\n  - [`Security`] 修复 Windows 文件显示行为，以使用 Windows Shell API 而不是插入的 PowerShell 命令文本，从而防止在打开文件所在的文件夹时将精心设计的文件路径解释为命令。"
+  },
+  "v2.0.0-beta.8": {
+    "sourceSha256": "9a542e2bf760786465b4998f0d4eadb39d30ae8990616c32f85b4f4bf4f2701c",
+    "body": "- 添加\n\n  - **`Emoji`** 添加对表情符号插件的AI搜索支持（您需要先在设置中启用AI功能）\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/emoji_ai_search.png)\n  - 添加自动主题，根据System Light/暗模式更改主题\n    ![](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/auto_theme.png)\n  - **`Explorer`** 添加Explorer插件以在打开/保存对话框#3259中快速切换路径，详细信息请参见[Explorer插件指南](https://wox-launcher.github.io/Wox/guide/plugins/system/explorer.html)\n  - 在插件元数据获取过程中向查询框添加加载动画以改善用户体验\n\n- 改进\n\n  - 提高 Markdown 预览渲染性能和稳定性\n  - 已对回收站实施关键删除操作，这将防止意外数据丢失 #3958\n  - 改进文档网站 [https://wox-launcher.github.io/Wox/guide/introduction.html](https://wox-launcher.github.io/Wox/guide/introduction.html)\n  - 支持查询输入框多行文本 #3797\n    ![](https://github.com/user-attachments/assets/64040d63-5d9b-46b4-93a8-449becf70762)\n  - 改进数据库恢复机制，防止云盘同步（icloud、onedrive、dropbox等）上的数据库损坏\n\n- 修复\n  - 修复剪贴板历史记录导致Windows复制故障#4309\n  - 修复切换到应用程序总是打开一个新窗口而不是聚焦现有窗口 #1922\n  - 修复Windows #4315上lnk文件的解析问题\n  - 修复插件升级后插件配置丢失的问题"
+  },
+  "v2.0.0-beta.7": {
+    "sourceSha256": "db4a5e4cdc29b85a8cb9e15d7e57984cdfb9c6bd40540b8e6edaba419dce7ed9",
+    "body": "**此版本将 Wox 主题重置为默认值，以修复 Wox v2.0.0-beta.6 上发布的回归问题**\n\n- 添加\n\n  - 添加MCP服务器用于Wox插件开发（默认在端口29867上启用，可以在设置中配置）\n  - 在计算器插件 `#4299` 中为数字添加千位分隔符\n  - 添加Windows设置搜索\n  - 在设置中添加使用页面\n    ![](https://github.com/Wox-launcher/Wox/blob/master/screenshots/usage.png?raw=true)\n\n- 改进\n\n  - 基于fzf算法改进模糊匹配\n  - 改进 Windows 上的应用程序搜索\n\n- 修复\n\n  - 修复工作目录问题，为命令执行上下文添加 getWorkingDirectory 函数，关闭 `#4161`\n  - 修复执行脚本插件时命令行窗口显示问题\n  - [`AI Chat`] 修复渲染问题\n  - [`Emoji`] 修复复制大图像在 Windows 上不起作用的问题\n  - [`Clipboard`] 修复 Windows 上剪贴板图像粘贴问题\n  - 修复了 beta.6 上发布的主题回归，导致无效主题颜色 `#4302` 崩溃"
+  },
+  "v2.0.0-beta.6": {
+    "sourceSha256": "a5c9921d64cbbff644f62064956ff0a97bcfe73226cbfaded936e3507f464cdc",
+    "body": "## 亮点\n\n1. 添加`Emoji`插件\n<img width=\"1900\" height=\"1410\" alt=\"image\" src=\"https://github.com/user-attachments/assets/c62822fa-7928-421b-9911-cfb2d75925af\" /> \n\n2. 添加`Launch Mode`和`Start Page`设置\n\n\n## 发生了什么变化\n* 修复（ui）：https://github.com/Wox-launcher/Wox/pull/4269 中的 @yougg 的新版本 Microsoft.VisualStudio.2022.BuildTools 未定义方法“ShuntingYardParser”\n* 修复（python_host）：https://github.com/Wox-launcher/Wox/pull/4288 中的@lyh-ADT的python插件日志rpc方法参数名称更正\n* [Bot] 通过 @github-actions[bot] 更新 https://github.com/Wox-launcher/Wox/pull/4294 中的插件商店清单\n* [Bot] 通过 @github-actions[bot] 更新 https://github.com/Wox-launcher/Wox/pull/4295 中的插件商店清单\n\n## 新贡献者\n* @lyh-ADT 在 https://github.com/Wox-launcher/Wox/pull/4288 中做出了第一个贡献\n\n**完整变更日志**：https://github.com/Wox-launcher/Wox/compare/v2.0.0-beta.5...v2.0.0-beta.6"
+  },
+  "v2.0.0-beta.5": {
+    "sourceSha256": "2f9637874b9d3aef717e2806ac1fe72cbd6243b6bd2b5f481c324f136638342b",
+    "body": "- 修复 beta.4 @yougg 上某些设置无法更改的回归问题"
+  },
+  "v2.0.0-beta.4": {
+    "sourceSha256": "b1b838fb93ca3d79e81dd1119d892332c783f625f9635d588f37a8a2bc7ea3fd",
+    "body": "- 添加\n  - 快速选择通过数字选择结果\n     <img width=\"2070\" height=\"1524\" alt=\"image\" src=\"https://github.com/user-attachments/assets/ace3dd51-7db5-4174-9a73-da26ee28b82a\" />\n  - 查询模式支持最近使用记录（MRU）。用户现在可以设置打开 Wox 时默认显示最近使用结果\n    <img width=\"2040\" height=\"1306\" alt=\"image\" src=\"https://github.com/user-attachments/assets/dcd77d44-1901-4f1d-8f5c-d2603b4ac6e4\" />\n    <img width=\"2400\" height=\"1600\" alt=\"image\" src=\"https://github.com/user-attachments/assets/82db7799-c64c-4904-83af-baea08d46060\" />\n  - 自定义Python和Node.js路径配置（#4220）\n  - 跨平台加载Edge 书签\n  - 计算器插件：添加幂运算符 (^) 支持\n\n- 改进\n  - 将设置从 JSON 迁移到统一的、类型安全的 SQLite 存储\n  - 减少剪贴板内存使用\n  - Windows UX：应用程序显示详细信息、Unicode 处理和 UWP 图标检索\n\n- 修复\n  - 按住 Ctrl 并重复按其他键时出现按键冲突\n  - 重启后“上次显示位置”未恢复\n  - Windows 应用程序扩展检查（不区分大小写，#4251）\n  - 图像视图中的图像加载错误处理"
+  },
+  "v2.0.0-beta.3": {
+    "sourceSha256": "af2fce0713d4e52ed96cf5931bbffbb89cd2e78559f58d3cd32193c6b660713d",
+    "body": "- 修复 Windows 有时无法获得焦点的问题 #4198\n- [聊天插件]，支持在单个请求中同时执行多个工具调用\n- [聊天插件]，支持自定义代理\n- 支持[脚本插件](https://wox-launcher.github.io/Wox/#/script_plugin_guide)"
+  },
+  "v2.0.0-beta.2": {
+    "sourceSha256": "02e1f6c90954bac7fcc637bb1cef620255ef9c3bee558eb4c948030254ae9571",
+    "body": "- 新增聊天插件，现在可以通过该插件直接与AI聊天，支持MCP。  \n![aichat](https://github.com/user-attachments/assets/61b5926c-a1da-4c0d-b412-ce9281c6f63d)\n- 设置界面现在遵循主题颜色。\n![image](https://github.com/user-attachments/assets/b395d1e0-1d01-4634-9b0e-1bf92eafdfc9)\n- 添加了双修饰符热键作为快捷方式，例如双击 ctrl 键。  \n- [仅限 Windows] 添加了对 [everything](https://www.voidtools.com/)（文件插件）的支持。  \n- [仅限 Windows] 解决了 Windows #4144 #4166 上焦点未返回的问题\n- [仅限Windows]优化Windows下的透明显示效果。"
+  },
+  "v2.0.0-beta.1": {
+    "sourceSha256": "57c10f23ff51830551277ba77713c469b2edd2fc30cc378f8dc0c71b2f0439f0",
+    "body": "## 概述\n我们很高兴地宣布 Wox v2.0.0 测试版发布！此次重大更新代表了 Wox 作为跨平台启动器的完全重写，现在支持 macOS、Windows 和 Linux。 Wox v2 旨在成为 Alfred 和 Launchy 的强大替代品，重点关注简单性、可扩展性和性能。\n\n## 主要特点\n\n### 跨平台支持\n- 现已在 macOS、Windows 和 Linux 上可用\n- 所有平台上的一致体验\n- 单个可执行文件，无需安装\n\n### 增强的 UI/UX\n- 现代而干净的界面\n- 新的预览面板\n- AI 就绪命令\n\n### 插件系统\n- 支持 JavaScript 和 Python 插件\n- 改进的插件管理\n- 增强的插件商店，包含越来越多的插件\n- 更好的动作过滤和结果评分\n\n### AI集成\n- 增强的AI命令响应处理\n- AI驱动的主题创建\n\n### 国际化\n- 全面的本地化支持\n- 多语言用户界面设置\n\n### 深层链接\n- 增强平台深度链接处理\n\n## 已知问题\n- 这是测试版，可能包含错误\n- 一些功能仍在积极开发中\n\n## 反馈\n我们欢迎您的反馈和错误报告！请加入我们的[讨论](https://github.com/Wox-launcher/Wox/discussions) 或在 GitHub 上提交问题。\n\n感谢您使用 Wox！"
+  },
+  "v2.0.0-nightly": {
+    "sourceSha256": "4f077f47334b02a88110613ec8b1c074b6656a97fdd432814ed5c7835528419b",
+    "body": "### **这是 Wox v2 nightly 版本，它的功能不完整并且可能有错误。如果您使用 Windows，则应使用 v1.x.x。**\n\n# 系统要求\n\n1. Macos需要10.15 Catalina或更高版本\n2. Windows需要windows 10或以上版本"
+  },
+  "v1.4.1196": {
+    "sourceSha256": "d668803935753c3cf2d1adb65d5daf2206d4c0af096f56a3f412d0c829231ab6",
+    "body": "1. 修复更多 UWP 应用加载问题\n2. 启动性能提升\n3. 首次搜索性能提升\n4. 查询和program/win32/uwp索引最高可达**100倍加速**\n5. 这将是稳定版本之前的最后一个预发布。\n\n\n`wox-full-installer*.exe` 包括所有依赖项，这是**推荐**方法。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。要求 Everything 版本大于 1.4.1。\n`*.zip`用于便携式模式，除非您知道什么是便携式模式，否则不要使用它。"
+  },
+  "v1.4.1129": {
+    "sourceSha256": "901b9f2c98183f4a479649d56a41aebba6322fc8c4ec6fe4d5f1e789bb2c4020",
+    "body": "1. 修复更多 UWP 图标加载问题\n2. 修复控制面板项目加载\n3. 拼音性能提升和内存泄漏修复\n\n\n`wox-full-installer*.exe` 包括所有依赖项，这是**推荐**方法。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。要求 Everything 版本大于 1.4.1。\n`*.zip`用于便携式模式，除非您知道什么是便携式模式，否则不要使用它。"
+  },
+  "v1.4.1115": {
+    "sourceSha256": "46703379a2ddf5edf900cc8f693e691750dd80590e0d53c4b7be818e037854ab",
+    "body": "错误修复和性能改进。\n\n\n`wox-full-installer*.exe` 包括所有依赖项，这是**推荐**方法。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。要求 Everything 版本大于 1.4.1。\n`*.zip`用于便携式模式，除非您知道什么是便携式模式，否则不要使用它。"
+  },
+  "v1.3.1073": {
+    "sourceSha256": "67fde60cb42f47daefe52f155021c7c46059c554c0bd710e4ee5892e944a66af",
+    "body": "1 巨大的查询性能提升 \n1. 1 程序插件和 Everything 插件支持取消查询\n1. 2 模糊匹配和拼音的细粒度缓存\n2 修复windows7和windows 8支持\n\n`wox-full-installer*.exe` 包括所有依赖项，这是**推荐**方法。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。要求 Everything 版本大于 1.4.1。\n`*.zip`用于便携式模式，除非您知道什么是便携式模式，否则不要使用它。"
+  },
+  "v1.3.1064": {
+    "sourceSha256": "139bea958d4530f80254df4eb04781ea260eb3394524a7465f9fbf5d3f8d30fb",
+    "body": "图标加载的性能改进。\n修复控制面板插件的图标加载。\n修复 Windows 7 和 Windows 8 支持。\n修复便携模式支持。\n\n\n\n`full-installer*.exe` 包括所有依赖项，这是**推荐**方法。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。要求 Everything 版本大于 1.4.1\n`*.zip`用于便携式模式，除非您知道什么是便携式模式，否则不要使用它。"
+  },
+  "v1.3.1039": {
+    "sourceSha256": "e61620b2fd4ee5971c98d36d6b8c685ae491a5b50f285ffd488c40ddaeda3ee0",
+    "body": "修复图片加载权限问题\n使用 Everything 原生的结果高亮数据，需要 Everything 版本大于 1.4.1\n\n`full-installer*.exe` 包括 everything.exe 和 python.exe。\n`*.zip` 用于便携式模式，无需 everything.exe 和 python.exe。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。"
+  },
+  "v1.3.1036": {
+    "sourceSha256": "b4ad37adb04fc6af6d3bcbf48e3aad5a896a1a9a4ad7debcc44b86f0ddc2c5d0",
+    "body": "修复自动启动\n修复图像缓存计算\n修复网页搜索插件\n修复插件触发关键词\n修复控制面板中程序列表的图标\n修复错误报告\n使用 Everything 原生的结果高亮数据，需要 Everything 版本大于 1.4.1\n\n`full-installer*.exe` 包括 everything.exe 和 python.exe。\n`*.zip` 用于便携式模式，无需 everything.exe 和 python.exe。\n`wox*.exe` 只是 wox 安装程序本身，没有 everything.exe 和 python.exe。"
+  },
+  "v1.3.1012": {
+    "sourceSha256": "0ac161832dd6b6ba11b84edcf8031d1985f2a6fd9cd562aa1dd9b11f5cc5b080",
+    "body": "1. 使用智能图像缓存和默认图像修复UI块。\n2. 添加两个新主题“System Dark”和“System Light”，会根据系统设置自动切换。"
+  },
+  "v1.3.996": {
+    "sourceSha256": "da62b0152700472462692ef8e7bf6576bfaa1d3d3fc95dfe3e3761e5ccefff9d",
+    "body": "1. ui渲染逻辑重写，CPU占用更少，结果列表响应更快。\n2. 使用raygun 进行自动崩溃报告。\n3. 启动后首次搜索不会阻塞"
+  },
+  "v1.3.981": {
+    "sourceSha256": "ef98df56867d94d7f9dd8fd4c6ddc3c90ca3d3ad4788f7076bf4f2c9c891b2dd",
+    "body": "1. 修复各种bug。包括主题兼容性和设置页面显示。\n2. 包括一个完整的安装程序，其中包括 Everything 和 Python。\n3. 程序插件bug修复，现在可以毫无异常地索引所有uwp和lnk程序。"
+  },
+  "v1.3.881": {
+    "sourceSha256": "eb583e45d36e441d58ba2c83f2801433de331b8cb1c1d42a9a96f26424d143b0",
+    "body": "1. 修复各种bug。\n2. 性能提升，快速打字不会造成阻塞、无响应或CPU使用率过高（>60%）。\n3. 能够选择自动更新预发布"
+  },
+  "v1.3.792": {
+    "sourceSha256": "d73e8f10ce308b2153ccf07946a4c5d89df4dd4d2e989c20a2f657c47fd3117e",
+    "body": "1. MS ClearType 已启用\n2. 更好的结果亮点\n![image](https://user-images.githubusercontent.com/1169912/80015557-840c8d80-8504-11ea-9960-009eddb0554b.png)\n\n3. 在 `Wox.exe` 所在目录创建名为 `UserData` 的文件夹，以启用便携模式"
+  },
+  "v1.3.735": {
+    "sourceSha256": "c9fa42bab4d157a518e48a81e07ff9e40e5a33d40c8735b80a2a2df25f725439",
+    "body": "便携模式\n大幅提升搜索体验\n自动完成文本建议\n突出显示查询搜索期间结果的匹配方式\n搜索所有子文件夹和文件\n始终以管理员身份运行 CMD 或 Powershell 的选项\n以不同用户身份运行 CMD、Powershell 和程序\n作为选项卡或新窗口打开网络搜索结果\n管理应该加载哪些程序\n重新加载/更新插件数据"
+  },
+  "v1.3.578": {
+    "sourceSha256": "b669fc9c0e72044b1dcb25fc4d83527fceb54a6dee7f40b261b63823650157ba",
+    "body": "# 发行说明\n\n### 新功能：\n- 添加了隐藏/删除托盘图标的设置（3dac6fd1c39ba9893b6a480168571157905b7204）\n- 添加了 HiDPI UWP 图标支持 (#1515)\n\n### 修复：\n- 对于很长的字符串跳过拼音得分的计算，减少内存使用。 （7fe01f07646ddbdfec34d19f1c94527bc73e17bd）\n- 尊重字体设置（#2186）\n- 重新索引时跳过损坏的文件夹 (#2004)\n- 重写ImageLoader，现在图像相关的操作应该更加稳定。 (#1836)\n\n### 更多语言支持：\n- 添加了挪威博克马尔语 (#2184)\n- 添加了意大利语 (#2143)\n- 添加了葡萄牙语（巴西）（#2119）\n- 添加了塞尔维亚语 (#2029)\n- 更新了日语 (#1982)"
+  },
+  "v1.3.524": {
+    "sourceSha256": "7b3ca817b414080053b3a8e1e1b18ba4fcb6282bd6c6fabe0d3ec050da15e288",
+    "body": "网站已更改为 wox.one"
+  },
+  "1.3.475": {
+    "sourceSha256": "36587d3def68776ba783914dbf0cfb81c589a6d940df4f2eab830856da4aafba",
+    "body": "# 发行说明\n\n### 修复：\n- 修复了文件夹未经授权的异常（PR #1282、https://github.com/Wox-launcher/Wox/commit/808523b814ddbb82c6ac13f1da697342bc29b6a0, PR #1780）\n- 索引现在在未经授权的异常后继续（#1779、PR #1780）\n- 防止 ActionKeyword 为空 \n- 空缓存文件不再使 Wox 崩溃（#1394、PR #1776）\n\n\n### 变化：\n- ReportWindow 异常格式恢复为简单的 ToString，因为它对于 AggregateExceptions 等提供更多信息 (PR #1778)\n- 计算器插件：YAMP 切换为 Mages (PR #1628)\n\n### 新功能：\n- 为非 C# 插件添加了上下文菜单 https://github.com/Wox-launcher/Wox/pull/1366"
+  },
+  "v1.3.424": {
+    "sourceSha256": "0908b25ed60ad842677bf5a23657ce8da1136954ffc8a07bb9c82278bc9db215",
+    "body": "# 发行说明：\n1. 修复win7异常#1251 \n2. UWP支持#198\n3. 更快的启动/查询\n4. 修复空引用#783\n5. 修复网页搜索设置\n6. 修复设置#875 #1190中的模糊问题 \n7. 修复光标跳跃#813 \n8. 修复更新问题#1320和System.Threading.Tasks.TaskCanceledException #1266\n9. 主题网站已更新，如果仍有主题文件问题#880，请删除旧主题文件"
+  },
+  "v1.3.357": {
+    "sourceSha256": "f6bca49d9aa9bcdb71cd326aa4b7ac9ebd2be533b18bbc708b55fb0cf08db4c3",
+    "body": "# 发行说明：\n1. 修复win7异常#1251 \n2. UWP支持#198\n3. 更快的启动/查询\n4. 修复空引用#783\n5. 修复网页搜索设置\n6. 修复设置#875 #1190中的模糊问题 \n7. 修复光标跳跃问题\n \n# 已知问题：\n1. System.UriFormatException：删除旧的主题文件\n2. System.Threading.Tasks.TaskCanceledException：https://ci.appveyor.com/project/happlebao/wox/build/1.3.414/artifacts"
+  },
+  "v1.3.352": {
+    "sourceSha256": "937b54d3f3f5687611f008b5334f11d380a230a14a3c680f36c32e63561d61fb",
+    "body": "# 发行说明：\n1. UWP支持#198\n2. 更快的启动/查询\n3. 修复空引用#783\n4. 修复网页搜索设置\n5. 修复设置#875 #1190中的模糊问题 \n\n# 已知问题：\n1. System.UriFormatException：删除旧的主题文件\n2. System.Threading.Tasks.TaskCanceledException：设置http代理"
+  },
+  "v1.3.183": {
+    "sourceSha256": "f30b2deeabe46d94140b78671cafed3fde6e16ff53e0527a3bb548726db58606",
+    "body": "# [安装](https://github.com/Wox-launcher/Wox#installation) / 安装:\n1. everything.exe\n2. python.exe\n3. wox.exe\n\n# 镜像\n\n[百度云盘](https://pan.baidu.com/s/1c28zLKk#path=%252FWox-v1.3.183)\n\n# 发行说明：\n\n错误修复\n\n# 已知问题：\n1. System.NullReferenceException：尝试通过删除 `%APPDATA%\\Wox` 来重置 wox，在执行此操作之前进行备份\n2. System.UriFormatException：删除旧的主题文件\n3. System.Threading.Tasks.TaskCanceledException：https://ci.appveyor.com/project/happlebao/wox/build/1.3.414/artifacts"
+  },
+  "v1.3.67": {
+    "sourceSha256": "a5d177c5be2bd716900ed172435b9d4ada2c2a50c256de168a500bffb3d553e2",
+    "body": "# [安装](https://github.com/Wox-launcher/Wox#installation) / 安装:\n1. everything.exe\n2. python.exe\n3. wox.exe\n\n# 发行说明：\n1. 错误修复\n2. Shell 插件支持 Windows 运行命令，例如 pictures、shell:Fonts\n\n已知问题：\n- [ ] python 插件不起作用：手动将 wox.py 复制到插件目录"
+  },
+  "v1.3.30": {
+    "sourceSha256": "9228b0178f1ac875e1449ee04e1124905abd37d54ebe5a3e464f0c044c868c2a",
+    "body": "1. 禁用自动更新的选项\n2. 错误修复\n\n已知问题：\n- [x] 关于 `%APPDATA%\\Wox\\Settings\\Plugins\\Wox.Plugin.WebSearch\\xxx.png` 的异常：手动删除该文件\n- [x] 无法自动启动：https://ci.appveyor.com/project/happlebao/wox/build/1.3.35/artifacts\n- [ ] python插件不起作用：手动将`wox.py`复制到插件目录"
+  },
+  "v1.3.0": {
+    "sourceSha256": "ea6913eec3d9766f2d7f1985069a3e93aa55c4ead5ab3fc4971ed302b669eace",
+    "body": "最新稳定版本1.3终于来了！ \n请下载`setup.exe`。\n如果 Windows 抱怨安全性，只需运行它即可。代码将在未来签署 \n- 要求：\n  1. .net >= 4.5.2\n  2. Everything\n     - 从 https://www.voidtools.com/ 下载 `.exe` 安装程序 \n     - 如果您的 Windows 是 64 位，请使用 x64 版本\n  3. python3\n     - 从 https://www.python.org/downloads/ 下载 python3 `.exe` 安装程序\n     - 某些插件可能与py3不兼容，请要求作者更新他们的插件\n     - 从现在开始将使用 py3 来开发插件，因此应该修复 unicode 问题\n- 增强功能：\n  1. 安装程序+自动更新！\n  2. 打字时不再阻塞，速度更快\n  3. 所有数据将存储在`%APPDATA%`中\n  4. 新增图标、文件关联图标\n- 待办事项：\n  - [ ] 捆绑 Everything 和 Python 安装程序\n  - [x]自动更新现在还不能使用代理，打开代理只能点检查更新来检查。master中已修复。\n  - [x] 修复单例"
+  },
+  "v1.2.900": {
+    "sourceSha256": "23af570c4b19cc8c9acd432451ab5d2e6778ac91b2ec45cc86a9d2f8df4c9268",
+    "body": "每个稳定主版本的预发布\n1. 使用**已安装的 Everything**\n   - 从 https://www.voidtools.com/ 下载 `.exe` 安装程序\n   - 如果您的 Windows 是 64 位，请使用 x64 版本\n2. 使用**现有安装的python**\n   - 从这里下载python3 https://www.python.org/downloads/\n   - 将 python 目录添加到 `%PATH%` 或使用设置 UI 进行设置）\n   - 某些插件可能与py3不兼容，请要求作者更新他们的插件\n   - py3将用于开发插件，因此应该修复unicode问题\n3. 修复无法保存设置的bug\n4. 新图标\n5. 添加文件关联图标（例如搜索`.sln`文件，将显示vs图标）\n6. 小得多！ 18MB -> 1.8MB\n\n安装程序将在下一个预发行版中出现，并且 python / everything 安装程序将被捆绑"
+  },
+  "v1.2.882": {
+    "sourceSha256": "d2c6795f33a8e453f89c98137ea1723b7dfbc098c6f08f7893b18cc5a75b1b31",
+    "body": "每个稳定主版本的预发布\n1. 所有数据移至`%APPDATA%`（安装的插件、设置、缓存）\n2. 修复了导致安装的插件无法运行的错误"
+  },
+  "v1.2.875": {
+    "sourceSha256": "f361a981dee7b9fe76f427955e50ae4a09b3c1519dd7173c906615ef04eee074",
+    "body": "每个稳定主版本的预发布\n1. 新图标 \n2. 错误修复，特别是网页搜索插件\n3. 右键菜单（<kbd>shift</kbd><kbd>enter</kbd> /右键单击）将显示相应的插件信息"
+  },
+  "v1.2.868": {
+    "sourceSha256": "e2198580aae2a2d3b1ddac811d1b698b7eca2d8547f517cb349612cc8267d2b4",
+    "body": "每个稳定主版本的预发布\n1. 修复大量UI错误\n2. 利用任务取消丢弃旧结果来加速\n3. .net 应该 >= 4.5.2"
+  },
+  "v1.2.857": {
+    "sourceSha256": "e520b082347cbd930d5fd134de638bd4dede6851c63af69dded0327ee8d2e106",
+    "body": "每个稳定主版本的预发布\n1. 修复程序插件中添加文件夹的bug\n2. 利用并行linq加速\n3. .net 应该 >= 4.5.2"
+  },
+  "v1.2.825": {
+    "sourceSha256": "f56b1db254e9472cebe140c8487388a98174f63168791e90f6dd07a2d11afa36",
+    "body": "每个稳定主版本的预发布\n1. 主题文件中ItemSelectedBackgroundColor的Color -> SolidColorBrush。\n   例如<SolidColorBrush x:Key=\"ItemSelectedBackgroundColor\">#4F6180</SolidColorBrush>\n2. .net 应该 >= 4.5.2"
+  },
+  "v1.2.0-beta.2": {
+    "sourceSha256": "3b875cf3a0cb6417433c1516058452c1c07ecb7eed6600960e570f7c3342ae28",
+    "body": "- 发布此测试版的主要原因是解决插件安装问题。\n- 请在运行 Wox 之前**安装 [.net 3.5](https://www.microsoft.com/en-us/download/details.aspx?id=14037)**。\n- 已知错误： \n  - 非 ASCII 字符：#384 \n  - 高DPI下的位置问题：#271\n\n# 一般特征\n1. 修复https导致Wox **无法安装插件**的问题\n2. 修复UI闪烁问题 #350 \n3. Aero 玻璃效果#330 \n4. 更快的查询时间（现在接近即时），更快的启动时间\n5. 俄语和法语翻译\n6. 改进结果权重，经常使用的结果会排在前面\n\n# 插件开发功能\n1. 多个动作关键字#352"
+  },
+  "v1.2.0-beta": {
+    "sourceSha256": "f52131eb40e8f2454358aae567ba1566e41e09d9ca40047919882c82be3a2c9f",
+    "body": "经过两个月的开发，Wox v1.2.0 **Beta** 现已发布。请为此测试版提供建议。\n\n**这是一个功能版本，一些 API 在此版本中已被标记为“已过时”。**\n- **添加多语言支持**  \n  目前，Wox 提供三种语言。英语、中文（简体）和中文（繁体）。如果您想帮助将 Wox 翻译成您的母语，请联系我。\n- **添加自动升级支持**\n- **添加置顶功能（在上下文菜单中）**  \n  此功能允许用户将某个结果置顶到指定查询的结果列表中。\n- **添加 Everything 插件作为默认插件**  \n  该插件将打包一个可移植的 Everything 本身，因此用户无需再单独运行 Everything\n- **使用 <kbd>alt</kbd>+<kbd>number</kbd> 或 <kbd>ctrl</kbd>+<kbd>number</kbd> 添加来选择项目 #202**\n- **添加新的崩溃报告者**\n- **允许在上下文菜单中搜索**  \n  用户现在可以搜索上下文菜单\n- **删除窗口模式设置**  \n  此功能存在缺陷，可能会导致性能问题。我们现在将删除此功能，并在准备就绪后将其添加回来\n- **插件开发者现在可以制作系统插件**  \n  系统插件是不需要触发关键词的插件。这对于计算器或文件夹插件等插件很有帮助。要将插件设为系统插件，只需在plugin.json中使用\\*作为ActionKeyword即可（用户也可以在设置页面将用户插件切换为系统插件）\n- **修复了 v1.1.1 #226 中 Wox 启动时的图像加载错误**\n- **修复Python插件编码错误#233**  \n\n[中文用户看这里](http://discussion.getwox.com/t/1-2-0-beta1/41)"
+  },
+  "v1.1.1": {
+    "sourceSha256": "434564b1acf41046d0b599117f8386d8e6b3d455aab491ab77da93fd71ad0bc0",
+    "body": "**这是一个错误修复版本**\n- 修复 Wox 在启动时处理异常 #221\n- 预加载最常用的图像\n\n[备份下载](http://pan.baidu.com/s/1kTokCvX#dir/path=%2FWox)"
+  },
+  "v1.1.0": {
+    "sourceSha256": "02d61d364c333cffd4e987ec18213442da20ee7d440c34986b67d23eef59ca7a",
+    "body": "- 添加上下文菜单支持#151，#107（通过shift + Enter触发）\n- 增加新版本检查（自动升级将在后续版本中发布）\n- 为 python 插件添加更多 api\n- 使用Tab键在搜索项之间循环切换 #150\n- 在 wpm 和第三方指示器中显示插件图标\n- 删除 Aero 相关主题\n- 更改 Wox 的默认值（从 500 像素到 800 像素）\n- 调整所选物品的重量 #203\n- 修复图标选择在资源管理器中不显示图像的问题 #183\n- 修复无法打开端口 #216 的 url\n- 修复wox启动后输入崩溃的问题\n\n[备份下载](http://pan.baidu.com/s/1kTokCvX#dir/path=%2FWox)"
+  },
+  "1.0.2": {
+    "sourceSha256": "1c32ba9f7205b963128904b3fd25b549e58d86f14ebfdc8ea1846fb952ef0ccd",
+    "body": "**这是错误修复版本。**\n1. 修复wox #189启动时间较长的问题\n2. 修复崩溃问题#197 \n3. 添加更多python插件[API](https://github.com/qianlifeng/Wox/blob/master/PythonHome/wox.py#L36)\n\n[备份下载](http://pan.baidu.com/s/1kTokCvX#dir/path=%2FWox)"
+  },
+  "1.0.1": {
+    "sourceSha256": "a5cd5076c0b6538437225e325c557a378693a03a070aa8afcca100fc7c75e5f6",
+    "body": "**这是错误修复版本，我们将遵循此版本中的[语义版本控制](http://semver.org/)。**  \n1. 修复python插件编码问题#192\n2. 修复网页搜索中图标选择问题#183\n3. 修复崩溃问题#181\n4. 修复网络搜索url编码问题#171\n5. 使用tab循环切换候选#150  \n\n[备份下载](http://pan.baidu.com/s/1kTokCvX#dir/path=%2FWox)"
+  },
+  "v1.0.0.219": {
+    "sourceSha256": "5e89af4e989dd5c9b12595ed0c5afd1d0b7af2037c934131055a5c2369b6e7d6",
+    "body": "1. 自动监视程序文件夹的变化并重新建立索引。\n2. 调整搜索结果的权重。  现在搜索结果应该更准确了。\n3. 修复URL插件错误。\n\n[备份下载](http://pan.baidu.com/s/1kTokCvX#dir/path=%2FWox)"
+  },
+  "v1.0.0.185-beta": {
+    "sourceSha256": "b0528aa6e1dbff3a1f171cf70003380efe51587e225a4166c87e931c036fa672",
+    "body": "1. 将python环境打包到Wox中\n2. 添加ControlPanel系统插件。通过 @CoenraadS\n3. 添加代理设置\n4. 性能提升"
+  },
+  "v1.0-beta": {
+    "sourceSha256": "de6b8ed6f76c9e28dda95e3a256b3f51e181f031a21fc9be139f8ae8304f34e8",
+    "body": "- 大多数功能可供使用\n- 该版本尚未经过大规模测试，在您的使用中可能存在bug。当您遇到错误时，请创建问题。"
+  }
+}

@@ -1,28 +1,55 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
-const props = defineProps<{ versions: string[]; chinese: boolean }>();
+type ReleaseLink = {
+  tag: string;
+  year: number;
+  href: string;
+};
+
+const props = defineProps<{ releases: ReleaseLink[]; chinese: boolean }>();
 const root = ref<HTMLElement>();
-const activeVersion = ref(props.versions[0]);
+const feed = ref<HTMLElement>();
+const activeTag = ref(props.releases[0]?.tag ?? "");
 let frame = 0;
 let cards: HTMLElement[] = [];
 
-const releaseId = (version: string) => `release-v${version.replaceAll(".", "-")}`;
+const groups = computed(() => {
+  const grouped: { year: number; releases: ReleaseLink[] }[] = [];
+  for (const release of props.releases) {
+    const current = grouped[grouped.length - 1];
+    if (!current || current.year !== release.year) {
+      grouped.push({ year: release.year, releases: [release] });
+    } else {
+      current.releases.push(release);
+    }
+  }
+  return grouped;
+});
 
-// Read the rendered scroll margin so the mobile picker and desktop nav share the same threshold.
+// Track the card at the top of the independently scrolling release feed.
 function updateActiveVersion() {
   frame = 0;
+  if (cards.length === 0 || !feed.value) {
+    return;
+  }
   let current = 0;
+  const top = feed.value.getBoundingClientRect().top;
   for (let index = 0; index < cards.length; index++) {
-    const top = cards[index].getBoundingClientRect().top;
-    const offset = parseFloat(getComputedStyle(cards[index]).scrollMarginTop);
-    if (top > offset + 32) break;
+    if (cards[index].getBoundingClientRect().top > top + 32) break;
     current = index;
   }
-  activeVersion.value = props.versions[current];
-  const link = root.value?.querySelector<HTMLElement>(`.release-links a[href="#${releaseId(activeVersion.value)}"]`);
-  const list = link?.parentElement;
-  // Scroll only the version list, never the document while the reader is scrolling.
+  if (feed.value.scrollTop + feed.value.clientHeight >= feed.value.scrollHeight - 1) {
+    current = cards.length - 1;
+  }
+  const tag = cards[current].dataset.release;
+  if (!tag) {
+    return;
+  }
+  activeTag.value = tag;
+  const list = root.value?.querySelector<HTMLElement>(".release-links");
+  const link = list ? [...list.querySelectorAll<HTMLAnchorElement>("a[data-tag]")].find((item) => item.dataset.tag === tag) : undefined;
+  // Year groups sit between the link and the scrolling list, so scroll that list directly.
   if (link && list && (link.offsetTop < list.scrollTop || link.offsetTop + link.offsetHeight > list.scrollTop + list.clientHeight)) {
     list.scrollTop = link.offsetTop - list.clientHeight / 2 + link.offsetHeight / 2;
   }
@@ -32,26 +59,38 @@ function scheduleUpdate() {
   if (!frame) frame = requestAnimationFrame(updateActiveVersion);
 }
 
-// Hash navigation preserves deep links and browser back/forward, including mobile selections.
-function selectVersion(event: Event) {
-  const version = (event.target as HTMLSelectElement).value;
-  window.location.hash = releaseId(version);
-  document.getElementById(releaseId(version))?.focus({ preventScroll: true });
+// Restore deep links inside the feed, including browser back and forward navigation.
+function scrollToRelease() {
+  const card = cards.find((item) => `#${item.id}` === window.location.hash);
+  if (card && feed.value) {
+    feed.value.scrollTop += card.getBoundingClientRect().top - feed.value.getBoundingClientRect().top;
+  }
+  scheduleUpdate();
+}
+
+// Hash navigation preserves deep links and browser back/forward.
+function selectRelease(event: Event) {
+  const select = event.target as HTMLSelectElement;
+  const release = props.releases.find((item) => item.tag === select.value);
+  if (!release) {
+    return;
+  }
+  const id = release.href.slice(1);
+  window.location.hash = id;
+  document.getElementById(id)?.focus({ preventScroll: true });
 }
 
 onMounted(() => {
   cards = Array.from(root.value?.querySelectorAll<HTMLElement>(".release-card") || []);
-  updateActiveVersion();
-  window.addEventListener("scroll", scheduleUpdate, { passive: true });
+  scrollToRelease();
   window.addEventListener("resize", scheduleUpdate);
-  window.addEventListener("hashchange", scheduleUpdate);
+  window.addEventListener("hashchange", scrollToRelease);
 });
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame);
-  window.removeEventListener("scroll", scheduleUpdate);
   window.removeEventListener("resize", scheduleUpdate);
-  window.removeEventListener("hashchange", scheduleUpdate);
+  window.removeEventListener("hashchange", scrollToRelease);
 });
 </script>
 
@@ -61,45 +100,98 @@ onBeforeUnmount(() => {
       <p class="release-nav-title">{{ chinese ? "版本列表" : "Release list" }}</p>
       <!-- Bypass VitePress routing so native hash links respect scroll margins and keyboard focus. -->
       <div class="release-links vp-raw">
-        <a
-          v-for="version in versions"
-          :key="version"
-          :href="`#${releaseId(version)}`"
-          :aria-current="activeVersion === version ? 'location' : undefined"
-        >v{{ version }}</a>
+        <div v-for="group in groups" :key="group.year" class="release-year-group">
+          <p class="release-year">{{ group.year }}</p>
+          <a
+            v-for="release in group.releases"
+            :key="release.tag"
+            :href="release.href"
+            :data-tag="release.tag"
+            :aria-current="activeTag === release.tag ? 'location' : undefined"
+          >{{ release.tag }}</a>
+        </div>
       </div>
       <label class="release-picker">
         <span>{{ chinese ? "选择版本" : "Choose a version" }}</span>
-        <select :value="activeVersion" @change="selectVersion">
-          <option v-for="version in versions" :key="version" :value="version">Wox v{{ version }}</option>
+        <select :value="activeTag" @change="selectRelease">
+          <optgroup v-for="group in groups" :key="group.year" :label="String(group.year)">
+            <option v-for="release in group.releases" :key="release.tag" :value="release.tag">Wox {{ release.tag }}</option>
+          </optgroup>
         </select>
       </label>
       <noscript>
-        <a v-for="version in versions" :key="version" :href="`#${releaseId(version)}`">v{{ version }}</a>
+        <template v-for="group in groups" :key="group.year">
+          <p>{{ group.year }}</p>
+          <a v-for="release in group.releases" :key="release.tag" :href="release.href">{{ release.tag }}</a>
+        </template>
       </noscript>
     </nav>
-    <div class="release-feed">
+    <div ref="feed" class="release-feed" role="region" :aria-label="chinese ? '更新日志' : 'Release notes'" tabindex="0" @scroll.passive="scheduleUpdate">
       <slot />
     </div>
   </div>
 </template>
 
+<style>
+/* Fill the viewport only on changelog indexes; the cards own the page's scrolling. */
+.Layout:has(.wox-changelog) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.Layout:has(.wox-changelog) .VPFooter,
+.Layout:has(.wox-changelog) .VPDocFooter {
+  display: none;
+}
+
+.Layout:has(.wox-changelog) .VPContent {
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.Layout:has(.wox-changelog) .VPDoc,
+.Layout:has(.wox-changelog) .VPDoc .container,
+.Layout:has(.wox-changelog) .VPDoc .content,
+.Layout:has(.wox-changelog) .VPDoc .content-container,
+.Layout:has(.wox-changelog) .VPDoc .main,
+.Layout:has(.wox-changelog) .vp-doc,
+.Layout:has(.wox-changelog) .vp-doc > div {
+  height: 100%;
+  min-height: 0;
+}
+
+.Layout:has(.wox-changelog) .VPDoc,
+.Layout:has(.wox-changelog) .VPDoc .content {
+  padding-bottom: 0;
+}
+
+.Layout:has(.wox-changelog) .vp-doc > div {
+  display: flex;
+  flex-direction: column;
+}
+</style>
+
 <style scoped>
 .wox-changelog {
   display: grid;
-  grid-template-columns: 184px minmax(0, 1fr);
+  grid-template-columns: 196px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 40px;
-  align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 32px;
 }
 
 .release-navigation {
-  position: sticky;
-  top: calc(var(--vp-nav-height) + 24px);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .release-nav-title {
+  flex: 0 0 auto;
   margin: 0 0 12px;
   font-size: 14px;
   font-weight: 600;
@@ -109,11 +201,73 @@ onBeforeUnmount(() => {
 .release-links {
   position: relative;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
-  max-height: calc(100dvh - var(--vp-nav-height) - 108px);
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.release-links,
+.release-feed {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.release-links:hover,
+.release-links:focus-within,
+.release-feed:hover,
+.release-feed:focus-within {
+  scrollbar-color: rgba(128, 128, 128, 0.72) transparent;
+}
+
+.release-links::-webkit-scrollbar,
+.release-feed::-webkit-scrollbar {
+  width: 8px;
+}
+
+.release-links::-webkit-scrollbar-track,
+.release-feed::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.release-links::-webkit-scrollbar-thumb,
+.release-feed::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  background-clip: padding-box;
+}
+
+.release-links:hover::-webkit-scrollbar-thumb,
+.release-links:focus-within::-webkit-scrollbar-thumb,
+.release-feed:hover::-webkit-scrollbar-thumb,
+.release-feed:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.72);
+  background-clip: padding-box;
+}
+
+.release-year-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.release-year-group + .release-year-group {
+  margin-top: 12px;
+}
+
+.release-year {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0 14px 4px;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .release-links a {
@@ -126,6 +280,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   line-height: 24px;
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .release-links a:hover {
@@ -152,12 +307,14 @@ onBeforeUnmount(() => {
 
 .release-links a:focus-visible,
 .release-picker select:focus-visible,
+.release-feed:focus-visible,
 :deep(.release-header a:focus-visible) {
   outline: 2px solid var(--vp-c-brand-1);
   outline-offset: 3px;
 }
 
-.release-links a:focus-visible {
+.release-links a:focus-visible,
+.release-feed:focus-visible {
   outline-offset: -2px;
 }
 
@@ -169,6 +326,10 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 32px;
   min-width: 0;
+  min-height: 0;
+  padding: 0 8px 24px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 :deep(.release-card) {
@@ -176,7 +337,7 @@ onBeforeUnmount(() => {
   padding: 28px 32px;
   border: 1px solid var(--wox-home-border);
   border-radius: 12px;
-  scroll-margin-top: calc(var(--vp-nav-height) + 24px);
+  scroll-margin-top: 0;
   overflow-wrap: anywhere;
 }
 
@@ -261,20 +422,10 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
-/* Below desktop, VitePress scrolls the main nav away and keeps a 48px local bar. */
-@media (max-width: 959px) {
-  .release-navigation {
-    top: 48px;
-  }
-
-  :deep(.release-card) {
-    scroll-margin-top: 72px;
-  }
-}
-
 @media (max-width: 767px) {
   .wox-changelog {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 20px;
     margin-top: 24px;
   }
@@ -301,7 +452,8 @@ onBeforeUnmount(() => {
   }
 
   .release-picker select {
-    min-width: 148px;
+    min-width: 180px;
+    max-width: 70%;
     padding: 8px 12px;
     border: 1px solid var(--wox-home-border);
     border-radius: 6px;
@@ -317,7 +469,6 @@ onBeforeUnmount(() => {
 
   :deep(.release-card) {
     padding: 20px;
-    scroll-margin-top: 136px;
   }
 
   :deep(.release-title-row h2) {

@@ -49,7 +49,12 @@ jobs:
         run: cd www && pnpm test:plugin-catalog
 
       - name: Build docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cd www && pnpm docs:build
+
+      - name: Test release pages
+        run: cd www && pnpm test:release-pages
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +11,9 @@ const ZH_CHANGELOG_PATH = path.join(REPO_ROOT, "CHANGELOG.zh_CN.md");
 const README_PATH = path.join(REPO_ROOT, "README.md");
 const EN_CHANGELOG_DIR = path.join(REPO_ROOT, "www/docs/changelog");
 const ZH_CHANGELOG_DIR = path.join(REPO_ROOT, "www/docs/zh/changelog");
+const GITHUB_RELEASES_PATH = path.join(SCRIPT_DIR, "github-releases.json");
+const GITHUB_RELEASES_ZH_PATH = path.join(SCRIPT_DIR, "github-releases.zh_CN.json");
+const GITHUB_RELEASES_API = "https://api.github.com/repos/Wox-launcher/Wox/releases";
 
 const STABLE_HEADING = /^## v(\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2})\s*$/;
 const MONTH_NAMES_EN = [
@@ -152,12 +157,166 @@ export function assertReadmeLatest(latest = getLatestRelease()) {
   }
 }
 
+/** Load the saved GitHub release list used when the API cannot be reached. */
+export function readGitHubReleaseSnapshot() {
+  if (!fs.existsSync(GITHUB_RELEASES_PATH)) {
+    return [];
+  }
+  const parsed = JSON.parse(fs.readFileSync(GITHUB_RELEASES_PATH, "utf8"));
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid GitHub release snapshot: ${GITHUB_RELEASES_PATH}`);
+  }
+  return parsed;
+}
+
+/** Refresh the saved Wox release list from GitHub so new tags stay in the changelog navigation. */
+export async function refreshGitHubReleaseSnapshot() {
+  let releases;
+  try {
+    releases = await fetchGitHubReleaseList();
+  } catch (error) {
+    // Unauthenticated REST calls are easy to rate-limit. A logged-in gh CLI can still read public releases.
+    releases = readGitHubReleasesWithGh();
+    if (!releases) {
+      throw error;
+    }
+  }
+  if (releases.length === 0) {
+    throw new Error("GitHub releases response was empty");
+  }
+  releases.sort((left, right) => right.publishedAt.localeCompare(left.publishedAt) || right.tag.localeCompare(left.tag));
+  writeIfChanged(GITHUB_RELEASES_PATH, `${JSON.stringify(releases, null, 2)}\n`);
+  return releases;
+}
+
+function githubRequestHeaders() {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "wox-docs",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+function normalizeGitHubReleases(payload) {
+  if (!Array.isArray(payload)) {
+    throw new Error("GitHub releases response was not a list");
+  }
+  const releases = [];
+  const seen = new Set();
+  for (const release of payload) {
+    if (release.draft || !release.tag_name || !release.published_at) {
+      continue;
+    }
+    if (seen.has(release.tag_name)) {
+      continue;
+    }
+    seen.add(release.tag_name);
+    releases.push({
+      tag: release.tag_name,
+      publishedAt: release.published_at,
+      body: release.body || "",
+    });
+  }
+  return releases;
+}
+
+async function fetchGitHubReleaseList() {
+  const pages = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await fetch(`${GITHUB_RELEASES_API}?per_page=100&page=${page}`, {
+      headers: githubRequestHeaders(),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub releases request failed (${response.status})`);
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error("GitHub releases response was not a list");
+    }
+    pages.push(...payload);
+    if (payload.length < 100) {
+      break;
+    }
+  }
+  return normalizeGitHubReleases(pages);
+}
+
+function readGitHubReleasesWithGh() {
+  try {
+    const output = execFileSync("gh", ["api", "--paginate", "--slurp", "repos/Wox-launcher/Wox/releases?per_page=100"], {
+      encoding: "utf8",
+      maxBuffer: 20 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return normalizeGitHubReleases(JSON.parse(output).flat());
+  } catch {
+    return null;
+  }
+}
+
+function releaseIdentity(tag) {
+  return tag.replace(/^v/i, "").toLowerCase();
+}
+
+function displayTag(tag) {
+  return /^v/i.test(tag) ? `v${tag.slice(1)}` : `v${tag}`;
+}
+
+function releaseAnchor(version) {
+  return `release-v${version.replaceAll(".", "-")}`;
+}
+
+/** Merge local changelog entries with every GitHub release, newest first. */
+export function buildReleaseNavigation(documentedReleases, githubReleases = readGitHubReleaseSnapshot()) {
+  const items = new Map();
+  for (const release of githubReleases) {
+    const date = String(release.publishedAt || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !release.tag) {
+      continue;
+    }
+    items.set(releaseIdentity(release.tag), {
+      tag: displayTag(release.tag),
+      year: Number(date.slice(0, 4)),
+      date,
+      href: `#${releaseAnchor(releaseIdentity(release.tag))}`,
+    });
+  }
+  for (const release of documentedReleases) {
+    items.set(releaseIdentity(release.version), {
+      tag: `v${release.version}`,
+      year: release.year,
+      date: release.date,
+      href: `#${releaseAnchor(release.version)}`,
+    });
+  }
+  return [...items.values()].sort((left, right) => right.date.localeCompare(left.date) || right.tag.localeCompare(left.tag, "en", { numeric: true }));
+}
+
 /** Write per-version changelog pages and language indexes from CHANGELOG.md and CHANGELOG.zh_CN.md. */
 export function generateChangelogPages() {
   const releases = getStableReleases();
   if (releases.length === 0) {
     throw new Error(`No stable releases found in ${CHANGELOG_PATH}`);
   }
+  const githubReleases = readGitHubReleaseSnapshot();
+  const githubChinese = JSON.parse(fs.readFileSync(GITHUB_RELEASES_ZH_PATH, "utf8"));
+  const navigation = buildReleaseNavigation(releases, githubReleases).map(({ tag, year, href }) => ({ tag, year, href }));
+  const localByIdentity = new Map(releases.map((release) => [releaseIdentity(release.tag), release]));
+  const githubByIdentity = new Map(githubReleases.map((release) => [releaseIdentity(release.tag), release]));
+  const feed = navigation.map((item) => {
+    const identity = releaseIdentity(item.tag);
+    const local = localByIdentity.get(identity);
+    if (local) return local;
+    const github = githubByIdentity.get(identity);
+    const date = github.publishedAt.slice(0, 10);
+    return { version: identity, tag: item.tag, githubTag: github.tag, date, ...formatDateParts(date), body: github.body || "", github: true };
+  });
 
   const chineseByVersion = chineseReleaseMap();
   fs.mkdirSync(EN_CHANGELOG_DIR, { recursive: true });
@@ -176,8 +335,8 @@ export function generateChangelogPages() {
       writeIfChanged(path.join(ZH_CHANGELOG_DIR, fileName), renderChineseVersionPage(chineseRelease));
     }
   }
-  writeIfChanged(path.join(EN_CHANGELOG_DIR, "index.md"), renderEnglishIndex(releases));
-  writeIfChanged(path.join(ZH_CHANGELOG_DIR, "index.md"), renderChineseIndex(releases, chineseByVersion));
+  writeIfChanged(path.join(EN_CHANGELOG_DIR, "index.md"), renderEnglishIndex(feed, navigation, releases[0]));
+  writeIfChanged(path.join(ZH_CHANGELOG_DIR, "index.md"), renderChineseIndex(feed, chineseByVersion, navigation, releases[0], githubChinese, githubByIdentity));
 
   removeStaleMarkdown(EN_CHANGELOG_DIR, expectedEnglish);
   removeStaleMarkdown(ZH_CHANGELOG_DIR, expectedChinese);
@@ -267,8 +426,7 @@ ${release.highlight}
 ${body}`;
 }
 
-function renderEnglishIndex(releases) {
-  const latest = releases[0];
+function renderEnglishIndex(releases, navigation, latest) {
   return `---
 title: "Changelog"
 description: ${JSON.stringify(`Wox release notes. Latest ${latest.tag} (${latest.dateShortEn}).`)}
@@ -279,12 +437,11 @@ lastUpdated: ${latest.date}
 
 # Changelog
 
-${renderReleaseFeed(releases, false)}
+${renderReleaseFeed(releases, navigation, false)}
 `;
 }
 
-function renderChineseIndex(releases, chineseByVersion) {
-  const latest = releases[0];
+function renderChineseIndex(releases, chineseByVersion, navigation, latest, githubChinese, githubByIdentity) {
   return `---
 title: "更新日志"
 description: ${JSON.stringify(`Wox 正式版更新记录。最新 ${latest.tag}（${latest.dateMonthZh}）。`)}
@@ -295,33 +452,43 @@ lastUpdated: ${latest.date}
 
 # 更新日志
 
-${renderReleaseFeed(releases, true, chineseByVersion)}
+${renderReleaseFeed(releases, navigation, true, chineseByVersion, githubChinese, githubByIdentity)}
 `;
 }
 
 /** Keep release content in Markdown so VitePress renders it into searchable static HTML. */
-function renderReleaseFeed(releases, chinese, chineseByVersion = new Map()) {
+function renderReleaseFeed(releases, navigation, chinese, chineseByVersion = new Map(), githubChinese = {}, githubByIdentity = new Map()) {
   const cards = releases.map((release, index) => {
     const translated = chineseByVersion.get(release.version);
+    const github = githubByIdentity.get(releaseIdentity(release.tag));
+    const githubTranslation = github && githubChinese[github.tag];
+    // A changed GitHub release must not be paired with a stale translation.
+    const translatedBody = githubTranslation && githubTranslation.sourceSha256 === createHash("sha256").update(github.body || "").digest("hex") ? githubTranslation.body : "";
     const content = chinese ? translated || release : release;
     const page = chinese && !translated ? `/changelog/${release.version}` : `./${release.version}`;
-    const id = `release-v${release.version.replaceAll(".", "-")}`;
-    const latest = index === 0 ? `<span class="release-badge">${chinese ? "最新版本" : "Latest"}</span>` : "";
-    const fallback = chinese && !translated ? "\n\n> 此版本暂无中文说明，以下为英文原文。" : "";
-    return `<section class="release-card" id="${id}" tabindex="-1" aria-labelledby="${id}-title">
+    const id = releaseAnchor(release.version);
+    const latest = index === 0 && !release.github ? `<span class="release-badge">${chinese ? "最新版本" : "Latest"}</span>` : "";
+    const fallback = chinese && !translated && !translatedBody && (!release.github || release.body.trim())
+      ? `\n\n> 此版本暂无中文说明，以下为${release.github ? " GitHub" : "英文"}原文。`
+      : "";
+    const title = release.github ? `Wox ${release.tag}` : `<a href="${page}">Wox ${release.tag}</a>`;
+    const body = chinese && !translated && translatedBody
+      ? translatedBody
+      : release.github ? (release.body || (chinese ? "此版本暂无发布说明。" : "No release notes were provided.")) : `${content.highlight}\n\n${content.body}`;
+    return `<section class="release-card" id="${id}" data-release="${release.tag}" tabindex="-1" aria-labelledby="${id}-title">
 <header class="release-header">
 <div class="release-title-row">
-<h2 id="${id}-title"><a href="${page}">Wox ${release.tag}</a></h2>
+<h2 id="${id}-title">${title}</h2>
 ${latest}
 </div>
 <div class="release-meta">
 <time datetime="${release.date}">${chinese ? release.dateLongZh : release.dateLongEn}</time>
-<a href="https://github.com/Wox-launcher/Wox/releases/tag/${release.tag}">GitHub Release ↗</a>
+<a href="https://github.com/Wox-launcher/Wox/releases/tag/${encodeURIComponent(release.githubTag || release.tag)}">GitHub Release ↗</a>
 </div>
 </header>
 ${fallback}
 
-${renderFeedMedia(`${content.highlight}\n\n${content.body}`, chinese)}
+${renderFeedMedia(body, chinese)}
 
 </section>`;
   });
@@ -329,7 +496,7 @@ ${renderFeedMedia(`${content.highlight}\n\n${content.body}`, chinese)}
 import ChangelogIndex from "../${chinese ? "../" : ""}.vitepress/theme/components/ChangelogIndex.vue";
 </script>
 
-<ChangelogIndex :versions='${JSON.stringify(releases.map((release) => release.version))}' :chinese="${chinese}">
+<ChangelogIndex :releases='${JSON.stringify(navigation)}' :chinese="${chinese}">
 
 ${cards.join("\n\n")}
 
