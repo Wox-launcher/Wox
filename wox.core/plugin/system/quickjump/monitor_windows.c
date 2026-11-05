@@ -362,6 +362,15 @@ static int hasFocusedFileList(int (*isAcceptedClassName)(const WCHAR *))
         return 0;
     }
 
+    // A popup menu keeps hwndFocus on the control that opened it, so a right
+    // click in the file list still looks focused while the menu owns the
+    // keyboard. Keys typed then belong to the menu's accelerators (refresh,
+    // properties, paste), so they must not become type-to-search.
+    if (guiInfo.hwndMenuOwner != NULL)
+    {
+        return 0;
+    }
+
     // Only check the focused HWND itself — do NOT walk up parents.
     // When the file list has focus, the focused HWND is DirectUIHWND itself.
     // When renaming a file, the focused HWND is an Edit control (child of DirectUIHWND),
