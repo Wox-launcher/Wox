@@ -62,8 +62,8 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
 
     # Acquire query buckets before any await so a later release cannot overtake startup.
     if method == "releaseQueryResults":
-        for instance in plugin_instances.values():
-            instance.result_actions.release(request.get("SessionId", ""), request.get("QueryId", ""))
+        for loaded_instance in plugin_instances.values():
+            loaded_instance.result_actions.release(request.get("SessionId", ""), request.get("QueryId", ""))
         return None
     if method == "retireToolbarSnapshot":
         instance = plugin_instances.get(request.get("PluginId", ""))
