@@ -114,7 +114,7 @@ func TestSlowWindowCallbackReceivesLatestChange(t *testing.T) {
 	for i := range 1000 {
 		driver.emit(WindowEvent{Type: WindowEventWoxView, DocumentID: "current", CoalesceKey: "field", Data: json.RawMessage(fmt.Sprint(i))})
 	}
-	driver.emit(WindowEvent{Type: WindowEventMessage, DocumentID: "current", Data: json.RawMessage(`"done"`)})
+	driver.emit(WindowEvent{Type: WindowEventWoxView, DocumentID: "current", Data: json.RawMessage(`"done"`)})
 	close(release)
 	for i := range 3 {
 		select {

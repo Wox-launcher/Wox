@@ -147,8 +147,7 @@ type API interface {
 
 	// Presentation and notifications.
 
-	// CreateWindow creates a hidden plugin window and installs its event callback before content
-	// loads.
+	// CreateWindow creates a hidden WoxView window and installs its event callback before the ready event.
 	CreateWindow(ctx context.Context, option CreateWindowOption) CreateWindowResult
 
 	// ShowToastMsg displays a transient toast message.

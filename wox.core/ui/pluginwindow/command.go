@@ -29,8 +29,8 @@ func (s *session) enqueueContentCommand(o plugin.WindowContentCommandOption) err
 	if o.DocumentID != "" && o.DocumentID != s.document {
 		return errors.New("document replaced")
 	}
-	if s.content.Type != plugin.WindowContentWoxView || s.view == nil {
-		return errors.New("content commands require woxview content")
+	if s.view == nil {
+		return errors.New("window content unavailable")
 	}
 	if (o.Command == plugin.WindowContentCommandFocus || o.Command == plugin.WindowContentCommandSelectAll) && !boolValue(s.options.Focusable, false) {
 		return errors.New("content focus commands require a focusable window")

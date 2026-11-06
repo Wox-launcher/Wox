@@ -13,13 +13,7 @@ import (
 
 type WindowContentType string
 
-const (
-	WindowContentText     WindowContentType = "text"
-	WindowContentMarkdown WindowContentType = "markdown"
-	WindowContentHTML     WindowContentType = "html"
-	// WindowContentWoxView is a declarative native view tree (JSON) rendered without a WebView.
-	WindowContentWoxView WindowContentType = "woxview"
-)
+const WindowContentWoxView WindowContentType = "woxview"
 
 type WindowPresentation string
 
@@ -45,10 +39,9 @@ const (
 type WindowEventType string
 
 const (
-	WindowEventReady   WindowEventType = "ready"
-	WindowEventMessage WindowEventType = "message"
-	WindowEventError   WindowEventType = "error"
-	WindowEventClosed  WindowEventType = "closed"
+	WindowEventReady  WindowEventType = "ready"
+	WindowEventError  WindowEventType = "error"
+	WindowEventClosed WindowEventType = "closed"
 	// WindowEventWoxView carries {"Handler","Args","Key"} for a callback registered in a woxview tree.
 	WindowEventWoxView WindowEventType = "woxview_event"
 	// WindowEventThemeChanged carries WindowThemeChangedData in Data.
@@ -58,7 +51,7 @@ const (
 // WindowThemeChangedData describes the plugin window's current surface appearance.
 type WindowThemeChangedData struct{ Dark bool }
 
-// WindowContent is independent of query previews while sharing their renderers.
+// WindowContent contains a serialized WoxView tree (JSON).
 type WindowContent struct {
 	Type WindowContentType
 	Data string
@@ -73,7 +66,6 @@ type WindowOptions struct {
 	OffsetX, OffsetY                                 *float64
 	Topmost, Focusable, Resizable, Movable, Closable *bool
 	HideChrome                                       *bool
-	DragContent                                      *bool
 }
 type CreateWindowOption struct {
 	Content WindowContent
@@ -119,11 +111,6 @@ type WindowContentUpdateOption struct {
 	// Sequence is an optional increasing per-document update number.
 	Sequence uint64
 }
-type WindowMessageOption struct {
-	Data json.RawMessage
-	// DocumentID optionally pins delivery to the document that emitted an event.
-	DocumentID string
-}
 
 // WindowContentCommand names an imperative WoxView operation.
 type WindowContentCommand string
@@ -147,7 +134,6 @@ type WindowSetOptionsResult struct{ WindowResult }
 type WindowContentSetResult struct{ WindowResult }
 type WindowContentUpdateResult struct{ WindowResult }
 type WindowContentCommandResult struct{ WindowResult }
-type WindowMessageResult struct{ WindowResult }
 
 // WindowDriver is the narrow native capability implemented by the UI feature.
 type WindowDriver interface {
@@ -158,7 +144,6 @@ type WindowDriver interface {
 	SetContent(WindowContent) error
 	UpdateContent(WindowContentUpdateOption) error
 	ContentCommand(WindowContentCommandOption) error
-	PostMessage(WindowMessageOption) error
 	AcceptEvent(WindowEvent) bool
 }
 
@@ -319,9 +304,6 @@ func (c *PluginWindowContent) Update(ctx context.Context, o WindowContentUpdateO
 // Command accepts a local operation for execution after the next content layout.
 func (c *PluginWindowContent) Command(ctx context.Context, o WindowContentCommandOption) WindowContentCommandResult {
 	return WindowContentCommandResult{c.window.call(func() error { return c.window.driver.ContentCommand(o) })}
-}
-func (c *PluginWindowContent) PostMessage(ctx context.Context, o WindowMessageOption) WindowMessageResult {
-	return WindowMessageResult{c.window.call(func() error { return c.window.driver.PostMessage(o) })}
 }
 
 // PluginWindowByID only resolves windows owned by this live API instance, for the host RPC adapter.

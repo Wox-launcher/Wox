@@ -19,17 +19,16 @@ from wox_plugin import (  # noqa: E402
     CreateWindowOption,
     WindowCloseOption,
     WindowContent,
+    WindowContentType,
     WindowContentSetOption,
     WindowContentUpdateOption,
     WindowContentUpdateResult,
     WindowContentCommand,
     WindowContentCommandOption,
     WindowContentCommandResult,
-    WindowContentType,
     WindowEventType,
     WindowThemeChangedData,
     WindowHideOption,
-    WindowMessageOption,
     WindowOptions,
     WindowPresentation,
     WindowSetOptionsOption,
@@ -68,13 +67,12 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
 
         api.invoke_method = invoke
         ctx = Context.new()
+        tree = '{"version":1,"root":{"type":"text","props":{"text":"hello"}}}'
         created = await api.create_window(
             ctx,
             CreateWindowOption(
-                content=WindowContent(WindowContentType.HTML, "<p>timer</p>"),
-                window=WindowOptions(
-                    presentation=WindowPresentation.WINDOW, topmost=False, offset_x=0, movable=True, drag_content=True, hide_chrome=True
-                ),
+                content=WindowContent(WindowContentType.WOXVIEW, tree),
+                window=WindowOptions(presentation=WindowPresentation.WINDOW, topmost=False, offset_x=0, movable=True, hide_chrome=True),
                 on_event=lambda ctx, e: fired.append(e),
             ),
         )
@@ -82,16 +80,14 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created.window.id, "native-1")
         self.assertEqual(json.loads(json.dumps(calls[0][1]))["option"]["Window"]["Presentation"], "window")
         self.assertIs(calls[0][1]["option"]["Window"]["Topmost"], False)
-        self.assertIs(calls[0][1]["option"]["Window"]["DragContent"], True)
+        self.assertEqual(calls[0][1]["option"]["Content"], {"Type": "woxview", "Data": tree})
         self.assertIs(calls[0][1]["option"]["Window"]["HideChrome"], True)
         self.assertNotIn("OnEvent", calls[0][1]["option"])
         await created.window.show(ctx, WindowShowOption())
         await created.window.hide(ctx, WindowHideOption())
         await created.window.set_options(ctx, WindowSetOptionsOption(offset_y=0, topmost=False))
-        await created.window.content.set(ctx, WindowContentSetOption(WindowContent(WindowContentType.TEXT, "done")))
-        tree = '{"version":1,"root":{"type":"text","props":{"text":"hello"}}}'
         await created.window.content.set(ctx, WindowContentSetOption(WindowContent(WindowContentType.WOXVIEW, tree)))
-        self.assertEqual(calls[-1][1]["option"]["Content"]["Type"], "woxview")
+        self.assertEqual(calls[-1][1]["option"]["Content"], {"Type": "woxview", "Data": tree})
         updated = await created.window.content.update(ctx, WindowContentUpdateOption(tree, "doc-1", 7))
         self.assertIsInstance(updated, WindowContentUpdateResult)
         self.assertTrue(updated.success)
@@ -120,13 +116,6 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fired[-1].type, WindowEventType.THEME_CHANGED)
             self.assertEqual(fired[-1].document_id, "doc-1")
             self.assertEqual(fired[-1].data, theme)
-        data = {"snake_case": False, "__proto__": {"x": 1}, "Unicode": "你好"}
-        await created.window.content.post_message(ctx, WindowMessageOption(data))
-        self.assertEqual(calls[-1][1], {"windowID": "native-1", "option": {"Data": data}})
-        await created.window.content.post_message(ctx, WindowMessageOption(None))
-        self.assertEqual(calls[-1][1]["option"], {"Data": None})
-        await event({"Event": json.dumps({"Type": "message", "WindowID": "native-1", "Data": data})})
-        self.assertEqual(fired[-1].data, data)
         await event({"Release": "true"})
         self.assertFalse(api.window_callbacks)
         delivered = len(fired)
@@ -143,7 +132,7 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_failure_and_unload_cleanup(self):
         api = PluginAPI(AsyncMock(), "window", "Window")
-        option = CreateWindowOption(WindowContent(WindowContentType.TEXT, ""))
+        option = CreateWindowOption(WindowContent(WindowContentType.WOXVIEW, '{"version":1,"root":{"type":"text","props":{"text":""}}}'))
         api.invoke_method = AsyncMock(side_effect=RuntimeError("disconnected"))
         with self.assertRaisesRegex(RuntimeError, "disconnected"):
             await api.create_window(Context.new(), option)

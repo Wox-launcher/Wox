@@ -91,12 +91,6 @@ func (w *WebsocketHost) handleWindowOperation(ctx context.Context, instance *plu
 			return nil, err
 		}
 		return window.Content.Command(ctx, o), nil
-	case "WindowPostMessage":
-		var o plugin.WindowMessageOption
-		if err := json.Unmarshal(raw, &o); err != nil {
-			return nil, err
-		}
-		return window.Content.PostMessage(ctx, o), nil
 	}
 	return nil, errors.New("unknown window operation")
 }

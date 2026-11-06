@@ -107,7 +107,6 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"WindowContentSet":     (*WebsocketHost).handleWindowOperation,
 	"WindowContentUpdate":  (*WebsocketHost).handleWindowOperation,
 	"WindowContentCommand": (*WebsocketHost).handleWindowOperation,
-	"WindowPostMessage":    (*WebsocketHost).handleWindowOperation,
 
 	"HideApp":                  (*WebsocketHost).handleHideApp,
 	"ShowApp":                  (*WebsocketHost).handleShowApp,

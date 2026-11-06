@@ -4,8 +4,8 @@ This package provides type definitions for developing Wox plugins in Python.
 
 Plugin-owned windows are available through `api.create_window(ctx, option)`.
 The returned instance has `show`, `hide`, `close`, `set_options`, `content.set`,
-`content.update` and `content.post_message`, all with named Option/Result models.
-See the [window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+`content.update` and `content.command`, all with named Option/Result models.
+See the [WoxView window API guide](../wox.core/ui/pluginwindow/README.md).
 
 ## WoxView protocol types
 

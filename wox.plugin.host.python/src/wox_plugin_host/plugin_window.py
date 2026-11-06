@@ -10,7 +10,6 @@ from wox_plugin.models.window import (
     WindowEvent,
     WindowEventType,
     WindowHideResult,
-    WindowMessageResult,
     WindowSetOptionsResult,
     WindowShowResult,
     window_option_payload,
@@ -29,9 +28,6 @@ class WindowContentProxy:
 
     async def command(self, ctx, option):
         return await self.window.call(ctx, "WindowContentCommand", option, WindowContentCommandResult)
-
-    async def post_message(self, ctx, option):
-        return await self.window.call(ctx, "WindowPostMessage", option, WindowMessageResult)
 
 
 class WindowProxy:

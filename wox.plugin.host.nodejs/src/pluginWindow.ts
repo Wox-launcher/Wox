@@ -12,7 +12,7 @@ import type {
 } from "@wox-launcher/wox-plugin"
 
 type Invoke = (ctx: Context, method: string, params: { [key: string]: string }) => Promise<unknown>
-/** Host-owned instance proxy. Its transport and native identity never enter page JavaScript. */
+/** Host-owned instance proxy. Its transport and native identity remain private. */
 export class WindowProxy implements PluginWindow {
   ID = ""
   closed = false
@@ -26,8 +26,7 @@ export class WindowProxy implements PluginWindow {
     this.Content = {
       Set: (ctx, option) => this.call(ctx, "WindowContentSet", option),
       Update: (ctx, option) => this.call(ctx, "WindowContentUpdate", option),
-      Command: (ctx, option) => this.call(ctx, "WindowContentCommand", option),
-      PostMessage: (ctx, option) => this.call(ctx, "WindowPostMessage", option)
+      Command: (ctx, option) => this.call(ctx, "WindowContentCommand", option)
     }
   }
   /** Early events can arrive before the creation reply assigns the instance ID. */

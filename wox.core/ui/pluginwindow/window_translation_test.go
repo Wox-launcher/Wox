@@ -21,7 +21,7 @@ func TestWindowMarksChangesWithoutLeakingQueueMetadata(t *testing.T) {
 	}
 	hideChrome := true
 	var events []plugin.WindowEvent
-	s := &session{content: content, document: "doc", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
+	s := &session{document: "doc", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
 	s.view.SetTree(tree)
 	host := widget.NewHost(s.build)
 	host.AttachServices(translationTestServices{})
@@ -54,7 +54,7 @@ func TestWindowWoxViewEventKeepsDocumentAndNodeKey(t *testing.T) {
 	}
 	hideChrome := true
 	var events []plugin.WindowEvent
-	s := &session{content: content, document: "doc-1", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
+	s := &session{document: "doc-1", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
 	s.view.SetTree(tree)
 	host := widget.NewHost(s.build)
 	host.AttachServices(translationTestServices{})
@@ -88,47 +88,31 @@ func (translationTestServices) UpdateAccessibility(ui.AccessibilityTree, ui.Acce
 	return nil
 }
 
-// TestWindowPassesTranslationOnlyToDeclarativeContent guards the literal shorthand content contract.
-func TestWindowPassesTranslationOnlyToDeclarativeContent(t *testing.T) {
-	for _, kind := range []plugin.WindowContentType{plugin.WindowContentWoxView, plugin.WindowContentText} {
-		content := plugin.WindowContent{Type: kind, Data: "i18n:label"}
-		if kind == plugin.WindowContentWoxView {
-			content.Data = `{"version":1,"root":{"type":"button","props":{"label":"i18n:label"}}}`
+// TestWindowPassesTranslationToWoxView verifies the creating plugin's translation capability.
+func TestWindowPassesTranslationToWoxView(t *testing.T) {
+	content := plugin.WindowContent{Type: plugin.WindowContentWoxView, Data: `{"version":1,"root":{"type":"button","props":{"label":"i18n:label"}}}`}
+	tree, err := prepareContent(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hideChrome := true
+	s := &session{document: "doc", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), translate: func(text string) string {
+		if text != "i18n:label" {
+			t.Fatalf("unexpected translation key %q", text)
 		}
-		tree, err := prepareContent(content)
-		if err != nil {
-			t.Fatal(err)
-		}
-		hideChrome := true
-		calls := 0
-		s := &session{content: content, document: "doc", options: plugin.WindowOptions{HideChrome: &hideChrome}, view: woxview.NewView(), translate: func(text string) string {
-			calls++
-			if text != "i18n:label" {
-				t.Fatalf("unexpected translation key %q", text)
-			}
-			return "Translated label"
-		}}
-		s.view.SetTree(tree)
-		host := widget.NewHost(s.build)
-		host.AttachServices(translationTestServices{})
-		host.Frame(&ui.DisplayList{}, ui.FrameInfo{Size: ui.Size{Width: 300, Height: 200}, PixelSize: ui.PixelSize{Width: 300, Height: 200}, Scale: 1})
-		want := "i18n:label"
-		if kind == plugin.WindowContentWoxView {
-			want = "Translated label"
-		}
-		found := false
-		for _, n := range host.Snapshot().Tree.Nodes {
-			if n.Label == want {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatalf("%s: missing displayed label %q", kind, want)
-		}
-		if kind == plugin.WindowContentText && calls != 0 {
-			t.Fatal("literal text was translated")
+		return "Translated label"
+	}}
+	s.view.SetTree(tree)
+	host := widget.NewHost(s.build)
+	host.AttachServices(translationTestServices{})
+	defer host.Dispose()
+	host.Frame(&ui.DisplayList{}, ui.FrameInfo{Size: ui.Size{Width: 300, Height: 200}, Scale: 1})
+	for _, n := range host.Snapshot().Tree.Nodes {
+		if n.Label == "Translated label" {
+			return
 		}
 	}
+	t.Fatal("missing translated label")
 }
 
 // TestWindowValidationPreservesStructuredErrorAndText checks validation before native allocation.

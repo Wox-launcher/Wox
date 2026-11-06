@@ -16,17 +16,9 @@ func (s *session) themeChanged() {
 		_ = s.window.SetAppearance(!overlay.CurrentThemeChrome().Light)
 		_ = s.window.Invalidate()
 	}
-	s.themePending = true
-	s.flushThemeChange()
-}
-
-// flushThemeChange delays notifications until the current document is ready.
-// Multiple changes while HTML loads collapse to its latest surface appearance.
-func (s *session) flushThemeChange() {
-	if s.closed || !s.ready || s.loadFailed || !s.themePending || s.document == "" {
+	if s.document == "" {
 		return
 	}
-	s.themePending = false
 	data, _ := json.Marshal(plugin.WindowThemeChangedData{Dark: !overlay.CurrentThemeChrome().Light})
 	s.emit(plugin.WindowEvent{Type: plugin.WindowEventThemeChanged, DocumentID: s.document, Data: data, CoalesceKey: "theme"})
 }

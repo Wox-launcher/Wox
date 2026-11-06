@@ -4,8 +4,8 @@ WoxView renders a versioned JSON tree with Wox widgets. It is independent of a
 particular plugin language or React. Plugin windows accept the serialized tree as
 `WindowContent{Type: "woxview", Data: json}`. `Content.Update` replaces the tree
 without replacing the document; `Content.Set` replaces the document and its state.
-The window must be focusable and activated for keyboard input. Existing text,
-Markdown and HTML window content types remain supported.
+The window must be focusable and activated for keyboard input. Window content is
+WoxView-only; use `text` and `markdown` nodes to display those formats.
 
 ```json
 {
@@ -145,8 +145,8 @@ Plugin windows also emit `theme_changed` with `Data: {"Dark": bool}` and their
 current `DocumentID`. It is a window event, not a node handler. Use it when image
 assets need to change; colors and tokens already resolve from the current theme.
 The notification covers hidden windows and same-appearance palette changes.
-Creation emits only the existing `ready`; a change during HTML loading waits for
-ready. Document replacement and close revoke stale notifications. See the
+Creation emits only `ready`. Document replacement and close revoke stale
+notifications. See the
 [window event contract](../pluginwindow/README.md) for SDK payload details.
 `alignSelf` applies to ordinary row/column/view/form/scroll Flex children and
 combines with `flex` weights. Omission inherits the parent; `start` explicitly
@@ -650,8 +650,7 @@ the locale or translation revision in Boundary props so a locale change rebuilds
 the cached subtree.
 
 Plugin windows receive their owner's existing plugin/Wox translation lookup
-through the internal window factory. `text`, `markdown`, and HTML shorthand
-content retain their literal semantics. Future settings embedders can supply
+through the internal window factory. Future settings embedders can supply
 Wox's translator without coupling WoxView to plugin or global i18n state.
 
 ## Schema and compatibility

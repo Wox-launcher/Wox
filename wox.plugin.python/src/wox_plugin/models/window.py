@@ -10,9 +10,6 @@ from .context import Context
 
 
 class WindowContentType(str, Enum):
-    TEXT = "text"
-    MARKDOWN = "markdown"
-    HTML = "html"
     WOXVIEW = "woxview"
 
 
@@ -35,7 +32,6 @@ class WindowAnchor(str, Enum):
 
 class WindowEventType(str, Enum):
     READY = "ready"
-    MESSAGE = "message"
     ERROR = "error"
     CLOSED = "closed"
     WOXVIEW = "woxview_event"
@@ -50,6 +46,8 @@ class WindowThemeChangedData(TypedDict):
 
 @dataclass
 class WindowContent:
+    """Serialized WoxView tree (JSON)."""
+
     type: WindowContentType
     data: str
 
@@ -69,7 +67,6 @@ class WindowOptions:
     movable: Optional[bool] = None
     closable: Optional[bool] = None
     hide_chrome: Optional[bool] = None
-    drag_content: Optional[bool] = None
 
 
 @dataclass
@@ -156,12 +153,6 @@ class WindowContentCommandOption:
 
 
 @dataclass
-class WindowMessageOption:
-    data: Any
-    document_id: Optional[str] = None
-
-
-@dataclass
 class WindowShowResult(WindowResult):
     pass
 
@@ -196,16 +187,10 @@ class WindowContentCommandResult(WindowResult):
     pass
 
 
-@dataclass
-class WindowMessageResult(WindowResult):
-    pass
-
-
 class PluginWindowContent(Protocol):
     async def set(self, ctx: Context, option: WindowContentSetOption) -> WindowContentSetResult: ...
     async def update(self, ctx: Context, option: WindowContentUpdateOption) -> WindowContentUpdateResult: ...
     async def command(self, ctx: Context, option: WindowContentCommandOption) -> WindowContentCommandResult: ...
-    async def post_message(self, ctx: Context, option: WindowMessageOption) -> WindowMessageResult: ...
 
 
 class PluginWindow(Protocol):
@@ -219,11 +204,11 @@ class PluginWindow(Protocol):
 
 
 def window_option_payload(option: Any) -> dict[str, Any]:
-    """Serialize fixed option fields, preserving explicit false/zero and opaque JSON message data."""
+    """Serialize fixed option fields, preserving explicit false/zero."""
     result = {}
     for item in fields(option):
         value = getattr(option, item.name)
-        if item.name == "on_event" or (value is None and not (isinstance(option, WindowMessageOption) and item.name == "data")):
+        if item.name == "on_event" or value is None:
             continue
         key = "DocumentID" if item.name == "document_id" else "".join(part.capitalize() for part in item.name.split("_"))
         if item.name in ("window", "content"):

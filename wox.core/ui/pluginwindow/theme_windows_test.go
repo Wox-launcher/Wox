@@ -25,7 +25,7 @@ func TestNativeHiddenWindowThemeChanges(t *testing.T) {
 		overlay.SetThemeProvider(func() common.Theme { return theme })
 		defer overlay.SetThemeProvider(nil)
 		var events []plugin.WindowEvent
-		driver, err := Create("hidden-theme-test", plugin.CreateWindowOption{Content: plugin.WindowContent{Type: plugin.WindowContentText, Data: "hidden"}}, func(e plugin.WindowEvent) { events = append(events, e) })
+		driver, err := Create("hidden-theme-test", plugin.CreateWindowOption{Content: plugin.WindowContent{Type: plugin.WindowContentWoxView, Data: `{"version":1,"root":{"type":"text","props":{"text":"hidden"}}}`}}, func(e plugin.WindowEvent) { events = append(events, e) })
 		if err != nil {
 			return err
 		}

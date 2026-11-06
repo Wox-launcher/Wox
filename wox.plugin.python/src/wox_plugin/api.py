@@ -324,7 +324,7 @@ class PublicAPI(Protocol):
         ...
 
     async def create_window(self, ctx: Context, option: CreateWindowOption) -> CreateWindowResult:
-        """Create a hidden plugin-owned window with an instance-bound content API."""
+        """Create a hidden WoxView window with an instance-bound content API."""
         ...
 
     async def show_toast_msg(self, ctx: Context, option: ShowToastMsgOption) -> ShowToastMsgResult:

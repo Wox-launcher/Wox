@@ -11,7 +11,7 @@ import (
 type windowRequestDriver struct {
 	emit    func(plugin.WindowEvent)
 	stop    sync.Once
-	data    json.RawMessage
+	content plugin.WindowContent
 	update  string
 	command plugin.WindowContentCommandOption
 }
@@ -23,17 +23,16 @@ func (d *windowRequestDriver) Close() error {
 	return nil
 }
 func (d *windowRequestDriver) SetOptions(plugin.WindowSetOptionsOption) error { return nil }
-func (d *windowRequestDriver) SetContent(plugin.WindowContent) error          { return nil }
+func (d *windowRequestDriver) SetContent(content plugin.WindowContent) error {
+	d.content = content
+	return nil
+}
 func (d *windowRequestDriver) UpdateContent(o plugin.WindowContentUpdateOption) error {
 	d.update = o.Data
 	return nil
 }
 func (d *windowRequestDriver) ContentCommand(o plugin.WindowContentCommandOption) error {
 	d.command = o
-	return nil
-}
-func (d *windowRequestDriver) PostMessage(o plugin.WindowMessageOption) error {
-	d.data = o.Data
 	return nil
 }
 func (d *windowRequestDriver) AcceptEvent(plugin.WindowEvent) bool { return true }
@@ -51,7 +50,7 @@ func TestWindowRequestRoundTrip(t *testing.T) {
 	instance := &plugin.Instance{}
 	instance.Metadata.Id = "owner"
 	instance.API = plugin.NewAPI(instance)
-	request := JsonRpcRequest{Id: "create", Method: "CreateWindow", Params: map[string]string{"option": `{"CallbackID":"callback","Content":{"Type":"html","Data":"<p>test</p>"}}`}}
+	request := JsonRpcRequest{Id: "create", Method: "CreateWindow", Params: map[string]string{"option": `{"CallbackID":"callback","Content":{"Type":"woxview","Data":"{\"version\":1,\"root\":{\"type\":\"text\",\"props\":{\"text\":\"test\"}}}"}}`}}
 	host.respondToPluginRequest(t.Context(), request, instance)
 	response := receivePluginResponse(t, responses, request)
 	raw, _ := json.Marshal(response.Result)
@@ -92,19 +91,19 @@ func TestWindowRequestRoundTrip(t *testing.T) {
 		}
 	}
 	other.API = plugin.NewAPI(other)
-	operation := JsonRpcRequest{Id: "message", Method: "WindowPostMessage", Params: map[string]string{"windowID": created.WindowID, "option": `{"Data":{"snake_case":false}}`}}
+	operation := JsonRpcRequest{Id: "content", Method: "WindowContentSet", Params: map[string]string{"windowID": created.WindowID, "option": `{"Content":{"Type":"woxview","Data":"{\"version\":1,\"root\":{\"type\":\"text\",\"props\":{\"text\":\"test\"}}}"}}`}}
 	host.respondToPluginRequest(t.Context(), operation, other)
 	denied := receivePluginResponse(t, responses, operation)
 	raw, _ = json.Marshal(denied.Result)
 	var result plugin.WindowResult
 	_ = json.Unmarshal(raw, &result)
-	if result.Success || driver.data != nil {
+	if result.Success || driver.content.Data != "" {
 		t.Fatal("foreign plugin accessed window")
 	}
 	host.respondToPluginRequest(t.Context(), operation, instance)
 	allowed := receivePluginResponse(t, responses, operation)
-	if allowed.Error != "" || string(driver.data) != `{"snake_case":false}` {
-		t.Fatalf("message response: %+v, data: %s", allowed, driver.data)
+	if allowed.Error != "" || driver.content.Data != `{"version":1,"root":{"type":"text","props":{"text":"test"}}}` {
+		t.Fatalf("content response: %+v, data: %s", allowed, driver.content.Data)
 	}
 	command := JsonRpcRequest{Id: "command-denied", Method: "WindowContentCommand", Params: map[string]string{"windowID": created.WindowID, "option": `{"DocumentID":"doc","Command":"selectAll","Key":"title"}`}}
 	host.respondToPluginRequest(t.Context(), command, other)

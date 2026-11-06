@@ -1595,7 +1595,7 @@ export interface ShowToastMsgResult {
 export interface PublicAPI {
   /** Subscribe once during init; global settings own registration and cleanup. */
   OnHotkey(ctx: Context, option: OnHotkeyOption): Promise<OnHotkeyResult>
-  /** Create a hidden plugin window and install its event callback before content loads. */
+  /** Create a hidden WoxView window and install its event callback before the ready event. */
   CreateWindow(ctx: Context, option: CreateWindowOption): Promise<CreateWindowResult>
   /**
    * Change the launcher query. Only input and selection query types are accepted.

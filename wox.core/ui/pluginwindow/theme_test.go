@@ -8,36 +8,30 @@ import (
 	"wox/util/overlay"
 )
 
-// TestThemeEventWaitsForReady preserves readiness ordering and the latest
-// surface appearance when a hidden HTML document is still loading.
-func TestThemeEventWaitsForReady(t *testing.T) {
+// TestThemeEvents checks document identity, palette changes and closed-window filtering.
+func TestThemeEvents(t *testing.T) {
 	theme := common.Theme{AppBackgroundColor: "#111111"}
 	overlay.SetThemeProvider(func() common.Theme { return theme })
 	t.Cleanup(func() { overlay.SetThemeProvider(nil) })
 	var events []plugin.WindowEvent
-	s := &session{document: "current", content: plugin.WindowContent{Type: plugin.WindowContentHTML}, emit: func(e plugin.WindowEvent) { events = append(events, e) }}
-	s.themeChanged()
-	theme.AppBackgroundColor = "#eeeeee"
+	s := &session{emit: func(e plugin.WindowEvent) { events = append(events, e) }}
 	s.themeChanged()
 	if len(events) != 0 {
-		t.Fatal("theme event preceded document ready")
+		t.Fatal("theme event preceded document creation")
 	}
-	s.message(`{"Token":"current","Type":"ready"}`)
-	if len(events) != 2 || events[0].Type != plugin.WindowEventReady || events[1].Type != plugin.WindowEventThemeChanged {
-		t.Fatalf("ready/theme ordering: %+v", events)
+	s.document = "current"
+	for _, background := range []string{"#111111", "#eeeeee", "#ffffff"} {
+		theme.AppBackgroundColor = background
+		s.themeChanged()
 	}
-	var data plugin.WindowThemeChangedData
-	if err := json.Unmarshal(events[1].Data, &data); err != nil || data.Dark || events[1].DocumentID != "current" {
-		t.Fatalf("wrong theme payload: %+v", events[1])
-	}
-	s.flushThemeChange()
-	if len(events) != 2 {
-		t.Fatal("duplicate pending theme event")
-	}
-	// A palette update still matters when it preserves the same light appearance.
-	s.themeChanged()
 	if len(events) != 3 {
-		t.Fatal("same-appearance theme update was lost")
+		t.Fatalf("theme updates lost: %+v", events)
+	}
+	for i, event := range events {
+		var data plugin.WindowThemeChangedData
+		if err := json.Unmarshal(event.Data, &data); err != nil || data.Dark != (i == 0) || event.DocumentID != "current" || event.Type != plugin.WindowEventThemeChanged {
+			t.Fatalf("wrong theme event: %+v", event)
+		}
 	}
 	s.closed = true
 	s.themeChanged()

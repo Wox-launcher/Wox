@@ -25,7 +25,6 @@ func (d *testWindowDriver) UpdateContent(WindowContentUpdateOption) error {
 	return nil
 }
 func (d *testWindowDriver) ContentCommand(WindowContentCommandOption) error { return nil }
-func (d *testWindowDriver) PostMessage(WindowMessageOption) error           { return nil }
 func (d *testWindowDriver) AcceptEvent(e WindowEvent) bool                  { return e.DocumentID == "current" }
 
 // TestWindowTranslationUsesOwner verifies windows with identical keys keep separate plugin dictionaries.
@@ -65,7 +64,7 @@ func TestWindowOwnershipAndRelease(t *testing.T) {
 	var driver *testWindowDriver
 	SetWindowFactory(func(id string, option CreateWindowOption, emit func(WindowEvent), _ func(string) string) (WindowDriver, error) {
 		driver = &testWindowDriver{emit: emit}
-		emit(WindowEvent{Type: WindowEventMessage, DocumentID: "old"})
+		emit(WindowEvent{Type: WindowEventWoxView, DocumentID: "old"})
 		emit(WindowEvent{Type: WindowEventReady, DocumentID: "current"})
 		return driver, nil
 	})

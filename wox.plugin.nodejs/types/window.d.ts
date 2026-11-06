@@ -1,13 +1,14 @@
 import type { Context } from "./index.js"
 
-export type WindowContentType = "text" | "markdown" | "html" | "woxview"
+export type WindowContentType = "woxview"
 export type WindowPresentation = "overlay" | "window"
-export type WindowEventType = "ready" | "message" | "error" | "closed" | "woxview_event" | "theme_changed"
+export type WindowEventType = "ready" | "error" | "closed" | "woxview_event" | "theme_changed"
 /** Payload of a document-scoped theme_changed event; colors resolve locally without this callback. */
 export interface WindowThemeChangedData {
   Dark: boolean
 }
 export type WindowAnchor = "top-left" | "top-center" | "top-right" | "left-center" | "center" | "right-center" | "bottom-left" | "bottom-center" | "bottom-right"
+/** Serialized WoxView tree (JSON). */
 export interface WindowContent {
   Type: WindowContentType
   Data: string
@@ -28,8 +29,6 @@ export interface WindowOptions {
   Closable?: boolean
   /** Hide Wox's window controls and drag strip. */
   HideChrome?: boolean
-  /** Drag the window from HTML content; ordinary clicks remain available to the page. Requires Movable. */
-  DragContent?: boolean
 }
 export interface WindowEvent {
   Type: WindowEventType
@@ -75,10 +74,6 @@ export interface WindowContentUpdateOption {
   /** Increasing per-document sequence; use nonnegative safe integers. Zero leaves updates unsequenced. */
   Sequence?: number
 }
-export interface WindowMessageOption {
-  Data: unknown
-  DocumentID?: string
-}
 export type WindowContentCommand = "focus" | "scrollTo" | "selectAll"
 /** Queue a local operation on a document-wide unique node key. Deferred failures emit an error event. */
 export interface WindowContentCommandOption {
@@ -93,12 +88,10 @@ export interface WindowSetOptionsResult extends WindowResult {}
 export interface WindowContentSetResult extends WindowResult {}
 export interface WindowContentUpdateResult extends WindowResult {}
 export interface WindowContentCommandResult extends WindowResult {}
-export interface WindowMessageResult extends WindowResult {}
 export interface PluginWindowContent {
   Set(ctx: Context, option: WindowContentSetOption): Promise<WindowContentSetResult>
   Update(ctx: Context, option: WindowContentUpdateOption): Promise<WindowContentUpdateResult>
   Command(ctx: Context, option: WindowContentCommandOption): Promise<WindowContentCommandResult>
-  PostMessage(ctx: Context, option: WindowMessageOption): Promise<WindowMessageResult>
 }
 export interface PluginWindow {
   readonly ID: string

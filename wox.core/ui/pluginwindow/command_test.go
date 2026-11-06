@@ -20,7 +20,7 @@ func TestContentCommandDocumentLifecycle(t *testing.T) {
 	}
 	flag := true
 	var events []plugin.WindowEvent
-	s := &session{content: content, document: "doc", options: plugin.WindowOptions{Focusable: &flag, HideChrome: &flag}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
+	s := &session{document: "doc", options: plugin.WindowOptions{Focusable: &flag, HideChrome: &flag}, view: woxview.NewView(), emit: func(e plugin.WindowEvent) { events = append(events, e) }}
 	s.view.SetTree(tree)
 	s.host = widget.NewHost(s.build)
 	s.host.AttachServices(translationTestServices{})
@@ -84,9 +84,9 @@ func TestContentCommandDocumentLifecycle(t *testing.T) {
 	if err := s.enqueueContentCommand(option); err != nil {
 		t.Fatalf("scrolling nonfocusable window: %v", err)
 	}
-	s.content.Type = plugin.WindowContentHTML
-	if err := s.enqueueContentCommand(option); err == nil || !strings.Contains(err.Error(), "woxview") {
-		t.Fatalf("HTML command: %v", err)
+	s.view = nil
+	if err := s.enqueueContentCommand(option); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("missing content command: %v", err)
 	}
 	s.closed = true
 	if err := s.enqueueContentCommand(option); err == nil || err.Error() != "window closed" {

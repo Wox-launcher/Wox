@@ -18,8 +18,7 @@ translation, and producer handlers. The shared text editor accepts that narrow
 measurement capability independently of native window services.
 
 `pluginwindow` owns plugin-created windows and document/event lifecycles. It renders
-native content through `woxview` (including text/Markdown adapters) and HTML through
-the `previewcontent` WebView surface. `woxview` owns declarative tree validation,
+only WoxView documents through `woxview`. `woxview` owns declarative tree validation,
 field values, debounced change delivery, command target resolution, and widget mapping.
 `widget` owns generic subtree focus/selection/reveal operations; `pluginwindow`
 guards command document identity and adapts deferred errors to plugin events.

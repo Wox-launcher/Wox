@@ -4,8 +4,8 @@ TypeScript type definitions and SDK for developing Wox plugins in TypeScript/Jav
 
 Plugin-owned windows are available through `API.CreateWindow(ctx, option)`.
 The returned instance has `Show`, `Hide`, `Close`, `SetOptions`, `Content.Set`,
-`Content.Update` and `Content.PostMessage`, all with named Option/Result contracts.
-See the [window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+`Content.Update` and `Content.Command`, all with named Option/Result contracts.
+See the [WoxView window API guide](../wox.core/ui/pluginwindow/README.md).
 
 ## WoxView protocol types
 

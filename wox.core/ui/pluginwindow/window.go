@@ -3,18 +3,13 @@ package pluginwindow
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"strings"
-	"time"
 	"wox/i18n"
-	"wox/internal/assetfs"
 	"wox/plugin"
 	component "wox/ui/launcher/component"
-	"wox/ui/previewcontent"
 	ui "wox/ui/runtime"
 	widget "wox/ui/widget"
 	"wox/ui/woxview"
@@ -23,39 +18,28 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxMessageBytes = 256 * 1024
-
 var anchors = map[plugin.WindowAnchor]int{
 	plugin.WindowAnchorTopLeft: overlay.AnchorTopLeft, plugin.WindowAnchorTopCenter: overlay.AnchorTopCenter, plugin.WindowAnchorTopRight: overlay.AnchorTopRight,
 	plugin.WindowAnchorLeftCenter: overlay.AnchorLeftCenter, plugin.WindowAnchorCenter: overlay.AnchorCenter, plugin.WindowAnchorRightCenter: overlay.AnchorRightCenter,
 	plugin.WindowAnchorBottomLeft: overlay.AnchorBottomLeft, plugin.WindowAnchorBottomCenter: overlay.AnchorBottomCenter, plugin.WindowAnchorBottomRight: overlay.AnchorBottomRight,
 }
 
-// session fields are confined to the UI thread, including native message callbacks.
+// session fields are confined to the UI thread, including native window callbacks.
 type session struct {
-	id        string
-	options   plugin.WindowOptions
-	placement overlay.WindowOptions
-	content   plugin.WindowContent
-	document  string
-	sequence  uint64
-	html      string
-	// view renders every non-HTML document; text and Markdown are one-node woxview trees.
+	id               string
+	options          plugin.WindowOptions
+	placement        overlay.WindowOptions
+	document         string
+	sequence         uint64
 	view             *woxview.View
 	window           *ui.Window
 	managed          *ui.ManagedWindow
 	host             *widget.Host
 	emit             func(plugin.WindowEvent)
-	ready, closed    bool
-	contentDrag      contentDrag
-	pending          []json.RawMessage
-	loadTimer        *time.Timer
-	loadFailed       bool
-	pendingShow      *plugin.WindowShowOption
+	closed           bool
 	workArea         func() (ui.Rect, bool)
 	translate        func(string) string
 	unsubscribeTheme func()
-	themePending     bool
 }
 
 func boolValue(p *bool, fallback bool) bool {
@@ -71,28 +55,12 @@ func number(p *float64, fallback float64) float64 {
 	return fallback
 }
 
-// prepareContent bounds allocations and parses native content before it reaches the UI thread.
-// HTML returns a nil tree; every other type becomes a woxview tree so there is one native render path.
+// prepareContent validates the WoxView document before allocating or mutating a window.
 func prepareContent(c plugin.WindowContent) (*woxview.Tree, error) {
-	if len(c.Data) > 4*1024*1024 {
-		return nil, errors.New("window content exceeds 4 MiB")
+	if c.Type != plugin.WindowContentWoxView {
+		return nil, errors.New("unsupported window content type")
 	}
-	switch c.Type {
-	case plugin.WindowContentHTML:
-		return nil, nil
-	case plugin.WindowContentWoxView:
-		return woxview.Parse([]byte(c.Data))
-	case plugin.WindowContentText:
-		// Matches the former Preview text layout: selectable 14/21 text in a padded scroll.
-		return woxview.NewTree(&woxview.Node{Type: woxview.NodeScroll, Props: &woxview.ScrollProps{BoxProps: woxview.BoxProps{Styled: woxview.Styled{Style: woxview.Style{Padding: woxview.Edges{Top: woxview.Size{Value: 24}, Right: woxview.Size{Value: 14}, Bottom: woxview.Size{Value: 24}, Left: woxview.Size{Value: 14}}}}}}, Children: []*woxview.Node{
-			{Type: woxview.NodeText, Props: &woxview.TextProps{Text: c.Data, Selectable: true, Styled: woxview.Styled{Style: woxview.Style{FontSize: woxview.Size{Value: 14}, LineHeight: woxview.Size{Value: 21}}}}},
-		}})
-	case plugin.WindowContentMarkdown:
-		return woxview.NewTree(&woxview.Node{Type: woxview.NodeScroll, Props: &woxview.ScrollProps{BoxProps: woxview.BoxProps{Styled: woxview.Styled{Style: woxview.Style{Padding: woxview.Edges{Top: woxview.Size{Value: 20}, Right: woxview.Size{Value: 20}, Bottom: woxview.Size{Value: 20}, Left: woxview.Size{Value: 20}}}}}}, Children: []*woxview.Node{
-			{Type: woxview.NodeMarkdown, Props: &woxview.MarkdownProps{Content: c.Data}},
-		}})
-	}
-	return nil, errors.New("unsupported window content type")
+	return woxview.Parse([]byte(c.Data))
 }
 
 // validateGeometry rejects NaN/infinite dimensions and unknown anchors.
@@ -116,7 +84,7 @@ func Create(id string, o plugin.CreateWindowOption, emit func(plugin.WindowEvent
 	return CreateWithWorkArea(id, o, emit, nil, nil)
 }
 
-// normalizePresentation keeps legacy overlays nonactivating and topmost, while
+// normalizePresentation keeps overlays nonactivating and topmost, while
 // ordinary windows participate in native application/window discovery.
 func normalizePresentation(options *plugin.WindowOptions) (ui.WindowRole, error) {
 	switch options.Presentation {
@@ -168,19 +136,16 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 			Nonactivating: !boolValue(o.Window.Focusable, false), Topmost: boolValue(o.Window.Topmost, true), Resizable: boolValue(o.Window.Resizable, false),
 			OnFrame: s.host.Frame, OnPointer: s.host.Pointer, OnTextInput: func(e ui.TextInputEvent) { s.host.TextInput(e) },
 			OnKey: func(e ui.KeyEvent) bool {
-				if s.content.Type == plugin.WindowContentWoxView && s.host.Key(e) {
+				if s.host.Key(e) {
 					return true
 				}
 				if e.Down && e.Key == ui.KeyEscape && boolValue(s.options.Closable, true) {
 					_ = s.managed.Close()
 					return true
 				}
-				if s.content.Type != plugin.WindowContentWoxView {
-					return s.host.Key(e)
-				}
 				return false
 			},
-			OnFocus: func(e ui.FocusEvent) { s.host.SetWindowFocused(e.Active) }, OnWebViewMessage: s.message,
+			OnFocus: func(e ui.FocusEvent) { s.host.SetWindowFocused(e.Active) },
 			OnCloseRequested: func() {
 				if boolValue(s.options.Closable, true) {
 					_ = s.managed.Close()
@@ -192,10 +157,6 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 					s.unsubscribeTheme()
 					s.unsubscribeTheme = nil
 				}
-				if s.loadTimer != nil {
-					s.loadTimer.Stop()
-				}
-				s.pending = nil
 				s.host.Dispose()
 				s.emit(plugin.WindowEvent{Type: plugin.WindowEventClosed})
 			},
@@ -211,7 +172,7 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 		s.host.Attach(s.window)
 		createErr = s.layout(false)
 		if createErr == nil {
-			createErr = s.setContent(o.Content, tree)
+			createErr = s.setContent(tree)
 		}
 		if createErr != nil {
 			_ = s.managed.Close()
@@ -247,13 +208,6 @@ func (s *session) Show(o plugin.WindowShowOption) error {
 		if o.Activate && !boolValue(s.options.Focusable, false) {
 			return errors.New("window is not focusable")
 		}
-		if s.content.Type == plugin.WindowContentHTML && !s.ready {
-			if s.loadFailed {
-				return errors.New("HTML document failed to become ready")
-			}
-			s.pendingShow = &o
-			return nil
-		}
 		return s.show(o)
 	})
 }
@@ -285,7 +239,6 @@ func windowCenterInWorkArea(bounds, area ui.Rect) bool {
 
 func (s *session) Hide() error {
 	return s.call(func() error {
-		s.pendingShow = nil
 		return s.managed.Hide()
 	})
 }
@@ -363,7 +316,7 @@ func (s *session) SetContent(c plugin.WindowContent) error {
 	if err != nil {
 		return err
 	}
-	return s.call(func() error { return s.setContent(c, tree) })
+	return s.call(func() error { return s.setContent(tree) })
 }
 
 // UpdateContent swaps the woxview tree in place. Unlike SetContent it keeps the document, so
@@ -374,16 +327,12 @@ func (s *session) UpdateContent(o plugin.WindowContentUpdateOption) error {
 		return err
 	}
 	return s.call(func() error {
-		if s.content.Type != plugin.WindowContentWoxView {
-			return errors.New("content updates require woxview content")
-		}
 		if err := s.validateUpdate(o); err != nil {
 			return err
 		}
 		if o.Sequence != 0 {
 			s.sequence = o.Sequence
 		}
-		s.content.Data = o.Data
 		s.view.SetTree(tree)
 		return s.window.Invalidate()
 	})
@@ -400,57 +349,19 @@ func (s *session) validateUpdate(o plugin.WindowContentUpdateOption) error {
 	return nil
 }
 
-// setContent replaces the document identity before resetting native content, invalidating late messages.
-func (s *session) setContent(c plugin.WindowContent, tree *woxview.Tree) error {
+// setContent replaces the document identity and drops retained state and pending callbacks.
+func (s *session) setContent(tree *woxview.Tree) error {
 	if s.view != nil {
 		s.view.CancelPending()
 	}
-	s.contentDrag = contentDrag{}
-	if s.loadTimer != nil {
-		s.loadTimer.Stop()
-	}
 	s.document = uuid.NewString()
 	s.sequence = 0
-	s.ready = false
-	s.themePending = false
-	s.loadFailed = false
-	s.pending = nil
-	s.content = c
-	s.html = ""
-	if err := s.window.ResetWebView(); err != nil {
-		return err
-	}
-	switch c.Type {
-	case plugin.WindowContentHTML:
-		s.html = bridgeHTML(c.Data, s.document)
-		document := s.document
-		s.loadTimer = time.AfterFunc(15*time.Second, func() {
-			_ = ui.Post(func() {
-				if !s.closed && !s.ready && s.document == document {
-					s.loadFailed = true
-					s.pendingShow = nil
-					s.pending = nil
-					s.emit(plugin.WindowEvent{Type: plugin.WindowEventError, DocumentID: document, ErrMsg: "HTML document did not become ready within 15 seconds"})
-				}
-			})
-		})
-		bounds, _ := s.window.Bounds()
-		if err := s.showHTML(ui.Rect{Width: bounds.Width, Height: max(float32(1), bounds.Height-s.chromeHeight())}); err != nil {
-			return err
-		}
-	default:
-		// A fresh View drops retained state and decoded images from the previous document.
-		s.view = woxview.NewView()
-		s.view.SetTree(tree)
-		s.ready = true
-	}
-	if s.ready {
-		s.emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: s.document})
-		s.flushThemeChange()
-		s.showPending()
-	}
+	s.view = woxview.NewView()
+	s.view.SetTree(tree)
+	s.emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: s.document})
 	return s.window.Invalidate()
 }
+
 func (s *session) chromeHeight() float32 {
 	if boolValue(s.options.HideChrome, false) {
 		return 0
@@ -461,86 +372,26 @@ func (s *session) chromeHeight() float32 {
 	return 0
 }
 
-func (s *session) showHTML(bounds ui.Rect) error {
-	return s.window.ShowWebView(ui.WebViewContent{DocumentKey: s.document, HTML: s.html}, bounds)
-}
-
-// contentDrag delays primary presses until they resolve as clicks or native window drags.
-type contentDrag struct{ press *ui.PointerEvent }
-
-func (d *contentDrag) pointer(event ui.PointerEvent, forward func(ui.PointerEvent) bool, drag func()) bool {
-	switch event.Kind {
-	case ui.PointerDown:
-		if event.Button == ui.PointerButtonPrimary {
-			press := event
-			d.press = &press
-			return true
-		}
-	case ui.PointerMove:
-		if d.press != nil {
-			dx, dy := event.Position.X-d.press.Position.X, event.Position.Y-d.press.Position.Y
-			if dx*dx+dy*dy >= 9 {
-				d.press = nil
-				drag()
-				return true
-			}
-		}
-	case ui.PointerUp:
-		if event.Button == ui.PointerButtonPrimary && d.press != nil {
-			press := *d.press
-			d.press = nil
-			forward(press)
-			return forward(event)
-		}
-	}
-	return forward(event)
-}
-
-func (s *session) contentPointer(event ui.PointerEvent) bool {
-	return s.contentDrag.pointer(event, s.window.ForwardEmbeddedSurfacePointer, func() { _ = s.window.StartDragging() })
-}
-
-// build renders HTML through the shared WebView surface and everything else through woxview.
+// build renders the WoxView document with the window chrome.
 func (s *session) build(frame ui.FrameInfo) widget.Widget {
 	chrome := overlay.CurrentThemeChrome()
 	h := s.chromeHeight()
 	width, height := frame.Size.Width, max(float32(1), frame.Size.Height-h)
-	var body widget.Widget
-	switch s.content.Type {
-	case plugin.WindowContentHTML:
-		// The enclosing container already paints the theme wash; a second layer
-		// would darken a transparent WebView and hide the native material.
-		props := previewcontent.WebViewSurfaceProps{Key: "plugin-window-webview", Width: width, Height: height, OnPointer: s.window.ForwardEmbeddedSurfacePointer, OnBounds: func(bounds ui.Rect) {
-			if err := s.showHTML(bounds); err != nil {
-				s.emit(plugin.WindowEvent{Type: plugin.WindowEventError, DocumentID: s.document, ErrMsg: err.Error()})
+	// Replaced documents must never inherit retained widget state.
+	document := s.document
+	body := s.view.Build(woxview.BuildProps{
+		Translate: s.translate, Width: width, Height: height, Theme: controlTheme(chrome), Window: s.window, IDPrefix: "plugin-window/" + document,
+		OnNodeEvent: func(event woxview.Event) {
+			data, _ := json.Marshal(event)
+			coalesceKey := ""
+			if event.Coalescible {
+				// Length-prefix the handler so arbitrary node keys cannot collide.
+				coalesceKey = fmt.Sprintf("%d:%s%s", len(event.Handler), event.Handler, event.Key)
 			}
-		}}
-		if boolValue(s.options.Movable, false) && boolValue(s.options.DragContent, false) {
-			props.OnPointer = s.contentPointer
-		}
-		body = previewcontent.WebViewSurface(props)
-	default:
-		// The document is part of the prefix so replaced documents never inherit retained widget state.
-		document := s.document
-		// Text shorthand remains literal even when its content starts with i18n:.
-		var translate func(string) string
-		if s.content.Type == plugin.WindowContentWoxView {
-			translate = s.translate
-		}
-		body = s.view.Build(woxview.BuildProps{
-			Translate: translate, Width: width, Height: height, Theme: controlTheme(chrome), Window: s.window, IDPrefix: "plugin-window/" + document,
-			OnNodeEvent: func(event woxview.Event) {
-				data, _ := json.Marshal(event)
-				coalesceKey := ""
-				if event.Coalescible {
-					// Length-prefix the handler so arbitrary node keys cannot collide.
-					coalesceKey = fmt.Sprintf("%d:%s%s", len(event.Handler), event.Handler, event.Key)
-				}
-				s.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: document, Data: data, CoalesceKey: coalesceKey})
-			},
-			OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) },
-		})
-	}
+			s.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: document, Data: data, CoalesceKey: coalesceKey})
+		},
+		OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) },
+	})
 	children := []widget.StackChild{{Top: h, Child: body}}
 	if h > 0 {
 		if boolValue(s.options.Movable, false) {
@@ -567,125 +418,7 @@ func controlTheme(chrome overlay.ThemeChrome) component.ControlTheme {
 	}
 }
 
-// PostMessage sends JSON only. Hidden windows keep their document; replacement drops pending data.
-func (s *session) PostMessage(o plugin.WindowMessageOption) error {
-	data := o.Data
-	if len(data) > maxMessageBytes || !json.Valid(data) {
-		return errors.New("message must be valid JSON of at most 256 KiB")
-	}
-	copyData := append(json.RawMessage(nil), data...)
-	return s.call(func() error {
-		if o.DocumentID != "" && o.DocumentID != s.document {
-			return errors.New("document replaced")
-		}
-		if s.loadFailed {
-			return errors.New("HTML document failed to become ready")
-		}
-		if s.content.Type != plugin.WindowContentHTML {
-			return errors.New("messages require HTML content")
-		}
-		if !s.ready {
-			if len(s.pending) >= 64 {
-				return errors.New("window message queue full")
-			}
-			s.pending = append(s.pending, copyData)
-			return nil
-		}
-		return s.send(copyData)
-	})
-}
-
-// send targets the current inline document through the shared WebView queue.
-func (s *session) send(data json.RawMessage) error {
-	token, _ := json.Marshal(s.document)
-	// Parse JSON as data: object literals would give __proto__ special semantics.
-	payload, _ := json.Marshal(string(data))
-	script := "window.__woxWindowReceive(" + string(token) + ",JSON.parse(" + string(payload) + "))"
-	if !s.window.UpdateWebViewScript(s.document, script) {
-		return errors.New("document unavailable")
-	}
-	return nil
-}
-
-// message authenticates each document generation before delivering native callbacks.
-func (s *session) message(raw string) {
-	if s.closed || len(raw) > maxMessageBytes+256 {
-		return
-	}
-	var m struct {
-		Token string
-		Type  string
-		Data  json.RawMessage
-	}
-	if json.Unmarshal([]byte(raw), &m) != nil || m.Token != s.document || s.content.Type != plugin.WindowContentHTML {
-		return
-	}
-	switch m.Type {
-	case "ready":
-		if s.ready {
-			return
-		}
-		s.ready = true
-		s.loadFailed = false
-		if s.loadTimer != nil {
-			s.loadTimer.Stop()
-		}
-		s.emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: s.document})
-		s.flushThemeChange()
-		pending := s.pending
-		s.pending = nil
-		for _, data := range pending {
-			if err := s.send(data); err != nil {
-				s.emit(plugin.WindowEvent{Type: plugin.WindowEventError, DocumentID: s.document, ErrMsg: err.Error()})
-			}
-		}
-		s.showPending()
-	case "message":
-		if json.Valid(m.Data) {
-			s.emit(plugin.WindowEvent{Type: plugin.WindowEventMessage, DocumentID: s.document, Data: m.Data})
-		}
-	case "error":
-		var detail string
-		if json.Unmarshal(m.Data, &detail) == nil {
-			s.emit(plugin.WindowEvent{Type: plugin.WindowEventError, DocumentID: s.document, ErrMsg: detail})
-		}
-	case "link":
-		var url string
-		if json.Unmarshal(m.Data, &url) == nil {
-			_ = s.window.OpenExternalURL(url)
-		}
-	}
-}
-
-// showPending presents the latest requested document only after its ready event.
-func (s *session) showPending() {
-	if s.pendingShow == nil {
-		return
-	}
-	o := *s.pendingShow
-	s.pendingShow = nil
-	if err := s.show(o); err != nil {
-		s.emit(plugin.WindowEvent{Type: plugin.WindowEventError, DocumentID: s.document, ErrMsg: err.Error()})
-	}
-}
-
-//go:embed bridge.js
-var rawBridgeFS embed.FS
-
-var bridgeSource = string(assetfs.New(rawBridgeFS).MustReadFile("bridge.js"))
-
-// bridgeHTML installs the bridge before plugin scripts, preserving standards mode.
-func bridgeHTML(html, token string) string {
-	encoded, _ := json.Marshal(token)
-	script := "<script>" + strings.Replace(bridgeSource, "__WOX_DOCUMENT_TOKEN__", string(encoded), 1) + "</script>"
-	end := 0
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(html)), "<!doctype") {
-		end = strings.Index(html, ">") + 1
-	}
-	return html[:end] + script + html[end:]
-}
-
-// AcceptEvent drops already-queued messages after a document replacement or close.
+// AcceptEvent drops already-queued events after a document replacement or close.
 func (s *session) AcceptEvent(e plugin.WindowEvent) bool {
 	accepted := false
 	_ = s.call(func() error {
