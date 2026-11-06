@@ -2082,7 +2082,7 @@
     "Id": "b18d674a-0ae0-4d20-bd11-c5268b069306",
     "Name": "i18n:plugin_timer_plugin_name",
     "Author": "Wox Launcher",
-    "Version": "1.0.1",
+    "Version": "1.2.0",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_timer_plugin_description",
@@ -2124,7 +2124,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 16:57:33",
-    "DateUpdated": "2026-11-03 08:57:33",
+    "DateUpdated": "2026-11-06 13:07:02",
     "StarCount": 0,
     "DownloadCount": 22
   },
@@ -2132,7 +2132,7 @@
     "Id": "eaadbcea-c907-4efe-b09b-dfc56e1dc758",
     "Name": "i18n:plugin_dictation_plugin_name",
     "Author": "Wox Launcher",
-    "Version": "1.0.2",
+    "Version": "1.1.0",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_dictation_plugin_description",
@@ -2174,7 +2174,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 17:00:42",
-    "DateUpdated": "2026-11-03 15:28:05",
+    "DateUpdated": "2026-11-06 13:13:46",
     "StarCount": 0,
     "DownloadCount": 22
   },
