@@ -7,7 +7,32 @@ import (
 	"testing"
 	"wox/plugin"
 	ui "wox/ui/runtime"
+	"wox/ui/woxview"
 )
+
+// TestWindowPresentation preserves overlay defaults and explicit application-window options.
+func TestWindowPresentation(t *testing.T) {
+	for _, presentation := range []plugin.WindowPresentation{"", plugin.WindowPresentationOverlay} {
+		options := plugin.WindowOptions{Presentation: presentation}
+		role, err := normalizePresentation(&options)
+		if err != nil || role != ui.WindowRoleUtility || options.Focusable != nil || options.Topmost != nil {
+			t.Fatalf("overlay defaults changed: %+v, %v", options, err)
+		}
+	}
+	options := plugin.WindowOptions{Presentation: plugin.WindowPresentationWindow}
+	role, err := normalizePresentation(&options)
+	if err != nil || role != ui.WindowRoleApplication || !boolValue(options.Focusable, false) || boolValue(options.Topmost, true) {
+		t.Fatalf("application defaults: %+v, %v", options, err)
+	}
+	yes, no := true, false
+	options.Focusable, options.Topmost = &no, &yes
+	if _, err := normalizePresentation(&options); err != nil || *options.Focusable || !*options.Topmost {
+		t.Fatal("explicit options overwritten")
+	}
+	if _, err := normalizePresentation(&plugin.WindowOptions{Presentation: "unknown"}); err == nil {
+		t.Fatal("accepted unknown presentation")
+	}
+}
 
 // TestWindowInputValidation checks untrusted geometry and content before native allocation.
 func TestWindowInputValidation(t *testing.T) {
@@ -22,11 +47,50 @@ func TestWindowInputValidation(t *testing.T) {
 	if validateGeometry(360, 160, "unknown", 0, 0) == nil {
 		t.Fatal("accepted unknown anchor")
 	}
-	if validateContent(plugin.WindowContent{Type: "url"}) == nil {
+	if _, err := prepareContent(plugin.WindowContent{Type: "url"}); err == nil {
 		t.Fatal("accepted unsupported content")
 	}
-	if validateContent(plugin.WindowContent{Type: plugin.WindowContentHTML, Data: strings.Repeat("x", 4*1024*1024+1)}) == nil {
+	if _, err := prepareContent(plugin.WindowContent{Type: plugin.WindowContentHTML, Data: strings.Repeat("x", 4*1024*1024+1)}); err == nil {
 		t.Fatal("accepted oversized content")
+	}
+	if _, err := prepareContent(plugin.WindowContent{Type: plugin.WindowContentWoxView, Data: `{"version":1,"root":{"type":"div"}}`}); err == nil {
+		t.Fatal("accepted invalid woxview tree")
+	}
+}
+
+// TestTextAndMarkdownBecomeWoxViewTrees keeps the shorthand types on the single native render path.
+func TestTextAndMarkdownBecomeWoxViewTrees(t *testing.T) {
+	text, err := prepareContent(plugin.WindowContent{Type: plugin.WindowContentText, Data: "hello"})
+	if err != nil || text.Root.Type != woxview.NodeScroll || text.Root.Children[0].Props.(*woxview.TextProps).Text != "hello" || !text.Root.Children[0].Props.(*woxview.TextProps).Selectable {
+		t.Fatalf("text tree: %+v, %v", text, err)
+	}
+	markdown, err := prepareContent(plugin.WindowContent{Type: plugin.WindowContentMarkdown, Data: "# Title"})
+	if err != nil || markdown.Root.Children[0].Type != woxview.NodeMarkdown {
+		t.Fatalf("markdown tree: %+v, %v", markdown, err)
+	}
+	if html, err := prepareContent(plugin.WindowContent{Type: plugin.WindowContentHTML, Data: "<p></p>"}); err != nil || html != nil {
+		t.Fatal("html must not produce a woxview tree")
+	}
+}
+
+// TestWoxViewUpdateRequiresWoxViewDocument rejects updates that would silently change a text or HTML window.
+func TestWoxViewUpdateRequiresWoxViewDocument(t *testing.T) {
+	if (&session{}).UpdateContent(plugin.WindowContentUpdateOption{Data: "{"}) == nil {
+		t.Fatal("accepted malformed update")
+	}
+}
+
+func TestUpdateRejectsStaleDocumentAndSequence(t *testing.T) {
+	s := &session{document: "new", sequence: 3}
+	for _, o := range []plugin.WindowContentUpdateOption{
+		{DocumentID: "old", Sequence: 4}, {DocumentID: "new", Sequence: 3}, {DocumentID: "new", Sequence: 0},
+	} {
+		if s.validateUpdate(o) == nil {
+			t.Fatalf("accepted stale update %+v", o)
+		}
+	}
+	if err := s.validateUpdate(plugin.WindowContentUpdateOption{DocumentID: "new", Sequence: 4}); err != nil {
+		t.Fatal(err)
 	}
 }
 

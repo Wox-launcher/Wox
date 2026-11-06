@@ -8,6 +8,12 @@ import (
 
 // ControlTheme defines appearance for reusable controls, independent of launcher layout and result styling.
 type ControlTheme struct {
+	// Dark describes this surface's appearance, independently of system settings.
+	Dark                      bool
+	Hover                     woxui.Color
+	Disabled                  woxui.Color
+	Link                      woxui.Color
+	Overlay                   woxui.Color
 	ControlText               woxui.Color
 	BodyText                  woxui.Color
 	ChromeText                woxui.Color

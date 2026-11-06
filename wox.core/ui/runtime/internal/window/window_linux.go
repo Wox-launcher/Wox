@@ -789,7 +789,46 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		return
 	}
 
+	result = encodeLinuxCommands(native, displayList, nativeFontFamily, nativeMonospaceFontFamily)
+
+	C.wox_linux_window_trace_encode(native)
+	presentStart := time.Now()
+	endResult := C.wox_linux_window_end_frame(native)
+	presentCost := time.Since(presentStart)
+	if result != 0 {
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
+		w.recordRenderError("encode OpenGL frame", result)
+		return
+	}
+	result = endResult
+	if w.options.frameMetrics != nil {
+		w.recordNativeResourceMetrics(native, displayList)
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-presentCost, presentCost, result == 0)
+	}
+	if result != 0 {
+		w.recordRenderError("finish OpenGL frame", result)
+	}
+}
+
+// encodeLinuxCommands shares production drawing, transform and clip handling with offscreen fixtures.
+func encodeLinuxCommands(native *C.WoxLinuxWindow, displayList *DisplayList, nativeFontFamily, nativeMonospaceFontFamily *C.char) C.int32_t {
+	var result C.int32_t
+	transform := IdentityTransform()
 	displayList.forEachCommand(func(command displayCommand) bool {
+		next := IdentityTransform()
+		if command.transformed {
+			next = command.transform
+		}
+		if next != transform {
+			result = C.wox_linux_window_set_transform(native, C.float(next.A), C.float(next.B), C.float(next.C), C.float(next.D), C.float(next.TX), C.float(next.TY))
+			if result != 0 {
+				return false
+			}
+			transform = next
+		}
 		switch command.kind {
 		case displayCommandFillRoundedRect:
 			result = C.wox_linux_window_fill_rounded_rect(
@@ -887,12 +926,20 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 				C.uint8_t(command.edge.B),
 				C.uint8_t(command.edge.A),
 			)
+		case displayCommandBeginOpacity:
+			result = C.wox_linux_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+		case displayCommandEndOpacity:
+			result = C.wox_linux_window_end_opacity(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.opacity))
 		case displayCommandBeginEdgeFade:
 			result = C.wox_linux_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		case displayCommandEndEdgeFade:
 			result = C.wox_linux_window_end_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
 		case displayCommandSetClipRect:
-			result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			if len(command.points) > 0 {
+				result = C.wox_linux_window_set_clip_polygon(native, (*C.float)(unsafe.Pointer(&command.points[0])), C.int32_t(len(command.points)))
+			} else {
+				result = C.wox_linux_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			}
 		case displayCommandClearClip:
 			result = C.wox_linux_window_clear_clip(native)
 		}
@@ -902,26 +949,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 		return true
 	})
 
-	C.wox_linux_window_trace_encode(native)
-	presentStart := time.Now()
-	endResult := C.wox_linux_window_end_frame(native)
-	presentCost := time.Since(presentStart)
-	if result != 0 {
-		if w.options.frameMetrics != nil {
-			w.recordNativeResourceMetrics(native, displayList)
-			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
-		}
-		w.recordRenderError("encode OpenGL frame", result)
-		return
-	}
-	result = endResult
-	if w.options.frameMetrics != nil {
-		w.recordNativeResourceMetrics(native, displayList)
-		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart)-presentCost, presentCost, result == 0)
-	}
-	if result != 0 {
-		w.recordRenderError("finish OpenGL frame", result)
-	}
+	return result
 }
 
 // woxGoLinuxRenderTrace routes native GTK/OpenGL diagnostics through Wox logging.
@@ -1244,4 +1272,12 @@ func (w *platformWindow) showInactive() (FocusEpoch, error) {
 		return 0, errors.New("could not show inactive window")
 	}
 	return FocusEpoch(epoch), nil
+}
+
+// testLinuxOpacity reads the native group's offscreen premultiplied RGBA result.
+func testLinuxOpacity(scale, opacity float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_linux_test_opacity((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(opacity))
+	return pixels, int(status)
 }

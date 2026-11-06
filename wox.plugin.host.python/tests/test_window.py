@@ -1,12 +1,11 @@
-"""Verify plugin tool callbacks stay on the host RPC path."""
+"""Verify window operations and callbacks stay on the host RPC path."""
 
-import asyncio
 import importlib.util
 import json
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 package_path = Path(__file__).resolve().parents[1] / "src" / "wox_plugin_host"
 spec = importlib.util.spec_from_loader("wox_plugin_host", loader=None, is_package=True)
@@ -17,28 +16,28 @@ sys.modules.setdefault("wox_plugin_host", package)
 from wox_plugin import (  # noqa: E402
     Context,
     CreateWindowOption,
-    InvokePluginToolHandlerResult,
-    InvokePluginToolOption,
-    PluginToolDescriptor,
-    RegisterPluginToolOption,
-    ShowToastMsgOption,
-    ToastMsgAction,
-    UnregisterPluginToolOption,
     WindowCloseOption,
     WindowContent,
     WindowContentSetOption,
+    WindowContentUpdateOption,
+    WindowContentUpdateResult,
+    WindowContentCommand,
+    WindowContentCommandOption,
+    WindowContentCommandResult,
     WindowContentType,
     WindowEventType,
+    WindowThemeChangedData,
     WindowHideOption,
     WindowMessageOption,
     WindowOptions,
+    WindowPresentation,
     WindowSetOptionsOption,
     WindowShowOption,
 )
 
 from wox_plugin_host import jsonrpc  # noqa: E402
 from wox_plugin_host.plugin_api import PluginAPI  # noqa: E402
-from wox_plugin_host.plugin_manager import PluginInstance, plugin_instances, waiting_for_response  # noqa: E402
+from wox_plugin_host.plugin_manager import PluginInstance, plugin_instances  # noqa: E402
 
 
 class WindowHostTest(unittest.IsolatedAsyncioTestCase):
@@ -70,12 +69,15 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
             ctx,
             CreateWindowOption(
                 content=WindowContent(WindowContentType.HTML, "<p>timer</p>"),
-                window=WindowOptions(topmost=False, offset_x=0, movable=True, drag_content=True, hide_chrome=True),
+                window=WindowOptions(
+                    presentation=WindowPresentation.WINDOW, topmost=False, offset_x=0, movable=True, drag_content=True, hide_chrome=True
+                ),
                 on_event=lambda ctx, e: fired.append(e),
             ),
         )
         self.assertEqual(fired[0].type, WindowEventType.READY)
         self.assertEqual(created.window.id, "native-1")
+        self.assertEqual(json.loads(json.dumps(calls[0][1]))["option"]["Window"]["Presentation"], "window")
         self.assertIs(calls[0][1]["option"]["Window"]["Topmost"], False)
         self.assertIs(calls[0][1]["option"]["Window"]["DragContent"], True)
         self.assertIs(calls[0][1]["option"]["Window"]["HideChrome"], True)
@@ -84,6 +86,37 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
         await created.window.hide(ctx, WindowHideOption())
         await created.window.set_options(ctx, WindowSetOptionsOption(offset_y=0, topmost=False))
         await created.window.content.set(ctx, WindowContentSetOption(WindowContent(WindowContentType.TEXT, "done")))
+        tree = '{"version":1,"root":{"type":"text","props":{"text":"hello"}}}'
+        await created.window.content.set(ctx, WindowContentSetOption(WindowContent(WindowContentType.WOXVIEW, tree)))
+        self.assertEqual(calls[-1][1]["option"]["Content"]["Type"], "woxview")
+        updated = await created.window.content.update(ctx, WindowContentUpdateOption(tree, "doc-1", 7))
+        self.assertIsInstance(updated, WindowContentUpdateResult)
+        self.assertTrue(updated.success)
+        self.assertEqual(
+            calls[-1], ("WindowContentUpdate", {"windowID": "native-1", "option": {"Data": tree, "DocumentID": "doc-1", "Sequence": 7}})
+        )
+        for command in WindowContentCommand:
+            result = await created.window.content.command(ctx, WindowContentCommandOption(command, "draft/世界", "doc-1"))
+            self.assertIsInstance(result, WindowContentCommandResult)
+            self.assertTrue(result.success)
+            wire = json.loads(json.dumps(calls[-1]))
+            self.assertEqual(
+                wire,
+                [
+                    "WindowContentCommand",
+                    {"windowID": "native-1", "option": {"DocumentID": "doc-1", "Command": command.value, "Key": "draft/世界"}},
+                ],
+            )
+        payload = {"Handler": "save", "Args": [{"name": "hello"}]}
+        await event({"Event": json.dumps({"Type": "woxview_event", "WindowID": "native-1", "DocumentID": "doc-1", "Data": payload})})
+        self.assertEqual(fired[-1].type, WindowEventType.WOXVIEW)
+        self.assertEqual(fired[-1].data, payload)
+        for dark in (False, True):
+            theme: WindowThemeChangedData = {"Dark": dark}
+            await event({"Event": json.dumps({"Type": "theme_changed", "WindowID": "native-1", "DocumentID": "doc-1", "Data": theme})})
+            self.assertEqual(fired[-1].type, WindowEventType.THEME_CHANGED)
+            self.assertEqual(fired[-1].document_id, "doc-1")
+            self.assertEqual(fired[-1].data, theme)
         data = {"snake_case": False, "__proto__": {"x": 1}, "Unicode": "你好"}
         await created.window.content.post_message(ctx, WindowMessageOption(data))
         self.assertEqual(calls[-1][1], {"windowID": "native-1", "option": {"Data": data}})
@@ -93,8 +126,15 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fired[-1].data, data)
         await event({"Release": "true"})
         self.assertFalse(api.window_callbacks)
+        delivered = len(fired)
+        await event({"Event": json.dumps({"Type": "theme_changed", "WindowID": "native-1", "Data": {"Dark": False}})})
+        self.assertEqual(len(fired), delivered)
         count = len(calls)
         self.assertFalse((await created.window.show(ctx, WindowShowOption())).success)
+        self.assertFalse((await created.window.content.update(ctx, WindowContentUpdateOption(tree))).success)
+        self.assertFalse(
+            (await created.window.content.command(ctx, WindowContentCommandOption(WindowContentCommand.FOCUS, "draft"))).success
+        )
         self.assertTrue((await created.window.close(ctx, WindowCloseOption())).success)
         self.assertEqual(len(calls), count)
 

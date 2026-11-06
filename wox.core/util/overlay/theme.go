@@ -32,6 +32,48 @@ type ThemeChrome struct {
 	Light      bool
 }
 
+// ThemeControlColors are the extra colors native controls need on an overlay. They come from
+// the plugin palette so native controls match plugin HTML that uses the theme color API.
+type ThemeControlColors struct {
+	Success, Warning, WarningText, Error woxui.Color
+	Hover                                woxui.Color
+	Disabled                             woxui.Color
+	Link                                 woxui.Color
+	Focus                                woxui.Color
+	SelectedText                         woxui.Color
+	Secondary                            woxui.Color
+	Border                               woxui.Color
+	Accent                               woxui.Color
+	AccentText                           woxui.Color
+	Selection                            woxui.Color
+}
+
+// CurrentThemeControlColors resolves control colors for the active theme. It is separate from
+// CurrentThemeChrome because resolving the palette costs more than the chrome-only callers need.
+func CurrentThemeControlColors(chrome ThemeChrome) ThemeControlColors {
+	themeMu.Lock()
+	provider := themeProvider
+	themeMu.Unlock()
+	theme := common.Theme{}
+	if provider != nil {
+		theme = provider()
+	}
+	palette := theme.PluginColors()
+	status := theme.StatusColors(!chrome.Light)
+	accent := parseThemeCSSColor(palette.Accent, chrome.Foreground)
+	secondary := parseThemeCSSColor(palette.SecondaryText, chrome.Foreground)
+	hover := chrome.Foreground
+	hover.A = 20
+	return ThemeControlColors{
+		Success: woxui.Color(status.Success), Warning: woxui.Color(status.Warning), WarningText: woxui.Color(status.WarningText), Error: woxui.Color(status.Error),
+		Hover: parseThemeCSSColor(theme.ResolvedColors()["ResultItemHoverBackgroundColor"], hover), Disabled: secondary, Link: accent,
+		Focus: parseThemeCSSColor(theme.QueryBoxCursorColor, accent), SelectedText: parseThemeCSSColor(theme.ResultItemActiveTitleColor, chrome.Foreground),
+		Secondary: parseThemeCSSColor(palette.SecondaryText, chrome.Foreground), Border: parseThemeCSSColor(palette.Border, chrome.Foreground),
+		Accent: parseThemeCSSColor(palette.Accent, chrome.Foreground), AccentText: parseThemeCSSColor(palette.AccentText, chrome.Background),
+		Selection: parseThemeCSSColor(palette.Selection, chrome.Foreground),
+	}
+}
+
 var (
 	themeFallbackBackground = woxui.Color{R: 24, G: 29, B: 38, A: 242}
 	themeFallbackDarkText   = woxui.Color{R: 246, G: 246, B: 246, A: 255}

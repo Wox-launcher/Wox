@@ -11,13 +11,39 @@ func (n *node) drawAt(displayList *woxui.DisplayList, origin woxui.Point, focuse
 	if work != nil {
 		work.paintVisits++
 	}
+	bounds := offsetRect(n.bounds, origin)
+	if n.snapshotScope {
+		if n.snapshotPaint != nil {
+			n.snapshotPaint()
+		}
+		displayList.BeginSnapshotScope(woxui.Point{X: bounds.X, Y: bounds.Y})
+		defer displayList.EndSnapshotScope()
+	}
+	if n.capturePaint != nil {
+		capture := displayList.BeginSnapshot(n.opacityPaintBounds(origin))
+		defer func() { n.capturePaint(displayList.EndSnapshot(capture)) }()
+	}
+	if n.transform != nil {
+		displayList.PushTransform(n.drawingTransform(bounds))
+		defer displayList.PopTransform()
+	}
+	if n.opacity != nil && *n.opacity < 1 {
+		if *n.opacity <= 0 {
+			return
+		}
+		bounds := n.opacityPaintBounds(origin)
+		if bounds.Width <= 0 || bounds.Height <= 0 {
+			return
+		}
+		displayList.BeginOpacity(bounds, *n.opacity)
+		defer displayList.EndOpacity(bounds, *n.opacity)
+	}
 	if n.focus != nil {
 		focusWithin = n.id == focused
 		focusableWithin = true
 	} else {
 		focusWithin = focusWithin || n.id == focused
 	}
-	bounds := offsetRect(n.bounds, origin)
 	childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}
 	if n.paint != nil {
 		n.paint(displayList, bounds)

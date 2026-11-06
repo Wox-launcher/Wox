@@ -47,9 +47,12 @@ type displayListDamageHostServices interface {
 
 // Host reconciles, lays out, paints, and routes input for one retained widget tree.
 type Host struct {
-	window HostServices
-	build  func(frame woxui.FrameInfo) Widget
-	root   *node
+	focusObservers map[Key]func(bool)
+	pressObservers []pressObservation
+	pressTarget    pressObservation
+	window         HostServices
+	build          func(frame woxui.FrameInfo) Widget
+	root           *node
 
 	nextNodeID    woxui.AccessibilityNodeID
 	identities    map[string]woxui.AccessibilityNodeID
@@ -87,10 +90,12 @@ type Host struct {
 	focused woxui.AccessibilityNodeID
 	// Reveal the caret after input has rebuilt and laid out the editor, not on idle or scroll frames.
 	revealCaret bool
+	// Non-editor controls also need successive layouts to reveal through nested scrollers.
+	revealFocus bool
 	// focusVisible mirrors :focus-visible so pointer focus keeps keyboard behavior without painting a ring.
 	focusVisible bool
 	modalScopes  []woxui.AccessibilityNodeID
-	scopeRestore map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID
+	scopeRestore map[woxui.AccessibilityNodeID]focusRestoreTarget
 
 	// overlay is painted above the build result in window coordinates (context menus, etc.).
 	overlay       Widget
@@ -141,7 +146,7 @@ func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 		identities:         map[string]woxui.AccessibilityNodeID{},
 		identityMeta:       map[string]identityBinding{},
 		nodes:              map[woxui.AccessibilityNodeID]*node{},
-		scopeRestore:       map[woxui.AccessibilityNodeID]woxui.AccessibilityNodeID{},
+		scopeRestore:       map[woxui.AccessibilityNodeID]focusRestoreTarget{},
 		change:             make(chan struct{}),
 		reported:           map[string]bool{},
 		caretVisible:       true,
@@ -204,15 +209,23 @@ func (h *Host) InvalidateKey(key Key) bool {
 	if h == nil {
 		return false
 	}
-	rect, found := h.BoundsForKey(key)
-	if !found {
+	var current *node
+	for _, candidate := range h.nodes {
+		if candidate.key == key {
+			current = candidate
+			break
+		}
+	}
+	if current == nil {
 		return false
 	}
 	if h.keyedDamage == nil {
 		h.keyedDamage = make(map[Key]bool)
 	}
 	h.keyedDamage[key] = true
-	h.invalidateRect(rect)
+	// Retain the previous decorative extent as well as next frame's bounds,
+	// so removing or shrinking a shadow cannot leave stale pixels behind.
+	h.invalidateRect(globalPaintBounds(current))
 	return true
 }
 
@@ -227,6 +240,7 @@ func (h *Host) SetWindowFocused(focused bool) {
 	window := h.window
 	h.caretBlinkMu.Unlock()
 	if !focused {
+		h.endObservedPress()
 		h.caretScene = nil
 		h.updateCaretBlink(false)
 		if window != nil {
@@ -386,7 +400,12 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 			}
 		}
 	}
+	focusToReveal := h.focused
 	h.reconcileFocus()
+	h.syncFocusObservers()
+	if h.revealFocus && focusToReveal == h.focused {
+		h.revealFocus = h.ensureFocusedVisible(false)
+	}
 	if h.revealCaret {
 		// A moved inner scroller needs another layout before checking its outer ancestors.
 		h.revealCaret = h.ensureFocusedVisible(true)
@@ -502,6 +521,8 @@ func (h *Host) Dispose() {
 		return
 	}
 	h.disposed = true
+	h.pressObservers = nil
+	h.pressTarget = pressObservation{}
 	for _, anchor := range h.hoverAnchors {
 		anchor.gesture.onHoverAt(false, woxui.Rect{})
 	}
@@ -517,6 +538,7 @@ func (h *Host) Dispose() {
 	h.overlay = nil
 	h.overlayOwner = ""
 	h.nodes = map[woxui.AccessibilityNodeID]*node{}
+	h.focusObservers = nil
 	h.identities = map[string]woxui.AccessibilityNodeID{}
 	h.identityMeta = map[string]identityBinding{}
 }
@@ -711,6 +733,7 @@ func (h *Host) refreshHoverFromPointer() {
 		return
 	}
 	target := h.root.hitTest(h.pointerAt)
+	h.observePointer(target, woxui.PointerEvent{Kind: woxui.PointerMove, Position: h.pointerAt})
 	if nodeID(target) == h.hovered {
 		h.updatePointerCursor(target, h.pointerAt)
 		return
@@ -728,6 +751,7 @@ func (h *Host) refreshHoverFromPointer() {
 }
 
 func (h *Host) reconcileTransientState(oldHovered *node) {
+	h.reconcileObservedPress()
 	h.remapCoverHover()
 	if h.hovered != 0 && h.nodes[h.hovered] == nil {
 		// Rebuilds replace node IDs. Keep the same gesture hovered without
@@ -773,6 +797,12 @@ func (h *Host) reconcileTransientState(oldHovered *node) {
 	}
 }
 
+// focusRestoreTarget survives the identity-path change caused by adding a Host overlay root.
+type focusRestoreTarget struct {
+	key Key
+	id  woxui.AccessibilityNodeID
+}
+
 func (h *Host) reconcileFocus() {
 	oldScopes := append([]woxui.AccessibilityNodeID(nil), h.modalScopes...)
 	h.modalScopes = h.collectModalScopes()
@@ -781,7 +811,7 @@ func (h *Host) reconcileFocus() {
 		common++
 	}
 	for index := common; index < len(h.modalScopes); index++ {
-		h.scopeRestore[h.modalScopes[index]] = h.focused
+		h.scopeRestore[h.modalScopes[index]] = focusRestoreTarget{key: nodeFocusKey(h.nodes[h.focused]), id: h.focused}
 	}
 
 	if current := h.nodes[h.focused]; h.focused != 0 && !h.isFocusable(current) {
@@ -802,9 +832,14 @@ func (h *Host) reconcileFocus() {
 		for index := len(oldScopes) - 1; index >= common; index-- {
 			restore := h.scopeRestore[oldScopes[index]]
 			delete(h.scopeRestore, oldScopes[index])
-			if h.focused == 0 && h.isFocusable(h.nodes[restore]) {
-				h.setFocus(restore)
-				break
+			if h.focused == 0 {
+				if restore.key != "" && h.RequestFocus(restore.key) {
+					break
+				}
+				if restore.key == "" && h.isFocusable(h.nodes[restore.id]) {
+					h.setFocus(restore.id)
+					break
+				}
 			}
 		}
 	}
@@ -951,6 +986,12 @@ func (h *Host) applyFocus(id woxui.AccessibilityNodeID, ensureVisible bool) {
 		return
 	}
 	if h.focused == id {
+		if ensureVisible && h.pointerDispatch == 0 {
+			h.revealFocus = h.ensureFocusedVisible(false)
+			if h.revealFocus {
+				h.invalidate()
+			}
+		}
 		return
 	}
 	old := h.nodes[h.focused]
@@ -962,10 +1003,9 @@ func (h *Host) applyFocus(id woxui.AccessibilityNodeID, ensureVisible bool) {
 	if current != nil && current.focus != nil && current.focus.onFocusChange != nil {
 		current.focus.onFocusChange(true)
 	}
+	h.syncFocusObservers()
 	logScrollFocus(fmt.Sprintf("apply-focus key=%q from=%q ensureVisible=%v", nodeFocusKey(current), nodeFocusKey(old), ensureVisible))
-	if ensureVisible {
-		h.ensureFocusedVisible(false)
-	}
+	h.revealFocus = ensureVisible && h.ensureFocusedVisible(false)
 	h.resetCaretBlink()
 	h.syncTextInput()
 	h.invalidate()
@@ -1234,6 +1274,9 @@ func (h *Host) Key(event woxui.KeyEvent) (handled bool) {
 	}
 	tabTraversal := event.Down && event.Key == woxui.KeyTab && !event.Composing && event.Modifiers & ^woxui.KeyModifierShift == 0
 	target := h.nodes[h.focused]
+	if h.handleShortcuts(target, event) {
+		return true
+	}
 	if target == nil {
 		if tabTraversal {
 			return h.moveFocus(event.Modifiers&woxui.KeyModifierShift != 0)
@@ -1318,8 +1361,17 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 	defer func() { h.pointerDispatch-- }()
 	if event.Kind == woxui.PointerDown || event.Kind == woxui.PointerScroll {
 		h.revealCaret = false
+		h.revealFocus = false
 	}
 	h.trackPointer(event)
+	if event.Kind == woxui.PointerDown && event.Button == woxui.PointerButtonPrimary {
+		h.beginObservedPress(h.root.hitTest(event.Position))
+	} else if event.Kind == woxui.PointerLeave || event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
+		h.endObservedPress()
+	}
+	if event.Kind != woxui.PointerLeave {
+		h.observePointer(h.root.hitTest(event.Position), event)
+	}
 	if event.Kind == woxui.PointerMove {
 		h.dispatchCoverPointerMove(event)
 	}
@@ -1338,12 +1390,12 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 				}
 				// Scroll callbacks repaint their viewport; independent changes made by
 				// the callback can still request additional damage or a full frame.
-				h.invalidateRect(globalRect(current))
+				h.invalidateRect(globalPaintBounds(current))
 				return
 			}
 			if current.gesture.onScroll != nil {
 				current.gesture.onScroll(event.Scroll)
-				h.invalidateRect(globalRect(current))
+				h.invalidateRect(globalPaintBounds(current))
 				return
 			}
 		}
@@ -1368,7 +1420,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		h.dragging = false
 		h.selecting = 0
 		h.selectingGestureID = ""
-		if target != nil && target.gesture != nil && target.gesture.onPressChange != nil {
+		if target != nil && target.gesture != nil && !target.gesture.observeDescendants && target.gesture.onPressChange != nil {
 			target.gesture.onPressChange(true)
 			h.invalidate()
 		}
@@ -1393,13 +1445,19 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			target.gesture.onSecondaryTapDown(event.Position)
 			h.invalidate()
 		}
+		for current := target; current != nil; current = current.parent {
+			if current != target && current.gesture != nil && current.gesture.observeDescendants && current.gesture.onSecondaryTapDown != nil {
+				current.gesture.onSecondaryTapDown(event.Position)
+			}
+		}
 	}
 	pressed := h.nodes[h.pressed]
 	if event.Kind == woxui.PointerMove && pressed != nil && pressed.gesture != nil && pressed.gesture.onDragStart != nil && !h.dragging && h.selecting == 0 {
 		deltaX := event.Position.X - h.pressedAt.X
 		deltaY := event.Position.Y - h.pressedAt.Y
 		if deltaX*deltaX+deltaY*deltaY >= 9 {
-			if pressed.gesture.onPressChange != nil {
+			h.endObservedPress()
+			if !pressed.gesture.observeDescendants && pressed.gesture.onPressChange != nil {
 				pressed.gesture.onPressChange(false)
 				h.invalidate()
 			}
@@ -1429,7 +1487,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	if event.Kind == woxui.PointerUp && event.Button == woxui.PointerButtonPrimary {
-		if pressed != nil && pressed.gesture != nil && pressed.gesture.onPressChange != nil {
+		if pressed != nil && pressed.gesture != nil && !pressed.gesture.observeDescendants && pressed.gesture.onPressChange != nil {
 			pressed.gesture.onPressChange(false)
 			h.invalidate()
 		}
@@ -1690,7 +1748,7 @@ func (h *Host) setHovered(target *node, position woxui.Point) {
 	old := h.nodes[h.hovered]
 	damage := woxui.Rect{}
 	if old != nil && old.gesture != nil && !old.gesture.coverHover {
-		damage = unionDamageRects(damage, globalRect(old))
+		damage = unionDamageRects(damage, globalPaintBounds(old))
 		h.fireNodeHover(old, false)
 	}
 	h.hovered = nodeID(target)
@@ -1701,7 +1759,7 @@ func (h *Host) setHovered(target *node, position woxui.Point) {
 	}
 	h.updatePointerCursor(target, position)
 	if target != nil && target.gesture != nil && !target.gesture.coverHover {
-		damage = unionDamageRects(damage, globalRect(target))
+		damage = unionDamageRects(damage, globalPaintBounds(target))
 		h.fireNodeHover(target, true)
 	}
 	damage = unionDamageRects(damage, h.syncCoverHover(target))
@@ -1768,7 +1826,7 @@ func (h *Host) syncCoverHover(target *node) woxui.Rect {
 			continue
 		}
 		if old := h.coverHoverNode(id, nodeID); old != nil {
-			damage = unionDamageRects(damage, globalRect(old))
+			damage = unionDamageRects(damage, globalPaintBounds(old))
 			h.fireNodeHover(old, false)
 		}
 		delete(h.coverHovered, id)
@@ -1779,7 +1837,7 @@ func (h *Host) syncCoverHover(target *node) woxui.Rect {
 			continue
 		}
 		if current := h.nodes[nodeID]; current != nil {
-			damage = unionDamageRects(damage, globalRect(current))
+			damage = unionDamageRects(damage, globalPaintBounds(current))
 			h.fireNodeHover(current, true)
 		}
 		h.coverHovered[id] = nodeID
@@ -1847,6 +1905,15 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 	h.lastTapID = target.id
 	h.lastTapAt = now
 	h.lastTapPosition = position
+	observedDouble := false
+	if h.lastTapCount == 2 {
+		for current := target.parent; current != nil; current = current.parent {
+			if current.gesture != nil && current.gesture.observeDescendants && current.gesture.onDoubleTap != nil {
+				current.gesture.onDoubleTap()
+				observedDouble = true
+			}
+		}
+	}
 
 	if h.lastTapCount == 3 && hasTripleTap {
 		target.gesture.onTripleTapAt(localPosition)
@@ -1877,6 +1944,9 @@ func (h *Host) activatePointerTarget(target *node, position woxui.Point) {
 		if target.gesture.onTapBounds != nil {
 			target.gesture.onTapBounds(globalRect(target))
 		}
+	}
+	if observedDouble && !hasTripleTap {
+		h.lastTapID, h.lastTapCount = 0, 0
 	}
 	h.invalidate()
 }

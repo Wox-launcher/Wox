@@ -32,6 +32,12 @@ type TextMetrics = window.TextMetrics
 // DisplayList records the drawing commands for one frame.
 type DisplayList = window.DisplayList
 
+// PaintSnapshot is immutable portable drawing data without widget callbacks.
+type PaintSnapshot = window.PaintSnapshot
+
+// SnapshotCapture marks a balanced capture inside a DisplayList snapshot scope.
+type SnapshotCapture = window.SnapshotCapture
+
 const (
 	MaxConvexPolygonPoints     = window.MaxConvexPolygonPoints
 	FloatingMaterialBlurMargin = window.FloatingMaterialBlurMargin

@@ -291,9 +291,17 @@ type uiPalette struct {
 
 // componentTheme exposes launcher appearance through the stable component package boundary.
 func (palette uiPalette) componentTheme() woxcomponent.Theme {
+	hover, overlayColor := palette.selectedBackground, palette.actionBackground
+	if palette.ResultItemHoverBackgroundColor != nil {
+		hover = *palette.ResultItemHoverBackgroundColor
+	}
+	if palette.OverlayBackground != nil {
+		overlayColor = *palette.OverlayBackground
+	}
 	return woxcomponent.Theme{
 		Surfaces: palette.Surfaces,
 		Controls: woxcomponent.ControlTheme{
+			Dark: palette.isDark(), Hover: hover, Disabled: palette.resultSubtitle, Link: palette.actionSelected, Overlay: overlayColor,
 			Warning: woxui.Color{R: 253, G: 230, B: 138, A: 255}, WarningText: woxui.Color{R: 102, G: 60, A: 255},
 			ControlText: palette.actionText, BodyText: palette.previewText, ChromeText: palette.toolbarText,
 			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color{R: 232, G: 95, B: 95, A: 255},

@@ -8,6 +8,10 @@ func (d *DisplayList) TransformScene(scale float32, offset Point) {
 	}
 	for index := range d.commands {
 		command := &d.commands[index]
+		if command.transformed {
+			command.transform = command.transform.Then(ScaleTransform(scale, scale)).Then(TranslationTransform(offset.X, offset.Y))
+			continue
+		}
 		command.rect = transform(command.rect)
 		command.radius *= scale
 		command.stroke *= scale
@@ -26,4 +30,8 @@ func (d *DisplayList) TransformScene(scale float32, offset Point) {
 	if d.nativeDamage.Width > 0 {
 		d.nativeDamage = transform(d.nativeDamage)
 	}
+	for i := range d.floatingMaterials {
+		d.floatingMaterials[i] = transform(d.floatingMaterials[i])
+	}
+	d.materialMargin *= scale
 }

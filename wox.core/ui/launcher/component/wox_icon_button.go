@@ -10,6 +10,7 @@ type IconButtonProps struct {
 	ID    string
 	Label string
 	Icon  woxwidget.Widget
+	Paint *ControlPaint
 	// IdleIcon is a quieter glyph replaced by Icon on hover, focus, or selection.
 	IdleIcon           woxwidget.Widget
 	Width              float32
@@ -73,10 +74,10 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 		if props.OnHoverAt != nil {
 			props.OnHoverAt(inside, bounds)
 		}
-	}, Child: woxwidget.Container{
+	}, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{
 		Width: props.Width, Height: props.Height, Radius: props.Radius, Color: background,
 		Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-	}}
+	})}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnFocusChange: func(focused bool) {

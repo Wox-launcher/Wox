@@ -7,6 +7,17 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxListItemAccessibilityActivation(t *testing.T) {
+	called := false
+	item := WoxListItem(ListItemProps{ID: "item", Label: "Item", OnTap: func() { called = true }}).(woxwidget.Semantics)
+	if item.OnAction == nil {
+		t.Fatal("missing accessibility handler")
+	}
+	if err := item.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !called {
+		t.Fatalf("activation: %v, called=%v", err, called)
+	}
+}
+
 func TestWoxListItemPreservesCustomRowStyle(t *testing.T) {
 	radius := float32(4)
 	background := woxui.Color{R: 10, G: 20, B: 30, A: 255}

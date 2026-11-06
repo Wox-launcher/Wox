@@ -133,9 +133,18 @@ typedef struct {
   GLuint before, after;
   int before_width, before_height, after_width, after_height;
   int left, bottom, width, height;
+  float transform[6];
+  float polygon[8];
 } WoxLinuxEdgeFade;
 
 typedef struct {
+  float transform[6];
+  bool transform_initialized;
+  GArray *clip_points;
+  GArray *clip_planes;
+  GLuint clip_buffer, clip_texture;
+  size_t clip_buffer_bytes;
+  GLint clip_plane_count;
   GArray *edge_fades;
   unsigned edge_fade_depth;
   GLuint edge_fade_program;
@@ -932,12 +941,16 @@ static void clear_active_web_view(WoxLinuxWindow *window, bool remove_from_paren
   apply_linux_pointer_cursor(window);
 }
 
+#include "drawing_transform_linux.h"
+
 static const char *const rect_vertex_source =
     "#version 330 core\n"
     "uniform vec2 u_viewport;\n"
     "uniform vec4 u_rect;\n"
     "uniform float u_aa_pad;\n"
+    "uniform mat3 u_transform = mat3(1.0);\n"
     "out vec2 v_local;\n"
+    "out vec2 v_target;\n"
     "void main() {\n"
     "  vec2 corners[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
     "  vec2 corner = corners[gl_VertexID];\n"
@@ -945,27 +958,32 @@ static const char *const rect_vertex_source =
     // discards it, so a 1px inset shadow pops as the launcher resizes.
     "  vec2 pad = vec2(max(u_aa_pad, 0.0));\n"
     "  vec2 point = u_rect.xy - pad + corner * (u_rect.zw + pad * 2.0);\n"
-    "  gl_Position = vec4(point.x / u_viewport.x * 2.0 - 1.0, 1.0 - point.y / u_viewport.y * 2.0, 0.0, 1.0);\n"
     "  v_local = point - u_rect.xy;\n"
+    "  v_target = (u_transform * vec3(point, 1.0)).xy;\n"
+    "  gl_Position = vec4(v_target.x / u_viewport.x * 2.0 - 1.0, 1.0 - v_target.y / u_viewport.y * 2.0, 0.0, 1.0);\n"
     "}\n";
 
 static const char *const edge_fade_fragment_source =
     "#version 330 core\n"
+    WOX_GL_CLIP_SOURCE
     "uniform sampler2D u_before, u_after;\n"
     "uniform vec2 u_origin, u_fades;\n"
+    "uniform float u_opacity;\n"
     "uniform vec4 u_rect;\n"
     "in vec2 v_local;\n"
     "out vec4 frag_color;\n"
     "void main() {\n"
+    "  if (!wox_inside_clip()) discard;\n"
     "  float alpha = 1.0;\n"
     "  if (u_fades.x > 0.0) alpha = min(alpha, v_local.y / u_fades.x);\n"
     "  if (u_fades.y > 0.0) alpha = min(alpha, (u_rect.w - v_local.y) / u_fades.y);\n"
     "  ivec2 pixel = ivec2(gl_FragCoord.xy - u_origin);\n"
-    "  frag_color = mix(texelFetch(u_before, pixel, 0), texelFetch(u_after, pixel, 0), clamp(alpha, 0.0, 1.0));\n"
+    "  frag_color = mix(texelFetch(u_before, pixel, 0), texelFetch(u_after, pixel, 0), clamp(alpha, 0.0, 1.0) * u_opacity);\n"
     "}\n";
 
 static const char *const rect_fragment_source =
     "#version 330 core\n"
+    WOX_GL_CLIP_SOURCE
     "uniform vec4 u_rect;\n"
     "uniform vec4 u_color;\n"
     "uniform float u_radius;\n"
@@ -976,6 +994,7 @@ static const char *const rect_fragment_source =
     "out vec4 fragment_color;\n"
     "float cross2(vec2 left, vec2 right) { return left.x * right.y - left.y * right.x; }\n"
     "void main() {\n"
+    "  if (!wox_inside_clip()) discard;\n"
     "  if (u_polygon_count >= 3) {\n"
     "    float area = 0.0;\n"
     "    for (int index = 0; index < u_polygon_count; index++) {\n"
@@ -1015,6 +1034,7 @@ static const char *const texture_vertex_source =
     "uniform vec2 u_viewport;\n"
     "uniform vec4 u_rect;\n"
     "uniform float u_rotation;\n"
+    "uniform mat3 u_transform = mat3(1.0);\n"
     "out vec2 v_uv;\n"
     "void main() {\n"
     "  vec2 corners[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(1.0, 1.0));\n"
@@ -1023,12 +1043,14 @@ static const char *const texture_vertex_source =
     "  float cosine = cos(u_rotation);\n"
     "  float sine = sin(u_rotation);\n"
     "  vec2 point = u_rect.xy + u_rect.zw * 0.5 + mat2(cosine, sine, -sine, cosine) * local;\n"
+    "  point = (u_transform * vec3(point, 1.0)).xy;\n"
     "  gl_Position = vec4(point.x / u_viewport.x * 2.0 - 1.0, 1.0 - point.y / u_viewport.y * 2.0, 0.0, 1.0);\n"
     "  v_uv = corner;\n"
     "}\n";
 
 static const char *const texture_fragment_source =
     "#version 330 core\n"
+    WOX_GL_CLIP_SOURCE
     "uniform sampler2D u_texture;\n"
     "uniform vec4 u_color;\n"
     "uniform vec4 u_rect;\n"
@@ -1036,6 +1058,7 @@ static const char *const texture_fragment_source =
     "in vec2 v_uv;\n"
     "out vec4 fragment_color;\n"
     "void main() {\n"
+    "  if (!wox_inside_clip()) discard;\n"
     "  float coverage = 1.0;\n"
     "  if (u_radius > 0.0) {\n"
     "    float radius = min(u_radius, min(u_rect.z, u_rect.w) * 0.5);\n"
@@ -1090,6 +1113,7 @@ static const char *const blit_fragment_source =
 
 static const char *const compose_fragment_source =
     "#version 330 core\n"
+    WOX_GL_CLIP_SOURCE
     "uniform sampler2D u_original;\n"
     "uniform sampler2D u_blurred;\n"
     "uniform float u_brightness;\n"
@@ -1099,15 +1123,17 @@ static const char *const compose_fragment_source =
     "uniform vec4 u_source;\n"
     "uniform float u_scale;\n"
     "in vec2 v_local;\n"
+    "in vec2 v_target;\n"
     "out vec4 fragment_color;\n"
     "void main() {\n"
+    "  if (!wox_inside_clip()) discard;\n"
     "  float radius = clamp(u_radius, 0.0, min(u_rect.z, u_rect.w) * 0.5);\n"
     "  vec2 half_size = u_rect.zw * 0.5;\n"
     "  vec2 edge = abs(v_local - half_size) - (half_size - radius);\n"
     "  float distance_value = length(max(edge, vec2(0.0))) + min(max(edge.x, edge.y), 0.0) - radius;\n"
     "  float antialias = max(fwidth(distance_value), 0.001);\n"
     "  float coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
-    "  vec2 pixel = (u_rect.xy + v_local) * u_scale;\n"
+    "  vec2 pixel = v_target * u_scale;\n"
     "  vec2 uv = vec2((pixel.x - u_source.x) / u_source.z, 1.0 - (pixel.y - u_source.y) / u_source.w);\n"
     "  vec4 blurred = texture(u_blurred, uv);\n"
     "  float luma = dot(blurred.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
@@ -1388,6 +1414,14 @@ static void clear_linux_resource_caches(WoxLinuxRenderer *renderer, bool delete_
   if (renderer == NULL) {
     return;
   }
+  delete_gl_texture(&renderer->clip_texture, delete_textures);
+  if (delete_textures && renderer->clip_buffer != 0) glDeleteBuffers(1, &renderer->clip_buffer);
+  renderer->clip_buffer = 0;
+  renderer->clip_buffer_bytes = 0;
+  if (renderer->clip_points != NULL) g_array_free(renderer->clip_points, TRUE);
+  if (renderer->clip_planes != NULL) g_array_free(renderer->clip_planes, TRUE);
+  renderer->clip_points = renderer->clip_planes = NULL;
+  reset_linux_drawing_state(renderer);
   if (renderer->edge_fades != NULL) {
     for (unsigned i = 0; i < renderer->edge_fades->len; i++) {
       WoxLinuxEdgeFade *fade = &g_array_index(renderer->edge_fades, WoxLinuxEdgeFade, i);
@@ -1421,7 +1455,14 @@ static uint64_t linux_cache_resident_bytes(const WoxLinuxRenderer *renderer) {
   if (renderer == NULL) {
     return 0;
   }
-  return renderer->image_bytes + renderer->text_bytes + renderer->cached_large_image_bytes;
+  uint64_t bytes = renderer->image_bytes + renderer->text_bytes + renderer->cached_large_image_bytes + renderer->clip_buffer_bytes;
+  if (renderer->edge_fades != NULL) {
+    for (unsigned i = 0; i < renderer->edge_fades->len; i++) {
+      const WoxLinuxEdgeFade *fade = &g_array_index(renderer->edge_fades, WoxLinuxEdgeFade, i);
+      bytes += ((uint64_t)fade->before_width * fade->before_height + (uint64_t)fade->after_width * fade->after_height) * 4;
+    }
+  }
+  return bytes;
 }
 
 static WoxLinuxImageCacheEntry *find_cached_gl_image(WoxLinuxRenderer *renderer, uint64_t image_id) {
@@ -1611,6 +1652,7 @@ static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char 
 
 static void draw_bound_texture(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float rotation_radians, float corner_radius, const float color[4]) {
   glUseProgram(renderer->texture_program);
+  apply_linux_drawing_state(renderer, renderer->texture_program, NULL, true);
   glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->texture_bounds, x, y, width, height);
   glUniform4fv(renderer->texture_color, 1, color);
@@ -3032,6 +3074,7 @@ static void apply_linux_window_corner_mask(WoxLinuxWindow *window, WoxLinuxRende
   glBlendEquation(GL_FUNC_ADD);
   glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
   glUseProgram(renderer->rect_program);
+  apply_linux_drawing_state(renderer, renderer->rect_program, linux_identity_transform, false);
   glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->rect_bounds, 0.0f, 0.0f, renderer->logical_width, renderer->logical_height);
   const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -5579,6 +5622,7 @@ static int32_t begin_linux_renderer_frame(WoxLinuxWindow *window, WoxLinuxRender
   glBindVertexArray(renderer->vertex_array);
   renderer->frame_open = true;
   renderer->clip_active = false;
+  reset_linux_drawing_state(renderer);
   if (wox_linux_render_trace_enabled) {
     GLenum framebuffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     GLenum gl_error = glGetError();
@@ -5637,6 +5681,7 @@ int32_t wox_linux_window_fill_rounded_rect(WoxLinuxWindow *window, float x, floa
   float color[4];
   premultiplied_color(red, green, blue, alpha, color);
   glUseProgram(renderer->rect_program);
+  apply_linux_drawing_state(renderer, renderer->rect_program, NULL, true);
   glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->rect_bounds, x, y, width, height);
   glUniform4fv(renderer->rect_color, 1, color);
@@ -5671,6 +5716,7 @@ int32_t wox_linux_window_fill_convex_polygon(WoxLinuxWindow *window, const float
   float color[4];
   premultiplied_color(red, green, blue, alpha, color);
   glUseProgram(renderer->rect_program);
+  apply_linux_drawing_state(renderer, renderer->rect_program, NULL, true);
   glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->rect_bounds, min_x, min_y, max_x - min_x, max_y - min_y);
   glUniform4fv(renderer->rect_color, 1, color);
@@ -5694,6 +5740,7 @@ int32_t wox_linux_window_stroke_rounded_rect(WoxLinuxWindow *window, float x, fl
   float color[4];
   premultiplied_color(red, green, blue, alpha, color);
   glUseProgram(renderer->rect_program);
+  apply_linux_drawing_state(renderer, renderer->rect_program, NULL, true);
   glUniform2f(renderer->rect_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->rect_bounds, x, y, width, height);
   glUniform4fv(renderer->rect_color, 1, color);
@@ -5745,10 +5792,13 @@ int32_t wox_linux_window_begin_edge_fade(WoxLinuxWindow *window, float x, float 
   if (renderer->edge_fades == NULL) renderer->edge_fades = g_array_new(FALSE, TRUE, sizeof(WoxLinuxEdgeFade));
   if (renderer->edge_fade_depth == renderer->edge_fades->len) g_array_set_size(renderer->edge_fades, renderer->edge_fade_depth + 1);
   WoxLinuxEdgeFade *fade = &g_array_index(renderer->edge_fades, WoxLinuxEdgeFade, renderer->edge_fade_depth);
-  fade->left = (int)fmaxf(0, fminf(renderer->frame_width, floorf(x * renderer->scale)));
-  int top = (int)fmaxf(0, fminf(renderer->frame_height, floorf(y * renderer->scale)));
-  int right = (int)fmaxf(fade->left, fminf(renderer->frame_width, ceilf((x + width) * renderer->scale)));
-  int bottom = (int)fmaxf(top, fminf(renderer->frame_height, ceilf((y + height) * renderer->scale)));
+  float bounds[4];
+  if (!linux_transformed_rect(renderer, x, y, width, height, fade->polygon, bounds)) return -1;
+  memcpy(fade->transform, linux_paint_transform(renderer), sizeof(fade->transform));
+  fade->left = (int)fmaxf(0, fminf(renderer->frame_width, floorf(bounds[0] * renderer->scale)));
+  int top = (int)fmaxf(0, fminf(renderer->frame_height, floorf(bounds[1] * renderer->scale)));
+  int right = (int)fmaxf(fade->left, fminf(renderer->frame_width, ceilf(bounds[2] * renderer->scale)));
+  int bottom = (int)fmaxf(top, fminf(renderer->frame_height, ceilf(bounds[3] * renderer->scale)));
   fade->bottom = renderer->frame_height - bottom;
   fade->width = right - fade->left;
   fade->height = bottom - top;
@@ -5766,12 +5816,12 @@ int32_t wox_linux_window_begin_edge_fade(WoxLinuxWindow *window, float x, float 
 
 // Interpolate premultiplied composites: this is equivalent to masking an isolated
 // content layer over its original backdrop, including when that backdrop has alpha.
-int32_t wox_linux_window_end_edge_fade(WoxLinuxWindow *window, float x, float y, float width, float height, float top, float bottom) {
+static int32_t end_composite_layer(WoxLinuxWindow *window, float x, float y, float width, float height, float top, float bottom, float opacity) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) return -1;
   WoxLinuxRenderer *renderer = window->active_renderer;
   if (renderer->edge_fade_depth == 0) return -1;
   WoxLinuxEdgeFade *fade = &g_array_index(renderer->edge_fades, WoxLinuxEdgeFade, --renderer->edge_fade_depth);
-  wox_linux_window_clear_clip(window);
+  if (wox_linux_window_clear_clip(window) != 0) return -1;
   if (fade->width == 0 || fade->height == 0) return 0;
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, fade->after);
@@ -5781,12 +5831,14 @@ int32_t wox_linux_window_end_edge_fade(WoxLinuxWindow *window, float x, float y,
   glBindTexture(GL_TEXTURE_2D, fade->after);
   GLuint program = renderer->edge_fade_program;
   glUseProgram(program);
+  apply_linux_drawing_state(renderer, program, fade->transform, true);
   glUniform1i(glGetUniformLocation(program, "u_before"), 0);
   glUniform1i(glGetUniformLocation(program, "u_after"), 1);
   glUniform2f(glGetUniformLocation(program, "u_viewport"), renderer->logical_width, renderer->logical_height);
   glUniform4f(glGetUniformLocation(program, "u_rect"), x, y, width, height);
   glUniform2f(glGetUniformLocation(program, "u_origin"), fade->left, fade->bottom);
   glUniform2f(glGetUniformLocation(program, "u_fades"), top, bottom);
+  glUniform1f(glGetUniformLocation(program, "u_opacity"), opacity);
   glBindVertexArray(renderer->vertex_array);
   // The shader already includes the backdrop; blending it again would change glass alpha.
   glDisable(GL_BLEND);
@@ -5797,6 +5849,14 @@ int32_t wox_linux_window_end_edge_fade(WoxLinuxWindow *window, float x, float y,
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
   return 0;
+}
+
+int32_t wox_linux_window_end_edge_fade(WoxLinuxWindow *window, float x, float y, float width, float height, float top, float bottom) {
+  return end_composite_layer(window, x, y, width, height, top, bottom, 1);
+}
+
+int32_t wox_linux_window_end_opacity(WoxLinuxWindow *window, float x, float y, float width, float height, float opacity) {
+  return end_composite_layer(window, x, y, width, height, 0, 0, opacity);
 }
 
 static bool ensure_blur_programs(WoxLinuxRenderer *renderer) {
@@ -5893,22 +5953,13 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
   const float scale = renderer->scale;
   const int frame_width = renderer->frame_width;
   const int frame_height = renderer->frame_height;
-  int left = (int)floorf((x - blur_margin) * scale);
-  int top = (int)floorf((y - blur_margin) * scale);
-  int right = (int)ceilf((x + width + blur_margin) * scale);
-  int bottom = (int)ceilf((y + height + blur_margin) * scale);
-  if (left < 0) {
-    left = 0;
-  }
-  if (top < 0) {
-    top = 0;
-  }
-  if (right > frame_width) {
-    right = frame_width;
-  }
-  if (bottom > frame_height) {
-    bottom = frame_height;
-  }
+  float points[8], bounds[4];
+  if (!linux_transformed_rect(renderer, x, y, width, height, points, bounds)) return false;
+  // Clamp physical bounds before integer conversion, including far-offscreen maps.
+  int left = (int)fmaxf(0, fminf(frame_width, floorf((bounds[0] - blur_margin) * scale)));
+  int top = (int)fmaxf(0, fminf(frame_height, floorf((bounds[1] - blur_margin) * scale)));
+  int right = (int)fmaxf(0, fminf(frame_width, ceilf((bounds[2] + blur_margin) * scale)));
+  int bottom = (int)fmaxf(0, fminf(frame_height, ceilf((bounds[3] + blur_margin) * scale)));
   const int copy_width = right - left;
   const int copy_height = bottom - top;
   if (copy_width <= 0 || copy_height <= 0 || copy_width > 4096 || copy_height > 4096) {
@@ -5991,6 +6042,7 @@ static bool blur_floating_material_backdrop(WoxLinuxRenderer *renderer, float x,
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, renderer->blur_ping_texture);
   glUseProgram(renderer->blur_compose_program);
+  apply_linux_drawing_state(renderer, renderer->blur_compose_program, NULL, true);
   glUniform2f(renderer->compose_viewport, renderer->logical_width, renderer->logical_height);
   glUniform4f(renderer->compose_rect, x, y, width, height);
   glUniform1f(renderer->compose_radius, radius);
@@ -6194,7 +6246,8 @@ int32_t wox_linux_window_set_clip_rect(WoxLinuxWindow *window, float x, float y,
   renderer->clip_y = top;
   renderer->clip_width = right - left;
   renderer->clip_height = bottom - top;
-  return 0;
+  if (renderer->clip_points != NULL) g_array_set_size(renderer->clip_points, 0);
+  return rebuild_linux_clip(renderer);
 }
 
 int32_t wox_linux_window_clear_clip(WoxLinuxWindow *window) {
@@ -6209,7 +6262,37 @@ int32_t wox_linux_window_clear_clip(WoxLinuxWindow *window) {
   } else {
     glDisable(GL_SCISSOR_TEST);
   }
+  if (renderer->clip_points != NULL) g_array_set_size(renderer->clip_points, 0);
+  return rebuild_linux_clip(renderer);
+}
+
+// Command transforms affect paint only; clips already describe target coordinates.
+int32_t wox_linux_window_set_transform(WoxLinuxWindow *window, float a, float b, float c, float d, float tx, float ty) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) return -1;
+  WoxLinuxRenderer *renderer = window->active_renderer;
+  float matrix[6] = {a, b, c, d, tx, ty};
+  for (int i = 0; i < 6; i++) if (!isfinite(matrix[i]) || !isfinite(matrix[i] * renderer->scale)) return -1;
+  memcpy(renderer->transform, matrix, sizeof(matrix));
+  renderer->transform_initialized = true;
   return 0;
+}
+
+// Keep scissor as a coarse damage bound and use half-planes for the exact silhouette.
+int32_t wox_linux_window_set_clip_polygon(WoxLinuxWindow *window, const float *points, int32_t count) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || points == NULL || count < 3) return -1;
+  float left = points[0], top = points[1], right = points[0], bottom = points[1];
+  for (int32_t i = 0; i < count; i++) {
+    float x = points[2*i], y = points[2*i+1];
+    if (!isfinite(x) || !isfinite(y)) return -1;
+    left = fminf(left, x); top = fminf(top, y);
+    right = fmaxf(right, x); bottom = fmaxf(bottom, y);
+  }
+  int32_t result = wox_linux_window_set_clip_rect(window, left, top, right - left, bottom - top);
+  if (result != 0) return result;
+  WoxLinuxRenderer *renderer = window->active_renderer;
+  if (renderer->clip_points == NULL) renderer->clip_points = g_array_new(FALSE, FALSE, sizeof(float));
+  g_array_append_vals(renderer->clip_points, points, (unsigned)count * 2);
+  return rebuild_linux_clip(renderer);
 }
 
 // wox_linux_window_trace_encode separates draw-command failures from the following framebuffer blit.
@@ -6267,21 +6350,34 @@ int32_t wox_linux_window_begin_embedded_surface_overlay(WoxLinuxWindow *window) 
   float clip_y = background->clip_y;
   float clip_width = background->clip_width;
   float clip_height = background->clip_height;
+  float transform[6];
+  memcpy(transform, linux_paint_transform(background), sizeof(transform));
+  GArray *clip = NULL;
+  if (background->clip_points != NULL && background->clip_points->len > 0) {
+    clip = g_array_sized_new(FALSE, FALSE, sizeof(float), background->clip_points->len);
+    g_array_append_vals(clip, background->clip_points->data, background->clip_points->len);
+  }
   int32_t result = finish_linux_renderer_frame(window, background);
   if (result != 0) {
+    if (clip != NULL) g_array_free(clip, TRUE);
     return result;
   }
   window->active_renderer = &window->overlay_renderer;
   window->active_gl_area = window->overlay_gl_area;
   result = begin_linux_renderer_frame(window, window->active_renderer, window->active_gl_area, false, background->logical_width, background->logical_height, background->scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
   if (result != 0) {
+    if (clip != NULL) g_array_free(clip, TRUE);
     return result;
   }
   window->embedded_surface_overlay_active = true;
-  if (restore_clip) {
-    return wox_linux_window_set_clip_rect(window, clip_x, clip_y, clip_width, clip_height);
+  result = wox_linux_window_set_transform(window, transform[0], transform[1], transform[2], transform[3], transform[4], transform[5]);
+  if (result == 0 && clip != NULL) {
+    result = wox_linux_window_set_clip_polygon(window, (float *)clip->data, clip->len / 2);
+  } else if (result == 0 && restore_clip) {
+    result = wox_linux_window_set_clip_rect(window, clip_x, clip_y, clip_width, clip_height);
   }
-  return 0;
+  if (clip != NULL) g_array_free(clip, TRUE);
+  return result;
 }
 
 // linux_present_overlay_idle runs after GtkGLArea::render returns. queue_render
@@ -6482,7 +6578,7 @@ int32_t wox_linux_test_window_uses_per_pixel_alpha(int32_t application, int32_t 
 }
 
 // Read the production GL mask offscreen; a missing display is reported as a skip.
-int32_t wox_linux_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+static int32_t test_linux_composite(uint8_t *pixels, int32_t size, float scale, float top, float bottom, float opacity) {
   if (!gtk_init_check(NULL, NULL)) return 1;
   GtkWidget *host = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   GtkWidget *area = gtk_gl_area_new();
@@ -6505,12 +6601,33 @@ int32_t wox_linux_test_edge_fade(uint8_t *pixels, int32_t size, float scale, flo
     glDisable(GL_SCISSOR_TEST);
     glClearColor(0, 0, 0.5f, 0.5f);
     glClear(GL_COLOR_BUFFER_BIT);
-    result = wox_linux_window_begin_edge_fade(&window, 0, 8, 96, 80);
-    if (result == 0) {
-      wox_linux_window_set_clip_rect(&window, 0, 8, 96, 80);
-      glClearColor(1, 1, 1, 1);
-      glClear(GL_COLOR_BUFFER_BIT);
-      result = wox_linux_window_end_edge_fade(&window, 0, 8, 96, 80, top, bottom);
+    if (opacity >= 0) {
+      result = wox_linux_window_begin_edge_fade(&window, 0, 8, 96, 80);
+      if (result == 0) {
+        wox_linux_window_set_clip_rect(&window, 0, 8, 64, 40);
+        glClearColor(1, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        wox_linux_window_set_clip_rect(&window, 32, 8, 64, 40);
+        glClearColor(0, 1, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        result = wox_linux_window_begin_edge_fade(&window, 0, 60, 96, 20);
+        if (result == 0) {
+          wox_linux_window_set_clip_rect(&window, 0, 60, 96, 20);
+          glClearColor(1, 1, 1, 1);
+          glClear(GL_COLOR_BUFFER_BIT);
+          result = wox_linux_window_end_opacity(&window, 0, 60, 96, 20, 0.5f);
+        }
+        int32_t outer_result = wox_linux_window_end_opacity(&window, 0, 8, 96, 80, opacity);
+        if (result == 0) result = outer_result;
+      }
+    } else {
+      result = wox_linux_window_begin_edge_fade(&window, 0, 8, 96, 80);
+      if (result == 0) {
+        wox_linux_window_set_clip_rect(&window, 0, 8, 96, 80);
+        glClearColor(1, 1, 1, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        result = wox_linux_window_end_edge_fade(&window, 0, 8, 96, 80, top, bottom);
+      }
     }
     wox_linux_window_set_clip_rect(&window, 0, 90, 96, 6);
     glClearColor(1, 0, 0, 1);
@@ -6524,7 +6641,80 @@ int32_t wox_linux_test_edge_fade(uint8_t *pixels, int32_t size, float scale, flo
   glDeleteTextures(1, &renderer.frame_texture);
   glDeleteVertexArrays(1, &renderer.vertex_array);
   gtk_widget_destroy(host);
+  gdk_gl_context_clear_current();
   return result;
+}
+
+// An unmapped GTK surface supplies a real GL context; retained pixels live in the production framebuffer.
+int32_t wox_linux_test_create_target(int32_t width, int32_t height, WoxLinuxWindow **out) {
+  if (out == NULL || width <= 0 || height <= 0) return -1;
+  *out = NULL;
+  if (!gtk_init_check(NULL, NULL)) return 1;
+  WoxLinuxWindow *window = calloc(1, sizeof(*window));
+  if (window == NULL) return -1;
+  window->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  window->gl_area = gtk_gl_area_new();
+  gtk_gl_area_set_required_version(GTK_GL_AREA(window->gl_area), 3, 3);
+  gtk_gl_area_set_has_alpha(GTK_GL_AREA(window->gl_area), TRUE);
+  gtk_widget_set_size_request(window->gl_area, width, height);
+  gtk_container_add(GTK_CONTAINER(window->window), window->gl_area);
+  gtk_widget_realize(window->window);
+  gtk_widget_realize(window->gl_area);
+  if (!initialize_renderer(window, &window->renderer, window->gl_area)) {
+    gtk_widget_destroy(window->window);
+    gdk_gl_context_clear_current();
+    free(window);
+    return -1;
+  }
+  // Exercise material shaders even on CI's llvmpipe; production keeps its CPU fallback policy.
+  window->renderer.software_gl = false;
+  window->per_pixel_alpha = true;
+  window->renderer.frame_width = width;
+  window->renderer.frame_height = height;
+  *out = window;
+  gdk_gl_context_clear_current();
+  return 0;
+}
+
+// The fixture retains physical dimensions while changing the logical display scale.
+int32_t wox_linux_test_begin_frame(WoxLinuxWindow *window, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || !isfinite(scale) || scale <= 0) return -1;
+  int32_t result = wox_linux_window_begin_frame(window, 0, window->renderer.frame_width / scale, window->renderer.frame_height / scale, scale, damage_x, damage_y, damage_width, damage_height, red, green, blue, alpha);
+  if (result != 0) gdk_gl_context_clear_current();
+  return result;
+}
+
+// Read the retained target without presenting or mapping a native window.
+int32_t wox_linux_test_end_frame(WoxLinuxWindow *window, uint8_t *pixels, size_t length) {
+  if (window == NULL || pixels == NULL || !window->renderer.frame_open) return -1;
+  WoxLinuxRenderer *renderer = &window->renderer;
+  int width = renderer->frame_width, height = renderer->frame_height;
+  if (length != (size_t)width * height * 4) return -1;
+  glBindFramebuffer(GL_FRAMEBUFFER, renderer->frame_framebuffer);
+  for (int row = 0; row < height; row++) glReadPixels(0, height - row - 1, width, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels + (size_t)row * width * 4);
+  renderer->frame_open = false;
+  renderer->last_presented_generation = renderer->context_generation;
+  reset_linux_drawing_state(renderer);
+  int32_t result = glGetError() == GL_NO_ERROR ? 0 : -1;
+  gdk_gl_context_clear_current();
+  return result;
+}
+
+// Release the fixture's GL objects before destroying its unmapped context owner.
+void wox_linux_test_destroy_target(WoxLinuxWindow *window) {
+  if (window == NULL) return;
+  destroy_renderer(&window->renderer, window->gl_area);
+  gtk_widget_destroy(window->window);
+  gdk_gl_context_clear_current();
+  free(window);
+}
+
+int32_t wox_linux_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+  return test_linux_composite(pixels, size, scale, top, bottom, -1);
+}
+
+int32_t wox_linux_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity) {
+  return test_linux_composite(pixels, size, scale, 0, 0, opacity);
 }
 
 extern void woxGoWebViewScriptResult(uint64_t, char *, char *);

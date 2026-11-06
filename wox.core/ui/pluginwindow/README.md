@@ -1,15 +1,16 @@
 # Plugin windows
 
 `API.CreateWindow(ctx, CreateWindowOption)` returns a hidden `PluginWindow` instance.
-`Show`, `Hide`, `Close`, `SetOptions`, `Content.Set`, and `Content.PostMessage` each take
+`Show`, `Hide`, `Close`, `SetOptions`, `Content.Set`, `Content.Update`, `Content.Command`, and `Content.PostMessage` each take
 context plus a named option and return a named result containing `Success`/`ErrMsg`.
 The Python names use snake case; Node.js and Go use PascalCase. New options can be
 added without changing method signatures. There is no public script execution API.
 
 ## Content and presentation
 
-`WindowContent{Type, Data}` supports `text`, `markdown`, and inline `html` (raw HTML,
-not a serialized Preview object). Text/Markdown reuse the Preview widgets. HTML and
+`WindowContent{Type, Data}` supports `text`, `markdown`, `woxview` (a serialized
+native view tree), and inline `html` (raw HTML, not a serialized Preview object).
+Text/Markdown are adapted to WoxView nodes using the shared components. HTML and
 query previews share `previewcontent.WebViewSurface` and the same native WebView
 controller; plugin windows own their documents and lifetime independently.
 
@@ -19,6 +20,11 @@ not focusable, not movable and not resizable. Wox supplies a 30-unit close/drag
 strip when needed. Set `Closable: false` for a chrome-free indicator. Geometry
 uses the shared overlay work-area and DPI conversions, including negative desktop
 origins. Bounds are clamped to the work area.
+
+Set `Presentation: "window"` for an independent application window that participates
+in native window discovery and task switching. This presentation defaults to
+focusable and not topmost; explicit `Focusable` and `Topmost` values still win.
+Other defaults are unchanged. The WoxView showcase and note examples use this mode.
 
 HTML pages control their own background. On Windows and macOS, a transparent `html` and
 `body` allows the window's themed wash and native material to show through the
@@ -47,6 +53,40 @@ closability are creation options. Other options can be added in future releases.
 discards pending messages from the previous document. `Close` is idempotent.
 Closed windows cannot be reopened. Plugin unload, disable, offline suspension and
 host loss close the plugin's windows and release its callbacks.
+
+## Native declarative content
+
+See the [WoxView protocol](../woxview/README.md) and its generated JSON Schema for
+components, form values, revision resets and event arguments. `Content.Update`
+(`content.update` in Python) takes `{Data, DocumentID?, Sequence?}` and replaces a
+validated tree while keeping its document and keyed state. `Content.Set` starts
+a fresh document. Invalid updates leave the previous tree intact. The optional
+monotonic `Sequence` rejects out-of-order updates; a nonzero sequence also prevents
+later unsequenced updates in that document.
+
+The `woxview_event` callback carries `{Handler, Args, Key}` in `Data`, alongside the
+window and document IDs. Core filters queued handlers against the current tree.
+Node and Python SDKs expose the same content type, event type, and update operation.
+
+`Content.Command` (`content.command` in Python) takes
+`{DocumentID?, Command: "focus" | "scrollTo" | "selectAll", Key}` and returns a
+named result. Keys must be unambiguous across the document. Commands execute in
+order after layout, materializing offscreen lazy rows as needed; success means
+accepted. Deferred failures emit a document-scoped `error` with `{Command, Key}`
+in `Data`. Document replacement and close discard pending commands. Focus and
+selection require a focusable window but never activate it. See the WoxView
+protocol's command section for target, queue, and modal behavior.
+
+Text-field `changeDebounce` delays only change notifications. Local values and
+form snapshots remain immediate; submission flushes pending edits first.
+
+WoxView display props prefixed with `i18n:` use the creating plugin's translation
+dictionary and existing Wox fallback. Translation is a Core-owned capability
+passed through the internal factory, not a new plugin callback or wire option.
+Field values, names, handler IDs and event arguments remain unchanged. Literal
+text/Markdown/HTML content is not translated. Core callers can inspect WoxView
+validation errors with `errors.As`; public window results retain their existing
+`ErrMsg` text.
 
 ## HTML messages
 
@@ -158,3 +198,34 @@ On macOS, `make smoke pluginwindow/001` checks a draggable HTML window's WebKit
 snapshot transparency, prompt pointer enter and leave (including repeated entry and
 leaving after a click), and the page's close-button click. The fixture keeps the
 window non-key and rejects unintended pressed buttons, selection, or dragging.
+
+WoxView event `Key` is the triggering node's explicit key, or an empty string for
+an unkeyed node. Handler registration and document checks still apply.
+
+`theme_changed` is a document-scoped window event with `Data: {"Dark": bool}`.
+It follows Wox theme notifications, including palette changes that keep the same
+light/dark appearance, and is delivered to hidden windows too. `Dark` describes
+the window's overlay surface rather than the OS appearance or launcher background.
+No initial event is emitted on creation; theme color APIs can provide initial
+appearance. Token and dual-color rendering updates locally without a plugin reply.
+Plugins can use the event to replace theme-specific image assets or send an HTML
+page a message through `Content.PostMessage`; it is not injected into page JavaScript.
+
+HTML documents loading during a change receive the latest theme after `ready`.
+Replacing content discards the old document's pending/queued theme events; closing
+or unloading cancels its theme subscription. Pending theme changes can coalesce
+within the same document and discrete-event ordering segment. Node exports
+`WindowThemeChangedData`; Python exports the matching `TypedDict` and
+`WindowEventType.THEME_CHANGED`. Both hosts preserve the opaque PascalCase `Dark`
+payload, including false.
+
+`WOX_WINDOW_THEME_NATIVE_TEST=1 go test ./ui/pluginwindow -run
+TestNativeHiddenWindowThemeChanges -count=1` runs a Windows integration fixture
+that creates only a hidden window and checks theme notification, document guards,
+and subscription cleanup without showing or activating Wox.
+
+The UI marks value-change events with an internal opaque coalescing key. The plugin
+queue combines pending changes within the same document and between discrete-event
+ordering barriers, retaining the latest value even when the bounded queue is full.
+The plugin package does not parse WoxView payloads or depend on UI components to
+make this decision. Nonmergeable overflow remains observable through error events.

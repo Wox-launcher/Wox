@@ -7,12 +7,21 @@ import (
 
 // WoxTag shares the quiet metadata styling used by preview and result-tail tags.
 func WoxTag(label string, color woxui.Color, theme ControlTheme) woxwidget.Widget {
-	return woxTag(label, color, theme, TagFontSize, 22)
+	return woxTag(label, color, theme, TagFontSize, 22, nil)
 }
 
 // WoxCompactTag is the 9px table-row status chip beside 13px cell text.
 func WoxCompactTag(label string, color woxui.Color, theme ControlTheme) woxwidget.Widget {
-	return woxTag(label, color, theme, CompactTagFontSize, 18)
+	return woxTag(label, color, theme, CompactTagFontSize, 18, nil)
+}
+
+// WoxTagWithPaint preserves the standard/compact tag geometry while exposing
+// individual paint overrides to declarative and composed choice controls.
+func WoxTagWithPaint(label string, color woxui.Color, theme ControlTheme, compact bool, paint *ControlPaint) woxwidget.Widget {
+	if compact {
+		return woxTag(label, color, theme, CompactTagFontSize, 18, paint)
+	}
+	return woxTag(label, color, theme, TagFontSize, 22, paint)
 }
 
 // WoxWarningTag uses an opaque status fill so its contrast survives custom launcher backgrounds.
@@ -30,16 +39,16 @@ func WoxWarningTag(label string, width float32, theme ControlTheme) woxwidget.Wi
 }
 
 // woxTag sizes to its label so translations and density changes need no fixed badge slot.
-func woxTag(label string, color woxui.Color, theme ControlTheme, size, height float32) woxwidget.Widget {
+func woxTag(label string, color woxui.Color, theme ControlTheme, size, height float32, paint *ControlPaint) woxwidget.Widget {
 	background := theme.Text
 	background.A = 13
 	height = theme.Scaled(height)
-	return woxwidget.Container{
+	return paint.paintContainer("tag", woxwidget.Container{
 		Height: height, Radius: theme.Scaled(4), Color: background,
 		Padding: woxwidget.Insets{Left: theme.Scaled(7), Right: theme.Scaled(7)},
 		Child: woxwidget.TextBlock{
-			Value: label, Style: woxui.TextStyle{Size: theme.Scaled(size)}, Color: color,
+			Value: label, Style: woxui.TextStyle{Size: theme.Scaled(size)}, Color: paint.foreground(color),
 			Height: height, LineHeight: height, MaxLines: 1, ShrinkWrap: true, AlignmentY: 0.5,
 		},
-	}
+	})
 }

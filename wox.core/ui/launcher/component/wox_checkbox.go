@@ -18,6 +18,7 @@ type CheckboxProps struct {
 	OnKey         func(woxui.KeyEvent) bool
 	OnFocusChange func(bool)
 	Theme         ControlTheme
+	Paint         *ControlPaint
 }
 
 // WoxCheckbox builds the Flutter-aligned 18px checkbox interaction.
@@ -33,7 +34,7 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 	if props.Value {
 		border = props.Theme.Accent
 		background = props.Theme.Accent
-		mark = woxwidget.Align{Width: 18, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: CheckGlyph(12, props.Theme.AccentText)}
+		mark = woxwidget.Align{Width: 18, Height: 18, Horizontal: 0.5, Vertical: 0.5, Child: CheckGlyph(12, props.Paint.foreground(props.Theme.AccentText))}
 	}
 	buildVisual := func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 		visualBackground := background
@@ -52,9 +53,9 @@ func WoxCheckbox(props CheckboxProps) woxwidget.Widget {
 		if !props.Disabled && props.OnChange != nil {
 			cursor = woxui.PointerCursorHand
 		}
-		return woxwidget.Gesture{ID: props.ID, Cursor: cursor, OnTap: toggle, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		return woxwidget.Gesture{ID: props.ID, Cursor: cursor, OnTap: toggle, OnHoverAt: onHoverAt, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{
 			Width: 18, Height: 18, Radius: 4, Color: visualBackground, BorderColor: visualBorder, BorderWidth: 1, Child: mark,
-		}}
+		})}
 	}
 	if props.ID == "" || props.OnChange == nil {
 		return buildVisual(false, nil).(woxwidget.Gesture).Child

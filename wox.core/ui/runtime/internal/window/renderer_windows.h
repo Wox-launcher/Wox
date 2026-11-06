@@ -8,7 +8,10 @@ extern "C" {
 #endif
 
 typedef struct WoxRenderer WoxRenderer;
+int32_t wox_renderer_test_create_offscreen(uint32_t width, uint32_t height, WoxRenderer **renderer);
+int32_t wox_renderer_test_read_pixels(WoxRenderer *renderer, uint8_t *pixels, uint32_t length);
 int32_t wox_renderer_test_floating_material(uint8_t *pixels, int32_t size, float scale);
+int32_t wox_renderer_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity);
 int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);
 int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float physical_radius);
 
@@ -47,8 +50,11 @@ int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, void **visual,
 int32_t wox_renderer_set_webview_visual_bounds(WoxRenderer *renderer, void *visual, float x, float y, float width, float height, float corner_radius);
 int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, void *visual);
 int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height);
-int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom);
+int32_t wox_renderer_set_clip_polygon(WoxRenderer *renderer, const float *points, int32_t point_count);
+int32_t wox_renderer_set_transform(WoxRenderer *renderer, float a, float b, float c, float d, float tx, float ty);
+int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom, int32_t backdrop);
 int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer);
+int32_t wox_renderer_begin_opacity(WoxRenderer *renderer, float x, float y, float width, float height, float opacity, int32_t backdrop);
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);
 int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline);
 // Measures with the default Segoe UI plus YaHei UI fallback, without a window.

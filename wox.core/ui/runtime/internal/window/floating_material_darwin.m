@@ -8,7 +8,7 @@
 // Blur only the physical sample region, leaving all output clipping to CoreGraphics.
 // A half-logical-resolution sample and three box passes approximate the shared
 // Gaussian without a GPU device or persistent window-sized scratch buffers.
-bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, float radius, float sigma, float margin, float brightness, float saturation, uint8_t red, uint8_t green, uint8_t blue) {
+bool wox_darwin_blur_material(CGContextRef context, float scale, CGAffineTransform transform, CGRect bounds, float radius, float sigma, float margin, float brightness, float saturation, uint8_t red, uint8_t green, uint8_t blue) {
   if (context == NULL || scale <= 0 || (sigma <= 0 && brightness == 1 && saturation == 1) || CGRectIsEmpty(bounds)) {
     return false;
   }
@@ -19,10 +19,11 @@ bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, 
   if (pixels == NULL || CGRectIsEmpty(CGRectIntersection(bounds, CGContextGetClipBoundingBox(context)))) {
     return false;
   }
-  size_t left = fmin(width, fmax(0, floor((CGRectGetMinX(bounds) - margin) * scale)));
-  size_t top = fmin(height, fmax(0, floor((CGRectGetMinY(bounds) - margin) * scale)));
-  size_t right = fmin(width, fmax(0, ceil((CGRectGetMaxX(bounds) + margin) * scale)));
-  size_t bottom = fmin(height, fmax(0, ceil((CGRectGetMaxY(bounds) + margin) * scale)));
+  CGRect target_bounds = CGRectApplyAffineTransform(bounds, transform);
+  size_t left = fmin(width, fmax(0, floor((CGRectGetMinX(target_bounds) - margin) * scale)));
+  size_t top = fmin(height, fmax(0, floor((CGRectGetMinY(target_bounds) - margin) * scale)));
+  size_t right = fmin(width, fmax(0, ceil((CGRectGetMaxX(target_bounds) + margin) * scale)));
+  size_t bottom = fmin(height, fmax(0, ceil((CGRectGetMaxY(target_bounds) + margin) * scale)));
   if (right <= left || bottom <= top) {
     return false;
   }
@@ -92,6 +93,8 @@ bool wox_darwin_blur_material(CGContextRef context, float scale, CGRect bounds, 
     CGContextSaveGState(context);
     CGContextAddPath(context, path);
     CGContextClip(context);
+    // The silhouette is now fixed in device space; the sampled image uses target axes, not the surface's local matrix.
+    CGContextConcatCTM(context, CGAffineTransformInvert(transform));
     // Replace sampled alpha rather than compositing a second copy of the backdrop.
     CGContextSetBlendMode(context, kCGBlendModeCopy);
     CGContextSetInterpolationQuality(context, kCGInterpolationLow);

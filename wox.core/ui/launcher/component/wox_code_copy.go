@@ -11,39 +11,39 @@ import (
 	"wox/util"
 )
 
-const markdownCopyFeedbackDuration = 1200 * time.Millisecond
+const codeCopyFeedbackDuration = 1200 * time.Millisecond
 
-type markdownCodeCopyProps struct {
+type codeCopyProps struct {
 	id    string
 	code  string
 	size  float32
 	theme ControlTheme
 }
 
-type markdownCodeCopyState struct {
+type codeCopyState struct {
 	copied     bool
 	generation uint64
 	reset      *time.Timer
 }
 
-// markdownCodeCopyButton retains feedback independently for each code block.
-func markdownCodeCopyButton(props markdownCodeCopyProps) woxwidget.Widget {
+// codeCopyButton retains feedback independently for each code block.
+func codeCopyButton(props codeCopyProps) woxwidget.Widget {
 	return woxwidget.Stateful{
-		Key: woxwidget.Key(props.id + "-feedback"), Type: (*markdownCodeCopyState)(nil), Widget: props,
-		CreateState: func() woxwidget.State { return &markdownCodeCopyState{} },
+		Key: woxwidget.Key(props.id + "-feedback"), Type: (*codeCopyState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &codeCopyState{} },
 	}
 }
 
-func (s *markdownCodeCopyState) InitState(_ woxwidget.StateContext, _ any) {}
+func (s *codeCopyState) InitState(_ woxwidget.StateContext, _ any) {}
 
-func (s *markdownCodeCopyState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
-	if oldWidget.(markdownCodeCopyProps).code != newWidget.(markdownCodeCopyProps).code {
+func (s *codeCopyState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget, newWidget any) {
+	if oldWidget.(codeCopyProps).code != newWidget.(codeCopyProps).code {
 		s.clearFeedback()
 	}
 }
 
-func (s *markdownCodeCopyState) Build(stateContext woxwidget.StateContext, widget any) woxwidget.Widget {
-	props := widget.(markdownCodeCopyProps)
+func (s *codeCopyState) Build(stateContext woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(codeCopyProps)
 	color := withAlpha(props.theme.BodyText, 180)
 	iconSize := min(props.size, props.theme.Scaled(14))
 	icon := CopyGlyph(iconSize, color)
@@ -63,14 +63,14 @@ func (s *markdownCodeCopyState) Build(stateContext woxwidget.StateContext, widge
 				return
 			}
 			if err := clipboard.WriteText(props.code); err != nil {
-				util.GetLogger().Warn(context.Background(), fmt.Sprintf("copy Markdown code block: %v", err))
+				util.GetLogger().Warn(context.Background(), fmt.Sprintf("copy code block: %v", err))
 				stateContext.SetState(s.clearFeedback)
 				return
 			}
 			s.clearFeedback()
 			stateContext.SetState(func() { s.copied = true })
 			generation := s.generation
-			s.reset = time.AfterFunc(markdownCopyFeedbackDuration, func() {
+			s.reset = time.AfterFunc(codeCopyFeedbackDuration, func() {
 				_ = woxui.Call(func() {
 					// A stopped timer may already be queued; only the latest copy can clear feedback.
 					if stateContext.Mounted() && s.generation == generation {
@@ -82,7 +82,7 @@ func (s *markdownCodeCopyState) Build(stateContext woxwidget.StateContext, widge
 	})
 }
 
-func (s *markdownCodeCopyState) clearFeedback() {
+func (s *codeCopyState) clearFeedback() {
 	s.generation++
 	s.copied = false
 	if s.reset != nil {
@@ -91,4 +91,4 @@ func (s *markdownCodeCopyState) clearFeedback() {
 	}
 }
 
-func (s *markdownCodeCopyState) Dispose() { s.clearFeedback() }
+func (s *codeCopyState) Dispose() { s.clearFeedback() }

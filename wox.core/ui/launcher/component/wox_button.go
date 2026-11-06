@@ -21,9 +21,13 @@ const (
 
 // ButtonProps describes one themed, focusable Wox button.
 type ButtonProps struct {
-	ID               string
-	Label            string
-	Icon             *woxui.Image
+	ID    string
+	Label string
+	// Role defaults to Button; link actions reuse the same keyboard and focus behavior.
+	Role woxui.AccessibilityRole
+	Icon *woxui.Image
+	// IconOpacity optionally fades the icon independently of the label.
+	IconOpacity      *float32
 	TrailingIcon     *woxui.Image
 	TrailingLabel    string
 	IconSize         float32
@@ -60,6 +64,7 @@ type ButtonProps struct {
 	OnFocusChange      func(bool)
 	OnKey              func(woxui.KeyEvent) bool
 	Theme              ControlTheme
+	Paint              *ControlPaint
 }
 
 // WoxButton builds a button with shared visuals, keyboard activation, and accessibility semantics.
@@ -126,6 +131,24 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		onTap = nil
 		props.OnPanStart, props.OnPanUpdate, props.OnPanEnd, props.OnSecondaryTapDown = nil, nil, nil, nil
 	}
+	borderWidth := boolFloat(border.A != 0)
+	if paint := props.Paint; paint != nil {
+		if paint.Background != nil {
+			background = *paint.Background
+		}
+		if paint.Foreground != nil {
+			foreground = *paint.Foreground
+		}
+		if paint.BorderColor != nil {
+			border = *paint.BorderColor
+		}
+		if paint.BorderWidth != nil {
+			borderWidth = *paint.BorderWidth
+		}
+		if paint.Radius != nil {
+			radius = *paint.Radius
+		}
+	}
 	actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
 	if props.Disabled {
 		actions = nil
@@ -146,8 +169,12 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 		if iconGap <= 0 {
 			iconGap = 8
 		}
+		var icon woxwidget.Widget = woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize}
+		if props.IconOpacity != nil {
+			icon = woxwidget.Opacity{Value: *props.IconOpacity, Child: icon}
+		}
 		child = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: iconGap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-			woxwidget.Image{Source: props.Icon, Width: iconSize, Height: iconSize},
+			icon,
 			label,
 		}}
 	}
@@ -195,18 +222,26 @@ func WoxButton(props ButtonProps) woxwidget.Widget {
 				buttonBackground = *props.HoverBackground
 			}
 		}
+		// Explicit state paint wins over the control's derived hover treatment.
+		if props.Paint != nil && props.Paint.Background != nil {
+			buttonBackground = *props.Paint.Background
+		}
 		return woxwidget.Gesture{ID: props.ID, Cursor: props.Cursor, OnTap: onTap, OnPanStart: props.OnPanStart, OnPanUpdate: props.OnPanUpdate, OnPanEnd: props.OnPanEnd, OnSecondaryTapDown: props.OnSecondaryTapDown, OnHoverAt: func(inside bool, bounds woxui.Rect) {
 			onHoverAt(inside, bounds)
 			if props.OnHoverAt != nil {
 				props.OnHoverAt(inside, bounds)
 			}
-		}, Child: woxwidget.Container{
-			Width: buttonWidth, Height: height, Radius: radius, Color: buttonBackground, BorderColor: border, BorderWidth: boolFloat(border.A != 0), Padding: padding,
+		}, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{
+			Width: buttonWidth, Height: height, Radius: radius, Color: buttonBackground, BorderColor: border, BorderWidth: borderWidth, Padding: padding,
 			Child: alignedChild,
-		}}
+		})}
 	})
+	role := props.Role
+	if role == "" {
+		role = woxui.AccessibilityRoleButton
+	}
 	return woxwidget.Semantics{
-		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label,
+		Key: key, AutomationID: props.ID, Role: role, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: radius, OnKey: func(event woxui.KeyEvent) bool {
 			if props.OnKey != nil && props.OnKey(event) {

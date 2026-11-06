@@ -19,7 +19,11 @@ func currentMaterialBounds(current *node, materials []woxui.Rect, margin *float3
 		return materials
 	}
 	if current.floating {
-		materials = append(materials, globalRect(current))
+		bounds := globalRect(current)
+		if current.paintTransformed {
+			bounds = current.paintMatrix.Bounds(bounds)
+		}
+		materials = append(materials, bounds)
 		*margin = max(*margin, current.materialMargin)
 	}
 	for _, child := range current.children {
@@ -34,7 +38,7 @@ func keyedNodeDamage(current *node, keys map[Key]bool) woxui.Rect {
 		return woxui.Rect{}
 	}
 	if keys[current.key] {
-		return globalRect(current)
+		return globalPaintBounds(current)
 	}
 	var damage woxui.Rect
 	for _, child := range current.children {
@@ -51,6 +55,10 @@ func (t *frameDamageTracker) add(oldBounds woxui.Rect, current *node, always boo
 	if t == nil || current == nil {
 		return
 	}
+	// Equal envelopes cannot prove equal paint after a rotation/reflection or a
+	// change to an enclosing transformed clip. Keep Build caching, but repaint
+	// transformed boundaries conservatively, including the frame that removes it.
+	always = always || current.boundary != nil && current.boundary.paintTransformed
 	t.rebuilt = append(t.rebuilt, boundaryDamage{oldBounds: oldBounds, node: current, always: always})
 }
 
@@ -62,9 +70,9 @@ func (t *frameDamageTracker) resolve(base woxui.Rect) woxui.Rect {
 	for _, repaint := range t.rebuilt {
 		current := woxui.Rect{}
 		if repaint.node != nil {
-			current = globalRect(repaint.node)
+			current = globalPaintBounds(repaint.node)
 		}
-		if !repaint.always && repaint.oldBounds == current {
+		if !repaint.always && (repaint.node == nil || !repaint.node.paintTransformed) && repaint.oldBounds == current {
 			continue
 		}
 		result = unionDamageRects(result, repaint.oldBounds)
@@ -209,6 +217,9 @@ func activeCaretDamageAt(current *node, origin woxui.Point, focused woxui.Access
 		}
 		if caretActive {
 			result = bounds
+			if current.paintTransformed {
+				result = current.paintMatrix.Bounds(bounds)
+			}
 		}
 	}
 	childOrigin := woxui.Point{X: bounds.X, Y: bounds.Y}

@@ -23,6 +23,8 @@ export class WindowProxy implements PluginWindow {
   ) {
     this.Content = {
       Set: (ctx, option) => this.call(ctx, "WindowContentSet", option),
+      Update: (ctx, option) => this.call(ctx, "WindowContentUpdate", option),
+      Command: (ctx, option) => this.call(ctx, "WindowContentCommand", option),
       PostMessage: (ctx, option) => this.call(ctx, "WindowPostMessage", option)
     }
   }

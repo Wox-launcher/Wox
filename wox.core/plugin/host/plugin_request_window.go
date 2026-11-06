@@ -79,6 +79,18 @@ func (w *WebsocketHost) handleWindowOperation(ctx context.Context, instance *plu
 			return nil, err
 		}
 		return window.Content.Set(ctx, o), nil
+	case "WindowContentUpdate":
+		var o plugin.WindowContentUpdateOption
+		if err := json.Unmarshal(raw, &o); err != nil {
+			return nil, err
+		}
+		return window.Content.Update(ctx, o), nil
+	case "WindowContentCommand":
+		var o plugin.WindowContentCommandOption
+		if err := json.Unmarshal(raw, &o); err != nil {
+			return nil, err
+		}
+		return window.Content.Command(ctx, o), nil
 	case "WindowPostMessage":
 		var o plugin.WindowMessageOption
 		if err := json.Unmarshal(raw, &o); err != nil {

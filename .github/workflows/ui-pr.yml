@@ -6,7 +6,8 @@ name: UI Quality
 on:
   pull_request:
     paths:
-      - ".github/workflows/ui.yml"
+      - ".github/workflows/ui-pr.yml"
+      - ".github/workflows/ui-scheduled.yml"
       - "Makefile"
       - "wox.core/appcontrol/**"
       - "wox.core/common/**"
@@ -53,4 +54,7 @@ jobs:
       - name: Compile native UI packages
         shell: bash
         working-directory: wox.core
-        run: go test ./ui/runtime ./ui/widget ./ui/launcher -run TestDoesNotExist
+        run: >-
+          go test ./ui/runtime ./ui/runtime/internal/window ./ui/runtime/internal/graphics
+          ./ui/widget ./ui/launcher ./ui/launcher/component ./ui/woxview ./ui/pluginwindow
+          ./plugin ./plugin/host -run TestDoesNotExist

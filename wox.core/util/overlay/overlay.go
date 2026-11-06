@@ -318,6 +318,7 @@ func NotifyThemeChanged(isDark bool) {
 			}
 			_ = instance.window.Invalidate()
 		}
+		notifyThemeSubscribers()
 	})
 }
 

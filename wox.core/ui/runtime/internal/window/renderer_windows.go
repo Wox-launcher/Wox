@@ -259,8 +259,23 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 
 	index := -1
 	var encodeErr error
+	transform := IdentityTransform()
+	backdropGroups := displayBackdropGroups(displayList)
 	displayList.forEachCommand(func(command displayCommand) bool {
 		index++
+		nextTransform := IdentityTransform()
+		if command.transformed {
+			nextTransform = command.transform
+		}
+		if nextTransform != transform {
+			result := C.wox_renderer_set_transform(r.handle, C.float(nextTransform.A), C.float(nextTransform.B), C.float(nextTransform.C), C.float(nextTransform.D), C.float(nextTransform.TX), C.float(nextTransform.TY))
+			if result < 0 {
+				_ = r.endFrame()
+				encodeErr = hresultError("set drawing transform", result)
+				return false
+			}
+			transform = nextTransform
+		}
 		if index+1 == displayList.caretCapture {
 			C.wox_renderer_capture_caret(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		}
@@ -360,12 +375,24 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.edge.B),
 				C.uint8_t(command.edge.A),
 			)
+		case displayCommandBeginOpacity:
+			commandResult = C.wox_renderer_begin_opacity(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.opacity), C.int32_t(boolByte(backdropGroups[index])))
+		case displayCommandEndOpacity:
+			commandResult = C.wox_renderer_end_edge_fade(r.handle)
 		case displayCommandBeginEdgeFade:
-			commandResult = C.wox_renderer_begin_edge_fade(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
+			commandResult = C.wox_renderer_begin_edge_fade(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke), C.int32_t(boolByte(backdropGroups[index])))
 		case displayCommandEndEdgeFade:
 			commandResult = C.wox_renderer_end_edge_fade(r.handle)
 		case displayCommandSetClipRect:
-			commandResult = C.wox_renderer_set_clip_rect(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			if len(command.points) > 0 {
+				points := make([]C.float, len(command.points)*2)
+				for i, point := range command.points {
+					points[i*2], points[i*2+1] = C.float(point.X), C.float(point.Y)
+				}
+				commandResult = C.wox_renderer_set_clip_polygon(r.handle, &points[0], C.int32_t(len(command.points)))
+			} else {
+				commandResult = C.wox_renderer_set_clip_rect(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			}
 		case displayCommandClearClip:
 			commandResult = C.wox_renderer_clear_clip(r.handle)
 		}
@@ -453,6 +480,26 @@ func (r *nativeRenderer) setCornerRadius(radius *float32) error {
 	return nil
 }
 
+// newWindowsOffscreenRenderer uses the production encoder on a retained WARP bitmap.
+func newWindowsOffscreenRenderer(width, height int) (*nativeRenderer, error) {
+	var handle *C.WoxRenderer
+	result := C.wox_renderer_test_create_offscreen(C.uint32_t(width), C.uint32_t(height), &handle)
+	if result < 0 {
+		return nil, hresultError("create offscreen renderer", result)
+	}
+	return &nativeRenderer{handle: handle, traceFrameCount: windowsRenderTraceFrameLimit}, nil
+}
+
+// readWindowsOffscreenPixels snapshots a completed production frame in RGBA order.
+func readWindowsOffscreenPixels(r *nativeRenderer, width, height int) ([]byte, error) {
+	pixels := make([]byte, width*height*4)
+	result := C.wox_renderer_test_read_pixels(r.handle, (*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.uint32_t(len(pixels)))
+	if result < 0 {
+		return nil, hresultError("read offscreen pixels", result)
+	}
+	return pixels, nil
+}
+
 // testWindowsEdgeFade reads native mask pixels without a visible window.
 func testWindowsEdgeFade(scale, top, bottom float32) ([]byte, int) {
 	size := int(96 * scale)
@@ -466,5 +513,13 @@ func testWindowsFloatingMaterial(scale float32) ([]byte, int) {
 	size := int(96 * scale)
 	pixels := make([]byte, size*size*4)
 	status := C.wox_renderer_test_floating_material((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale))
+	return pixels, int(status)
+}
+
+// testWindowsOpacity reads the production composition path through an offscreen WARP target.
+func testWindowsOpacity(scale, opacity float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_renderer_test_opacity((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(opacity))
 	return pixels, int(status)
 }

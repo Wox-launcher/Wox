@@ -64,6 +64,16 @@ func svgSourceImage(name, source string, size float32, color woxui.Color) *woxui
 	return actual.(*woxui.Image)
 }
 
+// IconGlyph renders any monochrome catalog icon from wox/common/icons, tinted to color.
+func IconGlyph(name string, size float32, color woxui.Color) woxwidget.Widget {
+	return svgIcon(name, size, color)
+}
+
+// IconImage returns the cached tinted raster for a catalog icon, or nil when it is not an SVG.
+func IconImage(name string, size float32, color woxui.Color) *woxui.Image {
+	return svgIconImage(name, size, color)
+}
+
 // CloseGlyph returns the shared SVG close icon.
 func CloseGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	if size <= 0 {

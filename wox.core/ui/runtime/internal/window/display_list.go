@@ -48,15 +48,19 @@ type TextMetrics struct {
 type DisplayList struct {
 	// RasterScale is the active display's physical pixels per logical unit.
 	// Zero means 1 for offscreen callers without a native frame.
-	RasterScale  float32
-	clearColor   Color
-	commands     []displayCommand
-	clipStack    []Rect
-	frameID      uint64
-	damage       Rect
-	nativeDamage Rect
-	textDraws    int
-	imageDraws   int
+	RasterScale    float32
+	clearColor     Color
+	commands       []displayCommand
+	clipStack      []displayClip
+	transformStack []AffineTransform
+	groups         []snapshotGroup
+	snapshotScopes []snapshotScope
+	snapshotDepth  int
+	frameID        uint64
+	damage         Rect
+	nativeDamage   Rect
+	textDraws      int
+	imageDraws     int
 	// overlayBegun records that later commands already target the overlay
 	// surface; a second split would fail at the native renderer.
 	overlayBegun bool
@@ -119,6 +123,31 @@ func (d *DisplayList) appendCommand(command displayCommand) {
 	if d == nil {
 		return
 	}
+	switch command.kind {
+	case displayCommandSetClipRect, displayCommandClearClip, displayCommandBeginEmbeddedSurfaceOverlay:
+		// Clips and embedded-surface boundaries already use target coordinates.
+	default:
+		if transform := d.paintTransform(); transform != IdentityTransform() {
+			command.transform, command.transformed = transform, true
+		}
+	}
+	// Surfaces without snapshot scopes keep the ordinary allocation path.
+	if len(d.snapshotScopes) > 0 {
+		switch command.kind {
+		case displayCommandBeginOpacity, displayCommandBeginEdgeFade:
+			d.groups = append(d.groups, snapshotGroup{command: command, clip: d.snapshotClip(), identity: new(byte)})
+		case displayCommandEndOpacity, displayCommandEndEdgeFade:
+			if len(d.groups) > 0 {
+				d.groups[len(d.groups)-1] = snapshotGroup{}
+				d.groups = d.groups[:len(d.groups)-1]
+			}
+		}
+	}
+	d.appendRecordedCommand(command)
+}
+
+// appendRecordedCommand accepts a command whose matrix is already resolved.
+func (d *DisplayList) appendRecordedCommand(command displayCommand) {
 	d.commands = append(d.commands, command)
 	switch command.kind {
 	case displayCommandDrawText:
@@ -209,7 +238,9 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 
 func displayCommandsEqual(left, right displayCommand) bool {
 	if left.caret != right.caret || left.caretVisible != right.caretVisible || left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
+		left.transformed != right.transformed || left.transformed && !displayTransformsEqual(left.transform, right.transform) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
+		!displayListFloatsEqual(left.opacity, right.opacity) ||
 		left.material != right.material || left.color != right.color || left.edge != right.edge || left.text != right.text || left.style.Weight != right.style.Weight ||
 		left.style.Family != right.style.Family || left.style.Italic != right.style.Italic ||
 		!displayListFloatsEqual(left.style.Size, right.style.Size) || !displayListFloatsEqual(left.rotation, right.rotation) {
@@ -260,15 +291,22 @@ const (
 	displayCommandFloatingMaterial
 	displayCommandBeginEdgeFade
 	displayCommandEndEdgeFade
+	displayCommandBeginOpacity
+	displayCommandEndOpacity
 )
 
 type displayCommand struct {
+	// Transform data stays internal until every native encoder can consume it.
+	// Untransformed commands preserve their existing coordinate and cache contract.
+	transformed  bool
+	transform    AffineTransform
 	caret        bool
 	caretVisible bool
 	kind         displayCommandKind
 	rect         Rect
 	radius       float32
 	stroke       float32
+	opacity      float32
 	color        Color
 	edge         Color
 	material     FloatingMaterialStyle
@@ -319,7 +357,7 @@ func (d *DisplayList) FloatingMaterial(rect Rect, radius float32, tint, edge Col
 		if d.shouldRecord(rect) {
 			d.appendCommand(displayCommand{kind: displayCommandFloatingMaterial, rect: rect, radius: max(float32(0), radius), color: tint, edge: edge, material: material})
 		}
-		d.floatingMaterials = append(d.floatingMaterials, rect)
+		d.floatingMaterials = append(d.floatingMaterials, d.paintTransform().Bounds(rect))
 		d.materialMargin = max(d.materialMargin, 3*material.Sigma)
 		return
 	}
@@ -423,13 +461,12 @@ func (d *DisplayList) StrokeRoundedRect(rect Rect, radius, width float32, color 
 	})
 }
 
-// PushClipRect intersects rect with the active clip for subsequent commands.
+// PushClipRect fixes rect in the current drawing coordinates and intersects it
+// with the enclosing clip. Later transforms do not move an established clip.
 func (d *DisplayList) PushClipRect(rect Rect) {
-	if len(d.clipStack) > 0 {
-		rect = intersectRects(d.clipStack[len(d.clipStack)-1], rect)
-	}
-	d.clipStack = append(d.clipStack, rect)
-	d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: rect})
+	clip := d.transformedClip(rect)
+	d.clipStack = append(d.clipStack, clip)
+	d.appendClip(clip)
 }
 
 // PopClipRect restores the previous clip rectangle.
@@ -442,15 +479,24 @@ func (d *DisplayList) PopClipRect() {
 		d.appendCommand(displayCommand{kind: displayCommandClearClip})
 		return
 	}
-	d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
+	d.appendClip(d.clipStack[len(d.clipStack)-1])
 }
 
-// ClipRect returns the effective clip while widgets record the current subtree.
+// ClipRect returns a conservative clip envelope in current drawing coordinates.
+// Native rendering retains the exact polygon even when this envelope is larger.
 func (d *DisplayList) ClipRect() (Rect, bool) {
 	if len(d.clipStack) == 0 {
 		return Rect{}, false
 	}
-	return d.clipStack[len(d.clipStack)-1], true
+	clip := d.clipStack[len(d.clipStack)-1]
+	if transform := d.paintTransform(); transform != IdentityTransform() {
+		inverse, ok := transform.Inverse()
+		if !ok {
+			return Rect{}, true
+		}
+		return inverse.Bounds(clip.rect), true
+	}
+	return clip.rect, true
 }
 
 func intersectRects(left, right Rect) Rect {
@@ -537,13 +583,19 @@ func (d *DisplayList) DrawRotatedRoundedImage(image *Image, rect Rect, radians, 
 }
 
 func (d *DisplayList) shouldRecord(rect Rect) bool {
-	if d == nil || d.damage.Width <= 0 || d.damage.Height <= 0 {
+	if d == nil || d.snapshotDepth > 0 || d.damage.Width <= 0 || d.damage.Height <= 0 {
 		return true
 	}
+	transform := d.paintTransform()
+	if !transform.Finite() {
+		// Preserve invalid commands so native/reference encoders report the error.
+		return true
+	}
+	rect = transform.Bounds(rect)
 	if !rectsOverlap(rect, d.damage) {
 		return false
 	}
-	if len(d.clipStack) > 0 && !rectsOverlap(rect, d.clipStack[len(d.clipStack)-1]) {
+	if len(d.clipStack) > 0 && !rectsOverlap(rect, d.clipStack[len(d.clipStack)-1].rect) {
 		return false
 	}
 	return true
@@ -571,6 +623,9 @@ func rotatedRectBounds(rect Rect, radians float32) Rect {
 func (d *DisplayList) BeginEdgeFade(rect Rect, top, bottom float32) {
 	d.appendCommand(displayCommand{kind: displayCommandBeginEdgeFade, rect: rect,
 		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
+	if len(d.clipStack) > 0 {
+		d.appendClip(d.clipStack[len(d.clipStack)-1])
+	}
 }
 
 // EndEdgeFade composites the isolated content back onto the window.
@@ -579,8 +634,33 @@ func (d *DisplayList) EndEdgeFade(rect Rect, top, bottom float32) {
 		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
 	// Native layer boundaries clear the current clip; restore the portable clip state.
 	if len(d.clipStack) > 0 {
-		d.appendCommand(displayCommand{kind: displayCommandSetClipRect, rect: d.clipStack[len(d.clipStack)-1]})
+		d.appendClip(d.clipStack[len(d.clipStack)-1])
 	}
 }
 
 func (d *DisplayList) FloatingMaterialSampleMargin() float32 { return d.materialMargin }
+
+// BeginOpacity isolates a subtree before applying alpha to the combined result.
+// Bounds are logical paint bounds, including overflow; callers must pair EndOpacity.
+func (d *DisplayList) BeginOpacity(bounds Rect, opacity float32) {
+	if math.IsNaN(float64(opacity)) {
+		opacity = 1
+	}
+	d.appendCommand(displayCommand{kind: displayCommandBeginOpacity, rect: bounds, opacity: min(float32(1), max(float32(0), opacity))})
+	// Native layer entry clears the active clip. Replay it inside the layer as
+	// well as at exit, so nested groups cannot paint outside an ancestor clip.
+	if len(d.clipStack) > 0 {
+		d.appendClip(d.clipStack[len(d.clipStack)-1])
+	}
+}
+
+// EndOpacity composites a completed group and restores its enclosing clip.
+func (d *DisplayList) EndOpacity(bounds Rect, opacity float32) {
+	if math.IsNaN(float64(opacity)) {
+		opacity = 1
+	}
+	d.appendCommand(displayCommand{kind: displayCommandEndOpacity, rect: bounds, opacity: min(float32(1), max(float32(0), opacity))})
+	if len(d.clipStack) > 0 {
+		d.appendClip(d.clipStack[len(d.clipStack)-1])
+	}
+}

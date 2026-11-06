@@ -1030,94 +1030,18 @@ func mergeFrameDamage(current, replaced Rect) Rect {
 	return unionRects(current, replaced)
 }
 
-// encodeFrame records and submits one display list while holding exclusive renderer ownership.
-func (w *platformWindow) encodeFrame(renderFrame *darwinRenderFrame, transactional bool) {
-	w.renderMu.Lock()
-	defer w.renderMu.Unlock()
-	w.encodeFrameLocked(renderFrame, transactional)
+// darwinCommandEncoding preserves metrics and the precise failure location for both native and offscreen frames.
+type darwinCommandEncoding struct {
+	textCost, imageCost                 time.Duration
+	textCount, imageCount, commandIndex int
+	failed                              bool
+	failedCommandKind                   displayCommandKind
+	result                              C.int32_t
 }
 
-// encodeFrameLocked records a frame for callers that already own the renderer transaction.
-func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, transactional bool) {
-	nativeStart := time.Now()
-	native, err := w.openNative()
-	if err != nil {
-		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=native_window_unavailable frameId=%d error=%q", renderFrame.displayList.frameID, err.Error()))
-		if w.options.frameMetrics != nil {
-			w.options.frameMetrics.dropFrame(renderFrame.displayList.frameID)
-		}
-		return
-	}
-	pool := C.wox_darwin_autorelease_pool_push()
-	defer C.wox_darwin_autorelease_pool_pop(pool)
-	frameStart := time.Now()
-	frame := renderFrame.frame
-	displayList := renderFrame.displayList
-	nativeDamage := displayList.NativeDamage()
-	transactionalFrame := C.int32_t(0)
-	if transactional {
-		transactionalFrame = 1
-	}
-	nativeFontFamily := C.CString(renderFrame.fontFamily)
-	defer C.free(unsafe.Pointer(nativeFontFamily))
-	nativeMonospaceFontFamily := C.CString("Menlo")
-	defer C.free(unsafe.Pointer(nativeMonospaceFontFamily))
-	beginStart := time.Now()
-	result := C.wox_darwin_window_begin_frame(
-		native,
-		C.uint64_t(displayList.frameID),
-		C.float(frame.Size.Width),
-		C.float(frame.Size.Height),
-		C.float(frame.Scale),
-		C.float(nativeDamage.X),
-		C.float(nativeDamage.Y),
-		C.float(nativeDamage.Width),
-		C.float(nativeDamage.Height),
-		C.uint8_t(displayList.clearColor.R),
-		C.uint8_t(displayList.clearColor.G),
-		C.uint8_t(displayList.clearColor.B),
-		C.uint8_t(displayList.clearColor.A),
-	)
-	beginCost := time.Since(beginStart)
-	if result > 0 {
-		// Preserve cleanup damage for the next naturally scheduled frame. Scheduling
-		// an immediate retry here can starve AppKit while every surface is still busy.
-		reason := darwinFrameStatusName(int32(result))
-		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
-			w.restoreFrameDamage(nativeDamage)
-		}
-		w.logRenderDiagnostic(fmt.Sprintf(
-			"event=frame_dropped reason=%s frameId=%d status=%d damage=%.1f,%.1f %.1fx%.1f size=%.1fx%.1f scale=%.2f",
-			reason,
-			displayList.frameID,
-			int32(result),
-			nativeDamage.X,
-			nativeDamage.Y,
-			nativeDamage.Width,
-			nativeDamage.Height,
-			frame.Size.Width,
-			frame.Size.Height,
-			frame.Scale,
-		))
-		if w.options.frameMetrics != nil {
-			if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
-				w.options.frameMetrics.backpressureFrame(displayList.frameID)
-			} else {
-				w.options.frameMetrics.dropFrame(displayList.frameID)
-			}
-		}
-		return
-	}
-	if result < 0 {
-		if w.options.frameMetrics != nil {
-			w.recordNativeResourceMetrics(native, displayList)
-			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
-		}
-		w.recordRenderError("begin macOS frame", result)
-		return
-	}
-
-	encodeStart := time.Now()
+// encodeDarwinCommands is the single production path shared by IOSurface frames and bitmap fixtures.
+func encodeDarwinCommands(native *C.WoxDarwinWindow, displayList *DisplayList, nativeFontFamily, nativeMonospaceFontFamily *C.char) darwinCommandEncoding {
+	var result C.int32_t
 	var textCost time.Duration
 	var imageCost time.Duration
 	var textCount int
@@ -1125,8 +1049,22 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 	commandIndex := -1
 	encodeFailed := false
 	var failedCommandKind displayCommandKind
+	transform := IdentityTransform()
+	backdropGroups := displayBackdropGroups(displayList)
 	displayList.forEachCommand(func(command displayCommand) bool {
 		commandIndex++
+		nextTransform := IdentityTransform()
+		if command.transformed {
+			nextTransform = command.transform
+		}
+		if nextTransform != transform {
+			result = C.wox_darwin_window_set_transform(native, C.float(nextTransform.A), C.float(nextTransform.B), C.float(nextTransform.C), C.float(nextTransform.D), C.float(nextTransform.TX), C.float(nextTransform.TY))
+			if result != 0 {
+				encodeFailed, failedCommandKind = true, command.kind
+				return false
+			}
+			transform = nextTransform
+		}
 		switch command.kind {
 		case displayCommandFloatingMaterial:
 			result = C.wox_darwin_window_floating_material(native,
@@ -1217,12 +1155,20 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 			imageCount++
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			result = C.wox_darwin_window_begin_embedded_surface_overlay(native)
+		case displayCommandBeginOpacity:
+			result = C.wox_darwin_window_begin_opacity(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.opacity), C.int32_t(boolByte(backdropGroups[commandIndex])))
+		case displayCommandEndOpacity:
+			result = C.wox_darwin_window_end_opacity(native)
 		case displayCommandBeginEdgeFade:
-			result = C.wox_darwin_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			result = C.wox_darwin_window_begin_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.int32_t(boolByte(backdropGroups[commandIndex])))
 		case displayCommandEndEdgeFade:
 			result = C.wox_darwin_window_end_edge_fade(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height), C.float(command.radius), C.float(command.stroke))
 		case displayCommandSetClipRect:
-			result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			if len(command.points) > 0 {
+				result = C.wox_darwin_window_set_clip_polygon(native, (*C.float)(unsafe.Pointer(&command.points[0])), C.int32_t(len(command.points)))
+			} else {
+				result = C.wox_darwin_window_set_clip_rect(native, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
+			}
 		case displayCommandClearClip:
 			result = C.wox_darwin_window_clear_clip(native)
 		}
@@ -1233,6 +1179,102 @@ func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, trans
 		}
 		return true
 	})
+	return darwinCommandEncoding{textCost, imageCost, textCount, imageCount, commandIndex, encodeFailed, failedCommandKind, result}
+}
+
+// encodeFrame records and submits one display list while holding exclusive renderer ownership.
+func (w *platformWindow) encodeFrame(renderFrame *darwinRenderFrame, transactional bool) {
+	w.renderMu.Lock()
+	defer w.renderMu.Unlock()
+	w.encodeFrameLocked(renderFrame, transactional)
+}
+
+// encodeFrameLocked records a frame for callers that already own the renderer transaction.
+func (w *platformWindow) encodeFrameLocked(renderFrame *darwinRenderFrame, transactional bool) {
+	nativeStart := time.Now()
+	native, err := w.openNative()
+	if err != nil {
+		w.logRenderDiagnostic(fmt.Sprintf("event=frame_dropped reason=native_window_unavailable frameId=%d error=%q", renderFrame.displayList.frameID, err.Error()))
+		if w.options.frameMetrics != nil {
+			w.options.frameMetrics.dropFrame(renderFrame.displayList.frameID)
+		}
+		return
+	}
+	pool := C.wox_darwin_autorelease_pool_push()
+	defer C.wox_darwin_autorelease_pool_pop(pool)
+	frameStart := time.Now()
+	frame := renderFrame.frame
+	displayList := renderFrame.displayList
+	nativeDamage := displayList.NativeDamage()
+	transactionalFrame := C.int32_t(0)
+	if transactional {
+		transactionalFrame = 1
+	}
+	nativeFontFamily := C.CString(renderFrame.fontFamily)
+	defer C.free(unsafe.Pointer(nativeFontFamily))
+	nativeMonospaceFontFamily := C.CString("Menlo")
+	defer C.free(unsafe.Pointer(nativeMonospaceFontFamily))
+	beginStart := time.Now()
+	result := C.wox_darwin_window_begin_frame(
+		native,
+		C.uint64_t(displayList.frameID),
+		C.float(frame.Size.Width),
+		C.float(frame.Size.Height),
+		C.float(frame.Scale),
+		C.float(nativeDamage.X),
+		C.float(nativeDamage.Y),
+		C.float(nativeDamage.Width),
+		C.float(nativeDamage.Height),
+		C.uint8_t(displayList.clearColor.R),
+		C.uint8_t(displayList.clearColor.G),
+		C.uint8_t(displayList.clearColor.B),
+		C.uint8_t(displayList.clearColor.A),
+	)
+	beginCost := time.Since(beginStart)
+	if result > 0 {
+		// Preserve cleanup damage for the next naturally scheduled frame. Scheduling
+		// an immediate retry here can starve AppKit while every surface is still busy.
+		reason := darwinFrameStatusName(int32(result))
+		if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+			w.restoreFrameDamage(nativeDamage)
+		}
+		w.logRenderDiagnostic(fmt.Sprintf(
+			"event=frame_dropped reason=%s frameId=%d status=%d damage=%.1f,%.1f %.1fx%.1f size=%.1fx%.1f scale=%.2f",
+			reason,
+			displayList.frameID,
+			int32(result),
+			nativeDamage.X,
+			nativeDamage.Y,
+			nativeDamage.Width,
+			nativeDamage.Height,
+			frame.Size.Width,
+			frame.Size.Height,
+			frame.Scale,
+		))
+		if w.options.frameMetrics != nil {
+			if result == C.WOX_DARWIN_FRAME_SURFACE_BUSY {
+				w.options.frameMetrics.backpressureFrame(displayList.frameID)
+			} else {
+				w.options.frameMetrics.dropFrame(displayList.frameID)
+			}
+		}
+		return
+	}
+	if result < 0 {
+		if w.options.frameMetrics != nil {
+			w.recordNativeResourceMetrics(native, displayList)
+			w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, false)
+		}
+		w.recordRenderError("begin macOS frame", result)
+		return
+	}
+
+	encodeStart := time.Now()
+	encoded := encodeDarwinCommands(native, displayList, nativeFontFamily, nativeMonospaceFontFamily)
+	textCost, imageCost := encoded.textCost, encoded.imageCost
+	textCount, imageCount := encoded.textCount, encoded.imageCount
+	commandIndex, encodeFailed, failedCommandKind := encoded.commandIndex, encoded.failed, encoded.failedCommandKind
+	result = encoded.result
 	encodeCost := time.Since(encodeStart)
 
 	endStart := time.Now()
@@ -1597,4 +1639,12 @@ func (w *platformWindow) showInactive() (FocusEpoch, error) {
 		return 0, errors.New("could not show inactive window")
 	}
 	return FocusEpoch(epoch), nil
+}
+
+// testDarwinOpacity reads the native group's offscreen premultiplied RGBA result.
+func testDarwinOpacity(scale, opacity float32) ([]byte, int) {
+	size := int(96 * scale)
+	pixels := make([]byte, size*size*4)
+	status := C.wox_darwin_test_opacity((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(opacity))
+	return pixels, int(status)
 }

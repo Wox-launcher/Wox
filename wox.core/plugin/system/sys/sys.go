@@ -481,6 +481,12 @@ func (r *SysPlugin) buildCommands() []SysCommand {
 func (r *SysPlugin) buildDevCommands() []SysCommand {
 	return []SysCommand{
 		{
+			ID: "woxview_showcase", Title: "i18n:plugin_sys_woxview_showcase",
+			SubTitle: "i18n:plugin_sys_woxview_showcase_subtitle", Icon: icons.Get(icons.ActionCPUProfile),
+			Aliases: []string{"woxview", "woxview demo", "woxview showcase"},
+			Action:  func(ctx context.Context, _ plugin.ActionContext) { r.showWoxViewShowcase(ctx) },
+		},
+		{
 			ID:       "open_onboarding",
 			Title:    "Open onboarding",
 			SubTitle: "Open the first-run onboarding window",

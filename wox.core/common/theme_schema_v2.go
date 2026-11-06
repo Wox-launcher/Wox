@@ -50,10 +50,15 @@ type ThemeSchemaV2 struct {
 	// Omitted values follow the effective app background and action-item text.
 	OverlayBackgroundColor *string `json:",omitempty"`
 	OverlayFontColor       *string `json:",omitempty"`
-	AppPaddingLeft         *int    `json:",omitempty"`
-	AppPaddingTop          *int    `json:",omitempty"`
-	AppPaddingRight        *int    `json:",omitempty"`
-	AppPaddingBottom       *int    `json:",omitempty"`
+	// Status colors belong to custom/plugin surfaces; omission follows surface appearance.
+	SuccessColor     *string `json:",omitempty"`
+	WarningColor     *string `json:",omitempty"`
+	WarningTextColor *string `json:",omitempty"`
+	ErrorColor       *string `json:",omitempty"`
+	AppPaddingLeft   *int    `json:",omitempty"`
+	AppPaddingTop    *int    `json:",omitempty"`
+	AppPaddingRight  *int    `json:",omitempty"`
+	AppPaddingBottom *int    `json:",omitempty"`
 
 	QueryBoxFontColor       *string `json:",omitempty"`
 	QueryBoxBackgroundColor *string `json:",omitempty"`

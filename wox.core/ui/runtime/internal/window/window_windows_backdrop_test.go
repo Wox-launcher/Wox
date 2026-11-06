@@ -8,6 +8,24 @@ import (
 	"github.com/lxn/win"
 )
 
+// TestApplicationWindowDiscoveryFlags preserves explicit behavior without hiding application windows from enumeration.
+func TestApplicationWindowDiscoveryFlags(t *testing.T) {
+	for _, topmost := range []bool{false, true} {
+		for _, nonactivating := range []bool{false, true} {
+			style := windowsWindowExStyle(WindowOptions{Role: WindowRoleApplication, Topmost: topmost, Nonactivating: nonactivating})
+			if style&win.WS_EX_TOOLWINDOW != 0 || style&win.WS_EX_APPWINDOW == 0 {
+				t.Fatalf("application window hidden from discovery: %#x", style)
+			}
+			if (style&win.WS_EX_TOPMOST != 0) != topmost || (style&win.WS_EX_NOACTIVATE != 0) != nonactivating {
+				t.Fatalf("explicit options lost: %#x", style)
+			}
+		}
+	}
+	if style := windowsWindowExStyle(WindowOptions{Role: WindowRoleUtility}); style&win.WS_EX_TOOLWINDOW == 0 || style&win.WS_EX_APPWINDOW != 0 {
+		t.Fatalf("utility window semantics changed: %#x", style)
+	}
+}
+
 // TestWindowBackdropPolicyFollowsLiveCorners covers the policy shared by show and activation across theme changes.
 func TestWindowBackdropPolicyFollowsLiveCorners(t *testing.T) {
 	w := &platformWindow{}

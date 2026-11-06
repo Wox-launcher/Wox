@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"wox/util"
 
 	"github.com/google/uuid"
@@ -16,11 +17,16 @@ const (
 	WindowContentText     WindowContentType = "text"
 	WindowContentMarkdown WindowContentType = "markdown"
 	WindowContentHTML     WindowContentType = "html"
+	// WindowContentWoxView is a declarative native view tree (JSON) rendered without a WebView.
+	WindowContentWoxView WindowContentType = "woxview"
 )
 
 type WindowPresentation string
 
-const WindowPresentationOverlay WindowPresentation = "overlay"
+const (
+	WindowPresentationOverlay WindowPresentation = "overlay"
+	WindowPresentationWindow  WindowPresentation = "window"
+)
 
 type WindowAnchor string
 
@@ -43,7 +49,14 @@ const (
 	WindowEventMessage WindowEventType = "message"
 	WindowEventError   WindowEventType = "error"
 	WindowEventClosed  WindowEventType = "closed"
+	// WindowEventWoxView carries {"Handler","Args","Key"} for a callback registered in a woxview tree.
+	WindowEventWoxView WindowEventType = "woxview_event"
+	// WindowEventThemeChanged carries WindowThemeChangedData in Data.
+	WindowEventThemeChanged WindowEventType = "theme_changed"
 )
+
+// WindowThemeChangedData describes the plugin window's current surface appearance.
+type WindowThemeChangedData struct{ Dark bool }
 
 // WindowContent is independent of query previews while sharing their renderers.
 type WindowContent struct {
@@ -70,11 +83,13 @@ type CreateWindowOption struct {
 	Release func() `json:"-"`
 }
 type WindowEvent struct {
-	Type       WindowEventType
-	WindowID   string
-	DocumentID string
-	Data       json.RawMessage
-	ErrMsg     string
+	// CoalesceKey is an internal producer hint, never part of the SDK event payload.
+	CoalesceKey string `json:"-"`
+	Type        WindowEventType
+	WindowID    string
+	DocumentID  string
+	Data        json.RawMessage
+	ErrMsg      string
 }
 type WindowResult struct {
 	Success bool
@@ -95,16 +110,43 @@ type WindowSetOptionsOption struct {
 	Topmost          *bool
 }
 type WindowContentSetOption struct{ Content WindowContent }
+
+// WindowContentUpdateOption replaces the woxview tree in place, keeping the document and widget state.
+type WindowContentUpdateOption struct {
+	Data string
+	// DocumentID optionally rejects an update intended for a replaced document.
+	DocumentID string
+	// Sequence is an optional increasing per-document update number.
+	Sequence uint64
+}
 type WindowMessageOption struct {
 	Data json.RawMessage
 	// DocumentID optionally pins delivery to the document that emitted an event.
 	DocumentID string
+}
+
+// WindowContentCommand names an imperative WoxView operation.
+type WindowContentCommand string
+
+const (
+	WindowContentCommandFocus     WindowContentCommand = "focus"
+	WindowContentCommandScrollTo  WindowContentCommand = "scrollTo"
+	WindowContentCommandSelectAll WindowContentCommand = "selectAll"
+)
+
+// WindowContentCommandOption targets a unique node key in the current document.
+type WindowContentCommandOption struct {
+	DocumentID string
+	Command    WindowContentCommand
+	Key        string
 }
 type WindowShowResult struct{ WindowResult }
 type WindowHideResult struct{ WindowResult }
 type WindowCloseResult struct{ WindowResult }
 type WindowSetOptionsResult struct{ WindowResult }
 type WindowContentSetResult struct{ WindowResult }
+type WindowContentUpdateResult struct{ WindowResult }
+type WindowContentCommandResult struct{ WindowResult }
 type WindowMessageResult struct{ WindowResult }
 
 // WindowDriver is the narrow native capability implemented by the UI feature.
@@ -114,10 +156,14 @@ type WindowDriver interface {
 	Close() error
 	SetOptions(WindowSetOptionsOption) error
 	SetContent(WindowContent) error
+	UpdateContent(WindowContentUpdateOption) error
+	ContentCommand(WindowContentCommandOption) error
 	PostMessage(WindowMessageOption) error
 	AcceptEvent(WindowEvent) bool
 }
-type WindowFactory func(id string, option CreateWindowOption, emit func(WindowEvent)) (WindowDriver, error)
+
+// WindowFactory receives host capabilities separately from the public creation options.
+type WindowFactory func(id string, option CreateWindowOption, emit func(WindowEvent), translate func(string) string) (WindowDriver, error)
 
 var windowFactory struct {
 	sync.RWMutex
@@ -162,24 +208,27 @@ func (a *APIImpl) CreateWindow(ctx context.Context, option CreateWindowOption) C
 	a.windowOnce.Do(func() { a.windows = util.NewHashMap[string, *PluginWindow]() })
 	w := &PluginWindow{ID: uuid.NewString(), owner: a, epoch: a.windowEpoch.Load()}
 	w.Content = &PluginWindowContent{window: w}
-	// The channel keeps callbacks off the UI thread and serializes each window's events.
-	events := make(chan WindowEvent, 128)
+	// The queue keeps callbacks off the UI thread and coalesces producer-marked changes.
+	events := newWindowEventQueue()
 	done := make(chan struct{})
 	var stop sync.Once
+	var overflow atomic.Bool
 	emit := func(event WindowEvent) {
 		event.WindowID = w.ID
 		if event.Type == WindowEventClosed {
+			events.close()
 			a.windows.Delete(w.ID)
 			stop.Do(func() { close(done) })
 			return
 		}
-		select {
-		case events <- event:
-		default:
+		if !events.push(event) {
+			overflow.Store(true)
 			util.GetLogger().Warn(ctx, "plugin window event queue full")
 		}
 	}
-	driver, err := factory(w.ID, option, emit)
+	// Retained windows outlive the query that created them; translation follows the current locale.
+	translationContext := context.WithoutCancel(ctx)
+	driver, err := factory(w.ID, option, emit, func(text string) string { return a.GetTranslation(translationContext, text) })
 	if err != nil {
 		if option.Release != nil {
 			option.Release()
@@ -213,9 +262,18 @@ func (a *APIImpl) CreateWindow(ctx context.Context, option CreateWindowOption) C
 					deliver(WindowEvent{Type: WindowEventClosed, WindowID: w.ID})
 				}
 				return
-			case event := <-events:
+			case <-events.ready:
+				event, ok := events.pop()
+				if !ok {
+					continue
+				}
 				if w.valid() && driver.AcceptEvent(event) && option.OnEvent != nil {
 					deliver(event)
+				}
+				// The UI thread must never block on a slow plugin. Report any dropped events
+				// through the callback after it becomes available so the plugin can recover.
+				if overflow.Swap(false) && w.valid() && option.OnEvent != nil {
+					deliver(WindowEvent{Type: WindowEventError, WindowID: w.ID, ErrMsg: "window event queue full; events were dropped"})
 				}
 			}
 		}
@@ -251,6 +309,16 @@ func (w *PluginWindow) SetOptions(ctx context.Context, o WindowSetOptionsOption)
 }
 func (c *PluginWindowContent) Set(ctx context.Context, o WindowContentSetOption) WindowContentSetResult {
 	return WindowContentSetResult{c.window.call(func() error { return c.window.driver.SetContent(o.Content) })}
+}
+
+// Update applies a new woxview tree without replacing the document, so scroll offsets and input state survive.
+func (c *PluginWindowContent) Update(ctx context.Context, o WindowContentUpdateOption) WindowContentUpdateResult {
+	return WindowContentUpdateResult{c.window.call(func() error { return c.window.driver.UpdateContent(o) })}
+}
+
+// Command accepts a local operation for execution after the next content layout.
+func (c *PluginWindowContent) Command(ctx context.Context, o WindowContentCommandOption) WindowContentCommandResult {
+	return WindowContentCommandResult{c.window.call(func() error { return c.window.driver.ContentCommand(o) })}
 }
 func (c *PluginWindowContent) PostMessage(ctx context.Context, o WindowMessageOption) WindowMessageResult {
 	return WindowMessageResult{c.window.call(func() error { return c.window.driver.PostMessage(o) })}

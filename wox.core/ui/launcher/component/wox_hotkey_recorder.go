@@ -13,17 +13,24 @@ type HotkeyRecorderProps struct {
 	Labels        []string
 	Placeholder   string
 	Focused       bool
+	Disabled      bool
 	Error         bool
 	Hold          bool
 	HoldPrefix    string
 	Window        *woxui.Window
 	Theme         ControlTheme
+	Paint         *ControlPaint
 	OnFocusChange func(bool)
 	OnKey         func(woxui.KeyEvent) bool
 }
 
 // WoxHotkeyRecorder matches Flutter's outlined recorder with platform-labelled keycaps.
 func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
+	if props.Disabled {
+		props.Theme.Text, props.Theme.ControlText = props.Theme.TextSecondary, props.Theme.TextSecondary
+	}
+	props.Theme.Text = props.Paint.foreground(props.Theme.Text)
+	props.Theme.ControlText = props.Paint.foreground(props.Theme.ControlText)
 	border := withAlpha(props.Theme.Text, 140)
 	if props.Error {
 		border = props.Theme.Error
@@ -55,16 +62,16 @@ func WoxHotkeyRecorder(props HotkeyRecorderProps) (woxwidget.Widget, float32) {
 		content, contentWidth = WoxHotkey(HotkeyProps{
 			// Flutter's recorder uses the app's default Material canvas rather than the launcher theme,
 			// so key legends stay light and keyboard-like on both light and dark Wox surfaces.
-			Labels: props.Labels, Foreground: woxui.Color{R: 33, G: 33, B: 33, A: 255}, Background: woxui.Color{R: 250, G: 250, B: 250, A: 255},
+			Labels: props.Labels, Foreground: props.Paint.foreground(woxui.Color{R: 33, G: 33, B: 33, A: 255}), Background: woxui.Color{R: 250, G: 250, B: 250, A: 255},
 			Border: woxui.Color{R: 0, G: 0, B: 0, A: 31}, Compact: true, FontSize: keycapFont, DensityScale: props.Theme.DensityScale, Window: props.Window,
 		})
 	}
 
 	width := contentWidth + padX + padX
-	contentBox := woxwidget.Container{
+	contentBox := props.Paint.applyContainer(woxwidget.Container{
 		Width: width, Height: keycapHeight + padY + padY, Padding: woxwidget.Insets{Left: padX, Top: padY, Right: padX, Bottom: padY},
 		BorderColor: border, BorderWidth: 1, Radius: props.Theme.Scaled(4), Child: content,
-	}
+	})
 	key := woxwidget.Key(props.ID)
 	return woxwidget.Stateful{
 		Key: key, Type: (*hotkeyRecorderFocusState)(nil), Widget: hotkeyRecorderFocusWidget{Props: props, Child: contentBox},
@@ -87,7 +94,7 @@ type hotkeyRecorderFocusState struct {
 func (s *hotkeyRecorderFocusState) InitState(context woxwidget.StateContext, widget any) {
 	s.focusNode = woxwidget.NewFocusNode()
 	s.updateBinding(context, widget.(hotkeyRecorderFocusWidget).Props.ID)
-	if widget.(hotkeyRecorderFocusWidget).Props.Focused {
+	if props := widget.(hotkeyRecorderFocusWidget).Props; props.Focused && !props.Disabled {
 		context.PostFrame(func() { s.focusNode.RequestFocus() })
 	}
 }
@@ -96,6 +103,11 @@ func (s *hotkeyRecorderFocusState) DidUpdateWidget(context woxwidget.StateContex
 	oldProps := oldWidget.(hotkeyRecorderFocusWidget).Props
 	props := newWidget.(hotkeyRecorderFocusWidget).Props
 	s.updateBinding(context, props.ID)
+	if props.Disabled {
+		s.hovered = false
+		context.PostFrame(func() { s.focusNode.Unfocus() })
+		return
+	}
 	if oldProps.Focused == props.Focused {
 		return
 	}
@@ -110,16 +122,24 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 	config := widget.(hotkeyRecorderFocusWidget)
 	s.updateBinding(context, config.Props.ID)
 	contentBox := config.Child.(woxwidget.Container)
-	if s.hovered {
+	if s.hovered && !config.Props.Disabled {
 		contentBox.Color = controlHoverColor(contentBox.Color, config.Props.Theme.Text)
 		if !config.Props.Error {
 			contentBox.BorderColor = withAlpha(config.Props.Theme.Text, 200)
 		}
 	}
+	contentBox = config.Props.Paint.applyContainer(contentBox)
+	var onTap func()
+	if !config.Props.Disabled {
+		onTap = func() { s.focusNode.RequestFocus() }
+	}
 	return woxwidget.Focusable{
-		Key: s.key, Autofocus: config.Props.Focused, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: config.Props.Theme.Scaled(4),
+		Key: s.key, Disabled: config.Props.Disabled, Autofocus: config.Props.Focused && !config.Props.Disabled, UnfocusOnPointerOutside: true, FocusRingColor: config.Props.Theme.Focus, FocusRingRadius: config.Props.Theme.Scaled(4),
 		// Ask the parent first. If it handles the event, do not record or unfocus.
 		OnKey: func(event woxui.KeyEvent) bool {
+			if config.Props.Disabled {
+				return false
+			}
 			if config.Props.OnKey != nil && config.Props.OnKey(event) {
 				return true
 			}
@@ -136,11 +156,11 @@ func (s *hotkeyRecorderFocusState) Build(context woxwidget.StateContext, widget 
 			}
 			context.Invalidate()
 		},
-		Child: woxwidget.Gesture{ID: config.Props.ID, OnTap: func() { s.focusNode.RequestFocus() }, OnHoverAt: func(inside bool, _ woxui.Rect) {
-			if inside != s.hovered {
+		Child: woxwidget.Gesture{ID: config.Props.ID, OnTap: onTap, OnHoverAt: func(inside bool, _ woxui.Rect) {
+			if !config.Props.Disabled && inside != s.hovered {
 				context.SetState(func() { s.hovered = inside })
 			}
-		}, Child: contentBox},
+		}, Child: config.Props.Paint.paintContainer(config.Props.ID, contentBox)},
 	}
 }
 

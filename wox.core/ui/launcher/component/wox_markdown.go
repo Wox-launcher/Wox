@@ -826,7 +826,7 @@ func markdownCodeWidget(block markdownBlock, props MarkdownProps, width float32,
 	if block.language != "" {
 		label = woxwidget.Text{Value: block.language, Style: woxui.TextStyle{Size: max(float32(9), fontSize-2), Weight: woxui.FontWeightSemibold}, Color: iconColor}
 	}
-	copyButton := markdownCodeCopyButton(markdownCodeCopyProps{
+	copyButton := codeCopyButton(codeCopyProps{
 		id: fmt.Sprintf("%s-code-copy-%d", markdownSelectableID(props.ID), index), code: code, size: buttonSize, theme: props.Theme,
 	})
 	children := []woxwidget.Widget{woxwidget.Container{Width: innerWidth, Child: woxwidget.Flex{

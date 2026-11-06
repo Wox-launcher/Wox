@@ -49,6 +49,10 @@ type Theme struct {
 	AppContentBorderRadius    int
 	OverlayBackgroundColor    string
 	OverlayFontColor          string
+	SuccessColor              string `json:",omitempty"`
+	WarningColor              string `json:",omitempty"`
+	WarningTextColor          string `json:",omitempty"`
+	ErrorColor                string `json:",omitempty"`
 	AppPaddingLeft            int
 	AppPaddingTop             int
 	AppPaddingRight           int

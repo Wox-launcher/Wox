@@ -10,22 +10,58 @@ func prepareNodeTree(current *node) {
 	if current != nil {
 		current.parent = nil
 	}
-	wireTree(current, woxui.Point{})
+	wireTree(current, woxui.Point{}, woxui.IdentityTransform(), false)
 }
 
 // wireTree walks once, wiring parents and stamping each Boundary from the accumulated origin.
-func wireTree(current *node, origin woxui.Point) {
+func wireTree(current *node, origin woxui.Point, parentTransform woxui.AffineTransform, transformed bool) {
 	if current == nil {
 		return
 	}
 	if current.boundary != nil {
 		current.boundary.globalBounds = offsetRect(current.bounds, origin)
 	}
+	bounds := offsetRect(current.bounds, origin)
+	current.paintMatrix = current.drawingTransform(bounds).Then(parentTransform)
+	current.paintTransformed = transformed || current.transform != nil
 	childOrigin := woxui.Point{X: origin.X + current.bounds.X, Y: origin.Y + current.bounds.Y}
 	for _, child := range current.children {
 		child.parent = current
-		wireTree(child, childOrigin)
+		wireTree(child, childOrigin, current.paintMatrix, current.paintTransformed)
 	}
+	// Paint-only effects must invalidate their old halo when a cached subtree
+	// moves, changes, or disappears. Ordinary layout/input bounds stay unchanged.
+	o := current.paintOutsets
+	if current.paintTransformed && current.focus != nil {
+		ring := current.focus.focusRingOutsets
+		o.Top, o.Right = max(o.Top, ring.Top), max(o.Right, ring.Right)
+		o.Bottom, o.Left = max(o.Bottom, ring.Bottom), max(o.Left, ring.Left)
+	}
+	current.paintBounds = woxui.Rect{X: bounds.X - o.Left, Y: bounds.Y - o.Top, Width: bounds.Width + o.Left + o.Right, Height: bounds.Height + o.Top + o.Bottom}
+	if current.paintTransformed {
+		current.paintBounds = current.paintMatrix.Bounds(current.paintBounds)
+	}
+	current.hasPaintOverflow = o != (Insets{}) || current.paintTransformed
+	if !current.clip {
+		for _, child := range current.children {
+			if child.hasPaintOverflow {
+				current.paintBounds = unionDamageRects(current.paintBounds, child.paintBounds)
+				current.hasPaintOverflow = true
+			}
+		}
+	}
+	if current.boundary != nil {
+		current.boundary.paintBounds = current.paintBounds
+		current.boundary.paintTransformed = current.paintTransformed
+	}
+}
+
+// globalPaintBounds keeps decorative outsets separate from layout and hit geometry.
+func globalPaintBounds(current *node) woxui.Rect {
+	if current != nil && current.hasPaintOverflow {
+		return current.paintBounds
+	}
+	return globalRect(current)
 }
 
 // globalRect maps a local node box into window coordinates by walking ancestors.
@@ -51,11 +87,11 @@ func boundaryWindowBounds(cache *boundaryCache) woxui.Rect {
 	if cache == nil {
 		return woxui.Rect{}
 	}
-	if cache.globalBounds.Width > 0 && cache.globalBounds.Height > 0 {
-		return cache.globalBounds
+	if cache.paintBounds.Width > 0 && cache.paintBounds.Height > 0 {
+		return cache.paintBounds
 	}
 	if cache.node != nil {
-		return globalRect(cache.node)
+		return globalPaintBounds(cache.node)
 	}
 	return woxui.Rect{}
 }

@@ -71,6 +71,10 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window);
 void *wox_darwin_autorelease_pool_push(void);
 void wox_darwin_autorelease_pool_pop(void *pool);
 
+int32_t wox_darwin_test_create_target(int32_t width, int32_t height, WoxDarwinWindow **window);
+int32_t wox_darwin_test_begin_frame(WoxDarwinWindow *window, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+int32_t wox_darwin_test_end_frame(WoxDarwinWindow *window, uint8_t *pixels, size_t length);
+void wox_darwin_test_destroy_target(WoxDarwinWindow *window);
 int32_t wox_darwin_window_begin_frame(WoxDarwinWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window);
 int32_t wox_darwin_window_trim_render_surfaces(WoxDarwinWindow *window, int32_t max_surfaces);
@@ -81,6 +85,8 @@ int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, fl
 int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius);
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_set_clip_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count);
+int32_t wox_darwin_window_set_transform(WoxDarwinWindow *window, float a, float b, float c, float d, float tx, float ty);
 int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window);
 int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional);
 int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, WoxRendererResourceStats *out);
@@ -93,9 +99,12 @@ int32_t wox_darwin_window_set_window_chrome(WoxDarwinWindow *window, int32_t cus
 
 uint64_t wox_darwin_window_show_inactive(WoxDarwinWindow *window);
 
-#endif
-
-int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height);
+int32_t wox_darwin_window_begin_opacity(WoxDarwinWindow *window, float x, float y, float width, float height, float opacity, int32_t backdrop);
+int32_t wox_darwin_window_end_opacity(WoxDarwinWindow *window);
+int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, int32_t backdrop);
 int32_t wox_darwin_window_end_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, float top, float bottom);
 
+int32_t wox_darwin_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity);
 int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom);
+
+#endif

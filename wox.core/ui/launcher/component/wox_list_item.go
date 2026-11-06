@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -22,8 +23,10 @@ type ListItemProps struct {
 	SkipFocus       bool
 	OnTap           func()
 	OnHover         func(bool)
+	OnKey           func(woxui.KeyEvent) bool
 	Child           woxwidget.Widget
 	Theme           ControlTheme
+	Paint           *ControlPaint
 }
 
 // WoxListItem builds a selectable row with shared pointer, keyboard, and accessibility behavior.
@@ -67,9 +70,9 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 				props.OnHover(inside)
 			}
 		}
-		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: woxwidget.Container{
+		return woxwidget.Gesture{ID: props.ID, OnTap: onTap, OnHoverAt: onHoverAt, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{
 			Width: props.Width, Height: props.Height, Radius: *radius, Color: rowBackground, BorderColor: props.BorderColor, BorderWidth: props.BorderWidth, Padding: props.Padding, Child: props.Child,
-		}}
+		})}
 	}
 	var content woxwidget.Widget = buildContent(false, nil)
 	if onTap != nil {
@@ -78,6 +81,9 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 	var child woxwidget.Widget = content
 	if !props.SkipFocus {
 		child = woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: *radius, OnKey: func(event woxui.KeyEvent) bool {
+			if props.OnKey != nil && props.OnKey(event) {
+				return true
+			}
 			if event.Key != woxui.KeyEnter && event.Key != woxui.KeySpace {
 				return false
 			}
@@ -87,9 +93,19 @@ func WoxListItem(props ListItemProps) woxwidget.Widget {
 			return true
 		}, Child: content}
 	}
-	return woxwidget.Semantics{
+	semantics := woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleListItem, Label: props.Label,
 		Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: child,
 	}
+	if onTap != nil {
+		semantics.OnAction = func(action woxui.AccessibilityAction, _ string) error {
+			if action != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported list item action %q", action)
+			}
+			onTap()
+			return nil
+		}
+	}
+	return semantics
 }

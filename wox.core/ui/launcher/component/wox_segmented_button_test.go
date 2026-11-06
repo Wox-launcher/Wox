@@ -9,9 +9,23 @@ import (
 
 func TestWoxSegmentedButtonUsesRegularLabelWeight(t *testing.T) {
 	button := WoxSegmentedButton(SegmentedButtonProps{ID: "period-30d", Label: "最近 30 天", Width: 100, Theme: ControlTheme{}})
-	label := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	label := buildHoverable(button.(woxwidget.Semantics).Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
 	if label.Style.Size != CompactButtonFontSize || label.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("segmented button label = %+v, want regular %.0fpx", label.Style, CompactButtonFontSize)
+	}
+}
+
+// TestWoxSegmentedButtonScalesChromeWithText prevents density changes clipping a tab label.
+func TestWoxSegmentedButtonScalesChromeWithText(t *testing.T) {
+	for _, scale := range []float32{0.9, 1, 1.1} {
+		theme := ControlTheme{DensityScale: scale}
+		button := WoxSegmentedButton(SegmentedButtonProps{ID: "tab", Label: "Tab", Width: 100, Theme: theme}).(woxwidget.Semantics)
+		frame := buildHoverable(button.Child.(woxwidget.Focusable).Child, false).(woxwidget.Gesture).Child.(woxwidget.Container)
+		align := frame.Child.(woxwidget.Align)
+		text := align.Child.(woxwidget.TextBlock)
+		if frame.Height != theme.Scaled(SettingsControlHeight) || align.Height != frame.Height || frame.Radius != theme.Scaled(6) || text.Style.Size != theme.Scaled(CompactButtonFontSize) || text.MaxLines != 1 {
+			t.Fatalf("density %v: frame %+v, text %+v", scale, frame, text)
+		}
 	}
 }
 

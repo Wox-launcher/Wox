@@ -22,6 +22,10 @@ type ThemeSchemaV1 struct {
 	IsAutoAppearance bool   // Whether to automatically switch theme based on system appearance
 	DarkThemeId      string // ID of the dark theme variant
 	LightThemeId     string // ID of the light theme variant
+	SuccessColor     string `json:",omitempty"`
+	WarningColor     string `json:",omitempty"`
+	WarningTextColor string `json:",omitempty"`
+	ErrorColor       string `json:",omitempty"`
 
 	AppBackgroundColor                   string
 	AppPaddingLeft                       int
@@ -122,6 +126,10 @@ func parseThemeV1(data []byte) (Theme, error) {
 		IsAutoAppearance:                     legacy.IsAutoAppearance,
 		DarkThemeId:                          legacy.DarkThemeId,
 		LightThemeId:                         legacy.LightThemeId,
+		SuccessColor:                         legacy.SuccessColor,
+		WarningColor:                         legacy.WarningColor,
+		WarningTextColor:                     legacy.WarningTextColor,
+		ErrorColor:                           legacy.ErrorColor,
 		AppBackgroundColor:                   legacy.AppBackgroundColor,
 		AppPaddingLeft:                       legacy.AppPaddingLeft,
 		AppPaddingTop:                        legacy.AppPaddingTop,
@@ -201,6 +209,10 @@ func marshalThemeV1(t Theme) ([]byte, error) {
 		IsAutoAppearance:                     t.IsAutoAppearance,
 		DarkThemeId:                          t.DarkThemeId,
 		LightThemeId:                         t.LightThemeId,
+		SuccessColor:                         t.SuccessColor,
+		WarningColor:                         t.WarningColor,
+		WarningTextColor:                     t.WarningTextColor,
+		ErrorColor:                           t.ErrorColor,
 		AppBackgroundColor:                   t.AppBackgroundColor,
 		AppPaddingLeft:                       t.AppPaddingLeft,
 		AppPaddingTop:                        t.AppPaddingTop,

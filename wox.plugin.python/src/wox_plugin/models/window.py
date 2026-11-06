@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import Any, Awaitable, Callable, Optional, Protocol
+from typing import Any, Awaitable, Callable, Optional, Protocol, TypedDict
 
 from .context import Context
 
@@ -13,10 +13,12 @@ class WindowContentType(str, Enum):
     TEXT = "text"
     MARKDOWN = "markdown"
     HTML = "html"
+    WOXVIEW = "woxview"
 
 
 class WindowPresentation(str, Enum):
     OVERLAY = "overlay"
+    WINDOW = "window"
 
 
 class WindowAnchor(str, Enum):
@@ -36,6 +38,14 @@ class WindowEventType(str, Enum):
     MESSAGE = "message"
     ERROR = "error"
     CLOSED = "closed"
+    WOXVIEW = "woxview_event"
+    THEME_CHANGED = "theme_changed"
+
+
+class WindowThemeChangedData(TypedDict):
+    """Opaque event.data payload; PascalCase matches the Core JSON contract."""
+
+    Dark: bool
 
 
 @dataclass
@@ -67,6 +77,7 @@ class WindowEvent:
     type: WindowEventType
     window_id: str
     document_id: str = ""
+    # WoxView events contain Handler, Args, Key; theme_changed contains WindowThemeChangedData.
     data: Any = None
     err_msg: str = ""
 
@@ -121,6 +132,30 @@ class WindowContentSetOption:
 
 
 @dataclass
+class WindowContentUpdateOption:
+    """Replace a WoxView tree, optionally pinning the document and ordering updates."""
+
+    data: str
+    document_id: Optional[str] = None
+    sequence: int = 0
+
+
+class WindowContentCommand(str, Enum):
+    FOCUS = "focus"
+    SCROLL_TO = "scrollTo"
+    SELECT_ALL = "selectAll"
+
+
+@dataclass
+class WindowContentCommandOption:
+    """Queue an operation on a unique node key; deferred failures emit an error event."""
+
+    command: WindowContentCommand
+    key: str
+    document_id: Optional[str] = None
+
+
+@dataclass
 class WindowMessageOption:
     data: Any
     document_id: Optional[str] = None
@@ -152,12 +187,24 @@ class WindowContentSetResult(WindowResult):
 
 
 @dataclass
+class WindowContentUpdateResult(WindowResult):
+    pass
+
+
+@dataclass
+class WindowContentCommandResult(WindowResult):
+    pass
+
+
+@dataclass
 class WindowMessageResult(WindowResult):
     pass
 
 
 class PluginWindowContent(Protocol):
     async def set(self, ctx: Context, option: WindowContentSetOption) -> WindowContentSetResult: ...
+    async def update(self, ctx: Context, option: WindowContentUpdateOption) -> WindowContentUpdateResult: ...
+    async def command(self, ctx: Context, option: WindowContentCommandOption) -> WindowContentCommandResult: ...
     async def post_message(self, ctx: Context, option: WindowMessageOption) -> WindowMessageResult: ...
 
 

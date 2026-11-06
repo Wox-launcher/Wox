@@ -5,6 +5,8 @@ import inspect
 from wox_plugin.models.window import (
     WindowCloseResult,
     WindowContentSetResult,
+    WindowContentUpdateResult,
+    WindowContentCommandResult,
     WindowEvent,
     WindowEventType,
     WindowHideResult,
@@ -21,6 +23,12 @@ class WindowContentProxy:
 
     async def set(self, ctx, option):
         return await self.window.call(ctx, "WindowContentSet", option, WindowContentSetResult)
+
+    async def update(self, ctx, option):
+        return await self.window.call(ctx, "WindowContentUpdate", option, WindowContentUpdateResult)
+
+    async def command(self, ctx, option):
+        return await self.window.call(ctx, "WindowContentCommand", option, WindowContentCommandResult)
 
     async def post_message(self, ctx, option):
         return await self.window.call(ctx, "WindowPostMessage", option, WindowMessageResult)

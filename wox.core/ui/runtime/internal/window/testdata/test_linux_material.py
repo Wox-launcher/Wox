@@ -7,7 +7,9 @@ import subprocess
 import tempfile
 
 source = (Path(__file__).resolve().parents[1] / "native_linux.c").read_text()
-shaders = []
+clip_source = (Path(__file__).resolve().parents[1] / "drawing_transform_linux.h").read_text()
+clip_start = clip_source.index("#define WOX_GL_CLIP_SOURCE")
+shaders = [clip_source[clip_start:clip_source.index("\n\n", clip_start)]]
 for name in ("rect_vertex_source", "compose_fragment_source"):
     start = source.index("static const char *const " + name + " =")
     end = source.index('\n\n', start)
@@ -63,6 +65,8 @@ int main(void) {
   glViewport(0, 0, 8, 8);
   glUniform1i(glGetUniformLocation(program,"u_original"),0);
   glUniform1i(glGetUniformLocation(program,"u_blurred"),1);
+  glUniform1i(glGetUniformLocation(program,"u_clip_planes"),2);
+  glUniform2f(glGetUniformLocation(program,"u_clip_target"),8,1);
   glUniform2f(glGetUniformLocation(program,"u_viewport"),8,8);
   glUniform4f(glGetUniformLocation(program,"u_rect"),0,0,8,8);
   glUniform4f(glGetUniformLocation(program,"u_source"),0,0,8,8);

@@ -43,6 +43,16 @@ struct StableLineBox {
   bool occupied = false;
 };
 
+// Groups containing backdrop materials use readable targets. Ordinary groups retain D2D's pooled layers.
+struct CompositeLayer {
+  ID2D1Bitmap1 *bitmap = nullptr;
+  ID2D1Bitmap1 *parent = nullptr;
+  ID2D1LinearGradientBrush *mask = nullptr;
+  D2D1_RECT_F bounds = {};
+  D2D1_MATRIX_3X2_F transform = {};
+  float opacity = 1;
+};
+
 struct WoxRenderer {
   ID3D11Device *device = nullptr;
   IDXGISwapChain1 *swap_chain = nullptr;
@@ -89,9 +99,14 @@ struct WoxRenderer {
   float scale = 1.0f;
   bool frame_open = false;
   bool overlay_active = false;
-  unsigned edge_fade_depth = 0;
+  std::vector<CompositeLayer> composite_layers;
+  std::vector<ID2D1Bitmap1 *> composite_cache;
+  std::vector<ID2D1Bitmap1 *> retired_composite_bitmaps;
+  uint64_t composite_bitmap_bytes = 0;
   bool clip_active = false;
   D2D1_RECT_F clip_rect = {};
+  ID2D1PathGeometry *clip_polygon = nullptr;
+  bool test_offscreen = false;
   bool damage_clip_active = false;
   RECT present_dirty_rect = {};
   bool present_dirty = false;
@@ -306,6 +321,49 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
   }
   renderer->cached_image_bitmaps.clear();
   renderer->cached_image_bitmap_bytes = 0;
+}
+
+// Readable groups reuse a bounded pool across frames; in-flight targets cannot be reused before EndDraw.
+static HRESULT acquire_composite_bitmap(WoxRenderer *renderer, ID2D1Bitmap1 *parent, ID2D1Bitmap1 **out) {
+  const auto size = parent->GetPixelSize();
+  const auto format = parent->GetPixelFormat();
+  for (auto entry = renderer->composite_cache.begin(); entry != renderer->composite_cache.end(); ++entry) {
+    const auto cached_size = (*entry)->GetPixelSize();
+    const auto cached_format = (*entry)->GetPixelFormat();
+    if (cached_size.width == size.width && cached_size.height == size.height && cached_format.format == format.format && cached_format.alphaMode == format.alphaMode) {
+      *out = *entry;
+      renderer->composite_cache.erase(entry);
+      return S_OK;
+    }
+  }
+  auto properties = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, format, 96, 96);
+  const HRESULT result = renderer->d2d_context->CreateBitmap(size, nullptr, 0, &properties, out);
+  if (SUCCEEDED(result)) renderer->composite_bitmap_bytes += static_cast<uint64_t>(size.width) * size.height * 4;
+  return result;
+}
+
+static void retire_composite_bitmap(WoxRenderer *renderer, ID2D1Bitmap1 **bitmap) {
+  if (*bitmap != nullptr) renderer->retired_composite_bitmaps.push_back(*bitmap);
+  *bitmap = nullptr;
+}
+
+// A hidden/resized renderer drops the pool; completed frames retain at most 16 MiB of group targets.
+static void finish_composite_bitmaps(WoxRenderer *renderer, bool discard) {
+  for (auto bitmap : renderer->retired_composite_bitmaps) renderer->composite_cache.push_back(bitmap);
+  renderer->retired_composite_bitmaps.clear();
+  uint64_t retained = 0;
+  for (auto entry = renderer->composite_cache.begin(); entry != renderer->composite_cache.end();) {
+    const auto size = (*entry)->GetPixelSize();
+    const uint64_t bytes = static_cast<uint64_t>(size.width) * size.height * 4;
+    if (discard || retained + bytes > 16 * 1024 * 1024) {
+      (*entry)->Release();
+      renderer->composite_bitmap_bytes -= bytes;
+      entry = renderer->composite_cache.erase(entry);
+    } else {
+      retained += bytes;
+      ++entry;
+    }
+  }
 }
 
 static void release_material_resources(WoxRenderer *renderer) {
@@ -677,10 +735,8 @@ static void destroy_renderer(WoxRenderer *renderer) {
   }
 
   if (renderer->frame_open && renderer->d2d_context != nullptr) {
-    if (renderer->clip_active) {
-      renderer->d2d_context->PopAxisAlignedClip();
-      renderer->clip_active = false;
-    }
+    wox_renderer_clear_clip(renderer);
+    while (!renderer->composite_layers.empty()) wox_renderer_end_edge_fade(renderer);
     if (renderer->damage_clip_active) {
       renderer->d2d_context->PopAxisAlignedClip();
       renderer->damage_clip_active = false;
@@ -688,6 +744,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
     renderer->d2d_context->EndDraw();
   }
   release_retired_image_bitmaps(renderer);
+  finish_composite_bitmaps(renderer, true);
   if (renderer->d2d_context != nullptr) {
     renderer->d2d_context->SetTarget(nullptr);
   }
@@ -858,6 +915,7 @@ extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, ui
   }
 
   renderer->d2d_context->SetTarget(nullptr);
+  finish_composite_bitmaps(renderer, true);
   renderer->caret_valid = false;
   release_com(&renderer->target_bitmap);
   release_com(&renderer->overlay_target_bitmap);
@@ -890,6 +948,7 @@ extern "C" int32_t wox_renderer_trim(WoxRenderer *renderer) {
   clear_cached_image_bitmaps(renderer);
 
   IDXGIDevice3 *dxgi_device = nullptr;
+  finish_composite_bitmaps(renderer, true);
   const HRESULT result = renderer->device->QueryInterface(__uuidof(IDXGIDevice3), reinterpret_cast<void **>(&dxgi_device));
   if (result == E_NOINTERFACE) {
     return S_OK;
@@ -911,6 +970,7 @@ extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
   renderer->cached_large_image_id = 0;
   renderer->cached_large_image_bytes = 0;
   release_material_resources(renderer);
+  finish_composite_bitmaps(renderer, true);
   // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
   // caches after upload. A hidden window has no useful warm resources, so release them eagerly.
   renderer->d2d_device->ClearResources(0);
@@ -1149,11 +1209,21 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
     }
   }
   HRESULT result = S_OK;
-  const auto snap = [renderer](float value) { return std::round(value * renderer->scale) / renderer->scale; };
-  const D2D1_RECT_F destination = {snap(x), snap(y), snap(x + width), snap(y + height)};
-  const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
   D2D1_MATRIX_3X2_F transform;
   renderer->d2d_context->GetTransform(&transform);
+  D2D1_RECT_F destination = {x, y, x + width, y + height};
+  // Snap only axis-aligned edges, in physical target coordinates. Rounding local
+  // geometry before an affine map makes equivalent snapshot/rebased draws differ.
+  if (rotation_radians == 0.0f && transform._12 == 0.0f && transform._21 == 0.0f) {
+    const auto snap = [](float value, float scale, float offset) {
+      if (scale == 0.0f) return value;
+      const float result = (std::round(value * scale + offset) - offset) / scale;
+      return std::isfinite(result) ? result : value;
+    };
+    destination = {snap(x, transform._11, transform._31), snap(y, transform._22, transform._32),
+                   snap(x + width, transform._11, transform._31), snap(y + height, transform._22, transform._32)};
+  }
+  const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
   if (rotation_radians != 0.0f) {
     const float degrees = rotation_radians * 180.0f / 3.14159265358979323846f;
     const D2D1_POINT_2F center = D2D1::Point2F(x + width * 0.5f, y + height * 0.5f);
@@ -1246,22 +1316,59 @@ static HRESULT ensure_material_resources(WoxRenderer *renderer, uint32_t width, 
   return S_OK;
 }
 
+// Clip suspension keeps the authored geometry alive while a backdrop snapshot flushes prior drawing.
+static void suspend_renderer_clip(WoxRenderer *renderer) {
+  if (!renderer->clip_active) return;
+  if (renderer->clip_polygon != nullptr) renderer->d2d_context->PopLayer();
+  else renderer->d2d_context->PopAxisAlignedClip();
+  renderer->clip_active = false;
+}
+
+// Clips are recorded in target logical coordinates and never inherit the current paint matrix.
+static void resume_renderer_clip(WoxRenderer *renderer) {
+  D2D1_MATRIX_3X2_F transform;
+  renderer->d2d_context->GetTransform(&transform);
+  renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(renderer->scale, renderer->scale));
+  if (renderer->clip_polygon != nullptr) {
+    auto layer = D2D1::LayerParameters1(D2D1::InfiniteRect(), renderer->clip_polygon);
+    layer.layerOptions = D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND;
+    const auto blend = renderer->d2d_context->GetPrimitiveBlend();
+    renderer->d2d_context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_COPY);
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+    renderer->d2d_context->SetPrimitiveBlend(blend);
+  } else {
+    renderer->d2d_context->PushAxisAlignedClip(renderer->clip_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+  }
+  renderer->d2d_context->SetTransform(transform);
+  renderer->clip_active = true;
+}
+
 // blur_floating_material_backdrop replaces the pixels inside the rounded surface with a
 // blurred copy of what the frame has drawn there so far. Direct2D runs on the selected device:
 // copy the region (plus margin) out of the back buffer, run it through the blur graph, and
-// draw it back inside the rounded shape while the corners keep their sharp pixels. Every
+// draw it back inside the transformed rounded shape. Every
 // step that can fail runs before the target is touched, so a failure leaves it as it was.
 static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue) {
   const float scale = renderer->scale;
+  D2D1::Matrix3x2F transform;
+  renderer->d2d_context->GetTransform(&transform);
   const D2D1_SIZE_U target_size = renderer->target_bitmap->GetPixelSize();
   const auto clamp_pixel = [](float value, uint32_t limit) {
     return static_cast<uint32_t>(std::min<float>(std::max(0.0f, value), static_cast<float>(limit)));
   };
-  // Physical source region: the surface grown by the sampling margin, clamped to the buffer.
-  const uint32_t left = clamp_pixel(std::floor((x - blur_margin) * scale), target_size.width);
-  const uint32_t top = clamp_pixel(std::floor((y - blur_margin) * scale), target_size.height);
-  const uint32_t right = clamp_pixel(std::ceil((x + width + blur_margin) * scale), target_size.width);
-  const uint32_t bottom = clamp_pixel(std::ceil((y + height + blur_margin) * scale), target_size.height);
+  // Sampling is in physical target axes, not the surface's rotated/scaled local axes.
+  const D2D1_POINT_2F points[] = {
+      transform.TransformPoint(D2D1::Point2F(x, y)), transform.TransformPoint(D2D1::Point2F(x + width, y)),
+      transform.TransformPoint(D2D1::Point2F(x + width, y + height)), transform.TransformPoint(D2D1::Point2F(x, y + height))};
+  float min_x = points[0].x, max_x = points[0].x, min_y = points[0].y, max_y = points[0].y;
+  for (const auto &point : points) {
+    min_x = std::min(min_x, point.x); max_x = std::max(max_x, point.x);
+    min_y = std::min(min_y, point.y); max_y = std::max(max_y, point.y);
+  }
+  const uint32_t left = clamp_pixel(std::floor(min_x - blur_margin * scale), target_size.width);
+  const uint32_t top = clamp_pixel(std::floor(min_y - blur_margin * scale), target_size.height);
+  const uint32_t right = clamp_pixel(std::ceil(max_x + blur_margin * scale), target_size.width);
+  const uint32_t bottom = clamp_pixel(std::ceil(max_y + blur_margin * scale), target_size.height);
   if (right <= left || bottom <= top) {
     return S_OK;
   }
@@ -1283,13 +1390,14 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
   }
   // The copy reads the back buffer, so every primitive recorded before the material
   // must have landed there first.
+  const bool restore_clip = renderer->clip_active;
+  suspend_renderer_clip(renderer);
   result = renderer->d2d_context->Flush();
-  if (FAILED(result)) {
-    return result;
-  }
   const D2D1_POINT_2U destination = D2D1::Point2U(0, 0);
   const D2D1_RECT_U source = D2D1::RectU(left, top, right, bottom);
-  result = renderer->material_source_bitmap->CopyFromBitmap(&destination, renderer->target_bitmap, &source);
+  ID2D1Bitmap1 *backdrop = renderer->composite_layers.empty() ? renderer->target_bitmap : renderer->composite_layers.back().bitmap;
+  if (SUCCEEDED(result)) result = backdrop == nullptr ? E_UNEXPECTED : renderer->material_source_bitmap->CopyFromBitmap(&destination, backdrop, &source);
+  if (restore_clip) resume_renderer_clip(renderer);
   if (FAILED(result)) {
     return result;
   }
@@ -1303,67 +1411,31 @@ static HRESULT blur_floating_material_backdrop(WoxRenderer *renderer, float x, f
   const float sigma = blur_sigma * scale;
   renderer->material_blur_effect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
 
-  // The rounded shape and its complement inside the surface rectangle, in logical coordinates.
+  // Keep the exact rounded silhouette; clearing an axis-aligned envelope damages rotated corners.
   const D2D1_RECT_F bounds = {x, y, x + width, y + height};
   const float clamped_radius = std::min(std::max(0.0f, radius), std::min(width, height) * 0.5f);
   ID2D1RoundedRectangleGeometry *shape = nullptr;
-  ID2D1RectangleGeometry *box = nullptr;
-  ID2D1PathGeometry *corners = nullptr;
-  ID2D1GeometrySink *sink = nullptr;
   result = renderer->d2d_factory->CreateRoundedRectangleGeometry(D2D1::RoundedRect(bounds, clamped_radius, clamped_radius), &shape);
   if (SUCCEEDED(result)) {
-    result = renderer->d2d_factory->CreateRectangleGeometry(bounds, &box);
-  }
-  if (SUCCEEDED(result)) {
-    result = renderer->d2d_factory->CreatePathGeometry(&corners);
-  }
-  if (SUCCEEDED(result)) {
-    result = corners->Open(&sink);
-  }
-  if (SUCCEEDED(result)) {
-    result = box->CombineWithGeometry(shape, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink);
-    const HRESULT close_result = sink->Close();
-    if (SUCCEEDED(result)) {
-      result = close_result;
-    }
-  }
-  if (SUCCEEDED(result)) {
-    // A layer always composites source-over onto the pixels already in the target, so drawing
-    // the blur through a rounded mask alone would stack it on the sharp content it was made
-    // from and darken the surface. Clear the rectangle first, then fill the rounded shape with
-    // the blur and its corners with the untouched copy; the two antialiased masks sum to full
-    // coverage, which replaces the interior exactly and keeps the corner pixels sharp.
+    // COPY on the layer replaces all four channels through its antialiased mask, rather than
+    // source-over compositing the blurred translucent backdrop onto the original a second time.
     const D2D1_POINT_2F offset = D2D1::Point2F(static_cast<float>(left), static_cast<float>(top));
-    const D2D1_RECT_F copied = {0.0f, 0.0f, static_cast<float>(source_width), static_cast<float>(source_height)};
-    D2D1_MATRIX_3X2_F transform;
-    renderer->d2d_context->GetTransform(&transform);
     D2D1_LAYER_PARAMETERS1 layer = {};
     layer.contentBounds = D2D1::InfiniteRect();
     layer.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
     layer.maskTransform = D2D1::Matrix3x2F::Identity();
     layer.opacity = 1.0f;
-
-    renderer->d2d_context->PushAxisAlignedClip(bounds, D2D1_ANTIALIAS_MODE_ALIASED);
-    renderer->d2d_context->Clear(nullptr);
-    renderer->d2d_context->PopAxisAlignedClip();
-
     layer.geometricMask = shape;
+    layer.layerOptions = D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND;
+    const auto blend = renderer->d2d_context->GetPrimitiveBlend();
+    renderer->d2d_context->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_COPY);
     renderer->d2d_context->PushLayer(&layer, nullptr);
     renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
-    renderer->d2d_context->DrawImage(renderer->material_tone_effect, &offset, nullptr, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
+    renderer->d2d_context->DrawImage(renderer->material_tone_effect, &offset, nullptr, D2D1_INTERPOLATION_MODE_LINEAR, D2D1_COMPOSITE_MODE_SOURCE_COPY);
     renderer->d2d_context->SetTransform(transform);
     renderer->d2d_context->PopLayer();
-
-    layer.geometricMask = corners;
-    renderer->d2d_context->PushLayer(&layer, nullptr);
-    renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
-    renderer->d2d_context->DrawImage(renderer->material_source_bitmap, &offset, &copied, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_SOURCE_OVER);
-    renderer->d2d_context->SetTransform(transform);
-    renderer->d2d_context->PopLayer();
+    renderer->d2d_context->SetPrimitiveBlend(blend);
   }
-  release_com(&sink);
-  release_com(&corners);
-  release_com(&box);
   release_com(&shape);
   // Drop the bitmap reference held by the graph so a later resize can release it promptly.
   renderer->material_crop_effect->SetInput(0, nullptr);
@@ -1388,7 +1460,7 @@ extern "C" int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x
     const HRESULT result = blur_floating_material_backdrop(renderer, x, y, width, height, radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
     // A lost device must surface through the normal recovery path; any other failure only
     // costs the blur, and the tint below still reads as a panel.
-    if (FAILED(result) && FAILED(renderer->device->GetDeviceRemovedReason())) {
+    if (FAILED(result) && (renderer->test_offscreen || FAILED(renderer->device->GetDeviceRemovedReason()))) {
       return result;
     }
   }
@@ -1417,16 +1489,16 @@ extern "C" int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *rend
   }
   const bool restore_clip = renderer->clip_active;
   const D2D1_RECT_F clip_rect = renderer->clip_rect;
-  if (renderer->clip_active) {
-    renderer->d2d_context->PopAxisAlignedClip();
-    renderer->clip_active = false;
-  }
+  ID2D1PathGeometry *clip_polygon = renderer->clip_polygon;
+  if (clip_polygon != nullptr) clip_polygon->AddRef();
+  wox_renderer_clear_clip(renderer);
   if (renderer->damage_clip_active) {
     renderer->d2d_context->PopAxisAlignedClip();
     renderer->damage_clip_active = false;
   }
   result = renderer->d2d_context->EndDraw();
   if (FAILED(result)) {
+    release_com(&clip_polygon);
     return result;
   }
   renderer->d2d_context->SetTarget(renderer->overlay_target_bitmap);
@@ -1435,9 +1507,9 @@ extern "C" int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *rend
   renderer->d2d_context->Clear(&transparent);
   renderer->overlay_active = true;
   if (restore_clip) {
-    renderer->d2d_context->PushAxisAlignedClip(clip_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    renderer->clip_active = true;
     renderer->clip_rect = clip_rect;
+    renderer->clip_polygon = clip_polygon;
+    resume_renderer_clip(renderer);
   }
   return S_OK;
 }
@@ -1558,19 +1630,54 @@ extern "C" int32_t wox_renderer_remove_webview_visual(WoxRenderer *renderer, voi
   return result;
 }
 
+// Geometry is local logical space; display scaling is applied exactly once at this boundary.
+extern "C" int32_t wox_renderer_set_transform(WoxRenderer *renderer, float a, float b, float c, float d, float tx, float ty) {
+  if (renderer == nullptr || !renderer->frame_open) return E_UNEXPECTED;
+  const auto matrix = D2D1::Matrix3x2F(a, b, c, d, tx, ty) * D2D1::Matrix3x2F::Scale(renderer->scale, renderer->scale);
+  if (!std::isfinite(matrix._11) || !std::isfinite(matrix._12) || !std::isfinite(matrix._21) || !std::isfinite(matrix._22) || !std::isfinite(matrix._31) || !std::isfinite(matrix._32)) return E_INVALIDARG;
+  renderer->d2d_context->SetTransform(matrix);
+  return S_OK;
+}
+
+// Recorded clips are already in target logical coordinates, independent of the current paint matrix.
 extern "C" int32_t wox_renderer_set_clip_rect(WoxRenderer *renderer, float x, float y, float width, float height) {
   if (renderer == nullptr || !renderer->frame_open) {
     return E_UNEXPECTED;
   }
-  if (renderer->clip_active) {
-    renderer->d2d_context->PopAxisAlignedClip();
-  }
+  wox_renderer_clear_clip(renderer);
   const float clipped_width = width > 0.0f ? width : 0.0f;
   const float clipped_height = height > 0.0f ? height : 0.0f;
   const D2D1_RECT_F rect = {x, y, x + clipped_width, y + clipped_height};
-  renderer->d2d_context->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-  renderer->clip_active = true;
   renderer->clip_rect = rect;
+  resume_renderer_clip(renderer);
+  return S_OK;
+}
+
+// Axis-aligned D2D clips only keep a rotated rectangle's envelope. A path layer preserves its silhouette.
+extern "C" int32_t wox_renderer_set_clip_polygon(WoxRenderer *renderer, const float *points, int32_t point_count) {
+  if (renderer == nullptr || !renderer->frame_open) return E_UNEXPECTED;
+  if (points == nullptr || point_count < 3) return E_INVALIDARG;
+  for (int32_t i = 0; i < point_count; i++) {
+    if (!std::isfinite(points[i * 2]) || !std::isfinite(points[i * 2 + 1])) return E_INVALIDARG;
+  }
+  ID2D1PathGeometry *geometry = nullptr;
+  ID2D1GeometrySink *sink = nullptr;
+  HRESULT result = renderer->d2d_factory->CreatePathGeometry(&geometry);
+  if (SUCCEEDED(result)) result = geometry->Open(&sink);
+  if (SUCCEEDED(result)) {
+    sink->BeginFigure(D2D1::Point2F(points[0], points[1]), D2D1_FIGURE_BEGIN_FILLED);
+    for (int32_t i = 1; i < point_count; i++) sink->AddLine(D2D1::Point2F(points[i * 2], points[i * 2 + 1]));
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    result = sink->Close();
+  }
+  release_com(&sink);
+  if (FAILED(result)) {
+    release_com(&geometry);
+    return result;
+  }
+  wox_renderer_clear_clip(renderer);
+  renderer->clip_polygon = geometry;
+  resume_renderer_clip(renderer);
   return S_OK;
 }
 
@@ -1579,14 +1686,47 @@ extern "C" int32_t wox_renderer_clear_clip(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   if (renderer->clip_active) {
-    renderer->d2d_context->PopAxisAlignedClip();
-    renderer->clip_active = false;
+    suspend_renderer_clip(renderer);
+    release_com(&renderer->clip_polygon);
   }
   return S_OK;
 }
 
+// Only backdrop-reading groups need an explicit target: D2D's pending layer content is not readable.
+static HRESULT begin_composite(WoxRenderer *renderer, float x, float y, float width, float height, float opacity, ID2D1LinearGradientBrush *mask, bool backdrop) {
+  wox_renderer_clear_clip(renderer);
+  CompositeLayer group;
+  group.bounds = D2D1::RectF(x, y, x + width, y + height);
+  group.opacity = opacity;
+  group.mask = mask;
+  renderer->d2d_context->GetTransform(&group.transform);
+  if (mask != nullptr) mask->AddRef();
+  if (backdrop) {
+    group.parent = renderer->composite_layers.empty() ? (renderer->overlay_active ? renderer->overlay_target_bitmap : renderer->target_bitmap) : renderer->composite_layers.back().bitmap;
+    // The encoder marks all ancestors of a material, so no opaque native layer can hide its pixels.
+    if (group.parent == nullptr) {
+      release_com(&group.mask);
+      return E_UNEXPECTED;
+    }
+    HRESULT result = acquire_composite_bitmap(renderer, group.parent, &group.bitmap);
+    if (SUCCEEDED(result)) result = renderer->d2d_context->Flush();
+    if (SUCCEEDED(result)) result = group.bitmap->CopyFromBitmap(nullptr, group.parent, nullptr);
+    if (FAILED(result)) {
+      retire_composite_bitmap(renderer, &group.bitmap);
+      release_com(&group.mask);
+      return result;
+    }
+    renderer->d2d_context->SetTarget(group.bitmap);
+  } else {
+    auto layer = D2D1::LayerParameters1(group.bounds, nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::Matrix3x2F::Identity(), opacity, mask);
+    renderer->d2d_context->PushLayer(&layer, nullptr);
+  }
+  renderer->composite_layers.push_back(group);
+  return S_OK;
+}
+
 // A layer opacity brush fades only its content, preserving the translucent backdrop.
-extern "C" int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom) {
+extern "C" int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, float width, float height, float top, float bottom, int32_t backdrop) {
   if (renderer == nullptr || !renderer->frame_open || height <= 0) return E_INVALIDARG;
   D2D1_GRADIENT_STOP stops[] = {
       {0, D2D1::ColorF(1, 1, 1, top > 0 ? 0.0f : 1.0f)},
@@ -1601,27 +1741,80 @@ extern "C" int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, 
     result = renderer->d2d_context->CreateLinearGradientBrush(gradient, collection, &mask);
   }
   if (SUCCEEDED(result)) {
-    wox_renderer_clear_clip(renderer);
-    D2D1_LAYER_PARAMETERS1 layer = {};
-    layer.contentBounds = D2D1::RectF(x, y, x + width, y + height);
-    layer.maskTransform = D2D1::Matrix3x2F::Identity();
-    layer.opacity = 1;
-    layer.opacityBrush = mask;
-    renderer->d2d_context->PushLayer(&layer, nullptr);
-    renderer->edge_fade_depth++;
+    result = begin_composite(renderer, x, y, width, height, 1, mask, backdrop != 0);
   }
   if (mask != nullptr) mask->Release();
   if (collection != nullptr) collection->Release();
   return result;
 }
 
-// Clear the content clip before popping its enclosing layer; Go restores the parent clip.
+// Uniform alpha applies to the completed layer, preserving opaque overlap inside it.
+extern "C" int32_t wox_renderer_begin_opacity(WoxRenderer *renderer, float x, float y, float width, float height, float opacity, int32_t backdrop) {
+  if (renderer == nullptr || !renderer->frame_open) return E_UNEXPECTED;
+  return begin_composite(renderer, x, y, width, height, opacity, nullptr, backdrop != 0);
+}
+
+// Opacity and edge fades share a layer stack. Clear the inner clip before popping;
+// Go restores the enclosing clip after the layer boundary.
 extern "C" int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer) {
-  if (renderer == nullptr || !renderer->frame_open || renderer->edge_fade_depth == 0) return E_UNEXPECTED;
+  if (renderer == nullptr || !renderer->frame_open || renderer->composite_layers.empty()) return E_UNEXPECTED;
   wox_renderer_clear_clip(renderer);
-  renderer->d2d_context->PopLayer();
-  renderer->edge_fade_depth--;
-  return S_OK;
+  CompositeLayer group = renderer->composite_layers.back();
+  renderer->composite_layers.pop_back();
+  HRESULT result = S_OK;
+  if (group.bitmap != nullptr) {
+    result = renderer->d2d_context->Flush();
+    D2D1_MATRIX_3X2_F transform;
+    renderer->d2d_context->GetTransform(&transform);
+    ID2D1Bitmap1 *before = nullptr, *mask = nullptr;
+    ID2D1Effect *inside = nullptr, *outside = nullptr, *combined = nullptr;
+    if (SUCCEEDED(result)) result = acquire_composite_bitmap(renderer, group.parent, &before);
+    if (SUCCEEDED(result)) result = before->CopyFromBitmap(nullptr, group.parent, nullptr);
+    if (SUCCEEDED(result)) result = acquire_composite_bitmap(renderer, group.parent, &mask);
+    if (SUCCEEDED(result)) result = renderer->d2d_context->CreateEffect(CLSID_D2D1Composite, &inside);
+    if (SUCCEEDED(result)) result = renderer->d2d_context->CreateEffect(CLSID_D2D1Composite, &outside);
+    if (SUCCEEDED(result)) result = renderer->d2d_context->CreateEffect(CLSID_D2D1Composite, &combined);
+    if (SUCCEEDED(result)) {
+      renderer->d2d_context->SetTarget(mask);
+      renderer->d2d_context->Clear(nullptr);
+      renderer->d2d_context->SetTransform(group.transform);
+      if (group.mask != nullptr) {
+        group.mask->SetOpacity(group.opacity);
+        renderer->d2d_context->FillRectangle(group.bounds, group.mask);
+      } else {
+        renderer->brush->SetColor(D2D1::ColorF(1, 1, 1, group.opacity));
+        renderer->d2d_context->FillRectangle(group.bounds, renderer->brush);
+      }
+      result = renderer->d2d_context->Flush();
+    }
+    renderer->d2d_context->SetTarget(group.parent);
+    if (SUCCEEDED(result)) {
+      // Interpolate all premultiplied channels: after*mask + before*(1-mask).
+      // D2D layer.opacity scales source alpha under COPY; it does not provide this interpolation.
+      inside->SetInput(0, group.bitmap);
+      inside->SetInput(1, mask);
+      inside->SetValue(D2D1_COMPOSITE_PROP_MODE, D2D1_COMPOSITE_MODE_DESTINATION_IN);
+      outside->SetInput(0, before);
+      outside->SetInput(1, mask);
+      outside->SetValue(D2D1_COMPOSITE_PROP_MODE, D2D1_COMPOSITE_MODE_DESTINATION_OUT);
+      combined->SetInputEffect(0, outside);
+      combined->SetInputEffect(1, inside);
+      combined->SetValue(D2D1_COMPOSITE_PROP_MODE, D2D1_COMPOSITE_MODE_PLUS);
+      renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
+      renderer->d2d_context->DrawImage(combined, nullptr, nullptr, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    }
+    renderer->d2d_context->SetTransform(transform);
+    release_com(&combined);
+    release_com(&outside);
+    release_com(&inside);
+    retire_composite_bitmap(renderer, &mask);
+    retire_composite_bitmap(renderer, &before);
+    retire_composite_bitmap(renderer, &group.bitmap);
+  } else {
+    renderer->d2d_context->PopLayer();
+  }
+  release_com(&group.mask);
+  return result;
 }
 
 extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
@@ -1683,15 +1876,9 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
 
-  if (renderer->clip_active) {
-    renderer->d2d_context->PopAxisAlignedClip();
-    renderer->clip_active = false;
-  }
+  wox_renderer_clear_clip(renderer);
   // Encoding can fail inside a layer; unwind it before ending the frame.
-  while (renderer->edge_fade_depth > 0) {
-    renderer->d2d_context->PopLayer();
-    renderer->edge_fade_depth--;
-  }
+  while (!renderer->composite_layers.empty()) wox_renderer_end_edge_fade(renderer);
   if (renderer->damage_clip_active) {
     renderer->d2d_context->PopAxisAlignedClip();
     renderer->damage_clip_active = false;
@@ -1705,6 +1892,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     result = renderer->d2d_context->EndDraw();
   }
   release_retired_image_bitmaps(renderer);
+  finish_composite_bitmaps(renderer, false);
   renderer->last_end_draw_result = result;
   renderer->frame_open = false;
   if (renderer->simulate_device_removed) {
@@ -1714,6 +1902,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
   if (FAILED(result)) {
     return result;
   }
+  if (renderer->test_offscreen) return S_OK;
   DXGI_PRESENT_PARAMETERS parameters = {};
   if (renderer->present_dirty) {
     parameters.DirtyRectsCount = 1;
@@ -1737,7 +1926,7 @@ extern "C" int64_t wox_renderer_resident_bytes(WoxRenderer *renderer) {
     return 0;
   }
   const auto caret_size = renderer->caret_backdrop == nullptr ? D2D1::SizeU(0, 0) : renderer->caret_backdrop->GetPixelSize();
-  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
+  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes + renderer->composite_bitmap_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
 }
 
 extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {
@@ -1782,8 +1971,62 @@ extern "C" int32_t wox_renderer_set_corner_radius(WoxRenderer *renderer, float p
  return result;
 }
 
+// Offscreen targets replay the Go encoder and production frame lifecycle without a HWND or presentation.
+extern "C" int32_t wox_renderer_test_create_offscreen(uint32_t width, uint32_t height, WoxRenderer **out) {
+  if (out == nullptr || width == 0 || height == 0) return E_INVALIDARG;
+  *out = nullptr;
+  auto *renderer = new WoxRenderer();
+  renderer->test_offscreen = true;
+  renderer->uses_warp = true;
+  renderer->width = width;
+  renderer->height = height;
+  IDXGIDevice *dxgi = nullptr;
+  HRESULT result = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &renderer->device, nullptr, nullptr);
+  if (SUCCEEDED(result)) result = renderer->device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void **>(&dxgi));
+  if (SUCCEEDED(result)) result = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), reinterpret_cast<void **>(&renderer->d2d_factory));
+  if (SUCCEEDED(result)) result = renderer->d2d_factory->CreateDevice(dxgi, &renderer->d2d_device);
+  if (SUCCEEDED(result)) result = renderer->d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &renderer->d2d_context);
+  if (SUCCEEDED(result)) result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown **>(&renderer->dwrite_factory));
+  auto properties = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+  if (SUCCEEDED(result)) result = renderer->d2d_context->CreateBitmap(D2D1::SizeU(width, height), nullptr, 0, &properties, &renderer->target_bitmap);
+  if (SUCCEEDED(result)) {
+    renderer->d2d_context->SetDpi(96, 96);
+    result = renderer->d2d_context->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &renderer->brush);
+  }
+  release_com(&dxgi);
+  if (FAILED(result)) {
+    destroy_renderer(renderer);
+    return result;
+  }
+  *out = renderer;
+  return S_OK;
+}
+
+// Read back premultiplied RGBA so native and software assertions use identical channel ordering.
+extern "C" int32_t wox_renderer_test_read_pixels(WoxRenderer *renderer, uint8_t *pixels, uint32_t length) {
+  if (renderer == nullptr || !renderer->test_offscreen || renderer->frame_open || pixels == nullptr || length != static_cast<uint64_t>(renderer->width) * renderer->height * 4) return E_INVALIDARG;
+  ID2D1Bitmap1 *readback = nullptr;
+  auto properties = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+  HRESULT result = renderer->d2d_context->CreateBitmap(D2D1::SizeU(renderer->width, renderer->height), nullptr, 0, &properties, &readback);
+  if (SUCCEEDED(result)) result = readback->CopyFromBitmap(nullptr, renderer->target_bitmap, nullptr);
+  D2D1_MAPPED_RECT mapped = {};
+  if (SUCCEEDED(result)) result = readback->Map(D2D1_MAP_OPTIONS_READ, &mapped);
+  if (SUCCEEDED(result)) {
+    for (uint32_t y = 0; y < renderer->height; y++) {
+      for (uint32_t x = 0; x < renderer->width; x++) {
+        const uint8_t *src = mapped.bits + y * mapped.pitch + x * 4;
+        uint8_t *dst = pixels + (y * renderer->width + x) * 4;
+        dst[0] = src[2]; dst[1] = src[1]; dst[2] = src[0]; dst[3] = src[3];
+      }
+    }
+    readback->Unmap();
+  }
+  release_com(&readback);
+  return result;
+}
+
 // Exercise production effects on a WARP bitmap without opening a window.
-static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, float top, float bottom, bool material) {
+static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, float top, float bottom, bool material, float opacity) {
   WoxRenderer renderer;
   IDXGIDevice *dxgi = nullptr;
   ID2D1Bitmap1 *target = nullptr, *readback = nullptr;
@@ -1794,13 +2037,13 @@ static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, floa
   if (SUCCEEDED(result)) result = renderer.d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &renderer.d2d_context);
   D2D1_BITMAP_PROPERTIES1 properties = {};
   properties.pixelFormat = D2D1::PixelFormat(material ? DXGI_FORMAT_B8G8R8A8_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-  properties.dpiX = properties.dpiY = material ? 96 : 96 * scale;
+  properties.dpiX = properties.dpiY = 96;
   properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
   if (SUCCEEDED(result)) result = renderer.d2d_context->CreateBitmap(D2D1::SizeU(size, size), nullptr, 0, &properties, &target);
   if (SUCCEEDED(result)) {
     renderer.d2d_context->SetTarget(target);
     renderer.d2d_context->SetDpi(properties.dpiX, properties.dpiY);
-    if (material) renderer.d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
+    renderer.d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
     result = renderer.d2d_context->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &renderer.brush);
   }
   if (SUCCEEDED(result)) {
@@ -1814,10 +2057,25 @@ static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, floa
       renderer.d2d_context->Clear(&black);
       wox_renderer_fill_rounded_rect(&renderer, 48, 0, 48, 96, 0, 255, 255, 255, 255);
       result = wox_renderer_floating_material(&renderer, 16, 16, 64, 64, 6, 4, 12, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0);
+    } else if (opacity >= 0) {
+      const auto glass = D2D1::ColorF(0, 0, 1, 0.5f);
+      renderer.d2d_context->Clear(&glass);
+      result = wox_renderer_begin_opacity(&renderer, 0, 8, 96, 80, opacity, 0);
+      if (SUCCEEDED(result)) {
+        wox_renderer_fill_rounded_rect(&renderer, 0, 8, 64, 40, 0, 255, 0, 0, 255);
+        wox_renderer_fill_rounded_rect(&renderer, 32, 8, 64, 40, 0, 0, 255, 0, 255);
+        result = wox_renderer_begin_opacity(&renderer, 0, 60, 96, 20, 0.5f, 0);
+        if (SUCCEEDED(result)) {
+          wox_renderer_fill_rounded_rect(&renderer, 0, 60, 96, 20, 0, 255, 255, 255, 255);
+          result = wox_renderer_end_edge_fade(&renderer);
+        }
+        wox_renderer_end_edge_fade(&renderer);
+      }
+      wox_renderer_fill_rounded_rect(&renderer, 0, 90, 96, 6, 0, 255, 0, 0, 255);
     } else {
       const auto glass = D2D1::ColorF(0, 0, 1, 0.5f);
       renderer.d2d_context->Clear(&glass);
-      result = wox_renderer_begin_edge_fade(&renderer, 0, 8, 96, 80, top, bottom);
+      result = wox_renderer_begin_edge_fade(&renderer, 0, 8, 96, 80, top, bottom, 0);
       if (SUCCEEDED(result)) {
         wox_renderer_set_clip_rect(&renderer, 0, 8, 96, 80);
         wox_renderer_fill_rounded_rect(&renderer, 0, 8, 96, 80, 0, 255, 255, 255, 255);
@@ -1851,9 +2109,14 @@ static int32_t test_warp_bitmap(uint8_t *pixels, int32_t size, float scale, floa
 }
 
 extern "C" int32_t wox_renderer_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
-  return test_warp_bitmap(pixels, size, scale, top, bottom, false);
+  return test_warp_bitmap(pixels, size, scale, top, bottom, false, -1);
 }
 
 extern "C" int32_t wox_renderer_test_floating_material(uint8_t *pixels, int32_t size, float scale) {
-  return test_warp_bitmap(pixels, size, scale, 0, 0, true);
+  return test_warp_bitmap(pixels, size, scale, 0, 0, true, -1);
+}
+
+// Offscreen WARP exercises production group composition without opening a window.
+extern "C" int32_t wox_renderer_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity) {
+  return test_warp_bitmap(pixels, size, scale, 0, 0, false, opacity);
 }

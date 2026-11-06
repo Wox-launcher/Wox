@@ -9,9 +9,11 @@ import (
 )
 
 type windowRequestDriver struct {
-	emit func(plugin.WindowEvent)
-	stop sync.Once
-	data json.RawMessage
+	emit    func(plugin.WindowEvent)
+	stop    sync.Once
+	data    json.RawMessage
+	update  string
+	command plugin.WindowContentCommandOption
 }
 
 func (d *windowRequestDriver) Show(plugin.WindowShowOption) error { return nil }
@@ -22,6 +24,14 @@ func (d *windowRequestDriver) Close() error {
 }
 func (d *windowRequestDriver) SetOptions(plugin.WindowSetOptionsOption) error { return nil }
 func (d *windowRequestDriver) SetContent(plugin.WindowContent) error          { return nil }
+func (d *windowRequestDriver) UpdateContent(o plugin.WindowContentUpdateOption) error {
+	d.update = o.Data
+	return nil
+}
+func (d *windowRequestDriver) ContentCommand(o plugin.WindowContentCommandOption) error {
+	d.command = o
+	return nil
+}
 func (d *windowRequestDriver) PostMessage(o plugin.WindowMessageOption) error {
 	d.data = o.Data
 	return nil
@@ -32,7 +42,7 @@ func (d *windowRequestDriver) AcceptEvent(plugin.WindowEvent) bool { return true
 func TestWindowRequestRoundTrip(t *testing.T) {
 	host, responses, callbacks := newPluginRequestPeer(t)
 	var driver *windowRequestDriver
-	plugin.SetWindowFactory(func(_ string, _ plugin.CreateWindowOption, emit func(plugin.WindowEvent)) (plugin.WindowDriver, error) {
+	plugin.SetWindowFactory(func(_ string, _ plugin.CreateWindowOption, emit func(plugin.WindowEvent), _ func(string) string) (plugin.WindowDriver, error) {
 		driver = &windowRequestDriver{emit: emit}
 		emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: "doc"})
 		return driver, nil
@@ -57,7 +67,30 @@ func TestWindowRequestRoundTrip(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("missing ready callback")
 	}
+	driver.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: "doc", Data: json.RawMessage(`{"Handler":"click","Args":[true]}`)})
+	select {
+	case event := <-callbacks:
+		var payload plugin.WindowEvent
+		if err := json.Unmarshal([]byte(event.Params["Event"]), &payload); err != nil || payload.Type != plugin.WindowEventWoxView || string(payload.Data) != `{"Handler":"click","Args":[true]}` {
+			t.Fatalf("woxview event: %+v, %v", event, err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing woxview callback")
+	}
 	other := &plugin.Instance{}
+	for _, dark := range []bool{false, true} {
+		data, _ := json.Marshal(plugin.WindowThemeChangedData{Dark: dark})
+		driver.emit(plugin.WindowEvent{Type: plugin.WindowEventThemeChanged, DocumentID: "doc", Data: data})
+		select {
+		case event := <-callbacks:
+			var payload plugin.WindowEvent
+			if err := json.Unmarshal([]byte(event.Params["Event"]), &payload); err != nil || payload.Type != plugin.WindowEventThemeChanged || payload.DocumentID != "doc" || string(payload.Data) != string(data) || event.Params["CallbackID"] != "callback" {
+				t.Fatalf("theme callback: %+v, %v", event, err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("missing theme callback")
+		}
+	}
 	other.API = plugin.NewAPI(other)
 	operation := JsonRpcRequest{Id: "message", Method: "WindowPostMessage", Params: map[string]string{"windowID": created.WindowID, "option": `{"Data":{"snake_case":false}}`}}
 	host.respondToPluginRequest(t.Context(), operation, other)
@@ -73,8 +106,25 @@ func TestWindowRequestRoundTrip(t *testing.T) {
 	if allowed.Error != "" || string(driver.data) != `{"snake_case":false}` {
 		t.Fatalf("message response: %+v, data: %s", allowed, driver.data)
 	}
-	for _, method := range []string{"WindowShow", "WindowHide", "WindowSetOptions", "WindowContentSet", "WindowClose", "WindowClose"} {
-		request = JsonRpcRequest{Id: method, Method: method, Params: map[string]string{"windowID": created.WindowID, "option": "{}"}}
+	command := JsonRpcRequest{Id: "command-denied", Method: "WindowContentCommand", Params: map[string]string{"windowID": created.WindowID, "option": `{"DocumentID":"doc","Command":"selectAll","Key":"title"}`}}
+	host.respondToPluginRequest(t.Context(), command, other)
+	denied = receivePluginResponse(t, responses, command)
+	raw, _ = json.Marshal(denied.Result)
+	_ = json.Unmarshal(raw, &result)
+	if result.Success || driver.command.Key != "" {
+		t.Fatal("foreign plugin executed a command")
+	}
+	host.respondToPluginRequest(t.Context(), command, instance)
+	allowed = receivePluginResponse(t, responses, command)
+	if allowed.Error != "" || driver.command != (plugin.WindowContentCommandOption{DocumentID: "doc", Command: plugin.WindowContentCommandSelectAll, Key: "title"}) {
+		t.Fatalf("command route: %+v, %+v", allowed, driver.command)
+	}
+	for _, method := range []string{"WindowShow", "WindowHide", "WindowSetOptions", "WindowContentSet", "WindowContentUpdate", "WindowClose", "WindowClose"} {
+		option := "{}"
+		if method == "WindowContentUpdate" {
+			option = `{"Data":"{\"version\":1}"}`
+		}
+		request = JsonRpcRequest{Id: method, Method: method, Params: map[string]string{"windowID": created.WindowID, "option": option}}
 		host.respondToPluginRequest(t.Context(), request, instance)
 		response = receivePluginResponse(t, responses, request)
 		raw, _ = json.Marshal(response.Result)
@@ -82,6 +132,9 @@ func TestWindowRequestRoundTrip(t *testing.T) {
 		if response.Error != "" || !result.Success {
 			t.Fatalf("%s: %+v", method, response)
 		}
+	}
+	if driver.update != `{"version":1}` {
+		t.Fatalf("update data = %q", driver.update)
 	}
 	for {
 		select {

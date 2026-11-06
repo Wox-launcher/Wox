@@ -20,8 +20,10 @@ const (
 
 // AnimatedFloat retains a keyed numeric value and rebuilds its child while the value changes.
 type AnimatedFloat struct {
-	Key      Key
-	Target   float32
+	Key    Key
+	Target float32
+	// Initial is used only when this key first mounts; nil starts at Target.
+	Initial  *float32
 	Duration time.Duration
 	Curve    AnimationCurve
 	Builder  func(float32) Widget
@@ -30,7 +32,7 @@ type AnimatedFloat struct {
 func (w AnimatedFloat) layout(ctx context, available constraints) *node {
 	value := w.Target
 	if w.Key != "" && w.Duration > 0 {
-		value = ctx.animation.value(w.Key, w.Target, w.Duration, w.Curve)
+		value = ctx.animation.valueFrom(w.Key, w.Target, w.Duration, w.Curve, w.Initial)
 		if ctx.dynamic != nil {
 			ctx.dynamic.animations = append(ctx.dynamic.animations, animationDependency{key: w.Key, kind: animationDependencyFloat, value: value})
 		}
@@ -74,7 +76,13 @@ func (w LoopAnimation) layout(ctx context, available constraints) *node {
 	if child == nil {
 		return &node{}
 	}
-	return child.layout(ctx, available)
+	result := child.layout(ctx, available)
+	if w.Key != "" && w.Duration > 0 && !w.Paused && ctx.damage != nil {
+		// Uncached loops also own a local repaint region, including transformed
+		// overflow; they must not request a full-window repaint on every tick.
+		ctx.damage.add(woxui.Rect{}, result, true)
+	}
+	return result
 }
 
 // FrameAnimation rebuilds its child only when the current GIF-style frame index changes.
@@ -110,10 +118,15 @@ type animationFrame struct {
 }
 
 func (f animationFrame) value(key Key, target float32, duration time.Duration, curve AnimationCurve) float32 {
+	return f.valueFrom(key, target, duration, curve, nil)
+}
+
+// valueFrom optionally starts a new timeline away from its target.
+func (f animationFrame) valueFrom(key Key, target float32, duration time.Duration, curve AnimationCurve, initial *float32) float32 {
 	if f.host == nil {
 		return target
 	}
-	return f.host.value(f, key, target, duration, curve)
+	return f.host.valueFrom(f, key, target, duration, curve, initial)
 }
 
 func (f animationFrame) loopValue(key Key, duration time.Duration, paused bool) float32 {
@@ -195,6 +208,7 @@ type animationFrameScheduler interface {
 
 type animationHost struct {
 	mu           sync.Mutex
+	clock        func() time.Time
 	values       map[Key]*floatAnimation
 	loops        map[Key]*loopAnimation
 	generation   uint64
@@ -258,11 +272,21 @@ func (h *animationHost) beginFrame() animationFrame {
 	h.generation++
 	h.active = false
 	h.vsyncPending = false
-	return animationFrame{host: h, generation: h.generation, now: time.Now()}
+	now := time.Now()
+	if h.clock != nil {
+		now = h.clock()
+	}
+	return animationFrame{host: h, generation: h.generation, now: now}
 }
 
 // value preserves continuity when an in-flight animation receives a new target.
 func (h *animationHost) value(frame animationFrame, key Key, target float32, duration time.Duration, curve AnimationCurve) float32 {
+	return h.valueFrom(frame, key, target, duration, curve, nil)
+}
+
+// valueFrom preserves existing targets across rebuilds; Initial applies only to
+// a newly mounted key, never to retargeting or updates of the Initial prop itself.
+func (h *animationHost) valueFrom(frame animationFrame, key Key, target float32, duration time.Duration, curve AnimationCurve, initial *float32) float32 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.values == nil {
@@ -271,6 +295,9 @@ func (h *animationHost) value(frame animationFrame, key Key, target float32, dur
 	animation := h.values[key]
 	if animation == nil {
 		animation = &floatAnimation{start: target, target: target, startedAt: frame.now, duration: duration, curve: curve}
+		if initial != nil {
+			animation.start = *initial
+		}
 		h.values[key] = animation
 	}
 	current := animation.valueAt(frame.now)
@@ -384,7 +411,7 @@ func (h *animationHost) endFrame(frame animationFrame, invalidate func(), vsync 
 			delete(h.loops, key)
 		}
 	}
-	if !h.active {
+	if !h.active || h.clock != nil {
 		if h.timer != nil {
 			h.timer.Stop()
 			h.timer = nil
@@ -437,4 +464,15 @@ func (h *animationHost) reset() {
 	h.values = nil
 	h.loops = nil
 	h.active = false
+}
+
+// SetAnimationClock switches to caller-driven frames using one timestamp per frame.
+// A non-nil clock disables timer/vsync scheduling; callers advance time and call
+// Frame themselves. Changing clocks discards timelines. Nil restores real time.
+// Like Frame, this method must be called on the host's UI thread.
+func (h *Host) SetAnimationClock(clock func() time.Time) {
+	h.animations.reset()
+	h.animations.mu.Lock()
+	h.animations.clock = clock
+	h.animations.mu.Unlock()
 }

@@ -177,6 +177,17 @@ typedef struct {
   bool full;
 } WoxDarwinDamageRecord;
 
+// Materials need readable pending pixels. These groups retain a bounded before image in physical target coordinates.
+typedef struct WoxDarwinComposite {
+  struct WoxDarwinComposite *parent;
+  bool readable;
+  CGRect bounds;
+  CGAffineTransform transform;
+  CGFloat opacity;
+  size_t left, top, width, height;
+  uint8_t *before;
+} WoxDarwinComposite;
+
 struct WoxDarwinRenderer {
   CALayer *layer;
   CALayer *content_layer;
@@ -196,10 +207,76 @@ struct WoxDarwinRenderer {
   WoxDarwinDamageRecord damage_history[64];
   bool frame_open;
   bool clip_active;
-  CGRect clip_rect;
+  CGPathRef clip_path;
+  CGAffineTransform paint_transform;
+  bool transform_initialized;
+  bool transform_active;
+  WoxDarwinComposite *composite;
   bool damage_clip_active;
   bool diagnostic_recovery_pending;
 };
+
+static void end_darwin_composite(WoxDarwinRenderer *renderer, CGFloat top, CGFloat bottom);
+
+static CGAffineTransform darwin_paint_transform(WoxDarwinRenderer *renderer) {
+  return renderer->transform_initialized ? renderer->paint_transform : CGAffineTransformIdentity;
+}
+
+// Never concatenate a singular matrix into CoreGraphics; collapsed commands paint no pixels.
+static bool darwin_transform_drawable(WoxDarwinRenderer *renderer) {
+  CGAffineTransform t = darwin_paint_transform(renderer);
+  return t.a * t.d - t.b * t.c != 0;
+}
+
+// The paint state stays at the top of the stack so clips/layers can change without inverting a matrix.
+static void suspend_darwin_transform(WoxDarwinRenderer *renderer) {
+  if (renderer->transform_active) {
+    CGContextRestoreGState(renderer->context);
+    renderer->transform_active = false;
+  }
+}
+
+static void resume_darwin_transform(WoxDarwinRenderer *renderer) {
+  CGAffineTransform transform = darwin_paint_transform(renderer);
+  if (!CGAffineTransformIsIdentity(transform) && darwin_transform_drawable(renderer)) {
+    CGContextSaveGState(renderer->context);
+    CGContextConcatCTM(renderer->context, transform);
+    renderer->transform_active = true;
+  }
+}
+
+// Remove the portable clip beneath the paint state, preserving the requested command matrix.
+static void clear_darwin_clip(WoxDarwinRenderer *renderer) {
+  suspend_darwin_transform(renderer);
+  if (renderer->clip_active) {
+    CGContextRestoreGState(renderer->context);
+    renderer->clip_active = false;
+  }
+  if (renderer->clip_path != NULL) {
+    CGPathRelease(renderer->clip_path);
+    renderer->clip_path = NULL;
+  }
+  resume_darwin_transform(renderer);
+}
+
+// Exact clips are in target logical space, independent of a later child's matrix.
+static void set_darwin_clip_path(WoxDarwinRenderer *renderer, CGPathRef path) {
+  clear_darwin_clip(renderer);
+  suspend_darwin_transform(renderer);
+  CGContextSaveGState(renderer->context);
+  CGContextAddPath(renderer->context, path);
+  CGContextClip(renderer->context);
+  renderer->clip_path = CGPathRetain(path);
+  renderer->clip_active = true;
+  resume_darwin_transform(renderer);
+}
+
+// Encoding failure can leave composite groups open; unwind before releasing the frame context.
+static void unwind_darwin_drawing_state(WoxDarwinRenderer *renderer) {
+  clear_darwin_clip(renderer);
+  suspend_darwin_transform(renderer);
+  while (renderer->composite != NULL) end_darwin_composite(renderer, 0, 0);
+}
 
 static NSInteger wox_open_window_count = 0;
 static NSInteger wox_unpinned_application_window_count = 0;
@@ -1095,9 +1172,7 @@ static void destroy_renderer(WoxDarwinRenderer *renderer) {
     return;
   }
   if (renderer->frame_open) {
-    if (renderer->clip_active) {
-      CGContextRestoreGState(renderer->context);
-    }
+    unwind_darwin_drawing_state(renderer);
     if (renderer->damage_clip_active) {
       CGContextRestoreGState(renderer->context);
     }
@@ -4252,6 +4327,9 @@ static int32_t begin_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRen
   renderer->frame_requested_full = requested_full;
   renderer->frame_open = true;
   renderer->clip_active = false;
+  renderer->transform_initialized = false;
+  renderer->transform_active = false;
+  renderer->composite = NULL;
   renderer->damage_clip_active = !effective_full;
   return 0;
 }
@@ -4314,6 +4392,7 @@ int32_t wox_darwin_window_fill_rounded_rect(WoxDarwinWindow *window, float x, fl
   }
 
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   CGFloat clamped_radius = fmaxf(0.0f, fminf(radius, fminf(width, height) / 2.0f));
   CGPathRef path = CGPathCreateWithRoundedRect(CGRectMake(x, y, width, height), clamped_radius, clamped_radius, NULL);
   CGContextSetRGBFillColor(renderer->context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
@@ -4332,6 +4411,7 @@ int32_t wox_darwin_window_fill_convex_polygon(WoxDarwinWindow *window, const flo
   }
 
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   CGContextBeginPath(renderer->context);
   CGContextMoveToPoint(renderer->context, points[0], points[1]);
   for (int32_t index = 1; index < point_count; index++) {
@@ -4377,6 +4457,7 @@ int32_t wox_darwin_window_stroke_rounded_rect(WoxDarwinWindow *window, float x, 
   }
 
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   CGFloat inset = stroke_width / 2.0f;
   if (width <= stroke_width || height <= stroke_width) {
     return 0;
@@ -4398,12 +4479,13 @@ int32_t wox_darwin_window_floating_material(WoxDarwinWindow *window, float x, fl
     return -1;
   }
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   if (width <= 0.0f || height <= 0.0f) {
     return 0;
   }
   if (!window->embedded_surface_overlay_active && (blur_sigma > 0.0f || brightness != 1.0f || saturation != 1.0f)) {
     // A failed blur leaves the backdrop intact; the authored tint still paints.
-    wox_darwin_blur_material(renderer->context, renderer->scale, CGRectMake(x, y, width, height), radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
+    wox_darwin_blur_material(renderer->context, renderer->scale, darwin_paint_transform(renderer), CGRectMake(x, y, width, height), radius, blur_sigma, blur_margin, brightness, saturation, tint_red, tint_green, tint_blue);
   }
   if (window->embedded_surface_overlay_active && tint_alpha != 0) {
     tint_alpha = 255;
@@ -4422,6 +4504,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
     return -1;
   }
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   if (text[0] == '\0' || width <= 0.0f || height <= 0.0f || font_size <= 0.0f || !isfinite(width) || !isfinite(height) || !isfinite(font_size)) {
     return 0;
   }
@@ -4462,6 +4545,7 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
     return -1;
   }
   WoxDarwinRenderer *renderer = window->active_renderer;
+  if (!darwin_transform_drawable(renderer)) return 0;
   uint64_t image_bytes = (uint64_t)row_stride * (uint64_t)image_height;
   bool large_image = image_bytes > wox_cached_image_max_entry_bytes;
   CGImageRef image = NULL;
@@ -4506,6 +4590,34 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
   return 0;
 }
 
+// Keep the display scale and native y-axis conversion in the base state; only local geometry is transformed.
+int32_t wox_darwin_window_set_transform(WoxDarwinWindow *window, float a, float b, float c, float d, float tx, float ty) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) return -1;
+  if (!isfinite(a) || !isfinite(b) || !isfinite(c) || !isfinite(d) || !isfinite(tx) || !isfinite(ty)) return -1;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  suspend_darwin_transform(renderer);
+  renderer->paint_transform = CGAffineTransformMake(a, b, c, d, tx, ty);
+  renderer->transform_initialized = true;
+  resume_darwin_transform(renderer);
+  return 0;
+}
+
+// Paths retain rotated clip silhouettes rather than their axis-aligned envelopes.
+int32_t wox_darwin_window_set_clip_polygon(WoxDarwinWindow *window, const float *points, int32_t point_count) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || points == NULL || point_count < 3) return -1;
+  for (int32_t i = 0; i < point_count; i++) {
+    if (!isfinite(points[i * 2]) || !isfinite(points[i * 2 + 1])) return -1;
+  }
+  CGMutablePathRef path = CGPathCreateMutable();
+  if (path == NULL) return -1;
+  CGPathMoveToPoint(path, NULL, points[0], points[1]);
+  for (int32_t i = 1; i < point_count; i++) CGPathAddLineToPoint(path, NULL, points[i * 2], points[i * 2 + 1]);
+  CGPathCloseSubpath(path);
+  set_darwin_clip_path(window->active_renderer, path);
+  CGPathRelease(path);
+  return 0;
+}
+
 int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float y, float width, float height) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) {
     return -1;
@@ -4521,13 +4633,10 @@ int32_t wox_darwin_window_set_clip_rect(WoxDarwinWindow *window, float x, float 
   top = floorf(top * renderer->scale) / renderer->scale;
   right = ceilf(right * renderer->scale) / renderer->scale;
   bottom = ceilf(bottom * renderer->scale) / renderer->scale;
-  if (renderer->clip_active) {
-    CGContextRestoreGState(renderer->context);
-  }
-  CGContextSaveGState(renderer->context);
-  CGContextClipToRect(renderer->context, CGRectMake(left, top, right - left, bottom - top));
-  renderer->clip_active = true;
-  renderer->clip_rect = CGRectMake(left, top, right - left, bottom - top);
+  CGPathRef path = CGPathCreateWithRect(CGRectMake(left, top, right - left, bottom - top), NULL);
+  if (path == NULL) return -1;
+  set_darwin_clip_path(renderer, path);
+  CGPathRelease(path);
   return 0;
 }
 
@@ -4536,10 +4645,7 @@ int32_t wox_darwin_window_clear_clip(WoxDarwinWindow *window) {
     return -1;
   }
   WoxDarwinRenderer *renderer = window->active_renderer;
-  if (renderer->clip_active) {
-    CGContextRestoreGState(renderer->context);
-    renderer->clip_active = false;
-  }
+  clear_darwin_clip(renderer);
   return 0;
 }
 
@@ -4547,10 +4653,7 @@ static int32_t finish_darwin_renderer_frame(WoxDarwinWindow *window, WoxDarwinRe
   if (window == NULL || renderer == NULL || !renderer->frame_open) {
     return -1;
   }
-  if (renderer->clip_active) {
-    CGContextRestoreGState(renderer->context);
-    renderer->clip_active = false;
-  }
+  unwind_darwin_drawing_state(renderer);
   if (renderer->damage_clip_active) {
     CGContextRestoreGState(renderer->context);
     renderer->damage_clip_active = false;
@@ -4590,24 +4693,27 @@ int32_t wox_darwin_window_begin_embedded_surface_overlay(WoxDarwinWindow *window
     return -1;
   }
   WoxDarwinRenderer *background = window->renderer;
-  bool restore_clip = background->clip_active;
-  CGRect clip_rect = background->clip_rect;
+  CGPathRef clip_path = background->clip_path != NULL ? CGPathRetain(background->clip_path) : NULL;
+  CGAffineTransform transform = darwin_paint_transform(background);
   CGSize viewport = background->viewport_size;
   float scale = background->scale;
   int32_t result = finish_darwin_renderer_frame(window, background, 0);
   if (result != 0) {
+    if (clip_path != NULL) CGPathRelease(clip_path);
     return result;
   }
   result = begin_darwin_renderer_frame(window, window->overlay_renderer, background->frame_id, viewport.width, viewport.height, scale, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0);
   if (result != 0) {
+    if (clip_path != NULL) CGPathRelease(clip_path);
     return result;
   }
   window->active_renderer = window->overlay_renderer;
   window->embedded_surface_overlay_active = true;
-  if (restore_clip) {
-    return wox_darwin_window_set_clip_rect(window, clip_rect.origin.x, clip_rect.origin.y, clip_rect.size.width, clip_rect.size.height);
+  if (clip_path != NULL) {
+    set_darwin_clip_path(window->active_renderer, clip_path);
+    CGPathRelease(clip_path);
   }
-  return 0;
+  return wox_darwin_window_set_transform(window, transform.a, transform.b, transform.c, transform.d, transform.tx, transform.ty);
 }
 
 int32_t wox_darwin_window_end_frame(WoxDarwinWindow *window, int32_t transactional) {
@@ -4635,6 +4741,97 @@ int32_t wox_darwin_window_take_frame_resource_stats(WoxDarwinWindow *window, Wox
   *out = window->frame_resource_stats;
   out->resident_bytes = (int64_t)(window->cached_image_bytes + window->cached_large_image_bytes);
   return 0;
+}
+
+// Bitmap fixtures use the production encoder without an NSWindow, IOSurface or presentation queue.
+int32_t wox_darwin_test_create_target(int32_t width, int32_t height, WoxDarwinWindow **out) {
+  if (out == NULL || width <= 0 || height <= 0) return -1;
+  *out = NULL;
+  WoxDarwinWindow *window = calloc(1, sizeof(*window));
+  WoxDarwinRenderer *renderer = calloc(1, sizeof(*renderer));
+  if (window == NULL || renderer == NULL) {
+    free(window);
+    free(renderer);
+    return -1;
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  renderer->context = CGBitmapContextCreate(NULL, width, height, 8, (size_t)width * 4, space, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+  CGColorSpaceRelease(space);
+  if (renderer->context == NULL) {
+    free(window);
+    free(renderer);
+    return -1;
+  }
+  window->active_renderer = renderer;
+  *out = window;
+  return 0;
+}
+
+// Reuse one physical target while rebuilding its logical frame state for display-scale changes.
+int32_t wox_darwin_test_begin_frame(WoxDarwinWindow *window, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  if (window == NULL || window->active_renderer == NULL || !isfinite(scale) || scale <= 0) return -1;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (renderer->frame_open) return -1;
+  CGContextRef context = renderer->context;
+  size_t width = CGBitmapContextGetWidth(context), height = CGBitmapContextGetHeight(context);
+  CGContextSaveGState(context);
+  CGContextTranslateCTM(context, 0, height);
+  CGContextScaleCTM(context, scale, -scale);
+  renderer->scale = scale;
+  renderer->viewport_size = CGSizeMake(width / scale, height / scale);
+  renderer->transform_initialized = false;
+  renderer->transform_active = false;
+  renderer->frame_open = true;
+  renderer->damage_clip_active = damage_width > 0 && damage_height > 0;
+  if (renderer->damage_clip_active) {
+    CGContextSaveGState(context);
+    CGRect device = CGRectIntegral(CGContextConvertRectToDeviceSpace(context, CGRectMake(damage_x, damage_y, damage_width, damage_height)));
+    CGContextClipToRect(context, CGContextConvertRectToUserSpace(context, device));
+  }
+  CGContextSetBlendMode(context, kCGBlendModeCopy);
+  CGContextSetRGBFillColor(context, red / 255.0, green / 255.0, blue / 255.0, alpha / 255.0);
+  CGContextFillRect(context, CGRectMake(0, 0, width / scale, height / scale));
+  CGContextSetBlendMode(context, kCGBlendModeNormal);
+  CGContextSetShouldAntialias(context, true);
+  CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+  return 0;
+}
+
+// Unwind failed encodes too, then return premultiplied RGBA in top-down physical rows.
+int32_t wox_darwin_test_end_frame(WoxDarwinWindow *window, uint8_t *pixels, size_t length) {
+  if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open) return -1;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  unwind_darwin_drawing_state(renderer);
+  if (renderer->damage_clip_active) CGContextRestoreGState(renderer->context);
+  renderer->damage_clip_active = false;
+  CGContextRestoreGState(renderer->context);
+  CGContextFlush(renderer->context);
+  renderer->frame_open = false;
+  size_t width = CGBitmapContextGetWidth(renderer->context), height = CGBitmapContextGetHeight(renderer->context);
+  size_t stride = CGBitmapContextGetBytesPerRow(renderer->context);
+  const uint8_t *source = CGBitmapContextGetData(renderer->context);
+  if (pixels == NULL || length != width * height * 4) return -1;
+  for (size_t y = 0; y < height; y++) {
+    for (size_t x = 0; x < width; x++) {
+      const uint8_t *src = source + y * stride + x * 4;
+      uint8_t *dst = pixels + (y * width + x) * 4;
+      dst[0] = src[2]; dst[1] = src[1]; dst[2] = src[0]; dst[3] = src[3];
+    }
+  }
+  return 0;
+}
+
+// Fixture teardown owns only a bitmap renderer and its image caches, never application windows.
+void wox_darwin_test_destroy_target(WoxDarwinWindow *window) {
+  if (window == NULL) return;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (renderer != NULL) {
+    if (renderer->frame_open) unwind_darwin_drawing_state(renderer);
+    CGContextRelease(renderer->context);
+    free(renderer);
+  }
+  clear_cached_images(window);
+  free(window);
 }
 
 // wox_darwin_test_large_image_admission proves the single large-image slot is bound to one
@@ -4804,35 +5001,147 @@ int32_t wox_darwin_test_render_material(uint8_t *pixels, int32_t size, float sca
   return 0;
 }
 
-// Isolate only the scroll content; destination-in must never erase window material.
-int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height) {
+// Keep composite scopes in target space so independently transformed children do not inherit their parent's matrix.
+static int32_t begin_darwin_composite(WoxDarwinWindow *window, float x, float y, float width, float height, float opacity, bool backdrop) {
   if (wox_darwin_window_clear_clip(window) != 0) return -1;
-  CGContextRef context = window->active_renderer->context;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  CGAffineTransform transform = darwin_paint_transform(renderer);
+  CGRect bounds = CGRectMake(x, y, width, height);
+  CGPathRef path = CGPathCreateWithRect(bounds, &transform);
+  if (path == NULL) return -1;
+  WoxDarwinComposite *group = calloc(1, sizeof(*group));
+  if (group == NULL || (backdrop && renderer->composite != NULL && !renderer->composite->readable)) {
+    free(group);
+    CGPathRelease(path);
+    return -1;
+  }
+  group->readable = backdrop;
+  group->bounds = bounds;
+  group->transform = transform;
+  group->opacity = opacity;
+  if (backdrop) {
+    // Capture only the transformed physical envelope; the native clip still controls every child draw.
+    CGRect target = CGRectApplyAffineTransform(bounds, transform);
+    size_t target_width = CGBitmapContextGetWidth(renderer->context), target_height = CGBitmapContextGetHeight(renderer->context);
+    group->left = fmin(target_width, fmax(0, floor(CGRectGetMinX(target) * renderer->scale)));
+    group->top = fmin(target_height, fmax(0, floor(CGRectGetMinY(target) * renderer->scale)));
+    size_t right = fmin(target_width, fmax(group->left, ceil(CGRectGetMaxX(target) * renderer->scale)));
+    size_t bottom = fmin(target_height, fmax(group->top, ceil(CGRectGetMaxY(target) * renderer->scale)));
+    group->width = right - group->left;
+    group->height = bottom - group->top;
+    if (group->width > 0 && group->height > 0) {
+      group->before = malloc(group->width * group->height * 4);
+      if (group->before == NULL) {
+        free(group);
+        CGPathRelease(path);
+        return -1;
+      }
+      CGContextFlush(renderer->context);
+      const uint8_t *pixels = CGBitmapContextGetData(renderer->context);
+      size_t stride = CGBitmapContextGetBytesPerRow(renderer->context);
+      for (size_t row = 0; row < group->height; row++) {
+        memcpy(group->before + row * group->width * 4, pixels + (group->top + row) * stride + group->left * 4, group->width * 4);
+      }
+    }
+  }
+  suspend_darwin_transform(renderer);
+  CGContextRef context = renderer->context;
   CGContextSaveGState(context);
-  CGContextClipToRect(context, CGRectMake(x, y, width, height));
-  CGContextBeginTransparencyLayerWithRect(context, CGRectMake(x, y, width, height), NULL);
+  CGContextAddPath(context, path);
+  CGContextClip(context);
+  CGPathRelease(path);
+  if (!backdrop) {
+    CGContextSetAlpha(context, opacity);
+    CGContextBeginTransparencyLayerWithRect(context, CGRectApplyAffineTransform(bounds, transform), NULL);
+  }
+  group->parent = renderer->composite;
+  renderer->composite = group;
+  resume_darwin_transform(renderer);
+  return 0;
+}
+
+// Isolate only the scroll content; destination-in must never erase window material.
+int32_t wox_darwin_window_begin_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, int32_t backdrop) {
+  return begin_darwin_composite(window, x, y, width, height, 1, backdrop != 0);
+}
+
+// CoreGraphics applies the saved alpha to the completed group, not each child.
+int32_t wox_darwin_window_begin_opacity(WoxDarwinWindow *window, float x, float y, float width, float height, float opacity, int32_t backdrop) {
+  return begin_darwin_composite(window, x, y, width, height, opacity, backdrop != 0);
+}
+
+// The readable path interpolates premultiplied before/after pixels so material alpha is never added twice.
+// Its children have already respected the native clip; unchanged pixels outside that clip stay byte-identical.
+static void end_darwin_composite(WoxDarwinRenderer *renderer, CGFloat top, CGFloat bottom) {
+  WoxDarwinComposite *group = renderer->composite;
+  CGContextRef context = renderer->context;
+  if (group->readable) {
+    CGContextFlush(context);
+    uint8_t *pixels = CGBitmapContextGetData(context);
+    size_t stride = CGBitmapContextGetBytesPerRow(context);
+    bool drawable = group->transform.a * group->transform.d - group->transform.b * group->transform.c != 0;
+    CGAffineTransform inverse = drawable ? CGAffineTransformInvert(group->transform) : CGAffineTransformIdentity;
+    for (size_t row = 0; row < group->height; row++) {
+      for (size_t column = 0; column < group->width; column++) {
+        CGFloat alpha = drawable ? group->opacity : 0;
+        if (top > 0 || bottom > 0) {
+          CGPoint local = CGPointApplyAffineTransform(CGPointMake((group->left + column + 0.5) / renderer->scale, (group->top + row + 0.5) / renderer->scale), inverse);
+          CGFloat fade = 1;
+          if (top > 0) fade = fmin(fade, (local.y - CGRectGetMinY(group->bounds)) / top);
+          if (bottom > 0) fade = fmin(fade, (CGRectGetMaxY(group->bounds) - local.y) / bottom);
+          alpha *= fmax(0, fmin(1, fade));
+        }
+        uint8_t *after = pixels + (group->top + row) * stride + (group->left + column) * 4;
+        const uint8_t *before = group->before + (row * group->width + column) * 4;
+        for (int channel = 0; channel < 4; channel++) after[channel] = before[channel] + lround((after[channel] - before[channel]) * alpha);
+      }
+    }
+  } else {
+    if ((top > 0 || bottom > 0) && group->bounds.size.height > 0 && group->transform.a * group->transform.d - group->transform.b * group->transform.c != 0) {
+      CGFloat locations[] = {0, top / group->bounds.size.height, 1 - bottom / group->bounds.size.height, 1};
+      CGFloat colors[] = {1, top > 0 ? 0 : 1, 1, 1, 1, 1, 1, bottom > 0 ? 0 : 1};
+      CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+      CGGradientRef gradient = CGGradientCreateWithColorComponents(space, colors, locations, 4);
+      CGContextSaveGState(context);
+      CGContextConcatCTM(context, group->transform);
+      CGContextSetBlendMode(context, kCGBlendModeDestinationIn);
+      CGContextDrawLinearGradient(context, gradient, CGPointMake(CGRectGetMinX(group->bounds), CGRectGetMinY(group->bounds)), CGPointMake(CGRectGetMinX(group->bounds), CGRectGetMaxY(group->bounds)), 0);
+      CGContextRestoreGState(context);
+      CGGradientRelease(gradient);
+      CGColorSpaceRelease(space);
+    }
+    CGContextEndTransparencyLayer(context);
+  }
+  CGContextRestoreGState(context);
+  renderer->composite = group->parent;
+  free(group->before);
+  free(group);
+}
+
+// Composite with the saved group alpha, then restore the enclosing drawing state.
+int32_t wox_darwin_window_end_opacity(WoxDarwinWindow *window) {
+  if (wox_darwin_window_clear_clip(window) != 0) return -1;
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (renderer->composite == NULL) return -1;
+  suspend_darwin_transform(renderer);
+  end_darwin_composite(renderer, 0, 0);
+  resume_darwin_transform(renderer);
   return 0;
 }
 
 // Apply a logical-coordinate alpha ramp so backing scale and glass tint stay independent.
 int32_t wox_darwin_window_end_edge_fade(WoxDarwinWindow *window, float x, float y, float width, float height, float top, float bottom) {
   if (wox_darwin_window_clear_clip(window) != 0) return -1;
-  CGContextRef context = window->active_renderer->context;
-  CGFloat locations[] = {0, top / height, 1 - bottom / height, 1};
-  CGFloat colors[] = {1, top > 0 ? 0 : 1, 1, 1, 1, 1, 1, bottom > 0 ? 0 : 1};
-  CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
-  CGGradientRef gradient = CGGradientCreateWithColorComponents(space, colors, locations, 4);
-  CGContextSetBlendMode(context, kCGBlendModeDestinationIn);
-  CGContextDrawLinearGradient(context, gradient, CGPointMake(x, y), CGPointMake(x, y + height), 0);
-  CGGradientRelease(gradient);
-  CGColorSpaceRelease(space);
-  CGContextEndTransparencyLayer(context);
-  CGContextRestoreGState(context);
+  WoxDarwinRenderer *renderer = window->active_renderer;
+  if (renderer->composite == NULL || height <= 0) return -1;
+  suspend_darwin_transform(renderer);
+  end_darwin_composite(renderer, top, bottom);
+  resume_darwin_transform(renderer);
   return 0;
 }
 
 // Exercise the production mask over translucent pixels without opening a window.
-int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+static int32_t test_darwin_composite(uint8_t *pixels, int32_t size, float scale, float top, float bottom, float opacity) {
   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
   CGContextRef context = CGBitmapContextCreate(pixels, size, size, 8, size * 4, space, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
   CGColorSpaceRelease(space);
@@ -4842,14 +5151,32 @@ int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, fl
   WoxDarwinRenderer renderer = {.context = context, .scale = scale, .viewport_size = CGSizeMake(96, 96), .frame_open = true};
   WoxDarwinWindow window = {.active_renderer = &renderer};
   wox_darwin_window_fill_rounded_rect(&window, 0, 0, 96, 96, 0, 0, 0, 255, 128);
-  wox_darwin_window_begin_edge_fade(&window, 0, 8, 96, 80);
-  wox_darwin_window_set_clip_rect(&window, 0, 8, 96, 80);
-  wox_darwin_window_fill_rounded_rect(&window, 0, 8, 96, 80, 0, 255, 255, 255, 255);
-  wox_darwin_window_end_edge_fade(&window, 0, 8, 96, 80, top, bottom);
+  if (opacity >= 0) {
+    wox_darwin_window_begin_opacity(&window, 0, 8, 96, 80, opacity, 0);
+    wox_darwin_window_fill_rounded_rect(&window, 0, 8, 64, 40, 0, 255, 0, 0, 255);
+    wox_darwin_window_fill_rounded_rect(&window, 32, 8, 64, 40, 0, 0, 255, 0, 255);
+    wox_darwin_window_begin_opacity(&window, 0, 60, 96, 20, 0.5f, 0);
+    wox_darwin_window_fill_rounded_rect(&window, 0, 60, 96, 20, 0, 255, 255, 255, 255);
+    wox_darwin_window_end_opacity(&window);
+    wox_darwin_window_end_opacity(&window);
+  } else {
+    wox_darwin_window_begin_edge_fade(&window, 0, 8, 96, 80, 0);
+    wox_darwin_window_set_clip_rect(&window, 0, 8, 96, 80);
+    wox_darwin_window_fill_rounded_rect(&window, 0, 8, 96, 80, 0, 255, 255, 255, 255);
+    wox_darwin_window_end_edge_fade(&window, 0, 8, 96, 80, top, bottom);
+  }
   wox_darwin_window_fill_rounded_rect(&window, 0, 90, 96, 6, 0, 255, 0, 0, 255);
   CGContextFlush(context);
   CGContextRelease(context);
   return 0;
+}
+
+int32_t wox_darwin_test_edge_fade(uint8_t *pixels, int32_t size, float scale, float top, float bottom) {
+  return test_darwin_composite(pixels, size, scale, top, bottom, -1);
+}
+
+int32_t wox_darwin_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity) {
+  return test_darwin_composite(pixels, size, scale, 0, 0, opacity);
 }
 
 void wox_darwin_dispatch_sync(dispatch_block_t block) {

@@ -142,8 +142,8 @@ func GetUIManager() *Manager {
 		managerInstance.themeReloadTimers = util.NewHashMap[string, *time.Timer]()
 		managerInstance.themeWatchIgnored = util.NewHashMap[string, int64]()
 		logger = util.GetLogger()
-		plugin.SetWindowFactory(func(id string, option plugin.CreateWindowOption, emit func(plugin.WindowEvent)) (plugin.WindowDriver, error) {
-			return pluginwindow.CreateWithWorkArea(id, option, emit, pluginWindowWorkArea)
+		plugin.SetWindowFactory(func(id string, option plugin.CreateWindowOption, emit func(plugin.WindowEvent), translate func(string) string) (plugin.WindowDriver, error) {
+			return pluginwindow.CreateWithWorkArea(id, option, emit, pluginWindowWorkArea, translate)
 		})
 		plugin.SetHotkeyBindingApplier(managerInstance.hotkeyService.ApplyPluginBindings)
 		plugin.GetPluginManager().SetResultBindingApplier(managerInstance.applyResultBindings)

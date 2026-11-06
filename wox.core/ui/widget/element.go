@@ -120,6 +120,14 @@ func (c StateContext) HostFrameSize() woxui.Size {
 	return c.element.tree.host.FrameSize()
 }
 
+// HostBoundsForKey returns current window-local logical bounds after layout.
+func (c StateContext) HostBoundsForKey(key Key) (woxui.Rect, bool) {
+	if !c.Mounted() || c.element.tree == nil || c.element.tree.host == nil {
+		return woxui.Rect{}, false
+	}
+	return c.element.tree.host.BoundsForKey(key)
+}
+
 // RequestFocus asks the owning Host to focus a laid-out descendant by stable key.
 func (c StateContext) RequestFocus(key Key) bool {
 	return c.Mounted() && c.element.tree != nil && c.element.tree.host != nil && c.element.tree.host.RequestFocus(key)

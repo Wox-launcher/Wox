@@ -35,14 +35,18 @@ type ScrollViewProps struct {
 	ContentWidth   float32
 	ContentHeight  float32
 	// Horizontal scrolls along X and places the shared fading thumb along the bottom.
-	Horizontal          bool
-	Offset              float32
-	Controller          *woxwidget.ScrollController
-	KeepVisible         *woxwidget.ScrollRange
-	KeepVisibleKey      woxwidget.Key
-	ThumbColor          woxui.Color
-	HideScrollbar       bool
-	AlwaysShowScrollbar bool
+	Horizontal bool
+	// PreserveVerticalWheel lets a nested horizontal surface pass ordinary wheel
+	// movement to its vertical ancestor instead of mapping it onto the X axis.
+	PreserveVerticalWheel bool
+	StickToEnd            bool
+	Offset                float32
+	Controller            *woxwidget.ScrollController
+	KeepVisible           *woxwidget.ScrollRange
+	KeepVisibleKey        woxwidget.Key
+	ThumbColor            woxui.Color
+	HideScrollbar         bool
+	AlwaysShowScrollbar   bool
 	// RetainState keeps the content subtree stable when overflow changes.
 	RetainState bool
 	// ReserveScrollbarSpace keeps vertical content clear of the thumb and its
@@ -132,7 +136,7 @@ func (s *scrollViewState) InitState(_ woxwidget.StateContext, widget any) {
 func (s *scrollViewState) DidUpdateWidget(context woxwidget.StateContext, oldWidget, newWidget any) {
 	oldProps := oldWidget.(ScrollViewProps)
 	newProps := newWidget.(ScrollViewProps)
-	if newProps.Height != oldProps.Height || newProps.ContentHeight != oldProps.ContentHeight || newProps.Width != oldProps.Width || newProps.ContentWidth != oldProps.ContentWidth {
+	if newProps.Horizontal != oldProps.Horizontal || newProps.Height != oldProps.Height || newProps.ContentHeight != oldProps.ContentHeight || newProps.Width != oldProps.Width || newProps.ContentWidth != oldProps.ContentWidth {
 		s.hasGeometry = false
 	}
 	if newProps.HideScrollbar {
@@ -242,10 +246,9 @@ func buildWoxScrollView(context woxwidget.StateContext, props ScrollViewProps, s
 	}
 	scroll := woxwidget.ScrollView{
 		EdgeFade: props.EdgeFade,
-		// A Wox strip is never nested inside another scroller, so a horizontal
-		// surface always consumes the ordinary mouse wheel.
-		Width: props.ContentViewportWidth(), Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal,
-		Offset: offset, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey, Child: props.Content,
+		Width:    props.ContentViewportWidth(), Height: props.Height, Horizontal: props.Horizontal, MapVerticalWheel: props.Horizontal && !props.PreserveVerticalWheel,
+		StickToEnd: props.StickToEnd,
+		Offset:     offset, KeepVisible: props.KeepVisible, KeepVisibleKey: props.KeepVisibleKey, Child: props.Content,
 	}
 	if props.Horizontal {
 		scroll.ContentWidth = contentHint
@@ -450,6 +453,9 @@ func woxScrollWheelDelta(props ScrollViewProps, delta woxui.Point) float32 {
 	}
 	if delta.X != 0 {
 		return -delta.X
+	}
+	if props.PreserveVerticalWheel {
+		return 0
 	}
 	return -delta.Y
 }

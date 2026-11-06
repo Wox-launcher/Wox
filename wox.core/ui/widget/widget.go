@@ -137,8 +137,13 @@ type node struct {
 	parent              *node
 	bounds              woxui.Rect
 	paint               func(*woxui.DisplayList, woxui.Rect)
+	capturePaint        func(*woxui.PaintSnapshot)
+	snapshotScope       bool
+	snapshotPaint       func()
 	gesture             *gesture
 	focus               *focusBehavior
+	onFocusWithin       func(bool)
+	shortcuts           *shortcutBehavior
 	scope               *focusScopeBehavior
 	semantic            *semanticBehavior
 	scroll              *scrollBehavior
@@ -148,6 +153,13 @@ type node struct {
 	caretPaint          func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	fadeTop, fadeBottom float32
 	clip                bool
+	opacity             *float32
+	transform           *woxui.AffineTransform
+	paintMatrix         woxui.AffineTransform
+	paintTransformed    bool
+	paintOutsets        Insets
+	paintBounds         woxui.Rect
+	hasPaintOverflow    bool
 	children            []*node
 	boundary            *boundaryCache
 	viewport            *viewportQuery
@@ -237,14 +249,18 @@ type Container struct {
 	Material          *woxui.FloatingMaterialStyle
 	BorderColor       woxui.Color
 	BorderWidth       float32
+	TopBorderColor    woxui.Color
+	TopBorderWidth    float32
 	LeftBorderColor   woxui.Color
 	LeftBorderWidth   float32
 	RightBorderColor  woxui.Color
 	RightBorderWidth  float32
 	BottomBorderColor woxui.Color
 	BottomBorderWidth float32
-	Radius            float32
-	Child             Widget
+	// EdgeBordersOnTop keeps side borders visible when the child paints opaque chrome.
+	EdgeBordersOnTop bool
+	Radius           float32
+	Child            Widget
 }
 
 // Align positions one child inside a fixed box using normalized axis factors.
@@ -367,46 +383,22 @@ func (w Container) layout(ctx context, available constraints) *node {
 	if w.Floating {
 		result.floating = true
 		result.materialMargin = 3 * w.Material.Resolved().Sigma
-		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			// Native material edges are always one unit; paint custom widths separately.
-			edge := w.BorderColor
-			if w.BorderWidth != 1 {
-				edge = woxui.Color{}
-			}
-			// A transparent image-framed panel supplies its own silhouette; a rectangular
-			// material behind it would fill the transparent parts outside the frame.
-			if w.Color.A != 0 || w.Surface == nil || w.Surface.Frame == nil {
-				displayList.FloatingMaterial(bounds, w.Radius, w.Color, edge, w.Material)
-			}
-			w.Surface.Paint(displayList, bounds, w.Radius)
-			if w.BorderWidth > 0 && w.BorderWidth != 1 && w.BorderColor.A != 0 {
-				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
-			}
-			paintContainerEdgeBorders(displayList, bounds, w)
-		}
+		result.paint = w.PaintBackground
 	} else if w.Color.A != 0 || (w.BorderColor.A != 0 && w.BorderWidth > 0) || containerHasEdgeBorder(w) || w.Surface != nil {
-		result.paint = func(displayList *woxui.DisplayList, bounds woxui.Rect) {
-			if w.Color.A != 0 {
-				displayList.FillRoundedRect(bounds, w.Radius, w.Color)
-			}
-			w.Surface.Paint(displayList, bounds, w.Radius)
-			if w.BorderColor.A != 0 && w.BorderWidth > 0 {
-				displayList.StrokeRoundedRect(bounds, w.Radius, w.BorderWidth, w.BorderColor)
-			}
-			paintContainerEdgeBorders(displayList, bounds, w)
-		}
+		result.paint = w.PaintBackground
 	}
 	if child != nil {
 		result.children = []*node{child}
 	}
-	if w.Surface != nil && w.Surface.InnerShadow != nil {
-		result.children = append(result.children, &node{bounds: result.bounds, paint: w.Surface.PaintOverlay})
+	if w.Surface != nil && w.Surface.InnerShadow != nil || w.EdgeBordersOnTop && containerHasEdgeBorder(w) {
+		result.children = append(result.children, &node{bounds: result.bounds, paint: w.PaintForeground})
 	}
 	return result
 }
 
 func containerHasEdgeBorder(w Container) bool {
-	return (w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0) ||
+	return (w.TopBorderColor.A != 0 && w.TopBorderWidth > 0) ||
+		(w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0) ||
 		(w.RightBorderColor.A != 0 && w.RightBorderWidth > 0) ||
 		(w.BottomBorderColor.A != 0 && w.BottomBorderWidth > 0)
 }
@@ -424,21 +416,25 @@ func paintContainerEdgeBorders(displayList *woxui.DisplayList, bounds woxui.Rect
 		displayList.FillRoundedRect(bounds, w.Radius, color)
 		displayList.PopClipRect()
 	}
-	bottom := float32(0)
+	top, bottom := float32(0), float32(0)
+	if w.TopBorderColor.A != 0 && w.TopBorderWidth > 0 {
+		top = min(w.TopBorderWidth, bounds.Height)
+		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: bounds.Width, Height: top}, w.TopBorderColor)
+	}
 	if w.BottomBorderColor.A != 0 && w.BottomBorderWidth > 0 {
-		bottom = min(w.BottomBorderWidth, bounds.Height)
+		bottom = min(w.BottomBorderWidth, bounds.Height-top)
 		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y + bounds.Height - bottom, Width: bounds.Width, Height: bottom}, w.BottomBorderColor)
 	}
-	innerHeight := max(float32(0), bounds.Height-bottom)
+	innerHeight := max(float32(0), bounds.Height-top-bottom)
 	if innerHeight <= 0 {
 		return
 	}
 	if w.LeftBorderColor.A != 0 && w.LeftBorderWidth > 0 {
-		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y, Width: min(w.LeftBorderWidth, bounds.Width), Height: innerHeight}, w.LeftBorderColor)
+		paintEdge(woxui.Rect{X: bounds.X, Y: bounds.Y + top, Width: min(w.LeftBorderWidth, bounds.Width), Height: innerHeight}, w.LeftBorderColor)
 	}
 	if w.RightBorderColor.A != 0 && w.RightBorderWidth > 0 {
 		width := min(w.RightBorderWidth, bounds.Width)
-		paintEdge(woxui.Rect{X: bounds.X + bounds.Width - width, Y: bounds.Y, Width: width, Height: innerHeight}, w.RightBorderColor)
+		paintEdge(woxui.Rect{X: bounds.X + bounds.Width - width, Y: bounds.Y + top, Width: width, Height: innerHeight}, w.RightBorderColor)
 	}
 }
 
@@ -477,6 +473,20 @@ type Flex struct {
 	MainAxisAlignment  MainAxisAlignment
 	CrossAxisAlignment CrossAxisAlignment
 	Children           []Widget
+}
+
+// AlignSelf overrides the containing Flex's cross-axis alignment for one item.
+// It can wrap or be wrapped by Expanded/Flexible and is transparent outside Flex.
+type AlignSelf struct {
+	Alignment CrossAxisAlignment
+	Child     Widget
+}
+
+func (w AlignSelf) layout(ctx context, available constraints) *node {
+	if w.Child == nil {
+		return &node{}
+	}
+	return w.Child.layout(ctx, available)
 }
 
 // Expanded gives its child a weighted share of the remaining Flex main-axis extent.
@@ -546,7 +556,10 @@ type ScrollView struct {
 	// MapVerticalWheel lets a standalone horizontal strip consume an ordinary
 	// mouse wheel. Nested strips must leave this unset so vertical wheels still
 	// reach the outer list instead of sliding the inner content sideways.
-	MapVerticalWheel  bool
+	MapVerticalWheel bool
+	// StickToEnd starts at the trailing edge and follows geometry changes while
+	// the user remains there. Scrolling away suspends following until they return.
+	StickToEnd        bool
 	Offset            float32
 	InitialOffset     float32
 	Controller        *ScrollController
@@ -564,10 +577,22 @@ type ScrollView struct {
 type Clip struct {
 	Width  float32
 	Height float32
-	Child  Widget
+	// SizeToChild clips to the child's constrained layout bounds without imposing
+	// a new viewport size. Width/Height are ignored in this mode.
+	SizeToChild bool
+	Child       Widget
 }
 
 func (w Clip) layout(ctx context, available constraints) *node {
+	if w.SizeToChild {
+		result := &node{clip: true}
+		if w.Child != nil {
+			child := available.constrainNode(w.Child.layout(ctx, available))
+			result.bounds.Width, result.bounds.Height = child.bounds.Width, child.bounds.Height
+			result.children = []*node{child}
+		}
+		return available.constrainNode(result)
+	}
 	width := available.constrainWidth(min(w.Width, available.width))
 	height := available.constrainHeight(min(w.Height, available.height))
 	result := &node{bounds: woxui.Rect{Width: width, Height: height}, clip: true}
@@ -777,7 +802,7 @@ func (w Flex) layout(ctx context, available constraints) *node {
 	if !enhanced {
 		for _, child := range w.Children {
 			switch child.(type) {
-			case Expanded, Flexible:
+			case Expanded, Flexible, AlignSelf:
 				enhanced = true
 			}
 			if enhanced {
@@ -794,6 +819,7 @@ func (w Flex) layout(ctx context, available constraints) *node {
 		flex   float32
 		flexed bool
 		tight  bool
+		align  CrossAxisAlignment
 		node   *node
 	}
 
@@ -803,17 +829,21 @@ func (w Flex) layout(ctx context, available constraints) *node {
 		if childWidget == nil {
 			continue
 		}
-		child := flexChild{widget: childWidget}
-		if expanded, ok := childWidget.(Expanded); ok {
-			child.widget = expanded.Child
-			child.flex = expanded.Flex
-			child.flexed = true
-			child.tight = true
-		}
-		if flexible, ok := childWidget.(Flexible); ok {
-			child.widget = flexible.Child
-			child.flex = flexible.Flex
-			child.flexed = true
+		child := flexChild{widget: childWidget, align: w.CrossAxisAlignment}
+		// Layout metadata stays outside the actual widget, preserving its identity
+		// and avoiding an extra alignment box that would hide intrinsic dimensions.
+	unwrap:
+		for {
+			switch item := child.widget.(type) {
+			case AlignSelf:
+				child.align, child.widget = item.Alignment, item.Child
+			case Expanded:
+				child.flex, child.flexed, child.tight, child.widget = item.Flex, true, true, item.Child
+			case Flexible:
+				child.flex, child.flexed, child.tight, child.widget = item.Flex, true, false, item.Child
+			default:
+				break unwrap
+			}
 		}
 		if child.flexed {
 			if child.flex <= 0 {
@@ -844,7 +874,7 @@ func (w Flex) layout(ctx context, available constraints) *node {
 			continue
 		}
 		childAvailable := available.loose()
-		if w.CrossAxisAlignment == CrossAxisStretch {
+		if children[index].align == CrossAxisStretch {
 			if w.Axis == Horizontal && available.height < math.MaxFloat32 {
 				childAvailable = childAvailable.tightHeight(available.height)
 			} else if w.Axis == Vertical && available.width < math.MaxFloat32 {
@@ -872,7 +902,7 @@ func (w Flex) layout(ctx context, available constraints) *node {
 				childAvailable = childAvailable.tightHeight(share)
 			}
 		}
-		if w.CrossAxisAlignment == CrossAxisStretch {
+		if children[index].align == CrossAxisStretch {
 			if w.Axis == Horizontal && available.height < math.MaxFloat32 {
 				childAvailable = childAvailable.tightHeight(available.height)
 			} else if w.Axis == Vertical && available.width < math.MaxFloat32 {
@@ -925,7 +955,7 @@ func (w Flex) layout(ctx context, available constraints) *node {
 
 	cursor := startOffset
 	for _, child := range children {
-		crossX, crossY := flexChildOffset(child.node, w.Axis, crossExtent, w.CrossAxisAlignment)
+		crossX, crossY := flexChildOffset(child.node, w.Axis, crossExtent, child.align)
 		child.node.place(crossX, crossY)
 		if w.Axis == Horizontal {
 			child.node.place(cursor, 0)
@@ -1580,6 +1610,7 @@ type gesture struct {
 	onHover            func(bool)
 	onHoverAt          func(bool, woxui.Rect)
 	coverHover         bool
+	observeDescendants bool
 	onPressChange      func(bool)
 	onTap              func()
 	onSecondaryTapDown func(position woxui.Point)
@@ -1594,6 +1625,7 @@ type gesture struct {
 	onPanEnd           func()
 	onScroll           func(woxui.Point)
 	onPointer          func(woxui.PointerEvent) bool
+	onPointerObserve   func(woxui.PointerEvent)
 	// onScrollHandled reports whether this gesture consumed the delta so an
 	// ancestor scroll view can continue at nested-scroll boundaries.
 	onScrollHandled func(woxui.Point) bool
@@ -1620,6 +1652,10 @@ type Gesture struct {
 	// surface can reveal its thumb after motion instead of appearing under a
 	// popup that just opened beneath the cursor.
 	CoverHover bool
+	// ObserveDescendants also receives primary press state, double and secondary taps
+	// handled by descendants, without replacing their normal activation. Observed
+	// presses cancel on pointer leave, window blur, drag handoff, or target removal.
+	ObserveDescendants bool
 	// OnPressChange reports primary-button press and release without changing tap activation.
 	OnPressChange func(pressed bool)
 	OnTap         func()
@@ -1637,6 +1673,11 @@ type Gesture struct {
 	OnScroll           func(delta woxui.Point)
 	// OnPointer handles the complete pointer stream in local coordinates.
 	OnPointer func(event woxui.PointerEvent) bool
+	// OnPointerObserve reports hit-tested events in local logical coordinates,
+	// including events consumed by descendants. It cannot consume input or capture
+	// the pointer. Layout refresh reports PointerMove at the stationary pointer;
+	// combine CoverHover and OnPressChange for subtree exit and press cancellation.
+	OnPointerObserve func(event woxui.PointerEvent)
 	// OnScrollHandled returns false to pass an unconsumed delta to the nearest
 	// ancestor scroll gesture.
 	OnScrollHandled func(delta woxui.Point) bool
@@ -1665,10 +1706,11 @@ func (w Gesture) layout(ctx context, available constraints) *node {
 	}
 	target.kind = "gesture"
 	target.gesture = &gesture{
-		id: w.ID, cursor: w.Cursor, cursorAt: w.CursorAt, onHover: w.OnHover, onHoverAt: w.OnHoverAt, coverHover: w.CoverHover, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
+		observeDescendants: w.ObserveDescendants,
+		id:                 w.ID, cursor: w.Cursor, cursorAt: w.CursorAt, onHover: w.OnHover, onHoverAt: w.OnHoverAt, coverHover: w.CoverHover, onPressChange: w.OnPressChange, onTap: w.OnTap, onSecondaryTapDown: w.OnSecondaryTapDown, onDoubleTap: w.OnDoubleTap,
 		onDoubleTapAt: w.OnDoubleTapAt, onTripleTapAt: w.OnTripleTapAt, onTapAt: w.OnTapAt,
 		onTapBounds: w.OnTapBounds, onDragStart: w.OnDragStart, onPanStart: w.OnPanStart, onPanUpdate: w.OnPanUpdate, onPanEnd: w.OnPanEnd,
-		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer,
+		onScroll: w.OnScroll, onScrollHandled: w.OnScrollHandled, onPointer: w.OnPointer, onPointerObserve: w.OnPointerObserve,
 		onSelectionStart: w.OnSelectionStart, onSelectionExtend: w.OnSelectionExtend, onSelectionEnd: w.OnSelectionEnd,
 	}
 	return target

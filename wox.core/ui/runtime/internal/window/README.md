@@ -1,5 +1,108 @@
 # Native window backend
 
+Drawing-transform work is in progress. Internal display commands, the software
+reference renderer and the Windows/Linux encoders support affine geometry and exact convex clipping; scene/DPI
+conversion composes onto the matrix without also scaling local text/image geometry.
+The reference path covers rotated clips, opacity groups, local-direction edge fades,
+retained damage, and singular/nonfinite maps. Transformed scenes conservatively
+disable caret backdrop patches. `DisplayList.PushTransform` / `PopTransform`
+compose local logical maps inside their parents. Clip rectangles are captured
+in target coordinates at push time and intersect as exact convex polygons;
+later transforms cannot move an established clip. `ClipRect` returns a conservative
+envelope in current drawing coordinates for text culling. Damage and material
+metadata use target envelopes; scene/DPI conversion also maps material bounds.
+The recording API, `widget.Transform`, and WoxView style mapping are implemented;
+macOS native compilation and execution remain an outstanding verification gate.
+
+`BeginSnapshotScope` anchors portable paint captures in logical coordinates and
+separates live outer groups from frozen internal groups. `BeginSnapshot` /
+`EndSnapshot` retain a balanced subtree's commands, clips, ancestor opacity/fades,
+and immutable images. Recording culls are suspended during capture so a partial
+frame cannot overwrite a complete snapshot with missing paint. Native damage
+scissors remain active. Captures exclude native embedded surfaces and freeze
+the visible caret phase; they retain no widget state or input callbacks.
+`DrawSnapshot` rebases the commands into the current scope and drawing transform,
+intersects frozen clips with the current parent clip, restores clip state, and
+re-registers backdrop-material damage metadata. Backdrop materials retain their
+recorded style and sample the replay backdrop through the ordinary renderer.
+`DrawSnapshots` replays ordered fragments under their shared captured ancestor
+groups once; distinct sibling groups retain separate identities even when their
+opacity and bounds match. `BeginSnapshotRegion` retains only a clipped portion
+of shared paint without changing live rendering. Its boundary uses the renderer's
+normal clip antialiasing, so callers should omit it when retaining all that paint.
+Snapshot storage and lifetime belong to the caller; `RetainedBytes` supplies a
+conservative command/image estimate for caller budgets. Shared renderers keep
+their existing image/resource cache ownership.
+
+Windows image edges snap only when axis aligned, in physical target coordinates.
+Rotated/skewed geometry stays unsnapped. This preserves equivalent image draws
+when geometry is rebased into a snapshot or moved into a drawing transform.
+
+Windows applies each command's logical matrix before the display scale. Convex
+clip paths remain in target logical coordinates and have no small vertex limit.
+Floating materials sample the transformed physical envelope and replace pixels
+through the exact rounded mask. Sampling temporarily flushes and restores the
+current clip so it includes earlier clipped content.
+
+Groups containing backdrop materials use readable bitmap targets; ordinary
+groups continue to use native D2D layers. Readable groups retain the background
+and interpolate premultiplied before/after pixels, including alpha, through the
+opacity/fade mask. This avoids both missing pending layer content and applying
+the backdrop alpha twice. Their targets are reusable after EndDraw, with a
+16 MiB retained pool released on resize, trim, cache clearing and destruction.
+The pool is included in renderer resident-byte accounting.
+
+`transform_native_test.go` and its Windows adapter replay the production Go encoder and frame lifecycle
+on an offscreen WARP bitmap without a window. It covers rotated clips, group
+alpha, edge fades, actual text/image drawing, material replacement and nested
+backdrops, retained damage, display-scale changes, invalid-frame recovery,
+singular matrices, clip replacement, and bounded resource reuse/clearing.
+
+The macOS source now keeps each command's matrix in a separate top graphics state.
+Clip and composite scopes stay in target logical coordinates, so restoring them
+cannot restore a stale child's matrix. Singular maps skip drawing without
+concatenating a singular CoreGraphics CTM. Exact clip paths survive overlay
+handoff, and frame teardown unwinds clips, transforms and unfinished groups.
+Floating-material sampling uses the transformed physical envelope. Groups that
+contain materials draw into the readable bitmap context and interpolate captured
+before/after premultiplied pixels over that envelope; ordinary groups retain
+CoreGraphics transparency layers. Snapshot storage is released at group exit.
+
+The macOS bitmap adapter reuses `encodeDarwinCommands` with the same shared
+transform/backdrop pixel cases as Windows. This implementation still requires
+compilation and execution on macOS; Windows/WSL test results do not validate its
+Objective-C/CoreGraphics path. Scheduled native-backend tests now include macOS
+and Windows, and PR compilation includes the backend test package.
+
+Linux applies command matrices in its shape and texture vertex shaders. Target-space
+convex clips and transformed composite bounds contribute inward half-planes in a GL
+texture buffer, with scissor retaining the coarse damage bound. The GL buffer limit
+is checked explicitly; the polygon-fill primitive's small vertex limit does not apply
+to clips. Group entry retains its own matrix so child paints cannot alter its bounds
+or fade direction. Material snapshots cover the transformed physical envelope and
+sample in target axes through the exact local rounded mask. Clip resources and group
+snapshots are included in resident-byte accounting and released with renderer caches.
+
+The Linux adapter runs the shared transform/backdrop suite through `encodeLinuxCommands`
+on an unmapped GTK/GL target. It releases the current context between calls so test
+subtests can change OS threads. Only this fixture enables blur on CPU GL rasterizers;
+production retains its software-renderer fallback policy. Run with
+`GDK_BACKEND=x11 xvfb-run -a go test ./ui/runtime/internal/window` from `wox.core`.
+This verifies native GL pixels without launching Wox or exercising desktop policies.
+
+Display-list opacity isolates a complete painted group. Windows uses a D2D
+layer, macOS uses a CoreGraphics transparency layer, and Linux interpolates
+premultiplied before/after framebuffer snapshots using the shared composite
+shader. Group boundaries restore enclosing clips; opacity is dimensionless and
+does not scale with scene coordinates. Composite layers disable standalone caret
+backdrop patches because the caret belongs to the completed group.
+
+`opacity_test.go` checks reference pixels and damage-scoped replay. Native
+`opacity_*_test.go` fixtures check opaque overlap, nested groups, glass alpha,
+and following drawing at 1x/1.25x/1.5x/2x. Windows uses offscreen WARP and macOS
+uses a bitmap context; neither opens a window. Linux uses an unmapped GTK/GL
+fixture and skips when no display is available.
+
 This package owns the event loop, native window lifetime, focus and visibility
 transitions, display-coordinate conversion, rendering pipeline and native child
 surfaces. Window methods use the owning GUI thread for native work. Native

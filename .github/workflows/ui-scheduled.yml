@@ -41,7 +41,13 @@ jobs:
         run: make test-go-ui-unit
       - name: Test Linux window backend
         working-directory: wox.core
-        run: xvfb-run -a go test ./ui/runtime/internal/window
+        run: GDK_BACKEND=x11 xvfb-run -a go test ./ui/runtime/internal/window
+      - name: Test WoxView and plugin window contracts
+        working-directory: wox.core
+        run: >-
+          GDK_BACKEND=x11 xvfb-run -a go test
+          ./ui/woxview ./ui/pluginwindow ./plugin ./plugin/host
+          ./ui/launcher/component ./ui/widget ./ui/runtime/internal/graphics -count=1
       - name: Test Linux native dispatch
         run: python3 wox.core/ui/runtime/internal/window/testdata/test_linux_startup.py
 
@@ -116,6 +122,14 @@ jobs:
       - name: Build plugin hosts
         shell: bash
         run: make host
+      - name: Test native drawing and WoxView contracts
+        if: ${{ runner.os != 'Linux' }}
+        shell: bash
+        working-directory: wox.core
+        run: >-
+          go test ./ui/runtime/internal/window ./ui/runtime/internal/graphics
+          ./ui/widget ./ui/launcher/component ./ui/woxview ./ui/pluginwindow
+          ./plugin ./plugin/host -count=1
       - name: Run native smoke
         shell: bash
         env:

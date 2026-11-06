@@ -19,6 +19,7 @@ func settingsPalette() woxcomponent.ControlTheme {
 		background.A = 255
 	}
 	return woxcomponent.ControlTheme{
+		Dark: true, Hover: woxui.Color{R: 255, G: 255, B: 255, A: 20}, Disabled: woxui.Color{R: 168, G: 168, B: 179, A: 255}, Link: text, Overlay: background,
 		Background:  background,
 		Surface:     woxui.Color{R: 22, G: 22, B: 26, A: 88},
 		ControlText: text, BodyText: text, ChromeText: woxui.Color{R: 168, G: 168, B: 179, A: 255},

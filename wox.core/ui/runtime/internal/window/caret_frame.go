@@ -15,7 +15,7 @@ func (d *DisplayList) PrepareCaretPatch(previous *DisplayList, allowPatch bool) 
 		return nil
 	}
 	for index, command := range d.commands {
-		if command.kind == displayCommandBeginEmbeddedSurfaceOverlay || command.kind == displayCommandBeginEdgeFade {
+		if command.transformed || command.kind == displayCommandSetClipRect && len(command.points) > 0 || command.kind == displayCommandBeginEmbeddedSurfaceOverlay || command.kind == displayCommandBeginEdgeFade || command.kind == displayCommandBeginOpacity {
 			d.caretCapture = 0
 			return nil
 		}

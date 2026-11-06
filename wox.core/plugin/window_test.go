@@ -21,8 +21,40 @@ func (d *testWindowDriver) Close() error {
 }
 func (d *testWindowDriver) SetOptions(WindowSetOptionsOption) error { return nil }
 func (d *testWindowDriver) SetContent(WindowContent) error          { return nil }
-func (d *testWindowDriver) PostMessage(WindowMessageOption) error   { return nil }
-func (d *testWindowDriver) AcceptEvent(e WindowEvent) bool          { return e.DocumentID == "current" }
+func (d *testWindowDriver) UpdateContent(WindowContentUpdateOption) error {
+	return nil
+}
+func (d *testWindowDriver) ContentCommand(WindowContentCommandOption) error { return nil }
+func (d *testWindowDriver) PostMessage(WindowMessageOption) error           { return nil }
+func (d *testWindowDriver) AcceptEvent(e WindowEvent) bool                  { return e.DocumentID == "current" }
+
+// TestWindowTranslationUsesOwner verifies windows with identical keys keep separate plugin dictionaries.
+func TestWindowTranslationUsesOwner(t *testing.T) {
+	windowFactory.RLock()
+	previous := windowFactory.create
+	windowFactory.RUnlock()
+	t.Cleanup(func() { SetWindowFactory(previous) })
+	var translators []func(string) string
+	SetWindowFactory(func(_ string, _ CreateWindowOption, emit func(WindowEvent), translate func(string) string) (WindowDriver, error) {
+		translators = append(translators, translate)
+		return &testWindowDriver{emit: emit}, nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	for _, label := range []string{"First plugin", "Second plugin"} {
+		instance := &Instance{Metadata: Metadata{I18n: map[string]map[string]string{"en_US": {"window_label": label}}}}
+		api := NewAPI(instance).(*APIImpl)
+		t.Cleanup(api.closeWindows)
+		if result := api.CreateWindow(ctx, CreateWindowOption{}); !result.Success {
+			t.Fatal(result.ErrMsg)
+		}
+	}
+	cancel()
+	for index, expected := range []string{"First plugin", "Second plugin"} {
+		if actual := translators[index]("i18n:window_label"); actual != expected {
+			t.Fatalf("owner %d: got %q, want %q", index, actual, expected)
+		}
+	}
+}
 
 // TestWindowOwnershipAndRelease covers early ready events, stale documents and plugin teardown.
 func TestWindowOwnershipAndRelease(t *testing.T) {
@@ -31,7 +63,7 @@ func TestWindowOwnershipAndRelease(t *testing.T) {
 	windowFactory.RUnlock()
 	t.Cleanup(func() { SetWindowFactory(previous) })
 	var driver *testWindowDriver
-	SetWindowFactory(func(id string, option CreateWindowOption, emit func(WindowEvent)) (WindowDriver, error) {
+	SetWindowFactory(func(id string, option CreateWindowOption, emit func(WindowEvent), _ func(string) string) (WindowDriver, error) {
 		driver = &testWindowDriver{emit: emit}
 		emit(WindowEvent{Type: WindowEventMessage, DocumentID: "old"})
 		emit(WindowEvent{Type: WindowEventReady, DocumentID: "current"})
@@ -66,6 +98,9 @@ func TestWindowOwnershipAndRelease(t *testing.T) {
 	if result.Window.Show(t.Context(), WindowShowOption{}).Success {
 		t.Fatal("unloaded handle remained usable")
 	}
+	if result.Window.Content.Command(t.Context(), WindowContentCommandOption{Command: WindowContentCommandFocus, Key: "draft"}).Success {
+		t.Fatal("unloaded handle accepted content command")
+	}
 	if _, ok := api.PluginWindowByID(result.WindowID); ok {
 		t.Fatal("closed window retained")
 	}
@@ -92,7 +127,7 @@ func TestWindowCreationFailureAndEarlyClose(t *testing.T) {
 	t.Cleanup(func() { SetWindowFactory(previous) })
 	for _, fail := range []bool{false, true} {
 		released := make(chan struct{}, 1)
-		SetWindowFactory(func(_ string, _ CreateWindowOption, emit func(WindowEvent)) (WindowDriver, error) {
+		SetWindowFactory(func(_ string, _ CreateWindowOption, emit func(WindowEvent), _ func(string) string) (WindowDriver, error) {
 			if fail {
 				return nil, errors.New("native failure")
 			}
@@ -114,4 +149,47 @@ func TestWindowCreationFailureAndEarlyClose(t *testing.T) {
 			t.Fatal("creation leaked registry entry")
 		}
 	}
+}
+
+func TestWindowQueueOverflowReportsError(t *testing.T) {
+	windowFactory.RLock()
+	previous := windowFactory.create
+	windowFactory.RUnlock()
+	t.Cleanup(func() { SetWindowFactory(previous) })
+	var driver *testWindowDriver
+	SetWindowFactory(func(_ string, _ CreateWindowOption, emit func(WindowEvent), _ func(string) string) (WindowDriver, error) {
+		driver = &testWindowDriver{emit: emit}
+		return driver, nil
+	})
+	started, release, reported := make(chan struct{}), make(chan struct{}), make(chan WindowEvent, 1)
+	var once sync.Once
+	api := NewAPI(&Instance{}).(*APIImpl)
+	r := api.CreateWindow(t.Context(), CreateWindowOption{OnEvent: func(_ context.Context, e WindowEvent) {
+		if e.Type == WindowEventError {
+			select {
+			case reported <- e:
+			default:
+			}
+			return
+		}
+		once.Do(func() { close(started); <-release })
+	}})
+	if !r.Success {
+		t.Fatal(r.ErrMsg)
+	}
+	driver.emit(WindowEvent{Type: WindowEventWoxView, DocumentID: "current"})
+	<-started
+	for i := 0; i < 140; i++ {
+		driver.emit(WindowEvent{Type: WindowEventWoxView, DocumentID: "current"})
+	}
+	close(release)
+	select {
+	case e := <-reported:
+		if e.ErrMsg == "" || e.WindowID != r.WindowID {
+			t.Fatalf("overflow: %+v", e)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("overflow not reported")
+	}
+	_ = r.Window.Close(t.Context(), WindowCloseOption{})
 }

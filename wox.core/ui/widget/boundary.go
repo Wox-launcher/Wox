@@ -94,15 +94,17 @@ type boundaryCache struct {
 	identityReuses      uint64
 	// nestedOwners keeps descendant Boundary owners alive on a parent cache hit
 	// so sweepIdentities does not walk every cached identity entry.
-	nestedOwners  []*identityOwner
-	a11yValid     bool
-	a11yOrigin    woxui.Point
-	a11yRootID    woxui.AccessibilityNodeID
-	a11yNodes     []woxui.AccessibilityNode
-	a11yRootIDs   []woxui.AccessibilityNodeID
-	a11yReuses    uint64
-	globalBounds  woxui.Rect
-	identityOwner identityOwner
+	nestedOwners     []*identityOwner
+	a11yValid        bool
+	a11yOrigin       woxui.Point
+	a11yRootID       woxui.AccessibilityNodeID
+	a11yNodes        []woxui.AccessibilityNode
+	a11yRootIDs      []woxui.AccessibilityNodeID
+	a11yReuses       uint64
+	globalBounds     woxui.Rect
+	paintBounds      woxui.Rect
+	paintTransformed bool
+	identityOwner    identityOwner
 }
 
 type identityOwner struct {
@@ -152,7 +154,7 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if w.element != nil {
 		w.element.boundary = &state.cache
 	}
-	oldBounds := state.cache.globalBounds
+	oldBounds := state.cache.paintBounds
 	if oldBounds == (woxui.Rect{}) && state.node != nil {
 		oldBounds = state.node.bounds
 	}

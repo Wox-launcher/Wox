@@ -184,6 +184,7 @@ type scrollViewState struct {
 	internalController *ScrollController
 	attachment         *ScrollAttachment
 	keepVisiblePending bool
+	stickToEndPending  bool
 	hasGeometry        bool
 	viewport           float32
 	content            float32
@@ -194,6 +195,7 @@ func (s *scrollViewState) InitState(context StateContext, widget any) {
 	props := widget.(ScrollView)
 	s.updateBindings(context, props)
 	s.keepVisiblePending = props.KeepVisible != nil || props.KeepVisibleKey != ""
+	s.stickToEndPending = props.StickToEnd
 }
 
 // DidUpdateWidget rebinds an externally replaced controller without resetting its offset.
@@ -201,6 +203,9 @@ func (s *scrollViewState) DidUpdateWidget(context StateContext, oldWidget, newWi
 	oldProps := oldWidget.(ScrollView)
 	newProps := newWidget.(ScrollView)
 	s.updateBindings(context, newProps)
+	if newProps.StickToEnd && !oldProps.StickToEnd {
+		s.stickToEndPending = true
+	}
 	if !sameScrollRange(oldProps.KeepVisible, newProps.KeepVisible) || oldProps.KeepVisibleKey != newProps.KeepVisibleKey {
 		s.keepVisiblePending = newProps.KeepVisible != nil || newProps.KeepVisibleKey != ""
 	}
@@ -218,15 +223,24 @@ func (s *scrollViewState) Build(context StateContext, widget any) Widget {
 	primitive.InitialOffset = 0
 	primitive.OnOffsetChanged = nil
 	primitive.OnGeometryChanged = nil
+	primitive.StickToEnd = false
 	primitive.Offset = s.controller.Offset()
 	primitive.dynamicController = s.controller
 	primitive.onEnsureVisible = s.controller.EnsureVisible
 	primitive.onGeometry = func(viewport, content float32, measuredKeepVisible *ScrollRange) {
 		geometryChanged := !s.hasGeometry || s.viewport != viewport || s.content != content
+		// Decide against the previous range before setGeometry clamps the offset.
+		// Otherwise an append would make a reader at the old end appear detached.
+		wasAtEnd := !s.hasGeometry || s.controller.Offset() >= max(float32(0), s.content-s.viewport)-1
+		followEnd := props.StickToEnd && (s.stickToEndPending || (geometryChanged && wasAtEnd))
+		s.stickToEndPending = false
 		s.hasGeometry = true
 		s.viewport = viewport
 		s.content = content
 		s.controller.setGeometry(viewport, content)
+		if followEnd {
+			s.controller.JumpTo(max(float32(0), content-viewport))
+		}
 		keepVisible := props.KeepVisible
 		if props.KeepVisibleKey != "" {
 			keepVisible = measuredKeepVisible

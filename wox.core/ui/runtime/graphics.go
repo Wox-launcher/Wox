@@ -22,6 +22,14 @@ type Rect = graphics.Rect
 // Point describes a position or delta in logical pixels.
 type Point = graphics.Point
 
+// AffineTransform maps logical or physical coordinates without implicit DPI conversion.
+type AffineTransform = graphics.AffineTransform
+
+func IdentityTransform() AffineTransform                { return graphics.IdentityTransform() }
+func TranslationTransform(x, y float32) AffineTransform { return graphics.TranslationTransform(x, y) }
+func ScaleTransform(x, y float32) AffineTransform       { return graphics.ScaleTransform(x, y) }
+func RotationTransform(radians float32) AffineTransform { return graphics.RotationTransform(radians) }
+
 // Image stores immutable packed pixels ready for native GPU upload.
 type Image = graphics.Image
 

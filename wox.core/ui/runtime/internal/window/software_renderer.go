@@ -11,7 +11,11 @@ import (
 // It intentionally approximates platform text antialiasing while preserving command geometry,
 // clipping, alpha compositing, and partial-frame retention.
 type SoftwareRenderer struct {
-	pixels *stdimage.RGBA
+	pixels             *stdimage.RGBA
+	transform, inverse AffineTransform
+	transformed        bool
+	invertible         bool
+	clipPolygon        []Point
 }
 
 // NewSoftwareRenderer creates one persistent reference surface.
@@ -40,6 +44,9 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 	if displayList == nil {
 		return fmt.Errorf("display list is nil")
 	}
+	r.transform, r.inverse, r.invertible = IdentityTransform(), IdentityTransform(), true
+	r.clipPolygon = nil
+	r.transformed = false
 	surface := Rect{Width: float32(r.pixels.Bounds().Dx()), Height: float32(r.pixels.Bounds().Dy())}
 	damage := displayList.damage
 	if damage.Width <= 0 || damage.Height <= 0 {
@@ -52,11 +59,25 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 	var renderErr error
 	var fadeLayers []*stdimage.RGBA
 	displayList.forEachCommand(func(command displayCommand) bool {
+		r.transform, r.inverse, r.invertible = IdentityTransform(), IdentityTransform(), true
+		r.transformed = command.transformed && command.transform != IdentityTransform()
+		if command.transformed {
+			if !command.transform.Finite() {
+				renderErr = fmt.Errorf("nonfinite drawing transform")
+				return false
+			}
+			r.transform = command.transform
+			r.inverse, r.invertible = command.transform.Inverse()
+		}
 		switch command.kind {
-		case displayCommandBeginEdgeFade:
+		case displayCommandBeginEdgeFade, displayCommandBeginOpacity:
 			fadeLayers = append(fadeLayers, r.pixels)
 			r.pixels = stdimage.NewRGBA(r.pixels.Bounds())
-		case displayCommandEndEdgeFade:
+		case displayCommandEndEdgeFade, displayCommandEndOpacity:
+			if len(fadeLayers) == 0 {
+				renderErr = fmt.Errorf("unbalanced display-list composite layer")
+				return false
+			}
 			layer := r.pixels
 			r.pixels = fadeLayers[len(fadeLayers)-1]
 			fadeLayers = fadeLayers[:len(fadeLayers)-1]
@@ -69,13 +90,18 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 					alpha = min(alpha, (command.rect.Y+command.rect.Height-y)/command.stroke)
 				}
 				alpha = max(float32(0), alpha)
+				if command.kind == displayCommandEndOpacity {
+					alpha = command.opacity
+				}
 				r.blendPremultiplied(offset, byte(float32(layer.Pix[offset])*alpha), byte(float32(layer.Pix[offset+1])*alpha), byte(float32(layer.Pix[offset+2])*alpha), byte(float32(layer.Pix[offset+3])*alpha))
 			})
 		case displayCommandSetClipRect:
 			value := command.rect
 			clip = &value
+			r.clipPolygon = command.points
 		case displayCommandClearClip:
 			clip = nil
+			r.clipPolygon = nil
 		case displayCommandFillRoundedRect:
 			r.fillRoundedRect(command.rect, command.radius, command.color, damage, clip)
 		case displayCommandStrokeRoundedRect:
@@ -99,6 +125,12 @@ func (r *SoftwareRenderer) Render(displayList *DisplayList) error {
 		}
 		return true
 	})
+	if len(fadeLayers) > 0 {
+		r.pixels = fadeLayers[0]
+		if renderErr == nil {
+			renderErr = fmt.Errorf("unclosed display-list composite layer")
+		}
+	}
 	return renderErr
 }
 
@@ -186,6 +218,13 @@ func (r *SoftwareRenderer) drawImage(command displayCommand, damage Rect, clip *
 }
 
 func (r *SoftwareRenderer) forEachPixel(bounds, damage Rect, clip *Rect, visit func(x, y float32, offset int)) {
+	localBounds := bounds
+	if r.transformed {
+		if !r.invertible {
+			return
+		}
+		bounds = r.transform.Bounds(bounds)
+	}
 	bounds = intersectRects(bounds, damage)
 	if clip != nil {
 		bounds = intersectRects(bounds, *clip)
@@ -196,7 +235,18 @@ func (r *SoftwareRenderer) forEachPixel(bounds, damage Rect, clip *Rect, visit f
 	bottom := min(r.pixels.Bounds().Dy(), int(math.Ceil(float64(bounds.Y+bounds.Height))))
 	for y := top; y < bottom; y++ {
 		for x := left; x < right; x++ {
-			visit(float32(x)+0.5, float32(y)+0.5, y*r.pixels.Stride+x*4)
+			point := Point{X: float32(x) + 0.5, Y: float32(y) + 0.5}
+			if len(r.clipPolygon) > 0 && !pointInConvexPolygon(point.X, point.Y, r.clipPolygon) {
+				continue
+			}
+			local := point
+			if r.transformed {
+				local = r.inverse.Point(point)
+				if local.X < localBounds.X || local.Y < localBounds.Y || local.X >= localBounds.X+localBounds.Width || local.Y >= localBounds.Y+localBounds.Height {
+					continue
+				}
+			}
+			visit(local.X, local.Y, y*r.pixels.Stride+x*4)
 		}
 	}
 }

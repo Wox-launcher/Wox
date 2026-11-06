@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -18,6 +19,7 @@ type DropdownProps struct {
 	Foreground    woxui.Color
 	Secondary     woxui.Color
 	Theme         ControlTheme
+	Paint         *ControlPaint
 	Focused       bool
 	OnKey         func(woxui.KeyEvent) bool
 	OnFocusChange func(bool)
@@ -43,18 +45,31 @@ func WoxDropdown(props DropdownProps) woxwidget.Widget {
 	if label == "" {
 		label = props.Value
 	}
-	return woxwidget.Semantics{
+	semantics := woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: label, Value: props.Value,
 		Actions: actions, Disabled: disabled, Child: woxwidget.Focusable{
 			Key: key, Autofocus: props.Focused, Disabled: disabled, FocusRingColor: props.Theme.Focus, FocusRingRadius: 4,
 			OnKey: props.OnKey, OnFocusChange: props.OnFocusChange, Child: trigger,
 		},
 	}
+	if props.OnTap != nil && props.OnTapBounds == nil {
+		semantics.OnAction = func(action woxui.AccessibilityAction, _ string) error {
+			if action != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported dropdown action %q", action)
+			}
+			props.OnTap()
+			return nil
+		}
+	}
+	return semantics
 }
 
 func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
 	const horizontalPadding = float32(8)
 	const indicatorWidth = float32(24)
+	if props.Paint != nil && props.Paint.Foreground != nil {
+		props.Foreground = *props.Paint.Foreground
+	}
 	children := make([]woxwidget.Widget, 0, 6)
 	if props.Leading != nil {
 		children = append(children,
@@ -87,11 +102,26 @@ func woxDropdownTrigger(props DropdownProps, hovered bool, onHoverAt func(bool, 
 	if hovered {
 		background = controlHoverColor(background, props.Foreground)
 	}
-	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, OnHoverAt: onHoverAt, Child: woxwidget.Container{
-		Width: props.Width, Height: props.Height, Radius: 4, Color: background, BorderColor: outline, BorderWidth: 1,
+	radius, borderWidth := float32(4), float32(1)
+	if paint := props.Paint; paint != nil {
+		if paint.Background != nil {
+			background = *paint.Background
+		}
+		if paint.BorderColor != nil {
+			outline = *paint.BorderColor
+		}
+		if paint.BorderWidth != nil {
+			borderWidth = *paint.BorderWidth
+		}
+		if paint.Radius != nil {
+			radius = *paint.Radius
+		}
+	}
+	return woxwidget.Gesture{ID: props.ID, OnTap: props.OnTap, OnTapBounds: props.OnTapBounds, OnHoverAt: onHoverAt, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{
+		Width: props.Width, Height: props.Height, Radius: radius, Color: background, BorderColor: outline, BorderWidth: borderWidth,
 		Padding: woxwidget.Insets{Left: horizontalPadding, Right: horizontalPadding},
 		Child:   woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children},
-	}}
+	})}
 }
 
 // WoxDropdownIndicator builds the shared dropdown arrow without its trigger surface.

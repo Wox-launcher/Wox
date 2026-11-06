@@ -1,5 +1,20 @@
 Due to the GO's cyclic reference limitation, some common type definitions are defined in this package
 
+## Status colors
+
+`SuccessColor`, `WarningColor`, `WarningTextColor`, and `ErrorColor` are optional
+theme colors for custom/plugin surfaces in both schema versions. `WarningColor`
+is a badge/background fill, paired with the `WarningTextColor` foreground.
+Unspecified values use `Theme.StatusColors` defaults for the receiving surface's
+appearance. Dark defaults preserve the previous plugin-window palette; light
+defaults use darker success/error foregrounds. Explicit transparent colors are
+preserved. Settings retains its independent fixed palette.
+
+Schema v2 validates these fields, supports normal platform/variant inheritance,
+and lets a null override restore the default. Saving preserves authored values
+and never materializes fallback colors into the theme document. Overlay adapters
+consume this shared palette instead of maintaining feature-local status colors.
+
 ## Theme variants
 
 Theme overrides resolve before schema defaults: root → operating system → matching

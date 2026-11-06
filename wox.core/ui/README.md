@@ -6,8 +6,100 @@
 
 Shared controls consume `component.ControlTheme` directly; launcher-only appearance stays in `component.Theme`. Settings defines the control colors directly without an adapter to launcher tokens.
 
-`pluginwindow` owns plugin-created windows and HTML message lifecycles. It reuses
-the text/Markdown Preview widgets and `previewcontent` WebView surface, while
+Reusable hotkey label formatting and local key-combination serialization live in
+`launcher/component` alongside the recorder and keycaps. Global recording sessions,
+availability checks, and persistence remain with the launcher recording controller.
+Declarative numeric fields, table contracts, and their producer events live in `woxview`;
+shared data-table grid rendering and literal code-block controls live in `launcher/component`.
+Inline paragraph rendering, selection, and link geometry also live in the shared
+`WoxRichText` component. `widget.TextLayoutBuilder` supplies the active Host's
+logical font-measurement capability; WoxView owns span validation, inheritance,
+translation, and producer handlers. The shared text editor accepts that narrow
+measurement capability independently of native window services.
+
+`pluginwindow` owns plugin-created windows and document/event lifecycles. It renders
+native content through `woxview` (including text/Markdown adapters) and HTML through
+the `previewcontent` WebView surface. `woxview` owns declarative tree validation,
+field values, debounced change delivery, command target resolution, and widget mapping.
+`widget` owns generic subtree focus/selection/reveal operations; `pluginwindow`
+guards command document identity and adapts deferred errors to plugin events.
+Gesture observers can track primary press state through descendants, including
+raw-input surfaces, without taking over their activation. The widget Host owns
+press lifetime and cancellation; consumers own the resulting visual treatment.
+WoxView keeps local paint state in keyed node State widgets, with immutable
+per-build style snapshots. Shared controls accept optional `ControlPaint`
+overrides so authored state colors can supersede hover/default fallbacks without
+changing geometry or activation policy. Group state fills are painted once behind
+unselected choices while selection remains distinct; table paint replaces the
+outer frame without changing collapsed cell separators. Inline-span state belongs
+to the keyed WoxView paragraph; shared rich-text controls report fragment hover
+and press observations without intercepting the editor's selection gestures.
+WoxView maps declarative transition channels to `widget.AnimatedFloat`; Core's
+Host owns their timeline, frame scheduling, cached-boundary observation and
+unmount cleanup. `Host.SetAnimationClock` allows caller-driven deterministic
+frames without timer/vsync scheduling, with one shared timestamp per frame.
+`widget.AnimatedColor` shares that clock across RGBA channels. Shared controls
+accept `ControlPaint.BackgroundTransition` and resolve native fallback colors
+locally before animating; WoxView supplies targets and timing without duplicating
+control theme policy. Composite controls namespace their individual paint parts.
+WoxView's pulse/spin/shimmer presets use `widget.LoopAnimation` and stay local to
+Core. `widget.PaintOverlay` adds bounded, noninteractive foreground paint after a
+single child measurement. WoxView owns the shimmer preset and its two immutable
+gradient textures; shared widgets own layout, clipping, transforms and scheduling.
+WoxView also owns mount identity and fade/slideUp/scale entry presets. They use
+`AnimatedFloat.Initial` to start a fresh keyed timeline away from its target;
+ordinary target updates retain the existing interpolation behavior. Entries
+compose after transitions and before loops, including inline fragments, and
+retire their timeline after completion without replacing the control's state.
+`widget.CapturePaint` records portable paint inside a `widget.SnapshotScope`;
+the scope can replay `SnapshotLayer` data above live content. Layers consume no
+layout space and contain no focus, semantics or gesture callbacks. Their paint
+overflow participates in damage and ancestor opacity bounds, including when
+the live child disappears. Runtime owns command/clip/transform capture and replay;
+feature code owns which snapshots to retain, animate and release. WoxView retains
+last-frame captures only for declared exits, deduplicates removed ancestors and
+descendants, and samples independent exit clocks above reflowed live content.
+Node event capabilities are revoked on deletion; replay layers never retain them.
+Paint-time accounting survives cached builds and forgets unpainted/lazy subtrees.
+`Gesture.OnPointerObserve` supplies hit-tested logical coordinates, including
+stationary-pointer layout refreshes. It never consumes events or captures input.
+Shared text-range paint decorators and `Container.PaintBackground/PaintForeground`
+reuse widget box chrome without adding layout/input nodes around inline text.
+Flex owns per-item cross-axis overrides through `widget.AlignSelf`; declarative
+styles map to this layout primitive instead of calculating alignment offsets.
+`widget.Clip` can preserve a child's intrinsic bounds, and `widget.Container`
+owns four-sided borders and optional foreground edge painting. WoxView maps box
+styles to those primitives and derives preferred aspect ratios from available
+layout space before applying normal constraints.
+`widget.Opacity` isolates subtree painting through runtime display-list layers,
+including visible overflow and focus chrome, while preserving layout and input.
+The native backends own group alpha and clip restoration; WoxView only validates
+and maps the scalar property.
+`widget.BoxShadow` owns paint-only outer shadows through bounded, immutable
+nine-slice raster textures. Its Gaussian distance-field falloff follows rounded
+silhouettes and display scale; large radii use textures capped at 512 pixels per
+axis. Paint extents participate in cached-boundary and keyed invalidation as well
+as opacity layers, independently of layout and hit geometry. WoxView maps fixed
+elevation tokens to this primitive.
+`widget.Transform` applies a logical affine map around a relative pivot without
+changing layout, input, scroll extents or accessibility. Paint matrices compose
+through nested nodes and the public DisplayList transform stack. Exact clips are
+fixed in target coordinates; paint/damage bounds include transformed child overflow,
+focus rings, shadows, carets and material envelopes. Cached boundaries keep Build
+reuse but conservatively repaint when a transform affects them, since unchanged
+envelopes cannot prove unchanged pixels or ancestor clip shapes. WoxView maps
+translateX/Y, scale and degree rotation to this primitive. Windows and Linux have
+offscreen native coverage; macOS native validation remains outstanding.
+Theme-aware document colors are immutable literals/tokens or light/dark pairs.
+The embedding feature supplies surface appearance and semantic colors through
+`component.ControlTheme`; WoxView resolves them each build without reading global
+theme state. Plugin windows adapt the overlay palette, including shared
+`common.Theme.StatusColors` defaults/overrides; Settings retains its fixed dark
+palette. Semantic color selection does not change input state or layout.
+The overlay theme service exposes generic UI-thread subscriptions for separately
+managed windows. Plugin-window sessions own subscription lifetime, native material
+refresh, document readiness, and `theme_changed` events; shared theme infrastructure
+has no dependency on plugin-window implementations.
 `runtime` supplies generic native callbacks without depending on plugins. See the
 [window API contract](pluginwindow/README.md).
 

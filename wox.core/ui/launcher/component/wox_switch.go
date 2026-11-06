@@ -16,6 +16,7 @@ type SwitchProps struct {
 	Disabled bool
 	OnChange func(bool)
 	Theme    ControlTheme
+	Paint    *ControlPaint
 }
 
 // WoxSwitch builds a compact switch with pointer, keyboard, and accessibility behavior.
@@ -40,11 +41,11 @@ func WoxSwitch(props SwitchProps) woxwidget.Widget {
 			}
 			trackColor = lerpColor(trackColor, controlHoverColor(trackColor, hoverForeground), hoverPosition)
 			// The active thumb follows the accent foreground so pale tracks keep their contrast.
-			thumbColor := lerpColor(woxui.Color{R: 255, G: 255, B: 255, A: 255}, props.Theme.AccentText, colorPosition)
+			thumbColor := props.Paint.foreground(lerpColor(woxui.Color{R: 255, G: 255, B: 255, A: 255}, props.Theme.AccentText, colorPosition))
 			// Rest-state track and thumb sizes stay on whole logical units.
 			thumbSize := float32(10) + 4*colorPosition + 2*hoverPosition
 			return woxwidget.Stack{Width: SettingsSwitchWidth, Height: 24, Children: []woxwidget.StackChild{
-				{Left: 2, Top: 2, Child: woxwidget.Container{Width: 32, Height: 20, Radius: 10, Color: trackColor}},
+				{Left: 2, Top: 2, Child: props.Paint.paintContainer(props.ID, woxwidget.Container{Width: 32, Height: 20, Radius: 10, Color: trackColor})},
 				{Left: 12 + 12*position - thumbSize/2, Top: 12 - thumbSize/2, Child: woxwidget.Container{Width: thumbSize, Height: thumbSize, Radius: thumbSize / 2, Color: thumbColor}},
 			}}
 		}}

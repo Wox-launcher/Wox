@@ -849,6 +849,21 @@ func windowsWindowStyle(options WindowOptions) uint32 {
 	return style
 }
 
+// windowsWindowExStyle keeps application discovery independent of activation and z-order options.
+func windowsWindowExStyle(options WindowOptions) uint32 {
+	exStyle := uint32(win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
+	if options.Role == WindowRoleApplication {
+		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
+	}
+	if options.Topmost || options.Role == WindowRoleScreenshot {
+		exStyle |= win.WS_EX_TOPMOST
+	}
+	if options.Nonactivating {
+		exStyle |= win.WS_EX_NOACTIVATE
+	}
+	return exStyle
+}
+
 // createNativeWindow publishes the HWND only after CreateWindowEx has completed its synchronous messages.
 func (w *platformWindow) createNativeWindow() error {
 	instance := win.GetModuleHandle(nil)
@@ -866,17 +881,7 @@ func (w *platformWindow) createNativeWindow() error {
 	height := logicalToPhysical(w.options.Size.Height, scale)
 	x := (win.GetSystemMetrics(win.SM_CXSCREEN) - int32(width)) / 2
 	y := (win.GetSystemMetrics(win.SM_CYSCREEN) - int32(height)) / 3
-	exStyle := uint32(win.WS_EX_TOOLWINDOW | wsExNoRedirectionBitmap)
-	if w.options.Topmost || w.options.Role == WindowRoleScreenshot {
-		exStyle |= win.WS_EX_TOPMOST
-	}
-	if w.options.Nonactivating {
-		exStyle |= win.WS_EX_NOACTIVATE
-	}
-	// Normal management windows use the taskbar; transient launcher surfaces keep utility/topmost semantics.
-	if w.options.Role == WindowRoleApplication {
-		exStyle = uint32(win.WS_EX_APPWINDOW | wsExNoRedirectionBitmap)
-	}
+	exStyle := windowsWindowExStyle(w.options)
 	style := windowsWindowStyle(w.options)
 	hwnd := win.CreateWindowEx(
 		exStyle,

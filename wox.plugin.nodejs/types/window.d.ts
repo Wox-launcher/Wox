@@ -1,8 +1,12 @@
 import type { Context } from "./index.js"
 
-export type WindowContentType = "text" | "markdown" | "html"
-export type WindowPresentation = "overlay"
-export type WindowEventType = "ready" | "message" | "error" | "closed"
+export type WindowContentType = "text" | "markdown" | "html" | "woxview"
+export type WindowPresentation = "overlay" | "window"
+export type WindowEventType = "ready" | "message" | "error" | "closed" | "woxview_event" | "theme_changed"
+/** Payload of a document-scoped theme_changed event; colors resolve locally without this callback. */
+export interface WindowThemeChangedData {
+  Dark: boolean
+}
 export type WindowAnchor = "top-left" | "top-center" | "top-right" | "left-center" | "center" | "right-center" | "bottom-left" | "bottom-center" | "bottom-right"
 export interface WindowContent {
   Type: WindowContentType
@@ -31,6 +35,7 @@ export interface WindowEvent {
   Type: WindowEventType
   WindowID: string
   DocumentID?: string
+  /** woxview_event: Handler, Args and Key. theme_changed: WindowThemeChangedData. */
   Data?: unknown
   ErrMsg?: string
 }
@@ -63,18 +68,36 @@ export interface WindowSetOptionsOption {
 export interface WindowContentSetOption {
   Content: WindowContent
 }
+/** Replace a WoxView tree while retaining its document and keyed controls. */
+export interface WindowContentUpdateOption {
+  Data: string
+  DocumentID?: string
+  /** Increasing per-document sequence; use nonnegative safe integers. Zero leaves updates unsequenced. */
+  Sequence?: number
+}
 export interface WindowMessageOption {
   Data: unknown
   DocumentID?: string
+}
+export type WindowContentCommand = "focus" | "scrollTo" | "selectAll"
+/** Queue a local operation on a document-wide unique node key. Deferred failures emit an error event. */
+export interface WindowContentCommandOption {
+  DocumentID?: string
+  Command: WindowContentCommand
+  Key: string
 }
 export interface WindowShowResult extends WindowResult {}
 export interface WindowHideResult extends WindowResult {}
 export interface WindowCloseResult extends WindowResult {}
 export interface WindowSetOptionsResult extends WindowResult {}
 export interface WindowContentSetResult extends WindowResult {}
+export interface WindowContentUpdateResult extends WindowResult {}
+export interface WindowContentCommandResult extends WindowResult {}
 export interface WindowMessageResult extends WindowResult {}
 export interface PluginWindowContent {
   Set(ctx: Context, option: WindowContentSetOption): Promise<WindowContentSetResult>
+  Update(ctx: Context, option: WindowContentUpdateOption): Promise<WindowContentUpdateResult>
+  Command(ctx: Context, option: WindowContentCommandOption): Promise<WindowContentCommandResult>
   PostMessage(ctx: Context, option: WindowMessageOption): Promise<WindowMessageResult>
 }
 export interface PluginWindow {

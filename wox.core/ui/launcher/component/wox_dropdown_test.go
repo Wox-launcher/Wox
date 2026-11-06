@@ -7,6 +7,17 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestWoxDropdownAccessibilityActivation(t *testing.T) {
+	called := false
+	dropdown := WoxDropdown(DropdownProps{ID: "mode", Label: "Mode", OnTap: func() { called = true }}).(woxwidget.Semantics)
+	if dropdown.OnAction == nil {
+		t.Fatal("missing accessibility handler")
+	}
+	if err := dropdown.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || !called {
+		t.Fatalf("activation: %v, called=%v", err, called)
+	}
+}
+
 func TestWoxDropdownAddsHoverSurface(t *testing.T) {
 	foreground := woxui.Color{R: 120, G: 140, B: 160, A: 255}
 	dropdown := WoxDropdown(DropdownProps{ID: "mode", Label: "Mode", Value: "Auto", Width: 160, Height: 38, Foreground: foreground, OnTap: func() {}}).(woxwidget.Semantics)

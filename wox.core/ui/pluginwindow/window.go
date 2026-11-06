@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -13,10 +14,10 @@ import (
 	"wox/internal/assetfs"
 	"wox/plugin"
 	component "wox/ui/launcher/component"
-	preview "wox/ui/launcher/view/preview"
 	"wox/ui/previewcontent"
 	ui "wox/ui/runtime"
 	widget "wox/ui/widget"
+	"wox/ui/woxview"
 	"wox/util/overlay"
 
 	"github.com/google/uuid"
@@ -32,24 +33,29 @@ var anchors = map[plugin.WindowAnchor]int{
 
 // session fields are confined to the UI thread, including native message callbacks.
 type session struct {
-	id            string
-	options       plugin.WindowOptions
-	placement     overlay.WindowOptions
-	content       plugin.WindowContent
-	document      string
-	html          string
-	markdown      component.MarkdownDocument
-	window        *ui.Window
-	managed       *ui.ManagedWindow
-	host          *widget.Host
-	emit          func(plugin.WindowEvent)
-	ready, closed bool
-	contentDrag   contentDrag
-	pending       []json.RawMessage
-	loadTimer     *time.Timer
-	loadFailed    bool
-	pendingShow   *plugin.WindowShowOption
-	workArea      func() (ui.Rect, bool)
+	id        string
+	options   plugin.WindowOptions
+	placement overlay.WindowOptions
+	content   plugin.WindowContent
+	document  string
+	sequence  uint64
+	html      string
+	// view renders every non-HTML document; text and Markdown are one-node woxview trees.
+	view             *woxview.View
+	window           *ui.Window
+	managed          *ui.ManagedWindow
+	host             *widget.Host
+	emit             func(plugin.WindowEvent)
+	ready, closed    bool
+	contentDrag      contentDrag
+	pending          []json.RawMessage
+	loadTimer        *time.Timer
+	loadFailed       bool
+	pendingShow      *plugin.WindowShowOption
+	workArea         func() (ui.Rect, bool)
+	translate        func(string) string
+	unsubscribeTheme func()
+	themePending     bool
 }
 
 func boolValue(p *bool, fallback bool) bool {
@@ -65,16 +71,28 @@ func number(p *float64, fallback float64) float64 {
 	return fallback
 }
 
-// validateContent bounds allocations before content enters a native engine.
-func validateContent(c plugin.WindowContent) error {
+// prepareContent bounds allocations and parses native content before it reaches the UI thread.
+// HTML returns a nil tree; every other type becomes a woxview tree so there is one native render path.
+func prepareContent(c plugin.WindowContent) (*woxview.Tree, error) {
 	if len(c.Data) > 4*1024*1024 {
-		return errors.New("window content exceeds 4 MiB")
+		return nil, errors.New("window content exceeds 4 MiB")
 	}
 	switch c.Type {
-	case plugin.WindowContentText, plugin.WindowContentMarkdown, plugin.WindowContentHTML:
-		return nil
+	case plugin.WindowContentHTML:
+		return nil, nil
+	case plugin.WindowContentWoxView:
+		return woxview.Parse([]byte(c.Data))
+	case plugin.WindowContentText:
+		// Matches the former Preview text layout: selectable 14/21 text in a padded scroll.
+		return woxview.NewTree(&woxview.Node{Type: woxview.NodeScroll, Props: &woxview.ScrollProps{BoxProps: woxview.BoxProps{Styled: woxview.Styled{Style: woxview.Style{Padding: woxview.Edges{Top: woxview.Size{Value: 24}, Right: woxview.Size{Value: 14}, Bottom: woxview.Size{Value: 24}, Left: woxview.Size{Value: 14}}}}}}, Children: []*woxview.Node{
+			{Type: woxview.NodeText, Props: &woxview.TextProps{Text: c.Data, Selectable: true, Styled: woxview.Styled{Style: woxview.Style{FontSize: woxview.Size{Value: 14}, LineHeight: woxview.Size{Value: 21}}}}},
+		}})
+	case plugin.WindowContentMarkdown:
+		return woxview.NewTree(&woxview.Node{Type: woxview.NodeScroll, Props: &woxview.ScrollProps{BoxProps: woxview.BoxProps{Styled: woxview.Styled{Style: woxview.Style{Padding: woxview.Edges{Top: woxview.Size{Value: 20}, Right: woxview.Size{Value: 20}, Bottom: woxview.Size{Value: 20}, Left: woxview.Size{Value: 20}}}}}}, Children: []*woxview.Node{
+			{Type: woxview.NodeMarkdown, Props: &woxview.MarkdownProps{Content: c.Data}},
+		}})
 	}
-	return errors.New("unsupported window content type")
+	return nil, errors.New("unsupported window content type")
 }
 
 // validateGeometry rejects NaN/infinite dimensions and unknown anchors.
@@ -95,16 +113,39 @@ func validateGeometry(width, height float64, anchor plugin.WindowAnchor, x, y fl
 
 // Create allocates a hidden registered window and prepares content without showing the launcher.
 func Create(id string, o plugin.CreateWindowOption, emit func(plugin.WindowEvent)) (plugin.WindowDriver, error) {
-	return CreateWithWorkArea(id, o, emit, nil)
+	return CreateWithWorkArea(id, o, emit, nil, nil)
+}
+
+// normalizePresentation keeps legacy overlays nonactivating and topmost, while
+// ordinary windows participate in native application/window discovery.
+func normalizePresentation(options *plugin.WindowOptions) (ui.WindowRole, error) {
+	switch options.Presentation {
+	case "", plugin.WindowPresentationOverlay:
+		return ui.WindowRoleUtility, nil
+	case plugin.WindowPresentationWindow:
+		if options.Focusable == nil {
+			value := true
+			options.Focusable = &value
+		}
+		if options.Topmost == nil {
+			value := false
+			options.Topmost = &value
+		}
+		return ui.WindowRoleApplication, nil
+	default:
+		return 0, errors.New("unsupported window presentation")
+	}
 }
 
 // CreateWithWorkArea resolves the launcher's selected display without coupling this feature to UI settings.
-func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin.WindowEvent), workArea func() (ui.Rect, bool)) (plugin.WindowDriver, error) {
-	if err := validateContent(o.Content); err != nil {
+func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin.WindowEvent), workArea func() (ui.Rect, bool), translate func(string) string) (plugin.WindowDriver, error) {
+	tree, err := prepareContent(o.Content)
+	if err != nil {
 		return nil, err
 	}
-	if o.Window.Presentation != "" && o.Window.Presentation != plugin.WindowPresentationOverlay {
-		return nil, errors.New("unsupported window presentation")
+	role, err := normalizePresentation(&o.Window)
+	if err != nil {
+		return nil, err
 	}
 	if o.Window.Anchor == "" {
 		o.Window.Anchor = plugin.WindowAnchorBottomCenter
@@ -114,7 +155,7 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 	if err := validateGeometry(width, height, o.Window.Anchor, x, y); err != nil {
 		return nil, err
 	}
-	s := &session{id: id, options: o.Window, emit: emit, workArea: workArea, placement: overlay.WindowOptions{Width: width, Height: height, Anchor: anchors[o.Window.Anchor], OffsetX: x, OffsetY: y}}
+	s := &session{id: id, options: o.Window, emit: emit, workArea: workArea, translate: translate, placement: overlay.WindowOptions{Width: width, Height: height, Anchor: anchors[o.Window.Anchor], OffsetX: x, OffsetY: y}}
 	var createErr error
 	dispatchErr := ui.Call(func() {
 		manager := overlay.WindowManager()
@@ -123,15 +164,21 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 			return
 		}
 		s.host = widget.NewHost(s.build)
-		opts := ui.WindowOptions{Title: o.Window.Title, Size: ui.Size{Width: float32(width), Height: float32(height)}, Role: ui.WindowRoleUtility,
+		opts := ui.WindowOptions{Title: o.Window.Title, Size: ui.Size{Width: float32(width), Height: float32(height)}, Role: role,
 			Nonactivating: !boolValue(o.Window.Focusable, false), Topmost: boolValue(o.Window.Topmost, true), Resizable: boolValue(o.Window.Resizable, false),
 			OnFrame: s.host.Frame, OnPointer: s.host.Pointer, OnTextInput: func(e ui.TextInputEvent) { s.host.TextInput(e) },
 			OnKey: func(e ui.KeyEvent) bool {
+				if s.content.Type == plugin.WindowContentWoxView && s.host.Key(e) {
+					return true
+				}
 				if e.Down && e.Key == ui.KeyEscape && boolValue(s.options.Closable, true) {
 					_ = s.managed.Close()
 					return true
 				}
-				return s.host.Key(e)
+				if s.content.Type != plugin.WindowContentWoxView {
+					return s.host.Key(e)
+				}
+				return false
 			},
 			OnFocus: func(e ui.FocusEvent) { s.host.SetWindowFocused(e.Active) }, OnWebViewMessage: s.message,
 			OnCloseRequested: func() {
@@ -141,6 +188,10 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 			},
 			OnClosed: func() {
 				s.closed = true
+				if s.unsubscribeTheme != nil {
+					s.unsubscribeTheme()
+					s.unsubscribeTheme = nil
+				}
 				if s.loadTimer != nil {
 					s.loadTimer.Stop()
 				}
@@ -155,10 +206,12 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 			return
 		}
 		s.window = s.managed.Window()
+		_ = s.window.SetAppearance(!overlay.CurrentThemeChrome().Light)
+		s.unsubscribeTheme = overlay.SubscribeThemeChanges(s.themeChanged)
 		s.host.Attach(s.window)
 		createErr = s.layout(false)
 		if createErr == nil {
-			createErr = s.setContent(o.Content)
+			createErr = s.setContent(o.Content, tree)
 		}
 		if createErr != nil {
 			_ = s.managed.Close()
@@ -306,20 +359,60 @@ func (s *session) SetOptions(o plugin.WindowSetOptionsOption) error {
 
 // SetContent validates input before replacing the current document.
 func (s *session) SetContent(c plugin.WindowContent) error {
-	if err := validateContent(c); err != nil {
+	tree, err := prepareContent(c)
+	if err != nil {
 		return err
 	}
-	return s.call(func() error { return s.setContent(c) })
+	return s.call(func() error { return s.setContent(c, tree) })
+}
+
+// UpdateContent swaps the woxview tree in place. Unlike SetContent it keeps the document, so
+// keyed widget state (scroll offsets, text being edited) survives and no ready event is sent.
+func (s *session) UpdateContent(o plugin.WindowContentUpdateOption) error {
+	tree, err := woxview.Parse([]byte(o.Data))
+	if err != nil {
+		return err
+	}
+	return s.call(func() error {
+		if s.content.Type != plugin.WindowContentWoxView {
+			return errors.New("content updates require woxview content")
+		}
+		if err := s.validateUpdate(o); err != nil {
+			return err
+		}
+		if o.Sequence != 0 {
+			s.sequence = o.Sequence
+		}
+		s.content.Data = o.Data
+		s.view.SetTree(tree)
+		return s.window.Invalidate()
+	})
+}
+
+// validateUpdate prevents delayed work from overwriting a newer document or ordered update.
+func (s *session) validateUpdate(o plugin.WindowContentUpdateOption) error {
+	if o.DocumentID != "" && o.DocumentID != s.document {
+		return errors.New("document replaced")
+	}
+	if (o.Sequence != 0 && o.Sequence <= s.sequence) || (o.Sequence == 0 && s.sequence != 0) {
+		return errors.New("stale window content update sequence")
+	}
+	return nil
 }
 
 // setContent replaces the document identity before resetting native content, invalidating late messages.
-func (s *session) setContent(c plugin.WindowContent) error {
+func (s *session) setContent(c plugin.WindowContent, tree *woxview.Tree) error {
+	if s.view != nil {
+		s.view.CancelPending()
+	}
 	s.contentDrag = contentDrag{}
 	if s.loadTimer != nil {
 		s.loadTimer.Stop()
 	}
 	s.document = uuid.NewString()
+	s.sequence = 0
 	s.ready = false
+	s.themePending = false
 	s.loadFailed = false
 	s.pending = nil
 	s.content = c
@@ -345,14 +438,15 @@ func (s *session) setContent(c plugin.WindowContent) error {
 		if err := s.showHTML(ui.Rect{Width: bounds.Width, Height: max(float32(1), bounds.Height-s.chromeHeight())}); err != nil {
 			return err
 		}
-	case plugin.WindowContentMarkdown:
-		s.markdown = component.ParseMarkdown(c.Data)
-		s.ready = true
 	default:
+		// A fresh View drops retained state and decoded images from the previous document.
+		s.view = woxview.NewView()
+		s.view.SetTree(tree)
 		s.ready = true
 	}
 	if s.ready {
 		s.emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: s.document})
+		s.flushThemeChange()
 		s.showPending()
 	}
 	return s.window.Invalidate()
@@ -406,13 +500,11 @@ func (s *session) contentPointer(event ui.PointerEvent) bool {
 	return s.contentDrag.pointer(event, s.window.ForwardEmbeddedSurfacePointer, func() { _ = s.window.StartDragging() })
 }
 
-// build reuses native Preview text/Markdown renderers and the shared WebView surface.
+// build renders HTML through the shared WebView surface and everything else through woxview.
 func (s *session) build(frame ui.FrameInfo) widget.Widget {
 	chrome := overlay.CurrentThemeChrome()
 	h := s.chromeHeight()
 	width, height := frame.Size.Width, max(float32(1), frame.Size.Height-h)
-	controls := component.ControlTheme{Text: chrome.Foreground, BodyText: chrome.Foreground, ControlText: chrome.Foreground, InputText: chrome.Foreground, TextSecondary: chrome.Foreground, Background: chrome.Background, Surface: chrome.Background}
-	theme := component.Theme{Controls: controls, PreviewText: chrome.Foreground, QueryBackground: chrome.Background}
 	var body widget.Widget
 	switch s.content.Type {
 	case plugin.WindowContentHTML:
@@ -427,10 +519,27 @@ func (s *session) build(frame ui.FrameInfo) widget.Widget {
 			props.OnPointer = s.contentPointer
 		}
 		body = previewcontent.WebViewSurface(props)
-	case plugin.WindowContentMarkdown:
-		body = preview.MarkdownPreviewView(preview.MarkdownPreviewProps{ID: s.document, Document: s.markdown, Width: width, Height: height, Window: s.window, Theme: theme, OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) }})
 	default:
-		body = preview.ScrollablePreviewText(preview.ScrollablePreviewTextProps{ID: s.document, Value: s.content.Data, Width: width, Height: height, FontSize: 14, LineHeight: 21, Color: chrome.Foreground, Window: s.window, Theme: theme})
+		// The document is part of the prefix so replaced documents never inherit retained widget state.
+		document := s.document
+		// Text shorthand remains literal even when its content starts with i18n:.
+		var translate func(string) string
+		if s.content.Type == plugin.WindowContentWoxView {
+			translate = s.translate
+		}
+		body = s.view.Build(woxview.BuildProps{
+			Translate: translate, Width: width, Height: height, Theme: controlTheme(chrome), Window: s.window, IDPrefix: "plugin-window/" + document,
+			OnNodeEvent: func(event woxview.Event) {
+				data, _ := json.Marshal(event)
+				coalesceKey := ""
+				if event.Coalescible {
+					// Length-prefix the handler so arbitrary node keys cannot collide.
+					coalesceKey = fmt.Sprintf("%d:%s%s", len(event.Handler), event.Handler, event.Key)
+				}
+				s.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: document, Data: data, CoalesceKey: coalesceKey})
+			},
+			OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) },
+		})
 	}
 	children := []widget.StackChild{{Top: h, Child: body}}
 	if h > 0 {
@@ -442,6 +551,20 @@ func (s *session) build(frame ui.FrameInfo) widget.Widget {
 		}
 	}
 	return widget.Container{Width: width, Height: frame.Size.Height, Color: chrome.Background, Child: widget.Stack{Width: width, Height: frame.Size.Height, Children: children}}
+}
+
+// controlTheme maps the overlay chrome onto component colors. Text uses the overlay foreground
+// rather than launcher colors because plugin windows paint the overlay wash, not the launcher.
+func controlTheme(chrome overlay.ThemeChrome) component.ControlTheme {
+	colors := overlay.CurrentThemeControlColors(chrome)
+	return component.ControlTheme{
+		Dark: !chrome.Light, Hover: colors.Hover, Disabled: colors.Disabled, Link: colors.Link, Overlay: chrome.Background,
+		Text: chrome.Foreground, BodyText: chrome.Foreground, ControlText: chrome.Foreground, InputText: chrome.Foreground, ChromeText: chrome.Foreground,
+		TextSecondary: colors.Secondary, Background: chrome.Background, Surface: chrome.Background, Border: colors.Border, Focus: colors.Focus,
+		Accent: colors.Accent, AccentText: colors.AccentText, SelectionBackground: colors.Selection, SelectionText: colors.SelectedText,
+		TextSelectionBackground: colors.Selection, TextSelectionText: chrome.Foreground,
+		Success: colors.Success, Warning: colors.Warning, WarningText: colors.WarningText, Error: colors.Error,
+	}
 }
 
 // PostMessage sends JSON only. Hidden windows keep their document; replacement drops pending data.
@@ -508,6 +631,7 @@ func (s *session) message(raw string) {
 			s.loadTimer.Stop()
 		}
 		s.emit(plugin.WindowEvent{Type: plugin.WindowEventReady, DocumentID: s.document})
+		s.flushThemeChange()
 		pending := s.pending
 		s.pending = nil
 		for _, data := range pending {
@@ -564,6 +688,13 @@ func bridgeHTML(html, token string) string {
 // AcceptEvent drops already-queued messages after a document replacement or close.
 func (s *session) AcceptEvent(e plugin.WindowEvent) bool {
 	accepted := false
-	_ = s.call(func() error { accepted = e.DocumentID == s.document; return nil })
+	_ = s.call(func() error {
+		accepted = e.DocumentID == s.document
+		if accepted && e.Type == plugin.WindowEventWoxView {
+			var payload struct{ Handler woxview.HandlerID }
+			accepted = s.view != nil && json.Unmarshal(e.Data, &payload) == nil && s.view.HasHandler(payload.Handler)
+		}
+		return nil
+	})
 	return accepted
 }
