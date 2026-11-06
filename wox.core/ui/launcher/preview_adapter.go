@@ -167,7 +167,11 @@ func (a *App) buildPreviewBody(result queryResult, scrollKey string, preview que
 func (a *App) buildWoxViewPreview(result queryResult, key string, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
 	data := preview.PreviewData
 	if a.previews.woxView == nil || a.previews.woxViewKey != key || a.previews.woxViewID != preview.WoxViewID || a.previews.woxViewData != data {
-		tree, err := woxview.Parse([]byte(data))
+		tree := preview.woxViewTree
+		var err error
+		if tree == nil {
+			tree, err = woxview.Parse([]byte(data))
+		}
 		if err == nil && tree.HasHandlers() && preview.WoxViewID == "" {
 			err = fmt.Errorf("interactive preview requires WoxViewID")
 		}
@@ -196,9 +200,7 @@ func (a *App) buildWoxViewPreview(result queryResult, key string, preview queryP
 			if a.previews.woxView != view || !view.HasHandler(event.Handler) || events == nil {
 				return
 			}
-			select {
-			case events <- event:
-			default:
+			if !events.Push(event) {
 				util.GetLogger().Warn(a.lifecycleCtx, "WoxView preview event queue full")
 			}
 		},
@@ -225,7 +227,8 @@ func (a *App) startWoxViewPreviewEvents(result queryResult, document string) {
 		return
 	}
 	ctx, cancel := context.WithCancel(a.lifecycleCtx)
-	events := make(chan woxview.Event, 128)
+	// Each document owns its inbox, so replacement cannot merge with old changes.
+	events := util.NewCoalescingQueue(128, woxview.Event.CoalescingKey)
 	view := a.previews.woxView
 	ready := a.previews.woxViewReady
 	a.previews.woxViewEvents, a.previews.woxViewCancel = events, cancel
@@ -234,7 +237,11 @@ func (a *App) startWoxViewPreviewEvents(result queryResult, document string) {
 			select {
 			case <-ctx.Done():
 				return
-			case event := <-events:
+			case <-events.Ready():
+				event, ok := events.Pop()
+				if !ok {
+					continue
+				}
 				select {
 				case <-ready:
 				case <-ctx.Done():

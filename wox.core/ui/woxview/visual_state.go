@@ -16,14 +16,14 @@ type nodeVisualConfig struct {
 // nodeVisualState belongs to the mounted node, never to the plugin or a global registry.
 type nodeVisualState struct {
 	hovered, pressed, focused bool
-	owner                     *View
+	owner                     *nodeLifetime
 	enter                     *PresenceAnimation
 }
 
 // InitState captures presence once, independently of subsequent producer echoes.
 func (s *nodeVisualState) InitState(_ widget.StateContext, value any) {
 	c := value.(nodeVisualConfig)
-	s.receiveEnter(c.builder.view, c.node.Props.(interface{ commonProps() CommonProps }).commonProps())
+	s.receiveEnter(c.builder.nodeOwner, c.node.Props.(interface{ commonProps() CommonProps }).commonProps())
 }
 func (*nodeVisualState) Dispose() {}
 
@@ -31,7 +31,7 @@ func (*nodeVisualState) Dispose() {}
 // a held press from reappearing after disable/re-enable.
 func (s *nodeVisualState) DidUpdateWidget(_ widget.StateContext, _, next any) {
 	c := next.(nodeVisualConfig)
-	s.receiveEnter(c.builder.view, c.node.Props.(interface{ commonProps() CommonProps }).commonProps())
+	s.receiveEnter(c.builder.nodeOwner, c.node.Props.(interface{ commonProps() CommonProps }).commonProps())
 	if c.node.Props.(interface{ interactionStyles() InteractionStyles }).interactionStyles().empty() {
 		s.hovered, s.pressed, s.focused = false, false, false
 		return
@@ -44,6 +44,18 @@ func (s *nodeVisualState) DidUpdateWidget(_ widget.StateContext, _, next any) {
 // Build applies hover, then press, then focus; disabled suppresses all active states.
 func (s *nodeVisualState) Build(ctx widget.StateContext, value any) widget.Widget {
 	c := value.(nodeVisualConfig)
+	common := c.node.Props.(interface{ commonProps() CommonProps }).commonProps()
+	p := c.node.Props.(interface{ interactionStyles() InteractionStyles }).interactionStyles()
+	// Keep the state boundary mounted so adding paint state or animation never
+	// resets a field. Plain nodes avoid allocating the animation closure chain.
+	if p.empty() && common.Transition == nil && s.enter == nil && common.Animation == nil {
+		return c.builder.decorateNode(c.node, c.id, catalog[c.node.Type].build(&c.builder, c.node, c.id))
+	}
+	return s.buildVisual(ctx, c)
+}
+
+// buildVisual isolates escaping animation snapshots from the ordinary node path.
+func (s *nodeVisualState) buildVisual(ctx widget.StateContext, c nodeVisualConfig) widget.Widget {
 	b, node := c.builder, c.node
 	p := node.Props.(interface{ interactionStyles() InteractionStyles }).interactionStyles()
 	disabled := b.nodeDisabled(node)

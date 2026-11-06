@@ -7,9 +7,40 @@ from unittest.mock import AsyncMock
 
 from wox_plugin import Button, Column, Context, Loading, Text, create_wox_view, wox_view_node
 from wox_plugin.models.window import WindowContentUpdateResult, WindowEvent, WindowEventType
+from wox_plugin.woxview import WoxViewSession
 
 
 class WoxViewSessionTest(unittest.IsolatedAsyncioTestCase):
+    async def test_replacing_root_key_revokes_own_and_descendant_callbacks(self):
+        for nested in (False, True):
+            key = "old"
+            calls = []
+
+            def render(_session):
+                current = key
+                button = Button(key="child" if nested else key, label=key, on_press=lambda: calls.append(current))
+                return Column(key=key, children=[button]) if nested else button
+
+            session = WoxViewSession(render, lambda error: self.fail(str(error)))
+
+            def handler():
+                root = json.loads(session.data)["root"]
+                return (root["children"][0] if nested else root)["props"]["onPress"]["$handler"]
+
+            old = handler()
+            session.connect(AsyncMock(return_value=True))
+            session.invalidate()
+            await session.dispatch({"Handler": old, "Args": [], "Key": "old"})
+            self.assertEqual(handler(), old)
+            key = "new"
+            session.invalidate()
+            await session.dispatch({"Handler": old, "Args": [], "Key": "old"})
+            self.assertNotEqual(handler(), old)
+            self.assertEqual(calls, ["old"])
+            await session.dispatch({"Handler": handler(), "Args": [], "Key": "new"})
+            self.assertEqual(calls, ["old", "new"])
+            session.dispose()
+
     def test_loading_builder(self):
         self.assertEqual(Loading(), {"type": "loading", "props": {}})
         self.assertEqual(

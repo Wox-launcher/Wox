@@ -123,7 +123,9 @@ func assertInteractionDamage(t *testing.T, ctx context.Context, client *automati
 		}
 	}
 	if checked == 0 {
-		t.Fatalf("%s produced no observed frames", label)
+		snapshot, snapshotErr := client.Snapshot(ctx)
+		input, found := automationdriver.Find(snapshot, "action-search")
+		t.Fatalf("%s produced no observed frames: metrics=%+v input=%+v found=%t snapshotError=%v", label, metrics, input, found, snapshotErr)
 	}
 }
 

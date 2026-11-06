@@ -30,9 +30,9 @@ type recordedEvent struct {
 }
 
 // renderView mounts a view in a headless Host so tests exercise real layout and hit-testing.
-func renderView(t *testing.T, view *View, events *[]recordedEvent) *widget.Host {
+func renderView(t testing.TB, view *View, events *[]recordedEvent) *widget.Host {
 	t.Helper()
-	theme := component.ControlTheme{Text: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Accent: woxui.Color{B: 255, A: 255}}
+	theme := component.ControlTheme{Dark: true, Text: woxui.Color{R: 255, G: 255, B: 255, A: 255}, Accent: woxui.Color{B: 255, A: 255}}
 	host := widget.NewHost(func(frame woxui.FrameInfo) widget.Widget {
 		return view.Build(BuildProps{Width: frame.Size.Width, Height: frame.Size.Height, Theme: theme, OnEvent: func(handler HandlerID, args json.RawMessage) {
 			*events = append(*events, recordedEvent{handler: handler, args: string(args)})

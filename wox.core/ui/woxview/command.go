@@ -29,11 +29,12 @@ type commandTarget struct {
 // pendingCommand keeps the original identity so key reuse under another parent
 // cannot redirect an accepted operation after a tree update.
 type pendingCommand struct {
-	kind Command
-	key  string
-	id   string
-	host *widget.Host
-	done func(error)
+	kind  Command
+	key   string
+	id    string
+	owner *nodeLifetime
+	host  *widget.Host
+	done  func(error)
 }
 
 // findCommandTarget resolves producer keys against the complete tree, including
@@ -90,7 +91,7 @@ func (v *View) EnqueueCommand(host *widget.Host, command Command, key string, do
 	if len(v.commands) >= 64 {
 		return errors.New("window content command queue full")
 	}
-	v.commands = append(v.commands, &pendingCommand{kind: command, key: key, id: target.id, host: host, done: done})
+	v.commands = append(v.commands, &pendingCommand{kind: command, key: key, id: target.id, owner: v.nodes[target.id], host: host, done: done})
 	// A frame alone may reuse an enclosing Boundary. Dirty the retained owner
 	// so its post-layout work also runs when the tree props have not changed.
 	v.frameContext.SetState(nil)
@@ -105,7 +106,7 @@ func (v *View) advanceCommand(c *pendingCommand) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	if target.id != c.id {
+	if target.id != c.id || c.owner == nil || !c.owner.live || v.nodes[target.id] != c.owner {
 		return true, errors.New("command target replaced")
 	}
 	if c.host.HasModalScope() {

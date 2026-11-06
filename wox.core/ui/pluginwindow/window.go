@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"runtime"
 	"wox/i18n"
@@ -392,12 +391,7 @@ func (s *session) build(frame ui.FrameInfo) widget.Widget {
 		Translate: s.translate, Width: width, Height: height, Theme: controlTheme(chrome), Window: s.window, IDPrefix: "plugin-window/" + document,
 		OnNodeEvent: func(event woxview.Event) {
 			data, _ := json.Marshal(event)
-			coalesceKey := ""
-			if event.Coalescible {
-				// Length-prefix the handler so arbitrary node keys cannot collide.
-				coalesceKey = fmt.Sprintf("%d:%s%s", len(event.Handler), event.Handler, event.Key)
-			}
-			s.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: document, Data: data, CoalesceKey: coalesceKey})
+			s.emit(plugin.WindowEvent{Type: plugin.WindowEventWoxView, DocumentID: document, Data: data, CoalesceKey: event.CoalescingKey()})
 		},
 		OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) },
 	})

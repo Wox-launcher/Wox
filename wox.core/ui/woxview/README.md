@@ -527,6 +527,16 @@ for a single-color glyph that follows the control's foreground. Disabled
 original-color button icons fade without losing their colors. `iconColorMode`
 does not apply to image `source`, which already preserves authored colors.
 
+SVG sources retain their view-box aspect ratio before `fit` is applied. Rasterization
+uses twice the logical size, capped at 2048 pixels on the longest side; larger boxes
+may appear softer. Source SVG theme variables follow the explicit surface appearance,
+independently of custom foreground colors. Local image files are limited to 32 MiB;
+bitmap headers must fit 16384 pixels per side and 16,777,216 pixels in total before
+decoding. Inline sources still share the document's 4 MiB limit. Each View retains
+at most 64 MiB of image pixels. Images exceeding the current frame's budget show
+an empty box and are retried when other images are removed. Unused rasters are
+released, and repeated bitmap sources share pixels across display sizes.
+
 All value fields (`text-field`, `switch`, `checkbox`, `slider`, `select`, `list`,
 `radio-group`, `tabs`, `multi-select`, `tags`, `number-field`, `hotkey`)
 also accept `revision` (unsigned integer, default 0), `required` (default false),
@@ -589,6 +599,9 @@ handlers are optional. Validation and persistence are plugin responsibilities.
 Fields update locally while callbacks travel to the plugin. Values live in the
 View rather than being discovered during Build, so cached subtrees still submit
 the user's edits. Removed field identities are discarded by `SetTree`.
+Removal starts a new lifetime even if the same key is inserted again before the
+next frame. The replacement gets fresh widget state and entry animations; queued
+commands for the removed lifetime fail instead of targeting its replacement.
 
 - Controlled mode: echo `onChange` values in subsequent trees. With the same
   `revision`, recent delayed echoes acknowledge edits without rewinding newer text.
@@ -613,6 +626,12 @@ result from updating a replacement document, pass its `DocumentID` to
 monotonically increasing nonzero `Sequence` values per document; stale and
 unsequenced updates are rejected once sequencing starts. Invalid or stale updates
 return an error and leave the current tree unchanged.
+
+Window and launcher-preview inboxes use the same bounded coalescing mechanism.
+Pending value changes retain the latest value without crossing discrete events
+such as clicks and submissions. Preview overflow of nonreplaceable events is
+reported in the Core log. Preview updates carry their validated immutable tree
+through the UI handoff, so layout does not parse an accepted update again.
 
 ## SDK wire types
 

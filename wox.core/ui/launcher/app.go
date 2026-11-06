@@ -19,6 +19,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/ui/woxview"
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/screen"
@@ -246,6 +247,8 @@ func appendUIReceivedTails(results []queryResult, elapsed int64) {
 }
 
 type queryPreview struct {
+	// woxViewTree carries validation work across the UI handoff; it is never wire data.
+	woxViewTree        *woxview.Tree
 	DefaultHidden      bool              `json:"DefaultHidden"`
 	PreviewType        string            `json:"PreviewType"`
 	PreviewData        string            `json:"PreviewData"`

@@ -383,50 +383,7 @@ func (s resolvedStyle) wrapOuter(theme component.ControlTheme, child widget.Widg
 // preserves the existing natural-size path when no new property is supplied.
 func (s resolvedStyle) finishBox(theme component.ControlTheme, child widget.Widget) widget.Widget {
 	if s.AspectRatio != nil {
-		content, ratio := child, *s.AspectRatio
-		child = widget.LayoutBuilder{Build: func(available woxui.Size) widget.Widget {
-			width, height := s.Width, s.Height
-			if width > 0 {
-				width = max(width, s.MinWidth)
-			}
-			if height > 0 {
-				height = max(height, s.MinHeight)
-			}
-			if width <= 0 && height <= 0 {
-				if available.Width < math.MaxFloat32 {
-					width = available.Width
-				} else if available.Height < math.MaxFloat32 {
-					height = available.Height
-				} else {
-					return content
-				}
-			}
-			if width > 0 && height > 0 {
-				// Both explicit dimensions take precedence over a preferred ratio.
-				width, height = min(width, available.Width), min(height, available.Height)
-			} else {
-				if width > 0 {
-					width = min(width, available.Width)
-					height = width / ratio
-				} else {
-					height = min(height, available.Height)
-					width = height * ratio
-				}
-				if width < s.MinWidth {
-					width, height = s.MinWidth, s.MinWidth/ratio
-				}
-				if height < s.MinHeight {
-					height, width = s.MinHeight, s.MinHeight*ratio
-				}
-				if height > available.Height {
-					height, width = available.Height, available.Height*ratio
-				}
-				if width > available.Width {
-					width, height = available.Width, available.Width/ratio
-				}
-			}
-			return widget.Constrained{MinWidth: width, MaxWidth: width, MinHeight: height, MaxHeight: height, Child: content}
-		}}
+		child = s.aspectBox(child)
 	}
 	child = s.constrain(child)
 	if s.Overflow == OverflowHidden {
@@ -451,4 +408,52 @@ func (s resolvedStyle) finishBox(theme component.ControlTheme, child widget.Widg
 		child = widget.Container{Padding: s.Margin, Child: child}
 	}
 	return child
+}
+
+// aspectBox isolates its layout closure so ordinary boxes do not heap-allocate a style snapshot.
+func (s resolvedStyle) aspectBox(child widget.Widget) widget.Widget {
+	content, ratio := child, *s.AspectRatio
+	return widget.LayoutBuilder{Build: func(available woxui.Size) widget.Widget {
+		width, height := s.Width, s.Height
+		if width > 0 {
+			width = max(width, s.MinWidth)
+		}
+		if height > 0 {
+			height = max(height, s.MinHeight)
+		}
+		if width <= 0 && height <= 0 {
+			if available.Width < math.MaxFloat32 {
+				width = available.Width
+			} else if available.Height < math.MaxFloat32 {
+				height = available.Height
+			} else {
+				return content
+			}
+		}
+		if width > 0 && height > 0 {
+			// Both explicit dimensions take precedence over a preferred ratio.
+			width, height = min(width, available.Width), min(height, available.Height)
+		} else {
+			if width > 0 {
+				width = min(width, available.Width)
+				height = width / ratio
+			} else {
+				height = min(height, available.Height)
+				width = height * ratio
+			}
+			if width < s.MinWidth {
+				width, height = s.MinWidth, s.MinWidth/ratio
+			}
+			if height < s.MinHeight {
+				height, width = s.MinHeight, s.MinHeight*ratio
+			}
+			if height > available.Height {
+				height, width = available.Height, available.Height*ratio
+			}
+			if width > available.Width {
+				width, height = available.Width, available.Width/ratio
+			}
+		}
+		return widget.Constrained{MinWidth: width, MaxWidth: width, MinHeight: height, MaxHeight: height, Child: content}
+	}}
 }

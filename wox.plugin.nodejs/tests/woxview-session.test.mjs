@@ -1,11 +1,48 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { Button, Column, Loading, Text, createWoxView, woxViewNode } from "../dist/index.js"
+import { WoxViewSession } from "../dist/woxviewSession.js"
+
+test("replacing a root key revokes its own and descendant callbacks", async () => {
+  for (const nested of [false, true]) {
+    let key = "old"
+    const calls = []
+    const session = new WoxViewSession(
+      () => {
+        const current = key
+        const button = Button({ key: nested ? "child" : key, label: key, onPress: () => calls.push(current) })
+        return nested ? Column({ key, children: [button] }) : button
+      },
+      error => {
+        throw error
+      }
+    )
+    const handler = () => {
+      const root = JSON.parse(session.data).root
+      return (nested ? root.children[0] : root).props.onPress.$handler
+    }
+    const old = handler()
+    session.connect(async () => true)
+    session.invalidate()
+    await session.dispatch({ Handler: old, Args: [], Key: "old" })
+    assert.equal(handler(), old)
+    key = "new"
+    session.invalidate()
+    await session.dispatch({ Handler: old, Args: [], Key: "old" })
+    assert.notEqual(handler(), old)
+    assert.deepEqual(calls, ["old"])
+    await session.dispatch({ Handler: handler(), Args: [], Key: "new" })
+    assert.deepEqual(calls, ["old", "new"])
+    session.dispose()
+  }
+})
 
 test("Loading builds a loading node with optional style and key", () => {
   assert.deepEqual(Loading(), { type: "loading", props: {} })
   assert.deepEqual(Loading({ key: "pending", style: { width: 24, color: "$accent" } }), {
-    type: "loading", key: "pending", props: { style: { width: 24, color: "$accent" } }
+    type: "loading",
+    key: "pending",
+    props: { style: { width: 24, color: "$accent" } }
   })
 })
 
@@ -20,14 +57,23 @@ const ctx = {
 const tick = () => new Promise(resolve => setTimeout(resolve, 10))
 
 test("preview visibility aborts work on hide and disposes exactly once", async () => {
-  const transitions = [], signals = [], errors = []
+  const transitions = [],
+    signals = [],
+    errors = []
   let timer
   const preview = createWoxView({ onError: error => errors.push(error), render: () => Text({ text: "preview" }) }).asPreview({
     onShow: signal => {
       transitions.push("show")
       signals.push(signal)
       timer = setInterval(() => {}, 1000)
-      signal.addEventListener("abort", () => { clearInterval(timer); transitions.push("abort") }, { once: true })
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearInterval(timer)
+          transitions.push("abort")
+        },
+        { once: true }
+      )
     },
     onHide: () => transitions.push("hide"),
     onDispose: () => transitions.push("dispose")
@@ -49,9 +95,14 @@ test("preview visibility aborts work on hide and disposes exactly once", async (
 
 test("hiding does not wait for an unfinished show hook", async () => {
   let finish, signal
-  const wait = new Promise(resolve => { finish = resolve })
+  const wait = new Promise(resolve => {
+    finish = resolve
+  })
   const preview = createWoxView({ onError: () => {}, render: () => Text({ text: "preview" }) }).asPreview({
-    onShow: async value => { signal = value; await wait }
+    onShow: async value => {
+      signal = value
+      await wait
+    }
   })
   await preview.OnWoxViewEvent(ctx, { Type: "show" })
   await preview.OnWoxViewEvent(ctx, { Type: "hide" })
@@ -62,13 +113,30 @@ test("hiding does not wait for an unfinished show hook", async () => {
 
 test("preview callbacks update their result and stop after release", async () => {
   let count = 0
-  const updates = [], errors = []
+  const updates = [],
+    errors = []
   const preview = createWoxView({
     onError: error => errors.push(error),
-    render: session => Button({ label: String(count), onPress: value => { count += value; session.invalidate() } })
+    render: session =>
+      Button({
+        label: String(count),
+        onPress: value => {
+          count += value
+          session.invalidate()
+        }
+      })
   }).asPreview()
   const binding = { ...preview }[Symbol.for("wox.preview.binding")]
-  binding.bind(ctx, { UpdateResult: async (_ctx, update) => { updates.push(update); return true } }, "row")
+  binding.bind(
+    ctx,
+    {
+      UpdateResult: async (_ctx, update) => {
+        updates.push(update)
+        return true
+      }
+    },
+    "row"
+  )
   const handler = JSON.parse(preview.PreviewData).root.props.onPress.$handler
   await preview.OnWoxViewEvent(ctx, { Handler: handler, Args: [2], Key: "" })
   await tick()
@@ -83,13 +151,18 @@ test("preview callbacks update their result and stop after release", async () =>
 })
 
 test("a rejected preview update keeps the accepted callback registry", async () => {
-  let session, value = "old"
-  const calls = [], errors = []
-  const preview = createWoxView({ onError: error => errors.push(error.message), render: s => {
-    session = s
-    const current = value
-    return Button({ onPress: () => calls.push(current) })
-  } }).asPreview()
+  let session,
+    value = "old"
+  const calls = [],
+    errors = []
+  const preview = createWoxView({
+    onError: error => errors.push(error.message),
+    render: s => {
+      session = s
+      const current = value
+      return Button({ onPress: () => calls.push(current) })
+    }
+  }).asPreview()
   const binding = preview[Symbol.for("wox.preview.binding")]
   binding.bind(ctx, { UpdateResult: async () => false }, "row")
   const handler = JSON.parse(preview.PreviewData).root.props.onPress.$handler

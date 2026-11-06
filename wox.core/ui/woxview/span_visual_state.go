@@ -23,8 +23,12 @@ func (s *richTextState) DidUpdateWidget(_ widget.StateContext, _, next any) {
 		id := nodeID(c.id, child, i)
 		live[id] = true
 		if state := s.spans[id]; state != nil {
+			if state.owner != c.builder.view.nodes[id] {
+				delete(s.spans, id)
+				continue
+			}
 			props := child.Props.(*SpanProps)
-			state.receiveEnter(c.builder.view, props.CommonProps)
+			state.receiveEnter(c.builder.view.nodes[id], props.CommonProps)
 			if props.InteractionStyles.empty() {
 				state.hovered, state.pressed, state.focused = false, false, false
 			}
@@ -52,7 +56,7 @@ func (s *richTextState) Build(ctx widget.StateContext, value any) widget.Widget 
 		state := s.spans[run.ID]
 		if state == nil {
 			state = &nodeVisualState{}
-			state.receiveEnter(b.view, props.CommonProps)
+			state.receiveEnter(b.view.nodes[run.ID], props.CommonProps)
 			s.spans[run.ID] = state
 		}
 		if props.InteractionStyles.empty() {

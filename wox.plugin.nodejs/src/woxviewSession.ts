@@ -1,4 +1,18 @@
-import type { Context, CreateWindowOption, PluginWindow, PublicAPI, WoxPreview, WoxViewButtonProps, WoxViewColumnProps, WoxViewEventData, WoxViewHandler, WoxViewLoadingProps, WoxViewPreviewOption, WoxViewTextProps, WoxViewTree } from "../types/index.js"
+import type {
+  Context,
+  CreateWindowOption,
+  PluginWindow,
+  PublicAPI,
+  WoxPreview,
+  WoxViewButtonProps,
+  WoxViewColumnProps,
+  WoxViewEventData,
+  WoxViewHandler,
+  WoxViewLoadingProps,
+  WoxViewPreviewOption,
+  WoxViewTextProps,
+  WoxViewTree
+} from "../types/index.js"
 
 type Callback = (...args: any[]) => void | Promise<void>
 type Node = { type: string; key?: string; props?: Record<string, unknown>; children?: Node[] }
@@ -92,7 +106,11 @@ export class WoxViewSession {
         })
       }
       if (value && typeof value === "object") {
-        if (typeof value.type === "string") path += `/type:${JSON.stringify(value.type)}`
+        if (typeof value.type === "string") {
+          path += `/type:${JSON.stringify(value.type)}`
+          // Root nodes have no array item path; their key must also revoke descendants' callbacks.
+          if (typeof value.key === "string" && value.key !== "") path += `/key:${JSON.stringify(value.key)}`
+        }
         const result: Record<string, unknown> = {}
         for (const key of Object.keys(value)) result[key] = convert(value[key], `${path}/${JSON.stringify(key)}`)
         return result
@@ -147,8 +165,11 @@ export class WoxView {
     const invoke = (callback: (() => void) | undefined) => {
       if (!callback) return
       const report = onError
-      try { Promise.resolve(callback()).catch(error => report?.(error instanceof Error ? error : new Error(String(error)))) }
-      catch (error) { report?.(error instanceof Error ? error : new Error(String(error))) }
+      try {
+        Promise.resolve(callback()).catch(error => report?.(error instanceof Error ? error : new Error(String(error))))
+      } catch (error) {
+        report?.(error instanceof Error ? error : new Error(String(error)))
+      }
     }
     const hide = () => {
       if (!visible) return
@@ -158,7 +179,9 @@ export class WoxView {
       invoke(lifecycle?.onHide)
     }
     const preview: WoxPreview = {
-      PreviewType: "woxview", PreviewData: session.data, WoxViewID: document,
+      PreviewType: "woxview",
+      PreviewData: session.data,
+      WoxViewID: document,
       OnWoxViewEvent: async (_ctx, event) => {
         if (released) return
         if ("Type" in event && event.Type === "show") {
@@ -174,7 +197,9 @@ export class WoxView {
           hide()
           return
         }
-        try { await session.dispatch(event as WoxViewEventData) } catch (error) {
+        try {
+          await session.dispatch(event as WoxViewEventData)
+        } catch (error) {
           onError?.(error instanceof Error ? error : new Error(String(error)))
         }
       }

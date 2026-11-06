@@ -76,6 +76,11 @@ type Icon struct {
 	masks               map[string][]svgShape
 }
 
+// ViewBoxSize exposes the authored aspect ratio without coupling callers to SVG internals.
+func (icon *Icon) ViewBoxSize() (width, height float64) {
+	return icon.viewBox.width, icon.viewBox.height
+}
+
 // openElement is one start tag still waiting for its end tag.
 type openElement struct {
 	group    int

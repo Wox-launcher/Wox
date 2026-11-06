@@ -2,6 +2,8 @@ package launcher
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,12 +11,106 @@ import (
 	"wox/ui/contract"
 	ui "wox/ui/runtime"
 	"wox/ui/widget"
+	"wox/ui/woxview"
 )
 
 type previewEventTestServices struct {
 	contract.Services
 	events    chan plugin.WoxViewPreviewEvent
 	lifecycle chan plugin.WoxViewPreviewEventType
+}
+
+// slowPreviewServices holds the first discrete callback while the UI keeps producing edits.
+type slowPreviewServices struct {
+	previewEventTestServices
+	started, release chan struct{}
+}
+
+func (s *slowPreviewServices) DispatchWoxViewPreviewEvent(ctx context.Context, session, query, result, document string, event plugin.WoxViewPreviewEvent) error {
+	if event.Handler == "block" {
+		close(s.started)
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return s.previewEventTestServices.DispatchWoxViewPreviewEvent(ctx, session, query, result, document, event)
+}
+
+// TestSlowWoxViewPreviewReceivesLatestChanges exercises the real worker and discrete-event barriers.
+func TestSlowWoxViewPreviewReceivesLatestChanges(t *testing.T) {
+	services := &slowPreviewServices{previewEventTestServices: previewEventTestServices{events: make(chan plugin.WoxViewPreviewEvent, 8)}, started: make(chan struct{}), release: make(chan struct{})}
+	var release sync.Once
+	defer release.Do(func() { close(services.release) })
+	app := New(false, services)
+	defer app.cancel()
+	defer app.previews.clearWoxViewPreview()
+	app.uiCall = nil
+	app.sessionID, app.previews.sessionID, app.visible = "session", "session", true
+	result := queryResult{ID: "row", QueryID: "query"}
+	preview := queryPreview{WoxViewID: "doc", PreviewData: `{"version":1,"root":{"type":"column","children":[{"type":"button","props":{"onPress":{"$handler":"block"}}},{"type":"slider","props":{"onChange":{"$handler":"change"}}},{"type":"button","props":{"onPress":{"$handler":"submit"}}}]}}`}
+	app.buildWoxViewPreview(result, "key", preview, uiPalette{}, 200, 100)
+	queue := app.previews.woxViewEvents
+	queue.Push(woxview.Event{Handler: "block", Args: []byte(`[]`)})
+	select {
+	case <-services.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("callback did not start")
+	}
+	for batch := range 2 {
+		for i := range 1000 {
+			if !queue.Push(woxview.Event{Handler: "change", Key: "slider", Args: []byte(fmt.Sprintf("[%d]", batch*1000+i)), Coalescible: true}) {
+				t.Fatal("replaceable edits overflowed")
+			}
+		}
+		if batch == 0 {
+			queue.Push(woxview.Event{Handler: "submit", Args: []byte(`[]`)})
+		}
+	}
+	release.Do(func() { close(services.release) })
+	for _, want := range []struct{ handler, args string }{{"block", "[]"}, {"change", "[999]"}, {"submit", "[]"}, {"change", "[1999]"}} {
+		select {
+		case got := <-services.events:
+			if got.Handler != want.handler || string(got.Args) != want.args {
+				t.Fatalf("event=%+v, want=%+v", got, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("missing %+v", want)
+		}
+	}
+	app.previews.clearWoxViewPreview()
+	queue.Push(woxview.Event{Handler: "change", Args: []byte(`[2000]`), Coalescible: true})
+	if _, ok := queue.Pop(); ok {
+		t.Fatal("disposed preview retained events")
+	}
+}
+
+// TestWoxViewPreviewReusesValidatedTree checks the complete update-to-build handoff.
+func TestWoxViewPreviewReusesValidatedTree(t *testing.T) {
+	app := New(false, nil)
+	defer app.cancel()
+	defer app.previews.clearWoxViewPreview()
+	app.uiCall = nil
+	app.resultList.results = []queryResult{{ID: "row", Preview: queryPreview{PreviewData: "old"}}}
+	preview := plugin.WoxPreview{PreviewType: plugin.WoxPreviewTypeWoxView, PreviewData: `{"version":1,"root":{"type":"text","props":{"text":"updated"}}}`}
+	accepted, err := app.UpdateResult(context.Background(), plugin.UpdatableResult{Id: "row", Preview: &preview})
+	if err != nil || !accepted {
+		t.Fatalf("update=%v err=%v", accepted, err)
+	}
+	prepared := app.resultList.results[0].Preview
+	if prepared.woxViewTree == nil {
+		t.Fatal("validated tree discarded before UI handoff")
+	}
+	app.buildWoxViewPreview(app.resultList.results[0], "key", prepared, uiPalette{}, 200, 100)
+	if app.previews.woxView.Tree() != prepared.woxViewTree {
+		t.Fatal("UI reparsed the accepted document")
+	}
+	preview.PreviewData = `{"version":1,"root":{"type":"missing"}}`
+	accepted, err = app.UpdateResult(context.Background(), plugin.UpdatableResult{Id: "row", Preview: &preview})
+	if err != nil || accepted || app.resultList.results[0].Preview.woxViewTree != prepared.woxViewTree {
+		t.Fatal("invalid update replaced the accepted document")
+	}
 }
 
 func (s *previewEventTestServices) DispatchWoxViewPreviewEvent(_ context.Context, session, query, result, document string, event plugin.WoxViewPreviewEvent) error {

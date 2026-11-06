@@ -182,6 +182,9 @@ func (a *previewController) clearWoxViewPreview() {
 	if a.woxViewCancel != nil {
 		a.woxViewCancel()
 	}
+	if a.woxViewEvents != nil {
+		a.woxViewEvents.Close()
+	}
 	a.woxView, a.woxViewKey, a.woxViewData, a.woxViewID, a.woxViewCancel, a.woxViewEvents = nil, "", "", "", nil, nil
 	a.woxViewResult = queryResult{}
 	a.woxViewShown = false

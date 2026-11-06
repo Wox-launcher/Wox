@@ -17,6 +17,8 @@ type nodeLifetime struct {
 	node     *Node
 	live     bool
 	handlers map[HandlerID]bool
+	stateKey widget.Key
+	serial   uint64
 }
 
 type snapshotPart struct {
@@ -48,7 +50,11 @@ func (v *View) reconcilePresence(tree *Tree) {
 	walk = func(node *Node, id string) {
 		owner := v.nodes[id]
 		if owner == nil {
-			owner = &nodeLifetime{live: true}
+			// Queued events can outlive the node, so identity must not depend on
+			// an address that the allocator can reuse after collection.
+			v.nodeSerial++
+			owner = &nodeLifetime{live: true, serial: v.nodeSerial}
+			owner.stateKey = widget.Key(fmt.Sprintf("%s/visual-state/%d", id, owner.serial))
 		}
 		if owner.node != node {
 			owner.node = node

@@ -1,11 +1,17 @@
 package woxview
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"image"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"wox/common"
@@ -31,6 +37,14 @@ const (
 )
 
 const svgThemeIconColor = "var(--wox-theme-icon-color)"
+
+// Budgets apply before pixel allocation, independently of JSON and logical layout limits.
+const (
+	maxSVGRasterSize    = 2048
+	maxImagePixels      = 16 * 1024 * 1024
+	maxImageSourceBytes = 32 * 1024 * 1024
+	maxImageCacheBytes  = 64 * 1024 * 1024
+)
 
 // IconColorMode chooses authored colors by default or an explicitly tinted glyph.
 type IconColorMode string
@@ -131,7 +145,7 @@ func buildImage(b *builder, node *Node, id string) widget.Widget {
 		content = widget.Image{Source: b.originalIcon(props.Icon, max(width, height)), Width: width, Height: height, Fit: fit, Radius: style.BorderRadius}
 	} else if props.Icon != "" {
 		content = component.IconGlyph(props.Icon, min(width, height), style.Color.resolve(b.theme(), b.theme().Text))
-	} else if image := b.view.images.get(props, isDarkText(b.theme().Text), width, height); image != nil {
+	} else if image := b.view.images.get(props, !b.theme().Dark, width, height); image != nil {
 		fit := widget.ImageFitContain
 		switch props.Fit {
 		case ImageFitCover:
@@ -157,11 +171,6 @@ func (b *builder) originalIcon(name string, size float32) *woxui.Image {
 	return b.view.images.get(props, !b.theme().Dark, size, size)
 }
 
-// isDarkText reports a dark text color, i.e. a light theme.
-func isDarkText(text woxui.Color) bool {
-	return 299*int(text.R)+587*int(text.G)+114*int(text.B) <= 128*1000
-}
-
 type imageCacheKey struct {
 	digest     [32]byte
 	rasterSize int
@@ -171,16 +180,20 @@ type imageCacheKey struct {
 type imageCacheEntry struct {
 	image *woxui.Image
 	used  bool
+	bytes int
 }
 
 // imageCache keeps decoded images across tree updates; entries not referenced by the latest
 // Build are dropped so replaced images do not accumulate. Failed decodes are cached as nil
 // so a broken source is not retried every frame.
 type imageCache struct {
-	entries map[imageCacheKey]*imageCacheEntry
+	entries    map[imageCacheKey]*imageCacheEntry
+	bytes      int
+	frameBytes int
 }
 
 func (c *imageCache) beginBuild() {
+	c.frameBytes = 0
 	for _, entry := range c.entries {
 		entry.used = false
 	}
@@ -189,6 +202,7 @@ func (c *imageCache) beginBuild() {
 func (c *imageCache) endBuild() {
 	for key, entry := range c.entries {
 		if !entry.used {
+			c.bytes -= entry.bytes
 			delete(c.entries, key)
 		}
 	}
@@ -199,10 +213,21 @@ func (c *imageCache) endBuild() {
 func (c *imageCache) get(props *ImageProps, lightTheme bool, width, height float32) *woxui.Image {
 	source := *props.Source
 	key := imageCacheKey{digest: props.digest, lightTheme: lightTheme && props.themed}
-	if source.ImageType == common.WoxImageTypeSvg {
-		key.rasterSize = max(32, int(math.Ceil(float64(max(width, height)*2))))
+	// File sources may also contain SVG. Clamp before converting to int and
+	// before decoding so a large logical box cannot allocate a giant square.
+	key.rasterSize = int(min(float64(maxSVGRasterSize), max(32, math.Ceil(float64(max(width, height)*2)))))
+	bitmapKey := key
+	bitmapKey.rasterSize = 0
+	if _, ok := c.entries[bitmapKey]; ok {
+		key = bitmapKey
 	}
 	if entry, ok := c.entries[key]; ok {
+		if !entry.used {
+			if c.frameBytes+entry.bytes > maxImageCacheBytes {
+				return nil
+			}
+			c.frameBytes += entry.bytes
+		}
 		entry.used = true
 		return entry.image
 	}
@@ -214,25 +239,107 @@ func (c *imageCache) get(props *ImageProps, lightTheme bool, width, height float
 		}
 		source.ImageData = strings.ReplaceAll(source.ImageData, svgThemeIconColor, color)
 	}
-	image, err := decodeImage(source, key.rasterSize)
+	decoded, vector, err := decodeImage(source, key.rasterSize, maxImageCacheBytes-c.frameBytes)
+	if errors.Is(err, errImageFrameBudget) {
+		// Retry next frame: removing other images can make room without changing this source.
+		return nil
+	}
 	if err != nil {
 		util.GetLogger().Warn(context.Background(), fmt.Sprintf("woxview: failed to decode %s image: %v", source.ImageType, err))
 	}
-	c.entries[key] = &imageCacheEntry{image: image, used: true}
-	return image
+	if !vector {
+		key.rasterSize = 0
+	}
+	size := 0
+	if decoded != nil {
+		size = decoded.Width * decoded.Height * 4
+	}
+	for oldKey, entry := range c.entries {
+		if c.bytes+size <= maxImageCacheBytes {
+			break
+		}
+		if !entry.used {
+			c.bytes -= entry.bytes
+			delete(c.entries, oldKey)
+		}
+	}
+	c.entries[key] = &imageCacheEntry{image: decoded, used: true, bytes: size}
+	c.bytes += size
+	c.frameBytes += size
+	return decoded
 }
 
-func decodeImage(source ImageSource, rasterSize int) (*woxui.Image, error) {
-	if source.ImageType == common.WoxImageTypeSvg {
-		rgba, err := woxsvg.Render(source.ImageData, rasterSize, rasterSize)
+var errImageFrameBudget = errors.New("woxview image frame exceeds 64 MiB")
+
+// decodeImage bounds encoded input and decoded pixels before allocating raster buffers.
+func decodeImage(source ImageSource, rasterSize, remainingBytes int) (*woxui.Image, bool, error) {
+	var data []byte
+	switch source.ImageType {
+	case common.WoxImageTypeSvg:
+		data = []byte(source.ImageData)
+	case common.WoxImageTypeAbsolutePath:
+		file, err := os.Open(source.ImageData)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return woxui.NewImage(rgba)
+		defer file.Close()
+		data, err = io.ReadAll(io.LimitReader(file, maxImageSourceBytes+1))
+		if err != nil {
+			return nil, false, err
+		}
+	case common.WoxImageTypeBase64:
+		_, encoded, found := strings.Cut(source.ImageData, ",")
+		if !found {
+			return nil, false, errors.New("invalid base64 image data")
+		}
+		if base64.StdEncoding.DecodedLen(len(encoded)) > maxImageSourceBytes {
+			return nil, false, errors.New("image source exceeds 32 MiB")
+		}
+		var err error
+		data, err = base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return nil, false, err
+		}
+	default:
+		return nil, false, fmt.Errorf("unsupported image type %q", source.ImageType)
 	}
-	decoded, err := common.WoxImage{ImageType: source.ImageType, ImageData: source.ImageData}.ToImageWithoutRemoteFetch()
+	if len(data) > maxImageSourceBytes {
+		return nil, false, errors.New("image source exceeds 32 MiB")
+	}
+	isSVG := source.ImageType == common.WoxImageTypeSvg || source.ImageType == common.WoxImageTypeAbsolutePath && (strings.EqualFold(filepath.Ext(source.ImageData), ".svg") || bytes.Contains(data[:min(len(data), 512)], []byte("<svg")))
+	if isSVG {
+		icon, err := woxsvg.Parse(bytes.NewReader(data))
+		if err != nil {
+			return nil, false, err
+		}
+		width, height := icon.ViewBoxSize()
+		scale := float64(min(maxSVGRasterSize, max(1, rasterSize))) / max(width, height)
+		pixelWidth, pixelHeight := max(1, int(math.Round(width*scale))), max(1, int(math.Round(height*scale)))
+		if pixelWidth*pixelHeight*4 > remainingBytes {
+			return nil, false, errImageFrameBudget
+		}
+		// Keep the source aspect ratio; Image owns contain/cover/fill in logical coordinates.
+		rgba, err := icon.Render(pixelWidth, pixelHeight)
+		if err != nil {
+			return nil, false, err
+		}
+		converted, err := woxui.NewImageFromPackedRGBA(rgba)
+		return converted, true, err
+	}
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return woxui.NewImage(decoded)
+	if config.Width <= 0 || config.Height <= 0 || config.Width > 16384 || config.Height > 16384 || int64(config.Width)*int64(config.Height) > maxImagePixels {
+		return nil, false, errors.New("image exceeds dimension or 16 megapixel limit")
+	}
+	if config.Width*config.Height*4 > remainingBytes {
+		return nil, false, errImageFrameBudget
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, false, err
+	}
+	converted, err := woxui.NewImage(decoded)
+	return converted, false, err
 }

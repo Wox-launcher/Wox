@@ -114,6 +114,9 @@ class WoxViewSession:
             if isinstance(value, dict):
                 if isinstance(value.get("type"), str):
                     path += f"/type:{json.dumps(value['type'], ensure_ascii=False)}"
+                    # Root nodes need the same keyed callback lifetime as array children.
+                    if isinstance(value.get("key"), str) and value["key"]:
+                        path += f"/key:{json.dumps(value['key'], ensure_ascii=False)}"
                 return {key: convert(item, f"{path}/{json.dumps(key, ensure_ascii=False)}") for key, item in value.items()}
             return value
 

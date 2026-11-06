@@ -37,10 +37,24 @@ type BuildProps struct {
 
 // Event identifies the keyed node which triggered a producer callback.
 type Event struct {
-	Handler     HandlerID
-	Args        json.RawMessage
-	Key         string
-	Coalescible bool `json:"-"`
+	Handler      HandlerID
+	Args         json.RawMessage
+	Key          string
+	Coalescible  bool `json:"-"`
+	nodeIdentity string
+}
+
+// CoalescingKey isolates nodes even when keys are only sibling-unique or handlers are shared.
+// Embedders treat this key as opaque; the public event still exposes only the authored key.
+func (e Event) CoalescingKey() string {
+	if !e.Coalescible {
+		return ""
+	}
+	identity := e.nodeIdentity
+	if identity == "" {
+		identity = e.Key
+	}
+	return fmt.Sprintf("%d:%s%s", len(e.Handler), e.Handler, identity)
 }
 
 // View retains one woxview surface: the current tree and decoded images. Widget-local state such
@@ -64,6 +78,7 @@ type View struct {
 	captureOrder   int
 	exitBatch      uint64
 	eventEpoch     uint64
+	nodeSerial     uint64
 }
 
 // NewView creates an empty view; Build returns an empty widget until SetTree is called.
@@ -131,16 +146,22 @@ func (v *View) Build(props BuildProps) widget.Widget {
 		clear(v.fieldValues)
 		clear(v.fieldStates)
 		clear(v.scrolls)
+		oldPrefix := v.prefix
 		// Commands accepted before the first frame use the default namespace.
 		for i := range v.commands {
 			v.commands[i].id = prefix + strings.TrimPrefix(v.commands[i].id, v.prefix)
 		}
 		v.prefix = prefix
 		v.clearPresence()
-		for _, owner := range v.nodes {
-			owner.live = false
+		// Changing the host namespace remounts widgets, but does not replace the
+		// document nodes targeted by commands accepted before the first frame.
+		nodes := make(map[string]*nodeLifetime, len(v.nodes))
+		for id, owner := range v.nodes {
+			id = prefix + strings.TrimPrefix(id, oldPrefix)
+			owner.stateKey = widget.Key(fmt.Sprintf("%s/visual-state/%d", id, owner.serial))
+			nodes[id] = owner
 		}
-		clear(v.nodes)
+		v.nodes = nodes
 		v.reconcilePresence(v.tree)
 	}
 	b := &builder{view: v, props: props}
@@ -234,7 +255,7 @@ func (b *builder) node(node *Node, id string) widget.Widget {
 	local.eventOwner = local.nodeOwner
 	local.isRoot = node == b.view.tree.Root
 	// Keep the state boundary stable when producers add or remove state-style props.
-	return b.captureNode(id, widget.Stateful{Key: widget.Key(id + "/visual-state"), Type: (*nodeVisualState)(nil),
+	return b.captureNode(id, widget.Stateful{Key: local.nodeOwner.stateKey, Type: (*nodeVisualState)(nil),
 		Widget: nodeVisualConfig{builder: local, node: node, id: id}, CreateState: func() widget.State { return &nodeVisualState{} }})
 }
 
@@ -307,7 +328,7 @@ func (b *builder) eventEmitter(handler *Handler, coalescible bool) func(args ...
 			return
 		}
 		if onNodeEvent != nil {
-			onNodeEvent(Event{Handler: id, Args: data, Key: key, Coalescible: coalescible})
+			onNodeEvent(Event{Handler: id, Args: data, Key: key, Coalescible: coalescible, nodeIdentity: string(source.stateKey)})
 		} else {
 			onEvent(id, data)
 		}

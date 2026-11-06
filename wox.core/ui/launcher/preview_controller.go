@@ -9,6 +9,7 @@ import (
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	"wox/ui/woxview"
+	"wox/util"
 )
 
 // previewImageServices opens a preview picture in core's full-size image overlay.
@@ -64,7 +65,7 @@ type previewController struct {
 	woxViewID         string
 	woxViewShown      bool
 	woxViewCancel     context.CancelFunc
-	woxViewEvents     chan woxview.Event
+	woxViewEvents     *util.CoalescingQueue[woxview.Event]
 	woxViewReady      chan struct{}
 	woxViewResult     queryResult
 	woxViewLifecycle  woxViewLifecycleQueue

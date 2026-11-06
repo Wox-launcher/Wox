@@ -374,11 +374,17 @@ func (a *App) RefreshAccountStatus(_ context.Context) error {
 
 // UpdateResult patches the visible result with one already-polished core snapshot.
 func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (bool, error) {
+	var preparedPreview *queryPreview
+	if result.Preview != nil {
+		preview := fromCorePreview(*result.Preview)
+		preparedPreview = &preview
+	}
 	if result.Preview != nil && result.Preview.PreviewType == plugin.WoxPreviewTypeWoxView {
 		tree, err := woxview.Parse([]byte(result.Preview.PreviewData))
 		if err != nil || tree.HasHandlers() && result.Preview.WoxViewID == "" {
 			return false, nil
 		}
+		preparedPreview.woxViewTree = tree
 	}
 	updated := false
 	previewBecameVisible := false
@@ -406,7 +412,7 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 			}
 			result.Preview = nil
 		}
-		updated = a.applyTypedResultUpdate(result)
+		updated = a.applyTypedResultUpdate(result, preparedPreview)
 	})
 	if err == nil && updated && previewBecameVisible {
 		err = a.applyWindowBounds()
@@ -853,7 +859,7 @@ func resultPreviewBecameVisible(previous queryPreview, update *plugin.WoxPreview
 	return update != nil && previous.PreviewData == "" && update.PreviewData != ""
 }
 
-func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
+func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult, preparedPreview *queryPreview) bool {
 	updated := false
 	updatedIndex := -1
 	for index := range a.resultList.results {
@@ -870,7 +876,7 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult) bool {
 			a.resultList.results[index].Icon = fromCoreImage(*result.Icon)
 		}
 		if result.Preview != nil {
-			a.resultList.results[index].Preview = fromCorePreview(*result.Preview)
+			a.resultList.results[index].Preview = *preparedPreview
 		}
 		if result.Tails != nil {
 			a.resultList.results[index].Tails = fromCoreTails(*result.Tails)

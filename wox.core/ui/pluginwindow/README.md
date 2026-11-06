@@ -194,3 +194,6 @@ queue combines pending changes within the same document and between discrete-eve
 ordering barriers, retaining the latest value even when the bounded queue is full.
 The plugin package does not parse WoxView payloads or depend on UI components to
 make this decision. Nonmergeable overflow remains observable through error events.
+The inbox mechanism is shared with launcher previews through `util.CoalescingQueue`;
+each owner supplies its document and event identities without coupling the queue
+to plugin or UI types.

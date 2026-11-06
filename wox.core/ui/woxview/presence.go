@@ -71,7 +71,7 @@ func (a PresenceAnimation) duration() time.Duration {
 
 // receiveEnter captures the first mounted declaration. Prop echoes and changes
 // cannot restart a mount; removing the declaration cancels it immediately.
-func (s *nodeVisualState) receiveEnter(owner *View, common CommonProps) {
+func (s *nodeVisualState) receiveEnter(owner *nodeLifetime, common CommonProps) {
 	if s.owner != owner {
 		s.owner, s.enter = owner, common.Enter
 	} else if common.Enter == nil {

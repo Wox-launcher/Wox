@@ -22,6 +22,10 @@ only WoxView documents through `woxview`. `woxview` owns declarative tree valida
 field values, debounced change delivery, command target resolution, and widget mapping.
 `widget` owns generic subtree focus/selection/reveal operations; `pluginwindow`
 guards command document identity and adapts deferred errors to plugin events.
+Window and preview event adapters use `util.CoalescingQueue` for bounded delivery
+with discrete ordering barriers. Preview result snapshots retain validated WoxView
+trees across the UI handoff. WoxView node lifetimes namespace mounted widget state
+and deferred commands independently of when Host frames run.
 Gesture observers can track primary press state through descendants, including
 raw-input surfaces, without taking over their activation. The widget Host owns
 press lifetime and cancellation; consumers own the resulting visual treatment.
