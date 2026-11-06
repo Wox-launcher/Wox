@@ -726,7 +726,7 @@ func (pluginHealthUI) ShowToast(context.Context, common.ToastMsg) {}
 
 func (pluginHealthUI) UpdateAttentionUnreadCount(context.Context, int) {}
 
-func (pluginHealthUI) ShowToolbarMsg(context.Context, interface{}) {}
+func (pluginHealthUI) ShowToolbarMsg(context.Context, common.ToolbarMsgUI) {}
 
 func (pluginHealthUI) ClearToolbarMsg(context.Context, string) {}
 
@@ -735,6 +735,8 @@ func (pluginHealthUI) ShowSystemToolbarMsg(context.Context, common.SystemToolbar
 func (pluginHealthUI) ClearSystemToolbarMsg(context.Context, string) {}
 
 func (pluginHealthUI) UpdateResult(context.Context, interface{}) bool { return false }
+
+func (pluginHealthUI) RemoveResult(context.Context, interface{}) bool { return false }
 
 func (pluginHealthUI) PushResults(context.Context, interface{}) bool { return false }
 
