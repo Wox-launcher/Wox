@@ -3,9 +3,17 @@
 This package provides type definitions for developing Wox plugins in Python.
 
 Plugin-owned windows are available through `api.create_window(ctx, option)`.
-The returned instance has `show`, `hide`, `close`, `set_options`, `content.set` and
-`content.post_message`, all with named Option/Result models. See the
-[window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+The returned instance has `show`, `hide`, `close`, `set_options`, `content.set`,
+`content.update` and `content.post_message`, all with named Option/Result models.
+See the [window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+
+## WoxView protocol types
+
+Import `WoxViewTree`, `WoxViewNode`, `WoxViewHandler` and `WoxViewEventData` from
+`wox_plugin`. Component props and other types live in `wox_plugin.models.woxview`.
+They describe the same JSON wire format as the Node.js SDK, using protocol keys
+such as `onPress` and `$handler`. See the [shared SDK guide](../wox.core/ui/woxview/README.md#sdk-wire-types)
+for examples, event dispatch, single-file plugins and type generation.
 
 ## Requirements
 
@@ -301,3 +309,32 @@ removed = await api.remove_result(ctx, RemoveResultOption(
 ```
 
 Use the original query context and a result owned by your plugin. `selected_result_id` is optional; if it is absent or unavailable, Wox preserves the current selection or selects the nearest remaining row. `removed.success` indicates whether the result was visible and removed.
+
+## Interactive WoxView windows
+
+Create a view once and mount it through the existing window API. Each `as_window()` call creates an independent session; keep business state in the plugin and call `invalidate()` when it changes. Wox retains native interaction state such as focus and text editing. Supply stable `key` values for nodes that can move in a list.
+
+```python
+from wox_plugin import Button, Column, Text, WindowOptions, WindowPresentation, create_wox_view
+
+state = {"count": 0}
+errors = []
+
+def render(session):
+    def add():
+        state["count"] += 1
+        session.invalidate()
+    return Column(children=[
+        Text(text=f"Count: {state['count']}"),
+        Button(key="add", label="Add", on_press=add),
+    ])
+
+view = create_wox_view(render, errors.append)
+result = await api.create_window(ctx, view.as_window(WindowOptions(
+    title="Counter", presentation=WindowPresentation.WINDOW, width=360, height=240,
+)))
+```
+
+Single-file Python plugins use the same `wox_plugin` imports supplied by their host. `wox_view_node(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, and `Button` are convenience builders. Props passed to the generic builder use WoxView JSON names such as `onChange`; callback arguments follow the WoxView event contract.
+
+The adapter owns the returned `content` and `on_event`. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `on_error`. This requires matching SDK and host versions. The session is surface-independent, but WoxView previews and `as_preview()` are not yet implemented.

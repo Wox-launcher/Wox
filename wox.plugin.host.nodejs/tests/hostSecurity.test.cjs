@@ -21,7 +21,10 @@ function launch(port, directory, secret) {
   const env = { ...process.env, TEST_PORT: String(port), TEST_LOG: directory, TEST_PID: String(process.pid) }
   delete env.WOX_HOST_SECRET
   if (secret) env.WOX_HOST_SECRET = secret
-  const child = spawn(process.execPath, ["-e", entry], { cwd: path.join(__dirname, ".."), env, stdio: ["ignore", "pipe", "pipe"] })
+  const args = process.env.WOX_TEST_BUNDLED_HOST
+    ? [path.join(__dirname, "../dist/index.js"), String(port), directory, String(process.pid)]
+    : ["-e", entry]
+  const child = spawn(process.execPath, args, { cwd: path.join(__dirname, ".."), env, stdio: ["ignore", "pipe", "pipe"] })
   child.diagnostics = ""
   child.stderr.on("data", data => { child.diagnostics += data })
   return child
@@ -96,7 +99,14 @@ test("host authenticates, blocks connection takeover, and permits reconnect", { 
   await assert.rejects(connect(port, headers))
 
   // The authorized connection still loads a plugin from a user-selected directory.
-  fs.writeFileSync(path.join(directory, "plugin.cjs"), "module.exports.plugin = {}\n")
+  fs.writeFileSync(path.join(directory, "plugin.cjs"), `
+    const { createWoxView, Button } = require('@wox-launcher/wox-plugin')
+    const view = createWoxView({ render: () => Button({ label: 'hello' }), onError: () => {} })
+    if (JSON.parse(view.asWindow().Content.Data).root.type !== 'button') throw new Error('SDK failed')
+    module.exports.plugin = { init: () => {
+      if (typeof require('@wox-launcher/wox-plugin').NewContext !== 'function') throw new Error('SDK unavailable later')
+    } }
+  `)
   const response = new Promise(resolve => active.on("message", data => {
     const message = JSON.parse(String(data))
     if (message.Id === "test") resolve(message)
@@ -106,6 +116,15 @@ test("host authenticates, blocks connection takeover, and permits reconnect", { 
     Params: { PluginDirectory: directory, Entry: "plugin.cjs", EntryMode: "singleFile" }
   }))
   assert.equal((await response).Error, undefined)
+  const initialized = new Promise(resolve => active.on("message", data => {
+    const message = JSON.parse(String(data))
+    if (message.Id === "init") resolve(message)
+  }))
+  active.send(JSON.stringify({
+    Type: "WOX_JSONRPC_REQUEST", Id: "init", TraceId: "test", Method: "init", PluginId: "test", PluginName: "test",
+    Params: { PluginDirectory: directory }
+  }))
+  assert.equal((await initialized).Error, undefined)
   await close(active)
 
   let reconnected

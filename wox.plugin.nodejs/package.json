@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "build": "node ./scripts/clean.mjs && tsc",
+    "test": "tsc && node --test tests/*.test.mjs && tsc --noEmit --strict --target es2020 --module nodenext --moduleResolution nodenext --allowJs --checkJs tests/woxview.types.ts tests/woxview-session.types.ts tests/woxview.singlefile.js",
     "clean": "node ./scripts/clean.mjs",
     "clean:all": "npm run clean && (rm -r ./node_modules || true)",
     "lint": "eslint --ext .ts --fix src/**/*.ts",

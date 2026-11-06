@@ -516,6 +516,79 @@ monotonically increasing nonzero `Sequence` values per document; stale and
 unsequenced updates are rejected once sequencing starts. Invalid or stale updates
 return an error and leave the current tree unchanged.
 
+## SDK wire types
+
+Node.js and Python expose types generated from this schema. Both use the exact
+JSON property names and values, including `onPress`, `$handler` and `version`.
+These describe serializable protocol data; callback functions and application
+state remain in the plugin. The same [counter fixture](testdata/sdk-counter.json)
+is used by the Go parser and both SDK tests.
+
+TypeScript imports `WoxViewTree`, `WoxViewNode`, `WoxViewHandler`,
+`WoxViewEventData`, and component-specific types from `@wox-launcher/wox-plugin`:
+
+```typescript
+import type { WoxViewTree, WoxViewEventData } from "@wox-launcher/wox-plugin"
+
+const tree: WoxViewTree = {
+  version: 1,
+  root: { type: "column", children: [
+    { type: "text", props: { text: "Count: 0" } },
+    { type: "button", key: "increment", props: { label: "Add", onPress: { $handler: "increment" } } }
+  ] }
+}
+const data = JSON.stringify(tree)
+// Pass data in CreateWindow's { Type: "woxview", Data: data }.
+// In OnEvent, inspect `event.Type === "woxview_event"` and cast
+// `event.Data` to WoxViewEventData before dispatching its Handler and Args.
+```
+
+Python uses the same object and wire spelling:
+
+```python
+import json
+from wox_plugin import WoxViewTree
+
+tree: WoxViewTree = {
+    "version": 1,
+    "root": {"type": "column", "children": [
+        {"type": "text", "props": {"text": "Count: 0"}},
+        {"type": "button", "key": "increment", "props": {"label": "Add", "onPress": {"$handler": "increment"}}},
+    ]},
+}
+data = json.dumps(tree, ensure_ascii=False)
+# Pass data in WindowContent(WindowContentType.WOXVIEW, data).
+```
+
+Python exports `WoxViewTree`, `WoxViewNode`, `WoxViewHandler` and
+`WoxViewEventData` from `wox_plugin`; all component prop types are available
+from `wox_plugin.models.woxview`. Types support Python 3.10 and newer.
+
+For either language, install the window callback during creation, dispatch events
+by `Handler`, and pass `Args` to the plugin's own callback. `ready` may arrive
+before creation returns. Keep each document's handler registry and state scoped
+to its window, discard them on close or replacement, and avoid running slow work
+in the event callback. For tree changes use `Content.Update` / `content.update`,
+with that document's ID and increasing sequence; check the result. `Content.Set`
+replaces the document instead. These SDK types do not install callbacks, manage
+state or perform runtime validation automatically.
+
+Single-file Python plugins can import these types when the host includes the
+updated SDK. Single-file JavaScript can use the identical plain object without
+any runtime package dependency. For editor type checking, a development-only SDK
+installation can supply `/** @typedef {import("@wox-launcher/wox-plugin").WoxViewTree} WoxViewTree */`
+and `/** @type {WoxViewTree} */`; type-only JSDoc is not a runtime import.
+
+Regenerate SDK declarations after changing the Go catalog or props with
+`python wox.core/ui/woxview/generate_sdk_types.py` from the repository root;
+pass `--check` to verify checked-in output. The script runs
+`go run ./ui/woxview/cmd/schema` from `wox.core`, so Go and the dependencies
+required to build WoxView must be installed. It reads `JSONSchema()` directly,
+without reading the checked-in test fixture. Static types do not express every
+schema or cross-node constraint: for example, Python cannot express the lazy-list
+child-key intersection. Core validates all trees, including limits, identities,
+forms, ranges and catalog icons. See Schema and compatibility below.
+
 ## Debounced changes
 
 Text fields can set `changeDebounce: 200` to emit only the latest `onChange` after
@@ -583,9 +656,10 @@ Wox's translator without coupling WoxView to plugin or global i18n state.
 
 ## Schema and compatibility
 
-`JSONSchema()` generates Draft 2020-12 JSON Schema from the Go catalog and props
-tags. The checked-in contract is `testdata/woxview.schema.json`. Tests compare it
-byte-for-byte; after an intentional contract change, regenerate it from
+`JSONSchema()` generates Draft 2020-12 JSON Schema from the Go catalog, props
+tags and event structure, which define the protocol. `testdata/woxview.schema.json` is a golden test
+fixture for detecting contract changes, not the SDK generator's input. Tests
+compare it byte-for-byte; after an intentional contract change, regenerate it from
 `wox.core` with `WOX_UPDATE_SCHEMA=1 go test ./ui/woxview -run TestJSONSchemaGolden`
 (PowerShell: `$env:WOX_UPDATE_SCHEMA='1'; go test ./ui/woxview -run TestJSONSchemaGolden`).
 Unset the variable before ordinary verification.

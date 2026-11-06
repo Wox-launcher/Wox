@@ -3,9 +3,17 @@
 TypeScript type definitions and SDK for developing Wox plugins in TypeScript/JavaScript.
 
 Plugin-owned windows are available through `API.CreateWindow(ctx, option)`.
-The returned instance has `Show`, `Hide`, `Close`, `SetOptions`, `Content.Set` and
-`Content.PostMessage`, all with named Option/Result contracts. See the
-[window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+The returned instance has `Show`, `Hide`, `Close`, `SetOptions`, `Content.Set`,
+`Content.Update` and `Content.PostMessage`, all with named Option/Result contracts.
+See the [window API guide and HTML examples](../wox.core/ui/pluginwindow/README.md).
+
+## WoxView protocol types
+
+The SDK exports `WoxViewTree`, `WoxViewNode`, `WoxViewHandler`, component props,
+style types and `WoxViewEventData`. These describe the language-independent JSON
+wire format. Event props contain `{ $handler: "id" }`; callbacks stay in plugin
+code. See the [shared SDK guide](../wox.core/ui/woxview/README.md#sdk-wire-types)
+for a complete example, event dispatch, single-file plugins and type generation.
 
 ## Quick Start
 
@@ -476,3 +484,28 @@ const removed = await api.RemoveResult(ctx, { ResultId: actionContext.ResultId, 
 ```
 
 Use the original query context and a result owned by your plugin. `SelectedResultId` is optional; if it is absent or unavailable, Wox preserves the current selection or selects the nearest remaining row. `removed.Success` indicates whether the result was visible and removed.
+
+## Interactive WoxView windows
+
+Create a view once and mount it through the existing window API. Each `asWindow()` call creates an independent session; keep business state in the plugin and call `invalidate()` when it changes. Wox retains native interaction state such as focus and text editing. Supply stable `key` values for nodes that can move in a list.
+
+```typescript
+import { Button, Column, Text, createWoxView } from "@wox-launcher/wox-plugin"
+
+let count = 0
+const view = createWoxView({
+  onError: error => console.error(error),
+  render: session => Column({ children: [
+    Text({ text: `Count: ${count}` }),
+    Button({ key: "add", label: "Add", onPress: () => { count++; session.invalidate() } })
+  ] })
+})
+const result = await api.CreateWindow(ctx, {
+  Window: { Title: "Counter", Presentation: "window", Width: 360, Height: 240 },
+  ...view.asWindow()
+})
+```
+
+Single-file Node.js plugins use `const { createWoxView, Column, Text, Button } = require("@wox-launcher/wox-plugin")`; Wox supplies the SDK, so no package installation is required. Packaged plugins import it as above. `woxViewNode(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, and `Button` are convenience builders. Callback arguments follow the WoxView event contract.
+
+The adapter owns `Content` and `OnEvent`; do not override them after spreading the returned options. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `onError`. This requires matching SDK and host versions. The session is surface-independent, but WoxView previews and `asPreview()` are not yet implemented.

@@ -1,5 +1,6 @@
 """Verify window operations and callbacks stay on the host RPC path."""
 
+import asyncio
 import importlib.util
 import json
 import sys
@@ -33,6 +34,8 @@ from wox_plugin import (  # noqa: E402
     WindowPresentation,
     WindowSetOptionsOption,
     WindowShowOption,
+    Button,
+    create_wox_view,
 )
 
 from wox_plugin_host import jsonrpc  # noqa: E402
@@ -153,3 +156,81 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
         api.release_windows()
         self.assertFalse(api.window_callbacks)
         self.assertFalse((await created.window.hide(Context.new(), WindowHideOption())).success)
+
+    async def test_window_binding_attaches_and_releases_once(self):
+        api = PluginAPI(AsyncMock(), "window", "Window")
+        events = []
+
+        class Binding:
+            def bind(self, _ctx, window):
+                events.append(f"bound:{window.id}")
+
+            def release(self):
+                events.append("released")
+
+        option = CreateWindowOption(WindowContent(WindowContentType.WOXVIEW, "{}"))
+        option._wox_window_binding = Binding()
+        api.invoke_method = AsyncMock(return_value={"Success": True, "WindowID": "native-3"})
+        created = await api.create_window(Context.new(), option)
+        self.assertTrue(created.success)
+        payload = api.invoke_method.await_args.args[2]["option"]
+        self.assertNotIn("_wox_window_binding", payload)
+        self.assertEqual(events, ["bound:native-3"])
+        api.release_windows()
+        api.release_windows()
+        self.assertEqual(events, ["bound:native-3", "released"])
+        failed = CreateWindowOption(WindowContent(WindowContentType.WOXVIEW, "{}"))
+        failed._wox_window_binding = Binding()
+        api.invoke_method = AsyncMock(return_value={"Success": False, "ErrMsg": "unsupported"})
+        self.assertFalse((await api.create_window(Context.new(), failed)).success)
+        self.assertEqual(events, ["bound:native-3", "released", "released"])
+
+    async def test_woxview_uses_window_rpc_and_dispatches_events(self):
+        api = PluginAPI(AsyncMock(), "view", "View")
+        plugin_instances["view"] = PluginInstance(
+            plugin=object(), api=api, plugin_dir="", module_name="view", toolbar_msg_actions={}, sys_paths=[]
+        )
+        self.addCleanup(lambda: plugin_instances.pop("view", None))
+        state = {"count": 0}
+        calls, errors = [], []
+        callback_id = ""
+
+        async def event(payload):
+            await jsonrpc.handle_request_from_wox(
+                Context.new(), {"PluginId": "view", "Method": "windowEvent", "Params": {"CallbackID": callback_id, **payload}}, AsyncMock()
+            )
+
+        async def invoke(_ctx, method, params):
+            nonlocal callback_id
+            calls.append((method, params))
+            if method == "CreateWindow":
+                callback_id = params["option"]["CallbackID"]
+                await event({"Event": json.dumps({"Type": "ready", "WindowID": "win", "DocumentID": "doc"})})
+                return {"Success": True, "WindowID": "win"}
+            return {"Success": True}
+
+        def render(session):
+            def add():
+                state["count"] += 1
+                session.invalidate()
+
+            return Button(label=str(state["count"]), on_press=add)
+
+        api.invoke_method = invoke
+        option = create_wox_view(render, errors.append).as_window()
+        handler = json.loads(option.content.data)["root"]["props"]["onPress"]["$handler"]
+        await api.create_window(Context.new(), option)
+        await event(
+            {
+                "Event": json.dumps(
+                    {"Type": "woxview_event", "WindowID": "win", "DocumentID": "doc", "Data": {"Handler": handler, "Args": [], "Key": ""}}
+                )
+            }
+        )
+        await asyncio.sleep(0.01)
+        self.assertEqual(state["count"], 1)
+        update = next(params["option"] for method, params in calls if method == "WindowContentUpdate")
+        self.assertEqual(json.loads(update["Data"])["root"]["props"]["label"], "1")
+        self.assertEqual(update["DocumentID"], "doc")
+        self.assertEqual(errors, [])
+        api.release_windows()

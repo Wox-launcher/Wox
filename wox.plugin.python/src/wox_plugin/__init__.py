@@ -342,6 +342,8 @@ from .models.toolbar_msg import (
 )
 from .plugin import Plugin, PluginInitParams, QueryReturn
 
+from .models.woxview import WoxViewEventData, WoxViewHandler, WoxViewNode, WoxViewTree
+from .woxview import Button, Column, Text, WoxView, WoxViewSession, create_wox_view, wox_view_node
 from .models.window import (
     WindowContentType,
     WindowPresentation,
@@ -550,6 +552,17 @@ __all__: List[str] = [
     "WindowMessageResult",
     "PluginWindowContent",
     "PluginWindow",
+    "WoxViewHandler",
+    "WoxViewEventData",
+    "WoxViewNode",
+    "WoxViewTree",
+    "Button",
+    "Column",
+    "Text",
+    "WoxView",
+    "WoxViewSession",
+    "create_wox_view",
+    "wox_view_node",
 ]
 
 

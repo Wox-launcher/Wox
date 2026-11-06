@@ -133,3 +133,60 @@ test("window failure and unload release every callback", async () => {
   assert.equal(api.windowCallbacks.size, 0)
   assert.equal((await created.Window.Hide(context(), {})).Success, false)
 })
+
+test("window bindings attach after creation and release exactly once", async () => {
+  const api = new PluginAPI({}, "window-owner", "Owner")
+  const events = []
+  const binding = { bind: (_ctx, window) => events.push(`bound:${window.ID}`), release: () => events.push("released") }
+  const option = { Content: { Type: "woxview", Data: "{}" }, [Symbol.for("wox.window.binding")]: binding }
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "CreateWindow")
+    assert.equal(JSON.stringify(params).includes("binding"), false)
+    return { Success: true, WindowID: "native-3" }
+  }
+  const created = await api.CreateWindow(context(), option)
+  assert.equal(created.Success, true)
+  assert.deepEqual(events, ["bound:native-3"])
+  api.releaseWindows()
+  api.releaseWindows()
+  assert.deepEqual(events, ["bound:native-3", "released"])
+  const failed = { Content: { Type: "woxview", Data: "{}" }, [Symbol.for("wox.window.binding")]: binding }
+  api.invokeMethod = async () => ({ Success: false, ErrMsg: "unsupported" })
+  assert.equal((await api.CreateWindow(context(), failed)).Success, false)
+  assert.deepEqual(events, ["bound:native-3", "released", "released"])
+})
+
+test("WoxView works through host window RPC", async () => {
+  const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, "../../wox.plugin.nodejs/src/woxviewSession.ts"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
+  }).outputText
+  const sdk = { exports: {} }
+  new Function("require", "module", "exports", compiled)(require, sdk, sdk.exports)
+  let params
+  rpc.pluginInstances.set("view-owner", { Plugin: { init: async (_ctx, value) => { params = value } } })
+  await rpc.handleRequestFromWox(context(), { PluginId: "view-owner", PluginName: "View", Method: "init", Params: { PluginDirectory: "" } }, {})
+  const api = params.API, calls = [], errors = []
+  let callbackID, count = 0, handler
+  api.invokeMethod = async (ctx, method, args) => {
+    const option = JSON.parse(args.option)
+    calls.push({ method, option })
+    if (method === "CreateWindow") {
+      callbackID = option.CallbackID
+      handler = JSON.parse(option.Content.Data).root.props.onPress.$handler
+      await rpc.handleRequestFromWox(ctx, { PluginId: "view-owner", Method: "windowEvent", Params: { CallbackID: callbackID, Event: JSON.stringify({ Type: "ready", WindowID: "win", DocumentID: "doc" }) } }, {})
+      return { Success: true, WindowID: "win" }
+    }
+    return { Success: true }
+  }
+  const view = sdk.exports.createWoxView({ onError: error => errors.push(error), render: session => sdk.exports.Button({ label: String(count), onPress: () => { count++; session.invalidate() } }) })
+  await api.CreateWindow(context(), { ...view.asWindow() })
+  await rpc.handleRequestFromWox(context(), { PluginId: "view-owner", Method: "windowEvent", Params: { CallbackID: callbackID, Event: JSON.stringify({ Type: "woxview_event", WindowID: "win", DocumentID: "doc", Data: { Handler: handler, Args: [], Key: "" } }) } }, {})
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(count, 1)
+  const update = calls.find(call => call.method === "WindowContentUpdate")
+  assert.equal(JSON.parse(update.option.Data).root.props.label, "1")
+  assert.equal(update.option.DocumentID, "doc")
+  assert.deepEqual(errors, [])
+  api.releaseWindows()
+  rpc.pluginInstances.delete("view-owner")
+})

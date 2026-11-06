@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "root": {
+    "type": "column",
+    "children": [
+      { "type": "text", "props": { "text": "Count: 0" } },
+      { "type": "button", "key": "increment", "props": { "label": "Add", "onPress": { "$handler": "increment" } } }
+    ]
+  }
+}

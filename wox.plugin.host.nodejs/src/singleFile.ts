@@ -1,4 +1,6 @@
 import path from "path"
+import Module from "module"
+import * as woxPlugin from "@wox-launcher/wox-plugin"
 
 export function assertPathWithinDirectory(filePath: string, directory: string): string {
   const resolvedFile = path.resolve(filePath)
@@ -19,14 +21,28 @@ export function getPluginExport(loaded: { plugin?: unknown; default?: { plugin?:
 }
 
 export function loadCommonJSModule(modulePath: string): unknown {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require(modulePath)
+  const nativeRequire = Module.createRequire(modulePath)
+  const resolved = nativeRequire.resolve(modulePath)
+  const cached = nativeRequire.cache[resolved]
+  if (cached) return cached.exports
+  const plugin = new Module(resolved) as Module & { load: (filename: string) => void }
+  const pluginRequire = plugin.require.bind(plugin)
+  // The SDK is bundled in the host, so it is not in the plugin's module search path.
+  plugin.require = ((name: string) => (name === "@wox-launcher/wox-plugin" ? woxPlugin : pluginRequire(name))) as NodeJS.Require
+  nativeRequire.cache[resolved] = plugin
+  try {
+    plugin.load(resolved)
+    return plugin.exports
+  } catch (error) {
+    delete nativeRequire.cache[resolved]
+    throw error
+  }
 }
 
 export function evictCommonJSModule(modulePath: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    delete require.cache[require.resolve(modulePath)]
+    const nativeRequire = Module.createRequire(modulePath)
+    delete nativeRequire.cache[nativeRequire.resolve(modulePath)]
   } catch {
     // The module may never have been loaded.
   }

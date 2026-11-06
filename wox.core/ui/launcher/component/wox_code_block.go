@@ -41,7 +41,7 @@ func WoxCodeBlock(p CodeBlockProps) widget.Widget {
 		// WoxTextField scales the base font itself; line height and content size are already logical measurements.
 		code := WoxTextField(TextFieldProps{
 			ID: p.ID + "/text", Label: p.Code, Value: p.Code, ReadOnly: true, DisableHover: true, Transparent: true,
-			Width: inner, Height: max(lineHeight, float32(lines)*lineHeight+1), LineHeight: lineHeight,
+			Width: inner, Height: max(lineHeight, float32(lines)*lineHeight+1), Padding: widget.Insets{Bottom: 1}, LineHeight: lineHeight,
 			Style: ui.TextStyle{Size: font, Family: ui.FontFamilyMonospace}, TextColor: p.Theme.Text,
 			MaxLines: max(2, lines+1), Theme: p.Theme, Window: p.Window, Paint: p.Paint.textPaint(),
 		})

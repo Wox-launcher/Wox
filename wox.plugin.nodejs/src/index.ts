@@ -22,3 +22,4 @@ export * from "./context.js"
 
 // Re-export all image-related functions
 export * from "./image.js"
+export * from "./woxviewSession.js"

@@ -16,10 +16,12 @@ type Invoke = (ctx: Context, method: string, params: { [key: string]: string }) 
 export class WindowProxy implements PluginWindow {
   ID = ""
   closed = false
+  private released = false
   readonly Content: PluginWindowContent
   constructor(
     private invoke: Invoke,
-    private onEvent: CreateWindowOption["OnEvent"]
+    private onEvent: CreateWindowOption["OnEvent"],
+    private onRelease?: () => void
   ) {
     this.Content = {
       Set: (ctx, option) => this.call(ctx, "WindowContentSet", option),
@@ -36,8 +38,14 @@ export class WindowProxy implements PluginWindow {
     if (this.onEvent) await this.onEvent(ctx, event)
   }
   release(): void {
+    if (this.released) return
+    this.released = true
     this.closed = true
     this.onEvent = undefined
+    const release = this.onRelease
+    this.onRelease = undefined
+    // Release is local adapter cleanup; it must not dispatch plugin callbacks.
+    release?.()
   }
   /** Keep closed proxies inert even when plugin code retains a reference. */
   private async call(ctx: Context, method: string, option: object): Promise<WindowResult> {

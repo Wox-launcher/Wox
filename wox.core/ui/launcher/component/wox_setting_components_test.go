@@ -47,5 +47,8 @@ func TestCodeBlockUsesMonospaceAndDensity(t *testing.T) {
 		if editor.Style.Family != ui.FontFamilyMonospace || !editor.ReadOnly || editor.Value != "first\nsecond\n" || editor.Width > 180 || editor.LineHeight < theme.Scaled(SettingsControlFontSize) || frame.Padding.Left != theme.Scaled(12) {
 			t.Fatalf("density %g code editor: %+v", density, editor)
 		}
+		if editor.Padding != (widget.Insets{Bottom: 1}) || editor.Height-editor.Padding.Top-editor.Padding.Bottom < 3*editor.LineHeight {
+			t.Fatalf("density %g code editor clips its lines: %+v", density, editor)
+		}
 	}
 }

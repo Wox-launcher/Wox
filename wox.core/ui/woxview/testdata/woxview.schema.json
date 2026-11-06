@@ -103,6 +103,27 @@
         }
       ]
     },
+    "EventData": {
+      "additionalProperties": false,
+      "properties": {
+        "Args": {
+          "items": {},
+          "type": "array"
+        },
+        "Handler": {
+          "type": "string"
+        },
+        "Key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Handler",
+        "Args",
+        "Key"
+      ],
+      "type": "object"
+    },
     "Handler": {
       "additionalProperties": false,
       "properties": {

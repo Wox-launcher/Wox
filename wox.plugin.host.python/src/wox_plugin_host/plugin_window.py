@@ -35,16 +35,21 @@ class WindowContentProxy:
 
 
 class WindowProxy:
-    def __init__(self, invoke, callback):
+    def __init__(self, invoke, callback, on_release=None):
         self.id = ""
         self.content = WindowContentProxy(self)
         self.closed = False
         self.invoke = invoke
         self.callback = callback
+        self.on_release = on_release
 
     def release(self):
         self.closed = True
         self.callback = None
+        release, self.on_release = self.on_release, None
+        # Release is local adapter cleanup; it must not dispatch plugin callbacks.
+        if release is not None:
+            release()
 
     async def event(self, ctx, payload):
         """Handle callbacks that may arrive before the creation reply."""

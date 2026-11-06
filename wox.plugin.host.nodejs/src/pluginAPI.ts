@@ -129,7 +129,8 @@ export class PluginAPI implements PublicAPI {
   /** Register the callback before Core can finish loading the native document. */
   async CreateWindow(ctx: Context, option: CreateWindowOption): Promise<CreateWindowResult> {
     const callbackID = crypto.randomUUID()
-    const window = new WindowProxy(this.invokeMethod.bind(this), option.OnEvent)
+    const binding = (option as CreateWindowOption & { [key: symbol]: { bind: (ctx: Context, window: WindowProxy) => void; release: () => void } | undefined })[Symbol.for("wox.window.binding")]
+    const window = new WindowProxy(this.invokeMethod.bind(this), option.OnEvent, () => binding?.release())
     this.windowCallbacks.set(callbackID, window)
     try {
       const result = (await this.invokeMethod(ctx, "CreateWindow", { option: JSON.stringify({ ...option, OnEvent: undefined, CallbackID: callbackID }) })) as CreateWindowResult
@@ -139,6 +140,7 @@ export class PluginAPI implements PublicAPI {
         return result
       }
       window.ID = result.WindowID!
+      binding?.bind(ctx, window)
       return { ...result, Window: window }
     } catch (error) {
       window.release()

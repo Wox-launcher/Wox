@@ -18,6 +18,7 @@ func JSONSchema() []byte {
 	for _, t := range []reflect.Type{reflect.TypeFor[Style](), reflect.TypeFor[StateStyle](), reflect.TypeFor[Transition](), reflect.TypeFor[Animation](), reflect.TypeFor[PresenceAnimation](), reflect.TypeFor[Color](), reflect.TypeFor[Edges](), reflect.TypeFor[Size](), reflect.TypeFor[Offset](), reflect.TypeFor[Handler]()} {
 		definitions[t.Name()] = schemaFor(t)
 	}
+	definitions["EventData"] = schemaFor(reflect.TypeFor[Event]())
 	types := make([]NodeType, 0, len(catalog))
 	for kind := range catalog {
 		types = append(types, kind)
@@ -153,9 +154,17 @@ func schemaFor(t reflect.Type) schemaObject {
 			if name == "" {
 				name = field.Name
 			}
+			if t == reflect.TypeFor[Event]() && field.Name == "Args" {
+				// Event arguments are encoded as a JSON array, not a byte array.
+				props[name] = schemaObject{"type": "array", "items": schemaObject{}}
+				continue
+			}
 			props[name] = schemaType(field.Type)
 		}
 		result := schemaObject{"type": "object", "additionalProperties": false, "properties": props}
+		if t == reflect.TypeFor[Event]() {
+			result["required"] = []string{"Handler", "Args", "Key"}
+		}
 		if t == reflect.TypeFor[Animation]() {
 			result["required"] = []string{"type"}
 			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 1, "maximum": 60000}, schemaObject{"type": "null"}}}

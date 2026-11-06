@@ -218,7 +218,8 @@ class PluginAPI(PublicAPI):
     async def create_window(self, ctx: Context, option: CreateWindowOption) -> CreateWindowResult:
         """Register events before Core can finish loading the native document."""
         callback_id = str(uuid.uuid4())
-        window = WindowProxy(self.invoke_method, option.on_event)
+        binding = getattr(option, "_wox_window_binding", None)
+        window = WindowProxy(self.invoke_method, option.on_event, binding.release if binding is not None else None)
         self.window_callbacks[callback_id] = window
         try:
             payload = window_option_payload(option)
@@ -229,6 +230,8 @@ class PluginAPI(PublicAPI):
                 self.window_callbacks.pop(callback_id, None)
                 return CreateWindowResult(err_msg=result.get("ErrMsg", ""))
             window.id = result["WindowID"]
+            if binding is not None:
+                binding.bind(ctx, window)
             return CreateWindowResult(success=True, window=window, window_id=window.id)
         except BaseException:
             window.release()

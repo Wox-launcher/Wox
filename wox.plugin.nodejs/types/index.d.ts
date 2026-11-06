@@ -2,6 +2,8 @@ import type { OnHotkeyOption, OnHotkeyResult } from "./hotkey.js"
 export * from "./hotkey.js"
 import { CreateWindowOption, CreateWindowResult } from "./window.js"
 export * from "./window.js"
+export * from "./woxview.js"
+export * from "./woxviewSession.js"
 import { MetadataCommand, PluginSettingDefinitionItem } from "./setting.js"
 import { AI } from "./ai.js"
 
@@ -1390,6 +1392,7 @@ export interface MRUData {
  * ```
  */
 export interface PluginInitParams {
+  /** WoxView helpers bundled by supporting Node hosts, including for single-file plugins. */
   /**
    * The public API for interacting with Wox.
    *
