@@ -34,6 +34,22 @@ func startStandaloneHold(key keyboard.Key, onPress, onRelease func(), transition
 		return nil, fmt.Errorf("standalone hold hotkey is unavailable for %s on this platform", normalKeyString(key))
 	}
 	h := &standaloneHold{key: key, onPress: onPress, onRelease: onRelease, onTransition: transition, replay: keyboard.ReplayStandaloneTap, inputTarget: keyboard.ForegroundInputTarget}
+	ready := make(chan struct{})
+	if listener, handled, err := keyboard.TryAddStandaloneHoldListener(key, func(event keyboard.RawKeyEvent) bool {
+		<-ready
+		return h.handle(event)
+	}); handled {
+		if err != nil {
+			close(ready)
+			return nil, err
+		}
+		h.listener = listener
+		h.replay = listener.ReplayTap
+		h.inputTarget = nil // The compositor verifies the target before replaying.
+		close(ready)
+		return h, nil
+	}
+	close(ready)
 	listener, err := addRawKeyListener(h.handle)
 	if err != nil {
 		return nil, err

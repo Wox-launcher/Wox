@@ -63,8 +63,9 @@ model loading. Plugins must tolerate overlapping asynchronous handlers.
 
 Standalone hold keys are Delete, Insert, and supported function keys. Short taps
 are replayed only if the foreground application remains the same (on Windows,
-the window must also remain the same). Linux does not support this kind; macOS
-supports F1–F20 where those keys are available.
+the window must also remain the same). On Linux, Hyprland with the Lua input and
+binding APIs supports Delete, Insert, and F1–F12; other desktops do not support
+this kind. macOS supports F1–F20 where those keys are available.
 
 System shortcuts such as Win+E use normalCombo; availability and interception depend on
 the platform. Wox does not swallow unrelated system shortcuts.

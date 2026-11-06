@@ -20,6 +20,7 @@ type hyprlandRawSubscription struct {
 	ipcMu    sync.Mutex
 	once     sync.Once
 	closeErr error
+	install  string
 }
 
 // addRawKeyListenerLinuxHyprland observes compositor events without grabbing the
@@ -45,17 +46,26 @@ func startHyprlandRawKeyListener(handler RawKeyHandler, eval func(string) (strin
 		name: "wox_raw_keys_" + uuid.NewString(), eval: eval,
 		stop: make(chan struct{}),
 	}
-	response, err := eval(hyprlandRawKeyInstallScript(s.name))
+	s.install = hyprlandRawKeyInstallScript(s.name)
+	if err := s.start(handler); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// start installs the leased compositor state before starting its polling loop.
+func (s *hyprlandRawSubscription) start(handler RawKeyHandler) error {
+	response, err := s.eval(s.install)
 	if err != nil || response != "ready" {
 		// A timed-out request may still have installed the hook.
-		_, _ = eval(hyprlandRawKeyCloseScript(s.name))
+		_, _ = s.eval(hyprlandRawKeyCloseScript(s.name))
 		if err != nil {
-			return nil, fmt.Errorf("Hyprland keyboard listener: %w", err)
+			return fmt.Errorf("Hyprland keyboard listener: %w", err)
 		}
-		return nil, fmt.Errorf("Hyprland keyboard listener requires Lua input.keyboard.key events")
+		return fmt.Errorf("Hyprland keyboard listener requires Lua input.keyboard.key events")
 	}
 	go s.listen(handler)
-	return s, nil
+	return nil
 }
 
 // Close removes the compositor hook without waiting on an active callback, which
@@ -113,7 +123,7 @@ func (s *hyprlandRawSubscription) listen(handler RawKeyHandler) {
 		}
 		response, err := s.eval(hyprlandRawKeyPollScript(s.name))
 		if err == nil && response == "missing" {
-			_, _ = s.eval(hyprlandRawKeyInstallScript(s.name))
+			_, _ = s.eval(s.install)
 		}
 		s.ipcMu.Unlock()
 		select {

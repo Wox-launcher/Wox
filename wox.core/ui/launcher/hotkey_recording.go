@@ -62,7 +62,7 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 	if len(allowedKinds) == 0 {
 		allowedKinds = defaultHotkeyRecordingKinds
 	}
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && !keyboard.SupportsStandaloneHold(keyboard.KeyDelete) {
 		filtered := make([]string, 0, len(allowedKinds))
 		for _, kind := range allowedKinds {
 			if kind != "holdKey" {
