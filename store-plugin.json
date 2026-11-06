@@ -2200,5 +2200,37 @@
     "DateUpdated": "2026-11-03 20:42:37",
     "StarCount": 0,
     "DownloadCount": 9
+  },
+  {
+    "Id": "18e5e5fc-6422-4186-bca0-cff98264807e",
+    "Name": "i18n:plugin_name",
+    "Author": "hsopex",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://raw.githubusercontent.com/hsopex/wox-singlefile-sdk-assets/main/assets/siyuan/icon.png",
+    "Website": "https://gist.github.com/hsopex/64693eab1cf4e4e62fa200faae087976",
+    "DownloadUrl": "https://gist.githubusercontent.com/hsopex/64693eab1cf4e4e62fa200faae087976/raw/Wox.Plugin.SiYuan.js",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/hsopex/wox-singlefile-sdk-assets/main/assets/siyuan/screenshot-1.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-11-06 20:29:02",
+    "DateUpdated": "2026-11-06 12:29:02",
+    "I18n": {
+      "en_US": {
+        "plugin_name": "SiYuan",
+        "plugin_description": "Search SiYuan notes and quickly create flash notes"
+      },
+      "zh_CN": {
+        "plugin_name": "SiYuan",
+        "plugin_description": "搜索 SiYuan 笔记并快速创建闪念速记"
+      }
+    }
   }
 ]
