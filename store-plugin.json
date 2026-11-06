@@ -2233,5 +2233,27 @@
         "plugin_description": "搜索 SiYuan 笔记并快速创建闪念速记"
       }
     }
+  },
+  {
+    "Id": "7a8cc425-3b7f-489c-8cac-1294cf61c19b",
+    "Name": "JetBrains Projects",
+    "Author": "tomsquest",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.9",
+    "Runtime": "python",
+    "Description": "Search the recent projects of your JetBrains IDEs and open them",
+    "IconUrl": "https://raw.githubusercontent.com/tomsquest/Wox.Plugin.JetBrainsProjects/main/icon.svg",
+    "Website": "https://github.com/tomsquest/Wox.Plugin.JetBrainsProjects",
+    "DownloadUrl": "https://raw.githubusercontent.com/tomsquest/Wox.Plugin.JetBrainsProjects/main/Wox.Plugin.JetBrainsProjects.py",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/tomsquest/Wox.Plugin.JetBrainsProjects/main/screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-11-06 20:21:06",
+    "DateUpdated": "2026-11-06 19:21:06"
   }
 ]
