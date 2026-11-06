@@ -6,9 +6,13 @@ import asyncio
 import inspect
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
+from uuid import uuid4
 
 from .models.context import Context
+from .models.preview import WoxPreview, WoxPreviewType
+from .models.result import UpdatableResult
 from .models.window import (
     CreateWindowOption,
     PluginWindow,
@@ -229,6 +233,23 @@ class WoxView:
         self._render = render
         self._on_error = on_error
 
+    def as_preview(
+        self,
+        *,
+        on_show: Callable[[asyncio.Event], Any] | None = None,
+        on_hide: Callable[[], Any] | None = None,
+        on_dispose: Callable[[], Any] | None = None,
+    ) -> WoxPreview:
+        """Create a result-scoped session, bound and released by the plugin host."""
+        session = WoxViewSession(self._render, self._on_error)
+        binding = _PreviewBinding(session, self._on_error, on_show, on_hide, on_dispose)
+        preview = WoxPreview(
+            preview_type=WoxPreviewType.WOXVIEW, preview_data=session.data, wox_view_id=str(uuid4()), on_wox_view_event=binding.event
+        )
+        binding.preview = preview
+        preview._wox_preview_binding = binding  # type: ignore[attr-defined]
+        return preview
+
     def as_window(self, window: WindowOptions | None = None) -> CreateWindowOption:
         """Create options for the existing create_window API."""
         session = WoxViewSession(self._render, self._on_error)
@@ -240,6 +261,101 @@ class WoxView:
         )
         option._wox_window_binding = binding  # type: ignore[attr-defined]
         return option
+
+
+class _PreviewBinding:
+    """Connect one preview session to its owning query result."""
+
+    def __init__(
+        self,
+        session: WoxViewSession,
+        on_error: Callable[[Exception], None],
+        on_show: Callable[[asyncio.Event], Any] | None,
+        on_hide: Callable[[], Any] | None,
+        on_dispose: Callable[[], Any] | None,
+    ):
+        self.session = session
+        self.on_error: Callable[[Exception], None] | None = on_error
+        self.preview: WoxPreview | None = None
+        self.bound = False
+        self.released = False
+        self.visible = False
+        self.hidden: asyncio.Event | None = None
+        self.on_show = on_show
+        self.on_hide = on_hide
+        self.on_dispose = on_dispose
+
+    def _invoke(self, callback: Callable[..., Any] | None, *args: Any) -> None:
+        if callback is None:
+            return
+        report = self.on_error
+        try:
+            result = callback(*args)
+            if inspect.isawaitable(result):
+
+                async def finish() -> None:
+                    try:
+                        await result
+                    except Exception as error:  # noqa: BLE001 - plugin lifecycle callbacks may fail.
+                        if report is not None:
+                            report(error)
+
+                asyncio.create_task(finish())
+        except Exception as error:  # noqa: BLE001 - plugin lifecycle callbacks may fail.
+            if report is not None:
+                report(error)
+
+    def _hide(self) -> None:
+        if not self.visible:
+            return
+        self.visible = False
+        if self.hidden is not None:
+            self.hidden.set()
+            self.hidden = None
+        self._invoke(self.on_hide)
+
+    def bind(self, ctx: Context, api: Any, result_id: str) -> None:
+        if self.bound or self.released:
+            return
+        self.bound = True
+
+        async def publish(data: str) -> bool:
+            if self.preview is None:
+                return False
+            preview = replace(self.preview, preview_data=data)
+            if not await api.update_result(ctx, UpdatableResult(id=result_id, preview=preview)):
+                raise RuntimeError("WoxView preview update failed")
+            return True
+
+        self.session.connect(publish)
+
+    async def event(self, _ctx: Context, event: dict[str, Any]) -> None:
+        if not self.released:
+            if event.get("Type") == "show":
+                if not self.visible:
+                    self.visible = True
+                    self.hidden = asyncio.Event()
+                    self._invoke(self.on_show, self.hidden)
+                return
+            if event.get("Type") == "hide":
+                self._hide()
+                return
+            try:
+                await self.session.dispatch(event)
+            except Exception as error:  # noqa: BLE001 - plugin callbacks may raise arbitrary exceptions.
+                if self.on_error is not None:
+                    self.on_error(error)
+
+    def release(self) -> None:
+        if self.released:
+            return
+        self.released = True
+        self._hide()
+        self.preview = None
+        self.session.dispose()
+        self._invoke(self.on_dispose)
+        self.on_show = self.on_hide = self.on_dispose = None
+        self.on_error = None
 
 
 def create_wox_view(render: Render, on_error: Callable[[Exception], None]) -> WoxView:
@@ -263,6 +379,10 @@ def Column(*, children: list[Node] | None = None, key: str | None = None, **prop
 
 def Text(*, text: str = "", key: str | None = None, **props: Any) -> Node:
     return wox_view_node("text", {"text": text, **props}, key=key)
+
+
+def Loading(*, key: str | None = None, **props: Any) -> Node:
+    return wox_view_node("loading", props, key=key)
 
 
 def Button(*, label: str = "", on_press: Callback | None = None, key: str | None = None, **props: Any) -> Node:

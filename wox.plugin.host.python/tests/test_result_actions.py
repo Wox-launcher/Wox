@@ -39,6 +39,67 @@ def result(result_id, callback, form=False):
 
 
 class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_preview_returned_after_query_release_is_disposed(self):
+        from wox_plugin import Text, create_wox_view
+
+        disposed = []
+        pending = asyncio.get_running_loop().create_future()
+
+        async def delayed_query(*_args):
+            return await pending
+
+        self.plugin.query = delayed_query
+        request = asyncio.create_task(self.call("query", "a", "one"))
+        await asyncio.sleep(0)
+        self.callbacks.release("a", "one")
+        preview = create_wox_view(lambda _session: Text(text="test"), lambda error: self.fail(str(error))).as_preview(
+            on_dispose=lambda: disposed.append(True)
+        )
+        pending.set_result([Result(id="row", title="row", sub_title="", icon=WoxImage(), preview=preview)])
+        await request
+        self.assertEqual(disposed, [True])
+
+    async def test_rejected_preview_replacement_preserves_old_session(self):
+        from wox_plugin import Text, create_wox_view
+
+        disposed = []
+        view = create_wox_view(lambda _session: Text(text="test"), lambda error: self.fail(str(error)))
+        old = view.as_preview(on_dispose=lambda: disposed.append("old"))
+        new = view.as_preview(on_dispose=lambda: disposed.append("new"))
+        self.plugin.query = AsyncMock(return_value=[Result(id="row", title="row", sub_title="", icon=WoxImage(), preview=old)])
+        await self.call("query", "a", "one")
+        self.api.invoke_method.return_value = False
+        self.assertFalse(await self.api.update_result(context("a", "one"), UpdatableResult(id="row", preview=new)))
+        self.assertEqual(self.callbacks.find("a", "one", "row").previews["row"][0], old.wox_view_id)
+        self.assertEqual(disposed, ["new"])
+        self.callbacks.release("a", "one")
+        self.assertEqual(disposed, ["new", "old"])
+
+    async def test_preview_event_scope_and_release(self):
+        from wox_plugin import Button, create_wox_view
+
+        calls, transitions = [], []
+        preview = create_wox_view(
+            lambda _session: Button(on_press=lambda value: calls.append(value)), lambda error: self.fail(str(error))
+        ).as_preview(
+            on_show=lambda _hidden: transitions.append("show"),
+            on_hide=lambda: transitions.append("hide"),
+            on_dispose=lambda: transitions.append("dispose"),
+        )
+        self.plugin.query = AsyncMock(return_value=[Result(id="row", title="row", sub_title="", icon=WoxImage(), preview=preview)])
+        await self.call("query", "a", "one")
+        await self.call(
+            "woxviewPreviewEvent", "a", "one", ResultId="row", DocumentID=preview.wox_view_id, Event=json.dumps({"Type": "show"})
+        )
+        handler = json.loads(preview.preview_data)["root"]["props"]["onPress"]["$handler"]
+        event = json.dumps({"Handler": handler, "Args": [5], "Key": ""})
+        await self.call("woxviewPreviewEvent", "a", "one", ResultId="row", DocumentID="old", Event=event)
+        await self.call("woxviewPreviewEvent", "a", "one", ResultId="row", DocumentID=preview.wox_view_id, Event=event)
+        self.callbacks.release("a", "one")
+        await self.call("woxviewPreviewEvent", "a", "one", ResultId="row", DocumentID=preview.wox_view_id, Event=event)
+        self.assertEqual(calls, [5])
+        self.assertEqual(transitions, ["show", "hide", "dispose"])
+
     async def asyncSetUp(self):
         self.calls = []
         self.callbacks = ResultActions()

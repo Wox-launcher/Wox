@@ -1,4 +1,4 @@
-import type { Context, CreateWindowOption, PluginWindow, WoxViewButtonProps, WoxViewColumnProps, WoxViewEventData, WoxViewHandler, WoxViewTextProps, WoxViewTree } from "../types/index.js"
+import type { Context, CreateWindowOption, PluginWindow, PublicAPI, WoxPreview, WoxViewButtonProps, WoxViewColumnProps, WoxViewEventData, WoxViewHandler, WoxViewLoadingProps, WoxViewPreviewOption, WoxViewTextProps, WoxViewTree } from "../types/index.js"
 
 type Callback = (...args: any[]) => void | Promise<void>
 type Node = { type: string; key?: string; props?: Record<string, unknown>; children?: Node[] }
@@ -134,6 +134,75 @@ export class WoxView {
     private onError: OnError
   ) {}
 
+  /** Create a result-scoped preview; the host binds and releases its session. */
+  asPreview(option: WoxViewPreviewOption = {}): WoxPreview {
+    const session = new WoxViewSession(this.render, this.onError)
+    const document = globalThis.crypto.randomUUID()
+    let released = false
+    let bound = false
+    let onError: OnError | undefined = this.onError
+    let lifecycle: WoxViewPreviewOption | undefined = option
+    let visible = false
+    let abort: AbortController | undefined
+    const invoke = (callback: (() => void) | undefined) => {
+      if (!callback) return
+      const report = onError
+      try { Promise.resolve(callback()).catch(error => report?.(error instanceof Error ? error : new Error(String(error)))) }
+      catch (error) { report?.(error instanceof Error ? error : new Error(String(error))) }
+    }
+    const hide = () => {
+      if (!visible) return
+      visible = false
+      abort?.abort()
+      abort = undefined
+      invoke(lifecycle?.onHide)
+    }
+    const preview: WoxPreview = {
+      PreviewType: "woxview", PreviewData: session.data, WoxViewID: document,
+      OnWoxViewEvent: async (_ctx, event) => {
+        if (released) return
+        if ("Type" in event && event.Type === "show") {
+          if (!visible) {
+            visible = true
+            abort = new AbortController()
+            const signal = abort.signal
+            invoke(() => lifecycle?.onShow?.(signal))
+          }
+          return
+        }
+        if ("Type" in event && event.Type === "hide") {
+          hide()
+          return
+        }
+        try { await session.dispatch(event as WoxViewEventData) } catch (error) {
+          onError?.(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+    }
+    const binding = {
+      bind: (ctx: Context, api: PublicAPI, resultID: string) => {
+        if (released || bound) return
+        bound = true
+        session.connect(async snapshot => {
+          const accepted = await api.UpdateResult(ctx, { Id: resultID, Preview: { ...preview, PreviewData: snapshot.data } })
+          if (!accepted) throw new Error("WoxView preview update failed")
+          return true
+        })
+      },
+      release: () => {
+        if (released) return
+        released = true
+        hide()
+        session.dispose()
+        invoke(lifecycle?.onDispose)
+        lifecycle = undefined
+        onError = undefined
+      }
+    }
+    Object.defineProperty(preview, Symbol.for("wox.preview.binding"), { value: binding, enumerable: true })
+    return preview
+  }
+
   /** Create options for the existing CreateWindow API. */
   asWindow(): Pick<CreateWindowOption, "Content" | "OnEvent"> {
     const session = new WoxViewSession(this.render, this.onError)
@@ -233,6 +302,11 @@ export function Column(option: Interactive<WoxViewColumnProps> & { children?: No
 export function Text(option: Interactive<WoxViewTextProps> & { key?: string }): Node {
   const { key, ...props } = option
   return woxViewNode("text", props, undefined, key)
+}
+
+export function Loading(option: Interactive<WoxViewLoadingProps> & { key?: string } = {}): Node {
+  const { key, ...props } = option
+  return woxViewNode("loading", props, undefined, key)
 }
 
 export function Button(option: Interactive<WoxViewButtonProps> & { key?: string }): Node {

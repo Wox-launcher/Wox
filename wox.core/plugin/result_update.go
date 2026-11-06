@@ -110,6 +110,9 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 	_, scriptUpdate, _ := WebViewScriptUpdate(result.Preview)
 	if result.Preview != nil && !scriptUpdate {
 		preview := *result.Preview
+		if previous := resultCache.previewSnapshot.Load(); previous != nil && preview.PreviewType == WoxPreviewTypeWoxView && preview.WoxViewID != "" && preview.WoxViewID == previous.WoxViewID && preview.OnWoxViewEvent == nil {
+			preview.OnWoxViewEvent = previous.OnWoxViewEvent
+		}
 		if shouldHidePreviewForGlobalQuery(resultCache.Query, preview) {
 			preview = WoxPreview{}
 		} else {
@@ -123,6 +126,7 @@ func (m *Manager) PolishUpdatableResult(ctx context.Context, pluginInstance *Ins
 		}
 		result.Preview = &preview
 		resultCache.Result.Preview = preview
+		resultCache.previewSnapshot.Store(&preview)
 	}
 
 	// Update drag data in cache if present. An empty or invalid payload clears the

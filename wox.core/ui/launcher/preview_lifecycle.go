@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"log"
+	"wox/plugin"
 )
 
 // reconcileSelectedPreview keeps stateful preview resources aligned with the selected render target.
@@ -36,6 +37,9 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 	}
 	a.remotePreview.prepareRemotePreview(preview)
 	preview = a.remotePreview.resolvePreview(preview)
+	if a.woxView != nil && (preview.PreviewType != "woxview" || a.woxViewKey != result.QueryID+"\x00"+result.ID+"\x00woxview" || a.woxViewID != preview.WoxViewID) {
+		a.clearWoxViewPreview()
+	}
 	// Release the old image even when the next surface bypasses buildPreviewBody.
 	var imageSource woxImage
 	if preview.PreviewType == "image" {
@@ -139,6 +143,9 @@ func (a *previewController) selectedPreviewForLifecycle() (queryResult, queryPre
 
 // deactivatePreviewTypes releases every stateful preview except the selected type.
 func (a *previewController) deactivatePreviewTypes(keep string) bool {
+	if keep != "woxview" && a.woxView != nil {
+		a.clearWoxViewPreview()
+	}
 	if keep != "query_requirement_settings" {
 		a.deactivateRequirementForm()
 	}
@@ -162,6 +169,23 @@ func (a *previewController) deactivatePreviewTypes(keep string) bool {
 		a.nativeFile.deactivateNativeFilePreview()
 	}
 	return false
+}
+
+// clearWoxViewPreview revokes queued events before another result is displayed.
+func (a *previewController) clearWoxViewPreview() {
+	if a.woxViewShown && a.woxViewID != "" {
+		a.enqueueWoxViewLifecycle(a.woxViewResult, a.woxViewID, plugin.WoxViewPreviewEventHide, nil)
+	}
+	if a.woxView != nil {
+		a.woxView.CancelPending()
+	}
+	if a.woxViewCancel != nil {
+		a.woxViewCancel()
+	}
+	a.woxView, a.woxViewKey, a.woxViewData, a.woxViewID, a.woxViewCancel, a.woxViewEvents = nil, "", "", "", nil, nil
+	a.woxViewResult = queryResult{}
+	a.woxViewShown = false
+	a.woxViewReady = nil
 }
 
 // keepChatPreview retains the chat surface when the selected preview is still an

@@ -7,6 +7,19 @@ without replacing the document; `Content.Set` replaces the document and its stat
 The window must be focusable and activated for keyboard input. Window content is
 WoxView-only; use `text` and `markdown` nodes to display those formats.
 
+Launcher results can also set `PreviewType` to `woxview` and `PreviewData` to a
+serialized tree. Interactive previews need a unique `WoxViewID` and a callback
+owned by the result's query. The Node `asPreview()` and Python `as_preview()`
+adapters create and bind this session, dispatch events with their arguments,
+and publish invalidations through `UpdateResult`. Result replacement or query
+release discards the old callbacks. A query response can set `ResultPreviewWidthRatio`
+to `0` for a full-width preview.
+
+The adapters also accept show, hide and dispose hooks. Each visible period has
+a cancellation signal (Node `AbortSignal`, Python `asyncio.Event`); it is
+triggered before hide, and disposal hides a still-visible session first. Hooks
+must arrange cleanup of plugin-owned timers and tasks, and should return promptly.
+
 ```json
 {
   "version": 1,
@@ -400,6 +413,7 @@ font features the runtime cannot consistently measure and render.
 | `span` | `text`, `onPress`; inline style subset and common interactions; only allowed inside `text` |
 | `markdown` | `content`, `onLinkPress`; links open externally only when the handler is absent |
 | `image` | exactly one of `icon` (Wox catalog name) or `source` (`imageType`, `imageData`); `fit`: `contain`, `cover`, `fill`. Sources support `base64`, `svg`, `absolute`; catalog icons accept `iconColorMode` |
+| `line-chart` | `values`: up to 4096 evenly spaced numbers in −1e100..1e100; optional `pointLabels` supplies one label per value for the hover readout and X axis; optional accessible `label`. `chart` configures axes, grid, fill and hover; see below. `style.color` sets the line color and `style.height` defaults to 160 logical units |
 | `morph-path` | `keyframes`, `progress`, `duration`, `curve`; filled vector outlines interpolated by Core |
 | `spacer` | `size` |
 | `button` | `label`, optional catalog `icon` and `iconColorMode`, `variant` (`secondary`, `primary`, `outline`, `text`, `surface`), `disabled`, `onPress` |
@@ -420,13 +434,49 @@ font features the runtime cannot consistently measure and render.
 | `form` | `onSubmit`, `disabled`, `submitting`, children; named descendant fields have unique names. Nested forms are rejected |
 | `submit` | Button props except `onPress`; must be inside a form and invokes its `onSubmit` |
 | `progress` | `value` clamped to 0–1, `indeterminate` |
-| `loading` | no additional props |
+| `loading` | Rotating ring; `style.width` sets its diameter (default 16 logical units), `style.color` sets its color (default `$text`) |
 | `divider` | `vertical` |
 
 For a Windows transparent plugin window using `PassThroughTransparent`, any
 node can opt its bounds into the native pointer region with `inputRegion: true`.
 This adds no visible paint and permits interactions in intentionally empty space;
 ordinary transparent pixels remain click-through.
+
+### Line charts
+
+The optional `chart` object changes only the options it specifies. Omitting it
+keeps the original two-unit line, no axes or fill, and the local hover crosshair,
+point, and top readout. Values remain evenly spaced; `pointLabels`, when given,
+must have the same length as `values`.
+
+| Option | Meaning and default |
+| --- | --- |
+| `showGrid`, `gridLines`, `gridColor` | Horizontal grid; off by default. Line count defaults to 5 (2–12); color defaults to `$border`. |
+| `showXAxis`, `xTicks` | Sample labels from `pointLabels` below the plot; off by default. Maximum ticks defaults to 5 (2–12) and is reduced for narrow plots. |
+| `yAxis`, `yAxisWidth` | `none` (default), `left`, or `right`; labels use the data minimum and maximum. Width defaults to 80 density-scaled logical units and can be set from 0–512 logical units. Labels are clipped to the reserved width. |
+| `lineWidth`, `showPoints` | Width in logical units (default 2, greater than 0 and at most 16); individual points are off by default. The line uses `style.color`. |
+| `fill`, `fillColor` | Gradient area below the line; off by default. The default is the line color at 22% opacity; an authored color may include its own alpha. |
+| `plotPadding` | Plot inset in logical units (0–128); defaults to 2. Axis space is reserved separately. Use `style.padding` for space outside the component. |
+| `hover`, `crosshair`, `hoverPoint`, `tooltip` | Independently enable or disable hover and its visual elements. Each defaults to true; `hover: false` disables the entire hover interaction. |
+| `tooltipPosition` | `top` (default, original readout) or `floating` (near the selected point). |
+| `valueDecimals`, `valuePrefix`, `valueSuffix` | Numeric labels use 2 decimals by default; choose 0–6 decimals and optional prefix/suffix (up to 32 characters each). Very large or small values use scientific notation when formatted. |
+
+```json
+{
+  "type": "line-chart",
+  "props": {
+    "values": [130.03, 125.10, 122.40, 124.68, 123.62],
+    "pointLabels": ["09:30", "11:00", "12:00", "12:45", "16:00"],
+    "label": "Price",
+    "style": {"height": 220, "color": "#ee6065"},
+    "chart": {"showGrid": true, "showXAxis": true, "yAxis": "right", "fill": true, "tooltipPosition": "floating", "valueSuffix": " USD"}
+  }
+}
+```
+
+Time-range controls are composed separately, for example with `tabs` or
+`radio-group`. The plugin handles their change event and supplies the selected
+range's values and labels; the chart does not fetch or aggregate data.
 
 ### Morphing vector paths
 

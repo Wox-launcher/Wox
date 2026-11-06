@@ -35,6 +35,7 @@ const (
 	NodeText        NodeType = "text"
 	NodeSpan        NodeType = "span"
 	NodeImage       NodeType = "image"
+	NodeLineChart   NodeType = "line-chart"
 	NodeMorphPath   NodeType = "morph-path"
 	NodeSpacer      NodeType = "spacer"
 	NodeMarkdown    NodeType = "markdown"
@@ -78,6 +79,9 @@ type Tree struct {
 	Version    int   `json:"version"`
 	Root       *Node `json:"root"`
 }
+
+// HasHandlers reports whether the document requires producer-side event delivery.
+func (t *Tree) HasHandlers() bool { return t != nil && len(t.handlerSet) != 0 }
 
 // Node is one validated element. Props holds the catalog-specific *XxxProps value for Type.
 type Node struct {

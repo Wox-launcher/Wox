@@ -235,6 +235,11 @@ func (s *CoreServices) PrepareResultDrag(ctx context.Context, sessionID string, 
 	}
 }
 
+// DispatchWoxViewPreviewEvent delivers a callback from the preview's worker.
+func (s *CoreServices) DispatchWoxViewPreviewEvent(ctx context.Context, sessionID, queryID, resultID, documentID string, event plugin.WoxViewPreviewEvent) error {
+	return plugin.GetPluginManager().DispatchWoxViewPreviewEvent(ctx, sessionID, queryID, resultID, documentID, event)
+}
+
 // ExecuteAction schedules one cached query-result action.
 func (s *CoreServices) ExecuteAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string) error {
 	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)

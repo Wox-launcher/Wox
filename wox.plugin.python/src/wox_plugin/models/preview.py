@@ -10,7 +10,7 @@ content in a dedicated preview panel when a result is selected.
 from dataclasses import dataclass, field
 from enum import Enum
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .image import WoxImage
 
@@ -25,6 +25,7 @@ class WoxPreviewType(str, Enum):
     - IMAGE: Display an image (using WoxImage)
     - URL: Load and display a web page
     - WEBVIEW: Embedded web page or inline HTML (JSON payload)
+    - WOXVIEW: WoxView tree (JSON payload)
     - FILE: Display a file (various formats supported)
     - LIST: Display structured rows using WoxPreviewListData JSON
     - REMOTE: Load preview data from a remote URL
@@ -91,6 +92,9 @@ class WoxPreviewType(str, Enum):
             preview_data="https://example.com"
         )
     """
+
+    WOXVIEW = "woxview"
+    """A serialized WoxView tree; use ``as_preview()`` for callback handling."""
 
     WEBVIEW = "webview"
     """
@@ -381,6 +385,9 @@ class WoxPreview:
     default_hidden: bool = field(default=False)
     """Initially hide this preview; Ctrl/Cmd+P opens it until the next query."""
 
+    wox_view_id: str = field(default="")
+    on_wox_view_event: Optional[Callable[..., Any]] = field(default=None, repr=False, compare=False)
+
     def to_json(self) -> str:
         """
         Convert to JSON string with camelCase naming.
@@ -395,6 +402,7 @@ class WoxPreview:
             {
                 "PreviewType": self.preview_type,
                 "PreviewData": self.preview_data,
+                "WoxViewID": self.wox_view_id,
                 "DefaultHidden": self.default_hidden,
                 "PreviewTags": [tag.to_dict() for tag in self.preview_tags],
                 "PreviewProperties": self.preview_properties,
@@ -424,6 +432,7 @@ class WoxPreview:
         return cls(
             preview_type=WoxPreviewType(data.get("PreviewType")),
             preview_data=data.get("PreviewData", ""),
+            wox_view_id=data.get("WoxViewID", ""),
             default_hidden=data.get("DefaultHidden", False),
             preview_tags=[WoxPreviewTag.from_json(item) for item in data.get("PreviewTags", []) if isinstance(item, dict)]
             if isinstance(data.get("PreviewTags", []), list)

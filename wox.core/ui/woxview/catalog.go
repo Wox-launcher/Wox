@@ -33,6 +33,7 @@ func init() {
 		NodeSpan:        {newProps: func() any { return &SpanProps{} }},
 		NodeMarkdown:    {newProps: func() any { return &MarkdownProps{} }, build: buildMarkdown},
 		NodeImage:       {newProps: func() any { return &ImageProps{} }, build: buildImage},
+		NodeLineChart:   {newProps: func() any { return &LineChartProps{} }, build: buildLineChart},
 		NodeMorphPath:   {newProps: func() any { return &MorphPathProps{} }, build: buildMorphPath},
 		NodeButton:      {newProps: func() any { return &ButtonProps{} }, build: buildButton},
 		NodeIconButton:  {newProps: func() any { return &IconButtonProps{} }, build: buildIconButton},

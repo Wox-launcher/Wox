@@ -105,6 +105,16 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
             elif window:
                 await window.event(ctx, json.loads(params["Event"]))
         return None
+    elif method == "woxviewPreviewEvent":
+        instance = plugin_instances.get(request.get("PluginId", ""))
+        params = request.get("Params", {})
+        bucket = instance.result_actions.for_context(ctx, params.get("ResultId", "")) if instance else None
+        cached = bucket.previews.get(params.get("ResultId", "")) if bucket else None
+        if cached and cached[0] == params.get("DocumentID"):
+            result = cached[1](ctx, json.loads(params["Event"]))
+            if inspect.isawaitable(result):
+                await result
+        return None
     elif method == "toastMsgAction":
         toast_instance = plugin_instances.get(request.get("PluginId", ""))
         api = toast_instance.api if toast_instance else None
@@ -338,7 +348,7 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
 
         if results_source:
             for result in results_source:
-                callbacks.cache(result)
+                callbacks.cache(result, ctx=ctx, api=plugin_instance.api)
 
         # Re-serialize after caching so generated result/action IDs are included
         # in the object that Go core receives and later sends back for actions.
@@ -584,7 +594,7 @@ async def on_mru_restore(ctx: Context, request: Dict[str, Any]) -> Any:
             result = await result  # type: ignore
 
         if result is not None:
-            callbacks.cache(result)
+            callbacks.cache(result, ctx=ctx, api=plugin_instance.api)
 
         # Convert Result object back to dict for JSON serialization
         if result is not None:

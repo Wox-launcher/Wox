@@ -8,7 +8,7 @@ import (
 
 // TestQueryFullPreviewLayout applies content and layout together, even before query completion.
 func TestQueryFullPreviewLayout(t *testing.T) {
-	for _, kind := range []string{"webview", "text", "markdown"} {
+	for _, kind := range []string{"webview", "text", "markdown", "woxview"} {
 		t.Run(kind, func(t *testing.T) {
 			app := New(false, nil)
 			app.uiCall = nil
@@ -18,6 +18,9 @@ func TestQueryFullPreviewLayout(t *testing.T) {
 			data := "Preview content"
 			if kind == "webview" {
 				data = `{"url":"https://example.com/?q=wox","cacheDisabled":true}`
+			}
+			if kind == "woxview" {
+				data = `{"version":1,"root":{"type":"line-chart","props":{"values":[1,2]}}}`
 			}
 			result := queryResult{ID: "search", Preview: queryPreview{PreviewType: kind, PreviewData: data}}
 			ratio := 0.0

@@ -5,6 +5,13 @@ from wox_plugin import WoxPreview, WoxPreviewType
 
 
 class WebViewPreviewTest(unittest.TestCase):
+    def test_woxview_preview_round_trip(self):
+        tree = {"version": 1, "root": {"type": "line-chart", "props": {"values": [1, 2]}}}
+        preview = WoxPreview(preview_type=WoxPreviewType.WOXVIEW, preview_data=json.dumps(tree))
+        decoded = WoxPreview.from_json(preview.to_json())
+        self.assertEqual(decoded.preview_type, WoxPreviewType.WOXVIEW)
+        self.assertEqual(json.loads(decoded.preview_data), tree)
+
     def test_default_hidden_round_trip_and_legacy_default(self):
         """Hidden previews remain available and older payloads still open by default."""
         preview = WoxPreview(preview_data="content", default_hidden=True)

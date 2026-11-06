@@ -512,8 +512,10 @@ export class PluginAPI implements PublicAPI {
 
   async UpdateResult(ctx: Context, result: UpdatableResult): Promise<boolean> {
     const callbacks = this.resultActions.forContext(ctx, result.Id)
+    const previousPreview = callbacks?.previews.get(result.Id)
+    const changingPreview = result.Preview !== undefined && previousPreview?.id !== result.Preview?.WoxViewID
     if (callbacks) {
-      callbacks.cache(result, true)
+      callbacks.cache(result, true, ctx, this, changingPreview)
     } else if (result.Actions?.length) {
       logger.warn(
         ctx,
@@ -521,19 +523,38 @@ export class PluginAPI implements PublicAPI {
       )
     }
 
-    const response = await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })
-    return response === true
+    const stagedPreview = callbacks?.previews.get(result.Id)
+    let accepted = false
+    try {
+      accepted = (await this.invokeMethod(ctx, "UpdateResult", { result: JSON.stringify(result) })) === true
+      return accepted
+    } finally {
+      if (changingPreview && callbacks) {
+        if (accepted || callbacks.previews.get(result.Id) !== stagedPreview || !callbacks.active) {
+          previousPreview?.binding?.release()
+        } else {
+          stagedPreview?.binding?.release()
+          if (previousPreview) callbacks.previews.set(result.Id, previousPreview)
+          else callbacks.previews.delete(result.Id)
+        }
+      }
+    }
   }
 
   async RemoveResult(ctx: Context, option: RemoveResultOption): Promise<RemoveResultResult> {
     const response = await this.invokeMethod(ctx, "RemoveResult", { option: JSON.stringify(option) }) as RemoveResultResult | null
-    if (response?.Success) this.resultActions.forContext(ctx, option.ResultId)?.results.delete(option.ResultId)
+    if (response?.Success) {
+      const bucket = this.resultActions.forContext(ctx, option.ResultId)
+      bucket?.previews.get(option.ResultId)?.binding?.release()
+      bucket?.previews.delete(option.ResultId)
+      bucket?.results.delete(option.ResultId)
+    }
     return response ?? { Success: false }
   }
 
   async PushResults(ctx: Context, query: Query, results: Result[]): Promise<boolean> {
     const callbacks = this.resultActions.find(query.SessionId ?? "", query.Id, "")
-    for (const result of results) callbacks?.cache(result)
+    for (const result of results) callbacks?.cache(result, false, ctx, this)
 
     const response = await this.invokeMethod(ctx, "PushResults", {
       query: JSON.stringify(query),

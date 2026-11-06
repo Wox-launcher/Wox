@@ -8,6 +8,7 @@ import (
 
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	"wox/ui/woxview"
 )
 
 // previewImageServices opens a preview picture in core's full-size image overlay.
@@ -57,6 +58,16 @@ type previewController struct {
 	previewVisibility queryPreviewVisibility
 	mdDocs            map[string]woxcomponent.MarkdownDocument
 	previewLayouts    map[string]*textLayoutCache
+	woxView           *woxview.View
+	woxViewKey        string
+	woxViewData       string
+	woxViewID         string
+	woxViewShown      bool
+	woxViewCancel     context.CancelFunc
+	woxViewEvents     chan woxview.Event
+	woxViewReady      chan struct{}
+	woxViewResult     queryResult
+	woxViewLifecycle  woxViewLifecycleQueue
 }
 
 // bindPreviews supplies selected-result state and each preview owner's lifecycle API.

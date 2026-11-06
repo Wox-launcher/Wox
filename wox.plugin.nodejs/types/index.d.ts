@@ -2030,7 +2030,7 @@ export interface WoxImage {
  * - `file`: File preview
  * - `list`: Structured row-list preview
  */
-export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "list" | "webview"
+export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "list" | "webview" | "woxview"
 
 /**
  * Embedded browser content. Set either url or html, then JSON.stringify into PreviewData.
@@ -2156,6 +2156,8 @@ export interface WoxPreviewTag {
  * }
  * ```
  */
+export type WoxViewPreviewLifecycleEvent = { Type: "show" | "hide" }
+
 export interface WoxPreview {
   /** Initially hide this preview; Ctrl/Cmd+P opens it until the next query. Defaults to false. */
   DefaultHidden?: boolean
@@ -2165,6 +2167,10 @@ export interface WoxPreview {
    * Determines how PreviewData is rendered.
    */
   PreviewType: WoxPreviewType
+  /** Document identity used to reject callbacks from replaced WoxView previews. */
+  WoxViewID?: string
+  /** Called by the host for WoxView events in this result's query scope. */
+  OnWoxViewEvent?: (ctx: Context, event: import("./woxview.js").WoxViewEventData | WoxViewPreviewLifecycleEvent) => void | Promise<void>
   /**
    * The preview content data.
    *
@@ -2174,6 +2180,7 @@ export interface WoxPreview {
    * - `image`: Image URL, path, or base64 data
    * - `url`: Website URL to preview
    * - `webview`: JSON string encoded from WoxPreviewWebviewData; use { html: "..." } for static HTML
+   * - `woxview`: JSON string encoded from WoxViewTree
    * - `file`: File path to preview
    * - `list`: JSON string encoded from WoxPreviewListData
    */

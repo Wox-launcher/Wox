@@ -3204,6 +3204,382 @@
       ],
       "type": "object"
     },
+    "line-chartProps": {
+      "additionalProperties": false,
+      "properties": {
+        "animation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chart": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "crosshair": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fill": {
+                  "type": "boolean"
+                },
+                "fillColor": {
+                  "$ref": "#/$defs/Color"
+                },
+                "gridColor": {
+                  "$ref": "#/$defs/Color"
+                },
+                "gridLines": {
+                  "anyOf": [
+                    {
+                      "const": 0
+                    },
+                    {
+                      "maximum": 12,
+                      "minimum": 2,
+                      "type": "integer"
+                    }
+                  ],
+                  "type": "integer"
+                },
+                "hover": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "hoverPoint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lineWidth": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "maximum": 16,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "plotPadding": {
+                  "anyOf": [
+                    {
+                      "maximum": 128,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "showGrid": {
+                  "type": "boolean"
+                },
+                "showPoints": {
+                  "type": "boolean"
+                },
+                "showXAxis": {
+                  "type": "boolean"
+                },
+                "tooltip": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tooltipPosition": {
+                  "enum": [
+                    "",
+                    "top",
+                    "floating"
+                  ],
+                  "type": "string"
+                },
+                "valueDecimals": {
+                  "anyOf": [
+                    {
+                      "maximum": 6,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "valuePrefix": {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                "valueSuffix": {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                "xTicks": {
+                  "anyOf": [
+                    {
+                      "const": 0
+                    },
+                    {
+                      "maximum": 12,
+                      "minimum": 2,
+                      "type": "integer"
+                    }
+                  ],
+                  "type": "integer"
+                },
+                "yAxis": {
+                  "enum": [
+                    "",
+                    "none",
+                    "left",
+                    "right"
+                  ],
+                  "type": "string"
+                },
+                "yAxisWidth": {
+                  "anyOf": [
+                    {
+                      "maximum": 512,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contextMenu": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "label",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "disabledStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focusStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hoverStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputRegion": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string"
+        },
+        "onContextMenu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onDoubleTap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onFocusChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onHoverChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pointLabels": {
+          "items": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "pressedStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shortcuts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "key",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "items": {
+            "maximum": 1e+100,
+            "minimum": -1e+100,
+            "type": "number"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "type": "object"
+    },
     "linkProps": {
       "additionalProperties": false,
       "properties": {
@@ -4913,6 +5289,33 @@
             },
             "type": {
               "const": "lazy-list"
+            }
+          },
+          "required": [
+            "type",
+            "props"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/$defs/node"
+              },
+              "maxItems": 0,
+              "type": "array"
+            },
+            "key": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "props": {
+              "$ref": "#/$defs/line-chartProps"
+            },
+            "type": {
+              "const": "line-chart"
             }
           },
           "required": [

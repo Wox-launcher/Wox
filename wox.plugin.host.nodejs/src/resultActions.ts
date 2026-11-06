@@ -1,18 +1,44 @@
-import { Context, ResultAction } from "@wox-launcher/wox-plugin"
+import { Context, PublicAPI, ResultAction } from "@wox-launcher/wox-plugin"
 import { randomUUID } from "crypto"
 
 // Retain only callbacks, not presentation fields such as icons and form definitions.
 type CachedAction = { Type: "execute"; Action?: Extract<ResultAction, { Type?: "execute" }>["Action"] } | { Type: "form"; OnSubmit?: Extract<ResultAction, { Type: "form" }>["OnSubmit"] }
+type PreviewBinding = { bind: (ctx: Context, api: PublicAPI, resultID: string) => void; release: () => void }
+type Preview = { WoxViewID?: string; OnWoxViewEvent?: (ctx: Context, event: any) => void | Promise<void>; [key: symbol]: PreviewBinding | undefined }
 
 // A bucket is held across async plugin calls; releasing it also invalidates late responses.
 export class QueryActions {
   active = true
   results = new Map<string, Map<string, CachedAction>>()
+  previews = new Map<string, { id: string; callback: NonNullable<Preview["OnWoxViewEvent"]>; binding?: PreviewBinding }>()
 
   // Replace one result atomically, including removed actions and execute/form type changes.
-  cache(result: { Id?: string; Actions?: ResultAction[] }, preserveCallbacks = false): void {
+  cache(result: { Id?: string; Actions?: ResultAction[]; Preview?: unknown }, preserveCallbacks = false, ctx?: Context, api?: PublicAPI, deferPreviewRelease = false): void {
     if (!result.Id) result.Id = randomUUID()
-    if (result.Actions === undefined || !this.active) return
+    const preview = result.Preview as Preview | undefined
+    if (!this.active) {
+      preview?.[Symbol.for("wox.preview.binding")]?.release()
+      return
+    }
+    if (preview !== undefined) {
+      const previous = this.previews.get(result.Id)
+      if (previous && (previous.id !== preview?.WoxViewID || (!preserveCallbacks && !preview?.OnWoxViewEvent))) {
+        if (!deferPreviewRelease) previous.binding?.release()
+        this.previews.delete(result.Id)
+      }
+      if (preview?.WoxViewID && preview.OnWoxViewEvent) {
+        const binding = preview[Symbol.for("wox.preview.binding")] ?? (previous?.id === preview.WoxViewID ? previous.binding : undefined)
+        this.previews.set(result.Id, { id: preview.WoxViewID, callback: preview.OnWoxViewEvent, binding })
+        if (binding && ctx && api) binding.bind(ctx, api, result.Id)
+      }
+    } else if (!preserveCallbacks) {
+      this.previews.get(result.Id)?.binding?.release()
+      this.previews.delete(result.Id)
+    }
+    if (result.Actions === undefined) {
+      if (!this.results.has(result.Id)) this.results.set(result.Id, new Map())
+      return
+    }
     const actions = new Map<string, CachedAction>()
     for (const action of result.Actions) {
       if (!action.Id) action.Id = randomUUID()
@@ -29,6 +55,8 @@ export class QueryActions {
 
   release(): void {
     this.active = false
+    for (const preview of Array.from(this.previews.values())) preview.binding?.release()
+    this.previews.clear()
     this.results.clear()
   }
 }

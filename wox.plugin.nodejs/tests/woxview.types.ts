@@ -5,13 +5,16 @@ export const counter: WoxViewTree = {
   root: {
     type: "column",
     children: [
-      { type: "text", props: { text: "Count: 0", inputRegion: true } },
+      { type: "text", props: { text: "Count: 0" } },
       { type: "button", key: "increment", props: { label: "Add", onPress: { $handler: "increment" } } }
     ]
   }
 }
 
 export const event: WoxViewEventData = { Handler: "increment", Args: [], Key: "increment" }
+export const chart: WoxViewTree = { version: 1, root: { type: "line-chart", props: { values: [1, 2, 3], pointLabels: ["a", "b", "c"], label: "Price", inputRegion: true, chart: { showGrid: true, yAxis: "right", gridLines: 5, fill: true, tooltipPosition: "floating", hover: false, valueDecimals: 2 } } } }
+// @ts-expect-error A line chart requires values.
+const badChart: WoxViewTree = { version: 1, root: { type: "line-chart", props: {} } }
 export const morph: WoxViewTree = {
   version: 1,
   root: { type: "morph-path", key: "shape", props: {
@@ -32,4 +35,4 @@ const badGrid: WoxViewTree = { version: 1, root: { type: "grid" } }
 const badChildren: WoxViewTree = { version: 1, root: { type: "button", children: [{ type: "text" }] } }
 // @ts-expect-error Image nodes need either an icon or a source.
 const badImage: WoxViewTree = { version: 1, root: { type: "image", props: {} } }
-void [badHandler, badGrid, badChildren, badImage, badMorph]
+void [badHandler, badGrid, badChildren, badImage, badMorph, badChart]

@@ -104,7 +104,7 @@ Methods for interacting with Wox:
 - `WoxPreviewTag`: Metadata tag shown below preview content
 - `WoxPreviewListData`: Structured data for list previews
 - `WoxPreviewListItem`: Row data for list previews
-- `WoxPreviewType`: MARKDOWN, TEXT, IMAGE, URL, WEBVIEW, FILE, LIST, REMOTE
+- `WoxPreviewType`: MARKDOWN, TEXT, IMAGE, URL, WEBVIEW, WOXVIEW, FILE, LIST, REMOTE
 - `WoxPreviewScrollPosition`: Control initial scroll position
 
 #### Setting Models (`models/setting.py`)
@@ -343,7 +343,7 @@ from .models.toolbar_msg import (
 from .plugin import Plugin, PluginInitParams, QueryReturn
 
 from .models.woxview import WoxViewEventData, WoxViewHandler, WoxViewNode, WoxViewTree
-from .woxview import Button, Column, Text, WoxView, WoxViewSession, create_wox_view, wox_view_node
+from .woxview import Button, Column, Loading, Text, WoxView, WoxViewSession, create_wox_view, wox_view_node
 from .models.window import (
     WindowContentType,
     WindowPresentation,
@@ -554,6 +554,7 @@ __all__: List[str] = [
     "WoxViewTree",
     "Button",
     "Column",
+    "Loading",
     "Text",
     "WoxView",
     "WoxViewSession",

@@ -14,10 +14,12 @@ import (
 
 	"wox/common"
 	"wox/common/icons"
+	"wox/plugin"
 	woxcomponent "wox/ui/launcher/component"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/ui/woxview"
 	"wox/util"
 )
 
@@ -61,13 +63,13 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 		return a.buildTerminalPreview(a.terminal.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
 	}
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme(), fullBleed)
-	body := a.buildPreviewBody(scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale, fullBleed)
+	body := a.buildPreviewBody(result, scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale, fullBleed)
 	return previewview.PreviewView(previewview.PreviewProps{
 		Width: width, Height: height, Tags: tags, Body: body, Theme: palette.componentTheme(), Window: a.window, OnTagHover: a.previews.setPreviewTooltip, FullBleed: fullBleed,
 	})
 }
 
-func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32, fullBleed bool) woxwidget.Widget {
+func (a *App) buildPreviewBody(result queryResult, scrollKey string, preview queryPreview, palette uiPalette, width, height, imageScale float32, fullBleed bool) woxwidget.Widget {
 	content := func(value string, color woxui.Color) woxwidget.Widget {
 		if strings.TrimSpace(value) == "" {
 			value = "No preview available"
@@ -76,6 +78,8 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	}
 	errorText := palette.componentTheme().ErrorText
 	switch preview.PreviewType {
+	case "woxview":
+		return a.buildWoxViewPreview(result, scrollKey, preview, palette, width, height)
 	case "text":
 		return a.previews.buildTextPreview(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, width, height)
 	case "markdown":
@@ -157,6 +161,100 @@ func (a *App) buildPreviewBody(scrollKey string, preview queryPreview, palette u
 	default:
 		return content(preview.PreviewData, palette.previewText)
 	}
+}
+
+// buildWoxViewPreview retains the selected document and updates its tree in place.
+func (a *App) buildWoxViewPreview(result queryResult, key string, preview queryPreview, palette uiPalette, width, height float32) woxwidget.Widget {
+	data := preview.PreviewData
+	if a.previews.woxView == nil || a.previews.woxViewKey != key || a.previews.woxViewID != preview.WoxViewID || a.previews.woxViewData != data {
+		tree, err := woxview.Parse([]byte(data))
+		if err == nil && tree.HasHandlers() && preview.WoxViewID == "" {
+			err = fmt.Errorf("interactive preview requires WoxViewID")
+		}
+		if err != nil {
+			return previewview.PreviewError(fmt.Sprintf("Invalid WoxView preview: %v", err), width, height, palette.componentTheme())
+		}
+		if a.previews.woxView == nil || a.previews.woxViewKey != key || a.previews.woxViewID != preview.WoxViewID {
+			a.previews.clearWoxViewPreview()
+			a.previews.woxView = woxview.NewView()
+			a.previews.woxViewReady = make(chan struct{})
+			a.previews.woxViewResult = result
+			a.startWoxViewPreviewEvents(result, preview.WoxViewID)
+		}
+		a.previews.woxView.SetTree(tree)
+		a.previews.woxViewKey, a.previews.woxViewData, a.previews.woxViewID = key, data, preview.WoxViewID
+	}
+	if a.visible && !a.isDestroyed() && !a.previews.woxViewShown && preview.WoxViewID != "" {
+		a.previews.woxViewShown = true
+		a.previews.enqueueWoxViewLifecycle(result, preview.WoxViewID, plugin.WoxViewPreviewEventShow, a.previews.woxViewReady)
+	}
+	view, events := a.previews.woxView, a.previews.woxViewEvents
+	return a.previews.woxView.Build(woxview.BuildProps{
+		Width: width, Height: height, Theme: palette.componentTheme().Controls, Window: a.window,
+		IDPrefix: "preview/" + key, Translate: a.language.translate,
+		OnNodeEvent: func(event woxview.Event) {
+			if a.previews.woxView != view || !view.HasHandler(event.Handler) || events == nil {
+				return
+			}
+			select {
+			case events <- event:
+			default:
+				util.GetLogger().Warn(a.lifecycleCtx, "WoxView preview event queue full")
+			}
+		},
+		OnOpenLink: func(target string) {
+			if a.window != nil {
+				if err := a.window.OpenExternalURL(target); err != nil {
+					util.GetLogger().Error(a.lifecycleCtx, fmt.Sprintf("open WoxView preview link: %v", err))
+				}
+			}
+		},
+	})
+}
+
+// startWoxViewPreviewEvents serializes callbacks away from the UI thread and cancels them on replacement.
+func (a *App) startWoxViewPreviewEvents(result queryResult, document string) {
+	a.previews.woxViewEvents, a.previews.woxViewCancel = nil, nil
+	if document == "" {
+		return
+	}
+	service, ok := a.services.(interface {
+		DispatchWoxViewPreviewEvent(context.Context, string, string, string, string, plugin.WoxViewPreviewEvent) error
+	})
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithCancel(a.lifecycleCtx)
+	events := make(chan woxview.Event, 128)
+	view := a.previews.woxView
+	ready := a.previews.woxViewReady
+	a.previews.woxViewEvents, a.previews.woxViewCancel = events, cancel
+	util.Go(ctx, "WoxView preview events", func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-events:
+				select {
+				case <-ready:
+				case <-ctx.Done():
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				valid := false
+				if err := a.runOnUI("validate WoxView preview event", func() {
+					valid = ctx.Err() == nil && a.previews.woxView == view && view.HasHandler(event.Handler)
+				}); err != nil || !valid {
+					continue
+				}
+				if err := service.DispatchWoxViewPreviewEvent(ctx, a.sessionID, result.QueryID, result.ID, document, plugin.WoxViewPreviewEvent{Handler: string(event.Handler), Args: event.Args, Key: event.Key}); err != nil && ctx.Err() == nil {
+					util.GetLogger().Warn(ctx, "WoxView preview event delivery failed: "+err.Error())
+				}
+			}
+		}
+	})
 }
 
 // buildMarkdownPreview injects launcher-owned image and external-link actions into the shared native component.

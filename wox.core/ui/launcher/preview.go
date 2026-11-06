@@ -76,14 +76,7 @@ func (a *remotePreviewController) loadRemotePreview(path string, fallback queryP
 			loaded, loadErr := a.services.ResultPreview(ctx, a.sessionID, query.Get("sessionId"), query.Get("queryId"), query.Get("id"))
 			err = loadErr
 			if err == nil {
-				tags := make([]previewTag, len(loaded.PreviewTags))
-				for index, tag := range loaded.PreviewTags {
-					tags[index] = previewTag{Label: tag.Label, Tooltip: tag.Tooltip}
-				}
-				resolved = queryPreview{
-					PreviewType: loaded.PreviewType, PreviewData: loaded.PreviewData, PreviewOverlayData: loaded.PreviewOverlayData, DefaultHidden: loaded.DefaultHidden,
-					PreviewTags: tags, PreviewProperties: loaded.PreviewProperties, ScrollPosition: loaded.ScrollPosition,
-				}
+				resolved = fromCorePreview(loaded)
 			}
 		}
 		cancel()

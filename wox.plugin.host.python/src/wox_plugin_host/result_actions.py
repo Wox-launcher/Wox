@@ -20,14 +20,39 @@ class QueryActions:
     def __init__(self) -> None:
         self.active = True
         self.results: dict[str, dict[str, CachedAction]] = {}
+        self.previews: dict[str, tuple[str, Any, Any]] = {}
 
-    def cache(self, result: Any, preserve_callbacks: bool = False) -> None:
+    def cache(
+        self, result: Any, preserve_callbacks: bool = False, ctx: Any = None, api: Any = None, defer_preview_release: bool = False
+    ) -> None:
         """Replace one result's callbacks; late responses cannot revive a released bucket."""
         if isinstance(result, dict):
             return
         if not result.id:
             result.id = str(uuid4())
-        if result.actions is None or not self.active:
+        preview = getattr(result, "preview", None)
+        if not self.active:
+            binding = getattr(preview, "_wox_preview_binding", None)
+            if binding is not None:
+                binding.release()
+            return
+        if preview is not None:
+            previous = self.previews.get(result.id)
+            document = getattr(preview, "wox_view_id", "")
+            callback = getattr(preview, "on_wox_view_event", None)
+            if previous and (previous[0] != document or (not preserve_callbacks and not callback)):
+                if previous[2] is not None and not defer_preview_release:
+                    previous[2].release()
+                self.previews.pop(result.id, None)
+            if document and callback:
+                binding = getattr(preview, "_wox_preview_binding", None) or (previous[2] if previous and previous[0] == document else None)
+                self.previews[result.id] = (document, callback, binding)
+                if binding is not None and ctx is not None and api is not None:
+                    binding.bind(ctx, api, result.id)
+        elif not preserve_callbacks:
+            self.remove_preview(result.id)
+        if result.actions is None:
+            self.results.setdefault(result.id, {})
             return
         actions = {}
         for action in result.actions:
@@ -47,7 +72,16 @@ class QueryActions:
 
     def release(self) -> None:
         self.active = False
+        for _, _, binding in self.previews.values():
+            if binding is not None:
+                binding.release()
+        self.previews.clear()
         self.results.clear()
+
+    def remove_preview(self, result_id: str) -> None:
+        preview = self.previews.pop(result_id, None)
+        if preview is not None and preview[2] is not None:
+            preview[2].release()
 
 
 class ResultActions:

@@ -5,11 +5,96 @@ import json
 import unittest
 from unittest.mock import AsyncMock
 
-from wox_plugin import Button, Column, Context, Text, create_wox_view, wox_view_node
+from wox_plugin import Button, Column, Context, Loading, Text, create_wox_view, wox_view_node
 from wox_plugin.models.window import WindowContentUpdateResult, WindowEvent, WindowEventType
 
 
 class WoxViewSessionTest(unittest.IsolatedAsyncioTestCase):
+    def test_loading_builder(self):
+        self.assertEqual(Loading(), {"type": "loading", "props": {}})
+        self.assertEqual(
+            Loading(key="pending", style={"width": 24, "color": "$accent"}),
+            {"type": "loading", "key": "pending", "props": {"style": {"width": 24, "color": "$accent"}}},
+        )
+
+    async def test_hide_does_not_wait_for_async_show(self):
+        gate = asyncio.Event()
+        seen = []
+
+        async def show(hidden):
+            await gate.wait()
+            seen.append(hidden.is_set())
+
+        preview = create_wox_view(lambda _session: Text(text="preview"), lambda error: self.fail(str(error))).as_preview(on_show=show)
+        ctx = Context.new()
+        await preview.on_wox_view_event(ctx, {"Type": "show"})
+        await preview.on_wox_view_event(ctx, {"Type": "hide"})
+        gate.set()
+        await asyncio.sleep(0.01)
+        self.assertEqual(seen, [True])
+        preview._wox_preview_binding.release()
+
+    async def test_preview_visibility_stops_work_and_disposes_once(self):
+        transitions, signals, errors = [], [], []
+        timer = None
+
+        def show(hidden):
+            nonlocal timer
+            transitions.append("show")
+            signals.append(hidden)
+            timer = asyncio.get_running_loop().call_later(60, lambda: None)
+
+        def hide():
+            transitions.append("hide")
+            timer.cancel()
+
+        preview = create_wox_view(lambda _session: Text(text="preview"), errors.append).as_preview(
+            on_show=show, on_hide=hide, on_dispose=lambda: transitions.append("dispose")
+        )
+        binding = preview._wox_preview_binding
+        ctx = Context.new()
+        await preview.on_wox_view_event(ctx, {"Type": "show"})
+        await preview.on_wox_view_event(ctx, {"Type": "show"})
+        await preview.on_wox_view_event(ctx, {"Type": "hide"})
+        await preview.on_wox_view_event(ctx, {"Type": "hide"})
+        await preview.on_wox_view_event(ctx, {"Type": "show"})
+        binding.release()
+        binding.release()
+        await preview.on_wox_view_event(ctx, {"Type": "show"})
+        self.assertEqual(transitions, ["show", "hide", "show", "hide", "dispose"])
+        self.assertTrue(all(signal.is_set() for signal in signals))
+        self.assertTrue(timer.cancelled())
+        self.assertEqual(errors, [])
+
+    async def test_preview_callback_update_and_release(self):
+        count = 0
+        errors = []
+
+        def render(session):
+            def increment(value):
+                nonlocal count
+                count += value
+                session.invalidate()
+
+            return Button(label=str(count), on_press=increment)
+
+        preview = create_wox_view(render, errors.append).as_preview()
+        binding = preview._wox_preview_binding
+        api = type("API", (), {"update_result": AsyncMock(return_value=True)})()
+        ctx = Context.new()
+        binding.bind(ctx, api, "row")
+        handler = json.loads(preview.preview_data)["root"]["props"]["onPress"]["$handler"]
+        await preview.on_wox_view_event(ctx, {"Handler": handler, "Args": [2], "Key": ""})
+        await asyncio.sleep(0.01)
+        update = api.update_result.await_args.args[1]
+        self.assertEqual(update.id, "row")
+        self.assertEqual(update.preview.wox_view_id, preview.wox_view_id)
+        self.assertEqual(json.loads(update.preview.preview_data)["root"]["props"]["label"], "2")
+        binding.release()
+        await preview.on_wox_view_event(ctx, {"Handler": handler, "Args": [2], "Key": ""})
+        self.assertEqual(count, 2)
+        self.assertEqual(errors, [])
+
     async def test_early_ready_callbacks_updates_and_release(self):
         count = 0
         errors = []

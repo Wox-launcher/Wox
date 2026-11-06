@@ -51,7 +51,7 @@ func JSONSchema() []byte {
 				"children": children,
 			},
 		}
-		if kind == NodeImage || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
+		if kind == NodeImage || kind == NodeLineChart || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
 			node["required"] = []string{"type", "props"}
 			node["properties"].(schemaObject)["props"] = schemaObject{"$ref": "#/$defs/" + string(kind) + "Props"}
 		}
@@ -168,6 +168,28 @@ func schemaFor(t reflect.Type) schemaObject {
 		if t == reflect.TypeFor[Animation]() {
 			result["required"] = []string{"type"}
 			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 1, "maximum": 60000}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[LineChartProps]() {
+			result["required"] = []string{"values"}
+			props["values"].(schemaObject)["maxItems"] = 4096
+			props["pointLabels"].(schemaObject)["maxItems"] = 4096
+			props["pointLabels"].(schemaObject)["items"] = schemaObject{"type": "string", "maxLength": 128}
+			props["values"].(schemaObject)["items"] = schemaObject{"type": "number", "minimum": -1e100, "maximum": 1e100}
+		}
+		if t == reflect.TypeFor[LineChartOptions]() {
+			for _, name := range []string{"gridLines", "xTicks"} {
+				props[name] = schemaObject{"type": "integer", "anyOf": []any{schemaObject{"const": 0}, schemaObject{"type": "integer", "minimum": 2, "maximum": 12}}}
+			}
+			for name, limits := range map[string]schemaObject{
+				"lineWidth":     {"type": "number", "exclusiveMinimum": 0, "maximum": 16},
+				"plotPadding":   {"type": "number", "minimum": 0, "maximum": 128},
+				"yAxisWidth":    {"type": "number", "minimum": 0, "maximum": 512},
+				"valueDecimals": {"type": "integer", "minimum": 0, "maximum": 6},
+			} {
+				props[name] = schemaObject{"anyOf": []any{limits, schemaObject{"type": "null"}}}
+			}
+			props["valuePrefix"].(schemaObject)["maxLength"] = 32
+			props["valueSuffix"].(schemaObject)["maxLength"] = 32
 		}
 		if t == reflect.TypeFor[MorphPathProps]() {
 			result["required"] = []string{"keyframes"}

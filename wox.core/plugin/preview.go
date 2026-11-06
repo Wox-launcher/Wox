@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"context"
+	"encoding/json"
 	"wox/common"
 )
 
@@ -16,6 +18,7 @@ const (
 	WoxPreviewTypeRemote   = "remote" // when type is remote, data should be url to load WoxPreview
 	WoxPreviewTypeTerminal = "terminal"
 	WoxPreviewTypeWebView  = "webview" // when type is webview, data should be JSON string of WoxPreviewWebviewData
+	WoxPreviewTypeWoxView  = "woxview" // PreviewData is a serialized WoxView tree.
 	// list is the generic structured preview used for status-oriented rows.
 	// It replaces the old file-only preview so plugins can reuse the same
 	// surface for progress lists, selected files, and other non-file workflows.
@@ -57,6 +60,9 @@ type WoxPreviewTag struct {
 type WoxPreview struct {
 	PreviewType WoxPreviewType
 	PreviewData string
+	// WoxViewID identifies one interactive document across in-place updates.
+	WoxViewID      string                                     `json:",omitempty"`
+	OnWoxViewEvent func(context.Context, WoxViewPreviewEvent) `json:"-"`
 	// DefaultHidden keeps content available for manual opening. Manual visibility overrides last until the next query.
 	DefaultHidden bool
 	// PreviewOverlayData is the optional full-size image payload used when the UI opens an image
@@ -69,6 +75,27 @@ type WoxPreview struct {
 	// their compact metadata display without changing their payload.
 	PreviewProperties map[string]string // key support i18n
 	ScrollPosition    WoxPreviewScrollPosition
+}
+
+// WoxViewPreviewEventType identifies preview visibility transitions.
+type WoxViewPreviewEventType string
+
+const (
+	WoxViewPreviewEventShow WoxViewPreviewEventType = "show"
+	WoxViewPreviewEventHide WoxViewPreviewEventType = "hide"
+)
+
+// WoxViewPreviewEvent carries a producer callback or a visibility transition.
+type WoxViewPreviewEvent struct {
+	Type    WoxViewPreviewEventType `json:",omitempty"`
+	Handler string
+	Args    json.RawMessage
+	Key     string
+}
+
+// WoxViewPreviewEventProxy routes a result-scoped event to an external host.
+type WoxViewPreviewEventProxy interface {
+	DispatchWoxViewPreviewEvent(context.Context, string, string, WoxViewPreviewEvent) error
 }
 
 func (p *WoxPreview) IsEmpty() bool {

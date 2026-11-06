@@ -335,6 +335,35 @@ result = await api.create_window(ctx, view.as_window(WindowOptions(
 )))
 ```
 
-Single-file Python plugins use the same `wox_plugin` imports supplied by their host. `wox_view_node(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, and `Button` are convenience builders. Props passed to the generic builder use WoxView JSON names such as `onChange`; callback arguments follow the WoxView event contract.
+Single-file Python plugins use the same `wox_plugin` imports supplied by their host. `wox_view_node(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, `Button`, and `Loading` are convenience builders. Props passed to the generic builder use WoxView JSON names such as `onChange`; callback arguments follow the WoxView event contract.
 
-The adapter owns the returned `content` and `on_event`. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `on_error`. This requires matching SDK and host versions. The session is surface-independent, but WoxView previews and `as_preview()` are not yet implemented.
+Line charts accept optional `chart` props for axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance.
+
+Import `Loading` from `wox_plugin` and use `Loading()` for an animated ring, or customize it with `Loading(style={"width": 24, "color": "$accent"})`. Render it while work is pending and invalidate the session when the work completes. The default diameter is 16 logical units and the default color is `$text`.
+
+The adapter owns the returned `content` and `on_event`. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `on_error`. This requires matching SDK and host versions. For an interactive result preview, use `view.as_preview()` as the result's `preview`; the host binds the session to that result, forwards events, and publishes `session.invalidate()` through `update_result`. Call `as_preview()` separately for each result. The session is released when its result is replaced or its query is released. Set `ResultPreviewWidthRatio` to 0 in the query layout to show the preview at full width.
+
+Use preview lifecycle hooks to stop work when the preview is hidden:
+
+```python
+task = None
+
+def show(hidden):
+    global task
+    task = asyncio.create_task(refresh_quotes_until_hidden(hidden))
+
+def hide():
+    global task
+    if task is not None:
+        task.cancel()
+        task = None
+
+preview = view.as_preview(on_show=show, on_hide=hide, on_dispose=hide)
+```
+
+`on_show` receives a new `asyncio.Event` each time the preview becomes visible;
+it is set before `on_hide`. Disposal runs `on_hide` first if still visible, then
+`on_dispose` once. Hooks should return promptly and arrange cancellation of
+their own tasks; Wox cannot stop arbitrary plugin work. A delayed async hook
+should check the event before starting work and after awaiting. Results removed,
+query caches released, and plugin unloads dispose the session.

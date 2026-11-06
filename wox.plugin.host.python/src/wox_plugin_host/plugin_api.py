@@ -542,8 +542,11 @@ class PluginAPI(PublicAPI):
     async def update_result(self, ctx: Context, result: UpdatableResult) -> bool:
         """Update a query result that is currently displayed in the UI"""
         callbacks = self.result_actions.for_context(ctx, result.id)
+        previous_preview = callbacks.previews.get(result.id) if callbacks is not None else None
+        previous_id = previous_preview[0] if previous_preview else ""
+        changing_preview = result.preview is not None and previous_id != result.preview.wox_view_id
         if callbacks is not None:
-            callbacks.cache(result, preserve_callbacks=True)
+            callbacks.cache(result, preserve_callbacks=True, ctx=ctx, api=self, defer_preview_release=changing_preview)
         elif result.actions:
             await logger.warning(
                 ctx.get_trace_id(),
@@ -551,8 +554,24 @@ class PluginAPI(PublicAPI):
                 "query scope is missing, ambiguous or released; preserve the original query Context (SessionId/QueryId)",
             )
 
-        response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
-        return bool(response) if response is not None else False
+        staged_preview = callbacks.previews.get(result.id) if callbacks is not None else None
+        accepted = False
+        try:
+            response = await self.invoke_method(ctx, "UpdateResult", {"result": result.to_json()})
+            accepted = bool(response) if response is not None else False
+            return accepted
+        finally:
+            if changing_preview and callbacks is not None:
+                if accepted or callbacks.previews.get(result.id) is not staged_preview or not callbacks.active:
+                    if previous_preview and previous_preview[2] is not None:
+                        previous_preview[2].release()
+                else:
+                    if staged_preview and staged_preview[2] is not None:
+                        staged_preview[2].release()
+                    if previous_preview:
+                        callbacks.previews[result.id] = previous_preview
+                    else:
+                        callbacks.previews.pop(result.id, None)
 
     async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:
         """Remove a visible result and its host callbacks when core accepts it."""
@@ -572,6 +591,7 @@ class PluginAPI(PublicAPI):
         if success:
             callbacks = self.result_actions.for_context(ctx, option.result_id)
             if callbacks is not None:
+                callbacks.remove_preview(option.result_id)
                 callbacks.results.pop(option.result_id, None)
         return RemoveResultResult(success=success)
 
@@ -580,7 +600,7 @@ class PluginAPI(PublicAPI):
         callbacks = self.result_actions.find(query.session_id, query.id, "")
         if callbacks is not None:
             for result in results:
-                callbacks.cache(result)
+                callbacks.cache(result, ctx=ctx, api=self)
 
         results_payload = [json.loads(result.to_json()) for result in results]
         response = await self.invoke_method(

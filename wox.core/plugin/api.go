@@ -1111,8 +1111,24 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 			return false
 		}
 	}
+	var previousPreview *WoxPreview
+	var previewCache *QueryResultCache
+	if result.Preview != nil && result.Preview.PreviewType == WoxPreviewTypeWoxView {
+		if cache, found := GetPluginManager().resultStore.findWithContext(ctx, result.Id); found {
+			if cache.PluginInstance != a.pluginInstance {
+				return false
+			}
+			previousPreview, previewCache = cache.previewSnapshot.Load(), cache
+		} else {
+			return false
+		}
+	}
 	polishedResult := GetPluginManager().PolishUpdatableResult(ctx, a.pluginInstance, result)
 	success := GetPluginManager().GetUI().UpdateResult(ctx, polishedResult)
+	if !success && previousPreview != nil && polishedResult.Preview != nil && previewCache.previewSnapshot.CompareAndSwap(polishedResult.Preview, previousPreview) {
+		// A rejected tree must not become the callback owner in Core's result cache.
+		previewCache.Result.Preview = *previousPreview
+	}
 	return success
 }
 

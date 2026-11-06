@@ -18,6 +18,7 @@ import (
 	woxui "wox/ui/runtime"
 	woxscreenshot "wox/ui/screenshot"
 	woxwidget "wox/ui/widget"
+	"wox/ui/woxview"
 	"wox/util"
 )
 
@@ -373,6 +374,12 @@ func (a *App) RefreshAccountStatus(_ context.Context) error {
 
 // UpdateResult patches the visible result with one already-polished core snapshot.
 func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (bool, error) {
+	if result.Preview != nil && result.Preview.PreviewType == plugin.WoxPreviewTypeWoxView {
+		tree, err := woxview.Parse([]byte(result.Preview.PreviewData))
+		if err != nil || tree.HasHandlers() && result.Preview.WoxViewID == "" {
+			return false, nil
+		}
+	}
 	updated := false
 	previewBecameVisible := false
 	err := a.runOnUI("apply result update", func() {
@@ -956,7 +963,7 @@ func fromCorePreview(preview plugin.WoxPreview) queryPreview {
 		tags[index] = previewTag{Label: tag.Label, Tooltip: tag.Tooltip}
 	}
 	return queryPreview{
-		PreviewType: preview.PreviewType, PreviewData: preview.PreviewData, PreviewOverlayData: preview.PreviewOverlayData, DefaultHidden: preview.DefaultHidden,
+		PreviewType: preview.PreviewType, PreviewData: preview.PreviewData, WoxViewID: preview.WoxViewID, PreviewOverlayData: preview.PreviewOverlayData, DefaultHidden: preview.DefaultHidden,
 		PreviewTags: tags, PreviewProperties: cloneStringMap(preview.PreviewProperties), ScrollPosition: preview.ScrollPosition,
 	}
 }

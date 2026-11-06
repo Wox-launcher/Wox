@@ -506,6 +506,43 @@ const result = await api.CreateWindow(ctx, {
 })
 ```
 
-Single-file Node.js plugins use `const { createWoxView, Column, Text, Button } = require("@wox-launcher/wox-plugin")`; Wox supplies the SDK, so no package installation is required. Packaged plugins import it as above. `woxViewNode(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, and `Button` are convenience builders. Callback arguments follow the WoxView event contract.
+Single-file Node.js plugins use `const { createWoxView, Column, Text, Button } = require("@wox-launcher/wox-plugin")`; Wox supplies the SDK, so no package installation is required. Packaged plugins import it as above. `woxViewNode(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, `Button`, and `Loading` are convenience builders. Callback arguments follow the WoxView event contract.
 
-The adapter owns `Content` and `OnEvent`; do not override them after spreading the returned options. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `onError`. This requires matching SDK and host versions. The session is surface-independent, but WoxView previews and `asPreview()` are not yet implemented.
+Import `Loading` from `@wox-launcher/wox-plugin` and use `Loading()` for an animated ring, or customize its diameter and color with `Loading({ style: { width: 24, color: "$accent" } })`. Render it while work is pending and invalidate the session when the work completes. The default diameter is 16 logical units and the default color is `$text`.
+
+The adapter owns `Content` and `OnEvent`; do not override them after spreading the returned options. It serializes updates, coalesces invalidations while an update is pending, and releases handlers when the window closes or the plugin unloads. Errors go to `onError`. This requires matching SDK and host versions. Use `view.asPreview()` for an interactive result preview: the host binds it to the result's query, forwards events, publishes invalidations through `UpdateResult`, and releases the session when the result is replaced or its query is released. Call `asPreview()` separately for each result. A query response can use `ResultPreviewWidthRatio: 0` for full-width content.
+
+```ts
+const tree: WoxViewTree = {
+  version: 1,
+  root: { type: "line-chart", props: { values: [101, 103, 102, 105], label: "Price", style: { height: 180, color: "$accent" } } }
+}
+const preview: WoxPreview = { PreviewType: "woxview", PreviewData: JSON.stringify(tree) }
+```
+
+Use the optional `chart` props to enable axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance.
+
+For callbacks, return `createWoxView({ render, onError }).asPreview()` as the result's `Preview`; call `session.invalidate()` after changing state. The static tree form above does not register event callbacks.
+
+Preview lifecycle hooks let plugins stop work as soon as the preview hides:
+
+```ts
+const preview = view.asPreview({
+  onShow(signal) {
+    const timer = setInterval(refreshQuote, 60_000)
+    signal.addEventListener("abort", () => clearInterval(timer), { once: true })
+    // Pass signal to fetch() so an in-flight request is canceled too.
+  },
+  onHide() { /* Release other visible-only resources. */ },
+  onDispose() { /* Release resources owned by this preview session. */ }
+})
+```
+
+`onShow` runs once per visible period with a fresh `AbortSignal`. Hide aborts
+the signal before `onHide`; if the session is disposed while visible, hide runs
+before `onDispose`. The latter runs once, including when the result is removed,
+its query cache is released, or the plugin unloads. Start background work in
+`onShow` and register cleanup immediately; Wox cannot cancel arbitrary timers or
+tasks that ignore the signal. Hooks must not block: asynchronous work should
+check the signal before starting and after awaiting. Each `asPreview()` owns
+its own hooks and must be used for only one result.

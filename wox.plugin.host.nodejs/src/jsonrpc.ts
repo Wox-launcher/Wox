@@ -128,6 +128,11 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       } else if (window) await window.event(ctx, JSON.parse(request.Params.Event))
       return
     }
+    case "woxviewPreviewEvent": {
+      const cached = pluginInstances.get(request.PluginId)?.ResultActions.forContext(ctx, request.Params.ResultId)?.previews.get(request.Params.ResultId)
+      if (cached && cached.id === request.Params.DocumentID) await cached.callback(ctx, JSON.parse(request.Params.Event))
+      return
+    }
     case "toastMsgAction": {
       const api = pluginInstances.get(request.PluginId)?.API
       const callback = api?.toastCallbacks.get(request.Params.CallbackId)
@@ -426,7 +431,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   const response = normalizeQueryResponse(ctx, request.PluginName, rawResponse)
 
   response.Results.forEach(result => {
-    callbacks.cache(result)
+    callbacks.cache(result, false, ctx, plugin.API)
   })
 
   return response
@@ -545,7 +550,7 @@ async function onMRURestore(ctx: Context, request: PluginJsonRpcRequest): Promis
   try {
     const result = await callback(ctx, mruData)
     if (result) {
-      callbacks.cache(result)
+      callbacks.cache(result, false, ctx, pluginInstance.API)
     }
     return result
   } catch (error) {

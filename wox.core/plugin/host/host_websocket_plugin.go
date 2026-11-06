@@ -15,6 +15,20 @@ type WebsocketPlugin struct {
 	websocketHost *WebsocketHost
 }
 
+// DispatchWoxViewPreviewEvent sends a result-scoped event to its owning host.
+func (w *WebsocketPlugin) DispatchWoxViewPreviewEvent(ctx context.Context, resultID, documentID string, event plugin.WoxViewPreviewEvent) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	params := map[string]string{"ResultId": resultID, "DocumentID": documentID, "Event": string(data)}
+	if event.Type == plugin.WoxViewPreviewEventShow || event.Type == plugin.WoxViewPreviewEventHide {
+		params["Lifecycle"] = "true"
+	}
+	_, err = w.websocketHost.invokeMethod(ctx, w.metadata, "woxviewPreviewEvent", params)
+	return err
+}
+
 func NewWebsocketPlugin(metadata plugin.Metadata, websocketHost *WebsocketHost) *WebsocketPlugin {
 	return &WebsocketPlugin{
 		metadata:      metadata,

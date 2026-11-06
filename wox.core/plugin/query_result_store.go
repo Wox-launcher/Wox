@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"wox/util"
 )
@@ -46,10 +47,12 @@ func (s *queryResultStore) clearSession(sessionId string) {
 }
 
 type QueryResultCache struct {
-	Result         QueryResult // store the full QueryResult including actions with callbacks
-	PluginInstance *Instance
-	Query          Query
-	Layout         QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
+	// previewSnapshot lets callback delivery read the current document while updates run concurrently.
+	previewSnapshot atomic.Pointer[WoxPreview]
+	Result          QueryResult // store the full QueryResult including actions with callbacks
+	PluginInstance  *Instance
+	Query           Query
+	Layout          QueryLayout // query layout used when polishing this result, so later updates keep the same surface sizing
 	// FlushBatch is the debouncer batch that first sent this result in a visible response.
 	FlushBatch int
 	// BatchQueueElapsed is the elapsed time when queryRun made this result ready for the debouncer queue.
@@ -197,6 +200,8 @@ func (s *queryResultStore) storeResult(ctx context.Context, pluginInstance *Inst
 		Query:          query,
 		Layout:         layout,
 	}
+	preview := resultOriginal.Preview
+	cache.previewSnapshot.Store(&preview)
 	cache.SourceMRUHash = sourceHash
 	cache.AliasMatchKind = match
 	set.Results.Store(resultOriginal.Id, cache)

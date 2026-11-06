@@ -249,6 +249,7 @@ type queryPreview struct {
 	DefaultHidden      bool              `json:"DefaultHidden"`
 	PreviewType        string            `json:"PreviewType"`
 	PreviewData        string            `json:"PreviewData"`
+	WoxViewID          string            `json:"WoxViewID"`
 	PreviewOverlayData string            `json:"PreviewOverlayData"`
 	PreviewTags        []previewTag      `json:"PreviewTags"`
 	PreviewProperties  map[string]string `json:"PreviewProperties"`

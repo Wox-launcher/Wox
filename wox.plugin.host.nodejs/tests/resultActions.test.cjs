@@ -62,6 +62,87 @@ function fixture(query) {
   return { callbacks, api }
 }
 
+test("preview events stay scoped to their result and released document", async () => {
+  const calls = [], released = []
+  const { callbacks } = fixture(async () => {
+    const preview = { PreviewType: "woxview", PreviewData: "{}", WoxViewID: "doc", OnWoxViewEvent: (ctx, event) => calls.push([ctx.Get("SessionId"), event.Args]) }
+    Object.defineProperty(preview, Symbol.for("wox.preview.binding"), { value: { bind() {}, release: () => released.push(true) } })
+    return { Results: [{ Id: "row", Preview: preview }] }
+  })
+  await call("query", "a", "one")
+  await call("query", "b", "one")
+  await call("woxviewPreviewEvent", "a", "one", { ResultId: "row", DocumentID: "doc", Event: JSON.stringify({ Handler: "h", Args: [3], Key: "" }) })
+  await call("woxviewPreviewEvent", "a", "one", { ResultId: "row", DocumentID: "old", Event: "{}" })
+  callbacks.release("a", "one")
+  await call("woxviewPreviewEvent", "a", "one", { ResultId: "row", DocumentID: "doc", Event: "{}" })
+  await call("woxviewPreviewEvent", "b", "one", { ResultId: "row", DocumentID: "doc", Event: JSON.stringify({ Args: [4] }) })
+  assert.deepEqual(calls, [["a", [3]], ["b", [4]]])
+  assert.equal(released.length, 1)
+})
+
+test("SDK preview binds through query RPC and publishes invalidation", async () => {
+  const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, "../../wox.plugin.nodejs/src/woxviewSession.ts"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
+  }).outputText
+  const sdk = { exports: {} }
+  new Function("require", "module", "exports", compiled)(require, sdk, sdk.exports)
+  let count = 0
+  const errors = [], updates = [], transitions = []
+  const preview = sdk.exports.createWoxView({
+    onError: error => errors.push(error),
+    render: session => sdk.exports.Button({ label: String(count), onPress: () => { count++; session.invalidate() } })
+  }).asPreview({ onShow: () => transitions.push("show"), onHide: () => transitions.push("hide"), onDispose: () => transitions.push("dispose") })
+  const { api, callbacks } = fixture(async () => ({ Results: [{ Id: "row", Preview: preview }] }))
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "UpdateResult")
+    updates.push(JSON.parse(params.result))
+    return true
+  }
+  await call("query", "a", "query")
+  await call("woxviewPreviewEvent", "a", "query", { ResultId: "row", DocumentID: preview.WoxViewID, Event: JSON.stringify({ Type: "show" }) })
+  const handler = JSON.parse(preview.PreviewData).root.props.onPress.$handler
+  await call("woxviewPreviewEvent", "a", "query", { ResultId: "row", DocumentID: preview.WoxViewID, Event: JSON.stringify({ Handler: handler, Args: [], Key: "" }) })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(count, 1)
+  assert.equal(JSON.parse(updates[0].Preview.PreviewData).root.props.label, "1")
+  assert.equal(updates[0].Preview.WoxViewID, preview.WoxViewID)
+  await call("woxviewPreviewEvent", "a", "query", { ResultId: "row", DocumentID: preview.WoxViewID, Event: JSON.stringify({ Type: "hide" }) })
+  await call("woxviewPreviewEvent", "a", "query", { ResultId: "row", DocumentID: preview.WoxViewID, Event: JSON.stringify({ Type: "show" }) })
+  callbacks.release("a", "query")
+  assert.deepEqual(transitions, ["show", "hide", "show", "hide", "dispose"])
+  assert.deepEqual(errors, [])
+})
+
+test("a rejected replacement disposes only the new preview", async () => {
+  const disposed = []
+  const preview = name => {
+    const value = { PreviewType: "woxview", PreviewData: "{}", WoxViewID: name, OnWoxViewEvent() {} }
+    value[Symbol.for("wox.preview.binding")] = { bind() {}, release: () => disposed.push(name) }
+    return value
+  }
+  const { api, callbacks } = fixture(async () => ({ Results: [{ Id: "row", Preview: preview("old") }] }))
+  await call("query", "a", "query")
+  api.invokeMethod = async () => false
+  assert.equal(await api.UpdateResult(context("a", "query"), { Id: "row", Preview: preview("new") }), false)
+  assert.equal(callbacks.find("a", "query", "row").previews.get("row").id, "old")
+  assert.deepEqual(disposed, ["new"])
+  callbacks.release("a", "query")
+  assert.deepEqual(disposed, ["new", "old"])
+})
+
+test("a preview returned after query release is disposed", async () => {
+  let complete, disposed = 0
+  const pending = new Promise(resolve => { complete = resolve })
+  const { callbacks } = fixture(async () => pending)
+  const query = call("query", "a", "query")
+  callbacks.release("a", "query")
+  const preview = { PreviewType: "woxview", PreviewData: "{}", WoxViewID: "doc", OnWoxViewEvent() {} }
+  preview[Symbol.for("wox.preview.binding")] = { bind() {}, release: () => disposed++ }
+  complete({ Results: [{ Id: "row", Preview: preview }] })
+  await query
+  assert.equal(disposed, 1)
+})
+
 test("toolbar callbacks with the same public ID stay isolated and retire by snapshot", async () => {
   const { api } = fixture(async () => [])
   const calls = []
