@@ -12,6 +12,13 @@
 extern void keyboardHotkeyTriggeredCGO(int id);
 extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character, int nativeEventType, unsigned long long nativeFlags, int nativeCapsLockStateAvailable, int nativeCapsLockPressed);
 
+unsigned int woxDarwinForegroundPID(void) {
+    @autoreleasepool {
+        NSRunningApplication *application = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        return application ? (unsigned int)application.processIdentifier : 0;
+    }
+}
+
 static EventHandlerRef gHotkeyHandler = NULL;
 static NSMutableDictionary<NSNumber *, NSValue *> *gHotkeyRefs = nil;
 static CFMachPortRef gRawKeyboardEventTap = NULL;
@@ -341,6 +348,10 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
             return event;
         }
 
+        // Replayed taps must pass through without entering the hold recognizer again.
+        if (CGEventGetIntegerValueField(event, kCGEventSourceUserData) == 0x574f5854) {
+            return event;
+        }
         if (type != kCGEventKeyDown && type != kCGEventKeyUp && type != kCGEventFlagsChanged) {
             return event;
         }

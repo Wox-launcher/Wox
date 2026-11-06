@@ -72,7 +72,7 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
             ctx,
             CreateWindowOption(
                 content=WindowContent(WindowContentType.WOXVIEW, tree),
-                window=WindowOptions(presentation=WindowPresentation.WINDOW, topmost=False, offset_x=0, movable=True, hide_chrome=True),
+                window=WindowOptions(presentation=WindowPresentation.WINDOW, topmost=False, offset_x=0, movable=True, hide_chrome=True, drag_content=True, transparent=True, pass_through_transparent=True),
                 on_event=lambda ctx, e: fired.append(e),
             ),
         )
@@ -82,6 +82,9 @@ class WindowHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(calls[0][1]["option"]["Window"]["Topmost"], False)
         self.assertEqual(calls[0][1]["option"]["Content"], {"Type": "woxview", "Data": tree})
         self.assertIs(calls[0][1]["option"]["Window"]["HideChrome"], True)
+        self.assertIs(calls[0][1]["option"]["Window"]["DragContent"], True)
+        self.assertIs(calls[0][1]["option"]["Window"]["Transparent"], True)
+        self.assertIs(calls[0][1]["option"]["Window"]["PassThroughTransparent"], True)
         self.assertNotIn("OnEvent", calls[0][1]["option"])
         await created.window.show(ctx, WindowShowOption())
         await created.window.hide(ctx, WindowHideOption())

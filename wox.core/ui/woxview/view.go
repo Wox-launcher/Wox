@@ -242,6 +242,9 @@ func (b *builder) node(node *Node, id string) widget.Widget {
 func (b *builder) decorateNode(node *Node, id string, content widget.Widget) widget.Widget {
 	if p, ok := node.Props.(interface{ commonProps() CommonProps }); ok {
 		common := p.commonProps()
+		if common.InputRegion {
+			content = widget.PaintOverlay{Child: content, Paint: func(list *woxui.DisplayList, bounds woxui.Rect) { list.AddInputRegion(bounds) }}
+		}
 		if len(common.Shortcuts) > 0 {
 			content = b.shortcuts(id, common.Shortcuts, b.isRoot, content)
 		}

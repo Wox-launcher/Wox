@@ -14,10 +14,11 @@ import (
 	woxui "wox/ui/runtime"
 	"wox/util"
 	utilhotkey "wox/util/hotkey"
+	"wox/util/keyboard"
 )
 
 var defaultHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo"}
-var globalHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
+var globalHotkeyRecordingKinds = []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier", "holdKey"}
 
 type hotkeyRecordingState struct {
 	diagnosticCtx   context.Context
@@ -60,6 +61,15 @@ func (c *hotkeyRecordingController) startHotkeyRecording(idPrefix string, target
 	}
 	if len(allowedKinds) == 0 {
 		allowedKinds = defaultHotkeyRecordingKinds
+	}
+	if runtime.GOOS == "linux" {
+		filtered := make([]string, 0, len(allowedKinds))
+		for _, kind := range allowedKinds {
+			if kind != "holdKey" {
+				filtered = append(filtered, kind)
+			}
+		}
+		allowedKinds = filtered
 	}
 	if runtime.GOOS == "windows" && persistKey == "MainHotkey" {
 		allowedKinds = append(append([]string{}, allowedKinds...), "pressModifier")
@@ -145,6 +155,7 @@ func (c *hotkeyRecordingController) hotkeyRecordingHint(allowedKinds []string, w
 		{"capsLockCombo", "ui_hotkey_hint_caps_lock_combo"},
 		{"pressModifier", "ui_hotkey_hint_press_modifier"},
 		{"holdModifier", "ui_hotkey_hint_hold_modifier"},
+		{"holdKey", "ui_hotkey_hint_hold_key"},
 	} {
 		if !containsString(allowedKinds, item.kind) {
 			continue
@@ -319,14 +330,14 @@ func (c *hotkeyRecordingController) applyRecordedHotkey(payload recordedHotkeyPa
 
 func canonicalRecordedHotkey(payload recordedHotkeyPayload) string {
 	canonical := strings.TrimSpace(payload.Hotkey)
-	if payload.Kind == "holdModifier" && !strings.HasPrefix(canonical, "hold:") {
+	if (payload.Kind == "holdModifier" || payload.Kind == "holdKey") && !strings.HasPrefix(canonical, "hold:") {
 		return "hold:" + canonical
 	}
 	return canonical
 }
 
 func hotkeyKindSkipsAvailability(kind string) bool {
-	return kind == "holdModifier" || kind == "pressModifier"
+	return kind == "holdModifier" || kind == "holdKey" || kind == "pressModifier"
 }
 
 func (c *hotkeyRecordingController) checkRecordedHotkey(state *hotkeyRecordingState, hotkey string) {
@@ -523,6 +534,11 @@ func (c *hotkeyRecordingController) onHotkeyRecordingKey(event woxui.KeyEvent) b
 	}
 	if !state.ready || !state.fallback || state.checking {
 		return true
+	}
+	if state.raw && state.allowed["holdKey"] && event.Modifiers == 0 {
+		if key, err := keyboard.ParseKey(string(event.Key)); err == nil && keyboard.SupportsStandaloneHold(key) && (event.Key == woxui.KeyInsert || event.Key == woxui.KeyDelete || isFunctionKeyEvent(event.Key)) {
+			return true
+		}
 	}
 	hotkey := fallbackHotkeyString(event)
 	if hotkey == "" {

@@ -25,6 +25,7 @@ const (
 	HotkeyKindCapsLockCombo  HotkeyKind = "capsLockCombo"
 	HotkeyKindPressModifier  HotkeyKind = "pressModifier"
 	HotkeyKindHoldModifier   HotkeyKind = "holdModifier"
+	HotkeyKindHoldKey        HotkeyKind = "holdKey"
 )
 
 type HotkeyPhase string
@@ -281,7 +282,7 @@ func (a *APIImpl) applyHotkeys(ctx context.Context, key, value string, persist f
 	for _, binding := range next {
 		b := binding
 		entry := corehotkey.Entry{ID: b.event.SettingKey + "\x00" + b.event.ItemID + "\x00" + b.event.ColumnKey, CombineKey: b.event.Hotkey, OnPress: func() { b.enqueue(HotkeyPhaseTriggered, "") }}
-		if b.event.Kind == HotkeyKindHoldModifier {
+		if b.event.Kind == HotkeyKindHoldModifier || b.event.Kind == HotkeyKindHoldKey {
 			entry.OnPress = func() {}
 			entry.OnRelease = func() {}
 			entry.OnHoldTransition = func(t utilhotkey.HoldTransition) {

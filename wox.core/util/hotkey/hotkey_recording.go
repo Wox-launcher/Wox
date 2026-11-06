@@ -11,8 +11,6 @@ import (
 	"wox/util/keyboard"
 )
 
-const recordingModifierChordDebounce = 120 * time.Millisecond
-
 type recordedHotkey struct {
 	Hotkey string
 	Kind   hotkeyKind
@@ -105,6 +103,8 @@ func parseHotkeyKind(kind string) (hotkeyKind, bool) {
 		return hotkeyKindCapsLockCombo, true
 	case hotkeyKindHoldModifier:
 		return hotkeyKindHoldModifier, true
+	case hotkeyKindHoldKey:
+		return hotkeyKindHoldKey, true
 	case hotkeyKindPressModifier:
 		return hotkeyKindPressModifier, true
 	default:
@@ -280,6 +280,10 @@ type recordingRawState struct {
 	holdPendingKeys   []keyboard.Key
 	holdPendingTimer  *time.Timer
 	pressPendingTimer *time.Timer
+	keyPending        keyboard.Key
+	keyTimer          *time.Timer
+	keySequence       uint64
+	keyHoldRecorded   bool
 }
 
 func newRecordingRawState(allowed map[hotkeyKind]bool, onRecorded func(recordedHotkey)) *recordingRawState {
@@ -329,6 +333,11 @@ func (s *recordingRawState) Close() {
 		s.pressPendingTimer.Stop()
 		s.pressPendingTimer = nil
 	}
+	if s.keyTimer != nil {
+		s.keyTimer.Stop()
+		s.keyTimer = nil
+	}
+	s.keySequence++
 }
 
 func (s *recordingRawState) HandleEvent(event keyboard.RawKeyEvent) bool {
@@ -364,7 +373,10 @@ func (s *recordingRawState) HandleEvent(event keyboard.RawKeyEvent) bool {
 		s.handleHoldModifierRecordingLocked(event)
 	}
 
-	if s.allowed[hotkeyKindNormalCombo] && event.Type == keyboard.EventTypeKeyDown && !isSpecificModifierKey(event.Key) {
+	keyConsumed, keyRecorded := s.handleStandaloneHoldRecordingLocked(event)
+	consume = consume || keyConsumed
+	recorded = append(recorded, keyRecorded...)
+	if !keyConsumed && s.allowed[hotkeyKindNormalCombo] && event.Type == keyboard.EventTypeKeyDown && !isSpecificModifierKey(event.Key) {
 		if hotkeyStr := s.normalComboStringLocked(event.Key); hotkeyStr != "" {
 			recorded = append(recorded, recordedHotkey{Hotkey: hotkeyStr, Kind: hotkeyKindNormalCombo})
 			consume = true
@@ -393,6 +405,60 @@ func (s *recordingRawState) HandleEvent(event keyboard.RawKeyEvent) bool {
 
 	s.dispatchRecorded(recorded)
 	return consume
+}
+
+// handleStandaloneHoldRecordingLocked waits for release or the shared hold threshold.
+func (s *recordingRawState) handleStandaloneHoldRecordingLocked(event keyboard.RawKeyEvent) (bool, []recordedHotkey) {
+	if !s.allowed[hotkeyKindHoldKey] {
+		return false, nil
+	}
+	if s.keyPending != keyboard.KeyUnknown && event.Key == s.keyPending && event.Type == keyboard.EventTypeKeyUp {
+		if s.keyTimer != nil {
+			s.keyTimer.Stop()
+			s.keyTimer = nil
+		}
+		s.keySequence++
+		key := s.keyPending
+		s.keyPending = keyboard.KeyUnknown
+		if !s.keyHoldRecorded && s.allowed[hotkeyKindNormalCombo] {
+			return true, []recordedHotkey{{Hotkey: normalKeyString(key), Kind: hotkeyKindNormalCombo}}
+		}
+		return true, nil
+	}
+	if event.Type != keyboard.EventTypeKeyDown {
+		return false, nil
+	}
+	if s.keyPending != keyboard.KeyUnknown && event.Key == s.keyPending {
+		return true, nil
+	}
+	if s.keyPending != keyboard.KeyUnknown {
+		if s.keyTimer != nil {
+			s.keyTimer.Stop()
+			s.keyTimer = nil
+		}
+		s.keySequence++
+		s.keyPending = keyboard.KeyUnknown
+	}
+	if !isStandaloneRecordingKey(event.Key) || !keyboard.SupportsStandaloneHold(event.Key) || len(s.currentGenericModifiersLocked()) != 0 || event.Modifiers != 0 {
+		return false, nil
+	}
+	s.keyPending = event.Key
+	s.keyHoldRecorded = false
+	s.keySequence++
+	sequence := s.keySequence
+	s.keyTimer = time.AfterFunc(holdPressDelay, func() {
+		s.mu.Lock()
+		if s.keyPending == keyboard.KeyUnknown || s.keySequence != sequence {
+			s.mu.Unlock()
+			return
+		}
+		key := s.keyPending
+		s.keyHoldRecorded = true
+		s.keyTimer = nil
+		s.mu.Unlock()
+		s.dispatchRecorded([]recordedHotkey{{Hotkey: normalKeyString(key), Kind: hotkeyKindHoldKey}})
+	})
+	return true, nil
 }
 
 func (s *recordingRawState) updatePressedLocked(event keyboard.RawKeyEvent) {
@@ -478,7 +544,7 @@ func (s *recordingRawState) handleHoldModifierRecordingLocked(event keyboard.Raw
 	s.cancelHoldPendingLocked()
 	s.holdPendingCombo = combo
 	s.holdPendingKeys = keys
-	s.holdPendingTimer = time.AfterFunc(recordingModifierChordDebounce, func() {
+	s.holdPendingTimer = time.AfterFunc(holdPressDelay, func() {
 		s.mu.Lock()
 		combo := s.holdPendingCombo
 		keys := append([]keyboard.Key(nil), s.holdPendingKeys...)

@@ -29,6 +29,12 @@ export interface WindowOptions {
   Closable?: boolean
   /** Hide Wox's window controls and drag strip. */
   HideChrome?: boolean
+  /** Drag from non-interactive content after pointer movement. Requires Movable. */
+  DragContent?: boolean
+  /** Leave the window background transparent; input still uses the window bounds. */
+  Transparent?: boolean
+  /** On Windows, pass pointer input through fully transparent pixels. Requires Transparent. */
+  PassThroughTransparent?: boolean
 }
 export interface WindowEvent {
   Type: WindowEventType

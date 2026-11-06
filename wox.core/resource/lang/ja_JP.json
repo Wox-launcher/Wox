@@ -116,6 +116,7 @@
   "ui_hotkey_hint_caps_lock_combo": "Caps Lock + キー",
   "ui_hotkey_hint_press_modifier": "修飾キーを押す",
   "ui_hotkey_hint_hold_modifier": "修飾キーを長押し",
+  "ui_hotkey_hint_hold_key": "Delete、Insert またはファンクションキーを長押し",
   "ui_hotkey_hint_press_win": "Win キーのみを押す",
   "ui_hotkey_accessibility_required": "アクセシビリティの許可が必要です",
   "ui_hotkey_raw_recorder_unavailable": "このホットキータイプは現在の環境では記録できません",

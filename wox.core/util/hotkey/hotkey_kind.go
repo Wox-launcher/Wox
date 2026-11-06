@@ -9,6 +9,7 @@ const (
 	hotkeyKindDoubleModifier hotkeyKind = "doubleModifier"
 	hotkeyKindCapsLockCombo  hotkeyKind = "capsLockCombo"
 	hotkeyKindHoldModifier   hotkeyKind = "holdModifier"
+	hotkeyKindHoldKey        hotkeyKind = "holdKey"
 	hotkeyKindPressModifier  hotkeyKind = "pressModifier"
 	hotkeyKindUnknown        hotkeyKind = ""
 )
@@ -29,7 +30,10 @@ func resolveHotkeyKind(spec hotkeySpec, hasRelease bool, options registerOptions
 		if spec.isModifierChord() {
 			return hotkeyKindHoldModifier, nil
 		}
-		return hotkeyKindUnknown, fmt.Errorf("release callbacks are only supported for modifier hold hotkeys")
+		if !spec.capsLock && spec.modifiers == 0 && isStandaloneRecordingKey(spec.key) {
+			return hotkeyKindHoldKey, nil
+		}
+		return hotkeyKindUnknown, fmt.Errorf("release callbacks require modifier chords or standalone Delete, Insert, or function keys")
 	}
 
 	if spec.isModifierChord() {

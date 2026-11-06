@@ -33,5 +33,16 @@ func (d *DisplayList) TransformScene(scale float32, offset Point) {
 	for i := range d.floatingMaterials {
 		d.floatingMaterials[i] = transform(d.floatingMaterials[i])
 	}
+	for i := range d.inputRegions {
+		region := &d.inputRegions[i]
+		region.rect = transform(region.rect)
+		if len(region.points) > 0 {
+			points := make([]Point, len(region.points))
+			for j, point := range region.points {
+				points[j] = Point{X: offset.X + point.X*scale, Y: offset.Y + point.Y*scale}
+			}
+			region.points = points
+		}
+	}
 	d.materialMargin *= scale
 }

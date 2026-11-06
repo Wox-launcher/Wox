@@ -51,7 +51,7 @@ func JSONSchema() []byte {
 				"children": children,
 			},
 		}
-		if kind == NodeImage || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
+		if kind == NodeImage || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
 			node["required"] = []string{"type", "props"}
 			node["properties"].(schemaObject)["props"] = schemaObject{"$ref": "#/$defs/" + string(kind) + "Props"}
 		}
@@ -168,6 +168,23 @@ func schemaFor(t reflect.Type) schemaObject {
 		if t == reflect.TypeFor[Animation]() {
 			result["required"] = []string{"type"}
 			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 1, "maximum": 60000}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[MorphPathProps]() {
+			result["required"] = []string{"keyframes"}
+			props["progress"] = schemaObject{"type": "number", "minimum": 0, "maximum": 1}
+			props["keyframes"].(schemaObject)["minItems"] = 2
+			props["keyframes"].(schemaObject)["maxItems"] = 18
+			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 0, "maximum": 60000}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[MorphPathKeyframe]() {
+			result["required"] = []string{"at", "path"}
+			props["at"] = schemaObject{"type": "number", "minimum": 0, "maximum": 1}
+			props["path"].(schemaObject)["minItems"] = 1
+			props["path"].(schemaObject)["maxItems"] = 128
+		}
+		if t == reflect.TypeFor[PathCommand]() {
+			result["required"] = []string{"op"}
+			props["values"].(schemaObject)["maxItems"] = 6
 		}
 		if t == reflect.TypeFor[Transition]() {
 			result["required"] = []string{"properties"}

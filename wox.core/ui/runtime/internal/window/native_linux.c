@@ -271,6 +271,7 @@ struct WoxLinuxWindow {
   bool native_dialog_active;
   bool nonactivating;
   bool per_pixel_alpha;
+  bool transparent;
   bool pointer_passthrough;
   bool application_window;
   bool screenshot_window;
@@ -3473,7 +3474,7 @@ static gboolean accessibility_id_equal(gconstpointer a, gconstpointer b) {
   return *(const uint64_t *)a == *(const uint64_t *)b;
 }
 
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context) {
   if (!is_main_thread() || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -3488,7 +3489,9 @@ WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float he
   window->application_window = application_window;
   window->screenshot_window = window_role == WOX_WINDOW_ROLE_SCREENSHOT;
   window->nonactivating = nonactivating != 0;
-  window->per_pixel_alpha = linux_window_uses_per_pixel_alpha(application_window, window->nonactivating, window->screenshot_window, wox_linux_background_blur_available() != 0);
+  window->transparent = transparent != 0;
+  window->per_pixel_alpha = window->transparent || linux_window_uses_per_pixel_alpha(application_window, window->nonactivating, window->screenshot_window, wox_linux_background_blur_available() != 0);
+  window->background_blur_disabled = window->transparent;
   window->im_context = gtk_im_multicontext_new();
   window->pressed_keys = g_hash_table_new(g_direct_hash, g_direct_equal);
   window->web_view_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
@@ -4080,7 +4083,7 @@ static void set_window_chrome_main(void *data) {
     return;
   }
   call->window->custom_window_chrome = call->enabled;
-  call->window->background_blur_disabled = !call->background_blur;
+  call->window->background_blur_disabled = call->window->transparent || !call->background_blur;
   call->window->corner_radius = linux_custom_chrome_corner_radius(call->enabled, call->radius);
   apply_linux_background_effect(call->window);
   if (call->window->gl_area != NULL) {

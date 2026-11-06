@@ -65,7 +65,8 @@ type WindowOptions struct {
 	Anchor                                           WindowAnchor
 	OffsetX, OffsetY                                 *float64
 	Topmost, Focusable, Resizable, Movable, Closable *bool
-	HideChrome                                       *bool
+	HideChrome, DragContent, Transparent             *bool
+	PassThroughTransparent                           *bool
 }
 type CreateWindowOption struct {
 	Content WindowContent

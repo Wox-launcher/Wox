@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"runtime"
 	"wox/i18n"
 	"wox/plugin"
 	component "wox/ui/launcher/component"
@@ -107,6 +108,14 @@ func normalizePresentation(options *plugin.WindowOptions) (ui.WindowRole, error)
 
 // CreateWithWorkArea resolves the launcher's selected display without coupling this feature to UI settings.
 func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin.WindowEvent), workArea func() (ui.Rect, bool), translate func(string) string) (plugin.WindowDriver, error) {
+	if boolValue(o.Window.PassThroughTransparent, false) {
+		if !boolValue(o.Window.Transparent, false) {
+			return nil, errors.New("transparent input passthrough requires a transparent window")
+		}
+		if runtime.GOOS != "windows" {
+			return nil, errors.New("transparent input passthrough is currently supported on Windows")
+		}
+	}
 	tree, err := prepareContent(o.Content)
 	if err != nil {
 		return nil, err
@@ -133,7 +142,7 @@ func CreateWithWorkArea(id string, o plugin.CreateWindowOption, emit func(plugin
 		}
 		s.host = widget.NewHost(s.build)
 		opts := ui.WindowOptions{Title: o.Window.Title, Size: ui.Size{Width: float32(width), Height: float32(height)}, Role: role,
-			Nonactivating: !boolValue(o.Window.Focusable, false), Topmost: boolValue(o.Window.Topmost, true), Resizable: boolValue(o.Window.Resizable, false),
+			Nonactivating: !boolValue(o.Window.Focusable, false), Transparent: boolValue(o.Window.Transparent, false), PassThroughTransparent: boolValue(o.Window.PassThroughTransparent, false), Topmost: boolValue(o.Window.Topmost, true), Resizable: boolValue(o.Window.Resizable, false),
 			OnFrame: s.host.Frame, OnPointer: s.host.Pointer, OnTextInput: func(e ui.TextInputEvent) { s.host.TextInput(e) },
 			OnKey: func(e ui.KeyEvent) bool {
 				if s.host.Key(e) {
@@ -392,6 +401,7 @@ func (s *session) build(frame ui.FrameInfo) widget.Widget {
 		},
 		OnOpenLink: func(url string) { _ = s.window.OpenExternalURL(url) },
 	})
+	body = contentDrag(s.options, body, func() { _ = s.window.StartDragging() })
 	children := []widget.StackChild{{Top: h, Child: body}}
 	if h > 0 {
 		if boolValue(s.options.Movable, false) {
@@ -401,7 +411,19 @@ func (s *session) build(frame ui.FrameInfo) widget.Widget {
 			children = append(children, widget.StackChild{Right: 0, AnchorRight: true, Child: component.WoxIconButton(component.IconButtonProps{ID: "plugin-window-close", Label: i18n.GetI18nManager().TranslateWox(context.Background(), "ui_close"), Icon: component.CloseGlyph(12, chrome.Foreground), Width: 30, Height: 30, OnTap: func() { _ = s.managed.Close() }})})
 		}
 	}
-	return widget.Container{Width: width, Height: frame.Size.Height, Color: chrome.Background, Child: widget.Stack{Width: width, Height: frame.Size.Height, Children: children}}
+	background := chrome.Background
+	if boolValue(s.options.Transparent, false) {
+		background = ui.Color{}
+	}
+	return widget.Container{Width: width, Height: frame.Size.Height, Color: background, Child: widget.Stack{Width: width, Height: frame.Size.Height, Children: children}}
+}
+
+// contentDrag lets interactive descendants retain their own gestures and selection.
+func contentDrag(options plugin.WindowOptions, body widget.Widget, start func()) widget.Widget {
+	if !boolValue(options.Movable, false) || !boolValue(options.DragContent, false) {
+		return body
+	}
+	return widget.Gesture{ID: "plugin-window-content-drag", OnDragStart: start, Child: body}
 }
 
 // controlTheme maps the overlay chrome onto component colors. Text uses the overlay foreground

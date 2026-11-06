@@ -16,6 +16,7 @@ class HotkeyKind(str, Enum):
     CAPS_LOCK_COMBO = "capsLockCombo"
     PRESS_MODIFIER = "pressModifier"
     HOLD_MODIFIER = "holdModifier"
+    HOLD_KEY = "holdKey"
 
 
 class HotkeyPhase(str, Enum):

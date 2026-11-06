@@ -1,6 +1,7 @@
 package hotkey
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -63,6 +64,20 @@ func TestResolveHotkeyKindRejectsReleaseForNonModifierChord(t *testing.T) {
 				t.Fatalf("expected release error, got: %v", err)
 			}
 		})
+	}
+}
+
+// TestStandaloneHoldKinds keeps supported keys distinct from modifier holds.
+func TestStandaloneHoldKinds(t *testing.T) {
+	values := []string{"delete", "insert"}
+	for i := 1; i <= 24; i++ {
+		values = append(values, fmt.Sprintf("f%d", i))
+	}
+	for _, value := range values {
+		kind, err := resolveHotkeyKind(mustParseHotkeySpec(t, value), true, registerOptions{})
+		if err != nil || kind != hotkeyKindHoldKey {
+			t.Fatalf("%s: kind=%s err=%v", value, kind, err)
+		}
 	}
 }
 

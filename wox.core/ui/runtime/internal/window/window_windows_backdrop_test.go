@@ -97,6 +97,9 @@ func TestWindows11WindowsShareDesktopAcrylic(t *testing.T) {
 	if windowsWindowUsesSystemBackdrop(WindowOptions{Role: WindowRoleScreenshot, Nonactivating: true}) {
 		t.Fatal("screenshot windows must keep skipping system backdrop")
 	}
+	if windowsWindowUsesSystemBackdrop(WindowOptions{Transparent: true}) {
+		t.Fatal("transparent windows must not have a system backdrop")
+	}
 }
 
 func TestWindowsNCActivateKeepsSystemBackdropActive(t *testing.T) {

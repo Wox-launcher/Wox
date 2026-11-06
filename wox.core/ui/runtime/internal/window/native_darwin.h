@@ -25,7 +25,7 @@ enum {
   WOX_TITLE_BAR_MAXIMIZE = 4,
 };
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context);
 int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float height, uint8_t controls);
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window);
 int32_t wox_darwin_window_hide(WoxDarwinWindow *window);

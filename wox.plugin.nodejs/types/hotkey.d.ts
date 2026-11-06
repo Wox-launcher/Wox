@@ -1,6 +1,6 @@
 import type { Context, QueryEnv } from "./index.js"
 
-export type HotkeyKind = "normalCombo" | "doubleModifier" | "capsLockCombo" | "pressModifier" | "holdModifier"
+export type HotkeyKind = "normalCombo" | "doubleModifier" | "capsLockCombo" | "pressModifier" | "holdModifier" | "holdKey"
 export type HotkeyPhase = "triggered" | "started" | "ended"
 export type HotkeyEndReason = "released" | "interrupted" | "disabled" | "bindingChanged" | "unavailable"
 export interface HotkeyEvent {

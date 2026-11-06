@@ -116,6 +116,44 @@ func TestDeclarativeHotkeyLifecycle(t *testing.T) {
 	}
 }
 
+// TestStandaloneHoldDeliversPairedPluginEvents checks the new SDK kind and activation identity.
+func TestStandaloneHoldDeliversPairedPluginEvents(t *testing.T) {
+	p := &hotkeySettingsPlugin{values: map[string]string{"record": "hold:delete"}}
+	instance := &Instance{Plugin: p, Metadata: Metadata{Id: "test-hold-key", SettingDefinitions: []definition.PluginSettingDefinitionItem{{Type: definition.PluginSettingDefinitionTypeHotkey, Value: &definition.PluginSettingValueHotkey{Key: "record", Scope: definition.HotkeyScopeGlobal}}}}}
+	a := NewAPI(instance).(*APIImpl)
+	instance.API = a
+	hotkeyCapability.RLock()
+	previous := hotkeyCapability.apply
+	hotkeyCapability.RUnlock()
+	t.Cleanup(func() { a.stopHotkeys(); SetHotkeyBindingApplier(previous) })
+	var entries []corehotkey.Entry
+	SetHotkeyBindingApplier(func(_ context.Context, _ string, next []corehotkey.Entry, _ func() error) error {
+		entries = next
+		return nil
+	})
+	events := make(chan HotkeyEvent, 2)
+	if result := a.OnHotkey(t.Context(), OnHotkeyOption{Callback: func(_ context.Context, event HotkeyEvent) { events <- event }}); !result.Success {
+		t.Fatal(result)
+	}
+	if err := a.ActivateHotkeys(t.Context()); err != nil || len(entries) != 1 || entries[0].OnHoldTransition == nil {
+		t.Fatalf("activation: entries=%v err=%v", entries, err)
+	}
+	entries[0].OnHoldTransition(utilhotkey.HoldTransition{Started: true})
+	entries[0].OnHoldTransition(utilhotkey.HoldTransition{Reason: utilhotkey.HoldEndReleased})
+	var pair []HotkeyEvent
+	for len(pair) < 2 {
+		select {
+		case event := <-events:
+			pair = append(pair, event)
+		case <-time.After(time.Second):
+			t.Fatal("missing hold event")
+		}
+	}
+	if pair[0].Kind != HotkeyKindHoldKey || pair[0].Phase != HotkeyPhaseStarted || pair[1].Phase != HotkeyPhaseEnded || pair[0].ActivationID == "" || pair[0].ActivationID != pair[1].ActivationID {
+		t.Fatalf("unexpected event pair: %+v", pair)
+	}
+}
+
 // TestGlobalHotkeyTableIdentity verifies explicit opt-in and persistent row ownership.
 func TestGlobalHotkeyTableIdentity(t *testing.T) {
 	p := &hotkeySettingsPlugin{values: map[string]string{"legacy": "invalid", "actions": `[{"id":"a","key":"hold:right_alt"},{"key":"invalid","disabled":true}]`}}

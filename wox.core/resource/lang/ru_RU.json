@@ -118,6 +118,7 @@
   "ui_hotkey_hint_caps_lock_combo": "Caps Lock + клавиша",
   "ui_hotkey_hint_press_modifier": "Нажмите модификаторы",
   "ui_hotkey_hint_hold_modifier": "Удерживайте модификаторы",
+  "ui_hotkey_hint_hold_key": "Удерживайте Delete, Insert или функциональную клавишу",
   "ui_hotkey_hint_press_win": "Нажмите только Win",
   "ui_hotkey_accessibility_required": "Требуется доступ к Универсальному доступу",
   "ui_hotkey_raw_recorder_unavailable": "Этот тип горячей клавиши нельзя записать в текущей среде",

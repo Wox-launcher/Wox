@@ -116,6 +116,7 @@
   "ui_hotkey_hint_caps_lock_combo": "Caps Lock + 按键",
   "ui_hotkey_hint_press_modifier": "按一次修饰键",
   "ui_hotkey_hint_hold_modifier": "按住修饰键",
+  "ui_hotkey_hint_hold_key": "按住 Delete、Insert 或支持的功能键",
   "ui_hotkey_hint_press_win": "单独按 Win 键",
   "ui_hotkey_accessibility_required": "请先授予辅助功能权限",
   "ui_hotkey_raw_recorder_unavailable": "当前环境无法录入这种快捷键",

@@ -30,6 +30,25 @@ interaction; `Show({Activate: true})` then explicitly activates the window.
 Set `HideChrome: true` to hide the Wox-drawn control strip. This does not change
 whether the window can be closed. Set `Movable: true` to enable the drag strip.
 Both options default to false.
+Set `Transparent: true` to remove the window background and native backdrop so
+WoxView can draw an arbitrary shape over the desktop. The default is false.
+Transparency changes painting only: the native window still receives pointer
+events within its rectangular bounds; transparent pixels are not click-through.
+On Windows, `PassThroughTransparent: true` also passes pointer input through
+fully transparent pixels. It requires `Transparent: true`; other platforms
+currently reject this option. The input region follows the painted content.
+WoxView's `inputRegion: true` also includes that node's bounds, even when its
+background is transparent; this supports intentionally interactive empty space.
+The Windows input mask supports up to 4,194,304 physical pixels; larger frames
+cannot update the region and log a warning. A fully empty frame retains one
+corner pixel so Windows can repaint an entrance animation.
+Use WoxView transitions or entry/exit animations on the content, and delay `Hide`
+until the exit completes. Showing a hidden window does not remount its document;
+remount the animated node or update its state to replay the entry animation.
+Set `DragContent: true` together with `Movable: true` to drag from non-interactive
+WoxView content, including ordinary text. The gesture starts after pointer movement;
+interactive descendants retain their own clicks, selection, scrolling and drag
+gestures. It works with or without the control strip and defaults to false.
 `SetOptions` patches size, anchor, offsets and topmost status; omitted fields stay
 unchanged, including explicit false/zero values. Size-only updates preserve the
 user-dragged position. Presentation, focusability, movability, resizability and

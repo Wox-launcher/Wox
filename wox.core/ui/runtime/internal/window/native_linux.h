@@ -26,7 +26,7 @@ int32_t wox_linux_post(uintptr_t context);
 // wox_linux_set_app_identity records the desktop id, X11 class, and icon path before gtk_init.
 void wox_linux_set_app_identity(const char *app_id, const char *wm_class, const char *icon_path);
 void wox_linux_set_render_trace(int32_t enabled);
-WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context);
+WoxLinuxWindow *wox_linux_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context);
 uint64_t wox_linux_window_show(WoxLinuxWindow *window);
 int32_t wox_linux_window_hide(WoxLinuxWindow *window);
 int32_t wox_linux_window_set_bounds(WoxLinuxWindow *window, float x, float y, float width, float height);

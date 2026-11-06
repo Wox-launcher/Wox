@@ -13,14 +13,14 @@ in development Core/hosts and SDK sources; it is not implied by an older release
     "Label": "Record",
     "DefaultValue": "",
     "Scope": "global",
-    "AllowedHotkeyKinds": ["normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"]
+    "AllowedHotkeyKinds": ["normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier", "holdKey"]
   }
 }
 ```
 
 Empty values are unbound. Empty/omitted `Scope`, or `local`, preserves the existing
 recorder-only behavior; it does not install a global listener. Omitted allowed kinds
-permits all five kinds for global settings. Platform support is still required.
+permits all kinds for global settings. Platform support is still required.
 Global declarations must be in static metadata, not returned by dynamic settings.
 
 ```typescript
@@ -59,12 +59,18 @@ model loading. Plugins must tolerate overlapping asynchronous handlers.
 | capsLockCombo | `capslock+d` | triggered |
 | pressModifier | `right_alt` | triggered |
 | holdModifier | `hold:right_alt` | started, ended |
+| holdKey | `hold:delete` | started, ended |
+
+Standalone hold keys are Delete, Insert, and supported function keys. Short taps
+are replayed only if the foreground application remains the same (on Windows,
+the window must also remain the same). Linux does not support this kind; macOS
+supports F1–F20 where those keys are available.
 
 System shortcuts such as Win+E use normalCombo; availability and interception depend on
 the platform. Wox does not swallow unrelated system shortcuts.
 
 Each activation has an opaque `ActivationID` and Unix millisecond `Timestamp`. A hold
-starts after the existing 200 ms threshold; early release produces no activation.
+starts after the 230 ms threshold; early release produces no activation.
 Its ended event shares the same ID. `EndReason` is `released`, `interrupted`,
 `bindingChanged`, `unavailable`, or `disabled`. Unload/crash closes delivery, so a final
 ended callback is not guaranteed there: always clean up in OnUnload too.

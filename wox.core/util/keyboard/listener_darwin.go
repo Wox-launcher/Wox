@@ -440,6 +440,22 @@ func keyToDarwinKeyCode(key Key) (uint32, error) {
 		return 103, nil
 	case KeyF12:
 		return 111, nil
+	case KeyF13:
+		return 105, nil
+	case KeyF14:
+		return 107, nil
+	case KeyF15:
+		return 113, nil
+	case KeyF16:
+		return 106, nil
+	case KeyF17:
+		return 64, nil
+	case KeyF18:
+		return 79, nil
+	case KeyF19:
+		return 80, nil
+	case KeyF20:
+		return 90, nil
 	case KeyCapsLock:
 		return 57, nil
 	case KeyBackquote:
@@ -587,6 +603,22 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 		return KeyF11
 	case 111:
 		return KeyF12
+	case 105:
+		return KeyF13
+	case 107:
+		return KeyF14
+	case 113:
+		return KeyF15
+	case 106:
+		return KeyF16
+	case 64:
+		return KeyF17
+	case 79:
+		return KeyF18
+	case 80:
+		return KeyF19
+	case 90:
+		return KeyF20
 	case 57:
 		return KeyCapsLock
 	case 55:

@@ -107,6 +107,7 @@ class WoxViewBadgeProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -129,6 +130,7 @@ class WoxViewButtonProps(TypedDict, total=False):
     hoverStyle: WoxViewStateStyle | None
     icon: str
     iconColorMode: Literal['', 'tint', 'original']
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -152,6 +154,7 @@ class WoxViewCheckboxProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -177,6 +180,7 @@ class WoxViewCodeProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     language: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -196,6 +200,7 @@ class WoxViewColumnProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -216,6 +221,7 @@ class WoxViewDividerProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -236,6 +242,7 @@ class WoxViewFormProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -260,6 +267,7 @@ class WoxViewGridProps(WoxViewGridPropsRequired, total=False):
     focusStyle: WoxViewStateStyle | None
     gap: WoxViewSize
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -282,6 +290,7 @@ class WoxViewHotkeyProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -312,6 +321,7 @@ class WoxViewIconButtonProps(WoxViewIconButtonPropsRequired, total=False):
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
     iconColorMode: Literal['', 'tint', 'original']
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -337,6 +347,7 @@ class WoxViewImagePropsVariant1(WoxViewImagePropsVariant1Required, total=False):
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
     iconColorMode: Literal['', 'tint', 'original']
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -362,6 +373,7 @@ class WoxViewImagePropsVariant2(WoxViewImagePropsVariant2Required, total=False):
     hoverStyle: WoxViewStateStyle | None
     icon: Literal['']
     iconColorMode: Literal['']
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -383,6 +395,7 @@ class WoxViewLazyListProps(WoxViewLazyListPropsRequired, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -409,6 +422,7 @@ class WoxViewLinkProps(WoxViewLinkPropsRequired, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -431,6 +445,7 @@ class WoxViewListProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -456,6 +471,7 @@ class WoxViewLoadingProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -475,6 +491,7 @@ class WoxViewMarkdownProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -482,6 +499,31 @@ class WoxViewMarkdownProps(TypedDict, total=False):
     onLinkPress: WoxViewHandler | None
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewMarkdownPropsShortcutsItem]
+    style: WoxViewStyle
+    tooltip: str
+    transition: WoxViewTransition | None
+
+class WoxViewMorphPathPropsRequired(TypedDict):
+    keyframes: list[WoxViewMorphPathPropsKeyframesItem]
+
+class WoxViewMorphPathProps(WoxViewMorphPathPropsRequired, total=False):
+    animation: WoxViewAnimation | None
+    contextMenu: list[WoxViewMorphPathPropsContextMenuItem]
+    curve: Literal['', 'linear', 'easeOutBack', 'easeInOut']
+    disabledStyle: WoxViewStateStyle | None
+    duration: int | None
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    focusStyle: WoxViewStateStyle | None
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    pressedStyle: WoxViewStateStyle | None
+    progress: float
+    shortcuts: list[WoxViewMorphPathPropsShortcutsItem]
     style: WoxViewStyle
     tooltip: str
     transition: WoxViewTransition | None
@@ -496,6 +538,7 @@ class WoxViewMultiSelectProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -640,6 +683,14 @@ class WoxViewMarkdownNode(WoxViewMarkdownNodeRequired, total=False):
     children: list[NoReturn]
     key: str
     props: WoxViewMarkdownProps | None
+
+class WoxViewMorphPathNodeRequired(TypedDict):
+    props: WoxViewMorphPathProps
+    type: Literal['morph-path']
+
+class WoxViewMorphPathNode(WoxViewMorphPathNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
 
 class WoxViewMultiSelectNodeRequired(TypedDict):
     type: Literal['multi-select']
@@ -804,6 +855,7 @@ class WoxViewNumberFieldProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     max: float | None
     min: float | None
@@ -834,6 +886,7 @@ class WoxViewProgressProps(TypedDict, total=False):
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
     indeterminate: bool
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -855,6 +908,7 @@ class WoxViewRadioGroupProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -880,6 +934,7 @@ class WoxViewRowProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -903,6 +958,7 @@ class WoxViewScrollProps(TypedDict, total=False):
     focusStyle: WoxViewStateStyle | None
     horizontal: bool
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -927,6 +983,7 @@ class WoxViewSelectProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -954,6 +1011,7 @@ class WoxViewSliderProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     max: float
     min: float
@@ -981,6 +1039,7 @@ class WoxViewSpacerProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -1008,6 +1067,7 @@ class WoxViewSpanProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -1028,6 +1088,7 @@ class WoxViewStackProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -1051,6 +1112,7 @@ class WoxViewSubmitProps(TypedDict, total=False):
     hoverStyle: WoxViewStateStyle | None
     icon: str
     iconColorMode: Literal['', 'tint', 'original']
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -1073,6 +1135,7 @@ class WoxViewSwitchProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -1101,6 +1164,7 @@ class WoxViewTableProps(WoxViewTablePropsRequired, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -1123,6 +1187,7 @@ class WoxViewTabsProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     items: list[WoxViewTabsPropsItemsItem]
     label: str
     name: str
@@ -1148,6 +1213,7 @@ class WoxViewTagProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -1169,6 +1235,7 @@ class WoxViewTagsProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     name: str
     onChange: WoxViewHandler | None
@@ -1198,6 +1265,7 @@ class WoxViewTextFieldProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     maxLines: int
     name: str
@@ -1226,6 +1294,7 @@ class WoxViewTextProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
@@ -1246,6 +1315,7 @@ class WoxViewViewProps(TypedDict, total=False):
     exit: WoxViewPresenceAnimation | None
     focusStyle: WoxViewStateStyle | None
     hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
     label: str
     onContextMenu: WoxViewHandler | None
     onDoubleTap: WoxViewHandler | None
@@ -1474,6 +1544,22 @@ class WoxViewMarkdownPropsContextMenuItem(WoxViewMarkdownPropsContextMenuItemReq
     icon: str
 
 class WoxViewMarkdownPropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
+class WoxViewMorphPathPropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewMorphPathPropsContextMenuItem(WoxViewMorphPathPropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewMorphPathPropsKeyframesItem(TypedDict):
+    at: float
+    path: list[WoxViewMorphPathPropsKeyframesItemPathItem]
+
+class WoxViewMorphPathPropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
@@ -1773,6 +1859,12 @@ class WoxViewViewPropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
+class WoxViewMorphPathPropsKeyframesItemPathItemRequired(TypedDict):
+    op: Literal['M', 'L', 'Q', 'C', 'Z']
+
+class WoxViewMorphPathPropsKeyframesItemPathItem(WoxViewMorphPathPropsKeyframesItemPathItemRequired, total=False):
+    values: list[float]
+
 class WoxViewTablePropsRowsItemActionsItemRequired(TypedDict):
     key: str
     label: str
@@ -1787,5 +1879,5 @@ WoxViewOffset: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', 
 WoxViewPresenceAnimation: TypeAlias = Literal['fade', 'slideUp', 'scale'] | WoxViewPresenceAnimationVariant2
 WoxViewSize: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', '$space2', '$space3', '$space4', '$fontSm', '$fontMd', '$fontLg', '$fontTitle'] | None
 WoxViewImageProps: TypeAlias = WoxViewImagePropsVariant1 | WoxViewImagePropsVariant2
-WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewViewNode
+WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMorphPathNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewViewNode
 WoxViewEdges: TypeAlias = WoxViewSize | WoxViewEdgesVariant2

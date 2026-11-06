@@ -33,6 +33,7 @@ func init() {
 		NodeSpan:        {newProps: func() any { return &SpanProps{} }},
 		NodeMarkdown:    {newProps: func() any { return &MarkdownProps{} }, build: buildMarkdown},
 		NodeImage:       {newProps: func() any { return &ImageProps{} }, build: buildImage},
+		NodeMorphPath:   {newProps: func() any { return &MorphPathProps{} }, build: buildMorphPath},
 		NodeButton:      {newProps: func() any { return &ButtonProps{} }, build: buildButton},
 		NodeIconButton:  {newProps: func() any { return &IconButtonProps{} }, build: buildIconButton},
 		NodeTextField:   {newProps: func() any { return &TextFieldProps{} }, build: buildTextField},
@@ -87,6 +88,7 @@ type CommonProps struct {
 	Exit          *PresenceAnimation `json:"exit,omitempty"`
 	Transition    *Transition        `json:"transition,omitempty"`
 	Animation     *Animation         `json:"animation,omitempty"`
+	InputRegion   bool               `json:"inputRegion,omitempty"`
 	Tooltip       string             `json:"tooltip,omitempty"`
 	OnHoverChange *Handler           `json:"onHoverChange,omitempty"`
 	OnDoubleTap   *Handler           `json:"onDoubleTap,omitempty"`

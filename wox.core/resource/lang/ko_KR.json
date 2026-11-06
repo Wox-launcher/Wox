@@ -116,6 +116,7 @@
   "ui_hotkey_hint_caps_lock_combo": "Caps Lock + 키",
   "ui_hotkey_hint_press_modifier": "보조 키 누르기",
   "ui_hotkey_hint_hold_modifier": "보조 키 길게 누르기",
+  "ui_hotkey_hint_hold_key": "Delete, Insert 또는 기능 키 길게 누르기",
   "ui_hotkey_hint_press_win": "Win 키만 누르기",
   "ui_hotkey_accessibility_required": "손쉬운 사용 권한이 필요합니다",
   "ui_hotkey_raw_recorder_unavailable": "현재 환경에서는 이 단축키 유형을 기록할 수 없습니다",

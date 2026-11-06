@@ -71,11 +71,20 @@ type DisplayList struct {
 	// surfaces are kept even when damage culling skips their command, because
 	// the next frame's damage depends on them.
 	floatingMaterials []Rect
+	inputRegions      []displayClip
 	materialMargin    float32
 	caretPatch        Rect
 	caretCapture      int  // One-based command index; zero disables native backdrop capture.
 	caretStable       bool // Both swap-chain buffers must have seen the unchanged background.
 	caretRestored     bool
+}
+
+// AddInputRegion reserves a painted-node-sized input area without changing its appearance.
+func (d *DisplayList) AddInputRegion(bounds Rect) {
+	clip := d.transformedClip(bounds)
+	if clip.rect.Width > 0 && clip.rect.Height > 0 {
+		d.inputRegions = append(d.inputRegions, clip)
+	}
 }
 
 const displayListFloatTolerance = float32(1e-4)

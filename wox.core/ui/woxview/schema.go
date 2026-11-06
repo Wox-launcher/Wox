@@ -35,6 +35,7 @@ const (
 	NodeText        NodeType = "text"
 	NodeSpan        NodeType = "span"
 	NodeImage       NodeType = "image"
+	NodeMorphPath   NodeType = "morph-path"
 	NodeSpacer      NodeType = "spacer"
 	NodeMarkdown    NodeType = "markdown"
 	NodeButton      NodeType = "button"

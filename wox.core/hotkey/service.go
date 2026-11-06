@@ -167,8 +167,8 @@ func buildHotkeySpecs(entries []Entry) ([]utilhotkey.Spec, error) {
 			OnHoldTransition:        e.OnHoldTransition,
 		}
 		if parsed.Trigger == utilhotkey.TriggerHold {
-			if !utilhotkey.IsModifierChordHotkeyString(parsed.CombineKey) {
-				return nil, fmt.Errorf("hold hotkey requires a modifier-only chord: source=%s id=%s key=%s", e.Source, e.ID, combineKey)
+			if _, err := utilhotkey.BindingKind(combineKey); err != nil {
+				return nil, fmt.Errorf("invalid hold hotkey: source=%s id=%s key=%s: %w", e.Source, e.ID, combineKey, err)
 			}
 			if e.OnRelease == nil {
 				return nil, fmt.Errorf("hold hotkey release callback is required: source=%s id=%s key=%s", e.Source, e.ID, combineKey)

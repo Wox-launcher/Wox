@@ -224,6 +224,10 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.Resizable {
 		resizable = 1
 	}
+	transparent := C.int32_t(0)
+	if options.Transparent {
+		transparent = 1
+	}
 	window.native = C.wox_linux_window_create(
 		title,
 		C.float(options.Size.Width),
@@ -232,6 +236,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		C.int32_t(options.Role),
 		nonactivating,
 		resizable,
+		transparent,
 		C.float(options.AspectRatio),
 		C.uintptr_t(window.handle),
 	)

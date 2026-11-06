@@ -132,3 +132,16 @@ func TestSyncedResultConflictKeepsOtherHotkeys(t *testing.T) {
 		t.Fatalf("unrelated hotkeys were lost: %+v", got)
 	}
 }
+
+// TestStandaloneHoldSpecAndConflict covers declarative plugin admission.
+func TestStandaloneHoldSpecAndConflict(t *testing.T) {
+	entries := []Entry{{Source: SourcePlugin, ID: "hold", CombineKey: "hold:delete", OnPress: func() {}, OnRelease: func() {}}}
+	specs, err := buildHotkeySpecs(entries)
+	if err != nil || len(specs) != 1 || specs[0].CombineKey != "delete" || specs[0].OnRelease == nil {
+		t.Fatalf("standalone hold specs = %+v, err = %v", specs, err)
+	}
+	entries = append(entries, Entry{Source: SourcePlugin, ID: "tap", CombineKey: "delete", OnPress: func() {}})
+	if err := validateHotkeyConflicts(entries); err == nil {
+		t.Fatal("same key was accepted for press and hold")
+	}
+}

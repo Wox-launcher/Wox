@@ -213,6 +213,9 @@ type platformWindow struct {
 	customCornerRadius *float32
 	customWindowChrome bool
 	cornerRegion       [3]int32
+	inputMask          *SoftwareRenderer
+	inputRegionHash    [32]byte
+	inputRegionValid   bool
 
 	options WindowOptions
 
@@ -928,6 +931,9 @@ func (w *platformWindow) createNativeWindow() error {
 	}
 	w.renderer = renderer
 	w.applyBackdrop()
+	if w.options.Transparent {
+		w.setCornerAttributes(true)
+	}
 	nativeWindows.Store(uintptr(hwnd), w)
 	platformRuntime.Lock()
 	platformRuntime.windowCount++
@@ -941,13 +947,13 @@ func windowsRendererNeedsEmbeddedSurfaceOverlay(role WindowRole) bool {
 	return role != WindowRoleScreenshot
 }
 
-// Screenshot windows cover the desktop with captured pixels, so a system backdrop is unnecessary.
+// Screenshot and explicitly transparent windows do not need a system backdrop.
 // More importantly, DWM can expose that backdrop for one refresh while the first swap-chain frame
 // is still being composed, which appears as a full-screen gray flash when capture starts.
 // Nonactivating is not part of this decision: tooltips and other overlays keep
 // Desktop Acrylic the same way macOS keeps NSVisualEffectView on non-key windows.
 func windowsWindowUsesSystemBackdrop(options WindowOptions) bool {
-	return options.Role != WindowRoleScreenshot
+	return options.Role != WindowRoleScreenshot && !options.Transparent
 }
 
 func nativeWindowMaterialAvailable() bool {
@@ -2628,6 +2634,10 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	}
 	currentDamage, currentFull := windowsPaintDamage(paint, client, scale)
 	damage := w.damageHistory.accumulate(currentDamage, currentFull)
+	if w.options.PassThroughTransparent {
+		// A changing native region can reduce the paint rectangle; keep the alpha mask complete.
+		damage = Rect{}
+	}
 	displayList := w.buildWindowsDisplayList(pixelSize, scale, damage)
 	err := w.renderWindowsDisplayList(&displayList, scale)
 	if isRecoverableRendererError(err) {
@@ -2639,6 +2649,10 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	if err != nil {
 		w.setRunError(err)
 		win.PostMessage(hwnd, windowForceCloseMessage, 0, 0)
+	} else if w.options.PassThroughTransparent {
+		if err := w.updateTransparentInputRegion(&displayList, pixelSize, scale); err != nil {
+			util.GetLogger().Warn(context.Background(), fmt.Sprintf("update transparent input region: %v", err))
+		}
 	}
 }
 

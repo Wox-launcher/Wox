@@ -52,11 +52,9 @@ type holdModifierRelease struct {
 	callback func()
 }
 
-// holdModifierPressDelay is the minimum time a hold-modifier key must remain
-// pressed alone before onPress fires. Presses shorter than this, or holds
-// interrupted by another key press, are treated as accidental and ignored,
-// matching the "press and hold" semantics users expect from hold mode.
-const holdModifierPressDelay = 200 * time.Millisecond
+// holdPressDelay keeps recording and runtime hold recognition consistent.
+// Shorter presses and holds interrupted by another key do not activate the hold.
+const holdPressDelay = 230 * time.Millisecond
 
 var (
 	holdCallbacks         = util.NewHashMap[keyboard.Key, *holdCallback]()
@@ -190,7 +188,7 @@ func armHoldModifierPress(mcb *holdModifierCallback) {
 	}
 	mcb.pressSeq++
 	pressSeq := mcb.pressSeq
-	mcb.pressTimer = time.AfterFunc(holdModifierPressDelay, func() {
+	mcb.pressTimer = time.AfterFunc(holdPressDelay, func() {
 		holdTrackerMu.Lock()
 		if mcb.pressSeq != pressSeq || !holdModifierExactKeysPressed(mcb.keys) {
 			mcb.pressTimer = nil

@@ -61,7 +61,7 @@ test("window instances route operations and early events through RPC", async () 
   const tree = JSON.stringify({ version: 1, root: { type: "text", props: { text: "hello" } } })
   const created = await api.CreateWindow(context(), {
     Content: { Type: "woxview", Data: tree },
-    Window: { Presentation: "window", Topmost: false, OffsetX: 0 },
+    Window: { Presentation: "window", Topmost: false, OffsetX: 0, Movable: true, DragContent: true, Transparent: true, PassThroughTransparent: true },
     OnEvent: (_ctx, event) => fired.push(event)
   })
   assert.equal(fired[0].Type, "ready")
@@ -101,6 +101,9 @@ test("window instances route operations and early events through RPC", async () 
     assert.deepEqual(fired.at(-1).Data, { Dark })
   }
   assert.equal(calls[0].option.Window.Topmost, false)
+  assert.equal(calls[0].option.Window.DragContent, true)
+  assert.equal(calls[0].option.Window.Transparent, true)
+  assert.equal(calls[0].option.Window.PassThroughTransparent, true)
   assert.deepEqual(calls[0].option.Content, { Type: "woxview", Data: tree })
   await rpc.handleRequestFromWox(context(), { PluginId: "window-owner", Method: "windowEvent", Params: { CallbackID: callbackID, Release: "true" } }, {})
   assert.equal(api.windowCallbacks.size, 0)

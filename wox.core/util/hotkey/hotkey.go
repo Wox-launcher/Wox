@@ -51,6 +51,7 @@ type Hotkey struct {
 	registration keyboard.HotkeyRegistration
 	key          keyboard.Key
 	modifierKeys []keyboard.Key
+	holdKey      *standaloneHold
 }
 
 // HoldEndReason distinguishes normal release from an interrupted gesture.
@@ -76,9 +77,8 @@ type Spec struct {
 	// It runs on the callback goroutine, never on the keyboard hook thread.
 	CanTriggerBeforeRelease func() bool
 	// OnRelease, when non-nil, marks this spec as hold-mode: Callback fires on
-	// press and OnRelease fires on release. Only meaningful for special hotkeys
-	// (modifier chords) that go through the evdev path; normal combos always use
-	// press-only portal registration, so OnRelease is ignored for them.
+	// press and OnRelease fires on release. Hold supports modifier chords and
+	// standalone Delete, Insert, and function keys on supported platforms.
 	OnRelease func()
 }
 
@@ -120,10 +120,7 @@ func (h *Hotkey) RegisterWithModifierPress(ctx context.Context, combineKey strin
 // the key combination is pressed, and onRelease fires when the main key is
 // released. This is used by the dictation plugin's hold trigger mode.
 //
-// Hold mode is currently supported for normal hotkeys (modifier+key),
-// double-modifier hotkeys, and exact left/right hold-modifier chords. CapsLock
-// combo hotkeys fall back to press-only behaviour because the CapsLock key does
-// not produce reliable key-up events on all platforms.
+// Hold mode supports exact modifier chords and supported standalone keys.
 func (h *Hotkey) RegisterWithRelease(ctx context.Context, combineKey string, onPress func(), onRelease func()) error {
 	return h.register(ctx, combineKey, onPress, onRelease, registerOptions{})
 }
@@ -146,6 +143,10 @@ func (h *Hotkey) register(ctx context.Context, combineKey string, onPress func()
 	h.kind = kind
 
 	switch kind {
+	case hotkeyKindHoldKey:
+		hold, err := startStandaloneHold(spec.key, onPress, onRelease, options.onHoldTransition)
+		h.holdKey = hold
+		return err
 	case hotkeyKindHoldModifier:
 		util.GetLogger().Info(ctx, fmt.Sprintf("register hold-modifier hotkey: %s", combineKey))
 		h.modifierKeys = canonicalHoldModifierKeys(spec.modifierChordKeys)
@@ -215,7 +216,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 			return nil, validateErr
 		}
 
-		if parsed.isDoubleModifier() || parsed.isCapsLockKey() || parsed.isModifierChord() {
+		if parsed.isDoubleModifier() || parsed.isCapsLockKey() || parsed.isModifierChord() || spec.OnRelease != nil {
 			// Synced or older settings may bypass validation; keep the first owner.
 			binding, _ := BindingKey(spec.CombineKey)
 			if registeredSpecial[binding] {
@@ -225,10 +226,7 @@ func RegisterGroup(ctx context.Context, specs []Spec) (*Group, error) {
 			hk := &Hotkey{}
 			var err error
 			if spec.OnRelease != nil {
-				// Hold-mode special hotkey: press fires Callback, release fires
-				// OnRelease. Only modifier chords use hold mode today; double-
-				// modifier and CapsLock fall back to press-only (RegisterWithRelease
-				// rejects non-chord release callbacks).
+				// Hold-mode registration tracks both press and release events.
 				err = hk.register(ctx, spec.CombineKey, spec.Callback, spec.OnRelease, registerOptions{onHoldTransition: spec.OnHoldTransition})
 			} else if parsed.isModifierChord() {
 				// Press-only modifier chord needs RegisterWithModifierPress so the
@@ -325,6 +323,12 @@ func (h *Hotkey) unregister(ctx context.Context) error {
 	// Stop hold-mode release tracking first so the release callback does not
 	// fire while we are tearing down the press registration.
 	switch h.kind {
+	case hotkeyKindHoldKey:
+		if h.holdKey != nil {
+			h.holdKey.close()
+			h.holdKey = nil
+		}
+		h.kind = hotkeyKindUnknown
 	case hotkeyKindHoldModifier:
 		stopHoldModifierTracking(h.modifierKeys)
 		h.modifierKeys = nil

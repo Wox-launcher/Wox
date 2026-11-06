@@ -235,6 +235,21 @@ func TestRecordingSessionCapturesHoldWithoutTrailingPressWhenBothModifierKindsAl
 	assertNoRecordedHotkey(t, recorded, "trailing press after hold")
 }
 
+// TestRecordingModifierPressBelowHoldThreshold keeps a deliberate short press as a press.
+func TestRecordingModifierPressBelowHoldThreshold(t *testing.T) {
+	recorded := make(chan recordedHotkey, 2)
+	state := newRecordingRawState(hotkeyKindSet([]hotkeyKind{hotkeyKindHoldModifier, hotkeyKindPressModifier}), func(result recordedHotkey) {
+		recorded <- result
+	})
+	defer state.Close()
+
+	state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftAlt))
+	time.Sleep(150 * time.Millisecond)
+	state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftAlt))
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "left_alt", Kind: hotkeyKindPressModifier})
+	assertNoRecordedHotkey(t, recorded, "hold after a short press")
+}
+
 func replaceRawKeyListenerForTest(t *testing.T, replacement func(keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error)) func() {
 	t.Helper()
 
@@ -259,7 +274,7 @@ func assertRecordedHotkey(t *testing.T, ch <-chan recordedHotkey, expected recor
 		if actual != expected {
 			t.Fatalf("expected recorded hotkey %+v, got %+v", expected, actual)
 		}
-	case <-time.After(recordingModifierChordDebounce + 800*time.Millisecond):
+	case <-time.After(holdPressDelay + 800*time.Millisecond):
 		t.Fatalf("expected recorded hotkey %+v", expected)
 	}
 }
@@ -270,7 +285,7 @@ func assertNoRecordedHotkey(t *testing.T, ch <-chan recordedHotkey, label string
 	select {
 	case actual := <-ch:
 		t.Fatalf("did not expect %s, got %+v", label, actual)
-	case <-time.After(recordingModifierChordDebounce + 80*time.Millisecond):
+	case <-time.After(holdPressDelay + 80*time.Millisecond):
 	}
 }
 
@@ -365,4 +380,39 @@ func TestRecordingDeleteAloneAndWithModifier(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRecordingStandaloneHoldDistinguishesTapAndHold exercises the recorder's shared threshold.
+func TestRecordingStandaloneHoldDistinguishesTapAndHold(t *testing.T) {
+	if !keyboard.SupportsStandaloneHold(keyboard.KeyDelete) {
+		t.Skip("standalone hold interception unavailable")
+	}
+	recorded := make(chan recordedHotkey, 3)
+	state := newRecordingRawState(hotkeyKindSet([]hotkeyKind{hotkeyKindNormalCombo, hotkeyKindHoldKey}), func(candidate recordedHotkey) { recorded <- candidate })
+	defer state.Close()
+	down := rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyDelete)
+	up := rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyDelete)
+	if !state.HandleEvent(down) || !state.HandleEvent(up) {
+		t.Fatal("tap was not consumed")
+	}
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "delete", Kind: hotkeyKindNormalCombo})
+	if !state.HandleEvent(down) || !state.HandleEvent(down) {
+		t.Fatal("hold or repeat was not consumed")
+	}
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "delete", Kind: hotkeyKindHoldKey})
+	state.HandleEvent(up)
+	assertNoRecordedHotkey(t, recorded, "tap after hold")
+}
+
+// TestRecordingStandaloneHoldKeepsModifiedCombos checks normal shortcuts while hold is allowed.
+func TestRecordingStandaloneHoldKeepsModifiedCombos(t *testing.T) {
+	if !keyboard.SupportsStandaloneHold(keyboard.KeyDelete) {
+		t.Skip("standalone hold interception unavailable")
+	}
+	recorded := make(chan recordedHotkey, 1)
+	state := newRecordingRawState(hotkeyKindSet([]hotkeyKind{hotkeyKindNormalCombo, hotkeyKindHoldKey}), func(candidate recordedHotkey) { recorded <- candidate })
+	defer state.Close()
+	state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftCtrl))
+	state.HandleEvent(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyDelete))
+	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "ctrl+delete", Kind: hotkeyKindNormalCombo})
 }

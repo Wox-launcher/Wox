@@ -67,6 +67,9 @@ class WindowOptions:
     movable: Optional[bool] = None
     closable: Optional[bool] = None
     hide_chrome: Optional[bool] = None
+    drag_content: Optional[bool] = None
+    transparent: Optional[bool] = None
+    pass_through_transparent: Optional[bool] = None
 
 
 @dataclass

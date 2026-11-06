@@ -103,6 +103,7 @@ typedef struct {
 
 struct WoxDarwinWindow {
   bool has_custom_window_chrome;
+  bool transparent;
   bool has_custom_corner_radius;
   CGFloat custom_corner_radius;
   NSWindow *window;
@@ -454,7 +455,7 @@ static void detach_window_material(WoxDarwinWindow *window) {
 }
 
 static void attach_window_material(WoxDarwinWindow *window) {
-  if (window == NULL || window->screenshot_window || window_uses_material_wrapper(window)) return;
+  if (window == NULL || window->screenshot_window || window->transparent || window_uses_material_wrapper(window)) return;
   clear_render_view_clip(window);
   NSView *view = (NSView *)window->view;
   [view retain];
@@ -2541,7 +2542,7 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, float aspect_ratio, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -2580,9 +2581,8 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     }
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];
-    // Every window floats with a native shadow except the screenshot surface,
-    // which covers the desktop and must not cast an outline over it.
-    native_window.hasShadow = !is_screenshot_window;
+    // Transparent surfaces draw their own shadows; the native shadow follows window bounds.
+    native_window.hasShadow = !is_screenshot_window && !transparent;
     if (aspect_ratio > 0.0f) {
       native_window.contentAspectRatio = NSMakeSize(aspect_ratio, 1.0);
     }
@@ -2669,15 +2669,13 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     }
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
+    window->transparent = transparent != 0;
     window->application_window = is_application_window;
-    if (is_screenshot_window) {
-      // Recording border and countdown windows intentionally clear their
-      // IOSurfaces to reveal the live desktop. A visual-effect container would
-      // turn those transparent pixels into a fullscreen blur.
+    if (is_screenshot_window || transparent) {
+      // A visual-effect container would turn transparent pixels into a blur.
       native_window.contentView = view;
     } else {
-      // Process default material. Every non-screenshot window uses the same
-      // material; do not specialize it per window or focus state.
+      // Ordinary windows use the process default material in every focus state.
       NSView *material_view = create_window_material_view(frame, view);
       native_window.contentView = material_view;
       [material_view release];

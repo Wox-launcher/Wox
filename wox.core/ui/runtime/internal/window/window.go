@@ -115,6 +115,10 @@ type WindowOptions struct {
 	// Nonactivating keeps tooltips and recording chrome visible without stealing
 	// focus. It is a focus policy only; native window materials still apply.
 	Nonactivating bool
+	// Transparent removes native backdrop materials so per-pixel alpha reaches the desktop.
+	Transparent bool
+	// PassThroughTransparent restricts native input to painted pixels on supported platforms.
+	PassThroughTransparent bool
 	// Topmost raises a utility window above the launcher so preview overlays
 	// cannot open behind Wox when both share the floating window band.
 	Topmost                    bool

@@ -4,6 +4,10 @@ from wox_plugin import HotkeyEvent, HotkeyKind, HotkeyPhase, PluginSettingDefini
 
 
 class HotkeyContractTest(unittest.TestCase):
+    def test_hold_key_event_kind(self):
+        event = HotkeyEvent.from_dict({"SettingKey": "record", "Kind": "holdKey", "Phase": "started", "Hotkey": "hold:delete", "ActivationID": "a", "Timestamp": 1})
+        self.assertEqual(event.kind, HotkeyKind.HOLD_KEY)
+
     def test_global_setting_round_trip(self):
         raw = {"Type": "hotkey", "Value": {"Key": "record", "Scope": "global", "AllowedHotkeyKinds": ["holdModifier"], "DefaultValue": "hold:right_alt"}}
         item = PluginSettingDefinitionItem.from_dict(raw)

@@ -12,6 +12,21 @@ extern int keyboardHookEventCGO(int eventKind, unsigned int vkCode, unsigned int
 #define WOX_WIN_MASK_VK 0xFF
 #define WOX_WIN_RELEASE_TAG ((ULONG_PTR)0x574F5857)
 
+// Replay a consumed standalone tap without sending it back to Wox listeners.
+int woxKeyboardReplayTap(unsigned int vkCode)
+{
+    INPUT inputs[2];
+    ZeroMemory(inputs, sizeof(inputs));
+    for (int i = 0; i < 2; i++) {
+        inputs[i].type = INPUT_KEYBOARD;
+        inputs[i].ki.wVk = (WORD)vkCode;
+        inputs[i].ki.dwExtraInfo = WOX_WIN_RELEASE_TAG;
+        if (vkCode == VK_DELETE || vkCode == VK_INSERT) inputs[i].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+    }
+    inputs[1].ki.dwFlags |= KEYEVENTF_KEYUP;
+    return SendInput(2, inputs, sizeof(INPUT)) == 2;
+}
+
 // Replace an intercepted Win-up atomically: masking after passing it through
 // can open Start first, while swallowing it alone leaves the OS key stuck down.
 static int sendMaskedWinRelease(UINT vkCode)

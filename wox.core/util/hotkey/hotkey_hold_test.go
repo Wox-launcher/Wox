@@ -89,6 +89,24 @@ func TestHoldModifierTrackingFiresPressAndReleaseForSingleKey(t *testing.T) {
 	assertSignal(t, released, "hold release")
 }
 
+// TestHoldModifierTrackingDoesNotFireForShortPress checks the shared hold threshold at runtime.
+func TestHoldModifierTrackingDoesNotFireForShortPress(t *testing.T) {
+	rawHandler, restore := captureRawKeyListenerForTest(t)
+	defer restore()
+
+	pressed := make(chan struct{}, 1)
+	keys := []keyboard.Key{keyboard.KeyLeftAlt}
+	if err := startHoldModifierTracking(keys, func() { pressed <- struct{}{} }, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer stopHoldModifierTracking(keys)
+
+	rawHandler()(rawModifierEvent(keyboard.EventTypeKeyDown, keyboard.KeyLeftAlt))
+	time.Sleep(150 * time.Millisecond)
+	rawHandler()(rawModifierEvent(keyboard.EventTypeKeyUp, keyboard.KeyLeftAlt))
+	assertNoSignal(t, pressed, "hold after a short press")
+}
+
 func TestHoldModifierTrackingRequiresWholeChordAndReleasesOnAnyChordKey(t *testing.T) {
 	rawHandler, restore := captureRawKeyListenerForTest(t)
 	defer restore()
@@ -287,7 +305,7 @@ func assertSignal(t *testing.T, ch <-chan struct{}, label string) {
 
 	select {
 	case <-ch:
-	case <-time.After(holdModifierPressDelay + 800*time.Millisecond):
+	case <-time.After(holdPressDelay + 800*time.Millisecond):
 		t.Fatalf("expected %s", label)
 	}
 }
@@ -298,7 +316,7 @@ func assertNoSignal(t *testing.T, ch <-chan struct{}, label string) {
 	select {
 	case <-ch:
 		t.Fatalf("did not expect %s", label)
-	case <-time.After(holdModifierPressDelay + 80*time.Millisecond):
+	case <-time.After(holdPressDelay + 80*time.Millisecond):
 	}
 }
 

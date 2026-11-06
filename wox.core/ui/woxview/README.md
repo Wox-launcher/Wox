@@ -400,6 +400,7 @@ font features the runtime cannot consistently measure and render.
 | `span` | `text`, `onPress`; inline style subset and common interactions; only allowed inside `text` |
 | `markdown` | `content`, `onLinkPress`; links open externally only when the handler is absent |
 | `image` | exactly one of `icon` (Wox catalog name) or `source` (`imageType`, `imageData`); `fit`: `contain`, `cover`, `fill`. Sources support `base64`, `svg`, `absolute`; catalog icons accept `iconColorMode` |
+| `morph-path` | `keyframes`, `progress`, `duration`, `curve`; filled vector outlines interpolated by Core |
 | `spacer` | `size` |
 | `button` | `label`, optional catalog `icon` and `iconColorMode`, `variant` (`secondary`, `primary`, `outline`, `text`, `surface`), `disabled`, `onPress` |
 | `icon-button` | `icon`, optional `iconColorMode`, accessible `label`, `disabled`, `onPress` |
@@ -421,6 +422,53 @@ font features the runtime cannot consistently measure and render.
 | `progress` | `value` clamped to 0–1, `indeterminate` |
 | `loading` | no additional props |
 | `divider` | `vertical` |
+
+For a Windows transparent plugin window using `PassThroughTransparent`, any
+node can opt its bounds into the native pointer region with `inputRegion: true`.
+This adds no visible paint and permits interactions in intentionally empty space;
+ordinary transparent pixels remain click-through.
+
+### Morphing vector paths
+
+`morph-path` is a decorative, filled outline that interpolates matching path
+commands as `progress` changes. Coordinates use a normalized 1×1 view box:
+`M` and `L` take `[x,y]`, `Q` takes `[cx,cy,x,y]`, `C` takes
+`[cx1,cy1,cx2,cy2,x,y]`, and `Z` closes the current subpath. All paths must
+have the same 1–128 commands, with identical operations and arities, and begin
+with `M`; coordinates must be between -4 and 4. Start another subpath with `M`
+after `Z`. The fill implicitly closes any open subpath. The node has no stroke.
+
+`keyframes` contains 2–18 outlines as `{at, path}`. Positions must be strictly
+increasing, beginning at 0 and ending at 1, with positions at least 1e-7 apart.
+With three or more keyframes,
+coordinates use monotone cubic interpolation to keep velocity continuous without
+overshooting keyframes. With two keyframes, coordinates interpolate linearly.
+
+```json
+{
+  "type": "morph-path", "key": "shape",
+  "props": {
+    "keyframes": [
+      {"at":0,"path":[{"op":"M","values":[0,0]}, {"op":"L","values":[1,0]}, {"op":"L","values":[0.5,1]}, {"op":"Z"}]},
+      {"at":1,"path":[{"op":"M","values":[0,0]}, {"op":"L","values":[1,0]}, {"op":"L","values":[1,1]}, {"op":"Z"}]}
+    ],
+    "progress": 1, "duration": 200, "curve": "easeInOut",
+    "style": {"width": 32, "height": 32, "color": "$accent"}
+  }
+}
+```
+
+`progress` is 0–1 and defaults to 0. A first mount renders the target immediately;
+later updates with the same key interpolate from the current progress, including
+mid-animation retargeting. `duration` defaults to 200 ms, accepts 0–60000, and
+the curve uses the same `linear`, `easeInOut`, and `easeOutBack` values as
+transitions. Overshoot is clipped to 0–1. A change to the paths themselves takes
+effect immediately; keep paths stable while retargeting progress. Fill uses
+`style.color` (including theme tokens and light/dark pairs), defaulting to text.
+The outline is rasterized locally; its longest raster dimension is capped at
+1024 pixels. Very large sizes may appear softer. This is a paint-only shape:
+its interaction and accessibility bounds remain rectangular. Overlay a keyed
+button when the shape is a control.
 
 Catalog icons preserve their authored colors and gradients by default (or with
 `iconColorMode: "original"`). The explicit Wox SVG theme variable still resolves

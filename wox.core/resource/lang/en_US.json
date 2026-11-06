@@ -116,6 +116,7 @@
   "ui_hotkey_hint_caps_lock_combo": "Caps Lock + key",
   "ui_hotkey_hint_press_modifier": "Press modifier keys",
   "ui_hotkey_hint_hold_modifier": "Hold modifier keys",
+  "ui_hotkey_hint_hold_key": "Hold Delete, Insert, or a supported function key",
   "ui_hotkey_hint_press_win": "Press Win alone",
   "ui_hotkey_accessibility_required": "Accessibility permission required",
   "ui_hotkey_raw_recorder_unavailable": "This hotkey type cannot be recorded in the current environment",

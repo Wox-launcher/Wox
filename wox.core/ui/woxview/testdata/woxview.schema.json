@@ -771,6 +771,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -967,6 +970,9 @@
             "original"
           ],
           "type": "string"
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -1178,6 +1184,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -1388,6 +1397,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "language": {
           "type": "string"
         },
@@ -1570,6 +1582,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -1764,6 +1779,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -1949,6 +1967,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "onContextMenu": {
           "anyOf": [
@@ -2151,6 +2172,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -2352,6 +2376,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -2577,6 +2604,9 @@
             "original"
           ],
           "type": "string"
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -2826,6 +2856,9 @@
           ],
           "type": "string"
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -3033,6 +3066,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "itemHeight": {
           "allOf": [
@@ -3261,6 +3297,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -3466,6 +3505,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -3697,6 +3739,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -3880,6 +3925,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -3980,6 +4028,269 @@
       },
       "type": "object"
     },
+    "morph-pathProps": {
+      "additionalProperties": false,
+      "properties": {
+        "animation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contextMenu": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "label",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "curve": {
+          "enum": [
+            "",
+            "linear",
+            "easeOutBack",
+            "easeInOut"
+          ],
+          "type": "string"
+        },
+        "disabledStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focusStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hoverStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputRegion": {
+          "type": "boolean"
+        },
+        "keyframes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "path": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "enum": [
+                        "M",
+                        "L",
+                        "Q",
+                        "C",
+                        "Z"
+                      ],
+                      "type": "string"
+                    },
+                    "values": {
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 6,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "op"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 128,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "at",
+              "path"
+            ],
+            "type": "object"
+          },
+          "maxItems": 18,
+          "minItems": 2,
+          "type": "array"
+        },
+        "onContextMenu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onDoubleTap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onFocusChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onHoverChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pressedStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "shortcuts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "key",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "keyframes"
+      ],
+      "type": "object"
+    },
     "multi-selectProps": {
       "additionalProperties": false,
       "properties": {
@@ -4075,6 +4386,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -4730,6 +5044,33 @@
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/$defs/node"
+              },
+              "maxItems": 0,
+              "type": "array"
+            },
+            "key": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "props": {
+              "$ref": "#/$defs/morph-pathProps"
+            },
+            "type": {
+              "const": "morph-path"
+            }
+          },
+          "required": [
+            "type",
+            "props"
           ],
           "type": "object"
         },
@@ -5450,6 +5791,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -5697,6 +6041,9 @@
         "indeterminate": {
           "type": "boolean"
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -5885,6 +6232,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -6116,6 +6466,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -6317,6 +6670,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -6529,6 +6885,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -6766,6 +7125,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -6983,6 +7345,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -7198,6 +7563,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "onContextMenu": {
           "anyOf": [
@@ -7451,6 +7819,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -7658,6 +8029,9 @@
           ],
           "type": "string"
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -7857,6 +8231,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -8092,6 +8469,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -8344,6 +8724,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "items": {
           "items": {
             "additionalProperties": false,
@@ -8574,6 +8957,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -8762,6 +9148,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"
@@ -9013,6 +9402,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "label": {
           "type": "string"
         },
@@ -9241,6 +9633,9 @@
             }
           ]
         },
+        "inputRegion": {
+          "type": "boolean"
+        },
         "onContextMenu": {
           "anyOf": [
             {
@@ -9426,6 +9821,9 @@
               "type": "null"
             }
           ]
+        },
+        "inputRegion": {
+          "type": "boolean"
         },
         "label": {
           "type": "string"

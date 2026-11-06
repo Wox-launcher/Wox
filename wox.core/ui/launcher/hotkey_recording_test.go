@@ -17,10 +17,10 @@ func TestHotkeyRecordingHintMatchesAllowedKinds(t *testing.T) {
 	app.language.translations = map[string]string{
 		"ui_hotkey_hint_normal_combo": "normal", "ui_hotkey_hint_double_modifier": "double",
 		"ui_hotkey_hint_caps_lock_combo": "caps", "ui_hotkey_hint_press_modifier": "press",
-		"ui_hotkey_hint_hold_modifier": "hold", "ui_hotkey_hint_press_win": "win",
+		"ui_hotkey_hint_hold_modifier": "hold", "ui_hotkey_hint_hold_key": "hold key", "ui_hotkey_hint_press_win": "win",
 	}
-	kinds := []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier"}
-	labels := []string{"normal", "double", "caps", "press", "hold"}
+	kinds := []string{"normalCombo", "doubleModifier", "capsLockCombo", "pressModifier", "holdModifier", "holdKey"}
+	labels := []string{"normal", "double", "caps", "press", "hold", "hold key"}
 	for mask := 1; mask < 1<<len(kinds); mask++ {
 		var allowed, want []string
 		for i, kind := range kinds {
@@ -55,10 +55,13 @@ func TestCanonicalRecordedHotkeyPrefixesHoldModifier(t *testing.T) {
 	if got := canonicalRecordedHotkey(recordedHotkeyPayload{Hotkey: "hold:shift", Kind: "holdModifier"}); got != "hold:shift" {
 		t.Fatalf("canonical existing hold hotkey = %q, want hold:shift", got)
 	}
+	if got := canonicalRecordedHotkey(recordedHotkeyPayload{Hotkey: "delete", Kind: "holdKey"}); got != "hold:delete" {
+		t.Fatalf("canonical standalone hold hotkey = %q", got)
+	}
 }
 
 func TestModifierOnlyHotkeysSkipAvailabilityCheck(t *testing.T) {
-	for _, kind := range []string{"pressModifier", "holdModifier"} {
+	for _, kind := range []string{"pressModifier", "holdModifier", "holdKey"} {
 		if !hotkeyKindSkipsAvailability(kind) {
 			t.Fatalf("%s should be accepted without an availability check", kind)
 		}

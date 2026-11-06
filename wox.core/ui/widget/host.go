@@ -1452,7 +1452,16 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 		}
 	}
 	pressed := h.nodes[h.pressed]
-	if event.Kind == woxui.PointerMove && pressed != nil && pressed.gesture != nil && pressed.gesture.onDragStart != nil && !h.dragging && h.selecting == 0 {
+	dragTarget := pressed
+	// Hover-only observers must not block an ancestor's drag gesture, while controls
+	// with their own press, selection, pan, or raw input retain ownership.
+	for dragTarget != nil && dragTarget.gesture != nil && dragTarget.gesture.onDragStart == nil && dragTarget.gesture.observeDescendants && dragTarget.gesture.onTap == nil && dragTarget.gesture.onTapAt == nil && dragTarget.gesture.onTapBounds == nil && dragTarget.gesture.onPanStart == nil && dragTarget.gesture.onSelectionStart == nil && dragTarget.gesture.onPointer == nil {
+		dragTarget = dragTarget.parent
+		for dragTarget != nil && dragTarget.gesture == nil {
+			dragTarget = dragTarget.parent
+		}
+	}
+	if event.Kind == woxui.PointerMove && dragTarget != nil && dragTarget.gesture != nil && dragTarget.gesture.onDragStart != nil && !h.dragging && h.selecting == 0 && h.panning == 0 {
 		deltaX := event.Position.X - h.pressedAt.X
 		deltaY := event.Position.Y - h.pressedAt.Y
 		if deltaX*deltaX+deltaY*deltaY >= 9 {
@@ -1463,7 +1472,7 @@ func (h *Host) Pointer(event woxui.PointerEvent) {
 			}
 			h.pressed = 0
 			h.dragging = true
-			pressed.gesture.onDragStart()
+			dragTarget.gesture.onDragStart()
 		}
 	}
 	// Extend an active drag selection by mapping the current position into the selecting node's local coords.
