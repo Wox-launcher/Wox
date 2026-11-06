@@ -900,3 +900,120 @@ are ordering barriers: an edit after submit never overwrites an edit queued befo
 it. In-flight callbacks are not cancelled. The queue remains bounded, and capacity
 failures for new, nonmergeable events still report an error. These internal hints
 are not serialized into the public event payload.
+
+
+## Sprite, timeline and timer
+
+`sprite` samples row-major cells from one static `source` image. `columns` and
+`rows` are required (1–64 each); `frame` defaults to 0. Logical `style.width` and
+`height` determine the displayed cell size, independently of source pixels and
+DPI. `flipX` mirrors around the cell center. Keep transparent padding and the
+same foot position in each frame to define a stable character anchor.
+
+Named `clips` contain `{name, frames, fps, loop?}`. Select one with `clip`;
+otherwise `frame` is used. Clips accept 1–256 frames and 1–60 fps. A finite clip
+holds its last frame and stops requesting animation frames. `paused` preserves
+the current phase. Image identity remains stable across frame and clip changes.
+
+Every block node accepts a native `timeline` with `duration` in milliseconds,
+`keyframes`, optional `loop`, `paused`, `playbackId`, and `elapsed`. Keyframes
+start at `at: 0`, end at `at: duration`, and have strictly increasing times.
+They interpolate `translateX`, `translateY`, `scale`, `rotate`, and `opacity`
+linearly; omitted channels hold their previous value, initially the node style.
+They affect paint, not layout or hit testing. Timelines have at most 256
+keyframes and last at most 600,000ms. Existing implicit transitions apply first,
+then the timeline, then any pulse/spin preset. Inline `span` does not support
+this block timeline contract.
+
+```json
+{"type":"sprite","key":"character","props":{
+  "source":{"imageType":"absolute","imageData":"/path/to/atlas.png"},
+  "columns":4,"rows":4,
+  "clips":[{"name":"walk","frames":[1,2],"fps":5,"loop":true}],
+  "clip":"walk","playbackId":"trip-1",
+  "timeline":{"playbackId":"trip-1","duration":2400,"keyframes":[
+    {"at":0,"translateX":0,"translateY":0},
+    {"at":1200,"translateX":80,"translateY":0},
+    {"at":2400,"translateX":80,"translateY":60}
+  ]},
+  "style":{"width":56,"height":56}
+}}
+```
+
+For both sprites and timelines, `elapsed` initializes playback on mount/replay;
+it is not a seek command on every tree echo. Change `playbackId` to replay or
+seek. Same-key updates preserve the current phase. Changing timeline duration
+or loop mode also restarts it; changing a sprite clip starts that clip. All
+clocks use the Host's single frame timestamp, so simultaneously mounted clips
+and dust timelines with the same elapsed offset stay synchronized. These clocks
+schedule no producer callbacks. Window hiding stops rendering; elapsed time
+catches up when shown. Use `paused` when playback must remain frozen.
+
+`timer` is a native stopwatch or countdown. It can represent task duration,
+workout intervals, a Pomodoro session, or any other elapsed/remaining time.
+It has no application-specific labels or business behavior.
+
+| Prop | Meaning |
+| --- | --- |
+| `direction` | `"up"` (default) or `"down"`. |
+| `format` | `"MM:SS"` (default), `"HH:MM:SS"`, `"HH:MM"`, `"HH"`, `"MM"`, `"SS"`, `"SS.SSS"`, `"MM:SS.SSS"`, or `"HH:MM:SS.SSS"`. |
+| `elapsed` | Time already consumed, in milliseconds; defaults to 0 in either direction. Initializes a new playback. |
+| `duration` | Optional endpoint in milliseconds. Required for countdown or `onComplete`; also caps a count-up timer. Zero means already complete. |
+| `running` | Defaults to false: display the supplied elapsed value without a native clock or completion events. True advances natively. |
+| `paused` | Freezes a running clock at its current position; false resumes from that position. |
+| `playbackId` | Change to restart/seek from the supplied elapsed value. Same-key updates do not restart the clock. |
+| `animate` | Defaults to false. True slides/fades changed digits in either direction. |
+| `onComplete` | Optional handler, emitted once per mounted playback with `Args: []` when elapsed reaches duration. Never emitted while paused or `running: false`. |
+
+The largest displayed unit is cumulative: `MM:SS` may show `90:00`, `SS` may
+show `5400`, and hours never wrap at 24. Units have at least two digits; `SSS`
+after the decimal point is three-digit milliseconds. Count-up rounds down to
+the displayed precision; countdown rounds up so it never shows zero early.
+A countdown clamps at zero, and a bounded count-up clamps at its duration.
+Both stop requesting animation frames at the endpoint; completion can occur
+between displayed ticks. Millisecond formats sample the frame clock, not a
+1,000 Hz producer loop. This is a display component, not a background alarm:
+hidden windows stop rendering, catch up when shown, and deliver any completion
+then. Removing the timer cancels its pending playback.
+
+Changing format, style, animation, handlers, or an elapsed echo preserves the
+clock and does not re-emit completion. Changing direction or duration starts a
+new playback, as does changing `playbackId`. To pause and continue, keep
+`running: true` and toggle `paused`; `running: false` switches to a producer-owned
+snapshot. Use a new `playbackId` when starting another run. `elapsed` and
+`duration` accept integer milliseconds from 0 to 31,536,000,000 (365 days);
+this bounds input offsets, not the lifetime of an unbounded stopwatch.
+
+Font and color use normal style props, with monospace as the default family and
+fixed digit cells. Labels and prefixes belong in adjacent text nodes. Defaults
+preserve the original count-up `MM:SS` behavior, including Mole's elapsed display.
+
+Stopwatch with hours and a subsecond initial offset:
+
+```json
+{"type":"timer","key":"stopwatch","props":{
+  "direction":"up","format":"HH:MM:SS","elapsed":1234,
+  "running":true,"playbackId":"session-1","animate":true
+}}
+```
+
+A 25-minute Pomodoro countdown, resumed with two minutes already consumed:
+
+```json
+{"type":"timer","key":"pomodoro","props":{
+  "direction":"down","format":"MM:SS","duration":1500000,"elapsed":120000,
+  "running":true,"paused":false,"playbackId":"focus-1",
+  "onComplete":{"$handler":"focus-complete"}
+}}
+```
+
+It starts at `23:00`. Toggle `paused` to freeze/resume, or change `playbackId`
+and set `elapsed: 0` to start another 25-minute interval. The producer only sends
+these state changes; Core owns all ticks. JSON Schema and Core enforce the
+duration requirement; SDK types expose the optional fields and format enums.
+
+The Windows renderer retains a shared 32 MiB / 128-entry image LRU, including
+medium and large images. Actual native creates/uploads/hits/evictions are
+reported in frame metrics; repeated frame regions reuse the atlas texture.
+Cache trimming and device recreation release these resources. The source-region
+contract is implemented in Windows, macOS, Linux, and the reference renderer.

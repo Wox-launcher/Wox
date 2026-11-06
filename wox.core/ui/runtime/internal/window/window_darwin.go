@@ -1141,6 +1141,7 @@ func encodeDarwinCommands(native *C.WoxDarwinWindow, displayList *DisplayList, n
 			textCost += time.Since(commandStart)
 			textCount++
 		case displayCommandDrawImage:
+			region := command.sourceRect()
 			commandStart := time.Now()
 			result = C.wox_darwin_window_draw_image(
 				native,
@@ -1155,6 +1156,7 @@ func encodeDarwinCommands(native *C.WoxDarwinWindow, displayList *DisplayList, n
 				C.float(command.rect.Height),
 				C.float(command.rotation),
 				C.float(command.radius),
+				C.float(region.X), C.float(region.Y), C.float(region.Width), C.float(region.Height),
 			)
 			imageCost += time.Since(commandStart)
 			imageCount++

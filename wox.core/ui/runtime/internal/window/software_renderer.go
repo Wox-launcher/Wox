@@ -196,6 +196,7 @@ func (r *SoftwareRenderer) drawReferenceText(command displayCommand, damage Rect
 }
 
 func (r *SoftwareRenderer) drawImage(command displayCommand, damage Rect, clip *Rect) {
+	region := command.sourceRect()
 	bounds := rotatedRectBounds(command.rect, command.rotation)
 	centerX := command.rect.X + command.rect.Width/2
 	centerY := command.rect.Y + command.rect.Height/2
@@ -210,8 +211,8 @@ func (r *SoftwareRenderer) drawImage(command displayCommand, damage Rect, clip *
 		if !pointInRoundedRect(localX, localY, localRect, command.radius) {
 			return
 		}
-		sourceX := min(command.image.Width-1, max(0, int(localX/command.rect.Width*float32(command.image.Width))))
-		sourceY := min(command.image.Height-1, max(0, int(localY/command.rect.Height*float32(command.image.Height))))
+		sourceX := min(command.image.Width-1, max(0, int(region.X+localX/command.rect.Width*region.Width)))
+		sourceY := min(command.image.Height-1, max(0, int(region.Y+localY/command.rect.Height*region.Height)))
 		source := command.image.RGBAAt(sourceX, sourceY)
 		r.blendPremultiplied(offset, source.R, source.G, source.B, source.A)
 	})

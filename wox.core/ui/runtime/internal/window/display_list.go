@@ -246,7 +246,7 @@ func (d *DisplayList) Compare(other *DisplayList) error {
 }
 
 func displayCommandsEqual(left, right displayCommand) bool {
-	if left.caret != right.caret || left.caretVisible != right.caretVisible || left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
+	if !displayListRectsEqual(left.imageSource, right.imageSource) || left.caret != right.caret || left.caretVisible != right.caretVisible || left.kind != right.kind || !displayListRectsEqual(left.rect, right.rect) ||
 		left.transformed != right.transformed || left.transformed && !displayTransformsEqual(left.transform, right.transform) ||
 		!displayListFloatsEqual(left.radius, right.radius) || !displayListFloatsEqual(left.stroke, right.stroke) ||
 		!displayListFloatsEqual(left.opacity, right.opacity) ||
@@ -313,6 +313,7 @@ type displayCommand struct {
 	caretVisible bool
 	kind         displayCommandKind
 	rect         Rect
+	imageSource  Rect // Source pixels; an empty rectangle means the complete image.
 	radius       float32
 	stroke       float32
 	opacity      float32
@@ -672,4 +673,21 @@ func (d *DisplayList) EndOpacity(bounds Rect, opacity float32) {
 	if len(d.clipStack) > 0 {
 		d.appendClip(d.clipStack[len(d.clipStack)-1])
 	}
+}
+
+// DrawImageRegion samples a source-pixel rectangle from a shared immutable atlas.
+// Destination geometry stays logical; source coordinates never follow display DPI.
+func (d *DisplayList) DrawImageRegion(image *Image, source, destination Rect) {
+	if image == nil || len(image.NativePixels()) == 0 || (math.IsNaN(float64(source.X+source.Y+source.Width+source.Height)) || math.IsInf(float64(source.X+source.Y+source.Width+source.Height), 0)) || source.X < 0 || source.Y < 0 || source.Width <= 0 || source.Height <= 0 || source.X+source.Width > float32(image.Width) || source.Y+source.Height > float32(image.Height) || destination.Width <= 0 || destination.Height <= 0 || !d.shouldRecord(destination) {
+		return
+	}
+	d.appendCommand(displayCommand{kind: displayCommandDrawImage, rect: destination, image: image, imageSource: source})
+}
+
+// sourceRect resolves the backward-compatible full-image default at encoder boundaries.
+func (c displayCommand) sourceRect() Rect {
+	if c.imageSource.Width > 0 && c.imageSource.Height > 0 {
+		return c.imageSource
+	}
+	return Rect{Width: float32(c.image.Width), Height: float32(c.image.Height)}
 }

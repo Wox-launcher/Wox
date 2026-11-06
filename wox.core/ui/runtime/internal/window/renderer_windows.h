@@ -2,6 +2,7 @@
 #define WOX_UI_GO_RENDERER_WINDOWS_H
 
 #include <stdint.h>
+#include "native_renderer_stats.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +32,7 @@ int32_t wox_renderer_process_gpu_memory(WoxRendererGpuMemory *memory);
 int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, uint32_t height, int32_t enable_embedded_surface_overlay, int32_t force_warp, WoxRenderer **renderer);
 int32_t wox_renderer_get_diagnostics(WoxRenderer *renderer, char *buffer, uint32_t buffer_size);
 int64_t wox_renderer_resident_bytes(WoxRenderer *renderer);
+void wox_renderer_resource_stats(WoxRenderer *renderer, WoxRendererResourceStats *stats);
 int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, uint32_t height);
 int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const char *font_family);
 int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer);
@@ -43,7 +45,7 @@ int32_t wox_renderer_fill_rounded_rect(WoxRenderer *renderer, float x, float y, 
 int32_t wox_renderer_fill_convex_polygon(WoxRenderer *renderer, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
-int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius);
+int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height);
 int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
 int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *renderer);
 int32_t wox_renderer_create_webview_visual(WoxRenderer *renderer, void **visual, void **root_visual_target);

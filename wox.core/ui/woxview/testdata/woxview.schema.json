@@ -633,6 +633,115 @@
       },
       "type": "object"
     },
+    "Timeline": {
+      "additionalProperties": false,
+      "properties": {
+        "duration": {
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "elapsed": {
+          "maximum": 86400000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframes": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "maximum": 600000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "opacity": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rotate": {
+                "anyOf": [
+                  {
+                    "maximum": 16384,
+                    "minimum": -16384,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scale": {
+                "anyOf": [
+                  {
+                    "maximum": 100,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "translateX": {
+                "anyOf": [
+                  {
+                    "maximum": 16384,
+                    "minimum": -16384,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "translateY": {
+                "anyOf": [
+                  {
+                    "maximum": 16384,
+                    "minimum": -16384,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "at"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "minItems": 2,
+          "type": "array"
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "playbackId": {
+          "maxLength": 256,
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration",
+        "keyframes"
+      ],
+      "type": "object"
+    },
     "Transition": {
       "additionalProperties": false,
       "properties": {
@@ -851,6 +960,16 @@
         "text": {
           "type": "string"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -1060,6 +1179,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -1285,6 +1414,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -1476,6 +1615,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -1673,6 +1822,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -1855,6 +2014,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -2057,6 +2226,16 @@
         },
         "submitting": {
           "type": "boolean"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -2261,6 +2440,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -2481,6 +2670,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -2694,6 +2893,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -2961,6 +3170,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -3184,6 +3403,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -3552,6 +3781,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -3762,6 +4001,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -4006,6 +4255,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -4191,6 +4450,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -4387,6 +4656,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -4648,6 +4927,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -4886,6 +5175,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -5779,6 +6078,33 @@
               "items": {
                 "$ref": "#/$defs/node"
               },
+              "maxItems": 0,
+              "type": "array"
+            },
+            "key": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "props": {
+              "$ref": "#/$defs/spriteProps"
+            },
+            "type": {
+              "const": "sprite"
+            }
+          },
+          "required": [
+            "type",
+            "props"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/$defs/node"
+              },
               "type": "array"
             },
             "key": {
@@ -6068,6 +6394,39 @@
               "items": {
                 "$ref": "#/$defs/node"
               },
+              "maxItems": 0,
+              "type": "array"
+            },
+            "key": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "props": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/timerProps"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "timer"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/$defs/node"
+              },
               "type": "array"
             },
             "key": {
@@ -6332,6 +6691,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -6520,6 +6889,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -6760,6 +7139,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -6958,6 +7347,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -7176,6 +7575,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -7413,6 +7822,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -7639,6 +8058,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -7827,6 +8256,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -8100,6 +8539,9 @@
         "text": {
           "type": "string"
         },
+        "timeline": {
+          "type": "null"
+        },
         "tooltip": {
           "type": "string"
         },
@@ -8130,6 +8572,296 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "spriteProps": {
+      "additionalProperties": false,
+      "properties": {
+        "animation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clip": {
+          "type": "string"
+        },
+        "clips": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "fps": {
+                "maximum": 60,
+                "minimum": 1,
+                "type": "number"
+              },
+              "frames": {
+                "items": {
+                  "maximum": 4095,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "maxItems": 256,
+                "minItems": 1,
+                "type": "array"
+              },
+              "loop": {
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "frames",
+              "fps"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "columns": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "contextMenu": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "label",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "disabledStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elapsed": {
+          "maximum": 86400000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "flipX": {
+          "type": "boolean"
+        },
+        "focusStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame": {
+          "maximum": 4095,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hoverStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputRegion": {
+          "type": "boolean"
+        },
+        "onContextMenu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onDoubleTap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onFocusChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onHoverChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "playbackId": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "pressedStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rows": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "shortcuts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "key",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "imageData": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "imageType": {
+              "enum": [
+                "base64",
+                "svg",
+                "absolute"
+              ]
+            }
+          },
+          "required": [
+            "imageType",
+            "imageData"
+          ],
+          "type": "object"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "columns",
+        "rows"
+      ],
       "type": "object"
     },
     "stackProps": {
@@ -8311,6 +9043,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -8511,6 +9253,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -8735,6 +9487,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -9012,6 +9774,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -9251,6 +10023,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -9439,6 +10221,16 @@
         },
         "text": {
           "type": "string"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -9675,6 +10467,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"
@@ -9927,6 +10729,16 @@
         "style": {
           "$ref": "#/$defs/Style"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -10119,6 +10931,16 @@
         "text": {
           "type": "string"
         },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "tooltip": {
           "type": "string"
         },
@@ -10132,6 +10954,296 @@
             }
           ]
         }
+      },
+      "type": "object"
+    },
+    "timerProps": {
+      "additionalProperties": false,
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "direction": {
+                "const": "down"
+              }
+            },
+            "required": [
+              "direction"
+            ]
+          },
+          {
+            "properties": {
+              "onComplete": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "onComplete"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "animate": {
+          "type": "boolean"
+        },
+        "animation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contextMenu": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "disabled": {
+                "type": "boolean"
+              },
+              "icon": {
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "label",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "direction": {
+          "enum": [
+            "",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        },
+        "disabledStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "maximum": 31536000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elapsed": {
+          "maximum": 31536000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PresenceAnimation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focusStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "format": {
+          "enum": [
+            "",
+            "HH",
+            "MM",
+            "SS",
+            "HH:MM",
+            "MM:SS",
+            "HH:MM:SS",
+            "SS.SSS",
+            "MM:SS.SSS",
+            "HH:MM:SS.SSS"
+          ],
+          "type": "string"
+        },
+        "hoverStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputRegion": {
+          "type": "boolean"
+        },
+        "onComplete": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onContextMenu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onDoubleTap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onFocusChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "onHoverChange": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Handler"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "playbackId": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "pressedStyle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StateStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "shortcuts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "onPress": {
+                "$ref": "#/$defs/Handler"
+              }
+            },
+            "required": [
+              "key",
+              "onPress"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "duration": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "duration"
+        ]
       },
       "type": "object"
     },
@@ -10314,6 +11426,16 @@
         },
         "style": {
           "$ref": "#/$defs/Style"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tooltip": {
           "type": "string"

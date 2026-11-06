@@ -1271,11 +1271,12 @@ const (
 
 // Image paints a raster resource into a fixed logical rectangle.
 type Image struct {
-	Source *woxui.Image
-	Width  float32
-	Height float32
-	Fit    ImageFit
-	Radius float32
+	SourceRect woxui.Rect
+	Source     *woxui.Image
+	Width      float32
+	Height     float32
+	Fit        ImageFit
+	Radius     float32
 }
 
 func (w Image) layout(ctx context, available constraints) *node {
@@ -1297,6 +1298,10 @@ func (w Image) layout(ctx context, available constraints) *node {
 	return &node{
 		bounds: woxui.Rect{Width: width, Height: height},
 		paint: func(displayList *woxui.DisplayList, bounds woxui.Rect) {
+			if w.SourceRect.Width > 0 && w.SourceRect.Height > 0 {
+				displayList.DrawImageRegion(w.Source, w.SourceRect, bounds)
+				return
+			}
 			imageBounds := fittedImageBounds(w.Source, bounds, w.Fit)
 			if w.Radius > 0 {
 				// Corner radius belongs to the widget box. Cover's overflowing

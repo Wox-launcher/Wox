@@ -339,6 +339,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 			)
 			C.free(unsafe.Pointer(text))
 		case displayCommandDrawImage:
+			region := command.sourceRect()
 			commandResult = C.wox_renderer_draw_image(
 				r.handle,
 				C.uint64_t(command.image.ID()),
@@ -353,6 +354,7 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.float(command.rect.Height),
 				C.float(command.rotation),
 				C.float(command.radius),
+				C.float(region.X), C.float(region.Y), C.float(region.Width), C.float(region.Height),
 			)
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			commandResult = C.wox_renderer_begin_embedded_surface_overlay(r.handle)
@@ -522,4 +524,11 @@ func testWindowsOpacity(scale, opacity float32) ([]byte, int) {
 	pixels := make([]byte, size*size*4)
 	status := C.wox_renderer_test_opacity((*C.uint8_t)(unsafe.Pointer(&pixels[0])), C.int32_t(size), C.float(scale), C.float(opacity))
 	return pixels, int(status)
+}
+
+// resourceStats reports work performed by Direct2D, including warm-cache frames with no uploads.
+func (r *nativeRenderer) resourceStats() FrameRendererResourceMetrics {
+	var stats C.WoxRendererResourceStats
+	C.wox_renderer_resource_stats(r.handle, &stats)
+	return FrameRendererResourceMetrics{ImageCreates: int(stats.image_creates), ImageUploads: int(stats.image_uploads), CacheHits: int(stats.cache_hits), CacheEvictions: int(stats.cache_evictions), ResidentBytes: int64(stats.resident_bytes)}
 }

@@ -173,6 +173,7 @@ typedef struct {
   GLint texture_color;
   GLint texture_rotation;
   GLint texture_radius;
+  GLint texture_source;
   GLuint blur_program;
   GLuint blur_blit_program;
   GLuint blur_compose_program;
@@ -1053,6 +1054,7 @@ static const char *const texture_fragment_source =
     "#version 330 core\n"
     WOX_GL_CLIP_SOURCE
     "uniform sampler2D u_texture;\n"
+    "uniform vec4 u_source;\n"
     "uniform vec4 u_color;\n"
     "uniform vec4 u_rect;\n"
     "uniform float u_radius;\n"
@@ -1069,7 +1071,9 @@ static const char *const texture_fragment_source =
     "    float antialias = max(fwidth(distance_value), 0.001);\n"
     "    coverage = 1.0 - smoothstep(-antialias * 0.5, antialias * 0.5, distance_value);\n"
     "  }\n"
-    "  fragment_color = texture(u_texture, v_uv) * u_color * coverage;\n"
+    "  vec2 half_texel = min(0.5 / vec2(textureSize(u_texture, 0)), u_source.zw * 0.5);\n"
+    "  vec2 uv = clamp(u_source.xy + v_uv * u_source.zw, u_source.xy + half_texel, u_source.xy + u_source.zw - half_texel);\n"
+    "  fragment_color = texture(u_texture, uv) * u_color * coverage;\n"
     "}\n";
 
 static const char *const blur_vertex_source =
@@ -1651,7 +1655,7 @@ static bool cache_gl_text(WoxLinuxRenderer *renderer, uint64_t hash, const char 
   return true;
 }
 
-static void draw_bound_texture(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float rotation_radians, float corner_radius, const float color[4]) {
+static void draw_bound_texture_region(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float rotation_radians, float corner_radius, const float color[4], float sx, float sy, float sw, float sh) {
   glUseProgram(renderer->texture_program);
   apply_linux_drawing_state(renderer, renderer->texture_program, NULL, true);
   glUniform2f(renderer->texture_viewport, renderer->logical_width, renderer->logical_height);
@@ -1659,8 +1663,14 @@ static void draw_bound_texture(WoxLinuxRenderer *renderer, float x, float y, flo
   glUniform4fv(renderer->texture_color, 1, color);
   glUniform1f(renderer->texture_rotation, rotation_radians);
   glUniform1f(renderer->texture_radius, corner_radius);
+  glUniform4f(renderer->texture_source, sx, sy, sw, sh);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+// Ordinary text textures sample their complete image.
+static void draw_bound_texture(WoxLinuxRenderer *renderer, float x, float y, float width, float height, float rotation_radians, float corner_radius, const float color[4]) {
+  draw_bound_texture_region(renderer, x, y, width, height, rotation_radians, corner_radius, color, 0, 0, 1, 1);
 }
 
 static GLuint upload_gl_texture(int width, int height, GLenum format, const void *pixels, int unpack_row_length) {
@@ -1764,6 +1774,7 @@ static bool initialize_renderer(WoxLinuxWindow *window, WoxLinuxRenderer *render
   renderer->texture_color = glGetUniformLocation(renderer->texture_program, "u_color");
   renderer->texture_rotation = glGetUniformLocation(renderer->texture_program, "u_rotation");
   renderer->texture_radius = glGetUniformLocation(renderer->texture_program, "u_radius");
+  renderer->texture_source = glGetUniformLocation(renderer->texture_program, "u_source");
   glUseProgram(renderer->texture_program);
   glUniform1i(glGetUniformLocation(renderer->texture_program, "u_texture"), 0);
   glUseProgram(0);
@@ -6151,7 +6162,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   return 0;
 }
 
-int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -6166,7 +6177,7 @@ int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, c
       renderer->cached_large_image != 0 && renderer->cached_large_image_generation == renderer->context_generation) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->cached_large_image);
-    draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+    draw_bound_texture_region(renderer, x, y, width, height, rotation_radians, corner_radius, color, source_x / image_width, source_y / image_height, source_width / image_width, source_height / image_height);
     window->frame_resource_stats.cache_hits++;
     return 0;
   }
@@ -6174,7 +6185,7 @@ int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, c
   if (cached != NULL) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cached->texture);
-    draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+    draw_bound_texture_region(renderer, x, y, width, height, rotation_radians, corner_radius, color, source_x / image_width, source_y / image_height, source_width / image_width, source_height / image_height);
     window->frame_resource_stats.cache_hits++;
     return 0;
   }
@@ -6199,7 +6210,7 @@ int32_t wox_linux_window_draw_image(WoxLinuxWindow *window, uint64_t image_id, c
   } else {
     cached_texture = image_id != 0 && cache_gl_image(renderer, image_id, image_bytes, texture, true, &window->frame_resource_stats.cache_evictions);
   }
-  draw_bound_texture(renderer, x, y, width, height, rotation_radians, corner_radius, color);
+  draw_bound_texture_region(renderer, x, y, width, height, rotation_radians, corner_radius, color, source_x / image_width, source_y / image_height, source_width / image_width, source_height / image_height);
   if (!cached_texture) {
     glDeleteTextures(1, &texture);
   }

@@ -74,14 +74,11 @@ struct WoxRenderer {
   D2D1_RECT_U caret_pixels = {};
   float caret_scale = 0.0f;
   bool caret_valid = false;
-  ID2D1Bitmap1 *cached_large_image_bitmap = nullptr;
-  uint64_t cached_large_image_id = 0;
-  uint64_t cached_large_image_bytes = 0;
+  WoxRendererResourceStats resource_stats = {};
   std::vector<CachedImageBitmap> cached_image_bitmaps;
   // Uploads too large for the retained cache but referenced again within the same frame, such as
   // a repeated theme surface slice. They live until EndDraw so one image costs one upload per frame.
   std::vector<CachedImageBitmap> frame_image_bitmaps;
-  std::vector<ID2D1Bitmap1 *> retired_image_bitmaps;
   uint64_t cached_image_bitmap_bytes = 0;
   uint64_t cached_image_use_serial = 0;
   ID2D1SolidColorBrush *brush = nullptr;
@@ -379,10 +376,6 @@ static void release_material_resources(WoxRenderer *renderer) {
 // release_retired_image_bitmaps keeps evicted and frame-scoped resources alive until EndDraw has
 // consumed every bitmap referenced by the current frame.
 static void release_retired_image_bitmaps(WoxRenderer *renderer) {
-  for (ID2D1Bitmap1 *bitmap : renderer->retired_image_bitmaps) {
-    release_com(&bitmap);
-  }
-  renderer->retired_image_bitmaps.clear();
   for (CachedImageBitmap &entry : renderer->frame_image_bitmaps) {
     release_com(&entry.bitmap);
   }
@@ -393,24 +386,25 @@ static ID2D1Bitmap1 *find_cached_image_bitmap(WoxRenderer *renderer, uint64_t im
   for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
     if (entry.image_id == image_id) {
       entry.last_used = ++renderer->cached_image_use_serial;
+      renderer->resource_stats.cache_hits++;
       return entry.bitmap;
     }
   }
   for (const CachedImageBitmap &entry : renderer->frame_image_bitmaps) {
     if (entry.image_id == image_id) {
+      renderer->resource_stats.cache_hits++;
       return entry.bitmap;
     }
   }
   return nullptr;
 }
 
-// The launcher normally shows fewer than 16 icons. These limits absorb repaint bursts without
-// turning decoded source images into a second, unbounded GPU cache.
+// Scenes need several atlases/backgrounds resident together. One byte-bounded LRU also
+// covers medium images, which previously fell between the icon and single-preview caches.
 static bool cache_image_bitmap(WoxRenderer *renderer, uint64_t image_id, uint64_t byte_size, ID2D1Bitmap1 *bitmap) {
-  constexpr size_t max_cached_image_count = 32;
-  constexpr uint64_t max_cached_image_entry_bytes = 1ULL * 1024ULL * 1024ULL;
-  constexpr uint64_t max_cached_image_bytes = 8ULL * 1024ULL * 1024ULL;
-  if (image_id == 0 || bitmap == nullptr || byte_size > max_cached_image_entry_bytes) {
+  constexpr size_t max_cached_image_count = 128;
+  constexpr uint64_t max_cached_image_bytes = 32ULL * 1024ULL * 1024ULL;
+  if (image_id == 0 || bitmap == nullptr || byte_size > max_cached_image_bytes) {
     return false;
   }
 
@@ -423,7 +417,9 @@ static bool cache_image_bitmap(WoxRenderer *renderer, uint64_t image_id, uint64_
           return left.last_used < right.last_used;
         });
     renderer->cached_image_bitmap_bytes -= oldest->byte_size;
-    renderer->retired_image_bitmaps.push_back(oldest->bitmap);
+    // Retain identity until EndDraw: repeated tiles still reuse an evicted image.
+    renderer->frame_image_bitmaps.push_back(*oldest);
+    renderer->resource_stats.cache_evictions++;
     oldest->bitmap = nullptr;
     renderer->cached_image_bitmaps.erase(oldest);
   }
@@ -751,7 +747,6 @@ static void destroy_renderer(WoxRenderer *renderer) {
   release_com(&renderer->brush);
   clear_cached_image_bitmaps(renderer);
   release_material_resources(renderer);
-  release_com(&renderer->cached_large_image_bitmap);
   release_com(&renderer->overlay_target_bitmap);
   release_com(&renderer->target_bitmap);
   release_com(&renderer->d2d_context);
@@ -942,9 +937,6 @@ extern "C" int32_t wox_renderer_trim(WoxRenderer *renderer) {
   if (renderer == nullptr || renderer->device == nullptr || renderer->frame_open) {
     return E_UNEXPECTED;
   }
-  release_com(&renderer->cached_large_image_bitmap);
-  renderer->cached_large_image_id = 0;
-  renderer->cached_large_image_bytes = 0;
   clear_cached_image_bitmaps(renderer);
 
   IDXGIDevice3 *dxgi_device = nullptr;
@@ -966,9 +958,6 @@ extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   clear_cached_image_bitmaps(renderer);
-  release_com(&renderer->cached_large_image_bitmap);
-  renderer->cached_large_image_id = 0;
-  renderer->cached_large_image_bytes = 0;
   release_material_resources(renderer);
   finish_composite_bitmaps(renderer, true);
   // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
@@ -987,6 +976,7 @@ extern "C" int32_t wox_renderer_begin_frame(WoxRenderer *renderer, float scale, 
   }
   renderer->d2d_context->SetTarget(renderer->target_bitmap);
   renderer->d2d_context->BeginDraw();
+  renderer->resource_stats = {};
   renderer->frame_open = true;
   renderer->overlay_active = false;
   renderer->scale = scale;
@@ -1163,7 +1153,7 @@ extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *tex
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height) {
   if (renderer == nullptr || !renderer->frame_open || pixels == nullptr || image_width == 0 || image_height == 0 || row_stride < image_width * 4 || pixel_format > 1 || width <= 0.0f || height <= 0.0f) {
     return E_INVALIDARG;
   }
@@ -1178,32 +1168,18 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
   ID2D1Bitmap1 *bitmap = nullptr;
   bool release_bitmap = true;
   const uint64_t image_bytes = static_cast<uint64_t>(row_stride) * image_height;
-  // Reuse a large preview bitmap across repaints instead of uploading its pixels every frame.
-  const bool cache_bitmap = image_id != 0 && image_bytes >= 4ULL * 1024ULL * 1024ULL;
-  if (cache_bitmap && renderer->cached_large_image_id == image_id && renderer->cached_large_image_bitmap != nullptr) {
-    bitmap = renderer->cached_large_image_bitmap;
-    release_bitmap = false;
-  } else if (!cache_bitmap && image_id != 0 && (bitmap = find_cached_image_bitmap(renderer, image_id)) != nullptr) {
+  if (image_id != 0 && (bitmap = find_cached_image_bitmap(renderer, image_id)) != nullptr) {
     release_bitmap = false;
   } else {
     HRESULT result = renderer->d2d_context->CreateBitmap(D2D1::SizeU(image_width, image_height), pixels, row_stride, &properties, &bitmap);
     if (FAILED(result)) {
       return result;
     }
-    if (cache_bitmap) {
-      // The previous image can still be referenced by commands queued in this frame.
-      if (renderer->cached_large_image_bitmap != nullptr) {
-        renderer->retired_image_bitmaps.push_back(renderer->cached_large_image_bitmap);
-      }
-      renderer->cached_large_image_bitmap = bitmap;
-      renderer->cached_large_image_id = image_id;
-      renderer->cached_large_image_bytes = image_bytes;
-      release_bitmap = false;
-    } else if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
+    renderer->resource_stats.image_creates++;
+    renderer->resource_stats.image_uploads++;
+    if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
       release_bitmap = false;
     } else if (image_id != 0) {
-      // Not retained across frames, but tiled surfaces draw the same oversized slice dozens of
-      // times per frame; re-uploading each time left hundreds of MB in driver staging buffers.
       renderer->frame_image_bitmaps.push_back(CachedImageBitmap{image_id, image_bytes, 0, bitmap});
       release_bitmap = false;
     }
@@ -1223,7 +1199,7 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
     destination = {snap(x, transform._11, transform._31), snap(y, transform._22, transform._32),
                    snap(x + width, transform._11, transform._31), snap(y + height, transform._22, transform._32)};
   }
-  const D2D1_RECT_F source = {0.0f, 0.0f, static_cast<float>(image_width), static_cast<float>(image_height)};
+  const D2D1_RECT_F source = {source_x, source_y, source_x + source_width, source_y + source_height};
   if (rotation_radians != 0.0f) {
     const float degrees = rotation_radians * 180.0f / 3.14159265358979323846f;
     const D2D1_POINT_2F center = D2D1::Point2F(x + width * 0.5f, y + height * 0.5f);
@@ -1926,7 +1902,7 @@ extern "C" int64_t wox_renderer_resident_bytes(WoxRenderer *renderer) {
     return 0;
   }
   const auto caret_size = renderer->caret_backdrop == nullptr ? D2D1::SizeU(0, 0) : renderer->caret_backdrop->GetPixelSize();
-  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->cached_large_image_bytes + renderer->composite_bitmap_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
+  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->composite_bitmap_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
 }
 
 extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {
@@ -2119,4 +2095,11 @@ extern "C" int32_t wox_renderer_test_floating_material(uint8_t *pixels, int32_t 
 // Offscreen WARP exercises production group composition without opening a window.
 extern "C" int32_t wox_renderer_test_opacity(uint8_t *pixels, int32_t size, float scale, float opacity) {
   return test_warp_bitmap(pixels, size, scale, 0, 0, false, opacity);
+}
+
+// Report actual native cache activity, rather than estimating one upload per image draw.
+extern "C" void wox_renderer_resource_stats(WoxRenderer *renderer, WoxRendererResourceStats *stats) {
+  if (stats == nullptr) return;
+  *stats = renderer == nullptr ? WoxRendererResourceStats{} : renderer->resource_stats;
+  stats->resident_bytes = wox_renderer_resident_bytes(renderer);
 }

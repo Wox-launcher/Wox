@@ -48,7 +48,7 @@ func (s *nodeVisualState) Build(ctx widget.StateContext, value any) widget.Widge
 	p := c.node.Props.(interface{ interactionStyles() InteractionStyles }).interactionStyles()
 	// Keep the state boundary mounted so adding paint state or animation never
 	// resets a field. Plain nodes avoid allocating the animation closure chain.
-	if p.empty() && common.Transition == nil && s.enter == nil && common.Animation == nil {
+	if p.empty() && common.Transition == nil && s.enter == nil && common.Animation == nil && common.Timeline == nil {
 		return c.builder.decorateNode(c.node, c.id, catalog[c.node.Type].build(&c.builder, c.node, c.id))
 	}
 	return s.buildVisual(ctx, c)
@@ -67,7 +67,7 @@ func (s *nodeVisualState) buildVisual(ctx widget.StateContext, c nodeVisualConfi
 	common := node.Props.(interface{ commonProps() CommonProps }).commonProps()
 	content := b.transitionStyle(style, common.Transition, c.id, func(style Style) widget.Widget {
 		return s.enterStyle(ctx, &b, c.id, style, func(sample Style) widget.Widget {
-			return b.buildAnimatedNode(node, c.id, sample, common.Animation)
+			return b.timelineStyle(sample, common.Timeline, c.id, func(current Style) widget.Widget { return b.buildAnimatedNode(node, c.id, current, common.Animation) })
 		})
 	})
 	if p.empty() {

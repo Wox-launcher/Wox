@@ -32,6 +32,8 @@ func init() {
 		NodeText:        {newProps: func() any { return &TextProps{} }, children: true, build: buildText},
 		NodeSpan:        {newProps: func() any { return &SpanProps{} }},
 		NodeMarkdown:    {newProps: func() any { return &MarkdownProps{} }, build: buildMarkdown},
+		NodeTimer:       {newProps: func() any { return &TimerProps{} }, build: buildTimer},
+		NodeSprite:      {newProps: func() any { return &SpriteProps{} }, build: buildSprite},
 		NodeImage:       {newProps: func() any { return &ImageProps{} }, build: buildImage},
 		NodeLineChart:   {newProps: func() any { return &LineChartProps{} }, build: buildLineChart},
 		NodeMorphPath:   {newProps: func() any { return &MorphPathProps{} }, build: buildMorphPath},
@@ -88,6 +90,7 @@ type CommonProps struct {
 	Enter         *PresenceAnimation `json:"enter,omitempty"`
 	Exit          *PresenceAnimation `json:"exit,omitempty"`
 	Transition    *Transition        `json:"transition,omitempty"`
+	Timeline      *Timeline          `json:"timeline,omitempty"`
 	Animation     *Animation         `json:"animation,omitempty"`
 	InputRegion   bool               `json:"inputRegion,omitempty"`
 	Tooltip       string             `json:"tooltip,omitempty"`
@@ -193,6 +196,9 @@ func prepareNode(node *Node, depth int, count *int, path string, handlers map[Ha
 		}
 		if err := p.commonProps().Enter.validate(); err != nil {
 			return invalid(path+".props.enter", "%s props: %w", path, err)
+		}
+		if err := p.commonProps().Timeline.validate(node.Type); err != nil {
+			return invalid(path+".props.timeline", "%s: %w", path, err)
 		}
 		if err := p.commonProps().Animation.validate(); err != nil {
 			return invalid(path+".props.animation", "%s props: %w", path, err)

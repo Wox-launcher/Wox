@@ -35,6 +35,8 @@ const (
 	NodeText        NodeType = "text"
 	NodeSpan        NodeType = "span"
 	NodeImage       NodeType = "image"
+	NodeSprite      NodeType = "sprite"
+	NodeTimer       NodeType = "timer"
 	NodeLineChart   NodeType = "line-chart"
 	NodeMorphPath   NodeType = "morph-path"
 	NodeSpacer      NodeType = "spacer"

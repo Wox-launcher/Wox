@@ -896,6 +896,7 @@ func encodeLinuxCommands(native *C.WoxLinuxWindow, displayList *DisplayList, nat
 			)
 			C.free(unsafe.Pointer(text))
 		case displayCommandDrawImage:
+			region := command.sourceRect()
 			result = C.wox_linux_window_draw_image(
 				native,
 				C.uint64_t(command.image.ID()),
@@ -909,6 +910,7 @@ func encodeLinuxCommands(native *C.WoxLinuxWindow, displayList *DisplayList, nat
 				C.float(command.rect.Height),
 				C.float(command.rotation),
 				C.float(command.radius),
+				C.float(region.X), C.float(region.Y), C.float(region.Width), C.float(region.Height),
 			)
 		case displayCommandBeginEmbeddedSurfaceOverlay:
 			result = C.wox_linux_window_begin_embedded_surface_overlay(native)

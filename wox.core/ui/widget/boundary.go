@@ -31,6 +31,7 @@ const (
 	animationDependencyFloat animationDependencyKind = iota
 	animationDependencyLoop
 	animationDependencyFrame
+	animationDependencyTimeline
 )
 
 type animationDependency struct {

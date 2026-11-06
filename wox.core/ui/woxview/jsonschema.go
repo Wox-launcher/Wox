@@ -15,7 +15,7 @@ type enumOwner interface{ enumValues() []string }
 // remain enforced by Parse; JSON Schema cannot express those recursive constraints.
 func JSONSchema() []byte {
 	definitions := schemaObject{}
-	for _, t := range []reflect.Type{reflect.TypeFor[Style](), reflect.TypeFor[StateStyle](), reflect.TypeFor[Transition](), reflect.TypeFor[Animation](), reflect.TypeFor[PresenceAnimation](), reflect.TypeFor[Color](), reflect.TypeFor[Edges](), reflect.TypeFor[Size](), reflect.TypeFor[Offset](), reflect.TypeFor[Handler]()} {
+	for _, t := range []reflect.Type{reflect.TypeFor[Style](), reflect.TypeFor[StateStyle](), reflect.TypeFor[Transition](), reflect.TypeFor[Animation](), reflect.TypeFor[Timeline](), reflect.TypeFor[PresenceAnimation](), reflect.TypeFor[Color](), reflect.TypeFor[Edges](), reflect.TypeFor[Size](), reflect.TypeFor[Offset](), reflect.TypeFor[Handler]()} {
 		definitions[t.Name()] = schemaFor(t)
 	}
 	definitions["EventData"] = schemaFor(reflect.TypeFor[Event]())
@@ -51,7 +51,7 @@ func JSONSchema() []byte {
 				"children": children,
 			},
 		}
-		if kind == NodeImage || kind == NodeLineChart || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
+		if kind == NodeSprite || kind == NodeImage || kind == NodeLineChart || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
 			node["required"] = []string{"type", "props"}
 			node["properties"].(schemaObject)["props"] = schemaObject{"$ref": "#/$defs/" + string(kind) + "Props"}
 		}
@@ -79,7 +79,7 @@ func JSONSchema() []byte {
 // schemaType references shared definitions to keep the generated contract compact.
 func schemaType(t reflect.Type) schemaObject {
 	switch t {
-	case reflect.TypeFor[Style](), reflect.TypeFor[StateStyle](), reflect.TypeFor[Transition](), reflect.TypeFor[Animation](), reflect.TypeFor[PresenceAnimation](), reflect.TypeFor[Color](), reflect.TypeFor[Edges](), reflect.TypeFor[Size](), reflect.TypeFor[Offset](), reflect.TypeFor[Handler]():
+	case reflect.TypeFor[Style](), reflect.TypeFor[StateStyle](), reflect.TypeFor[Transition](), reflect.TypeFor[Animation](), reflect.TypeFor[Timeline](), reflect.TypeFor[PresenceAnimation](), reflect.TypeFor[Color](), reflect.TypeFor[Edges](), reflect.TypeFor[Size](), reflect.TypeFor[Offset](), reflect.TypeFor[Handler]():
 		return schemaObject{"$ref": "#/$defs/" + t.Name()}
 	default:
 		return schemaFor(t)
@@ -126,7 +126,7 @@ func schemaFor(t reflect.Type) schemaObject {
 		return schemaObject{"type": "string"}
 	case reflect.Bool:
 		return schemaObject{"type": "boolean"}
-	case reflect.Int:
+	case reflect.Int, reflect.Int64:
 		return schemaObject{"type": "integer"}
 	case reflect.Uint64:
 		return schemaObject{"type": "integer", "minimum": 0, "maximum": uint64(1<<64 - 1)}
@@ -168,6 +168,54 @@ func schemaFor(t reflect.Type) schemaObject {
 		if t == reflect.TypeFor[Animation]() {
 			result["required"] = []string{"type"}
 			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 1, "maximum": 60000}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[SpriteProps]() {
+			result["required"] = []string{"source", "columns", "rows"}
+			props["source"] = schemaType(reflect.TypeFor[ImageSource]())
+			for _, name := range []string{"columns", "rows"} {
+				props[name] = schemaObject{"type": "integer", "minimum": 1, "maximum": 64}
+			}
+			props["frame"] = schemaObject{"type": "integer", "minimum": 0, "maximum": 4095}
+			props["clips"].(schemaObject)["maxItems"] = 64
+		}
+		if t == reflect.TypeFor[SpriteClip]() {
+			result["required"] = []string{"name", "frames", "fps"}
+			props["name"] = schemaObject{"type": "string", "minLength": 1, "maxLength": 128}
+			props["fps"] = schemaObject{"type": "number", "minimum": 1, "maximum": 60}
+			props["frames"] = schemaObject{"type": "array", "minItems": 1, "maxItems": 256, "items": schemaObject{"type": "integer", "minimum": 0, "maximum": 4095}}
+		}
+		if t == reflect.TypeFor[Timeline]() {
+			result["required"] = []string{"duration", "keyframes"}
+			props["duration"] = schemaObject{"type": "integer", "minimum": 1, "maximum": 600000}
+			props["keyframes"].(schemaObject)["minItems"] = 2
+			props["keyframes"].(schemaObject)["maxItems"] = 256
+		}
+		if t == reflect.TypeFor[TimelineKeyframe]() {
+			result["required"] = []string{"at"}
+			props["at"] = schemaObject{"type": "integer", "minimum": 0, "maximum": 600000}
+			for _, name := range []string{"translateX", "translateY", "rotate", "scale", "opacity"} {
+				low, high := -16384, 16384
+				if name == "scale" {
+					low, high = 0, 100
+				}
+				if name == "opacity" {
+					low, high = 0, 1
+				}
+				props[name] = schemaObject{"anyOf": []any{schemaObject{"type": "number", "minimum": low, "maximum": high}, schemaObject{"type": "null"}}}
+			}
+		}
+		if t == reflect.TypeFor[SpriteProps]() || t == reflect.TypeFor[Timeline]() || t == reflect.TypeFor[TimerProps]() {
+			props["elapsed"] = schemaObject{"type": "integer", "minimum": 0, "maximum": 86400000}
+			props["playbackId"] = schemaObject{"type": "string", "maxLength": 256}
+		}
+		if t == reflect.TypeFor[TimerProps]() {
+			props["elapsed"] = schemaObject{"type": "integer", "minimum": 0, "maximum": maxTimerMilliseconds}
+			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 0, "maximum": maxTimerMilliseconds}, schemaObject{"type": "null"}}}
+			result["if"] = schemaObject{"anyOf": []any{
+				schemaObject{"required": []string{"direction"}, "properties": schemaObject{"direction": schemaObject{"const": TimerDown}}},
+				schemaObject{"required": []string{"onComplete"}, "properties": schemaObject{"onComplete": schemaObject{"type": "object"}}},
+			}}
+			result["then"] = schemaObject{"required": []string{"duration"}, "properties": schemaObject{"duration": schemaObject{"type": "integer"}}}
 		}
 		if t == reflect.TypeFor[LineChartProps]() {
 			result["required"] = []string{"values"}
@@ -215,6 +263,7 @@ func schemaFor(t reflect.Type) schemaObject {
 			props["duration"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 0, "maximum": 60000}, schemaObject{"type": "null"}}}
 		}
 		if t == reflect.TypeFor[SpanProps]() {
+			props["timeline"] = schemaObject{"type": "null"}
 			props["transition"] = schemaObject{"anyOf": []any{schemaObject{"type": "null"}, schemaObject{"allOf": []any{
 				schemaType(reflect.TypeFor[Transition]()),
 				schemaObject{"properties": schemaObject{"properties": schemaObject{"items": schemaObject{"enum": []string{"opacity", "backgroundColor"}}}}},

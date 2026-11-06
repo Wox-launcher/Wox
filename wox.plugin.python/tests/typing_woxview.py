@@ -16,3 +16,24 @@ counter: WoxViewTree = {
 event: WoxViewEventData = {"Handler": "increment", "Args": [], "Key": "increment"}
 
 bad_image: WoxViewImageProps = {}  # type: ignore[assignment]
+
+stopwatch: WoxViewTree = {
+    "version": 1,
+    "root": {"type": "timer", "props": {"direction": "up", "format": "HH:MM:SS", "elapsed": 1234, "running": True, "animate": True}},
+}
+countdown: WoxViewTree = {
+    "version": 1,
+    "root": {
+        "type": "timer",
+        "props": {
+            "direction": "down",
+            "format": "MM:SS.SSS",
+            "duration": 1500000,
+            "elapsed": 120000,
+            "running": True,
+            "paused": False,
+            "playbackId": "focus-1",
+            "onComplete": {"$handler": "done"},
+        },
+    },
+}

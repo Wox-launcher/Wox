@@ -12,6 +12,12 @@ export const counter: WoxViewTree = {
 }
 
 export const event: WoxViewEventData = { Handler: "increment", Args: [], Key: "increment" }
+export const stopwatch: WoxViewTree = { version: 1, root: { type: "timer", props: { direction: "up", format: "HH:MM:SS", elapsed: 1234, running: true, animate: true } } }
+export const countdown: WoxViewTree = { version: 1, root: { type: "timer", props: { direction: "down", format: "MM:SS.SSS", duration: 1500000, elapsed: 120000, running: true, paused: false, playbackId: "focus-1", onComplete: { $handler: "done" } } } }
+// @ts-expect-error Timer formats are explicit protocol values.
+const badTimerFormat: WoxViewTree = { version: 1, root: { type: "timer", props: { format: "hh:mm" } } }
+// @ts-expect-error Timer direction is not an arbitrary string.
+const badTimerDirection: WoxViewTree = { version: 1, root: { type: "timer", props: { direction: "backwards" } } }
 export const chart: WoxViewTree = { version: 1, root: { type: "line-chart", props: { values: [1, 2, 3], pointLabels: ["a", "b", "c"], label: "Price", inputRegion: true, chart: { showGrid: true, yAxis: "right", gridLines: 5, fill: true, tooltipPosition: "floating", hover: false, valueDecimals: 2 } } } }
 // @ts-expect-error A line chart requires values.
 const badChart: WoxViewTree = { version: 1, root: { type: "line-chart", props: {} } }

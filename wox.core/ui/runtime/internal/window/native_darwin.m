@@ -1024,7 +1024,7 @@ static CGImageRef create_cgimage_from_pixels(const uint8_t *pixels, int32_t imag
   return image;
 }
 
-static void draw_cached_cgimage(WoxDarwinRenderer *renderer, CGImageRef image, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+static void draw_cached_cgimage(WoxDarwinRenderer *renderer, CGImageRef image, float x, float y, float width, float height, float rotation_radians, float corner_radius, float sx, float sy, float sw, float sh) {
   CGContextSaveGState(renderer->context);
   CGContextTranslateCTM(renderer->context, x + width * 0.5f, y + height * 0.5f);
   CGContextRotateCTM(renderer->context, rotation_radians);
@@ -1036,7 +1036,10 @@ static void draw_cached_cgimage(WoxDarwinRenderer *renderer, CGImageRef image, f
     CGPathRelease(clip_path);
   }
   CGContextScaleCTM(renderer->context, 1.0, -1.0);
-  CGContextDrawImage(renderer->context, CGRectMake(-width * 0.5f, -height * 0.5f, width, height), image);
+  // Clip and sample the cached atlas without allocating a cropped CGImage per frame.
+  CGContextClipToRect(renderer->context, CGRectMake(-width * 0.5f, -height * 0.5f, width, height));
+  float scale_x = width / sw, scale_y = height / sh;
+  CGContextDrawImage(renderer->context, CGRectMake(-width * 0.5f - sx * scale_x, -height * 0.5f - (CGImageGetHeight(image) - sy - sh) * scale_y, CGImageGetWidth(image) * scale_x, CGImageGetHeight(image) * scale_y), image);
   CGContextRestoreGState(renderer->context);
 }
 
@@ -4538,7 +4541,7 @@ int32_t wox_darwin_window_draw_text(WoxDarwinWindow *window, const char *text, c
   return 0;
 }
 
-int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius) {
+int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id, const uint8_t *pixels, int32_t image_width, int32_t image_height, int32_t row_stride, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || image_id == 0 || pixels == NULL || image_width <= 0 || image_height <= 0 || row_stride < image_width * 4 || width <= 0.0f || height <= 0.0f) {
     return -1;
   }
@@ -4581,7 +4584,7 @@ int32_t wox_darwin_window_draw_image(WoxDarwinWindow *window, uint64_t image_id,
       release_image = false;
     }
   }
-  draw_cached_cgimage(renderer, image, x, y, width, height, rotation_radians, corner_radius);
+  draw_cached_cgimage(renderer, image, x, y, width, height, rotation_radians, corner_radius, source_x, source_y, source_width, source_height);
   if (release_image) {
     CGImageRelease(image);
   }

@@ -92,6 +92,16 @@ class WoxViewStyle(TypedDict, total=False):
     translateY: WoxViewOffset
     width: WoxViewSize
 
+class WoxViewTimelineRequired(TypedDict):
+    duration: int
+    keyframes: list[WoxViewTimelineKeyframesItem]
+
+class WoxViewTimeline(WoxViewTimelineRequired, total=False):
+    elapsed: int
+    loop: bool
+    paused: bool
+    playbackId: str
+
 class WoxViewTransitionRequired(TypedDict):
     properties: list[Literal['opacity', 'backgroundColor', 'width', 'height', 'translateX', 'translateY', 'scale']]
 
@@ -116,6 +126,7 @@ class WoxViewBadgeProps(TypedDict, total=False):
     shortcuts: list[WoxViewBadgePropsShortcutsItem]
     style: WoxViewStyle
     text: str
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -140,6 +151,7 @@ class WoxViewButtonProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewButtonPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     variant: Literal['', 'secondary', 'primary', 'outline', 'text', 'surface']
@@ -167,6 +179,7 @@ class WoxViewCheckboxProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewCheckboxPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: bool
@@ -189,6 +202,7 @@ class WoxViewCodeProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewCodePropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -210,6 +224,7 @@ class WoxViewColumnProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewColumnPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -229,6 +244,7 @@ class WoxViewDividerProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewDividerPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     vertical: bool
@@ -252,6 +268,7 @@ class WoxViewFormProps(TypedDict, total=False):
     shortcuts: list[WoxViewFormPropsShortcutsItem]
     style: WoxViewStyle
     submitting: bool
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -277,6 +294,7 @@ class WoxViewGridProps(WoxViewGridPropsRequired, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewGridPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -304,6 +322,7 @@ class WoxViewHotkeyProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewHotkeyPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -331,6 +350,7 @@ class WoxViewIconButtonProps(WoxViewIconButtonPropsRequired, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewIconButtonPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -356,6 +376,7 @@ class WoxViewImagePropsVariant1(WoxViewImagePropsVariant1Required, total=False):
     shortcuts: list[WoxViewImagePropsVariant1ShortcutsItem]
     source: None
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -381,6 +402,7 @@ class WoxViewImagePropsVariant2(WoxViewImagePropsVariant2Required, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewImagePropsVariant2ShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -407,6 +429,7 @@ class WoxViewLazyListProps(WoxViewLazyListPropsRequired, total=False):
     shortcuts: list[WoxViewLazyListPropsShortcutsItem]
     stickToEnd: bool
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -432,6 +455,7 @@ class WoxViewLineChartProps(WoxViewLineChartPropsRequired, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewLineChartPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -457,6 +481,7 @@ class WoxViewLinkProps(WoxViewLinkPropsRequired, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewLinkPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -484,6 +509,7 @@ class WoxViewListProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewListPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -504,6 +530,7 @@ class WoxViewLoadingProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewLoadingPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -525,6 +552,7 @@ class WoxViewMarkdownProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewMarkdownPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -550,6 +578,7 @@ class WoxViewMorphPathProps(WoxViewMorphPathPropsRequired, total=False):
     progress: float
     shortcuts: list[WoxViewMorphPathPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -577,6 +606,7 @@ class WoxViewMultiSelectProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewMultiSelectPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: list[str]
@@ -797,6 +827,14 @@ class WoxViewSpacerNode(WoxViewSpacerNodeRequired, total=False):
     key: str
     props: WoxViewSpacerProps | None
 
+class WoxViewSpriteNodeRequired(TypedDict):
+    props: WoxViewSpriteProps
+    type: Literal['sprite']
+
+class WoxViewSpriteNode(WoxViewSpriteNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
+
 class WoxViewStackNodeRequired(TypedDict):
     type: Literal['stack']
 
@@ -869,6 +907,14 @@ class WoxViewTextFieldNode(WoxViewTextFieldNodeRequired, total=False):
     key: str
     props: WoxViewTextFieldProps | None
 
+class WoxViewTimerNodeRequired(TypedDict):
+    type: Literal['timer']
+
+class WoxViewTimerNode(WoxViewTimerNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
+    props: WoxViewTimerProps | None
+
 class WoxViewViewNodeRequired(TypedDict):
     type: Literal['view']
 
@@ -906,6 +952,7 @@ class WoxViewNumberFieldProps(TypedDict, total=False):
     shortcuts: list[WoxViewNumberFieldPropsShortcutsItem]
     step: float
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: float
@@ -927,6 +974,7 @@ class WoxViewProgressProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewProgressPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: float
@@ -955,6 +1003,7 @@ class WoxViewRadioGroupProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewRadioGroupPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -977,6 +1026,7 @@ class WoxViewRowProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewRowPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     wrap: bool
@@ -1003,6 +1053,7 @@ class WoxViewScrollProps(TypedDict, total=False):
     shortcuts: list[WoxViewScrollPropsShortcutsItem]
     stickToEnd: bool
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1030,6 +1081,7 @@ class WoxViewSelectProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewSelectPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -1060,6 +1112,7 @@ class WoxViewSliderProps(TypedDict, total=False):
     shortcuts: list[WoxViewSliderPropsShortcutsItem]
     step: float
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: float
@@ -1081,6 +1134,7 @@ class WoxViewSpacerProps(TypedDict, total=False):
     shortcuts: list[WoxViewSpacerPropsShortcutsItem]
     size: WoxViewSize
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1110,8 +1164,41 @@ class WoxViewSpanProps(TypedDict, total=False):
     shortcuts: list[WoxViewSpanPropsShortcutsItem]
     style: WoxViewSpanPropsStyle
     text: str
+    timeline: None
     tooltip: str
     transition: None | WoxViewTransition
+
+class WoxViewSpritePropsRequired(TypedDict):
+    columns: int
+    rows: int
+    source: WoxViewSpritePropsSource
+
+class WoxViewSpriteProps(WoxViewSpritePropsRequired, total=False):
+    animation: WoxViewAnimation | None
+    clip: str
+    clips: list[WoxViewSpritePropsClipsItem]
+    contextMenu: list[WoxViewSpritePropsContextMenuItem]
+    disabledStyle: WoxViewStateStyle | None
+    elapsed: int
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    flipX: bool
+    focusStyle: WoxViewStateStyle | None
+    frame: int
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    paused: bool
+    playbackId: str
+    pressedStyle: WoxViewStateStyle | None
+    shortcuts: list[WoxViewSpritePropsShortcutsItem]
+    style: WoxViewStyle
+    timeline: WoxViewTimeline | None
+    tooltip: str
+    transition: WoxViewTransition | None
 
 class WoxViewStackProps(TypedDict, total=False):
     animation: WoxViewAnimation | None
@@ -1131,6 +1218,7 @@ class WoxViewStackProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewStackPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1154,6 +1242,7 @@ class WoxViewSubmitProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewSubmitPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     variant: Literal['', 'secondary', 'primary', 'outline', 'text', 'surface']
@@ -1181,6 +1270,7 @@ class WoxViewSwitchProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewSwitchPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: bool
@@ -1207,6 +1297,7 @@ class WoxViewTableProps(WoxViewTablePropsRequired, total=False):
     rows: list[WoxViewTablePropsRowsItem]
     shortcuts: list[WoxViewTablePropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1234,6 +1325,7 @@ class WoxViewTabsProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewTabsPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -1255,6 +1347,7 @@ class WoxViewTagProps(TypedDict, total=False):
     shortcuts: list[WoxViewTagPropsShortcutsItem]
     style: WoxViewStyle
     text: str
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1282,6 +1375,7 @@ class WoxViewTagsProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewTagsPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: list[str]
@@ -1315,6 +1409,7 @@ class WoxViewTextFieldProps(TypedDict, total=False):
     revision: int
     shortcuts: list[WoxViewTextFieldPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
     value: str
@@ -1337,6 +1432,36 @@ class WoxViewTextProps(TypedDict, total=False):
     shortcuts: list[WoxViewTextPropsShortcutsItem]
     style: WoxViewStyle
     text: str
+    timeline: WoxViewTimeline | None
+    tooltip: str
+    transition: WoxViewTransition | None
+
+class WoxViewTimerProps(TypedDict, total=False):
+    animate: bool
+    animation: WoxViewAnimation | None
+    contextMenu: list[WoxViewTimerPropsContextMenuItem]
+    direction: Literal['', 'up', 'down']
+    disabledStyle: WoxViewStateStyle | None
+    duration: int | None
+    elapsed: int
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    focusStyle: WoxViewStateStyle | None
+    format: Literal['', 'HH', 'MM', 'SS', 'HH:MM', 'MM:SS', 'HH:MM:SS', 'SS.SSS', 'MM:SS.SSS', 'HH:MM:SS.SSS']
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    onComplete: WoxViewHandler | None
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    paused: bool
+    playbackId: str
+    pressedStyle: WoxViewStateStyle | None
+    running: bool
+    shortcuts: list[WoxViewTimerPropsShortcutsItem]
+    style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
@@ -1358,12 +1483,23 @@ class WoxViewViewProps(TypedDict, total=False):
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewViewPropsShortcutsItem]
     style: WoxViewStyle
+    timeline: WoxViewTimeline | None
     tooltip: str
     transition: WoxViewTransition | None
 
 class WoxViewTree(TypedDict):
     root: WoxViewNode
     version: Literal[1]
+
+class WoxViewTimelineKeyframesItemRequired(TypedDict):
+    at: int
+
+class WoxViewTimelineKeyframesItem(WoxViewTimelineKeyframesItemRequired, total=False):
+    opacity: float | None
+    rotate: float | None
+    scale: float | None
+    translateX: float | None
+    translateY: float | None
 
 class WoxViewBadgePropsContextMenuItemRequired(TypedDict):
     label: str
@@ -1778,6 +1914,30 @@ class WoxViewSpanPropsStyle(TypedDict, total=False):
     italic: bool | None
     underline: bool | None
 
+class WoxViewSpritePropsClipsItemRequired(TypedDict):
+    fps: float
+    frames: list[int]
+    name: str
+
+class WoxViewSpritePropsClipsItem(WoxViewSpritePropsClipsItemRequired, total=False):
+    loop: bool
+
+class WoxViewSpritePropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewSpritePropsContextMenuItem(WoxViewSpritePropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewSpritePropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
+class WoxViewSpritePropsSource(TypedDict):
+    imageData: str
+    imageType: Literal['base64', 'svg', 'absolute']
+
 class WoxViewStackPropsContextMenuItemRequired(TypedDict):
     label: str
     onPress: WoxViewHandler
@@ -1914,6 +2074,18 @@ class WoxViewTextPropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
+class WoxViewTimerPropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewTimerPropsContextMenuItem(WoxViewTimerPropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewTimerPropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
 class WoxViewViewPropsContextMenuItemRequired(TypedDict):
     label: str
     onPress: WoxViewHandler
@@ -1946,5 +2118,5 @@ WoxViewOffset: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', 
 WoxViewPresenceAnimation: TypeAlias = Literal['fade', 'slideUp', 'scale'] | WoxViewPresenceAnimationVariant2
 WoxViewSize: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', '$space2', '$space3', '$space4', '$fontSm', '$fontMd', '$fontLg', '$fontTitle'] | None
 WoxViewImageProps: TypeAlias = WoxViewImagePropsVariant1 | WoxViewImagePropsVariant2
-WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLineChartNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMorphPathNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewViewNode
+WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLineChartNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMorphPathNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewSpriteNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewTimerNode | WoxViewViewNode
 WoxViewEdges: TypeAlias = WoxViewSize | WoxViewEdgesVariant2

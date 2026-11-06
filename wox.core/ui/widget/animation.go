@@ -211,6 +211,7 @@ type animationHost struct {
 	clock        func() time.Time
 	values       map[Key]*floatAnimation
 	loops        map[Key]*loopAnimation
+	timelines    map[Key]*clockAnimation
 	generation   uint64
 	active       bool
 	timer        *time.Timer
@@ -222,6 +223,15 @@ func (h *animationHost) observe(frame animationFrame, dependency animationDepend
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	switch dependency.kind {
+	case animationDependencyTimeline:
+		a := h.timelines[dependency.key]
+		if a == nil {
+			return 0, false
+		}
+		a.lastSeenAt = frame.generation
+		elapsed, active := a.sample(frame.now)
+		h.active = h.active || active
+		return float32(elapsed.Seconds()), true
 	case animationDependencyFloat:
 		animation := h.values[dependency.key]
 		if animation == nil {
@@ -406,6 +416,11 @@ func (h *animationHost) endFrame(frame animationFrame, invalidate func(), vsync 
 			delete(h.values, key)
 		}
 	}
+	for key, animation := range h.timelines {
+		if animation.lastSeenAt != frame.generation {
+			delete(h.timelines, key)
+		}
+	}
 	for key, animation := range h.loops {
 		if animation.lastSeenAt != frame.generation {
 			delete(h.loops, key)
@@ -463,6 +478,7 @@ func (h *animationHost) reset() {
 	h.vsyncPending = false
 	h.values = nil
 	h.loops = nil
+	h.timelines = nil
 	h.active = false
 }
 
