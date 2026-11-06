@@ -940,6 +940,9 @@ func (w *platformWindow) createNativeWindow() error {
 	platformRuntime.Unlock()
 	w.applyWindowIcon()
 	win.InvalidateRect(hwnd, nil, false)
+	// Open returns a hidden window. Precreated plugin windows may never be shown,
+	// so waiting for a Show/Hide cycle would pin the shared graphics device forever.
+	w.scheduleRendererTrim()
 	return nil
 }
 
@@ -2398,17 +2401,22 @@ func (w *platformWindow) hideNative() {
 	_ = w.stopAnimationFrames()
 	win.ShowWindow(w.hwnd, win.SW_HIDE)
 	_ = w.renderer.clearImageCache()
+	w.scheduleRendererTrim()
+
+	if shouldRestore && isRestorableForegroundWindow(previous) {
+		activateWindow(previous)
+		w.scheduleForegroundRestore(previous)
+	}
+}
+
+// scheduleRendererTrim gives every hidden native lifetime the same delayed GPU cleanup.
+func (w *platformWindow) scheduleRendererTrim() {
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 	}
 	w.rendererTrimTimer = time.AfterFunc(windowsRendererTrimDelay, func() {
 		_ = w.call(windowCommand{kind: windowCommandTrimRenderer})
 	})
-
-	if shouldRestore && isRestorableForegroundWindow(previous) {
-		activateWindow(previous)
-		w.scheduleForegroundRestore(previous)
-	}
 }
 
 // stopForegroundRestoreTimers cancels retries from an earlier hide before a new focus epoch starts.
