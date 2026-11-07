@@ -1079,6 +1079,9 @@ extern "C" int32_t wox_renderer_repaint_caret(WoxRenderer *renderer, float scale
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Identity());
   const D2D1_POINT_2F offset = D2D1::Point2F(static_cast<float>(pixels.left), static_cast<float>(pixels.top));
   renderer->d2d_context->DrawImage(renderer->caret_backdrop, &offset, nullptr, D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_SOURCE_COPY);
+  // begin_frame cleared the counters. Reusing the captured backdrop is a real cache hit;
+  // the caret fill below is new paint and must not increment this.
+  renderer->resource_stats.cache_hits++;
   renderer->d2d_context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
   return wox_renderer_fill_rounded_rect(renderer, x, y, width, height, 0, red, green, blue, alpha);
 }

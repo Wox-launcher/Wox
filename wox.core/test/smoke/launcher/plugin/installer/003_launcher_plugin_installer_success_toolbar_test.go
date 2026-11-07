@@ -133,9 +133,9 @@ func Test003LauncherPluginInstallerSuccessToolbar(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
-			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
+			_, found := smoke.FindLauncherResult(snapshot, name)
 			_, err := os.Stat(filepath.Join(pluginRoot, id+"@1.0.1"))
-			return found && strings.Contains(status.Value, name) && os.IsNotExist(err)
+			return !found && os.IsNotExist(err)
 		}); err != nil {
 			t.Fatalf("fixture uninstall did not complete: %v", err)
 		}
