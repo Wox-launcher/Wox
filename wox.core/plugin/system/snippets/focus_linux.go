@@ -39,6 +39,7 @@ type accessibilityFocus struct {
 	current  accessibleTarget
 	sequence uint64
 	token    atomic.Uint64
+	blocked  atomic.Bool
 	signals  chan *dbus.Signal
 	cancel   context.CancelFunc
 	done     chan struct{}
@@ -102,6 +103,8 @@ func (f *accessibilityFocus) listen(ctx context.Context, onChange func()) {
 			f.sequence++
 			sequence := f.sequence
 			f.current = accessibleTarget{}
+			// While a reported focus is unresolved, do not fall back to window-only matching.
+			f.blocked.Store(true)
 			f.token.Store(0)
 			f.mu.Unlock()
 			onChange()
@@ -128,6 +131,7 @@ func (f *accessibilityFocus) confirmCandidate(parent context.Context, candidate 
 	if f.sequence == candidate.token && parent.Err() == nil {
 		f.current = candidate
 		f.token.Store(candidate.token)
+		f.blocked.Store(false)
 	}
 }
 
@@ -156,6 +160,19 @@ func accessibleTargetAllowed(role atspiRole, states []uint32) bool {
 }
 
 func (f *accessibilityFocus) fast() uint64 { return f.token.Load() }
+
+// reset discards control focus from a previous top-level window.
+func (f *accessibilityFocus) reset() {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	f.sequence++
+	f.current = accessibleTarget{}
+	f.token.Store(0)
+	f.blocked.Store(false)
+	f.mu.Unlock()
+}
 
 // verifiedTarget checks the accessible object and its generation outside the keyboard callback.
 func (f *accessibilityFocus) verifiedTarget() uint64 {

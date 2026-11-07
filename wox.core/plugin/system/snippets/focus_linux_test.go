@@ -139,6 +139,13 @@ func TestWaylandFocusTracksRealDBusSignals(t *testing.T) {
 	if got := focus.fast(); got != 0 {
 		t.Fatal("password control was accepted")
 	}
+	if !focus.blocked.Load() {
+		t.Fatal("password control did not block window fallback")
+	}
+	focus.reset()
+	if focus.blocked.Load() {
+		t.Fatal("window change did not discard the previous control")
+	}
 	if os.Getenv("DISPLAY") != "" {
 		backend := newX11ExpansionBackend()
 		stop, err := backend.start(func(inputEvent) {})

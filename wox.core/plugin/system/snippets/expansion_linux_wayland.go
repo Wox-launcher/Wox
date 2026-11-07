@@ -35,6 +35,7 @@ type waylandExpansionBackend struct {
 	mu       sync.Mutex
 	state    *C.SnippetWayland
 	focus    *accessibilityFocus
+	window   *hyprlandFocus
 	failed   atomic.Bool
 	callback C.uintptr_t
 	layout   *kdeLayout
@@ -47,17 +48,27 @@ type waylandCallback struct {
 
 func newWaylandExpansionBackend() expansionBackend { return &waylandExpansionBackend{} }
 
-// start observes physical devices, the compositor's XKB keymap, and accessibility focus.
+// start observes physical devices, the compositor's XKB keymap, and focus.
 func (b *waylandExpansionBackend) start(handle func(inputEvent)) (func() error, error) {
 	focus, err := startAccessibilityFocus(func() { handle(inputEvent{kind: inputInvalidate, down: true}) })
-	if err != nil {
+	if err != nil && !util.IsHyprlandSession() {
 		return nil, err
 	}
 	b.focus = focus
+	if util.IsHyprlandSession() {
+		b.window, err = startHyprlandFocus(func() {
+			focus.reset()
+			handle(inputEvent{kind: inputInvalidate, down: true})
+		})
+		if err != nil && focus == nil {
+			return nil, errFocusUnavailable
+		}
+	}
 	var failure C.int
 	b.state = C.snippetWaylandOpen(&failure)
 	if b.state == nil {
 		focus.close()
+		b.window.close()
 		switch failure {
 		case 2:
 			return nil, errLayoutUnavailable
@@ -78,6 +89,7 @@ func (b *waylandExpansionBackend) start(handle func(inputEvent)) (func() error, 
 		C.snippetWaylandClose(b.state)
 		b.state = nil
 		focus.close()
+		b.window.close()
 		return nil, errLayoutUnavailable
 	}
 	callback := cgo.NewHandle(waylandCallback{backend: b, handle: handle})
@@ -116,6 +128,7 @@ func (b *waylandExpansionBackend) start(handle func(inputEvent)) (func() error, 
 			close(stop)
 			<-done
 			b.layout.close()
+			b.window.close()
 			focus.close()
 			b.mu.Lock()
 			C.snippetWaylandClose(b.state)
@@ -161,7 +174,7 @@ func woxSnippetWaylandEvent(callback C.uintptr_t, kind C.int, down C.int, key C.
 		}
 		return
 	}
-	event := inputEvent{kind: inputKind(kind), down: down != 0, key: uint32(key), target: listener.backend.focus.fast()}
+	event := inputEvent{kind: inputKind(kind), down: down != 0, key: uint32(key), target: listener.backend.fastTarget()}
 	if character != 0 {
 		event.text = string(rune(character))
 	}
@@ -169,7 +182,7 @@ func woxSnippetWaylandEvent(callback C.uintptr_t, kind C.int, down C.int, key C.
 }
 
 func (b *waylandExpansionBackend) target() uint64 {
-	if b.focus == nil {
+	if b.focus == nil && b.window == nil {
 		return 0
 	}
 	b.mu.Lock()
@@ -187,10 +200,30 @@ func (b *waylandExpansionBackend) target() uint64 {
 			return 0
 		}
 	}
+	if b.window != nil {
+		if b.focus != nil && (b.focus.blocked.Load() || (b.focus.fast() != 0 && b.focus.verifiedTarget() == 0)) {
+			return 0
+		}
+		return b.window.verifiedTarget()
+	}
 	return b.focus.verifiedTarget()
 }
 
-// replace uses the virtual keyboard only after accessibility confirms the focused control.
+// fastTarget is safe to call from the native input callback without compositor IPC.
+func (b *waylandExpansionBackend) fastTarget() uint64 {
+	if b.window != nil {
+		if b.focus != nil && b.focus.blocked.Load() {
+			return 0
+		}
+		return b.window.fast()
+	}
+	if b.focus == nil {
+		return 0
+	}
+	return b.focus.fast()
+}
+
+// replace checks the focused target before using the virtual keyboard.
 func (b *waylandExpansionBackend) replace(ctx context.Context, target uint64, deletes int, text string, checks replacementChecks) error {
 	deadline := time.Now().Add(time.Second)
 	for {
@@ -224,7 +257,7 @@ func (b *waylandExpansionBackend) replace(ctx context.Context, target uint64, de
 		return errors.New("input context changed")
 	}
 	terminal := 0
-	if b.focus.isTerminal(target) {
+	if (b.window != nil && b.window.isTerminal(target)) || (b.focus != nil && b.focus.isTerminal(b.focus.fast())) {
 		terminal = 1
 	}
 	b.mu.Lock()
@@ -246,7 +279,7 @@ func (b *waylandExpansionBackend) replace(ctx context.Context, target uint64, de
 			break
 		}
 	}
-	if !drained || !checks.current() || b.focus.fast() != target {
+	if !drained || !checks.current() || b.fastTarget() != target {
 		b.mu.Unlock()
 		return errors.New("input context changed")
 	}
