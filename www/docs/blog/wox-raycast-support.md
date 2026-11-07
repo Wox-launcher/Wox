@@ -48,6 +48,6 @@ After importing, enter a plugin's trigger keyword in Wox and follow the command 
 
 Wox provides a compatibility layer for Raycast plugins, and it currently covers a subset of their APIs. It can map capabilities such as lists, actions, and some forms to Wox's interface, but OAuth, background schedules, and menu bar features are not supported. A successful import does not guarantee that every command will run: that depends on the APIs the plugin uses and the current operating system.
 
-Imported data may not retain every original behavior either. For example, snippets are saved as Wox notes; dynamic placeholders remain as literal text and keywords do not expand automatically. Review the explanations in the import list, then try your frequently used commands and shortcuts after importing.
+Imported data may not retain every original behavior either. For example, snippets are imported into [Snippets](/guide/plugins/system/snippets), and supported dynamic placeholders are converted; unsupported placeholders remain as literal text. Automatic keyword expansion must be enabled separately on each device. Review the explanations in the import list, then try your frequently used commands and shortcuts after importing.
 
 To find more extensions, visit the [Wox plugin store](/store/plugins). On Windows, Wox can also import settings and compatible local plugins from Flow Launcher; although it originally forked from Wox, we do not directly offer its plugin store for the same copyright and distribution reasons.

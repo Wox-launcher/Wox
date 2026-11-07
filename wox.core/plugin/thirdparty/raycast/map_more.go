@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"wox/plugin/system/snippets/keyword"
 )
 
 func mapQuicklinkRows(payload Payload, current woxSnapshot) []mappedQuicklink {
@@ -193,38 +195,47 @@ func mapSnippetRows(payload Payload, current woxSnapshot) []mappedSnippet {
 		}
 		row := mappedSnippet{
 			id: "snippet:" + strconv.Itoa(index), sourceID: strings.TrimSpace(snippet.ID),
-			title: title, text: snippet.Text, keyword: strings.TrimSpace(snippet.Keyword), keepKeyword: true,
+			title: title, text: snippet.Text, keyword: snippet.Keyword, keepKeyword: true,
 			selectable: true,
 		}
-		if snippetHasDynamic(snippet.Text) {
+		if snippetHasUnsupported(snippet.Text) {
 			row.detailKey = "raycast_snippet_literal"
 		} else if row.keyword != "" {
 			row.detailKey = "raycast_snippet_keyword"
 		}
 		row.detail = snippetBody(row.text, row.keyword, true)
 		applySnippetState(&row, current)
+		if row.status == "" && !keyword.Valid(row.keyword) {
+			row.selectable = false
+			row.status = statusUnsupported
+			row.detailKey = "raycast_snippet_invalid_keyword"
+		}
 		rows = append(rows, row)
 	}
 	return rows
 }
 
 func applySnippetState(row *mappedSnippet, current woxSnapshot) {
-	body := snippetBody(row.text, row.keyword, row.keepKeyword)
-	row.detail = body
-	fingerprint := snippetFingerprint(row.sourceID, row.title, row.text, row.keyword, row.keepKeyword)
-	for _, note := range current.Notes {
-		if note.Deleted {
-			continue
-		}
-		if note.Fingerprint == fingerprint || (row.sourceID != "" && note.SourceID == row.sourceID) {
+	row.detail = row.text
+	if row.keyword != "" {
+		row.detail = strconv.Quote(row.keyword) + "\n\n" + row.text
+	}
+	fingerprint := snippetFingerprint(row.sourceID, row.title, row.text, row.keyword, true)
+	for _, existing := range current.Snippets {
+		if existing.Source == "raycast" && (existing.Fingerprint == fingerprint || (row.sourceID != "" && existing.SourceID == row.sourceID)) {
 			row.selectable = false
-			// A title suffix from an earlier import still identifies the same snippet.
-			if note.Body == body {
+			if existing.Title == row.title && existing.Text == row.text && existing.Keyword == row.keyword {
 				row.status = statusExists
 			} else {
 				row.status = statusConflict
 				row.detailKey = "raycast_conflict"
 			}
+			return
+		}
+		if row.keyword != "" && existing.Keyword == row.keyword {
+			row.selectable = false
+			row.status = statusConflict
+			row.detailKey = "raycast_conflict"
 			return
 		}
 	}

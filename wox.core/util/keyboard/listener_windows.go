@@ -385,13 +385,16 @@ func keyboardHotkeyTriggeredCGO(id C.int) {
 }
 
 //export keyboardHookEventCGO
-func keyboardHookEventCGO(eventKind C.int, vkCode C.uint, modifiers C.uint, scanCode C.uint, flags C.uint) C.int {
+func keyboardHookEventCGO(eventKind C.int, vkCode C.uint, modifiers C.uint, scanCode C.uint, flags C.uint, extraInfo C.ulonglong) C.int {
 	key := refineWindowsModifierKey(windowsVKToKey(uint32(vkCode)), uint32(vkCode), uint32(scanCode), uint32(flags))
 	event := RawKeyEvent{
-		Key:           key,
-		Character:     key.Character(),
-		Modifiers:     Modifier(modifiers),
-		NativeKeyCode: uint32(vkCode),
+		Key:             key,
+		Character:       key.Character(),
+		Modifiers:       Modifier(modifiers),
+		NativeKeyCode:   uint32(vkCode),
+		NativeScanCode:  uint32(scanCode),
+		NativeFlags:     uint64(flags),
+		NativeExtraInfo: uint64(extraInfo),
 	}
 	if int(eventKind) == rawEventKeyUp {
 		event.Type = EventTypeKeyUp

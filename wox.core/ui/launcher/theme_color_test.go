@@ -3,8 +3,23 @@ package launcher
 import (
 	"testing"
 
+	"wox/common"
 	woxui "wox/ui/runtime"
 )
+
+func TestPaletteStatusColors(t *testing.T) {
+	for _, tc := range []struct{ background, success, errorColor, warning, warningText string }{
+		{"#111111", "", "", "", ""}, {"#ffffff", "", "", "", ""}, {"#111111", "#123456", "#abcdef", "#345678", "#56789a"},
+	} {
+		input := common.Theme{AppBackgroundColor: tc.background, SuccessColor: tc.success, ErrorColor: tc.errorColor, WarningColor: tc.warning, WarningTextColor: tc.warningText}
+		palette := paletteForTheme(fromCoreTheme(input))
+		got := palette.componentTheme().Controls
+		want := input.StatusColors(palette.isDark())
+		if got.Success != woxui.Color(want.Success) || got.Error != woxui.Color(want.Error) || got.Warning != woxui.Color(want.Warning) || got.WarningText != woxui.Color(want.WarningText) {
+			t.Errorf("background %s: got success %#v, error %#v, warning %#v, warning text %#v; want %#v", tc.background, got.Success, got.Error, got.Warning, got.WarningText, want)
+		}
+	}
+}
 
 func TestThemeColorHSVRoundTripAndCSSEncoding(t *testing.T) {
 	parsed, ok := decodeThemeColor("rgba(22, 22, 26, 0.52)")

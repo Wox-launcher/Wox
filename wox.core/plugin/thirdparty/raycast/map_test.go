@@ -102,11 +102,17 @@ func TestMapQuicklinkPlaceholders(t *testing.T) {
 }
 
 func TestMapSnippetBodies(t *testing.T) {
+	if !snippetHasUnsupported(`{unsupported {date}}`) || !snippetHasUnsupported(`{date format="{uuid}"}`) {
+		t.Fatal("nested source placeholders must be flagged for review")
+	}
+	if !snippetHasUnsupported(`{date format="MMM d, yyyy"}`) || snippetHasUnsupported(`{date format="yyyy-MM-dd HH:mm:ss"}`) {
+		t.Fatal("date format warnings must match the fields supported by snippets")
+	}
 	if snippetBody("hello", "", true) != "hello" {
 		t.Fatal("empty keyword changed the body")
 	}
 	kept := snippetBody("hello {date}", "addr", true)
-	if kept != "Keyword: addr\n\nhello {date}" || !snippetHasDynamic("hello {date}") {
+	if kept != "Keyword: addr\n\nhello {date}" || snippetHasUnsupported("hello {date}") || !snippetHasUnsupported("hello {cursor}") {
 		t.Fatalf("kept = %q", kept)
 	}
 	if snippetBody("hello", "addr", false) != "hello" {
@@ -119,23 +125,66 @@ func TestMapSnippetBodies(t *testing.T) {
 		t.Fatalf("snippets = %+v", mapped.snippets)
 	}
 	first := snippetFingerprint(mapped.snippets[0].sourceID, "Address", "hello", "addr", true)
-	again := buildMapped(payload, woxSnapshot{Notes: []noteRow{{
-		Title: "Address (2)", Body: snippetBody("hello", "addr", true), Fingerprint: first,
+	again := buildMapped(payload, woxSnapshot{Snippets: []snippetRow{{
+		Title: "Address", Text: "hello", Keyword: "addr", Source: "raycast", Fingerprint: first,
 	}}})
 	if again.snippets[0].selectable || again.snippets[0].status != statusExists {
 		t.Fatalf("repeat = %+v", again.snippets[0])
 	}
-	edited := buildMapped(payload, woxSnapshot{Notes: []noteRow{{
-		Title: "Address", Body: "user edited", Fingerprint: first,
+	edited := buildMapped(payload, woxSnapshot{Snippets: []snippetRow{{
+		Title: "Address", Text: "user edited", Keyword: "addr", Source: "raycast", Fingerprint: first,
 	}}})
 	if edited.snippets[0].status != statusConflict {
 		t.Fatalf("edited = %+v", edited.snippets[0])
 	}
-	deleted := buildMapped(payload, woxSnapshot{Notes: []noteRow{{
-		Title: "Address", Body: snippetBody("hello", "addr", true), Fingerprint: first, Deleted: true,
+	legacy := buildMapped(payload, woxSnapshot{Notes: []noteRow{{
+		Title: "Address", Body: snippetBody("hello", "addr", true), Fingerprint: first,
 	}}})
-	if !deleted.snippets[0].selectable {
-		t.Fatal("deleted target did not allow a new note")
+	if !legacy.snippets[0].selectable {
+		t.Fatal("a previously imported note must not block a new snippet")
+	}
+}
+
+func TestConvertSnippetVariables(t *testing.T) {
+	input := `{date}|{date format="yyyy/MM/dd HH:mm"}|{clipboard}|{uuid}|{unknown}|{outer {date}}`
+	want := `{wox:date}|{wox:date?format=yyyy/MM/dd HH:mm}|{wox:clipboard_text}|{wox:uuid}|{unknown}|{outer {date}}`
+	if got := convertSnippetVariables(input); got != want {
+		t.Fatalf("converted snippet = %q, want %q", got, want)
+	}
+}
+
+// TestImportSelectedSnippetKeepsItsKeywordAndBodySeparate preserves the source trigger verbatim.
+func TestImportSelectedSnippetKeepsItsKeywordAndBodySeparate(t *testing.T) {
+	payload := Payload{}
+	payload.Snippets.Snippets = []Snippet{{ID: "source", Title: "Address", Text: "hello {date}", Keyword: ";addr "}}
+	mapped := buildMapped(payload, defaultSnapshot())
+	result := importSelected(mapped, []string{"snippet:0"})
+	if len(result.Snippets) != 1 || len(result.Notes) != 0 {
+		t.Fatalf("snippet import: %#v", result)
+	}
+	if got := result.Snippets[0]; got.Keyword != ";addr " || got.Text != "hello {wox:date}" || got.SourceID != "source" {
+		t.Fatalf("lost source data: %#v", got)
+	}
+}
+
+func TestSnippetImportFlagsUnsupportedKeywords(t *testing.T) {
+	payload := Payload{}
+	payload.Snippets.Snippets = []Snippet{
+		{Title: "Unicode", Keyword: "你好", Text: "text"},
+		{Title: "Control", Keyword: "a\tb", Text: "text"},
+		{Title: "Trailing space", Keyword: ";addr ", Text: "text"},
+		{Title: "No keyword", Text: "text"},
+	}
+	rows := mapSnippetRows(payload, defaultSnapshot())
+	for _, row := range rows[:2] {
+		if row.selectable || row.status != statusUnsupported || row.detailKey != "raycast_snippet_invalid_keyword" {
+			t.Fatalf("invalid keyword was not explained: %+v", row)
+		}
+	}
+	for _, row := range rows[2:] {
+		if !row.selectable {
+			t.Fatalf("valid optional keyword rejected: %+v", row)
+		}
 	}
 }
 

@@ -142,6 +142,7 @@ type formTableQueryVariablePickerSnapshot struct {
 	query      string
 	selected   int
 	kind       string
+	options    []formVariableOption
 }
 
 type queryHotkeyVariable struct {
@@ -153,6 +154,7 @@ const (
 	formTableQueryVariableKindAICommand   = "aiCommand"
 	formTableQueryVariableKindDictation   = "dictation"
 	formTableQueryVariableKindWebSearch   = "webSearch"
+	formTableQueryVariableKindCustom      = "custom"
 )
 
 var queryHotkeyVariables = []queryHotkeyVariable{
@@ -301,7 +303,7 @@ func snapshotFormTableEditorLocked(state *formTableEditorState) *formTableEditor
 		}
 		queryVariable = &formTableQueryVariablePickerSnapshot{
 			fieldIndex: picker.fieldIndex, anchor: picker.anchor, query: query, selected: picker.selected,
-			kind: formTableQueryVariableKindForField(state, picker.fieldIndex),
+			kind: formTableQueryVariableKindForField(state, picker.fieldIndex), options: state.rowForm.definitions[picker.fieldIndex].Value.VariableOptions,
 		}
 	}
 	var favicon *formTableFaviconState
@@ -488,7 +490,7 @@ func formTableColumnValue(column formTableColumn, row map[string]any) string {
 }
 
 func formTableColumnDefinition(column formTableColumn, row map[string]any) (formDefinition, bool) {
-	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, Extensions: column.Extensions, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, QueryTest: column.QueryTest, Group: column.Group}
+	value := formDefinitionValue{Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Validators: column.Validators, Extensions: column.Extensions, ColumnType: column.Type, QueryVariableKind: column.QueryVariableKind, VariableOptions: column.VariableOptions, QueryTest: column.QueryTest, Group: column.Group}
 	switch column.Type {
 	case "text", "queryHotkeyQuery", "aiCommandPrompt", "dictationPrompt", "queryVariable":
 		value.MaxLines = max(1, column.TextMaxLines)
@@ -1397,6 +1399,9 @@ func (c *formTableController) snapFormTableQueryVariableSelection() {
 	if state == nil || state.rowForm == nil || state.rowForm.editor == nil || formTableQueryVariableKindForField(state, state.rowForm.focused) == "" {
 		return
 	}
+	if formTableQueryVariableKindForField(state, state.rowForm.focused) == formTableQueryVariableKindCustom {
+		return
+	}
 	editor := state.rowForm.editor
 	current := editor.State()
 	editing := state.queryVariableEdit
@@ -1758,6 +1763,9 @@ func formTableColumnIsTextList(columnType string) bool {
 
 // formTableQueryVariableKind maps a field onto the placeholder set it can insert.
 func formTableQueryVariableKind(definition formDefinition) string {
+	if len(definition.Value.VariableOptions) > 0 {
+		return formTableQueryVariableKindCustom
+	}
 	if definition.Value.QueryVariableKind != "" {
 		return definition.Value.QueryVariableKind
 	}
@@ -1853,8 +1861,14 @@ func (c *formTableController) updateFormTableQueryVariableTrigger(index int) {
 	state.queryVariable = &formTableQueryVariablePickerState{fieldIndex: index, anchor: anchor, triggerStart: start}
 }
 
-func (c *formTableController) filteredQueryHotkeyVariables(kind, query string) []queryHotkeyVariable {
+func (c *formTableController) filteredQueryHotkeyVariables(kind, query string, custom []formVariableOption) []queryHotkeyVariable {
 	options := formTableQueryVariables(kind)
+	if kind == formTableQueryVariableKindCustom {
+		options = make([]queryHotkeyVariable, 0, len(custom))
+		for _, option := range custom {
+			options = append(options, queryHotkeyVariable{option.Value, option.Label, option.Description, option.Icon})
+		}
+	}
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
 		return options
@@ -1910,8 +1924,11 @@ func (c *formTableController) chooseFormTableQueryVariable(index int) {
 		return
 	}
 	picker := state.queryVariable
-	options := c.filteredQueryHotkeyVariables(formTableQueryVariableKindForField(state, picker.fieldIndex), snapshotFormTableEditorLocked(state).queryVariable.query)
-	if index < 0 || index >= len(options) || picker.fieldIndex < 0 || picker.fieldIndex >= len(state.rowForm.definitions) {
+	if picker.fieldIndex < 0 || picker.fieldIndex >= len(state.rowForm.definitions) {
+		return
+	}
+	options := c.filteredQueryHotkeyVariables(formTableQueryVariableKindForField(state, picker.fieldIndex), snapshotFormTableEditorLocked(state).queryVariable.query, state.rowForm.definitions[picker.fieldIndex].Value.VariableOptions)
+	if index < 0 || index >= len(options) {
 		return
 	}
 	if state.rowForm.focused != picker.fieldIndex || state.rowForm.editor == nil {
@@ -1951,7 +1968,7 @@ func (c *formTableController) moveFormTableQueryVariableSelection(delta int) {
 		return
 	}
 	snapshot := snapshotFormTableEditorLocked(state).queryVariable
-	count := len(c.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query))
+	count := len(c.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query, snapshot.options))
 	if count > 0 {
 		state.queryVariable.selected = (state.queryVariable.selected + delta + count) % count
 	}
@@ -2198,7 +2215,7 @@ func (c *formTableController) onFormTableKey(event woxui.KeyEvent) bool {
 		return false
 	}
 	if textEditable {
-		if formTableQueryVariableKindForField(state, focused) != "" && c.handleFormTableQueryVariableEditorKey(event) {
+		if kind := formTableQueryVariableKindForField(state, focused); kind != "" && kind != formTableQueryVariableKindCustom && c.handleFormTableQueryVariableEditorKey(event) {
 			return true
 		}
 		switch event.Key {

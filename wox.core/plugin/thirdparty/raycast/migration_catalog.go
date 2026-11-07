@@ -115,16 +115,9 @@ func quicklinkItems(rows []mappedQuicklink) []migrate.Item {
 func snippetItems(rows []mappedSnippet) []migrate.Item {
 	items := make([]migrate.Item, 0, len(rows))
 	for _, row := range rows {
-		if !row.selectable {
-			continue
-		}
 		item := migrate.Item{
 			ID: row.id, Kind: migrate.ItemKindNote, Title: row.title,
 			DetailKey: row.detailKey, Detail: row.detail, Selectable: row.selectable, Status: row.status,
-		}
-		if row.keyword != "" && row.selectable {
-			item.OptionKey = "raycast_keep_keyword"
-			item.OptionOn = row.keepKeyword
 		}
 		items = append(items, item)
 	}

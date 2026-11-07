@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -18,6 +19,10 @@ import (
 )
 
 type themeData struct {
+	SuccessColor                               string
+	ErrorColor                                 string
+	WarningColor                               string
+	WarningTextColor                           string
 	Surfaces                                   *woxcomponent.ThemeSurfaceSet `json:"-"`
 	PreviewBackgroundColor                     string
 	PreviewBorderColor                         string
@@ -161,6 +166,10 @@ type themeData struct {
 }
 
 type uiPalette struct {
+	successColor                               string
+	errorColor                                 string
+	warningColor                               string
+	warningTextColor                           string
 	Surfaces                                   *woxcomponent.ThemeSurfaceSet
 	PreviewBackgroundColor                     *woxui.Color
 	PreviewBorderColor                         *woxui.Color
@@ -292,6 +301,7 @@ type uiPalette struct {
 // componentTheme exposes launcher appearance through the stable component package boundary.
 func (palette uiPalette) componentTheme() woxcomponent.Theme {
 	hover, overlayColor := palette.selectedBackground, palette.actionBackground
+	status := (common.Theme{SuccessColor: palette.successColor, ErrorColor: palette.errorColor, WarningColor: palette.warningColor, WarningTextColor: palette.warningTextColor}).StatusColors(palette.isDark())
 	if palette.ResultItemHoverBackgroundColor != nil {
 		hover = *palette.ResultItemHoverBackgroundColor
 	}
@@ -302,9 +312,9 @@ func (palette uiPalette) componentTheme() woxcomponent.Theme {
 		Surfaces: palette.Surfaces,
 		Controls: woxcomponent.ControlTheme{
 			Dark: palette.isDark(), Hover: hover, Disabled: palette.resultSubtitle, Link: palette.actionSelected, Overlay: overlayColor,
-			Warning: woxui.Color{R: 253, G: 230, B: 138, A: 255}, WarningText: woxui.Color{R: 102, G: 60, A: 255},
+			Success: woxui.Color(status.Success), Warning: woxui.Color(status.Warning), WarningText: woxui.Color(status.WarningText),
 			ControlText: palette.actionText, BodyText: palette.previewText, ChromeText: palette.toolbarText,
-			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color{R: 232, G: 95, B: 95, A: 255},
+			Background: palette.background, Surface: palette.actionBackground, Text: palette.resultTitle, TextSecondary: palette.resultSubtitle, InputBackground: palette.queryBackground, InputText: palette.queryText, Focus: palette.cursor, TextSelectionBackground: palette.selectionBackground, TextSelectionText: palette.selectionText, SelectionBackground: palette.selectedBackground, SelectionText: palette.selectedTitle, Accent: palette.actionSelected, AccentText: palette.actionSelectedText, Border: palette.previewSplit, Error: woxui.Color(status.Error),
 			ScrollbarThumbColor: palette.ScrollbarThumbColor, ScrollbarThumbHoverColor: palette.ScrollbarThumbHoverColor, ScrollbarThumbActiveColor: palette.ScrollbarThumbActiveColor, ScrollbarWidth: palette.ScrollbarWidth, ScrollbarHoverWidth: palette.ScrollbarHoverWidth, ScrollbarBorderRadius: palette.ScrollbarBorderRadius,
 		},
 		PreviewBackgroundColor:                     palette.PreviewBackgroundColor,
@@ -600,6 +610,10 @@ func paletteForTheme(theme themeData) uiPalette {
 	toolbarBorder := parseThemeColor(theme.ToolbarFontColor, fallback.toolbarText)
 	toolbarBorder.A = min(toolbarBorder.A, uint8(26))
 	return uiPalette{
+		successColor:                               theme.SuccessColor,
+		errorColor:                                 theme.ErrorColor,
+		warningColor:                               theme.WarningColor,
+		warningTextColor:                           theme.WarningTextColor,
 		Surfaces:                                   theme.Surfaces,
 		ActionContainerDividerColor:                optionalThemeColor(theme.ActionContainerDividerColor),
 		PreviewBackgroundColor:                     optionalThemeColor(theme.PreviewBackgroundColor),

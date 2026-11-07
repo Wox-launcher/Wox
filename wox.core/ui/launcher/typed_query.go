@@ -320,11 +320,15 @@ func fromCoreFormDefinition(item definition.PluginSettingDefinitionItem) (formDe
 			if column.EmptyAsZero {
 				validators = optionalIntegerValidatorsForEmptyAsZero(validators)
 			}
+			variableOptions := make([]formVariableOption, len(column.VariableOptions))
+			for i, option := range column.VariableOptions {
+				variableOptions[i] = formVariableOption{Value: option.Value, Label: option.Label, Description: option.Description, Icon: option.Icon}
+			}
 			columns[index] = formTableColumn{
 				Key: column.Key, Label: column.Label, Tooltip: column.Tooltip, Width: column.Width, Type: column.Type, HotkeyScope: string(column.Scope), Extensions: append([]string(nil), column.Extensions...),
 				Validators: validators, SelectOptions: fromCoreSelectOptions(column.SelectOptions), TextMaxLines: column.TextMaxLines,
 				HideInTable: column.HideInTable, HideInUpdate: column.HideInUpdate, AllowedHotkeyKinds: append([]string(nil), column.AllowedHotkeyKinds...),
-				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind,
+				PreviewMatchedApps: column.PreviewMatchedApps, QueryVariableKind: column.QueryVariableKind, VariableOptions: variableOptions,
 				Group: column.Group, EmptyAsZero: column.EmptyAsZero,
 			}
 		}

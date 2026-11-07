@@ -303,7 +303,8 @@ type formDefinitionValue struct {
 	// ColumnType keeps the original table column type after the row editor maps it to a textbox.
 	ColumnType string `json:"ColumnType"`
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
-	QueryVariableKind string `json:"QueryVariableKind"`
+	QueryVariableKind string               `json:"QueryVariableKind"`
+	VariableOptions   []formVariableOption `json:"VariableOptions"`
 	// QueryTest shows the test button that runs this field's value as a launcher query.
 	QueryTest         bool              `json:"QueryTest"`
 	Content           string            `json:"Content"`
@@ -344,6 +345,13 @@ type formStatsRow struct {
 	Value string `json:"Value"`
 }
 
+type formVariableOption struct {
+	Value       string `json:"Value"`
+	Label       string `json:"Label"`
+	Description string `json:"Description"`
+	Icon        string `json:"Icon"`
+}
+
 type formTableColumn struct {
 	Extensions    []string        `json:"Extensions"`
 	HotkeyScope   string          `json:"Scope"`
@@ -367,7 +375,8 @@ type formTableColumn struct {
 	// PreviewMatchedApps shows a live indexed-app list under this text column.
 	PreviewMatchedApps bool `json:"PreviewMatchedApps"`
 	// QueryVariableKind selects the {wox:...} picker set for query-variable columns.
-	QueryVariableKind string `json:"QueryVariableKind"`
+	QueryVariableKind string               `json:"QueryVariableKind"`
+	VariableOptions   []formVariableOption `json:"VariableOptions"`
 	// QueryTest shows the test button that runs this column's value as a launcher query.
 	QueryTest bool `json:"QueryTest"`
 	// Group is a formTableGroup.Key. Empty keeps the field ungrouped at the top.

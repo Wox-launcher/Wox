@@ -60,6 +60,22 @@ func (s *CoreServices) ImportMigratedNotes(ctx context.Context, _ string, items 
 	return results
 }
 
+// ImportMigratedSnippets delegates storage and conflict checks to the Snippets plugin.
+func (s *CoreServices) ImportMigratedSnippets(ctx context.Context, _ string, items []contract.MigratedSnippet) []contract.MigratedItemResult {
+	results := make([]contract.MigratedItemResult, len(items))
+	if migrateapply.ImportSnippets == nil {
+		return migrationUnavailable(results, migrationIDs(len(items), func(index int) string { return items[index].ItemID }))
+	}
+	incoming := make([]migrateapply.Snippet, len(items))
+	for index, item := range items {
+		incoming[index] = migrateapply.Snippet{Source: item.Source, SourceID: item.SourceID, Fingerprint: item.Fingerprint, Title: item.Title, Keyword: item.Keyword, Text: item.Text}
+	}
+	for index, result := range migrateapply.ImportSnippets(ctx, incoming) {
+		results[index] = contract.MigratedItemResult{ID: items[index].ItemID, Status: result.Status, ErrorCode: result.ErrorCode}
+	}
+	return results
+}
+
 func (s *CoreServices) ImportMigratedClipboard(ctx context.Context, _ string, items []contract.MigratedClipboard) []contract.MigratedItemResult {
 	results := make([]contract.MigratedItemResult, len(items))
 	if migrateapply.ImportClipboardItems == nil {

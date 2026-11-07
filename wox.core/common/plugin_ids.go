@@ -32,6 +32,7 @@ const (
 	QuickJumpPluginID         = "6cde8bec-3f19-44f6-8a8b-d3ba3712d04e"
 	ScreenshotPluginID        = "78fc701b-a87e-4d5f-a7f2-13cbad9f7d1d"
 	SelectionPluginID         = "d9e557ed-89bd-4b8b-bd64-2a7632cf3483"
+	SnippetsPluginID          = "b7d9f8e0-5dcf-4b0d-99dd-1fa8c3ac3800"
 	ShellPluginID             = "8a4b5c6d-7e8f-9a0b-1c2d-3e4f5a6b7c8d"
 	SysPluginID               = "227f7d64-df08-4e35-ad05-98a26d540d06"
 	ThemePluginID             = "58a59382-8b3a-48c2-89ac-0a9a0e12e03f"

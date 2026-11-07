@@ -583,6 +583,7 @@ class PluginSettingValueTableColumn:
     allowed_hotkey_kinds: List[str] = field(default_factory=list)
     empty_as_zero: bool = False
     extensions: List[str] = field(default_factory=list)
+    variable_options: List[Dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -598,6 +599,7 @@ class PluginSettingValueTableColumn:
             "HideInTable": self.hide_in_table,
             "HideInUpdate": self.hide_in_update,
             "QueryVariableKind": self.query_variable_kind,
+            "VariableOptions": self.variable_options,
             "Group": self.group,
             "EmptyAsZero": self.empty_as_zero,
             "Scope": self.scope,
@@ -619,6 +621,7 @@ class PluginSettingValueTableColumn:
             hide_in_table=data.get("HideInTable", False),
             hide_in_update=data.get("HideInUpdate", False),
             query_variable_kind=data.get("QueryVariableKind", ""),
+            variable_options=data.get("VariableOptions", []),
             group=data.get("Group", ""),
             empty_as_zero=data.get("EmptyAsZero", False),
             scope=data.get("Scope", ""),

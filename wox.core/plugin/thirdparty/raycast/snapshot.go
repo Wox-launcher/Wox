@@ -89,9 +89,39 @@ func readLiveSnapshot() woxSnapshot {
 	readFileSearchSnapshot(&snap)
 	readFavoriteSnapshot(&snap)
 	readNotesSnapshot(&snap)
+	readSnippetsSnapshot(&snap)
 	readClipboardSnapshot(&snap)
 	readOverlapSnapshot(&snap)
 	return snap
+}
+
+// readSnippetsSnapshot checks the destination records without changing existing imported notes.
+func readSnippetsSnapshot(snap *woxSnapshot) {
+	store := setting.NewPluginSettingStore(database.GetDB(), common.SnippetsPluginID)
+	readSnippetsSnapshotFromStore(snap, store)
+}
+
+// readSnippetsSnapshotFromStore reads the same table used by snippet management and sync.
+func readSnippetsSnapshotFromStore(snap *woxSnapshot, store *setting.PluginSettingStore) {
+	var raw string
+	if err := store.Get("snippetsTable", &raw); err != nil {
+		return
+	}
+	var records []struct {
+		Name              string `json:"name"`
+		Keyword           string `json:"keyword"`
+		Text              string `json:"text"`
+		ImportSource      string `json:"importSource"`
+		ImportID          string `json:"importId"`
+		ImportFingerprint string `json:"importFingerprint"`
+	}
+	if json.Unmarshal([]byte(raw), &records) != nil {
+		return
+	}
+	for _, record := range records {
+		snap.Snippets = append(snap.Snippets, snippetRow{Title: record.Name, Text: record.Text, Keyword: record.Keyword,
+			Source: record.ImportSource, SourceID: record.ImportID, Fingerprint: record.ImportFingerprint})
+	}
 }
 
 // readFileSearchSnapshot overlays saved file-search settings onto the default baseline.

@@ -590,6 +590,37 @@ func TestWebSearchVariablePickerInsertsParameter(t *testing.T) {
 	}
 }
 
+func TestCustomVariablePickerInsertsInMultilineText(t *testing.T) {
+	column := formTableColumn{Key: "text", Type: "text", TextMaxLines: 8, VariableOptions: []formVariableOption{
+		{Value: "{wox:date?format=yyyy-MM-dd}", Label: "Date"},
+		{Value: "{wox:uuid}", Label: "UUID"},
+	}}
+	field, ok := formTableColumnDefinition(column, nil)
+	if !ok || formTableQueryVariableKind(field) != "custom" || field.Value.MaxLines != 8 {
+		t.Fatalf("custom variable field: %#v", field)
+	}
+	fields := newFormFieldsState([]formDefinition{field}, map[string]string{"text": "hello "}, true)
+	app := bindTestApp(&App{formTables: formTableController{launcherEditor: &formTableEditorState{rowForm: &fields}}})
+	app.formTables.setFormTableRowText(0, "hello {uuid")
+	if app.formTables.launcherEditor.queryVariable == nil {
+		t.Fatal("typing { should open the picker")
+	}
+	app.formTables.chooseFormTableQueryVariable(0)
+	if got := fields.values["text"]; got != "hello {wox:uuid}" {
+		t.Fatalf("filtered insertion = %q", got)
+	}
+	app.formTables.openFormTableQueryVariablePicker(0, woxui.Rect{})
+	app.formTables.chooseFormTableQueryVariable(0)
+	if got := fields.values["text"]; got != "hello {wox:uuid}{wox:date?format=yyyy-MM-dd}" {
+		t.Fatalf("button insertion = %q", got)
+	}
+	fields.editor.SetCaret(strings.Index(fields.editor.State().Text, "yyyy") + 2)
+	app.formTables.snapFormTableQueryVariableSelection()
+	if got := fields.editor.State().Selection.Focus; got != strings.Index(fields.editor.State().Text, "yyyy")+2 {
+		t.Fatal("custom variables must remain editable")
+	}
+}
+
 func TestQueryVariableEnterExitsParameterEdit(t *testing.T) {
 	value := "https://www.google.com/search?q={wox:parameter?name=query}&t={wox:parameter?name=time}"
 	fields := newFormFieldsState([]formDefinition{{

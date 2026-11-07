@@ -623,6 +623,10 @@ func (a *App) ApplyTerminalState(_ context.Context, sessionID string, state term
 func fromCoreTheme(theme common.Theme) themeData {
 	colors := theme.ResolvedColors()
 	return themeData{
+		SuccessColor:                               theme.SuccessColor,
+		ErrorColor:                                 theme.ErrorColor,
+		WarningColor:                               theme.WarningColor,
+		WarningTextColor:                           theme.WarningTextColor,
 		Surfaces:                                   woxcomponent.LoadThemeSurfaces(theme.Surfaces, theme.AssetFiles),
 		ActionContainerDividerColor:                colors["ActionContainerDividerColor"],
 		PreviewBackgroundColor:                     colors["PreviewBackgroundColor"],

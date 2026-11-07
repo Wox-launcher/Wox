@@ -176,6 +176,7 @@ type ImportResult struct {
 	Quicklinks     []QuicklinkWrite
 	Favorites      []FavoriteWrite
 	Notes          []NoteWrite
+	Snippets       []SnippetWrite
 	Clipboard      []ClipboardWrite
 	ResultBindings []ResultBindingWrite
 	Results        []ItemResult
@@ -237,8 +238,7 @@ type FavoriteWrite struct {
 	Path   string
 }
 
-// NoteWrite is one note mapped from a Raycast snippet or note.
-// Document is set for a Raycast note. Snippets leave it empty and use Title and Body.
+// NoteWrite is one note mapped from a source launcher.
 type NoteWrite struct {
 	ItemID      string
 	SourceID    string
@@ -246,6 +246,16 @@ type NoteWrite struct {
 	Title       string
 	Body        string
 	Document    common.NoteDocument
+}
+
+// SnippetWrite preserves the source keyword and template separately.
+type SnippetWrite struct {
+	ItemID      string
+	SourceID    string
+	Fingerprint string
+	Title       string
+	Keyword     string
+	Text        string
 }
 
 // ClipboardWrite is mapped clipboard content. The clipboard package copies images and commits records.

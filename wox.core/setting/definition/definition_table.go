@@ -74,6 +74,14 @@ type PluginSettingValueTableGroup struct {
 	CollapsedByDefault bool
 }
 
+// PluginSettingVariableOption describes a literal placeholder offered by a text field.
+type PluginSettingVariableOption struct {
+	Value       string
+	Label       string
+	Description string
+	Icon        string
+}
+
 type PluginSettingValueTableColumn struct {
 	Key                string
 	Label              string
@@ -91,6 +99,8 @@ type PluginSettingValueTableColumn struct {
 	PreviewMatchedApps bool     // Show a live indexed-app preview under this text column
 	// QueryVariableKind selects the {wox:...} picker set for queryVariable columns.
 	QueryVariableKind string
+	// VariableOptions supplies literal placeholders for this column.
+	VariableOptions []PluginSettingVariableOption
 	// Group is a PluginSettingValueTableGroup.Key. Empty keeps the field ungrouped.
 	Group string
 	// EmptyAsZero maps blank editor text to persisted integer 0 (and the reverse on load).
@@ -125,6 +135,12 @@ func (p *PluginSettingValueTable) Translate(translator func(ctx context.Context,
 		copy.Columns[i] = p.Columns[i]
 		copy.Columns[i].Label = translator(context.Background(), p.Columns[i].Label)
 		copy.Columns[i].Tooltip = translator(context.Background(), p.Columns[i].Tooltip)
+		copy.Columns[i].VariableOptions = append([]PluginSettingVariableOption(nil), p.Columns[i].VariableOptions...)
+		for j := range copy.Columns[i].VariableOptions {
+			option := &copy.Columns[i].VariableOptions[j]
+			option.Label = translator(context.Background(), option.Label)
+			option.Description = translator(context.Background(), option.Description)
+		}
 		copy.Columns[i].AllowedHotkeyKinds = append([]string{}, p.Columns[i].AllowedHotkeyKinds...)
 		copy.Columns[i].SelectOptions = make([]PluginSettingValueSelectOption, len(p.Columns[i].SelectOptions))
 		for j := range p.Columns[i].SelectOptions {

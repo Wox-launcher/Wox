@@ -6,6 +6,7 @@ const (
 	PluginSelection     = "plugin.selection"
 	PluginAttention     = "plugin.attention"
 	PluginNotes         = "plugin.notes"
+	PluginSnippets      = "plugin.snippets"
 	PluginAICommand     = "plugin.ai-command"
 	PluginApp           = "plugin.app"
 	PluginCalculator    = "plugin.calculator"

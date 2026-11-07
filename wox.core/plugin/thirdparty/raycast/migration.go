@@ -316,10 +316,10 @@ func importSelected(mapped mappedExport, itemIDs []string) migrate.ImportResult 
 		if _, ok := selected[row.id]; !ok || !row.selectable {
 			continue
 		}
-		result.Notes = append(result.Notes, migrate.NoteWrite{
+		result.Snippets = append(result.Snippets, migrate.SnippetWrite{
 			ItemID: row.id, SourceID: row.sourceID,
-			Fingerprint: snippetFingerprint(row.sourceID, row.title, row.text, row.keyword, row.keepKeyword),
-			Title:       row.title, Body: snippetBody(row.text, row.keyword, row.keepKeyword),
+			Fingerprint: snippetFingerprint(row.sourceID, row.title, row.text, row.keyword, true),
+			Title:       row.title, Keyword: row.keyword, Text: convertSnippetVariables(row.text),
 		})
 	}
 	for _, row := range mapped.notes {

@@ -369,6 +369,11 @@ func ReadText() (string, error) {
 	return text, nil
 }
 
+// ReadTextRequired distinguishes an unavailable text format from an empty text value.
+func ReadTextRequired() (string, error) {
+	return readText()
+}
+
 // ReadFilePaths returns copied filesystem paths, or nil when the clipboard has none.
 func ReadFilePaths() ([]string, error) {
 	paths, err := readFilePaths()

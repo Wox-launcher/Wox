@@ -34,12 +34,17 @@ type rawKeySubscription struct {
 	once sync.Once
 }
 
+type rawKeyObserver struct {
+	handler RawKeyHandler
+	onReset func()
+}
+
 var (
 	managerMu            sync.Mutex
 	nextHotkeyID         = 1
 	nextListenerID       = 1
 	hotkeyCallbacks      = map[int]func(){}
-	rawKeyListeners      = map[int]RawKeyHandler{}
+	rawKeyListeners      = util.NewHashMap[int, rawKeyObserver]()
 	rawHookIsEnabled     bool
 	rawHookIsDeferred    bool
 	rawHookAccessKnown   bool
@@ -63,7 +68,7 @@ func rawKeyboardDiagnosticsDarwin() string {
 	})
 	managerMu.Lock()
 	defer managerMu.Unlock()
-	return fmt.Sprintf("%s listeners=%d enabled=%t deferred=%t accessKnown=%t accessGranted=%t", snapshot, len(rawKeyListeners), rawHookIsEnabled, rawHookIsDeferred, rawHookAccessKnown, rawHookAccessGranted)
+	return fmt.Sprintf("%s listeners=%d enabled=%t deferred=%t accessKnown=%t accessGranted=%t", snapshot, rawKeyListeners.Len(), rawHookIsEnabled, rawHookIsDeferred, rawHookAccessKnown, rawHookAccessGranted)
 }
 
 func TryRegisterGlobalHotkey(modifiers Modifier, key Key, callback func()) (HotkeyRegistration, error) {
@@ -117,6 +122,15 @@ func (r *hotkeyRegistration) Unregister() error {
 }
 
 func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
+	return addRawKeyListenerDarwin(handler, nil)
+}
+
+// AddRawKeyListenerWithReset notifies the subscriber when the input stream may have lost events.
+func AddRawKeyListenerWithReset(handler RawKeyHandler, onReset func()) (RawKeySubscription, error) {
+	return addRawKeyListenerDarwin(handler, onReset)
+}
+
+func addRawKeyListenerDarwin(handler RawKeyHandler, onReset func()) (RawKeySubscription, error) {
 	if handler == nil {
 		return nil, fmt.Errorf("raw key handler is required")
 	}
@@ -128,7 +142,7 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 	managerMu.Lock()
 	id := nextListenerID
 	nextListenerID++
-	rawKeyListeners[id] = handler
+	rawKeyListeners.Store(id, rawKeyObserver{handler: handler, onReset: onReset})
 	managerMu.Unlock()
 
 	// Keep the subscription pending when macOS permissions are missing. The
@@ -141,6 +155,20 @@ func AddRawKeyListener(handler RawKeyHandler) (RawKeySubscription, error) {
 	return &rawKeySubscription{id: id}, nil
 }
 
+//export keyboardHookResetCGO
+func keyboardHookResetCGO() {
+	observers := rawKeyListeners.ToMap()
+	callbacks := make([]func(), 0, len(observers))
+	for _, observer := range observers {
+		if observer.onReset != nil {
+			callbacks = append(callbacks, observer.onReset)
+		}
+	}
+	for _, callback := range callbacks {
+		callback()
+	}
+}
+
 func (s *rawKeySubscription) Close() error {
 	if s == nil {
 		return nil
@@ -149,7 +177,7 @@ func (s *rawKeySubscription) Close() error {
 	var closeErr error
 	s.once.Do(func() {
 		managerMu.Lock()
-		delete(rawKeyListeners, s.id)
+		rawKeyListeners.Delete(s.id)
 		managerMu.Unlock()
 
 		closeErr = reconcileRawKeyListenerAccessDarwin()
@@ -200,7 +228,7 @@ func reconcileRawKeyListenerAccessWithPermissionStatusDarwin(accessibilityGrante
 	managerMu.Lock()
 	rawHookAccessKnown = true
 	rawHookAccessGranted = accessibilityGranted
-	hasListeners := len(rawKeyListeners) > 0
+	hasListeners := rawKeyListeners.Len() > 0
 	isEnabled := rawHookIsEnabled
 	isDeferred := rawHookIsDeferred
 	managerMu.Unlock()
@@ -278,7 +306,7 @@ func keyboardHotkeyTriggeredCGO(id C.int) {
 }
 
 //export keyboardHookEventCGO
-func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint, nativeEventType C.int, nativeFlags C.ulonglong, nativeCapsLockStateAvailable C.int, nativeCapsLockPressed C.int) C.int {
+func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, character C.uint, text C.uint, nativeEventType C.int, nativeFlags C.ulonglong, nativeCapsLockStateAvailable C.int, nativeCapsLockPressed C.int) C.int {
 	key := darwinKeyCodeToKey(uint32(keyCode))
 	characterValue := key.Character()
 	if character != 0 {
@@ -286,9 +314,14 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, cha
 		// derived from the hardware key code.
 		characterValue = string(rune(character))
 	}
+	producedText := ""
+	if text != 0 {
+		producedText = string(rune(text))
+	}
 	event := RawKeyEvent{
 		Key:                          key,
 		Character:                    characterValue,
+		Text:                         producedText,
 		Modifiers:                    Modifier(modifiers),
 		NativeKeyCode:                uint32(keyCode),
 		NativeEventType:              int(nativeEventType),
@@ -302,12 +335,11 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, cha
 		event.Type = EventTypeKeyDown
 	}
 
-	managerMu.Lock()
-	listeners := make([]RawKeyHandler, 0, len(rawKeyListeners))
-	for _, listener := range rawKeyListeners {
-		listeners = append(listeners, listener)
+	observers := rawKeyListeners.ToMap()
+	listeners := make([]RawKeyHandler, 0, len(observers))
+	for _, listener := range observers {
+		listeners = append(listeners, listener.handler)
 	}
-	managerMu.Unlock()
 
 	consume := false
 	for _, listener := range listeners {

@@ -557,6 +557,8 @@ export interface PluginSettingValueTableColumn {
    * `{wox:...}` picker set for `queryVariable` and `queryVariableList`.
    */
   QueryVariableKind?: string
+  /** Literal placeholders offered by this text field. */
+  VariableOptions?: { Value: string; Label: string; Description: string; Icon: string }[]
   /**
    * `PluginSettingValueTableGroup.Key`. Empty keeps the field ungrouped at the top.
    */

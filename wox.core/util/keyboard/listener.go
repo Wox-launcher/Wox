@@ -505,13 +505,17 @@ const (
 )
 
 type RawKeyEvent struct {
-	Type                         EventType
-	Key                          Key
-	Character                    string
+	Type      EventType
+	Key       Key
+	Character string
+	// Text is the character produced by this event when the backend can resolve it.
+	Text                         string
 	Modifiers                    Modifier
 	NativeKeyCode                uint32
+	NativeScanCode               uint32
 	NativeEventType              int
 	NativeFlags                  uint64
+	NativeExtraInfo              uint64
 	NativeCapsLockStateAvailable bool
 	NativeCapsLockPressed        bool
 }

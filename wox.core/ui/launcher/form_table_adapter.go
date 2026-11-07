@@ -499,7 +499,7 @@ func (c *formTableController) buildFormTableOverlay(snapshot *formTableEditorSna
 }
 
 func (c *formTableController) buildFormTableQueryVariablePicker(snapshot *formTableQueryVariablePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
-	options := c.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query)
+	options := c.filteredQueryHotkeyVariables(snapshot.kind, snapshot.query, snapshot.options)
 	choices := make([]launcherview.QueryVariableChoice, 0, len(options))
 	for _, option := range options {
 		choices = append(choices, launcherview.QueryVariableChoice{
@@ -508,7 +508,7 @@ func (c *formTableController) buildFormTableQueryVariablePicker(snapshot *formTa
 		})
 	}
 	return launcherview.QueryVariablePicker(launcherview.QueryVariablePickerProps{
-		Width: width, Height: height, Anchor: snapshot.anchor, Choices: choices, Selected: min(snapshot.selected, len(choices)-1), Theme: palette,
+		Window: c.formTableNativeWindow(), Width: width, Height: height, Anchor: snapshot.anchor, Choices: choices, Selected: min(snapshot.selected, len(choices)-1), Theme: palette,
 		OnChoose: c.chooseFormTableQueryVariable, OnHover: func(index int) {
 			if state := c.activeFormTableEditor(); state != nil && state.queryVariable != nil && state.queryVariable.selected != index {
 				state.queryVariable.selected = index
@@ -839,6 +839,9 @@ func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, 
 	}
 	if formTableQueryVariableKind(definition) != "" {
 		props.TrailingLabel = "{}"
+		if len(value.VariableOptions) > 0 {
+			props.TrailingIcon = c.imageForTint(settingControlIconSource("bolt"), &palette.TextSecondary, physicalImageSize(18, callbacks.imageScale))
+		}
 		props.TrailingActionLabel = c.language.translate("i18n:ui_query_variable_picker_insert")
 		props.OnTrailingTap = func(anchor woxui.Rect) { c.openFormTableQueryVariablePicker(index, anchor) }
 		var editing queryVariableToken
@@ -847,7 +850,9 @@ func (c *formTableController) buildFormTableRowField(fields formFieldsSnapshot, 
 				editing = editor.queryVariableEdit
 			}
 		}
-		props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, c.formTableNativeWindow(), palette, c.language.translate)
+		if len(value.VariableOptions) == 0 {
+			props.RichRuns, props.AtomicTokens = formTableQueryVariableFieldDecorations(fieldValue, editing, c.formTableNativeWindow(), palette, c.language.translate)
+		}
 		props.OnDismissRun = func(start, end int) bool {
 			return c.dismissFormTableQueryVariable(index, start, end)
 		}

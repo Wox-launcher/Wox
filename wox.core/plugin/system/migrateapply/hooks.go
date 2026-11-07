@@ -37,6 +37,16 @@ type Favorite struct {
 	Path string
 }
 
+// Snippet is a source record whose keyword and body stay separate.
+type Snippet struct {
+	Source      string
+	SourceID    string
+	Fingerprint string
+	Title       string
+	Keyword     string
+	Text        string
+}
+
 // ImportQuicklinks is set by the Web Search plugin.
 var ImportQuicklinks func(ctx context.Context, items []Quicklink) []Result
 
@@ -45,3 +55,6 @@ var ImportFavorites func(ctx context.Context, items []Favorite) []Result
 
 // ImportClipboardItems is set by the Clipboard plugin.
 var ImportClipboardItems func(ctx context.Context, items []ClipboardItem) []Result
+
+// ImportSnippets is set by the Snippets plugin.
+var ImportSnippets func(ctx context.Context, items []Snippet) []Result

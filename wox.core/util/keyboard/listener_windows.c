@@ -2,7 +2,7 @@
 #include <windows.h>
 
 extern void keyboardHotkeyTriggeredCGO(int id);
-extern int keyboardHookEventCGO(int eventKind, unsigned int vkCode, unsigned int modifiers, unsigned int scanCode, unsigned int flags);
+extern int keyboardHookEventCGO(int eventKind, unsigned int vkCode, unsigned int modifiers, unsigned int scanCode, unsigned int flags, unsigned long long extraInfo);
 
 #define WM_WOX_KEYBOARD_REQUEST (WM_APP + 71)
 
@@ -207,7 +207,7 @@ static LRESULT CALLBACK lowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                     }
                 }
             }
-            int consume = keyboardHookEventCGO(eventKind, event->vkCode, currentModifierMask(), event->scanCode, event->flags);
+            int consume = keyboardHookEventCGO(eventKind, event->vkCode, currentModifierMask(), event->scanCode, event->flags, (unsigned long long)event->dwExtraInfo);
             if (consume != 0)
             {
                 if (eventKind == 1 && (event->vkCode == VK_LWIN || event->vkCode == VK_RWIN))

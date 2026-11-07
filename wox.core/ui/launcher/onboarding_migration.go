@@ -1018,6 +1018,11 @@ func (c *onboardingController) applyOnboardingMigrationDomain(ctx context.Contex
 	for _, item := range c.services.ImportMigratedNotes(ctx, c.sessionID, migrationNotes(result.Notes)) {
 		outcomes[item.ID] = item
 	}
+	if service, ok := c.services.(contract.SnippetMigrationImportServices); ok {
+		for _, item := range service.ImportMigratedSnippets(ctx, c.sessionID, migrationSnippets(result.Snippets)) {
+			outcomes[item.ID] = item
+		}
+	}
 	for _, item := range c.services.ImportMigratedResultBindings(ctx, c.sessionID, migrationResultBindings(result.ResultBindings)) {
 		outcomes[item.ID] = item
 	}
@@ -1072,6 +1077,16 @@ func migrationNotes(items []migrate.NoteWrite) []contract.MigratedNote {
 			ItemID: item.ItemID, Source: "raycast", SourceID: item.SourceID, Fingerprint: item.Fingerprint,
 			Title: item.Title, Body: item.Body, Document: item.Document,
 		}
+	}
+	return rows
+}
+
+// migrationSnippets preserves whitespace in source keywords and snippet bodies.
+func migrationSnippets(items []migrate.SnippetWrite) []contract.MigratedSnippet {
+	rows := make([]contract.MigratedSnippet, len(items))
+	for index, item := range items {
+		rows[index] = contract.MigratedSnippet{ItemID: item.ItemID, Source: "raycast", SourceID: item.SourceID,
+			Fingerprint: item.Fingerprint, Title: item.Title, Keyword: item.Keyword, Text: item.Text}
 	}
 	return rows
 }

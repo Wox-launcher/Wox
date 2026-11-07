@@ -1087,6 +1087,7 @@ type FormTableRowFieldProps struct {
 	UploadIcon          *woxui.Image
 	ActionIcon          *woxui.Image
 	ActionLabel         string
+	TrailingIcon        *woxui.Image
 	TrailingLabel       string
 	TrailingActionLabel string
 	RichRuns            []woxcomponent.TextFieldRichRun
@@ -1401,11 +1402,13 @@ func formTableRowTextControl(props FormTableRowFieldProps, width, height float32
 		if label == "" {
 			label = props.TrailingLabel
 		}
+		var trailingIcon woxwidget.Widget = woxwidget.Text{Value: props.TrailingLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary}
+		if props.TrailingIcon != nil {
+			trailingIcon = woxwidget.Image{Source: props.TrailingIcon, Width: 18, Height: 18}
+		}
 		trailing := woxwidget.Align{Width: 34, Height: height, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
 			ID: props.ID + "-trailing", Label: label,
-			Icon: woxwidget.Text{
-				Value: props.TrailingLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary,
-			},
+			Icon:  trailingIcon,
 			Width: woxcomponent.SettingsCompactControlHeight, Height: woxcomponent.SettingsCompactControlHeight, Radius: 4,
 			HoverBackground: hoverBackground, FocusRingColor: props.Theme.Focus,
 			OnTap: func() {
@@ -1848,6 +1851,7 @@ type QueryVariableChoice struct {
 }
 
 type QueryVariablePickerProps struct {
+	Window        *woxui.Window
 	Width, Height float32
 	Anchor        woxui.Rect
 	Choices       []QueryVariableChoice
@@ -1876,8 +1880,7 @@ func queryVariablePickerTextWidth(menuWidth float32) float32 {
 }
 
 // queryVariablePickerRowHeight sizes one choice so wrapped descriptions stay fully visible.
-func queryVariablePickerRowHeight(description string, textWidth float32) float32 {
-	lines := max(1, formTableEstimateWrappedLines(description, textWidth))
+func queryVariablePickerRowHeight(lines int) float32 {
 	return queryVariablePickerRowPadding*2 + queryVariablePickerLabelHeight + queryVariablePickerTextGap + float32(lines)*queryVariablePickerDescriptionLine
 }
 
@@ -1886,8 +1889,18 @@ func QueryVariablePicker(props QueryVariablePickerProps) woxwidget.Widget {
 	menuWidth := min(queryVariablePickerMenuMaxWidth, max(float32(1), props.Width-24))
 	textWidth := queryVariablePickerTextWidth(menuWidth)
 	contentHeight := float32(0)
-	for _, choice := range props.Choices {
-		contentHeight += queryVariablePickerRowHeight(choice.Description, textWidth)
+	descriptionLines := make([]int, len(props.Choices))
+	for i, choice := range props.Choices {
+		descriptionLines[i] = max(1, formTableEstimateWrappedLines(choice.Description, textWidth))
+		style := woxui.TextStyle{Size: props.Theme.Scaled(12)}
+		if props.Window != nil {
+			if _, err := props.Window.MeasureText("Mg", style); err == nil {
+				// Use the renderer's font metrics so a single line does not reserve a blank second line.
+				layout := woxwidget.LayoutTextBlock(props.Window, choice.Description, style, textWidth, 0, queryVariablePickerDescriptionLine)
+				descriptionLines[i] = max(1, len(layout.Lines))
+			}
+		}
+		contentHeight += queryVariablePickerRowHeight(descriptionLines[i])
 	}
 	menuHeight := min(queryVariablePickerMenuMaxHeight, contentHeight+12)
 	left := min(max(float32(12), props.Anchor.X), max(float32(12), props.Width-menuWidth-12))
@@ -1908,14 +1921,14 @@ func QueryVariablePicker(props QueryVariablePickerProps) woxwidget.Widget {
 				props.OnChoose(index)
 			}
 		}
-		descriptionLines := max(1, formTableEstimateWrappedLines(choice.Description, textWidth))
-		descriptionHeight := float32(descriptionLines) * queryVariablePickerDescriptionLine
-		rowHeight := queryVariablePickerRowHeight(choice.Description, textWidth)
+		lines := descriptionLines[index]
+		descriptionHeight := float32(lines) * queryVariablePickerDescriptionLine
+		rowHeight := queryVariablePickerRowHeight(lines)
 		content := woxwidget.Container{Width: menuWidth - 12, Height: rowHeight, Radius: 4, Color: background, Padding: woxwidget.Insets{Left: 14, Top: queryVariablePickerRowPadding, Right: 10, Bottom: queryVariablePickerRowPadding}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: queryVariablePickerIconGap, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{
 			woxwidget.Align{Width: queryVariablePickerIconWidth, Height: queryVariablePickerLabelHeight, Vertical: .5, Child: woxwidget.Image{Source: choice.Icon, Width: 18, Height: 18}},
 			woxwidget.Flex{Axis: woxwidget.Vertical, Gap: queryVariablePickerTextGap, Children: []woxwidget.Widget{
 				woxwidget.TextBlock{Value: choice.Label, Width: textWidth, Height: queryVariablePickerLabelHeight, MaxLines: 1, LineHeight: queryVariablePickerLabelHeight, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text},
-				woxwidget.TextBlock{Value: choice.Description, Width: textWidth, Height: descriptionHeight, MaxLines: descriptionLines, LineHeight: queryVariablePickerDescriptionLine, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
+				woxwidget.TextBlock{Value: choice.Description, Width: textWidth, Height: descriptionHeight, MaxLines: lines, LineHeight: queryVariablePickerDescriptionLine, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary},
 			}},
 		}}}
 		row := woxwidget.Gesture{ID: fmt.Sprintf("query-variable-%d", index), OnTap: activate, OnHover: func(inside bool) {

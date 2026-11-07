@@ -34,6 +34,7 @@ type woxSnapshot struct {
 	Favorites                 []favoriteRow
 	OccupiedKeywords          map[string]struct{}
 	Notes                     []noteRow
+	Snippets                  []snippetRow
 	ClipboardTexts            map[string]clipboardHit
 	ClipboardImages           map[string]clipboardHit
 	ClipboardFiles            map[string]clipboardHit
@@ -91,6 +92,15 @@ type noteRow struct {
 	Fingerprint string
 	SourceID    string
 	Deleted     bool
+}
+
+type snippetRow struct {
+	Title       string
+	Text        string
+	Keyword     string
+	Source      string
+	SourceID    string
+	Fingerprint string
 }
 
 type clipboardHit struct {

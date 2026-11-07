@@ -35,6 +35,22 @@ type MigratedNote struct {
 	Document    common.NoteDocument
 }
 
+// MigratedSnippet is one text-expansion record produced by launcher migration.
+type MigratedSnippet struct {
+	ItemID      string
+	Source      string
+	SourceID    string
+	Fingerprint string
+	Title       string
+	Keyword     string
+	Text        string
+}
+
+// SnippetMigrationImportServices persists migrated snippets through their owning plugin.
+type SnippetMigrationImportServices interface {
+	ImportMigratedSnippets(context.Context, string, []MigratedSnippet) []MigratedItemResult
+}
+
 // MigratedClipboard is clipboard content produced by launcher migration.
 type MigratedClipboard struct {
 	ItemID    string

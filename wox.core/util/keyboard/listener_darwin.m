@@ -10,7 +10,8 @@
 #include <unistd.h>
 
 extern void keyboardHotkeyTriggeredCGO(int id);
-extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character, int nativeEventType, unsigned long long nativeFlags, int nativeCapsLockStateAvailable, int nativeCapsLockPressed);
+extern void keyboardHookResetCGO(void);
+extern int keyboardHookEventCGO(int eventKind, unsigned int keyCode, unsigned int modifiers, unsigned int character, unsigned int text, int nativeEventType, unsigned long long nativeFlags, int nativeCapsLockStateAvailable, int nativeCapsLockPressed);
 
 unsigned int woxDarwinForegroundPID(void) {
     @autoreleasepool {
@@ -342,6 +343,7 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
         if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
             if (type == kCGEventTapDisabledByTimeout) gRawTimeoutCount++;
             else gRawDisabledCount++;
+            keyboardHookResetCGO();
             if (gRawKeyboardEventTap) {
                 CGEventTapEnable(gRawKeyboardEventTap, true);
             }
@@ -360,6 +362,7 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
         CGEventFlags flags = CGEventGetFlags(event);
         unsigned int modifiers = currentModifierMaskFromCGFlags(flags);
         unsigned int character = 0;
+        unsigned int text = 0;
         int eventKind = -1;
 
         if (type == kCGEventFlagsChanged) {
@@ -373,10 +376,15 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
             NSEvent *nsEvent = [NSEvent eventWithCGEvent:event];
             if (!nsEvent) {
                 gRawConversionFailureCount++;
+                keyboardHookResetCGO();
                 return event;
             }
             eventKind = 0;
             character = currentCharacterCode(nsEvent);
+            UniChar chars[2] = {0};
+            UniCharCount length = 0;
+            CGEventKeyboardGetUnicodeString(event, 2, &length, chars);
+            if (length == 1) text = chars[0];
         } else if (type == kCGEventKeyUp) {
             gRawUpCount++;
             eventKind = 1;
@@ -388,7 +396,7 @@ static CGEventRef rawKeyboardEventTapCallback(CGEventTapProxy proxy, CGEventType
 
         int nativeCapsLockStateAvailable = gPhysicalKeyboardManagerReady ? 1 : 0;
         int nativeCapsLockPressed = gPhysicalKeyboardManagerReady && gPhysicalCapsLockPressed ? 1 : 0;
-        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character, (int)type, (unsigned long long)flags, nativeCapsLockStateAvailable, nativeCapsLockPressed);
+        int consume = keyboardHookEventCGO(eventKind, keyCode, modifiers, character, text, (int)type, (unsigned long long)flags, nativeCapsLockStateAvailable, nativeCapsLockPressed);
         if (consume != 0) {
             return NULL;
         }
