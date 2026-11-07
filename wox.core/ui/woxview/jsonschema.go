@@ -51,7 +51,7 @@ func JSONSchema() []byte {
 				"children": children,
 			},
 		}
-		if kind == NodeSprite || kind == NodeImage || kind == NodeLineChart || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
+		if kind == NodeSprite || kind == NodeImage || kind == NodeLineChart || kind == NodeBarChart || kind == NodePieChart || kind == NodeScatterChart || kind == NodeMorphPath || kind == NodeIconButton || kind == NodeGrid || kind == NodeLazyList || kind == NodeTable || kind == NodeLink {
 			node["required"] = []string{"type", "props"}
 			node["properties"].(schemaObject)["props"] = schemaObject{"$ref": "#/$defs/" + string(kind) + "Props"}
 		}
@@ -217,19 +217,34 @@ func schemaFor(t reflect.Type) schemaObject {
 			}}
 			result["then"] = schemaObject{"required": []string{"duration"}, "properties": schemaObject{"duration": schemaObject{"type": "integer"}}}
 		}
-		if t == reflect.TypeFor[LineChartProps]() {
+		if t == reflect.TypeFor[LineChartProps]() || t == reflect.TypeFor[BarChartProps]() || t == reflect.TypeFor[PieChartProps]() {
 			result["required"] = []string{"values"}
-			props["values"].(schemaObject)["maxItems"] = 4096
-			props["pointLabels"].(schemaObject)["maxItems"] = 4096
+			limit := 4096
+			minValue := -1e100
+			if t == reflect.TypeFor[PieChartProps]() {
+				limit, minValue = 128, 0
+			}
+			props["values"].(schemaObject)["maxItems"] = limit
+			props["pointLabels"].(schemaObject)["maxItems"] = limit
 			props["pointLabels"].(schemaObject)["items"] = schemaObject{"type": "string", "maxLength": 128}
-			props["values"].(schemaObject)["items"] = schemaObject{"type": "number", "minimum": -1e100, "maximum": 1e100}
+			props["values"].(schemaObject)["items"] = schemaObject{"type": "number", "minimum": minValue, "maximum": 1e100}
 		}
-		if t == reflect.TypeFor[LineChartOptions]() {
+		if t == reflect.TypeFor[ScatterChartProps]() {
+			result["required"] = []string{"points"}
+			props["points"].(schemaObject)["maxItems"] = 4096
+		}
+		if t == reflect.TypeFor[ScatterPoint]() {
+			result["required"] = []string{"x", "y"}
+			for _, name := range []string{"x", "y"} {
+				props[name] = schemaObject{"type": "number", "minimum": -1e100, "maximum": 1e100}
+			}
+			props["label"].(schemaObject)["maxLength"] = 128
+		}
+		if t == reflect.TypeFor[LineChartOptions]() || t == reflect.TypeFor[CartesianChartOptions]() {
 			for _, name := range []string{"gridLines", "xTicks"} {
 				props[name] = schemaObject{"type": "integer", "anyOf": []any{schemaObject{"const": 0}, schemaObject{"type": "integer", "minimum": 2, "maximum": 12}}}
 			}
 			for name, limits := range map[string]schemaObject{
-				"lineWidth":     {"type": "number", "exclusiveMinimum": 0, "maximum": 16},
 				"plotPadding":   {"type": "number", "minimum": 0, "maximum": 128},
 				"yAxisWidth":    {"type": "number", "minimum": 0, "maximum": 512},
 				"valueDecimals": {"type": "integer", "minimum": 0, "maximum": 6},
@@ -238,6 +253,31 @@ func schemaFor(t reflect.Type) schemaObject {
 			}
 			props["valuePrefix"].(schemaObject)["maxLength"] = 32
 			props["valueSuffix"].(schemaObject)["maxLength"] = 32
+		}
+		if t == reflect.TypeFor[LineChartOptions]() {
+			props["lineWidth"] = schemaObject{"anyOf": []any{schemaObject{"type": "number", "exclusiveMinimum": 0, "maximum": 16}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[BarChartOptions]() || t == reflect.TypeFor[ScatterChartOptions]() || t == reflect.TypeFor[PieChartOptions]() {
+			limit := 4096
+			if t == reflect.TypeFor[PieChartOptions]() {
+				limit = 128
+			}
+			props["colors"].(schemaObject)["maxItems"] = limit
+		}
+		if t == reflect.TypeFor[BarChartOptions]() {
+			props["barWidth"] = schemaObject{"anyOf": []any{schemaObject{"type": "number", "exclusiveMinimum": 0, "maximum": 1}, schemaObject{"type": "null"}}}
+		}
+		if t == reflect.TypeFor[PieChartOptions]() {
+			props["innerRadius"] = schemaObject{"anyOf": []any{schemaObject{"type": "number", "minimum": 0, "maximum": 0.9}, schemaObject{"type": "null"}}}
+			props["valueDecimals"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 0, "maximum": 6}, schemaObject{"type": "null"}}}
+			props["valuePrefix"].(schemaObject)["maxLength"] = 32
+			props["valueSuffix"].(schemaObject)["maxLength"] = 32
+		}
+		if t == reflect.TypeFor[ScatterChartOptions]() {
+			props["pointRadius"] = schemaObject{"anyOf": []any{schemaObject{"type": "number", "minimum": 1, "maximum": 16}, schemaObject{"type": "null"}}}
+			props["xValueDecimals"] = schemaObject{"anyOf": []any{schemaObject{"type": "integer", "minimum": 0, "maximum": 6}, schemaObject{"type": "null"}}}
+			props["xValuePrefix"].(schemaObject)["maxLength"] = 32
+			props["xValueSuffix"].(schemaObject)["maxLength"] = 32
 		}
 		if t == reflect.TypeFor[MorphPathProps]() {
 			result["required"] = []string{"keyframes"}

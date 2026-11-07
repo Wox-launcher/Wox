@@ -337,7 +337,7 @@ result = await api.create_window(ctx, view.as_window(WindowOptions(
 
 Single-file Python plugins use the same `wox_plugin` imports supplied by their host. `wox_view_node(type, props, children, key)` supports all schema-defined components, while `Column`, `Text`, `Button`, and `Loading` are convenience builders. Props passed to the generic builder use WoxView JSON names such as `onChange`; callback arguments follow the WoxView event contract.
 
-Line charts accept optional `chart` props for axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance.
+Line charts accept optional `chart` props for axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance. WoxView also supports [bar, scatter, and pie charts](../wox.core/ui/woxview/README.md#other-chart-types).
 
 Import `Loading` from `wox_plugin` and use `Loading()` for an animated ring, or customize it with `Loading(style={"width": 24, "color": "$accent"})`. Render it while work is pending and invalidate the session when the work completes. The default diameter is 16 logical units and the default color is `$text`.
 

@@ -414,6 +414,9 @@ font features the runtime cannot consistently measure and render.
 | `markdown` | `content`, `onLinkPress`; links open externally only when the handler is absent |
 | `image` | exactly one of `icon` (Wox catalog name) or `source` (`imageType`, `imageData`); `fit`: `contain`, `cover`, `fill`. Sources support `base64`, `svg`, `absolute`; catalog icons accept `iconColorMode` |
 | `line-chart` | `values`: up to 4096 evenly spaced numbers in −1e100..1e100; optional `pointLabels` supplies one label per value for the hover readout and X axis; optional accessible `label`. `chart` configures axes, grid, fill and hover; see below. `style.color` sets the line color and `style.height` defaults to 160 logical units |
+| `bar-chart` | `values` and optional `pointLabels` describe categories. Supports positive and negative bars, a zero baseline, configurable axes, colors and local hover. |
+| `scatter-chart` | `points`: numeric `{x, y, label?}` observations in any order; supports configurable axes, colors and local nearest-point hover. |
+| `pie-chart` | Nonnegative `values` and optional `pointLabels` describe parts of a whole. Supports per-slice colors, a donut hole and local slice hover. |
 | `morph-path` | `keyframes`, `progress`, `duration`, `curve`; filled vector outlines interpolated by Core |
 | `spacer` | `size` |
 | `button` | `label`, optional catalog `icon` and `iconColorMode`, `variant` (`secondary`, `primary`, `outline`, `text`, `surface`), `disabled`, `onPress` |
@@ -477,6 +480,57 @@ must have the same length as `values`.
 Time-range controls are composed separately, for example with `tabs` or
 `radio-group`. The plugin handles their change event and supplies the selected
 range's values and labels; the chart does not fetch or aggregate data.
+
+### Other chart types
+
+Charts use `label` for image accessibility, `style.height` (default 160 logical
+units), and `style.color` (default `$accent`). Hover is local and does not send
+events to the producer. Empty data draws nothing. `colors`, when supplied and
+nonempty, must have exactly one WoxView color per value or point; colors accept
+the same literals, theme tokens and light/dark pairs as `style.color`.
+
+`bar-chart` accepts up to 4096 finite `values` in −1e100..1e100 and optional
+`pointLabels`, one per value. Categories occupy equal-width slots, and the Y
+domain includes zero even when all values have the same sign. `chart` supports
+the line chart's grid, axes, padding, hover, crosshair, hover point, tooltip and
+value formatting options. `barWidth` is the fraction of each slot occupied by
+the bar (greater than 0 and at most 1; default 0.7); `colors` overrides
+`style.color` per category. Hover follows the category under the pointer.
+
+```json
+{"type":"bar-chart","props":{"label":"Monthly change","values":[-4,0,8],"pointLabels":["Jan","Feb","Mar"],"chart":{"showGrid":true,"showXAxis":true,"yAxis":"left","barWidth":0.65,"colors":["$error","$textSecondary","$accent"],"tooltipPosition":"floating"}}}
+```
+
+`scatter-chart` accepts up to 4096 `points`, each with required numeric `x` and
+`y` in −1e100..1e100 and an optional `label` of up to 128 characters. Points
+may be unordered or share coordinates. Its `chart` accepts the same shared
+Cartesian options as the bar chart, plus `pointRadius` (1–16 logical units,
+default 4 density-scaled logical units) and per-point `colors`. X and Y axes use their independent data
+ranges. The X-axis and hover X value can be formatted independently with
+`xValueDecimals` (0–6), `xValuePrefix` and `xValueSuffix` (up to 32 characters
+each); the line chart's `value*` options format Y. Hover selects the closest
+point within the hit radius and displays X followed by Y.
+
+```json
+{"type":"scatter-chart","props":{"label":"Duration and distance","points":[{"x":2,"y":120,"label":"Walk"},{"x":0.5,"y":320,"label":"Run"}],"chart":{"showGrid":true,"showXAxis":true,"yAxis":"right","xValueSuffix":" h","valueSuffix":" m","tooltipPosition":"floating"}}}
+```
+
+`pie-chart` accepts up to 128 finite nonnegative `values` and matching optional
+`pointLabels`. Slices start at 12 o'clock and proceed clockwise; zero values
+occupy no angle and an all-zero total draws nothing. Its `chart` supports
+`colors`, `innerRadius` (0–0.9 of the outer radius; default 0 for a pie),
+`hover`, `highlight`, `tooltip`, `tooltipPosition`, and the line chart's
+`valueDecimals`, `valuePrefix` and `valueSuffix`. Without `colors`, slice shades
+are derived from the chart color and the active theme. Hover highlights the
+slice under the pointer; the donut hole and space outside the pie are not hits.
+
+```json
+{"type":"pie-chart","props":{"label":"Storage usage","values":[65,25,10],"pointLabels":["Documents","Photos","Free"],"chart":{"innerRadius":0.55,"colors":["#628fdb","#ce9270","#77ad95"],"valueSuffix":" GB","tooltipPosition":"floating"}}}
+```
+
+The chart does not create legends or aggregate data; plugins can compose labels,
+controls and data preparation around it. Existing `line-chart` defaults remain
+unchanged.
 
 ### Morphing vector paths
 

@@ -15,6 +15,10 @@ counter: WoxViewTree = {
 }
 event: WoxViewEventData = {"Handler": "increment", "Args": [], "Key": "increment"}
 
+bar: WoxViewTree = {"version": 1, "root": {"type": "bar-chart", "props": {"values": [-5, 10], "pointLabels": ["loss", "profit"], "chart": {"barWidth": 0.7, "showGrid": True}}}}
+scatter: WoxViewTree = {"version": 1, "root": {"type": "scatter-chart", "props": {"points": [{"x": 2, "y": 4, "label": "walk"}], "chart": {"showXAxis": True, "xValueSuffix": " h"}}}}
+pie: WoxViewTree = {"version": 1, "root": {"type": "pie-chart", "props": {"values": [60, 40], "chart": {"innerRadius": 0.5, "colors": ["$accent", "$textSecondary"]}}}}
+
 bad_image: WoxViewImageProps = {}  # type: ignore[assignment]
 
 stopwatch: WoxViewTree = {

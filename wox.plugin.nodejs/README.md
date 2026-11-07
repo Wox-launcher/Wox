@@ -520,7 +520,7 @@ const tree: WoxViewTree = {
 const preview: WoxPreview = { PreviewType: "woxview", PreviewData: JSON.stringify(tree) }
 ```
 
-Use the optional `chart` props to enable axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance.
+Use the optional `chart` props to enable axes, grid, area fill, and a floating hover tooltip; see the [line chart options](../wox.core/ui/woxview/README.md#line-charts). Omitting them preserves the original chart appearance. WoxView also supports [bar, scatter, and pie charts](../wox.core/ui/woxview/README.md#other-chart-types).
 
 For callbacks, return `createWoxView({ render, onError }).asPreview()` as the result's `Preview`; call `session.invalidate()` after changing state. The static tree form above does not register event callbacks.
 

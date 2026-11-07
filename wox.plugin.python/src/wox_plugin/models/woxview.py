@@ -130,6 +130,32 @@ class WoxViewBadgeProps(TypedDict, total=False):
     tooltip: str
     transition: WoxViewTransition | None
 
+class WoxViewBarChartPropsRequired(TypedDict):
+    values: list[float]
+
+class WoxViewBarChartProps(WoxViewBarChartPropsRequired, total=False):
+    animation: WoxViewAnimation | None
+    chart: WoxViewBarChartPropsChartVariant1 | None
+    contextMenu: list[WoxViewBarChartPropsContextMenuItem]
+    disabledStyle: WoxViewStateStyle | None
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    focusStyle: WoxViewStateStyle | None
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    label: str
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    pointLabels: list[str]
+    pressedStyle: WoxViewStateStyle | None
+    shortcuts: list[WoxViewBarChartPropsShortcutsItem]
+    style: WoxViewStyle
+    timeline: WoxViewTimeline | None
+    tooltip: str
+    transition: WoxViewTransition | None
+
 class WoxViewButtonProps(TypedDict, total=False):
     animation: WoxViewAnimation | None
     contextMenu: list[WoxViewButtonPropsContextMenuItem]
@@ -619,6 +645,14 @@ class WoxViewBadgeNode(WoxViewBadgeNodeRequired, total=False):
     key: str
     props: WoxViewBadgeProps | None
 
+class WoxViewBarChartNodeRequired(TypedDict):
+    props: WoxViewBarChartProps
+    type: Literal['bar-chart']
+
+class WoxViewBarChartNode(WoxViewBarChartNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
+
 class WoxViewButtonNodeRequired(TypedDict):
     type: Literal['button']
 
@@ -771,6 +805,14 @@ class WoxViewNumberFieldNode(WoxViewNumberFieldNodeRequired, total=False):
     key: str
     props: WoxViewNumberFieldProps | None
 
+class WoxViewPieChartNodeRequired(TypedDict):
+    props: WoxViewPieChartProps
+    type: Literal['pie-chart']
+
+class WoxViewPieChartNode(WoxViewPieChartNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
+
 class WoxViewProgressNodeRequired(TypedDict):
     type: Literal['progress']
 
@@ -794,6 +836,14 @@ class WoxViewRowNode(WoxViewRowNodeRequired, total=False):
     children: list[WoxViewNode]
     key: str
     props: WoxViewRowProps | None
+
+class WoxViewScatterChartNodeRequired(TypedDict):
+    props: WoxViewScatterChartProps
+    type: Literal['scatter-chart']
+
+class WoxViewScatterChartNode(WoxViewScatterChartNodeRequired, total=False):
+    children: list[NoReturn]
+    key: str
 
 class WoxViewScrollNodeRequired(TypedDict):
     type: Literal['scroll']
@@ -957,6 +1007,32 @@ class WoxViewNumberFieldProps(TypedDict, total=False):
     transition: WoxViewTransition | None
     value: float
 
+class WoxViewPieChartPropsRequired(TypedDict):
+    values: list[float]
+
+class WoxViewPieChartProps(WoxViewPieChartPropsRequired, total=False):
+    animation: WoxViewAnimation | None
+    chart: WoxViewPieChartPropsChartVariant1 | None
+    contextMenu: list[WoxViewPieChartPropsContextMenuItem]
+    disabledStyle: WoxViewStateStyle | None
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    focusStyle: WoxViewStateStyle | None
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    label: str
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    pointLabels: list[str]
+    pressedStyle: WoxViewStateStyle | None
+    shortcuts: list[WoxViewPieChartPropsShortcutsItem]
+    style: WoxViewStyle
+    timeline: WoxViewTimeline | None
+    tooltip: str
+    transition: WoxViewTransition | None
+
 class WoxViewProgressProps(TypedDict, total=False):
     animation: WoxViewAnimation | None
     contextMenu: list[WoxViewProgressPropsContextMenuItem]
@@ -1030,6 +1106,31 @@ class WoxViewRowProps(TypedDict, total=False):
     tooltip: str
     transition: WoxViewTransition | None
     wrap: bool
+
+class WoxViewScatterChartPropsRequired(TypedDict):
+    points: list[WoxViewScatterChartPropsPointsItem]
+
+class WoxViewScatterChartProps(WoxViewScatterChartPropsRequired, total=False):
+    animation: WoxViewAnimation | None
+    chart: WoxViewScatterChartPropsChartVariant1 | None
+    contextMenu: list[WoxViewScatterChartPropsContextMenuItem]
+    disabledStyle: WoxViewStateStyle | None
+    enter: WoxViewPresenceAnimation | None
+    exit: WoxViewPresenceAnimation | None
+    focusStyle: WoxViewStateStyle | None
+    hoverStyle: WoxViewStateStyle | None
+    inputRegion: bool
+    label: str
+    onContextMenu: WoxViewHandler | None
+    onDoubleTap: WoxViewHandler | None
+    onFocusChange: WoxViewHandler | None
+    onHoverChange: WoxViewHandler | None
+    pressedStyle: WoxViewStateStyle | None
+    shortcuts: list[WoxViewScatterChartPropsShortcutsItem]
+    style: WoxViewStyle
+    timeline: WoxViewTimeline | None
+    tooltip: str
+    transition: WoxViewTransition | None
 
 class WoxViewScrollProps(TypedDict, total=False):
     animation: WoxViewAnimation | None
@@ -1513,6 +1614,38 @@ class WoxViewBadgePropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
+class WoxViewBarChartPropsChartVariant1(TypedDict, total=False):
+    barWidth: float | None
+    colors: list[WoxViewColor]
+    crosshair: bool | None
+    gridColor: WoxViewColor
+    gridLines: Literal[0] | int
+    hover: bool | None
+    hoverPoint: bool | None
+    plotPadding: float | None
+    showGrid: bool
+    showXAxis: bool
+    tooltip: bool | None
+    tooltipPosition: Literal['', 'top', 'floating']
+    valueDecimals: int | None
+    valuePrefix: str
+    valueSuffix: str
+    xTicks: Literal[0] | int
+    yAxis: Literal['', 'none', 'left', 'right']
+    yAxisWidth: float | None
+
+class WoxViewBarChartPropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewBarChartPropsContextMenuItem(WoxViewBarChartPropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewBarChartPropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
 class WoxViewButtonPropsContextMenuItemRequired(TypedDict):
     label: str
     onPress: WoxViewHandler
@@ -1797,6 +1930,29 @@ class WoxViewNumberFieldPropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
+class WoxViewPieChartPropsChartVariant1(TypedDict, total=False):
+    colors: list[WoxViewColor]
+    highlight: bool | None
+    hover: bool | None
+    innerRadius: float | None
+    tooltip: bool | None
+    tooltipPosition: Literal['', 'top', 'floating']
+    valueDecimals: int | None
+    valuePrefix: str
+    valueSuffix: str
+
+class WoxViewPieChartPropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewPieChartPropsContextMenuItem(WoxViewPieChartPropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewPieChartPropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
 class WoxViewProgressPropsContextMenuItemRequired(TypedDict):
     label: str
     onPress: WoxViewHandler
@@ -1837,6 +1993,48 @@ class WoxViewRowPropsContextMenuItem(WoxViewRowPropsContextMenuItemRequired, tot
     icon: str
 
 class WoxViewRowPropsShortcutsItem(TypedDict):
+    key: str
+    onPress: WoxViewHandler
+
+class WoxViewScatterChartPropsChartVariant1(TypedDict, total=False):
+    colors: list[WoxViewColor]
+    crosshair: bool | None
+    gridColor: WoxViewColor
+    gridLines: Literal[0] | int
+    hover: bool | None
+    hoverPoint: bool | None
+    plotPadding: float | None
+    pointRadius: float | None
+    showGrid: bool
+    showXAxis: bool
+    tooltip: bool | None
+    tooltipPosition: Literal['', 'top', 'floating']
+    valueDecimals: int | None
+    valuePrefix: str
+    valueSuffix: str
+    xTicks: Literal[0] | int
+    xValueDecimals: int | None
+    xValuePrefix: str
+    xValueSuffix: str
+    yAxis: Literal['', 'none', 'left', 'right']
+    yAxisWidth: float | None
+
+class WoxViewScatterChartPropsContextMenuItemRequired(TypedDict):
+    label: str
+    onPress: WoxViewHandler
+
+class WoxViewScatterChartPropsContextMenuItem(WoxViewScatterChartPropsContextMenuItemRequired, total=False):
+    disabled: bool
+    icon: str
+
+class WoxViewScatterChartPropsPointsItemRequired(TypedDict):
+    x: float
+    y: float
+
+class WoxViewScatterChartPropsPointsItem(WoxViewScatterChartPropsPointsItemRequired, total=False):
+    label: str
+
+class WoxViewScatterChartPropsShortcutsItem(TypedDict):
     key: str
     onPress: WoxViewHandler
 
@@ -2118,5 +2316,5 @@ WoxViewOffset: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', 
 WoxViewPresenceAnimation: TypeAlias = Literal['fade', 'slideUp', 'scale'] | WoxViewPresenceAnimationVariant2
 WoxViewSize: TypeAlias = float | Literal['$radiusSm', '$radiusMd', '$space1', '$space2', '$space3', '$space4', '$fontSm', '$fontMd', '$fontLg', '$fontTitle'] | None
 WoxViewImageProps: TypeAlias = WoxViewImagePropsVariant1 | WoxViewImagePropsVariant2
-WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLineChartNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMorphPathNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewSpriteNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewTimerNode | WoxViewViewNode
+WoxViewNode: TypeAlias = WoxViewBadgeNode | WoxViewBarChartNode | WoxViewButtonNode | WoxViewCheckboxNode | WoxViewCodeNode | WoxViewColumnNode | WoxViewDividerNode | WoxViewFormNode | WoxViewGridNode | WoxViewHotkeyNode | WoxViewIconButtonNode | WoxViewImageNode | WoxViewLazyListNode | WoxViewLineChartNode | WoxViewLinkNode | WoxViewListNode | WoxViewLoadingNode | WoxViewMarkdownNode | WoxViewMorphPathNode | WoxViewMultiSelectNode | WoxViewNumberFieldNode | WoxViewPieChartNode | WoxViewProgressNode | WoxViewRadioGroupNode | WoxViewRowNode | WoxViewScatterChartNode | WoxViewScrollNode | WoxViewSelectNode | WoxViewSliderNode | WoxViewSpacerNode | WoxViewSpriteNode | WoxViewStackNode | WoxViewSubmitNode | WoxViewSwitchNode | WoxViewTableNode | WoxViewTabsNode | WoxViewTagNode | WoxViewTagsNode | WoxViewTextNode | WoxViewTextFieldNode | WoxViewTimerNode | WoxViewViewNode
 WoxViewEdges: TypeAlias = WoxViewSize | WoxViewEdgesVariant2

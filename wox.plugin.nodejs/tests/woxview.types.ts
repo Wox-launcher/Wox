@@ -19,6 +19,11 @@ const badTimerFormat: WoxViewTree = { version: 1, root: { type: "timer", props: 
 // @ts-expect-error Timer direction is not an arbitrary string.
 const badTimerDirection: WoxViewTree = { version: 1, root: { type: "timer", props: { direction: "backwards" } } }
 export const chart: WoxViewTree = { version: 1, root: { type: "line-chart", props: { values: [1, 2, 3], pointLabels: ["a", "b", "c"], label: "Price", inputRegion: true, chart: { showGrid: true, yAxis: "right", gridLines: 5, fill: true, tooltipPosition: "floating", hover: false, valueDecimals: 2 } } } }
+export const bar: WoxViewTree = { version: 1, root: { type: "bar-chart", props: { values: [-2, 4], pointLabels: ["cost", "profit"], chart: { showGrid: true, barWidth: .7, colors: ["$error", "$accent"] } } } }
+export const pie: WoxViewTree = { version: 1, root: { type: "pie-chart", props: { values: [2, 1], chart: { innerRadius: .5, tooltipPosition: "floating" } } } }
+export const scatter: WoxViewTree = { version: 1, root: { type: "scatter-chart", props: { points: [{ x: 2, y: -1, label: "A" }], chart: { showXAxis: true, pointRadius: 4, xValueSuffix: " h" } } } }
+// @ts-expect-error Scatter observations require both coordinates.
+const badScatter: WoxViewTree = { version: 1, root: { type: "scatter-chart", props: { points: [{ x: 2 }] } } }
 // @ts-expect-error A line chart requires values.
 const badChart: WoxViewTree = { version: 1, root: { type: "line-chart", props: {} } }
 export const morph: WoxViewTree = {
