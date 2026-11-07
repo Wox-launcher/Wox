@@ -108,8 +108,7 @@ void snippetMacStopFocusObserver(void) {
     atomic_store(&snippetCachedTarget, 0);
 }
 
-uint64_t snippetMacTarget(void) {
-    if (!AXIsProcessTrusted() || IsSecureEventInputEnabled()) return 0;
+static int snippetMacReadInputSource(void) {
     TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
     if (source) {
         CFTypeRef type = TISGetInputSourceProperty(source, kTISPropertyInputSourceType);
@@ -117,6 +116,29 @@ uint64_t snippetMacTarget(void) {
         CFRelease(source);
         if (isInputMode) return 0;
     }
+    return 1;
+}
+
+int snippetMacInputSourceAllowsExpansion(void) {
+    if ([NSThread isMainThread]) return snippetMacReadInputSource();
+
+    // HIToolbox asserts that input source properties are read on the main queue.
+    // A bounded wait also lets shutdown finish if the main thread is waiting for the worker.
+    dispatch_semaphore_t ready = dispatch_semaphore_create(0);
+    dispatch_retain(ready);
+    __block int allowed = 0;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        allowed = snippetMacReadInputSource();
+        dispatch_semaphore_signal(ready);
+        dispatch_release(ready);
+    });
+    long result = dispatch_semaphore_wait(ready, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC));
+    dispatch_release(ready);
+    return result == 0 ? allowed : 0;
+}
+
+uint64_t snippetMacTarget(void) {
+    if (!AXIsProcessTrusted() || IsSecureEventInputEnabled() || !snippetMacInputSourceAllowsExpansion()) return 0;
     return atomic_load(&snippetCachedTarget);
 }
 
