@@ -1088,7 +1088,7 @@
     "Author": "qianlifeng",
     "Version": "1.1.0",
     "MinWoxVersion": "2.4.9",
-    "Runtime": "script",
+    "Runtime": "python",
     "Description": "i18n:plugin_description",
     "IconUrl": "https://avatars.githubusercontent.com/u/16618068?s=128",
     "Website": "https://gist.github.com/qianlifeng/75ee2660ab0bd347623a752b0f2d4cd9",
