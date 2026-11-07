@@ -261,8 +261,8 @@
     "Id": "36fa2371-144c-4f53-98bb-874f77b21849",
     "Name": "Mole",
     "Author": "qianlifeng",
-    "Version": "0.0.2",
-    "MinWoxVersion": "2.0.0",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.5.0",
     "Runtime": "python",
     "Description": "Dig deep like a mole to optimize you Mac",
     "IconUrl": "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/app.png",
@@ -275,7 +275,7 @@
       "Darwin"
     ],
     "DateCreated": "2025-11-26 22:15:00",
-    "DateUpdated": "2026-04-27 06:00:49",
+    "DateUpdated": "2026-11-07 09:09:45",
     "StarCount": 1,
     "DownloadCount": 754
   },
