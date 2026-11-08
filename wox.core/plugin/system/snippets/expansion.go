@@ -64,6 +64,7 @@ type replacementChecks struct {
 	valid   func() bool
 	current func() bool
 	applied func()
+	trigger string
 }
 
 // expansion coordinates a single worker and invalidates stale requests on every physical input.
@@ -143,7 +144,9 @@ func (s *expansion) run(ctx context.Context, work replacement) {
 	}
 	var completed sync.Once
 	applied := func() { completed.Do(func() { s.engine.completed(work, text, codepointBackspace) }) }
-	if err := s.backend.replace(ctx, work.target, work.deletes, text, replacementChecks{valid: valid, current: current, applied: applied}); err != nil {
+	if err := s.backend.replace(ctx, work.target, work.deletes, text, replacementChecks{
+		valid: valid, current: current, applied: applied, trigger: work.record.Keyword,
+	}); err != nil {
 		util.GetLogger().Warn(ctx, "snippet expansion cancelled: "+err.Error())
 		return
 	}

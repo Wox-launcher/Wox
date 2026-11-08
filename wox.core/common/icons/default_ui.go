@@ -171,14 +171,15 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ScreenshotText:             newMonochromeUIIcon(`<path d="M5 5h14M12 5v14" stroke-width="2.4"/>`),
 	ScreenshotArrow:            newMonochromeUIIcon(`<path d="M5 19 19 5M11 5h8v8"/>`),
 	ScreenshotNumber:           newMonochromeUIIcon(`<circle cx="12" cy="12" r="8.5"/><path d="m10 9 2-2v10M9.5 17h5"/>`),
-	ScreenshotBrush:            newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m14 5 5-2 2 2-2 5-8 7-4-4zM7 14c-4-1-5 2-4 6 4 1 7 0 6-4"/>`),
+	ScreenshotBrush:            newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M3 21l2-6L16 4a2.83 2.83 0 0 1 4 4L9 19zM5 15l4 4M14 6l4 4"/>`),
 	ScreenshotHighlighter:      newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m10 14-3-3 9-9 6 6-9 9zM7 11l-3 4 5 5 4-3m-8-1-3 3 3 3 3-3M13 22h8"/>`),
-	ScreenshotEraser:           newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="m14 3 7 7-10 10H6l-4-4zM7 11l7 7M11 20h10"/>`),
+	ScreenshotEraser:           newMonochromeUIIcon(`<g transform="rotate(-40 12 12)"><rect x="2" y="7" width="20" height="10" rx="2" stroke="var(--wox-theme-icon-color)"/><path d="M9 7v10H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" fill="var(--wox-theme-icon-color)" stroke="none"/></g>`),
 	ScreenshotMosaic:           newMonochromeUIIcon(`<rect x="3.5" y="3.5" width="17" height="17" rx=".75"/><path d="M4 4h4v4H4zM12 4h4v4h-4zM8 8h4v4H8zM16 8h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4zM8 16h4v4H8zM16 16h4v4h-4z" fill="#fff" stroke="none"/>`),
 	ScreenshotScrollingCapture: newMonochromeUIIcon(`<path d="m8 7 4-4 4 4M12 3v18M8 17l4 4 4-4"/>`),
 	ScreenshotBackground:       newMonochromeUIIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/>`),
 	ScreenshotCursor:           common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M4.5 2.5v16.2l4.1-4 3.4 7.1 3.8-1.8-3.3-6.8h6.1L4.5 2.5Z" fill="#fff" stroke="#171717" stroke-width="1.6" stroke-linejoin="round"/></svg>`),
 	ScreenshotPin:              newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
+	ScreenshotAIChat:           newMonochromeUIIcon(`<path stroke="var(--wox-theme-icon-color)" d="M3 18l4.5-12L12 18M4.5 14h6M15 6h6M18 6v12M15 18h6"/>`),
 
 	// Usage dashboard.
 	UsageShare:      common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" d="M6 22q-.825 0-1.412-.587T4 20V10q0-.825.588-1.412T6 8h2q.425 0 .713.288T9 9t-.288.713T8 10H6v10h12V10h-2q-.425 0-.712-.288T15 9t.288-.712T16 8h2q.825 0 1.413.588T20 10v10q0 .825-.587 1.413T18 22zm5.288-6.288Q11 15.425 11 15V4.825l-.9.9q-.3.3-.7.288T8.7 5.7q-.275-.3-.287-.7t.287-.7l2.6-2.6q.15-.15.325-.212T12 1.425t.375.063t.325.212l2.6 2.6q.275.275.275.688T15.3 5.7q-.3.3-.712.3t-.713-.3L13 4.825V15q0 .425-.288.713T12 16t-.712-.288"/></svg>`),

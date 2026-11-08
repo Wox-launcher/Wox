@@ -421,7 +421,7 @@ func screenshotAIToolbarActions(enabled bool, hasProvider bool, tooltip string) 
 	}
 	return []common.ScreenshotExtraAction{{
 		ID:      screenshotAIExtraActionID,
-		Icon:    icons.ControlSparkles,
+		Icon:    icons.ScreenshotAIChat,
 		Tooltip: tooltip,
 	}}
 }

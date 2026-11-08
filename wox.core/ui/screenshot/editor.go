@@ -1216,6 +1216,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	state.mu.Unlock()
 
 	displayList.FillRoundedRect(toolbarRect, scaled(12), Color{R: 30, G: 26, B: 24, A: 255})
+	canUndo := len(annotations) > 0
 	if gripRect.Width > 0 {
 		// Smaller and dimmer than the action icons so the handle reads as chrome, not a tool.
 		drawScreenshotEditorToolbarIconSized(displayList, icons.ControlGripDots, gripRect, Color{R: 255, G: 255, B: 255, A: 153}, uiScale, 16)
@@ -1236,7 +1237,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			drawScreenshotEditorToolbarIcon(displayList, screenshotEditorToolIconNames[index], rect, foreground, uiScale)
 		}
 		undoColor := Color{R: 255, G: 255, B: 255, A: 97}
-		if len(annotations) > 0 {
+		if canUndo {
 			undoColor.A = 255
 		}
 		drawScreenshotEditorToolbarIcon(displayList, "control.undo", undoRect, undoColor, uiScale)
@@ -1262,9 +1263,6 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			} else if backgroundEnabled {
 				displayList.FillRoundedRect(backgroundRect, scaled(10), Color{R: 41, G: 255, B: 114, A: 51})
 				backgroundColor = green
-			}
-			if hasHoveredAction && hoveredAction == screenshotEditorActionBackground && !backgroundLoading {
-				displayList.StrokeRoundedRect(backgroundRect, scaled(10), scaled(1), green)
 			}
 			drawScreenshotEditorToolbarIcon(displayList, icons.ScreenshotBackground, backgroundRect, backgroundColor, uiScale)
 		}
@@ -1296,25 +1294,42 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		state.drawEditBar(displayList, toolbarFrame, toolbarRect, selection, activeTool, selectedMark, creationColor, mosaicRadius, fontSize, uiScale)
 	}
 	state.publishSizeLabel(chip, label)
-	if hasHoveredTool {
-		tooltip := screenshotEditorToolTooltip(hoveredTool, tooltips)
-		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, toolRects[hoveredTool], selection, tooltip, uiScale)
-	} else if hoveredExtraIndex >= 0 && hoveredExtraIndex < len(extraActionRects) {
-		tooltip := strings.TrimSpace(state.extraActions[hoveredExtraIndex].Tooltip)
+	var hoverRect Rect
+	var tooltip string
+	hoverEnabled := true
+	switch {
+	case hasHoveredTool:
+		hoverRect = toolRects[hoveredTool]
+		tooltip = screenshotEditorToolTooltip(hoveredTool, tooltips)
+	case hoveredExtraIndex >= 0 && hoveredExtraIndex < len(extraActionRects):
+		hoverRect = extraActionRects[hoveredExtraIndex]
+		tooltip = strings.TrimSpace(state.extraActions[hoveredExtraIndex].Tooltip)
 		if tooltip == "" {
 			tooltip = state.extraActions[hoveredExtraIndex].ID
 		}
-		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, extraActionRects[hoveredExtraIndex], selection, tooltip, uiScale)
-	} else if hasHoveredAction {
-		if hoveredAction == screenshotEditorActionBackground {
+	case hasHoveredAction:
+		switch hoveredAction {
+		case screenshotEditorActionUndo:
+			hoverEnabled = canUndo
+		case screenshotEditorActionScrollingCapture:
+			hoverEnabled = !scrollingStarting
+		case screenshotEditorActionCursor:
+			hoverEnabled = cursorPixel != nil
+		case screenshotEditorActionBackground:
+			hoverEnabled = !backgroundLoading
 			if backgroundLoading {
 				actionTooltips.Background = actionTooltips.BackgroundLoading
 			} else if backgroundFailed {
 				actionTooltips.Background = actionTooltips.BackgroundFailed
 			}
 		}
-		anchor, tooltip := screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, saveRect, confirmRect, backgroundRect)
-		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, anchor, selection, tooltip, uiScale)
+		hoverRect, tooltip = screenshotEditorActionTooltip(hoveredAction, actionTooltips, undoRect, scrollRect, cursorRect, pinRect, recordRect, cancelRect, saveRect, confirmRect, backgroundRect)
+	}
+	if hoverRect.Width > 0 {
+		if hoverEnabled && screenshotEditorRectContains(hoverRect, pointerPosition) {
+			displayList.StrokeRoundedRect(hoverRect, scaled(10), scaled(1), green)
+		}
+		drawScreenshotEditorToolTooltip(displayList, state.window, frame.Size, hoverRect, selection, tooltip, uiScale)
 	}
 	if pointerInside && !colorInspectorDismissed && !ratioMenuOpen {
 		drawScreenshotEditorColorInspector(displayList, previewImage, frame.Size, pointerPosition, desktopPixelOrigin, inspectorScale)
@@ -2381,11 +2396,12 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			state.mu.Unlock()
 			return
 		}
-		hoverChanged := state.pointerInside || state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.pointerCursor != PointerCursorDefault
+		hoverChanged := state.pointerInside || state.hasHoveredMark || state.hasHoveredTool || state.hasHoveredAction || state.hoveredExtraIndex >= 0 || state.pointerCursor != PointerCursorDefault
 		state.pointerInside = false
 		state.hasHoveredMark = false
 		state.hasHoveredTool = false
 		state.hasHoveredAction = false
+		state.hoveredExtraIndex = -1
 		state.pointerCursor = PointerCursorDefault
 		state.mu.Unlock()
 		state.setPointerCursor(PointerCursorDefault)

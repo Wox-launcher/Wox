@@ -889,8 +889,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 896 || state.toolbarRect.Height != 48 {
-		t.Fatalf("toolbar bounds = %+v, want 896x48", state.toolbarRect)
+	if state.toolbarRect.Width != 732 || state.toolbarRect.Height != 48 {
+		t.Fatalf("toolbar bounds = %+v, want 732x48", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -907,9 +907,12 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	if state.toolRects[screenshotEditorToolRect].Width != 40 || state.toolRects[screenshotEditorToolMosaic].Width != 40 {
 		t.Fatalf("creation tool bounds = rect %+v mosaic %+v", state.toolRects[screenshotEditorToolRect], state.toolRects[screenshotEditorToolMosaic])
 	}
-	for tool := screenshotEditorToolRect + 1; tool < screenshotEditorToolCount; tool++ {
-		if gap := state.toolRects[tool].X - state.toolRects[tool-1].X; gap != 48 {
-			t.Fatalf("tool %d slot gap = %v, want 48", tool, gap)
+	buttons := append([]Rect(nil), state.toolRects[1:]...)
+	buttons = append(buttons, state.undoRect, state.scrollRect, state.cursorRect, state.backgroundRect,
+		state.pinRect, state.cancelRect, state.saveRect, state.confirmRect)
+	for index := 1; index < len(buttons); index++ {
+		if step := buttons[index].X - buttons[index-1].X; step != 40 {
+			t.Fatalf("toolbar button %d step = %v, want 40", index, step)
 		}
 	}
 	rectTool := state.toolRects[screenshotEditorToolRect]
@@ -984,7 +987,7 @@ func TestScreenshotEditorToolbarGripDragsTheBar(t *testing.T) {
 }
 
 func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testing.T) {
-	action := common.ScreenshotExtraAction{ID: "ai", Icon: "control.sparkles", Tooltip: "Send to AI Chat"}
+	action := common.ScreenshotExtraAction{ID: "ai", Icon: icons.ScreenshotAIChat, Tooltip: "Send to AI Chat"}
 	state := newScreenshotEditorOverlayState(ScreenshotOptions{
 		AllowVideoRecording: true,
 		ExtraActions:        []common.ScreenshotExtraAction{action},
@@ -992,18 +995,18 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 1004 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+	if state.toolbarRect.Width != 812 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
 		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
 	}
-	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
-		t.Fatalf("extra=%+v should sit between record=%+v and cancel=%+v", state.extraActionRects[0], state.recordRect, state.cancelRect)
+	if state.extraActionRects[0].X-state.recordRect.X != 40 || state.cancelRect.X-state.extraActionRects[0].X != 40 {
+		t.Fatalf("extra=%+v should be evenly spaced between record=%+v and cancel=%+v", state.extraActionRects[0], state.recordRect, state.cancelRect)
 	}
 
 	imageOnly := newScreenshotEditorOverlayState(ScreenshotOptions{ExtraActions: []common.ScreenshotExtraAction{action}}, testScreenshotImage(t, 10, 10), screenshotEditorPlatform{})
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 950 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 772 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
@@ -1026,7 +1029,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 950 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 772 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -1034,7 +1037,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 896 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 732 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
@@ -1185,6 +1188,7 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 		"control.add",
 		"control.delete",
 		"screenshot.video-camera",
+		icons.ScreenshotAIChat,
 		"control.record",
 		"control.pause",
 		"control.play-circle",
@@ -1328,11 +1332,14 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 1344 || state.toolbarRect.Height != 72 {
-		t.Fatalf("scaled toolbar = %+v, want 1344x72", state.toolbarRect)
+	if state.toolbarRect.Width != 1098 || state.toolbarRect.Height != 72 {
+		t.Fatalf("scaled toolbar = %+v, want 1098x72", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)
+	}
+	if step := state.toolRects[screenshotEditorToolEllipse].X - state.toolRects[screenshotEditorToolRect].X; step != 60 {
+		t.Fatalf("scaled tool step = %v, want 60", step)
 	}
 }
 

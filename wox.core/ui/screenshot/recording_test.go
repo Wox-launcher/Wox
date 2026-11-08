@@ -447,7 +447,7 @@ func TestRecordingToolbarLayoutScalesOutsideTheSelection(t *testing.T) {
 	}
 }
 
-func TestRecordingToolbarControlLayoutMatchesScreenshotSlots(t *testing.T) {
+func TestRecordingToolbarControlLayout(t *testing.T) {
 	panel, timeRect, primary, restart, pointer, keypress, finish, cancel := recordingToolbarControlLayout(1)
 	if panel.Y != 0 || panel.Height != recordingToolbarHeight {
 		t.Fatalf("toolbar panel = %+v, want y=0 height=%v", panel, recordingToolbarHeight)

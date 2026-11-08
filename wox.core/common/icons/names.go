@@ -325,6 +325,7 @@ const (
 	ScreenshotBackground       = "screenshot.background"
 	ScreenshotCursor           = "screenshot.cursor"
 	ScreenshotPin              = "screenshot.pin"
+	ScreenshotAIChat           = "screenshot.ai-chat"
 	UsageShare                 = "usage.share"
 	UsageVisibility            = "usage.visibility"
 	UsageRocket                = "usage.rocket"

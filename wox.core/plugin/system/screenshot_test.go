@@ -314,7 +314,7 @@ func TestScreenshotAIToolbarSettingIsLastInAIGroup(t *testing.T) {
 
 func TestScreenshotAIToolbarActionsRequiresSettingAndProvider(t *testing.T) {
 	actions := screenshotAIToolbarActions(true, true, "Send to AI Chat")
-	if len(actions) != 1 || actions[0].ID != screenshotAIExtraActionID || actions[0].Icon != icons.ControlSparkles {
+	if len(actions) != 1 || actions[0].ID != screenshotAIExtraActionID || actions[0].Icon != icons.ScreenshotAIChat {
 		t.Fatalf("enabled actions = %#v", actions)
 	}
 	if screenshotAIToolbarActions(false, true, "Send to AI Chat") != nil {

@@ -21,48 +21,39 @@ func screenshotEditorToolbarFrame(selection, fallback Rect, displays []Rect) Rec
 
 // screenshotEditorToolbarLayout wraps complete button slots on narrow or scaled displays without shrinking hit targets.
 func screenshotEditorToolbarLayout(frameWidth, scale float32, hideTools, recording, scrolling, background bool, extraCount int) (Size, []Rect) {
-	steps := make([]float32, 0, int(screenshotEditorToolCount)+extraCount+8)
-	width := float32(182) + screenshotEditorToolbarGripSlot
+	const (
+		buttonSize  = 40
+		buttonInset = 4
+		edgePadding = 16
+		rowHeight   = buttonSize + 2*buttonInset
+	)
+	buttonCount := extraCount + 3 // Cancel, save, and confirm.
 	if !hideTools {
-		for tool := screenshotEditorTool(1); tool < screenshotEditorToolCount; tool++ {
-			steps = append(steps, 48)
-		}
-		steps[len(steps)-1] += 6
-		steps = append(steps, 54, 54, 54, 54)
-		if !scrolling {
-			steps = steps[:len(steps)-1]
-		}
-		width = 398 + screenshotEditorToolbarGripSlot + 48*float32(screenshotEditorToolCount-1)
-		if !scrolling {
-			width -= 54
+		buttonCount += int(screenshotEditorToolCount-1) + 3 // Annotation tools, undo, cursor, and pin.
+		if scrolling {
+			buttonCount++
 		}
 		if background {
-			steps = append(steps, 54)
-			width += 54
+			buttonCount++
 		}
 		if recording {
-			steps = append(steps, 48)
-			width += 54
+			buttonCount++
 		}
 	}
-	for index := 0; index < extraCount; index++ {
-		steps = append(steps, 54)
-		width += 54
-	}
-	steps = append(steps, 48, 48, 48)
+	contentLeft := float32(edgePadding + screenshotEditorToolbarGripSlot + buttonInset)
+	width := contentLeft + float32(buttonCount*buttonSize) + edgePadding + buttonInset
 	scale = max(float32(1), scale)
 	width = min(width, max(float32(80)+screenshotEditorToolbarGripSlot, frameWidth/scale-48))
-	contentLeft := float32(16) + screenshotEditorToolbarGripSlot
 	left, top := contentLeft, float32(0)
-	buttons := make([]Rect, 0, len(steps))
-	for _, step := range steps {
-		if left+44 > width-16 {
-			left, top = contentLeft, top+48
+	buttons := make([]Rect, 0, buttonCount)
+	for index := 0; index < buttonCount; index++ {
+		if left+buttonSize > width-edgePadding {
+			left, top = contentLeft, top+rowHeight
 		}
-		buttons = append(buttons, Rect{X: (left + 4) * scale, Y: (top + 4) * scale, Width: 40 * scale, Height: 40 * scale})
-		left += step
+		buttons = append(buttons, Rect{X: left * scale, Y: (top + buttonInset) * scale, Width: buttonSize * scale, Height: buttonSize * scale})
+		left += buttonSize
 	}
-	return Size{Width: width * scale, Height: (top + 48) * scale}, buttons
+	return Size{Width: width * scale, Height: (top + rowHeight) * scale}, buttons
 }
 
 // screenshotEditorToolbarGripRect is the leading drag target, ending where the first tool begins.

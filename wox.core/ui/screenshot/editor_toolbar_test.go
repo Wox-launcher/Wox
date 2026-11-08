@@ -1,6 +1,59 @@
 package screenshot
 
-import "testing"
+import (
+	"image/color"
+	"testing"
+	"wox/common"
+	"wox/common/icons"
+	woxui "wox/ui/runtime"
+)
+
+func TestScreenshotToolbarOutlinesHoveredButtons(t *testing.T) {
+	frame := FrameInfo{Size: Size{Width: 1400, Height: 500}}
+	for _, scale := range []float32{1, 1.5} {
+		state := newScreenshotEditorOverlayState(ScreenshotOptions{
+			ExtraActions: []common.ScreenshotExtraAction{{ID: "ai", Icon: icons.ScreenshotAIChat}},
+		}, testScreenshotImage(t, 1, 1), screenshotEditorPlatform{})
+		state.selection = Rect{X: 50, Y: 50, Width: 1280, Height: 300}
+		state.hasSelection = true
+		state.colorInspectorDismissed = true
+		state.chromeScale = func(Rect) float32 { return scale }
+		state.draw(&DisplayList{}, frame)
+
+		renderer, err := woxui.NewSoftwareRenderer(int(frame.Size.Width), int(frame.Size.Height))
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkOutline := func(name string, rect Rect, want bool) {
+			t.Helper()
+			list := &DisplayList{}
+			state.draw(list, frame)
+			if err := renderer.Render(list); err != nil {
+				t.Fatal(err)
+			}
+			pixel := renderer.RGBA().RGBAAt(int(rect.X+rect.Width/2), int(rect.Y))
+			if outlined := pixel == (color.RGBA{R: 41, G: 255, B: 114, A: 255}); outlined != want {
+				t.Fatalf("scale %g: %s outline = %t (%v), want %t", scale, name, outlined, pixel, want)
+			}
+		}
+		for _, target := range []struct {
+			name    string
+			rect    Rect
+			outline bool
+		}{
+			{"annotation tool", state.toolRects[screenshotEditorToolRect], true},
+			{"disabled undo", state.undoRect, false},
+			{"background", state.backgroundRect, true},
+			{"confirm", state.confirmRect, true},
+			{"AI", state.extraActionRects[0], true},
+		} {
+			state.pointer(PointerEvent{Kind: PointerMove, Position: Point{X: target.rect.X + target.rect.Width/2, Y: target.rect.Y + target.rect.Height/2}})
+			checkOutline(target.name, target.rect, target.outline)
+		}
+		state.pointer(PointerEvent{Kind: PointerLeave})
+		checkOutline("AI after pointer leave", state.extraActionRects[0], false)
+	}
+}
 
 // TestScreenshotToolbarStaysOnDisplay covers full-height selections on offset, scaled displays.
 func TestScreenshotToolbarStaysOnDisplay(t *testing.T) {

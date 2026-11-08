@@ -36,7 +36,7 @@ func TestWindowsReplacementInNativeEdit(t *testing.T) {
 		t.Skip("GCC unavailable")
 	}
 	binary := filepath.Join(t.TempDir(), "replacement-native-test.exe")
-	command := exec.Command(compiler, "testdata/replacement_windows_native.c", "focus_windows.c", "keyboard_windows.c", "-o", binary, "-luser32", "-lole32", "-loleaut32", "-luuid", "-luiautomationcore")
+	command := exec.Command(compiler, "testdata/replacement_windows_native.c", "keyboard_windows.c", "-o", binary, "-luser32", "-lole32", "-loleaut32", "-luuid", "-luiautomationcore")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("compile native replacement test: %v\n%s", err, output)
 	}

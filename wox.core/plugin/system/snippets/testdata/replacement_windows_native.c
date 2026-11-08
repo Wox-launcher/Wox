@@ -3,37 +3,51 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../focus_windows.c"
 #include "../replacement_windows.c"
 
-int snippetWindowsFocusedControlSafe(void);
-int snippetWindowsUsesCodepointBackspace(uint64_t target);
 unsigned int snippetCharacter(unsigned int vk, unsigned int scan);
 
-static DWORD WINAPI checkFocusedControl(void *result) {
-    *(int *)result = snippetWindowsFocusedControlSafe();
-    return 0;
+static DWORD WINAPI checkFocusedControl(void *unused) {
+    return snippetWindowsFocusedControlSafe();
 }
 
 // UI Automation may call back into the edit control, so keep its window thread pumping.
-static int checkFocusedControlWithPump(void) {
-    int *result = malloc(sizeof(*result));
-    if (!result) return -1;
-    *result = -1;
-    HANDLE thread = CreateThread(NULL, 0, checkFocusedControl, result, 0, NULL);
-    if (!thread) { free(result); return -1; }
+static int runWithMessagePump(LPTHREAD_START_ROUTINE run, void *arg) {
+    HANDLE thread = CreateThread(NULL, 0, run, arg, 0, NULL);
+    if (!thread) return -1;
     ULONGLONG deadline = GetTickCount64() + 3000;
     while (GetTickCount64() < deadline) {
         DWORD status = MsgWaitForMultipleObjects(1, &thread, FALSE, 50, QS_ALLINPUT);
-        if (status == WAIT_OBJECT_0) { int value = *result; free(result); CloseHandle(thread); return value; }
+        if (status == WAIT_OBJECT_0) {
+            DWORD result;
+            BOOL gotResult = GetExitCodeThread(thread, &result);
+            CloseHandle(thread);
+            return gotResult ? (int)result : -1;
+        }
         MSG message;
         while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
     }
-    // The process exits on timeout; the worker may still hold its result buffer.
     CloseHandle(thread);
     return -1;
+}
+
+static DWORD WINAPI selectTestTrigger(void *trigger) {
+    if (FAILED(CoInitializeEx(NULL, COINIT_MULTITHREADED))) return SNIPPET_TRIGGER_UNAVAILABLE;
+    IUIAutomationElement *element = snippetWindowsFocusedElement();
+    IUIAutomationTextPattern *pattern = NULL;
+    SnippetTriggerSelection result = SNIPPET_TRIGGER_UNAVAILABLE;
+    if (element && SUCCEEDED(element->lpVtbl->GetCurrentPatternAs(element, UIA_TextPatternId,
+                                                                  &IID_IUIAutomationTextPattern, (void **)&pattern)) && pattern) {
+        result = snippetWindowsSelectTrigger(pattern, trigger, 5);
+        pattern->lpVtbl->Release(pattern);
+    }
+    if (element) element->lpVtbl->Release(element);
+    CoUninitialize();
+    return result;
 }
 
 // A foreground app can block SetForegroundWindow; attach only for this explicit UI test.
@@ -88,11 +102,34 @@ int main(void) {
         DestroyWindow(edit);
         return 2;
     }
-    if (checkFocusedControlWithPump() != 1) {
+    if (runWithMessagePump(checkFocusedControl, NULL) != 1) {
         fprintf(stderr, "normal edit control was rejected by UI Automation\n");
         DestroyWindow(edit);
         return 5;
     }
+
+    // Model the address bar with an autocomplete suffix selected after the typed keyword.
+    HMODULE richEdit = LoadLibraryW(L"Msftedit.dll");
+    HWND completion = richEdit ? CreateWindowExW(0, L"RICHEDIT50W", L"keep :mail completion",
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 420, 100, NULL, NULL, GetModuleHandleW(NULL), NULL) : NULL;
+    if (!completion || !focusTestWindow(completion)) return 18;
+    SendMessageW(completion, EM_SETSEL, 10, 21);
+    int mismatched = runWithMessagePump(selectTestTrigger, L":fail");
+    DWORD originalSelection = (DWORD)SendMessageW(completion, EM_GETSEL, 0, 0);
+    int matched = runWithMessagePump(selectTestTrigger, L":mail");
+    DWORD expandedSelection = (DWORD)SendMessageW(completion, EM_GETSEL, 0, 0);
+    DestroyWindow(completion);
+    FreeLibrary(richEdit);
+    if (mismatched != SNIPPET_TRIGGER_CHANGED || originalSelection != MAKELRESULT(10, 21) ||
+        matched != SNIPPET_TRIGGER_SELECTED || expandedSelection != MAKELRESULT(5, 21)) {
+        fprintf(stderr, "unexpected trigger selection: mismatch=%d (%d,%d), match=%d (%d,%d)\n",
+                mismatched, LOWORD(originalSelection), HIWORD(originalSelection),
+                matched, LOWORD(expandedSelection), HIWORD(expandedSelection));
+        DestroyWindow(edit);
+        return 18;
+    }
+    if (!focusTestWindow(edit)) return 18;
+    SendMessageW(edit, EM_SETSEL, 11, 11);
 
     HKL original = GetKeyboardLayout(0);
     HKL us = LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
@@ -164,7 +201,7 @@ int main(void) {
             HWND password = CreateWindowExW(0, L"EDIT", L"secret", WS_OVERLAPPEDWINDOW | WS_VISIBLE | ES_PASSWORD,
                                             CW_USEDEFAULT, CW_USEDEFAULT, 420, 100, NULL, NULL, GetModuleHandleW(NULL), NULL);
             if (!password) { DestroyWindow(edit); return 6; }
-            if (!focusTestWindow(password) || checkFocusedControlWithPump() != 0) {
+            if (!focusTestWindow(password) || runWithMessagePump(checkFocusedControl, NULL) != 0) {
                 fprintf(stderr, "password control was not safely rejected\n");
                 DestroyWindow(password);
                 DestroyWindow(edit);

@@ -5,11 +5,10 @@ package snippets
 #include <imm.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include "focus_windows.h"
 
 #cgo LDFLAGS: -limm32 -lole32 -loleaut32 -luuid -luiautomationcore
 
-int snippetWindowsFocusedControlSafe(void);
-int snippetWindowsUsesCodepointBackspace(uint64_t target);
 int snippetWindowsReplace(unsigned int count, const uint16_t *text, unsigned int length, int paste);
 unsigned int snippetCharacter(unsigned int vk, unsigned int scan);
 int snippetClipboardStageText(DWORD expected, const uint16_t *text, unsigned int length, const uint8_t *marker);
@@ -270,6 +269,20 @@ func (windowsExpansionBackend) replace(ctx context.Context, target uint64, delet
 	}
 	if !checks.valid() || uint64(C.snippetTarget()) != target {
 		return errors.New("input context changed")
+	}
+	if checks.trigger != "" && deletes <= 32768 {
+		trigger := utf16.Encode([]rune(checks.trigger))
+		selection := C.snippetWindowsSelectOmniboxTrigger((*C.uint16_t)(&trigger[0]), C.int(len(trigger)))
+		if selection == C.SNIPPET_TRIGGER_CHANGED || !checks.current() || uint64(C.snippetTarget()) != target {
+			return errors.New("trigger or input context changed")
+		}
+		if selection == C.SNIPPET_TRIGGER_SELECTED {
+			// Typing or pasting replaces the selection. Empty snippets need one Backspace to clear it.
+			deletes = 0
+			if text == "" {
+				deletes = 1
+			}
+		}
 	}
 	if multiline && (C.snippetClipboardStillStaged((*C.uint8_t)(unsafe.Pointer(&stagedMarker[0])), (*C.uint16_t)(unsafe.Pointer(&stagedText[0])), C.uint(len(stagedText))) == 0 || !checks.current() || uint64(C.snippetTarget()) != target) {
 		return errors.New("clipboard or input context changed")

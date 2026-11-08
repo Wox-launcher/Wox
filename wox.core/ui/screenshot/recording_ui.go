@@ -24,14 +24,14 @@ import (
 const (
 	recordingOverlayWindowID WindowID = "wox.screenshot.recording.overlay"
 	recordingBorderWindowID  WindowID = "wox.screenshot.recording.border"
-	// Match screenshot toolbar slots: 16px pad, 40px buttons, 8px gaps (48px stride).
+
 	recordingToolbarPad          = float32(16)
 	recordingToolbarGap          = float32(8)
 	recordingToolbarButton       = float32(40)
 	recordingToolbarSlot         = float32(48)
 	recordingToolbarTimeWidth    = float32(56)
 	recordingToolbarWidth        = float32(380)
-	recordingToolbarHeight       = float32(60) // Same bar height as the screenshot toolbar.
+	recordingToolbarHeight       = float32(60)
 	recordingToolbarSelectionGap = float32(16) // Same selection-to-toolbar gap as the screenshot toolbar.
 	recordingBorderMargin        = float32(40)
 	recordingKeycapLifetime      = 1500 * time.Millisecond
@@ -1256,7 +1256,7 @@ func drawRecordingKeycapBackground(target *image.RGBA, clip image.Rectangle, rec
 	raster.Draw(target, bounds, image.NewUniform(ink), image.Point{})
 }
 
-// recordingToolbarControlLayout uses the same 16px pad, 40px buttons, and 48px stride as the screenshot toolbar.
+// recordingToolbarControlLayout places the timer before the recording button slots.
 func recordingToolbarControlLayout(scale float32) (panel, timeRect, primary, restart, pointer, keypress, finish, cancel Rect) {
 	if scale <= 0 {
 		scale = 1
