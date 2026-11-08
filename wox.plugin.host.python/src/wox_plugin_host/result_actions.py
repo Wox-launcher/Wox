@@ -134,8 +134,11 @@ class ResultActions:
     def stage_plugin_preview(self, session: str, query: str, result_id: str, preview: Any) -> None:
         active = self.plugin_previews.get(session, [])
         binding = getattr(preview, "_wox_preview_binding", None)
-        if any((binding is not None and binding is item[2][2]) or
-               (getattr(preview, "wox_view_id", "") == item[2][0] and getattr(preview, "on_wox_view_event", None) == item[2][1]) for item in active):
+        if any(
+            (binding is not None and binding is item[2][2])
+            or (getattr(preview, "wox_view_id", "") == item[2][0] and getattr(preview, "on_wox_view_event", None) == item[2][1])
+            for item in active
+        ):
             return
         bucket = self.find(session, query, result_id)
         if bucket is not None:
@@ -150,7 +153,9 @@ class ResultActions:
         if not activate:
             return None
         bucket = self.find(session, query, result_id)
-        candidate = bucket.previews.get(result_id) if bucket else None
+        if bucket is None:
+            return None
+        candidate = bucket.previews.get(result_id)
         if candidate is None or candidate[0] != document:
             return None
         del bucket.previews[result_id]
