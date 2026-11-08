@@ -36,10 +36,21 @@ func TestFallbackToolbarActionOpensMainHotkeySettings(t *testing.T) {
 	message := fromSystemToolbarMessage(common.SystemToolbarMsg{Id: "warning", Title: "Hotkey failed", Actions: []common.SystemToolbarAction{{Id: "open", Name: "Change hotkey", SettingsPath: "/hotkeys", SettingsParam: "MainHotkey"}}})
 	app := bindTestApp(&App{lifecycleCtx: context.Background(), querySession: queryController{editor: woxui.NewTextEditor("")}})
 	app.toolbar.applySystemToolbarMessage(message, common.SystemToolbarPriorityWarning, 0)
+	results := []queryResult{{ID: "station", Actions: []resultAction{{ID: "play", Name: "Play station", Hotkey: "enter", IsDefault: true}}}}
+	footer := toolbarActionEntries(unifiedActionPanelEntries(results, 0, app.toolbar.effectiveToolbarMessage()), true)
+	if len(footer) != 1 || footer[0].Source != actionPanelSourceResult {
+		t.Fatalf("footer actions = %+v, want only the result action", footer)
+	}
 	opened := make(chan common.SettingWindowContext, 1)
 	app.toolbar.openSettings = func(_ context.Context, target common.SettingWindowContext) error { opened <- target; return nil }
-	app.toggleToolbarPanel()
+	shortcut, ok := woxui.ParseHotkey(primaryHotkey("t"))
+	if !ok || !app.actions.onActionKey(woxui.KeyEvent{Key: shortcut.Key, Modifiers: shortcut.Modifiers, Down: true}) || app.actions.actionPanelPurpose != actionPanelPurposeToolbar {
+		t.Fatal("status shortcut did not open the toolbar action panel")
+	}
 	entries := app.toolbarActionPanelEntries()
+	if len(entries) == 0 || entries[0].ToolbarMessageAction.ID != "open" {
+		t.Fatalf("warning menu actions = %+v, want the recovery action first", entries)
+	}
 	app.activateActionPanelEntry(entries[0])
 	select {
 	case target := <-opened:

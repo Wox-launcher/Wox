@@ -70,6 +70,7 @@ type Manager struct {
 	presentation                 pluginPresentation
 	ui                           common.UI
 	resultStore                  *queryResultStore
+	pluginPreviews               *pluginPreviewRegistry
 	queryScheduler               *queryScheduler
 	autoQueryHistory             *autoQueryHistoryRecorder
 	aiProviders                  *util.HashMap[string, ai.Provider]
@@ -102,6 +103,7 @@ func GetPluginManager() *Manager {
 func newManager() *Manager {
 	m := &Manager{
 		resultStore:    newQueryResultStore(),
+		pluginPreviews: newPluginPreviewRegistry(),
 		queryScheduler: newQueryScheduler(),
 		aiProviders:    util.NewHashMap[string, ai.Provider](),
 		autoQueryHistory: newAutoQueryHistoryRecorder(autoRecordQueryHistoryDelay, func(ctx context.Context, query common.PlainQuery) {

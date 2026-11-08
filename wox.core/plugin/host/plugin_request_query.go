@@ -147,6 +147,19 @@ func (w *WebsocketHost) handleUpdateResult(ctx context.Context, pluginInstance *
 	return success, nil
 }
 
+// handleUpdatePluginPreview forwards a plugin-scoped preview update.
+func (w *WebsocketHost) handleUpdatePluginPreview(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	value, err := requirePluginParam(request.Params, "option")
+	if err != nil {
+		return nil, err
+	}
+	var option plugin.UpdatePluginPreviewOption
+	if err := json.Unmarshal([]byte(value), &option); err != nil {
+		return nil, fmt.Errorf("unmarshal plugin preview update: %w", err)
+	}
+	return pluginInstance.API.UpdatePluginPreview(ctx, option), nil
+}
+
 // handleRemoveResult adapts the removal option to the plugin API.
 func (w *WebsocketHost) handleRemoveResult(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	optionStr, err := requirePluginParam(request.Params, "option")

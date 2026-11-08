@@ -205,6 +205,7 @@ var launcherHoverTooltipNames = []string{
 	"go-ui-glance",
 	"go-ui-attention",
 	"go-ui-refinement",
+	"go-ui-refinement-default",
 	"go-ui-titlebar-action",
 	"go-ui-result-tail",
 	aboutMenuTooltipName,
@@ -219,6 +220,7 @@ func (a *App) dismissLauncherHoverTooltipsOnUI() {
 	a.glance.glanceTooltipRevision.Add(1)
 	a.attention.attentionTooltipRevision.Add(1)
 	a.resultList.refinementTooltipRevision.Add(1)
+	a.resultList.refinementDefaultTooltip.Add(1)
 	a.actions.aboutMenuTooltipRevision.Add(1)
 	a.tooltips.dismissOnUI(launcherHoverTooltipNames)
 }

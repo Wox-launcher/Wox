@@ -100,6 +100,10 @@ func (e StubAPI) UpdateResult(ctx context.Context, result plugin.UpdatableResult
 	return false
 }
 
+func (e StubAPI) UpdatePluginPreview(context.Context, plugin.UpdatePluginPreviewOption) plugin.UpdatePluginPreviewResult {
+	return plugin.UpdatePluginPreviewResult{}
+}
+
 func (e StubAPI) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) plugin.RemoveResultResult {
 	return plugin.RemoveResultResult{}
 }

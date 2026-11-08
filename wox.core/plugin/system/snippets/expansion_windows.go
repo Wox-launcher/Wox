@@ -149,7 +149,8 @@ func (windowsExpansionBackend) start(handle func(inputEvent)) (func() error, err
 		return nil, err
 	}
 	stopPointer, err := startPointerObserver(func() {
-		handle(inputEvent{kind: inputInvalidate, down: true, target: (windowsExpansionBackend{}).target()})
+		// Pointer input only cancels matching. A synchronous UI Automation query here delays mouse delivery.
+		handle(inputEvent{kind: inputInvalidate, down: true})
 	})
 	if err != nil {
 		_ = subscription.Close()

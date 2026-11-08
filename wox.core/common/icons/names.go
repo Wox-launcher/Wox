@@ -296,6 +296,8 @@ const (
 	ControlTextFormat          = "control.text-format"
 	ControlPin                 = "control.pin"
 	ControlPinFilled           = "control.pin-filled"
+	ControlBookmark            = "control.bookmark"
+	ControlBookmarkFilled      = "control.bookmark-filled"
 	ControlFormatHeading       = "control.format-heading"
 	ControlFormatBold          = "control.format-bold"
 	ControlFormatItalic        = "control.format-italic"

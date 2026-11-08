@@ -209,7 +209,10 @@ export class WoxView {
         if (released || bound) return
         bound = true
         session.connect(async snapshot => {
-          const accepted = await api.UpdateResult(ctx, { Id: resultID, Preview: { ...preview, PreviewData: snapshot.data } })
+          const updatedPreview = { ...preview, PreviewData: snapshot.data }
+          const accepted = resultID.startsWith("plugin-preview:")
+            ? (await api.UpdatePluginPreview(ctx, { Preview: updatedPreview })).Success
+            : await api.UpdateResult(ctx, { Id: resultID, Preview: updatedPreview })
           if (!accepted) throw new Error("WoxView preview update failed")
           return true
         })

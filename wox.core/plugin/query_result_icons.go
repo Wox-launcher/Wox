@@ -88,7 +88,15 @@ func (s *queryResultStore) registerLazyIcon(ctx context.Context, pluginInstance 
 			cacheKey += fmt.Sprintf("-%d", info.ModTime().UnixNano())
 		}
 	}
-	return common.NewWoxImageLazyLoad(token, cacheKey, query.Id, icons.Get(icons.StatusImagePlaceholder), size)
+	placeholder := icons.Get(icons.StatusImagePlaceholder)
+	if normalized.ImageType == common.WoxImageTypeUrl {
+		// Reuse the bundled icon by path so lazy payloads stay small.
+		fallback := pluginIdentityIcon(pluginInstance)
+		if fallback.ImageType == common.WoxImageTypeAbsolutePath && !fallback.IsEmpty() {
+			placeholder = fallback
+		}
+	}
+	return common.NewWoxImageLazyLoad(token, cacheKey, query.Id, placeholder, size)
 }
 
 // loadLazyIcon validates query ownership before resolving and publishing the image.
@@ -147,13 +155,13 @@ func (s *queryResultStore) loadLazyIcon(ctx context.Context, token string) (comm
 	}
 	converted, err := common.ConvertPluginIcon(ctx, entry.OriginalIcon, pluginID, entry.PluginDirectory, common.IconConversion{Size: entry.TargetSize, CacheScope: entry.CacheScope})
 	if err != nil {
-		return icons.Get(icons.StatusImagePlaceholder), err
+		return payload.Placeholder, err
 	}
 	// URL GIFs used to stay typed as url because conversion skipped resize.
 	// UI cannot decode that type, so they collapsed to the placeholder. The
 	// converter now downloads the file first; a remaining url means the fetch failed.
 	if converted.IsEmpty() || converted.ImageType == common.WoxImageTypeLazyLoad || converted.ImageType == common.WoxImageTypeUrl {
-		converted = icons.Get(icons.StatusImagePlaceholder)
+		converted = payload.Placeholder
 	}
 
 	entry.icon = converted

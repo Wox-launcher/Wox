@@ -248,3 +248,12 @@ func TestHardEllipsisUsesAvailableWidth(t *testing.T) {
 		t.Fatalf("word-wrapped text changed: %v", normal)
 	}
 }
+
+func TestHardEllipsisShrinkWrapsToVisibleText(t *testing.T) {
+	measurer := &fakeHostServices{}
+	block := TextBlock{Value: "long name", Style: woxui.TextStyle{Size: 10}, Width: 22, MaxLines: 1, HardEllipsis: true, ShrinkWrap: true}
+	node := block.layout(context{window: measurer}, constraints{width: 50, height: 24})
+	if node.bounds.Width != 20 {
+		t.Fatalf("shrink-wrapped ellipsis width = %v, want 20", node.bounds.Width)
+	}
+}

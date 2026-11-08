@@ -74,7 +74,8 @@ function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: Q
   return {
     Results: rawResponse.Results ?? [],
     Refinements: rawResponse.Refinements ?? [],
-    Layout: rawResponse.Layout ?? {}
+    Layout: rawResponse.Layout ?? {},
+    PluginPreview: rawResponse.PluginPreview
   }
 }
 
@@ -129,8 +130,16 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
       return
     }
     case "woxviewPreviewEvent": {
-      const cached = pluginInstances.get(request.PluginId)?.ResultActions.forContext(ctx, request.Params.ResultId)?.previews.get(request.Params.ResultId)
-      if (cached && cached.id === request.Params.DocumentID) await cached.callback(ctx, JSON.parse(request.Params.Event))
+      const instance = pluginInstances.get(request.PluginId)
+      const event = JSON.parse(request.Params.Event)
+      const cached = request.Params.ResultId.startsWith("plugin-preview:")
+        ? instance?.ResultActions.pluginPreview(ctx, request.Params.ResultId, request.Params.DocumentID, event.Type === "show", instance.API)
+        : instance?.ResultActions.forContext(ctx, request.Params.ResultId)?.previews.get(request.Params.ResultId)
+      if (cached && cached.id === request.Params.DocumentID) await cached.callback(ctx, event)
+      return
+    }
+    case "releasePluginPreview": {
+      pluginInstances.get(request.PluginId)?.ResultActions.releasePluginPreview(request.SessionId ?? "", request.QueryId ?? "", request.Params.ResultId, request.Params.DocumentID)
       return
     }
     case "toastMsgAction": {
@@ -433,6 +442,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
   response.Results.forEach(result => {
     callbacks.cache(result, false, ctx, plugin.API)
   })
+  if (response.PluginPreview) plugin.ResultActions.stagePluginPreview(sessionId, queryId, `plugin-preview:${request.PluginId}`, response.PluginPreview)
 
   return response
 }

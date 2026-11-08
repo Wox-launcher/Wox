@@ -77,6 +77,15 @@ type WoxPreview struct {
 	ScrollPosition    WoxPreviewScrollPosition
 }
 
+// UpdatePluginPreviewOption updates an existing interactive plugin preview document.
+type UpdatePluginPreviewOption struct {
+	Preview WoxPreview
+}
+
+type UpdatePluginPreviewResult struct {
+	Success bool
+}
+
 // WoxViewPreviewEventType identifies preview visibility transitions.
 type WoxViewPreviewEventType string
 

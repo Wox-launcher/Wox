@@ -143,8 +143,9 @@ func resolveActionIconRefs(results []queryResult, refs map[string]woxImage) {
 }
 
 type queryContext struct {
-	IsGlobalQuery bool   `json:"IsGlobalQuery"`
-	PluginID      string `json:"PluginId"`
+	IsGlobalQuery      bool   `json:"IsGlobalQuery"`
+	PluginID           string `json:"PluginId"`
+	refinementDefaults contract.RefinementDefaults
 }
 
 type queryLayout struct {
@@ -956,6 +957,8 @@ func (a *App) hideWindow(notify bool) error {
 			lastPosition, saveLast = a.captureLauncherOriginLocked()
 		}
 		a.actions.clearActionPanelStateLocked()
+		a.resultList.refinementPicker = refinementPicker{}
+		a.resultList.refinementFocusPending = ""
 		a.forms.form = nil
 		a.quickSelect.stopQuickSelectLocked()
 		a.visible = false
@@ -1109,6 +1112,8 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		lastPosition, saveLast = a.captureLauncherOriginLocked()
 	}
 	if hideOnBlur {
+		a.resultList.refinementPicker = refinementPicker{}
+		a.resultList.refinementFocusPending = ""
 		a.visible = false
 		a.bottomAnchorY = 0
 		a.glance.stopGlanceLocked(false)
@@ -1264,9 +1269,11 @@ func (a *App) sendCurrentQuery() error {
 	var query plainQuery
 	var startPage string
 	var skipCompletionHint bool
+	var refinementScope contract.RefinementScope
 	if err := a.runOnUI("prepare current query", func() {
 		query = a.querySession.query
 		query.QueryHint = a.querySession.query.QueryHint.Clone()
+		refinementScope = a.resultList.refinementDefault.scope
 		startPage = a.show.StartPage
 		skipCompletionHint = a.querySession.query.QueryHint != nil || a.querySession.queryHintEditorState.candidate != nil || !a.generalSettings.Data().EnableQueryCompletionHint
 		a.querySession.startQueryLoadingLocked()
@@ -1281,7 +1288,7 @@ func (a *App) sendCurrentQuery() error {
 	if query.QueryType != "selection" && query.QueryText == "" && len(query.QueryScope.Plugins) == 0 && startPage == "mru" {
 		return a.requestMRU()
 	}
-	if err := a.startTypedQuery(query, skipCompletionHint); err != nil {
+	if err := a.startTypedQuery(query, skipCompletionHint, refinementScope); err != nil {
 		_ = a.runOnUI("stop query loading after start failure", a.querySession.resetQueryLoadingLocked)
 		return err
 	}
@@ -1327,6 +1334,7 @@ func (a *App) requestMRU() error {
 		previousQueryID := a.querySession.query.QueryID
 		a.querySession.queryComplete = false
 		a.querySession.resetToGlobalInputLocked()
+		a.previews.clearPluginPreviewContext()
 		queryID = a.querySession.query.QueryID
 		// MRU replaces the refresh generation; carry its selection into the actual response.
 		if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == previousQueryID {
@@ -1371,6 +1379,12 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 	if a.webView.webViewFullscreen {
 		a.webView.clearWebViewPreviewModeLocked()
 	}
+	if refinements != nil {
+		if a.applyRefinementDefaults(queryID, context, *refinements, complete) {
+			return
+		}
+		a.applyRefinementsLocked(*refinements)
+	}
 	a.resultList.publishRows(queryID, results)
 	a.querySession.queryComplete = complete
 	enterChatMode := layout != nil && layout.ChatMode
@@ -1379,9 +1393,6 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		if !layout.ChatMode {
 			a.chat.chatFullscreen = false
 		}
-	}
-	if refinements != nil {
-		a.applyRefinementsLocked(*refinements)
 	}
 	if context != nil {
 		a.querySession.queryContext = *context
@@ -1526,7 +1537,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		actionListHeight = int(actionPanelVisibleListHeight(entries, actionPanelUnfilteredIndices(entries)))
 	}
 	guidanceFormPreview, previewVisible := false, false
-	if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
+	if result, ok := a.previews.pluginPreview.result(); ok {
+		previewVisible = launcherPreviewVisible(layout, result.Preview)
+	} else if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
 		previewType := a.resultList.results[a.resultList.selected].Preview.PreviewType
 		guidanceFormPreview = previewType == "query_requirement_settings" || previewType == "trigger_keyword_conflict"
 		// Grid results can carry preview data without displaying a preview pane.
@@ -1568,6 +1581,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	toolbarHasContent := launcherToolbarHasContent(resultCount, toolbarMessageVisible, aboutMenuOpen || a.forms.form != nil)
 	toolbarHeightIncluded := launcherToolbarHeightIncluded(params.HideToolbar, toolbarHasContent, previewFullscreen, chatFullscreen || a.webView.webViewFullscreen)
 	height := 0
+	minimumPickerWindowHeight := 0
 	if !params.HideQueryBox {
 		height += queryAreaHeight
 	} else {
@@ -1575,6 +1589,11 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	if refinementVisible {
 		height += int(densityMetrics.refinementBarHeight)
+		if picker := a.refinementByID(a.resultList.refinementPicker.id); picker != nil && a.resultList.refinementPicker.id != "" {
+			pickerHeight := launcherview.RefinementPickerHeight(len(picker.Options), densityMetrics.scale)
+			// The menu overlays existing rows and only grows a window that is too short to contain it.
+			minimumPickerWindowHeight = height + int(pickerHeight+densityMetrics.scaled(8))
+		}
 	}
 	if visibleResults > 0 {
 		height += a.resultAreaHeightLocked(results, layout)
@@ -1582,6 +1601,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if toolbarHeightIncluded {
 		height += int(densityMetrics.toolbarHeight)
 	}
+	height = max(height, minimumPickerWindowHeight)
 	maximumResultWindowHeight := resultPaddingTop + resultPaddingBottom + maxResults*resultRowHeight + max(0, maxResults-1)*resultRowGap
 	if !params.HideQueryBox {
 		maximumResultWindowHeight += queryAreaHeight
@@ -1885,6 +1905,9 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 	if !event.Down {
 		return a.quickSelect.onQuickSelectKey(event)
 	}
+	if a.resultList.refinementPicker.id != "" {
+		return a.onRefinementPickerKey(event)
+	}
 	if !a.hotkeyRecordingUsesSettingsWindow() && a.hotkeyRecording.onHotkeyRecordingKey(event) {
 		return true
 	}
@@ -1965,13 +1988,16 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			return true
 		}
 	}
-	if hotkeyMatches(a.refinementHotkey(), event) && a.toggleRefinementBar() {
+	if hotkeyMatches(a.refinementHotkey(), event) && len(a.resultList.refinements) > 0 && !a.show.HideQueryBox {
+		if !event.Repeat {
+			a.toggleRefinementBar()
+		}
 		return true
 	}
 	if event.Key == woxui.Key("u") && event.Modifiers.HasPrimary() && a.attention.activateAttentionUnread() {
 		return true
 	}
-	if a.onRefinementHotkey(event) {
+	if a.onRefinementDefaultKey(event) || a.onRefinementHotkey(event) {
 		return true
 	}
 	if a.actions.onResultActionHotkey(event) {
@@ -2154,6 +2180,9 @@ func (a *App) resizeLauncherForQueryLineChange(previousText string) {
 }
 
 func (a *App) onTextInput(event woxui.TextInputEvent) {
+	if a.resultList.refinementPicker.id != "" {
+		return
+	}
 	if a.actions.onActionTextInput(event) {
 		return
 	}
@@ -2230,7 +2259,7 @@ func (a *App) moveSelection(delta int) {
 		}
 	}
 	if target >= 0 && target < len(a.resultList.results) && !a.resultList.results[target].IsGroup {
-		a.cancelQuerySelectionRestore(target)
+		a.retainManualResultSelection(target)
 	}
 	if target != a.resultList.selected {
 		a.resultList.selected = target
@@ -2256,7 +2285,7 @@ func (a *App) moveSelectionByGroup(direction int) {
 	}
 	target := groupSelectionIndex(a.resultList.results, a.resultList.selected, direction)
 	if target >= 0 && target < len(a.resultList.results) && !a.resultList.results[target].IsGroup {
-		a.cancelQuerySelectionRestore(target)
+		a.retainManualResultSelection(target)
 	}
 	if target != a.resultList.selected {
 		a.resultList.selected = target
@@ -2278,7 +2307,7 @@ func (a *App) selectResult(index int) {
 	valid := false
 	if index >= 0 && index < len(a.resultList.results) && !a.resultList.results[index].IsGroup {
 		valid = true
-		a.cancelQuerySelectionRestore(index)
+		a.retainManualResultSelection(index)
 		changed := a.resultList.selected != index
 		a.resultList.selected = index
 		if changed {
@@ -2460,9 +2489,8 @@ func resultIndexByID(results []queryResult, id string) int {
 	return -1
 }
 
-// restoreRefreshSelection applies one refresh snapshot.
-// A result id stays pending until the query is complete so a later snapshot can
-// still follow the item. Index preservation is applied once, matching the previous refresh.
+// restoreRefreshSelection applies a selection target to one result snapshot.
+// Keep it pending until completion, since partial snapshots can omit or move the target.
 // keepPending reports whether the caller should retain pending for the next snapshot.
 func restoreRefreshSelection(results []queryResult, pending *pendingResultSelection, queryID string, complete bool) (selected int, preserved bool, keepPending bool) {
 	selected = selectableIndex(results)
@@ -2481,7 +2509,7 @@ func restoreRefreshSelection(results []queryResult, pending *pendingResultSelect
 		}
 		return selected, false, !complete
 	}
-	return selectableIndexFrom(results, pending.index), true, false
+	return selectableIndexFrom(results, pending.index), true, !complete
 }
 
 // restoreQueryResultSelection follows matching text before falling back to the old row or first result.
@@ -2507,13 +2535,15 @@ func restoreQueryResultSelection(results []queryResult, snapshot queryResultSele
 	return selectableIndex(results)
 }
 
-// cancelQuerySelectionRestore lets explicit navigation override a pending undo target.
-func (a *App) cancelQuerySelectionRestore(index int) {
-	if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.querySnapshot != nil {
-		// IDs remain stable within this query, so later snapshots can retain the user's choice.
-		a.resultList.pendingSelection = &pendingResultSelection{
-			queryID: a.querySession.query.QueryID, index: index, resultID: a.resultList.results[index].ID, preserveIndex: true,
-		}
+// retainManualResultSelection lets the user's choice override an automatic selection while results arrive.
+func (a *App) retainManualResultSelection(index int) {
+	queryID := a.querySession.query.QueryID
+	pending := a.resultList.pendingSelection
+	if a.querySession.queryComplete || (a.resultList.resultsQueryID != queryID && (pending == nil || pending.queryID != queryID)) {
+		return
+	}
+	a.resultList.pendingSelection = &pendingResultSelection{
+		queryID: queryID, index: index, resultID: a.resultList.results[index].ID, preserveIndex: true,
 	}
 }
 

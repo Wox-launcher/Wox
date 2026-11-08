@@ -108,12 +108,23 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
     elif method == "woxviewPreviewEvent":
         instance = plugin_instances.get(request.get("PluginId", ""))
         params = request.get("Params", {})
-        bucket = instance.result_actions.for_context(ctx, params.get("ResultId", "")) if instance else None
-        cached = bucket.previews.get(params.get("ResultId", "")) if bucket else None
+        result_id = params.get("ResultId", "")
+        event = json.loads(params["Event"])
+        if instance and result_id.startswith("plugin-preview:"):
+            cached = instance.result_actions.plugin_preview(ctx, result_id, params.get("DocumentID", ""), event.get("Type") == "show", instance.api)
+        else:
+            bucket = instance.result_actions.for_context(ctx, result_id) if instance else None
+            cached = bucket.previews.get(result_id) if bucket else None
         if cached and cached[0] == params.get("DocumentID"):
-            result = cached[1](ctx, json.loads(params["Event"]))
+            result = cached[1](ctx, event)
             if inspect.isawaitable(result):
                 await result
+        return None
+    elif method == "releasePluginPreview":
+        instance = plugin_instances.get(request.get("PluginId", ""))
+        params = request.get("Params", {})
+        if instance:
+            instance.result_actions.release_plugin_preview(request.get("SessionId", ""), request.get("QueryId", ""), params.get("ResultId", ""), params.get("DocumentID", ""))
         return None
     elif method == "toastMsgAction":
         toast_instance = plugin_instances.get(request.get("PluginId", ""))
@@ -299,19 +310,23 @@ async def _normalize_query_response(ctx: Context, plugin_name: str, raw_response
         results = raw_response.results
         refinements = raw_response.refinements
         layout = raw_response.layout
+        plugin_preview = raw_response.plugin_preview
     elif isinstance(raw_response, dict):
         results = raw_response.get("Results", raw_response.get("results", []))
         refinements = raw_response.get("Refinements", raw_response.get("refinements", []))
         layout = raw_response.get("Layout", raw_response.get("layout", {}))
+        plugin_preview = raw_response.get("PluginPreview", raw_response.get("plugin_preview"))
     else:
         results = getattr(raw_response, "results", [])
         refinements = getattr(raw_response, "refinements", [])
         layout = getattr(raw_response, "layout", {})
+        plugin_preview = getattr(raw_response, "plugin_preview", None)
 
     return {
         "Results": [_serialize_result(result) for result in (results or [])],
         "Refinements": [_serialize_model(refinement) for refinement in (refinements or [])],
         "Layout": _serialize_model(layout),
+        "PluginPreview": _serialize_model(plugin_preview) if plugin_preview is not None else None,
     }
 
 
@@ -334,6 +349,10 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
         await logger.info(ctx.get_trace_id(), f"invoke <{plugin_name}> method: query")
         raw_response = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
         response = await _normalize_query_response(ctx, plugin_name, raw_response)
+
+        preview_source = raw_response.plugin_preview if isinstance(raw_response, QueryResponse) else getattr(raw_response, "plugin_preview", None)
+        if preview_source is not None:
+            plugin_instance.result_actions.stage_plugin_preview(session_id, query_id, f"plugin-preview:{plugin_id}", preview_source)
 
         # Ensure each result has an ID and cache actions
         results_source = []

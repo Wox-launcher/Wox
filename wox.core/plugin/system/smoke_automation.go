@@ -33,6 +33,7 @@ const (
 	smokeAutomationQuickSelectCommand      = "quick-select"
 	smokeAutomationPinRankingCommand       = "pin-ranking"
 	smokeAutomationGroupJumpCommand        = "group-jump"
+	smokeAutomationSelectionCommand        = "selection-stability"
 	smokeAutomationTooltipCommand          = "tooltip"
 	smokeAutomationToolbarMessageID        = "wox-smoke-toolbar-message"
 	smokeAutomationKeepOpenAction          = "keep-open"
@@ -89,6 +90,7 @@ func (*smokeAutomationPlugin) GetMetadata() plugin.Metadata {
 			{Command: smokeAutomationQuickSelectCommand, Description: "Two numbered results for Quick Select"},
 			{Command: smokeAutomationPinRankingCommand, Description: "Two deterministic results for pin ranking"},
 			{Command: smokeAutomationGroupJumpCommand, Description: "Two named groups for Option/Ctrl-arrow group jumps"},
+			{Command: smokeAutomationSelectionCommand, Description: "Staged results for selection stability"},
 			{Command: smokeAutomationTooltipCommand, Description: "Preview tag tooltip fixture"},
 			{Command: smokeAutomationResultBindingCommand, Description: "Result hotkey and alias fixture"},
 			{Command: smokeAutomationListCommand, Description: "500 list results"},
@@ -186,6 +188,8 @@ func (p *smokeAutomationPlugin) Query(ctx context.Context, query plugin.Query) p
 		return queryPinRanking()
 	case smokeAutomationGroupJumpCommand:
 		return queryGroupJump()
+	case smokeAutomationSelectionCommand:
+		return p.querySelectionStability(ctx, query)
 	case smokeAutomationTooltipCommand:
 		return queryTooltipPreview()
 	case smokeAutomationResultBindingCommand:
@@ -289,6 +293,43 @@ func queryPinRanking() plugin.QueryResponse {
 		{Id: "pin-ranking-first-fixture", Title: "Pin ranking first fixture", Icon: icons.Get(icons.PluginApp)},
 		{Id: "pin-ranking-second-fixture", Title: "Pin ranking second fixture", Icon: icons.Get(icons.PluginApp)},
 	})
+}
+
+// querySelectionStability keeps the query open until a user action releases the final batch.
+func (p *smokeAutomationPlugin) querySelectionStability(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	released := make(chan struct{})
+	release := sync.OnceFunc(func() { close(released) })
+	first := plugin.QueryResult{Id: "selection-first", Title: "Selection first", Icon: icons.Get(icons.PluginApp), Score: 3000}
+	target := plugin.QueryResult{
+		Id: "selection-target", Title: "Selection target", Icon: icons.Get(icons.PluginApp), Score: 1500,
+		Actions: []plugin.QueryResultAction{{
+			Name: "Finish selection batch", PreventHideAfterAction: true,
+			Action: func(context.Context, plugin.ActionContext) { release() },
+		}},
+	}
+	if !p.api.PushResults(ctx, query, []plugin.QueryResult{first, target}) {
+		return plugin.QueryResponse{}
+	}
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-released:
+	case <-ctx.Done():
+		return plugin.QueryResponse{}
+	case <-timer.C:
+		return plugin.QueryResponse{}
+	}
+	late := plugin.QueryResult{Id: "selection-late", Title: "Selection late", Icon: icons.Get(icons.PluginApp), Score: 2250}
+	if query.Search == "refresh" {
+		late.Score = 750 // PreserveSelectedIndex should keep the same row in this mode.
+	}
+	target.Actions = []plugin.QueryResultAction{{
+		Name: "Refresh selection batch", PreventHideAfterAction: true,
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
+		},
+	}}
+	return plugin.NewQueryResponse([]plugin.QueryResult{first, target, late})
 }
 
 // queryAttentionFixture exposes fresh and repeated pushes through the real plugin API boundary.

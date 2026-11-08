@@ -254,6 +254,23 @@ func (u *uiImpl) UpdateResult(ctx context.Context, result interface{}) bool {
 	return success
 }
 
+// UpdatePluginPreview routes plugin-owned preview updates to the requesting launcher session.
+func (u *uiImpl) UpdatePluginPreview(ctx context.Context, pluginID string, option plugin.UpdatePluginPreviewOption) plugin.UpdatePluginPreviewResult {
+	view, err := u.getView(ctx)
+	if err != nil {
+		return plugin.UpdatePluginPreviewResult{}
+	}
+	if target, ok := view.(interface {
+		UpdatePluginPreview(context.Context, string, plugin.UpdatePluginPreviewOption) (plugin.UpdatePluginPreviewResult, error)
+	}); ok {
+		result, err := target.UpdatePluginPreview(ctx, pluginID, option)
+		if err == nil {
+			return result
+		}
+	}
+	return plugin.UpdatePluginPreviewResult{}
+}
+
 // RemoveResult routes a result removal to the owning launcher session.
 func (u *uiImpl) RemoveResult(ctx context.Context, option interface{}) bool {
 	typed, ok := option.(plugin.RemoveResultOption)
@@ -528,6 +545,7 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 		tracker.Log(ctx)
 	}
 
+	refinementDefaults := prepareRefinementDefaults(request.RefinementScope, &query, ownerPlugin)
 	completionHintScheduleStart := util.GetSystemTimestamp()
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !request.SkipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() && changedQuery.QueryScope.IsEmpty() {
@@ -567,7 +585,9 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 		tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-handlerStart)
 		tracker.Log(ctx)
 	}
-	newQueryRun(ctx, request, view, query, ownerPlugin).start()
+	run := newQueryRun(ctx, request, view, query, ownerPlugin)
+	run.refinementDefaults = refinementDefaults
+	run.start()
 }
 
 func queryPipelinePluginLabel(ctx context.Context, pluginInstance *plugin.Instance) string {

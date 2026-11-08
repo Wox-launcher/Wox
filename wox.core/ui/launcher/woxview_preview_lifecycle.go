@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,7 +58,16 @@ func (a *previewController) enqueueWoxViewLifecycle(result queryResult, document
 			queue.pending = queue.pending[1:]
 			queue.mu.Unlock()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := service.DispatchWoxViewPreviewEvent(ctx, a.sessionID, next.queryID, next.resultID, next.document, plugin.WoxViewPreviewEvent{Type: next.kind})
+			var err error
+			if next.kind == "release-plugin-preview" {
+				if target, ok := a.services.(interface {
+					ReleasePluginPreview(string, string, string, string) bool
+				}); ok {
+					target.ReleasePluginPreview(a.sessionID, next.queryID, strings.TrimPrefix(next.resultID, "plugin-preview:"), next.document)
+				}
+			} else {
+				err = service.DispatchWoxViewPreviewEvent(ctx, a.sessionID, next.queryID, next.resultID, next.document, plugin.WoxViewPreviewEvent{Type: next.kind})
+			}
 			cancel()
 			if next.done != nil {
 				close(next.done)

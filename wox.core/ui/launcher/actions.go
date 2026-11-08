@@ -245,8 +245,8 @@ func unifiedActionPanelEntriesWithHide(results []queryResult, selected int, mess
 			entries = append(entries, actionPanelEntry{
 				Key: fmt.Sprintf("toolbar:%s:%s:%d", message.ID, action.ID, index), ID: fmt.Sprintf("toolbar-%s-%d", action.ID, index),
 				Name: action.Name, Icon: action.Icon, Hotkey: hotkey, IsDefault: action.IsDefault, Source: actionPanelSourceToolbar,
-				// Toolbar message actions are explicitly supplied for the footer.
-				ShowInToolbar: true, ToolbarMessageID: message.ID, ToolbarMessageAction: action,
+				// Keep system recovery actions with their status message.
+				ShowInToolbar: !message.System, ToolbarMessageID: message.ID, ToolbarMessageAction: action,
 			})
 			if hotkey := normalizeToolbarHotkey(action.Hotkey); hotkey != "" {
 				reservedHotkeys[hotkey] = struct{}{}

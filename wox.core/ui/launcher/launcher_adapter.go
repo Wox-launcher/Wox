@@ -107,6 +107,7 @@ type viewSnapshot struct {
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
 	selectedPreviewType   string
+	pluginPreview         *queryResult
 	webViewNavigation     woxui.WebViewNavigationState
 	quickSelectMode       bool
 }
@@ -146,7 +147,11 @@ func (a *App) snapshot() viewSnapshot {
 		actionIndices = filteredActionIndices(actionEntries, actionFilter, a.language.translationSnapshot(), a.usePinYin())
 	}
 	selectedPreviewType := ""
-	if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
+	var pluginPreview *queryResult
+	if result, ok := a.previews.pluginPreview.result(); ok {
+		pluginPreview = &result
+		selectedPreviewType = result.Preview.PreviewType
+	} else if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
 		preview := a.remotePreview.resolvePreview(a.resultList.results[a.resultList.selected].Preview)
 		selectedPreviewType = preview.PreviewType
 	}
@@ -195,6 +200,7 @@ func (a *App) snapshot() viewSnapshot {
 		palette:               a.appearance.palette,
 		densityMetrics:        a.appearance.densityMetrics.normalized(),
 		selectedPreviewType:   selectedPreviewType,
+		pluginPreview:         pluginPreview,
 		webViewNavigation:     a.webView.webViewNavigation,
 		quickSelectMode:       a.quickSelect.quickSelectMode && a.actions.actionPanel == false && a.forms.form == nil && a.requirements.requirementForm == nil,
 	}
@@ -300,6 +306,14 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		}
 	}
 	var overlay woxwidget.Widget
+	var refinementAnchor woxui.Rect
+	if refinementHeight > 0 && snapshot.tableEditor == nil {
+		var popupBounds woxui.Rect
+		overlay, refinementAnchor, popupBounds = a.buildRefinementPicker(snapshot, contentBounds, frame.Scale)
+		if overlay != nil {
+			nativePreviewOcclusion = popupBounds
+		}
+	}
 	if snapshot.tableEditor != nil {
 		overlay = a.formTables.buildFormTableOverlay(snapshot.tableEditor, a.formControlTheme(snapshot), width, height, frame.Scale)
 		overlay = launcherPreparedSection("launcher-table-overlay-section", "table-overlay", launcherPreparedSectionProps{Signature: a.launcherTableOverlaySectionSignature(snapshot, width, height, frame.Scale), Width: width, Height: height, Child: overlay})
@@ -311,7 +325,7 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 		nativePreviewOcclusion.Y += contentBounds.Y
 	}
 	a.nativeFile.requestNativeFilePreviewOcclusion(nativePreviewOcclusion)
-	return launcherview.LauncherView(launcherview.LauncherViewProps{
+	launcher := launcherview.LauncherView(launcherview.LauncherViewProps{
 		Width: frame.Size.Width, Height: frame.Size.Height, TitleBar: titleBar, Header: header, Refinements: refinements, Content: content, Footer: footer, FooterOverlay: footerOverlay,
 		QueryAtBottom: snapshot.show.QueryBoxAtBottom, Floating: floating, Overlay: overlay, Theme: snapshot.palette.componentTheme(),
 		PreviewOnly: previewOnly, BorderWidth: snapshot.palette.appPadding.Top, OnDragStart: func() {
@@ -320,6 +334,22 @@ func (a *App) buildLauncher(frame woxui.FrameInfo) woxwidget.Widget {
 			}
 		},
 	})
+	pickerID, pendingFocus := a.resultList.refinementPicker.id, a.resultList.refinementFocusPending
+	var afterLayout func()
+	if a.host != nil && (pickerID != "" || pendingFocus != "") {
+		afterLayout = func() {
+			if pendingFocus != "" && a.resultList.refinementFocusPending == pendingFocus {
+				a.resultList.refinementFocusPending = ""
+				a.host.RequestFocus(pendingFocus)
+			}
+			if refinementHeight > 0 && pickerID != "" && a.resultList.refinementPicker.id == pickerID {
+				if bounds, ok := a.host.BoundsForKey(launcherview.RefinementGroupKey(pickerID)); ok && bounds != refinementAnchor {
+					_ = a.window.Invalidate()
+				}
+			}
+		}
+	}
+	return launcherview.ObserveRefinementLayout(launcher, afterLayout)
 }
 
 // buildPreviewTitleBar selects browser chrome for direct WebView previews and native title chrome for other full previews.
@@ -986,14 +1016,20 @@ func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compos
 }
 
 func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, underlayHeight float32) woxwidget.Widget {
-	if len(snapshot.results) == 0 {
+	if len(snapshot.results) == 0 && snapshot.pluginPreview == nil {
 		// A query that finished with nothing still has to report completion. Dropping the
 		// status node made "results pending" and "finished empty" indistinguishable to
 		// automation, so waiting for completion could only ever succeed on a non-empty
 		// result set, and callers had to guess by treating a missing node as settled.
 		return launcherview.WrapLauncherResultsStatus(snapshot.queryComplete, woxwidget.Container{Width: width, Height: height})
 	}
-	previewVisible := snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) && launcherPreviewVisible(snapshot.layout, snapshot.results[snapshot.selected].Preview)
+	var result queryResult
+	if snapshot.pluginPreview != nil {
+		result = *snapshot.pluginPreview
+	} else if snapshot.selected >= 0 && snapshot.selected < len(snapshot.results) {
+		result = snapshot.results[snapshot.selected]
+	}
+	previewVisible := launcherPreviewVisible(snapshot.layout, result.Preview)
 	if !previewVisible {
 		if snapshot.show.HideResults {
 			return launcherview.WrapLauncherResultsStatus(snapshot.queryComplete, woxwidget.Container{Width: width, Height: height})
@@ -1002,7 +1038,6 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 	}
 	ratio := launcherPreviewRatio(snapshot.layout, snapshot.chatFullscreen || snapshot.webViewFullscreen || snapshot.terminalFullscreen)
 	if ratio <= 0 {
-		result := snapshot.results[snapshot.selected]
 		preview := a.buildPreviewSection(result, snapshot, width, height, imageScale)
 		if launcherChromeHidden(snapshot.show, snapshot.chatFullscreen) && a.remotePreview.resolvePreview(result.Preview).PreviewType != "chat" && !launcherPreviewTitleBarVisible(snapshot) {
 			label := a.language.translate("i18n:ui_close")
@@ -1023,7 +1058,7 @@ func (a *App) buildContent(snapshot viewSnapshot, width, height, imageScale, und
 	previewWidth := width - splitX
 	return launcherview.LauncherSplitContentView(
 		splitX, a.buildResults(snapshot, splitX, height, imageScale, underlayHeight),
-		previewWidth, a.buildPreviewSection(snapshot.results[snapshot.selected], snapshot, previewWidth, height, imageScale),
+		previewWidth, a.buildPreviewSection(result, snapshot, previewWidth, height, imageScale),
 	)
 }
 
@@ -1433,6 +1468,9 @@ func (a *App) buildFooter(snapshot viewSnapshot, width, height, imageScale float
 	actions := make([]launcherview.LauncherToolbarAction, 0)
 	entries := unifiedActionPanelEntriesWithHide(snapshot.results, snapshot.selected, snapshot.toolbarMsg, a.webView.canHideWebViewPage())
 	for _, entry := range toolbarActionEntries(entries, snapshot.toolbarMsg != nil) {
+		if a.resultList.refinementPicker.id != "" && toolbarPinnedAction(entry) {
+			continue
+		}
 		label := a.language.translate(entry.Name)
 		if strings.TrimSpace(label) == "" {
 			continue

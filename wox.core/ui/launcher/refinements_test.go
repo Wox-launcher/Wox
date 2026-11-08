@@ -56,6 +56,73 @@ func TestRefinementHotkeyTargetRequiresKeyDown(t *testing.T) {
 	}
 }
 
+func TestRefinementDropdownHotkeysAndLocalSearch(t *testing.T) {
+	refinements := []queryRefinement{
+		{ID: "country", Type: "singleSelect", Hotkey: "ctrl+r", Options: []queryRefinementOption{
+			{Value: "all", Title: "All"}, {Value: "FR", Title: "France", Keywords: []string{"法国"}},
+			{Value: "JP", Title: "Japan", Keywords: []string{"日本"}},
+		}},
+		{ID: "genre", Type: "multiSelect", Hotkey: "ctrl+g", Options: []queryRefinementOption{{Value: "jazz"}, {Value: "rock"}}},
+	}
+	app := bindTestApp(&App{querySession: queryController{query: newInputQuery("radio jazz")}})
+	app.applyRefinementsLocked(refinements)
+	if !app.toggleRefinementBar() {
+		t.Fatal("could not show refinements")
+	}
+	countryKey := woxui.KeyEvent{Key: "r", Modifiers: woxui.KeyModifierControl, Down: true}
+	if !app.onRefinementHotkey(countryKey) || app.resultList.refinementPicker.id != "country" {
+		t.Fatal("visible country hotkey did not open its dropdown")
+	}
+	app.resultList.refinementPicker.search = "日本"
+	app.filterRefinementPicker(app.refinementByID("country"), "")
+	picker := app.resultList.refinementPicker
+	if !reflect.DeepEqual(picker.options, []int{2}) || picker.value != "JP" {
+		t.Fatalf("search by keyword = %#v, want JP", picker)
+	}
+	if app.querySession.query.QueryText != "radio jazz" || app.querySession.query.QueryRefinements["country"] != "all" {
+		t.Fatal("opening or searching modified the query")
+	}
+	genreKey := woxui.KeyEvent{Key: "g", Modifiers: woxui.KeyModifierControl, Down: true}
+	if !app.onRefinementPickerKey(genreKey) || app.resultList.refinementPicker.id != "genre" {
+		t.Fatal("multi-select hotkey did not switch the open dropdown")
+	}
+	app.applyRefinementsLocked(refinements[:1])
+	if app.resultList.refinementPicker.id != "" {
+		t.Fatal("picker remained open after its group disappeared")
+	}
+}
+
+func TestRefinementMultiSelectCanRemainEmptyWithDefaults(t *testing.T) {
+	refinement := queryRefinement{ID: "type", Type: "multiSelect", DefaultValue: []string{"text"},
+		Options: []queryRefinementOption{{Value: "text"}}}
+	app := bindTestApp(&App{querySession: queryController{query: newInputQuery("test ")}})
+	app.applyRefinementsLocked([]queryRefinement{refinement})
+	if got := app.querySession.query.QueryRefinements["type"]; got != "text" {
+		t.Fatalf("initial refinement = %q, want default text", got)
+	}
+	app.querySession.query.QueryRefinements["type"] = ""
+	app.applyRefinementsLocked([]queryRefinement{refinement})
+	if got, exists := app.querySession.query.QueryRefinements["type"]; !exists || got != "" {
+		t.Fatalf("explicitly cleared refinement = %q (exists: %v)", got, exists)
+	}
+	if got := nextRefinementHotkeyValues(refinement, nil); !reflect.DeepEqual(got, []string{"text"}) {
+		t.Fatalf("multi-select hotkey from empty = %v, want text", got)
+	}
+}
+
+func TestValidateRestoredRefinementsUsesCurrentOptions(t *testing.T) {
+	refinements := []queryRefinement{
+		{ID: "genre", Type: "singleSelect", DefaultValue: []string{"all"}, Options: []queryRefinementOption{{Value: "jazz"}, {Value: "all"}}},
+		{ID: "language", Type: "singleSelect", Options: []queryRefinementOption{{Value: "chinese"}}},
+		{ID: "tags", Type: "multiSelect", DefaultValue: []string{"news"}},
+	}
+	saved := map[string]string{"genre": "obsolete", "language": "chinese", "tags": "", "removed": "value"}
+	want := map[string]string{"genre": "all", "language": "chinese", "tags": ""}
+	if got := validateRestoredRefinements(refinements, saved); !reflect.DeepEqual(got, want) {
+		t.Fatalf("validated refinements = %v, want %v", got, want)
+	}
+}
+
 func TestBeginQueryTransitionKeepsVisibleResultsDuringGracePeriod(t *testing.T) {
 	app := bindTestApp(&App{
 		querySession: queryController{query: plainQuery{QueryID: "new-query", QueryText: "cb "}},

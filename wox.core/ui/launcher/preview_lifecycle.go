@@ -117,7 +117,13 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 
 // selectedPreviewForLifecycle retains an already active WebView during the result grace period.
 func (a *previewController) selectedPreviewForLifecycle() (queryResult, queryPreview, bool) {
-	if a.isDestroyed() || !a.visible() || a.resultList.resultsQueryID == "" || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
+	if a.isDestroyed() || !a.visible() {
+		return queryResult{}, queryPreview{}, false
+	}
+	if result, ok := a.pluginPreview.result(); ok {
+		return result, result.Preview, launcherPreviewVisible(a.selectedPreviewLayout(), result.Preview)
+	}
+	if a.resultList.resultsQueryID == "" || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {
 		return queryResult{}, queryPreview{}, false
 	}
 	result := a.resultList.results[a.resultList.selected]

@@ -159,21 +159,19 @@ func LauncherView(props LauncherViewProps) woxwidget.Widget {
 	}
 	// Keep the footer's backdrop on the main surface; only floating UI belongs
 	// above an embedded WebView. The boundary is a no-op when no page was painted.
-	body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+	layers := []woxwidget.StackChild{
 		{Child: body},
 		{Child: woxwidget.Painter{Width: props.Width, Height: props.Height, Paint: func(list *woxui.DisplayList, _ woxui.Rect) {
 			list.FlushEmbeddedSurfaceOverlay()
 		}}},
-	}}
+	}
 	if props.Floating != nil && props.Floating.Child != nil {
-		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
-			{Child: body},
-			{Left: props.Floating.Left, Top: props.Floating.Top, Bottom: props.Floating.Bottom, AnchorBottom: props.Floating.AnchorBottom, Child: props.Floating.Child},
-		}}
+		layers = append(layers, woxwidget.StackChild{Left: props.Floating.Left, Top: props.Floating.Top, Bottom: props.Floating.Bottom, AnchorBottom: props.Floating.AnchorBottom, Child: props.Floating.Child})
 	}
 	if props.Overlay != nil {
-		body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{{Child: body}, {Child: props.Overlay}}}
+		layers = append(layers, woxwidget.StackChild{Child: props.Overlay})
 	}
+	body = woxwidget.Stack{Width: props.Width, Height: props.Height, Children: layers}
 	body = woxcomponent.WoxLauncherContent(windowWidth, windowHeight, props.Theme, body)
 	props.Width, props.Height = windowWidth, windowHeight
 	radius := props.Radius

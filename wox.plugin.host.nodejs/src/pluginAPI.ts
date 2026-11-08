@@ -38,6 +38,7 @@ import {
   ShowToastMsgOption,
   ShowToastMsgResult,
   UpdatableResult,
+  WoxPreview,
   RemoveResultOption,
   RemoveResultResult
 } from "@wox-launcher/wox-plugin"
@@ -539,6 +540,10 @@ export class PluginAPI implements PublicAPI {
         }
       }
     }
+  }
+
+  async UpdatePluginPreview(ctx: Context, option: { Preview: WoxPreview }): Promise<{ Success: boolean }> {
+    return (await this.invokeMethod(ctx, "UpdatePluginPreview", { option: JSON.stringify(option) })) as { Success: boolean } ?? { Success: false }
   }
 
   async RemoveResult(ctx: Context, option: RemoveResultOption): Promise<RemoveResultResult> {

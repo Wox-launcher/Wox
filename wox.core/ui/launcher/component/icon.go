@@ -495,6 +495,14 @@ func FilledPinGlyph(size float32, color woxui.Color) woxwidget.Widget {
 	return svgIcon("control.pin-filled", size, color)
 }
 
+// BookmarkGlyph indicates whether a refinement default has been saved.
+func BookmarkGlyph(size float32, color woxui.Color, saved bool) woxwidget.Widget {
+	if saved {
+		return svgIcon(icons.ControlBookmarkFilled, size, color)
+	}
+	return svgIcon(icons.ControlBookmark, size, color)
+}
+
 var formatGlyphNames = map[string]string{
 	"block":               "control.format-heading",
 	"bold":                "control.format-bold",

@@ -618,6 +618,32 @@ func TestLoadLazyResultIconFallsBackWhenRemoteURLFails(t *testing.T) {
 	}
 }
 
+func TestRemoteResultIconUsesPluginIconAsFallback(t *testing.T) {
+	initPluginImageTestLocation(t)
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+
+	ctx := context.Background()
+	query := Query{Id: "query", SessionId: "session"}
+	result := QueryResult{Id: "station", Icon: common.NewWoxImageUrl(server.URL + "/station.webp")}
+	manager, instance := newTestManagerWithCachedResult(query, result)
+	instance.PluginDirectory = t.TempDir()
+	instance.Metadata.Icon = "relative:images/radio.png"
+
+	icon := manager.convertResultIcon(ctx, instance, query, QueryLayout{}, result.Id, result.Title, result.Icon)
+	payload, err := common.ParseWoxLazyLoadImagePayload(icon)
+	require.NoError(t, err)
+	require.Equal(t, common.WoxImageTypeAbsolutePath, payload.Placeholder.ImageType)
+	require.Equal(t, filepath.Join(instance.PluginDirectory, "images", "radio.png"), filepath.Clean(payload.Placeholder.ImageData))
+	cached, ok := manager.resultStore.findInSession(query.SessionId, query.Id, result.Id)
+	require.True(t, ok)
+	cached.Result.Icon = icon
+
+	loaded, err := manager.LoadLazyResultIcon(ctx, payload.Token)
+	require.ErrorContains(t, err, "404")
+	require.Equal(t, payload.Placeholder, loaded)
+}
+
 func initPluginImageTestLocation(t *testing.T) {
 	t.Helper()
 	dataDir := t.TempDir()

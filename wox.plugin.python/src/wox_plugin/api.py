@@ -16,6 +16,7 @@ from .models.context import Context
 from .models.window import CreateWindowOption, CreateWindowResult
 from .models.log import LogLevel
 from .models.mru import MRUData
+from .models.preview import WoxPreview
 from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
@@ -55,6 +56,16 @@ class RemoveResultOption:
 class RemoveResultResult:
     """Whether the visible result was removed."""
 
+    success: bool = False
+
+
+@dataclass
+class UpdatePluginPreviewOption:
+    preview: WoxPreview
+
+
+@dataclass
+class UpdatePluginPreviewResult:
     success: bool = False
 
 
@@ -801,6 +812,10 @@ class PublicAPI(Protocol):
                     tails=[ResultTail(...)]
                 ))
         """
+        ...
+
+    async def update_plugin_preview(self, ctx: Context, option: UpdatePluginPreviewOption) -> UpdatePluginPreviewResult:
+        """Update the current session's existing WoxView plugin preview."""
         ...
 
     async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:

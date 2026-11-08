@@ -22,6 +22,16 @@ class QueryActions:
         self.results: dict[str, dict[str, CachedAction]] = {}
         self.previews: dict[str, tuple[str, Any, Any]] = {}
 
+    def stage_plugin_preview(self, result_id: str, preview: Any) -> None:
+        binding = getattr(preview, "_wox_preview_binding", None)
+        document = getattr(preview, "wox_view_id", "")
+        callback = getattr(preview, "on_wox_view_event", None)
+        if not self.active or not document or not callback:
+            if binding is not None:
+                binding.release()
+            return
+        self.previews[result_id] = (document, callback, binding)
+
     def cache(
         self, result: Any, preserve_callbacks: bool = False, ctx: Any = None, api: Any = None, defer_preview_release: bool = False
     ) -> None:
@@ -87,6 +97,7 @@ class QueryActions:
 class ResultActions:
     def __init__(self) -> None:
         self.sessions: dict[str, dict[str, QueryActions]] = {}
+        self.plugin_previews: dict[str, list[tuple[str, str, tuple[str, Any, Any]]]] = {}
         self.closed = False
 
     def begin(self, session: str, query: str, managed: bool) -> QueryActions:
@@ -120,6 +131,44 @@ class ResultActions:
     def for_context(self, ctx: Context, result_id: str) -> QueryActions | None:
         return self.find(ctx.values.get("SessionId", ""), ctx.values.get("QueryId", ""), result_id)
 
+    def stage_plugin_preview(self, session: str, query: str, result_id: str, preview: Any) -> None:
+        active = self.plugin_previews.get(session, [])
+        binding = getattr(preview, "_wox_preview_binding", None)
+        if any((binding is not None and binding is item[2][2]) or
+               (getattr(preview, "wox_view_id", "") == item[2][0] and getattr(preview, "on_wox_view_event", None) == item[2][1]) for item in active):
+            return
+        bucket = self.find(session, query, result_id)
+        if bucket is not None:
+            bucket.stage_plugin_preview(result_id, preview)
+
+    def plugin_preview(self, ctx: Context, result_id: str, document: str, activate: bool, api: Any) -> tuple[str, Any, Any] | None:
+        session, query = ctx.values.get("SessionId", ""), ctx.values.get("QueryId", "")
+        active = self.plugin_previews.get(session, [])
+        existing = next((item for item in active if item[0] == query and item[1] == result_id and item[2][0] == document), None)
+        if existing:
+            return existing[2]
+        if not activate:
+            return None
+        bucket = self.find(session, query, result_id)
+        candidate = bucket.previews.get(result_id) if bucket else None
+        if candidate is None or candidate[0] != document:
+            return None
+        del bucket.previews[result_id]
+        self.plugin_previews.setdefault(session, []).append((query, result_id, candidate))
+        if candidate[2] is not None:
+            candidate[2].bind(ctx, api, result_id)
+        return candidate
+
+    def release_plugin_preview(self, session: str, query: str, result_id: str, document: str) -> None:
+        active = self.plugin_previews.get(session, [])
+        existing = next((item for item in active if item[0] == query and item[1] == result_id and item[2][0] == document), None)
+        if existing:
+            active.remove(existing)
+            if not active:
+                self.plugin_previews.pop(session, None)
+            if existing[2][2] is not None:
+                existing[2][2].release()
+
     def release(self, session: str, query: str) -> None:
         """Release only the requested query, leaving other windows intact."""
         queries = self.sessions.get(session)
@@ -134,6 +183,11 @@ class ResultActions:
     def close(self) -> None:
         """Invalidate in-flight callbacks and APIs belonging to an unloaded plugin."""
         self.closed = True
+        for active in self.plugin_previews.values():
+            for _, _, preview in active:
+                if preview[2] is not None:
+                    preview[2].release()
+        self.plugin_previews.clear()
         for queries in self.sessions.values():
             for bucket in queries.values():
                 bucket.release()

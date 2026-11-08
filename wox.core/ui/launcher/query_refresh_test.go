@@ -7,6 +7,24 @@ import (
 	"wox/common"
 )
 
+// TestRefreshPreservesSelectedIndexThroughCompletion covers the final snapshot after an index-preserving refresh.
+func TestRefreshPreservesSelectedIndexThroughCompletion(t *testing.T) {
+	app := newSendQueryTestApp(&sendQueryRecorderServices{}, newInputQuery("radio "), showAppParams{MaxResultCount: 8})
+	t.Cleanup(app.querySession.resetQueryLoadingLocked)
+	rows := []queryResult{{ID: "next"}, {ID: "station:first"}, {ID: "station:selected"}}
+	app.applyResults(app.querySession.query.QueryID, rows, nil, nil, nil, 0, true)
+	app.selectResult(2)
+	if err := app.RefreshQuery(context.Background(), common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
+		t.Fatal(err)
+	}
+	queryID := app.querySession.query.QueryID
+	app.applyResults(queryID, []queryResult{{ID: "next"}}, nil, nil, nil, 0, false)
+	app.applyResults(queryID, []queryResult{{ID: "next"}, {ID: "station:first"}, {ID: "station:selected"}}, nil, nil, nil, 0, true)
+	if app.resultList.selected != 2 {
+		t.Fatalf("final refresh selected row %d, want row 2", app.resultList.selected)
+	}
+}
+
 // TestRefreshResultHoldPublishesLatestSnapshot covers a slow plugin leaving usable partial results behind.
 func TestRefreshResultHoldPublishesLatestSnapshot(t *testing.T) {
 	app := newSendQueryTestApp(&sendQueryRecorderServices{}, newInputQuery("setting"), showAppParams{MaxResultCount: 8})

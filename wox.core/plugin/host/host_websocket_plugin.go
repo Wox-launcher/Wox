@@ -29,6 +29,12 @@ func (w *WebsocketPlugin) DispatchWoxViewPreviewEvent(ctx context.Context, resul
 	return err
 }
 
+// ReleasePluginPreview releases the host-side callback after the UI unmounts it.
+func (w *WebsocketPlugin) ReleasePluginPreview(ctx context.Context, resultID, documentID string) error {
+	_, err := w.websocketHost.invokeMethod(ctx, w.metadata, "releasePluginPreview", map[string]string{"ResultId": resultID, "DocumentID": documentID})
+	return err
+}
+
 func NewWebsocketPlugin(metadata plugin.Metadata, websocketHost *WebsocketHost) *WebsocketPlugin {
 	return &WebsocketPlugin{
 		metadata:      metadata,

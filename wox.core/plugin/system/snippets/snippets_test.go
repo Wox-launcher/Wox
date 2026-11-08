@@ -272,9 +272,9 @@ func TestEngineUndoCountsGraphemesAndCancelsOnInput(t *testing.T) {
 	if undo == nil || !undo.undo || undo.deletes != 1 || undo.record.Text != ";a" {
 		t.Fatalf("undo = %#v", undo)
 	}
-	e.onInput(inputEvent{kind: inputInvalidate, down: true, key: 10, target: 10})
+	e.onInput(inputEvent{kind: inputInvalidate, down: true})
 	if e.valid(*undo) {
-		t.Fatal("subsequent input must cancel undo")
+		t.Fatal("pointer input without a focus target must cancel queued undo")
 	}
 }
 

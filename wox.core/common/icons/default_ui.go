@@ -145,6 +145,8 @@ var defaultUIIcons = map[string]common.WoxImage{
 	ControlToolbarHidden:     newMonochromeUIIcon(`<rect x="3" y="4" width="18" height="16" rx="2" stroke="var(--wox-theme-icon-color)"/>`),
 	ControlTextFormat:        newMonochromeUIIcon(`<path d="M2 20 6.5 4 11 20M4 14h5M22 12v8M22 16a3 4 0 1 0-6 0 3 4 0 1 0 6 0"/>`),
 	ControlPin:               newMonochromeUIIcon(`<path d="m9 4 6 0-1 6 4 4H6l4-4zM12 14v6"/>`),
+	ControlBookmark:          newMonochromeUIIcon(`<path d="M6 4h12v16l-6-4-6 4z"/>`),
+	ControlBookmarkFilled:    newMonochromeUIIcon(`<path d="M6 4h12v16l-6-4-6 4z" fill="var(--wox-theme-icon-color)" stroke="none"/>`),
 	ControlPinFilled:         common.NewWoxImageSvg(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="var(--wox-theme-icon-color)" d="M8 3h8l-1 7 4 4v2h-6v5l-1 2-1-2v-5H5v-2l4-4z"/></svg>`),
 
 	// Notes and other compact editor format bars.

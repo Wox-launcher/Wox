@@ -39,6 +39,37 @@ def result(result_id, callback, form=False):
 
 
 class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_plugin_preview_survives_query_and_is_released(self):
+        from wox_plugin import Button, QueryResponse, create_wox_view
+
+        clicks, disposed = [], []
+        def render(session):
+            def press():
+                clicks.append("click")
+                session.invalidate()
+            return Button(label=str(len(clicks)), on_press=press)
+
+        preview = create_wox_view(render, lambda error: self.fail(str(error))).as_preview(on_dispose=lambda: disposed.append(True))
+        self.api.invoke_method.return_value = {"Success": True}
+        self.plugin.query = AsyncMock(return_value=QueryResponse(plugin_preview=preview))
+        await self.call("query", "a", "first")
+        result_id = "plugin-preview:owner"
+        params = {"ResultId": result_id, "DocumentID": preview.wox_view_id}
+        await self.call("woxviewPreviewEvent", "a", "first", **params, Event=json.dumps({"Type": "show"}))
+        self.callbacks.release("a", "first")
+        await self.call("query", "a", "second")
+        self.callbacks.release("a", "second")
+        handler = json.loads(preview.preview_data)["root"]["props"]["onPress"]["$handler"]
+        event = json.dumps({"Handler": handler, "Args": [], "Key": ""})
+        await self.call("woxviewPreviewEvent", "a", "first", **params, Event=event)
+        await asyncio.sleep(0.05)
+        self.assertEqual(clicks, ["click"])
+        self.assertEqual(self.api.invoke_method.await_args.args[1], "UpdatePluginPreview")
+        await self.call("releasePluginPreview", "a", "first", **params)
+        await self.call("woxviewPreviewEvent", "a", "first", **params, Event=event)
+        self.assertEqual(clicks, ["click"])
+        self.assertEqual(disposed, [True])
+
     async def test_preview_returned_after_query_release_is_disposed(self):
         from wox_plugin import Text, create_wox_view
 

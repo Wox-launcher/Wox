@@ -1,6 +1,10 @@
 # Query Refinements
 
-Return query-scoped chips such as type filters or sort modes on `QueryResponse.Refinements`. Wox renders the controls and sends the selected values back on the next query as `Query.Refinements` / `query.refinements`. The plugin owns the filtering or sorting semantics.
+Return query-scoped controls such as type filters or sort modes on `QueryResponse.Refinements`. Wox renders the controls and sends the selected values back on the next query as `Query.Refinements` / `query.refinements`. The plugin owns the filtering or sorting semantics.
+
+Wox shows `singleSelect` and `multiSelect` as searchable dropdowns. Options can supply `Keywords` / `keywords` for alternative names. Searching the dropdown is local to Wox and leaves the query text untouched. While the filters bar is visible, a group's shortcut opens its dropdown. With the bar hidden, it cycles single-select values or toggles all multi-select values, as before.
+
+The bookmark at the end of the filters bar saves or removes the current command's default selections. Wox stores the snapshot as a synced plugin setting and supplies it through `Query.Refinements` on re-entry. Temporary edits stay in the current query.
 
 Requires `MinWoxVersion` >= `2.0.4` (or `2.4.2` for single-file SDK plugins). Do not invent command syntax such as `type:file` when a refinement can express the same control.
 

@@ -15,7 +15,7 @@ import (
 	utilselection "wox/util/selection"
 )
 
-func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool) error {
+func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool, refinementScope contract.RefinementScope) error {
 	if a.destroyed.Load() {
 		return context.Canceled
 	}
@@ -26,6 +26,7 @@ func (a *App) startTypedQuery(query plainQuery, skipCompletionHint bool) error {
 		Query:              toCorePlainQuery(query),
 		SkipCompletionHint: skipCompletionHint,
 		SentTimestamp:      time.Now().UnixMilli(),
+		RefinementScope:    refinementScope,
 	}, a)
 }
 
@@ -86,12 +87,32 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 		}
 	}
 	refinements := fromCoreQueryRefinements(response.Response.Refinements)
-	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId}
+	queryContext := queryContext{IsGlobalQuery: response.Response.Context.IsGlobalQuery, PluginID: response.Response.Context.PluginId,
+		refinementDefaults: response.RefinementDefaults}
+	var pluginPreview *queryPreview
+	if response.Response.PluginPreview != nil {
+		converted := fromCorePreview(*response.Response.PluginPreview)
+		pluginPreview = &converted
+	}
 	if err := a.runOnUI("apply query response", func() {
 		if util.IsDev() {
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response ui enter queryId=%s results=%d final=%t", response.QueryID, len(results), response.IsFinal))
 		}
-		if !a.isDestroyed() {
+		if !a.isDestroyed() && response.QueryID == a.querySession.query.QueryID {
+			previewState := &a.previews.pluginPreview
+			if previewState.preview != nil && (queryContext.IsGlobalQuery || queryContext.PluginID != previewState.pluginID) {
+				a.previews.clearPluginPreviewContext()
+			}
+			if previewState.preview == nil && pluginPreview != nil && pluginPreview.PreviewType == "woxview" {
+				if service, ok := a.services.(interface {
+					InstallPluginPreview(string, string, string, plugin.WoxPreview) bool
+				}); ok {
+					if !service.InstallPluginPreview(a.sessionID, response.QueryID, queryContext.PluginID, *response.Response.PluginPreview) {
+						pluginPreview = nil
+					}
+				}
+			}
+			previewState.accept(queryContext, pluginPreview, response.QueryID)
 			a.applyResults(response.QueryID, results, &layout, &refinements, &queryContext, response.Response.QueryStartTimestamp, response.IsFinal)
 		}
 		if util.IsDev() {

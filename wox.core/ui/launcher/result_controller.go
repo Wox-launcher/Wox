@@ -7,6 +7,7 @@ import (
 	"wox/plugin"
 
 	woxui "wox/ui/runtime"
+	woxwidget "wox/ui/widget"
 )
 
 // resultController owns the published result collection and its selection and scroll state.
@@ -28,6 +29,11 @@ type resultController struct {
 	refinementsSectionRevision uint64
 	refinementOpen             bool
 	refinementScope            string
+	refinementPicker           refinementPicker
+	refinementFocusPending     woxwidget.Key
+	refinementDefault          refinementDefaultState
+	refinementDefaultBusy      bool
+	refinementDefaultTooltip   atomic.Uint64
 	// retainedResultIcons is the last decoded bitmap for each result row.
 	// A replacement icon keeps that bitmap until its own decode finishes.
 	retainedResultIcons        map[string]*woxui.Image
@@ -83,6 +89,9 @@ func (a *resultController) clearRefinements() {
 	a.refinementsSectionRevision++
 	a.refinementOpen = false
 	a.refinementScope = ""
+	a.refinementPicker = refinementPicker{}
+	a.refinementFocusPending = ""
+	a.refinementDefault = refinementDefaultState{}
 }
 
 // restoreSelection retains a requested row across partial refresh snapshots.

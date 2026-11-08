@@ -32,8 +32,11 @@ func (a *previewController) selectedPreviewLayout() queryLayout {
 	if a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) || launcherPreviewRatio(layout, false) == 0 {
 		return layout
 	}
-	result := a.resultList.results[a.resultList.selected]
-	visible := !result.Preview.DefaultHidden && launcherPreviewRatio(layout, false) < 1
+	preview := a.resultList.results[a.resultList.selected].Preview
+	if result, ok := a.pluginPreview.result(); ok {
+		preview = result.Preview
+	}
+	visible := !preview.DefaultHidden && launcherPreviewRatio(layout, false) < 1
 	state := a.previewVisibility
 	if state.queryID == a.resultList.resultsQueryID && state.visible != nil {
 		visible = *state.visible
@@ -53,6 +56,9 @@ func (a *App) toggleSelectedPreview() bool {
 		return false
 	}
 	preview := a.resultList.results[a.resultList.selected].Preview
+	if result, ok := a.previews.pluginPreview.result(); ok {
+		preview = result.Preview
+	}
 	// Grid and preview-only surfaces retain their existing navigation contracts.
 	if preview.PreviewData == "" || a.resultList.layout.GridLayout != nil || launcherPreviewRatio(a.previews.selectedPreviewLayout(), false) == 0 || a.isPreviewFullscreen() {
 		return false

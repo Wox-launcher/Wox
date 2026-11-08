@@ -326,7 +326,12 @@ class _PreviewBinding:
             if self.preview is None:
                 return False
             preview = replace(self.preview, preview_data=data)
-            if not await api.update_result(ctx, UpdatableResult(id=result_id, preview=preview)):
+            if result_id.startswith("plugin-preview:"):
+                from .api import UpdatePluginPreviewOption
+                accepted = (await api.update_plugin_preview(ctx, UpdatePluginPreviewOption(preview=preview))).success
+            else:
+                accepted = await api.update_result(ctx, UpdatableResult(id=result_id, preview=preview))
+            if not accepted:
                 raise RuntimeError("WoxView preview update failed")
             return True
 

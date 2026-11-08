@@ -32,6 +32,14 @@ func TestQueryResponseAutoRecordQueryHistoryStaysInsideCore(t *testing.T) {
 	assert.False(t, response.AutoRecordQueryHistory)
 }
 
+func TestQueryResponseCarriesPluginPreviewToUI(t *testing.T) {
+	var response QueryResponse
+	assert.NoError(t, json.Unmarshal([]byte(`{"PluginPreview":{"PreviewType":"text","PreviewData":"player"}}`), &response))
+	if assert.NotNil(t, response.PluginPreview) {
+		assert.Equal(t, "player", response.ToUI().PluginPreview.PreviewData)
+	}
+}
+
 // TestQueryLayoutWindowSizeStaysInsideCore guards the internal sizing contract in both directions.
 func TestQueryLayoutWindowSizeStaysInsideCore(t *testing.T) {
 	layout := QueryLayout{WindowWidth: 640, WindowHeight: 720}

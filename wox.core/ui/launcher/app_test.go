@@ -823,7 +823,7 @@ func TestRestoreRefreshSelectionFollowsResultID(t *testing.T) {
 
 	indexPending := &pendingResultSelection{queryID: queryID, index: 3, preserveIndex: true}
 	selected, preserved, keep = restoreRefreshSelection(reordered, indexPending, queryID, false)
-	if selected != 3 || !preserved || keep {
+	if selected != 3 || !preserved || !keep {
 		t.Fatalf("index selection = %d preserved=%v keep=%v", selected, preserved, keep)
 	}
 

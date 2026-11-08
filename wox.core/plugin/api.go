@@ -133,6 +133,9 @@ type API interface {
 	// updates when it returns false; use PreventHideAfterAction if an action needs the result to stay visible.
 	UpdateResult(ctx context.Context, result UpdatableResult) bool
 
+	// UpdatePluginPreview updates the current session's plugin-owned WoxView document.
+	UpdatePluginPreview(ctx context.Context, option UpdatePluginPreviewOption) UpdatePluginPreviewResult
+
 	// RemoveResult removes a visible result owned by this plugin. SelectedResultId, when present,
 	// selects another visible result; otherwise the current selection or nearest row is retained.
 	RemoveResult(ctx context.Context, option RemoveResultOption) RemoveResultResult
@@ -1130,6 +1133,19 @@ func (a *APIImpl) UpdateResult(ctx context.Context, result UpdatableResult) bool
 		previewCache.Result.Preview = *previousPreview
 	}
 	return success
+}
+
+// UpdatePluginPreview delegates ownership and document validation to the active launcher.
+func (a *APIImpl) UpdatePluginPreview(ctx context.Context, option UpdatePluginPreviewOption) UpdatePluginPreviewResult {
+	if util.GetContextSessionId(ctx) == "" {
+		return UpdatePluginPreviewResult{}
+	}
+	if ui, ok := GetPluginManager().GetUI().(interface {
+		UpdatePluginPreview(context.Context, string, UpdatePluginPreviewOption) UpdatePluginPreviewResult
+	}); ok {
+		return ui.UpdatePluginPreview(ctx, a.pluginInstance.Metadata.Id, option)
+	}
+	return UpdatePluginPreviewResult{}
 }
 
 // RemoveResult removes only this plugin's result from the query that produced it.

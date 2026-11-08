@@ -420,6 +420,30 @@ func (a *App) UpdateResult(ctx context.Context, result plugin.UpdatableResult) (
 	return updated, err
 }
 
+// UpdatePluginPreview updates a live WoxView without changing selection or recreating its view.
+func (a *App) UpdatePluginPreview(ctx context.Context, pluginID string, option plugin.UpdatePluginPreviewOption) (plugin.UpdatePluginPreviewResult, error) {
+	preview := fromCorePreview(option.Preview)
+	if option.Preview.PreviewType != plugin.WoxPreviewTypeWoxView || option.Preview.WoxViewID == "" {
+		return plugin.UpdatePluginPreviewResult{}, nil
+	}
+	tree, err := woxview.Parse([]byte(option.Preview.PreviewData))
+	if err != nil {
+		return plugin.UpdatePluginPreviewResult{}, nil
+	}
+	preview.woxViewTree = tree
+	result := plugin.UpdatePluginPreviewResult{}
+	err = a.runOnUI("update plugin preview", func() {
+		if util.GetContextSessionId(ctx) != a.sessionID || a.isDestroyed() {
+			return
+		}
+		result.Success = a.previews.pluginPreview.updateWoxView(pluginID, preview.WoxViewID, preview)
+		if result.Success && a.window != nil {
+			_ = a.window.Invalidate()
+		}
+	})
+	return result, err
+}
+
 // RemoveResult deletes a row only while its originating query is still displayed.
 func (a *App) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) (bool, error) {
 	removed := false
@@ -949,7 +973,7 @@ func (a *App) appendTypedResults(queryID string, results []queryResult) (bool, e
 	}
 	a.resultList.results = append(a.resultList.results, results...)
 	a.resultList.resultsSectionRevision++
-	if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == queryID && a.resultList.pendingSelection.querySnapshot != nil {
+	if a.resultList.pendingSelection != nil && a.resultList.pendingSelection.queryID == queryID {
 		selected, _, keep := restoreRefreshSelection(a.resultList.results, a.resultList.pendingSelection, queryID, a.querySession.queryComplete)
 		a.resultList.selected = selected
 		if !keep {

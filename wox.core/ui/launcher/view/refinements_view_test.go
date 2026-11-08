@@ -1,6 +1,8 @@
 package view
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -85,10 +87,63 @@ func TestRefinementStripUsesSharedHorizontalScrollbar(t *testing.T) {
 	}
 }
 
+func TestRefinementDefaultStaysAtRightWhileFiltersScroll(t *testing.T) {
+	const width, height, density = 380, 55, 1.25
+	groups := make([]RefinementGroup, 8)
+	for i := range groups {
+		groups[i] = RefinementGroup{ID: strconv.Itoa(i), Title: "Filter", Current: "All"}
+	}
+	visibleGroups, clicked := groups[:1], false
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		return RefinementsView(RefinementsProps{
+			Width: width, Height: height, DensityScale: density, Groups: visibleGroups,
+			DefaultButton: &RefinementDefaultButtonProps{Label: "Save default", Hotkey: "Ctrl+Shift+D", OnToggle: func() { clicked = true }},
+		})
+	})
+	defer host.Dispose()
+	host.AttachServices(&queryPointerHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: width, Height: height}, PixelSize: woxui.PixelSize{Width: 475, Height: 69}, Scale: density}
+	bounds := func(key woxwidget.Key) woxui.Rect {
+		t.Helper()
+		rect, found := host.BoundsForKey(key)
+		if !found {
+			t.Fatalf("missing widget %q", key)
+		}
+		return rect
+	}
+	host.Frame(&woxui.DisplayList{}, frame)
+	bookmark := bounds("refinement-default")
+	if right := bookmark.X + bookmark.Width; right != width-scaledLauncherSize(8, density) {
+		t.Fatalf("bookmark right edge = %v, want right edge of the padded bar", right)
+	}
+
+	visibleGroups = groups
+	host.Frame(&woxui.DisplayList{}, frame)
+	viewport := bounds("launcher-refinements-scroll-viewport")
+	if viewport.X+viewport.Width >= bookmark.X {
+		t.Fatalf("filter viewport %v overlaps bookmark %v", viewport, bookmark)
+	}
+	first := bounds(RefinementGroupKey(groups[0].ID))
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerScroll, Position: woxui.Point{X: viewport.X + 5, Y: viewport.Y + 5}, Scroll: woxui.Point{X: -40}})
+	host.Frame(&woxui.DisplayList{}, frame)
+	if after := bounds(RefinementGroupKey(groups[0].ID)); after.X >= first.X {
+		t.Fatalf("filter did not scroll left, before %v, after %v", first, after)
+	}
+	if after := bounds("refinement-default"); after != bookmark {
+		t.Fatalf("bookmark moved from %v to %v after adding and scrolling filters", bookmark, after)
+	}
+	position := woxui.Point{X: bookmark.X + bookmark.Width/2, Y: bookmark.Y + bookmark.Height/2}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Position: position, Button: woxui.PointerButtonPrimary})
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Position: position, Button: woxui.PointerButtonPrimary})
+	if !clicked {
+		t.Fatal("bookmark must remain clickable while filters overflow")
+	}
+}
+
 func TestRefinementToggleOwnsSharedHoverState(t *testing.T) {
 	queryText := woxui.Color{R: 230, G: 235, B: 240, A: 48}
 	toggle := RefinementToggle(RefinementsProps{
-		Summary: "Filters", DefaultLabel: "Filters", Theme: woxcomponent.Theme{QueryText: queryText}, OnToggle: func() {},
+		DefaultLabel: "Filters", Theme: woxcomponent.Theme{QueryText: queryText}, OnToggle: func() {},
 	}).(woxwidget.Stateful)
 	gesture := toggle.CreateState().Build(woxwidget.StateContext{}, toggle.Widget).(woxwidget.Gesture)
 	if gesture.OnTap == nil || gesture.OnHoverAt == nil {
@@ -100,7 +155,7 @@ func TestRefinementToggleForwardsHotkeyTooltip(t *testing.T) {
 	var gotInside bool
 	var gotText string
 	toggle := RefinementToggle(RefinementsProps{
-		Summary: "Filters", DefaultLabel: "Filters", Tooltip: "Filter search results (Ctrl+F)",
+		DefaultLabel: "Filters", Tooltip: "Filter search results (Ctrl+F)",
 		Theme:    woxcomponent.Theme{QueryText: woxui.Color{R: 230, G: 235, B: 240, A: 48}},
 		OnToggle: func() {},
 		OnTooltip: func(inside bool, text string, _ woxui.Rect) {
@@ -112,6 +167,49 @@ func TestRefinementToggleForwardsHotkeyTooltip(t *testing.T) {
 	gesture.OnHoverAt(true, woxui.Rect{Width: 80, Height: 26})
 	if !gotInside || gotText != "Filter search results (Ctrl+F)" {
 		t.Fatalf("refinement tooltip = inside %v text %q, want hover with hotkey hint", gotInside, gotText)
+	}
+}
+
+func TestRefinementToggleEllipsizesSummaryAndShowsFullTextOnHover(t *testing.T) {
+	const shortcut = "Filter search results (Ctrl+F)"
+	var tooltip string
+	props := RefinementsProps{
+		SummaryLabels: []string{"entretenimiento", "China", "中文广播"}, DefaultLabel: "Filters", DensityScale: 1.25, Tooltip: shortcut,
+		OnTooltip: func(_ bool, text string, _ woxui.Rect) { tooltip = text },
+	}
+	toggle := RefinementToggle(props).(woxwidget.Stateful)
+	gesture := toggle.CreateState().Build(woxwidget.StateContext{}, toggle.Widget).(woxwidget.Gesture)
+	button := gesture.Child.(woxwidget.Container).Child.(woxwidget.Container)
+	if button.Width != scaledLauncherSize(192, 1.25) {
+		t.Fatalf("button width = %v, want the scaled maximum", button.Width)
+	}
+	content := button.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	padding, gap, iconSize := refinementToggleHorizontalMetrics(props.DensityScale)
+	budget := button.Width - padding.Left - padding.Right - gap - iconSize
+	layout := content.Children[1].(woxwidget.Flexible).Child.(woxwidget.LayoutBuilder)
+	parts := layout.Build(woxui.Size{Width: budget, Height: button.Height}).(woxwidget.Flex).Children
+	if len(parts) != 5 {
+		t.Fatalf("got %d parts, want three values and two separators", len(parts))
+	}
+	total := float32(0)
+	for i, part := range parts {
+		label := part.(woxwidget.TextBlock)
+		total += label.Width
+		if i%2 != 0 {
+			continue
+		}
+		fullWidth := refinementTextWidth(nil, label.Value, label.Style)
+		if label.Value != props.SummaryLabels[i/2] || !label.HardEllipsis || label.MaxLines != 1 ||
+			(i == 0 && label.Width >= fullWidth) || (i > 0 && label.Width != fullWidth) {
+			t.Fatalf("button label %d = %#v, want only the long value truncated", i/2, label)
+		}
+	}
+	if total > budget+0.01 {
+		t.Fatalf("summary width = %v, exceeds text budget %v", total, budget)
+	}
+	gesture.OnHoverAt(true, woxui.Rect{Width: button.Width, Height: button.Height})
+	if tooltip != strings.Join(props.SummaryLabels, ", ")+"\n"+shortcut {
+		t.Fatalf("tooltip = %q, want the full summary and shortcut", tooltip)
 	}
 }
 

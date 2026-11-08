@@ -240,6 +240,21 @@ func (s *CoreServices) DispatchWoxViewPreviewEvent(ctx context.Context, sessionI
 	return plugin.GetPluginManager().DispatchWoxViewPreviewEvent(ctx, sessionID, queryID, resultID, documentID, event)
 }
 
+// InstallPluginPreview retains the callback owner after the originating query is retired.
+func (s *CoreServices) InstallPluginPreview(sessionID, queryID, ownerID string, preview plugin.WoxPreview) bool {
+	return plugin.GetPluginManager().InstallPluginPreview(sessionID, queryID, ownerID, preview)
+}
+
+// RetirePluginPreview detaches an old document before a new context can install one.
+func (s *CoreServices) RetirePluginPreview(sessionID, queryID, ownerID, documentID string) bool {
+	return plugin.GetPluginManager().RetirePluginPreview(sessionID, queryID, ownerID, documentID)
+}
+
+// ReleasePluginPreview drops an installed plugin document after its context ends.
+func (s *CoreServices) ReleasePluginPreview(sessionID, queryID, ownerID, documentID string) bool {
+	return plugin.GetPluginManager().ReleasePluginPreview(sessionID, queryID, ownerID, documentID)
+}
+
 // ExecuteAction schedules one cached query-result action.
 func (s *CoreServices) ExecuteAction(ctx context.Context, sessionID string, queryID string, resultID string, actionID string) error {
 	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)

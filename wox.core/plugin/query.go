@@ -155,6 +155,8 @@ type QueryResponse struct {
 	Refinements []QueryRefinement
 	Layout      QueryLayout
 	Context     QueryContext
+	// PluginPreview is installed once for the active plugin context; later queries do not replace it.
+	PluginPreview *WoxPreview `json:",omitempty"`
 	// AutoRecordQueryHistory lets built-in Go plugins mark a successful display-only query as completed.
 	// It stays inside core so external plugin protocols do not gain a new compatibility contract.
 	AutoRecordQueryHistory bool `json:"-"`
@@ -499,9 +501,10 @@ func (q *QueryResponse) ToUI() QueryResponseUI {
 		Results: lo.Map(q.Results, func(result QueryResult, index int) QueryResultUI {
 			return result.ToUI()
 		}),
-		Refinements: q.Refinements,
-		Layout:      q.Layout,
-		Context:     q.Context,
+		Refinements:   q.Refinements,
+		Layout:        q.Layout,
+		Context:       q.Context,
+		PluginPreview: q.PluginPreview,
 	}
 }
 
@@ -524,10 +527,11 @@ type QueryResultUI struct {
 }
 
 type QueryResponseUI struct {
-	Results     []QueryResultUI
-	Refinements []QueryRefinement
-	Layout      QueryLayout
-	Context     QueryContext
+	Results       []QueryResultUI
+	Refinements   []QueryRefinement
+	Layout        QueryLayout
+	Context       QueryContext
+	PluginPreview *WoxPreview
 	// ScopeIcons is core-owned and set from QueryScope before plugin responses.
 	// It is not part of the public plugin QueryLayout API.
 	ScopeIcons          []common.WoxImage

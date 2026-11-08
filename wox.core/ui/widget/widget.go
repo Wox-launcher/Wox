@@ -1244,7 +1244,7 @@ type TextBlock struct {
 	// slot. 0 keeps the native top edge; 0.5 centers CJK metrics that are
 	// taller than the slot by clipping extra ascent and descent equally.
 	AlignmentY float32
-	// ShrinkWrap keeps short text at its measured width while preserving Width as the truncation limit.
+	// ShrinkWrap keeps short or hard-ellipsized text at its measured width while preserving Width as the truncation limit.
 	ShrinkWrap bool
 	// HardEllipsis truncates a single line at a grapheme boundary instead of a word boundary.
 	HardEllipsis bool
@@ -1398,6 +1398,11 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 		}
 	} else {
 		textLayout = buildLayout()
+	}
+	if w.ShrinkWrap && w.HardEllipsis && maxLines == 1 {
+		if metrics, err := ctx.window.MeasureText(textLayout.Lines[0], w.Style); err == nil {
+			width = available.constrainWidth(min(width, metrics.Size.Width))
+		}
 	}
 	height := min(heightLimit, textLayout.Size.Height)
 	if w.Height > 0 {

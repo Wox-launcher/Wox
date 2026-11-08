@@ -57,6 +57,7 @@ type previewController struct {
 	// pinnedPreview is the full-bleed preview image currently on screen.
 	pinnedPreview     viewportPreviewPin
 	previewVisibility queryPreviewVisibility
+	pluginPreview     pluginPreviewState
 	mdDocs            map[string]woxcomponent.MarkdownDocument
 	previewLayouts    map[string]*textLayoutCache
 	woxView           *woxview.View

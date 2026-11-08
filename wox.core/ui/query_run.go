@@ -33,7 +33,8 @@ type queryRun struct {
 	// query is the parsed backend query passed to plugin scheduling and fallback handling.
 	query plugin.Query
 	// ownerPlugin is set for plugin-scoped queries and nil for global queries.
-	ownerPlugin *plugin.Instance
+	ownerPlugin        *plugin.Instance
+	refinementDefaults contract.RefinementDefaults
 	// startTimestamp records the end-to-end query start time for elapsed metrics and debug tails.
 	// Prefer the UI request send timestamp; fall back to backend start for non-UI callers.
 	startTimestamp int64
@@ -221,6 +222,9 @@ func (r *queryRun) addResponse(response plugin.QueryResponseUI) {
 	if r.ownerPlugin != nil {
 		r.latestResponse.Refinements = response.Refinements
 		r.latestResponse.Layout = response.Layout
+		if response.PluginPreview != nil {
+			r.latestResponse.PluginPreview = response.PluginPreview
+		}
 	}
 	r.latestResponse.ScopeIcons = scopeIcons
 	if len(response.Results) == 0 {
@@ -410,9 +414,10 @@ func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
 		Refinements:         r.latestResponse.Refinements,
 		Layout:              r.latestResponse.Layout,
 		Context:             r.latestResponse.Context,
+		PluginPreview:       r.latestResponse.PluginPreview,
 		ScopeIcons:          r.latestResponse.ScopeIcons,
 		QueryStartTimestamp: r.startTimestamp,
-	}, IsFinal: isFinal})
+	}, IsFinal: isFinal, RefinementDefaults: r.refinementDefaults})
 	if tracker := timetracking.New("send_ui_response"); tracker.Enabled() {
 		tracker.SetRawString("queryId", r.queryId)
 		tracker.SetInt("responseCount", len(responseSnapshot))

@@ -23,13 +23,34 @@ type QueryRequest struct {
 	Query              common.PlainQuery
 	SkipCompletionHint bool
 	SentTimestamp      int64
+	RefinementScope    RefinementScope
+}
+
+// RefinementScope identifies one plugin command's saved defaults.
+type RefinementScope struct {
+	PluginID string
+	Command  string
+}
+
+// RefinementDefaults carries a scope and any selections injected before dispatch.
+type RefinementDefaults struct {
+	Scope         RefinementScope
+	Saved         bool
+	Restored      bool
+	AppliedValues map[string]string
 }
 
 // QueryResponse contains one incremental or terminal result snapshot.
 type QueryResponse struct {
-	QueryID  string
-	Response plugin.QueryResponseUI
-	IsFinal  bool
+	QueryID            string
+	Response           plugin.QueryResponseUI
+	IsFinal            bool
+	RefinementDefaults RefinementDefaults
+}
+
+// RefinementDefaultServices writes a saved selection. A nil map removes it.
+type RefinementDefaultServices interface {
+	SetRefinementDefault(context.Context, RefinementScope, map[string]string) error
 }
 
 // QueryView receives typed query output from core.

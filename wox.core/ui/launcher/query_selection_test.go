@@ -22,6 +22,30 @@ func newQuerySelectionTestApp(t *testing.T) *App {
 	return a
 }
 
+// TestManualSelectionSurvivesLaterQuerySnapshots reproduces navigation while a query is still publishing results.
+func TestManualSelectionSurvivesLaterQuerySnapshots(t *testing.T) {
+	a := newQuerySelectionTestApp(t)
+	a.setQuery(newInputQuery("radio "))
+	queryID := a.querySession.query.QueryID
+	first := queryResult{ID: "next"}
+	station := queryResult{ID: "station:selected"}
+	a.applyResults(queryID, []queryResult{first, station}, nil, nil, nil, 0, false)
+	a.moveSelection(1)
+	a.applyResults(queryID, []queryResult{first, {ID: "station:new"}, station}, nil, nil, nil, 0, false)
+	if a.resultList.selected != 2 {
+		t.Fatalf("later batch selected row %d, want the station at row 2", a.resultList.selected)
+	}
+	a.applyResults(queryID, []queryResult{first, {IsGroup: true}, station}, nil, nil, nil, 0, true)
+	if a.resultList.selected != 2 || a.resultList.pendingSelection != nil {
+		t.Fatalf("final batch selected row %d with pending selection %+v", a.resultList.selected, a.resultList.pendingSelection)
+	}
+	a.setQuery(newInputQuery("radio different"))
+	a.applyResults(a.querySession.query.QueryID, []queryResult{first, station}, nil, nil, nil, 0, true)
+	if a.resultList.selected != 0 {
+		t.Fatalf("new query selected row %d, want first result", a.resultList.selected)
+	}
+}
+
 // TestQueryUndoSelectionMatching covers text identity, duplicate rows, and positional fallback.
 func TestQueryUndoSelectionMatching(t *testing.T) {
 	target := queryResultSelection{title: "target", subTitle: "detail", index: 2}

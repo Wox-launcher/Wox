@@ -1,12 +1,12 @@
 package launcher
 
 import (
-	"fmt"
 	"log"
 	"slices"
 	"strings"
 	"time"
 
+	"wox/plugin"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -24,6 +24,17 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 	}
 	groups := make([]launcherview.RefinementGroup, 0, len(snapshot.refinements))
 	for _, refinement := range snapshot.refinements {
+		selected := splitRefinementValues(snapshot.refinementValues[refinement.ID])
+		group := launcherview.RefinementGroup{Title: a.language.translate(refinement.Title), Hotkey: strings.Join(formatHotkeyLabels(refinement.Hotkey), "+")}
+		if refinementUsesDropdown(refinement) {
+			group.ID = refinement.ID
+			group.Current = a.refinementSelectionLabel(refinement, selected)
+			group.Expanded = refinement.ID == a.resultList.refinementPicker.id
+			group.OnTap = func() { a.toggleRefinementPicker(refinement.ID) }
+			group.OnKey = func(event woxui.KeyEvent) bool { return a.onRefinementGroupKey(refinement.ID, event) }
+			groups = append(groups, group)
+			continue
+		}
 		options := refinement.Options
 		if len(options) == 0 {
 			value := "true"
@@ -37,7 +48,7 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 			refinementID := refinement.ID
 			converted = append(converted, launcherview.RefinementOption{
 				Value: option.Value, Label: a.language.translate(option.Title), Count: option.Count, Icon: a.imageForSize(option.Icon, physicalImageSize(int(snapshot.densityMetrics.scaled(16)), imageScale)),
-				Selected: slices.Contains(splitRefinementValues(snapshot.refinementValues[refinement.ID]), option.Value),
+				Selected: slices.Contains(selected, option.Value),
 				OnTap:    func() { a.selectRefinementOption(refinementID, option.Value) },
 			})
 		}
@@ -45,15 +56,30 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		if !strings.Contains(hotkey, "+") {
 			hotkey = ""
 		}
-		groups = append(groups, launcherview.RefinementGroup{Title: a.language.translate(refinement.Title), Hotkey: hotkey, Options: converted})
+		group.Hotkey, group.Options = hotkey, converted
+		groups = append(groups, group)
 	}
-	return launcherview.RefinementsProps{
+	props := launcherview.RefinementsProps{
 		Revision: snapshot.refinementsRevision,
 		Width:    width, Height: height, Theme: snapshot.palette.componentTheme(), Window: a.window, DensityScale: snapshot.densityMetrics.scale,
-		Summary: a.refinementSummary(snapshot, fallback), DefaultLabel: fallback, Open: snapshot.refinementOpen,
+		SummaryLabels: a.refinementSummaryLabels(snapshot), DefaultLabel: fallback, Open: snapshot.refinementOpen,
 		Tooltip: a.refinementToggleTooltip(), Groups: groups, OnToggle: func() { a.toggleRefinementBar() },
 		OnTooltip: a.setRefinementTooltip,
+		PickerID:  a.resultList.refinementPicker.id,
 	}
+	if width > 0 && a.resultList.refinementDefault.scope.PluginID != "" {
+		saved := a.resultList.refinementDefault.saved
+		label := "i18n:ui_query_refinement_default_save"
+		if saved {
+			label = "i18n:ui_query_refinement_default_remove"
+		}
+		props.DefaultButton = &launcherview.RefinementDefaultButtonProps{
+			Label: a.language.translate(label), Hotkey: strings.Join(formatHotkeyLabels(refinementDefaultHotkey()), "+"),
+			Saved: saved, Busy: a.resultList.refinementDefaultBusy || !a.canToggleRefinementDefault(),
+			OnToggle: a.toggleRefinementDefault, OnTooltip: a.setRefinementDefaultTooltip,
+		}
+	}
+	return props
 }
 
 // refinementToggleTooltip advertises the configured shortcut for the filter bar.
@@ -83,36 +109,23 @@ func (a *App) buildRefinementBar(snapshot viewSnapshot, width, height, imageScal
 	return launcherview.RefinementsBoundary(a.refinementViewProps(snapshot, width, height, imageScale))
 }
 
-func (a *App) refinementSummary(snapshot viewSnapshot, fallback string) string {
-	labels := make([]string, 0, 2)
-	activeControls := 0
+// refinementSummaryLabels gives each active filter group one slot in the header.
+func (a *App) refinementSummaryLabels(snapshot viewSnapshot) []string {
+	labels := make([]string, 0, len(snapshot.refinements))
 	for _, refinement := range snapshot.refinements {
-		selected := normalizeRefinementValues(refinement, splitRefinementValues(snapshot.refinementValues[refinement.ID]))
-		defaults := normalizeRefinementValues(refinement, nil)
-		if sameStringSet(selected, defaults) {
+		selected := splitRefinementValues(snapshot.refinementValues[refinement.ID])
+		if len(selected) == 0 || sameStringSet(selected, refinement.DefaultValue) {
 			continue
 		}
-		activeControls++
-		for _, value := range selected {
-			for _, option := range refinement.Options {
-				if option.Value == value {
-					labels = append(labels, a.language.translate(option.Title))
-					break
-				}
-			}
-			if len(labels) == 2 {
-				break
-			}
+		label := a.refinementSelectionLabel(refinement, selected)
+		if refinement.Type == plugin.QueryRefinementTypeToggle && len(refinement.Options) == 0 {
+			label = a.language.translate(refinement.Title)
+		}
+		if label != "" {
+			labels = append(labels, label)
 		}
 	}
-	if len(labels) == 0 {
-		return fallback
-	}
-	label := strings.Join(labels, ", ")
-	if activeControls > len(labels) {
-		label += fmt.Sprintf(" +%d", activeControls-len(labels))
-	}
-	return label
+	return labels
 }
 
 func sameStringSet(left, right []string) bool {
@@ -135,9 +148,14 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 		if refinement.ID == "" || refinement.Type == "" {
 			continue
 		}
-		selected := splitRefinementValues(a.querySession.query.QueryRefinements[refinement.ID])
-		selected = normalizeRefinementValues(refinement, selected)
-		if len(selected) > 0 {
+		value, hasSelection := a.querySession.query.QueryRefinements[refinement.ID]
+		selected := splitRefinementValues(value)
+		refinement.DefaultValue = normalizeRefinementValues(refinement, nil)
+		// An explicitly empty multi-select must not pick its defaults again after a query refresh.
+		if !hasSelection || len(selected) > 0 || refinement.Type != plugin.QueryRefinementTypeMultiSelect {
+			selected = normalizeRefinementValues(refinement, selected)
+		}
+		if len(selected) > 0 || (hasSelection && refinement.Type == plugin.QueryRefinementTypeMultiSelect) {
 			values[refinement.ID] = strings.Join(selected, ",")
 		}
 		valid = append(valid, refinement)
@@ -149,6 +167,7 @@ func (a *App) applyRefinementsLocked(refinements []queryRefinement) {
 	if len(valid) == 0 {
 		a.resultList.refinementOpen = false
 	}
+	a.reconcileRefinementPicker()
 }
 
 // applyQueryTextChangeLocked starts a new query while retaining controls only inside their plugin scope.
@@ -291,6 +310,15 @@ func (a *App) toggleRefinementBar() bool {
 		return false
 	}
 	a.resultList.refinementOpen = !a.resultList.refinementOpen
+	if !a.resultList.refinementOpen {
+		a.resultList.refinementPicker = refinementPicker{}
+		a.resultList.refinementFocusPending = launcherview.LauncherQueryInputKey
+	} else if index := slices.IndexFunc(a.resultList.refinements, refinementUsesDropdown); index >= 0 {
+		a.resultList.refinementFocusPending = launcherview.RefinementGroupKey(a.resultList.refinements[index].ID)
+	}
+	if a.window == nil {
+		return true
+	}
 	if err := a.applyWindowBounds(); err != nil {
 		log.Printf("resize launcher for query refinements: %v", err)
 	}
@@ -298,7 +326,7 @@ func (a *App) toggleRefinementBar() bool {
 	return true
 }
 
-// onRefinementHotkey applies the first matching query-scoped refinement without moving query focus.
+// onRefinementHotkey retains blind cycling until the user shows the filter bar.
 func (a *App) onRefinementHotkey(event woxui.KeyEvent) bool {
 	if a.show.HideQueryBox {
 		return false
@@ -307,6 +335,12 @@ func (a *App) onRefinementHotkey(event woxui.KeyEvent) bool {
 		refinement := &a.resultList.refinements[index]
 		if !hotkeyMatches(refinement.Hotkey, event) {
 			continue
+		}
+		if a.resultList.refinementOpen && refinementUsesDropdown(*refinement) {
+			if !event.Repeat {
+				a.toggleRefinementPicker(refinement.ID)
+			}
+			return true
 		}
 		a.updateRefinementSelection(refinement, nextRefinementHotkeyValues(*refinement, splitRefinementValues(a.querySession.query.QueryRefinements[refinement.ID])))
 		return true
@@ -322,7 +356,9 @@ func nextRefinementHotkeyValues(refinement queryRefinement, selected []string) [
 			optionValues = append(optionValues, option.Value)
 		}
 	}
-	selected = normalizeRefinementValues(refinement, selected)
+	if refinement.Type != plugin.QueryRefinementTypeMultiSelect {
+		selected = normalizeRefinementValues(refinement, selected)
+	}
 
 	switch refinement.Type {
 	case "toggle":
@@ -371,19 +407,13 @@ func nextRefinementHotkeyValues(refinement queryRefinement, selected []string) [
 }
 
 func (a *App) selectRefinementOption(refinementID, value string) {
-	var refinement *queryRefinement
-	for index := range a.resultList.refinements {
-		if a.resultList.refinements[index].ID == refinementID {
-			refinement = &a.resultList.refinements[index]
-			break
-		}
-	}
+	refinement := a.refinementByID(refinementID)
 	if refinement == nil || value == "" {
 		return
 	}
 	selected := splitRefinementValues(a.querySession.query.QueryRefinements[refinementID])
 	switch refinement.Type {
-	case "multiSelect", "toggle":
+	case plugin.QueryRefinementTypeMultiSelect, plugin.QueryRefinementTypeToggle:
 		if slices.Contains(selected, value) {
 			selected = slices.DeleteFunc(selected, func(candidate string) bool { return candidate == value })
 		} else {
@@ -398,12 +428,19 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 // updateRefinementSelection routes keyboard and pointer changes through the same query refresh path.
 func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []string) {
 	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.querySession.query.QueryText)
-	selected = normalizeRefinementValues(*refinement, selected)
-	if len(selected) == 0 {
+	multiSelect := refinement.Type == plugin.QueryRefinementTypeMultiSelect
+	if !multiSelect || len(selected) > 0 {
+		selected = normalizeRefinementValues(*refinement, selected)
+	}
+	if len(selected) == 0 && !multiSelect {
 		delete(a.querySession.query.QueryRefinements, refinement.ID)
 	} else {
+		if a.querySession.query.QueryRefinements == nil {
+			a.querySession.query.QueryRefinements = make(map[string]string)
+		}
 		a.querySession.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
 	}
+	a.resultList.refinementsSectionRevision++
 	a.beginQueryGenerationLocked()
 	a.querySession.completionHint = nil
 	a.resultList.resultScrollDetached = false
@@ -416,7 +453,9 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 	if err := a.sendCurrentQuery(); err != nil {
 		log.Printf("send query after refinement change: %v", err)
 	}
-	_ = a.window.Invalidate()
+	if a.window != nil {
+		_ = a.window.Invalidate()
+	}
 }
 
 func normalizeRefinementValues(refinement queryRefinement, values []string) []string {

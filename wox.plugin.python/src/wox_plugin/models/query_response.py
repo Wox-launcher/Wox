@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from .image import WoxImage
+from .preview import WoxPreview
 from .result import Result
 
 
@@ -152,12 +153,14 @@ class QueryResponse:
     results: List[Result] = field(default_factory=list)
     refinements: List[QueryRefinement] = field(default_factory=list)
     layout: QueryLayout = field(default_factory=QueryLayout)
+    plugin_preview: Optional[WoxPreview] = None
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "Results": [json.loads(result.to_json()) for result in self.results],
-                "Refinements": [json.loads(refinement.to_json()) for refinement in self.refinements],
-                "Layout": json.loads(self.layout.to_json()),
-            }
-        )
+        data = {
+            "Results": [json.loads(result.to_json()) for result in self.results],
+            "Refinements": [json.loads(refinement.to_json()) for refinement in self.refinements],
+            "Layout": json.loads(self.layout.to_json()),
+        }
+        if self.plugin_preview is not None:
+            data["PluginPreview"] = json.loads(self.plugin_preview.to_json())
+        return json.dumps(data)

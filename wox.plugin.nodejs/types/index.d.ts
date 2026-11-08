@@ -583,6 +583,8 @@ export interface QueryResponse {
   Results: Result[]
   Refinements?: QueryRefinement[]
   Layout?: QueryLayout
+  /** Initial plugin-scoped preview; subsequent query responses do not replace it. */
+  PluginPreview?: WoxPreview
 }
 
 /**
@@ -1840,6 +1842,9 @@ export interface PublicAPI {
    * @returns True if accepted, false if rejected
    */
   UpdateResult: (ctx: Context, result: UpdatableResult) => Promise<boolean>
+
+  /** Update an existing WoxView plugin preview in this session. */
+  UpdatePluginPreview: (ctx: Context, option: { Preview: WoxPreview }) => Promise<{ Success: boolean }>
 
   /** Remove a result owned by this plugin. Keep the original query context. */
   RemoveResult: (ctx: Context, option: RemoveResultOption) => Promise<RemoveResultResult>

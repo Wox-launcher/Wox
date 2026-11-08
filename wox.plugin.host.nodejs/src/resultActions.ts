@@ -5,12 +5,23 @@ import { randomUUID } from "crypto"
 type CachedAction = { Type: "execute"; Action?: Extract<ResultAction, { Type?: "execute" }>["Action"] } | { Type: "form"; OnSubmit?: Extract<ResultAction, { Type: "form" }>["OnSubmit"] }
 type PreviewBinding = { bind: (ctx: Context, api: PublicAPI, resultID: string) => void; release: () => void }
 type Preview = { WoxViewID?: string; OnWoxViewEvent?: (ctx: Context, event: any) => void | Promise<void>; [key: symbol]: PreviewBinding | undefined }
+type CachedPreview = { id: string; callback: NonNullable<Preview["OnWoxViewEvent"]>; binding?: PreviewBinding }
 
 // A bucket is held across async plugin calls; releasing it also invalidates late responses.
 export class QueryActions {
   active = true
   results = new Map<string, Map<string, CachedAction>>()
-  previews = new Map<string, { id: string; callback: NonNullable<Preview["OnWoxViewEvent"]>; binding?: PreviewBinding }>()
+  previews = new Map<string, CachedPreview>()
+
+  stagePluginPreview(id: string, value: unknown): void {
+    const preview = value as Preview | undefined
+    const binding = preview?.[Symbol.for("wox.preview.binding")]
+    if (!this.active || !preview?.WoxViewID || !preview.OnWoxViewEvent) {
+      binding?.release()
+      return
+    }
+    this.previews.set(id, { id: preview.WoxViewID, callback: preview.OnWoxViewEvent, binding })
+  }
 
   // Replace one result atomically, including removed actions and execute/form type changes.
   cache(result: { Id?: string; Actions?: ResultAction[]; Preview?: unknown }, preserveCallbacks = false, ctx?: Context, api?: PublicAPI, deferPreviewRelease = false): void {
@@ -63,6 +74,7 @@ export class QueryActions {
 
 export class ResultActions {
   private sessions = new Map<string, Map<string, QueryActions>>()
+  private pluginPreviews = new Map<string, { query: string; result: string; preview: CachedPreview }[]>()
   private closed = false
 
   // Core owns modern query retention. The cap only protects hosts used with older Core builds.
@@ -109,6 +121,40 @@ export class ResultActions {
     return this.find(ctx.Get("SessionId") ?? "", ctx.Get("QueryId") ?? "", resultId)
   }
 
+  stagePluginPreview(session: string, query: string, result: string, value: unknown): void {
+    const preview = value as Preview | undefined
+    const active = this.pluginPreviews.get(session) ?? []
+    const binding = preview?.[Symbol.for("wox.preview.binding")]
+    if (active.some(item => (binding && binding === item.preview.binding) || (preview?.WoxViewID === item.preview.id && preview?.OnWoxViewEvent === item.preview.callback))) return
+    this.find(session, query, result)?.stagePluginPreview(result, value)
+  }
+
+  // A shown document is promoted out of the query bucket until Core releases it.
+  pluginPreview(ctx: Context, result: string, document: string, activate: boolean, api?: PublicAPI): CachedPreview | undefined {
+    const session = ctx.Get("SessionId") ?? "", query = ctx.Get("QueryId") ?? ""
+    const active = this.pluginPreviews.get(session) ?? []
+    const existing = active.find(item => item.query === query && item.result === result && item.preview.id === document)
+    if (existing) return existing.preview
+    if (!activate) return undefined
+    const bucket = this.find(session, query, result)
+    const candidate = bucket?.previews.get(result)
+    if (!candidate || candidate.id !== document) return undefined
+    bucket!.previews.delete(result)
+    active.push({ query, result, preview: candidate })
+    this.pluginPreviews.set(session, active)
+    if (api) candidate.binding?.bind(ctx, api, result)
+    return candidate
+  }
+
+  releasePluginPreview(session: string, query: string, result: string, document: string): void {
+    const active = this.pluginPreviews.get(session) ?? []
+    const index = active.findIndex(item => item.query === query && item.result === result && item.preview.id === document)
+    if (index < 0) return
+    const [removed] = active.splice(index, 1)
+    if (!active.length) this.pluginPreviews.delete(session)
+    removed.preview.binding?.release()
+  }
+
   release(session: string, query: string): void {
     const queries = this.sessions.get(session)
     queries?.get(query)?.release()
@@ -119,6 +165,8 @@ export class ResultActions {
   // Closing prevents an old API or an in-flight query from repopulating an unloaded plugin.
   close(): void {
     this.closed = true
+    for (const active of Array.from(this.pluginPreviews.values())) for (const item of active) item.preview.binding?.release()
+    this.pluginPreviews.clear()
     for (const queries of Array.from(this.sessions.values())) {
       for (const bucket of Array.from(queries.values())) bucket.release()
     }

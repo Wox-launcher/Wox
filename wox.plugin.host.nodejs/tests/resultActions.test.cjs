@@ -80,6 +80,65 @@ test("preview events stay scoped to their result and released document", async (
   assert.equal(released.length, 1)
 })
 
+test("plugin preview survives its query and releases its callbacks on context exit", async () => {
+  const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, "../../wox.plugin.nodejs/src/woxviewSession.ts"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
+  }).outputText
+  const sdk = { exports: {} }
+  new Function("require", "module", "exports", compiled)(require, sdk, sdk.exports)
+  let count = 0, disposed = 0
+  const updates = []
+  const preview = sdk.exports.createWoxView({
+    onError: error => { throw error },
+    render: session => sdk.exports.Button({ label: String(count), onPress: () => { count++; session.invalidate() } })
+  }).asPreview({ onDispose: () => disposed++ })
+  const { api, callbacks } = fixture(async () => ({ Results: [], PluginPreview: preview }))
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "UpdatePluginPreview")
+    updates.push(JSON.parse(params.option))
+    return { Success: true }
+  }
+  const result = "plugin-preview:owner"
+  const event = (method, params) => call(method, "a", "first", { ResultId: result, DocumentID: preview.WoxViewID, ...params })
+  await call("query", "a", "first")
+  await event("woxviewPreviewEvent", { Event: JSON.stringify({ Type: "show" }) })
+  callbacks.release("a", "first")
+  await call("query", "a", "second")
+  callbacks.release("a", "second")
+  const handler = JSON.parse(preview.PreviewData).root.props.onPress.$handler
+  await event("woxviewPreviewEvent", { Event: JSON.stringify({ Handler: handler, Args: [] }) })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  assert.equal(count, 1)
+  assert.equal(JSON.parse(updates[0].Preview.PreviewData).root.props.label, "1")
+  await event("releasePluginPreview", {})
+  await event("woxviewPreviewEvent", { Event: JSON.stringify({ Handler: handler, Args: [] }) })
+  assert.equal(count, 1)
+  assert.equal(disposed, 1)
+})
+
+test("new plugin preview can show before the previous document is released", async () => {
+  const disposed = [], seen = []
+  const make = id => {
+    const preview = { PreviewType: "woxview", PreviewData: "{}", WoxViewID: id, OnWoxViewEvent: () => seen.push(id) }
+    Object.defineProperty(preview, Symbol.for("wox.preview.binding"), { value: { bind() {}, release: () => disposed.push(id) } })
+    return preview
+  }
+  const old = make("old"), current = make("new")
+  let next = old
+  fixture(async () => ({ Results: [], PluginPreview: next }))
+  const invoke = (method, query, doc, extra = {}) => call(method, "a", query, { ResultId: "plugin-preview:owner", DocumentID: doc, ...extra })
+  await call("query", "a", "q1")
+  await invoke("woxviewPreviewEvent", "q1", "old", { Event: JSON.stringify({ Type: "show" }) })
+  next = current
+  await call("query", "a", "q2")
+  await invoke("woxviewPreviewEvent", "q2", "new", { Event: JSON.stringify({ Type: "show" }) })
+  await invoke("releasePluginPreview", "q1", "old")
+  await invoke("woxviewPreviewEvent", "q2", "new", { Event: "{}" })
+  assert.deepEqual(seen, ["old", "new", "new"])
+  assert.deepEqual(disposed, ["old"])
+  await invoke("releasePluginPreview", "q2", "new")
+})
+
 test("SDK preview binds through query RPC and publishes invalidation", async () => {
   const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, "../../wox.plugin.nodejs/src/woxviewSession.ts"), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
