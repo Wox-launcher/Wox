@@ -54,6 +54,7 @@ const (
 	screenshotEditorToolNumber
 	screenshotEditorToolMosaic
 	screenshotEditorToolBrush
+	screenshotEditorToolHighlighter
 	screenshotEditorToolEraser
 	screenshotEditorToolCount
 )
@@ -67,6 +68,7 @@ var screenshotEditorToolIconNames = [...]string{
 	"screenshot.number",
 	"screenshot.mosaic",
 	icons.ScreenshotBrush,
+	icons.ScreenshotHighlighter,
 	icons.ScreenshotEraser,
 }
 
@@ -79,10 +81,21 @@ var screenshotEditorDefaultTooltips = [...]string{
 	"Number",
 	"Mosaic",
 	"Brush",
+	"Highlighter",
 	"Eraser",
 }
 
-var screenshotEditorToolShortcuts = [...]string{"", "R", "E", "T", "A", "N", "M", "B", "X"}
+var screenshotEditorToolShortcuts = [screenshotEditorToolCount]Key{
+	screenshotEditorToolRect:        "r",
+	screenshotEditorToolEllipse:     "e",
+	screenshotEditorToolText:        "t",
+	screenshotEditorToolArrow:       "a",
+	screenshotEditorToolNumber:      "n",
+	screenshotEditorToolMosaic:      "m",
+	screenshotEditorToolBrush:       "b",
+	screenshotEditorToolHighlighter: "h",
+	screenshotEditorToolEraser:      "x",
+}
 
 type screenshotEditorAction uint8
 
@@ -291,6 +304,10 @@ type screenshotEditorOverlayState struct {
 	annotationColor         Color
 	mosaicRadius            float32
 	brushRadius             float32
+	highlighterColor        Color
+	highlighterRadius       float32
+	highlighterSnapping     bool
+	highlighterPreview      screenshotEditorHighlighterPreview
 	eraserRadius            float32
 	textFontSize            float32
 	numberFontSize          float32
@@ -378,6 +395,7 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		extraActions:        append([]common.ScreenshotExtraAction(nil), options.ExtraActions...),
 		hoveredExtraIndex:   -1,
 		annotationColor:     screenshotEditorAnnotationColor,
+		highlighterColor:    screenshotEditorHighlighterColor,
 		mosaicRadius:        screenshotEditorMosaicRadius,
 		textFontSize:        screenshotEditorTextFontSize,
 		numberFontSize:      screenshotEditorNumberFontSize,
@@ -402,6 +420,7 @@ func newScreenshotEditorOverlayState(options ScreenshotOptions, uiImage *Image, 
 		options.AnnotationTooltips.Number,
 		options.AnnotationTooltips.Mosaic,
 		options.AnnotationTooltips.Brush,
+		options.AnnotationTooltips.Highlighter,
 		options.AnnotationTooltips.Eraser,
 	}
 	state.actionTooltips = options.ActionTooltips
@@ -851,6 +870,14 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	backgroundLoading := (state.showBackground && state.backgroundLoading) || (state.windowSelection != nil && state.windowSource == nil)
 	backgroundFailed := state.backgroundFailed
 	backgroundImage := state.backgroundPreview
+	previewSource := state.originalSource
+	var previewWallpaper *image.RGBA
+	var previewWindowAlpha bool
+	if backgroundEnabled && backgroundImage != nil {
+		previewSource = state.backgroundCaptureSourceLocked()
+		previewWallpaper = state.backgroundSource
+		previewWindowAlpha = state.windowSource != nil && state.windowSelection != nil && *state.windowSelection == state.selection
+	}
 	backgroundSize := image.Point{}
 	if state.backgroundSource != nil {
 		backgroundSize = state.backgroundSource.Bounds().Size()
@@ -917,6 +944,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	toolbarMoved := state.toolbarMoved
 	toolbarOrigin := state.toolbarOrigin
 	annotationColor := state.annotationColor
+	creationColor := state.creationColorLocked()
 	mosaicRadius := state.mosaicRadius
 	showMosaicCursor := activeTool == screenshotEditorToolMosaic && !state.autoConfirm && state.pointerCursor == PointerCursorHidden &&
 		state.mosaicPointerCursorLocked(pointerPosition) == PointerCursorHidden
@@ -924,7 +952,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		mosaicRadius = screenshotEditorAnnotationMosaicRadius(*state.draft)
 	}
 	strokeRadius := state.strokeRadiusLocked(activeTool) * annotationScale
-	showStrokeCursor := (activeTool == screenshotEditorToolBrush || activeTool == screenshotEditorToolEraser) &&
+	showStrokeCursor := activeTool.isFreehand() &&
 		!state.autoConfirm && state.pointerCursor == PointerCursorHidden && state.mosaicPointerCursorLocked(pointerPosition) == PointerCursorHidden
 	textFontSize := state.textFontSize
 	fontSize := state.fontSizeLocked()
@@ -970,9 +998,15 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	hasHoveredAction := state.hasHoveredAction
 	hoveredExtraIndex := state.hoveredExtraIndex
 	actionTooltips := state.actionTooltips
+	var highlighterDraft *screenshotEditorAnnotation
 	if state.draft != nil {
-		annotations = append(annotations, *state.draft)
-		drawAnnotations = annotations
+		if state.draft.tool == screenshotEditorToolHighlighter {
+			draft := *state.draft
+			highlighterDraft = &draft
+		} else {
+			annotations = append(annotations, *state.draft)
+			drawAnnotations = annotations
+		}
 	}
 	if hasEditingText {
 		drawAnnotations = append([]screenshotEditorAnnotation(nil), annotations[:editingTextIndex]...)
@@ -1041,6 +1075,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		drawScreenshotEditorTextSelection(displayList, state.window, textPosition, textValue, textSelection, textFontSize*annotationScale, annotationColor, annotationScale)
 	}
 	drawScreenshotEditorAnnotations(displayList, state.window, drawAnnotations, previewImage, frame.Size, annotationScale)
+	state.highlighterPreview.draw(displayList, previewSource, previewWallpaper, previewWindowAlpha, selection, frame.Size, annotationScale, drawAnnotations, highlighterDraft)
 	if textEditing && caretVisible {
 		displayList.FillRect(screenshotEditorTextCaretRect(state.window, textPosition, textCaretPrefix, textFontSize, annotationScale), annotationColor)
 	}
@@ -1258,7 +1293,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 			}
 			selectedMark = &selectedCopy
 		}
-		state.drawEditBar(displayList, toolbarFrame, toolbarRect, selection, activeTool, selectedMark, annotationColor, mosaicRadius, fontSize, uiScale)
+		state.drawEditBar(displayList, toolbarFrame, toolbarRect, selection, activeTool, selectedMark, creationColor, mosaicRadius, fontSize, uiScale)
 	}
 	state.publishSizeLabel(chip, label)
 	if hasHoveredTool {
@@ -1477,7 +1512,11 @@ func screenshotEditorToolTooltip(tool int, configured [screenshotEditorToolCount
 	if label == "" {
 		label = screenshotEditorDefaultTooltips[tool]
 	}
-	return fmt.Sprintf("%s (%s)", label, screenshotEditorToolShortcuts[tool])
+	shortcut := screenshotEditorToolShortcuts[tool]
+	if shortcut == "" {
+		return label
+	}
+	return fmt.Sprintf("%s (%s)", label, strings.ToUpper(string(shortcut)))
 }
 
 func screenshotEditorActionTooltip(action screenshotEditorAction, configured ScreenshotActionTooltips, undo, scroll, cursor, pin, record, cancel, save, confirm, background Rect) (Rect, string) {
@@ -1694,7 +1733,7 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 			cursorX += scaled(32)
 		}
 	} else {
-		for index, swatch := range screenshotEditorPalette {
+		for index, swatch := range screenshotEditorToolPalette(editTool) {
 			rect := Rect{X: cursorX, Y: top + scaled(18), Width: scaled(20), Height: scaled(20)}
 			colorRects[index] = rect
 			displayList.FillRoundedRect(rect, scaled(10), swatch)
@@ -1707,11 +1746,12 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 		}
 	}
 
-	if editTool == screenshotEditorToolBrush {
+	if editTool.hasStrokeWidths() {
 		if wrapSize {
 			cursorX, controlTop = left+scaled(12), top+scaled(48)
 		}
-		for index, radius := range screenshotEditorBrushRadii {
+		radii := screenshotEditorToolStrokeRadii(editTool)
+		for index, radius := range radii {
 			rect := Rect{X: cursorX, Y: controlTop + scaled(12), Width: scaled(32), Height: scaled(32)}
 			sizeRects[index] = rect
 			color := Color{R: 255, G: 255, B: 255, A: 179}
@@ -1719,7 +1759,11 @@ func (state *screenshotEditorOverlayState) drawEditBar(
 				color = green
 			}
 			center := Point{X: rect.X + rect.Width/2, Y: rect.Y + rect.Height/2}
-			drawScreenshotEditorLine(displayList, center, center, scaled(radius*2), color)
+			visualRadius := radius
+			if editTool == screenshotEditorToolHighlighter {
+				visualRadius = 2 + 6*radius/radii[len(radii)-1]
+			}
+			drawScreenshotEditorLine(displayList, center, center, scaled(visualRadius*2), color)
 			cursorX += scaled(32)
 		}
 	}
@@ -2054,7 +2098,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			state.invalidate()
 			return
 		}
-		if state.activeTool == screenshotEditorToolMosaic || state.activeTool == screenshotEditorToolBrush || state.activeTool == screenshotEditorToolEraser || state.pointerCursor == PointerCursorHidden {
+		if state.activeTool == screenshotEditorToolMosaic || state.activeTool.isFreehand() || state.pointerCursor == PointerCursorHidden {
 			state.updateHoverLocked(event.Position)
 		}
 		confirm := state.hasSelection && screenshotEditorRectContains(state.confirmRect, event.Position)
@@ -2090,11 +2134,19 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			if !screenshotEditorRectContains(rect, event.Position) {
 				continue
 			}
-			color := screenshotEditorPalette[index]
 			hasSelectedMark := state.hasSelectedMark && state.selectedAnnotation >= 0 && state.selectedAnnotation < len(state.annotations)
+			tool := state.activeTool
+			if hasSelectedMark {
+				tool = state.annotations[state.selectedAnnotation].tool
+			}
+			color := screenshotEditorToolPalette(tool)[index]
 			// Creation tools stay active after placing a mark; the next mark must use the newly chosen color too.
 			if state.activeTool != screenshotEditorToolSelect || !hasSelectedMark || state.textEditing {
-				state.annotationColor = color
+				if tool == screenshotEditorToolHighlighter {
+					state.highlighterColor = color
+				} else {
+					state.annotationColor = color
+				}
 			}
 			if hasSelectedMark && !(state.textEditing && state.hasEditingText) {
 				state.annotations[state.selectedAnnotation].color = color
@@ -2112,16 +2164,20 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			if hasSelectedMark {
 				tool = state.annotations[state.selectedAnnotation].tool
 			}
-			if tool == screenshotEditorToolBrush {
-				radius = screenshotEditorBrushRadii[index]
-				state.brushRadius = radius
+			if tool.hasStrokeWidths() {
+				radius = screenshotEditorToolStrokeRadii(tool)[index]
+				if tool == screenshotEditorToolHighlighter {
+					state.highlighterRadius = radius
+				} else {
+					state.brushRadius = radius
+				}
 			} else if tool == screenshotEditorToolEraser {
 				state.eraserRadius = radius
 			} else if state.activeTool == screenshotEditorToolMosaic || !hasSelectedMark {
 				state.mosaicRadius = radius
 			}
 			if hasSelectedMark {
-				if tool == screenshotEditorToolBrush {
+				if tool.hasStrokeWidths() {
 					state.annotations[state.selectedAnnotation].strokeRadius = radius
 				} else {
 					state.annotations[state.selectedAnnotation].mosaicRadius = radius
@@ -2148,7 +2204,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			if screenshotEditorRectContains(rect, event.Position) {
 				state.commitTextLocked()
 				tool := screenshotEditorTool(index)
-				if tool == state.activeTool && (tool == screenshotEditorToolBrush || tool == screenshotEditorToolEraser) {
+				if tool == state.activeTool && tool.isFreehand() {
 					tool = screenshotEditorToolSelect
 				}
 				state.activeTool = tool
@@ -2168,7 +2224,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 					if state.textEditing {
 						state.commitTextLocked()
 					}
-					if state.activeTool == screenshotEditorToolBrush || state.activeTool == screenshotEditorToolEraser {
+					if state.activeTool.isFreehand() {
 						// Freehand tools must paint through existing marks instead of selecting them.
 						state.beginPointerToolActionLocked(event)
 					} else if state.beginTextAnnotationMoveAtLocked(event.Position) {
@@ -2185,7 +2241,7 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				}
 			}
 		}
-		if state.annotationDragging && state.draft != nil && (state.draft.tool == screenshotEditorToolMosaic || state.draft.tool == screenshotEditorToolBrush || state.draft.tool == screenshotEditorToolEraser) {
+		if state.annotationDragging && state.draft != nil && (state.draft.tool == screenshotEditorToolMosaic || state.draft.tool.isFreehand()) {
 			state.pointerCursor = state.mosaicPointerCursorLocked(event.Position)
 		} else if toolChanged || editChanged {
 			state.updateHoverLocked(event.Position)
@@ -2224,6 +2280,8 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 		}
 	case PointerMove:
 		state.mu.Lock()
+		previousPointer := state.pointerPosition
+		previousCursor := state.pointerCursor
 		pointerChanged := !state.pointerInside || state.pointerPosition != event.Position
 		state.pointerPosition = event.Position
 		state.pointerInside = true
@@ -2274,9 +2332,27 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				}
 			case screenshotEditorToolArrow:
 				state.draft.end = position
+			case screenshotEditorToolHighlighter:
+				scale := state.annotationScale()
+				dirty := screenshotEditorHighlighterTailBounds(*state.draft, scale)
+				state.appendStrokePointLocked(position, event.Modifiers&KeyModifierShift != 0)
+				dirty = unionScreenshotEditorRects(dirty, screenshotEditorHighlighterTailBounds(*state.draft, scale))
+				state.pointerCursor = state.mosaicPointerCursorLocked(event.Position)
+				cursor := state.pointerCursor
+				cursorRadius := screenshotEditorStrokeRadius(*state.draft, scale) + 3*max(float32(1), state.uiScale)
+				if previousCursor == PointerCursorHidden {
+					dirty = unionScreenshotEditorRects(dirty, Rect{X: previousPointer.X - cursorRadius, Y: previousPointer.Y - cursorRadius, Width: 2 * cursorRadius, Height: 2 * cursorRadius})
+				}
+				if cursor == PointerCursorHidden {
+					dirty = unionScreenshotEditorRects(dirty, Rect{X: event.Position.X - cursorRadius, Y: event.Position.Y - cursorRadius, Width: 2 * cursorRadius, Height: 2 * cursorRadius})
+				}
+				state.mu.Unlock()
+				state.setPointerCursor(cursor)
+				state.invalidateRect(dirty)
+				return
 			case screenshotEditorToolBrush, screenshotEditorToolEraser:
 				state.pointerCursor = state.mosaicPointerCursorLocked(event.Position)
-				state.appendStrokePointLocked(position)
+				state.appendStrokePointLocked(position, event.Modifiers&KeyModifierShift != 0)
 			case screenshotEditorToolMosaic:
 				state.pointerCursor = state.mosaicPointerCursorLocked(event.Position)
 				points := state.draft.points
@@ -2374,18 +2450,18 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 			return
 		}
 		state.pointerPosition = event.Position
-		state.appendStrokePointLocked(clampScreenshotEditorPoint(event.Position, state.selection))
+		state.appendStrokePointLocked(clampScreenshotEditorPoint(event.Position, state.selection), event.Modifiers&KeyModifierShift != 0)
 		draft := *state.draft
 		state.annotationDragging = false
 		state.draft = nil
 		if screenshotEditorAnnotationIsVisible(draft) {
 			state.annotations = append(state.annotations, draft)
 			state.selectedAnnotation = len(state.annotations) - 1
-			state.hasSelectedMark = draft.tool != screenshotEditorToolBrush && draft.tool != screenshotEditorToolEraser
+			state.hasSelectedMark = !draft.tool.isFreehand()
 			state.hasHoveredMark = false
 			// Keep the creation tool so the next drag draws another mark instead of moving the capture.
 		}
-		if state.activeTool == screenshotEditorToolMosaic || state.activeTool == screenshotEditorToolBrush || state.activeTool == screenshotEditorToolEraser {
+		if state.activeTool == screenshotEditorToolMosaic || state.activeTool.isFreehand() {
 			state.updateHoverLocked(state.pointerPosition)
 		}
 		cursor := state.pointerCursor
@@ -2592,29 +2668,12 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 		state.mu.Unlock()
 		return false
 	}
-	tool, toolShortcut := screenshotEditorToolSelect, true
-	switch event.Key {
-	case Key("r"):
-		tool = screenshotEditorToolRect
-	case Key("e"):
-		tool = screenshotEditorToolEllipse
-	case Key("t"):
-		tool = screenshotEditorToolText
-	case Key("a"):
-		tool = screenshotEditorToolArrow
-	case Key("n"):
-		tool = screenshotEditorToolNumber
-	case Key("m"):
-		tool = screenshotEditorToolMosaic
-	case Key("b"):
-		tool = screenshotEditorToolBrush
-	case Key("x"):
-		tool = screenshotEditorToolEraser
-	default:
-		toolShortcut = false
-	}
-	if toolShortcut {
-		if tool == state.activeTool && (tool == screenshotEditorToolBrush || tool == screenshotEditorToolEraser) {
+	for index, shortcut := range screenshotEditorToolShortcuts {
+		if shortcut == "" || shortcut != event.Key {
+			continue
+		}
+		tool := screenshotEditorTool(index)
+		if tool == state.activeTool && tool.isFreehand() {
 			tool = screenshotEditorToolSelect
 		}
 		state.activeTool = tool
@@ -2683,7 +2742,7 @@ func (state *screenshotEditorOverlayState) key(event KeyEvent) bool {
 // copyInspectedColor writes the currently sampled color without changing the screenshot selection.
 func (state *screenshotEditorOverlayState) copyInspectedColor(format screenshotEditorColorFormat) bool {
 	state.mu.Lock()
-	if state.textEditing || state.colorInspectorDismissed || !state.pointerInside || state.writeClipboardText == nil {
+	if state.textEditing || state.hasSelection || state.colorInspectorDismissed || !state.pointerInside || state.writeClipboardText == nil {
 		state.mu.Unlock()
 		return false
 	}
@@ -2898,13 +2957,14 @@ func (state *screenshotEditorOverlayState) beginPointerToolActionLocked(event Po
 			state.start = event.Position
 			state.annotationDragging = true
 			state.hasSelectedMark, state.hasHoveredMark = false, false
+			state.highlighterSnapping = false
 			state.draft = &screenshotEditorAnnotation{
 				tool:         state.activeTool,
 				rect:         Rect{X: event.Position.X, Y: event.Position.Y},
 				start:        event.Position,
 				end:          event.Position,
 				points:       []Point{event.Position},
-				color:        state.annotationColor,
+				color:        state.creationColorLocked(),
 				mosaicRadius: state.mosaicRadius,
 				strokeRadius: state.strokeRadiusLocked(state.activeTool),
 				paintOrder:   state.nextAnnotationPaintOrderLocked(),
@@ -3412,7 +3472,7 @@ func (state *screenshotEditorOverlayState) updateHoverLocked(point Point) bool {
 		return previousHasHoveredMark || previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra != index || previousCursor != PointerCursorDefault
 	}
 	toolHoverChanged := previousHasHoveredTool || previousHasHoveredAction || previousHoveredExtra >= 0
-	if state.activeTool == screenshotEditorToolBrush || state.activeTool == screenshotEditorToolEraser {
+	if state.activeTool.isFreehand() {
 		state.pointerCursor = state.mosaicPointerCursorLocked(point)
 		return toolHoverChanged || previousHasHoveredMark || previousCursor != state.pointerCursor
 	}
@@ -3770,7 +3830,7 @@ func screenshotEditorAnnotationIsVisible(annotation screenshotEditorAnnotation) 
 		return annotation.rect.Width >= 2 && annotation.rect.Height >= 2
 	case screenshotEditorToolArrow:
 		return math.Hypot(float64(annotation.end.X-annotation.start.X), float64(annotation.end.Y-annotation.start.Y)) >= 2 || math.Hypot(float64(annotation.arrowBend.X), float64(annotation.arrowBend.Y)) >= 2
-	case screenshotEditorToolMosaic, screenshotEditorToolBrush, screenshotEditorToolEraser:
+	case screenshotEditorToolMosaic, screenshotEditorToolBrush, screenshotEditorToolHighlighter, screenshotEditorToolEraser:
 		return len(annotation.points) > 0
 	case screenshotEditorToolNumber:
 		return annotation.number > 0

@@ -46,6 +46,7 @@ type screenshotSavedAnnotation struct {
 	FontSize, MosaicRadius, StrokeRadius float32
 	Number                               int
 	PaintOrder                           uint64
+	FlatCap                              bool `json:",omitempty"`
 }
 
 // screenshotDisplay excludes work areas and labels, which can change without rearranging screens.
@@ -124,7 +125,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 			Tool: screenshotEditorToolIconNames[mark.tool], Rect: mark.rect, Start: mark.start, End: mark.end,
 			ArrowBend: mark.arrowBend, CornerRadius: mark.cornerRadius, Text: mark.text, Points: append([]Point(nil), mark.points...),
 			Color: mark.color, FontSize: mark.fontSize, MosaicRadius: mark.mosaicRadius, StrokeRadius: mark.strokeRadius,
-			Number: mark.number, PaintOrder: mark.paintOrder,
+			Number: mark.number, PaintOrder: mark.paintOrder, FlatCap: mark.flatCap,
 		})
 	}
 	cursorStartedAt := time.Now()
@@ -325,7 +326,8 @@ func (document *screenshotDocument) annotations(bounds image.Rectangle) ([]scree
 		mark := screenshotEditorAnnotation{tool: tool, rect: saved.Rect, start: saved.Start, end: saved.End,
 			arrowBend: saved.ArrowBend, cornerRadius: saved.CornerRadius, text: saved.Text, points: saved.Points,
 			color: saved.Color, fontSize: saved.FontSize, mosaicRadius: saved.MosaicRadius, strokeRadius: saved.StrokeRadius,
-			number: saved.Number, paintOrder: saved.PaintOrder}
+			number: saved.Number, paintOrder: saved.PaintOrder,
+			flatCap: tool == screenshotEditorToolHighlighter && saved.FlatCap && len(saved.Points) == 2 && saved.Points[0] != saved.Points[1]}
 		if !screenshotEditorAnnotationIsVisible(mark) {
 			return nil, errors.New("empty screenshot annotation")
 		}

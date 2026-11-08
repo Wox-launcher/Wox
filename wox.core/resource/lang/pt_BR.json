@@ -2844,6 +2844,7 @@
   "ui_screenshot_tool_number": "Número",
   "ui_screenshot_tool_mosaic": "Mosaico",
   "ui_screenshot_tool_brush": "Pincel",
+  "ui_screenshot_tool_highlighter": "Marca-texto",
   "ui_screenshot_tool_eraser": "Borracha",
   "ui_screenshot_tool_mosaic_brush_small": "Pincel de mosaico pequeno",
   "ui_screenshot_tool_mosaic_brush_medium": "Pincel de mosaico médio",

@@ -82,7 +82,7 @@ func screenshotEditorEditBarSize(frameWidth float32, tool screenshotEditorTool, 
 	hasFontSize := tool == screenshotEditorToolText || tool == screenshotEditorToolNumber
 	if tool == screenshotEditorToolMosaic || tool == screenshotEditorToolEraser {
 		width = 120
-	} else if tool == screenshotEditorToolBrush {
+	} else if tool.hasStrokeWidths() {
 		width = 288
 	} else if hasFontSize {
 		width = 376
@@ -94,7 +94,7 @@ func screenshotEditorEditBarSize(frameWidth float32, tool screenshotEditorTool, 
 	}
 	available := max(float32(192), frameWidth/scale-48)
 	width = min(width, available)
-	if (hasFontSize && width < 328+deleteWidth) || (tool == screenshotEditorToolBrush && width < 288+deleteWidth) {
+	if (hasFontSize && width < 328+deleteWidth) || (tool.hasStrokeWidths() && width < 288+deleteWidth) {
 		height, wrap = 104, true
 	}
 	return width * scale, height * scale, wrap

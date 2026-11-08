@@ -11,6 +11,14 @@ import (
 
 var screenshotEditorBrushRadii = [...]float32{2, 4, 8}
 
+func (tool screenshotEditorTool) hasStrokeWidths() bool {
+	return tool == screenshotEditorToolBrush || tool == screenshotEditorToolHighlighter
+}
+
+func (tool screenshotEditorTool) isFreehand() bool {
+	return tool.hasStrokeWidths() || tool == screenshotEditorToolEraser
+}
+
 // screenshotEditorEraserPreview retains only the source patch covered by one stroke, not another desktop image.
 // Erasers cannot be selected or moved, so appended points and render scale completely identify the patch.
 type screenshotEditorEraserPreview struct {
@@ -43,10 +51,13 @@ func screenshotEditorPaintOrder(annotations []screenshotEditorAnnotation) []scre
 	return ordered
 }
 
-// strokeRadiusLocked resolves independent brush and eraser creation sizes in logical units.
+// strokeRadiusLocked resolves each freehand tool's creation size in logical units.
 func (state *screenshotEditorOverlayState) strokeRadiusLocked(tool screenshotEditorTool) float32 {
 	radius := state.brushRadius
-	if tool == screenshotEditorToolEraser {
+	switch tool {
+	case screenshotEditorToolHighlighter:
+		radius = state.highlighterRadius
+	case screenshotEditorToolEraser:
 		radius = state.eraserRadius
 	}
 	return screenshotEditorStrokeRadius(screenshotEditorAnnotation{tool: tool, strokeRadius: radius}, 1)
@@ -56,17 +67,25 @@ func (state *screenshotEditorOverlayState) strokeRadiusLocked(tool screenshotEdi
 func screenshotEditorStrokeRadius(annotation screenshotEditorAnnotation, uiScale float32) float32 {
 	radius := annotation.strokeRadius
 	if radius <= 0 {
-		radius = screenshotEditorBrushRadii[0]
-		if annotation.tool == screenshotEditorToolEraser {
+		switch annotation.tool {
+		case screenshotEditorToolHighlighter:
+			radius = screenshotEditorHighlighterRadii[1]
+		case screenshotEditorToolEraser:
 			radius = screenshotEditorMosaicRadius
+		default:
+			radius = screenshotEditorBrushRadii[0]
 		}
 	}
 	return radius * max(float32(1), uiScale)
 }
 
 // appendStrokePointLocked keeps release coordinates and sparse pointer events connected without dropping short strokes.
-func (state *screenshotEditorOverlayState) appendStrokePointLocked(point Point) {
-	if state.draft == nil || (state.draft.tool != screenshotEditorToolBrush && state.draft.tool != screenshotEditorToolEraser) {
+func (state *screenshotEditorOverlayState) appendStrokePointLocked(point Point, shift bool) {
+	if state.draft == nil || !state.draft.tool.isFreehand() {
+		return
+	}
+	if state.draft.tool == screenshotEditorToolHighlighter {
+		state.updateHighlighterStrokeLocked(point, shift)
 		return
 	}
 	points := state.draft.points
@@ -108,11 +127,20 @@ func drawScreenshotEditorStrokeCursor(list *DisplayList, point Point, radius, ui
 
 // paintScreenshotEditorStroke evaluates capsules in logical coordinates, preserving circular strokes with unequal capture scales.
 func paintScreenshotEditorStroke(target *image.RGBA, clip image.Rectangle, points []Point, radius, scaleX, scaleY float32, pixel func(int, int) color.RGBA) {
+	visitScreenshotEditorStrokePixels(clip.Intersect(target.Bounds()), points, radius, scaleX, scaleY, false, func(x, y int) {
+		target.SetRGBA(x, y, pixel(x, y))
+	})
+}
+
+// visitScreenshotEditorStrokePixels walks coverage in capture-local pixel coordinates.
+func visitScreenshotEditorStrokePixels(clip image.Rectangle, points []Point, radius, scaleX, scaleY float32, flatCap bool, visit func(int, int)) {
 	if radius <= 0 || scaleX <= 0 || scaleY <= 0 {
 		return
 	}
-	clip = clip.Intersect(target.Bounds())
 	for index, end := range points {
+		if flatCap && index == 0 {
+			continue
+		}
 		start := points[max(0, index-1)]
 		dx, dy := end.X-start.X, end.Y-start.Y
 		lengthSquared := dx*dx + dy*dy
@@ -123,15 +151,28 @@ func paintScreenshotEditorStroke(target *image.RGBA, clip image.Rectangle, point
 			int(math.Ceil(float64((max(start.Y, end.Y)+radius)*scaleY))),
 		).Intersect(clip)
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			for x := bounds.Min.X; x < bounds.Max.X; x++ {
-				px, py := (float32(x)+0.5)/scaleX-start.X, (float32(y)+0.5)/scaleY-start.Y
+			py := (float32(y)+0.5)/scaleY - start.Y
+			left, right := bounds.Min.X, bounds.Max.X
+			if dx != 0 && dy != 0 {
+				// Only the segment within one radius of this row can contribute to it.
+				first := min(max((py-radius)/dy, 0), 1)*dx + start.X
+				last := min(max((py+radius)/dy, 0), 1)*dx + start.X
+				left = max(left, int(math.Floor(float64((min(first, last)-radius)*scaleX))))
+				right = min(right, int(math.Ceil(float64((max(first, last)+radius)*scaleX))))
+			}
+			for x := left; x < right; x++ {
+				px := (float32(x)+0.5)/scaleX - start.X
 				ratio := float32(0)
 				if lengthSquared > 0 {
-					ratio = min(max(float32(0), (px*dx+py*dy)/lengthSquared), 1)
+					ratio = (px*dx + py*dy) / lengthSquared
+					if flatCap && (ratio < 0 || ratio > 1) {
+						continue
+					}
+					ratio = min(max(float32(0), ratio), 1)
 				}
 				ex, ey := px-ratio*dx, py-ratio*dy
 				if ex*ex+ey*ey <= radius*radius {
-					target.SetRGBA(x, y, pixel(x, y))
+					visit(x, y)
 				}
 			}
 		}

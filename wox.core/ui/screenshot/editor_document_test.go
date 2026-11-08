@@ -287,6 +287,7 @@ func TestScreenshotDocumentRoundTripAllAnnotations(t *testing.T) {
 			arrowBend: Point{X: 15, Y: -8}, cornerRadius: 8, text: "Hello\n截图", number: 12, fontSize: 21,
 			points: []Point{{X: 60, Y: 60}, {X: 90, Y: 70}}, mosaicRadius: 18, strokeRadius: 4,
 			color: Color{R: 255, G: 91, B: 54, A: 255}, paintOrder: uint64(screenshotEditorToolCount - tool),
+			flatCap: tool == screenshotEditorToolHighlighter,
 		})
 	}
 	before, err := exportScreenshotSelection(source, state.annotations, state.selection, state.frameSize, state.annotationScale(), state.cursorPixel, true, nil)
@@ -311,6 +312,9 @@ func TestScreenshotDocumentRoundTripAllAnnotations(t *testing.T) {
 	}
 	if len(marks) != int(screenshotEditorToolCount)-1 || marks[0].arrowBend != state.annotations[0].arrowBend {
 		t.Fatal("annotation properties lost")
+	}
+	if marker := marks[screenshotEditorToolHighlighter-1]; marker.tool != screenshotEditorToolHighlighter || !marker.flatCap {
+		t.Fatalf("flat highlighter was not restored: %+v", marker)
 	}
 	if doc.DesktopPixelOrigin != state.desktopPixelOrigin {
 		t.Fatal("negative desktop origin changed")

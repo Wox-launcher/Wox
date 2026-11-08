@@ -65,6 +65,7 @@ type screenshotEditorAnnotation struct {
 	mosaicRadius float32
 	number       int
 	strokeRadius float32
+	flatCap      bool
 	// paintOrder separates visual stacking from creation order, which remains the undo history.
 	paintOrder    uint64
 	eraserPreview *screenshotEditorEraserPreview
@@ -127,7 +128,7 @@ func drawScreenshotEditorAnnotationHandles(displayList *DisplayList, annotation 
 	case screenshotEditorToolText:
 		drawScreenshotEditorTextFrame(displayList, screenshotEditorTextFrame(annotation, uiScale), uiScale)
 		return
-	case screenshotEditorToolBrush:
+	case screenshotEditorToolBrush, screenshotEditorToolHighlighter:
 		drawScreenshotEditorTextFrame(displayList, screenshotEditorAnnotationBounds(annotation, uiScale), uiScale)
 		return
 	case screenshotEditorToolNumber:
@@ -238,7 +239,7 @@ func screenshotEditorAnnotationContains(annotation screenshotEditorAnnotation, p
 		bounds := screenshotEditorNumberBounds(annotation, uiScale)
 		radius := bounds.Width / 2
 		return math.Hypot(float64(point.X-annotation.start.X), float64(point.Y-annotation.start.Y)) <= float64(radius)
-	case screenshotEditorToolBrush:
+	case screenshotEditorToolBrush, screenshotEditorToolHighlighter:
 		return screenshotEditorStrokeContains(annotation.points, point, screenshotEditorStrokeRadius(annotation, uiScale)+3*max(float32(1), uiScale))
 	case screenshotEditorToolMosaic:
 		radius := screenshotEditorAnnotationMosaicRadius(annotation)
@@ -305,7 +306,7 @@ func screenshotEditorAnnotationBounds(annotation screenshotEditorAnnotation, uiS
 		return Rect{X: annotation.start.X, Y: annotation.start.Y, Width: textSize.Width, Height: textSize.Height}
 	case screenshotEditorToolNumber:
 		return screenshotEditorNumberBounds(annotation, uiScale)
-	case screenshotEditorToolMosaic, screenshotEditorToolBrush, screenshotEditorToolEraser:
+	case screenshotEditorToolMosaic, screenshotEditorToolBrush, screenshotEditorToolHighlighter, screenshotEditorToolEraser:
 		if len(annotation.points) == 0 {
 			return Rect{}
 		}
@@ -454,43 +455,81 @@ func drawScreenshotEditorMosaicPreview(displayList *DisplayList, points []Point,
 // The returned RGBA keeps the source-pixel rectangle so annotation and cursor coordinates
 // stay in capture space without a second full-desktop copy.
 func renderScreenshotEditorAnnotations(source image.Image, annotations []screenshotEditorAnnotation, selection Rect, frame Size, uiScale float32) (*image.RGBA, error) {
+	output, _, err := compositeScreenshotEditorAnnotations(source, annotations, selection, frame, uiScale)
+	return output, err
+}
+
+// compositeScreenshotEditorAnnotations also returns the scene without ink from earlier
+// highlighters. The extra crop is only needed when a screenshot mixes markers and other tools.
+func compositeScreenshotEditorAnnotations(source image.Image, annotations []screenshotEditorAnnotation, selection Rect, frame Size, uiScale float32) (*image.RGBA, image.Image, error) {
 	bounds := source.Bounds()
 	clip, err := screenshotEditorPixelSelection(bounds, selection, frame)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	output := image.NewRGBA(clip)
 	copyScreenshotCapture(output, source, clip.Min)
-	if len(annotations) == 0 {
-		return output, nil
-	}
 	scaleX := float32(bounds.Dx()) / frame.Width
 	scaleY := float32(bounds.Dy()) / frame.Height
 	previewScale := max(float32(1), uiScale)
-	strokeWidth := screenshotEditorAnnotationStroke * previewScale * scaleX
-	for _, annotation := range screenshotEditorPaintOrder(annotations) {
-		drawColor := screenshotEditorAnnotationDrawColor(annotation)
-		pixelColor := color.RGBA{R: drawColor.R, G: drawColor.G, B: drawColor.B, A: drawColor.A}
-		switch annotation.tool {
-		case screenshotEditorToolRect:
-			drawScreenshotEditorPixelRect(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
-		case screenshotEditorToolEllipse:
-			drawScreenshotEditorPixelEllipse(output, clip, screenshotEditorScaleRect(annotation.rect, scaleX, scaleY), strokeWidth, pixelColor)
-		case screenshotEditorToolArrow:
-			drawScreenshotEditorPixelArrow(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
-		case screenshotEditorToolText:
-			drawScreenshotEditorPixelText(output, clip, annotation.text, screenshotEditorScalePoint(annotation.start, scaleX, scaleY), screenshotEditorAnnotationRenderedFontSize(annotation, previewScale)*scaleY, pixelColor)
-		case screenshotEditorToolNumber:
-			drawScreenshotEditorPixelNumber(output, clip, annotation, previewScale, scaleX, scaleY, pixelColor)
-		case screenshotEditorToolBrush:
-			paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(int, int) color.RGBA { return pixelColor })
-		case screenshotEditorToolEraser:
-			paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(x, y int) color.RGBA { return color.RGBAModel.Convert(source.At(x, y)).(color.RGBA) })
-		case screenshotEditorToolMosaic:
-			drawScreenshotEditorPixelMosaic(output, clip, annotation.points, screenshotEditorAnnotationMosaicRadius(annotation), scaleX, scaleY)
+	var clean *image.RGBA
+	highlighted := false
+	for index, annotation := range screenshotEditorPaintOrder(annotations) {
+		if annotation.tool == screenshotEditorToolHighlighter {
+			if !highlighted && index > 0 {
+				clean = image.NewRGBA(clip)
+				copy(clean.Pix, output.Pix)
+			}
+			inkUnderlay := source
+			if clean != nil {
+				inkUnderlay = clean
+			}
+			paintScreenshotEditorHighlighter(output, source, inkUnderlay, annotation, bounds.Min, previewScale, scaleX, scaleY)
+			highlighted = true
+			continue
+		}
+		paintScreenshotEditorPixelAnnotation(output, source, annotation, previewScale, scaleX, scaleY)
+		if highlighted {
+			if clean == nil {
+				clean = image.NewRGBA(clip)
+				copyScreenshotCapture(clean, source, clip.Min)
+			}
+			paintScreenshotEditorPixelAnnotation(clean, source, annotation, previewScale, scaleX, scaleY)
 		}
 	}
-	return output, nil
+	if clean != nil {
+		return output, clean, nil
+	}
+	if highlighted {
+		return output, source, nil
+	}
+	return output, output, nil
+}
+
+// paintScreenshotEditorPixelAnnotation applies an ordinary mark to either composite.
+func paintScreenshotEditorPixelAnnotation(output *image.RGBA, source image.Image, annotation screenshotEditorAnnotation, previewScale, scaleX, scaleY float32) {
+	clip := output.Bounds()
+	drawColor := screenshotEditorAnnotationDrawColor(annotation)
+	pixelColor := color.RGBA{R: drawColor.R, G: drawColor.G, B: drawColor.B, A: drawColor.A}
+	switch annotation.tool {
+	case screenshotEditorToolRect:
+		drawScreenshotEditorPixelRect(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
+	case screenshotEditorToolEllipse:
+		strokeWidth := screenshotEditorAnnotationStroke * previewScale * scaleX
+		drawScreenshotEditorPixelEllipse(output, clip, screenshotEditorScaleRect(annotation.rect, scaleX, scaleY), strokeWidth, pixelColor)
+	case screenshotEditorToolArrow:
+		drawScreenshotEditorPixelArrow(output, clip, annotation, screenshotEditorAnnotationPreviewStroke(previewScale), scaleX, scaleY, pixelColor)
+	case screenshotEditorToolText:
+		drawScreenshotEditorPixelText(output, clip, annotation.text, screenshotEditorScalePoint(annotation.start, scaleX, scaleY), screenshotEditorAnnotationRenderedFontSize(annotation, previewScale)*scaleY, pixelColor)
+	case screenshotEditorToolNumber:
+		drawScreenshotEditorPixelNumber(output, clip, annotation, previewScale, scaleX, scaleY, pixelColor)
+	case screenshotEditorToolBrush:
+		paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(int, int) color.RGBA { return pixelColor })
+	case screenshotEditorToolEraser:
+		paintScreenshotEditorStroke(output, clip, annotation.points, screenshotEditorStrokeRadius(annotation, previewScale), scaleX, scaleY, func(x, y int) color.RGBA { return color.RGBAModel.Convert(source.At(x, y)).(color.RGBA) })
+	case screenshotEditorToolMosaic:
+		drawScreenshotEditorPixelMosaic(output, clip, annotation.points, screenshotEditorAnnotationMosaicRadius(annotation), scaleX, scaleY)
+	}
 }
 
 // drawScreenshotEditorPixelNumber preserves the marker's logical size and centered label in the exported image.
@@ -716,6 +755,9 @@ func drawScreenshotEditorPixelMosaic(target *image.RGBA, clip image.Rectangle, p
 
 func screenshotEditorAnnotationDrawColor(annotation screenshotEditorAnnotation) Color {
 	if annotation.color.A == 0 {
+		if annotation.tool == screenshotEditorToolHighlighter {
+			return screenshotEditorHighlighterColor
+		}
 		return screenshotEditorAnnotationColor
 	}
 	return annotation.color

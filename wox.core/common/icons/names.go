@@ -319,6 +319,7 @@ const (
 	ScreenshotNumber           = "screenshot.number"
 	ScreenshotMosaic           = "screenshot.mosaic"
 	ScreenshotBrush            = "screenshot.brush"
+	ScreenshotHighlighter      = "screenshot.highlighter"
 	ScreenshotEraser           = "screenshot.eraser"
 	ScreenshotScrollingCapture = "screenshot.scrolling-capture"
 	ScreenshotBackground       = "screenshot.background"

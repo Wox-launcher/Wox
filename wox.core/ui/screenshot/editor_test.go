@@ -889,8 +889,8 @@ func TestScreenshotEditorToolbarUsesCompactCreationTools(t *testing.T) {
 	}
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
 
-	if state.toolbarRect.Width != 848 || state.toolbarRect.Height != 48 {
-		t.Fatalf("toolbar bounds = %+v, want 848x48", state.toolbarRect)
+	if state.toolbarRect.Width != 896 || state.toolbarRect.Height != 48 {
+		t.Fatalf("toolbar bounds = %+v, want 896x48", state.toolbarRect)
 	}
 	if state.toolbarRect.X != state.selection.X+state.selection.Width-state.toolbarRect.Width {
 		t.Fatalf("toolbar left = %v, want right-aligned to selection", state.toolbarRect.X)
@@ -992,7 +992,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 956 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
+	if state.toolbarRect.Width != 1004 || len(state.extraActionRects) != 1 || state.extraActionRects[0].Width != 40 {
 		t.Fatalf("toolbar=%+v extra=%+v", state.toolbarRect, state.extraActionRects)
 	}
 	if state.extraActionRects[0].X <= state.recordRect.X || state.extraActionRects[0].X >= state.cancelRect.X {
@@ -1003,7 +1003,7 @@ func TestScreenshotEditorToolbarShowsExtraActionsBetweenRecordAndCancel(t *testi
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 902 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 950 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only extra toolbar=%+v record=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 	if imageOnly.extraActionRects[0].X <= imageOnly.pinRect.X || imageOnly.extraActionRects[0].X >= imageOnly.cancelRect.X {
@@ -1026,7 +1026,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	state.selection = Rect{X: 100, Y: 100, Width: 900, Height: 400}
 	state.hasSelection = true
 	state.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if state.toolbarRect.Width != 902 || state.recordRect.Width != 40 {
+	if state.toolbarRect.Width != 950 || state.recordRect.Width != 40 {
 		t.Fatalf("recording toolbar=%+v button=%+v", state.toolbarRect, state.recordRect)
 	}
 
@@ -1034,7 +1034,7 @@ func TestScreenshotEditorToolbarShowsRecordingOnlyWhenAllowed(t *testing.T) {
 	imageOnly.selection = state.selection
 	imageOnly.hasSelection = true
 	imageOnly.draw(&DisplayList{}, FrameInfo{Size: Size{Width: 1200, Height: 700}})
-	if imageOnly.toolbarRect.Width != 848 || imageOnly.recordRect != (Rect{}) {
+	if imageOnly.toolbarRect.Width != 896 || imageOnly.recordRect != (Rect{}) {
 		t.Fatalf("image-only toolbar=%+v button=%+v", imageOnly.toolbarRect, imageOnly.recordRect)
 	}
 }
@@ -1221,13 +1221,19 @@ func TestScreenshotEditorToolbarIconsRenderFromSharedSVGs(t *testing.T) {
 
 func TestScreenshotEditorAnnotationToolsHaveTooltips(t *testing.T) {
 	configured := [screenshotEditorToolCount]string{"", "Localized rectangle"}
-	for tool := int(screenshotEditorToolRect); tool <= int(screenshotEditorToolMosaic); tool++ {
+	for tool := int(screenshotEditorToolRect); tool < int(screenshotEditorToolCount); tool++ {
 		if tooltip := screenshotEditorToolTooltip(tool, configured); tooltip == "" {
 			t.Fatalf("tool %d tooltip is empty", tool)
 		}
 	}
 	if got := screenshotEditorToolTooltip(int(screenshotEditorToolRect), configured); got != "Localized rectangle (R)" {
 		t.Fatalf("configured tooltip = %q", got)
+	}
+	if got := screenshotEditorToolTooltip(int(screenshotEditorToolHighlighter), configured); got != "Highlighter (H)" {
+		t.Fatalf("highlighter tooltip = %q", got)
+	}
+	if got := screenshotEditorToolTooltip(int(screenshotEditorToolEraser), configured); got != "Eraser (X)" {
+		t.Fatalf("eraser tooltip = %q", got)
 	}
 	anchor, actionTooltip := screenshotEditorActionTooltip(screenshotEditorActionCursor, ScreenshotActionTooltips{Cursor: "Localized cursor"}, Rect{}, Rect{}, Rect{X: 10, Y: 20, Width: 40, Height: 40}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{}, Rect{})
 	if anchor.X != 10 || actionTooltip != "Localized cursor (C)" {
@@ -1322,8 +1328,8 @@ func TestScreenshotEditorChromeUsesSelectionMonitorScale(t *testing.T) {
 	if state.uiScale != 1.5 {
 		t.Fatalf("chrome scale = %.2f, want 1.5", state.uiScale)
 	}
-	if state.toolbarRect.Width != 1272 || state.toolbarRect.Height != 72 {
-		t.Fatalf("scaled toolbar = %+v, want 1272x72", state.toolbarRect)
+	if state.toolbarRect.Width != 1344 || state.toolbarRect.Height != 72 {
+		t.Fatalf("scaled toolbar = %+v, want 1344x72", state.toolbarRect)
 	}
 	if state.confirmRect.Width != 60 || state.confirmRect.Height != 60 {
 		t.Fatalf("scaled confirm action = %+v, want 60x60", state.confirmRect)

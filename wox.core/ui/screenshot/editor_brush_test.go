@@ -183,7 +183,7 @@ func TestScreenshotEditorStrokeSizeAndToolbar(t *testing.T) {
 	}
 	for _, scale := range []float32{1, 2, 1.25, 1.5, 1} {
 		state.chromeScale = func(Rect) float32 { return scale }
-		for _, tool := range []screenshotEditorTool{screenshotEditorToolBrush, screenshotEditorToolEraser} {
+		for _, tool := range []screenshotEditorTool{screenshotEditorToolBrush, screenshotEditorToolHighlighter, screenshotEditorToolEraser} {
 			state.activeTool = tool
 			state.draw(&DisplayList{}, FrameInfo{Size: state.frameSize})
 			buttons := append([]Rect(nil), state.toolRects[1:]...)
@@ -199,16 +199,16 @@ func TestScreenshotEditorStrokeSizeAndToolbar(t *testing.T) {
 				}
 				state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: button.X + button.Width/2, Y: button.Y + button.Height/2}})
 				want := screenshotEditorMosaicRadii[index]
-				if tool == screenshotEditorToolBrush {
-					want = screenshotEditorBrushRadii[index]
+				if tool.hasStrokeWidths() {
+					want = screenshotEditorToolStrokeRadii(tool)[index]
 				}
 				if state.strokeRadiusLocked(tool) != want {
 					t.Fatalf("stroke size = %g, want %g", state.strokeRadiusLocked(tool), want)
 				}
 			}
 		}
-		if state.brushRadius != 8 || state.eraserRadius != 28 {
-			t.Fatal("brush and eraser size preferences are not independent")
+		if state.brushRadius != 8 || state.highlighterRadius != 14 || state.eraserRadius != 28 {
+			t.Fatal("freehand size preferences are not independent")
 		}
 	}
 }
