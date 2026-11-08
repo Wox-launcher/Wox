@@ -269,7 +269,7 @@
     "Website": "https://github.com/qianlifeng/Wox.Plugin.Mole",
     "DownloadUrl": "https://github.com/qianlifeng/Wox.Plugin.Mole/releases/latest/download/Wox.Plugin.Mole.wox",
     "ScreenshotUrls": [
-      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/main/image/demo.png"
+      "https://raw.githubusercontent.com/qianlifeng/Wox.Plugin.Mole/refs/heads/main/screenshot.png"
     ],
     "SupportedOS": [
       "Darwin"
