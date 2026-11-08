@@ -444,6 +444,37 @@ func (a *App) UpdatePluginPreview(ctx context.Context, pluginID string, option p
 	return result, err
 }
 
+// UpdatePluginPreviewData updates one live chart, even when typing changes the query ID.
+func (a *App) UpdatePluginPreviewData(ctx context.Context, pluginID string, option plugin.UpdatePluginPreviewDataOption) (plugin.UpdatePluginPreviewDataResult, error) {
+	data, err := woxview.ParseNodeData(option.WoxViewData)
+	if err != nil {
+		return plugin.UpdatePluginPreviewDataResult{}, nil
+	}
+	result := plugin.UpdatePluginPreviewDataResult{}
+	err = a.runOnUI("update plugin preview data", func() {
+		if util.GetContextSessionId(ctx) != a.sessionID || a.isDestroyed() {
+			return
+		}
+		previews := &a.previews
+		active, ok := previews.pluginPreview.result()
+		if !ok || previews.pluginPreview.pluginID != pluginID || !previews.woxViewShown || previews.woxView == nil || option.WoxViewID == "" ||
+			active.Preview.WoxViewID != option.WoxViewID || previews.woxViewID != option.WoxViewID ||
+			previews.woxViewResult.ID != active.ID || previews.woxViewResult.QueryID != active.QueryID {
+			return
+		}
+		// A full update may already be accepted but not yet have reached the renderer.
+		if previews.woxViewData != active.Preview.PreviewData {
+			if active.Preview.woxViewTree == nil {
+				return
+			}
+			previews.woxView.SetTree(active.Preview.woxViewTree)
+			previews.woxViewData = active.Preview.PreviewData
+		}
+		result.Success = previews.woxView.UpdateNodeData(option.WoxViewNodeKey, data) == nil
+	})
+	return result, err
+}
+
 // RemoveResult deletes a row only while its originating query is still displayed.
 func (a *App) RemoveResult(ctx context.Context, option plugin.RemoveResultOption) (bool, error) {
 	removed := false

@@ -232,6 +232,7 @@ func schemaFor(t reflect.Type) schemaObject {
 		if t == reflect.TypeFor[ScatterChartProps]() {
 			result["required"] = []string{"points"}
 			props["points"].(schemaObject)["maxItems"] = 4096
+			props["pointRadii"] = schemaObject{"type": "array", "maxItems": 4096, "items": schemaObject{"type": "number", "minimum": 0, "maximum": 16}}
 		}
 		if t == reflect.TypeFor[ScatterPoint]() {
 			result["required"] = []string{"x", "y"}

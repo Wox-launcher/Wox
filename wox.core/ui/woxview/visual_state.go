@@ -21,8 +21,9 @@ type nodeVisualState struct {
 }
 
 // InitState captures presence once, independently of subsequent producer echoes.
-func (s *nodeVisualState) InitState(_ widget.StateContext, value any) {
+func (s *nodeVisualState) InitState(ctx widget.StateContext, value any) {
 	c := value.(nodeVisualConfig)
+	c.builder.nodeOwner.dataContext = ctx
 	s.receiveEnter(c.builder.nodeOwner, c.node.Props.(interface{ commonProps() CommonProps }).commonProps())
 }
 func (*nodeVisualState) Dispose() {}
@@ -44,6 +45,11 @@ func (s *nodeVisualState) DidUpdateWidget(_ widget.StateContext, _, next any) {
 // Build applies hover, then press, then focus; disabled suppresses all active states.
 func (s *nodeVisualState) Build(ctx widget.StateContext, value any) widget.Widget {
 	c := value.(nodeVisualConfig)
+	if data := c.builder.nodeOwner.dataProps; data != nil {
+		node := *c.node
+		node.Props = data
+		c.node = &node
+	}
 	common := c.node.Props.(interface{ commonProps() CommonProps }).commonProps()
 	p := c.node.Props.(interface{ interactionStyles() InteractionStyles }).interactionStyles()
 	// Keep the state boundary mounted so adding paint state or animation never

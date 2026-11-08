@@ -146,6 +146,7 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"GetUpdatableResult":       (*WebsocketHost).handleGetUpdatableResult,
 	"UpdateResult":             (*WebsocketHost).handleUpdateResult,
 	"UpdatePluginPreview":      (*WebsocketHost).handleUpdatePluginPreview,
+	"UpdatePluginPreviewData":  (*WebsocketHost).handleUpdatePluginPreviewData,
 	"RemoveResult":             (*WebsocketHost).handleRemoveResult,
 	"PushResults":              (*WebsocketHost).handlePushResults,
 	"ExecuteToolbarMsgAction":  (*WebsocketHost).handleExecuteToolbarMsgAction,

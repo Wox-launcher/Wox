@@ -135,6 +135,8 @@ type API interface {
 
 	// UpdatePluginPreview updates the current session's plugin-owned WoxView document.
 	UpdatePluginPreview(ctx context.Context, option UpdatePluginPreviewOption) UpdatePluginPreviewResult
+	// UpdatePluginPreviewData updates a keyed chart without replacing its WoxView document.
+	UpdatePluginPreviewData(ctx context.Context, option UpdatePluginPreviewDataOption) UpdatePluginPreviewDataResult
 
 	// RemoveResult removes a visible result owned by this plugin. SelectedResultId, when present,
 	// selects another visible result; otherwise the current selection or nearest row is retained.
@@ -1146,6 +1148,19 @@ func (a *APIImpl) UpdatePluginPreview(ctx context.Context, option UpdatePluginPr
 		return ui.UpdatePluginPreview(ctx, a.pluginInstance.Metadata.Id, option)
 	}
 	return UpdatePluginPreviewResult{}
+}
+
+// UpdatePluginPreviewData delegates the scoped update to the active launcher.
+func (a *APIImpl) UpdatePluginPreviewData(ctx context.Context, option UpdatePluginPreviewDataOption) UpdatePluginPreviewDataResult {
+	if util.GetContextSessionId(ctx) == "" || option.WoxViewID == "" || option.WoxViewNodeKey == "" {
+		return UpdatePluginPreviewDataResult{}
+	}
+	if ui, ok := GetPluginManager().GetUI().(interface {
+		UpdatePluginPreviewData(context.Context, string, UpdatePluginPreviewDataOption) UpdatePluginPreviewDataResult
+	}); ok {
+		return ui.UpdatePluginPreviewData(ctx, a.pluginInstance.Metadata.Id, option)
+	}
+	return UpdatePluginPreviewDataResult{}
 }
 
 // RemoveResult removes only this plugin's result from the query that produced it.

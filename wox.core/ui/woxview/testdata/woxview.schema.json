@@ -8472,6 +8472,15 @@
             }
           ]
         },
+        "pointRadii": {
+          "items": {
+            "maximum": 16,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
         "points": {
           "items": {
             "additionalProperties": false,

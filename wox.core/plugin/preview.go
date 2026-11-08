@@ -86,6 +86,17 @@ type UpdatePluginPreviewResult struct {
 	Success bool
 }
 
+// UpdatePluginPreviewDataOption replaces data fields of one keyed chart in an active plugin preview.
+type UpdatePluginPreviewDataOption struct {
+	WoxViewID      string
+	WoxViewNodeKey string
+	WoxViewData    json.RawMessage
+}
+
+type UpdatePluginPreviewDataResult struct {
+	Success bool
+}
+
 // WoxViewPreviewEventType identifies preview visibility transitions.
 type WoxViewPreviewEventType string
 

@@ -1,4 +1,4 @@
-import type { HotkeyEvent, OnHotkeyOption, OnHotkeyResult } from "@wox-launcher/wox-plugin"
+import type { HotkeyEvent, OnHotkeyOption, OnHotkeyResult, UpdatePluginPreviewDataOption, UpdatePluginPreviewDataResult } from "@wox-launcher/wox-plugin"
 import { WindowProxy } from "./pluginWindow"
 import type { CreateWindowOption, CreateWindowResult } from "@wox-launcher/wox-plugin"
 import { ResultActions } from "./resultActions"
@@ -544,6 +544,10 @@ export class PluginAPI implements PublicAPI {
 
   async UpdatePluginPreview(ctx: Context, option: { Preview: WoxPreview }): Promise<{ Success: boolean }> {
     return (await this.invokeMethod(ctx, "UpdatePluginPreview", { option: JSON.stringify(option) })) as { Success: boolean } ?? { Success: false }
+  }
+
+  async UpdatePluginPreviewData(ctx: Context, option: UpdatePluginPreviewDataOption): Promise<UpdatePluginPreviewDataResult> {
+    return (await this.invokeMethod(ctx, "UpdatePluginPreviewData", { option: JSON.stringify(option) })) as UpdatePluginPreviewDataResult ?? { Success: false }
   }
 
   async RemoveResult(ctx: Context, option: RemoveResultOption): Promise<RemoveResultResult> {

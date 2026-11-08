@@ -271,6 +271,23 @@ func (u *uiImpl) UpdatePluginPreview(ctx context.Context, pluginID string, optio
 	return plugin.UpdatePluginPreviewResult{}
 }
 
+// UpdatePluginPreviewData routes a chart update to the requesting launcher session.
+func (u *uiImpl) UpdatePluginPreviewData(ctx context.Context, pluginID string, option plugin.UpdatePluginPreviewDataOption) plugin.UpdatePluginPreviewDataResult {
+	view, err := u.getView(ctx)
+	if err != nil {
+		return plugin.UpdatePluginPreviewDataResult{}
+	}
+	if target, ok := view.(interface {
+		UpdatePluginPreviewData(context.Context, string, plugin.UpdatePluginPreviewDataOption) (plugin.UpdatePluginPreviewDataResult, error)
+	}); ok {
+		result, err := target.UpdatePluginPreviewData(ctx, pluginID, option)
+		if err == nil {
+			return result
+		}
+	}
+	return plugin.UpdatePluginPreviewDataResult{}
+}
+
 // RemoveResult routes a result removal to the owning launcher session.
 func (u *uiImpl) RemoveResult(ctx context.Context, option interface{}) bool {
 	typed, ok := option.(plugin.RemoveResultOption)

@@ -169,9 +169,17 @@ type cartesianChartConfig struct {
 	kind        NodeType
 	barWidth    float32
 	pointRadius float32
+	pointRadii  []float32
 	xValues     []float64
 	colors      []Color
 	xOptions    LineChartOptions
+}
+
+func (c cartesianChartConfig) radius(index int) float32 {
+	if len(c.pointRadii) > 0 {
+		return c.pointRadii[index]
+	}
+	return c.pointRadius
 }
 
 type cartesianChartState struct {
@@ -269,6 +277,10 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 	if options.LineWidth != nil {
 		lineWidth = *options.LineWidth
 	}
+	maxRadius := config.pointRadius
+	for _, radius := range config.pointRadii {
+		maxRadius = max(maxRadius, radius)
+	}
 	return widget.TextLayoutBuilder{Build: func(available ui.Size, measurer widget.TextMeasurer) widget.Widget {
 		width := widthOr(style, available)
 		selected := s.selected
@@ -278,14 +290,14 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 			plot := chartPlot(bounds, options, theme)
 			if config.kind == NodeScatterChart {
 				// Reserve room for markers at the extrema so their circles are not clipped.
-				inset := min(config.pointRadius, plot.Width/2, plot.Height/2)
+				inset := min(maxRadius, plot.Width/2, plot.Height/2)
 				plot.X, plot.Y = plot.X+inset, plot.Y+inset
 				plot.Width, plot.Height = max(0, plot.Width-2*inset), max(0, plot.Height-2*inset)
 			}
 			// Pointer positions are local to the gesture, while painter bounds can have an origin.
 			s.plotLeft, s.plotWidth = plot.X-bounds.X, plot.Width
 			points, low, high, xLow, xHigh := cartesianPoints(p.Values, config.xValues, plot, config.kind)
-			if config.kind == NodeScatterChart {
+			if config.kind == NodeScatterChart && chartOption(options.Hover) {
 				s.points = make([]ui.Point, len(points))
 				for i, point := range points {
 					s.points[i] = ui.Point{X: point.X - bounds.X, Y: point.Y - bounds.Y}
@@ -415,7 +427,10 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 				}
 			} else if config.kind == NodeScatterChart {
 				for i, point := range points {
-					r := config.pointRadius
+					r := config.radius(i)
+					if r == 0 {
+						continue
+					}
 					list.FillRoundedRect(ui.Rect{X: point.X - r, Y: point.Y - r, Width: r * 2, Height: r * 2}, r, chartItemColor(config.colors, i, theme, color))
 				}
 			} else {
@@ -441,6 +456,9 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 			if selected < 0 || selected >= len(points) || !chartOption(options.Hover) {
 				return
 			}
+			if config.kind == NodeScatterChart && config.radius(selected) == 0 {
+				return
+			}
 			point := points[selected]
 			selectedColor := chartItemColor(config.colors, selected, theme, color)
 			if chartOption(options.Crosshair) {
@@ -452,7 +470,7 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 					radius = theme.Scaled(4)
 				}
 				if config.kind == NodeScatterChart {
-					radius = max(radius, config.pointRadius)
+					radius = max(radius, config.radius(selected))
 				}
 				if config.kind != NodeLineChart {
 					outer := radius + theme.Scaled(2)
@@ -486,8 +504,11 @@ func (s *cartesianChartState) Build(ctx widget.StateContext, value any) widget.W
 					next = min(int(ratio*float32(len(p.Values))), len(p.Values)-1)
 				case NodeScatterChart:
 					// XY points can be unordered or share an X value, so select by two-dimensional distance.
-					distance := float64(max(theme.Scaled(12), config.pointRadius+theme.Scaled(4)))
+					distance := float64(max(theme.Scaled(12), maxRadius+theme.Scaled(4)))
 					for i, point := range s.points {
+						if config.radius(i) == 0 {
+							continue
+						}
 						d := math.Hypot(float64(event.Position.X-point.X), float64(event.Position.Y-point.Y))
 						if d <= distance {
 							next, distance = i, d

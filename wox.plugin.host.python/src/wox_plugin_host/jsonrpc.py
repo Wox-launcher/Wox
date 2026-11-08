@@ -111,7 +111,9 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         result_id = params.get("ResultId", "")
         event = json.loads(params["Event"])
         if instance and result_id.startswith("plugin-preview:"):
-            cached = instance.result_actions.plugin_preview(ctx, result_id, params.get("DocumentID", ""), event.get("Type") == "show", instance.api)
+            cached = instance.result_actions.plugin_preview(
+                ctx, result_id, params.get("DocumentID", ""), event.get("Type") == "show", instance.api
+            )
         else:
             bucket = instance.result_actions.for_context(ctx, result_id) if instance else None
             cached = bucket.previews.get(result_id) if bucket else None
@@ -124,7 +126,9 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
         instance = plugin_instances.get(request.get("PluginId", ""))
         params = request.get("Params", {})
         if instance:
-            instance.result_actions.release_plugin_preview(request.get("SessionId", ""), request.get("QueryId", ""), params.get("ResultId", ""), params.get("DocumentID", ""))
+            instance.result_actions.release_plugin_preview(
+                request.get("SessionId", ""), request.get("QueryId", ""), params.get("ResultId", ""), params.get("DocumentID", "")
+            )
         return None
     elif method == "toastMsgAction":
         toast_instance = plugin_instances.get(request.get("PluginId", ""))
@@ -350,7 +354,9 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
         raw_response = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
         response = await _normalize_query_response(ctx, plugin_name, raw_response)
 
-        preview_source = raw_response.plugin_preview if isinstance(raw_response, QueryResponse) else getattr(raw_response, "plugin_preview", None)
+        preview_source = (
+            raw_response.plugin_preview if isinstance(raw_response, QueryResponse) else getattr(raw_response, "plugin_preview", None)
+        )
         if preview_source is not None:
             plugin_instance.result_actions.stage_plugin_preview(session_id, query_id, f"plugin-preview:{plugin_id}", preview_source)
 

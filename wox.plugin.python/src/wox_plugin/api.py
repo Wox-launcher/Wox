@@ -7,13 +7,14 @@ and provides access to UI control, settings, logging, and more.
 """
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List, Optional, Protocol
+from typing import Awaitable, Callable, Dict, List, Optional, Protocol, TypedDict
 
 from .models.hotkey import OnHotkeyOption, OnHotkeyResult
 from .models.ai import AIModel, ChatOptions, ChatStreamCallback, Conversation
 from .models.attention import PushAttentionRequest
 from .models.context import Context
 from .models.window import CreateWindowOption, CreateWindowResult
+from .models.woxview import WoxViewScatterChartPropsPointsItem
 from .models.log import LogLevel
 from .models.mru import MRUData
 from .models.preview import WoxPreview
@@ -66,6 +67,28 @@ class UpdatePluginPreviewOption:
 
 @dataclass
 class UpdatePluginPreviewResult:
+    success: bool = False
+
+
+class WoxViewLineChartData(TypedDict, total=False):
+    values: list[float]
+    pointLabels: list[str]
+
+
+class WoxViewScatterChartData(TypedDict, total=False):
+    points: list[WoxViewScatterChartPropsPointsItem]
+    pointRadii: list[float]
+
+
+@dataclass
+class UpdatePluginPreviewDataOption:
+    wox_view_id: str
+    wox_view_node_key: str
+    wox_view_data: WoxViewLineChartData | WoxViewScatterChartData
+
+
+@dataclass
+class UpdatePluginPreviewDataResult:
     success: bool = False
 
 
@@ -816,6 +839,10 @@ class PublicAPI(Protocol):
 
     async def update_plugin_preview(self, ctx: Context, option: UpdatePluginPreviewOption) -> UpdatePluginPreviewResult:
         """Update the current session's existing WoxView plugin preview."""
+        ...
+
+    async def update_plugin_preview_data(self, ctx: Context, option: UpdatePluginPreviewDataOption) -> UpdatePluginPreviewDataResult:
+        """Replace the supplied data fields of a uniquely keyed chart in the visible plugin preview."""
         ...
 
     async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:

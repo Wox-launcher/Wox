@@ -511,6 +511,10 @@ ranges. The X-axis and hover X value can be formatted independently with
 each); the line chart's `value*` options format Y. Hover selects the closest
 point within the hit radius and displays X followed by Y.
 
+Optional `pointRadii` supplies one radius in logical units per point, from 0 to 16.
+Zero hides a marker from paint and hover while keeping its coordinates in the axis
+domain. Omit the array or supply an empty array to use `chart.pointRadius`.
+
 ```json
 {"type":"scatter-chart","props":{"label":"Duration and distance","points":[{"x":2,"y":120,"label":"Walk"},{"x":0.5,"y":320,"label":"Run"}],"chart":{"showGrid":true,"showXAxis":true,"yAxis":"right","xValueSuffix":" h","valueSuffix":" m","tooltipPosition":"floating"}}}
 ```
@@ -531,6 +535,40 @@ slice under the pointer; the donut hole and space outside the pie are not hits.
 The chart does not create legends or aggregate data; plugins can compose labels,
 controls and data preparation around it. Existing `line-chart` defaults remain
 unchanged.
+
+### Updating live chart data
+
+After a plugin-owned WoxView preview sends its `show` event, `UpdatePluginPreviewData`
+can replace the data of one chart without sending a new document. The node key
+must be unique in that document. The caller must own the visible preview in the
+current launcher session. The same document can stay active across queries.
+
+```ts
+await api.UpdatePluginPreviewData(ctx, {
+  WoxViewID: preview.WoxViewID,
+  WoxViewNodeKey: "cpu-usage",
+  WoxViewData: { values: [13, 27, 31] }
+})
+
+await api.UpdatePluginPreviewData(ctx, {
+  WoxViewID: preview.WoxViewID,
+  WoxViewNodeKey: "observations",
+  WoxViewData: { pointRadii: [2, 0, 4] }
+})
+```
+
+`line-chart` accepts `values` and `pointLabels`. `scatter-chart` accepts `points`
+and `pointRadii`. Each supplied array replaces that field; omitted fields retain
+their latest values. An empty labels or radii array clears the corresponding
+override. When a data update changes the number of observations, aligned labels,
+radii and authored colors must still match. Layout, handlers, and appearance stay
+in the document. A full document replacement resets its node data.
+
+The Python API is `update_plugin_preview_data(ctx, UpdatePluginPreviewDataOption(...))`.
+`Success` (`success` in Python) means Wox accepted the snapshot. It does not wait
+for presentation. Multiple snapshots accepted before paint leave the latest data
+in the retained chart. Plugins can use the same `UpdatePluginPreview` fallback
+when running on a host without the data API.
 
 ### Morphing vector paths
 

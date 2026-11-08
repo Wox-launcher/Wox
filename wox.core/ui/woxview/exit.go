@@ -14,11 +14,13 @@ import (
 // nodeLifetime survives prop updates but is revoked immediately by SetTree when
 // its identity disappears. Reusing the key creates a different event capability.
 type nodeLifetime struct {
-	node     *Node
-	live     bool
-	handlers map[HandlerID]bool
-	stateKey widget.Key
-	serial   uint64
+	node        *Node
+	dataProps   any
+	dataContext widget.StateContext
+	live        bool
+	handlers    map[HandlerID]bool
+	stateKey    widget.Key
+	serial      uint64
 }
 
 type snapshotPart struct {
@@ -58,6 +60,7 @@ func (v *View) reconcilePresence(tree *Tree) {
 		}
 		if owner.node != node {
 			owner.node = node
+			owner.dataProps = nil
 			owner.handlers = map[HandlerID]bool{}
 			if handlers, ok := node.Props.(handlerOwner); ok {
 				for _, h := range handlers.handlers() {

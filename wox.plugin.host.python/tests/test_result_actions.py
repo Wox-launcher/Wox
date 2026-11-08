@@ -39,6 +39,16 @@ def result(result_id, callback, form=False):
 
 
 class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_plugin_preview_data_sends_chart_snapshot(self):
+        from wox_plugin import UpdatePluginPreviewDataOption
+
+        self.api.invoke_method.return_value = {"Success": True}
+        result = await self.api.update_plugin_preview_data(context("a", "one"), UpdatePluginPreviewDataOption("doc", "chart", {"values": [1, 2]}))
+        self.assertTrue(result.success)
+        _, method, params = self.api.invoke_method.await_args.args
+        self.assertEqual(method, "UpdatePluginPreviewData")
+        self.assertEqual(json.loads(params["option"]), {"WoxViewID": "doc", "WoxViewNodeKey": "chart", "WoxViewData": {"values": [1, 2]}})
+
     async def test_plugin_preview_survives_query_and_is_released(self):
         from wox_plugin import Button, QueryResponse, create_wox_view
 

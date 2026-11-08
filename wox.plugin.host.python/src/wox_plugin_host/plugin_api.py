@@ -26,6 +26,8 @@ from wox_plugin import (
     RemoveResultResult,
     UpdatePluginPreviewOption,
     UpdatePluginPreviewResult,
+    UpdatePluginPreviewDataOption,
+    UpdatePluginPreviewDataResult,
     Query,
     RefreshQueryParam,
     Result,
@@ -576,8 +578,15 @@ class PluginAPI(PublicAPI):
                         callbacks.previews.pop(result.id, None)
 
     async def update_plugin_preview(self, ctx: Context, option: UpdatePluginPreviewOption) -> UpdatePluginPreviewResult:
-        response = await self.invoke_method(ctx, "UpdatePluginPreview", {"option": json.dumps({"Preview": json.loads(option.preview.to_json())})})
+        response = await self.invoke_method(
+            ctx, "UpdatePluginPreview", {"option": json.dumps({"Preview": json.loads(option.preview.to_json())})}
+        )
         return UpdatePluginPreviewResult(success=isinstance(response, dict) and bool(response.get("Success")))
+
+    async def update_plugin_preview_data(self, ctx: Context, option: UpdatePluginPreviewDataOption) -> UpdatePluginPreviewDataResult:
+        payload = {"WoxViewID": option.wox_view_id, "WoxViewNodeKey": option.wox_view_node_key, "WoxViewData": option.wox_view_data}
+        response = await self.invoke_method(ctx, "UpdatePluginPreviewData", {"option": json.dumps(payload)})
+        return UpdatePluginPreviewDataResult(success=isinstance(response, dict) and bool(response.get("Success")))
 
     async def remove_result(self, ctx: Context, option: RemoveResultOption) -> RemoveResultResult:
         """Remove a visible result and its host callbacks when core accepts it."""

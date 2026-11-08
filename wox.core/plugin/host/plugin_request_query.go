@@ -160,6 +160,19 @@ func (w *WebsocketHost) handleUpdatePluginPreview(ctx context.Context, pluginIns
 	return pluginInstance.API.UpdatePluginPreview(ctx, option), nil
 }
 
+// handleUpdatePluginPreviewData forwards a chart snapshot to the owning launcher session.
+func (w *WebsocketHost) handleUpdatePluginPreviewData(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	value, err := requirePluginParam(request.Params, "option")
+	if err != nil {
+		return nil, err
+	}
+	var option plugin.UpdatePluginPreviewDataOption
+	if err := json.Unmarshal([]byte(value), &option); err != nil {
+		return nil, fmt.Errorf("unmarshal plugin preview data update: %w", err)
+	}
+	return pluginInstance.API.UpdatePluginPreviewData(ctx, option), nil
+}
+
 // handleRemoveResult adapts the removal option to the plugin API.
 func (w *WebsocketHost) handleRemoveResult(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	optionStr, err := requirePluginParam(request.Params, "option")

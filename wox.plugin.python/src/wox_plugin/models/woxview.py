@@ -1125,6 +1125,7 @@ class WoxViewScatterChartProps(WoxViewScatterChartPropsRequired, total=False):
     onDoubleTap: WoxViewHandler | None
     onFocusChange: WoxViewHandler | None
     onHoverChange: WoxViewHandler | None
+    pointRadii: list[float]
     pressedStyle: WoxViewStateStyle | None
     shortcuts: list[WoxViewScatterChartPropsShortcutsItem]
     style: WoxViewStyle

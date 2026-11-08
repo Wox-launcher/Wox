@@ -1846,6 +1846,9 @@ export interface PublicAPI {
   /** Update an existing WoxView plugin preview in this session. */
   UpdatePluginPreview: (ctx: Context, option: { Preview: WoxPreview }) => Promise<{ Success: boolean }>
 
+  /** Replace the supplied data fields of one uniquely keyed chart in the visible plugin preview. */
+  UpdatePluginPreviewData: (ctx: Context, option: UpdatePluginPreviewDataOption) => Promise<UpdatePluginPreviewDataResult>
+
   /** Remove a result owned by this plugin. Keep the original query context. */
   RemoveResult: (ctx: Context, option: RemoveResultOption) => Promise<RemoveResultResult>
 
@@ -2035,6 +2038,16 @@ export interface WoxImage {
  * - `file`: File preview
  * - `list`: Structured row-list preview
  */
+export interface UpdatePluginPreviewDataOption {
+  WoxViewID: string
+  WoxViewNodeKey: string
+  WoxViewData: { values?: number[]; pointLabels?: string[] } | { points?: import("./woxview.js").WoxViewScatterChartProps["points"]; pointRadii?: number[] }
+}
+
+export interface UpdatePluginPreviewDataResult {
+  Success: boolean
+}
+
 export type WoxPreviewType = "markdown" | "text" | "image" | "url" | "file" | "list" | "webview" | "woxview"
 
 /**

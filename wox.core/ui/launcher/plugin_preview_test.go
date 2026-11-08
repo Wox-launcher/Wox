@@ -6,6 +6,7 @@ import (
 
 	"wox/plugin"
 	"wox/ui/contract"
+	"wox/ui/woxview"
 	"wox/util"
 )
 
@@ -141,5 +142,45 @@ func TestUpdatePluginPreviewValidatesOwnerSessionAndTree(t *testing.T) {
 	}
 	if !call(ctx, "radio", updated) || app.previews.pluginPreview.preview.PreviewData != updated.PreviewData {
 		t.Fatal("rejected current plugin document after query change")
+	}
+}
+
+func TestUpdatePluginPreviewDataUsesVisibleOwnedDocument(t *testing.T) {
+	app := bindTestApp(&App{sessionID: "window"})
+	document := `{"version":1,"root":{"type":"line-chart","key":"live","props":{"values":[0]}}}`
+	initial := queryPreview{PreviewType: "woxview", PreviewData: document, WoxViewID: "doc"}
+	app.previews.pluginPreview.accept(queryContext{PluginID: "radio"}, &initial, "first-query")
+	active, _ := app.previews.pluginPreview.result()
+	app.previews.woxView = woxview.NewView()
+	tree, err := woxview.Parse([]byte(document))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.previews.woxView.SetTree(tree)
+	app.previews.woxViewID, app.previews.woxViewData, app.previews.woxViewResult = "doc", document, active
+	ctx := util.WithQueryIdContext(util.WithSessionContext(context.Background(), "window"), "later-query")
+	update := func(ctx context.Context, owner, doc string) bool {
+		result, err := app.UpdatePluginPreviewData(ctx, owner, plugin.UpdatePluginPreviewDataOption{WoxViewID: doc, WoxViewNodeKey: "live", WoxViewData: []byte(`{"values":[5]}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.Success
+	}
+	if update(ctx, "radio", "doc") {
+		t.Fatal("accepted data for a hidden preview")
+	}
+	app.previews.woxViewShown = true
+	if update(ctx, "other", "doc") || update(ctx, "radio", "retired") || update(context.Background(), "radio", "doc") {
+		t.Fatal("accepted a foreign session, owner or stale document")
+	}
+	if !update(ctx, "radio", "doc") || app.previews.woxView.Tree() != tree {
+		t.Fatal("rejected retained document after a query change")
+	}
+	updated := plugin.WoxPreview{PreviewType: "woxview", WoxViewID: "doc", PreviewData: `{"version":1,"root":{"type":"line-chart","key":"live","props":{"values":[0,1],"pointLabels":["A","B"]}}}`}
+	if result, err := app.UpdatePluginPreview(ctx, "radio", plugin.UpdatePluginPreviewOption{Preview: updated}); err != nil || !result.Success {
+		t.Fatalf("full update: %+v %v", result, err)
+	}
+	if update(ctx, "radio", "doc") || app.previews.woxViewData != updated.PreviewData {
+		t.Fatal("data patch bypassed the pending document's point-label constraint")
 	}
 }

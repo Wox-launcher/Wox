@@ -101,9 +101,10 @@ type ScatterPoint struct {
 // ScatterChartProps displays numeric XY observations in any order.
 type ScatterChartProps struct {
 	Styled
-	Points []ScatterPoint       `json:"points"`
-	Label  string               `json:"label,omitempty"`
-	Chart  *ScatterChartOptions `json:"chart,omitempty"`
+	Points     []ScatterPoint       `json:"points"`
+	PointRadii []float32            `json:"pointRadii,omitempty"`
+	Label      string               `json:"label,omitempty"`
+	Chart      *ScatterChartOptions `json:"chart,omitempty"`
 }
 
 // ScatterChartOptions controls point appearance and independent X value formatting.
@@ -122,6 +123,9 @@ func (p *ScatterChartProps) prepare() error {
 	}
 	if len(p.Points) > 4096 {
 		return fmt.Errorf("scatter-chart accepts at most 4096 points")
+	}
+	if err := validateScatterRadii(p.PointRadii, len(p.Points)); err != nil {
+		return err
 	}
 	values := make([]float64, len(p.Points))
 	labels := make([]string, len(p.Points))
@@ -156,6 +160,19 @@ func (p *ScatterChartProps) prepare() error {
 	return p.Style.validate()
 }
 
+// validateScatterRadii allows zero to hide a point while keeping its position in the domain.
+func validateScatterRadii(radii []float32, count int) error {
+	if len(radii) != 0 && len(radii) != count {
+		return fmt.Errorf("scatter-chart pointRadii must match points")
+	}
+	for _, radius := range radii {
+		if !(radius >= 0 && radius <= 16) {
+			return fmt.Errorf("scatter-chart pointRadii must be between 0 and 16")
+		}
+	}
+	return nil
+}
+
 // buildScatterChart adapts XY points to the shared Cartesian renderer.
 func buildScatterChart(b *builder, node *Node, id string) widget.Widget {
 	p := node.Props.(*ScatterChartProps)
@@ -175,7 +192,7 @@ func buildScatterChart(b *builder, node *Node, id string) widget.Widget {
 		}
 	}
 	props := &LineChartProps{Styled: p.Styled, Values: values, PointLabels: labels, Label: p.Label, Chart: &options}
-	return buildCartesianChart(b, cartesianChartConfig{props: props, id: id, kind: NodeScatterChart, pointRadius: radius, xValues: xs, colors: colors, xOptions: xOptions})
+	return buildCartesianChart(b, cartesianChartConfig{props: props, id: id, kind: NodeScatterChart, pointRadius: radius, pointRadii: p.PointRadii, xValues: xs, colors: colors, xOptions: xOptions})
 }
 
 // validateChartColors keeps per-item colors aligned with their observations.

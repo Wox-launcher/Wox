@@ -116,6 +116,17 @@ test("plugin preview survives its query and releases its callbacks on context ex
   assert.equal(disposed, 1)
 })
 
+test("plugin preview data sends a chart snapshot without a full document", async () => {
+  const { api } = fixture(async () => ({ Results: [] }))
+  const option = { WoxViewID: "doc", WoxViewNodeKey: "chart", WoxViewData: { pointRadii: [0, 2] } }
+  api.invokeMethod = async (_ctx, method, params) => {
+    assert.equal(method, "UpdatePluginPreviewData")
+    assert.deepEqual(JSON.parse(params.option), option)
+    return { Success: true }
+  }
+  assert.deepEqual(await api.UpdatePluginPreviewData({}, option), { Success: true })
+})
+
 test("new plugin preview can show before the previous document is released", async () => {
   const disposed = [], seen = []
   const make = id => {
