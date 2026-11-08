@@ -176,9 +176,9 @@ func TestRemotePreviewKeepsDefaultHidden(t *testing.T) {
 	assert.True(t, result.Preview.DefaultHidden)
 }
 
-func TestLargeChatAndTerminalPreviewsBypassRemoteWrapping(t *testing.T) {
+func TestLargeBuiltInInteractivePreviewsBypassRemoteWrapping(t *testing.T) {
 	previewData := strings.Repeat("x", previewDataMaxSize+1)
-	for _, previewType := range []string{WoxPreviewTypeChat, WoxPreviewTypeTerminal} {
+	for _, previewType := range []string{WoxPreviewTypeChat, WoxPreviewTypeTerminal, WoxPreviewTypeShell} {
 		preview := WoxPreview{PreviewType: previewType, PreviewData: previewData}
 		assert.False(t, shouldWrapRemotePreview(preview), previewType)
 

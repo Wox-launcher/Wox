@@ -461,6 +461,8 @@ type App struct {
 	resultList      resultController
 	actions         actionPanelController
 	terminal        terminalController
+	shellPreview    shellPreviewState
+	shellRunMu      sync.Mutex
 	webView         webViewPreviewController
 	nativeFile      nativeFilePreviewController
 	remotePreview   remotePreviewController
@@ -689,7 +691,12 @@ func (a *App) start() error {
 		// macOS floating level and Linux layer-shell TOP already do that without
 		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
 		Topmost: launcherQueryWindowTopmost(runtime.GOOS),
-		OnFrame: host.Frame,
+		OnFrame: func(list *woxui.DisplayList, frame woxui.FrameInfo) {
+			host.Frame(list, frame)
+			if a.shellPreview.focusPending && host.RequestFocus(shellPreviewFocusKey) {
+				a.shellPreview.focusPending = false
+			}
+		},
 		OnPointer: func(event woxui.PointerEvent) {
 			if event.Kind == woxui.PointerDown {
 				a.resultDrag.releaseResultFileDragHold()
@@ -1899,6 +1906,10 @@ func absFloat32(value float32) float32 {
 }
 
 func (a *App) onKey(event woxui.KeyEvent) bool {
+	if a.host != nil && a.host.HasFocus(shellPreviewFocusKey) {
+		// Unhandled printable keys need to reach native text input, not launcher shortcuts.
+		return false
+	}
 	if event.Composing {
 		return false
 	}

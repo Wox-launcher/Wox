@@ -16,6 +16,13 @@ func (a *previewController) reconcileSelectedPreview() {
 func (a *previewController) reconcileSelectedPreviewOnUI() {
 	a.reconcilePreviewVisibility()
 	result, preview, visible := a.selectedPreviewForLifecycle()
+	if a.reconcileShell != nil {
+		if visible && preview.PreviewType == plugin.WoxPreviewTypeShell {
+			a.reconcileShell(result.QueryID, result.ID)
+		} else {
+			a.reconcileShell("", "")
+		}
+	}
 	if a.window() != nil {
 		key, html := a.inlineWebViewScriptTarget(preview, visible)
 		a.window().RetainWebViewScriptTarget(key, html)

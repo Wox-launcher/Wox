@@ -49,6 +49,7 @@ func (app *App) bindControllers() {
 // disposeControllers runs on the UI thread at final instance destruction, never
 // on launcher hide: a dedicated chat window may still own the shared session.
 func (a *App) disposeControllers() {
+	a.reconcileShellPreview("", "")
 	a.previews.clearPluginPreviewContext()
 	a.querySession.resetQueryLoadingLocked()
 	a.querySession.resetQueryTransitionLocked()

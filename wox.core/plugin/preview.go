@@ -25,6 +25,7 @@ const (
 	WoxPreviewTypeList = "list"
 
 	// internal use
+	WoxPreviewTypeShell        = "shell"         // built-in interactive Shell preview.
 	WoxPreviewTypePluginDetail = "plugin_detail" // when type is plugin_detail, data should be JSON string of plugin metadata
 	WoxPreviewTypeChat         = "chat"          // when type is chat, data should be JSON string of common.AIChatPreviewData. this type is only for ai chat plugin
 	WoxPreviewTypeUpdate       = "update"        // internal update UI, data should be JSON string

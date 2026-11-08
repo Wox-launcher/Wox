@@ -18,6 +18,7 @@ import (
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
+	"wox/plugin/system/shell/interactive"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting/definition"
 	"wox/setting/validator"
@@ -398,7 +399,7 @@ func (s *ShellPlugin) buildEmptyCommandResult(ctx context.Context, interpreter s
 // buildEmptyCommandResultWithTrigger keeps the empty compose row and exposes a working-directory action.
 func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, interpreter string, workingDirectory string, triggerKeyword string) plugin.QueryResult {
 	data := shellContextData{Interpreter: interpreter, WorkingDirectory: workingDirectory}
-	return plugin.QueryResult{
+	result := plugin.QueryResult{
 		Title:      "i18n:plugin_shell_enter_command",
 		Icon:       shellIcon,
 		Score:      2000,
@@ -422,6 +423,26 @@ func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, in
 			s.buildChangeWorkingDirectoryAction(data, triggerKeyword),
 		},
 	}
+	if interactive.Available {
+		actual := interpreter
+		switch {
+		case util.IsWindows() && (actual == "powershell" || actual == "cmd"):
+		case !util.IsWindows() && (actual == "bash" || actual == "zsh" || actual == "sh"):
+		default:
+			actual = getDefaultInterpreter()
+		}
+		options, _ := json.Marshal(interactive.Options{Interpreter: actual, Directory: workingDirectory})
+		data.Interpreter = actual
+		result.Preview = plugin.WoxPreview{
+			PreviewType: plugin.WoxPreviewTypeShell,
+			PreviewData: string(options),
+			PreviewTags: s.buildShellPreviewTags(ctx, data),
+		}
+		result.Actions[0].Id = interactive.OpenActionID
+		result.Actions[0].Name = "i18n:plugin_shell_interactive_open"
+		result.Actions[0].Icon = icons.Get(icons.ActionExecute)
+	}
+	return result
 }
 
 // userHomeDirectory is the fallback working directory when no command-specific path is set.

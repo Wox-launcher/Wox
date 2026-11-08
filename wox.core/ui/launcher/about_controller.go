@@ -4,24 +4,29 @@ import (
 	"context"
 	"time"
 
+	"wox/resource/licenses"
 	"wox/ui/contract"
 )
 
 // aboutSettingsSnapshot is the immutable About tab state consumed by the view layer.
 type aboutSettingsSnapshot struct {
-	Version string
-	Loading bool
-	Loaded  bool
-	Error   string
+	Version         string
+	Loading         bool
+	Loaded          bool
+	Error           string
+	LicensesOpen    bool
+	SelectedLicense *licenses.Entry
 }
 
-// aboutSettingsController owns the About tab state (version, loading, error).
+// aboutSettingsController owns About data and license navigation.
 type aboutSettingsController struct {
-	deps    CommonDeps
-	version string
-	loading bool
-	loaded  bool
-	errMsg  string
+	deps            CommonDeps
+	version         string
+	loading         bool
+	loaded          bool
+	errMsg          string
+	licensesOpen    bool
+	selectedLicense *licenses.Entry
 }
 
 func newAboutSettingsController(deps CommonDeps) *aboutSettingsController {
@@ -70,12 +75,27 @@ func (c *aboutSettingsController) SetError(msg string) {
 	})
 }
 
+// ShowLicenses opens the catalog or returns to it from the selected license.
+func (c *aboutSettingsController) ShowLicenses() {
+	c.setLicensePage(true, nil)
+}
+
+func (c *aboutSettingsController) setLicensePage(open bool, entry *licenses.Entry) {
+	c.deps.OnUI("navigate About licenses", func() {
+		c.licensesOpen = open
+		c.selectedLicense = entry
+		c.deps.Invalidate()
+	})
+}
+
 // Snapshot returns a copy of the About state for the view layer.
 func (c *aboutSettingsController) Snapshot() aboutSettingsSnapshot {
 	return aboutSettingsSnapshot{
-		Version: c.version,
-		Loading: c.loading,
-		Loaded:  c.loaded,
-		Error:   c.errMsg,
+		Version:         c.version,
+		Loading:         c.loading,
+		Loaded:          c.loaded,
+		Error:           c.errMsg,
+		LicensesOpen:    c.licensesOpen,
+		SelectedLicense: c.selectedLicense,
 	}
 }

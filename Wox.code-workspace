@@ -52,6 +52,28 @@
 		"version": "2.0.0",
 		"tasks": [
 			{
+				"label": "Prepare libghostty-vt",
+				"type": "process",
+				"command": "go",
+				"args": ["run", "./cmd/ghosttybuild"],
+				"options": { "cwd": "${workspaceFolder:wox.core}" },
+				"problemMatcher": []
+			},
+			{
+				"label": "Prepare Wox licenses",
+				"dependsOn": ["Prepare libghostty-vt"],
+				"type": "process",
+				"command": "go",
+				"args": ["run", "./cmd/licensecatalog", "-tags", "sqlite_fts5 wox_automation wox_ghostty"],
+				"options": { "cwd": "${workspaceFolder:wox.core}" },
+				"problemMatcher": []
+			},
+			{
+				"label": "Prepare Wox debug on Windows",
+				"dependsOn": ["Configure Wox crash dumps", "Prepare Wox licenses"],
+				"problemMatcher": []
+			},
+			{
 				"label": "Configure Wox crash dumps",
 				"type": "process",
 				"command": "powershell.exe",
@@ -80,13 +102,14 @@
 				"cwd": "${workspaceFolder:wox.core}",
 				// Keep the macOS process identity stable so AppKit can reuse tray positions between debug builds.
 				"output": "${workspaceFolder:wox.core}/__debug_bin_wox",
-				"buildFlags": "-tags=sqlite_fts5,wox_automation",
+				"buildFlags": "-tags=sqlite_fts5,wox_automation,wox_ghostty",
+				"preLaunchTask": "Prepare Wox licenses",
 				"env": {
 					"CGO_ENABLED": "1",
 					"WOX_AUTOMATION_INFO_FILE": "${workspaceFolder:wox.core}/.wox-automation.json"
 				},
 				"windows": {
-					"preLaunchTask": "Configure Wox crash dumps"
+					"preLaunchTask": "Prepare Wox debug on Windows"
 				}
 			}
 		]

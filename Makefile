@@ -181,10 +181,12 @@ dev: _check_deps ensure-resources
 # binary name, automation info file, and the Windows crash-dump preLaunchTask.
 # Optimizations stay disabled so crash stacks match a delve debug launch.
 run: ensure-resources
+	$(MAKE) -C wox.core ghostty-build
+	$(MAKE) -C wox.core licenses-build LICENSE_BUILD_TAGS=wox_automation
 ifeq ($(PLATFORM),windows)
 	powershell.exe -NoProfile -Command '$$dumpDir = Join-Path $$env:USERPROFILE ".wox\diagnostics\dumps"; $$key = "HKCU:\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\__debug_bin_wox.exe"; New-Item -ItemType Directory -Force -Path $$dumpDir | Out-Null; New-Item -Path $$key -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpFolder -PropertyType ExpandString -Value $$dumpDir -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null; New-ItemProperty -Path $$key -Name DumpCount -PropertyType DWord -Value 5 -Force | Out-Null; Write-Host "Wox crash dumps: $$dumpDir"'
 endif
-	cd wox.core && CGO_ENABLED=1 go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -gcflags="all=-N -l" -o "$(DEBUG_BIN_NAME)" .
+	cd wox.core && CGO_ENABLED=1 go build -tags "$(SQLITE_BUILD_TAGS) wox_automation wox_ghostty" -gcflags="all=-N -l" -o "$(DEBUG_BIN_NAME)" .
 	cd wox.core && WOX_AUTOMATION_INFO_FILE="$(REPO_ROOT)/wox.core/.wox-automation.json" ./"$(DEBUG_BIN_NAME)"
 
 host:
@@ -433,8 +435,10 @@ GO_UI_SMOKE_RUNNER ?=
 
 # Keep the smoke binary build reusable by CI, make, and editor launch configurations.
 build-go-ui-smoke: ensure-resources
+	$(MAKE) -C wox.core ghostty-build
+	$(MAKE) -C wox.core licenses-build LICENSE_BUILD_TAGS=wox_automation
 	@mkdir -p wox.core/.tmp
-	cd wox.core && go build -tags "$(SQLITE_BUILD_TAGS) wox_automation" -o "$(GO_UI_SMOKE_BINARY)" .
+	cd wox.core && go build -tags "$(SQLITE_BUILD_TAGS) wox_automation wox_ghostty" -o "$(GO_UI_SMOKE_BINARY)" .
 
 clean-go-ui-smoke:
 	@rm -f "$(GO_UI_SMOKE_BINARY)"
@@ -476,7 +480,7 @@ test-debug:
 
 
 build: clean dev
-	$(MAKE) -C wox.core build
+	$(MAKE) -C wox.core build LICENSE_CATALOG_FLAGS=-release
 
 ifeq ($(PLATFORM),linux)
 		$(MAKE) appimage

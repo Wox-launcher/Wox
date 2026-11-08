@@ -78,6 +78,8 @@ func (a *App) buildPreviewBody(result queryResult, scrollKey string, preview que
 	}
 	errorText := palette.componentTheme().ErrorText
 	switch preview.PreviewType {
+	case plugin.WoxPreviewTypeShell:
+		return a.buildShellPreview(result, palette.componentTheme(), width, height, imageScale)
 	case "woxview":
 		return a.buildWoxViewPreview(result, scrollKey, preview, palette, width, height)
 	case "text":

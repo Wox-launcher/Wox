@@ -2,12 +2,14 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"wox/network"
 
 	"wox/common"
 	"wox/plugin"
+	"wox/plugin/system/shell/interactive"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting"
 	"wox/ui/contract"
@@ -18,6 +20,26 @@ import (
 
 // CoreServices implements the typed services consumed by the embedded UI.
 type CoreServices struct{}
+
+// StartInteractiveShell resolves the launch parameters from the trusted built-in result.
+func (s *CoreServices) StartInteractiveShell(ctx context.Context, sessionID, queryID, resultID string, size interactive.Size) (*interactive.Session, error) {
+	manager := plugin.GetPluginManager()
+	if manager.PluginIDForCachedResult(sessionID, queryID, resultID) != common.ShellPluginID {
+		return nil, errors.New("interactive shell result is no longer available")
+	}
+	preview, err := manager.GetResultPreview(ctx, sessionID, queryID, resultID)
+	if err != nil {
+		return nil, err
+	}
+	if preview.PreviewType != plugin.WoxPreviewTypeShell {
+		return nil, errors.New("result does not support interactive shell")
+	}
+	var options interactive.Options
+	if err := json.Unmarshal([]byte(preview.PreviewData), &options); err != nil {
+		return nil, err
+	}
+	return interactive.Start(ctx, options, size)
+}
 
 var _ contract.Services = (*CoreServices)(nil)
 var updateChannelVersionsProvider = updater.GetUpdateChannelVersions

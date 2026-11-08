@@ -1,6 +1,7 @@
-.PHONY: clean build pack-resources help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build
+.PHONY: clean build pack-resources help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build ghostty-build ghostty-test licenses-build
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
+GHOSTTY_BUILD_TAG := wox_ghostty
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -76,14 +77,26 @@ sync-ai-skills:
 
 # Run after all helper builds/signing; the overlay contains the exact final bytes.
 pack-resources:
-	go run ./cmd/assetpack -tags "$(SQLITE_BUILD_TAGS)" -goos $(if $(filter macos,$(PLATFORM)),darwin,$(PLATFORM)) -goarch $(GOARCH)
+	go run ./cmd/assetpack -tags "$(SQLITE_BUILD_TAGS) $(GHOSTTY_BUILD_TAG)" -goos $(if $(filter macos,$(PLATFORM)),darwin,$(PLATFORM)) -goarch $(GOARCH)
+
+ghostty-build:
+	go run ./cmd/ghosttybuild
+
+licenses-build:
+	go run ./cmd/licensecatalog -tags "$(SQLITE_BUILD_TAGS) $(GHOSTTY_BUILD_TAG) $(LICENSE_BUILD_TAGS)" $(LICENSE_CATALOG_FLAGS)
+
+ghostty-test: ghostty-build
+	CGO_ENABLED=1 go test -tags "$(GHOSTTY_BUILD_TAG)" ./plugin/system/shell/interactive -count=1
 
 build: clean sync-ai-skills
+	$(MAKE) ghostty-test
 	$(MAKE) woxmr-build
 	$(MAKE) window-hook-build
 	$(MAKE) crash-handler-build
 	$(MAKE) file-index-service-build
+	$(MAKE) licenses-build
 	$(MAKE) pack-resources
+	mkdir -p $(RELEASE_DIR)
 ifeq ($(PLATFORM),windows)
 	# Generate Windows VERSIONINFO using the version from updater.CURRENT_VERSION
 	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
@@ -93,16 +106,16 @@ ifeq ($(PLATFORM),windows)
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
 	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS) $(GHOSTTY_BUILD_TAG)" -ldflags "-s -w -H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)
 	# Keep symbols in release binaries so native crash reports retain actionable stack information.
-	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS) $(GHOSTTY_BUILD_TAG)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
 	# Keep symbols in release binaries so macOS diagnostic reports can be symbolized with the shipped executable.
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0 -Wl,-no_warn_duplicate_libraries" go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=13.0" CGO_LDFLAGS="-mmacosx-version-min=13.0 -Wl,-no_warn_duplicate_libraries" go build -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS) $(GHOSTTY_BUILD_TAG)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
 endif
 
 WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c

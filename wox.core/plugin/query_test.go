@@ -116,6 +116,18 @@ func Test_NewQuery(t *testing.T) {
 	assert.Equal(t, q.Search, "other install q q1")
 }
 
+func TestShellTriggerRequiresSpace(t *testing.T) {
+	shell := &Instance{IsSystemPlugin: true, Metadata: Metadata{TriggerKeywords: []string{">", "*"}}}
+	query, owner := newQueryInputWithPlugins(">", []*Instance{shell})
+	assert.Nil(t, owner)
+	assert.True(t, query.IsGlobalQuery())
+
+	query, owner = newQueryInputWithPlugins("> ", []*Instance{shell})
+	assert.Same(t, shell, owner)
+	assert.Equal(t, ">", query.TriggerKeyword)
+	assert.Empty(t, query.Search)
+}
+
 func Test_BuildQueryCompletionHint_Command(t *testing.T) {
 	q, pluginInstance := newQueryInputWithPlugins("wpm i", getFakePluginInstances())
 

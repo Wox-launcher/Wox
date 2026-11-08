@@ -36,6 +36,8 @@ Wox 默认检查稳定版通道。如需接收测试版预发布版，打开 **�
 
 ### macOS
 
+Wox 要求 macOS 13 Ventura 或更高版本。macOS 12 Monterey 用户可使用 [Wox 2.4.9](https://github.com/Wox-launcher/Wox/releases/tag/v2.4.9)。
+
 1. 从 Releases 下载 macOS 磁盘镜像。
 2. 打开镜像，把 Wox 拖入 `Applications`。
 3. 从 `Applications` 启动 Wox。

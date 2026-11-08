@@ -4,6 +4,11 @@
 
 `wox.core` always starts the embedded Go UI; there is no standalone Wox UI module or runner.
 
+The Shell preview consumes viewport snapshots from the built-in Shell's
+`interactive` package. That package owns PTY processes and libghostty-vt
+handles. The Launcher owns selection, focus, input routing, and painting. The
+single-command terminal preview keeps its separate output subscription.
+
 Shared controls consume `component.ControlTheme` directly; launcher-only appearance stays in `component.Theme`. Settings defines the control colors directly without an adapter to launcher tokens.
 
 Reusable hotkey label formatting and local key-combination serialization live in

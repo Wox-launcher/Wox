@@ -42,4 +42,6 @@ build: install
 	# Explicit CommonJS prevents an ancestor package.json from changing the host's module type.
 	rm -f $(HOSTS_DIR)/node-host.js
 	cp dist/index.js $(HOSTS_DIR)/node-host.cjs
+	mkdir -p ../wox.core/.build/licenses
+	cp dist/licenses.txt ../wox.core/.build/licenses/node-host.txt
 	rm -rf dist/

@@ -1083,7 +1083,7 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	// Chat is already prepared above and owns retained scrolling/message state.
 	// Hashing its entire history to cache a trivial wrapper costs more than rebuilding it.
 	// Media likewise owns its smaller animation and live-data boundaries.
-	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
+	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" || resolved.PreviewType == "shell" {
 		return child
 	}
 	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, fullBleed, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load()}

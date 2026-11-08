@@ -2,10 +2,12 @@ package shell
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
+	"wox/plugin/system/shell/interactive"
 	"wox/setting/definition"
 )
 
@@ -53,9 +55,7 @@ func TestBuildEmptyCommandResultSurfacesWorkingDirectory(t *testing.T) {
 	if len(result.Tails) != 0 {
 		t.Fatalf("tails = %#v, want none on the empty-command row", result.Tails)
 	}
-	if result.Preview.PreviewData != "i18n:plugin_shell_enter_command_preview" {
-		t.Fatalf("preview = %q, want enter-command instruction", result.Preview.PreviewData)
-	}
+	assertShellComposePreview(t, result, workingDirectory)
 	if !emptyCommandResultShowsDirectory(result, workingDirectory) {
 		t.Fatalf("empty command result does not show working directory %q", workingDirectory)
 	}
@@ -218,14 +218,31 @@ func TestQueryEmptyShellPromptLeadsWithDirectoryAwarePlaceholder(t *testing.T) {
 	if first.SubTitle != "" || len(first.Tails) != 0 {
 		t.Fatalf("first result must be title-only, subtitle=%q tails=%#v", first.SubTitle, first.Tails)
 	}
-	if first.Preview.PreviewData != "i18n:plugin_shell_enter_command_preview" {
-		t.Fatalf("preview = %q, want enter-command instruction", first.Preview.PreviewData)
-	}
+	assertShellComposePreview(t, first, workingDirectory)
 	if !emptyCommandResultShowsDirectory(first, workingDirectory) {
 		t.Fatalf("first result does not show working directory %q", workingDirectory)
 	}
 	if !resultHasChangeWorkingDirectoryAction(first) {
 		t.Fatal("empty > query is missing the change working directory action")
+	}
+}
+
+// assertShellComposePreview covers the interactive payload and the plain Go build fallback.
+func assertShellComposePreview(t *testing.T, result plugin.QueryResult, workingDirectory string) {
+	t.Helper()
+	if !interactive.Available {
+		if result.Preview.PreviewType != plugin.WoxPreviewTypeText || result.Preview.PreviewData != "i18n:plugin_shell_enter_command_preview" {
+			t.Fatalf("preview = %+v, want enter-command instruction", result.Preview)
+		}
+		return
+	}
+	var options interactive.Options
+	err := json.Unmarshal([]byte(result.Preview.PreviewData), &options)
+	if result.Preview.PreviewType != plugin.WoxPreviewTypeShell || err != nil || options.Directory != workingDirectory || options.Interpreter != getDefaultInterpreter() {
+		t.Fatalf("interactive preview = %+v, options = %+v, err = %v", result.Preview, options, err)
+	}
+	if len(result.Actions) == 0 || result.Actions[0].Id != interactive.OpenActionID || !result.Actions[0].IsDefault || !result.Actions[0].PreventHideAfterAction {
+		t.Fatalf("interactive launch action = %+v", result.Actions)
 	}
 }
 

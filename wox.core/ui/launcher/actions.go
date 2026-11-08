@@ -12,6 +12,8 @@ import (
 
 	"wox/common"
 	"wox/common/icons"
+	"wox/plugin"
+	"wox/plugin/system/shell/interactive"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -943,6 +945,11 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	}
 	result := a.resultList.results[resultIndex]
 	action := result.Actions[actionIndex]
+	if result.Preview.PreviewType == plugin.WoxPreviewTypeShell && action.ID == interactive.OpenActionID {
+		a.actions.hideActionPanel()
+		a.openShellPreview(result)
+		return
+	}
 	if action.ID == enterChatModeActionID {
 		a.actions.hideActionPanel()
 		a.chat.enterChatMode()

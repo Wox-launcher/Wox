@@ -36,6 +36,8 @@ If Windows SmartScreen asks for confirmation, check that the file came from the 
 
 ### macOS
 
+Wox requires macOS 13 Ventura or later. On macOS 12 Monterey, use [Wox 2.4.9](https://github.com/Wox-launcher/Wox/releases/tag/v2.4.9).
+
 1. Download the macOS disk image from Releases.
 2. Open the image and drag Wox into `Applications`.
 3. Start Wox from `Applications`.

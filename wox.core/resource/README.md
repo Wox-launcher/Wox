@@ -24,6 +24,11 @@ Compression must happen after helper signing; main executable signing remains
 after the final build. Generated files are local build artifacts and are ignored
 by Git. Always regenerate the overlay after changing resources or target platform.
 
+The About page loads the platform's license catalog from `licenses/catalog`.
+`make licenses-build` generates it after the hosts and native dependencies are
+staged. See [license catalog sources](../cmd/licensecatalog/README.md) when
+adding a dependency with its own build step.
+
 Plain `go build` and `go test` use the current uncompressed source resources,
 without a generation prerequisite. Release-mode checks can be run from `wox.core`:
 
