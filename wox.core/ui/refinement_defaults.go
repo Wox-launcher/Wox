@@ -25,17 +25,16 @@ func prepareRefinementDefaults(previous contract.RefinementScope, query *plugin.
 	if scope == previous {
 		return state
 	}
-	values, saved := owner.Setting.RefinementDefault(command)
-	state.Saved = saved
+	state.SavedValues, _ = owner.Setting.RefinementDefault(command)
 	if previous.PluginID != "" {
 		// Launcher refinements from another command have no meaning in this scope.
 		query.Refinements = map[string]string{}
 		state.AppliedValues = map[string]string{}
 	}
 	// Plugin navigation may carry explicit selections in ContextData.
-	if saved && len(query.Refinements) == 0 && len(query.ContextData) == 0 {
-		query.Refinements = values
-		state.AppliedValues = maps.Clone(values)
+	if state.SavedValues != nil && len(query.Refinements) == 0 && len(query.ContextData) == 0 {
+		query.Refinements = maps.Clone(state.SavedValues)
+		state.AppliedValues = state.SavedValues
 		state.Restored = true
 	}
 	return state

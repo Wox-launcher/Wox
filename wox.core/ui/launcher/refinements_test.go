@@ -1,10 +1,13 @@
 package launcher
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
 
@@ -108,6 +111,102 @@ func TestRefinementMultiSelectCanRemainEmptyWithDefaults(t *testing.T) {
 	if got := nextRefinementHotkeyValues(refinement, nil); !reflect.DeepEqual(got, []string{"text"}) {
 		t.Fatalf("multi-select hotkey from empty = %v, want text", got)
 	}
+}
+
+func TestClearRefinementSelectionsRequeriesWithPluginDefaults(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	query := newInputQuery("radio jazz")
+	query.QueryRefinements = map[string]string{"genre": "jazz", "language": "Chinese", "favorites": "true"}
+	app := newSendQueryTestApp(services, query, showAppParams{})
+	defer app.querySession.resetQueryLoadingLocked()
+	refinements := []queryRefinement{
+		{ID: "genre", Type: "singleSelect", Options: []queryRefinementOption{{Value: "all"}, {Value: "jazz"}}},
+		{ID: "language", Type: "multiSelect", Options: []queryRefinementOption{{Value: "Chinese"}}},
+		{ID: "favorites", Type: "toggle", Title: "Favorites"},
+	}
+	app.applyRefinementsLocked(refinements)
+	app.resultList.refinementDefault.savedValues = query.QueryRefinements
+	props := app.refinementViewProps(app.snapshot(), 0, 0, 1)
+	if len(props.SummaryLabels) != 3 || props.OnClear == nil {
+		t.Fatalf("want a clear action for all three active filters, got %v", props.SummaryLabels)
+	}
+	props.OnClear()
+	started := services.startedQuery
+	if started.QueryText != query.QueryText || started.QueryId == query.QueryID || !reflect.DeepEqual(started.QueryRefinements, map[string]string{"genre": "all"}) {
+		t.Fatalf("query after clearing filters = %#v", started)
+	}
+	app.applyRefinementsLocked(refinements)
+	props = app.refinementViewProps(app.snapshot(), 0, 0, 1)
+	if len(props.SummaryLabels) != 0 || props.OnClear != nil || !reflect.DeepEqual(app.resultList.refinementDefault.savedValues, query.QueryRefinements) {
+		t.Fatal("cleared filters returned or the saved default was removed")
+	}
+}
+
+type refinementDefaultTestServices struct {
+	contract.Services
+	writes chan map[string]string
+}
+
+func (s refinementDefaultTestServices) SetRefinementDefault(_ context.Context, _ contract.RefinementScope, values map[string]string) error {
+	s.writes <- values
+	return nil
+}
+
+func TestRefinementDefaultBookmarkMatchesAndReplacesCurrentCombination(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	query := newInputQuery("radio stations")
+	query.QueryRefinements = map[string]string{"genre": "jazz", "language": "fr,en"}
+	app := bindTestApp(&App{lifecycleCtx: ctx, querySession: queryController{query: query}, resultList: resultController{refinementOpen: true}})
+	service := refinementDefaultTestServices{writes: make(chan map[string]string, 1)}
+	app.services = service
+	completed := make(chan func(), 1)
+	app.uiCall = func(fn func()) error { completed <- fn; return nil }
+	refinements := []queryRefinement{
+		{ID: "genre", Type: "singleSelect", Options: []queryRefinementOption{{Value: "jazz"}, {Value: "rock"}}},
+		{ID: "language", Type: "multiSelect"},
+	}
+	app.applyRefinementDefaults(query.QueryID, &queryContext{refinementDefaults: contract.RefinementDefaults{
+		Scope: contract.RefinementScope{PluginID: "radio"}, SavedValues: map[string]string{"genre": "jazz", "language": "en,fr"},
+	}}, refinements, true)
+	app.applyRefinementsLocked(refinements)
+	values := app.querySession.query.QueryRefinements
+	bookmark := func(wantSaved bool) func() {
+		t.Helper()
+		button := app.refinementViewProps(app.snapshot(), 400, 44, 1).DefaultButton
+		if button == nil || button.Saved != wantSaved || button.Busy {
+			t.Fatalf("bookmark = %+v, want enabled with Saved=%t", button, wantSaved)
+		}
+		return button.OnToggle
+	}
+	finishWrite := func(want map[string]string) {
+		t.Helper()
+		select {
+		case got := <-service.writes:
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("saved filters = %v, want %v", got, want)
+			}
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for bookmark write")
+		}
+		select {
+		case fn := <-completed:
+			fn()
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for bookmark completion")
+		}
+	}
+
+	bookmark(true)
+	values["genre"] = "rock"
+	bookmark(false)()
+	values["genre"] = "jazz"
+	finishWrite(map[string]string{"genre": "rock", "language": "fr,en"})
+	bookmark(false)
+	values["genre"] = "rock"
+	bookmark(true)()
+	finishWrite(nil)
+	bookmark(false)
 }
 
 func TestValidateRestoredRefinementsUsesCurrentOptions(t *testing.T) {

@@ -3386,6 +3386,7 @@
   "onboarding_media_file_result_subtitle": "로컬 파일 검색",
   "ui_query_refinement_filters": "필터",
   "ui_query_refinement_filters_tooltip": "검색 결과를 필터링합니다({hotkey})",
+  "ui_query_refinement_clear": "모든 필터 지우기",
   "ui_query_refinement_selected_count": "%d개 선택됨",
   "ui_query_refinement_default_save": "현재 필터를 기본값으로 저장",
   "ui_query_refinement_default_remove": "저장된 기본 필터 제거",

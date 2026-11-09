@@ -152,6 +152,8 @@ type node struct {
 	materialMargin      float32
 	caretPaint          func(*woxui.DisplayList, woxui.Rect, bool, bool)
 	fadeTop, fadeBottom float32
+	fadeRight           float32
+	fadeRightInset      float32
 	clip                bool
 	opacity             *float32
 	transform           *woxui.AffineTransform

@@ -32,10 +32,11 @@ type RefinementScope struct {
 	Command  string
 }
 
-// RefinementDefaults carries a scope and any selections injected before dispatch.
+// RefinementDefaults carries a scope and its saved selections on entry.
 type RefinementDefaults struct {
-	Scope         RefinementScope
-	Saved         bool
+	Scope RefinementScope
+	// SavedValues is only loaded on scope changes. An empty non-nil map is a saved combination.
+	SavedValues   map[string]string
 	Restored      bool
 	AppliedValues map[string]string
 }

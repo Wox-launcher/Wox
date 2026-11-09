@@ -140,14 +140,14 @@ func TestRefinementDefaultStaysAtRightWhileFiltersScroll(t *testing.T) {
 	}
 }
 
-func TestRefinementToggleOwnsSharedHoverState(t *testing.T) {
+func TestRefinementToggleTracksHoverAcrossClearAction(t *testing.T) {
 	queryText := woxui.Color{R: 230, G: 235, B: 240, A: 48}
 	toggle := RefinementToggle(RefinementsProps{
 		DefaultLabel: "Filters", Theme: woxcomponent.Theme{QueryText: queryText}, OnToggle: func() {},
 	}).(woxwidget.Stateful)
 	gesture := toggle.CreateState().Build(woxwidget.StateContext{}, toggle.Widget).(woxwidget.Gesture)
-	if gesture.OnTap == nil || gesture.OnHoverAt == nil {
-		t.Fatalf("refinement toggle gesture = tap %v hover %v, want shared hover state", gesture.OnTap != nil, gesture.OnHoverAt != nil)
+	if gesture.OnTap == nil || gesture.OnHoverAt == nil || !gesture.CoverHover {
+		t.Fatalf("refinement toggle gesture = tap %v hover %v, want subtree hover tracking", gesture.OnTap != nil, gesture.OnHoverAt != nil)
 	}
 }
 
@@ -164,7 +164,8 @@ func TestRefinementToggleForwardsHotkeyTooltip(t *testing.T) {
 		},
 	}).(woxwidget.Stateful)
 	gesture := toggle.CreateState().Build(woxwidget.StateContext{}, toggle.Widget).(woxwidget.Gesture)
-	gesture.OnHoverAt(true, woxui.Rect{Width: 80, Height: 26})
+	body := gesture.Child.(woxwidget.Container).Child.(woxwidget.Container).Child.(woxwidget.Gesture)
+	body.OnHoverAt(true, woxui.Rect{Width: 80, Height: 26})
 	if !gotInside || gotText != "Filter search results (Ctrl+F)" {
 		t.Fatalf("refinement tooltip = inside %v text %q, want hover with hotkey hint", gotInside, gotText)
 	}
@@ -183,7 +184,8 @@ func TestRefinementToggleEllipsizesSummaryAndShowsFullTextOnHover(t *testing.T) 
 	if button.Width != scaledLauncherSize(192, 1.25) {
 		t.Fatalf("button width = %v, want the scaled maximum", button.Width)
 	}
-	content := button.Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	body := button.Child.(woxwidget.Gesture)
+	content := body.Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
 	padding, gap, iconSize := refinementToggleHorizontalMetrics(props.DensityScale)
 	budget := button.Width - padding.Left - padding.Right - gap - iconSize
 	layout := content.Children[1].(woxwidget.Flexible).Child.(woxwidget.LayoutBuilder)
@@ -207,9 +209,90 @@ func TestRefinementToggleEllipsizesSummaryAndShowsFullTextOnHover(t *testing.T) 
 	if total > budget+0.01 {
 		t.Fatalf("summary width = %v, exceeds text budget %v", total, budget)
 	}
-	gesture.OnHoverAt(true, woxui.Rect{Width: button.Width, Height: button.Height})
+	body.OnHoverAt(true, woxui.Rect{Width: button.Width, Height: button.Height})
 	if tooltip != strings.Join(props.SummaryLabels, ", ")+"\n"+shortcut {
 		t.Fatalf("tooltip = %q, want the full summary and shortcut", tooltip)
+	}
+}
+
+func TestRefinementToggleOverlaysClearActionOnHover(t *testing.T) {
+	const clearKey woxwidget.Key = "query-refinements-clear"
+	var toggled, cleared int
+	var tooltip string
+	props := RefinementsProps{
+		SummaryLabels: []string{"music", "Chinese"}, ClearLabel: "Clear all filters", DensityScale: 1.1,
+		OnToggle: func() { toggled++ }, OnClear: func() { cleared++ },
+		OnTooltip: func(inside bool, text string, _ woxui.Rect) {
+			if inside {
+				tooltip = text
+			}
+		},
+	}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return RefinementToggleBoundary(props) })
+	defer host.Dispose()
+	host.AttachServices(&queryPointerHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 220, Height: 44}, PixelSize: woxui.PixelSize{Width: 330, Height: 66}, Scale: 1.5}
+	render := func() int {
+		display := &woxui.DisplayList{}
+		host.Frame(display, frame)
+		return display.ImageDrawCount()
+	}
+	center := func(bounds woxui.Rect) woxui.Point {
+		return woxui.Point{X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2}
+	}
+	click := func(position woxui.Point) {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Position: position, Button: woxui.PointerButtonPrimary})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Position: position, Button: woxui.PointerButtonPrimary})
+	}
+	idleIcons := render()
+	body, _ := host.BoundsForKey("query-refinements-toggle")
+	clear, found := host.BoundsForKey(clearKey)
+	if !found || clear.X <= body.X || clear.X+clear.Width > body.X+body.Width {
+		t.Fatalf("clear button %v must overlap the right side of the summary %v", clear, body)
+	}
+	withoutClear := props
+	withoutClear.ClearLabel = ""
+	if body.Width != RefinementToggleWidth(withoutClear) {
+		t.Fatalf("summary width = %v, want no space reserved for clear", body.Width)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: center(body)})
+	if icons := render(); icons != idleIcons+1 {
+		t.Fatalf("hover drew %d icons, want one more than idle (%d)", icons, idleIcons)
+	}
+	if after, _ := host.BoundsForKey(clearKey); after != clear {
+		t.Fatalf("clear button moved on hover from %v to %v", clear, after)
+	}
+	if after, _ := host.BoundsForKey("query-refinements-toggle"); after != body {
+		t.Fatalf("summary bounds moved on hover from %v to %v", body, after)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave})
+	if icons := render(); icons != idleIcons {
+		t.Fatalf("pointer leave drew %d icons, want idle count %d", icons, idleIcons)
+	}
+	click(center(clear)) // The same spot belongs to the summary while the glyph is hidden.
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerMove, Position: center(clear)})
+	render()
+	click(center(clear))
+	if toggled != 1 || cleared != 1 || tooltip != props.ClearLabel {
+		t.Fatalf("toggle calls = %d, clear calls = %d, tooltip = %q", toggled, cleared, tooltip)
+	}
+	host.Pointer(woxui.PointerEvent{Kind: woxui.PointerLeave})
+	host.ClearFocus()
+	if render() != idleIcons {
+		t.Fatal("clear button must hide when pointer and focus leave")
+	}
+	if !host.FocusAutomationID(string(clearKey)) || render() != idleIcons+1 ||
+		!host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || cleared != 2 {
+		t.Fatal("keyboard focus must reveal the clear button and Enter must activate it")
+	}
+	props.SummaryLabels = nil
+	render()
+	if _, found := host.BoundsForKey(clearKey); found {
+		t.Fatal("clear button remained available with no active filters")
+	}
+	props.SummaryLabels = []string{"Chinese"}
+	if icons := render(); icons != idleIcons {
+		t.Fatalf("new filter drew %d icons without hover, want idle count %d", icons, idleIcons)
 	}
 }
 

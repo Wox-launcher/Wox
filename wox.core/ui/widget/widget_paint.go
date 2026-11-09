@@ -38,6 +38,19 @@ func (n *node) drawAt(displayList *woxui.DisplayList, origin woxui.Point, focuse
 		displayList.BeginOpacity(bounds, *n.opacity)
 		defer displayList.EndOpacity(bounds, *n.opacity)
 	}
+	if n.fadeRight > 0 {
+		mask := bounds
+		mask.Width -= n.fadeRightInset
+		if mask.Width <= 0 || mask.Height <= 0 {
+			return
+		}
+		displayList.PushClipRect(mask)
+		displayList.BeginHorizontalEdgeFade(mask, 0, n.fadeRight)
+		defer func() {
+			displayList.EndHorizontalEdgeFade(mask, 0, n.fadeRight)
+			displayList.PopClipRect()
+		}()
+	}
 	if n.focus != nil {
 		focusWithin = n.id == focused
 		focusableWithin = true

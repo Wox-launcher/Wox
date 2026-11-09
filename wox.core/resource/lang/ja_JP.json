@@ -3387,6 +3387,7 @@
   "onboarding_media_file_result_subtitle": "ローカルファイルを検索",
   "ui_query_refinement_filters": "フィルター",
   "ui_query_refinement_filters_tooltip": "検索結果をフィルタリング({hotkey})",
+  "ui_query_refinement_clear": "すべてのフィルターをクリア",
   "ui_query_refinement_selected_count": "%d 件選択中",
   "ui_query_refinement_default_save": "現在のフィルターを既定にする",
   "ui_query_refinement_default_remove": "保存した既定のフィルターを削除",

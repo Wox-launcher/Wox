@@ -69,16 +69,18 @@ type RefinementsProps struct {
 	DefaultLabel  string
 	Open          bool
 	Tooltip       string
+	ClearLabel    string
 	Groups        []RefinementGroup
 	PickerID      string
 	DefaultButton *RefinementDefaultButtonProps
 	OnToggle      func()                         `boundary:"stable"`
+	OnClear       func()                         `boundary:"stable"`
 	OnTooltip     func(bool, string, woxui.Rect) `boundary:"stable"`
 }
 
 // Equal compares every render dependency for the expanded refinement section.
 func (p RefinementsProps) Equal(other RefinementsProps) bool {
-	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || !slices.Equal(p.SummaryLabels, other.SummaryLabels) || p.DefaultLabel != other.DefaultLabel || p.Open != other.Open || p.Tooltip != other.Tooltip || p.PickerID != other.PickerID || !p.DefaultButton.Equal(other.DefaultButton) || len(p.Groups) != len(other.Groups) {
+	if p.Revision != other.Revision || p.Width != other.Width || p.Height != other.Height || p.Theme != other.Theme || p.Window != other.Window || p.DensityScale != other.DensityScale || !slices.Equal(p.SummaryLabels, other.SummaryLabels) || p.DefaultLabel != other.DefaultLabel || p.Open != other.Open || p.Tooltip != other.Tooltip || p.ClearLabel != other.ClearLabel || p.PickerID != other.PickerID || !p.DefaultButton.Equal(other.DefaultButton) || len(p.Groups) != len(other.Groups) {
 		return false
 	}
 	for groupIndex := range p.Groups {
@@ -119,42 +121,107 @@ func RefinementToggleWidth(props RefinementsProps) float32 {
 	return min(scaledLauncherSize(192, props.DensityScale), textWidth+padding.Left+padding.Right+gap+iconSize)
 }
 
-func refinementToggleHorizontalMetrics(densityScale float32) (padding woxwidget.Insets, gap, iconSize float32) {
-	padding = woxwidget.Insets{Left: scaledLauncherSize(8, densityScale), Right: scaledLauncherSize(9, densityScale)}
-	return padding, scaledLauncherSize(5, densityScale), scaledLauncherSize(15, densityScale)
+func refinementToggleHorizontalMetrics(scale float32) (padding woxwidget.Insets, gap, iconSize float32) {
+	padding = woxwidget.Insets{Left: scaledLauncherSize(8, scale), Right: scaledLauncherSize(9, scale)}
+	return padding, scaledLauncherSize(5, scale), scaledLauncherSize(15, scale)
 }
 
 // RefinementToggle builds the compact query accessory.
 func RefinementToggle(props RefinementsProps) woxwidget.Widget {
+	return woxwidget.Stateful{
+		Key: "query-refinements-toggle", Type: (*refinementToggleState)(nil), Widget: props,
+		CreateState: func() woxwidget.State { return &refinementToggleState{} },
+	}
+}
+
+type refinementToggleState struct {
+	hovered, clearFocused bool
+}
+
+func (*refinementToggleState) InitState(woxwidget.StateContext, any) {}
+func (*refinementToggleState) Dispose()                              {}
+
+// DidUpdateWidget drops focus state when clearing removes the overlay from the tree.
+func (s *refinementToggleState) DidUpdateWidget(_ woxwidget.StateContext, _, widget any) {
+	props := widget.(RefinementsProps)
+	if len(props.SummaryLabels) == 0 || props.ClearLabel == "" {
+		s.clearFocused = false
+	}
+}
+
+// Build keeps the summary's layout stable while layering the clear action over it.
+func (s *refinementToggleState) Build(ctx woxwidget.StateContext, widget any) woxwidget.Widget {
+	props := widget.(RefinementsProps)
 	active := props.Open || len(props.SummaryLabels) > 0
+	canClear := len(props.SummaryLabels) > 0 && props.ClearLabel != ""
+	showClear := canClear && (s.hovered || s.clearFocused)
+	scale := func(size float32) float32 { return scaledLauncherSize(size, props.DensityScale) }
 	width := RefinementToggleWidth(props)
-	toggleHeight := scaledLauncherSize(34, props.DensityScale)
-	controlHeight := scaledLauncherSize(26, props.DensityScale)
+	controlHeight := scale(26)
 	padding, gap, iconSize := refinementToggleHorizontalMetrics(props.DensityScale)
 	tooltip := props.Tooltip
 	if len(props.SummaryLabels) > 0 {
 		tooltip = strings.Join(props.SummaryLabels, ", ") + "\n" + tooltip
 	}
-	return woxcomponent.Hoverable(woxwidget.Key("query-refinements-toggle"), false, func(hovered bool, onHoverAt func(bool, woxui.Rect)) woxwidget.Widget {
-		foreground, icon, toggleBackground, border := props.Theme.RefinementButtonColors(active, hovered)
-		return woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, OnHoverAt: func(inside bool, bounds woxui.Rect) {
-			onHoverAt(inside, bounds)
-			if props.OnTooltip != nil {
-				props.OnTooltip(inside, tooltip, bounds)
-			}
-		}, Child: woxwidget.Container{
-			Width: width, Height: toggleHeight, Padding: woxwidget.Insets{Top: scaledLauncherSize(4, props.DensityScale)}, Child: woxwidget.Container{
-				Width: width, Height: controlHeight, Radius: scaledLauncherSize(7, props.DensityScale), Color: toggleBackground,
-				BorderColor: border, BorderWidth: 1,
-				Padding: padding, Child: woxwidget.Align{Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
-					Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-						woxcomponent.FilterListGlyph(iconSize, icon),
-						woxwidget.Flexible{Child: refinementSummaryView(props, foreground, controlHeight)},
-					},
-				}},
+	foreground, icon, toggleBackground, border := props.Theme.RefinementButtonColors(active, s.hovered)
+	tooltipAt := func(text string) func(bool, woxui.Rect) {
+		if props.OnTooltip == nil {
+			return nil
+		}
+		return func(inside bool, bounds woxui.Rect) { props.OnTooltip(inside, text, bounds) }
+	}
+	summary := refinementSummaryView(props, foreground, controlHeight)
+	if showClear {
+		summary = woxwidget.FadeRight{Width: scale(16), Inset: scale(10), Child: woxwidget.Align{Height: controlHeight, Child: summary}}
+	}
+	body := woxwidget.Gesture{ID: "query-refinements-toggle", OnTap: props.OnToggle, OnHoverAt: tooltipAt(tooltip), Child: woxwidget.Container{
+		Padding: padding, Child: woxwidget.Align{
+			Height: controlHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Flex{
+				Axis: woxwidget.Horizontal, Gap: gap, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+					woxcomponent.FilterListGlyph(iconSize, icon),
+					woxwidget.Flexible{Child: summary},
+				},
 			},
-		}}
-	})
+		},
+	}}
+	var content woxwidget.Widget = body
+	if canClear {
+		clearSize := scale(22)
+		clear := woxcomponent.IconButtonProps{
+			ID: "query-refinements-clear", Label: props.ClearLabel, Icon: woxcomponent.CloseGlyph(scale(13), icon),
+			Width: clearSize, Height: clearSize, Radius: scale(5), FocusRingColor: props.Theme.Controls.Focus,
+			OnTap: props.OnClear, OnHoverAt: tooltipAt(props.ClearLabel),
+			OnFocusChange: func(focused bool) {
+				if s.clearFocused != focused {
+					ctx.SetState(func() { s.clearFocused = focused })
+				}
+			},
+		}
+		if !showClear {
+			clear.IdleIcon = woxwidget.Painter{}
+		}
+		layers := []woxwidget.StackChild{
+			{Child: body},
+			{Right: scale(3), AnchorRight: true, Child: woxwidget.Align{
+				Width: clearSize, Height: controlHeight, Horizontal: 0.5, Vertical: 0.5, Child: woxcomponent.WoxIconButton(clear),
+			}},
+		}
+		// Keep the clear action focusable, but let the summary take pointer input until the glyph is visible.
+		if !showClear {
+			layers[0], layers[1] = layers[1], layers[0]
+		}
+		content = woxwidget.Stack{Width: width, Height: controlHeight, Children: layers}
+	}
+	return woxwidget.Gesture{ID: "query-refinements-toggle-hover", CoverHover: true, OnTap: props.OnToggle, OnHoverAt: func(inside bool, _ woxui.Rect) {
+		if s.hovered != inside {
+			ctx.SetState(func() { s.hovered = inside })
+		}
+	}, Child: woxwidget.Container{
+		Width: width, Height: scale(34), Padding: woxwidget.Insets{Top: scale(4)}, Child: woxwidget.Container{
+			Width: width, Height: controlHeight, Radius: scale(7), Color: toggleBackground,
+			BorderColor: border, BorderWidth: 1, Child: content,
+		},
+	}}
 }
 
 func refinementSummaryStyle(scale float32) woxui.TextStyle {

@@ -631,16 +631,33 @@ func rotatedRectBounds(rect Rect, radians float32) Rect {
 // BeginEdgeFade isolates content so its alpha can fade without covering glass behind it.
 // Top and bottom are logical distances, clamped to keep the ramps from overlapping.
 func (d *DisplayList) BeginEdgeFade(rect Rect, top, bottom float32) {
-	d.appendCommand(displayCommand{kind: displayCommandBeginEdgeFade, rect: rect,
-		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
-	if len(d.clipStack) > 0 {
-		d.appendClip(d.clipStack[len(d.clipStack)-1])
-	}
+	d.recordEdgeFade(displayCommandBeginEdgeFade, rect, top, bottom)
 }
 
 // EndEdgeFade composites the isolated content back onto the window.
 func (d *DisplayList) EndEdgeFade(rect Rect, top, bottom float32) {
-	d.appendCommand(displayCommand{kind: displayCommandEndEdgeFade, rect: rect,
+	d.recordEdgeFade(displayCommandEndEdgeFade, rect, top, bottom)
+}
+
+// BeginHorizontalEdgeFade isolates content with left and right alpha ramps in logical units.
+func (d *DisplayList) BeginHorizontalEdgeFade(rect Rect, left, right float32) {
+	d.recordHorizontalEdgeFade(displayCommandBeginEdgeFade, rect, left, right)
+}
+
+// EndHorizontalEdgeFade composites the content with the same horizontal mask.
+func (d *DisplayList) EndHorizontalEdgeFade(rect Rect, left, right float32) {
+	d.recordHorizontalEdgeFade(displayCommandEndEdgeFade, rect, left, right)
+}
+
+// recordHorizontalEdgeFade rotates the mask's local axes while leaving the content in place.
+func (d *DisplayList) recordHorizontalEdgeFade(kind displayCommandKind, rect Rect, left, right float32) {
+	d.PushTransform(AffineTransform{B: -1, C: 1})
+	d.recordEdgeFade(kind, Rect{X: -rect.Y - rect.Height, Y: rect.X, Width: rect.Height, Height: rect.Width}, left, right)
+	d.PopTransform()
+}
+
+func (d *DisplayList) recordEdgeFade(kind displayCommandKind, rect Rect, top, bottom float32) {
+	d.appendCommand(displayCommand{kind: kind, rect: rect,
 		radius: min(max(float32(0), top), rect.Height/2), stroke: min(max(float32(0), bottom), rect.Height/2)})
 	// Native layer boundaries clear the current clip; restore the portable clip state.
 	if len(d.clipStack) > 0 {
