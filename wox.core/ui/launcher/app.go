@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"runtime"
 	"strings"
 	"sync"
@@ -1266,19 +1267,36 @@ func (a *App) replaceQuery(query plainQuery, rememberPrevious bool) {
 }
 
 func (a *App) sendCurrentQuery() error {
+	return a.sendCurrentQueryForGeneration("", nil)
+}
+
+// sendCurrentQueryForGeneration adds one-shot data to a specific refresh request.
+func (a *App) sendCurrentQueryForGeneration(queryID string, contextData common.ContextData) error {
 	var query plainQuery
 	var startPage string
 	var skipCompletionHint bool
 	var refinementScope contract.RefinementScope
 	if err := a.runOnUI("prepare current query", func() {
+		if queryID != "" && queryID != a.querySession.query.QueryID {
+			return
+		}
 		query = a.querySession.query
 		query.QueryHint = a.querySession.query.QueryHint.Clone()
+		if len(contextData) > 0 {
+			data := make(map[string]string, len(query.ContextData)+len(contextData))
+			maps.Copy(data, query.ContextData)
+			maps.Copy(data, contextData)
+			query.ContextData = data
+		}
 		refinementScope = a.resultList.refinementDefault.scope
 		startPage = a.show.StartPage
 		skipCompletionHint = a.querySession.query.QueryHint != nil || a.querySession.queryHintEditorState.candidate != nil || !a.generalSettings.Data().EnableQueryCompletionHint
 		a.querySession.startQueryLoadingLocked()
 	}); err != nil {
 		return err
+	}
+	if queryID != "" && query.QueryID != queryID {
+		return nil
 	}
 	// A selection query keeps its payload in QuerySelection, so an empty QueryText
 	// is not an empty query box; replacing it with MRU reassigns QueryID and the

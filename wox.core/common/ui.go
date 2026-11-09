@@ -82,6 +82,10 @@ type RefreshQueryOptions struct {
 	PreserveSelectedIndex bool
 	// SelectedResultId reselects the result with this id. Empty keeps the index behavior.
 	SelectedResultId string
+	// ExpectedQueryId guards an asynchronous refresh against a newer query.
+	ExpectedQueryId string
+	// ContextData supplements the outgoing query for this refresh only.
+	ContextData ContextData
 }
 
 // ui methods that can be invoked by plugins

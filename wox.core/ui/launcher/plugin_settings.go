@@ -93,16 +93,6 @@ const (
 	pluginFilterRuntimeScript = "script"
 )
 
-type pluginStoreSort string
-
-const (
-	pluginStoreSortDefault   pluginStoreSort = ""
-	pluginStoreSortStars     pluginStoreSort = "stars"
-	pluginStoreSortName      pluginStoreSort = "name"
-	pluginStoreSortDownloads pluginStoreSort = "downloads"
-	pluginStoreSortUpdated   pluginStoreSort = "updated"
-)
-
 // pluginFilterState stores exclusive catalog dropdowns. Empty or "all" means no restriction.
 type pluginFilterState struct {
 	enabledStatus string
@@ -110,7 +100,7 @@ type pluginFilterState struct {
 	pluginType    string
 	runtime       string
 	installStatus string
-	storeSort     pluginStoreSort
+	storeSort     plugin.StorePluginSort
 }
 
 func pluginFilterIsAll(value string) bool {
@@ -119,7 +109,7 @@ func pluginFilterIsAll(value string) bool {
 
 func (filters pluginFilterState) applied(store bool) bool {
 	if store {
-		return filters.storeSort != pluginStoreSortDefault || !pluginFilterIsAll(filters.installStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
+		return filters.storeSort != plugin.StorePluginSortDefault || !pluginFilterIsAll(filters.installStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 	}
 	return !pluginFilterIsAll(filters.enabledStatus) || !pluginFilterIsAll(filters.upgradeStatus) || !pluginFilterIsAll(filters.pluginType) || !pluginFilterIsAll(filters.runtime)
 }
@@ -137,45 +127,16 @@ func filterPlugins(plugins []pluginSettingsPlugin, query string, filters pluginF
 	}
 	if store {
 		sort.SliceStable(filtered, func(i, j int) bool {
-			return storePluginLess(filtered[i].plugin, filtered[j].plugin, filters.storeSort)
+			return filters.storeSort.Less(filtered[i].plugin.storeSortKey(), filtered[j].plugin.storeSortKey())
 		})
 	}
 	return filtered
 }
 
-// storePluginLess keeps catalog groups stable and puts known statistics before unknown values.
-func storePluginLess(left, right pluginSettingsPlugin, order pluginStoreSort) bool {
-	leftStore, rightStore := pluginStoreSectionID(left.Store), pluginStoreSectionID(right.Store)
-	if leftStore != rightStore {
-		return pluginStoreSectionLess(leftStore, rightStore)
+func (p pluginSettingsPlugin) storeSortKey() plugin.StorePluginSortKey {
+	return plugin.StorePluginSortKey{
+		Store: p.Store, Name: p.Name, StarCount: p.StarCount, DownloadCount: p.DownloadCount, DateUpdated: p.DateUpdated,
 	}
-	if order == pluginStoreSortUpdated {
-		leftDate, leftErr := time.Parse("2006-01-02 15:04:05", left.DateUpdated)
-		rightDate, rightErr := time.Parse("2006-01-02 15:04:05", right.DateUpdated)
-		if (leftErr == nil) != (rightErr == nil) {
-			return leftErr == nil
-		}
-		if leftErr == nil && !leftDate.Equal(rightDate) {
-			return leftDate.After(rightDate)
-		}
-	}
-	var a, b *int
-	switch order {
-	case pluginStoreSortStars:
-		a, b = left.StarCount, right.StarCount
-	case pluginStoreSortDefault, pluginStoreSortDownloads:
-		a, b = left.DownloadCount, right.DownloadCount
-	}
-	if a != nil && b == nil {
-		return true
-	}
-	if a == nil && b != nil {
-		return false
-	}
-	if a != nil && b != nil && *a != *b {
-		return *a > *b
-	}
-	return strings.ToLower(left.Name) < strings.ToLower(right.Name)
 }
 
 const (
@@ -212,35 +173,12 @@ func groupInstalledPlugins(filtered []filteredPlugin) []installedPluginSection {
 	return sections
 }
 
-// pluginStoreSectionID maps a missing catalog id onto the official store.
-func pluginStoreSectionID(store string) string {
-	store = strings.ToLower(strings.TrimSpace(store))
-	if store == "" {
-		return plugin.OfficialPluginStoreID
-	}
-	return store
-}
-
-// pluginStoreSectionLess keeps the official store above every other catalog.
-func pluginStoreSectionLess(left, right string) bool {
-	if left == plugin.OfficialPluginStoreID {
-		return right != plugin.OfficialPluginStoreID
-	}
-	if right == plugin.OfficialPluginStoreID {
-		return false
-	}
-	return left < right
-}
-
 // pluginCatalogLess orders installed plugins with system entries first, and store plugins by catalog then name.
 func pluginCatalogLess(left, right pluginSettingsPlugin, store bool) bool {
 	if store {
-		leftStore := pluginStoreSectionID(left.Store)
-		rightStore := pluginStoreSectionID(right.Store)
-		if leftStore != rightStore {
-			return pluginStoreSectionLess(leftStore, rightStore)
-		}
-	} else if left.IsSystem != right.IsSystem {
+		return plugin.StorePluginSortName.Less(left.storeSortKey(), right.storeSortKey())
+	}
+	if left.IsSystem != right.IsSystem {
 		return left.IsSystem
 	}
 	return strings.ToLower(left.Name) < strings.ToLower(right.Name)
@@ -253,23 +191,25 @@ type storePluginSection struct {
 
 // groupStorePlugins splits the visible store catalog by publishing store.
 // The official store stays first. Empty groups are omitted.
-func groupStorePlugins(filtered []filteredPlugin, orderBy pluginStoreSort) []storePluginSection {
+func groupStorePlugins(filtered []filteredPlugin, orderBy plugin.StorePluginSort) []storePluginSection {
 	order := make([]string, 0)
 	grouped := map[string][]filteredPlugin{}
 	for _, entry := range filtered {
-		id := pluginStoreSectionID(entry.plugin.Store)
+		id := plugin.StoreCatalogID(entry.plugin.Store)
 		if _, found := grouped[id]; !found {
 			order = append(order, id)
 		}
 		grouped[id] = append(grouped[id], entry)
 	}
 	sort.SliceStable(order, func(i, j int) bool {
-		return pluginStoreSectionLess(order[i], order[j])
+		return plugin.StoreCatalogLess(order[i], order[j])
 	})
 	sections := make([]storePluginSection, 0, len(order))
 	for _, id := range order {
 		plugins := grouped[id]
-		sort.SliceStable(plugins, func(i, j int) bool { return storePluginLess(plugins[i].plugin, plugins[j].plugin, orderBy) })
+		sort.SliceStable(plugins, func(i, j int) bool {
+			return orderBy.Less(plugins[i].plugin.storeSortKey(), plugins[j].plugin.storeSortKey())
+		})
 		sections = append(sections, storePluginSection{ID: id, Plugins: plugins})
 	}
 	return sections
@@ -1071,7 +1011,7 @@ func (c *pluginSettingsController) setPluginFilter(id, value string) {
 	case "install":
 		filters.installStatus = value
 	case "sort":
-		filters.storeSort = pluginStoreSort(value)
+		filters.storeSort = plugin.StorePluginSort(value)
 	default:
 		return
 	}

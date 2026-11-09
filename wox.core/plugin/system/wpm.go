@@ -34,6 +34,9 @@ var wpmIcon = icons.Get(icons.PluginWPM)
 var localPluginDirectoriesKey = "local_plugin_directories"
 
 const (
+	wpmRecentlyInstalledContextKey         = "wpm_recently_installed"
+	wpmInstallOutcomeContextKey            = "wpm_install_outcome"
+	wpmStoreSortRefinementKey              = "wpm_store_sort"
 	wpmInstallStatusRefinementKey          = "wpm_install_status"
 	wpmInstallStatusRefinementAll          = "all"
 	wpmInstallStatusRefinementInstalled    = "installed"
@@ -422,13 +425,20 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 	}
 
 	if query.Command == "install" {
-		response := plugin.NewQueryResponse(w.installCommand(ctx, query))
-		response.Refinements = []plugin.QueryRefinement{w.buildInstallStatusRefinement()}
+		if outcome := query.ContextData[wpmInstallOutcomeContextKey]; outcome != "" {
+			w.showUpgradeStatus(ctx, outcome, false)
+		}
+		manifests := plugin.GetStoreManager().Search(ctx, query.Search)
+		installed := w.buildInstalledPluginLookup()
+		response := plugin.NewQueryResponse(w.buildStorePluginResults(ctx, query, manifests, installed, selectedWPMInstallStatus(query)))
+		response.Refinements = []plugin.QueryRefinement{w.buildInstallStatusRefinement(), wpmStoreSortRefinement()}
 		return response
 	}
 
 	if query.Command == "update" {
-		return plugin.NewQueryResponse(w.updateCommand(ctx, query))
+		response := plugin.NewQueryResponse(w.updateCommand(ctx, query))
+		response.Refinements = []plugin.QueryRefinement{wpmStoreSortRefinement()}
+		return response
 	}
 
 	if query.Command == "uninstall" {
@@ -527,6 +537,23 @@ func (w *WPMPlugin) buildInstallStatusRefinement() plugin.QueryRefinement {
 	}
 }
 
+// wpmStoreSortRefinement exposes the same sort choices as the Settings store.
+func wpmStoreSortRefinement() plugin.QueryRefinement {
+	return plugin.QueryRefinement{
+		Id:           wpmStoreSortRefinementKey,
+		Title:        "i18n:ui_plugin_store_sort",
+		Type:         plugin.QueryRefinementTypeSingleSelect,
+		DefaultValue: []string{string(plugin.StorePluginSortDownloads)},
+		Hotkey:       util.PrimaryHotkey("shift+s"),
+		Options: []plugin.QueryRefinementOption{
+			{Value: string(plugin.StorePluginSortDownloads), Title: "i18n:ui_plugin_store_sort_downloads"},
+			{Value: string(plugin.StorePluginSortName), Title: "i18n:ui_plugin_store_sort_default"},
+			{Value: string(plugin.StorePluginSortStars), Title: "i18n:ui_plugin_store_sort_stars"},
+			{Value: string(plugin.StorePluginSortUpdated), Title: "i18n:ui_plugin_store_sort_updated"},
+		},
+	}
+}
+
 func wpmInstallStatusRefinementHotkey() string {
 	return util.PrimaryHotkey("s")
 }
@@ -558,12 +585,9 @@ func wpmInstallStatusMatches(selectedStatus string, installed bool, upgradable b
 	}
 }
 
+// searchStorePlugins keeps name order for global discovery and bulk upgrades.
 func (w *WPMPlugin) searchStorePlugins(ctx context.Context, keyword string) []plugin.StorePluginManifest {
 	pluginManifests := plugin.GetStoreManager().Search(ctx, keyword)
-
-	// Refactor support: global query and explicit install query both need the
-	// same stable ordering. Keeping the sort in one helper prevents discovery
-	// results from drifting away from the WPM install command.
 	sort.SliceStable(pluginManifests, func(i, j int) bool {
 		return pluginManifests[i].GetName(ctx) < pluginManifests[j].GetName(ctx)
 	})
@@ -793,8 +817,7 @@ func (w *WPMPlugin) buildPluginDetailIcon(manifest plugin.StorePluginManifest) c
 	return wpmIcon
 }
 
-// buildPluginDetailPreview constructs the WoxPreview shown in the preview panel
-// for a plugin listed in installCommand results.
+// buildPluginDetailPreview constructs the preview for a store plugin result.
 // isInstalled reflects whether the plugin is currently installed.
 // isInstalling reflects whether an install/upgrade is currently in progress;
 // the preview intentionally no longer serializes either state. The result tail
@@ -820,8 +843,8 @@ func (w *WPMPlugin) buildPluginDetailPreview(ctx context.Context, manifest plugi
 	}
 }
 
-// buildPostInstallActions returns the actions to show after a successful
-// install or upgrade: always includes Uninstall, and adds "Start Using" when
+// buildPostInstallActions returns the actions after an in-place upgrade.
+// It always includes Uninstall and adds "Start Using" when
 // the plugin has a non-wildcard trigger keyword.
 func (w *WPMPlugin) buildPostInstallActions(ctx context.Context, pluginManifest plugin.StorePluginManifest) []plugin.QueryResultAction {
 	newActions := []plugin.QueryResultAction{w.createUninstallAction(pluginManifest)}
@@ -832,21 +855,25 @@ func (w *WPMPlugin) buildPostInstallActions(ctx context.Context, pluginManifest 
 	instances := plugin.GetPluginManager().GetPluginInstances()
 	if len(instances) > 0 {
 		if inst, ok := lo.Find(instances, func(it *plugin.Instance) bool { return it.Metadata.Id == pluginManifest.Id }); ok {
-			// Global plugins can still expose a keyword after "*", and users may override it.
-			if kw := inst.PrimaryTriggerKeyword(); strings.TrimSpace(kw) != "" {
-				newActions = append(newActions, plugin.QueryResultAction{
-					Name:                   "i18n:plugin_wpm_start_using",
-					Icon:                   icons.Get(icons.ActionOpen),
-					PreventHideAfterAction: true,
-					IsDefault:              true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: kw + " "})
-					},
-				})
+			if kw := inst.PrimaryTriggerKeyword(); kw != "" {
+				newActions = append(newActions, w.startUsingAction(kw))
 			}
 		}
 	}
 	return newActions
+}
+
+// startUsingAction opens the plugin with its effective trigger keyword.
+func (w *WPMPlugin) startUsingAction(keyword string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Name:                   "i18n:plugin_wpm_start_using",
+		Icon:                   icons.Get(icons.ActionOpen),
+		PreventHideAfterAction: true,
+		IsDefault:              true,
+		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+			w.api.ChangeQuery(ctx, common.PlainQuery{QueryType: plugin.QueryTypeInput, QueryText: keyword + " "})
+		},
+	}
 }
 
 // createInstallAction creates an install action with immediate UI lock:
@@ -898,22 +925,12 @@ func (w *WPMPlugin) createInstallAction(pluginManifest plugin.StorePluginManifes
 					return
 				}
 
-				// Update tails, preview, and actions to the installed state.
-				if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-					newTails := []plugin.QueryResultTail{{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)}}
-					updatable.Tails = &newTails
-					successPreview := w.buildPluginDetailPreview(ctx, pluginManifest, true, false)
-					updatable.Preview = &successPreview
-					newActions := w.buildPostInstallActions(ctx, pluginManifest)
-					updatable.Actions = &newActions
-					w.api.UpdateResult(ctx, *updatable)
-				}
-
-				w.showUpgradeStatus(ctx, fmt.Sprintf(
+				outcome := fmt.Sprintf(
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 					pluginName,
 					w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_install_past"),
-				), false)
+				)
+				w.refreshInstallResults(ctx, actionContext.ResultId, outcome, pluginManifest.Id)
 			})
 		},
 	}
@@ -1004,7 +1021,7 @@ func (w *WPMPlugin) createUpgradeAction(pluginManifest plugin.StorePluginManifes
 	}
 }
 
-// createUninstallAction creates an uninstall action that updates to install action after success
+// createUninstallAction refreshes the catalog after removing an installed plugin.
 func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManifest) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:                   "i18n:plugin_wpm_uninstall",
@@ -1033,40 +1050,43 @@ func (w *WPMPlugin) createUninstallAction(pluginManifest plugin.StorePluginManif
 						return
 					}
 
-					// Update tails, preview, and actions to the uninstalled state.
-					if updatable := w.api.GetUpdatableResult(ctx, actionContext.ResultId); updatable != nil {
-						newTails := []plugin.QueryResultTail{}
-						updatable.Tails = &newTails
-						uninstalledPreview := w.buildPluginDetailPreview(ctx, pluginManifest, false, false)
-						updatable.Preview = &uninstalledPreview
-						newActions := []plugin.QueryResultAction{w.createInstallAction(pluginManifest)}
-						updatable.Actions = &newActions
-						w.api.UpdateResult(ctx, *updatable)
-					}
-
-					w.showUpgradeStatus(ctx, fmt.Sprintf(
+					outcome := fmt.Sprintf(
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_action_success"),
 						pluginName,
 						w.api.GetTranslation(ctx, "i18n:plugin_installer_verb_uninstall_past"),
-					), false)
+					)
+					w.refreshInstallResults(ctx, actionContext.ResultId, outcome, "")
 				})
 			}
 		},
 	}
 }
 
-func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
+// refreshInstallResults carries the outcome into the rebuilt groups because a
+// pending toolbar owner change can discard a message queued for the old query.
+func (w *WPMPlugin) refreshInstallResults(ctx context.Context, resultID, outcome, recentlyInstalledID string) {
+	w.showUpgradeStatus(ctx, outcome, false)
+	if ui := plugin.GetPluginManager().GetUI(); ui != nil {
+		ui.RefreshQuery(ctx, common.RefreshQueryOptions{
+			SelectedResultId: resultID,
+			ExpectedQueryId:  util.GetContextQueryId(ctx),
+			ContextData: common.ContextData{
+				wpmInstallOutcomeContextKey:    outcome,
+				wpmRecentlyInstalledContextKey: recentlyInstalledID,
+			},
+		})
+	}
+}
+
+// buildStorePluginResults ranks the catalog rows and attaches actions for their install status.
+func (w *WPMPlugin) buildStorePluginResults(ctx context.Context, query plugin.Query, pluginManifests []plugin.StorePluginManifest, installedById map[string]*plugin.Instance, selectedStatus string) []plugin.QueryResult {
 	var results []plugin.QueryResult
-	pluginManifests := w.searchStorePlugins(ctx, query.Search)
+	order := plugin.StorePluginSort(query.Refinements[wpmStoreSortRefinementKey])
+	sort.SliceStable(pluginManifests, func(i, j int) bool {
+		return order.Less(pluginManifests[i].SortKey(ctx), pluginManifests[j].SortKey(ctx))
+	})
 
-	// Feature addition: build one installed-plugin lookup and use it for both
-	// filtering and row decoration. The previous per-row scans were acceptable
-	// for tails/actions only, but refinement filtering needs the same status
-	// decision to stay consistent across the whole result.
-	installedById := w.buildInstalledPluginLookup()
-	selectedStatus := selectedWPMInstallStatus(query)
-
-	for _, pluginManifest := range pluginManifests {
+	for index, pluginManifest := range pluginManifests {
 		installedPlugin, installedFlag := installedById[pluginManifest.Id]
 		upgradeFlag := installedFlag && plugin.IsVersionUpgradable(installedPlugin.Metadata.Version, pluginManifest.Version)
 		if !wpmInstallStatusMatches(selectedStatus, installedFlag, upgradeFlag) {
@@ -1076,14 +1096,13 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		// build tails to indicate installation/upgrade status
 		var tails []plugin.QueryResultTail
 		if installedFlag {
-			// plugin is installed, check if upgrade is available
+			statusIcon := icons.StatusInstalled
 			if upgradeFlag {
-				// show an upgrade icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.ActionUpgrade)})
-			} else {
-				// show an installed icon
-				tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(icons.StatusInstalled)})
+				statusIcon = icons.ActionUpgrade
 			}
+			tails = append(tails, plugin.QueryResultTail{Type: plugin.QueryResultTailTypeImage, Image: icons.Get(statusIcon)})
+		} else if metric := order.MetricLabel(pluginManifest.SortKey(ctx)); metric != "" {
+			tails = append(tails, plugin.NewQueryResultTailText(metric))
 		}
 
 		// decide actions based on install/upgrade status
@@ -1098,6 +1117,11 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			} else {
 				// installed and up-to-date: provide uninstall
 				actions = []plugin.QueryResultAction{w.createUninstallAction(pluginManifest)}
+				if query.ContextData[wpmRecentlyInstalledContextKey] == pluginManifest.Id {
+					if kw := installedPlugin.PrimaryTriggerKeyword(); kw != "" {
+						actions = append(actions, w.startUsingAction(kw))
+					}
+				}
 			}
 		} else {
 			// not installed: show Install
@@ -1129,8 +1153,8 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 		pluginName := pluginManifest.GetName(ctx)
 		pluginDescription := pluginManifest.GetDescription(ctx)
 
-		results = append(results, plugin.QueryResult{
-			Id:          uuid.NewString(),
+		// The launcher orders groups and rows by score, independently of their response order.
+		result := plugin.QueryResult{
 			Title:       pluginName,
 			SubTitle:    pluginDescription,
 			Icon:        icon,
@@ -1138,7 +1162,18 @@ func (w *WPMPlugin) installCommand(ctx context.Context, query plugin.Query) []pl
 			Tails:       tails,
 			Preview:     w.buildPluginDetailPreview(ctx, pluginManifest, installedFlag, false),
 			Actions:     attachWPMMRUContext(actions, pluginManifest.Id),
-		})
+			Score:       int64(len(pluginManifests) - index),
+		}
+		if query.Command == "install" {
+			// Stable IDs keep the selected plugin in view when an operation moves it to the other group.
+			result.Id = "wpm:install:" + pluginManifest.Id
+			result.Group = "i18n:plugin_wpm_refinement_status_installed"
+			if !installedFlag {
+				result.Group = "i18n:plugin_wpm_refinement_status_not_installed"
+				result.GroupScore = 1
+			}
+		}
+		results = append(results, result)
 	}
 	return results
 }
@@ -1162,8 +1197,8 @@ func (w *WPMPlugin) updateCommand(ctx context.Context, query plugin.Query) []plu
 		return []plugin.QueryResult{{Title: "i18n:plugin_wpm_all_up_to_date", Icon: wpmIcon}}
 	}
 
-	query.Refinements = map[string]string{wpmInstallStatusRefinementKey: wpmInstallStatusRefinementUpgradable}
-	results := w.installCommand(ctx, query)
+	manifests := plugin.GetStoreManager().Search(ctx, query.Search)
+	results := w.buildStorePluginResults(ctx, query, manifests, installed, wpmInstallStatusRefinementUpgradable)
 	for i := range results {
 		for _, manifest := range upgrades {
 			if results[i].IdentityKey == manifest.Id {

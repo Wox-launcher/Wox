@@ -111,9 +111,14 @@ func fromCorePlainQuery(query common.PlainQuery) plainQuery {
 
 // RefreshQuery starts a new query identity while optionally retaining the visible selection.
 func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions) error {
+	var queryID string
 	if err := a.runOnUI("refresh query", func() {
+		if options.ExpectedQueryId != "" && options.ExpectedQueryId != a.querySession.query.QueryID {
+			return
+		}
 		selected := a.resultList.selected
 		a.beginQueryGenerationLocked()
+		queryID = a.querySession.query.QueryID
 		a.querySession.completionHint = nil
 		// Keep the visible glance through the refresh. Clearing it blanks the query accessory until results return.
 		a.glance.stopGlanceLocked(false)
@@ -134,7 +139,10 @@ func (a *App) RefreshQuery(_ context.Context, options common.RefreshQueryOptions
 	}); err != nil {
 		return err
 	}
-	return a.sendCurrentQuery()
+	if queryID == "" {
+		return nil
+	}
+	return a.sendCurrentQueryForGeneration(queryID, options.ContextData)
 }
 
 // RefreshGlance schedules a stale-query-guarded accessory refresh.

@@ -38,12 +38,14 @@ func NewStoreServer() (*httptest.Server, error) {
 				{
 					"Id": "com.wox.smoke.storetoolbar", "Name": "Store Toolbar Smoke", "Author": "Wox Smoke",
 					"Version": "1.0.1", "MinWoxVersion": "2.0.0", "Runtime": "NODEJS", "Description": "Store toolbar fixture",
-					"DownloadUrl": server.URL + "/fixture.wox", "SupportedOS": []string{"Windows", "Linux", "Darwin"},
+					"DownloadCount": 100,
+					"DownloadUrl":   server.URL + "/fixture.wox", "SupportedOS": []string{"Windows", "Linux", "Darwin"},
 				},
 				{
 					"Id": "com.wox.smoke.storefailure", "Name": "Store Failure Smoke", "Author": "Wox Smoke",
 					"Version": "1.0.0", "MinWoxVersion": "2.0.0", "Runtime": "NODEJS", "Description": "Invalid package fixture",
-					"DownloadUrl": server.URL + "/broken.wox", "SupportedOS": []string{"Windows", "Linux", "Darwin"},
+					"DownloadCount": 10,
+					"DownloadUrl":   server.URL + "/broken.wox", "SupportedOS": []string{"Windows", "Linux", "Darwin"},
 				},
 			})
 			return
