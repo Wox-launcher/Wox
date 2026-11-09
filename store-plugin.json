@@ -2260,7 +2260,7 @@
     "Id": "2bc0acfb-88c9-49d1-9acf-7d93ab315a53",
     "Name": "i18n:radio_name",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
+    "Version": "1.1.1",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:radio_description",
