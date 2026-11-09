@@ -347,6 +347,11 @@ func TestNativeBackdropGroupMatchesNativeComposition(t *testing.T) {
 				}
 				want := draw(build(false), scale)
 				got := draw(build(true), scale)
+				tolerance := 2
+				if runtime.GOOS == "darwin" && fade {
+					// CoreGraphics samples the rotated gradient differently from pixel-center interpolation.
+					tolerance = 12
+				}
 				for i := 0; i < len(got.Pix); i += 4 {
 					x, y := i/4%128, i/4/128
 					if runtime.GOOS == "darwin" {
@@ -365,7 +370,7 @@ func TestNativeBackdropGroupMatchesNativeComposition(t *testing.T) {
 					}
 					for channel := range 4 {
 						value := got.Pix[i+channel]
-						if delta := int(value) - int(want.Pix[i+channel]); delta < -2 || delta > 2 {
+						if delta := int(value) - int(want.Pix[i+channel]); delta < -tolerance || delta > tolerance {
 							t.Fatalf("scale %g opacity %g fade %t pixel %d,%d channel %d: got %d want %d", scale, opacity, fade, x, y, channel, value, want.Pix[i+channel])
 						}
 					}
