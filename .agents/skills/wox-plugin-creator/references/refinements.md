@@ -8,33 +8,33 @@ The bookmark at the end of the filters bar saves or removes the current command'
 
 Requires `MinWoxVersion` >= `2.0.4` (or `2.4.2` for single-file SDK plugins). Do not invent command syntax such as `type:file` when a refinement can express the same control.
 
-## Hotkey format (required)
+## Required hotkey
 
-Refinement hotkeys use the platform primary modifier:
+Every refinement must supply a non-empty `Hotkey` (Python `hotkey`). Prefer `Primary+Shift+<key>` to leave common `Primary+<key>` chords available for result actions.
 
-- macOS: `cmd+<key>` (for example `cmd+t`)
-- Windows and Linux: `ctrl+<key>` (for example `ctrl+t`)
+- On macOS, use a chord such as `cmd+shift+t`.
+- On Windows and Linux, use a chord such as `ctrl+shift+t`.
 
-Detect the OS at runtime and emit one of those real hotkey strings. Do not write a literal `ctrl/cmd+t` token. Wox does not parse that form.
+Detect the OS at runtime and emit the matching chord.
 
 ```typescript
-const primaryHotkey = (key: string) =>
-  (process.platform === "darwin" ? "cmd+" : "ctrl+") + key;
+const refinementHotkey = (key: string) =>
+  (process.platform === "darwin" ? "cmd+shift+" : "ctrl+shift+") + key;
 
-{ Hotkey: primaryHotkey("t") }
+{ Hotkey: refinementHotkey("t") }
 ```
 
 ```python
 import sys
 
-def primary_hotkey(key: str) -> str:
+def refinement_hotkey(key: str) -> str:
     modifier = "cmd" if sys.platform == "darwin" else "ctrl"
-    return f"{modifier}+{key}"
+    return f"{modifier}+shift+{key}"
 
-QueryRefinement(..., hotkey=primary_hotkey("t"))
+QueryRefinement(..., hotkey=refinement_hotkey("t"))
 ```
 
-Pick a mnemonic after checking [Wox built-in hotkeys](hotkeys.md) and the actions shown alongside the refinement. The `t` examples illustrate platform formatting; they are not universally conflict-free defaults. Leave `Hotkey` empty when no suitable binding is available.
+Pick a mnemonic after checking Wox built-in hotkeys and the actions shown alongside the refinement. If the chord conflicts, choose another one. [Wox built-in hotkeys](hotkeys.md)
 
 ### Reserved shortcuts
 
@@ -50,8 +50,8 @@ Selected values are opaque strings keyed by refinement `Id`. Multi-select values
 ## Node.js example
 
 ```typescript
-const primaryHotkey = (key: string) =>
-  (process.platform === "darwin" ? "cmd+" : "ctrl+") + key;
+const refinementHotkey = (key: string) =>
+  (process.platform === "darwin" ? "cmd+shift+" : "ctrl+shift+") + key;
 
 async query(ctx, query): Promise<QueryResponse> {
   const selectedType = query.Refinements?.["item_type"] ?? "all";
@@ -62,7 +62,7 @@ async query(ctx, query): Promise<QueryResponse> {
         Id: "item_type",
         Title: "Type",
         Type: "singleSelect",
-        Hotkey: primaryHotkey("t"),
+        Hotkey: refinementHotkey("t"),
         DefaultValue: ["all"],
         Options: [
           { Value: "all", Title: "All" },
@@ -81,16 +81,16 @@ async query(ctx, query): Promise<QueryResponse> {
 import sys
 from wox_plugin import QueryRefinement, QueryRefinementOption, QueryRefinementType, QueryResponse
 
-def primary_hotkey(key: str) -> str:
+def refinement_hotkey(key: str) -> str:
     modifier = "cmd" if sys.platform == "darwin" else "ctrl"
-    return f"{modifier}+{key}"
+    return f"{modifier}+shift+{key}"
 
 def build_type_refinement() -> QueryRefinement:
     return QueryRefinement(
         id="item_type",
         title="Type",
         type=QueryRefinementType.SINGLE_SELECT,
-        hotkey=primary_hotkey("t"),
+        hotkey=refinement_hotkey("t"),
         default_value=["all"],
         options=[
             QueryRefinementOption(value="all", title="All"),

@@ -4,11 +4,11 @@ Read this before assigning `QueryResponse.Refinements[].Hotkey` or `ResultAction
 
 ## Choosing a binding
 
-- Use the platform primary modifier for refinements and prefer it for action defaults: `ctrl` on Windows/Linux, `cmd` on macOS. Emit a real chord such as `ctrl+t` or `cmd+t`, never `ctrl/cmd+t`.
+- Give every refinement a non-empty hotkey. Prefer `Primary+Shift+<key>` for refinements and `Primary+<key>` for action defaults. For example, use `ctrl+shift+t` on Windows and Linux or `cmd+shift+t` on macOS for a type filter.
 - Always avoid the two window commands below. Prefer avoiding launcher and editor bindings too, and check the preview or form types the plugin actually uses. A binding that works in the query box can fail when a text field, action filter, or WebView has focus.
 - Check all refinements, selected-result actions, and toolbar actions that can appear together. Do not give a refinement and an action the same chord; dispatch order can make one unreachable. User-configured Action Panel and query hotkeys can also collide, so no default is guaranteed free on every installation.
 - Choose a mnemonic only after checking its context. Additional modifiers may help, but several built-in handlers check only whether the primary modifier is present, so `ctrl+shift+f` is not a universally safe replacement for `ctrl+f`.
-- Leave `Hotkey` empty when there is no suitable binding. Refinements remain available in the filter panel and actions remain available in the Action Panel. Use `IsDefault` for the ordinary Enter action. An intentional conventional alternate action can use primary+Enter in a plain result list; do not reuse it for refinements or expect it to bypass an active form's submit handler.
+- Choose a different chord when a refinement shortcut conflicts. Result actions with no suitable shortcut remain accessible from the Action Panel. Use `IsDefault` for the ordinary Enter action. An intentional conventional alternate action can use primary+Enter in a plain result list; do not reuse it for refinements or expect it to bypass an active form's submit handler.
 - Verify the plugin with focus in the query editor, the open Action Panel, its refinement panel, and any preview/form it creates. Check both platform strings and preserve typing, clipboard, undo/redo, Tab navigation, and Escape dismissal.
 
 ## Window and launcher commands
@@ -24,6 +24,7 @@ Read this before assigning `QueryResponse.Refinements[].Hotkey` or `ResultAction
 | Primary+Shift+`K` | Toggle About panel | Launcher. |
 | Primary+`P` | Toggle selected-result preview | Launcher when a preview is available; Ctrl+P navigates upward when Action Panel is open. |
 | Primary+`F` | Toggle refinements / filters | Launcher when refinements are available; also opens search in Settings. |
+| Primary+Shift+`D` | Save or remove refinement defaults | Open filters bar when defaults are available. |
 | Primary+`U` | Open unread Attention items | Launcher when unread items are available. |
 | Ctrl+`N` / Ctrl+`P` | Next / previous action | Open Action Panel on all platforms, including macOS (these use Control, not Command). |
 | Hold Alt, then `1`–`9` | Execute a numbered visible result | Windows/Linux quick select. |

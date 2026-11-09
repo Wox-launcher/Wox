@@ -537,6 +537,11 @@ export interface QueryRefinement {
   Type: QueryRefinementType
   Options: QueryRefinementOption[]
   DefaultValue?: string[]
+  /**
+   * Required non-empty shortcut for this refinement. Prefer `cmd+shift+<key>`
+   * on macOS or `ctrl+shift+<key>` on Windows and Linux to reduce conflicts
+   * with result actions.
+   */
   Hotkey: string
   Persist?: boolean
 }
