@@ -21,6 +21,7 @@ import (
 // Evidence: the keyword retains its trailing space, both configured results appear, and deletion removes them.
 func Test001SnippetsSettingsQuery(t *testing.T) {
 	const title = "Snippets smoke address"
+	const addressKeyword = ";addr "
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
 		openSnippetSettings(t, ctx, client)
 		if snapshot, err := client.Snapshot(ctx); err != nil {
@@ -40,7 +41,7 @@ func Test001SnippetsSettingsQuery(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("wait for snippet editor: %v", err)
 		}
-		for id, value := range map[string]string{"form-table-row-field-0": title, "form-table-row-field-1": ";addr ", "form-table-row-field-2": "Example address"} {
+		for id, value := range map[string]string{"form-table-row-field-0": title, "form-table-row-field-1": addressKeyword, "form-table-row-field-2": "Example address"} {
 			if err := client.Perform(ctx, id, woxui.AccessibilityActionSetValue, value); err != nil {
 				t.Fatalf("set %s: %v", id, err)
 			}
@@ -137,21 +138,21 @@ func Test001SnippetsSettingsQuery(t *testing.T) {
 			for index := range 2 {
 				name, hasName := automationdriver.Find(snapshot, fmt.Sprintf("plugin-settings-field-2-row-%d-cell-0", index))
 				keyword, hasKeyword := automationdriver.Find(snapshot, fmt.Sprintf("plugin-settings-field-2-row-%d-cell-1", index))
-				if hasName && hasKeyword && name.Value == title && keyword.Value == `";addr "` {
+				if hasName && hasKeyword && name.Value == title && keyword.Value == addressKeyword {
 					addressRow = index
 					return true
 				}
 			}
 			return false
 		}); err != nil {
-			t.Fatalf("verify visible keyword whitespace: %v", err)
+			t.Fatalf("verify snippet table preserves keyword whitespace: %v", err)
 		}
 		if err := client.Perform(ctx, fmt.Sprintf("plugin-settings-field-2-row-%d-edit", addressRow), woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			field, found := automationdriver.Find(snapshot, "form-table-row-field-1")
-			return found && field.Value == ";addr "
+			return found && field.Value == addressKeyword
 		}); err != nil {
 			t.Fatalf("verify trailing keyword space: %v", err)
 		}

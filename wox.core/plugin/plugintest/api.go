@@ -145,6 +145,14 @@ func (e StubAPI) GetThemeColors(ctx context.Context, option plugin.GetThemeColor
 	return plugin.GetThemeColorsResult{}
 }
 
+func (e StubAPI) GetOSPermissionStatus(ctx context.Context, option plugin.OSPermissionOption) plugin.OSPermissionResult {
+	return plugin.OSPermissionResult{}
+}
+
+func (e StubAPI) RequestOSPermission(ctx context.Context, option plugin.OSPermissionOption) plugin.OSPermissionResult {
+	return plugin.OSPermissionResult{}
+}
+
 func (e StubAPI) RegisterTriggerKeyword(context.Context, plugin.RegisterTriggerKeywordOption) plugin.RegisterTriggerKeywordResult {
 	return plugin.RegisterTriggerKeywordResult{Success: true}
 }

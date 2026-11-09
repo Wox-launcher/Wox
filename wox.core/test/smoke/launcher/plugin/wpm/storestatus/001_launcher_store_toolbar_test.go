@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,8 @@ import (
 func Test001LauncherStoreToolbar(t *testing.T) {
 	smoke.CaseWithTimeout(t, 2*time.Minute, func(ctx context.Context, client *automationdriver.Client) {
 		const name, id = "Store Toolbar Smoke", "com.wox.smoke.storetoolbar"
+		const otherName = "Store Failure Smoke"
+		const storeQuery = "wpm install Store"
 		userDir := os.Getenv(automationdriver.SharedUserDataDirectoryEnvironment)
 		if userDir == "" || !filepath.IsAbs(userDir) {
 			t.Fatal("isolated smoke user data directory is not configured")
@@ -106,6 +109,22 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 			}
 			smoke.AssertNoDiagnostics(t, snapshot)
 		}
+		waitStoreOrder := func(firstName, secondName string) {
+			t.Helper()
+			_, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+				firstID, firstFound := smoke.FindLauncherResult(snapshot, firstName)
+				secondID, secondFound := smoke.FindLauncherResult(snapshot, secondName)
+				if !firstFound || !secondFound {
+					return false
+				}
+				first, _ := automationdriver.Find(snapshot, firstID)
+				second, _ := automationdriver.Find(snapshot, secondID)
+				return first.Bounds.Y < second.Bounds.Y
+			})
+			if err != nil {
+				t.Fatalf("wait for %q above %q: %v", firstName, secondName, err)
+			}
+		}
 		packagePath := filepath.Join(t.TempDir(), "older.wox")
 		file, err := os.Create(packagePath)
 		if err != nil {
@@ -174,9 +193,33 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 			}
 		}
 		smoke.ShowLauncher(t, ctx, client)
-		waitResult("wpm install "+name, name)
+		waitResult(storeQuery, name)
+		waitStoreOrder(name, otherName)
+		primary := woxui.KeyModifierControl
+		if runtime.GOOS == "darwin" {
+			primary = woxui.KeyModifierMeta
+		}
+		if err := client.PressKey(ctx, woxui.Key("f"), primary); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.PressKey(ctx, woxui.Key("s"), primary|woxui.KeyModifierShift); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
+			sortGroup, found := automationdriver.Find(snapshot, "refinement-group-wpm_store_sort")
+			return found && sortGroup.Expanded && sortGroup.Description != ""
+		}); err != nil {
+			t.Fatalf("open the WPM sort picker with its shortcut: %v", err)
+		}
+		if err := client.PressKey(ctx, woxui.KeyEscape, 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.PressKey(ctx, woxui.Key("f"), primary); err != nil {
+			t.Fatal(err)
+		}
 		activate("plugin_wpm_install")
 		waitOutcome("plugin_installer_verb_install_past", "1.0.1", true)
+		waitStoreOrder(otherName, name)
 		installOlder()
 		smoke.ShowLauncher(t, ctx, client)
 		waitResult("wpm install "+name, name)
@@ -187,8 +230,9 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 		waitResult("storetoolbarsmoke", "storetoolbarsmoke")
 		activate("plugin_wpm_upgrade")
 		waitOutcome("plugin_installer_verb_upgrade_past", "1.0.1", true)
-		waitResult("wpm uninstall "+name, name)
+		waitResult(storeQuery, name)
 		activate("plugin_wpm_uninstall")
 		waitOutcome("plugin_installer_verb_uninstall_past", "1.0.1", false)
+		waitStoreOrder(name, otherName)
 	})
 }

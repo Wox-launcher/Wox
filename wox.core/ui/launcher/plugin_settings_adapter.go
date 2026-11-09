@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 	"wox/common/icons"
 	"wox/network"
 
@@ -106,19 +105,8 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
 		if plugins.PluginsStore {
-			switch plugins.PluginFilters.storeSort {
-			case pluginStoreSortStars:
-				if plugin.StarCount != nil {
-					status += fmt.Sprintf("  ★ %d", *plugin.StarCount)
-				}
-			case pluginStoreSortDefault, pluginStoreSortDownloads:
-				if plugin.DownloadCount != nil {
-					status += fmt.Sprintf("  ↓ %d", *plugin.DownloadCount)
-				}
-			case pluginStoreSortUpdated:
-				if updated, err := time.Parse("2006-01-02 15:04:05", plugin.DateUpdated); err == nil {
-					status += "  " + updated.Format("2006-01-02")
-				}
+			if metric := plugins.PluginFilters.storeSort.MetricLabel(plugin.storeSortKey()); metric != "" {
+				status += "  " + metric
 			}
 		}
 		if plugin.IsUpgradable {
@@ -864,7 +852,7 @@ func (c *pluginSettingsController) pluginFilterChoices(id string) []settingChoic
 	all := settingChoice{value: pluginFilterAll, label: c.language.translate("i18n:ui_all")}
 	switch id {
 	case "sort":
-		return []settingChoice{{value: pluginFilterAll, label: c.language.translate("i18n:ui_plugin_store_sort_downloads")}, {value: string(pluginStoreSortName), label: c.language.translate("i18n:ui_plugin_store_sort_default")}, {value: string(pluginStoreSortStars), label: c.language.translate("i18n:ui_plugin_store_sort_stars")}, {value: string(pluginStoreSortUpdated), label: c.language.translate("i18n:ui_plugin_store_sort_updated")}}
+		return []settingChoice{{value: pluginFilterAll, label: c.language.translate("i18n:ui_plugin_store_sort_downloads")}, {value: string(woxplugin.StorePluginSortName), label: c.language.translate("i18n:ui_plugin_store_sort_default")}, {value: string(woxplugin.StorePluginSortStars), label: c.language.translate("i18n:ui_plugin_store_sort_stars")}, {value: string(woxplugin.StorePluginSortUpdated), label: c.language.translate("i18n:ui_plugin_store_sort_updated")}}
 	case "enabled":
 		return []settingChoice{all, {value: pluginFilterEnabled, label: c.language.translate("i18n:ui_plugin_filter_enabled")}, {value: pluginFilterDisabled, label: c.language.translate("i18n:ui_plugin_filter_disabled")}}
 	case "upgrade":

@@ -8,13 +8,19 @@ import (
 	"wox/i18n"
 	"wox/util"
 	"wox/util/notifier"
+	"wox/util/overlay"
 )
 
 // prepareToast resolves local icons and translates the optional action without blocking on remote images.
 func prepareToast(ctx context.Context, msg common.ToastMsg) notifier.Toast {
 	var icon image.Image
 	if parsed, err := common.ParseWoxImage(msg.Icon); err == nil {
-		icon, _ = parsed.ToImageWithoutRemoteFetch()
+		decoded, decodeErr := parsed.ToImageWithOptions(ctx, common.WoxImageRenderOptions{LocalOnly: true, Dark: !overlay.CurrentThemeChrome().Light})
+		if decodeErr != nil {
+			util.GetLogger().Warn(ctx, "failed to load system toast icon: "+decodeErr.Error())
+		} else {
+			icon = decoded
+		}
 	}
 	toast := notifier.Toast{Icon: icon, Message: msg.Text, DisplaySeconds: msg.DisplaySeconds}
 	if msg.Action != nil && msg.Action.Action != nil {

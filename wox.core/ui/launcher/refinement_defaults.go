@@ -13,9 +13,28 @@ import (
 )
 
 type refinementDefaultState struct {
-	scope   contract.RefinementScope
-	queryID string
-	saved   bool
+	scope       contract.RefinementScope
+	queryID     string
+	savedValues map[string]string
+}
+
+// matches compares selected values, allowing different multi-select order and omitted empty groups.
+func (s refinementDefaultState) matches(values map[string]string) bool {
+	if s.savedValues == nil {
+		return false
+	}
+	for id, saved := range s.savedValues {
+		current := values[id]
+		if saved != current && !sameStringSet(splitRefinementValues(saved), splitRefinementValues(current)) {
+			return false
+		}
+	}
+	for id, current := range values {
+		if _, saved := s.savedValues[id]; !saved && current != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func refinementDefaultHotkey() string { return primaryHotkey("shift+d") }
@@ -33,7 +52,7 @@ func (a *App) applyRefinementDefaults(queryID string, context *queryContext, ref
 		return false
 	}
 	if state.scope != incoming.Scope {
-		*state = refinementDefaultState{scope: incoming.Scope, saved: incoming.Saved}
+		*state = refinementDefaultState{scope: incoming.Scope, savedValues: incoming.SavedValues}
 	}
 	state.queryID = queryID
 	if incoming.AppliedValues == nil {
@@ -97,16 +116,15 @@ func (a *App) onRefinementDefaultKey(event woxui.KeyEvent) bool {
 	return true
 }
 
-// toggleRefinementDefault saves a snapshot or removes the existing default without changing the active query.
+// toggleRefinementDefault removes a matching default or replaces it with the current selections.
 func (a *App) toggleRefinementDefault() {
 	service, ok := a.services.(contract.RefinementDefaultServices)
 	if !ok || !a.canToggleRefinementDefault() || a.resultList.refinementDefaultBusy {
 		return
 	}
 	state := a.resultList.refinementDefault
-	saving := !state.saved
 	var values map[string]string
-	if saving {
+	if !state.matches(a.querySession.query.QueryRefinements) {
 		values = make(map[string]string, len(a.querySession.query.QueryRefinements))
 		maps.Copy(values, a.querySession.query.QueryRefinements)
 	}
@@ -120,7 +138,7 @@ func (a *App) toggleRefinementDefault() {
 		if dispatchErr := a.runOnUI("finish updating refinement default", func() {
 			a.resultList.refinementDefaultBusy = false
 			if err == nil && a.resultList.refinementDefault.scope == state.scope {
-				a.resultList.refinementDefault.saved = saving
+				a.resultList.refinementDefault.savedValues = values
 			}
 			if err != nil {
 				util.GetLogger().Warn(a.lifecycleCtx, fmt.Sprintf("update refinement default: %v", err))

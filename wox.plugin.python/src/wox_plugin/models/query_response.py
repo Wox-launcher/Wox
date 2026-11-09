@@ -52,7 +52,12 @@ class QueryRefinementOption:
 
 @dataclass
 class QueryRefinement:
-    """Query-scoped UI control returned alongside results."""
+    """Query-scoped UI control returned alongside results.
+
+    Supply a non-empty ``hotkey``. Prefer ``cmd+shift+<key>`` on macOS or
+    ``ctrl+shift+<key>`` on Windows and Linux to reduce conflicts with result
+    actions.
+    """
 
     id: str
     title: str

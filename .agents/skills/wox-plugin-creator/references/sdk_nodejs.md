@@ -58,12 +58,12 @@ interface QueryRefinement {
   Type: "singleSelect" | "multiSelect" | "toggle" | "sort";
   Options: QueryRefinementOption[];
   DefaultValue?: string[];
-  Hotkey: string; // cmd+t on macOS, ctrl+t on Windows/Linux
+  Hotkey: string; // e.g. cmd+shift+t on macOS, ctrl+shift+t on Windows/Linux
   Persist?: boolean;
 }
 ```
 
-When assigned, `Hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `process.platform === "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token. Check [built-in hotkeys and collisions](hotkeys.md) before choosing a refinement binding; an empty string leaves it unbound.
+Every refinement requires a non-empty `Hotkey`. Prefer `Primary+Shift+<key>` and use `process.platform === "darwin"` to choose `cmd` on macOS or `ctrl` on Windows and Linux. Check for conflicts before choosing a chord. [Built-in hotkeys and collisions](hotkeys.md)
 
 ### Result
 

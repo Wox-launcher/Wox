@@ -36,6 +36,8 @@ from wox_plugin import (
     ScreenshotResult,
     GetThemeColorsOption,
     GetThemeColorsResult,
+    OSPermissionOption,
+    OSPermissionResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
     DragOutEvent,
@@ -689,3 +691,11 @@ class PluginAPI(PublicAPI):
         if not isinstance(response, dict):
             return GetThemeColorsResult()
         return GetThemeColorsResult.from_dict(response)
+
+    async def get_os_permission_status(self, ctx: Context, option: OSPermissionOption) -> OSPermissionResult:
+        response = await self.invoke_method(ctx, "GetOSPermissionStatus", {"option": json.dumps(option.to_dict())})
+        return OSPermissionResult(status=response["Status"])
+
+    async def request_os_permission(self, ctx: Context, option: OSPermissionOption) -> OSPermissionResult:
+        response = await self.invoke_method(ctx, "RequestOSPermission", {"option": json.dumps(option.to_dict())})
+        return OSPermissionResult(status=response["Status"])

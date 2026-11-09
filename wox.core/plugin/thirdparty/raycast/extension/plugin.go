@@ -15,6 +15,7 @@ import (
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/hotkey"
 )
 
 // extensionPlugin exposes command discovery through ordinary Wox results and retains one command per window.
@@ -354,12 +355,37 @@ func (p *extensionPlugin) bind(s *commandSession, source plugin.QueryResponse) p
 		}
 	}
 	for i := range response.Refinements {
-		for j := range response.Refinements[i].Options {
-			option := &response.Refinements[i].Options[j]
+		refinement := &response.Refinements[i]
+		if refinement.Id == "raycast.dropdown" {
+			refinement.Hotkey = dropdownHotkey(response.Results)
+		}
+		for j := range refinement.Options {
+			option := &refinement.Options[j]
 			option.Icon = mappedIcon(option.Icon, false)
 		}
 	}
 	return response
+}
+
+// dropdownHotkey keeps imported result actions reachable alongside the filter.
+func dropdownHotkey(results []plugin.QueryResult) string {
+	used := make(map[hotkey.Combo]bool)
+	for _, result := range results {
+		for _, action := range result.Actions {
+			if action.Hotkey != "" {
+				if combo, err := hotkey.ParseCombo(action.Hotkey); err == nil {
+					used[combo] = true
+				}
+			}
+		}
+	}
+	for _, key := range "tgmresilbn" {
+		shortcut := util.PrimaryHotkey("shift+" + string(key))
+		if combo, err := hotkey.ParseCombo(shortcut); err == nil && !used[combo] {
+			return shortcut
+		}
+	}
+	return ""
 }
 
 func mappedIcon(image common.WoxImage, action bool) common.WoxImage {

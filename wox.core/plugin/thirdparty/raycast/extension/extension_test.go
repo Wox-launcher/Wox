@@ -19,6 +19,20 @@ import (
 	"wox/util"
 )
 
+// TestBindDropdownHotkey gives imported filters a shortcut without shadowing their actions.
+func TestBindDropdownHotkey(t *testing.T) {
+	p := &extensionPlugin{}
+	session := &commandSession{}
+	source := plugin.QueryResponse{Refinements: []plugin.QueryRefinement{{Id: "raycast.dropdown"}}}
+	if got := p.bind(session, source).Refinements[0].Hotkey; got != util.PrimaryHotkey("shift+t") {
+		t.Fatalf("dropdown shortcut = %q", got)
+	}
+	source.Results = []plugin.QueryResult{{Actions: []plugin.QueryResultAction{{Hotkey: "Shift+" + util.PrimaryHotkey("T")}}}}
+	if got := p.bind(session, source).Refinements[0].Hotkey; got != util.PrimaryHotkey("shift+g") {
+		t.Fatalf("dropdown shortcut with a conflicting action = %q", got)
+	}
+}
+
 // fixture writes a prebuilt CommonJS command, matching the local import contract.
 func fixture(t *testing.T, source string) string {
 	t.Helper()

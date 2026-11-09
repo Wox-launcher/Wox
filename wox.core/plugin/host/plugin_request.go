@@ -117,6 +117,8 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"Screenshot":               (*WebsocketHost).handleScreenshot,
 	"GetCacheFolder":           (*WebsocketHost).handleGetCacheFolder,
 	"GetThemeColors":           (*WebsocketHost).handleGetThemeColors,
+	"GetOSPermissionStatus":    (*WebsocketHost).handleGetOSPermissionStatus,
+	"RequestOSPermission":      (*WebsocketHost).handleRequestOSPermission,
 	"Notify":                   (*WebsocketHost).handleNotify,
 	"ShowToastMsg":             (*WebsocketHost).handleShowToastMsg,
 	"PushAttention":            (*WebsocketHost).handlePushAttention,

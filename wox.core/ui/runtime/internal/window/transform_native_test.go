@@ -96,6 +96,35 @@ func TestNativeTransformLayerBounds(t *testing.T) {
 	}
 }
 
+// TestNativeHorizontalEdgeFade keeps the child upright and preserves the backdrop under the fade.
+func TestNativeHorizontalEdgeFade(t *testing.T) {
+	_, draw := nativeTransformTarget(t, 160, 96)
+	for _, scale := range []float32{1, 1.25, 1.5, 2} {
+		d := &DisplayList{}
+		d.Clear(Color{B: 255, A: 128})
+		d.PushTransform(TranslationTransform(18, 18))
+		bounds := Rect{X: -4, Y: -2, Width: 48, Height: 20}
+		d.PushClipRect(bounds)
+		d.BeginHorizontalEdgeFade(bounds, 0, 16)
+		d.FillRect(bounds, Color{R: 255, A: 255})
+		d.EndHorizontalEdgeFade(bounds, 0, 16)
+		d.PopClipRect()
+		d.PopTransform()
+		d.FillRect(Rect{X: 56, Y: 23, Width: 4, Height: 4}, Color{G: 255, A: 255})
+		pixels := draw(d, scale)
+		checkNativeTransformPixel(t, pixels, scale, 23, 21, color.RGBA{R: 255, A: 255})
+		checkNativeTransformPixel(t, pixels, scale, 64, 21, color.RGBA{B: 128, A: 128})
+		checkNativeTransformPixel(t, pixels, scale, 57, 24, color.RGBA{G: 255, A: 255})
+		for _, y := range []float32{21, 31} {
+			mid := pixels.RGBAAt(int(54*scale), int(y*scale))
+			tail := pixels.RGBAAt(int(60*scale), int(y*scale))
+			if mid.R < 110 || mid.R > 145 || mid.B < 55 || mid.B > 75 || tail.R >= mid.R || tail.B <= mid.B {
+				t.Fatalf("scale %g row %g: midpoint %+v and tail %+v should fade toward the backdrop", scale, y, mid, tail)
+			}
+		}
+	}
+}
+
 // TestNativeTransformDamageAndReset compares retained replay to a full native frame and rejects invalid matrices.
 func TestNativeTransformDamageAndReset(t *testing.T) {
 	r, draw := nativeTransformTarget(t, 128, 128)
@@ -347,6 +376,11 @@ func TestNativeBackdropGroupMatchesNativeComposition(t *testing.T) {
 				}
 				want := draw(build(false), scale)
 				got := draw(build(true), scale)
+				tolerance := 2
+				if runtime.GOOS == "darwin" && fade {
+					// CoreGraphics samples the rotated gradient differently from pixel-center interpolation.
+					tolerance = 12
+				}
 				for i := 0; i < len(got.Pix); i += 4 {
 					x, y := i/4%128, i/4/128
 					if runtime.GOOS == "darwin" {
@@ -365,7 +399,7 @@ func TestNativeBackdropGroupMatchesNativeComposition(t *testing.T) {
 					}
 					for channel := range 4 {
 						value := got.Pix[i+channel]
-						if delta := int(value) - int(want.Pix[i+channel]); delta < -2 || delta > 2 {
+						if delta := int(value) - int(want.Pix[i+channel]); delta < -tolerance || delta > tolerance {
 							t.Fatalf("scale %g opacity %g fade %t pixel %d,%d channel %d: got %d want %d", scale, opacity, fade, x, y, channel, value, want.Pix[i+channel])
 						}
 					}

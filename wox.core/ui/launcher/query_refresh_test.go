@@ -2,10 +2,42 @@ package launcher
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"wox/common"
 )
+
+// TestRefreshScopesTemporaryContextData keeps a delayed action from refreshing another query.
+func TestRefreshScopesTemporaryContextData(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	query := newInputQuery("wpm install")
+	query.ContextData = map[string]string{"existing": "value"}
+	app := newSendQueryTestApp(services, query, showAppParams{})
+	t.Cleanup(app.querySession.resetQueryLoadingLocked)
+	options := common.RefreshQueryOptions{
+		ExpectedQueryId: "stale", ContextData: common.ContextData{"installed": "plugin"},
+	}
+	if err := app.RefreshQuery(context.Background(), options); err != nil {
+		t.Fatal(err)
+	}
+	if services.startedQuery.QueryId != "" || app.querySession.query.QueryID != query.QueryID {
+		t.Fatal("stale refresh started a new query")
+	}
+	options.ExpectedQueryId = query.QueryID
+	if err := app.RefreshQuery(context.Background(), options); err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(services.startedQuery.ContextData, common.ContextData{"existing": "value", "installed": "plugin"}) {
+		t.Fatalf("refresh context = %v", services.startedQuery.ContextData)
+	}
+	if err := app.sendCurrentQuery(); err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(services.startedQuery.ContextData, common.ContextData{"existing": "value"}) {
+		t.Fatalf("normal query retained one-shot context: %v", services.startedQuery.ContextData)
+	}
+}
 
 // TestRefreshPreservesSelectedIndexThroughCompletion covers the final snapshot after an index-preserving refresh.
 func TestRefreshPreservesSelectedIndexThroughCompletion(t *testing.T) {

@@ -17,6 +17,8 @@ import {
   ScreenshotResult,
   GetThemeColorsOption,
   GetThemeColorsResult,
+  OSPermissionOption,
+  OSPermissionResult,
   RegisterTriggerKeywordOption,
   RegisterTriggerKeywordResult,
   DragOutEvent,
@@ -606,5 +608,13 @@ export class PluginAPI implements PublicAPI {
     return (await this.invokeMethod(ctx, "GetThemeColors", {
       option: JSON.stringify(option ?? {})
     })) as GetThemeColorsResult
+  }
+
+  async GetOSPermissionStatus(ctx: Context, option: OSPermissionOption): Promise<OSPermissionResult> {
+    return (await this.invokeMethod(ctx, "GetOSPermissionStatus", { option: JSON.stringify(option) })) as OSPermissionResult
+  }
+
+  async RequestOSPermission(ctx: Context, option: OSPermissionOption): Promise<OSPermissionResult> {
+    return (await this.invokeMethod(ctx, "RequestOSPermission", { option: JSON.stringify(option) })) as OSPermissionResult
   }
 }

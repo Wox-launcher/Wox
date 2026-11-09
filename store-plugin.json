@@ -2132,7 +2132,7 @@
     "Id": "eaadbcea-c907-4efe-b09b-dfc56e1dc758",
     "Name": "i18n:plugin_dictation_plugin_name",
     "Author": "Wox Launcher",
-    "Version": "1.1.0",
+    "Version": "1.1.1",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_dictation_plugin_description",
@@ -2174,7 +2174,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-03 17:00:42",
-    "DateUpdated": "2026-11-06 13:13:46",
+    "DateUpdated": "2026-11-09 05:30:18",
     "StarCount": 0,
     "DownloadCount": 22
   },
@@ -2260,7 +2260,7 @@
     "Id": "2bc0acfb-88c9-49d1-9acf-7d93ab315a53",
     "Name": "i18n:radio_name",
     "Author": "qianlifeng",
-    "Version": "1.0.0",
+    "Version": "1.1.1",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:radio_description",

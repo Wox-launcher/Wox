@@ -1,3 +1,3 @@
 package updater
 
-const CURRENT_VERSION = "2.4.9"
+const CURRENT_VERSION = "2.5.0"

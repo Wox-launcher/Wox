@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
+	"wox/util"
 )
 
 const (
@@ -67,8 +69,12 @@ func (a *App) refinementViewProps(snapshot viewSnapshot, width, height, imageSca
 		OnTooltip: a.setRefinementTooltip,
 		PickerID:  a.resultList.refinementPicker.id,
 	}
+	if len(props.SummaryLabels) > 0 {
+		props.ClearLabel = a.language.translate("i18n:ui_query_refinement_clear")
+		props.OnClear = a.clearRefinementSelections
+	}
 	if width > 0 && a.resultList.refinementDefault.scope.PluginID != "" {
-		saved := a.resultList.refinementDefault.saved
+		saved := a.resultList.refinementDefault.matches(snapshot.refinementValues)
 		label := "i18n:ui_query_refinement_default_save"
 		if saved {
 			label = "i18n:ui_query_refinement_default_remove"
@@ -427,7 +433,6 @@ func (a *App) selectRefinementOption(refinementID, value string) {
 
 // updateRefinementSelection routes keyboard and pointer changes through the same query refresh path.
 func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []string) {
-	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.querySession.query.QueryText)
 	multiSelect := refinement.Type == plugin.QueryRefinementTypeMultiSelect
 	if !multiSelect || len(selected) > 0 {
 		selected = normalizeRefinementValues(*refinement, selected)
@@ -440,6 +445,26 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 		}
 		a.querySession.query.QueryRefinements[refinement.ID] = strings.Join(selected, ",")
 	}
+	a.refreshRefinementResults()
+}
+
+// clearRefinementSelections restores the same plugin defaults the summary treats as inactive.
+func (a *App) clearRefinementSelections() {
+	values := make(map[string]string, len(a.resultList.refinements))
+	for _, refinement := range a.resultList.refinements {
+		if len(refinement.DefaultValue) > 0 {
+			values[refinement.ID] = strings.Join(refinement.DefaultValue, ",")
+		}
+	}
+	a.querySession.query.QueryRefinements = values
+	a.dismissRefinementPicker()
+	a.resultList.refinementFocusPending = launcherview.LauncherQueryInputKey
+	a.refreshRefinementResults()
+}
+
+// refreshRefinementResults starts one query after the entire selection change is applied.
+func (a *App) refreshRefinementResults() {
+	preservePluginLayout := a.shouldPreservePluginLayoutLocked(a.querySession.query.QueryText)
 	a.resultList.refinementsSectionRevision++
 	a.beginQueryGenerationLocked()
 	a.querySession.completionHint = nil
@@ -451,7 +476,7 @@ func (a *App) updateRefinementSelection(refinement *queryRefinement, selected []
 	a.webView.clearWebViewPreviewModeLocked()
 	a.previews.reconcileSelectedPreview()
 	if err := a.sendCurrentQuery(); err != nil {
-		log.Printf("send query after refinement change: %v", err)
+		util.GetLogger().Warn(a.lifecycleCtx, fmt.Sprintf("send query after refinement change: %v", err))
 	}
 	if a.window != nil {
 		_ = a.window.Invalidate()

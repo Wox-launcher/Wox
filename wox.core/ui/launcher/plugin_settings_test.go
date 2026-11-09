@@ -229,7 +229,7 @@ func TestResetPluginFiltersClearsExclusiveDropdowns(t *testing.T) {
 		enabledStatus: pluginFilterDisabled,
 		pluginType:    pluginFilterThirdParty,
 		runtime:       pluginFilterRuntimePython,
-		storeSort:     pluginStoreSortStars,
+		storeSort:     plugin.StorePluginSortStars,
 	})
 	app.pluginSettings.resetPluginFilters()
 	if got := app.pluginSettings.Filters(); got != (pluginFilterState{}) {
@@ -276,7 +276,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 		{index: 3, plugin: pluginSettingsPlugin{ID: "flow-a", Name: "Alpine", Store: "FLOW"}},
 		{index: 4, plugin: pluginSettingsPlugin{ID: "wox-a", Name: "Alpha"}},
 	}
-	got := groupStorePlugins(filtered, pluginStoreSortDefault)
+	got := groupStorePlugins(filtered, plugin.StorePluginSortDefault)
 	if len(got) != 3 || got[0].ID != plugin.OfficialPluginStoreID || got[1].ID != "acme" || got[2].ID != "flow" {
 		t.Fatalf("sections = %#v", got)
 	}
@@ -286,7 +286,7 @@ func TestGroupStorePluginsPutsWoxFirst(t *testing.T) {
 	if ids := installedSectionPluginIDs(installedPluginSection{Plugins: got[2].Plugins}); !reflect.DeepEqual(ids, []string{"flow-a", "flow-b"}) {
 		t.Fatalf("flow order = %v", ids)
 	}
-	if got := groupStorePlugins(nil, pluginStoreSortDefault); len(got) != 0 {
+	if got := groupStorePlugins(nil, plugin.StorePluginSortDefault); len(got) != 0 {
 		t.Fatalf("empty filter = %#v", got)
 	}
 	if !pluginCatalogLess(pluginSettingsPlugin{Name: "Zebra", Store: "wox"}, pluginSettingsPlugin{Name: "Alpha", Store: "flow"}, true) {
@@ -1487,14 +1487,14 @@ func TestStorePluginStatisticsSorting(t *testing.T) {
 		{ID: "other", Name: "D", Store: "other", StarCount: &ten},
 	}
 	for _, tc := range []struct {
-		order pluginStoreSort
+		order plugin.StorePluginSort
 		want  []string
 	}{
-		{pluginStoreSortDefault, []string{"zero", "high", "unknown", "other"}},
-		{pluginStoreSortName, []string{"unknown", "zero", "high", "other"}},
-		{pluginStoreSortStars, []string{"high", "zero", "unknown", "other"}},
-		{pluginStoreSortDownloads, []string{"zero", "high", "unknown", "other"}},
-		{pluginStoreSortUpdated, []string{"high", "zero", "unknown", "other"}},
+		{plugin.StorePluginSortDefault, []string{"zero", "high", "unknown", "other"}},
+		{plugin.StorePluginSortName, []string{"unknown", "zero", "high", "other"}},
+		{plugin.StorePluginSortStars, []string{"high", "zero", "unknown", "other"}},
+		{plugin.StorePluginSortDownloads, []string{"zero", "high", "unknown", "other"}},
+		{plugin.StorePluginSortUpdated, []string{"high", "zero", "unknown", "other"}},
 	} {
 		filtered := filterPlugins(plugins, "", pluginFilterState{storeSort: tc.order}, true, false)
 		got := installedSectionPluginIDs(installedPluginSection{Plugins: filtered})
@@ -1512,20 +1512,20 @@ func TestStorePluginStatisticsFollowSortAndAppearInDetails(t *testing.T) {
 	app := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer app.cancel()
 	choices := app.pluginSettings.pluginFilterChoices("sort")
-	if len(choices) != 4 || choices[0].value != pluginFilterAll || choices[0].label != app.pluginSettings.language.translate("i18n:ui_plugin_store_sort_downloads") || choices[2].value != string(pluginStoreSortStars) {
+	if len(choices) != 4 || choices[0].value != pluginFilterAll || choices[0].label != app.pluginSettings.language.translate("i18n:ui_plugin_store_sort_downloads") || choices[2].value != string(plugin.StorePluginSortStars) {
 		t.Fatalf("sort choices = %#v", choices)
 	}
 	stars, downloads := 0, 1234
 	item := pluginSettingsPlugin{ID: "example", Name: "Example", Version: "1.0", Author: "Author", StarCount: &stars, DownloadCount: &downloads, DateUpdated: "2026-01-02 03:04:05"}
 	for _, test := range []struct {
-		order pluginStoreSort
+		order plugin.StorePluginSort
 		want  string
 	}{
-		{pluginStoreSortDefault, "1.0  Author  ↓ 1234"},
-		{pluginStoreSortStars, "1.0  Author  ★ 0"},
-		{pluginStoreSortDownloads, "1.0  Author  ↓ 1234"},
-		{pluginStoreSortUpdated, "1.0  Author  2026-01-02"},
-		{pluginStoreSortName, "1.0  Author"},
+		{plugin.StorePluginSortDefault, "1.0  Author  ↓ 1234"},
+		{plugin.StorePluginSortStars, "1.0  Author  ★ 0"},
+		{plugin.StorePluginSortDownloads, "1.0  Author  ↓ 1234"},
+		{plugin.StorePluginSortUpdated, "1.0  Author  2026-01-02"},
+		{plugin.StorePluginSortName, "1.0  Author"},
 	} {
 		snapshot := settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: true, PluginFilters: pluginFilterState{storeSort: test.order}}}
 		entries := app.pluginSettings.pluginListEntries(snapshot, []filteredPlugin{{plugin: item}}, 1)

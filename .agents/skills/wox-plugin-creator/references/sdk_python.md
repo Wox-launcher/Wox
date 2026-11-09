@@ -42,7 +42,7 @@ class QueryRefinement:
     id: str
     title: str
     type: QueryRefinementType  # singleSelect | multiSelect | toggle | sort
-    hotkey: str  # cmd+t on macOS, ctrl+t on Windows/Linux
+    hotkey: str  # e.g. cmd+shift+t on macOS, ctrl+shift+t on Windows/Linux
     options: list[QueryRefinementOption]
     default_value: list[str] = []
     persist: bool = False
@@ -69,9 +69,9 @@ Action icons should be theme-adaptive SVG (`svg:` / inline markup with `var(--wo
 
 Return refinements on `QueryResponse.refinements`. Read selected values from `query.refinements` on the next query. See `references/refinements.md`.
 
-When assigned, refinement `hotkey` must be a real platform chord: `cmd+<key>` on macOS and `ctrl+<key>` on Windows/Linux. Detect `sys.platform == "darwin"` and emit the matching string. Do not write a literal `ctrl/cmd+t` token; an empty string leaves it unbound.
+Every refinement requires a non-empty `hotkey`. Prefer `Primary+Shift+<key>` and use `sys.platform == "darwin"` to choose `cmd` on macOS or `ctrl` on Windows and Linux.
 
-`ResultAction.hotkey` is optional too. Before assigning either an action or refinement binding, read [built-in hotkeys and collisions](hotkeys.md). Prefer the platform primary modifier for action defaults, avoid duplicate bindings, and keep the action accessible through the Action Panel when leaving it unbound.
+`ResultAction.hotkey` is optional. Prefer the platform primary modifier for action defaults. Check for conflicts before choosing a chord for either kind of binding. [Built-in hotkeys and collisions](hotkeys.md)
 
 ## Public API Methods
 

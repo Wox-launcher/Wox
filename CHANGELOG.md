@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.5.0 - 2026-11-09
+
+Plugins can now open native windows and let you interact directly with search previews. Timer and Dictation are now standalone plugins you can install from the Wox Store as needed. We explain the move in [Keeping Wox Simple](https://www.woxlauncher.com/blog/a-smaller-core-with-plugins.html).
+
+![Wox v2.5.0 Native UI for Plugins cover with an illustrated chart preview](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.5.0-woxview.png)
+
+- Add
+  - [`WoxView`] Fill out forms, change options, and explore live charts in plugins that use WoxView, either in a separate window or right from a search result.
+  - [`Snippets`] Save and search text you use often. Copy a snippet from Wox or set it to expand when you type a keyword. Snippets can insert values such as today's date or the current clipboard text. [#4702](https://github.com/Wox-launcher/Wox/issues/4702)
+
+- Improve
+  - [`Timer` and `Dictation`] Install either plugin from the Wox Store when you need it. Wox carries over your existing plugin settings when you upgrade.
+  - [`Screenshot`] Highlight parts of a screenshot and edit the strokes later. Choose a preset aspect ratio and keep it locked as you resize the capture area. [#4704](https://github.com/Wox-launcher/Wox/issues/4704)
+  - [`AI Chat`] Connect to local models through LM Studio and see an indicator while waiting for a reply. [#4692](https://github.com/Wox-launcher/Wox/issues/4692)
+  - [`Quick Jump`] Type to search in Directory Opus, with the search box appearing next to the active pane. [#4688](https://github.com/Wox-launcher/Wox/pull/4688) [@momadacoding](https://github.com/momadacoding)
+  - [`Converter`] Convert Unix timestamps to your local date and time with `to datetime` or `to dt`. [#4685](https://github.com/Wox-launcher/Wox/issues/4685)
+  - [`Hotkey`] Use Insert or Delete as a shortcut on its own, and trigger shortcuts by holding supported keys on Windows, macOS, and Hyprland.
+  - [`Query`] Search within filter options and save default selections for each plugin command.
+  - [`Plugin`] See installation and update progress in the toolbar, and take action directly from plugin notifications.
+  - [`Plugin Store`] See download and star counts, and sort by downloads, stars, name, or recent updates.
+
+- Fix
+  - [`Clipboard`] Read the latest clipboard contents on Wayland and preserve text without appending a newline.
+  - [`Notes`] Preserve blank lines when switching between Markdown and preview, and keep headings from being clipped.
+  - [`Settings`] Keep the active field focused and preserve its selection when plugin settings refresh after saving.
+  - [`Quick Jump`] Keep File Explorer context menu shortcuts working when type-to-search is enabled. [#4698](https://github.com/Wox-launcher/Wox/pull/4698) [@yiumanlenong](https://github.com/yiumanlenong)
+
+- Store
+  - Plugin
+    - [Timer](https://github.com/Wox-launcher/Wox.Plugin.Timer) Create and manage countdown timers [@Wox-launcher](https://github.com/Wox-launcher)
+    - [Dictation](https://github.com/Wox-launcher/Wox.Plugin.Dictation) Offline speech recognition with AI refinement and custom actions. [@Wox-launcher](https://github.com/Wox-launcher)
+    - [MultiTranslate for Wox](https://github.com/designstudio/MultiTranslate-for-Wox) Multi-provider translation for Wox. Google, Microsoft, DeepL and more. UI follows the Wox language automatically. [#4694](https://github.com/Wox-launcher/Wox/pull/4694) [@designstudio](https://github.com/designstudio)
+    - [SiYuan](https://gist.github.com/hsopex/64693eab1cf4e4e62fa200faae087976) Search SiYuan notes and quickly create flash notes [#4699](https://github.com/Wox-launcher/Wox/pull/4699) [@hsopex](https://github.com/hsopex)
+    - [JetBrains Projects](https://github.com/tomsquest/Wox.Plugin.JetBrainsProjects) Search the recent projects of your JetBrains IDEs and open them [#4701](https://github.com/Wox-launcher/Wox/pull/4701) [@tomsquest](https://github.com/tomsquest)
+    - [Radio](https://github.com/qianlifeng/Wox.Plugin.Radio) Play internet radio in Wox [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.9 - 2026-10-31
 
 Import Raycast settings and plugins into Wox, and organize AI Chat conversations into projects. Wox also offers improved Omarchy support, including an Omarchy Auto theme that follows your desktop theme.

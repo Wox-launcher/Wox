@@ -7,7 +7,7 @@ and provides access to UI control, settings, logging, and more.
 """
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List, Optional, Protocol, TypedDict
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, Protocol, TypedDict
 
 from .models.hotkey import OnHotkeyOption, OnHotkeyResult
 from .models.ai import AIModel, ChatOptions, ChatStreamCallback, Conversation
@@ -121,6 +121,29 @@ class ScreenshotResult:
     success: bool = False
     screenshot_path: str = ""
     errmsg: str = ""
+
+
+OSPermission = Literal["microphone"]
+OSPermissionStatus = Literal["granted", "notDetermined", "denied", "restricted", "unsupported"]
+
+
+@dataclass
+class OSPermissionOption:
+    """Optional plain text or plugin i18n key shown before the first system permission prompt."""
+
+    permission: OSPermission
+    reason: str = ""
+
+    def to_dict(self) -> Dict[str, object]:
+        data: Dict[str, object] = {"Permission": self.permission}
+        if self.reason:
+            data["Reason"] = self.reason
+        return data
+
+
+@dataclass
+class OSPermissionResult:
+    status: OSPermissionStatus
 
 
 @dataclass
@@ -983,4 +1006,12 @@ class PublicAPI(Protocol):
         Use this for HTML/webview previews so plugin surfaces follow the
         active light or dark Wox theme. Requires Wox >= 2.4.5.
         """
+        ...
+
+    async def get_os_permission_status(self, ctx: Context, option: OSPermissionOption) -> OSPermissionResult:
+        """Check Wox's OS permission without prompting."""
+        ...
+
+    async def request_os_permission(self, ctx: Context, option: OSPermissionOption) -> OSPermissionResult:
+        """Request Wox's OS permission in response to an explicit user action."""
         ...

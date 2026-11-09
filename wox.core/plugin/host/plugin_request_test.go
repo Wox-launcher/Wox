@@ -14,6 +14,7 @@ import (
 	"wox/network"
 	"wox/plugin"
 	"wox/util"
+	"wox/util/permission"
 
 	"github.com/gorilla/websocket"
 )
@@ -128,6 +129,8 @@ func TestPluginRequestInvalidArgumentsReply(t *testing.T) {
 		{"RegisterQueryCommands", map[string]string{"commands": "{"}, "unmarshal commands"},
 		{"Screenshot", map[string]string{"option": "{"}, "unmarshal screenshot option"},
 		{"GetThemeColors", map[string]string{"option": "{"}, "unmarshal theme colors option"},
+		{"GetOSPermissionStatus", map[string]string{"option": `{"Permission":"camera"}`}, "invalid OS permission"},
+		{"RequestOSPermission", map[string]string{"option": "{}"}, "invalid OS permission"},
 		{"SetSetting", map[string]string{"option": "{"}, "unmarshal SetSetting option"},
 		{"PushAttention", map[string]string{"request": "{"}, "unmarshal push attention request"},
 	}
@@ -152,6 +155,44 @@ func TestPluginRequestInvalidArgumentsReply(t *testing.T) {
 	case extra := <-responses:
 		t.Fatalf("duplicate response: %+v", extra)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+type osPermissionTestAPI struct {
+	plugin.API
+	checked   permission.OSPermission
+	requested plugin.OSPermissionOption
+}
+
+func (a *osPermissionTestAPI) GetOSPermissionStatus(_ context.Context, option plugin.OSPermissionOption) plugin.OSPermissionResult {
+	a.checked = option.Permission
+	return plugin.OSPermissionResult{Status: permission.OSPermissionNotDetermined}
+}
+
+func (a *osPermissionTestAPI) RequestOSPermission(_ context.Context, option plugin.OSPermissionOption) plugin.OSPermissionResult {
+	a.requested = option
+	return plugin.OSPermissionResult{Status: permission.OSPermissionGranted}
+}
+
+func TestPluginRequestOSPermission(t *testing.T) {
+	host, responses, _ := newPluginRequestPeer(t)
+	api := &osPermissionTestAPI{}
+	caller := &plugin.Instance{API: api}
+	request := JsonRpcRequest{Id: "check", Method: "GetOSPermissionStatus", Params: map[string]string{"option": `{"Permission":"microphone"}`}}
+	host.respondToPluginRequest(t.Context(), request, caller)
+	response := receivePluginResponse(t, responses, request)
+	result, ok := response.Result.(map[string]any)
+	if response.Error != "" || !ok || result["Status"] != "notDetermined" || api.checked != permission.OSPermissionMicrophone || api.requested.Permission != "" {
+		t.Fatalf("unexpected passive permission check: %+v", response)
+	}
+
+	request.Id, request.Method = "request", "RequestOSPermission"
+	request.Params["option"] = `{"Permission":"microphone","Reason":"i18n:plugin_microphone_reason"}`
+	host.respondToPluginRequest(t.Context(), request, caller)
+	response = receivePluginResponse(t, responses, request)
+	result, ok = response.Result.(map[string]any)
+	if response.Error != "" || !ok || result["Status"] != "granted" || api.requested != (plugin.OSPermissionOption{Permission: permission.OSPermissionMicrophone, Reason: "i18n:plugin_microphone_reason"}) {
+		t.Fatalf("unexpected permission request: %+v", response)
 	}
 }
 

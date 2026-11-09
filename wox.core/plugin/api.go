@@ -14,6 +14,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/notifier"
+	"wox/util/overlay"
 
 	"github.com/samber/lo"
 )
@@ -182,6 +183,12 @@ type API interface {
 	// GetThemeColors returns the current launcher palette as opaque #RRGGBB colors for plugin HTML and
 	// webviews. Requires Wox >= 2.4.5.
 	GetThemeColors(ctx context.Context, option GetThemeColorsOption) GetThemeColorsResult
+
+	// GetOSPermissionStatus checks Wox's permission without showing a prompt.
+	GetOSPermissionStatus(ctx context.Context, option OSPermissionOption) OSPermissionResult
+
+	// RequestOSPermission may prompt the user and should follow an explicit user action.
+	RequestOSPermission(ctx context.Context, option OSPermissionOption) OSPermissionResult
 
 	// Settings and lifecycle.
 
@@ -367,7 +374,12 @@ func (a *APIImpl) ShowToastMsg(ctx context.Context, option ShowToastMsgOption) S
 	var imageIcon image.Image
 	if parsed, err := common.ParseWoxImage(icon); err == nil {
 		converted := a.pluginInstance.ConvertIcon(ctx, parsed)
-		imageIcon, _ = converted.ToImageWithoutRemoteFetch()
+		decoded, decodeErr := converted.ToImageWithOptions(ctx, common.WoxImageRenderOptions{LocalOnly: true, Dark: !overlay.CurrentThemeChrome().Light})
+		if decodeErr != nil {
+			util.GetLogger().Warn(ctx, "failed to load plugin toast icon: "+decodeErr.Error())
+		} else {
+			imageIcon = decoded
+		}
 	}
 	epoch := a.pluginInstance.toastEpoch.Load()
 	toast := notifier.Toast{PluginID: a.pluginInstance.Metadata.Id, Icon: imageIcon, Title: a.GetTranslation(ctx, option.Title), Message: a.GetTranslation(ctx, option.Message), IsValid: func() bool { return a.pluginInstance.toastEpoch.Load() == epoch }}
