@@ -205,19 +205,27 @@ func (w WoxImage) ToImage() (image.Image, error) {
 	return w.ToImageWithContext(util.NewTraceContext())
 }
 
+// WoxImageRenderOptions controls local-only conversion and explicit SVG theme paints.
+// The zero value allows remote fetches and uses black for the Wox icon color.
+type WoxImageRenderOptions struct {
+	LocalOnly bool
+	Dark      bool
+}
+
 // ToImageWithContext converts an image while allowing remote fetch callers to apply cancellation or timeout.
 func (w WoxImage) ToImageWithContext(ctx context.Context) (image.Image, error) {
-	return w.toImage(ctx, true)
+	return w.ToImageWithOptions(ctx, WoxImageRenderOptions{})
 }
 
 func (w WoxImage) ToImageWithoutRemoteFetch() (image.Image, error) {
 	// Some user-visible flows, such as screenshot success notifications, only need a best-effort icon.
 	// The previous implementation always routed emoji icons through Twemoji download on cache miss, which
 	// blocked those flows on network latency. Callers that need predictable completion can use this local-only path.
-	return w.toImage(util.NewTraceContext(), false)
+	return w.ToImageWithOptions(util.NewTraceContext(), WoxImageRenderOptions{LocalOnly: true})
 }
 
-func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Image, error) {
+// ToImageWithOptions resolves Wox SVG paints without changing authored colors or currentColor.
+func (w WoxImage) ToImageWithOptions(ctx context.Context, options WoxImageRenderOptions) (image.Image, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -229,7 +237,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 				return nil, err
 			}
 
-			return renderSvgImage(string(svgData))
+			return renderSvgImage(string(svgData), options.Dark)
 		}
 
 		return imaging.Open(w.ImageData)
@@ -246,11 +254,14 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return nil, base64DecodeErr
 		}
 
+		if isSvgBytes(decodedData) {
+			return renderSvgImage(string(decodedData), options.Dark)
+		}
 		imgReader := bytes.NewReader(decodedData)
 		return imaging.Decode(imgReader)
 	}
 	if w.ImageType == WoxImageTypeSvg {
-		return renderSvgImage(w.ImageData)
+		return renderSvgImage(w.ImageData, options.Dark)
 	}
 	if w.ImageType == WoxImageTypeEmoji {
 		emojiPath, err := w.emojiImageCachePath(w.ImageData)
@@ -267,7 +278,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return img, nil
 		}
 
-		if !allowRemoteFetch {
+		if options.LocalOnly {
 			return nil, fmt.Errorf("emoji image cache miss: %s", w.ImageData)
 		}
 
@@ -287,13 +298,13 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return nil, err
 		}
 
-		if img, ok, err := w.loadCachedURLImageAny(cachePath); err != nil {
+		if img, ok, err := w.loadCachedURLImageAny(cachePath, options.Dark); err != nil {
 			return nil, err
 		} else if ok {
 			return img, nil
 		}
 
-		if !allowRemoteFetch {
+		if options.LocalOnly {
 			return nil, fmt.Errorf("url image cache miss: %s", w.ImageData)
 		}
 
@@ -301,7 +312,7 @@ func (w *WoxImage) toImage(ctx context.Context, allowRemoteFetch bool) (image.Im
 			return nil, err
 		}
 
-		if img, ok, err := w.loadCachedURLImageAny(cachePath); err != nil {
+		if img, ok, err := w.loadCachedURLImageAny(cachePath, options.Dark); err != nil {
 			return nil, err
 		} else if ok {
 			return img, nil
@@ -426,10 +437,10 @@ func existingURLImageCache(cachePath string) (string, os.FileInfo, bool) {
 }
 
 // loadCachedURLImageAny tries the URL-derived cache path and an .svg sibling.
-func (w *WoxImage) loadCachedURLImageAny(cachePath string) (image.Image, bool, error) {
+func (w *WoxImage) loadCachedURLImageAny(cachePath string, dark bool) (image.Image, bool, error) {
 	var lastErr error
 	for _, candidate := range urlImageCacheCandidates(cachePath) {
-		img, ok, err := w.loadCachedURLImage(candidate)
+		img, ok, err := w.loadCachedURLImage(candidate, dark)
 		if err != nil {
 			lastErr = err
 			continue
@@ -441,7 +452,7 @@ func (w *WoxImage) loadCachedURLImageAny(cachePath string) (image.Image, bool, e
 	return nil, false, lastErr
 }
 
-func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, error) {
+func (w *WoxImage) loadCachedURLImage(cachePath string, dark bool) (image.Image, bool, error) {
 	info, err := os.Stat(cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -459,7 +470,7 @@ func (w *WoxImage) loadCachedURLImage(cachePath string) (image.Image, bool, erro
 	}
 
 	if isSvgFilePath(cachePath) || isSvgBytes(data) {
-		img, err := renderSvgImage(string(data))
+		img, err := renderSvgImage(string(data), dark)
 		if err != nil {
 			return nil, false, err
 		}
@@ -556,8 +567,19 @@ func fileLooksLikeSvg(filePath string) bool {
 	return isSvgBytes(header[:n])
 }
 
-func renderSvgImage(svg string) (image.Image, error) {
-	return woxsvg.Render(svg, 32, 32)
+// renderSvgImage shares the launcher's opt-in color policy with raster consumers such as toasts.
+func renderSvgImage(svg string, dark bool) (image.Image, error) {
+	iconColor := "#000000"
+	if dark {
+		iconColor = "#ffffff"
+	}
+	svg = strings.ReplaceAll(svg, "var(--wox-theme-icon-color)", iconColor)
+	img, err := woxsvg.Render(svg, 32, 32)
+	if err != nil {
+		// Converting a nil *image.RGBA directly to image.Image would bypass callers' nil checks.
+		return nil, err
+	}
+	return img, nil
 }
 
 func (w *WoxImage) IsValid() bool {

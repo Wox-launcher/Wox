@@ -14,6 +14,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/notifier"
+	"wox/util/overlay"
 
 	"github.com/samber/lo"
 )
@@ -373,7 +374,12 @@ func (a *APIImpl) ShowToastMsg(ctx context.Context, option ShowToastMsgOption) S
 	var imageIcon image.Image
 	if parsed, err := common.ParseWoxImage(icon); err == nil {
 		converted := a.pluginInstance.ConvertIcon(ctx, parsed)
-		imageIcon, _ = converted.ToImageWithoutRemoteFetch()
+		decoded, decodeErr := converted.ToImageWithOptions(ctx, common.WoxImageRenderOptions{LocalOnly: true, Dark: !overlay.CurrentThemeChrome().Light})
+		if decodeErr != nil {
+			util.GetLogger().Warn(ctx, "failed to load plugin toast icon: "+decodeErr.Error())
+		} else {
+			imageIcon = decoded
+		}
 	}
 	epoch := a.pluginInstance.toastEpoch.Load()
 	toast := notifier.Toast{PluginID: a.pluginInstance.Metadata.Id, Icon: imageIcon, Title: a.GetTranslation(ctx, option.Title), Message: a.GetTranslation(ctx, option.Message), IsValid: func() bool { return a.pluginInstance.toastEpoch.Load() == epoch }}

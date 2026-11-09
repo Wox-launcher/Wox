@@ -15,6 +15,16 @@ type failingImageReader struct{ err error }
 
 func (r failingImageReader) Read([]byte) (int, error) { return 0, r.err }
 
+// TestNewImageRejectsNilSources covers interfaces containing nil standard image pointers.
+func TestNewImageRejectsNilSources(t *testing.T) {
+	for _, source := range []image.Image{nil, (*image.RGBA)(nil), (*image.NRGBA)(nil), (*image.Gray)(nil), (*image.YCbCr)(nil)} {
+		img, err := NewImage(source)
+		if err == nil || img != nil {
+			t.Fatalf("NewImage(%T) = (%v, %v), want (nil, error)", source, img, err)
+		}
+	}
+}
+
 func TestDecodeImagePreservesInitialReadError(t *testing.T) {
 	want := errors.New("cloud file provider is not running")
 	_, err := DecodeImage(failingImageReader{err: want})

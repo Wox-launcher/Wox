@@ -10,6 +10,7 @@ import (
 	"image/gif"
 	"io"
 	"math"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -232,7 +233,9 @@ func constrainedImageSize(width, height, maxDimension int) (int, int) {
 
 // NewImage copies a Go image into tightly packed, top-down premultiplied RGBA pixels.
 func NewImage(source image.Image) (*Image, error) {
-	if source == nil {
+	// Failed decoders can leave a typed nil pointer inside a non-nil image interface.
+	value := reflect.ValueOf(source)
+	if !value.IsValid() || value.Kind() == reflect.Pointer && value.IsNil() {
 		return nil, fmt.Errorf("image source is nil")
 	}
 	bounds := source.Bounds()

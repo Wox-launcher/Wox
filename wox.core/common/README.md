@@ -1,5 +1,15 @@
 Due to the GO's cyclic reference limitation, some common type definitions are defined in this package
 
+## Image conversion
+
+`WoxImage.ToImageWithOptions` lets raster consumers supply the surface appearance
+and disable remote fetches. Explicit `var(--wox-theme-icon-color)` paints resolve
+to white in dark appearances and black in light appearances; fixed paints and
+SVG `currentColor` retain their authored meaning. SVG conversion errors return
+a nil `image.Image`, so optional icons can safely fall back without hiding a nil
+`*image.RGBA` inside the interface. Existing conversion methods keep their remote
+fetch behavior and default to the light icon color.
+
 ## Status colors
 
 `SuccessColor`, `WarningColor`, `WarningTextColor`, and `ErrorColor` are optional
