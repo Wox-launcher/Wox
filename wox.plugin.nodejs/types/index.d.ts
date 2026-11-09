@@ -1929,6 +1929,26 @@ export interface PublicAPI {
    * Requires Wox >= 2.4.5.
    */
   GetThemeColors: (ctx: Context, option: GetThemeColorsOption) => Promise<GetThemeColorsResult>
+
+  /** Check Wox's OS permission without prompting. */
+  GetOSPermissionStatus: (ctx: Context, option: OSPermissionOption) => Promise<OSPermissionResult>
+
+  /** Request Wox's OS permission in response to an explicit user action. */
+  RequestOSPermission: (ctx: Context, option: OSPermissionOption) => Promise<OSPermissionResult>
+}
+
+export type OSPermission = "microphone"
+export type OSPermissionStatus = "granted" | "notDetermined" | "denied" | "restricted" | "unsupported"
+
+export interface OSPermissionOption {
+  Permission: OSPermission
+  /** Optional plain text or plugin i18n key shown before the first system permission prompt. */
+  Reason?: string
+}
+
+export interface OSPermissionResult {
+  /** `unsupported` means Wox does not handle this permission on the current platform. */
+  Status: OSPermissionStatus
 }
 
 /**

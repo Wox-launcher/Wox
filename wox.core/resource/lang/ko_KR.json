@@ -824,6 +824,8 @@
   "ui_delete_row_confirm": "이 행을 삭제하시겠습니까?",
   "ui_clone_row": "행 복제",
   "ui_cancel": "취소",
+  "ui_os_permission_microphone_title": "%s에서 마이크 접근을 요청합니다",
+  "ui_os_permission_continue": "계속",
   "ui_close": "닫기",
   "ui_minimize": "최소화",
   "ui_maximize": "최대화",

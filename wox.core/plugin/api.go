@@ -183,6 +183,12 @@ type API interface {
 	// webviews. Requires Wox >= 2.4.5.
 	GetThemeColors(ctx context.Context, option GetThemeColorsOption) GetThemeColorsResult
 
+	// GetOSPermissionStatus checks Wox's permission without showing a prompt.
+	GetOSPermissionStatus(ctx context.Context, option OSPermissionOption) OSPermissionResult
+
+	// RequestOSPermission may prompt the user and should follow an explicit user action.
+	RequestOSPermission(ctx context.Context, option OSPermissionOption) OSPermissionResult
+
 	// Settings and lifecycle.
 
 	// GetSetting returns a plugin setting, preferring the current platform's value. Returns an empty

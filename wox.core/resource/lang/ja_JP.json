@@ -824,6 +824,8 @@
   "ui_delete_row_confirm": "この行を削除してもよろしいですか？",
   "ui_clone_row": "行を複製",
   "ui_cancel": "キャンセル",
+  "ui_os_permission_microphone_title": "%s がマイクへのアクセスを求めています",
+  "ui_os_permission_continue": "続ける",
   "ui_close": "閉じる",
   "ui_minimize": "最小化",
   "ui_maximize": "最大化",

@@ -810,6 +810,8 @@
   "ui_delete_row_confirm": "Вы уверены, что хотите удалить эту строку?",
   "ui_clone_row": "Клонировать строку",
   "ui_cancel": "Отмена",
+  "ui_os_permission_microphone_title": "%s запрашивает доступ к микрофону",
+  "ui_os_permission_continue": "Продолжить",
   "ui_close": "Закрыть",
   "ui_minimize": "Свернуть",
   "ui_maximize": "Развернуть",

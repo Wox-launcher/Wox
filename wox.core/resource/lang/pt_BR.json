@@ -810,6 +810,8 @@
   "ui_delete_row_confirm": "Tem certeza que deseja excluir esta linha?",
   "ui_clone_row": "Clonar linha",
   "ui_cancel": "Cancelar",
+  "ui_os_permission_microphone_title": "%s solicita acesso ao microfone",
+  "ui_os_permission_continue": "Continuar",
   "ui_close": "Fechar",
   "ui_minimize": "Minimizar",
   "ui_maximize": "Maximizar",

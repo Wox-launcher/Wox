@@ -505,7 +505,7 @@ _bundle_mac_app:
 	# The outer development bundle gets a stable designated requirement so TCC grants
 	# survive code changes without requiring an interactive signing certificate.
 	@if [ -n "$(MACOS_SIGN_IDENTITY)" ]; then \
-		codesign --options=runtime --force --deep --sign "$(MACOS_SIGN_IDENTITY)" Wox.app; \
+		codesign --options=runtime --force --entitlements ../assets/mac/Wox.entitlements --sign "$(MACOS_SIGN_IDENTITY)" Wox.app; \
 	else \
 		/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.github.wox.dev" Wox.app/Contents/Info.plist; \
 		codesign --force --deep --sign - Wox.app; \

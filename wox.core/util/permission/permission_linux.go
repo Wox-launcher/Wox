@@ -14,7 +14,10 @@ func OpenPrivacySecuritySettings(ctx context.Context) {
 
 }
 
-// RequestMicrophonePermission is a no-op on Linux because audio capture handles access directly.
-func RequestMicrophonePermission(ctx context.Context) bool {
-	return true
+func microphonePermissionStatus() OSPermissionStatus {
+	return OSPermissionUnsupported
+}
+
+func requestMicrophonePermission(_ *OSPermissionPrompt) OSPermissionStatus {
+	return OSPermissionUnsupported
 }

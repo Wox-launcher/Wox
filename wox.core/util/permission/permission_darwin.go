@@ -6,6 +6,7 @@ package permission
 // #import <Cocoa/Cocoa.h>
 // #import <Dispatch/Dispatch.h>
 // #import <Foundation/Foundation.h>
+// #include <stdlib.h>
 //
 // bool hasAccessibilityPermission() {
 //     NSDictionary *options = @{(__bridge NSString *)kAXTrustedCheckOptionPrompt: @NO};
@@ -17,15 +18,13 @@ package permission
 //     [[NSWorkspace sharedWorkspace] openURL:url];
 // }
 //
-// bool requestMicrophonePermission() {
-//     AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
-//     if (status == AVAuthorizationStatusAuthorized) {
-//         return true;
-//     }
-//     if (status != AVAuthorizationStatusNotDetermined) {
-//         return false;
-//     }
+// static AVAuthorizationStatus microphoneAuthorizationStatus() {
+//     return [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+// }
 //
+// bool woxConfirmOSPermissionReason(const char *title, const char *reason, const char *continueLabel, const char *cancelLabel);
+//
+// static bool requestMicrophoneAccess() {
 //     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 //     __block BOOL granted = NO;
 //     [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL allowed) {
@@ -47,6 +46,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"unsafe"
 	"wox/util/mainthread"
 )
 
@@ -123,7 +123,55 @@ func OpenPrivacySecuritySettings(ctx context.Context) {
 	})
 }
 
-// RequestMicrophonePermission requests access when needed and reports whether recording is authorized.
-func RequestMicrophonePermission(ctx context.Context) bool {
-	return bool(C.requestMicrophonePermission())
+func microphonePermissionStatus() OSPermissionStatus {
+	switch C.microphoneAuthorizationStatus() {
+	case C.AVAuthorizationStatusAuthorized:
+		return OSPermissionGranted
+	case C.AVAuthorizationStatusNotDetermined:
+		return OSPermissionNotDetermined
+	case C.AVAuthorizationStatusDenied:
+		return OSPermissionDenied
+	case C.AVAuthorizationStatusRestricted:
+		return OSPermissionRestricted
+	default:
+		return OSPermissionUnsupported
+	}
+}
+
+var microphoneRequestMu sync.Mutex
+
+// Serialize prompts from plugins and recheck the status after any earlier prompt.
+func requestMicrophonePermission(prompt *OSPermissionPrompt) OSPermissionStatus {
+	microphoneRequestMu.Lock()
+	defer microphoneRequestMu.Unlock()
+	status := microphonePermissionStatus()
+	if status != OSPermissionNotDetermined {
+		return status
+	}
+	if prompt != nil && !confirmOSPermissionReason(prompt) {
+		return microphonePermissionStatus()
+	}
+	if C.requestMicrophoneAccess() {
+		return OSPermissionGranted
+	}
+	if microphonePermissionStatus() == OSPermissionRestricted {
+		return OSPermissionRestricted
+	}
+	return OSPermissionDenied
+}
+
+// Present the reason on the AppKit thread before asking AVFoundation for access.
+func confirmOSPermissionReason(prompt *OSPermissionPrompt) bool {
+	title, reason := C.CString(prompt.Title), C.CString(prompt.Reason)
+	continueLabel, cancelLabel := C.CString(prompt.ContinueLabel), C.CString(prompt.CancelLabel)
+	defer C.free(unsafe.Pointer(title))
+	defer C.free(unsafe.Pointer(reason))
+	defer C.free(unsafe.Pointer(continueLabel))
+	defer C.free(unsafe.Pointer(cancelLabel))
+
+	var confirmed bool
+	mainthread.Call(func() {
+		confirmed = bool(C.woxConfirmOSPermissionReason(title, reason, continueLabel, cancelLabel))
+	})
+	return confirmed
 }
