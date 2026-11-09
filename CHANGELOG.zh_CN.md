@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.5.0 - 2026-11-09
+
+插件现在可以打开原生窗口，也可以让你直接在搜索结果的预览中操作。计时器和听写改为独立插件，可在 Wox 商店按需安装，查看[此博客](https://www.woxlauncher.com/zh/blog/a-smaller-core-with-plugins.html)了解我们为什么这么做。
+
+![Wox v2.5.0 Native UI for Plugins cover with an illustrated chart preview](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.5.0-woxview.png)
+
+- Add
+  - [`WoxView`] 使用 WoxView 的插件可以在独立窗口或搜索结果预览里提供表单、选项和实时图表，你可以直接填写、调整和查看。
+  - [`文本片段`] 保存和搜索常用文本，可从 Wox 复制，也可设置为输入关键词时自动展开。片段还能插入当天日期或当前剪贴板文本等内容。 [#4702](https://github.com/Wox-launcher/Wox/issues/4702)
+
+- Improve
+  - [`计时器`和`听写`] 可以在 Wox 商店按需安装这两个插件。升级时，Wox 会迁移已有的插件设置。
+  - [`截图`] 用荧光笔标记截图，之后还可以编辑笔迹。可选择预设宽高比，并在调整截图区域大小时锁定比例。 [#4704](https://github.com/Wox-launcher/Wox/issues/4704)
+  - [`AI Chat`] 支持通过 LM Studio 连接本地模型，并在等待回复时显示提示。 [#4692](https://github.com/Wox-launcher/Wox/issues/4692)
+  - [`Quick Jump`] 在 Directory Opus 中直接打字即可搜索，搜索框会显示在当前窗格旁。 [#4688](https://github.com/Wox-launcher/Wox/pull/4688) [@momadacoding](https://github.com/momadacoding)
+  - [`转换器`] 使用 `to datetime` 或 `to dt` 把 Unix 时间戳转换为本地日期和时间。 [#4685](https://github.com/Wox-launcher/Wox/issues/4685)
+  - [`快捷键`] 可单独使用 Insert 或 Delete 作为快捷键，也可在 Windows、macOS 和 Hyprland 上长按受支持的按键触发快捷键。
+  - [`搜索`] 可以搜索筛选选项，并为各个插件命令保存默认筛选条件。
+  - [`插件`] 在工具栏查看插件安装和更新进度，也可以直接在插件通知里执行操作。
+  - [`插件商店`] 查看下载数和 GitHub 星标数，并按下载数、星标数、名称或最近更新时间排序。
+
+- Fix
+  - [`剪贴板`] 在 Wayland 上读取最新的剪贴板内容，避免在原有文本末尾额外添加换行。
+  - [`Notes`] 在 Markdown 和预览之间切换时保留空行，并修复标题文字被裁切的问题。
+  - [`设置`] 保存插件设置后刷新页面时，保留当前输入框的焦点和选中的内容。
+  - [`Quick Jump`] 修复启用打字搜索时，文件资源管理器右键菜单的快捷键失效的问题。 [#4698](https://github.com/Wox-launcher/Wox/pull/4698) [@yiumanlenong](https://github.com/yiumanlenong)
+
+- Store
+  - Plugin
+    - [计时器](https://github.com/Wox-launcher/Wox.Plugin.Timer) 创建和管理倒计时 [@Wox-launcher](https://github.com/Wox-launcher)
+    - [听写](https://github.com/Wox-launcher/Wox.Plugin.Dictation) 离线语音识别、AI 润色与自定义动作。 [@Wox-launcher](https://github.com/Wox-launcher)
+    - [MultiTranslate for Wox](https://github.com/designstudio/MultiTranslate-for-Wox) Multi-provider translation for Wox. Google, Microsoft, DeepL and more. UI follows the Wox language automatically. [#4694](https://github.com/Wox-launcher/Wox/pull/4694) [@designstudio](https://github.com/designstudio)
+    - [SiYuan](https://gist.github.com/hsopex/64693eab1cf4e4e62fa200faae087976) 搜索 SiYuan 笔记并快速创建闪念速记 [#4699](https://github.com/Wox-launcher/Wox/pull/4699) [@hsopex](https://github.com/hsopex)
+    - [JetBrains Projects](https://github.com/tomsquest/Wox.Plugin.JetBrainsProjects) Search the recent projects of your JetBrains IDEs and open them [#4701](https://github.com/Wox-launcher/Wox/pull/4701) [@tomsquest](https://github.com/tomsquest)
+    - [电台](https://github.com/qianlifeng/Wox.Plugin.Radio) 在 Wox 中收听网络电台 [@qianlifeng](https://github.com/qianlifeng)
+
 ## v2.4.9 - 2026-10-31
 
 支持导入Raycast的设置以及插件；AI Chat支持项目；增强Omarchy系统适配，新增Omarchy Auto主题，可以跟随Omarchy的主题。
