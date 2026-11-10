@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"math"
 	"runtime"
 	"strings"
 	"sync"
@@ -1722,6 +1723,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	x, y, nextAnchor := launcherWindowOrigin(params, current, targetHeight, useShowPosition, bottomAnchor)
 	requested := woxui.Rect{X: x, Y: y, Width: float32(width), Height: targetHeight}
 	var targetDisplay screen.Display
+	var autoHeightScale float32
 	displays, listErr := screen.ListDisplays()
 	if listErr == nil {
 		displayID := ""
@@ -1735,14 +1737,22 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		if displayErr != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-display resolve failed: showPos=%t requested=%+v error=%v", useShowPosition, requested, displayErr))
 		}
+		if runtime.GOOS == "windows" && requestedHeight <= 0 && targetDisplay.Scale > 0 {
+			// Auto height must fit all measured content. Rounding down a fraction
+			// of a physical pixel makes a full result row look scrollable.
+			autoHeightScale = float32(targetDisplay.Scale)
+			targetHeight = float32(math.Ceil(float64(targetHeight*autoHeightScale))) / autoHeightScale
+			_, y, nextAnchor = launcherWindowOrigin(params, current, targetHeight, useShowPosition, bottomAnchor)
+		}
 		layoutDisplays := displays
 		if targetDisplay.ID != "" {
 			// Keep clipping and native placement on the same display. Mixed-DPI logical
 			// rectangles can overlap even when the physical monitors do not (#4572).
 			layoutDisplays = []screen.Display{targetDisplay}
 		}
+		unclampedY, unclampedHeight := y, targetHeight
 		y, targetHeight, nextAnchor = constrainLauncherHeightToWorkArea(params.QueryBoxAtBottom, params.RememberPosition, x, y, float32(width), targetHeight, float32(minimumHeight), nextAnchor, layoutDisplays)
-		if useShowPosition || y != requested.Y || targetHeight != requested.Height {
+		if useShowPosition || y != unclampedY || targetHeight != unclampedHeight {
 			util.GetLogger().Info(context.Background(), fmt.Sprintf("launcher-display showPos=%t useNativeCurrent=%t requestedLogical=%+v minimumHeight=%.1f selected=%+v displays=%+v", useShowPosition, !useShowPosition, requested, float32(minimumHeight), targetDisplay, displays))
 		}
 	} else {
@@ -1768,7 +1778,9 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 		// Equal logical bounds can still refer to different physical displays.
 		sameDisplay = displayErr == nil && currentDisplay.ID == targetDisplay.ID
 	}
-	if sameDisplay && launcherBoundsEffectivelyEqual(current, target) {
+	// The logical position tolerance can hide a whole missing pixel at high DPI.
+	sameHeight := autoHeightScale <= 0 || math.Round(float64(current.Height*autoHeightScale)) == math.Round(float64(target.Height*autoHeightScale))
+	if sameDisplay && sameHeight && launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
 			a.bottomAnchorY = nextAnchor
 		}

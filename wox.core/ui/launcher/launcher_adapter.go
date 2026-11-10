@@ -1425,7 +1425,11 @@ func resolveResultScroll(results []queryResult, layout *gridLayout, selected int
 		for index := selected - 1; index >= 0; index-- {
 			if results[index].IsGroup {
 				if selected-index <= 2 {
-					top = listResultOffset(results, index, 0, rowHeight, groupHeight, resultRowGap)
+					groupTop := listResultOffset(results, index, 0, rowHeight, groupHeight, resultRowGap)
+					// Only reveal the group header when the selected row still fits.
+					if bottom-groupTop <= viewport {
+						top = groupTop
+					}
 				}
 				break
 			}

@@ -94,6 +94,58 @@ func TestQueryPreviewWindowSize(t *testing.T) {
 	}
 }
 
+// TestLauncherSingleResultFitsAtDisplayScale checks the scroll viewport after
+// autosizing a native window, including a resize from a one-pixel-short height.
+func TestLauncherSingleResultFitsAtDisplayScale(t *testing.T) {
+	displays, err := screen.ListDisplays()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = woxui.Run(func() error {
+		window, err := woxui.Open(woxui.WindowOptions{Title: "Wox single result bounds test", Size: woxui.Size{Width: 800, Height: 177}})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		app := New(false, nil)
+		defer app.cancel()
+		app.window = window
+		app.show.WindowWidth = 800
+		app.querySession.editor = woxui.NewTextEditor("vd ")
+		app.appearance.palette = defaultPalette()
+		app.appearance.palette.resultContainerPadding.Bottom = 8
+		app.resultList.results = []queryResult{{ID: "video", Title: "Paste a video URL"}}
+		for _, display := range displays {
+			area := display.WorkArea
+			if area.Height < 200 || area.Width < 820 || display.Scale <= 0 {
+				continue
+			}
+			scale := float32(display.Scale)
+			// Start short enough to overflow but close enough to exercise bounds deduplication.
+			height := float32(int(177*scale)) / scale
+			if err := window.SetBoundsOnDisplay(woxui.Rect{X: float32(area.X + 20), Y: float32(area.Y + 20), Width: 800, Height: height}, display); err != nil {
+				return err
+			}
+			if err := app.applyWindowBounds(); err != nil {
+				return err
+			}
+			bounds, err := window.Bounds()
+			if err != nil {
+				return err
+			}
+			app.buildLauncher(woxui.FrameInfo{Size: woxui.Size{Width: bounds.Width, Height: bounds.Height}, Scale: scale})
+			scroll := app.resultList.resultScroll
+			if scroll.content == 0 || scroll.maxOffset() > 0 {
+				return fmt.Errorf("display %q at %.2f: one result overflows: height=%v, scroll=%+v", display.ID, scale, bounds.Height, scroll)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestLauncherBoundsKeepsNewerPreview reproduces a result arriving before the hotkey caller resumes.
 func TestLauncherBoundsKeepsNewerPreview(t *testing.T) {
 	err := woxui.Run(func() error {

@@ -174,6 +174,35 @@ func TestListScrollKeepsContentCoordinates(t *testing.T) {
 	}
 }
 
+// TestListScrollSettlesWhenSelectionDoesNotFit covers the fractional viewport
+// produced by physical window rounding at 125% scale and a nearby group header.
+func TestListScrollSettlesWhenSelectionDoesNotFit(t *testing.T) {
+	palette := defaultPalette()
+	density := launcherDensityMetricsFor("")
+	rowHeight := density.resultRowHeight(palette)
+	groupHeight := density.groupHeaderHeight()
+	for _, test := range []struct {
+		name     string
+		results  []queryResult
+		viewport float32
+		want     float32
+	}{
+		{"single row at 125%", []queryResult{{Title: "Video"}}, rowHeight - 0.2, 0},
+		{"row with group header", []queryResult{{Title: "Files", IsGroup: true}, {Title: "Video"}}, rowHeight, groupHeight + resultRowGap},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			content := listResultsContentHeight(test.results, 0, 0, rowHeight, groupHeight, resultRowGap)
+			scroll := scrollController{}
+			for range 3 {
+				scroll = resolveResultScroll(test.results, nil, len(test.results)-1, 800, test.viewport, content, scroll, false, palette, density)
+				if scroll.offset != test.want {
+					t.Fatalf("offset = %v, want %v", scroll.offset, test.want)
+				}
+			}
+		})
+	}
+}
+
 // TestFooterSamplingPreservesPaddingHeight keeps layout space while painting through it.
 func TestFooterSamplingPreservesPaddingHeight(t *testing.T) {
 	for _, border := range []float32{0, 1} {

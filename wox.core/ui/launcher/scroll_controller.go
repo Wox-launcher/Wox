@@ -34,7 +34,8 @@ func (c *scrollController) ensureVisible(top, bottom float32) {
 		c.offset = 0
 		return
 	}
-	if top < c.offset {
+	// Anchor an oversized range at its start so repeated reveals cannot alternate between edges.
+	if bottom-top >= c.viewport || top < c.offset {
 		c.offset = top
 	} else if bottom > c.offset+c.viewport {
 		c.offset = bottom - c.viewport
