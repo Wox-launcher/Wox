@@ -23,7 +23,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/multippt/gopaddleocr v0.0.0-20260322145423-d4b7cc8b4429
 	github.com/olahol/melody v1.4.0
-	github.com/openai/openai-go/v3 v3.11.0
+	github.com/openai/openai-go/v3 v3.43.0
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a
 	github.com/rivo/uniseg v0.4.7
@@ -47,6 +47,7 @@ require (
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
+	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -74,7 +75,6 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
