@@ -31,13 +31,12 @@ func Test004LauncherQueryShellStopReexecute(t *testing.T) {
 		smoke.ReplaceLauncherQuery(t, ctx, client, "> ")
 		historyResultID := waitForShellResult(t, ctx, client, command)
 		if err := client.Perform(ctx, historyResultID, woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("reexecute Shell history result: %v", err)
+			t.Fatalf("open Shell history output: %v", err)
 		}
+		waitForTerminalStatus(t, ctx, client, "killed")
+		activateShellAction(t, ctx, client, "action-result-reexecute-")
 		waitForTerminalStatus(t, ctx, client, "running")
-		runningResultID := waitForShellResult(t, ctx, client, command)
-		if err := client.Perform(ctx, runningResultID, woxui.AccessibilityActionActivate, ""); err != nil {
-			t.Fatalf("stop reexecuted Shell result: %v", err)
-		}
+		activateShellAction(t, ctx, client, "action-result-reexecute-")
 		waitForTerminalStatus(t, ctx, client, "killed")
 	})
 }

@@ -42,7 +42,7 @@ type previewController struct {
 	nativeFile                       *nativeFilePreviewController
 	webView                          *webViewPreviewController
 	terminal                         *terminalController
-	reconcileShell                   func(queryID, resultID string)
+	reconcileShell                   func(queryResult)
 	chat                             *chatController
 	window                           func() *woxui.Window
 	runOnUI                          func(string, func()) error
@@ -59,6 +59,7 @@ type previewController struct {
 	pinnedPreview     viewportPreviewPin
 	previewVisibility queryPreviewVisibility
 	pluginPreview     pluginPreviewState
+	shellOutput       queryResult
 	mdDocs            map[string]woxcomponent.MarkdownDocument
 	previewLayouts    map[string]*textLayoutCache
 	woxView           *woxview.View

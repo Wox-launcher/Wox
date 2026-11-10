@@ -41,6 +41,22 @@ func TestGhosttyFrameAndKeyEncoding(t *testing.T) {
 	}
 }
 
+// TestGhosttyCommandOutput checks that capture starts after the echoed command and survives scrolling.
+func TestGhosttyCommandOutput(t *testing.T) {
+	model, err := newEmulator(testSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer model.close()
+	model.write([]byte("previous output\r\n> command\r\n"))
+	model.beginCommand()
+	model.write([]byte("\x1b[32mfirst output\x1b[0m\r\n" + strings.Repeat("middle\r\n", testSize.Rows) + "last output"))
+	output := model.commandOutput()
+	if !strings.HasPrefix(output, "first output\n") || !strings.HasSuffix(output, "last output") {
+		t.Fatalf("command output = %q", output)
+	}
+}
+
 // TestInteractivePTY checks that the actual platform shell accepts commands and delivers its last screen.
 func TestInteractivePTY(t *testing.T) {
 	interpreter := "sh"
@@ -51,7 +67,7 @@ func TestInteractivePTY(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	session, err := Start(ctx, Options{Interpreter: interpreter, Directory: t.TempDir()}, testSize)
+	session, err := Start(ctx, Options{Interpreter: interpreter, Directory: t.TempDir()}, testSize, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +110,7 @@ func TestInteractivePTYResizeAndClose(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	session, err := Start(ctx, Options{Interpreter: interpreter, Directory: t.TempDir()}, testSize)
+	session, err := Start(ctx, Options{Interpreter: interpreter, Directory: t.TempDir()}, testSize, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,21 +1,29 @@
 package interactive
 
 import (
+	_ "embed"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
+//go:embed integration.ps1
+var powerShellIntegration string
+
 var updatePTYAttribute = windows.NewLazySystemDLL("kernel32.dll").NewProc("UpdateProcThreadAttribute")
 var createPTYAvailable = windows.NewLazySystemDLL("kernel32.dll").NewProc("CreatePseudoConsole")
 
 // openPTY starts the shell suspended so all descendants belong to the job before any code runs.
-func openPTY(options Options, size Size) (result transport, err error) {
+func openPTY(options Options, size Size, token string) (result transport, err error) {
 	if err := createPTYAvailable.Find(); err != nil {
 		return transport{}, err
 	}
@@ -59,7 +67,7 @@ func openPTY(options Options, size Size) (result transport, err error) {
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
 		return transport{}, err
 	}
-	process, err := startConsoleProcess(options, console, job)
+	process, err := startConsoleProcess(options, console, job, token)
 	if err != nil {
 		return transport{}, err
 	}
@@ -102,20 +110,31 @@ func openPTY(options Options, size Size) (result transport, err error) {
 }
 
 // startConsoleProcess passes the pseudoconsole handle itself as the process attribute value.
-func startConsoleProcess(options Options, console, job windows.Handle) (windows.Handle, error) {
+func startConsoleProcess(options Options, console, job windows.Handle, token string) (windows.Handle, error) {
 	systemDirectory, err := windows.GetSystemDirectory()
 	if err != nil {
 		return 0, err
 	}
 	path := filepath.Join(systemDirectory, "cmd.exe")
+	args := []string{}
 	if options.Interpreter == "powershell" {
 		path = filepath.Join(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")
+		script := strings.ReplaceAll(powerShellIntegration, "@WOX_TOKEN@", token)
+		if options.scrollbackFile != "" {
+			file := strings.ReplaceAll(options.scrollbackFile, "'", "''")
+			script = "[Console]::Write([IO.File]::ReadAllText('" + file + "'))\n" + script
+		}
+		var source []byte
+		for _, unit := range utf16.Encode([]rune(script)) {
+			source = binary.LittleEndian.AppendUint16(source, unit)
+		}
+		args = append(args, "-NoExit", "-EncodedCommand", base64.StdEncoding.EncodeToString(source))
 	}
 	path16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return 0, err
 	}
-	command16, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{path}))
+	command16, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{path}, args...)))
 	if err != nil {
 		return 0, err
 	}

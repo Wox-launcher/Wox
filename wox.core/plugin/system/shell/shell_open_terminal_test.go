@@ -37,12 +37,8 @@ func TestBuildOpenInSystemTerminalActionHandsOffAndHidesOnSuccess(t *testing.T) 
 	}
 }
 
-func TestEmptyAndCommandResultsIncludeOpenInSystemTerminal(t *testing.T) {
+func TestCommandResultsIncludeOpenInSystemTerminal(t *testing.T) {
 	pluginInstance := &ShellPlugin{api: &shellQueryTestAPI{settings: map[string]string{}}}
-	empty := pluginInstance.buildEmptyCommandResult(context.Background(), "powershell", `D:\dev\apps`)
-	if !resultHasOpenInSystemTerminalAction(empty) {
-		t.Fatal("empty command result is missing Open in System Terminal")
-	}
 
 	response := pluginInstance.Query(context.Background(), plugin.Query{
 		Type:           plugin.QueryTypeInput,

@@ -59,9 +59,6 @@ func (a *App) buildPreviewWithChatHeader(result queryResult, palette uiPalette, 
 		return a.buildUpdatePreview(scrollKey, data, palette, width, height, imageScale)
 	}
 	tags := append(a.previews.previewTags(preview.PreviewTags), a.previews.previewTags(a.previews.previewBodyTags(preview))...)
-	if preview.PreviewType == "terminal" {
-		return a.buildTerminalPreview(a.terminal.terminalPreviewSnapshotFor(preview), palette, width, height, imageScale, tags)
-	}
 	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme(), fullBleed)
 	body := a.buildPreviewBody(result, scrollKey, preview, palette, layout.BodyWidth, layout.BodyHeight, imageScale, fullBleed)
 	return previewview.PreviewView(previewview.PreviewProps{
@@ -80,6 +77,8 @@ func (a *App) buildPreviewBody(result queryResult, scrollKey string, preview que
 	switch preview.PreviewType {
 	case plugin.WoxPreviewTypeShell:
 		return a.buildShellPreview(result, palette.componentTheme(), width, height, imageScale)
+	case plugin.WoxPreviewTypeTerminal:
+		return a.buildShellOutputPreview(a.terminal.terminalPreviewSnapshotFor(preview), palette.componentTheme(), width, height, imageScale)
 	case "woxview":
 		return a.buildWoxViewPreview(result, scrollKey, preview, palette, width, height)
 	case "text":

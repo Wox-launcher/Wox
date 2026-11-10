@@ -19,4 +19,7 @@ const uint8_t *wox_ghostty_write(WoxGhostty *model, const uint8_t *bytes, size_t
 size_t wox_ghostty_key(WoxGhostty *model, GhosttyKey key, uint32_t codepoint, GhosttyMods mods, bool repeat, uint8_t *out, size_t capacity);
 size_t wox_ghostty_paste(WoxGhostty *model, char *data, size_t length, uint8_t *out, size_t capacity);
 void wox_ghostty_scroll(WoxGhostty *model, int rows);
+void wox_ghostty_scroll_bottom(WoxGhostty *model);
 bool wox_ghostty_frame(WoxGhostty *model, WoxGhosttyCell *grid, uint16_t cols, uint16_t rows, GhosttyRenderStateCursor *cursor);
+void wox_ghostty_begin_command(WoxGhostty *model);
+uint8_t *wox_ghostty_command_output(WoxGhostty *model, size_t *length);

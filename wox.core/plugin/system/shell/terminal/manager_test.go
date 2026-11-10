@@ -148,8 +148,12 @@ func TestSessionManagerSubscribeLoadsSessionFromFile(t *testing.T) {
 		mu.Unlock()
 	}})
 
-	if _, err := manager.Subscribe(context.Background(), "ui-load-file", sessionID, 0); err != nil {
+	state, err := manager.Subscribe(context.Background(), "ui-load-file", sessionID, 0)
+	if err != nil {
 		t.Fatalf("subscribe failed: %v", err)
+	}
+	if state.Status != "" {
+		t.Fatalf("restored output reported process status %q", state.Status)
 	}
 
 	time.Sleep(20 * time.Millisecond)

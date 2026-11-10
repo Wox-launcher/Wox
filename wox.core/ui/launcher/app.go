@@ -7,6 +7,7 @@ import (
 	"log"
 	"maps"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 
 	"wox/common"
 	"wox/network"
+	"wox/plugin"
 	"wox/setting"
 	"wox/ui/contract"
 	woxcomponent "wox/ui/launcher/component"
@@ -200,6 +202,8 @@ type queryResult struct {
 	DragData          *queryResultDragData `json:"DragData"`
 	IsGroup           bool                 `json:"IsGroup"`
 	Revision          uint64               `json:"-"`
+	score, groupScore int64
+	localShellRow     bool
 }
 
 type queryResultDragData struct {
@@ -828,6 +832,7 @@ func (a *App) showWindow(params showAppParams) error {
 	queryEmpty := false
 	preserveQuery := false
 	refreshInlinePreview := false
+	refreshShellQueryID := ""
 	wasVisible := false
 	if err := a.runOnUI("prepare launcher show", func() {
 		if params.WindowWidth <= 0 {
@@ -849,6 +854,12 @@ func (a *App) showWindow(params showAppParams) error {
 		}
 		preserveQuery = a.applyLaunchModeOnShowLocked()
 		refreshInlinePreview = !wasVisible && a.previews.hasInlinePreviewToRestore()
+		if !wasVisible && preserveQuery && a.previews.pluginPreview.pluginID == common.ShellPluginID &&
+			a.resultList.resultsQueryID == a.querySession.query.QueryID &&
+			slices.ContainsFunc(a.resultList.results, func(row queryResult) bool { return row.localShellRow }) {
+			// The old PTY is gone. Replace its local rows with saved history when the query is retained.
+			refreshShellQueryID = a.querySession.query.QueryID
+		}
 		a.querySession.armHistoryRecall(params.QueryHistories, params.LaunchMode == "continue")
 		if params.SelectAll {
 			a.querySession.selectEntireQuery()
@@ -894,6 +905,11 @@ func (a *App) showWindow(params showAppParams) error {
 	if refreshInlinePreview {
 		util.GetLogger().Info(a.lifecycleCtx, "refresh inline WebView state after launcher restore")
 		if err := a.RefreshQuery(a.lifecycleCtx, common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
+			return err
+		}
+	}
+	if refreshShellQueryID != "" {
+		if err := a.RefreshQuery(a.lifecycleCtx, common.RefreshQueryOptions{PreserveSelectedIndex: true, ExpectedQueryId: refreshShellQueryID}); err != nil {
 			return err
 		}
 	}
@@ -970,6 +986,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.forms.form = nil
 		a.quickSelect.stopQuickSelectLocked()
 		a.visible = false
+		a.previews.shellOutput = queryResult{}
 		a.bottomAnchorY = 0
 		a.glance.stopGlanceLocked(false)
 		a.dismissLauncherHoverTooltipsOnUI()
@@ -1410,7 +1427,7 @@ func (a *App) applyResults(queryID string, results []queryResult, layout *queryL
 		}
 		a.applyRefinementsLocked(*refinements)
 	}
-	a.resultList.publishRows(queryID, results)
+	a.resultList.publishRows(queryID, a.withShellSessionHistory(queryID, results))
 	a.querySession.queryComplete = complete
 	enterChatMode := layout != nil && layout.ChatMode
 	if layout != nil {
@@ -2169,6 +2186,10 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			a.host.ClearOverlay(launcherview.LauncherQueryInputKey, 0)
 			return true
 		}
+		if a.previews.shellOutput.ID != "" {
+			a.showLiveShell()
+			return true
+		}
 		util.Go(a.lifecycleCtx, "hide launcher from escape", func() {
 			if err := a.hideWindow(true); err != nil {
 				log.Printf("hide launcher: %v", err)
@@ -2363,6 +2384,12 @@ func (a *App) selectResult(index int) {
 
 func (a *App) activateSelected() {
 	selected := a.resultList.selected
+	if selected < 0 {
+		if result, ok := a.previews.pluginPreview.result(); ok && result.Preview.PreviewType == plugin.WoxPreviewTypeShell {
+			a.openShellPreview(result)
+			return
+		}
+	}
 	a.activateResult(selected)
 }
 

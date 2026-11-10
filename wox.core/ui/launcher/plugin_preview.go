@@ -13,6 +13,7 @@ func (a *previewController) clearPluginPreviewContext() {
 		a.enqueueWoxViewLifecycle(previous, previous.Preview.WoxViewID, "release-plugin-preview", nil)
 	}
 	a.pluginPreview.clear()
+	a.shellOutput = queryResult{}
 }
 
 // pluginPreviewState owns the preview independently of selected rows and query generations.

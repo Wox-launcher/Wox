@@ -944,7 +944,15 @@ func (a *App) applyTypedResultUpdate(result plugin.UpdatableResult, preparedPrev
 			a.resultList.results[index].Icon = fromCoreImage(*result.Icon)
 		}
 		if result.Preview != nil {
+			previous := a.resultList.results[index].Preview
 			a.resultList.results[index].Preview = *preparedPreview
+			if a.previews.shellOutput.ID == result.Id {
+				a.previews.shellOutput.Preview = *preparedPreview
+			} else if a.previews.shellOutput.ID == "" && index == a.resultList.selected &&
+				preparedPreview.PreviewType == plugin.WoxPreviewTypeTerminal &&
+				decodeTerminalPreviewData(preparedPreview.PreviewData).SessionID != decodeTerminalPreviewData(previous.PreviewData).SessionID {
+				a.pinShellOutput(a.resultList.results[index])
+			}
 		}
 		if result.Tails != nil {
 			a.resultList.results[index].Tails = fromCoreTails(*result.Tails)

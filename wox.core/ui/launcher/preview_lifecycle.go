@@ -2,6 +2,8 @@ package launcher
 
 import (
 	"log"
+
+	"wox/common"
 	"wox/plugin"
 )
 
@@ -17,10 +19,14 @@ func (a *previewController) reconcileSelectedPreviewOnUI() {
 	a.reconcilePreviewVisibility()
 	result, preview, visible := a.selectedPreviewForLifecycle()
 	if a.reconcileShell != nil {
-		if visible && preview.PreviewType == plugin.WoxPreviewTypeShell {
-			a.reconcileShell(result.QueryID, result.ID)
+		shell, ok := a.pluginPreview.result()
+		if visible && ok && a.pluginPreview.pluginID == common.ShellPluginID && shell.Preview.PreviewType == plugin.WoxPreviewTypeShell {
+			if preview.PreviewType == plugin.WoxPreviewTypeShell {
+				shell = result
+			}
+			a.reconcileShell(shell)
 		} else {
-			a.reconcileShell("", "")
+			a.reconcileShell(queryResult{})
 		}
 	}
 	if a.window() != nil {
@@ -127,7 +133,7 @@ func (a *previewController) selectedPreviewForLifecycle() (queryResult, queryPre
 	if a.isDestroyed() || !a.visible() {
 		return queryResult{}, queryPreview{}, false
 	}
-	if result, ok := a.pluginPreview.result(); ok {
+	if result, ok := a.displayedPluginPreview(); ok {
 		return result, result.Preview, launcherPreviewVisible(a.selectedPreviewLayout(), result.Preview)
 	}
 	if a.resultList.resultsQueryID == "" || a.resultList.selected < 0 || a.resultList.selected >= len(a.resultList.results) {

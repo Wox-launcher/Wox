@@ -8,11 +8,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"wox/plugin/system/shell/terminal"
 	woxcomponent "wox/ui/launcher/component"
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
-	woxwidget "wox/ui/widget"
 	"wox/util"
 	"wox/util/clipboard"
 )
@@ -21,12 +21,6 @@ const (
 	maxTerminalPreviewBytes = 2 * 1024 * 1024
 	terminalHistoryBytes    = 64 * 1024
 )
-
-type terminalPreviewData struct {
-	SessionID string `json:"session_id"`
-	Command   string `json:"command"`
-	Status    string `json:"status"`
-}
 
 type terminalChunk struct {
 	SessionID   string `json:"SessionId"`
@@ -50,6 +44,7 @@ type terminalPreviewState struct {
 	SessionID           string
 	Command             string
 	Status              string
+	LiveStatus          bool
 	Error               string
 	Text                string
 	BaseCursor          int64
@@ -93,48 +88,12 @@ type terminalMatch struct {
 	end   int
 }
 
-// buildTerminalPreview delegates presentation to the pure view while retaining controller-owned text layout caching.
-func (a *App) buildTerminalPreview(snapshot terminalPreviewSnapshot, palette uiPalette, width, height, imageScale float32, tags []previewview.PreviewTag) woxwidget.Widget {
-	font := ""
-	if a.generalSettings != nil {
-		font = a.generalSettings.Data().AppFontFamily
-	}
-	matches := make([]previewview.TerminalMatch, len(snapshot.Matches))
-	for index, match := range snapshot.Matches {
-		matches[index] = previewview.TerminalMatch{Start: match.start, End: match.end}
-	}
-	return previewview.TerminalPreviewView(previewview.TerminalPreviewProps{
-		Width: width, Height: height, Theme: palette.componentTheme(), Window: a.window,
-		SessionID: snapshot.SessionID, Command: snapshot.Command, Status: snapshot.Status, Error: snapshot.Error, Text: snapshot.Text,
-		Scroll: snapshot.Scroll, LoadingHistory: snapshot.LoadingHistory, SearchOpen: snapshot.SearchOpen, SearchEditing: snapshot.SearchEditing,
-		CaseSensitive: snapshot.CaseSensitive, MatchCount: snapshot.MatchCount, MatchIndex: snapshot.MatchIndex, Matches: matches,
-		Fullscreen: a.terminal.terminalFullscreen, SearchHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("shift+f")), "+"),
-		FullscreenHotkey: strings.Join(formatHotkeyLabels(primaryHotkey("b")), "+"), Tags: tags,
-		LayoutText: func(value string, style woxui.TextStyle, textWidth, lineHeight float32) woxwidget.TextBlockLayout {
-			return a.terminal.terminalLayout.measure(value, textLayoutKey{
-				session: snapshot.SessionID, font: font, window: a.window, width: textWidth,
-				scale: imageScale, lineHeight: lineHeight, style: style,
-			})
-		},
-		OnClampScroll: a.terminal.clampTerminalPreviewScroll, OnScroll: a.terminal.scrollTerminalPreview, OnOpenSearch: a.terminal.openTerminalSearch,
-		OnSetSearch: a.terminal.setTerminalSearchQuery, OnSearchChanged: func(value string) { _ = a.terminal.setTerminalSearchQuery(value) },
-		OnSearchKey:  a.terminal.onTerminalPreviewKey,
-		OnMoveSearch: a.terminal.moveTerminalSearch, OnToggleSearchCase: a.terminal.toggleTerminalSearchCase, OnCloseSearch: a.terminal.closeTerminalSearch,
-		OnToggleFullscreen: a.terminal.toggleTerminalFullscreen, OnTagHover: a.previews.setPreviewTooltip,
-		SelectionAnchor: snapshot.SelectionAnchor, SelectionFocus: snapshot.SelectionFocus,
-		OnSelectionStart: a.terminal.startTerminalSelection, OnSelectionExtend: a.terminal.extendTerminalSelection,
-		OnSelectWord: a.terminal.selectTerminalWord, OnSelectLine: a.terminal.selectTerminalLine,
-		OnCopy: a.terminal.copyTerminalPreviewOutput, OnSelectAll: a.terminal.selectAllTerminalPreview,
-		OnContextMenu: a.terminal.openTerminalContextMenu,
-	})
-}
-
-func decodeTerminalPreviewData(value string) terminalPreviewData {
-	var data terminalPreviewData
+func decodeTerminalPreviewData(value string) terminal.PreviewData {
+	var data terminal.PreviewData
 	if json.Unmarshal([]byte(value), &data) == nil {
 		return data
 	}
-	return terminalPreviewData{SessionID: strings.TrimSpace(value)}
+	return terminal.PreviewData{SessionID: strings.TrimSpace(value)}
 }
 
 // activateTerminalPreview switches the single visible terminal subscription before rendering.
@@ -142,18 +101,19 @@ func (a *terminalController) activateTerminalPreview(preview queryPreview) {
 	data := decodeTerminalPreviewData(preview.PreviewData)
 	state := a.terminalPreview
 	oldSessionID := ""
-	sessionChanged := state == nil || state.SessionID != data.SessionID
+	sessionChanged := state == nil || state.SessionID != data.SessionID ||
+		(data.SessionID == "" && (state.Command != data.Command || state.Text != data.Output))
 	if sessionChanged {
 		if state != nil {
 			oldSessionID = state.SessionID
 		}
-		state = &terminalPreviewState{SessionID: data.SessionID, Command: data.Command, Status: data.Status, AutoFollow: true, Scroll: float32(math.MaxFloat32), LastHistoryCursor: -1, MatchIndex: -1}
+		state = &terminalPreviewState{SessionID: data.SessionID, Command: data.Command, Status: data.Status, Text: data.Output, AutoFollow: true, Scroll: float32(math.MaxFloat32), LastHistoryCursor: -1, MatchIndex: -1}
 		a.terminalPreview = state
 	} else {
 		if data.Command != "" {
 			state.Command = data.Command
 		}
-		if data.Status != "" {
+		if !state.LiveStatus && data.Status != "" {
 			state.Status = data.Status
 		}
 	}
@@ -167,7 +127,7 @@ func (a *terminalController) activateTerminalPreview(preview queryPreview) {
 func (a *terminalController) terminalPreviewSnapshotFor(preview queryPreview) terminalPreviewSnapshot {
 	data := decodeTerminalPreviewData(preview.PreviewData)
 	if a.terminalPreview == nil || a.terminalPreview.SessionID != data.SessionID {
-		return terminalPreviewSnapshot{SessionID: data.SessionID, Command: data.Command, Status: data.Status}
+		return terminalPreviewSnapshot{SessionID: data.SessionID, Command: data.Command, Status: data.Status, Text: data.Output, Scroll: math.MaxFloat32}
 	}
 	return snapshotTerminalPreview(a.terminalPreview)
 }
@@ -223,7 +183,7 @@ func (a *terminalController) scheduleTerminalSubscription(sessionID string) {
 
 // deactivateTerminalPreview releases core output when the selected preview no longer uses it.
 func (a *terminalController) deactivateTerminalPreview() {
-	a.terminalLayout = textLayoutCache{}
+	a.terminalLayout = shellOutputLayout{}
 	oldSessionID := ""
 	searchWasOpen := false
 	if a.terminalPreview != nil {
@@ -280,7 +240,11 @@ func (a *terminalController) applyTerminalChunk(chunk terminalChunk) {
 	if state.HistoryAnchorBase > 0 && state.BaseCursor <= state.HistoryAnchorBase {
 		prefixBytes := state.HistoryAnchorBase - state.BaseCursor
 		if prefixBytes >= 0 && prefixBytes <= int64(len(state.Text)) {
-			state.Scroll = state.HistoryAnchorScroll + float32(strings.Count(state.Text[:prefixBytes], "\n"))*18
+			layout := &a.terminalLayout
+			if layout.columns > 0 {
+				layout.prepare(state.Command, state.Text, state.Error, layout.columns)
+				state.Scroll = state.HistoryAnchorScroll + float32(layout.rowAt(layout.prefix+int(prefixBytes))-layout.rowAt(layout.prefix))*layout.cellHeight
+			}
 			state.AutoFollow = false
 			state.HistoryAnchorBase = 0
 			state.LoadingHistory = false
@@ -303,7 +267,10 @@ func (a *terminalController) applyTerminalState(update terminalSessionState) {
 		if update.Command != "" {
 			state.Command = update.Command
 		}
-		state.Status = update.Status
+		if update.Status != "" {
+			state.Status = update.Status
+			state.LiveStatus = true
+		}
 		state.Error = update.Error
 	}
 	_ = a.window().Invalidate()
@@ -463,7 +430,7 @@ func (a *terminalController) setTerminalSearchQuery(value string) error {
 	return nil
 }
 
-// moveTerminalSearch advances through loaded matches and scrolls to an approximate text-layout position.
+// moveTerminalSearch advances through loaded matches and scrolls to the matching grid row.
 func (a *terminalController) moveTerminalSearch(delta int) {
 	state := a.terminalPreview
 	if state == nil || !state.SearchOpen || state.SearchEditor == nil {
@@ -477,11 +444,9 @@ func (a *terminalController) moveTerminalSearch(delta int) {
 			state.MatchIndex = (state.MatchIndex + delta + len(state.Matches)) % len(state.Matches)
 		}
 		match := state.Matches[state.MatchIndex]
-		prefixEnd := min(max(0, match.start), len(state.Text))
-		line := strings.Count(state.Text[:prefixEnd], "\n")
-		totalLines := max(1, strings.Count(state.Text, "\n")+1)
-		ratio := float32(line) / float32(totalLines)
-		state.Scroll = min(max(float32(0), ratio*state.MaxScroll), state.MaxScroll)
+		layout := &a.terminalLayout
+		row := layout.rowAt(layout.prefix + match.start)
+		state.Scroll = min(float32(row)*layout.cellHeight, state.MaxScroll)
 		state.AutoFollow = false
 	}
 	_ = a.window().Invalidate()

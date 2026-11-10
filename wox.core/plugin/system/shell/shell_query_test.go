@@ -41,32 +41,6 @@ func (a *shellQueryTestAPI) ChangeQuery(ctx context.Context, query common.PlainQ
 	a.changedQuery = query
 }
 
-func TestBuildEmptyCommandResultSurfacesWorkingDirectory(t *testing.T) {
-	plugin := &ShellPlugin{}
-	const workingDirectory = `D:\dev\apps`
-	result := plugin.buildEmptyCommandResult(context.Background(), "powershell", workingDirectory)
-
-	if result.Title != "i18n:plugin_shell_enter_command" {
-		t.Fatalf("title = %q, want empty-command prompt", result.Title)
-	}
-	if result.SubTitle != "" {
-		t.Fatalf("subtitle = %q, want empty so the list row stays title-only", result.SubTitle)
-	}
-	if len(result.Tails) != 0 {
-		t.Fatalf("tails = %#v, want none on the empty-command row", result.Tails)
-	}
-	assertShellComposePreview(t, result, workingDirectory)
-	if !emptyCommandResultShowsDirectory(result, workingDirectory) {
-		t.Fatalf("empty command result does not show working directory %q", workingDirectory)
-	}
-	if result.GroupScore <= 100 {
-		t.Fatalf("GroupScore = %d, want above saved-command group score 100", result.GroupScore)
-	}
-	if !resultHasChangeWorkingDirectoryAction(result) {
-		t.Fatal("empty command result is missing the change working directory action")
-	}
-}
-
 func TestBuildHistoryTailsMarksOnlyRunningCommands(t *testing.T) {
 	shellPlugin := &ShellPlugin{}
 	tails := shellPlugin.buildHistoryTails(context.Background(), "running")
@@ -153,12 +127,7 @@ func TestQueryEmptyShellPromptUsesHomeDirectoryByDefault(t *testing.T) {
 		TriggerKeyword: ">",
 		Search:         "",
 	})
-	if len(response.Results) == 0 {
-		t.Fatal("empty > query returned no results")
-	}
-	if !emptyCommandResultShowsDirectory(response.Results[0], home) {
-		t.Fatalf("empty > query does not show home directory %q", home)
-	}
+	assertShellPluginPreview(t, response.PluginPreview, home)
 }
 
 func TestBuildDefaultWorkingDirectoryDetailSettingFollowsMode(t *testing.T) {
@@ -194,7 +163,7 @@ func TestGetMetadataDefaultWorkingDirectoryIsHome(t *testing.T) {
 	t.Fatal("default working directory mode setting is missing")
 }
 
-func TestQueryEmptyShellPromptLeadsWithDirectoryAwarePlaceholder(t *testing.T) {
+func TestQueryEmptyShellUsesDirectoryAwarePluginPreview(t *testing.T) {
 	shellPlugin := &ShellPlugin{
 		api: &shellQueryTestAPI{settings: map[string]string{}},
 	}
@@ -207,42 +176,32 @@ func TestQueryEmptyShellPromptLeadsWithDirectoryAwarePlaceholder(t *testing.T) {
 			QueryContextWorkingDirectoryKey: workingDirectory,
 		},
 	})
-	if len(response.Results) == 0 {
-		t.Fatal("empty > query returned no results")
+	if interactive.Available {
+		if len(response.Results) != 1 || len(response.Results[0].Actions) == 0 || response.Results[0].Actions[0].Id != interactive.FocusActionID {
+			t.Fatalf("empty > query did not return the new-command action: %+v", response.Results)
+		}
+	} else if len(response.Results) != 0 {
+		t.Fatalf("empty > query returned an interactive result in a plain build: %+v", response.Results)
 	}
-
-	first := response.Results[0]
-	if first.Title != "i18n:plugin_shell_enter_command" {
-		t.Fatalf("first result title = %q, want empty-command prompt", first.Title)
-	}
-	if first.SubTitle != "" || len(first.Tails) != 0 {
-		t.Fatalf("first result must be title-only, subtitle=%q tails=%#v", first.SubTitle, first.Tails)
-	}
-	assertShellComposePreview(t, first, workingDirectory)
-	if !emptyCommandResultShowsDirectory(first, workingDirectory) {
-		t.Fatalf("first result does not show working directory %q", workingDirectory)
-	}
-	if !resultHasChangeWorkingDirectoryAction(first) {
-		t.Fatal("empty > query is missing the change working directory action")
-	}
+	assertShellPluginPreview(t, response.PluginPreview, workingDirectory)
 }
 
-// assertShellComposePreview covers the interactive payload and the plain Go build fallback.
-func assertShellComposePreview(t *testing.T, result plugin.QueryResult, workingDirectory string) {
+// assertShellPluginPreview checks the directory metadata in both interactive and plain builds.
+func assertShellPluginPreview(t *testing.T, preview *plugin.WoxPreview, workingDirectory string) {
 	t.Helper()
+	if preview == nil || len(preview.PreviewTags) < 2 || preview.PreviewTags[1].Label != workingDirectory {
+		t.Fatalf("plugin preview does not show working directory %q: %+v", workingDirectory, preview)
+	}
 	if !interactive.Available {
-		if result.Preview.PreviewType != plugin.WoxPreviewTypeText || result.Preview.PreviewData != "i18n:plugin_shell_enter_command_preview" {
-			t.Fatalf("preview = %+v, want enter-command instruction", result.Preview)
+		if preview.PreviewType != plugin.WoxPreviewTypeText || preview.PreviewData == "" {
+			t.Fatalf("preview = %+v, want enter-command instruction", preview)
 		}
 		return
 	}
 	var options interactive.Options
-	err := json.Unmarshal([]byte(result.Preview.PreviewData), &options)
-	if result.Preview.PreviewType != plugin.WoxPreviewTypeShell || err != nil || options.Directory != workingDirectory || options.Interpreter != getDefaultInterpreter() {
-		t.Fatalf("interactive preview = %+v, options = %+v, err = %v", result.Preview, options, err)
-	}
-	if len(result.Actions) == 0 || result.Actions[0].Id != interactive.OpenActionID || !result.Actions[0].IsDefault || !result.Actions[0].PreventHideAfterAction {
-		t.Fatalf("interactive launch action = %+v", result.Actions)
+	err := json.Unmarshal([]byte(preview.PreviewData), &options)
+	if preview.PreviewType != plugin.WoxPreviewTypeShell || err != nil || options.Directory != workingDirectory || options.Interpreter != getDefaultInterpreter() {
+		t.Fatalf("interactive preview = %+v, options = %+v, err = %v", preview, options, err)
 	}
 }
 
@@ -299,15 +258,6 @@ func TestShellQueryTextKeepsTriggerAndCommand(t *testing.T) {
 	if got := shellQueryText(">", "ls"); got != "> ls" {
 		t.Fatalf("command query = %q, want \"> ls\"", got)
 	}
-}
-
-func emptyCommandResultShowsDirectory(result plugin.QueryResult, workingDirectory string) bool {
-	for _, tag := range result.Preview.PreviewTags {
-		if tag.Label == workingDirectory {
-			return true
-		}
-	}
-	return false
 }
 
 func resultHasChangeWorkingDirectoryAction(result plugin.QueryResult) bool {

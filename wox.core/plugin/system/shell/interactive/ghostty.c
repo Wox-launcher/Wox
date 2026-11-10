@@ -11,6 +11,7 @@ struct WoxGhostty {
     GhosttyRenderStateRowCells cells;
     GhosttyKeyEncoder encoder;
     GhosttyKeyEvent key;
+    GhosttyTrackedGridRef command_start;
     uint8_t reply[65536];
     size_t reply_length;
 };
@@ -44,6 +45,7 @@ WoxGhostty *wox_ghostty_new(uint16_t cols, uint16_t rows) {
 }
 
 void wox_ghostty_free(WoxGhostty *model) {
+    if (model->command_start) ghostty_tracked_grid_ref_free(model->command_start);
     if (model->key) ghostty_key_event_free(model->key);
     if (model->encoder) ghostty_key_encoder_free(model->encoder);
     if (model->cells) ghostty_render_state_row_cells_free(model->cells);
@@ -87,6 +89,73 @@ size_t wox_ghostty_paste(WoxGhostty *model, char *data, size_t length, uint8_t *
 void wox_ghostty_scroll(WoxGhostty *model, int rows) {
     GhosttyTerminalScrollViewport action = {.tag = GHOSTTY_TERMINAL_SCROLL_VIEWPORT_DELTA, .value.delta = rows};
     ghostty_terminal_scroll_viewport(model->terminal, action);
+}
+
+void wox_ghostty_scroll_bottom(WoxGhostty *model) {
+    GhosttyTerminalScrollViewport action = {.tag = GHOSTTY_TERMINAL_SCROLL_VIEWPORT_BOTTOM};
+    ghostty_terminal_scroll_viewport(model->terminal, action);
+}
+
+static GhosttyPoint cursor_point(GhosttyTerminal terminal) {
+    uint16_t x = 0, y = 0;
+    ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_X, &x);
+    ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_Y, &y);
+    return (GhosttyPoint){.tag = GHOSTTY_POINT_TAG_ACTIVE, .value.coordinate = {.x = x, .y = y}};
+}
+
+void wox_ghostty_begin_command(WoxGhostty *model) {
+    if (model->command_start) ghostty_tracked_grid_ref_free(model->command_start);
+    model->command_start = NULL;
+    ghostty_terminal_grid_ref_track(model->terminal, cursor_point(model->terminal), &model->command_start);
+}
+
+// Format the cells written between the shell's markers, including scrolled rows.
+uint8_t *wox_ghostty_command_output(WoxGhostty *model, size_t *length) {
+    GhosttyTrackedGridRef tracked = model->command_start;
+    model->command_start = NULL;
+    if (!tracked) return NULL;
+
+    GhosttyTerminal terminal = model->terminal;
+    GhosttySelection selection = {0};
+    GhosttyPoint start = {.tag = GHOSTTY_POINT_TAG_SCREEN};
+    GhosttyPoint end = {.tag = GHOSTTY_POINT_TAG_SCREEN};
+    GhosttyResult found = ghostty_tracked_grid_ref_point(tracked, start.tag, &start.value.coordinate);
+    ghostty_tracked_grid_ref_free(tracked);
+    GhosttyGridRef cursor;
+    if (found != GHOSTTY_SUCCESS ||
+        ghostty_terminal_grid_ref(terminal, cursor_point(terminal), &cursor) != GHOSTTY_SUCCESS ||
+        ghostty_terminal_point_from_grid_ref(terminal, &cursor, end.tag, &end.value.coordinate) != GHOSTTY_SUCCESS) return NULL;
+
+    bool wrap = false;
+    ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_PENDING_WRAP, &wrap);
+    if (!wrap) {
+        // The cursor is normally one cell past the last character. Selections are inclusive.
+        if (end.value.coordinate.x > 0) {
+            end.value.coordinate.x--;
+        } else if (end.value.coordinate.y > 0) {
+            uint16_t cols = 0;
+            ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLS, &cols);
+            end.value.coordinate.x = cols - 1;
+            end.value.coordinate.y--;
+        } else {
+            return NULL;
+        }
+    }
+    if (end.value.coordinate.y < start.value.coordinate.y ||
+        (end.value.coordinate.y == start.value.coordinate.y && end.value.coordinate.x < start.value.coordinate.x) ||
+        ghostty_terminal_grid_ref(terminal, start, &selection.start) != GHOSTTY_SUCCESS ||
+        ghostty_terminal_grid_ref(terminal, end, &selection.end) != GHOSTTY_SUCCESS) return NULL;
+
+    GhosttyFormatter formatter;
+    if (ghostty_formatter_terminal_new(NULL, &formatter, terminal) != GHOSTTY_SUCCESS) return NULL;
+    uint8_t *output = NULL;
+    bool unwrap = true;
+    if (ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_SELECTION, &selection) == GHOSTTY_SUCCESS &&
+        ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_UNWRAP, &unwrap) == GHOSTTY_SUCCESS) {
+        ghostty_formatter_format_alloc(formatter, NULL, &output, length);
+    }
+    ghostty_formatter_free(formatter);
+    return output;
 }
 
 static uint32_t color(GhosttyRenderStateRowCells cells, GhosttyRenderStateRowCellsData key) {

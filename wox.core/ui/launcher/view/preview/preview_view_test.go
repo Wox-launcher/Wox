@@ -12,6 +12,28 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+func TestShellPreviewWaitsForFirstFrameWithoutStartupText(t *testing.T) {
+	props := ShellPreviewProps{Width: 240, Height: 180, Reopen: "Retry", OnOpen: func() {}}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return ShellPreviewView(props) })
+	host.AttachServices(terminalPreviewHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 240, Height: 180}, PixelSize: woxui.PixelSize{Width: 240, Height: 180}, Scale: 1}
+	var pending woxui.DisplayList
+	host.Frame(&pending, frame)
+	if pending.TextDrawCount() != 0 {
+		t.Fatal("the pending shell drew startup text")
+	}
+
+	props.Error = "Unable to start shell"
+	var failed woxui.DisplayList
+	host.Frame(&failed, frame)
+	for _, node := range host.Snapshot().Tree.Nodes {
+		if node.AutomationID == "shell-interactive-open" && node.Label == props.Reopen && failed.TextDrawCount() >= 2 {
+			return
+		}
+	}
+	t.Fatal("shell startup failure did not show an error and retry action")
+}
+
 func TestFullBleedPreviewUsesAvailableSpace(t *testing.T) {
 	theme := woxcomponent.Theme{}
 	for _, hasTags := range []bool{false, true} {
@@ -166,78 +188,6 @@ func TestPreviewTagHoverUsesTooltip(t *testing.T) {
 
 	if !hovered || tooltip != "Character count" || anchor != wantAnchor {
 		t.Fatalf("hover = %v, %q, %#v; want tooltip and anchor", hovered, tooltip, anchor)
-	}
-}
-
-func TestTerminalPreviewUsesFramelessFlutterSurface(t *testing.T) {
-	theme := woxcomponent.Theme{PreviewText: woxui.Color{R: 220, G: 230, B: 240, A: 255}, PreviewSplit: woxui.Color{R: 100, G: 110, B: 120, A: 255}}
-	tooltip := ""
-	view := TerminalPreviewView(TerminalPreviewProps{
-		Width: 500, Height: 300, SessionID: "test", Command: "ping example.com", SearchOpen: true, Theme: theme,
-		SearchHotkey: "Cmd+Shift+F", FullscreenHotkey: "Cmd+B", OnTagHover: func(_ bool, text string, _ woxui.Rect) { tooltip = text },
-	}).(woxwidget.Container)
-	if view.BorderWidth != 0 || view.Color.A != 0 || view.Padding.Left != 10 || view.Padding.Top != 10 || view.Padding.Right != 12 {
-		t.Fatalf("terminal outer surface = border %.0f fill %#v padding %#v; want Flutter frameless padding", view.BorderWidth, view.Color, view.Padding)
-	}
-	stack := view.Child.(woxwidget.Stack)
-	if stack.Width != 478 {
-		t.Fatalf("terminal content width = %.0f, want 478 after outer padding", stack.Width)
-	}
-	content := stack.Children[0].Child.(woxwidget.Flex)
-	header := content.Children[0].(woxwidget.Container).Child.(woxwidget.Container)
-	if header.BorderWidth != 1 || header.Color.A == 0 {
-		t.Fatalf("terminal header = border %.0f fill %#v; want framed status bar", header.BorderWidth, header.Color)
-	}
-	headerStack := header.Child.(woxwidget.Stack)
-	command := headerStack.Children[1]
-	if command.Left != 17 || command.Right != 79 || !command.StretchWidth {
-		t.Fatalf("terminal command layout = left/right %.0f/%.0f stretch %v, want 17/79/true", command.Left, command.Right, command.StretchWidth)
-	}
-	commandAlign := command.Child.(woxwidget.Align)
-	if command.Top != 0 || commandAlign.Height != 34 || commandAlign.Vertical != 0.5 {
-		t.Fatalf("terminal command alignment = top %.0f child %#v, want full-height vertical center", command.Top, command.Child)
-	}
-	findAlign := headerStack.Children[2].Child.(woxwidget.Align)
-	find := findAlign.Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	if !headerStack.Children[2].AnchorRight || headerStack.Children[2].Right != 34 || !headerStack.Children[3].AnchorRight {
-		t.Fatalf("terminal action anchors = find %v/%.0f fullscreen %v, want true/34/true", headerStack.Children[2].AnchorRight, headerStack.Children[2].Right, headerStack.Children[3].AnchorRight)
-	}
-	if findAlign.Height != 34 || findAlign.Vertical != 0.5 {
-		t.Fatalf("terminal find alignment = %#v, want full-height vertical center", findAlign)
-	}
-	if find.Label != "Find" || find.Icon == nil || find.OnHoverAt == nil {
-		t.Fatalf("terminal find action = %+v; want shared icon button", find)
-	}
-	find.OnHoverAt(true, woxui.Rect{})
-	if tooltip != "Cmd+Shift+F" {
-		t.Fatalf("terminal find tooltip = %q, want Cmd+Shift+F", tooltip)
-	}
-	fullscreen := headerStack.Children[3].Child.(woxwidget.Align).Child.(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
-	if fullscreen.Label != "Toggle fullscreen" || fullscreen.Icon == nil || fullscreen.OnHoverAt == nil {
-		t.Fatalf("terminal fullscreen action = %+v; want shared icon button", fullscreen)
-	}
-	fullscreen.OnHoverAt(true, woxui.Rect{})
-	if tooltip != "Cmd+B" {
-		t.Fatalf("terminal fullscreen tooltip = %q, want Cmd+B", tooltip)
-	}
-	search := content.Children[1].(woxwidget.Container).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	if _, ok := search.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.TextFieldProps); !ok {
-		t.Fatal("terminal find input does not reuse WoxTextField")
-	}
-	count := search.Children[1].(woxwidget.Semantics)
-	if count.AutomationID != "launcher.preview.terminal.search.match-count" || count.Value != "0/0" {
-		t.Fatalf("terminal match count semantics = %+v, want stable 0/0 state", count)
-	}
-	body := content.Children[2].(woxwidget.Container)
-	if body.BorderWidth != 0 || body.Color.A != 0 {
-		t.Fatalf("terminal output surface = border %.0f fill %#v; want transparent output", body.BorderWidth, body.Color)
-	}
-}
-
-func TestTerminalHighlightSegmentsFollowWrappedLines(t *testing.T) {
-	segments := terminalHighlightSegments("first ms second ms", []string{"first ms", "second ms"}, []TerminalMatch{{Start: 6, End: 8}, {Start: 16, End: 18}})
-	if len(segments) != 2 || segments[0] != (terminalHighlightSegment{line: 0, start: 6, end: 8, matchIndex: 0}) || segments[1] != (terminalHighlightSegment{line: 1, start: 7, end: 9, matchIndex: 1}) {
-		t.Fatalf("terminal highlight segments = %+v, want both wrapped matches", segments)
 	}
 }
 

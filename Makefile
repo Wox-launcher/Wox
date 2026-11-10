@@ -176,6 +176,8 @@ dev: _check_deps ensure-resources
 	$(MAKE) -C wox.core woxmr-build
 	$(MAKE) -C wox.core window-hook-build
 	$(MAKE) host
+	$(MAKE) -C wox.core ghostty-build
+	$(MAKE) -C wox.core licenses-build LICENSE_BUILD_TAGS=wox_automation
 
 # Mirrors Wox.code-workspace "Run Wox": automation-enabled debug build, stable
 # binary name, automation info file, and the Windows crash-dump preLaunchTask.

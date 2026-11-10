@@ -3,8 +3,11 @@
 package interactive
 
 import (
+	_ "embed"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -12,11 +15,26 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+//go:embed integration.bash
+var bashIntegration string
+
+//go:embed integration.zsh
+var zshIntegration string
+
 // openPTY starts the shell as leader of its own session and assigns the slave as its controlling terminal.
-func openPTY(options Options, size Size) (transport, error) {
-	cmd := exec.Command(options.Interpreter, "-i")
+func openPTY(options Options, size Size, token string) (result transport, err error) {
+	args, env, cleanup, err := unixShellIntegration(options.Interpreter, token)
+	if err != nil {
+		return transport{}, err
+	}
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+	cmd := exec.Command(options.Interpreter, args...)
 	cmd.Dir = options.Directory
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd.Env = append(env, "TERM=xterm-256color", "COLORTERM=truecolor", "WOX_SHELL_SCROLLBACK="+options.scrollbackFile)
 	original, slave, err := pty.Open()
 	if err != nil {
 		return transport{}, err
@@ -57,7 +75,10 @@ func openPTY(options Options, size Size) (transport, error) {
 			}
 			return resizeErr
 		},
-		wait: cmd.Wait,
+		wait: func() error {
+			defer cleanup()
+			return cmd.Wait()
+		},
 		stop: func(canceled bool) {
 			if canceled {
 				// Give the interactive shell time to forward hangup to its own jobs.
@@ -75,6 +96,41 @@ func openPTY(options Options, size Size) (transport, error) {
 			_ = master.SetWriteDeadline(time.Now())
 		},
 	}, nil
+}
+
+// unixShellIntegration stages startup hooks without editing the user's shell configuration.
+func unixShellIntegration(interpreter, token string) ([]string, []string, func(), error) {
+	env := os.Environ()
+	if interpreter != "bash" && interpreter != "zsh" {
+		return []string{"-i"}, env, func() {}, nil
+	}
+	dir, err := os.MkdirTemp("", "wox-shell-")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	file, script := "bashrc", bashIntegration
+	if interpreter == "zsh" {
+		file, script = ".zshenv", zshIntegration
+		original, set := os.LookupEnv("ZDOTDIR")
+		flag := "0"
+		if set {
+			flag = "1"
+		}
+		env = append(env, "ZDOTDIR="+dir, "WOX_ZDOTDIR_SET="+flag, "WOX_ORIGINAL_ZDOTDIR="+original)
+	}
+	path := filepath.Join(dir, file)
+	cleanup := func() {
+		_ = os.Remove(path)
+		_ = os.Remove(dir)
+	}
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(script, "@WOX_TOKEN@", token)), 0600); err != nil {
+		cleanup()
+		return nil, nil, nil, err
+	}
+	if interpreter == "bash" {
+		return []string{"--rcfile", path, "-i"}, env, cleanup, nil
+	}
+	return []string{"-i"}, env, cleanup, nil
 }
 
 func unixPTYSize(size Size) *unix.Winsize {

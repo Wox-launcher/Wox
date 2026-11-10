@@ -2,6 +2,7 @@ package interactive
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -11,15 +12,18 @@ import (
 )
 
 const (
-	OpenActionID = "open-interactive-shell"
-	MaxColumns   = 240
-	MaxRows      = 100
-	MaxPaste     = 64 * 1024
+	MaxColumns = 240
+	MaxRows    = 100
+	MaxPaste   = 64 * 1024
 )
 
 type Options struct {
 	Interpreter string
 	Directory   string
+	HistoryID   string `json:",omitempty"`
+	Scrollback  string `json:"-"`
+
+	scrollbackFile string
 }
 
 type Size struct {
@@ -44,6 +48,7 @@ type Frame struct {
 	PasteBlocked            bool
 	Exited                  bool
 	Err                     error
+	History                 HistoryEntry
 }
 
 type Key struct {
@@ -74,7 +79,10 @@ type emulator interface {
 	paste(string) ([]byte, bool)
 	resize(Size) error
 	scroll(int)
+	scrollBottom()
 	snapshot(Size) Frame
+	beginCommand()
+	commandOutput() string
 }
 
 // Session owns one PTY and emulator. The UI exchanges immutable frames and ordered input.
@@ -90,7 +98,7 @@ type Session struct {
 }
 
 // Start creates a fresh shell after the first viewport size is known.
-func Start(ctx context.Context, options Options, size Size) (*Session, error) {
+func Start(ctx context.Context, options Options, size Size, save func(HistoryEntry, string, int, string) bool) (*Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -101,14 +109,40 @@ func Start(ctx context.Context, options Options, size Size) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	pty, err := openPTY(options, size)
+	options.scrollbackFile, err = stageScrollback(options.Scrollback)
 	if err != nil {
 		model.close()
 		return nil, err
 	}
+	token := rand.Text()
+	pty, err := openPTY(options, size, token)
+	if err != nil {
+		model.close()
+		if options.scrollbackFile != "" {
+			_ = os.Remove(options.scrollbackFile)
+		}
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	s := &Session{ctx: ctx, cancel: cancel, input: make(chan input, 64), resized: make(chan struct{}, 1), changes: make(chan struct{}, 1), done: make(chan struct{})}
-	go s.run(pty, model, size)
+	commands := commandTracker{prefix: "\x1b]633;Wox;" + token + ";"}
+	commands.history.ID = options.HistoryID
+	commands.history.Saved = options.HistoryID != ""
+	if commands.history.ID == "" {
+		commands.history.ID = HistoryIDPrefix + rand.Text()
+	}
+	if save != nil {
+		commands.onStart = model.beginCommand
+		commands.onFinish = func(entry HistoryEntry, command string, exitCode int) bool {
+			return save(entry, command, exitCode, model.commandOutput())
+		}
+	}
+	go func() {
+		if options.scrollbackFile != "" {
+			defer os.Remove(options.scrollbackFile)
+		}
+		s.run(pty, model, size, commands, options.HistoryID == "")
+	}()
 	return s, nil
 }
 
@@ -166,7 +200,7 @@ func (s *Session) publish(frame Frame) {
 
 // run serializes libghostty calls. PTY reads and writes progress independently so a full pipe
 // cannot deadlock a child waiting for its input or a ConPTY waiting to flush its final frame.
-func (s *Session) run(pty transport, model emulator, size Size) {
+func (s *Session) run(pty transport, model emulator, size Size, commands commandTracker, showCommandRows bool) {
 	defer close(s.done)
 	defer close(s.changes)
 	defer model.close()
@@ -232,6 +266,12 @@ func (s *Session) run(pty transport, model emulator, size Size) {
 		<-writeDone
 	}()
 
+	publish := func(frame Frame) {
+		if showCommandRows && commands.history.Title != "" {
+			frame.History = commands.history
+		}
+		s.publish(frame)
+	}
 	write := func(data []byte) bool {
 		if len(data) == 0 {
 			return true
@@ -244,22 +284,23 @@ func (s *Session) run(pty transport, model emulator, size Size) {
 			s.cancel()
 			frame := model.snapshot(size)
 			frame.Exited, frame.Err = true, errors.New("shell input queue is full")
-			s.publish(frame)
+			publish(frame)
 			return false
 		}
 	}
 
-	s.publish(model.snapshot(size))
+	publish(model.snapshot(size))
 	ticker := time.NewTicker(time.Second / 60)
 	defer ticker.Stop()
 	dirty := false
+	scrolled := false
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
 			if dirty {
-				s.publish(model.snapshot(size))
+				publish(model.snapshot(size))
 				dirty = false
 			}
 		case bytes, ok := <-output:
@@ -267,10 +308,15 @@ func (s *Session) run(pty transport, model emulator, size Size) {
 				frame := model.snapshot(size)
 				frame.Exited = true
 				frame.Err = <-result
-				s.publish(frame)
+				exitCode := -1
+				if frame.Err == nil {
+					exitCode = 0
+				}
+				commands.finish(exitCode)
+				publish(frame)
 				return
 			}
-			if !write(model.write(bytes)) {
+			if !commands.observe(bytes, func(segment []byte) bool { return write(model.write(segment)) }) {
 				return
 			}
 			dirty = true
@@ -284,7 +330,7 @@ func (s *Session) run(pty transport, model emulator, size Size) {
 				if err != nil {
 					frame := model.snapshot(size)
 					frame.Exited, frame.Err = true, fmt.Errorf("resize shell viewport: %w", err)
-					s.publish(frame)
+					publish(frame)
 					return
 				}
 				size, dirty = next, true
@@ -295,19 +341,25 @@ func (s *Session) run(pty transport, model emulator, size Size) {
 			case value.scroll != 0:
 				model.scroll(value.scroll)
 				dirty = true
+				scrolled = true
 			case value.paste:
 				var safe bool
 				data, safe = model.paste(value.text)
 				if !safe {
 					frame := model.snapshot(size)
 					frame.PasteBlocked = true
-					s.publish(frame)
+					publish(frame)
 					dirty = false
 				}
 			case value.key.Name != "":
 				data = model.key(value.key)
 			default:
 				data = []byte(value.text)
+			}
+			if scrolled && len(data) != 0 {
+				model.scrollBottom()
+				scrolled = false
+				dirty = true
 			}
 			if !write(data) {
 				return

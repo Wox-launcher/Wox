@@ -18,6 +18,7 @@ import (
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
+	shellhistory "wox/plugin/system/shell/history"
 	"wox/plugin/system/shell/interactive"
 	"wox/plugin/system/shell/terminal"
 	"wox/setting/definition"
@@ -58,8 +59,6 @@ const (
 	shellFormInterpreterKey = "interpreter"
 	shellFormWorkingDirKey  = "working_directory"
 	shellFormSilentKey      = "silent"
-
-	emptyCommandResultGroupScore int64 = 200
 )
 
 var shellIcon = icons.Get(icons.PluginShell)
@@ -390,59 +389,29 @@ func displayTitleForCommand(data shellContextData) string {
 	return data.Command
 }
 
-// buildEmptyCommandResult is the selected compose row for an empty ">" query.
-// History and saved commands stay below it so a Folder/Explorer handoff can still show the pending working directory.
-func (s *ShellPlugin) buildEmptyCommandResult(ctx context.Context, interpreter string, workingDirectory string) plugin.QueryResult {
-	return s.buildEmptyCommandResultWithTrigger(ctx, interpreter, workingDirectory, ">")
-}
-
-// buildEmptyCommandResultWithTrigger keeps the empty compose row and exposes a working-directory action.
-func (s *ShellPlugin) buildEmptyCommandResultWithTrigger(ctx context.Context, interpreter string, workingDirectory string, triggerKeyword string) plugin.QueryResult {
+// buildShellPluginPreview supplies launch options even when the result list is empty.
+func (s *ShellPlugin) buildShellPluginPreview(ctx context.Context, interpreter string, workingDirectory string) *plugin.WoxPreview {
 	data := shellContextData{Interpreter: interpreter, WorkingDirectory: workingDirectory}
-	result := plugin.QueryResult{
-		Title:      "i18n:plugin_shell_enter_command",
-		Icon:       shellIcon,
-		Score:      2000,
-		GroupScore: emptyCommandResultGroupScore,
-		Preview: plugin.WoxPreview{
+	if !interactive.Available {
+		return &plugin.WoxPreview{
 			PreviewType:    plugin.WoxPreviewTypeText,
-			PreviewData:    "i18n:plugin_shell_enter_command_preview",
+			PreviewData:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_enter_command_preview"),
 			PreviewTags:    s.buildShellPreviewTags(ctx, data),
 			ScrollPosition: plugin.WoxPreviewScrollPositionBottom,
-		},
-		Actions: []plugin.QueryResultAction{
-			{
-				Id:                     "compose",
-				Name:                   "i18n:plugin_shell_enter_command",
-				Icon:                   icons.Get(icons.ActionEdit),
-				IsDefault:              true,
-				PreventHideAfterAction: true,
-				Action:                 func(context.Context, plugin.ActionContext) {},
-			},
-			s.buildOpenInSystemTerminalAction(data),
-			s.buildChangeWorkingDirectoryAction(data, triggerKeyword),
-		},
-	}
-	if interactive.Available {
-		actual := interpreter
-		switch {
-		case util.IsWindows() && (actual == "powershell" || actual == "cmd"):
-		case !util.IsWindows() && (actual == "bash" || actual == "zsh" || actual == "sh"):
-		default:
-			actual = getDefaultInterpreter()
 		}
-		options, _ := json.Marshal(interactive.Options{Interpreter: actual, Directory: workingDirectory})
-		data.Interpreter = actual
-		result.Preview = plugin.WoxPreview{
-			PreviewType: plugin.WoxPreviewTypeShell,
-			PreviewData: string(options),
-			PreviewTags: s.buildShellPreviewTags(ctx, data),
-		}
-		result.Actions[0].Id = interactive.OpenActionID
-		result.Actions[0].Name = "i18n:plugin_shell_interactive_open"
-		result.Actions[0].Icon = icons.Get(icons.ActionExecute)
 	}
-	return result
+	switch {
+	case util.IsWindows() && (interpreter == "powershell" || interpreter == "cmd"):
+	case !util.IsWindows() && (interpreter == "bash" || interpreter == "zsh" || interpreter == "sh"):
+	default:
+		data.Interpreter = getDefaultInterpreter()
+	}
+	options, _ := json.Marshal(interactive.Options{Interpreter: data.Interpreter, Directory: workingDirectory})
+	return &plugin.WoxPreview{
+		PreviewType: plugin.WoxPreviewTypeShell,
+		PreviewData: string(options),
+		PreviewTags: s.buildShellPreviewTags(ctx, data),
+	}
 }
 
 // userHomeDirectory is the fallback working directory when no command-specific path is set.
@@ -1179,26 +1148,6 @@ func (s *ShellPlugin) refreshCommandActionForms(actions []plugin.QueryResultActi
 	}
 }
 
-// getHistoryResultGroup groups shell history by recency, matching clipboard-style date buckets.
-func (s *ShellPlugin) getHistoryResultGroup(timestamp int64) (string, int64) {
-	now := util.GetSystemTimestamp()
-	if now-timestamp < 1000*60*60*24 {
-		return "i18n:plugin_shell_group_today", 90
-	}
-	if now-timestamp < 1000*60*60*24*2 {
-		return "i18n:plugin_shell_group_yesterday", 80
-	}
-	return "i18n:plugin_shell_group_history", 10
-}
-
-// getHistoryResultScore keeps default shell history ordered by most recent first.
-func (s *ShellPlugin) getHistoryResultScore(timestamp int64) int64 {
-	if timestamp <= 0 {
-		return 0
-	}
-	return timestamp / 1000
-}
-
 // buildCommandLastRunSubtitle renders the saved command's latest execution time.
 func (s *ShellPlugin) buildCommandLastRunSubtitle(ctx context.Context, title string, interpreter string, workingDirectory string) string {
 	history, err := s.historyManager.GetLatestCommandRun(ctx, strings.TrimSpace(title), strings.TrimSpace(interpreter), strings.TrimSpace(workingDirectory))
@@ -1274,6 +1223,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 		return nil
 	}
 
+	now := time.Now()
 	var results []plugin.QueryResult
 	for _, history := range histories {
 		s.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("History: %s, created_at:%s", history.Command, history.CreatedAt.String()))
@@ -1282,7 +1232,7 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 		hasRuntimeSession := runtimeSessionID != ""
 		if history.Status == "running" && hasRuntimeSession {
 			runtimeState, ok := s.terminalManager.GetState(runtimeSessionID)
-			if !ok {
+			if !ok || runtimeState.Status == "" {
 				history.Status = "failed"
 				history.ExitCode = -1
 				history.EndTime = util.GetSystemTimestamp()
@@ -1327,43 +1277,57 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 			Background:       history.Background,
 		}
 
-		// Build actions based on status
-		var actions []plugin.QueryResultAction
-
-		// Always add re-execute action
-		actions = append(actions, plugin.QueryResultAction{
-			Id:                     "reexecute",
-			Name:                   "i18n:plugin_shell_reexecute",
-			Icon:                   icons.Get(icons.ActionUpdate),
+		fromInteractive := strings.HasPrefix(history.ID, interactive.HistoryIDPrefix)
+		hasInteractivePreview := fromInteractive && interactive.Available
+		actionName := "i18n:plugin_shell_view_output"
+		if hasInteractivePreview {
+			actionName = "i18n:plugin_shell_interactive_open"
+		}
+		actions := []plugin.QueryResultAction{{
+			Id:                     terminal.ShowHistoryActionID,
+			Name:                   actionName,
+			Icon:                   icons.Get(icons.ActionPreview),
+			IsDefault:              true,
 			PreventHideAfterAction: true,
-			ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				currentData := shellContextDataFromActionContext(actionContext, historyContextData)
-				if s.stopSessionByHistoryID(ctx, currentData.HistoryID) {
-					return
-				}
+			Action:                 func(context.Context, plugin.ActionContext) {},
+		}}
 
-				util.Go(ctx, "re-execute shell command from history", func() {
-					s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
-				})
-			},
-		})
-		actions = s.appendExecuteAsAdministratorAction(actions, historyContextData)
-		actions = append(actions, s.buildOpenInSystemTerminalAction(historyContextData), s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData), s.buildChangeWorkingDirectoryAction(historyContextData, triggerKeyword))
-
-		// Only add stop action if command is still running
-		if history.Status == "running" {
+		// PTY history records display text, which can omit multiline syntax and shell state.
+		if !fromInteractive {
 			actions = append(actions, plugin.QueryResultAction{
-				Id:                     "stop",
-				Name:                   "i18n:plugin_shell_stop",
-				Icon:                   icons.Get(icons.ActionTerminate),
+				Id:                     "reexecute",
+				Name:                   "i18n:plugin_shell_reexecute",
+				Icon:                   icons.Get(icons.ActionUpdate),
 				PreventHideAfterAction: true,
 				ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 					currentData := shellContextDataFromActionContext(actionContext, historyContextData)
-					s.stopSessionByHistoryID(ctx, currentData.HistoryID)
+					if s.stopSessionByHistoryID(ctx, currentData.HistoryID) {
+						return
+					}
+
+					util.Go(ctx, "re-execute shell command from history", func() {
+						s.executeCommandWithUpdateResult(ctx, actionContext.ResultId, currentData)
+					})
 				},
 			})
+			actions = s.appendExecuteAsAdministratorAction(actions, historyContextData)
+			actions = append(actions, s.buildOpenInSystemTerminalAction(historyContextData), s.buildEditCommandAction(historyContextData), s.buildAddCommandAction(historyContextData), s.buildRunWithInterpreterAction(historyContextData), s.buildChangeWorkingDirectoryAction(historyContextData, triggerKeyword))
+
+			// Only add stop action if command is still running
+			if history.Status == "running" {
+				actions = append(actions, plugin.QueryResultAction{
+					Id:                     "stop",
+					Name:                   "i18n:plugin_shell_stop",
+					Icon:                   icons.Get(icons.ActionTerminate),
+					PreventHideAfterAction: true,
+					ContextData:            s.buildActionContextData(history.SessionID, history.ID, history.Command, historyInterpreter, history.Title, history.WorkingDirectory),
+					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+						currentData := shellContextDataFromActionContext(actionContext, historyContextData)
+						s.stopSessionByHistoryID(ctx, currentData.HistoryID)
+					},
+				})
+			}
 		}
 
 		actions = append(actions, plugin.QueryResultAction{
@@ -1383,27 +1347,42 @@ func (s *ShellPlugin) queryHistory(ctx context.Context, interpreter string, trig
 			},
 		})
 
-		previewType := plugin.WoxPreviewTypeText
-		previewData := history.OutputSummary
-		if hasRuntimeSession {
-			previewType = plugin.WoxPreviewTypeTerminal
-			previewData = s.buildTerminalPreviewData(runtimeSessionID, history.Command, history.Status)
+		output := terminal.PreviewData{Command: history.Command, Status: history.Status}
+		if hasRuntimeSession && !history.Background {
+			output.SessionID = runtimeSessionID
+		} else {
+			output.Output = history.OutputSummary
 		}
-		group, groupScore := s.getHistoryResultGroup(history.StartTime)
+		previewData, _ := json.Marshal(output)
+		previewType := plugin.WoxPreviewTypeTerminal
+		group, groupScore := shellhistory.Group(time.UnixMilli(history.StartTime), now)
+		tags := s.buildShellPreviewTags(ctx, historyContextData)
+		resultID := ""
+		if fromInteractive {
+			resultID = history.ID
+			if history.WorkingDirectory == "" {
+				tags = tags[:1]
+			}
+			if hasInteractivePreview {
+				previewType = plugin.WoxPreviewTypeShell
+				previewData, _ = json.Marshal(interactive.Options{HistoryID: history.ID})
+			}
+		}
 
 		results = append(results, plugin.QueryResult{
+			Id:          resultID,
 			Title:       title,
 			SubTitle:    subTitle,
 			IdentityKey: history.ID,
 			Icon:        shellIcon,
 			Tails:       s.buildHistoryTails(ctx, history.Status),
-			Score:       s.getHistoryResultScore(history.StartTime),
+			Score:       max(0, history.StartTime),
 			Group:       group,
 			GroupScore:  groupScore,
 			Preview: plugin.WoxPreview{
 				PreviewType: previewType,
-				PreviewData: previewData,
-				PreviewTags: s.buildShellPreviewTags(ctx, historyContextData),
+				PreviewData: string(previewData),
+				PreviewTags: tags,
 			},
 			Actions: actions,
 		})
@@ -1428,12 +1407,24 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 	command := strings.TrimSpace(query.Search)
 	workingDirectory := s.effectiveWorkingDirectory(ctx, query.ContextData[QueryContextWorkingDirectoryKey])
 
-	// Keep a compose row selected on empty ">" so history cannot hide the pending working directory.
+	preview := s.buildShellPluginPreview(ctx, interpreter, workingDirectory)
 	if command == "" {
-		results := []plugin.QueryResult{s.buildEmptyCommandResultWithTrigger(ctx, interpreter, workingDirectory, query.TriggerKeyword)}
+		var results []plugin.QueryResult
+		if interactive.Available {
+			data := shellContextData{Interpreter: interpreter, WorkingDirectory: workingDirectory}
+			results = append(results, plugin.QueryResult{
+				Title: "i18n:plugin_shell_new_shell", Icon: shellIcon, Score: 2000, GroupScore: 200,
+				Actions: []plugin.QueryResultAction{
+					{Id: interactive.FocusActionID, Name: "i18n:plugin_shell_interactive_open", Icon: icons.Get(icons.ActionEdit),
+						IsDefault: true, PreventHideAfterAction: true, Action: func(context.Context, plugin.ActionContext) {}},
+					s.buildOpenInSystemTerminalAction(data),
+					s.buildChangeWorkingDirectoryAction(data, query.TriggerKeyword),
+				},
+			})
+		}
 		results = append(results, s.queryCommands(ctx, query, interpreter, true)...)
 		results = append(results, s.queryHistory(ctx, interpreter, query.TriggerKeyword)...)
-		return plugin.NewQueryResponse(results)
+		return plugin.QueryResponse{Results: results, PluginPreview: preview}
 	}
 
 	// Create context data
@@ -1527,7 +1518,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 		},
 	)
 
-	return plugin.NewQueryResponse([]plugin.QueryResult{
+	return plugin.QueryResponse{PluginPreview: preview, Results: []plugin.QueryResult{
 		{
 			Title:       command,
 			SubTitle:    subtitle,
@@ -1542,7 +1533,7 @@ func (s *ShellPlugin) Query(ctx context.Context, query plugin.Query) plugin.Quer
 			},
 			Actions: actions,
 		},
-	})
+	}}
 }
 
 // loadCommands loads configured shell commands from settings
@@ -1823,13 +1814,17 @@ func (s *ShellPlugin) executeCommandWithUpdateResult(ctx context.Context, result
 				}
 			}
 			s.refreshCommandActionForms(actions, data)
-			if len(actions) > 0 {
+			executeIndex := 0
+			if len(actions) > 0 && actions[0].Id == terminal.ShowHistoryActionID {
+				executeIndex++
+			}
+			if executeIndex < len(actions) {
 				if isRunning {
-					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
-					actions[0].Icon = icons.Get(icons.ActionTerminate)
+					actions[executeIndex].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_stop")
+					actions[executeIndex].Icon = icons.Get(icons.ActionTerminate)
 				} else {
-					actions[0].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
-					actions[0].Icon = icons.Get(icons.ActionUpdate)
+					actions[executeIndex].Name = i18n.GetI18nManager().TranslateWox(ctx, "plugin_shell_reexecute")
+					actions[executeIndex].Icon = icons.Get(icons.ActionUpdate)
 				}
 			}
 			updatable.Actions = &actions
@@ -2247,11 +2242,7 @@ func (s *ShellPlugin) deleteSessionResources(ctx context.Context, historyID stri
 }
 
 func (s *ShellPlugin) buildTerminalPreviewData(sessionID string, command string, status string) string {
-	payload, _ := json.Marshal(map[string]string{
-		"session_id": sessionID,
-		"command":    command,
-		"status":     status,
-	})
+	payload, _ := json.Marshal(terminal.PreviewData{SessionID: sessionID, Command: command, Status: status})
 	return string(payload)
 }
 

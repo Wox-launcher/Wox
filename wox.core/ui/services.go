@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"wox/network"
@@ -21,24 +20,19 @@ import (
 // CoreServices implements the typed services consumed by the embedded UI.
 type CoreServices struct{}
 
-// StartInteractiveShell resolves the launch parameters from the trusted built-in result.
-func (s *CoreServices) StartInteractiveShell(ctx context.Context, sessionID, queryID, resultID string, size interactive.Size) (*interactive.Session, error) {
+// StartInteractiveShell starts the native preview only in a Shell-owned launcher context.
+func (s *CoreServices) StartInteractiveShell(ctx context.Context, sessionID string, options interactive.Options, size interactive.Size) (*interactive.Session, error) {
 	manager := plugin.GetPluginManager()
-	if manager.PluginIDForCachedResult(sessionID, queryID, resultID) != common.ShellPluginID {
-		return nil, errors.New("interactive shell result is no longer available")
+	if !manager.OwnsPluginQueryContext(sessionID, common.ShellPluginID) {
+		return nil, errors.New("interactive shell context is no longer available")
 	}
-	preview, err := manager.GetResultPreview(ctx, sessionID, queryID, resultID)
-	if err != nil {
-		return nil, err
+	owner, ok := manager.GetSystemPlugin(common.ShellPluginID).(interface {
+		StartInteractiveShell(context.Context, interactive.Options, interactive.Size) (*interactive.Session, error)
+	})
+	if !ok {
+		return nil, errors.New("interactive shell plugin is unavailable")
 	}
-	if preview.PreviewType != plugin.WoxPreviewTypeShell {
-		return nil, errors.New("result does not support interactive shell")
-	}
-	var options interactive.Options
-	if err := json.Unmarshal([]byte(preview.PreviewData), &options); err != nil {
-		return nil, err
-	}
-	return interactive.Start(ctx, options, size)
+	return owner.StartInteractiveShell(ctx, options, size)
 }
 
 var _ contract.Services = (*CoreServices)(nil)

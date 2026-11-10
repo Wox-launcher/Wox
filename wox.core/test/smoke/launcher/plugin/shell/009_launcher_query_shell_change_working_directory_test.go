@@ -18,10 +18,10 @@ import (
 func Test009LauncherQueryShellChangeWorkingDirectory(t *testing.T) {
 	const marker = "wox-cwd-action-smoke.txt"
 	command := shellWriteCwdMarkerCommand(marker)
+	// Let the shared process reset before removing the live Shell's working directory.
+	workingDirectory := t.TempDir()
 
 	smoke.Case(t, func(ctx context.Context, client *automationdriver.Client) {
-		workingDirectory := t.TempDir()
-
 		smoke.ShowLauncher(t, ctx, client)
 		smoke.ReplaceLauncherQuery(t, ctx, client, "> "+command)
 		selectShellResult(t, ctx, client, waitForShellResult(t, ctx, client, command))

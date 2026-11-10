@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -49,6 +50,24 @@ func newEmulator(size Size) (emulator, error) {
 
 func (e *ghosttyEmulator) close()          { C.wox_ghostty_free(e.model) }
 func (e *ghosttyEmulator) scroll(rows int) { C.wox_ghostty_scroll(e.model, C.int(rows)) }
+func (e *ghosttyEmulator) scrollBottom()   { C.wox_ghostty_scroll_bottom(e.model) }
+func (e *ghosttyEmulator) beginCommand()   { C.wox_ghostty_begin_command(e.model) }
+
+// commandOutput copies a bounded, valid UTF-8 tail of the rendered command output.
+func (e *ghosttyEmulator) commandOutput() string {
+	var length C.size_t
+	output := C.wox_ghostty_command_output(e.model, &length)
+	if output == nil {
+		return ""
+	}
+	defer C.ghostty_free(nil, output, length)
+	data := unsafe.Slice((*byte)(output), int(length))
+	start := max(0, len(data)-64*1024)
+	for start < len(data) && !utf8.RuneStart(data[start]) {
+		start++
+	}
+	return string(data[start:])
+}
 
 func (e *ghosttyEmulator) resize(size Size) error {
 	result := C.wox_ghostty_resize(e.model, C.uint16_t(size.Columns), C.uint16_t(size.Rows), C.uint32_t(size.CellWidthPixels), C.uint32_t(size.CellHeightPixels))

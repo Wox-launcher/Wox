@@ -35,7 +35,7 @@ type terminalController struct {
 	terminalMenuAnchor     woxui.Point
 	terminalMenuEnablement terminalMenuEnablement
 	terminalFullscreen     bool
-	terminalLayout         textLayoutCache
+	terminalLayout         shellOutputLayout
 	terminalPreview        *terminalPreviewState
 }
 

@@ -14,6 +14,7 @@ import (
 	"wox/common/icons"
 	"wox/plugin"
 	"wox/plugin/system/shell/interactive"
+	"wox/plugin/system/shell/terminal"
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -945,9 +946,37 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	}
 	result := a.resultList.results[resultIndex]
 	action := result.Actions[actionIndex]
-	if result.Preview.PreviewType == plugin.WoxPreviewTypeShell && action.ID == interactive.OpenActionID {
+	if a.previews.pluginPreview.pluginID == common.ShellPluginID && action.ID == interactive.FocusActionID {
 		a.actions.hideActionPanel()
-		a.openShellPreview(result)
+		if a.previews.shellOutput.ID != "" {
+			a.showLiveShell()
+		}
+		if shell, ok := a.previews.pluginPreview.result(); ok {
+			a.openShellPreview(shell)
+		}
+		return
+	}
+	if a.previews.pluginPreview.pluginID == common.ShellPluginID && action.ID == terminal.ShowHistoryActionID {
+		a.actions.hideActionPanel()
+		if run := a.shellPreview.run; run != nil && run.err == nil && run.frame != nil &&
+			!run.frame.Exited && run.frame.History.ID == result.ID {
+			// The history row belongs to the live New shell, so keep its process and scrollback.
+			if a.previews.shellOutput.ID != "" {
+				a.showLiveShell()
+			}
+			if shell, ok := a.previews.pluginPreview.result(); ok {
+				a.openShellPreview(shell)
+			}
+			return
+		}
+		if a.pinShellOutput(result) {
+			a.previews.reconcileSelectedPreview()
+			if shell, ok := a.previews.displayedPluginPreview(); ok && shell.Preview.PreviewType == plugin.WoxPreviewTypeShell {
+				a.openShellPreview(shell)
+			} else {
+				a.returnShellFocus()
+			}
+		}
 		return
 	}
 	if action.ID == enterChatModeActionID {
@@ -967,6 +996,12 @@ func (a *App) activateAction(resultIndex, actionIndex int) {
 	if action.Type == "local" {
 		log.Printf("Go UI local action %q is not implemented yet", action.ID)
 		return
+	}
+	if action.ID == "execute" || action.ID == "reexecute" {
+		if a.pinShellOutput(result) {
+			a.previews.reconcileSelectedPreview()
+			a.invalidateShellPreview()
+		}
 	}
 	util.Go(a.lifecycleCtx, "execute result action", func() {
 		if err := a.services.ExecuteAction(context.Background(), a.sessionID, result.QueryID, result.ID, action.ID); err != nil {

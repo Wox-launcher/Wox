@@ -2,11 +2,14 @@ package launcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"unicode/utf8"
 
+	"wox/common"
 	"wox/plugin"
 	"wox/plugin/system/shell/interactive"
 	woxcomponent "wox/ui/launcher/component"
@@ -21,10 +24,10 @@ import (
 const shellPreviewFocusKey woxwidget.Key = "launcher-shell-preview-input"
 
 type shellPreviewServices interface {
-	StartInteractiveShell(context.Context, string, string, string, interactive.Size) (*interactive.Session, error)
+	StartInteractiveShell(context.Context, string, interactive.Options, interactive.Size) (*interactive.Session, error)
 }
 
-// The selected result and each request have separate identities so stale work cannot reopen a shell.
+// The plugin preview and each launch request have separate identities so stale work cannot reopen a shell.
 type shellPreviewState struct {
 	queryID, resultID string
 	run               *shellPreviewRun
@@ -36,38 +39,85 @@ type shellPreviewState struct {
 }
 
 type shellPreviewRun struct {
-	cancel  context.CancelFunc
-	session *interactive.Session
-	frame   *interactive.Frame
-	err     error
+	cancel           context.CancelFunc
+	session          *interactive.Session
+	frame            *interactive.Frame
+	err              error
+	historyPublished bool
 }
 
-// reconcileShellPreview immediately revokes the previous result's input before stopping its process.
-func (a *App) reconcileShellPreview(queryID, resultID string) {
+// displayedPluginPreview changes the content of the Shell pane without replacing its live session.
+func (a *previewController) displayedPluginPreview() (queryResult, bool) {
+	result, ok := a.pluginPreview.result()
+	if ok {
+		switch a.shellOutput.Preview.PreviewType {
+		case plugin.WoxPreviewTypeShell:
+			result.ID = a.shellOutput.ID
+			result.Preview = a.shellOutput.Preview
+		case plugin.WoxPreviewTypeTerminal:
+			result.Preview = a.shellOutput.Preview
+		}
+	}
+	return result, ok
+}
+
+// pinShellOutput remembers the activated row independently of the selected result.
+func (a *App) pinShellOutput(result queryResult) bool {
+	preview := &a.previews.pluginPreview
+	if preview.pluginID != common.ShellPluginID || preview.preview == nil || result.QueryID != a.querySession.query.QueryID {
+		return false
+	}
+	a.previews.shellOutput = queryResult{ID: result.ID, Preview: result.Preview}
+	return true
+}
+
+// showLiveShell closes the transcript and restores the live preview and query focus.
+func (a *App) showLiveShell() {
+	a.previews.shellOutput = queryResult{}
+	a.previews.reconcileSelectedPreview()
+	_ = a.applyWindowBounds()
+	a.returnShellFocus()
+}
+
+// reconcileShellPreview starts a newly visible shell while leaving the query available for typing a command.
+func (a *App) reconcileShellPreview(result queryResult) {
 	state := &a.shellPreview
-	if state.queryID == queryID && state.resultID == resultID {
+	if state.queryID == result.QueryID && state.resultID == result.ID {
 		return
 	}
 	if state.run != nil {
 		state.run.cancel()
 	}
-	*state = shellPreviewState{queryID: queryID, resultID: resultID}
+	*state = shellPreviewState{queryID: result.QueryID, resultID: result.ID, size: state.size}
 	if a.host.HasFocus(shellPreviewFocusKey) {
 		a.returnShellFocus()
 	}
+	if result.ID != "" {
+		a.startShellPreview(result, false)
+	}
 }
 
-// openShellPreview is shared by the result action and the preview's accessible button.
+// openShellPreview focuses the plugin's shell or restarts it after exit.
 func (a *App) openShellPreview(result queryResult) {
-	service, ok := a.services.(shellPreviewServices)
 	selected, preview, visible := a.previews.selectedPreviewForLifecycle()
-	if !ok || !visible || selected.QueryID != result.QueryID || selected.ID != result.ID || preview.PreviewType != plugin.WoxPreviewTypeShell {
+	if !visible || selected.QueryID != result.QueryID || selected.ID != result.ID || preview.PreviewType != plugin.WoxPreviewTypeShell {
 		return
 	}
-	a.reconcileShellPreview(result.QueryID, result.ID)
+	a.startShellPreview(result, true)
+}
+
+// startShellPreview reuses a running session and serializes process replacements.
+func (a *App) startShellPreview(result queryResult, focus bool) {
+	service, ok := a.services.(shellPreviewServices)
+	if !ok {
+		return
+	}
 	state := &a.shellPreview
+	if state.queryID != result.QueryID || state.resultID != result.ID {
+		return
+	}
+	state.focusPending = focus
 	if run := state.run; run != nil && run.err == nil && (run.frame == nil || !run.frame.Exited) {
-		state.focusPending = true
 		a.invalidateShellPreview()
 		return
 	}
@@ -92,7 +142,12 @@ func (a *App) openShellPreview(result queryResult) {
 		if ctx.Err() != nil {
 			return
 		}
-		session, err := service.StartInteractiveShell(ctx, a.sessionID, result.QueryID, result.ID, size)
+		var options interactive.Options
+		err := json.Unmarshal([]byte(result.Preview.PreviewData), &options)
+		var session *interactive.Session
+		if err == nil {
+			session, err = service.StartInteractiveShell(ctx, a.sessionID, options, size)
+		}
 		if session != nil {
 			defer func() {
 				session.Close()
@@ -107,7 +162,9 @@ func (a *App) openShellPreview(result queryResult) {
 				return
 			}
 			request.session, request.err = session, err
-			state.focusPending = err == nil
+			if err != nil {
+				state.focusPending = false
+			}
 			if session != nil && state.size.Columns > 0 {
 				session.Resize(state.size)
 			}
@@ -135,9 +192,18 @@ func (a *App) watchShellPreview(ctx context.Context, request *shellPreviewRun, s
 					if state.run != request || ctx.Err() != nil || request.frame == frame {
 						return
 					}
+					var previousHistory interactive.HistoryEntry
+					if request.frame != nil {
+						previousHistory = request.frame.History
+					}
 					state.selection = previewview.ShellSelection{}
 					request.frame = frame
-					a.invalidateShellPreview()
+					if previousHistory != frame.History {
+						a.syncShellSessionHistory()
+					}
+					if a.previews.shellOutput.Preview.PreviewType != plugin.WoxPreviewTypeTerminal {
+						a.invalidateShellPreview()
+					}
 				})
 				if err != nil {
 					session.Close()
@@ -166,29 +232,59 @@ func (a *App) returnShellFocus() {
 	a.invalidateShellPreview()
 }
 
-// buildShellPreview uses logical metrics for drawing and passes physical cell sizes to the emulator.
-func (a *App) buildShellPreview(result queryResult, theme woxcomponent.Theme, width, height, scale float32) woxwidget.Widget {
-	state := &a.shellPreview
+// shellViewportProps shares logical drawing metrics and physical terminal dimensions.
+func (a *App) shellViewportProps(theme woxcomponent.Theme, width, height, scale, barHeight float32) (previewview.ShellPreviewProps, interactive.Size) {
 	style := woxui.TextStyle{Size: theme.Controls.Scaled(woxcomponent.PreviewCodeFontSize), Family: woxui.FontFamilyMonospace}
-	cellWidth, cellHeight := style.Size*0.61, style.Size*1.35
-	if a.window != nil {
-		if metrics, err := a.window.MeasureText("M", style); err == nil {
-			cellWidth = max(1, metrics.Size.Width)
-			cellHeight = max(cellHeight, metrics.Size.Height)
-		}
+	if strings.TrimSpace(a.generalSettings.Data().AppFontFamily) != "" {
+		style.Family = woxui.FontFamilyUI
 	}
+	var measure func(string, woxui.TextStyle) (woxui.TextMetrics, error)
+	if a.window != nil {
+		measure = a.window.MeasureText
+	}
+	cellWidth, cellHeight := shellCellMetrics(style, measure)
 	padding := theme.Controls.Scaled(8)
-	barHeight := theme.Controls.Scaled(34)
 	size, cellWidth, cellHeight := shellGridMetrics(width-2*padding, height-barHeight-padding, cellWidth, cellHeight, scale)
-	props := previewview.ShellPreviewProps{
+	return previewview.ShellPreviewProps{
 		Width: width, Height: height, Padding: padding, BarHeight: barHeight, Theme: theme,
 		CellWidth: cellWidth, CellHeight: cellHeight, Style: style, FocusKey: shellPreviewFocusKey,
-		Open:     a.language.translate("i18n:plugin_shell_interactive_open"),
-		Reopen:   a.language.translate("i18n:plugin_shell_interactive_reopen"),
-		Starting: a.language.translate("i18n:plugin_shell_interactive_starting"),
-		Help:     a.language.translate("i18n:plugin_shell_interactive_keys"),
-		OnOpen:   func() { a.activateResultActionByID(result.QueryID, result.ID, interactive.OpenActionID) },
+	}, size
+}
+
+// shellCellMetrics keeps terminal columns fixed even when the configured font is proportional.
+func shellCellMetrics(style woxui.TextStyle, measure func(string, woxui.TextStyle) (woxui.TextMetrics, error)) (width, height float32) {
+	width, height = style.Size*0.61, style.Size*1.35
+	if measure == nil {
+		return width, height
 	}
+	samples := []struct {
+		text    string
+		columns float32
+	}{{"M", 1}, {"W", 1}, {"@", 1}, {"界", 2}}
+	if style.Family == woxui.FontFamilyMonospace {
+		samples = samples[:1]
+	}
+	var measuredWidth float32
+	for _, sample := range samples {
+		if metrics, err := measure(sample.text, style); err == nil {
+			measuredWidth = max(measuredWidth, metrics.Size.Width/sample.columns)
+			height = max(height, metrics.Size.Height)
+		}
+	}
+	if measuredWidth > 0 {
+		width = max(1, measuredWidth)
+	}
+	return width, height
+}
+
+// buildShellPreview paints the interactive shell and connects the viewport to its PTY.
+func (a *App) buildShellPreview(result queryResult, theme woxcomponent.Theme, width, height, scale float32) woxwidget.Widget {
+	state := &a.shellPreview
+	props, size := a.shellViewportProps(theme, width, height, scale, theme.Controls.Scaled(34))
+	props.Open = a.language.translate("i18n:plugin_shell_interactive_open")
+	props.Reopen = a.language.translate("i18n:plugin_shell_interactive_reopen")
+	props.Help = a.language.translate("i18n:plugin_shell_interactive_keys")
+	props.OnOpen = func() { a.openShellPreview(result) }
 	if state.queryID != result.QueryID || state.resultID != result.ID {
 		return previewview.ShellPreviewView(props)
 	}
@@ -200,7 +296,6 @@ func (a *App) buildShellPreview(result queryResult, theme woxcomponent.Theme, wi
 	}
 	if run := state.run; run != nil {
 		props.Frame = run.frame
-		props.Busy = run.frame == nil && run.err == nil
 		if run.err != nil {
 			props.Error = a.language.translate("i18n:plugin_shell_interactive_failed")
 		} else if run.frame != nil && run.frame.Err != nil {

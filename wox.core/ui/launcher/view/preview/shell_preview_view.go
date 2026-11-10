@@ -20,10 +20,11 @@ type ShellPreviewProps struct {
 	Theme                             woxcomponent.Theme
 	Frame                             *interactive.Frame
 	Selection                         ShellSelection
+	Output                            *ShellOutputProps
+	Footer                            woxwidget.Widget
 	FocusKey                          woxwidget.Key
-	Open, Reopen, Starting, Help      string
+	Open, Reopen, Help                string
 	Error, MarkedText                 string
-	Busy                              bool
 	OnOpen, OnFocus, OnBlur           func()
 	OnKey                             func(woxui.KeyEvent) bool
 	OnText                            func(woxui.TextInputEvent) bool
@@ -33,35 +34,32 @@ type ShellPreviewProps struct {
 
 // ShellPreviewView renders the controls and a fixed-cell viewport from a single frame snapshot.
 func ShellPreviewView(p ShellPreviewProps) woxwidget.Widget {
-	label := p.Open
-	if p.Frame != nil || p.Error != "" {
-		label = p.Reopen
+	if p.Frame == nil && p.Error == "" {
+		// Keep the pane in place while switching sessions without flashing a startup label.
+		return woxwidget.Container{Width: p.Width, Height: p.Height}
 	}
 	button := woxcomponent.WoxButton(woxcomponent.ButtonProps{
-		ID: "shell-interactive-open", Label: label, Variant: woxcomponent.ButtonOutlinedSurface,
+		ID: "shell-interactive-open", Label: p.Reopen, Variant: woxcomponent.ButtonOutlinedSurface,
 		Theme: p.Theme.Controls, OnTap: p.OnOpen,
 	})
 	status := func(label string) woxwidget.Widget {
 		return woxwidget.Text{Value: label, Style: woxui.TextStyle{Size: p.Theme.Controls.Scaled(woxcomponent.ResultSubtitleFontSize)}, Color: p.Theme.Controls.TextSecondary}
 	}
 	if p.Frame == nil {
-		children := []woxwidget.Widget{button}
-		if p.Busy {
-			children = []woxwidget.Widget{status(p.Starting)}
-		} else if p.Error != "" {
-			children = append([]woxwidget.Widget{status(p.Error)}, children...)
-		}
 		return woxwidget.Align{
 			Width: p.Width, Height: p.Height, Horizontal: 0.5, Vertical: 0.5,
-			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: p.Padding, Children: children},
+			Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: p.Padding, Children: []woxwidget.Widget{status(p.Error), button}},
 		}
 	}
 
 	gridWidth := max(0, p.Width-2*p.Padding)
 	gridHeight := max(0, p.Height-p.BarHeight-p.Padding)
-	footer := woxwidget.Widget(status(p.Help))
-	if p.Frame.Exited || p.Error != "" {
-		footer = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: p.Padding, Children: []woxwidget.Widget{button, status(p.Error)}}
+	footer := p.Footer
+	if footer == nil {
+		footer = status(p.Help)
+		if p.Frame.Exited || p.Error != "" {
+			footer = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: p.Padding, Children: []woxwidget.Widget{button, status(p.Error)}}
+		}
 	}
 	return woxwidget.Stack{Width: p.Width, Height: p.Height, Children: []woxwidget.StackChild{
 		{Top: p.Padding, Left: p.Padding, Child: shellGrid(p, gridWidth, gridHeight)},
@@ -81,10 +79,13 @@ func shellGrid(p ShellPreviewProps, width, height float32) woxwidget.Widget {
 		return index
 	}
 	painter := woxwidget.CaretPainter{
-		Width: width, Height: height, Active: !frame.Exited,
+		Width: width, Height: height, Active: p.Output == nil && !frame.Exited,
 		Paint: func(list *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
 			paintShellGrid(list, bounds, p, focused, caretVisible)
 		},
+	}
+	if p.Output != nil {
+		return shellOutputGrid(*p.Output, painter, cellAt)
 	}
 	gesture := woxwidget.Gesture{
 		Child: painter, Cursor: woxui.PointerCursorText,

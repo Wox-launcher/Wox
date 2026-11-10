@@ -148,7 +148,7 @@ func (a *App) snapshot() viewSnapshot {
 	}
 	selectedPreviewType := ""
 	var pluginPreview *queryResult
-	if result, ok := a.previews.pluginPreview.result(); ok {
+	if result, ok := a.previews.displayedPluginPreview(); ok {
 		pluginPreview = &result
 		selectedPreviewType = result.Preview.PreviewType
 	} else if a.resultList.selected >= 0 && a.resultList.selected < len(a.resultList.results) {
@@ -1097,7 +1097,7 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 			state = append(state, snapshotTriggerConflictPreviewLocked(a.conflicts.triggerConflict))
 		}
 	case "terminal":
-		state = append(state, snapshotTerminalPreview(a.terminal.terminalPreview))
+		state = append(state, snapshotTerminalPreview(a.terminal.terminalPreview), a.generalSettings.Data().AppFontFamily)
 	case "file":
 		filePreview := a.filePreview.filePreviewFor(resolved.PreviewData)
 		state = append(state, filePreview)

@@ -44,6 +44,12 @@ func (m *Manager) BeginSessionQuery(sessionID, queryID string) {
 	}
 }
 
+// OwnsPluginQueryContext checks the explicit plugin owner independently of result selection.
+func (m *Manager) OwnsPluginQueryContext(sessionID, pluginID string) bool {
+	state, found := m.presentation.sessionPluginQueries.Load(sessionID)
+	return found && !state.SelectedOwner && state.PluginId == pluginID
+}
+
 // SelectResultContext resolves ownership from the session's cached result rather than trusting UI data.
 func (m *Manager) SelectResultContext(ctx context.Context, sessionID, queryID, resultID string) {
 	pluginID := ""

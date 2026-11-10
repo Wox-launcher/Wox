@@ -337,7 +337,7 @@ func (m *Manager) ensureSession(sessionID string) (*Session, error) {
 		OutputPath: outputPath,
 		state: SessionState{
 			SessionID: sessionID,
-			Status:    SessionStatusCompleted,
+			// A restored log has no process status. The history record provides it.
 			StartTime: util.GetSystemTimestamp(),
 			EndTime:   util.GetSystemTimestamp(),
 		},

@@ -1,55 +1,12 @@
 package preview
 
 import (
-	"reflect"
 	"testing"
 
+	"wox/plugin/system/shell/interactive"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
-
-// TestTerminalHighlightSegments preserves byte offsets across wrapped lines and skips inactive search.
-func TestTerminalHighlightSegments(t *testing.T) {
-	value := "first\n中文 match\nlast"
-	lines := []string{"first", "中文", "match", "last"}
-	if got := terminalHighlightSegments(value, lines, nil); got != nil {
-		t.Fatalf("inactive search prepared highlights: %#v", got)
-	}
-	got := terminalHighlightSegments(value, lines, []TerminalMatch{{Start: 6, End: 18}})
-	want := []terminalHighlightSegment{{line: 1, start: 0, end: 6}, {line: 2, start: 0, end: 5}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("highlight segments = %#v, want %#v", got, want)
-	}
-}
-
-func TestTerminalOffsetAtUsesWrappedLineOrigins(t *testing.T) {
-	value := "first\n中文 match\nlast"
-	layout := woxwidget.TextBlockLayout{Lines: []string{"first", "中文", "match", "last"}, LineHeight: 18}
-	style := woxui.TextStyle{Size: 12}
-	got := terminalOffsetAt(value, layout, nil, style, woxui.Point{X: 0, Y: 36}, 18)
-	if value[got:got+5] != "match" {
-		t.Fatalf("offset %d = %q, want match", got, value[got:])
-	}
-	end := terminalOffsetAt(value, layout, nil, style, woxui.Point{X: 0, Y: 90}, 18)
-	if end != len(value) {
-		t.Fatalf("below last line offset = %d, want %d", end, len(value))
-	}
-}
-
-// TestTerminalOffsetAtPreservesBlankLines covers original byte offsets across newline formats and wrapping.
-func TestTerminalOffsetAtPreservesBlankLines(t *testing.T) {
-	for _, newline := range []string{"\n", "\r\n", "\r"} {
-		value := newline + "first" + newline + newline + "中文 match" + newline
-		layout := woxwidget.TextBlockLayout{Lines: []string{"", "first", "", "中文", "match", ""}, LineHeight: 18}
-		want := []int{0, len(newline), len("first") + 2*len(newline), len("first") + 3*len(newline), len("first中文 ") + 3*len(newline), len(value)}
-		for line, offset := range want {
-			got := terminalOffsetAt(value, layout, nil, woxui.TextStyle{Size: 12}, woxui.Point{Y: float32(line) * 18}, 18)
-			if got != offset {
-				t.Fatalf("newline %q line %d offset = %d, want %d", newline, line, got, offset)
-			}
-		}
-	}
-}
 
 func TestTerminalWordAndLineByteRanges(t *testing.T) {
 	value := "hello 世界\nnext"
@@ -69,14 +26,10 @@ func TestTerminalWordAndLineByteRanges(t *testing.T) {
 
 func TestTerminalOutputExposesCopyActions(t *testing.T) {
 	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
-		return TerminalPreviewView(TerminalPreviewProps{
-			Width: 240, Height: 180, SessionID: "s", Text: "hello output",
-			LayoutText: func(value string, style woxui.TextStyle, width, lineHeight float32) woxwidget.TextBlockLayout {
-				return woxwidget.LayoutTextBlock(nil, value, style, width, 0, lineHeight)
-			},
-			OnSelectionStart: func(int, woxui.KeyModifiers) {},
-			OnCopy:           func() {},
-			OnSelectAll:      func() {},
+		return ShellPreviewView(ShellPreviewProps{
+			Width: 240, Height: 180, CellWidth: 8, CellHeight: 16,
+			Frame:  &interactive.Frame{Size: interactive.Size{Columns: 30, Rows: 10}},
+			Output: &ShellOutputProps{SessionID: "s", Text: "hello output", OnCopy: func() {}, OnSelectAll: func() {}},
 		})
 	})
 	host.AttachServices(terminalPreviewHostServices{})

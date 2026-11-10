@@ -1,5 +1,15 @@
 package terminal
 
+const ShowHistoryActionID = "show-shell-history"
+
+// PreviewData identifies streamed output or supplies the summary of an older record.
+type PreviewData struct {
+	SessionID string `json:"session_id"`
+	Command   string `json:"command"`
+	Status    string `json:"status"`
+	Output    string `json:"output,omitempty"`
+}
+
 type SessionStatus string
 
 const (

@@ -3,8 +3,10 @@ package shell
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 	"wox/database"
+	"wox/plugin/system/shell/terminal"
 	"wox/util"
 
 	"gorm.io/gorm"
@@ -89,6 +91,21 @@ func (m *ShellHistoryManager) UpdateOutputSummary(ctx context.Context, id string
 			"output_summary": summary,
 			"output_path":    outputPath,
 		}).Error
+}
+
+// appendInteractiveOutput updates the existing row and bounds its transcript in the same write transaction.
+func (m *ShellHistoryManager) appendInteractiveOutput(ctx context.Context, id, output string, status terminal.SessionStatus, exitCode int, endedAt time.Time) error {
+	return m.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var summary string
+		result := tx.Raw(`UPDATE shell_histories SET output_summary = COALESCE(output_summary, '') || ?,
+			status = ?, exit_code = ?, end_time = ?, duration = ? - start_time, updated_at = ?
+			WHERE id = ? RETURNING output_summary`, output, status, exitCode, endedAt.UnixMilli(), endedAt.UnixMilli(), endedAt, id).Scan(&summary)
+		if result.Error != nil || len(summary) <= shellOutputSummaryMaxBytes {
+			return result.Error
+		}
+		summary = strings.ToValidUTF8(appendSummaryOutput("", summary, shellOutputSummaryMaxBytes), "")
+		return tx.Model(&ShellHistory{}).Where("id = ?", id).UpdateColumn("output_summary", summary).Error
+	})
 }
 
 // UpdateStatus updates the status and related fields

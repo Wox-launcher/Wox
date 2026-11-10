@@ -82,6 +82,9 @@ func Test003LauncherQueryShellSavedCommand(t *testing.T) {
 		smoke.ReplaceLauncherQuery(t, ctx, client, "> ")
 		historyResultID := waitForShellResult(t, ctx, client, alias)
 		selectShellResult(t, ctx, client, historyResultID)
+		if err := client.PressKey(ctx, woxui.KeyEnter, 0); err != nil {
+			t.Fatalf("open saved Shell command output: %v", err)
+		}
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			results, resultsFound := automationdriver.Find(snapshot, "launcher.results")
 			status, statusFound := automationdriver.Find(snapshot, "launcher.preview.terminal.status")

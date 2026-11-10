@@ -103,6 +103,14 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 			if previewState.preview != nil && (queryContext.IsGlobalQuery || queryContext.PluginID != previewState.pluginID) {
 				a.previews.clearPluginPreviewContext()
 			}
+			if previewState.pluginID == common.ShellPluginID && previewState.preview != nil && pluginPreview != nil {
+				// A changed launch directory needs a fresh PTY. Ordinary query generations keep the existing one.
+				if previewState.preview.PreviewData != pluginPreview.PreviewData {
+					a.previews.clearPluginPreviewContext()
+				} else {
+					previewState.preview = pluginPreview
+				}
+			}
 			if previewState.preview == nil && pluginPreview != nil && pluginPreview.PreviewType == "woxview" {
 				if service, ok := a.services.(interface {
 					InstallPluginPreview(string, string, string, plugin.WoxPreview) bool
@@ -237,7 +245,9 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 			}
 			return &queryResultDragData{Type: result.DragData.Type, Files: append([]string(nil), result.DragData.Files...), PreventHideAfterDrag: result.DragData.PreventHideAfterDrag}
 		}(),
-		IsGroup: result.IsGroup,
+		IsGroup:    result.IsGroup,
+		score:      result.Score,
+		groupScore: result.GroupScore,
 	}
 }
 
