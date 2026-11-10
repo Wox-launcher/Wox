@@ -186,6 +186,37 @@ func TestLauncherQueryOverflowExposesVisibleCursorRect(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryCaretSharesStableFontBoxWithIME(t *testing.T) {
+	for _, text := range []string{"test", "gyp", "中文🙂", ""} {
+		t.Run(text, func(t *testing.T) {
+			length := len([]rune(text))
+			var ime woxui.TextInputState
+			props := LauncherQueryProps{
+				Width: 240, Height: 42, LineHeight: 38, CaretHeight: 34, CaretWidth: float32(length * 10),
+				Enabled: true, Focused: true, Style: woxui.TextStyle{Size: 28},
+				FontMetrics:      woxui.TextMetrics{Size: woxui.Size{Height: 36}, Baseline: 32},
+				State:            woxui.TextEditingState{Text: text, Selection: woxui.TextSelection{Anchor: length, Focus: length}},
+				Lines:            []LauncherQueryLine{{Text: text}},
+				Theme:            woxcomponent.Theme{Cursor: woxui.Color{A: 255}, QueryText: woxui.Color{A: 255}},
+				OnTextInputState: func(state woxui.TextInputState) { ime = state },
+			}
+			bounds := woxui.Rect{X: -120, Y: -16, Width: props.Width, Height: props.Height}
+			want := woxui.Rect{X: bounds.X + props.CaretWidth, Y: bounds.Y + 6, Width: 2, Height: 32}
+			var actual, expected woxui.DisplayList
+			expected.DrawText(text, woxui.Rect{X: bounds.X, Y: bounds.Y + 2, Width: bounds.Width, Height: 38}, props.Style, props.Theme.QueryText)
+			expected.DrawCaret(want, props.Theme.Cursor, true)
+			launcherQueryCaretPainter(props).Paint(&actual, bounds, true, true)
+			if !reflect.DeepEqual(actual, expected) {
+				t.Fatalf("caret paint must use the stable font rectangle %+v", want)
+			}
+			editor := launcherQueryEditable(LauncherQueryView(props))
+			if state := editor.TextInput(bounds); state != ime || !ime.Enabled || ime.CursorRect != want {
+				t.Fatalf("IME rectangles differ: editor %+v, painter %+v, want %+v", state, ime, want)
+			}
+		})
+	}
+}
+
 func TestLauncherQueryOverflowRemapsPointerToContent(t *testing.T) {
 	var tapped woxui.Point
 	props := LauncherQueryProps{
@@ -234,71 +265,61 @@ func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
 	}
 }
 
-func TestLauncherQueryCentersSelectionWithoutMovingText(t *testing.T) {
+func TestLauncherQuerySelectionUsesStableLineBox(t *testing.T) {
+	const text = "abcdefg"
 	props := LauncherQueryProps{
 		Width: 200, Height: 46, LineHeight: 38, CaretHeight: 34, Focused: true,
-		CaretWidth: 58,
+		CaretWidth: 110,
 		Style:      woxui.TextStyle{Size: 28},
-		State:      woxui.TextEditingState{Text: "a gyp", Selection: woxui.TextSelection{Anchor: 2, Focus: 5}},
-		Lines: []LauncherQueryLine{{
-			Text: "a gyp", PrefixWidth: 18, SelectedWidth: 40, TextWidth: 58,
-			SelectedInk: woxui.TextInkBounds{Top: 16, Bottom: 36},
-		}},
+		State:      woxui.TextEditingState{Text: text, Selection: woxui.TextSelection{Focus: 7}},
+		Lines:      []LauncherQueryLine{{Text: text, TextWidth: 110}},
 		Theme: woxcomponent.Theme{
 			QueryText:           woxui.Color{A: 255},
 			SelectionBackground: woxui.Color{B: 255, A: 255},
 			SelectionText:       woxui.Color{R: 255, G: 255, B: 255, A: 255},
 		},
 	}
-	bounds := woxui.Rect{X: 10, Y: 20, Width: props.Width, Height: props.Height}
-	lineBounds := woxui.Rect{X: 10, Y: 24, Width: 200, Height: 38}
-	selectionBounds := woxui.Rect{X: 28, Y: 34, Width: 40, Height: 32}
-	var actual, expected woxui.DisplayList
-	expected.FillRoundedRect(selectionBounds, 3, props.Theme.SelectionBackground)
-	expected.PushClipRect(woxui.Rect{X: 10, Y: 24, Width: 18, Height: 38})
-	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
-	expected.PopClipRect()
-	expected.PushClipRect(woxui.Rect{X: 28, Y: 24, Width: 40, Height: 38})
-	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.SelectionText)
-	expected.PopClipRect()
-	expected.PushClipRect(woxui.Rect{X: 68, Y: 24, Width: 142, Height: 38})
-	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
-	expected.PopClipRect()
-	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
-	if !reflect.DeepEqual(actual, expected) {
-		t.Fatal("selection must center the background on the measured ink and recolor the original text layout")
+	bounds := woxui.Rect{X: -20, Y: 20, Width: props.Width, Height: props.Height}
+	lineBounds := woxui.Rect{X: -20, Y: 24, Width: 200, Height: 38}
+	for _, test := range []struct {
+		name          string
+		anchor        int
+		prefix, width float32
+	}{
+		{"g", 6, 90, 20},
+		{"fg", 5, 77, 33},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			props.State.Selection.Anchor = test.anchor
+			props.Lines[0].PrefixWidth = test.prefix
+			props.Lines[0].SelectedWidth = test.width
+			selection := woxui.Rect{X: bounds.X + test.prefix, Y: 24, Width: test.width, Height: 38}
+			var actual, expected woxui.DisplayList
+			expected.FillRoundedRect(selection, 3, props.Theme.SelectionBackground)
+			expected.PushClipRect(woxui.Rect{X: bounds.X, Y: 24, Width: test.prefix, Height: 38})
+			expected.DrawText(text, lineBounds, props.Style, props.Theme.QueryText)
+			expected.PopClipRect()
+			expected.PushClipRect(selection)
+			expected.DrawText(text, lineBounds, props.Style, props.Theme.SelectionText)
+			expected.PopClipRect()
+			expected.PushClipRect(woxui.Rect{X: 90, Y: 24, Width: 90, Height: 38})
+			expected.DrawText(text, lineBounds, props.Style, props.Theme.QueryText)
+			expected.PopClipRect()
+			launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
+			if !reflect.DeepEqual(actual, expected) {
+				t.Fatal("selection must fill the stable line box and recolor the original text layout")
+			}
+		})
 	}
 
 	props.State.Selection.Anchor = props.State.Selection.Focus
-	props.Lines[0] = LauncherQueryLine{Text: "a gyp", TextWidth: 58}
+	props.Lines[0] = LauncherQueryLine{Text: text, TextWidth: 110}
 	var deselected, expectedDeselected woxui.DisplayList
-	expectedDeselected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
-	expectedDeselected.DrawCaret(woxui.Rect{X: 68, Y: 24, Width: 2, Height: 34}, props.Theme.Cursor, false)
+	expectedDeselected.DrawText(text, lineBounds, props.Style, props.Theme.QueryText)
+	expectedDeselected.DrawCaret(woxui.Rect{X: 90, Y: 24, Width: 2, Height: 34}, props.Theme.Cursor, false)
 	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&deselected, bounds, true, false)
 	if !reflect.DeepEqual(deselected, expectedDeselected) {
 		t.Fatal("deselecting must preserve the text layout")
-	}
-}
-
-func TestLauncherQuerySelectionBoundsFitsLine(t *testing.T) {
-	lineBounds := woxui.Rect{X: -40, Y: 20, Width: 200, Height: 38}
-	for _, test := range []struct {
-		name      string
-		ink       woxui.TextInkBounds
-		y, height float32
-	}{
-		{"descenders", woxui.TextInkBounds{Top: 16, Bottom: 36}, 34, 24},
-		{"accents", woxui.TextInkBounds{Top: 2, Bottom: 24}, 20, 26},
-		{"whitespace", woxui.TextInkBounds{}, 20, 38},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			line := LauncherQueryLine{PrefixWidth: 18, SelectedWidth: 40, SelectedInk: test.ink}
-			got := launcherQuerySelectionBounds(line, lineBounds, 20, 58)
-			want := woxui.Rect{X: -22, Y: test.y, Width: 40, Height: test.height}
-			if got != want {
-				t.Fatalf("highlight = %+v, want %+v", got, want)
-			}
-		})
 	}
 }
 
@@ -396,7 +417,7 @@ func TestQueryHintCompletionChipsPaintSeparately(t *testing.T) {
 
 func TestLauncherQueryTabHintCentersOnLetterInk(t *testing.T) {
 	props := LauncherQueryProps{
-		LineHeight: 38, Style: woxui.TextStyle{Size: 28}, TextBaseline: 30,
+		LineHeight: 38, Style: woxui.TextStyle{Size: 28}, FontMetrics: woxui.TextMetrics{Baseline: 30},
 		Lines:   []LauncherQueryLine{{Text: "ing"}},
 		TabHint: LauncherQueryTabHint{Height: 14},
 	}
@@ -411,7 +432,7 @@ func TestLauncherQueryPlacesTabHintAfterTarget(t *testing.T) {
 	theme := woxcomponent.Theme{QueryText: woxui.Color{R: 255, G: 255, B: 255, A: 255}}
 	hint := LauncherQueryTabHint{Visible: true, Label: "Tab", X: 80, Width: 14, Height: 14}
 	props := LauncherQueryProps{Width: 400, Height: 42, LineHeight: 38, CaretHeight: 34, Focused: true,
-		Style: woxui.TextStyle{Size: 28}, TextBaseline: 30,
+		Style: woxui.TextStyle{Size: 28}, FontMetrics: woxui.TextMetrics{Baseline: 30},
 		State: woxui.TextEditingState{Text: "sett"}, Lines: []LauncherQueryLine{{Text: "sett", TextWidth: 40}},
 		CompletionSuffix: "ing", TabHint: hint, Theme: theme}
 	feedback := launcherQueryFeedback(props).(woxwidget.AnimatedFloat)

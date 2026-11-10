@@ -662,15 +662,8 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			a.host.RequestFocus(launcherview.LauncherQueryInputKey)
 		}
 	}
-	var measureInk func(string, int, int) woxui.TextInkBounds
-	if queryFocused {
-		measureInk = func(text string, start, end int) woxui.TextInkBounds {
-			ink, _ := a.window.MeasureTextInk(text, style, start, end)
-			return ink
-		}
-	}
 	lines, caretLine, caretWidth, compositionLine, compositionX, compositionWidth, textWidth := queryDisplayLines(
-		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure, measureInk,
+		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure,
 	)
 	selectQueryAt := func(point woxui.Point, line bool) {
 		a.querySession.queryHintEditorState.allSelected = false
@@ -685,15 +678,13 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 		}
 		_ = a.window.Invalidate()
 	}
-	textBaseline := float32(0)
-	if metrics, err := a.window.MeasureText("Ag", style); err == nil {
-		textBaseline = metrics.Baseline
-	}
+	// Measure a fixed sample so typing different scripts cannot move the caret.
+	fontMetrics, _ := a.window.MeasureText("Ag", style)
 	props := launcherview.LauncherQueryProps{
 		TabFeedback: snapshot.queryTabFeedback,
 		Width:       width, Height: height, LineHeight: lineHeight, Style: style, State: state, Lines: lines,
 		CompletionSuffix: completionSuffix, CaretWidth: caretWidth, CaretLine: caretLine,
-		CompositionWidth: compositionWidth, CompositionX: compositionX, CompositionLine: compositionLine, TextWidth: textWidth, CaretHeight: caretHeight, TextBaseline: textBaseline,
+		CompositionWidth: compositionWidth, CompositionX: compositionX, CompositionLine: compositionLine, TextWidth: textWidth, CaretHeight: caretHeight, FontMetrics: fontMetrics,
 		Focused: queryFocused, Enabled: snapshot.queryEnabled, Theme: snapshot.palette.componentTheme(), OnTapAt: func(point woxui.Point) { a.placeQueryCaret(point, style, lineHeight) },
 		OnDoubleTapAt: func(point woxui.Point) { selectQueryAt(point, false) }, OnTripleTapAt: func(point woxui.Point) { selectQueryAt(point, true) },
 		OnTapEnd: focusQuery, OnDragStart: func() {
@@ -982,7 +973,7 @@ func queryRuneLines(runes []rune) []queryRuneLine {
 }
 
 // queryDisplayLines prepares complete line geometry for the retained scroll viewport.
-func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compositionStart, compositionLength int, measure func(string) float32, measureInk func(string, int, int) woxui.TextInkBounds) ([]launcherview.LauncherQueryLine, int, float32, int, float32, float32, float32) {
+func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compositionStart, compositionLength int, measure func(string) float32) ([]launcherview.LauncherQueryLine, int, float32, int, float32, float32, float32) {
 	runeLines := queryRuneLines(runes)
 	caretAbsoluteLine := len(runeLines) - 1
 	for index, line := range runeLines {
@@ -1001,13 +992,8 @@ func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compos
 		selectedStart := max(line.start, selectionStart)
 		selectedEnd := min(lineEnd, selectionEnd)
 		if selectedStart < selectedEnd {
-			prefix := string(runes[line.start:selectedStart])
-			selected := string(runes[selectedStart:selectedEnd])
-			displayLine.PrefixWidth = measure(prefix)
-			displayLine.SelectedWidth = measure(selected)
-			if measureInk != nil {
-				displayLine.SelectedInk = measureInk(displayLine.Text, len(prefix), len(prefix)+len(selected))
-			}
+			displayLine.PrefixWidth = measure(string(runes[line.start:selectedStart]))
+			displayLine.SelectedWidth = measure(string(runes[selectedStart:selectedEnd]))
 		}
 		displayLine.TextWidth = measure(displayLine.Text)
 		lines = append(lines, displayLine)

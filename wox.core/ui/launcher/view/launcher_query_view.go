@@ -86,7 +86,7 @@ type LauncherQueryProps struct {
 	CompositionLine     int
 	TextWidth           float32
 	CaretHeight         float32
-	TextBaseline        float32
+	FontMetrics         woxui.TextMetrics
 	Focused             bool
 	Enabled             bool
 	Theme               woxcomponent.Theme
@@ -120,7 +120,7 @@ func (p LauncherQueryProps) Equal(other LauncherQueryProps) bool {
 	if p.CompletionOffset != other.CompletionOffset || p.TabHint != other.TabHint || p.CompletionInsertion != other.CompletionInsertion {
 		return false
 	}
-	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.TextBaseline != other.TextBaseline || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
+	if p.Label != other.Label || p.Width != other.Width || p.Height != other.Height || p.LineHeight != other.LineHeight || p.Style != other.Style || p.State != other.State || p.CompletionSuffix != other.CompletionSuffix || p.CaretWidth != other.CaretWidth || p.CaretLine != other.CaretLine || p.CompositionWidth != other.CompositionWidth || p.CompositionX != other.CompositionX || p.CompositionLine != other.CompositionLine || p.TextWidth != other.TextWidth || p.CaretHeight != other.CaretHeight || p.FontMetrics != other.FontMetrics || p.Focused != other.Focused || p.Enabled != other.Enabled || p.Theme != other.Theme || len(p.Lines) != len(other.Lines) || len(p.Marks) != len(other.Marks) || len(p.CompletionChips) != len(other.CompletionChips) {
 		return false
 	}
 	for index := range p.Marks {
@@ -157,7 +157,6 @@ type LauncherQueryLine struct {
 	PrefixWidth   float32
 	SelectedWidth float32
 	TextWidth     float32
-	SelectedInk   woxui.TextInkBounds
 }
 
 // LauncherStatusTag carries a measured session indicator in logical layout units.
@@ -393,7 +392,6 @@ func launcherQueryLineMetrics(props LauncherQueryProps) (lineHeight float32, lin
 
 // launcherQueryEditor builds the retained query text painter without scroll chrome.
 func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
-	const cursorWidth = float32(2)
 	pointerCursor := woxui.PointerCursorText
 	if !props.Enabled {
 		pointerCursor = woxui.PointerCursorDefault
@@ -464,8 +462,7 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 		OnCut:            props.OnCut,
 		OnPaste:          props.OnPaste,
 		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
-			textTop := max(float32(0), bounds.Height-float32(len(lines))*lineHeight) / 2
-			return woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: bounds.X + props.CaretWidth - launcherQueryHorizontalOffset(props), Y: bounds.Y + textTop + float32(props.CaretLine)*lineHeight, Width: cursorWidth, Height: props.CaretHeight}}
+			return woxui.TextInputState{Enabled: true, CursorRect: launcherQueryCaretRect(props, bounds, lineHeight, len(lines))}
 		},
 		Child: editor,
 	}
@@ -526,25 +523,11 @@ func launcherQueryTabHintVisible(props LauncherQueryProps) bool {
 // DrawText is top-aligned; letters sit on the baseline, so the center is
 // about a quarter em above it rather than the input box or line box.
 func launcherQueryLetterCenter(props LauncherQueryProps, lineTop float32) float32 {
-	baseline := props.TextBaseline
+	baseline := props.FontMetrics.Baseline
 	if baseline <= 0 {
 		baseline = props.Style.Size * 4 / 5
 	}
 	return lineTop + baseline - props.Style.Size/4
-}
-
-// launcherQuerySelectionBounds keeps the highlight centered on the visible ink
-// and limits its height where it would otherwise spill into a neighboring line.
-func launcherQuerySelectionBounds(line LauncherQueryLine, lineBounds woxui.Rect, top, bottom float32) woxui.Rect {
-	selection := woxui.Rect{X: lineBounds.X + line.PrefixWidth, Y: lineBounds.Y, Width: line.SelectedWidth, Height: lineBounds.Height}
-	inkTop := max(top, lineBounds.Y, lineBounds.Y+line.SelectedInk.Top)
-	inkBottom := min(bottom, lineBounds.Y+lineBounds.Height, lineBounds.Y+line.SelectedInk.Bottom)
-	if inkBottom > inkTop {
-		center := (inkTop + inkBottom) / 2
-		halfHeight := min(lineBounds.Height/2, center-top, bottom-center)
-		selection.Y, selection.Height = center-halfHeight, 2*halfHeight
-	}
-	return selection
 }
 
 // launcherQueryTabHintTop places the glyph on the query letter ink, not the
@@ -561,9 +544,27 @@ func launcherQueryTabGlyph(hint LauncherQueryTabHint, theme woxcomponent.Theme) 
 	return woxcomponent.KeyboardTabGlyph(hint.Width, ink)
 }
 
+// launcherQueryCaretRect centers the preferred caret in a stable, baseline-aligned font box.
+func launcherQueryCaretRect(props LauncherQueryProps, bounds woxui.Rect, lineHeight float32, lineCount int) woxui.Rect {
+	textTop := max(float32(0), bounds.Height-float32(lineCount)*lineHeight) / 2
+	caret := woxui.Rect{
+		X:     bounds.X + props.CaretWidth - launcherQueryHorizontalOffset(props),
+		Y:     bounds.Y + textTop + float32(props.CaretLine)*lineHeight,
+		Width: 2, Height: min(props.CaretHeight, lineHeight),
+	}
+	// Fallback fonts can expand the shared ascent. Keep at most one em above
+	// the measured baseline and retain the space below it for descenders.
+	fontTop := max(float32(0), props.FontMetrics.Baseline-props.Style.Size)
+	fontBottom := min(lineHeight, props.FontMetrics.Size.Height)
+	if props.FontMetrics.Baseline > 0 && props.Style.Size > 0 && fontBottom > fontTop {
+		caret.Height = min(caret.Height, fontBottom-fontTop)
+		caret.Y += (fontTop + fontBottom - caret.Height) / 2
+	}
+	return caret
+}
+
 // launcherQueryPainter keeps text, selection and caret geometry identical across focus transitions.
 func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
-	const cursorWidth = float32(2)
 	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
 	offset := launcherQueryHorizontalOffset(props)
 	return woxwidget.CaretPainter{Width: props.Width, Height: contentHeight, Active: props.Focused, Paint: func(displayList *woxui.DisplayList, bounds woxui.Rect, focused, caretVisible bool) {
@@ -606,14 +607,9 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			lineY := textTop + float32(index)*lineHeight
 			lineBounds := woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}
 			if focused && props.State.Composition == "" && line.SelectedWidth > 0 {
-				top, bottom := lineY, lineY+lineHeight
-				if index == 0 {
-					top = bounds.Y
-				}
-				if index == len(lines)-1 {
-					bottom = bounds.Y + bounds.Height
-				}
-				selection := launcherQuerySelectionBounds(line, lineBounds, top, bottom)
+				selection := lineBounds
+				selection.X += line.PrefixWidth
+				selection.Width = line.SelectedWidth
 				displayList.FillRoundedRect(selection, 3, props.Theme.SelectionBackground)
 				// Reuse the whole line in each color so selection cannot change shaping or the baseline.
 				viewportRight := bounds.X + bounds.Width
@@ -648,18 +644,17 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 			return
 		}
 
-		cursorX := bounds.X + props.CaretWidth - offset
-		caretY := textTop + float32(props.CaretLine)*lineHeight
+		caret := launcherQueryCaretRect(props, bounds, lineHeight, len(lines))
 		// Native text fields hide the blinking caret once a range is selected.
 		if props.State.Selection.Collapsed() {
-			paintX := cursorX
+			paintCaret := caret
 			if props.CaretShaking {
-				paintX = max(bounds.X, min(bounds.X+bounds.Width-cursorWidth, cursorX+props.CaretShake))
+				paintCaret.X = max(bounds.X, min(bounds.X+bounds.Width-caret.Width, caret.X+props.CaretShake))
 			}
-			displayList.DrawCaret(woxui.Rect{X: paintX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}, props.Theme.Cursor, caretVisible || props.CaretShaking)
+			displayList.DrawCaret(paintCaret, props.Theme.Cursor, caretVisible || props.CaretShaking)
 		}
 		if props.OnTextInputState != nil {
-			props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: woxui.Rect{X: cursorX, Y: caretY, Width: cursorWidth, Height: props.CaretHeight}})
+			props.OnTextInputState(woxui.TextInputState{Enabled: true, CursorRect: caret})
 		}
 		if props.State.Composition != "" {
 			compositionY := textTop + float32(props.CompositionLine)*lineHeight

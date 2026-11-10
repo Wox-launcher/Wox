@@ -828,7 +828,7 @@ func windowsPointerCursor(cursor PointerCursor) win.HCURSOR {
 }
 
 // measureText stays on the UI thread because the renderer is destroyed with its HWND.
-func (w *platformWindow) measureText(text string, style TextStyle, ink *textInkRequest) (TextMetrics, error) {
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	if win.GetCurrentThreadId() != w.uiThreadID {
 		// ponytail: Route this through the command queue only when background layout exists.
 		return TextMetrics{}, errors.New("text measurement must run on the Windows UI thread")
@@ -836,7 +836,7 @@ func (w *platformWindow) measureText(text string, style TextStyle, ink *textInkR
 	if w.renderer == nil {
 		return TextMetrics{}, errors.New("window is closed")
 	}
-	return w.renderer.measureText(text, style, ink)
+	return w.renderer.measureText(text, style)
 }
 
 func (w *platformWindow) close() error {

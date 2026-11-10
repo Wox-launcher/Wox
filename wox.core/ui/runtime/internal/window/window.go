@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode/utf16"
-	"unicode/utf8"
 
 	"wox/util/screen"
 )
@@ -569,7 +567,12 @@ func (w *Window) MeasureText(text string, style TextStyle) (TextMetrics, error) 
 	if style.Size <= 0 {
 		return TextMetrics{}, errors.New("text size must be positive")
 	}
-	style = normalizedTextStyle(style)
+	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
+		style.Weight = FontWeightRegular
+	}
+	if style.Family != FontFamilyUI && style.Family != FontFamilyMonospace {
+		style.Family = FontFamilyUI
+	}
 	key := textMetricsCacheKey{text: text, size: style.Size, weight: style.Weight, family: w.currentFontFamily(), kind: style.Family, italic: style.Italic}
 	if metrics, ok := globalTextMetricsCache.get(key); ok {
 		return metrics, nil
@@ -587,58 +590,7 @@ func (w *Window) measureText(text string, style TextStyle) (TextMetrics, error) 
 	if w.measureTextFn != nil {
 		return w.measureTextFn(text, style)
 	}
-	return w.native.measureText(text, style, nil)
-}
-
-// TextInkBounds gives the visible vertical bounds in logical units from the top of DrawText's line rectangle.
-type TextInkBounds struct {
-	Top, Bottom float32
-}
-
-type textInkRequest struct {
-	start, end int
-	bounds     TextInkBounds
-}
-
-// utf16Range converts validated byte boundaries for Core Text and DirectWrite.
-func (ink *textInkRequest) utf16Range(text string) (start, end int) {
-	for index, character := range text[:ink.end] {
-		units := utf16.RuneLen(character)
-		end += units
-		if index < ink.start {
-			start += units
-		}
-	}
-	return start, end
-}
-
-// MeasureTextInk measures the glyph clusters intersecting a UTF-8 byte range in the fully shaped line.
-// An empty result means the range has no visible glyphs. Like MeasureText, call it on the UI thread.
-func (w *Window) MeasureTextInk(text string, style TextStyle, start, end int) (TextInkBounds, error) {
-	if w == nil || w.native == nil {
-		return TextInkBounds{}, errors.New("window is not initialized")
-	}
-	if !w.isOpen() {
-		return TextInkBounds{}, errWindowClosed
-	}
-	if !(style.Size > 0) || start < 0 || start >= end || end > len(text) ||
-		!utf8.RuneStart(text[start]) || (end < len(text) && !utf8.RuneStart(text[end])) || !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0 {
-		return TextInkBounds{}, errors.New("invalid text ink range or style")
-	}
-	request := textInkRequest{start: start, end: end}
-	_, err := w.native.measureText(text, normalizedTextStyle(style), &request)
-	return request.bounds, err
-}
-
-// normalizedTextStyle keeps measurement on the same supported font variants as drawing.
-func normalizedTextStyle(style TextStyle) TextStyle {
-	if style.Weight != FontWeightRegular && style.Weight != FontWeightSemibold {
-		style.Weight = FontWeightRegular
-	}
-	if style.Family != FontFamilyUI && style.Family != FontFamilyMonospace {
-		style.Family = FontFamilyUI
-	}
-	return style
+	return w.native.measureText(text, style)
 }
 
 // currentFontFamily returns the last font family applied via SetFontFamily.

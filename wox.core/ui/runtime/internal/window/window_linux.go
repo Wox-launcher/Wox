@@ -645,7 +645,7 @@ func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
 }
 
 // measureText uses Pango on the GTK thread so it matches the native renderer.
-func (w *platformWindow) measureText(text string, style TextStyle, ink *textInkRequest) (TextMetrics, error) {
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	native, err := w.openNative()
 	if err != nil {
 		return TextMetrics{}, err
@@ -663,17 +663,9 @@ func (w *platformWindow) measureText(text string, style TextStyle, ink *textInkR
 	var width C.float
 	var height C.float
 	var baseline C.float
-	var nativeInk *C.WoxTextInkRange
-	if ink != nil {
-		start, end := ink.start, ink.end
-		nativeInk = &C.WoxTextInkRange{start: C.int32_t(start), end: C.int32_t(end)}
-	}
-	result := C.wox_linux_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline, nativeInk)
+	result := C.wox_linux_window_measure_text(native, nativeText, nativeFontFamily, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
 	if result != 0 {
 		return TextMetrics{}, errors.New("woxui: failed to measure Linux text")
-	}
-	if ink != nil {
-		ink.bounds = TextInkBounds{Top: float32(nativeInk.top), Bottom: float32(nativeInk.bottom)}
 	}
 	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
 }

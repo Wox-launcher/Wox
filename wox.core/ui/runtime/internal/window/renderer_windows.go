@@ -198,25 +198,17 @@ func (r *nativeRenderer) residentBytes() int64 {
 }
 
 // measureText uses DirectWrite without opening a draw transaction.
-func (r *nativeRenderer) measureText(text string, style TextStyle, ink *textInkRequest) (TextMetrics, error) {
+func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics, error) {
 	nativeText := C.CString(text)
 	defer C.free(unsafe.Pointer(nativeText))
 	var width C.float
 	var height C.float
 	var baseline C.float
-	var nativeInk *C.WoxTextInkRange
-	if ink != nil {
-		start, end := ink.utf16Range(text)
-		nativeInk = &C.WoxTextInkRange{start: C.int32_t(start), end: C.int32_t(end)}
-	}
 	traceNativeCall("renderer measure enter handle=%p textLen=%d size=%.2f weight=%d", r.handle, len(text), style.Size, style.Weight)
-	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(style.Family), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline, nativeInk)
+	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(style.Family), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
 	traceNativeCall("renderer measure exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return TextMetrics{}, hresultError("measure text", result)
-	}
-	if ink != nil {
-		ink.bounds = TextInkBounds{Top: float32(nativeInk.top), Bottom: float32(nativeInk.bottom)}
 	}
 	return TextMetrics{Size: Size{Width: float32(width), Height: float32(height)}, Baseline: float32(baseline)}, nil
 }

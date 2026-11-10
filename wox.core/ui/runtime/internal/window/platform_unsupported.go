@@ -174,7 +174,7 @@ func (w *platformWindow) setPointerCursor(cursor PointerCursor) error {
 	return ErrPlatformUnsupported
 }
 
-func (w *platformWindow) measureText(text string, style TextStyle, ink *textInkRequest) (TextMetrics, error) {
+func (w *platformWindow) measureText(text string, style TextStyle) (TextMetrics, error) {
 	return TextMetrics{}, ErrPlatformUnsupported
 }
 

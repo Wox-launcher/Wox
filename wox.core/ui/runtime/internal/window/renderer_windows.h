@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include "native_renderer_stats.h"
-#include "text_ink.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,7 +58,7 @@ int32_t wox_renderer_begin_edge_fade(WoxRenderer *renderer, float x, float y, fl
 int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer);
 int32_t wox_renderer_begin_opacity(WoxRenderer *renderer, float x, float y, float width, float height, float opacity, int32_t backdrop);
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);
-int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink);
+int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline);
 // Measures with the default Segoe UI plus YaHei UI fallback, without a window.
 int32_t wox_renderer_measure_default_text_for_test(const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline);
 int32_t wox_renderer_end_frame(WoxRenderer *renderer);

@@ -5,7 +5,6 @@
 #include <stddef.h>
 
 #include "native_renderer_stats.h"
-#include "text_ink.h"
 
 typedef struct WoxLinuxWindow WoxLinuxWindow;
 int32_t wox_linux_webview_evaluate(WoxLinuxWindow *target, const char *script, uint64_t callback);
@@ -68,7 +67,7 @@ int32_t wox_linux_accessibility_add_node(WoxLinuxWindow *window, uint64_t id, ui
 // publication stopped early: widgets already written stay, and the next successful
 // update drops anything that generation did not visit.
 int32_t wox_linux_accessibility_end(WoxLinuxWindow *window, int32_t commit);
-int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink);
+int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline);
 int32_t wox_linux_window_close(WoxLinuxWindow *window);
 
 int32_t wox_linux_window_begin_frame(WoxLinuxWindow *window, uint64_t frame_id, float logical_width, float logical_height, float scale, float damage_x, float damage_y, float damage_width, float damage_height, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
