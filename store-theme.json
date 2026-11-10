@@ -238,5 +238,55 @@
         "theme_description": "鼠尾草绿、赭金与天青笔触的油画外框，配暖白画布内容区、粉色搜索框、金色工具栏与深焦茶选中。"
       }
     }
+  },
+  {
+    "Id": "25506f7f-e0d9-4bc0-87ad-9e489cb83af6",
+    "Name": "i18n:theme_name",
+    "Author": "qianlifeng",
+    "Version": "1.0.3",
+    "MinWoxVersion": "2.4.5",
+    "Description": "i18n:theme_description",
+    "ImageTheme": true,
+    "IconColors": {
+      "Background": "#19223A",
+      "Query": "#111A2C",
+      "Selected": "#294469",
+      "Outline": "#D8EAFA",
+      "OutlineWidth": 2,
+      "Indicator": "#92E0B2"
+    },
+    "Website": "https://github.com/Wox-launcher/Wox.Theme.8bit",
+    "DownloadUrl": "https://github.com/Wox-launcher/Wox.Theme.8bit/releases/latest/download/8bit.wox-theme",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/Wox-launcher/Wox.Theme.8bit/main/preview.png"
+    ],
+    "DateCreated": "2026-11-10 11:10:50",
+    "DateUpdated": "2026-11-10 11:10:50",
+    "I18n": {
+      "en_US": {
+        "theme_name": "8-Bit Night",
+        "theme_description": "A navy pixel-art launcher with stepped frames and ice-blue, mint, and gold accents."
+      },
+      "zh_CN": {
+        "theme_name": "像素夜航",
+        "theme_description": "深蓝底色、阶梯形像素边框，点缀冰蓝、薄荷绿和金黄。"
+      },
+      "ru_RU": {
+        "theme_name": "8-битная ночь",
+        "theme_description": "Тёмно-синяя тема в пиксельном стиле со ступенчатой рамкой и голубыми, мятными и золотыми акцентами."
+      },
+      "pt_BR": {
+        "theme_name": "Noite de 8 bits",
+        "theme_description": "Tema azul-marinho em pixel art com moldura escalonada e detalhes em azul-gelo, verde-menta e dourado."
+      },
+      "ko_KR": {
+        "theme_name": "8비트의 밤",
+        "theme_description": "계단형 픽셀 테두리와 얼음빛 파랑, 민트색, 금색으로 꾸민 짙은 남색 테마입니다."
+      },
+      "ja_JP": {
+        "theme_name": "8ビットの夜",
+        "theme_description": "濃紺に階段状のドット枠を重ね、アイスブルー、ミント、金色を添えたテーマ。"
+      }
+    }
   }
 ]
