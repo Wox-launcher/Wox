@@ -24,12 +24,20 @@ typedef struct WoxDataControlOffer {
     struct WoxDataControlOffer *next;
 } WoxDataControlOffer;
 
+// Transfer descriptors are passed to Go so blocked readers cannot stall Wayland dispatch indefinitely.
+typedef struct WoxDataControlTransfer {
+    int fd;
+    struct WoxDataControlTransfer *next;
+} WoxDataControlTransfer;
+
 typedef struct WoxDataControlState {
     struct wl_display *display;
     struct wl_registry *registry;
     struct wl_seat *seat;
     struct ext_data_control_manager_v1 *manager;
     struct ext_data_control_device_v1 *device;
+    struct ext_data_control_source_v1 *source;
+    WoxDataControlTransfer *transfers;
     WoxDataControlOffer *offers;
     WoxDataControlOffer *selection;
     int finished;
@@ -268,6 +276,15 @@ static int wox_data_control_receive(
 }
 
 static void wox_data_control_state_destroy(WoxDataControlState *state) {
+    while (state->transfers != NULL) {
+        WoxDataControlTransfer *transfer = state->transfers;
+        state->transfers = transfer->next;
+        close(transfer->fd);
+        free(transfer);
+    }
+    if (state->source != NULL) {
+        ext_data_control_source_v1_destroy(state->source);
+    }
     WoxDataControlOffer *offer = state->offers;
     while (offer != NULL) {
         WoxDataControlOffer *next = offer->next;
@@ -399,6 +416,70 @@ void wox_data_control_watch_close(WoxDataControlState *state) {
     if (state == NULL) return;
     wox_data_control_state_destroy(state);
     free(state);
+}
+
+// Keep sends in the owning connection; Go retains the immutable payload and writes each descriptor with a deadline.
+static void wox_data_control_source_send(
+    void *data,
+    struct ext_data_control_source_v1 *source,
+    const char *mime_type,
+    int32_t fd) {
+    (void)source;
+    (void)mime_type;
+    WoxDataControlState *state = data;
+    WoxDataControlTransfer *transfer = calloc(1, sizeof(*transfer));
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (transfer == NULL || flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        free(transfer);
+        close(fd);
+        return;
+    }
+    transfer->fd = fd;
+    transfer->next = state->transfers;
+    state->transfers = transfer;
+}
+
+static void wox_data_control_source_cancelled(void *data, struct ext_data_control_source_v1 *source) {
+    (void)source;
+    WoxDataControlState *state = data;
+    state->finished = 1;
+}
+
+static const struct ext_data_control_source_v1_listener wox_data_control_source_listener = {
+    .send = wox_data_control_source_send,
+    .cancelled = wox_data_control_source_cancelled,
+};
+
+// Data-control publishes in the background without requiring focus, wl-copy, or a RemoteDesktop session.
+WoxDataControlState *wox_data_control_write_start(const char *mime_type, WoxDataControlReadResult *result) {
+    WoxDataControlState *state = wox_data_control_watch_start(result);
+    if (state == NULL) return NULL;
+    state->source = ext_data_control_manager_v1_create_data_source(state->manager);
+    if (state->source == NULL) goto fail;
+    ext_data_control_source_v1_add_listener(state->source, &wox_data_control_source_listener, state);
+    ext_data_control_source_v1_offer(state->source, mime_type);
+    if (strcmp(mime_type, "text/plain;charset=utf-8") == 0) {
+        ext_data_control_source_v1_offer(state->source, "text/plain");
+    }
+    ext_data_control_device_v1_set_selection(state->device, state->source);
+    if (wl_display_roundtrip(state->display) < 0) goto fail;
+    return state;
+fail:
+    wox_data_control_set_error(result, "failed to publish Wayland clipboard selection");
+    wox_data_control_watch_close(state);
+    return NULL;
+}
+
+// Sleep in Wayland dispatch until a reader requests bytes or another owner replaces this source.
+int wox_data_control_write_next(WoxDataControlState *state) {
+    while (state->transfers == NULL) {
+        if (state->finished || wl_display_dispatch(state->display) < 0) return -1;
+    }
+    WoxDataControlTransfer *transfer = state->transfers;
+    state->transfers = transfer->next;
+    int fd = transfer->fd;
+    free(transfer);
+    return fd;
 }
 
 void wox_data_control_read_result_free(WoxDataControlReadResult *result) {

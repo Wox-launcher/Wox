@@ -8,9 +8,9 @@ import (
 	"wox/util"
 )
 
-// kdeWaylandClipboard uses the desktop portal on KDE/Plasma Wayland, except
-// for images: KWin does not reliably request image payloads from a background
-// portal session, so image writes go through the focused UI GTK path.
+// kdeWaylandClipboard uses data-control so clipboard history does not start a
+// RemoteDesktop portal session and prompt for remote-control access on startup.
+// Image writes retain the focused UI GTK path for KWin compatibility.
 type kdeWaylandClipboard struct{}
 
 func newKDEWaylandClipboard() kdeWaylandClipboard {
@@ -22,45 +22,31 @@ func (kdeWaylandClipboard) name() string {
 }
 
 func (kdeWaylandClipboard) readContentType() Type {
-	if err := portalReady(); err == nil {
-		return portalReadContentType()
-	}
 	return dataControlReadContentType()
 }
 
 func (kdeWaylandClipboard) readText() (string, error) {
-	if err := portalReady(); err == nil {
-		return portalReadText()
-	}
 	return dataControlReadText()
 }
 
 func (kdeWaylandClipboard) readFilePaths() ([]string, error) {
-	if err := portalReady(); err == nil {
-		return portalReadFilePaths()
-	}
 	return dataControlReadFilePaths()
 }
 
 func (kdeWaylandClipboard) readImageSnapshot() (*ImageSnapshot, error) {
-	if err := portalReady(); err == nil {
-		return portalReadImageSnapshot()
-	}
 	return dataControlReadImageSnapshot()
 }
 
 func (kdeWaylandClipboard) writeText(text string) error {
-	if err := portalReady(); err == nil {
-		return portalWriteText(text)
-	}
-	return waylandCopy(portalMimeTextUTF8, []byte(text))
+	return writeDataControlSelection(portalMimeTextUTF8, []byte(text))
 }
 
 func (kdeWaylandClipboard) writeFilePaths(paths []string) error {
-	if err := portalReady(); err == nil {
-		return portalWriteFilePaths(paths)
+	payload, err := buildPortalURIListPayload(paths)
+	if err != nil {
+		return err
 	}
-	return newWaylandClipboard().writeFilePaths(paths)
+	return writeDataControlSelection(portalMimeURIList, payload)
 }
 
 func (kdeWaylandClipboard) writeImageBytes(pngData []byte) error {
@@ -72,16 +58,10 @@ func (kdeWaylandClipboard) writeImageBytes(pngData []byte) error {
 }
 
 func (kdeWaylandClipboard) isChanged() bool {
-	if err := portalReady(); err == nil {
-		return portalIsChanged()
-	}
 	return dataControlIsChanged()
 }
 
 func (kdeWaylandClipboard) watchSnapshot() string {
-	if err := portalReady(); err == nil {
-		return portalWatchSnapshot()
-	}
 	return dataControlWatchSnapshot()
 }
 

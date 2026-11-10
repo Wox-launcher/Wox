@@ -16,6 +16,9 @@ WoxDataControlState *wox_data_control_watch_start(WoxDataControlReadResult *resu
 int wox_data_control_watch_next(WoxDataControlState *state, WoxDataControlReadResult *result);
 void wox_data_control_watch_close(WoxDataControlState *state);
 
+WoxDataControlState *wox_data_control_write_start(const char *mime_type, WoxDataControlReadResult *result);
+int wox_data_control_write_next(WoxDataControlState *state);
+
 int wox_data_control_read(WoxDataControlReadResult *result);
 void wox_data_control_read_result_free(WoxDataControlReadResult *result);
 

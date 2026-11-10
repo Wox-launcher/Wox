@@ -74,8 +74,8 @@ func selectLinuxClipboard() linuxClipboard {
 	)
 }
 
-// selectLinuxClipboardFor picks a backend from session facts. GNOME/KDE Wayland
-// keep the portal path; every X11 desktop uses the X11 backend.
+// selectLinuxClipboardFor picks a backend from session facts without probing
+// protocols or requesting desktop permissions. Every X11 desktop uses X11.
 func selectLinuxClipboardFor(wayland, kde, gnome, hyprland bool) linuxClipboard {
 	if wayland {
 		if kde {

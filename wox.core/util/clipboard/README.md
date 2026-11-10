@@ -37,6 +37,12 @@ Linux desktop selection remains in `clipboard_linux.go` with each environment's
 implementation in its own file. `clipboard_image_linux_gtk.*` is the UI-thread transport;
 it does not select or alter GNOME, KDE, Hyprland, or X11 policies.
 
+KDE Wayland reads and watches through `ext-data-control-v1`; text and file writes
+use a native data-control source that serves immutable payloads until ownership
+changes. This avoids creating a RemoteDesktop session, whose startup authorization
+dialog appears on every launch. No `wl-copy` executable is required. Image writes
+retain the focused GTK adapter. GNOME continues to use its portal backend.
+
 On Windows, independently build this package and run image/lifetime/watcher
 tests with CGO enabled. Native image-format fixtures inspect prepared handles
 without modifying the desktop clipboard. macOS PNG/TIFF and Linux GTK format
