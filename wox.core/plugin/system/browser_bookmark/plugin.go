@@ -19,6 +19,8 @@ import (
 	"wox/util/browser"
 	"wox/util/imagecache"
 	"wox/util/shell"
+
+	"github.com/mitchellh/go-homedir"
 )
 
 func init() {
@@ -337,8 +339,22 @@ func (c *BrowserBookmarkPlugin) getBookmarkIndexBrowserOptions(installedBrowsers
 func (c *BrowserBookmarkPlugin) getBookmarkIndexableInstalledBrowsers() []browser.BrowserOption {
 	var browsers []browser.BrowserOption
 
-	for _, localBrowser := range browser.GetInstalledBrowsers() {
+	for _, localBrowser := range browser.SupportedBrowsers {
 		if !c.isBookmarkIndexableBrowser(localBrowser.ID) {
+			continue
+		}
+		available := browser.IsInstalled(localBrowser.ID)
+		if !available && util.IsLinux() {
+			// Flatpak browsers need not expose an executable on the host PATH.
+			for _, root := range getLinuxBookmarkRootDirs(localBrowser.ID) {
+				resolvedRoot, err := homedir.Expand(root)
+				if err == nil && util.IsDirExists(resolvedRoot) {
+					available = true
+					break
+				}
+			}
+		}
+		if !available {
 			continue
 		}
 		browsers = append(browsers, localBrowser)

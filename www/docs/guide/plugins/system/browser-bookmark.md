@@ -26,11 +26,13 @@ The plugin uses stricter matching than broad text search so bookmark results do 
 
 Safari bookmarks are not currently indexed.
 
+On Linux, Firefox supports both `~/.mozilla/firefox` and `$XDG_CONFIG_HOME/mozilla/firefox` (`~/.config/mozilla/firefox` by default), plus Snap and Flatpak data directories. Chrome supports `$XDG_CONFIG_HOME/google-chrome` and Flatpak's `~/.var/app/com.google.Chrome/config/google-chrome`. Browsers with data in these locations can be indexed even when their executable is absent from the host PATH.
+
 ## Settings
 
 Open **Settings -> Plugins -> Browser Bookmark** to choose which browsers Wox should index. Keep only the browsers you actually use enabled if you have many duplicate bookmarks.
 
-Bookmarks reload when Wox starts or when the browser selection changes in plugin settings. Restart Wox to pick up bookmark file changes. If Firefox has the profile database locked, close Firefox once and retry.
+Bookmarks reload when Wox starts or when the browser selection changes in plugin settings. Restart Wox to pick up bookmark file changes. Firefox bookmarks are read from a temporary copy of the profile database and its transaction files, so Firefox can stay open.
 
 ## Icons and Ordering
 

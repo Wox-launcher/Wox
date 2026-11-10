@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"wox/plugin"
 	"wox/plugin/system"
@@ -54,7 +55,11 @@ func (c *BrowserBookmarkPlugin) loadChromeBookmarkInWindows(ctx context.Context,
 }
 
 func (c *BrowserBookmarkPlugin) loadChromeBookmarkInLinux(ctx context.Context, profile string) []Bookmark {
-	return c.loadChromiumBookmarkFiles(ctx, fmt.Sprintf("~/.config/google-chrome/%s", profile), "/", "Chrome")
+	var bookmarks []Bookmark
+	for _, root := range getLinuxBookmarkRootDirs(browser.BrowserIDChrome) {
+		bookmarks = append(bookmarks, c.loadChromiumBookmarkFiles(ctx, filepath.Join(root, profile), "/", "Chrome")...)
+	}
+	return bookmarks
 }
 
 // loadChromiumBookmarkFiles reads plaintext Chromium bookmark JSON files from a profile directory.

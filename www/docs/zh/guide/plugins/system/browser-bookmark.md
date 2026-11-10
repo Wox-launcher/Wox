@@ -26,11 +26,13 @@ b github
 
 目前不会索引 Safari 书签。
 
+Linux 上，Firefox 支持 `~/.mozilla/firefox` 和 `$XDG_CONFIG_HOME/mozilla/firefox`（默认是 `~/.config/mozilla/firefox`），以及 Snap 和 Flatpak 数据目录。Chrome 支持 `$XDG_CONFIG_HOME/google-chrome` 和 Flatpak 的 `~/.var/app/com.google.Chrome/config/google-chrome`。即使浏览器可执行文件不在宿主机的 PATH 中，插件也能通过这些数据目录发现并索引书签。
+
 ## 设置
 
 打开 **设置 -> 插件 -> 浏览器书签**，选择 Wox 应该索引哪些浏览器。如果重复书签很多，只保留你真正在用的浏览器。
 
-Wox 启动时或插件设置中的浏览器选择发生变化时会重新加载书签。浏览器书签文件变化后，可以重启 Wox 以读取更新。如果 Firefox 锁定了 profile 数据库，先关闭 Firefox 再试。
+Wox 启动时或插件设置中的浏览器选择发生变化时会重新加载书签。浏览器书签文件变化后，可以重启 Wox 以读取更新。Firefox 书签通过 profile 数据库及其事务文件的临时副本读取，无需关闭 Firefox。
 
 ## 图标和排序
 

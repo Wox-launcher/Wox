@@ -24,6 +24,11 @@ func init() {
 }
 
 func (c *BrowserBookmarkPlugin) loadFirefoxBookmarks(ctx context.Context) []Bookmark {
+	return c.loadFirefoxBookmarksFromRootDirs(ctx, getFirefoxBookmarkRootDirs(), "Firefox")
+}
+
+// getFirefoxBookmarkRootDirs keeps profile discovery and local verification in sync.
+func getFirefoxBookmarkRootDirs() []string {
 	var roots []string
 
 	switch {
@@ -35,16 +40,10 @@ func (c *BrowserBookmarkPlugin) loadFirefoxBookmarks(ctx context.Context) []Book
 			roots = append(roots, filepath.Join(appData, "Mozilla", "Firefox"))
 		}
 	case util.IsLinux():
-		roots = []string{
-			"~/.mozilla/firefox",
-			"~/snap/firefox/common/.mozilla/firefox",
-			"~/.var/app/org.mozilla.firefox/.mozilla/firefox",
-		}
-	default:
-		return []Bookmark{}
+		roots = getLinuxBookmarkRootDirs(browser.BrowserIDFirefox)
 	}
 
-	return c.loadFirefoxBookmarksFromRootDirs(ctx, roots, "Firefox")
+	return roots
 }
 
 func (c *BrowserBookmarkPlugin) loadFirefoxBookmarksFromRootDirs(ctx context.Context, rootDirs []string, browserName string) []Bookmark {
@@ -227,7 +226,16 @@ func (c *BrowserBookmarkPlugin) loadFirefoxBookmarkFromPlacesFile(ctx context.Co
 		return []Bookmark{}
 	}
 
-	db, err := sql.Open("sqlite3", placesFile+"?mode=ro&_busy_timeout=2000")
+	// Firefox can hold an exclusive lock for its entire lifetime. Query a private
+	// copy so SQLite can recover the WAL without touching the browser's files.
+	snapshotFile, cleanup, err := snapshotFirefoxPlacesFile(placesFile)
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("error snapshotting Firefox places database %s: %s", placesFile, err))
+		return []Bookmark{}
+	}
+	defer cleanup()
+
+	db, err := sql.Open("sqlite3", snapshotFile+"?mode=rw&_busy_timeout=2000")
 	if err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error opening Firefox places database: %s", err.Error()))
 		return []Bookmark{}
