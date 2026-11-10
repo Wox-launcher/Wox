@@ -2303,5 +2303,37 @@
         "radio_description": "Wox でインターネットラジオを聴く"
       }
     }
+  },
+    {
+    "Id": "31ea5f56-fd15-40ca-bb98-e4ae369ee8e8",
+    "Name": "i18n:plugin_name",
+    "Author": "nanhaiya",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.2",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_description",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/42a81808-c496-4d6c-9e9f-9ed397bc5d39",
+    "Website": "https://gist.github.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0",
+    "DownloadUrl": "https://gist.githubusercontent.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0/raw/Wox.Plugin.%E5%A4%A9%E6%B0%94.js",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/0fc09df1-ad0e-4bf8-b512-3bf5c3097bec"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "I18n": {
+      "en_US": {
+        "plugin_name": "Weather (China)",
+        "plugin_description": "Current weather and a 7-day forecast for Chinese cities from the itab weather API.\n\n1. Type 天气 to query the default city\n2. Type 天气 长沙 or 天气 上海 to pick a place\n3. The first row is the current weather. The following rows are the next few days"
+      },
+      "zh_CN": {
+        "plugin_name": "天气",
+        "plugin_description": "使用 itab 天气接口查询中国城市当前天气和 7 天预报。\n\n1. 输入 天气 查询默认城市\n2. 输入 天气 长沙 或 天气 上海 选择地点\n3. 第一行是当前天气，后面几行是未来几天"
+      }
+    },
+    "DateCreated": "2026-11-10 09:10:00",
+    "DateUpdated": "2026-11-10 09:10:00"
   }
 ]
