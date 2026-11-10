@@ -2304,7 +2304,7 @@
       }
     }
   },
-  {
+    {
     "Id": "31ea5f56-fd15-40ca-bb98-e4ae369ee8e8",
     "Name": "i18n:plugin_name",
     "Author": "nanhaiya",
@@ -2312,11 +2312,11 @@
     "MinWoxVersion": "2.4.2",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",
-    "IconUrl": "https://raw.githubusercontent.com/nanhaiya/Wox/codex/add-weather-cn-store-entry/images/app.svg",
+    "IconUrl": "https://gist.github.com/user-attachments/assets/42a81808-c496-4d6c-9e9f-9ed397bc5d39",
     "Website": "https://gist.github.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0",
     "DownloadUrl": "https://gist.githubusercontent.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0/raw/Wox.Plugin.%E5%A4%A9%E6%B0%94.js",
     "ScreenshotUrls": [
-      "https://raw.githubusercontent.com/nanhaiya/Wox/codex/add-weather-cn-store-entry/images/screenshot1.png"
+      "https://gist.github.com/user-attachments/assets/0fc09df1-ad0e-4bf8-b512-3bf5c3097bec"
     ],
     "SupportedOS": [
       "Windows",
