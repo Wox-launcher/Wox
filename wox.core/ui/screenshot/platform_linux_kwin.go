@@ -3,15 +3,12 @@
 package screenshot
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"image"
 	"io"
-	"math"
 	"os"
-	"strings"
 	"sync"
 	"time"
 	"wox/util"
@@ -25,9 +22,6 @@ const (
 	linuxKWinScreenshotObjectPath    = dbus.ObjectPath("/org/kde/KWin/ScreenShot2")
 	linuxKWinScreenshotInterface     = "org.kde.KWin.ScreenShot2"
 	linuxKWinScreenshotCallTimeout   = 4 * time.Second
-	linuxKWinBusName                 = "org.kde.KWin"
-	linuxKWinObjectPath              = dbus.ObjectPath("/KWin")
-	linuxKWinInterface               = "org.kde.KWin"
 	linuxKWinImageFormatRGB32        = 4
 	linuxKWinImageFormatARGB32       = 5
 	linuxKWinImageFormatARGB32Premul = 6
@@ -36,19 +30,13 @@ const (
 	linuxKWinImageFormatRGBA8888Prem = 18
 )
 
-// linuxKWinDesktopCapture keeps one compositor output stable across scrolling recaptures.
+// linuxKWinDesktopCapture freezes all output identities before any selection overlay appears.
 type linuxKWinDesktopCapture struct {
-	mu     sync.Mutex
-	conn   *dbus.Conn
-	screen linuxKWinDisplayGeometry
-	closed bool
-}
-
-type linuxKWinDisplayGeometry struct {
-	Name        string
-	Logical     utilscreen.Rect
-	PixelWidth  int
-	PixelHeight int
+	mu      sync.Mutex
+	conn    *dbus.Conn
+	screen  utilscreen.KWinDisplay
+	screens []utilscreen.KWinDisplay
+	closed  bool
 }
 
 func init() {
@@ -62,22 +50,12 @@ func init() {
 	})
 }
 
-// newLinuxKWinDesktopCapture fixes the output at the compositor's active screen before capture begins.
+// newLinuxKWinDesktopCapture discovers every output without relying on the launcher's current screen.
 func newLinuxKWinDesktopCapture() (*linuxKWinDesktopCapture, error) {
-	screen, err := linuxKWinActiveScreenIdentity()
+	screens, err := utilscreen.GetKWinDisplays()
 	if err != nil {
 		return nil, err
 	}
-	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
-		"[screenshot] active Plasma output source=kwin name=%s logical=%d,%d %dx%d pixels=%dx%d",
-		screen.Name,
-		screen.Logical.X,
-		screen.Logical.Y,
-		screen.Logical.Width,
-		screen.Logical.Height,
-		screen.PixelWidth,
-		screen.PixelHeight,
-	))
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return nil, fmt.Errorf("connect to KWin screenshot service: %w", err)
@@ -86,81 +64,29 @@ func newLinuxKWinDesktopCapture() (*linuxKWinDesktopCapture, error) {
 		conn.Close()
 		return nil, errors.New("KWin screenshot service requires D-Bus Unix FD passing")
 	}
-	return &linuxKWinDesktopCapture{conn: conn, screen: screen}, nil
+	return &linuxKWinDesktopCapture{conn: conn, screen: screens[0], screens: screens}, nil
 }
 
-// linuxKWinActiveScreenIdentity resolves KWin's active output to logical and native-pixel geometry.
-func linuxKWinActiveScreenIdentity() (linuxKWinDisplayGeometry, error) {
-	conn, err := dbus.ConnectSessionBus()
-	if err != nil {
-		return linuxKWinDisplayGeometry{}, err
-	}
-	defer conn.Close()
-	object := conn.Object(linuxKWinBusName, linuxKWinObjectPath)
-	var activeName string
-	if err := object.Call(linuxKWinInterface+".activeOutputName", 0).Store(&activeName); err != nil {
-		return linuxKWinDisplayGeometry{}, fmt.Errorf("query KWin active output: %w", err)
-	}
-	var support string
-	if err := object.Call(linuxKWinInterface+".supportInformation", 0).Store(&support); err != nil {
-		return linuxKWinDisplayGeometry{}, fmt.Errorf("query KWin output geometry: %w", err)
-	}
-	for _, display := range parseLinuxKWinDisplayGeometries(support) {
-		if display.Name == activeName {
-			return display, nil
-		}
-	}
-	return linuxKWinDisplayGeometry{}, fmt.Errorf("KWin active output %q has no geometry", activeName)
+// captureOutputs snapshots every monitor before mapping overlays and keeps recapture bound to its output.
+func (capture *linuxKWinDesktopCapture) captureOutputs() ([]linuxDesktopOutput, error) {
+	return captureLinuxKWinOutputs(capture.screens, capture.captureScreen)
 }
 
-// parseLinuxKWinDisplayGeometries reads KWin's per-output logical geometry and fractional scale diagnostics.
-func parseLinuxKWinDisplayGeometries(support string) []linuxKWinDisplayGeometry {
-	var displays []linuxKWinDisplayGeometry
-	var name string
-	var logical utilscreen.Rect
-	var scale float64
-	inScreen := false
-	flush := func() {
-		if name == "" || logical.Width <= 0 || logical.Height <= 0 || scale <= 0 {
-			return
+// captureLinuxKWinOutputs separates the frozen output layout from the per-output native capture operation.
+func captureLinuxKWinOutputs(screens []utilscreen.KWinDisplay, captureScreen func(utilscreen.KWinDisplay) (image.Image, error)) ([]linuxDesktopOutput, error) {
+	outputs := make([]linuxDesktopOutput, 0, len(screens))
+	for _, screen := range screens {
+		source, err := captureScreen(screen)
+		if err != nil {
+			return nil, err
 		}
-		displays = append(displays, linuxKWinDisplayGeometry{
-			Name: name, Logical: logical,
-			PixelWidth: int(math.Round(float64(logical.Width) * scale)), PixelHeight: int(math.Round(float64(logical.Height) * scale)),
+		outputs = append(outputs, linuxDesktopOutput{
+			source:  source,
+			bounds:  Rect{X: float32(screen.Logical.X), Y: float32(screen.Logical.Y), Width: float32(screen.Logical.Width), Height: float32(screen.Logical.Height)},
+			capture: func() (image.Image, error) { return captureScreen(screen) },
 		})
 	}
-	scanner := bufio.NewScanner(strings.NewReader(support))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "Screen ") && strings.HasSuffix(line, ":") {
-			flush()
-			inScreen = true
-			name = ""
-			logical = utilscreen.Rect{}
-			scale = 0
-			continue
-		}
-		if !inScreen {
-			continue
-		}
-		if name == "" && strings.HasPrefix(line, "Name: ") {
-			name = strings.TrimSpace(strings.TrimPrefix(line, "Name: "))
-			continue
-		}
-		if strings.HasPrefix(line, "Geometry: ") {
-			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Geometry: "), "%d,%d,%dx%d", &logical.X, &logical.Y, &logical.Width, &logical.Height)
-			continue
-		}
-		if strings.HasPrefix(line, "Scale: ") {
-			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Scale: "), "%f", &scale)
-			flush()
-			inScreen = false
-			name = ""
-			logical = utilscreen.Rect{}
-			scale = 0
-		}
-	}
-	return displays
+	return outputs, nil
 }
 
 // linuxKWinCaptureOptions keeps launcher hiding in Go. KWin's hide-caller-windows
@@ -174,6 +100,11 @@ func linuxKWinCaptureOptions() map[string]dbus.Variant {
 
 // capture requests native-resolution pixels for the fixed output and decodes KWin's raw QImage buffer.
 func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
+	return capture.captureScreen(capture.screen)
+}
+
+// captureScreen reads one output at native resolution, including fractional display scales.
+func (capture *linuxKWinDesktopCapture) captureScreen(screen utilscreen.KWinDisplay) (image.Image, error) {
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	if capture.closed || capture.conn == nil {
@@ -192,7 +123,7 @@ func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
 		callContext,
 		linuxKWinScreenshotInterface+".CaptureScreen",
 		0,
-		capture.screen.Name,
+		screen.Name,
 		options,
 		dbus.UnixFD(writer.Fd()),
 	)
@@ -201,7 +132,7 @@ func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
 		return nil, fmt.Errorf("close KWin screenshot pipe writer: %w", closeErr)
 	}
 	if call.Err != nil {
-		return nil, fmt.Errorf("capture KWin screen %q: %w", capture.screen.Name, call.Err)
+		return nil, fmt.Errorf("capture KWin screen %q: %w", screen.Name, call.Err)
 	}
 
 	var metadata map[string]dbus.Variant
@@ -212,16 +143,16 @@ func (capture *linuxKWinDesktopCapture) capture() (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	if details.screen != "" && details.screen != capture.screen.Name {
-		return nil, fmt.Errorf("KWin captured screen %q instead of requested screen %q", details.screen, capture.screen.Name)
+	if details.screen != "" && details.screen != screen.Name {
+		return nil, fmt.Errorf("KWin captured screen %q instead of requested screen %q", details.screen, screen.Name)
 	}
 	util.GetLogger().Info(util.NewTraceContext(), fmt.Sprintf(
 		"[screenshot] captured Plasma desktop source=kwin-screenshot2 screen=%s logical=%d,%d %dx%d pixels=%dx%d stride=%d format=%d scale=%.2f",
-		capture.screen.Name,
-		capture.screen.Logical.X,
-		capture.screen.Logical.Y,
-		capture.screen.Logical.Width,
-		capture.screen.Logical.Height,
+		screen.Name,
+		screen.Logical.X,
+		screen.Logical.Y,
+		screen.Logical.Width,
+		screen.Logical.Height,
 		details.width,
 		details.height,
 		details.stride,

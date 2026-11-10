@@ -7,6 +7,16 @@ This package owns screenshot capture workflows, the portable editor, object sele
 - `selection_darwin.m` owns the macOS capture snapshot, selection session, inspector, selection layers, click/drag handling, and scrolling border. `selection_darwin.h` is its package-local C bridge; `platform_darwin.go` owns the Go handoff.
 - `platform_*.go` maps capture and native coordinates into the editor. Linux desktop-specific capture behavior stays in the corresponding environment file.
 
+Plasma capture and launcher placement share KWin output identity and logical/native
+geometry through `util/screen`. GTK supplies launcher workareas; its integer buffer
+scale must not replace KWin's fractional scale for screenshot pixels. Plasma freezes
+every output before showing any masks. `selection_linux.go` owns one selection
+surface per output, reusing portable editor hover, color inspection and drag logic.
+Keyboard shortcuts follow the pointer's output independently of native layer-shell
+keyboard focus. A drag stays on its starting output. The selected output enters the
+ordinary editor with its original pixels and a fixed-output recapture callback;
+all masks close once that editor is shown. No desktop-spanning image is resampled.
+
 Dependencies point from `screenshot` to `runtime`. Runtime supplies general window/event-loop, cursor, coordinate, and image-capture capabilities; it does not own selection policy or call screenshot implementations. `runtime/internal/window/native_darwin_platform.h` exposes the shared overlay panel and platform primitives to native feature code without depending on screenshot headers or session types. Selector tests and native provider fixtures live in this package; shared overlay cursor tests stay in runtime.
 
 ## Coordinate contract
@@ -35,7 +45,17 @@ Hyprland versions retain the existing evdev fallback.
 
 ## Verification
 
-From `wox.core`, run `go test -race -tags sqlite_fts5 ./ui/runtime ./ui/screenshot` and `go build -tags sqlite_fts5 .`. The macOS selector fixture uses a deterministic AX provider and AddressSanitizer without requesting accessibility permission. Windows native changes also require a CGO-enabled Windows build; Linux desktop integration must be checked in the affected desktop session.
+From `wox.core`, run `go test -race -tags sqlite_fts5 ./util/screen ./ui/runtime ./ui/screenshot` and `go build -tags sqlite_fts5 .`. The macOS selector fixture uses a deterministic AX provider and AddressSanitizer without requesting accessibility permission. Windows native changes also require a CGO-enabled Windows build; Linux desktop integration must be checked in the affected desktop session.
+
+The Plasma output lookup has a read-only live check:
+`WOX_LIVE_KWIN_SCREEN=1 go test ./util/screen -run 'Test(KWinLive|KDELive)' -v -count=1`.
+It verifies the active output and GTK workareas for every compositor output without moving the pointer.
+
+The multi-output selection check uses the real GTK/layer-shell windows with solid
+test rasters, without reading the desktop or changing the pointer/clipboard:
+`WOX_LIVE_KWIN_SELECTION=1 go test -tags sqlite_fts5 ./ui/screenshot -run '^TestLinuxLiveMultiOutputSelection$' -v -count=1 -timeout=45s`.
+It briefly shows masks on every output, selects each output in turn, verifies
+native-resolution PNG exports and logical desktop coordinates, and checks mask cleanup.
 
 The Hyprland key listener has an opt-in live check (requires `wtype`):
 `WOX_TEST_HYPRLAND_RAW_KEYS=1 go test -race -tags sqlite_fts5 ./util/keyboard -run TestHyprlandRawKeyLive`.

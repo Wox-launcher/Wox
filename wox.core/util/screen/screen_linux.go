@@ -239,19 +239,10 @@ func getMouseScreenX11WithPointer() (Size, int, int, error) {
 
 func GetMouseScreen() Size {
 	if isWaylandSession() {
-		fallbackReason := "wayland-no-global-pointer"
-		if isHyprlandSession() {
-			pointerX, pointerY, pointerErr := getHyprlandCursorPosition()
-			if pointerErr == nil {
-				size, screenErr := getScreenGtkAtPoint(pointerX, pointerY)
-				if screenErr == nil {
-					setLastMouseScreenDebug(fmt.Sprintf("source=hyprland-ipc pointer=%d,%d screen=%d,%d %dx%d", pointerX, pointerY, size.X, size.Y, size.Width, size.Height))
-					return size
-				}
-				fallbackReason = fmt.Sprintf("hyprland-ipc-screen-failed pointer=%d,%d err=%v", pointerX, pointerY, screenErr)
-			} else {
-				fallbackReason = fmt.Sprintf("hyprland-ipc-failed err=%v", pointerErr)
-			}
+		size, debug, compositorErr := getWaylandMouseScreen()
+		if compositorErr == nil {
+			setLastMouseScreenDebug(debug)
+			return size
 		}
 
 		// Wayland does not expose a trusted global pointer to regular clients.
@@ -260,7 +251,7 @@ func GetMouseScreen() Size {
 		// state can disagree with the compositor that actually places the window.
 		size, err := getStableScreenGtk()
 		if err == nil {
-			setLastMouseScreenDebug(fmt.Sprintf("source=gtk-wayland-stable screen=%d,%d %dx%d reason=%s", size.X, size.Y, size.Width, size.Height, fallbackReason))
+			setLastMouseScreenDebug(fmt.Sprintf("source=gtk-wayland-stable screen=%d,%d %dx%d reason=%v", size.X, size.Y, size.Width, size.Height, compositorErr))
 			return size
 		}
 		setLastMouseScreenDebug(fmt.Sprintf("source=wayland-stable-failed err=%v", err))

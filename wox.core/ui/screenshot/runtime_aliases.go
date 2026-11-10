@@ -59,6 +59,7 @@ const (
 	PointerCursorResizeVertical   = woxui.PointerCursorResizeVertical
 	PointerCursorText             = woxui.PointerCursorText
 	PointerDown                   = woxui.PointerDown
+	PointerEnter                  = woxui.PointerEnter
 	PointerLeave                  = woxui.PointerLeave
 	PointerScroll                 = woxui.PointerScroll
 	PointerMove                   = woxui.PointerMove

@@ -35,18 +35,26 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		selectionWindows = captureLinuxScreenshotWindows()
 	}
 	source, bounds, err := captureLinuxX11Desktop()
-	var waylandCapture linuxDesktopCapture
 	if errors.Is(err, errLinuxPortalCaptureRequired) {
-		waylandCapture, err = newLinuxWaylandDesktopCapture()
-		if err == nil {
-			defer waylandCapture.close()
-			source, err = waylandCapture.capture()
-			bounds = waylandCapture.logicalBounds()
+		capture, openErr := newLinuxWaylandDesktopCapture()
+		if openErr != nil {
+			return ScreenshotResult{}, openErr
 		}
+		defer capture.close()
+		return captureLinuxWaylandScreenshot(options, capture, capturedCursor, selectionWindows)
 	}
 	if err != nil {
 		return ScreenshotResult{}, err
 	}
+	platform := linuxScreenshotEditorPlatform(options, source, bounds, capturedCursor, selectionWindows, func() (image.Image, error) {
+		captured, _, captureErr := captureLinuxX11Desktop()
+		return captured, captureErr
+	})
+	return runScreenshotEditor(options, source, platform)
+}
+
+// linuxScreenshotEditorPlatform maps one output's logical editor to its original capture pixels.
+func linuxScreenshotEditorPlatform(options ScreenshotOptions, source image.Image, bounds Rect, capturedCursor *Point, selectionWindows []linuxScreenshotWindow, capture func() (image.Image, error)) screenshotEditorPlatform {
 	windowCandidates, objectQuery := linuxScreenshotObjectSelection(selectionWindows, bounds, source)
 	platform := screenshotEditorPlatform{
 		windowCandidates:  windowCandidates,
@@ -64,11 +72,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			}
 		},
 		captureDesktop: func() (screenshotDesktopCapture, error) {
-			if waylandCapture != nil {
-				captured, captureErr := waylandCapture.capture()
-				return screenshotDesktopCapture{source: captured}, captureErr
-			}
-			captured, _, captureErr := captureLinuxX11Desktop()
+			captured, captureErr := capture()
 			return screenshotDesktopCapture{source: captured}, captureErr
 		},
 		desktopPixelOrigin: screenshotEditorDesktopPixelOrigin(bounds, source),
@@ -96,7 +100,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 	if capturedCursor != nil {
 		platform.cursorPixel = screenshotEditorCursorPixelFromDesktop(*capturedCursor, bounds, source)
 	}
-	return runScreenshotEditor(options, source, platform)
+	return platform
 }
 
 // captureLinuxX11Desktop captures the root window or reports that Wayland needs the Portal path.

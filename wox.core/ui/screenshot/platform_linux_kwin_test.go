@@ -4,13 +4,48 @@ package screenshot
 
 import (
 	"bytes"
+	"errors"
+	"image"
 	"image/color"
-	"os"
 	"testing"
 	utilscreen "wox/util/screen"
 
 	"github.com/godbus/dbus/v5"
 )
+
+// TestLinuxKWinCaptureOutputs keeps all native rasters and each recapture callback bound to the correct output.
+func TestLinuxKWinCaptureOutputs(t *testing.T) {
+	screens := []utilscreen.KWinDisplay{
+		{Name: "DP-1", Logical: utilscreen.Rect{X: 0, Y: 80, Width: 192, Height: 108}, PixelWidth: 192, PixelHeight: 108},
+		{Name: "HDMI-A-1", Logical: utilscreen.Rect{X: -128, Y: 0, Width: 128, Height: 80}, PixelWidth: 192, PixelHeight: 120},
+	}
+	var calls []string
+	outputs, err := captureLinuxKWinOutputs(screens, func(screen utilscreen.KWinDisplay) (image.Image, error) {
+		calls = append(calls, screen.Name)
+		return image.NewRGBA(image.Rect(0, 0, screen.PixelWidth, screen.PixelHeight)), nil
+	})
+	if err != nil || len(outputs) != 2 || len(calls) != 2 || calls[0] != "DP-1" || calls[1] != "HDMI-A-1" {
+		t.Fatalf("initial outputs=%+v calls=%v error=%v", outputs, calls, err)
+	}
+	if outputs[1].bounds != (Rect{X: -128, Width: 128, Height: 80}) || outputs[1].source.Bounds() != image.Rect(0, 0, 192, 120) {
+		t.Fatalf("secondary logical/native geometry changed: %+v", outputs[1])
+	}
+	for index, output := range outputs {
+		if _, err := output.capture(); err != nil || calls[len(calls)-1] != screens[index].Name {
+			t.Fatalf("output %d recaptured %v, %v", index, calls, err)
+		}
+	}
+	want := errors.New("output disconnected")
+	outputs, err = captureLinuxKWinOutputs(screens, func(screen utilscreen.KWinDisplay) (image.Image, error) {
+		if screen.Name == "HDMI-A-1" {
+			return nil, want
+		}
+		return image.NewRGBA(image.Rect(0, 0, screen.PixelWidth, screen.PixelHeight)), nil
+	})
+	if !errors.Is(err, want) || outputs != nil {
+		t.Fatalf("failed output left a partial selector: outputs=%v error=%v", outputs, err)
+	}
+}
 
 func TestLinuxKWinCaptureKeepsCallerWindows(t *testing.T) {
 	options := linuxKWinCaptureOptions()
@@ -22,48 +57,6 @@ func TestLinuxKWinCaptureKeepsCallerWindows(t *testing.T) {
 	if !ok || hidden {
 		t.Fatalf("hide-caller-windows = %#v, want false so the settings window stays visible", value.Value())
 	}
-}
-
-func TestParseLinuxKWinDisplayGeometries(t *testing.T) {
-	support := `Screens
--------
-Number of Screens: 2
-
-Screen 0:
----------
-Name: DP-1
-Enabled: 1
-Geometry: 0,800,1920x1080
-Scale: 1
-Screen 1:
----------
-Name: HDMI-A-1
-Enabled: 1
-Geometry: 0,0,1280x800
-Scale: 1.5
-Compositing
--------`
-	displays := parseLinuxKWinDisplayGeometries(support)
-	if len(displays) != 2 {
-		t.Fatalf("KWin display count = %d", len(displays))
-	}
-	if displays[0].Name != "DP-1" || displays[0].Logical != (utilscreen.Rect{X: 0, Y: 800, Width: 1920, Height: 1080}) || displays[0].PixelWidth != 1920 || displays[0].PixelHeight != 1080 {
-		t.Fatalf("first KWin display = %#v", displays[0])
-	}
-	if displays[1].Name != "HDMI-A-1" || displays[1].Logical != (utilscreen.Rect{X: 0, Y: 0, Width: 1280, Height: 800}) || displays[1].PixelWidth != 1920 || displays[1].PixelHeight != 1200 {
-		t.Fatalf("scaled KWin display = %#v", displays[1])
-	}
-}
-
-func TestLinuxKWinLiveActiveScreen(t *testing.T) {
-	if os.Getenv("WOX_LIVE_KWIN_SCREEN") != "1" {
-		t.Skip("set WOX_LIVE_KWIN_SCREEN=1 to query KWin")
-	}
-	display, err := linuxKWinActiveScreenIdentity()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("active KWin display: %+v", display)
 }
 
 func TestReadLinuxKWinScreenshotARGB32Premultiplied(t *testing.T) {

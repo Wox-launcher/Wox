@@ -30,12 +30,16 @@ func TestLinuxWindowPolicy(t *testing.T) {
 				t.Setenv(name, "")
 			}
 			t.Setenv("XDG_CURRENT_DESKTOP", tc.desktop)
-			if got := selectLinuxWindowPolicy(true); got.name != tc.name || got.layerShell != tc.layerShell {
+			namespace := ""
+			if tc.name == "kde" {
+				namespace = "utility"
+			}
+			if got := selectLinuxWindowPolicy(true); got.name != tc.name || got.layerShell != tc.layerShell || got.layerNamespace != namespace {
 				t.Fatalf("Wayland policy = %+v, want %s layerShell=%v", got, tc.name, tc.layerShell)
 			}
 			t.Setenv("XDG_SESSION_TYPE", "wayland")
 			t.Setenv("WAYLAND_DISPLAY", "wayland-0")
-			if got := selectLinuxWindowPolicy(false); got.name != "x11" || got.layerShell {
+			if got := selectLinuxWindowPolicy(false); got.name != "x11" || got.layerShell || got.layerNamespace != "" {
 				t.Fatalf("actual X11 display must override session variables: %+v", got)
 			}
 		})

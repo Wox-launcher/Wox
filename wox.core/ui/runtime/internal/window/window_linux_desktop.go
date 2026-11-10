@@ -17,8 +17,9 @@ import (
 // linuxWindowPolicy describes desktop policy, not protocol availability. GTK still
 // verifies the actual display and layer-shell support before creating a surface.
 type linuxWindowPolicy struct {
-	name       string
-	layerShell bool
+	name           string
+	layerShell     bool
+	layerNamespace string
 }
 
 // selectLinuxWindowPolicy keeps X11 independent of Wayland environment variables.
@@ -44,7 +45,7 @@ func selectLinuxWindowPolicy(wayland bool) linuxWindowPolicy {
 	}
 }
 
-// woxGoLinuxWindowUsesLayerShell is the sole desktop-policy bridge used by GTK.
+// woxGoLinuxWindowUsesLayerShell supplies the layer-shell policy used by GTK.
 // Application windows are excluded by the native caller before this decision.
 //
 //export woxGoLinuxWindowUsesLayerShell
@@ -53,6 +54,18 @@ func woxGoLinuxWindowUsesLayerShell(wayland C.int32_t) C.int32_t {
 		return 1
 	}
 	return 0
+}
+
+// woxGoLinuxWindowLayerNamespace returns a desktop role override; the native caller owns the string.
+// A nil override keeps the app-id namespace used by compositor-specific window rules.
+//
+//export woxGoLinuxWindowLayerNamespace
+func woxGoLinuxWindowLayerNamespace(wayland C.int32_t) *C.char {
+	namespace := selectLinuxWindowPolicy(wayland != 0).layerNamespace
+	if namespace == "" {
+		return nil
+	}
+	return C.CString(namespace)
 }
 
 // linuxWindowDesktop preserves the native backend's first-nonempty lookup order.

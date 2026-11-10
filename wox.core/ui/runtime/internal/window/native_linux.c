@@ -38,6 +38,7 @@ extern void woxGoLinuxFrame(uintptr_t context, float width, float height, int32_
 extern void woxGoLinuxRenderTrace(const char *message);
 extern void woxGoLinuxInfo(const char *message);
 extern int32_t woxGoLinuxWindowUsesLayerShell(int32_t wayland);
+extern char *woxGoLinuxWindowLayerNamespace(int32_t wayland);
 extern void woxGoLinuxFocus(uintptr_t context, uint64_t epoch, int32_t active);
 extern void woxGoLinuxDestroyed(uintptr_t context, uint64_t epoch, int32_t active);
 extern int32_t woxGoLinuxCloseRequested(uintptr_t context);
@@ -2441,10 +2442,12 @@ static bool enable_layer_shell(GtkWindow *window) {
     return false;
   }
   layer_init_for_window(window);
-  // Compositor layer rules match this namespace. It is the Wayland app id so
-  // Hyprland can disable resize animation without matching every GTK layer.
+  // Desktop policy can supply a role namespace; otherwise compositor rules
+  // continue to match Wox's app id.
   if (layer_set_namespace != NULL) {
-    layer_set_namespace(window, linux_app_id());
+    char *name_space = woxGoLinuxWindowLayerNamespace(wayland);
+    layer_set_namespace(window, name_space != NULL ? name_space : linux_app_id());
+    free(name_space);
   }
   // TOP sits above ordinary xdg_toplevels. OVERLAY is reserved for Topmost
   // HUDs so showing the launcher cannot cover a timer or tooltip.

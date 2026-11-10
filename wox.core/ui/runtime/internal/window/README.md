@@ -132,6 +132,11 @@ the other layer-shell policies preserve the legacy first-nonempty desktop-variab
 order and aliases such as `plasmawayland`. GTK still probes protocol support and
 excludes application windows before enabling layer-shell.
 
+KDE uses the `utility` layer namespace so KWin classifies Wox's floating surfaces
+as utility windows. The normal-window default would animate both show and hide,
+retaining launcher pixels after unmap and allowing screenshots to capture them.
+Other desktops keep the app-id namespace for their compositor window rules.
+
 `native_linux.c` owns shared GTK lifecycle, rendering and layer-shell protocol
 operations. It calls the narrow `native_linux_desktop.h` capability interface for
 desktop window operations. `native_linux_x11.c` owns X11 activation, taskbar hints,
