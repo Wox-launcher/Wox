@@ -1796,7 +1796,89 @@ extern "C" int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer) {
   return result;
 }
 
-extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
+// Inspect the glyph runs DirectWrite shaped for the whole line. Cluster membership
+// comes from the layout, including ligatures, combining marks, and fallback fonts.
+class TextInkRenderer final : public IDWriteTextRenderer {
+ public:
+  explicit TextInkRenderer(WoxTextInkRange &ink) : ink_(ink) {}
+
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void **object) override {
+    if (object == nullptr) return E_POINTER;
+    *object = nullptr;
+    if (iid != __uuidof(IUnknown) && iid != __uuidof(IDWritePixelSnapping) &&
+        iid != __uuidof(IDWriteTextRenderer)) return E_NOINTERFACE;
+    *object = static_cast<IDWriteTextRenderer *>(this);
+    AddRef();
+    return S_OK;
+  }
+
+  // The renderer is stack-owned for the synchronous layout Draw call.
+  ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+  ULONG STDMETHODCALLTYPE Release() override { return --refs_; }
+  HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void *, BOOL *disabled) override {
+    *disabled = TRUE;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE GetCurrentTransform(void *, DWRITE_MATRIX *transform) override {
+    *transform = {1, 0, 0, 1, 0, 0};
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void *, FLOAT *scale) override {
+    *scale = 1;
+    return S_OK;
+  }
+  HRESULT STDMETHODCALLTYPE DrawUnderline(void *, FLOAT, FLOAT, const DWRITE_UNDERLINE *, IUnknown *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE DrawStrikethrough(void *, FLOAT, FLOAT, const DWRITE_STRIKETHROUGH *, IUnknown *) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE DrawInlineObject(void *, FLOAT, FLOAT, IDWriteInlineObject *, BOOL, BOOL, IUnknown *) override { return S_OK; }
+
+  HRESULT STDMETHODCALLTYPE DrawGlyphRun(void *, FLOAT, FLOAT baseline, DWRITE_MEASURING_MODE,
+      const DWRITE_GLYPH_RUN *run, const DWRITE_GLYPH_RUN_DESCRIPTION *description, IUnknown *) override {
+    if (description == nullptr || description->clusterMap == nullptr || run->glyphCount == 0) return S_OK;
+    const UINT32 start = static_cast<UINT32>(ink_.start);
+    const UINT32 end = static_cast<UINT32>(ink_.end);
+    const UINT32 run_start = description->textPosition;
+    if (run_start >= end || run_start + description->stringLength <= start) return S_OK;
+
+    enum Cluster : uint8_t { Continuation, Unselected, Selected };
+    std::vector<Cluster> clusters(run->glyphCount, Continuation);
+    for (UINT32 index = 0; index < description->stringLength; ++index) {
+      const UINT16 glyph = description->clusterMap[index];
+      if (glyph < run->glyphCount) {
+        const UINT32 position = run_start + index;
+        clusters[glyph] = std::max(clusters[glyph], position >= start && position < end ? Selected : Unselected);
+      }
+    }
+
+    std::vector<DWRITE_GLYPH_METRICS> metrics(run->glyphCount);
+    const HRESULT result = run->fontFace->GetDesignGlyphMetrics(run->glyphIndices, run->glyphCount, metrics.data(), run->isSideways);
+    if (FAILED(result)) return result;
+    DWRITE_FONT_METRICS font = {};
+    run->fontFace->GetMetrics(&font);
+    const float scale = run->fontEmSize / font.designUnitsPerEm;
+    bool selected = false;
+    for (UINT32 glyph = 0; glyph < run->glyphCount; ++glyph) {
+      if (clusters[glyph] != Continuation) selected = clusters[glyph] == Selected;
+      if (!selected) continue;
+      const auto &metric = metrics[glyph];
+      const float width = static_cast<float>(metric.advanceWidth) - metric.leftSideBearing - metric.rightSideBearing;
+      const float height = static_cast<float>(metric.advanceHeight) - metric.topSideBearing - metric.bottomSideBearing;
+      if (width <= 0 || height <= 0) continue;
+      const float ascender_offset = run->glyphOffsets == nullptr ? 0 : run->glyphOffsets[glyph].ascenderOffset;
+      const float top = baseline - ascender_offset + (metric.topSideBearing - metric.verticalOriginY) * scale;
+      const float bottom = top + height * scale;
+      const bool has_ink = ink_.bottom > ink_.top;
+      ink_.top = has_ink ? std::min(ink_.top, top) : top;
+      ink_.bottom = has_ink ? std::max(ink_.bottom, bottom) : bottom;
+    }
+    return S_OK;
+  }
+
+ private:
+  WoxTextInkRange &ink_;
+  ULONG refs_ = 1;
+};
+
+extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink) {
   if (renderer == nullptr || text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
     return E_INVALIDARG;
   }
@@ -1804,6 +1886,9 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
   *height = 0.0f;
   *baseline = 0.0f;
   const std::wstring wide_text = utf8_to_wide(text);
+  if (ink != nullptr && (ink->start < 0 || ink->end <= ink->start || static_cast<size_t>(ink->end) > wide_text.size())) {
+    return E_INVALIDARG;
+  }
   if (wide_text.empty()) {
     return S_OK;
   }
@@ -1829,6 +1914,11 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
       }
     }
   }
+  if (SUCCEEDED(result) && ink != nullptr) {
+    ink->top = ink->bottom = 0;
+    TextInkRenderer ink_renderer(*ink);
+    result = layout->Draw(nullptr, &ink_renderer, 0, 0);
+  }
   layout->Release();
   return result;
 }
@@ -1845,7 +1935,7 @@ extern "C" int32_t wox_renderer_measure_default_text_for_test(const char *text, 
   }
   renderer.font_family = L"Segoe UI";
   renderer.uses_default_font_family = true;
-  result = wox_renderer_measure_text(&renderer, text, font_size, font_weight, 0, 0, width, height, baseline);
+  result = wox_renderer_measure_text(&renderer, text, font_size, font_weight, 0, 0, width, height, baseline, nullptr);
   release_com(&renderer.dwrite_factory);
   return result;
 }

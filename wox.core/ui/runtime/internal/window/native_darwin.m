@@ -4091,8 +4091,53 @@ static void darwin_expand_line_metrics(NSFont *font, const char *font_family, fl
   }
 }
 
+// Measure the original Core Text runs, including every glyph in a selected cluster.
+static bool darwin_measure_line_ink(CTLineRef line, CGFloat ascent, WoxTextInkRange *ink) {
+  CGRect bounds = CGRectNull;
+  CFArrayRef runs = CTLineGetGlyphRuns(line);
+  for (CFIndex index = 0; index < CFArrayGetCount(runs); ++index) {
+    CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, index);
+    CFRange range = CTRunGetStringRange(run);
+    CFIndex end = range.location + range.length;
+    CFIndex count = CTRunGetGlyphCount(run);
+    if (count == 0 || range.location >= ink->end || end <= ink->start) continue;
+    if (range.location >= ink->start && end <= ink->end) {
+      CGRect image = CTRunGetImageBounds(run, NULL, CFRangeMake(0, count));
+      if (!CGRectIsEmpty(image)) bounds = CGRectUnion(bounds, image);
+      continue;
+    }
+
+    CFIndex *storage = NULL;
+    const CFIndex *positions = CTRunGetStringIndicesPtr(run);
+    if (positions == NULL) {
+      storage = malloc((size_t)count * sizeof(*storage));
+      if (storage == NULL) return false;
+      CTRunGetStringIndices(run, CFRangeMake(0, count), storage);
+      positions = storage;
+    }
+    // Core Text may return glyphs in visual order. Find the logical cluster
+    // containing the start without assuming adjacent entries increase.
+    CFIndex first = range.location;
+    for (CFIndex glyph = 0; glyph < count; ++glyph) {
+      if (positions[glyph] > first && positions[glyph] <= ink->start) first = positions[glyph];
+    }
+    for (CFIndex glyph = 0; glyph < count; ++glyph) {
+      if (positions[glyph] < first || positions[glyph] >= ink->end) continue;
+      CGRect image = CTRunGetImageBounds(run, NULL, CFRangeMake(glyph, 1));
+      if (!CGRectIsEmpty(image)) bounds = CGRectUnion(bounds, image);
+    }
+    free(storage);
+  }
+  ink->top = ink->bottom = 0;
+  if (!CGRectIsEmpty(bounds)) {
+    ink->top = (float)(ascent - CGRectGetMaxY(bounds));
+    ink->bottom = (float)(ascent - CGRectGetMinY(bounds));
+  }
+  return true;
+}
+
 // wox_darwin_window_measure_text returns logical CoreText metrics for the configured UI font.
-int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink) {
   if (window == NULL || text == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || italic > 1) {
     return -1;
   }
@@ -4110,6 +4155,11 @@ int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text
       result = -1;
       return;
     }
+    if (ink != NULL && (ink->start < 0 || ink->end <= ink->start || (NSUInteger)ink->end > string.length)) {
+      [string release];
+      result = -1;
+      return;
+    }
     NSFont *font = wox_font(font_family, font_size, font_weight, italic);
     NSAttributedString *attributed = [[NSAttributedString alloc] initWithString:string attributes:@{(id)kCTFontAttributeName : font}];
     CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef)attributed);
@@ -4121,6 +4171,7 @@ int32_t wox_darwin_window_measure_text(WoxDarwinWindow *window, const char *text
     *width = (float)measured_width;
     *height = (float)(ascent + descent + leading);
     *baseline = (float)ascent;
+    if (ink != NULL && !darwin_measure_line_ink(line, ascent, ink)) result = -1;
     CFRelease(line);
     [attributed release];
     [string release];

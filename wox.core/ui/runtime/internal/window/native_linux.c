@@ -5330,6 +5330,7 @@ typedef struct {
   float *width;
   float *height;
   float *baseline;
+  WoxTextInkRange *ink;
   int32_t result;
 } WoxTextMeasureCall;
 
@@ -5367,8 +5368,40 @@ static void configure_text_layout(PangoLayout *layout, const char *font_family, 
   pango_layout_set_single_paragraph_mode(layout, TRUE);
 }
 
+// Use each selected cluster's ink extents from the original shaped Pango runs.
+static void measure_pango_line_ink(PangoLayout *layout, const char *text, WoxTextInkRange *ink) {
+  ink->top = ink->bottom = 0.0f;
+  PangoLayoutIter *runs = pango_layout_get_iter(layout);
+  do {
+    PangoLayoutRun *run = pango_layout_iter_get_run_readonly(runs);
+    if (run == NULL || run->item->offset >= ink->end || run->item->offset + run->item->length <= ink->start) continue;
+    int baseline = pango_layout_iter_get_baseline(runs);
+    PangoGlyphItemIter cluster;
+    for (gboolean ok = pango_glyph_item_iter_init_start(&cluster, run, text); ok;
+         ok = pango_glyph_item_iter_next_cluster(&cluster)) {
+      if (cluster.start_index >= ink->end) break;
+      if (cluster.end_index <= ink->start) continue;
+      int first = cluster.start_glyph;
+      int end = cluster.end_glyph;
+      if (first > end) {
+        first = cluster.end_glyph + 1;
+        end = cluster.start_glyph + 1;
+      }
+      PangoRectangle image;
+      pango_glyph_string_extents_range(run->glyphs, first, end, run->item->analysis.font, &image, NULL);
+      if (image.width <= 0 || image.height <= 0) continue;
+      float top = (float)(baseline + image.y) / PANGO_SCALE;
+      float bottom = top + (float)image.height / PANGO_SCALE;
+      bool has_ink = ink->bottom > ink->top;
+      ink->top = has_ink ? fminf(ink->top, top) : top;
+      ink->bottom = has_ink ? fmaxf(ink->bottom, bottom) : bottom;
+    }
+  } while (pango_layout_iter_next_run(runs));
+  pango_layout_iter_free(runs);
+}
+
 // measure_pango_line returns one string's own Pango line box, before the stable-script expansion.
-static void measure_pango_line(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+static void measure_pango_line(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink) {
   PangoContext *context = pango_font_map_create_context(pango_cairo_font_map_get_default());
   PangoLayout *layout = pango_layout_new(context);
   pango_layout_set_text(layout, text, -1);
@@ -5378,6 +5411,7 @@ static void measure_pango_line(const char *text, const char *font_family, float 
   *width = (float)logical.width / PANGO_SCALE;
   *height = (float)logical.height / PANGO_SCALE;
   *baseline = (float)pango_layout_get_baseline(layout) / PANGO_SCALE;
+  if (ink != NULL) measure_pango_line_ink(layout, text, ink);
   g_object_unref(layout);
   g_object_unref(context);
 }
@@ -5422,7 +5456,7 @@ static void stable_script_line_box(const char *font_family, float font_size, uin
     }
   }
   float width = 0.0f;
-  measure_pango_line(kStableScriptSample, family, font_size, font_weight, italic, &width, height, baseline);
+  measure_pango_line(kStableScriptSample, family, font_size, font_weight, italic, &width, height, baseline, NULL);
   WoxStableLineBox *slot = &stable_line_boxes[stable_line_box_cursor % kStableLineBoxes];
   stable_line_box_cursor++;
   snprintf(slot->family, sizeof(slot->family), "%s", family);
@@ -5451,12 +5485,18 @@ static void expand_line_box(float *height, float *baseline, float ref_height, fl
 // measure_text_layout returns logical Pango metrics without a surface. It is the
 // measurement measure_text_main reports and the one the drawn-fit test checks
 // against. Han, Kana, and Hangul share one baseline with Latin.
-static void measure_text_layout(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
-  measure_pango_line(text, font_family, font_size, font_weight, italic, width, height, baseline);
+static void measure_text_layout(const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink) {
+  measure_pango_line(text, font_family, font_size, font_weight, italic, width, height, baseline, ink);
+  float content_baseline = *baseline;
   float ref_height = 0.0f;
   float ref_baseline = 0.0f;
   stable_script_line_box(font_family, font_size, font_weight, italic, &ref_height, &ref_baseline);
   expand_line_box(height, baseline, ref_height, ref_baseline);
+  float shift = *baseline - content_baseline;
+  if (ink != NULL && ink->bottom > ink->top && shift > 0.01f) {
+    ink->top += shift;
+    ink->bottom += shift;
+  }
 }
 
 // measure_text_main returns logical Pango metrics without allocating a render texture.
@@ -5472,7 +5512,7 @@ static void measure_text_main(void *data) {
   if (call->text[0] == '\0') {
     return;
   }
-  measure_text_layout(call->text, call->font_family, call->font_size, call->font_weight, call->italic, call->width, call->height, call->baseline);
+  measure_text_layout(call->text, call->font_family, call->font_size, call->font_weight, call->italic, call->width, call->height, call->baseline, call->ink);
 }
 
 // WoxLinuxTextRaster holds one line of text drawn into a device-pixel surface.
@@ -5535,10 +5575,11 @@ static void destroy_text_raster(WoxLinuxTextRaster *raster) {
   cairo_surface_destroy(raster->surface);
 }
 
-int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline) {
+int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, const char *font_family, float font_size, uint8_t font_weight, uint8_t italic, float *width, float *height, float *baseline, WoxTextInkRange *ink) {
   if (window == NULL || text == NULL || font_family == NULL || width == NULL || height == NULL || baseline == NULL || font_size <= 0.0f || font_weight > 1 || italic > 1 || !g_utf8_validate(text, -1, NULL) || !g_utf8_validate(font_family, -1, NULL)) {
     return -1;
   }
+  if (ink != NULL && (ink->start < 0 || ink->end <= ink->start || (size_t)ink->end > strlen(text))) return -1;
   WoxTextMeasureCall call = {
       .window = window,
       .text = text,
@@ -5549,6 +5590,7 @@ int32_t wox_linux_window_measure_text(WoxLinuxWindow *window, const char *text, 
       .width = width,
       .height = height,
       .baseline = baseline,
+      .ink = ink,
   };
   return run_on_main_sync(measure_text_main, &call) ? call.result : -1;
 }
@@ -6549,7 +6591,7 @@ int32_t wox_linux_test_drawn_text_fit(const char *text, const char *font_family,
   float logical_width = 0.0f;
   float logical_height = 0.0f;
   float baseline = 0.0f;
-  measure_text_layout(text, family, font_size, 0, 0, &logical_width, &logical_height, &baseline);
+  measure_text_layout(text, family, font_size, 0, 0, &logical_width, &logical_height, &baseline, NULL);
   int pixel_width = (int)ceilf(logical_width * scale);
   int pixel_height = (int)ceilf(logical_height * scale);
   if (pixel_width <= 0 || pixel_height <= 0) {

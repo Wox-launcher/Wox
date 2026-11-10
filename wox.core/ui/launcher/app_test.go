@@ -1669,9 +1669,37 @@ func TestQueryDisplayProvidesAllLinesToSharedViewport(t *testing.T) {
 	runes := []rune("one\ntwo\nthree\nfour\nfive")
 	lines, caretLine, _, _, _, _, _ := queryDisplayLines(runes, len(runes), len(runes), len(runes), -1, 0, func(value string) float32 {
 		return float32(len([]rune(value)))
-	})
+	}, nil)
 	if len(lines) != 5 || caretLine != 4 || lines[4].Text != "five" {
 		t.Fatalf("query lines = count %d, caret %d, last %q", len(lines), caretLine, lines[4].Text)
+	}
+}
+
+func TestQueryDisplayMeasuresInkFromWholeLines(t *testing.T) {
+	runes := []rune("a🚀g\nÉT z")
+	var measured int
+	lines, _, _, _, _, _, _ := queryDisplayLines(runes, 2, 6, 6, -1, 0, func(value string) float32 {
+		return float32(len(value))
+	}, func(text string, start, end int) woxui.TextInkBounds {
+		measured++
+		switch text {
+		case "a🚀g":
+			if start != 5 || end != 6 {
+				t.Fatalf("first line selection bytes = %d..%d, want 5..6", start, end)
+			}
+			return woxui.TextInkBounds{Top: 16, Bottom: 36}
+		case "ÉT z":
+			if start != 0 || end != 3 {
+				t.Fatalf("second line selection bytes = %d..%d, want 0..3", start, end)
+			}
+			return woxui.TextInkBounds{Top: 3, Bottom: 28}
+		default:
+			t.Fatalf("measured a substring instead of the whole line: %q", text)
+			return woxui.TextInkBounds{}
+		}
+	})
+	if measured != 2 || lines[0].SelectedInk.Bottom != 36 || lines[1].SelectedInk.Top != 3 {
+		t.Fatalf("selection ink was not measured for both lines: %#v", lines)
 	}
 }
 

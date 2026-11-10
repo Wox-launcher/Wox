@@ -662,8 +662,15 @@ func (a *App) queryViewProps(snapshot viewSnapshot, width, height, lineHeight fl
 			a.host.RequestFocus(launcherview.LauncherQueryInputKey)
 		}
 	}
+	var measureInk func(string, int, int) woxui.TextInkBounds
+	if queryFocused {
+		measureInk = func(text string, start, end int) woxui.TextInkBounds {
+			ink, _ := a.window.MeasureTextInk(text, style, start, end)
+			return ink
+		}
+	}
 	lines, caretLine, caretWidth, compositionLine, compositionX, compositionWidth, textWidth := queryDisplayLines(
-		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure,
+		displayRunes, displayStart, displayEnd, displayFocus, compositionStart, len([]rune(state.Composition)), measure, measureInk,
 	)
 	selectQueryAt := func(point woxui.Point, line bool) {
 		a.querySession.queryHintEditorState.allSelected = false
@@ -975,7 +982,7 @@ func queryRuneLines(runes []rune) []queryRuneLine {
 }
 
 // queryDisplayLines prepares complete line geometry for the retained scroll viewport.
-func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compositionStart, compositionLength int, measure func(string) float32) ([]launcherview.LauncherQueryLine, int, float32, int, float32, float32, float32) {
+func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compositionStart, compositionLength int, measure func(string) float32, measureInk func(string, int, int) woxui.TextInkBounds) ([]launcherview.LauncherQueryLine, int, float32, int, float32, float32, float32) {
 	runeLines := queryRuneLines(runes)
 	caretAbsoluteLine := len(runeLines) - 1
 	for index, line := range runeLines {
@@ -990,18 +997,21 @@ func queryDisplayLines(runes []rune, selectionStart, selectionEnd, focus, compos
 	textWidth := float32(0)
 	for index, line := range runeLines {
 		lineEnd := line.start + len(line.runes)
+		displayLine := launcherview.LauncherQueryLine{Text: string(line.runes)}
 		selectedStart := max(line.start, selectionStart)
 		selectedEnd := min(lineEnd, selectionEnd)
-		selected := ""
-		prefixWidth, selectedWidth := float32(0), float32(0)
 		if selectedStart < selectedEnd {
-			prefixWidth = measure(string(runes[line.start:selectedStart]))
-			selected = string(runes[selectedStart:selectedEnd])
-			selectedWidth = measure(selected)
+			prefix := string(runes[line.start:selectedStart])
+			selected := string(runes[selectedStart:selectedEnd])
+			displayLine.PrefixWidth = measure(prefix)
+			displayLine.SelectedWidth = measure(selected)
+			if measureInk != nil {
+				displayLine.SelectedInk = measureInk(displayLine.Text, len(prefix), len(prefix)+len(selected))
+			}
 		}
-		width := measure(string(line.runes))
-		lines = append(lines, launcherview.LauncherQueryLine{Text: string(line.runes), Selected: selected, PrefixWidth: prefixWidth, SelectedWidth: selectedWidth, TextWidth: width})
-		textWidth = max(textWidth, width)
+		displayLine.TextWidth = measure(displayLine.Text)
+		lines = append(lines, displayLine)
+		textWidth = max(textWidth, displayLine.TextWidth)
 		if focus >= line.start && (focus <= lineEnd || index == len(runeLines)-1) {
 			caretLine = index
 			caretWidth = measure(string(runes[line.start:min(focus, lineEnd)]))

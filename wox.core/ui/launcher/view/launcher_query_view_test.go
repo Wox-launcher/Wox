@@ -189,12 +189,12 @@ func TestLauncherQueryOverflowExposesVisibleCursorRect(t *testing.T) {
 func TestLauncherQueryOverflowRemapsPointerToContent(t *testing.T) {
 	var tapped woxui.Point
 	props := LauncherQueryProps{
-		Width: 100, Height: 34, CaretWidth: 240, Focused: true, Enabled: true,
+		Width: 100, Height: 42, LineHeight: 38, CaretWidth: 240, Focused: true, Enabled: true,
 		OnTapAt: func(point woxui.Point) { tapped = point },
 	}
 	launcherQueryEditor(props).(woxwidget.EditableText).Child.(woxwidget.Gesture).OnTapAt(woxui.Point{X: 10, Y: 8})
-	if tapped.X != 154 || tapped.Y != 8 {
-		t.Fatalf("overflow tap = %#v, want content point 154,8", tapped)
+	if tapped.X != 154 || tapped.Y != 6 {
+		t.Fatalf("overflow tap = %#v, want content point 154,6", tapped)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
 	selected := launcherQueryCaretPainter(LauncherQueryProps{
 		Width: 200, Height: 40, LineHeight: 34, CaretHeight: 34, Focused: true, Style: style, Theme: theme,
 		State: woxui.TextEditingState{Text: "note", Selection: woxui.TextSelection{Anchor: 0, Focus: 3}},
-		Lines: []LauncherQueryLine{{Text: "note", Selected: "not", SelectedWidth: 30, TextWidth: 40}},
+		Lines: []LauncherQueryLine{{Text: "note", SelectedWidth: 30, TextWidth: 40}},
 	})
 	selectedVisible := &woxui.DisplayList{}
 	selectedHidden := &woxui.DisplayList{}
@@ -234,12 +234,80 @@ func TestLauncherQueryHidesCaretWhenTextIsSelected(t *testing.T) {
 	}
 }
 
+func TestLauncherQueryCentersSelectionWithoutMovingText(t *testing.T) {
+	props := LauncherQueryProps{
+		Width: 200, Height: 46, LineHeight: 38, CaretHeight: 34, Focused: true,
+		CaretWidth: 58,
+		Style:      woxui.TextStyle{Size: 28},
+		State:      woxui.TextEditingState{Text: "a gyp", Selection: woxui.TextSelection{Anchor: 2, Focus: 5}},
+		Lines: []LauncherQueryLine{{
+			Text: "a gyp", PrefixWidth: 18, SelectedWidth: 40, TextWidth: 58,
+			SelectedInk: woxui.TextInkBounds{Top: 16, Bottom: 36},
+		}},
+		Theme: woxcomponent.Theme{
+			QueryText:           woxui.Color{A: 255},
+			SelectionBackground: woxui.Color{B: 255, A: 255},
+			SelectionText:       woxui.Color{R: 255, G: 255, B: 255, A: 255},
+		},
+	}
+	bounds := woxui.Rect{X: 10, Y: 20, Width: props.Width, Height: props.Height}
+	lineBounds := woxui.Rect{X: 10, Y: 24, Width: 200, Height: 38}
+	selectionBounds := woxui.Rect{X: 28, Y: 34, Width: 40, Height: 32}
+	var actual, expected woxui.DisplayList
+	expected.FillRoundedRect(selectionBounds, 3, props.Theme.SelectionBackground)
+	expected.PushClipRect(woxui.Rect{X: 10, Y: 24, Width: 18, Height: 38})
+	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
+	expected.PopClipRect()
+	expected.PushClipRect(woxui.Rect{X: 28, Y: 24, Width: 40, Height: 38})
+	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.SelectionText)
+	expected.PopClipRect()
+	expected.PushClipRect(woxui.Rect{X: 68, Y: 24, Width: 142, Height: 38})
+	expected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
+	expected.PopClipRect()
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&actual, bounds, true, false)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatal("selection must center the background on the measured ink and recolor the original text layout")
+	}
+
+	props.State.Selection.Anchor = props.State.Selection.Focus
+	props.Lines[0] = LauncherQueryLine{Text: "a gyp", TextWidth: 58}
+	var deselected, expectedDeselected woxui.DisplayList
+	expectedDeselected.DrawText("a gyp", lineBounds, props.Style, props.Theme.QueryText)
+	expectedDeselected.DrawCaret(woxui.Rect{X: 68, Y: 24, Width: 2, Height: 34}, props.Theme.Cursor, false)
+	launcherQueryPainter(props).(woxwidget.CaretPainter).Paint(&deselected, bounds, true, false)
+	if !reflect.DeepEqual(deselected, expectedDeselected) {
+		t.Fatal("deselecting must preserve the text layout")
+	}
+}
+
+func TestLauncherQuerySelectionBoundsFitsLine(t *testing.T) {
+	lineBounds := woxui.Rect{X: -40, Y: 20, Width: 200, Height: 38}
+	for _, test := range []struct {
+		name      string
+		ink       woxui.TextInkBounds
+		y, height float32
+	}{
+		{"descenders", woxui.TextInkBounds{Top: 16, Bottom: 36}, 34, 24},
+		{"accents", woxui.TextInkBounds{Top: 2, Bottom: 24}, 20, 26},
+		{"whitespace", woxui.TextInkBounds{}, 20, 38},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			line := LauncherQueryLine{PrefixWidth: 18, SelectedWidth: 40, SelectedInk: test.ink}
+			got := launcherQuerySelectionBounds(line, lineBounds, 20, 58)
+			want := woxui.Rect{X: -22, Y: test.y, Width: 40, Height: test.height}
+			if got != want {
+				t.Fatalf("highlight = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
 func TestLauncherQueryUsesSharedScrollViewForHiddenLines(t *testing.T) {
 	query := LauncherQueryView(LauncherQueryProps{
-		Width: 100, Height: 136, LineHeight: 34, CaretHeight: 34, CaretLine: 4, Lines: make([]LauncherQueryLine, 5),
+		Width: 100, Height: 156, LineHeight: 38, CaretHeight: 34, CaretLine: 4, Lines: make([]LauncherQueryLine, 5),
 	}).(woxwidget.Stateful)
 	props := query.Widget.(woxcomponent.ScrollViewProps)
-	if props.ContentHeight != 170 || props.KeepVisible == nil || props.KeepVisible.Start != 136 || props.KeepVisible.End != 170 || !props.AlwaysShowScrollbar || props.AutomationID != "launcher.query.scroll" {
+	if props.ContentHeight != 190 || props.KeepVisible == nil || props.KeepVisible.Start != 152 || props.KeepVisible.End != 190 || !props.AlwaysShowScrollbar || props.AutomationID != "launcher.query.scroll" {
 		t.Fatalf("query scroll props = content %.0f keep %#v always visible %v automation %q", props.ContentHeight, props.KeepVisible, props.AlwaysShowScrollbar, props.AutomationID)
 	}
 }

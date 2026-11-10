@@ -151,13 +151,13 @@ func LauncherQueryBoundary(props LauncherQueryProps) woxwidget.Widget {
 	})
 }
 
-// LauncherQueryLine contains adapter-measured text slices for one query line.
+// LauncherQueryLine contains the text and measured geometry of one query line.
 type LauncherQueryLine struct {
 	Text          string
-	Selected      string
 	PrefixWidth   float32
 	SelectedWidth float32
 	TextWidth     float32
+	SelectedInk   woxui.TextInkBounds
 }
 
 // LauncherStatusTag carries a measured session indicator in logical layout units.
@@ -402,6 +402,7 @@ func launcherQueryEditor(props LauncherQueryProps) woxwidget.Widget {
 	contentPoint := func(position woxui.Point) woxui.Point {
 		position.X += launcherQueryHorizontalOffset(props)
 		position = launcherQueryDocumentPoint(props, position)
+		position.Y -= (contentHeight - float32(len(lines))*lineHeight) / 2
 		return position
 	}
 
@@ -532,6 +533,20 @@ func launcherQueryLetterCenter(props LauncherQueryProps, lineTop float32) float3
 	return lineTop + baseline - props.Style.Size/4
 }
 
+// launcherQuerySelectionBounds keeps the highlight centered on the visible ink
+// and limits its height where it would otherwise spill into a neighboring line.
+func launcherQuerySelectionBounds(line LauncherQueryLine, lineBounds woxui.Rect, top, bottom float32) woxui.Rect {
+	selection := woxui.Rect{X: lineBounds.X + line.PrefixWidth, Y: lineBounds.Y, Width: line.SelectedWidth, Height: lineBounds.Height}
+	inkTop := max(top, lineBounds.Y, lineBounds.Y+line.SelectedInk.Top)
+	inkBottom := min(bottom, lineBounds.Y+lineBounds.Height, lineBounds.Y+line.SelectedInk.Bottom)
+	if inkBottom > inkTop {
+		center := (inkTop + inkBottom) / 2
+		halfHeight := min(lineBounds.Height/2, center-top, bottom-center)
+		selection.Y, selection.Height = center-halfHeight, 2*halfHeight
+	}
+	return selection
+}
+
 // launcherQueryTabHintTop places the glyph on the query letter ink, not the
 // input box or the font line box.
 func launcherQueryTabHintTop(props LauncherQueryProps, lineHeight, textTop float32) float32 {
@@ -589,18 +604,44 @@ func launcherQueryPainter(props LauncherQueryProps) woxwidget.Widget {
 		}
 		for index, line := range lines {
 			lineY := textTop + float32(index)*lineHeight
-			if focused && props.State.Composition == "" && line.Selected != "" {
-				displayList.FillRoundedRect(woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: props.CaretHeight}, 3, props.Theme.SelectionBackground)
+			lineBounds := woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}
+			if focused && props.State.Composition == "" && line.SelectedWidth > 0 {
+				top, bottom := lineY, lineY+lineHeight
+				if index == 0 {
+					top = bounds.Y
+				}
+				if index == len(lines)-1 {
+					bottom = bounds.Y + bounds.Height
+				}
+				selection := launcherQuerySelectionBounds(line, lineBounds, top, bottom)
+				displayList.FillRoundedRect(selection, 3, props.Theme.SelectionBackground)
+				// Reuse the whole line in each color so selection cannot change shaping or the baseline.
+				viewportRight := bounds.X + bounds.Width
+				left := min(viewportRight, max(bounds.X, selection.X))
+				right := min(viewportRight, max(left, selection.X+selection.Width))
+				for _, segment := range [...]struct {
+					left, right float32
+					color       woxui.Color
+				}{
+					{bounds.X, left, props.Theme.QueryText},
+					{left, right, props.Theme.SelectionText},
+					{right, viewportRight, props.Theme.QueryText},
+				} {
+					if segment.right <= segment.left {
+						continue
+					}
+					displayList.PushClipRect(woxui.Rect{X: segment.left, Y: lineY, Width: segment.right - segment.left, Height: lineHeight})
+					displayList.DrawText(line.Text, lineBounds, props.Style, segment.color)
+					displayList.PopClipRect()
+				}
+				continue
 			}
 			if insertion := props.CompletionInsertion; insertion.Visible && insertion.Line == index {
-				displayList.DrawText(insertion.Prefix, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
+				displayList.DrawText(insertion.Prefix, lineBounds, props.Style, props.Theme.QueryText)
 				x := insertion.X + insertion.Width - offset
 				displayList.DrawText(insertion.Remainder, woxui.Rect{X: bounds.X + x, Y: lineY, Width: max(float32(0), bounds.Width-x), Height: lineHeight}, props.Style, props.Theme.QueryText)
 			} else {
-				displayList.DrawText(line.Text, woxui.Rect{X: bounds.X - offset, Y: lineY, Width: bounds.Width + offset, Height: lineHeight}, props.Style, props.Theme.QueryText)
-			}
-			if focused && props.State.Composition == "" && line.Selected != "" {
-				displayList.DrawText(line.Selected, woxui.Rect{X: bounds.X + line.PrefixWidth - offset, Y: lineY, Width: line.SelectedWidth, Height: lineHeight}, props.Style, props.Theme.SelectionText)
+				displayList.DrawText(line.Text, lineBounds, props.Style, props.Theme.QueryText)
 			}
 		}
 		if !focused {
@@ -655,8 +696,9 @@ func launcherQueryHorizontalOffset(props LauncherQueryProps) float32 {
 
 // launcherQueryScrollSurface clips overflowing query lines and reserves the trailing window-drag region.
 func launcherQueryScrollSurface(props LauncherQueryProps, editor woxwidget.Widget) woxwidget.Widget {
-	lineHeight, _, contentHeight := launcherQueryLineMetrics(props)
-	keepVisible := &woxwidget.ScrollRange{Start: float32(props.CaretLine) * lineHeight, End: float32(props.CaretLine)*lineHeight + props.CaretHeight}
+	lineHeight, lines, contentHeight := launcherQueryLineMetrics(props)
+	caretTop := (contentHeight-float32(len(lines))*lineHeight)/2 + float32(props.CaretLine)*lineHeight
+	keepVisible := &woxwidget.ScrollRange{Start: caretTop, End: caretTop + max(props.CaretHeight, lineHeight)}
 	editor = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 		Key: "launcher-query-scroll", Content: editor, Width: props.Width, Height: props.Height, ContentHeight: contentHeight,
 		KeepVisible: keepVisible, Theme: props.Theme.Controls, ThumbColor: props.Theme.ResultTitle, AlwaysShowScrollbar: true,

@@ -29,6 +29,9 @@ type TextStyle = window.TextStyle
 // TextMetrics describes one shaped line in logical pixels.
 type TextMetrics = window.TextMetrics
 
+// TextInkBounds describes the visible vertical bounds of part of a shaped line.
+type TextInkBounds = window.TextInkBounds
+
 // DisplayList records the drawing commands for one frame.
 type DisplayList = window.DisplayList
 
