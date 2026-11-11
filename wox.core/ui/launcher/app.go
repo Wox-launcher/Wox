@@ -493,6 +493,8 @@ type App struct {
 
 	window *woxui.Window
 	host   *woxwidget.Host
+	// requestedWindowBounds also tracks resizes that GTK has not applied yet.
+	requestedWindowBounds woxui.Rect
 
 	visible bool
 	show    showAppParams
@@ -1786,7 +1788,7 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	}
 	// The logical position tolerance can hide a whole missing pixel at high DPI.
 	sameHeight := autoHeightScale <= 0 || math.Round(float64(current.Height*autoHeightScale)) == math.Round(float64(target.Height*autoHeightScale))
-	if sameDisplay && sameHeight && launcherBoundsEffectivelyEqual(current, target) {
+	if sameDisplay && sameHeight && a.requestedWindowBounds == target && launcherBoundsEffectivelyEqual(current, target) {
 		if params.QueryBoxAtBottom && nextAnchor != bottomAnchor {
 			a.bottomAnchorY = nextAnchor
 		}
@@ -1795,7 +1797,11 @@ func (a *App) applyWindowBoundsOnUI(useShowPosition bool) error {
 	if params.QueryBoxAtBottom {
 		a.bottomAnchorY = nextAnchor
 	}
+	// GTK can still report the old size while a shrink is queued. Record the
+	// replacement before SetBounds, which may synchronously render another frame.
+	a.requestedWindowBounds = target
 	if err := a.window.SetBoundsOnDisplay(target, targetDisplay); err != nil {
+		a.requestedWindowBounds = woxui.Rect{}
 		util.GetLogger().Warn(context.Background(), fmt.Sprintf("launcher-bounds apply failed: target=%+v display=%q error=%v", target, targetDisplay.ID, err))
 		return err
 	}
