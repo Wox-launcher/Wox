@@ -76,7 +76,7 @@ type WoxSetting struct {
 	// UiDensity keeps launcher, chat, and text-overlay sizing in one user preference.
 	// The setting is stored as an enum instead of individual dimensions so Go
 	// window estimates and UI rendering can derive the same compact,
-	// normal, and comfortable sizes without expanding the settings DTO.
+	// normal, comfortable, and large sizes without expanding the settings DTO.
 	UiDensity                 *WoxSettingValue[UiDensity]
 	ThemeId                   *WoxSettingValue[string]
 	AppFontFamily             *PlatformValue[string]
@@ -185,6 +185,7 @@ const (
 	UiDensityCompact     UiDensity = "compact"
 	UiDensityNormal      UiDensity = "normal"
 	UiDensityComfortable UiDensity = "comfortable"
+	UiDensityLarge       UiDensity = "large"
 )
 
 const (
@@ -382,18 +383,20 @@ func NormalizeUiDensity(value string) UiDensity {
 		return UiDensityCompact
 	case UiDensityComfortable:
 		return UiDensityComfortable
+	case UiDensityLarge:
+		return UiDensityLarge
 	default:
 		return UiDensityNormal
 	}
 }
 
 // IsValidUiDensity lets lazy setting loading fall back to normal when a stored
-// value is not one of the three supported scale buckets.
+// value is not one of the four supported scale buckets.
 func IsValidUiDensity(value UiDensity) bool {
-	return value == UiDensityCompact || value == UiDensityNormal || value == UiDensityComfortable
+	return value == UiDensityCompact || value == UiDensityNormal || value == UiDensityComfortable || value == UiDensityLarge
 }
 
-// UiDensityMultiplier is the exact compact/normal/comfortable factor.
+// UiDensityMultiplier is the exact compact/normal/comfortable/large factor.
 // Integer window estimates multiply in float64 so halves such as 55 * 0.9 still round to 50.
 func UiDensityMultiplier(density UiDensity) float64 {
 	switch NormalizeUiDensity(string(density)) {
@@ -401,6 +404,8 @@ func UiDensityMultiplier(density UiDensity) float64 {
 		return 0.9
 	case UiDensityComfortable:
 		return 1.1
+	case UiDensityLarge:
+		return 1.2
 	default:
 		return 1
 	}

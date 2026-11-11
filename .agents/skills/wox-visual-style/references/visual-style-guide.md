@@ -19,7 +19,7 @@ Classify the surface before applying ordinary control metrics:
 - Launcher query, results, accessories, and previews follow launcher density and theme geometry.
 - The Action Panel has its own density and geometry contract.
 - Native window controls and dialogs follow platform conventions.
-- Every interface element responds to Interface size (`UiDensity`): compact 0.9, normal 1, comfortable 1.1. Typography constants and other authored sizes are the normal-density bases. Multiply them when drawing, together with the line box and the control that holds the text. A missing scale stays at the base so tests and normal density do not move. Do not store the scaled result back into the base, and do not scale a value that was already multiplied. Text drawn into a captured image follows that image's pixel scale instead of Interface size.
+- Every interface element responds to Interface size (`UiDensity`): compact 0.9, normal 1, comfortable 1.1, large 1.2. Typography constants and other authored sizes are the normal-density bases. Multiply them when drawing, together with the line box and the control that holds the text. A missing scale stays at the base so tests and normal density do not move. Do not store the scaled result back into the base, and do not scale a value that was already multiplied. Text drawn into a captured image follows that image's pixel scale instead of Interface size.
 
 Do not normalize special surfaces to Settings dimensions or change shared defaults to solve one page's layout problem.
 

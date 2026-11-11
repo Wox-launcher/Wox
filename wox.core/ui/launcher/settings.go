@@ -1583,7 +1583,7 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "ShowPosition", title: "Window position", description: "Display used when Wox opens", value: data.ShowPosition, choices: []settingChoice{{"mouse_screen", "Mouse display"}, {"active_screen", "Active display"}, {"last_location", "Last location"}, {"specific_screen", "Specific screen"}}},
 			{key: "ShowTray", title: "Tray icon", description: "Show Wox in the system tray or menu bar", value: boolValue(data.ShowTray), choices: boolChoices},
 			{key: "AppWidth", title: "Launcher width", description: "Logical width of the query and result window", value: fmt.Sprintf("%d", data.AppWidth), choices: widthChoices},
-			{key: "UiDensity", title: "UI density", description: "Spacing and row size across the launcher", value: data.UIDensity, choices: []settingChoice{{"compact", "Compact"}, {"normal", "Normal"}, {"comfortable", "Comfortable"}}},
+			{key: "UiDensity", title: "UI density", description: "Spacing and row size across the launcher", value: data.UIDensity, choices: []settingChoice{{"compact", "Compact"}, {"normal", "Normal"}, {"comfortable", "Comfortable"}, {"large", "Large"}}},
 			{key: "EnableQueryCompletionHint", title: "Query completion hints", description: "Show completion text while typing", value: boolValue(data.EnableQueryCompletionHint), choices: boolChoices},
 			{key: "MaxResultCount", title: "Maximum results", description: "Number of result rows visible before scrolling", value: fmt.Sprintf("%d", data.MaxResultCount), choices: resultChoices},
 			{key: "EnableGlance", title: "Glance", description: "Show glance content beside the query", value: boolValue(data.EnableGlance), choices: boolChoices},

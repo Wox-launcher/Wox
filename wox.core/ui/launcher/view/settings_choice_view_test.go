@@ -8,6 +8,52 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
+type settingsChoiceTallFontServices struct{ actionSearchHostServices }
+
+func (services settingsChoiceTallFontServices) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	metrics, err := services.actionSearchHostServices.MeasureText(text, style)
+	metrics.Size.Height = style.Size * 1.6
+	return metrics, err
+}
+
+// TestSettingsChoiceLabelFitsMeasuredFont preserves descenders and taller fallback fonts at every interface size and display DPI.
+func TestSettingsChoiceLabelFitsMeasuredFont(t *testing.T) {
+	for _, density := range []float32{0.9, 1, 1.1, 1.2} {
+		for _, dpi := range []float32{1, 1.25, 1.5, 2.5} {
+			for _, label := range []string{"Large", "大きいg"} {
+				props := SettingsChoiceProps{
+					ID: "density", Width: 640, Height: 480, Theme: woxcomponent.ControlTheme{DensityScale: density},
+					Choices: []SettingsChoice{{Value: "large", Label: label}},
+				}
+				menu := settingsChoiceBuiltMenu(t, props)
+				content := menu.Children[0].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+				scroll := content.Children[0].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+				row := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics).Child.(woxwidget.Gesture).Child.(woxwidget.Stack)
+				rowContent := row.Children[1].Child.(woxwidget.Container).Child.(woxwidget.Flex)
+				aligned := rowContent.Children[0].(woxwidget.Expanded).Child.(woxwidget.Align)
+				text := aligned.Child.(woxwidget.TextBlock)
+				aligned.Child = woxwidget.Keyed{Key: "label", Child: text}
+				host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return aligned })
+				services := settingsChoiceTallFontServices{}
+				host.AttachServices(services)
+				host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{
+					Size:      woxui.Size{Width: 200, Height: settingsChoiceRowHeight},
+					PixelSize: woxui.PixelSize{Width: int(200 * dpi), Height: int(settingsChoiceRowHeight * dpi)}, Scale: dpi,
+				})
+				bounds, found := host.BoundsForKey("label")
+				metrics, _ := services.MeasureText(label, text.Style)
+				if !found || bounds.Height < metrics.Size.Height || bounds.Y < 0 || bounds.Y+bounds.Height > settingsChoiceRowHeight {
+					t.Errorf("density %g DPI %g label %q: bounds %+v clip measured height %g", density, dpi, label, bounds, metrics.Size.Height)
+				}
+				if bounds.Y+bounds.Height/2 != settingsChoiceRowHeight/2 {
+					t.Errorf("density %g DPI %g: label %+v is not centered in its row", density, dpi, bounds)
+				}
+				host.Dispose()
+			}
+		}
+	}
+}
+
 // TestSettingsChoiceInputKeys checks IME and key releases through the focused search field.
 func TestSettingsChoiceInputKeys(t *testing.T) {
 	chosen, cancelled := -1, false

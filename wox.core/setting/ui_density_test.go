@@ -9,6 +9,9 @@ func TestUiDensityScaleBuckets(t *testing.T) {
 	if UiDensityScale("oversized") != 1 {
 		t.Fatal("unknown density must stay on the normal scale")
 	}
+	if NormalizeUiDensity(" LARGE ") != UiDensityLarge || !IsValidUiDensity(UiDensityLarge) || UiDensityMultiplier(UiDensityLarge) != 1.2 || UiDensityScale(UiDensityLarge) != 1.2 {
+		t.Fatal("Large must remain a valid, normalized 120% scale bucket")
+	}
 }
 
 func TestScaleUiDensityRoundsAuthoredSizes(t *testing.T) {
@@ -20,6 +23,9 @@ func TestScaleUiDensityRoundsAuthoredSizes(t *testing.T) {
 	}
 	if got := ScaleUiDensity(13, UiDensityCompact); got != 12 {
 		t.Fatalf("compact size = %v, want 12", got)
+	}
+	if got := ScaleUiDensity(13, UiDensityLarge); got != 16 {
+		t.Fatalf("large size = %v, want 16", got)
 	}
 }
 

@@ -57,7 +57,7 @@ type WoxSettingDto struct {
 	MaxResultCount int
 	// UiDensity is a compact enum rather than per-control dimensions because
 	// backend window sizing and UI rendering both derive their local
-	// metrics from the same three scale buckets.
+	// metrics from the same four scale buckets.
 	UiDensity                 setting.UiDensity
 	ThemeId                   string
 	AppFontFamily             string

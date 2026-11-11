@@ -1214,6 +1214,7 @@
   "ui_interface_size_compact": "紧凑",
   "ui_interface_size_normal": "正常",
   "ui_interface_size_comfortable": "宽松",
+  "ui_interface_size_large": "较大",
   "ui_app_font_family": "字体",
   "ui_app_font_family_tips": "为 Wox 界面选择系统字体",
   "ui_app_font_family_system_default": "跟随系统默认",

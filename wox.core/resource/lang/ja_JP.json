@@ -1214,6 +1214,7 @@
   "ui_interface_size_compact": "コンパクト",
   "ui_interface_size_normal": "ノーマル",
   "ui_interface_size_comfortable": "快適",
+  "ui_interface_size_large": "大",
   "ui_app_font_family": "フォントファミリ",
   "ui_app_font_family_tips": "Wox インターフェースに使用するシステムフォントを選択します",
   "ui_app_font_family_system_default": "システムデフォルト",

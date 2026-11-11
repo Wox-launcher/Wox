@@ -1156,6 +1156,7 @@
   "ui_interface_size_compact": "Compacto",
   "ui_interface_size_normal": "Normal",
   "ui_interface_size_comfortable": "Confortável",
+  "ui_interface_size_large": "Grande",
   "ui_app_font_family": "Família da fonte",
   "ui_app_font_family_tips": "Escolha uma fonte do sistema para a interface do Wox",
   "ui_app_font_family_system_default": "Padrão do sistema",

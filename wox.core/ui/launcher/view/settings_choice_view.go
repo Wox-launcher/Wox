@@ -386,8 +386,10 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				woxwidget.Container{Width: 8, Height: settingsChoiceRowHeight},
 			)
 		}
+		// Let the measured font line box grow with Interface size and fallback fonts.
+		// The fixed 18-unit text slot clipped descenders even though the row had room.
 		rowChildren = append(rowChildren, woxwidget.Expanded{Child: woxwidget.Align{Height: settingsChoiceRowHeight, Vertical: 0.5, Child: woxwidget.TextBlock{
-			Value: choice.Label, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: foreground,
+			Value: choice.Label, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: foreground,
 		}}})
 		if choice.Trailing != "" {
 			rowChildren = append(rowChildren,

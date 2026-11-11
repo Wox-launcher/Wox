@@ -106,7 +106,7 @@ func TestVisibleListResultRangeUsesShorterGroupHeaders(t *testing.T) {
 // and compact footer gap across theme geometry and launcher density.
 func TestListViewportKeepsGuttersOutsideRows(t *testing.T) {
 	for _, bottom := range []float32{0, 8} {
-		for _, densityName := range []string{"compact", "normal", "comfortable"} {
+		for _, densityName := range []string{"compact", "normal", "comfortable", "large"} {
 			for _, count := range []int{4, 8, 12} {
 				for _, show := range []showAppParams{
 					{}, {HideToolbar: true}, {QueryBoxAtBottom: true},

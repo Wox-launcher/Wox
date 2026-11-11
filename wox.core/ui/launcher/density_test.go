@@ -12,6 +12,7 @@ func TestLauncherDensityMetricsMatchFlutterBuckets(t *testing.T) {
 		{density: "compact", query: 50, result: 45, toolbar: 36, refinement: 40},
 		{density: "normal", query: 55, result: 50, toolbar: 40, refinement: 44},
 		{density: "comfortable", query: 61, result: 55, toolbar: 44, refinement: 48},
+		{density: "large", query: 66, result: 60, toolbar: 48, refinement: 53},
 	}
 
 	for _, test := range tests {

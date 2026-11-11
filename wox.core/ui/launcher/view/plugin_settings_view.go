@@ -306,12 +306,11 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 		icon = woxwidget.Image{Source: iconImage, Width: PluginListIconSize, Height: PluginListIconSize, Fit: woxwidget.ImageFitContain}
 	}
 	rowChildren := []woxwidget.Widget{icon,
-		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
-				woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
-			}}}
-		}}},
+		// Preserve horizontal clipping while letting both measured lines fit at larger interface sizes.
+		woxwidget.Expanded{Child: woxwidget.Clip{SizeToChild: true, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
+			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
+		}}}},
 	}
 	if item.Badge != "" {
 		// Keep the System badge on secondary text so a selected row cannot invert it.

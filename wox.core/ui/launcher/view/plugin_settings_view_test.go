@@ -192,12 +192,12 @@ func TestPluginListBadgeUsesSharedMetadataStyle(t *testing.T) {
 	rows := props.Content.(woxwidget.LazyList)
 	row := focusedControlGesture(rows.ItemBuilder(0)).Child.(woxwidget.Container)
 	rowContent := row.Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	status := rowContent.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	status := rowContent.Children[1].(woxwidget.Expanded).Child.(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if status.Color != activeColor {
 		t.Fatalf("selected plugin subtitle color = %#v, want %#v", status.Color, activeColor)
 	}
 	inactiveRow := focusedControlGesture(rows.ItemBuilder(1)).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	inactiveStatus := inactiveRow.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
+	inactiveStatus := inactiveRow.Children[1].(woxwidget.Expanded).Child.(woxwidget.Clip).Child.(woxwidget.Flex).Children[1].(woxwidget.Text)
 	if inactiveStatus.Color != inactiveColor {
 		t.Fatalf("unselected plugin subtitle color = %#v, want %#v", inactiveStatus.Color, inactiveColor)
 	}
@@ -1234,7 +1234,7 @@ func TestPluginListDisabledRowsUseSecondaryText(t *testing.T) {
 
 func pluginListRowTexts(row woxwidget.Widget) (woxwidget.Text, woxwidget.Text) {
 	content := focusedControlGesture(row).Child.(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.Flex)
-	texts := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 150}).(woxwidget.Clip).Child.(woxwidget.Flex)
+	texts := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Clip).Child.(woxwidget.Flex)
 	return texts.Children[0].(woxwidget.Text), texts.Children[1].(woxwidget.Text)
 }
 

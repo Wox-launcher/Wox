@@ -1156,6 +1156,7 @@
   "ui_interface_size_compact": "Компактный",
   "ui_interface_size_normal": "Обычный",
   "ui_interface_size_comfortable": "Свободный",
+  "ui_interface_size_large": "Крупный",
   "ui_app_font_family": "Семейство шрифта",
   "ui_app_font_family_tips": "Выберите системный шрифт для интерфейса Wox",
   "ui_app_font_family_system_default": "Системный по умолчанию",

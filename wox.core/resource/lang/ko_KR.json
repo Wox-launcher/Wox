@@ -1214,6 +1214,7 @@
   "ui_interface_size_compact": "컴팩트",
   "ui_interface_size_normal": "보통",
   "ui_interface_size_comfortable": "넓게",
+  "ui_interface_size_large": "크게",
   "ui_app_font_family": "글꼴 패밀리",
   "ui_app_font_family_tips": "Wox 인터페이스에 사용할 시스템 글꼴을 선택합니다",
   "ui_app_font_family_system_default": "시스템 기본값",

@@ -296,12 +296,11 @@ func themeListRow(props ThemeSettingsProps, item ThemeCatalogItem, width float32
 	swatch := themeListSwatch(props, item)
 	rowChildren := []woxwidget.Widget{
 		swatch,
-		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-			return woxwidget.Clip{Width: size.Width, Height: 44, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
-				woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
-				woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
-			}}}
-		}}},
+		// The clip follows the measured lines so enlarged metadata is not cut off at 44 units.
+		woxwidget.Expanded{Child: woxwidget.Clip{SizeToChild: true, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
+			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
+			woxwidget.Text{Value: status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
+		}}}},
 	}
 	if item.ImageTheme && props.ImageLabel != "" {
 		rowChildren = append(rowChildren, woxcomponent.WoxTag(props.ImageLabel, props.Theme.TextSecondary, props.Theme))
