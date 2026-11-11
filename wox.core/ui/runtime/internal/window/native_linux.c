@@ -199,6 +199,7 @@ typedef struct {
   GLint compose_brightness;
   GLint compose_saturation;
   bool software_gl;
+  unsigned text_trace_count;
   bool blur_unavailable;
   bool ready;
   bool frame_open;
@@ -1456,6 +1457,7 @@ static void clear_linux_resource_caches(WoxLinuxRenderer *renderer, bool delete_
   }
   renderer->text_count = 0;
   renderer->text_bytes = 0;
+  renderer->text_trace_count = 0;
 }
 
 static uint64_t linux_cache_resident_bytes(const WoxLinuxRenderer *renderer) {
@@ -6113,6 +6115,65 @@ int32_t wox_linux_window_floating_material(WoxLinuxWindow *window, float x, floa
   return 0;
 }
 
+// draw_text_texture preserves Cairo's device-pixel coverage instead of squeezing
+// the rounded raster back into the fractional layout slot. Translation-only
+// text also snaps in target pixels; filtering a raster at a fractional origin
+// otherwise applies a second antialiasing pass. Keep other transforms continuous.
+static void draw_text_texture(WoxLinuxRenderer *renderer, float x, float y, int pixel_width, int pixel_height, const float color[4]) {
+  const float *m = linux_paint_transform(renderer);
+  if (m[0] == 1.0f && m[1] == 0.0f && m[2] == 0.0f && m[3] == 1.0f) {
+    x = roundf((x + m[4]) * renderer->scale) / renderer->scale - m[4];
+    y = roundf((y + m[5]) * renderer->scale) / renderer->scale - m[5];
+  }
+  draw_bound_texture(renderer, x, y, pixel_width / renderer->scale, pixel_height / renderer->scale, 0.0f, 0.0f, color);
+}
+
+// trace_text_raster samples the resolved font and Cairo options for machines
+// whose font configuration differs. Bound the samples and omit query contents.
+static void trace_text_raster(WoxLinuxRenderer *renderer, WoxLinuxTextRaster *raster, const char *family, float font_size, float x, float y, float width, float height, int pixel_width, int pixel_height) {
+  if (!wox_linux_render_trace_enabled || renderer->text_trace_count >= 8) {
+    return;
+  }
+  renderer->text_trace_count++;
+  PangoLayoutLine *line = pango_layout_get_line_readonly(raster->layout, 0);
+  PangoGlyphItem *run = line != NULL && line->runs != NULL ? line->runs->data : NULL;
+  PangoFont *font = run != NULL ? run->item->analysis.font : NULL;
+  PangoFontDescription *description = font != NULL ? pango_font_describe(font) : NULL;
+  char *resolved = description != NULL ? pango_font_description_to_string(description) : NULL;
+  cairo_font_options_t *options = cairo_font_options_create();
+  if (font != NULL && PANGO_IS_CAIRO_FONT(font)) {
+    cairo_scaled_font_t *scaled = pango_cairo_font_get_scaled_font(PANGO_CAIRO_FONT(font));
+    if (scaled != NULL) {
+      cairo_scaled_font_get_font_options(scaled, options);
+    }
+  }
+  // Fontconfig can supply LCD coverage while Cairo still reports DEFAULT.
+  // Inspect the raster too so the trace distinguishes actual channel coverage.
+  unsigned non_gray_pixels = 0;
+  unsigned char *pixels = cairo_image_surface_get_data(raster->surface);
+  int stride = cairo_image_surface_get_stride(raster->surface);
+  for (int row = 0; row < pixel_height; row++) {
+    const uint32_t *values = (const uint32_t *)(pixels + (size_t)row * stride);
+    for (int column = 0; column < pixel_width; column++) {
+      uint32_t value = values[column];
+      if (((value >> 16) & 255) != ((value >> 8) & 255) || ((value >> 8) & 255) != (value & 255)) {
+        non_gray_pixels++;
+      }
+    }
+  }
+  const float *m = linux_paint_transform(renderer);
+  trace_linux_render(
+      "event=text_raster family=%s firstFont=%s fontSize=%.3f scale=%.3f logical=%.3f,%.3f %.3fx%.3f raster=%dx%d transform=[%.3f %.3f %.3f %.3f %.3f %.3f] cairoAntialias=%d cairoSubpixelOrder=%d cairoHintStyle=%d cairoHintMetrics=%d nonGrayPixels=%u",
+      family, resolved != NULL ? resolved : "unknown", font_size, renderer->scale, x, y, width, height, pixel_width, pixel_height,
+      m[0], m[1], m[2], m[3], m[4], m[5], cairo_font_options_get_antialias(options), cairo_font_options_get_subpixel_order(options),
+      cairo_font_options_get_hint_style(options), cairo_font_options_get_hint_metrics(options), non_gray_pixels);
+  cairo_font_options_destroy(options);
+  g_free(resolved);
+  if (description != NULL) {
+    pango_font_description_free(description);
+  }
+}
+
 int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, const char *font_family, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (window == NULL || window->active_renderer == NULL || !window->active_renderer->frame_open || text == NULL || font_family == NULL || italic > 1) {
     return -1;
@@ -6140,7 +6201,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   if (cached != NULL) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cached->texture);
-    draw_bound_texture(renderer, x, y, width, height, 0.0f, 0.0f, color);
+    draw_text_texture(renderer, x, y, pixel_width, pixel_height, color);
     window->frame_resource_stats.cache_hits++;
     return 0;
   }
@@ -6149,6 +6210,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
   if (!rasterize_text_line(&raster, text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height)) {
     return -1;
   }
+  trace_text_raster(renderer, &raster, family, font_size, x, y, width, height, pixel_width, pixel_height);
 
   GLuint texture = upload_gl_texture(pixel_width, pixel_height, GL_BGRA, cairo_image_surface_get_data(raster.surface), 0);
   if (texture == 0) {
@@ -6161,7 +6223,7 @@ int32_t wox_linux_window_draw_text(WoxLinuxWindow *window, const char *text, con
     uint64_t byte_size = (uint64_t)pixel_width * (uint64_t)pixel_height * 4ULL;
     cached_texture = cache_gl_text(renderer, hash, text, family, font_size, font_weight, italic, renderer->scale, pixel_width, pixel_height, byte_size, texture, true, &window->frame_resource_stats.cache_evictions);
   }
-  draw_bound_texture(renderer, x, y, width, height, 0.0f, 0.0f, color);
+  draw_text_texture(renderer, x, y, pixel_width, pixel_height, color);
   if (!cached_texture) {
     glDeleteTextures(1, &texture);
   }

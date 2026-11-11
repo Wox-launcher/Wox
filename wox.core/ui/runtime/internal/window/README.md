@@ -152,6 +152,23 @@ waiting. A persistent backlog with no completed calls and fresh stages points to
 dispatch starvation; an old stage helps locate a native stall. These are diagnostic
 signals, not a replacement for a native stack when identifying the cause.
 
+Linux text textures retain their raster's physical dimensions when painted; rounding
+the allocation must not squeeze glyphs into a smaller fractional layout slot. Text
+under translation-only transforms snaps to target physical pixels after the display
+scale and drawing translation, avoiding a second filtering pass. Rotation, skew and
+scale transforms keep continuous positioning. Portable text metrics remain unchanged.
+`native_text_sampling_linux_test.go` compares actual GL glyph pixels across layout
+padding, fractional positions, cached draws and display-scale changes.
+
+For font rendering reports, start Wox with `WOX_LINUX_RENDER_TRACE=1`. Besides the
+GTK backend and GL renderer, `event=text_raster` records the first run's resolved
+font, Cairo font options, logical bounds, physical raster size and drawing transform.
+It also counts non-gray raster pixels: Fontconfig can supply LCD subpixel coverage
+even when Cairo's options retain DEFAULT; color glyphs can also contribute to this
+count. It omits text contents and samples at most eight new rasters per renderer
+between cache resets (including display-scale changes). The existing trace callback
+writes through `util.GetLogger()` to the normal Wox log.
+
 Run `python3 testdata/test_linux_startup.py` on Linux with GLib development files
 to exercise native startup, deferred dispatch, backlog accounting, and both call
 and post dispatch during continuous redraw without a display. The scheduled UI
