@@ -29,6 +29,9 @@ func TestRecordingExportFormats(t *testing.T) {
 	}
 	frame := image.NewRGBA(image.Rect(0, 0, 64, 32))
 	for index := range 12 {
+		if index == 3 || index == 5 {
+			continue // The exported video should keep the slots for uncaptured frames.
+		}
 		for pixel := 0; pixel < len(frame.Pix); pixel += 4 {
 			frame.Pix[pixel], frame.Pix[pixel+1], frame.Pix[pixel+2], frame.Pix[pixel+3] = byte(index*20), 60, 180, 255
 		}
@@ -62,7 +65,7 @@ func TestRecordingExportFormats(t *testing.T) {
 				t.Fatal(err)
 			}
 			started := time.Now()
-			session := &recordingSession{state: recordingStateSave, tempPath: temp, startedAt: started, stoppedAt: started.Add(400 * time.Millisecond), config: recordingSessionConfig{Now: time.Now}}
+			session := &recordingSession{state: recordingStateSave, tempPath: temp, startedAt: started, stoppedAt: started.Add(400 * time.Millisecond), config: recordingSessionConfig{Now: time.Now, FPS: 30}}
 			target := filepath.Join(dir, "saved."+format.extension())
 			if err := os.WriteFile(target, []byte("old destination"), 0o600); err != nil {
 				t.Fatal(err)
@@ -102,6 +105,10 @@ func TestRecordingExportFormats(t *testing.T) {
 				output, err := exec.Command(ffmpeg, "-hide_banner", "-i", target, "-f", "null", "-").CombinedOutput()
 				if err != nil || !bytes.Contains(output, []byte(codec)) {
 					t.Fatalf("MP4 export did not decode as %s: %v\n%s", codec, err, output)
+				}
+				pixels, err := exec.Command(ffmpeg, "-v", "error", "-i", target, "-fps_mode", "passthrough", "-pix_fmt", "yuv420p", "-f", "rawvideo", "pipe:1").Output()
+				if want := 12 * 64 * 32 * 3 / 2; err != nil || len(pixels) != want {
+					t.Fatalf("MP4 export of the gapped take decoded %d bytes, want %d: %v", len(pixels), want, err)
 				}
 			case recordingExportGIF:
 				animation, err := gif.DecodeAll(bytes.NewReader(data))

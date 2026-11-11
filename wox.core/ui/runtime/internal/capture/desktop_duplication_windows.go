@@ -36,11 +36,25 @@ func (capturer *windowsDXGIRectCapturer) Capture() (*image.RGBA, error) {
 		return nil, errors.New("recording capture surface is closed")
 	}
 	output := image.NewRGBA(image.Rect(0, 0, capturer.width, capturer.height))
-	result := C.wox_dxgi_rect_capturer_capture(capturer.handle, (*C.uint8_t)(unsafe.Pointer(&output.Pix[0])), C.int32_t(output.Stride))
-	if result < 0 {
-		return nil, errors.New("failed to duplicate Windows desktop pixels")
+	if err := capturer.captureInto(output, false); err != nil {
+		return nil, err
 	}
 	return output, nil
+}
+
+func (capturer *windowsDXGIRectCapturer) captureInto(output *image.RGBA, paced bool) error {
+	if capturer == nil || capturer.handle == nil {
+		return errors.New("recording capture surface is closed")
+	}
+	var pacedCapture C.int32_t
+	if paced {
+		pacedCapture = 1
+	}
+	result := C.wox_dxgi_rect_capturer_capture(capturer.handle, (*C.uint8_t)(unsafe.Pointer(&output.Pix[0])), C.int32_t(output.Stride), pacedCapture)
+	if result < 0 {
+		return errors.New("failed to duplicate Windows desktop pixels")
+	}
+	return nil
 }
 
 func (capturer *windowsDXGIRectCapturer) Close() {

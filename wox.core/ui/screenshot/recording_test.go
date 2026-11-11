@@ -1273,7 +1273,7 @@ func TestExportRecordingAtomicallyRejectsTemporaryFileAsTarget(t *testing.T) {
 	if err := os.WriteFile(path, []byte("video"), 0o600); err != nil {
 		t.Fatalf("write recording: %v", err)
 	}
-	if err := exportRecordingAtomically(context.Background(), path, path, recordingExportMP4, 0, nil); err == nil {
+	if err := exportRecordingAtomically(context.Background(), path, path, recordingExportMP4, 60, 0, nil); err == nil {
 		t.Fatal("publishing over the temporary file should be rejected")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -1357,6 +1357,52 @@ func TestFFmpegRecordingEncoderHoldsFramesAcrossCaptureGaps(t *testing.T) {
 	}
 	if !bytes.Equal(writer.Bytes()[frameBytes*3:], secondYUV) {
 		t.Fatal("latest capture should be written at its timeline position")
+	}
+}
+
+func TestRecordingI420MatchesPortableConversionForStridedFrames(t *testing.T) {
+	parent := image.NewRGBA(image.Rect(0, 0, 23, 10))
+	for i := range parent.Pix {
+		parent.Pix[i] = byte(i*37 + i/19)
+	}
+	frame := parent.SubImage(image.Rect(3, 1, 17, 9)).(*image.RGBA)
+	want := make([]byte, 14*8*3/2)
+	writeRecordingI420Go(frame, want)
+	spare := make([]byte, len(want))
+	got, err := recordingI420(frame, spare)
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("I420 conversion differs from the portable reference: %v", err)
+	}
+	if &got[0] != &spare[0] {
+		t.Fatal("I420 conversion did not reuse the encoder buffer")
+	}
+}
+
+func TestRecordingCaptureBufferStaysOwnedUntilRecycled(t *testing.T) {
+	var pixel byte
+	session := &recordingSession{
+		freeFrames: make(chan *image.RGBA, recordingFrameQueueSize+2),
+		config: recordingSessionConfig{
+			PixelBounds: image.Rect(0, 0, 4, 2),
+			CaptureInto: func(frame *image.RGBA) error {
+				pixel++
+				frame.Pix[0] = pixel
+				return nil
+			},
+		},
+	}
+	_, first, err := session.captureFrame()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, second, err := session.captureFrame()
+	if err != nil || first == second || first.Pix[0] != 1 {
+		t.Fatalf("a new capture overwrote an in-flight frame: %v", err)
+	}
+	session.recycleCaptureBuffer(first)
+	_, reused, err := session.captureFrame()
+	if err != nil || reused != first || second.Pix[0] != 2 {
+		t.Fatalf("capture did not reuse the released frame: %v", err)
 	}
 }
 

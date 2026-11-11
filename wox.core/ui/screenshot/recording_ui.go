@@ -1703,17 +1703,18 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 		return cropRecordingFrame(capture.source, pixelSelection)
 	}
 	releaseCapture := func() {}
+	var captureInto func(*image.RGBA) error
 	if state.platform.openRecordingCapture != nil {
 		captureFn, releaseFn, captureErr := state.platform.openRecordingCapture(pixelSelection)
 		if captureErr != nil {
 			return nil, captureErr
 		}
-		captureFrame = func() (image.Image, error) { return captureFn() }
+		captureInto = captureFn
 		releaseCapture = releaseFn
 	}
 	return newRecordingSession(recordingSessionConfig{
 		FPS: fps, ShowPointer: showPointer, ShowKeypress: showKeypress, PixelBounds: image.Rect(0, 0, pixelSelection.Dx(), pixelSelection.Dy()),
-		Capture: captureFrame,
+		Capture: captureFrame, CaptureInto: captureInto,
 		Compose: func(source image.Image) (*image.RGBA, error) {
 			frame, composeErr := cropRecordingFrame(source, pixelSelection)
 			if composeErr != nil {

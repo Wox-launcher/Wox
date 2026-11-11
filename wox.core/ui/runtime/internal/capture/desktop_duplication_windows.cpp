@@ -5,10 +5,10 @@
 #include <dxgi.h>
 #include <dxgi1_2.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <new>
-#include <vector>
 
 #include "desktop_duplication_windows.h"
 
@@ -34,8 +34,9 @@ struct WoxDXGIRectCapturer {
   int32_t width = 0;
   int32_t height = 0;
   D3D11_BOX box = {};
-  std::vector<uint8_t> last_frame;
   bool has_frame = false;
+  bool upright = false;
+  bool frame_owned = false;
 };
 
 static bool output_contains_rect(const RECT &output, int32_t x, int32_t y, int32_t width, int32_t height) {
@@ -47,29 +48,79 @@ static HRESULT duplicate_output(WoxDXGIRectCapturer *capturer) {
   if (capturer->output == nullptr || capturer->device == nullptr) {
     return E_FAIL;
   }
-  return capturer->output->DuplicateOutput(capturer->device, &capturer->duplication);
+  HRESULT result = capturer->output->DuplicateOutput(capturer->device, &capturer->duplication);
+  if (SUCCEEDED(result)) {
+    DXGI_OUTDUPL_DESC description = {};
+    capturer->duplication->GetDesc(&description);
+    capturer->upright = description.Rotation == DXGI_MODE_ROTATION_IDENTITY;
+  }
+  return result;
 }
 
-static HRESULT copy_mapped_frame(WoxDXGIRectCapturer *capturer, const D3D11_MAPPED_SUBRESOURCE &mapped, uint8_t *bgra, int32_t stride) {
-  const int32_t row_bytes = capturer->width * 4;
-  capturer->last_frame.resize(static_cast<size_t>(capturer->height) * static_cast<size_t>(row_bytes));
-  for (int32_t row = 0; row < capturer->height; row++) {
-    const uint8_t *source = static_cast<const uint8_t *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch;
-    uint8_t *cached = capturer->last_frame.data() + static_cast<size_t>(row) * static_cast<size_t>(row_bytes);
-    std::memcpy(cached, source, static_cast<size_t>(row_bytes));
-    std::memcpy(bgra + static_cast<size_t>(row) * static_cast<size_t>(stride), source, static_cast<size_t>(row_bytes));
+// The staging texture also holds the last frame when the desktop has not changed.
+static int32_t copy_staging_frame(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride) {
+  D3D11_MAPPED_SUBRESOURCE mapped = {};
+  const size_t row_bytes = static_cast<size_t>(capturer->width) * 4;
+  HRESULT result = capturer->context->Map(capturer->staging, 0, D3D11_MAP_READ, 0, &mapped);
+  if (FAILED(result)) {
+    return -5;
   }
-  capturer->has_frame = true;
-  return S_OK;
+  if (mapped.pData == nullptr || mapped.RowPitch < row_bytes) {
+    capturer->context->Unmap(capturer->staging, 0);
+    return -5;
+  }
+  if (mapped.RowPitch == row_bytes && static_cast<size_t>(stride) == row_bytes) {
+    std::memcpy(bgra, mapped.pData, row_bytes * capturer->height);
+  } else {
+    for (int32_t row = 0; row < capturer->height; row++) {
+      std::memcpy(bgra + static_cast<size_t>(row) * static_cast<size_t>(stride),
+                  static_cast<const uint8_t *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch, row_bytes);
+    }
+  }
+  capturer->context->Unmap(capturer->staging, 0);
+  return 0;
 }
 
-static void copy_last_frame(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride) {
-  const int32_t row_bytes = capturer->width * 4;
-  for (int32_t row = 0; row < capturer->height; row++) {
-    std::memcpy(bgra + static_cast<size_t>(row) * static_cast<size_t>(stride),
-                capturer->last_frame.data() + static_cast<size_t>(row) * static_cast<size_t>(row_bytes),
-                static_cast<size_t>(row_bytes));
+// Read the destination of move rectangles from the current desktop image, so the cached
+// crop can be updated even when a window moves in from outside the captured rectangle.
+static void copy_desktop_update(WoxDXGIRectCapturer *capturer, ID3D11Texture2D *source, const RECT &rect) {
+  const D3D11_BOX &crop = capturer->box;
+  LONG left = (std::max)(rect.left, static_cast<LONG>(crop.left));
+  LONG top = (std::max)(rect.top, static_cast<LONG>(crop.top));
+  LONG right = (std::min)(rect.right, static_cast<LONG>(crop.right));
+  LONG bottom = (std::min)(rect.bottom, static_cast<LONG>(crop.bottom));
+  if (left < right && top < bottom) {
+    D3D11_BOX update = {static_cast<UINT>(left), static_cast<UINT>(top), 0,
+                        static_cast<UINT>(right), static_cast<UINT>(bottom), 1};
+    capturer->context->CopySubresourceRegion(capturer->staging, 0, update.left - crop.left, update.top - crop.top,
+                                            0, source, 0, &update);
   }
+}
+
+// Small desktop changes only need to update part of the staging texture. Fall back to a full
+// copy after duplication is recreated or when the damage list is too large or unavailable.
+static bool copy_desktop_damage(WoxDXGIRectCapturer *capturer, ID3D11Texture2D *source, const DXGI_OUTDUPL_FRAME_INFO &info) {
+  if (!capturer->has_frame || !capturer->upright) {
+    return false;
+  }
+  if (info.TotalMetadataBufferSize == 0) {
+    return info.LastPresentTime.QuadPart == 0;
+  }
+  DXGI_OUTDUPL_MOVE_RECT moves[32];
+  RECT dirty[32];
+  UINT move_bytes = 0, dirty_bytes = 0;
+  if (FAILED(capturer->duplication->GetFrameMoveRects(sizeof(moves), moves, &move_bytes)) ||
+      FAILED(capturer->duplication->GetFrameDirtyRects(sizeof(dirty), dirty, &dirty_bytes)) ||
+      move_bytes + dirty_bytes == 0) {
+    return false;
+  }
+  for (UINT index = 0; index < move_bytes / sizeof(moves[0]); ++index) {
+    copy_desktop_update(capturer, source, moves[index].DestinationRect);
+  }
+  for (UINT index = 0; index < dirty_bytes / sizeof(dirty[0]); ++index) {
+    copy_desktop_update(capturer, source, dirty[index]);
+  }
+  return true;
 }
 
 int32_t wox_dxgi_rect_capturer_create(int32_t x, int32_t y, int32_t width, int32_t height, WoxDXGIRectCapturer **out) {
@@ -150,7 +201,7 @@ int32_t wox_dxgi_rect_capturer_create(int32_t x, int32_t y, int32_t width, int32
   return 0;
 }
 
-int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride) {
+int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride, int32_t paced) {
   if (capturer == nullptr || capturer->duplication == nullptr || capturer->staging == nullptr || bgra == nullptr ||
       stride < capturer->width * 4) {
     return -1;
@@ -158,24 +209,24 @@ int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *b
 
   DXGI_OUTDUPL_FRAME_INFO info = {};
   IDXGIResource *resource = nullptr;
-  HRESULT result = capturer->duplication->AcquireNextFrame(16, &info, &resource);
-  if (result == DXGI_ERROR_WAIT_TIMEOUT) {
-    if (capturer->has_frame) {
-      copy_last_frame(capturer, bgra, stride);
-      return 0;
-    }
+  if (capturer->frame_owned) {
+    capturer->duplication->ReleaseFrame();
+    capturer->frame_owned = false;
+  }
+  HRESULT result = capturer->duplication->AcquireNextFrame(paced ? 0 : 16, &info, &resource);
+  if (result == DXGI_ERROR_WAIT_TIMEOUT && !capturer->has_frame) {
     result = capturer->duplication->AcquireNextFrame(100, &info, &resource);
   }
   if (result == DXGI_ERROR_ACCESS_LOST) {
     if (FAILED(duplicate_output(capturer))) {
       return -2;
     }
+    capturer->has_frame = false;
     result = capturer->duplication->AcquireNextFrame(100, &info, &resource);
   }
   if (FAILED(result) || resource == nullptr) {
     if (capturer->has_frame) {
-      copy_last_frame(capturer, bgra, stride);
-      return 0;
+      return copy_staging_frame(capturer, bgra, stride);
     }
     return -3;
   }
@@ -187,24 +238,28 @@ int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *b
     capturer->duplication->ReleaseFrame();
     return -4;
   }
-  capturer->context->CopySubresourceRegion(capturer->staging, 0, 0, 0, 0, source, 0, &capturer->box);
+  if (!paced || !copy_desktop_damage(capturer, source, info)) {
+    capturer->context->CopySubresourceRegion(capturer->staging, 0, 0, 0, 0, source, 0, &capturer->box);
+  }
   release_com(&source);
 
-  D3D11_MAPPED_SUBRESOURCE mapped = {};
-  result = capturer->context->Map(capturer->staging, 0, D3D11_MAP_READ, 0, &mapped);
-  if (FAILED(result) || mapped.pData == nullptr) {
+  const int32_t copied = copy_staging_frame(capturer, bgra, stride);
+  capturer->has_frame = copied == 0;
+  // Holding the frame until the next sample prevents redundant desktop updates between samples.
+  if (paced && copied == 0) {
+    capturer->frame_owned = true;
+  } else {
     capturer->duplication->ReleaseFrame();
-    return -5;
   }
-  copy_mapped_frame(capturer, mapped, bgra, stride);
-  capturer->context->Unmap(capturer->staging, 0);
-  capturer->duplication->ReleaseFrame();
-  return 0;
+  return copied;
 }
 
 void wox_dxgi_rect_capturer_destroy(WoxDXGIRectCapturer *capturer) {
   if (capturer == nullptr) {
     return;
+  }
+  if (capturer->frame_owned) {
+    capturer->duplication->ReleaseFrame();
   }
   release_com(&capturer->staging);
   release_com(&capturer->duplication);

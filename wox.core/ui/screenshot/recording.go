@@ -67,8 +67,9 @@ func (state recordingState) String() string {
 }
 
 type recordingFrame struct {
-	image *image.RGBA
-	index int64
+	image  *image.RGBA
+	buffer *image.RGBA
+	index  int64
 }
 
 type recordingEncoder interface {
@@ -84,6 +85,7 @@ type recordingSessionConfig struct {
 	ShowKeypress bool
 	PixelBounds  image.Rectangle
 	Capture      func() (image.Image, error)
+	CaptureInto  func(*image.RGBA) error
 	Compose      func(image.Image) (*image.RGBA, error)
 	Encoder      recordingEncoder
 	Release      func()
@@ -111,6 +113,7 @@ type recordingSession struct {
 	framesWritten   int64
 	framesDropped   int64
 	frames          chan recordingFrame
+	freeFrames      chan *image.RGBA
 	stopCapture     context.CancelFunc
 	workerDone      chan struct{}
 	captureDone     chan struct{}
@@ -129,7 +132,7 @@ func newRecordingSession(config recordingSessionConfig) (*recordingSession, erro
 	if config.PixelBounds.Empty() || config.PixelBounds.Dx()%2 != 0 || config.PixelBounds.Dy()%2 != 0 {
 		return nil, errors.New("recording pixel bounds must have positive even dimensions")
 	}
-	if config.Capture == nil || config.Encoder == nil {
+	if (config.Capture == nil && config.CaptureInto == nil) || config.Encoder == nil {
 		return nil, errors.New("recording capture and encoder are required")
 	}
 	if config.Compose == nil {
@@ -366,6 +369,10 @@ func (session *recordingSession) countdown(parent context.Context) {
 	}
 	session.startedAt = session.config.Now()
 	session.frames = make(chan recordingFrame, recordingFrameQueueSize)
+	if session.config.CaptureInto != nil {
+		// The queue, capture worker and encoder each own their buffers until released.
+		session.freeFrames = make(chan *image.RGBA, recordingFrameQueueSize+2)
+	}
 	session.workerDone = make(chan struct{})
 	session.captureDone = make(chan struct{})
 	session.state = recordingStateRecording
@@ -392,9 +399,15 @@ func (session *recordingSession) captureLoop(ctx context.Context) {
 				continue
 			}
 			captureEpoch := session.captureEpoch
+			// Timestamp the sampling attempt before readback and composition. Round to the nearest
+			// slot so timer jitter at a slot boundary does not discard a successfully captured frame.
+			timelineIndex := max(int64(0), int64((session.effectiveDurationLocked(session.config.Now())*time.Duration(session.config.FPS)+time.Second/2)/time.Second)-1)
 			session.mu.Unlock()
+			if timelineIndex < index {
+				continue
+			}
 			captureStartedAt := time.Now()
-			source, err := session.config.Capture()
+			source, buffer, err := session.captureFrame()
 			if err != nil {
 				session.setRuntimeError(fmt.Errorf("capture recording frame: %w", err))
 				return
@@ -403,37 +416,29 @@ func (session *recordingSession) captureLoop(ctx context.Context) {
 			atomic.AddInt64(&session.captureNanos, time.Since(captureStartedAt).Nanoseconds())
 			atomic.AddInt64(&session.captureSamples, 1)
 			if err != nil {
+				session.recycleCaptureBuffer(buffer)
 				session.setRuntimeError(fmt.Errorf("compose recording frame: %w", err))
 				return
 			}
 			session.mu.Lock()
 			if session.state != recordingStateRecording || session.captureEpoch != captureEpoch {
 				session.mu.Unlock()
+				session.recycleCaptureBuffer(buffer)
 				continue
 			}
-			// Raw-video encoders have a fixed cadence. Index frames from the active monotonic
-			// timeline so slow capture produces held frames instead of a time-compressed video.
-			timelineIndex := int64(session.effectiveDurationLocked(session.config.Now())*time.Duration(session.config.FPS)/time.Second) - 1
-			if timelineIndex < 0 {
-				timelineIndex = 0
-			}
-			if timelineIndex < index {
-				session.mu.Unlock()
-				continue
-			}
-			frame := recordingFrame{image: composed, index: timelineIndex}
+			frame := recordingFrame{image: composed, buffer: buffer, index: timelineIndex}
 			select {
 			case session.frames <- frame:
 			default:
 				select {
-				case <-session.frames:
-					atomic.AddInt64(&session.framesDropped, 1)
+				case stale := <-session.frames:
+					session.discardFrame(stale)
 				default:
 				}
 				select {
 				case session.frames <- frame:
 				default:
-					atomic.AddInt64(&session.framesDropped, 1)
+					session.discardFrame(frame)
 				}
 			}
 			index = timelineIndex + 1
@@ -442,11 +447,46 @@ func (session *recordingSession) captureLoop(ctx context.Context) {
 	}
 }
 
+// captureFrame transfers a reusable buffer to the queue without letting the next capture overwrite it.
+func (session *recordingSession) captureFrame() (image.Image, *image.RGBA, error) {
+	if session.freeFrames == nil {
+		source, err := session.config.Capture()
+		return source, nil, err
+	}
+	var buffer *image.RGBA
+	select {
+	case buffer = <-session.freeFrames:
+	default:
+		buffer = image.NewRGBA(session.config.PixelBounds.Sub(session.config.PixelBounds.Min))
+	}
+	if err := session.config.CaptureInto(buffer); err != nil {
+		session.recycleCaptureBuffer(buffer)
+		return nil, nil, err
+	}
+	return buffer, buffer, nil
+}
+
+func (session *recordingSession) recycleCaptureBuffer(buffer *image.RGBA) {
+	if buffer != nil {
+		select {
+		case session.freeFrames <- buffer:
+		default:
+		}
+	}
+}
+
+func (session *recordingSession) discardFrame(frame recordingFrame) {
+	atomic.AddInt64(&session.framesDropped, 1)
+	session.recycleCaptureBuffer(frame.buffer)
+}
+
 // encodeLoop is the sole encoder writer, preserving monotonic frame ordering.
 func (session *recordingSession) encodeLoop() {
 	defer close(session.workerDone)
 	for frame := range session.frames {
-		if err := session.config.Encoder.WriteFrame(frame); err != nil {
+		err := session.config.Encoder.WriteFrame(frame)
+		session.recycleCaptureBuffer(frame.buffer)
+		if err != nil {
 			session.mu.Lock()
 			session.workerErr = err
 			session.mu.Unlock()
@@ -550,15 +590,18 @@ func (session *recordingSession) stopClockLocked() {
 // DiscardPendingFrames removes stale captures before an in-selection toolbar is exposed.
 func (session *recordingSession) DiscardPendingFrames() {
 	session.mu.Lock()
+	defer session.mu.Unlock()
 	frames := session.frames
-	session.mu.Unlock()
 	if frames == nil {
 		return
 	}
 	for {
 		select {
-		case <-frames:
-			atomic.AddInt64(&session.framesDropped, 1)
+		case frame, ok := <-frames:
+			if !ok {
+				return
+			}
+			session.discardFrame(frame)
 		default:
 			return
 		}
@@ -588,6 +631,11 @@ func (session *recordingSession) stopPipelines() error {
 	if done != nil {
 		<-done
 	}
+	session.DiscardPendingFrames()
+	session.mu.Lock()
+	// Release large frame storage while the user is looking at the preview.
+	session.freeFrames = nil
+	session.mu.Unlock()
 	if session.config.Release != nil {
 		session.config.Release()
 		session.config.Release = nil
@@ -620,11 +668,17 @@ func (session *recordingSession) Finish() (string, error) {
 	session.notifyChanged()
 	if session.config.Diagnostics {
 		samples := atomic.LoadInt64(&session.captureSamples)
+		written := atomic.LoadInt64(&session.framesWritten)
+		duration := session.EffectiveDuration().Seconds()
 		captureAvgMs := 0.0
 		if samples > 0 {
 			captureAvgMs = float64(atomic.LoadInt64(&session.captureNanos)) / float64(samples) / 1e6
 		}
-		util.GetLogger().Info(context.Background(), fmt.Sprintf("recording finalized: backend=ffmpeg pixels=%dx%d fps=%d written=%d dropped=%d captureAvgMs=%.1f reason=completed", session.config.PixelBounds.Dx(), session.config.PixelBounds.Dy(), session.config.FPS, atomic.LoadInt64(&session.framesWritten), atomic.LoadInt64(&session.framesDropped), captureAvgMs))
+		sampledFPS, writtenFPS := 0.0, 0.0
+		if duration > 0 {
+			sampledFPS, writtenFPS = float64(samples)/duration, float64(written)/duration
+		}
+		util.GetLogger().Info(context.Background(), fmt.Sprintf("recording finalized: backend=ffmpeg pixels=%dx%d fps=%d written=%d dropped=%d captureAvgMs=%.1f sampledFPS=%.1f writtenFPS=%.1f reason=completed", session.config.PixelBounds.Dx(), session.config.PixelBounds.Dy(), session.config.FPS, written, atomic.LoadInt64(&session.framesDropped), captureAvgMs, sampledFPS, writtenFPS))
 	}
 	return path, nil
 }
@@ -679,7 +733,7 @@ func (session *recordingSession) Save(ctx context.Context, target string, format
 	if session.config.Now != nil {
 		duration = session.EffectiveDuration()
 	}
-	if err := exportRecordingAtomically(ctx, source, target, format, duration, progress); err != nil {
+	if err := exportRecordingAtomically(ctx, source, target, format, session.config.FPS, duration, progress); err != nil {
 		return err
 	}
 	if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
@@ -718,7 +772,7 @@ func cleanupRecordingOrphans(root string, now time.Time, maxAge time.Duration) e
 }
 
 // exportRecordingAtomically publishes only a complete export and preserves the source on failure.
-func exportRecordingAtomically(ctx context.Context, source, target string, format recordingExportFormat, duration time.Duration, progress func(int)) error {
+func exportRecordingAtomically(ctx context.Context, source, target string, format recordingExportFormat, fps int, duration time.Duration, progress func(int)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -751,7 +805,7 @@ func exportRecordingAtomically(ctx context.Context, source, target string, forma
 	if err := sibling.Close(); err != nil {
 		return err
 	}
-	if err := convertRecording(ctx, source, siblingPath, format, duration, progress); err != nil {
+	if err := convertRecording(ctx, source, siblingPath, format, fps, duration, progress); err != nil {
 		return err
 	}
 	// Conversion writes directly into the sibling, avoiding a second full-file copy.
@@ -781,6 +835,17 @@ type ffmpegRecordingEncoder struct {
 	abort          bool
 	nextFrameIndex int64
 	lastYUV        []byte
+	nextYUV        []byte
+	packets        chan recordingYUVPacket
+	pipeDone       chan struct{}
+	freeYUV        chan []byte
+	pipeErr        error
+	timestampedFPS int
+}
+
+type recordingYUVPacket struct {
+	pixels []byte
+	index  int64
 }
 
 func (encoder *ffmpegRecordingEncoder) Start(path string, width, height, fps int) error {
@@ -788,23 +853,39 @@ func (encoder *ffmpegRecordingEncoder) Start(path string, width, height, fps int
 	if err != nil {
 		return errors.New("H.264 recording runtime is unavailable")
 	}
-	arguments := []string{
-		"-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pixel_format", "yuv420p",
-		"-video_size", strconv.Itoa(width) + "x" + strconv.Itoa(height), "-framerate", strconv.Itoa(fps),
-		"-i", "pipe:0", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-		"-bf", "0", "-g", strconv.Itoa(fps * 2), "-keyint_min", strconv.Itoa(fps * 2),
-		"-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path,
+	arguments := []string{"-hide_banner", "-loglevel", "error"}
+	timestamped := runtime.GOOS == "windows"
+	if timestamped {
+		arguments = append(arguments, "-f", "matroska", "-i", "pipe:0", "-fps_mode", "passthrough", "-enc_time_base", "1:"+strconv.Itoa(fps), "-threads", "4")
+	} else {
+		arguments = append(arguments, "-f", "rawvideo", "-pixel_format", "yuv420p",
+			"-video_size", strconv.Itoa(width)+"x"+strconv.Itoa(height), "-framerate", strconv.Itoa(fps),
+			"-i", "pipe:0", "-tune", "zerolatency")
 	}
+	arguments = append(arguments, "-an", "-c:v", "libx264", "-preset", "ultrafast",
+		"-bf", "0", "-g", strconv.Itoa(fps*2), "-keyint_min", strconv.Itoa(fps*2),
+		"-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", path,
+	)
 	cmd := exec.Command(ffmpegPath, arguments...)
 	ffmpeg.Prepare(cmd)
-	stdin, err := cmd.StdinPipe()
+	reader, stdin, err := newRecordingEncoderPipe()
 	if err != nil {
 		return fmt.Errorf("open H.264 encoder input: %w", err)
 	}
+	defer reader.Close()
+	cmd.Stdin = reader
 	cmd.Stderr = &encoder.stderr
 	if err := cmd.Start(); err != nil {
 		_ = stdin.Close()
 		return fmt.Errorf("start H.264 encoder: %w", err)
+	}
+	if timestamped {
+		if _, err := stdin.Write(recordingMatroskaHeader(width, height, fps)); err != nil {
+			_ = stdin.Close()
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return fmt.Errorf("write H.264 encoder input header: %w", err)
+		}
 	}
 	encoder.mu.Lock()
 	encoder.cmd = cmd
@@ -812,6 +893,17 @@ func (encoder *ffmpegRecordingEncoder) Start(path string, width, height, fps int
 	encoder.abort = false
 	encoder.nextFrameIndex = 0
 	encoder.lastYUV = nil
+	encoder.nextYUV = nil
+	encoder.pipeErr = nil
+	encoder.timestampedFPS = 0
+	if timestamped {
+		encoder.timestampedFPS = fps
+		// Overlap color conversion with the pipe write without accumulating raw frames in FFmpeg.
+		encoder.packets = make(chan recordingYUVPacket, 1)
+		encoder.pipeDone = make(chan struct{})
+		encoder.freeYUV = make(chan []byte, 3)
+		go encoder.writePackets()
+	}
 	encoder.mu.Unlock()
 	return nil
 }
@@ -821,6 +913,61 @@ func recordingFFmpegPath() (string, error) {
 }
 
 func (encoder *ffmpegRecordingEncoder) WriteFrame(frame recordingFrame) error {
+	if frame.image == nil {
+		return errors.New("H.264 frame is empty")
+	}
+	if encoder.packets != nil {
+		var spare []byte
+		select {
+		case <-encoder.pipeDone:
+			return encoder.pipeErr
+		default:
+		}
+		select {
+		case spare = <-encoder.freeYUV:
+		default:
+		}
+		pixels, err := recordingI420(frame.image, spare)
+		if err != nil {
+			return err
+		}
+		select {
+		case encoder.packets <- recordingYUVPacket{pixels: pixels, index: frame.index}:
+			return nil
+		case <-encoder.pipeDone:
+			return encoder.pipeErr
+		}
+	}
+	if frame.index < encoder.nextFrameIndex {
+		return nil
+	}
+	yuv, err := recordingI420(frame.image, encoder.nextYUV)
+	if err != nil {
+		return err
+	}
+	encoder.nextYUV = encoder.lastYUV
+	return encoder.writePacket(recordingYUVPacket{pixels: yuv, index: frame.index})
+}
+
+// writePackets serializes FFmpeg input while the recording worker converts the next capture.
+func (encoder *ffmpegRecordingEncoder) writePackets() {
+	defer close(encoder.pipeDone)
+	for packet := range encoder.packets {
+		if packet.index >= encoder.nextFrameIndex {
+			if err := encoder.writePacket(packet); err != nil {
+				encoder.pipeErr = err
+				return
+			}
+		}
+		select {
+		case encoder.freeYUV <- packet.pixels:
+		default:
+		}
+	}
+}
+
+// writePacket preserves the capture timeline across missing samples.
+func (encoder *ffmpegRecordingEncoder) writePacket(packet recordingYUVPacket) error {
 	encoder.mu.Lock()
 	stdin := encoder.stdin
 	aborted := encoder.abort
@@ -828,43 +975,76 @@ func (encoder *ffmpegRecordingEncoder) WriteFrame(frame recordingFrame) error {
 	if stdin == nil || aborted {
 		return errors.New("H.264 encoder is not running")
 	}
-	if frame.image == nil {
-		return errors.New("H.264 frame is empty")
-	}
-	if frame.index < encoder.nextFrameIndex {
+	if encoder.timestampedFPS > 0 {
+		if encoder.nextFrameIndex == 0 && packet.index > 0 {
+			if err := writeRecordingMatroskaFrame(stdin, packet.pixels, 0, encoder.timestampedFPS); err != nil {
+				return err
+			}
+		}
+		if err := writeRecordingMatroskaFrame(stdin, packet.pixels, packet.index, encoder.timestampedFPS); err != nil {
+			return err
+		}
+		encoder.nextFrameIndex = packet.index + 1
 		return nil
-	}
-	yuv, err := bgraToI420(frame.image)
-	if err != nil {
-		return err
 	}
 	filler := encoder.lastYUV
 	if filler == nil {
-		filler = yuv
+		filler = packet.pixels
 	}
-	for encoder.nextFrameIndex < frame.index {
+	for encoder.nextFrameIndex < packet.index {
 		if _, err := stdin.Write(filler); err != nil {
 			return err
 		}
 		encoder.nextFrameIndex++
 	}
-	if _, err := stdin.Write(yuv); err != nil {
+	if _, err := stdin.Write(packet.pixels); err != nil {
 		return err
 	}
 	encoder.nextFrameIndex++
-	encoder.lastYUV = yuv
+	encoder.lastYUV = packet.pixels
 	return nil
+}
+
+// finishPackets joins the pipe writer after the session's last WriteFrame call.
+func (encoder *ffmpegRecordingEncoder) finishPackets() error {
+	if encoder.packets != nil {
+		close(encoder.packets)
+		<-encoder.pipeDone
+		encoder.packets, encoder.pipeDone, encoder.freeYUV = nil, nil, nil
+	}
+	return encoder.pipeErr
 }
 
 // bgraToI420 converts a BGR0/BGRA capture into planar YUV 4:2:0 for the H.264 pipe.
 func bgraToI420(frame *image.RGBA) ([]byte, error) {
+	return recordingI420(frame, nil)
+}
+
+// recordingI420 reuses the encoder's spare buffer while the last frame remains available for gaps.
+func recordingI420(frame *image.RGBA, output []byte) ([]byte, error) {
 	width, height := frame.Rect.Dx(), frame.Rect.Dy()
 	if width <= 0 || height <= 0 || width%2 != 0 || height%2 != 0 {
 		return nil, errors.New("I420 frame must have positive even dimensions")
 	}
+	if width > len(frame.Pix)/4 || frame.Stride < width*4 || (len(frame.Pix)-width*4)/frame.Stride < height-1 {
+		return nil, errors.New("I420 frame has an invalid pixel buffer")
+	}
+	ySize := width * height
+	size := ySize + ySize/2
+	if cap(output) < size {
+		output = make([]byte, size)
+	} else {
+		output = output[:size]
+	}
+	writeRecordingI420(frame, output)
+	return output, nil
+}
+
+// writeRecordingI420Go is the portable reference for the packed BGRA conversion.
+func writeRecordingI420Go(frame *image.RGBA, output []byte) {
+	width, height := frame.Rect.Dx(), frame.Rect.Dy()
 	ySize := width * height
 	uvSize := ySize / 4
-	output := make([]byte, ySize+uvSize*2)
 	yPlane := output[:ySize]
 	uPlane := output[ySize : ySize+uvSize]
 	vPlane := output[ySize+uvSize:]
@@ -887,31 +1067,35 @@ func bgraToI420(frame *image.RGBA) ([]byte, error) {
 			}
 		}
 	}
-	return output, nil
 }
 
 func (encoder *ffmpegRecordingEncoder) Finalize() error {
+	pipeErr := encoder.finishPackets()
 	encoder.mu.Lock()
 	stdin, cmd := encoder.stdin, encoder.cmd
 	encoder.stdin = nil
+	encoder.lastYUV, encoder.nextYUV = nil, nil
 	encoder.mu.Unlock()
 	if stdin == nil || cmd == nil {
 		return errors.New("H.264 encoder is not running")
 	}
-	if err := stdin.Close(); err != nil {
-		return fmt.Errorf("close H.264 encoder input: %w", err)
-	}
+	closeErr := stdin.Close()
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("finalize H.264 encoder: %w: %s", err, encoder.stderr.String())
 	}
-	return nil
+	if closeErr != nil {
+		return fmt.Errorf("close H.264 encoder input: %w", closeErr)
+	}
+	return pipeErr
 }
 
 func (encoder *ffmpegRecordingEncoder) Abort() error {
+	_ = encoder.finishPackets()
 	encoder.mu.Lock()
 	encoder.abort = true
 	stdin, cmd := encoder.stdin, encoder.cmd
 	encoder.stdin = nil
+	encoder.lastYUV, encoder.nextYUV = nil, nil
 	encoder.mu.Unlock()
 	if stdin != nil {
 		_ = stdin.Close()

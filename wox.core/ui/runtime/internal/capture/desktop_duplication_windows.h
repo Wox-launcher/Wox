@@ -10,7 +10,7 @@ extern "C" {
 typedef struct WoxDXGIRectCapturer WoxDXGIRectCapturer;
 
 int32_t wox_dxgi_rect_capturer_create(int32_t x, int32_t y, int32_t width, int32_t height, WoxDXGIRectCapturer **capturer);
-int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride);
+int32_t wox_dxgi_rect_capturer_capture(WoxDXGIRectCapturer *capturer, uint8_t *bgra, int32_t stride, int32_t paced);
 void wox_dxgi_rect_capturer_destroy(WoxDXGIRectCapturer *capturer);
 
 #ifdef __cplusplus

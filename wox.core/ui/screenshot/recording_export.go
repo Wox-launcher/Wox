@@ -50,12 +50,17 @@ func recordingExportPath(path string, format recordingExportFormat) string {
 }
 
 // convertRecording encodes the selected output without touching the finalized preview.
-func convertRecording(ctx context.Context, source, target string, format recordingExportFormat, duration time.Duration, progress func(int)) error {
+func convertRecording(ctx context.Context, source, target string, format recordingExportFormat, fps int, duration time.Duration, progress func(int)) error {
 	ffmpegPath, err := recordingFFmpegPath()
 	if err != nil {
 		return err
 	}
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-an"}
+	if format == recordingExportMP4 && fps > 0 {
+		// Fill any capture gaps here, after the live recording no longer needs the CPU.
+		args = append(args, "-vf", "fps="+strconv.Itoa(fps))
+	}
+	inputArgs := args
 	switch format {
 	case recordingExportMP4:
 		args = append(args, "-c:v", "libx265", "-preset", "medium", "-crf", "28", "-tag:v", "hvc1", "-movflags", "+faststart", "-f", "mp4")
@@ -71,7 +76,7 @@ func convertRecording(ctx context.Context, source, target string, format recordi
 	if err != nil && format == recordingExportMP4 && strings.Contains(string(output), "Unknown encoder") && ctx.Err() == nil {
 		// Some supported FFmpeg builds lack x265; keep MP4 export available with H.264.
 		util.GetLogger().Warn(ctx, "HEVC encoder unavailable; exporting recording with H.264")
-		args = []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", source, "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-movflags", "+faststart", "-f", "mp4"}
+		args = append(inputArgs, "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-movflags", "+faststart", "-f", "mp4")
 		output, err = runRecordingExportCommand(ctx, ffmpegPath, append(args, target), duration, progress)
 	}
 	if err != nil && format == recordingExportWebP && strings.Contains(string(output), "Unknown encoder") && ctx.Err() == nil {

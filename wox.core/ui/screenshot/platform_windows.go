@@ -171,13 +171,13 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 			screen := pixelBounds.Add(image.Pt(virtualBounds.Min.X, virtualBounds.Min.Y))
 			return woxui.CaptureWindowsRect(screen)
 		},
-		openRecordingCapture: func(pixelBounds image.Rectangle) (func() (*image.RGBA, error), func(), error) {
+		openRecordingCapture: func(pixelBounds image.Rectangle) (func(*image.RGBA) error, func(), error) {
 			screen := pixelBounds.Add(image.Pt(virtualBounds.Min.X, virtualBounds.Min.Y))
 			capturer, err := woxui.NewWindowsRectCapturer(screen)
 			if err != nil {
 				return nil, nil, err
 			}
-			return capturer.Capture, func() { _ = capturer.Close() }, nil
+			return capturer.CaptureInto, func() { _ = capturer.Close() }, nil
 		},
 		setScrollBounds: func(window *Window, controls Rect, _ Size) error {
 			return window.SetPhysicalBounds(Rect{

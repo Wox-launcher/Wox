@@ -222,20 +222,39 @@ func (capturer *WindowsRectCapturer) Capture() (*image.RGBA, error) {
 	if capturer == nil {
 		return nil, errors.New("recording capture surface is closed")
 	}
+	output := image.NewRGBA(image.Rect(0, 0, capturer.width, capturer.height))
+	if err := capturer.captureInto(output, false); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+// CaptureInto fills a caller-owned packed BGR0 frame at the caller's sampling cadence.
+func (capturer *WindowsRectCapturer) CaptureInto(output *image.RGBA) error {
+	if capturer == nil {
+		return errors.New("recording capture surface is closed")
+	}
+	if output == nil || output.Rect.Size() != image.Pt(capturer.width, capturer.height) ||
+		output.Stride != capturer.width*4 || len(output.Pix) < capturer.height*output.Stride {
+		return errors.New("recording capture buffer does not match the capture rectangle")
+	}
+	return capturer.captureInto(output, true)
+}
+
+func (capturer *WindowsRectCapturer) captureInto(output *image.RGBA, paced bool) error {
 	if capturer.dxgi != nil {
-		return capturer.dxgi.Capture()
+		return capturer.dxgi.captureInto(output, paced)
 	}
 	if capturer.bitmap == 0 || capturer.bits == nil {
-		return nil, errors.New("recording capture surface is closed")
+		return errors.New("recording capture surface is closed")
 	}
 	if !win.BitBlt(capturer.memoryDC, 0, 0, int32(capturer.width), int32(capturer.height), capturer.screenDC, int32(capturer.bounds.Min.X), int32(capturer.bounds.Min.Y), win.SRCCOPY|windowsCaptureBlt) {
-		return nil, errors.New("failed to copy Windows desktop pixels")
+		return errors.New("failed to copy Windows desktop pixels")
 	}
 	pixelBytes := capturer.width * capturer.height * 4
 	pixels := unsafe.Slice((*byte)(capturer.bits), pixelBytes)
-	output := image.NewRGBA(image.Rect(0, 0, capturer.width, capturer.height))
 	copy(output.Pix, pixels)
-	return output, nil
+	return nil
 }
 
 // Close releases the reusable capture surface.
